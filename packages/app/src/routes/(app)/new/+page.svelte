@@ -3,7 +3,7 @@
   import { createSpace } from "$lib/mutations/space";
   import { navigate } from "$lib/utils.svelte";
   import { peerStatus } from "$lib/workers";
-  import type { AsyncStateWithIdle, StreamDid } from "@roomy/sdk";
+  import type { AsyncStateWithIdle, StreamDid } from "@roomy-space/sdk";
   import { IconXMark } from "@roomy/design/icons";
   import {
     Alert,

@@ -6,8 +6,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MockBridgeRepository } from "../../src/repositories/MockBridgeRepository.js";
 import { ProfileSyncService } from "../../src/services/ProfileSyncService.js";
-import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid } from "@roomy/sdk";
+import type { ConnectedSpace } from "@roomy-space/sdk";
+import { newUlid } from "@roomy-space/sdk";
 
 // Mock ConnectedSpace
 const mockConnectedSpace = {

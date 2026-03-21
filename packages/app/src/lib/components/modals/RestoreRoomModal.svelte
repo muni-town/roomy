@@ -6,7 +6,7 @@
   import Button from "$lib/components/ui/button/Button.svelte";
   import { IconArrowUturnLeft } from "@roomy/design/icons";
   import { peer } from "$lib/workers";
-  import { type AsyncStateWithIdle, type RoomMetadata } from "@roomy/sdk";
+  import { type AsyncStateWithIdle, type RoomMetadata } from "@roomy-space/sdk";
 
   let {
     open = $bindable(false),

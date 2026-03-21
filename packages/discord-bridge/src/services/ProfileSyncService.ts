@@ -6,14 +6,17 @@
  */
 
 import { avatarUrl } from "@discordeno/bot";
-import type { BridgeRepository, RoomyUserProfile } from "../repositories/index.js";
-import type { ConnectedSpace, StreamDid, Ulid } from "@roomy/sdk";
+import type {
+  BridgeRepository,
+  RoomyUserProfile,
+} from "../repositories/index.js";
+import type { ConnectedSpace, StreamDid, Ulid } from "@roomy-space/sdk";
 import {
   newUlid,
   type Did,
   type Event,
   type DecodedStreamEvent,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import type { Agent } from "@atproto/api";
 import { computeProfileHash as fingerprint } from "../utils/hash.js";
 import {
@@ -306,7 +309,7 @@ export class ProfileSyncService {
     // 5. Fetch from Bluesky
     try {
       // Dynamic import to avoid circular dependencies
-      const { getProfile } = await import("@roomy/sdk");
+      const { getProfile } = await import("@roomy-space/sdk");
       const atpProfile = await getProfile(agent, did as Did);
 
       if (atpProfile) {
@@ -324,9 +327,7 @@ export class ProfileSyncService {
         );
         return profile;
       } else {
-        console.log(
-          `[Profile Puppeting] No Bluesky profile found for ${did}`,
-        );
+        console.log(`[Profile Puppeting] No Bluesky profile found for ${did}`);
       }
     } catch (e) {
       console.error(

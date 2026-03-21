@@ -3,7 +3,7 @@
  *
  * @example
  * ```ts
- * import { ConnectedSpace } from "@roomy/sdk";
+ * import { ConnectedSpace } from "@roomy-space/sdk";
  *
  * const space = await ConnectedSpace.connect({
  *   agent,
@@ -33,9 +33,5 @@ export type {
 } from "./types";
 
 // SQL parsing utilities
-export {
-  unwrapSqlValue,
-  unwrapSqlRow,
-  unwrapSqlRows,
-} from "./sqlParsing";
+export { unwrapSqlValue, unwrapSqlRow, unwrapSqlRows } from "./sqlParsing";
 export type { SqlValueToPrimitive } from "./sqlParsing";

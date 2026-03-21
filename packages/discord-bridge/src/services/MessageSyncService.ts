@@ -8,7 +8,7 @@
 
 import { avatarUrl } from "@discordeno/bot";
 import type { BridgeRepository } from "../repositories/index.js";
-import type { ConnectedSpace, StreamDid, StateMachine } from "@roomy/sdk";
+import type { ConnectedSpace, StreamDid, StateMachine } from "@roomy-space/sdk";
 import {
   newUlid,
   toBytes,
@@ -18,7 +18,7 @@ import {
   type Attachment,
   type Content,
   type DecodedStreamEvent,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import type { Agent } from "@atproto/api";
 import type { DiscordBot, MessageProperties } from "../discord/types.js";
 import { ProfileSyncService } from "./ProfileSyncService.js";
@@ -67,7 +67,10 @@ export class MessageSyncService {
    * const result = await service.syncDiscordToRoomy(discordMessage);
    * ```
    */
-  async syncDiscordToRoomy(message: MessageProperties, backfill = false): Promise<string | null> {
+  async syncDiscordToRoomy(
+    message: MessageProperties,
+    backfill = false,
+  ): Promise<string | null> {
     // Check that we know the corresponding Roomy room
     const roomyRoomId = await this.repo.getRoomyId(
       getRoomKey(message.channelId),
@@ -101,7 +104,11 @@ export class MessageSyncService {
 
     // Handle thread starter messages
     if (message.type === DISCORD_MESSAGE_TYPES.THREAD_STARTER_MESSAGE) {
-      return await this.handleThreadStarterMessage(roomyRoomId, message, backfill);
+      return await this.handleThreadStarterMessage(
+        roomyRoomId,
+        message,
+        backfill,
+      );
     }
 
     // Build attachments array
@@ -573,7 +580,9 @@ export class MessageSyncService {
       }
 
       // Fetch messages with pagination (oldest first), resuming from last known cursor
-      const storedLatest = await this.repo.getLatestMessage(channelId.toString());
+      const storedLatest = await this.repo.getLatestMessage(
+        channelId.toString(),
+      );
       let after: bigint = storedLatest ? BigInt(storedLatest) : channelId;
       while (true) {
         const messages = await this.bot.helpers.getMessages(channelId, {
@@ -604,7 +613,10 @@ export class MessageSyncService {
 
         // Update pagination cursor and persist latest message ID for next startup
         after = sortedMessages[sortedMessages.length - 1]!.id;
-        await this.repo.setLatestMessage(channelId.toString(), after.toString());
+        await this.repo.setLatestMessage(
+          channelId.toString(),
+          after.toString(),
+        );
       }
     }
 

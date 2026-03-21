@@ -80,7 +80,7 @@
     "@playwright/test": "^1.40.0",
     "@repo/tsconfig": "workspace:*",
     "@roomy/design": "workspace:*",
-    "@roomy/sdk": "workspace:*",
+    "@roomy-space/sdk": "workspace:*",
     "@sqlite.org/sqlite-wasm": "3.50.4-build1",
     "@sveltejs/adapter-netlify": "^5.2.3",
     "@sveltejs/adapter-static": "^3.0.9",

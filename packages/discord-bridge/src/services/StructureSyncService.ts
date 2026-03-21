@@ -8,17 +8,17 @@
  * - Rooms: `createRoom` events do NOT trigger sync (only register Discord-origin mappings)
  *
  * This service handles channels, threads, links, and sidebar syncing.
- * Uses SDK operations from @roomy/sdk/package/operations.
+ * Uses SDK operations from @roomy-space/sdk/package/operations.
  */
 
 import type { BridgeRepository, BridgeConfig } from "../repositories/index.js";
-import type { ConnectedSpace, StreamDid } from "@roomy/sdk";
+import type { ConnectedSpace, StreamDid } from "@roomy-space/sdk";
 import {
   newUlid,
   type Ulid,
   type Event,
   type DecodedStreamEvent,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import type { DiscordBot, ChannelProperties } from "../discord/types.js";
 import { computeSidebarHash } from "../utils/hash.js";
 import {
@@ -34,8 +34,8 @@ import {
   extractRoomyRoomIdFromUrl,
 } from "../utils/discord-topic.js";
 
-// Import SDK operations from @roomy/sdk/package/operations
-import { createRoom, createThread } from "@roomy/sdk/package/operations";
+// Import SDK operations from @roomy-space/sdk/package/operations
+import { createRoom, createThread } from "@roomy-space/sdk/package/operations";
 import {
   createChannel as discordCreateChannel,
   fetchChannel as discordFetchChannel,
@@ -96,9 +96,7 @@ export class StructureSyncService {
    */
   private isChannelInBridgeScope(channelId: string | bigint): boolean {
     if (!this.bridgeConfig || this.bridgeConfig.mode === "full") return true;
-    return (
-      this.bridgeConfig.channels?.includes(channelId.toString()) ?? false
-    );
+    return this.bridgeConfig.channels?.includes(channelId.toString()) ?? false;
   }
 
   /**
@@ -258,7 +256,7 @@ export class StructureSyncService {
 
     console.log("roomUlid", roomUlid);
 
-    // Call SDK operation (pure function from @roomy/sdk)
+    // Call SDK operation (pure function from @roomy-space/sdk)
     if (!roomUlid) {
       console.log("creating room", discordChannel.id);
       const createRoomEvent = createRoom({

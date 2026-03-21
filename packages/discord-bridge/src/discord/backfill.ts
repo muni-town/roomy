@@ -21,7 +21,7 @@ import type { BridgeRepository } from "../repositories/index.js";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import { fingerprint } from "../utils/hash.js";
 import { ReactionSyncService } from "../services/ReactionSyncService.js";
-import { ConnectedSpace } from "@roomy/sdk";
+import { ConnectedSpace } from "@roomy-space/sdk";
 
 /**
  * Compute a SHA-256 hash of normalized Discord message content.

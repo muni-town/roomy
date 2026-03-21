@@ -6,7 +6,7 @@
  */
 
 import { AtpAgent } from "@atproto/api";
-import { RoomyClient } from "@roomy/sdk";
+import { RoomyClient } from "@roomy-space/sdk";
 import {
   ATPROTO_BRIDGE_DID,
   ATPROTO_BRIDGE_APP_PASSWORD,

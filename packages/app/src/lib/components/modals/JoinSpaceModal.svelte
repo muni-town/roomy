@@ -6,7 +6,7 @@
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { peer } from "$lib/workers";
-  import { StreamDid, type AsyncStateWithIdle } from "@roomy/sdk";
+  import { StreamDid, type AsyncStateWithIdle } from "@roomy-space/sdk";
   import ErrorModal from "./Error.svelte";
 
   let spaceDid = $state<StreamDid>();

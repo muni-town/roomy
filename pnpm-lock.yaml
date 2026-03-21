@@ -180,12 +180,12 @@ importers:
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      '@roomy-space/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@roomy/design':
         specifier: workspace:*
         version: link:../design
-      '@roomy/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@sqlite.org/sqlite-wasm':
         specifier: 3.50.4-build1
         version: 3.50.4-build1
@@ -392,7 +392,7 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.36.0
         version: 1.38.0
-      '@roomy/sdk':
+      '@roomy-space/sdk':
         specifier: workspace:*
         version: link:../sdk
       '@types/turndown':

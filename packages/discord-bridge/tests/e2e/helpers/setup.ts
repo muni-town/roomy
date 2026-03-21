@@ -14,7 +14,7 @@ import {
   StreamIndex,
   UserDid,
   Ulid,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import {
   desiredProperties,
   type ChannelProperties,

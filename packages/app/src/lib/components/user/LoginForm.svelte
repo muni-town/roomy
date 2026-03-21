@@ -4,7 +4,7 @@
   import { peer } from "$lib/workers";
 
   import { Subheading, Label, Avatar, Box, Tabs, toast } from "@foxui/core";
-  import { Handle } from "@roomy/sdk";
+  import { Handle } from "@roomy-space/sdk";
   import { onMount } from "svelte";
   import Button from "../ui/button/Button.svelte";
   import Input from "../ui/input/Input.svelte";

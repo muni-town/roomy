@@ -9,7 +9,7 @@ import {
   ButtonStyles,
 } from "@discordeno/bot";
 
-import { StreamDid } from "@roomy/sdk";
+import { StreamDid } from "@roomy-space/sdk";
 import type { Bridge } from "../Bridge.js";
 import type { BridgeConfig } from "../repositories/BridgeRepository.js";
 import { bridgeConfigs } from "../repositories/LevelDBBridgeRepository.js";

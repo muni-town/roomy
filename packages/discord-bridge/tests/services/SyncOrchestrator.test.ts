@@ -6,10 +6,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MockBridgeRepository } from "../../src/repositories/MockBridgeRepository.js";
 import { SyncOrchestrator } from "../../src/services/SyncOrchestrator.js";
-import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid } from "@roomy/sdk";
+import type { ConnectedSpace } from "@roomy-space/sdk";
+import { newUlid } from "@roomy-space/sdk";
 import type { DiscordBot } from "../../src/discord/types.js";
-import type { MessageProperties, ChannelProperties } from "../../src/discord/types.js";
+import type {
+  MessageProperties,
+  ChannelProperties,
+} from "../../src/discord/types.js";
 import { ProfileSyncService } from "../../src/services/ProfileSyncService.js";
 import { ReactionSyncService } from "../../src/services/ReactionSyncService.js";
 import { StructureSyncService } from "../../src/services/StructureSyncService.js";
@@ -22,14 +25,15 @@ const createMockConnectedSpace = () => ({
 });
 
 // Mock DiscordBot
-const createMockBot = (): DiscordBot => ({
-  helpers: {
-    getMessage: vi.fn(async () => null),
-    editMessage: vi.fn(async () => ({ id: 456n })),
-    deleteMessage: vi.fn(async () => ({ success: true })),
-    executeWebhook: vi.fn(async () => ({ id: 123n })),
-  },
-} as any);
+const createMockBot = (): DiscordBot =>
+  ({
+    helpers: {
+      getMessage: vi.fn(async () => null),
+      editMessage: vi.fn(async () => ({ id: 456n })),
+      deleteMessage: vi.fn(async () => ({ success: true })),
+      executeWebhook: vi.fn(async () => ({ id: 123n })),
+    },
+  }) as any;
 
 describe("SyncOrchestrator", () => {
   let repo: MockBridgeRepository;
@@ -50,8 +54,18 @@ describe("SyncOrchestrator", () => {
     mockBot = createMockBot();
 
     profileService = new ProfileSyncService(repo, mockSpace, guildId, spaceId);
-    reactionService = new ReactionSyncService(repo, mockSpace, guildId, spaceId);
-    structureService = new StructureSyncService(repo, mockSpace, guildId, spaceId);
+    reactionService = new ReactionSyncService(
+      repo,
+      mockSpace,
+      guildId,
+      spaceId,
+    );
+    structureService = new StructureSyncService(
+      repo,
+      mockSpace,
+      guildId,
+      spaceId,
+    );
     messageService = new MessageSyncService(
       repo,
       mockSpace,
@@ -88,9 +102,15 @@ describe("SyncOrchestrator", () => {
         webhookId: null,
       } as any;
 
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
 
-      await orchestrator.handleDiscordMessageCreate(discordMessage, roomyRoomId);
+      await orchestrator.handleDiscordMessageCreate(
+        discordMessage,
+        roomyRoomId,
+      );
 
       // Should have called the message service
       expect(await repo.getRoomyId(discordMessage.id.toString())).toBeDefined();
@@ -116,7 +136,10 @@ describe("SyncOrchestrator", () => {
       } as any;
 
       await repo.registerMapping(editedMessage.id.toString(), "roomy-msg-456");
-      await repo.registerMapping(`room:${editedMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${editedMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
 
       await orchestrator.handleDiscordMessageUpdate(editedMessage);
 
@@ -128,7 +151,10 @@ describe("SyncOrchestrator", () => {
       const messageId = 987654321n;
       const channelId = 111222333n;
       await repo.registerMapping(messageId.toString(), "roomy-msg-456");
-      await repo.registerMapping(`room:${channelId.toString()}`, "room-room-123");
+      await repo.registerMapping(
+        `room:${channelId.toString()}`,
+        "room-room-123",
+      );
 
       await orchestrator.handleDiscordMessageDelete(messageId, channelId);
 
@@ -143,9 +169,17 @@ describe("SyncOrchestrator", () => {
       const emoji = { id: null, name: "😀", animated: false };
 
       await repo.registerMapping(messageId.toString(), "roomy-msg-456");
-      await repo.registerMapping(`room:${channelId.toString()}`, "roomy-room-123");
+      await repo.registerMapping(
+        `room:${channelId.toString()}`,
+        "roomy-room-123",
+      );
 
-      await orchestrator.handleDiscordReactionAdd(messageId, channelId, userId, emoji);
+      await orchestrator.handleDiscordReactionAdd(
+        messageId,
+        channelId,
+        userId,
+        emoji,
+      );
 
       // Should have sent a reaction add event
       expect(mockSpace.sendEvent).toHaveBeenCalled();
@@ -158,10 +192,18 @@ describe("SyncOrchestrator", () => {
       const emoji = { id: null, name: "😀", animated: false };
       const reactionKey = `${messageId}:${userId}:😀`;
 
-      await repo.registerMapping(`room:${channelId.toString()}`, "roomy-room-123");
+      await repo.registerMapping(
+        `room:${channelId.toString()}`,
+        "roomy-room-123",
+      );
       await repo.setReaction(reactionKey, "reaction-event-123");
 
-      await orchestrator.handleDiscordReactionRemove(messageId, channelId, userId, emoji);
+      await orchestrator.handleDiscordReactionRemove(
+        messageId,
+        channelId,
+        userId,
+        emoji,
+      );
 
       // Should have sent a reaction remove event
       expect(mockSpace.sendEvent).toHaveBeenCalled();
@@ -192,9 +234,15 @@ describe("SyncOrchestrator", () => {
       const parentChannelId = 987654321n;
 
       // Set up parent channel
-      await repo.registerMapping(`room:${parentChannelId.toString()}`, "parent-room-123");
+      await repo.registerMapping(
+        `room:${parentChannelId.toString()}`,
+        "parent-room-123",
+      );
 
-      await orchestrator.handleDiscordThreadCreate(discordThread, parentChannelId);
+      await orchestrator.handleDiscordThreadCreate(
+        discordThread,
+        parentChannelId,
+      );
 
       // Should have created a thread with link
       expect(mockSpace.sendEvent).toHaveBeenCalled();
@@ -224,7 +272,7 @@ describe("SyncOrchestrator", () => {
       } as any;
 
       await expect(
-        orchestrator.handleRoomyCreateMessage(event, mockBot)
+        orchestrator.handleRoomyCreateMessage(event, mockBot),
       ).rejects.toThrow("Not implemented");
     });
 
@@ -235,7 +283,7 @@ describe("SyncOrchestrator", () => {
       } as any;
 
       await expect(
-        orchestrator.handleRoomyEditMessage(event, mockBot)
+        orchestrator.handleRoomyEditMessage(event, mockBot),
       ).rejects.toThrow("Not implemented");
     });
 
@@ -246,7 +294,7 @@ describe("SyncOrchestrator", () => {
       } as any;
 
       await expect(
-        orchestrator.handleRoomyDeleteMessage(event, mockBot)
+        orchestrator.handleRoomyDeleteMessage(event, mockBot),
       ).rejects.toThrow("Not implemented");
     });
 
@@ -257,7 +305,7 @@ describe("SyncOrchestrator", () => {
       } as any;
 
       await expect(
-        orchestrator.handleRoomyAddReaction(event, mockBot)
+        orchestrator.handleRoomyAddReaction(event, mockBot),
       ).rejects.toThrow("Not implemented");
     });
 
@@ -268,7 +316,7 @@ describe("SyncOrchestrator", () => {
       } as any;
 
       await expect(
-        orchestrator.handleRoomyRemoveReaction(event, mockBot)
+        orchestrator.handleRoomyRemoveReaction(event, mockBot),
       ).rejects.toThrow("Not implemented");
     });
 
@@ -279,7 +327,7 @@ describe("SyncOrchestrator", () => {
       } as any;
 
       await expect(
-        orchestrator.handleRoomyCreateRoom(event, mockBot)
+        orchestrator.handleRoomyCreateRoom(event, mockBot),
       ).rejects.toThrow("Not implemented");
     });
 
@@ -290,7 +338,7 @@ describe("SyncOrchestrator", () => {
       } as any;
 
       await expect(
-        orchestrator.handleRoomyUpdateSidebar(event, mockBot)
+        orchestrator.handleRoomyUpdateSidebar(event, mockBot),
       ).rejects.toThrow("Not implemented");
     });
   });

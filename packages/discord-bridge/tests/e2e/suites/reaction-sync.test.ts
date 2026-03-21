@@ -35,7 +35,7 @@ import {
   StreamIndex,
   Ulid,
   UserDid,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 
 describe("E2E: Reaction Sync - Origin Matrix", () => {
   beforeAll(async () => {
@@ -70,8 +70,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create Discord-origin message
       const testContent = `D-msg for D-react test at ${Date.now()}`;
@@ -153,8 +152,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create Discord-origin message
       const testContent = `D-msg for R-react test at ${Date.now()}`;
@@ -262,8 +260,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create Roomy-origin message
       const testContent = `R-msg for D-react test at ${Date.now()}`;
@@ -370,8 +367,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create Roomy-origin message
       const testContent = `R-msg for R-react test at ${Date.now()}`;
@@ -485,8 +481,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       const testContent = `Test message for reaction remove at ${Date.now()}`;
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -546,8 +541,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       const testContent = `Test message for idempotency at ${Date.now()}`;
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {

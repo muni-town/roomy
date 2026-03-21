@@ -7,7 +7,7 @@
   import { ScrollArea, Select } from "@foxui/core";
   import Button from "$lib/components/ui/button/Button.svelte";
   import Input from "$lib/components/ui/input/Input.svelte";
-  import { Ulid, ulidFactory } from "@roomy/sdk";
+  import { Ulid, ulidFactory } from "@roomy-space/sdk";
   import { deepClone } from "@ark/util";
 
   const types = ["Channel", "Category"] as const;

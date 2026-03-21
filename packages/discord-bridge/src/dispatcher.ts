@@ -6,8 +6,8 @@
  * - toDiscord: Roomy → Discord events (queued during Phase 1, consumed after Phase 3)
  */
 
-import { AsyncChannel, type Event } from "@roomy/sdk";
-import type { DecodedStreamEvent, Ulid } from "@roomy/sdk";
+import { AsyncChannel, type Event } from "@roomy-space/sdk";
+import type { DecodedStreamEvent, Ulid } from "@roomy-space/sdk";
 
 /**
  * Dispatcher holds both directional channels for bidirectional sync.

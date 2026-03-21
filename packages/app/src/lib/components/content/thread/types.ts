@@ -1,4 +1,4 @@
-import type { Ulid, UserDid } from "@roomy/sdk";
+import type { Ulid, UserDid } from "@roomy-space/sdk";
 
 export type Message = {
   id: Ulid;

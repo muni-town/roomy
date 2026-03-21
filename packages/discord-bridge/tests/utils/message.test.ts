@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from "vitest";
 import { decodeMessageBody } from "../../src/utils/message";
-import type { Event } from "@roomy/sdk";
+import type { Event } from "@roomy-space/sdk";
 
 describe("decodeMessageBody", () => {
   it("should decode Uint8Array data to string", () => {
@@ -63,7 +63,9 @@ describe("decodeMessageBody", () => {
     const encoder = new TextEncoder();
     const uint8Array = encoder.encode(text);
     // Convert to binary string for btoa
-    const binaryString = Array.from(uint8Array, byte => String.fromCharCode(byte)).join('');
+    const binaryString = Array.from(uint8Array, (byte) =>
+      String.fromCharCode(byte),
+    ).join("");
     const base64 = btoa(binaryString);
     const event = {
       body: {

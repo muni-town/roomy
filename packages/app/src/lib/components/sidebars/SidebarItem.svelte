@@ -8,7 +8,7 @@
 
   import { IconPencil, IconHashtag, IconDocument } from "@roomy/design/icons";
   import LinkedRoomsList from "./LinkedRoomsList.svelte";
-  import { Ulid } from "@roomy/sdk";
+  import { Ulid } from "@roomy-space/sdk";
 
   let {
     item,

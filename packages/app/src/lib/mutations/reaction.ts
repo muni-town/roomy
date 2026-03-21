@@ -1,4 +1,4 @@
-import { newUlid, type StreamDid, type Ulid } from "@roomy/sdk";
+import { newUlid, type StreamDid, type Ulid } from "@roomy-space/sdk";
 import { peer } from "$lib/workers";
 
 export async function addReaction(

@@ -12,7 +12,7 @@
   import { RichTextEditor } from "$lib/components/richtext";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
-  import { newUlid, toBytes, Ulid } from "@roomy/sdk";
+  import { newUlid, toBytes, Ulid } from "@roomy-space/sdk";
   import { scrollContainerRef } from "$lib/utils.svelte";
 
   import { IconCheck, IconPencil } from "@roomy/design/icons";

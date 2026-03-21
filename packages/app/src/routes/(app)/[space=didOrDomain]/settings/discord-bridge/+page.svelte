@@ -8,7 +8,7 @@
   import { IconCopy } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
   import { peer } from "$lib/workers";
-  import { newUlid, type Event } from "@roomy/sdk";
+  import { newUlid, type Event } from "@roomy-space/sdk";
   const app = getAppState();
 
   const space = $derived(app.joinedSpace?.id);

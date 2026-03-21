@@ -7,7 +7,7 @@
   import { Modal } from "@foxui/core";
   import Input from "$lib/components/ui/input/Input.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
-  import type { Ulid } from "@roomy/sdk";
+  import type { Ulid } from "@roomy-space/sdk";
   // import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
   import { IconSave, IconTrash } from "@roomy/design/icons";
   import { flags } from "$lib/config";

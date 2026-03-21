@@ -5,7 +5,7 @@
  * to survive bridge restarts and prevent duplicate channel creation.
  */
 
-import { Ulid } from "@roomy/sdk";
+import { Ulid } from "@roomy-space/sdk";
 
 /**
  * Topic marker prefix for Roomy-synced channels.

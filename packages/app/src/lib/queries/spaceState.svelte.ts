@@ -4,7 +4,7 @@ import {
   type Handle,
   Ulid,
   newUlid,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SpaceMeta, SidebarCategory } from "./types";

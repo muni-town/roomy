@@ -3,7 +3,7 @@ import type {
   MaterializationSummary,
   MaterializationWarnings,
 } from "./types";
-import type { StreamDid, Ulid } from "@roomy/sdk";
+import type { StreamDid, Ulid } from "@roomy-space/sdk";
 
 /**
  * Compute a summary of materialization results from a batch of applied events.

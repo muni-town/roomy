@@ -23,7 +23,7 @@ import {
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { backfillDiscordReactions } from "../../../src/discord/backfill.js";
-import { StreamIndex } from "@roomy/sdk";
+import { StreamIndex } from "@roomy-space/sdk";
 
 describe("E2E: Reaction Backfill", () => {
   beforeAll(async () => {
@@ -62,8 +62,7 @@ describe("E2E: Reaction Backfill", () => {
     });
 
     const bridge = await createBridgeForTest(result, bot);
-    const roomyRoomId =
-      await bridge.handleDiscordChannelCreate(firstChannel);
+    const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
     await bridge.handleDiscordMessageCreate(testMessage);
 
     // Simulate gateway sync (simulated user reactions, NOT from bot)
@@ -162,8 +161,7 @@ describe("E2E: Reaction Backfill", () => {
     });
 
     const bridge = await createBridgeForTest(result, bot);
-    const roomyRoomId =
-      await bridge.handleDiscordChannelCreate(firstChannel);
+    const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
     await bridge.handleDiscordMessageCreate(testMessage);
 
     // Call backfill on channel with no reactions
@@ -218,8 +216,7 @@ describe("E2E: Reaction Backfill", () => {
     });
 
     const bridge = await createBridgeForTest(result, bot);
-    const roomyRoomId =
-      await bridge.handleDiscordChannelCreate(firstChannel);
+    const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
     await bridge.handleDiscordMessageCreate(message1);
     await bridge.handleDiscordMessageCreate(message2);

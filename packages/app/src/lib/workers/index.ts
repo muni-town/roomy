@@ -12,7 +12,7 @@ import { CONFIG, flags } from "../config";
 import { context, trace } from "@opentelemetry/api";
 import { page } from "$app/state";
 import { Peer, peerStatusChannel } from "./peer/impl";
-import { newUlid } from "@roomy/sdk";
+import { newUlid } from "@roomy-space/sdk";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot && !(window as any).__playwright) {

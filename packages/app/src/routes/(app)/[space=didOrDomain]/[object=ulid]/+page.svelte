@@ -50,7 +50,7 @@
   import Error from "$lib/components/modals/Error.svelte";
 
   import { flags } from "$lib/config";
-  import { Ulid } from "@roomy/sdk";
+  import { Ulid } from "@roomy-space/sdk";
   // import EditRoomModal from "$lib/components/modals/EditRoomModal.svelte";
 
   let createPageDialogOpen = $state(false);

@@ -5,7 +5,7 @@
  * allowing us to track the source and prevent sync loops.
  */
 
-import type { DecodedStreamEvent } from "@roomy/sdk";
+import type { DecodedStreamEvent } from "@roomy-space/sdk";
 
 /**
  * Extension type key constants.

@@ -43,7 +43,7 @@ import {
   type StateMachine,
   Deferred,
   Handle,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import {
   AsyncChannel,
   UserDid,
@@ -54,7 +54,7 @@ import {
   Ulid,
   StreamIndex,
   type RoomMetadata,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import { decode, encode } from "@atcute/cbor";
 import { context, SpanStatusCode } from "@opentelemetry/api";
 import { logMaterializationResult } from "../materializationLogging";

@@ -1,4 +1,4 @@
-import { Did, type } from "@roomy/sdk";
+import { Did, type } from "@roomy-space/sdk";
 import type { ParamMatcher } from "@sveltejs/kit";
 
 export const match = ((param: string) => {

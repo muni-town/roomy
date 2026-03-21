@@ -6,7 +6,7 @@
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { peer } from "$lib/workers";
-  import { newUlid, type StreamDid } from "@roomy/sdk";
+  import { newUlid, type StreamDid } from "@roomy-space/sdk";
 
   let spaceId = $derived(app.joinedSpace?.id);
   let linkQuery = $derived(spaceId ? calendarLinkQuery(spaceId) : undefined);

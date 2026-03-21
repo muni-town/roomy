@@ -1,7 +1,7 @@
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import type { Batch, TaskPriority } from "../types";
 import type { QueryResult } from "./setup";
-import type { StreamDid } from "@roomy/sdk";
+import type { StreamDid } from "@roomy-space/sdk";
 
 export interface SqliteStatus {
   isActiveWorker: boolean;

@@ -3,7 +3,7 @@
  * All functions in this module are pure (no side effects).
  */
 
-import type { Event } from "@roomy/sdk";
+import type { Event } from "@roomy-space/sdk";
 
 /**
  * Decode message body data from a Roomy event.
@@ -28,7 +28,9 @@ import type { Event } from "@roomy/sdk";
  * ```
  */
 export function decodeMessageBody(event: Event): string {
-  const createMessageEvent = event as { body?: { data: { $bytes?: string } | Uint8Array } };
+  const createMessageEvent = event as {
+    body?: { data: { $bytes?: string } | Uint8Array };
+  };
   const data = createMessageEvent.body?.data;
   if (!data) return "";
   if (data instanceof Uint8Array) return new TextDecoder().decode(data);

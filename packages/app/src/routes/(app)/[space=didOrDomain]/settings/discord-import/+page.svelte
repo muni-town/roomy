@@ -19,7 +19,7 @@
     type Event,
     type Ulid,
     toBytes,
-  } from "@roomy/sdk";
+  } from "@roomy-space/sdk";
 
   const currentSpaceId = $derived(app.joinedSpace?.id);
 

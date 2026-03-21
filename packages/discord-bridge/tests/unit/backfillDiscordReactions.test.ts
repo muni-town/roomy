@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { backfillDiscordReactions } from "../../src/discord/backfill.js";
 import type { DiscordBot, Emoji } from "@discordeno/bot";
 import type { GuildContext } from "../../src/types.js";
-import { newUlid, ConnectedSpace } from "@roomy/sdk";
+import { newUlid, ConnectedSpace } from "@roomy-space/sdk";
 
 // Mock the ReactionSyncService
 vi.mock("../../src/services/ReactionSyncService.js", () => ({
@@ -68,7 +68,8 @@ describe("Unit: backfillDiscordReactions", () => {
   });
 
   it("should sync reactions when found on messages", async () => {
-    const { ReactionSyncService } = await import("../../src/services/ReactionSyncService.js");
+    const { ReactionSyncService } =
+      await import("../../src/services/ReactionSyncService.js");
     const mockSyncAddToRoomy = vi.fn().mockResolvedValue("reaction-event-id");
     (ReactionSyncService as any).mockImplementation(() => ({
       syncAddToRoomy: mockSyncAddToRoomy,
@@ -83,9 +84,7 @@ describe("Unit: backfillDiscordReactions", () => {
         {
           id: 1n,
           content: "Test message",
-          reactions: [
-            { emoji: mockEmoji, count: 2 },
-          ],
+          reactions: [{ emoji: mockEmoji, count: 2 }],
         },
       ])
       .mockResolvedValueOnce([]); // Second call returns empty (pagination end)
@@ -102,12 +101,23 @@ describe("Unit: backfillDiscordReactions", () => {
 
     // Verify syncAddToRoomy was called for each user
     expect(mockSyncAddToRoomy).toHaveBeenCalledTimes(2);
-    expect(mockSyncAddToRoomy).toHaveBeenCalledWith(1n, 12345n, 111n, mockEmoji);
-    expect(mockSyncAddToRoomy).toHaveBeenCalledWith(1n, 12345n, 222n, mockEmoji);
+    expect(mockSyncAddToRoomy).toHaveBeenCalledWith(
+      1n,
+      12345n,
+      111n,
+      mockEmoji,
+    );
+    expect(mockSyncAddToRoomy).toHaveBeenCalledWith(
+      1n,
+      12345n,
+      222n,
+      mockEmoji,
+    );
   });
 
   it("should handle custom emojis with id", async () => {
-    const { ReactionSyncService } = await import("../../src/services/ReactionSyncService.js");
+    const { ReactionSyncService } =
+      await import("../../src/services/ReactionSyncService.js");
     const mockSyncAddToRoomy = vi.fn().mockResolvedValue("reaction-event-id");
     (ReactionSyncService as any).mockImplementation(() => ({
       syncAddToRoomy: mockSyncAddToRoomy,
@@ -120,9 +130,7 @@ describe("Unit: backfillDiscordReactions", () => {
       .mockResolvedValueOnce([
         {
           id: 1n,
-          reactions: [
-            { emoji: mockEmoji, count: 1 },
-          ],
+          reactions: [{ emoji: mockEmoji, count: 1 }],
         },
       ])
       .mockResolvedValueOnce([]);
@@ -138,14 +146,20 @@ describe("Unit: backfillDiscordReactions", () => {
       12345n,
       1n,
       "pepe:456",
-      expect.anything()
+      expect.anything(),
     );
 
-    expect(mockSyncAddToRoomy).toHaveBeenCalledWith(1n, 12345n, 333n, mockEmoji);
+    expect(mockSyncAddToRoomy).toHaveBeenCalledWith(
+      1n,
+      12345n,
+      333n,
+      mockEmoji,
+    );
   });
 
   it("should handle pagination of reaction users", async () => {
-    const { ReactionSyncService } = await import("../../src/services/ReactionSyncService.js");
+    const { ReactionSyncService } =
+      await import("../../src/services/ReactionSyncService.js");
     const mockSyncAddToRoomy = vi.fn().mockResolvedValue("reaction-event-id");
     (ReactionSyncService as any).mockImplementation(() => ({
       syncAddToRoomy: mockSyncAddToRoomy,
@@ -186,7 +200,8 @@ describe("Unit: backfillDiscordReactions", () => {
   });
 
   it("should handle messages with no reactions", async () => {
-    const { ReactionSyncService } = await import("../../src/services/ReactionSyncService.js");
+    const { ReactionSyncService } =
+      await import("../../src/services/ReactionSyncService.js");
     const mockSyncAddToRoomy = vi.fn().mockResolvedValue("reaction-event-id");
     (ReactionSyncService as any).mockImplementation(() => ({
       syncAddToRoomy: mockSyncAddToRoomy,

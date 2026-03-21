@@ -54,7 +54,7 @@
   import type { MessagingState } from "../TimelineView.svelte";
   import { messagingState as importedMessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
-  import { Event, newUlid, toBytes, Ulid } from "@roomy/sdk";
+  import { Event, newUlid, toBytes, Ulid } from "@roomy-space/sdk";
   import { page } from "$app/state";
   import { cdnImageUrl } from "$lib/utils.svelte";
   import { getLinkEmbedData } from "$lib/utils/getLinkEmbedData";

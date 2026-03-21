@@ -4,7 +4,7 @@
   const app = getAppState();
   import { peer } from "$lib/workers";
   import { Button, Input, Textarea, toast } from "@foxui/core";
-  import { newUlid } from "@roomy/sdk";
+  import { newUlid } from "@roomy-space/sdk";
 
   let currentSpace = $derived(app.joinedSpace);
   let spaceId = $derived(currentSpace?.id);

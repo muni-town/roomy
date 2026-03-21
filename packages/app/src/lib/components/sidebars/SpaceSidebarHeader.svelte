@@ -7,7 +7,7 @@
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { getAppState } from "$lib/queries";
   import { peer, peerStatus } from "$lib/workers";
-  import { newUlid } from "@roomy/sdk";
+  import { newUlid } from "@roomy-space/sdk";
 
   import {
     IconChevronDown,

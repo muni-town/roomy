@@ -8,7 +8,7 @@ import type {
   UserDid,
   DecodedStreamEvent,
   SyntheticEvent as SyntheticEventType,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import type { SqlStatement } from "./sqlite/types";
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 

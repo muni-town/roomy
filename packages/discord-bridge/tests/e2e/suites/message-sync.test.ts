@@ -23,7 +23,7 @@ import {
   assertEventTypeExists,
   assertEventTypeCount,
 } from "../helpers/assertions.js";
-import { fromBytes, StreamIndex } from "@roomy/sdk";
+import { fromBytes, StreamIndex } from "@roomy-space/sdk";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
@@ -70,8 +70,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message in Discord
       const testContent = `Test message at ${Date.now()}`;
@@ -141,8 +140,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create multiple test messages
       const messages: string[] = [];
@@ -204,8 +202,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message
       const originalContent = `Original message at ${Date.now()}`;
@@ -287,8 +284,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create and sync a message
       const originalContent = `Idempotency test message at ${Date.now()}`;
@@ -352,8 +348,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create and sync a message
       const testContent = `Message to delete at ${Date.now()}`;
@@ -373,10 +368,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
 
       // Sync the deletion to Roomy
-      await bridge.handleDiscordMessageDelete(
-        testMessage.id,
-        firstChannel.id,
-      );
+      await bridge.handleDiscordMessageDelete(testMessage.id, firstChannel.id);
 
       await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -413,8 +405,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message
       const testContent = `Idempotency test at ${Date.now()}`;
@@ -476,8 +467,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create original message
       const originalContent = `Original message for reply at ${Date.now()}`;
@@ -486,10 +476,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       });
 
       // Sync original message
-      await bridge.handleDiscordMessageCreate(
-        originalMessage,
-        roomyRoomId,
-      );
+      await bridge.handleDiscordMessageCreate(originalMessage, roomyRoomId);
 
       // Create reply message
       const replyContent = `Reply at ${Date.now()}`;
@@ -555,8 +542,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a message with an image attachment
       // Using a simple 1x1 red PNG (base64)
@@ -620,8 +606,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a message with a text file attachment
       const fileContent = "Test file content";

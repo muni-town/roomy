@@ -20,7 +20,7 @@ import {
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
-import { StreamIndex } from "@roomy/sdk";
+import { StreamIndex } from "@roomy-space/sdk";
 
 describe("E2E: Discord Bridge Edge Cases", () => {
   beforeAll(async () => {
@@ -65,8 +65,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a webhook for the channel (simulating Roomy → Discord sync)
       const webhook = await bot.rest.createWebhook(firstChannel.id, {
@@ -140,8 +139,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a webhook for the channel (simulating Roomy → Discord sync setup)
       const webhook = await bot.rest.createWebhook(firstChannel.id, {
@@ -162,9 +160,8 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       });
 
       // Try to sync the bot's own message back to Roomy
-      const roomyMessageId = await bridge.handleDiscordMessageCreate(
-        botMessage,
-      );
+      const roomyMessageId =
+        await bridge.handleDiscordMessageCreate(botMessage);
 
       // Verify: Message was skipped (null returned) to prevent echo
       expect(roomyMessageId).toBeNull();
@@ -206,8 +203,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // For this test, we'll create a message via the bot
       // but verify it doesn't get skipped when we DON'T match bot.id
@@ -245,8 +241,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -299,8 +294,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a large message (Discord's limit is 2000 chars for user messages)
       // We'll test with 1500 chars to stay safely under the limit
@@ -330,7 +324,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       expect(messageEvent).toBeDefined();
 
       // Decode and verify content
-      const { fromBytes } = await import("@roomy/sdk");
+      const { fromBytes } = await import("@roomy-space/sdk");
       const bodyData = fromBytes(messageEvent!.body?.data);
       const decodedContent = new TextDecoder().decode(bodyData);
       expect(decodedContent.length).toBe(largeContent.length);
@@ -364,8 +358,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a message with only an attachment (empty content)
       // Using a simple 1x1 red PNG (base64)

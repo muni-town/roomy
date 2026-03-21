@@ -2,7 +2,7 @@ import type { QueryResult } from "../sqlite/setup";
 import type { Batch, SpaceIdOrHandle, StreamIndex } from "../types";
 import type { BlobRef } from "@atproto/lexicon";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
-import { AsyncChannel, trackableState } from "@roomy/sdk";
+import { AsyncChannel, trackableState } from "@roomy-space/sdk";
 import {
   type Profile,
   type StreamDid,
@@ -15,7 +15,7 @@ import {
   type DecodedStreamEvent,
   type EncodedStreamEvent,
   type RoomMetadata,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 import type { messagePortInterface } from "../internalMessaging";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";

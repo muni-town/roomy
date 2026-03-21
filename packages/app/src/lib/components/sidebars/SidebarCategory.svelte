@@ -10,7 +10,7 @@
   } from "@roomy/design/icons";
   import { page } from "$app/state";
   import SidebarItem from "./SidebarItem.svelte";
-  import type { Ulid } from "@roomy/sdk";
+  import type { Ulid } from "@roomy-space/sdk";
 
   let {
     category,

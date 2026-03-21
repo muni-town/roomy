@@ -6,7 +6,7 @@
   import type { ThreadInfo } from "./types";
   import { IconDocument, IconHashtag } from "@roomy/design/icons";
   import AvatarGroup from "$lib/components/user/AvatarGroup.svelte";
-  import type { Ulid } from "@roomy/sdk";
+  import type { Ulid } from "@roomy-space/sdk";
 
   let {
     thread,

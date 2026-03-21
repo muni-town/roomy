@@ -19,7 +19,7 @@
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import Error from "$lib/components/modals/Error.svelte";
   import { IconLoading } from "@roomy/design/icons";
-  import type { StreamIndex } from "@roomy/sdk";
+  import type { StreamIndex } from "@roomy-space/sdk";
 
   const spaceId = $derived(app.joinedSpace?.id);
 

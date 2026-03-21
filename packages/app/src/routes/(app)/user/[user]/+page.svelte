@@ -3,7 +3,7 @@
   import UserProfile from "$lib/components/user/UserProfile.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { peer } from "$lib/workers";
-  import type { UserDid } from "@roomy/sdk";
+  import type { UserDid } from "@roomy-space/sdk";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
   let profile = $state(undefined) as ProfileViewDetailed | undefined;

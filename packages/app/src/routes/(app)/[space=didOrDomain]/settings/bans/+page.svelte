@@ -5,7 +5,7 @@
   import Button from "$lib/components/ui/button/Button.svelte";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { newUlid, UserDid } from "@roomy/sdk";
+  import { newUlid, UserDid } from "@roomy-space/sdk";
 
   import { IconLoading } from "@roomy/design/icons";
   import { Input, toast } from "@foxui/core";

@@ -36,7 +36,7 @@
 
   import { IconChatBubbleText } from "@roomy/design/icons";
   import MessageContextReply from "./MessageContextReply.svelte";
-  import type { Ulid } from "@roomy/sdk";
+  import type { Ulid } from "@roomy-space/sdk";
   import { renderMarkdownPlaintext } from "$lib/utils/markdown";
 
   let {

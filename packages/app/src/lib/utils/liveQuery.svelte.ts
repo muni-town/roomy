@@ -1,7 +1,7 @@
 import { peer } from "$lib/workers";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import type { SqlStatement } from "$lib/workers/sqlite/types";
-import type { AsyncState } from "@roomy/sdk";
+import type { AsyncState } from "@roomy-space/sdk";
 
 /** Simple LRU cache using Map insertion order. */
 class LRUCache<K, V> {

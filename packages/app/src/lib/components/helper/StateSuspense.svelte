@@ -5,7 +5,7 @@
    * Pass a snippet for success (children), pending and error.
    *   */
 
-  import type { AsyncStateWithIdle } from "@roomy/sdk";
+  import type { AsyncStateWithIdle } from "@roomy-space/sdk";
 
   interface ErrorInfo {
     message: string;

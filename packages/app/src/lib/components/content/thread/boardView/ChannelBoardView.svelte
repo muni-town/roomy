@@ -8,7 +8,7 @@
 
   import BoardView from "./BoardView.svelte";
   import type { ThreadInfo } from "./types";
-  import { StreamIndex, Ulid } from "@roomy/sdk";
+  import { StreamIndex, Ulid } from "@roomy-space/sdk";
 
   let { emptyMessage }: { objectType?: string; emptyMessage?: string } =
     $props();

@@ -1,7 +1,7 @@
 import { peer, peerStatus } from "$lib/workers";
-import type { StreamDid, Did } from "@roomy/sdk";
+import type { StreamDid, Did } from "@roomy-space/sdk";
 import { toast } from "@foxui/core";
-import { newUlid, createDefaultSpaceEvents } from "@roomy/sdk";
+import { newUlid, createDefaultSpaceEvents } from "@roomy-space/sdk";
 
 /**
  * Join a space.

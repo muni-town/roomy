@@ -6,14 +6,14 @@
  */
 
 import type { BridgeRepository } from "../repositories/index.js";
-import type { StreamDid, Ulid } from "@roomy/sdk";
+import type { StreamDid, Ulid } from "@roomy-space/sdk";
 import {
   newUlid,
   UserDid,
   type Event,
   type Did,
   type DecodedStreamEvent,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import type { Emoji } from "@discordeno/bot";
 import type { DiscordBot } from "../discord/types.js";
 import {
@@ -476,13 +476,20 @@ export class ReactionSyncService {
           emojiString = `${emojiMatch[2]}:${emojiMatch[3]!}`;
         }
 
-        await this.bot.helpers.deleteOwnReaction(channelId, messageId, emojiString);
+        await this.bot.helpers.deleteOwnReaction(
+          channelId,
+          messageId,
+          emojiString,
+        );
 
         console.log(
           `[ReactionSyncService] Bot removed reaction ${reaction} from Discord message ${messageId}`,
         );
       } catch (error) {
-        console.error(`[ReactionSyncService] Error removing reaction from Discord:`, error);
+        console.error(
+          `[ReactionSyncService] Error removing reaction from Discord:`,
+          error,
+        );
       }
     }
   }
@@ -557,13 +564,20 @@ export class ReactionSyncService {
       // We track this when adding reactions using event ID -> {reactionTo, reaction} mapping
       const removeData = await this.repo.getReaction(e.id);
       if (!removeData) {
-        console.warn(`[ReactionSyncService] Unknown reaction event ${e.id}, skipping removal`);
+        console.warn(
+          `[ReactionSyncService] Unknown reaction event ${e.id}, skipping removal`,
+        );
         return;
       }
       const { reactionTo, reaction } = JSON.parse(removeData);
       // Also clean up the reaction metadata mapping
       await this.repo.deleteReaction(e.id);
-      await this.syncRoomyToDiscordRemove(reactionTo, e.room, reaction, decoded.user);
+      await this.syncRoomyToDiscordRemove(
+        reactionTo,
+        e.room,
+        reaction,
+        decoded.user,
+      );
     }
   }
 }

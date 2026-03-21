@@ -29,7 +29,7 @@ SOFTWARE.
   } from "svelte/elements";
   import { type VariantProps, tv } from "tailwind-variants";
   import { cn } from "$lib/utils.svelte";
-  import type { AsyncStateWithIdle } from "@roomy/sdk";
+  import type { AsyncStateWithIdle } from "@roomy-space/sdk";
 
   export const buttonVariants = tv({
     base: "touch-manipulation hover:cursor-pointer hover:scale-101 focus-visible:scale-101 disabled:hover:scale-100 motion-safe:focus-visible:transition-transform focus-visible:outline-2 outline-offset-2 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl active:scale-98 text-sm font-medium motion-safe:transition-all disabled:pointer-events-none disabled:opacity-60 duration-800 active:duration-100 hover:duration-300 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",

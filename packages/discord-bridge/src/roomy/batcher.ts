@@ -1,5 +1,5 @@
-import type { ConnectedSpace } from "@roomy/sdk";
-import type { Event } from "@roomy/sdk";
+import type { ConnectedSpace } from "@roomy-space/sdk";
+import type { Event } from "@roomy-space/sdk";
 
 const DEFAULT_BATCH_SIZE = 100;
 

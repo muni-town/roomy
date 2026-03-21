@@ -29,9 +29,9 @@ import {
 import { getLatestSidebarEvent } from "../helpers/assertions.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
-import { createRoom } from "@roomy/sdk/package/operations/room";
-import { createMessage } from "@roomy/sdk/package/operations/message";
-import { ConnectedSpace, StreamIndex } from "@roomy/sdk";
+import { createRoom } from "@roomy-space/sdk/package/operations/room";
+import { createMessage } from "@roomy-space/sdk/package/operations/message";
+import { ConnectedSpace, StreamIndex } from "@roomy-space/sdk";
 
 const connectedSpaces = new Map<string, ConnectedSpace>();
 
@@ -88,8 +88,7 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Verify: A createRoom event was created
       const events = (
@@ -196,8 +195,7 @@ describe("E2E: Discord Channel Sync", () => {
       const firstChannel = channels[0];
 
       // First sync
-      const roomId1 =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomId1 = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Get event count after first sync
       const events1 = (
@@ -210,8 +208,7 @@ describe("E2E: Discord Channel Sync", () => {
       );
 
       // Second sync with same channel
-      const roomId2 =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomId2 = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Get event count after second sync
       const events2 = (
@@ -263,7 +260,8 @@ describe("E2E: Discord Channel Sync", () => {
         await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
       ).map((e: any) => e.event);
       const sidebarEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+        (e: any) =>
+          e.$type === "space.roomy.space.updateSidebar.v0" ||
           e.$type === "space.roomy.space.updateSidebar.v1",
       );
 
@@ -482,7 +480,8 @@ describe("E2E: Discord Channel Sync", () => {
         await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
       ).map((e: any) => e.event);
       const sidebarEvents1 = events1.filter(
-        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+        (e: any) =>
+          e.$type === "space.roomy.space.updateSidebar.v0" ||
           e.$type === "space.roomy.space.updateSidebar.v1",
       );
 
@@ -493,7 +492,8 @@ describe("E2E: Discord Channel Sync", () => {
         await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
       ).map((e: any) => e.event);
       const sidebarEvents2 = events2.filter(
-        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+        (e: any) =>
+          e.$type === "space.roomy.space.updateSidebar.v0" ||
           e.$type === "space.roomy.space.updateSidebar.v1",
       );
 
@@ -514,7 +514,8 @@ describe("E2E: Discord Channel Sync", () => {
       );
       const orchestrator = createBridgeForTest(result, bot);
 
-      const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
+      const { createRoom, updateSidebarEvents } =
+        await import("@roomy-space/sdk");
 
       const uniqueName = `test-roomy-channel-${testId}`;
       const roomEvents = createRoom({
@@ -568,7 +569,7 @@ describe("E2E: Discord Channel Sync", () => {
       const countBefore = channelsBefore.size;
 
       // Create a sidebar update that includes the synced Discord channel
-      const { updateSidebarEvents } = await import("@roomy/sdk");
+      const { updateSidebarEvents } = await import("@roomy-space/sdk");
       const events = await result.connectedSpace.fetchEvents(1 as any, 100);
       const createRoomEvents = events.filter(
         (e: any) => e.event.$type === "space.roomy.room.createRoom.v0",
@@ -620,7 +621,8 @@ describe("E2E: Discord Channel Sync", () => {
       );
       const orchestrator = createBridgeForTest(result, bot);
 
-      const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
+      const { createRoom, updateSidebarEvents } =
+        await import("@roomy-space/sdk");
 
       // Create initial room
       const uniqueName = `original-name-${testId}`;
@@ -685,7 +687,8 @@ describe("E2E: Discord Channel Sync", () => {
       );
       const orchestrator = createBridgeForTest(result, bot);
 
-      const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
+      const { createRoom, updateSidebarEvents } =
+        await import("@roomy-space/sdk");
 
       const roomEvents = createRoom({
         kind: "space.roomy.channel",
@@ -751,7 +754,8 @@ describe("E2E: Discord Channel Sync", () => {
       const orchestrator = createBridgeForTest(result, bot);
 
       // 1. Create a Roomy room (without discordOrigin - simulating a room created in Roomy)
-      const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
+      const { createRoom, updateSidebarEvents } =
+        await import("@roomy-space/sdk");
 
       const roomEvents = createRoom({
         kind: "space.roomy.channel",
@@ -821,7 +825,8 @@ describe("E2E: Discord Channel Sync", () => {
       const orchestrator = createBridgeForTest(result, bot);
 
       // Phase 1: Create a Roomy room and sync to Discord
-      const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
+      const { createRoom, updateSidebarEvents } =
+        await import("@roomy-space/sdk");
 
       const uniqueName = `test-recovery-channel-${testId}`;
       const roomEvents = createRoom({
@@ -940,7 +945,8 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Get the current sidebar (it should include the lobby room)
       const sidebarEvents = allEvents.filter(
-        (e: any) => e.event.$type === "space.roomy.space.updateSidebar.v0" ||
+        (e: any) =>
+          e.event.$type === "space.roomy.space.updateSidebar.v0" ||
           e.event.$type === "space.roomy.space.updateSidebar.v1",
       );
 
@@ -998,7 +1004,7 @@ describe("E2E: Discord Channel Sync", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Import updateSidebarEvents
-      const { updateSidebarEvents } = await import("@roomy/sdk");
+      const { updateSidebarEvents } = await import("@roomy-space/sdk");
 
       // Create a Roomy-native room using the Roomy SDK
       const testRoomName = `Backfill Test Room ${testId}`;

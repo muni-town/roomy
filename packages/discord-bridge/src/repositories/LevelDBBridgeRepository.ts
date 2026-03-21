@@ -1,4 +1,4 @@
-import { StreamDid } from "@roomy/sdk";
+import { StreamDid } from "@roomy-space/sdk";
 import {
   BridgeConfig,
   BridgeRepository,
@@ -176,7 +176,10 @@ export class LevelDBBridgeRepository implements BridgeRepository {
     return this.stores.threadParents.get(threadDiscordId);
   }
 
-  async setThreadParent(threadDiscordId: string, parentDiscordId: string): Promise<void> {
+  async setThreadParent(
+    threadDiscordId: string,
+    parentDiscordId: string,
+  ): Promise<void> {
     return this.stores.threadParents.put(threadDiscordId, parentDiscordId);
   }
 
@@ -374,8 +377,7 @@ async function retryWithBackoff<T>(
       // Don't retry if this isn't a lock error
       // Note: abstract-level wraps LEVEL_LOCKED in LEVEL_DATABASE_NOT_OPEN
       const isLockError =
-        error.code === "LEVEL_LOCKED" ||
-        error.cause?.code === "LEVEL_LOCKED";
+        error.code === "LEVEL_LOCKED" || error.cause?.code === "LEVEL_LOCKED";
 
       if (!isLockError) {
         throw error;
@@ -418,7 +420,7 @@ async function ensureDbOpen() {
       openPromise = retryWithBackoff(
         () => db.open(),
         "Database open",
-        5,  // maxRetries
+        5, // maxRetries
         100, // initialDelay (ms)
         2000, // maxDelay (ms)
       )
@@ -834,8 +836,7 @@ export type SyncedRoomLinks = ReturnType<typeof syncedRoomLinksForBridge>;
  * Value: Parent Discord channel snowflake (without "room:" prefix)
  * Used to resolve the correct channel for webhook creation in threads.
  */
-export const threadParentsForBridge =
-  createBridgeStoreFactory("threadParents");
+export const threadParentsForBridge = createBridgeStoreFactory("threadParents");
 
 export type ThreadParents = ReturnType<typeof threadParentsForBridge>;
 

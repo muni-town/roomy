@@ -1,4 +1,4 @@
-import type { Ulid } from "@roomy/sdk";
+import type { Ulid } from "@roomy-space/sdk";
 
 export type ThreadInfo = {
   id: string;

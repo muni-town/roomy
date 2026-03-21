@@ -4,7 +4,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { Ulid } from "@roomy/sdk";
+import type { Ulid } from "@roomy-space/sdk";
 
 /**
  * Compute a collision-resistant fingerprint from arbitrary string data.

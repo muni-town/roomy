@@ -169,7 +169,7 @@
 <script lang="ts">
   import ChatArea from "./ChatArea.svelte";
   import ChatInputArea from "./ChatInputArea.svelte";
-  import type { Ulid } from "@roomy/sdk";
+  import type { Ulid } from "@roomy-space/sdk";
 </script>
 
 <div class="relative flex flex-col flex-1 h-full min-h-0 justify-stretch">

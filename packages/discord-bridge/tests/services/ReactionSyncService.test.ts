@@ -6,8 +6,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MockBridgeRepository } from "../../src/repositories/MockBridgeRepository.js";
 import { ReactionSyncService } from "../../src/services/ReactionSyncService.js";
-import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid, type Ulid } from "@roomy/sdk";
+import type { ConnectedSpace } from "@roomy-space/sdk";
+import { newUlid, type Ulid } from "@roomy-space/sdk";
 import type { Emoji } from "@discordeno/bot";
 import { DiscordBot } from "../../src/discord/types.js";
 

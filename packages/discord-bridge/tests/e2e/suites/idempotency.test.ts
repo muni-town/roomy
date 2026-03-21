@@ -16,7 +16,7 @@ import {
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
-import { StreamIndex } from "@roomy/sdk";
+import { StreamIndex } from "@roomy-space/sdk";
 
 describe("E2E: Discord Bridge Idempotency", () => {
   beforeAll(async () => {
@@ -55,8 +55,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message in Discord
       const testContent = `Test message at ${Date.now()}`;
@@ -123,8 +122,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create and sync a message
       const originalContent = `Original message at ${Date.now()}`;
@@ -198,8 +196,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId =
-        await bridge.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create and sync a message
       const originalContent = `Original message at ${Date.now()}`;
@@ -261,7 +258,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
 
       // Verify: The content is from the NEWER edit (not overwritten by older edit)
       const latestEdit = editEvents[0];
-      const { fromBytes } = await import("@roomy/sdk");
+      const { fromBytes } = await import("@roomy-space/sdk");
       const editBodyData = fromBytes(latestEdit.body?.data);
       const decodedEdit = new TextDecoder().decode(editBodyData);
       expect(decodedEdit).toBe(secondEditContent);

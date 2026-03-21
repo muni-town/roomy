@@ -36,7 +36,7 @@ import {
   type Event,
   type EventType,
   getSyntheticMaterializer,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import { materialize } from "./materializer";
 import type {
   Savepoint,

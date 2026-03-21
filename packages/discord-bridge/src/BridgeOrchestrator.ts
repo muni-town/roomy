@@ -1,11 +1,21 @@
-import { RoomyClient, stateMachine, StateMachine, StreamDid } from "@roomy/sdk";
+import {
+  RoomyClient,
+  stateMachine,
+  StateMachine,
+  StreamDid,
+} from "@roomy-space/sdk";
 import {
   desiredProperties,
   DiscordBot,
   DiscordEvent,
 } from "./discord/types.js";
 import { initRoomyClient } from "./roomy/client.js";
-import { createBot, Intents, InteractionTypes, MessageFlags } from "@discordeno/bot";
+import {
+  createBot,
+  Intents,
+  InteractionTypes,
+  MessageFlags,
+} from "@discordeno/bot";
 import { DISCORD_TOKEN } from "./env.js";
 import { tracer, setDiscordAttrs, recordError } from "./tracing.js";
 import {
@@ -13,7 +23,7 @@ import {
   handleComponentInteraction,
   slashCommands,
 } from "./discord/slashCommands.js";
-import { Deferred } from "@roomy/sdk";
+import { Deferred } from "@roomy-space/sdk";
 import {
   bridgeConfigs,
   migrateBridgeConfigs,
@@ -120,10 +130,7 @@ export class BridgeOrchestrator {
         client: roomy,
         config,
       });
-      this.bridges.set(
-        this.bridgeKey(config.guildId, config.spaceId),
-        bridge,
-      );
+      this.bridges.set(this.bridgeKey(config.guildId, config.spaceId), bridge);
     }
     this.state.current = {
       state: "ready",
@@ -187,9 +194,7 @@ export class BridgeOrchestrator {
             }
 
             // Route component interactions (buttons, selects) to component handler
-            if (
-              interaction.type === InteractionTypes.MessageComponent
-            ) {
+            if (interaction.type === InteractionTypes.MessageComponent) {
               return handleComponentInteraction({
                 interaction,
                 guildId,

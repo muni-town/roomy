@@ -6,8 +6,8 @@ import {
   UserDid,
   StreamDid,
   getMaterializer,
-} from "@roomy/sdk";
-import { getDependsOn } from "@roomy/sdk";
+} from "@roomy-space/sdk";
+import { getDependsOn } from "@roomy-space/sdk";
 
 // UTILS
 

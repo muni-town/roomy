@@ -14,7 +14,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /// <reference lib="webworker" />
 
-import { newUlid } from "@roomy/sdk";
+import { newUlid } from "@roomy-space/sdk";
 import { Peer } from "./impl";
 import { initializeFaro } from "$lib/otel";
 

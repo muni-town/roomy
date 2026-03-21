@@ -1,6 +1,6 @@
 import { createContext } from "svelte";
 import { page } from "$app/state";
-import { Handle, type StreamDid, Ulid, type UserDid } from "@roomy/sdk";
+import { Handle, type StreamDid, Ulid, type UserDid } from "@roomy-space/sdk";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import { peer, peerStatus, getPersonalSpaceId } from "$lib/workers";

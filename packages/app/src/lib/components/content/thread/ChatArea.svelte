@@ -26,7 +26,7 @@
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
-  import { mapAsyncState, type AsyncStateWithIdle } from "@roomy/sdk";
+  import { mapAsyncState, type AsyncStateWithIdle } from "@roomy-space/sdk";
   import StateSuspense from "$lib/components/helper/StateSuspense.svelte";
   import { peer } from "$lib/workers";
   import { getAppState } from "$lib/queries";

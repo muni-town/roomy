@@ -19,7 +19,7 @@ import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 import type { DiscordUser } from "../../../src/services/ProfileSyncService.js";
-import { StreamIndex } from "@roomy/sdk";
+import { StreamIndex } from "@roomy-space/sdk";
 
 describe("E2E: Discord Profile Sync (D→R)", () => {
   beforeAll(async () => {

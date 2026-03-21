@@ -30,7 +30,7 @@ import {
   assertEventTypeExists,
   assertEventTypeCount,
 } from "../helpers/assertions.js";
-import { StreamIndex } from "@roomy/sdk";
+import { StreamIndex } from "@roomy-space/sdk";
 
 describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
   beforeAll(async () => {
@@ -155,7 +155,8 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     assertEventTypeExists(allEvents, "space.roomy.space.updateSpaceInfo.v0");
     assertEventTypeExists(allEvents, "space.roomy.room.createRoom.v0");
     const hasSidebarEvent = allEvents.some(
-      (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+      (e: any) =>
+        e.$type === "space.roomy.space.updateSidebar.v0" ||
         e.$type === "space.roomy.space.updateSidebar.v1",
     );
     expect(hasSidebarEvent).toBe(true);
@@ -273,7 +274,8 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     assertEventTypeCount(events, "space.roomy.space.updateSpaceInfo.v0", 1);
     assertEventTypeCount(events, "space.roomy.room.createRoom.v0", 1);
     const sidebarEventCount = events.filter(
-      (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+      (e: any) =>
+        e.$type === "space.roomy.space.updateSidebar.v0" ||
         e.$type === "space.roomy.space.updateSidebar.v1",
     ).length;
     expect(sidebarEventCount).toBe(1);

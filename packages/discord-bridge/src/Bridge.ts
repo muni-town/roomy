@@ -12,13 +12,13 @@ import {
   type RoomyClient,
   type StreamDid,
   stateMachine,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import type {
   DecodedStreamEvent,
   StateMachine,
   StreamIndex,
   Ulid,
-} from "@roomy/sdk";
+} from "@roomy-space/sdk";
 import type { DiscordBot, DiscordEvent } from "./discord/types.js";
 import { MessageSyncService } from "./services/MessageSyncService.js";
 import { ReactionSyncService } from "./services/ReactionSyncService.js";
@@ -27,8 +27,8 @@ import { StructureSyncService } from "./services/StructureSyncService.js";
 import { getRepo } from "./repositories/LevelDBBridgeRepository.js";
 import { recordError, setRoomyAttrs, tracer } from "./tracing.js";
 import { createDispatcher, EventDispatcher } from "./dispatcher.js";
-import { EventCallbackMeta } from "@roomy/sdk";
-import { Event } from "@roomy/sdk";
+import { EventCallbackMeta } from "@roomy-space/sdk";
+import { Event } from "@roomy-space/sdk";
 
 type BridgeState =
   | {

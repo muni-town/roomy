@@ -25,8 +25,8 @@
   import { messagingState, type Commenting } from "./TimelineView.svelte";
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
   import { getImagePreloadData } from "$lib/utils/media";
-  import { newUlid, toBytes, Ulid, type Event as RoomyEvent } from "@roomy/sdk";
-  import type { Attachment } from "@roomy/sdk";
+  import { newUlid, toBytes, Ulid, type Event as RoomyEvent } from "@roomy-space/sdk";
+  import type { Attachment } from "@roomy-space/sdk";
   import ChatInput, { clearInput, setInputFocus } from "./ChatInput.svelte";
   import { createThread } from "$lib/mutations/room";
   import { goto } from "$app/navigation";

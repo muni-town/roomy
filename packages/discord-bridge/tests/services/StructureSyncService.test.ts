@@ -6,8 +6,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MockBridgeRepository } from "../../src/repositories/MockBridgeRepository.js";
 import { StructureSyncService } from "../../src/services/StructureSyncService.js";
-import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid, type Ulid } from "@roomy/sdk";
+import type { ConnectedSpace } from "@roomy-space/sdk";
+import { newUlid, type Ulid } from "@roomy-space/sdk";
 import type { DiscordBot } from "../../src/discord/types.js";
 import type { ChannelProperties } from "../../src/discord/types.js";
 import { DISCORD_EXTENSION_KEYS } from "../../src/utils/event-extensions.js";

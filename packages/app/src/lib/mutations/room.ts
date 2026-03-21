@@ -1,7 +1,7 @@
-import { newUlid, toBytes, Ulid } from "@roomy/sdk";
+import { newUlid, toBytes, Ulid } from "@roomy-space/sdk";
 import { peer } from "$lib/workers";
-import type { Event, StreamDid } from "@roomy/sdk";
-import { RoomKind } from "@roomy/sdk";
+import type { Event, StreamDid } from "@roomy-space/sdk";
+import { RoomKind } from "@roomy-space/sdk";
 
 interface CreateRoomOpts {
   spaceId: StreamDid;
