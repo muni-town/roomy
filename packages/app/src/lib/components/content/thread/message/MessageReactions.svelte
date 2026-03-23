@@ -1,7 +1,6 @@
 <script lang="ts">
   import { PopoverEmojiPicker } from "@foxui/social";
   import { Toggle } from "@foxui/core";
-  import Tooltip from "$lib/components/helper/Tooltip.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
   import { IconSmilePlus } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
@@ -69,25 +68,20 @@
 {#if message.reactions.length > 0}
   <div class="flex gap-2 items-center flex-wrap pl-12 z-10">
     {#each Object.entries(sortedReactions) as [emoji, users]}
-      <Tooltip tip={emoji + " " + Object.values(users).join(", ")}>
-        {#snippet children()}
-          {@const count = Object.keys(users).length}
-          <Toggle
-            pressed={app.did! in users}
-            onclick={() => onEmojiButtonClick(emoji)}
-            class={`h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15 min-w-4 p-1.5 ${count > 1 ? "px-2" : ""}`}
-          >
-            <span class={count === 1 ? "" : ""}>{emoji}</span>
-            {#if count > 1}
-              <span
-                class="text-xs font-semibold text-base-900 dark:text-base-100"
-              >
-                {Object.keys(users).length}
-              </span>
-            {/if}
-          </Toggle>
-        {/snippet}
-      </Tooltip>
+      {@const count = Object.keys(users).length}
+      <Toggle
+        title={emoji + " " + Object.values(users).join(", ")}
+        pressed={app.did! in users}
+        onclick={() => onEmojiButtonClick(emoji)}
+        class={`h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15 min-w-4 p-1.5 ${count > 1 ? "px-2" : ""}`}
+      >
+        <span class={count === 1 ? "" : ""}>{emoji}</span>
+        {#if count > 1}
+          <span class="text-xs font-semibold text-base-900 dark:text-base-100">
+            {Object.keys(users).length}
+          </span>
+        {/if}
+      </Toggle>
     {/each}
 
     <PopoverEmojiPicker
