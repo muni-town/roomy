@@ -68,9 +68,18 @@ const RemoveRoomLinkSchema = type({
 
 export const RemoveRoomLink = defineEvent(
   RemoveRoomLinkSchema,
-  // TODO: implement removeRoomLink materializer
-  ({}) => {
-    return [];
+  ({ event: { room, linkToRoom } }) => {
+    return [
+      sql`
+        delete from edges
+        where
+          label = 'link'
+            and
+          head = ${room}
+            and
+          tail = ${linkToRoom}
+      `,
+    ];
   },
 );
 

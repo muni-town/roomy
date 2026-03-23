@@ -28,7 +28,7 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { navigate, scrollContainerRef } from "$lib/utils.svelte";
 
-  import { Modal, toast } from "@foxui/core";
+  import { Modal, Popover, toast } from "@foxui/core";
   import Input from "$lib/components/ui/input/Input.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
@@ -45,17 +45,23 @@
     IconHashtag,
     IconDocument,
     IconChatBubble,
+    IconBars,
   } from "@roomy/design/icons";
 
   import Error from "$lib/components/modals/Error.svelte";
 
   import { flags } from "$lib/config";
-  import { Ulid } from "@roomy-space/sdk";
+  import { deleteRoom, newUlid, Ulid } from "@roomy-space/sdk";
+  import LoadingSpinner from "$lib/components/helper/LoadingSpinner.svelte";
+  import { goto } from "$app/navigation";
   // import EditRoomModal from "$lib/components/modals/EditRoomModal.svelte";
 
+  let loading = $state(false);
+  let deleteThreadDialogOpen = $state(false);
   let createPageDialogOpen = $state(false);
   let createPageName = $state("");
   let promoteChannelName = $state("");
+  let parentRoomId = $derived(page.url.searchParams.get("parent"));
 
   const channelTabList = ["Chat", "Threads"] as const;
   let channelActiveTab = $state<(typeof channelTabList)[number]>("Chat");
@@ -189,6 +195,34 @@
       sql`update comp_last_read set unread_count = 0 where entity = ${page.params.object}`,
     );
   });
+
+  async function deleteThread() {
+    if (!page.params.object || !spaceId) return;
+
+    loading = true;
+    try {
+      const events = deleteRoom({ roomId: Ulid.assert(page.params.object) });
+      if (parentRoomId) {
+        events.push({
+          $type: "space.roomy.link.removeRoomLink.v0",
+          id: newUlid(),
+          room: Ulid.assert(parentRoomId),
+          linkToRoom: Ulid.assert(page.params.object),
+        });
+      }
+      await peer.sendEventBatch(spaceId, events);
+
+      toast.success("Successfully deleted stream");
+
+      await goto(`/${page.params.space}`);
+    } catch (e) {
+      console.error(e);
+      toast.error(`Error deleting thread: ${e}`);
+    } finally {
+      loading = false;
+      deleteThreadDialogOpen = false;
+    }
+  }
 </script>
 
 {#snippet sidebar()}
@@ -237,22 +271,39 @@
       {:else if room?.kind == "space.roomy.thread"}
         <span class="grow"></span>
 
-        <!-- <Popover>
-          {#snippet child({ props })}
-            <Button {...props} variant="secondary" size="icon">
-              <IconTablerClick class="shrink-0" /></Button
+        {#if app.isSpaceAdmin}
+          <Popover>
+            {#snippet child({ props })}
+              <Button {...props} variant="secondary" size="icon">
+                <IconBars class="shrink-0" /></Button
+              >
+            {/snippet}
+
+            <Button onclick={() => (deleteThreadDialogOpen = true)}
+              >Delete Thread</Button
             >
-          {/snippet}
 
-          <Button onclick={() => (promoteChannelDialogOpen = true)}
-            >Promote to Channel</Button
+            <!-- <Button onclick={() => (promoteChannelDialogOpen = true)}
+              >Promote to Channel</Button
+            > -->
+          </Popover>
+        {/if}
+
+        <Modal bind:open={deleteThreadDialogOpen}>
+          <form
+            class="flex flex-col items-stretch gap-4"
+            onsubmit={deleteThread}
           >
-        </Popover> -->
+            Are you Sure you want to delete this thread?
+            <div class="flex justify-end">
+              <Button type="submit" disabled={loading}
+                >{#if loading}<LoadingSpinner />{/if} Delete</Button
+              >
+            </div>
+          </form>
+        </Modal>
 
-        <Modal
-          bind:open={promoteChannelDialogOpen}
-          title="Promote Thread to Channel"
-        >
+        <Modal bind:open={promoteChannelDialogOpen}>
           <form
             class="flex flex-col items-stretch gap-4"
             onsubmit={async () => {
