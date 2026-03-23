@@ -250,7 +250,7 @@
             <div class="w-8 shrink-0 sm:w-10"></div>
           {/if}
 
-          <div class="flex flex-col w-full">
+          <div class="flex flex-col w-full min-w-0">
             <!-- Username, timestamp -->
             {#if !message.mergeWithPrevious}
               <div class="text-sm w-full text-start">
@@ -290,7 +290,7 @@
 
             <!-- Message text -->
             <div
-              class="text-sm font-normal prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full"
+              class="text-sm font-normal prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full overflow-scroll"
             >
               {#if isEditing}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
