@@ -194,7 +194,7 @@
     <ContextMenu.Trigger>
       <div
         class={[
-          `relative group w-full flex flex-col px-2 rounded ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
+          `no-mobile-select relative group w-full flex flex-col px-2 rounded ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
           message.mergeWithPrevious ? "mt-1" : "mt-5 pt-1",
         ]}
       >
@@ -431,3 +431,11 @@
     {formattedDate}{format(date, "p")}
   </time>
 {/snippet}
+
+<style>
+  @media (hover: none), (pointer: coarse) {
+    .no-mobile-select {
+      user-select: none;
+    }
+  }
+</style>
