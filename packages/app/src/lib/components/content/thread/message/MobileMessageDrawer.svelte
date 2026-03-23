@@ -30,6 +30,7 @@
     onEditMessage: () => void;
   } = $props();
 
+  let hoveringOverEmojiPicker = $state(false);
   let isEmojiPickerOpen = $state(false);
 
   let canEditAndDelete = $derived(
@@ -66,13 +67,9 @@
 </script>
 
 <Drawer
-  {open}
-  onOpenChange={(value) => {
-    if (value) {
-      open = true;
-    } else if (!isEmojiPickerOpen) {
-      open = false;
-    }
+  bind:open
+  onOutsideClick={(e) => {
+    if (isEmojiPickerOpen) e.preventDefault();
   }}
 >
   {#if message}
@@ -92,6 +89,7 @@
       <PopoverEmojiPicker
         bind:open={isEmojiPickerOpen}
         onpicked={(emoji) => onEmojiPick(emoji.unicode)}
+        interactOutsideBehavior="close"
       >
         {#snippet child({ props })}
           <Button size="icon" variant="ghost" {...props}>

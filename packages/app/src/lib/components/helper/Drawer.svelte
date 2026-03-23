@@ -9,6 +9,7 @@
     drawerTrigger?: Snippet;
     children: Snippet;
     onOpenChange?: (open: boolean) => void;
+    onOutsideClick?: (event: PointerEvent | MouseEvent | TouchEvent) => void;
   };
 
   let {
@@ -18,10 +19,18 @@
     drawerTrigger,
     children,
     onOpenChange,
+    onOutsideClick,
   }: Props = $props();
+  $effect(() => {
+    console.error(onOutsideClick);
+  });
 </script>
 
-<Drawer.Root bind:open {onOpenChange}>
+<Drawer.Root
+  bind:open
+  {onOpenChange}
+  {onOutsideClick}
+>
   {#if drawerTrigger}
     <Drawer.Trigger>
       {@render drawerTrigger?.()}
