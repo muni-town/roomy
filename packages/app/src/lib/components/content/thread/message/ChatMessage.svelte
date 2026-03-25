@@ -290,7 +290,7 @@
 
             <!-- Message text -->
             <div
-              class="text-sm font-normal prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full overflow-scroll"
+              class="text-sm font-normal prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full overflow-auto hide-scrollbar"
             >
               {#if isEditing}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -437,5 +437,15 @@
     .no-mobile-select {
       user-select: none;
     }
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .hide-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
   }
 </style>
