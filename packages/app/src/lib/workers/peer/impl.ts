@@ -1228,7 +1228,10 @@ export class Peer {
           );
         }
 
-        const ROOM_FETCH_BATCH_SIZE = 100;
+        // Keep batch size small to avoid Safari's WebSocket binary frame
+        // truncation bug. Safari silently truncates binary WebSocket frames
+        // above ~30-50KB or something, corrupting msgpack responses and crashing the socket.
+        const ROOM_FETCH_BATCH_SIZE = 10;
         const events = await tracer.startActiveSpan(
           "Fetch Room Events",
           { attributes: { "space.id": spaceId, "room.id": roomId } },
