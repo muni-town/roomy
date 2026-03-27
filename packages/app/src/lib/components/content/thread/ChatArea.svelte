@@ -384,11 +384,15 @@
     isAtBottom = true;
   }
 
+  let scrollRaf: number | undefined;
   function handleScroll() {
-    if (!viewport || !virtualizer) return;
-    const { scrollTop, scrollHeight, clientHeight } = viewport;
-    const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 500;
-    isAtBottom = isNearBottom;
+    if (scrollRaf) return;
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = undefined;
+      if (!viewport || !virtualizer) return;
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      isAtBottom = scrollHeight - (scrollTop + clientHeight) < 500;
+    });
   }
 
   function scrollToMessage(id: string) {

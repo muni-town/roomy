@@ -38,9 +38,12 @@
     },
   );
 
-  let contextMessage = $derived.by(() => {
-    if (!query.result) return null;
-    return query.result[0];
+  // Keep showing previous result while query reloads to avoid flashing
+  let contextMessage = $state<(typeof query.result extends (infer T)[] | null ? T : never) | null>(null);
+  $effect(() => {
+    if (query.result?.[0]) {
+      contextMessage = query.result[0];
+    }
   });
 </script>
 
