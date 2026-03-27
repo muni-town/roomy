@@ -97,6 +97,13 @@ export class ConnectedSpace {
   /** Tracks lazy loading cursors per room */
   #roomCursors: Map<string, StreamIndex> = new Map();
 
+  /**
+   * Max events per subscription notification.
+   * Safari silently truncates binary WebSocket frames above ~30-50KB,
+   * corrupting msgpack responses. With ~600 bytes/event, 30 events ≈ 18KB.
+   */
+  static SUBSCRIPTION_BATCH_LIMIT = 10;
+
   private constructor(config: ConnectedSpaceConfig) {
     this.streamDid = config.streamDid;
     this.#config = config;
@@ -229,7 +236,7 @@ export class ConnectedSpace {
         name: "events",
         params: {},
         start,
-        limit: 2500,
+        limit: ConnectedSpace.SUBSCRIPTION_BATCH_LIMIT,
       },
       (result) => this.#handleEventResult(result),
     );
@@ -258,7 +265,7 @@ export class ConnectedSpace {
         name: "metadata",
         params: {},
         start,
-        limit: 2500,
+        limit: ConnectedSpace.SUBSCRIPTION_BATCH_LIMIT,
       },
       (result) => this.#handleMetadataResult(result, doneBackfilling),
     );
@@ -580,7 +587,7 @@ export class ConnectedSpace {
           name: "events",
           params: {},
           start,
-          limit: 2500,
+          limit: ConnectedSpace.SUBSCRIPTION_BATCH_LIMIT,
         },
         (result) => this.#handleEventResult(result),
       );
@@ -598,7 +605,7 @@ export class ConnectedSpace {
           name: "metadata",
           params: {},
           start,
-          limit: 2500,
+          limit: ConnectedSpace.SUBSCRIPTION_BATCH_LIMIT,
         },
         (result) => this.#handleMetadataResult(result),
       );
