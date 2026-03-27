@@ -36,6 +36,7 @@ import {
   type Event,
   type EventType,
   getSyntheticMaterializer,
+  type,
 } from "@roomy-space/sdk";
 import { materialize } from "./materializer";
 import type {
@@ -265,13 +266,27 @@ class SqliteWorkerSupervisor {
 
         // Make sure all of the profiles we need are downloaded and inserted
         const neededProfiles = new Set<UserDid>();
-        decodedEvents.forEach(([i, ev]) =>
-          newUserSignals.includes(ev.$type)
-            ? UserDid.allows(i.user)
+        decodedEvents.forEach(([i, ev]) => {
+          if (newUserSignals.includes(ev.$type)) {
+            UserDid.allows(i.user)
               ? neededProfiles.add(UserDid.assert(i.user))
-              : console.warn("Found invalid user id", i.user)
-            : undefined,
-        );
+              : console.warn("Found invalid user id", i.user);
+            if (
+              ev.$type == "space.roomy.message.createMessage.v0" &&
+              ev.extensions["space.roomy.extension.authorOverride.v0"]
+            ) {
+              const did = UserDid(
+                ev.extensions["space.roomy.extension.authorOverride.v0"].did,
+              );
+              if (
+                !(did instanceof type.errors) &&
+                (did.startsWith("did:web") || did.startsWith("did:plc"))
+              ) {
+                neededProfiles.add(did);
+              }
+            }
+          }
+        });
 
         if (neededProfiles.size)
           bundles.push(
