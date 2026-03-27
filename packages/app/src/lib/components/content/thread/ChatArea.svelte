@@ -22,7 +22,6 @@
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { onNavigate } from "$app/navigation";
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
@@ -297,26 +296,19 @@
     { cache: true, description: "Messages query", origin: "ChatArea.svelte" },
   );
 
-  let showLastN = $state(50);
-  onNavigate(() => {
-    showLastN = 50;
-  });
   let isAtBottom = $state(true);
   let showJumpToPresent = $derived(!isAtBottom);
 
-  let timeline = $derived(
+  let displayMessages = $derived(
     mapAsyncState(query.current, (results) => {
       if (!results) return [];
 
       // Results come in descending order (newest first), reverse to get chronological
       const reversed = results.toReversed();
 
-      const mapped = reversed.map((message, index) => {
-        // Get the previous message from the reversed array (if it exists)
+      return reversed.map((message, index) => {
         const prevMessage = index > 0 ? reversed[index - 1] : null;
 
-        // Calculate mergeWithPrevious
-        // Merge if same author AND within 5 minutes AND both authors exist
         let mergeWithPrevious: boolean | null = false;
         if (
           prevMessage &&
@@ -333,16 +325,7 @@
           mergeWithPrevious,
         };
       });
-
-      return mapped;
     }),
-  );
-
-  // Messages to display - ensures the Virtualizer gets proper reactivity when data changes
-  // This is computed as a derived state rather than a {@const} in the template to ensure
-  // the Virtualizer is properly notified of data changes
-  let displayMessages = $derived(
-    mapAsyncState(timeline, (t) => t.slice(-showLastN)),
   );
 
   let viewport: HTMLDivElement = $state(null!);
@@ -378,9 +361,7 @@
 
   function scrollToBottom() {
     if (!virtualizer || displayMessages.status !== "success") return;
-    virtualizer.scrollToIndex(displayMessages.data.length - 1, {
-      align: "start",
-    });
+    virtualizer.scrollToIndex(displayMessages.data.length - 1);
     isAtBottom = true;
   }
 
@@ -397,27 +378,21 @@
 
   function scrollToMessage(id: string) {
     if (displayMessages.status !== "success") return;
-    const message = displayMessages.data.find((msg) => id === msg.id);
-    if (!message) {
-      toast.error("Message not found");
-      return;
-    }
-    const idx = displayMessages.data.indexOf(message);
+    const idx = displayMessages.data.findIndex((msg) => id === msg.id);
     if (idx >= 0) virtualizer?.scrollToIndex(idx);
-    else {
-      toast.error("Message not found");
-    }
+    else toast.error("Message not found");
   }
 
   setContext("scrollToMessage", scrollToMessage);
 
-  // Handle route changes and initial load - scroll to bottom once
+  // Reset scroll state on route changes
   $effect(() => {
-    page.route; // Trigger on route changes
-    hasInitiallyScrolled = false; // Reset for new route
+    page.route;
+    hasInitiallyScrolled = false;
   });
 
-  // Simple initial scroll to bottom when timeline first loads
+  // Scroll to bottom once when messages first appear, then stop.
+  // shift={true} on the Virtualizer keeps position stable as messages prepend.
   $effect(() => {
     if (
       !hasInitiallyScrolled &&
@@ -425,28 +400,19 @@
       displayMessages.data.length > 0 &&
       virtualizer
     ) {
-      // Use rAF to scroll after the browser has painted the initial frame
-      requestAnimationFrame(() => {
-        scrollToBottom();
-        hasInitiallyScrolled = true;
-      });
+      scrollToBottom();
+      hasInitiallyScrolled = true;
     }
     chatArea.scrollToMessage = scrollToMessage;
   });
 
-  // Auto-scroll to bottom when new messages arrive at the END and user is already at bottom.
-  // Compare the last message ID to distinguish appends (new messages) from prepends (lazy load).
+  // Auto-scroll when a new message arrives at the bottom (not prepend from lazy load)
   let prevLastMessageId = $state<string | undefined>();
   $effect(() => {
     if (displayMessages.status !== "success") return;
     const msgs = displayMessages.data;
-    const lastId = msgs.length > 0 ? msgs[msgs.length - 1].id : undefined;
-    if (
-      lastId &&
-      prevLastMessageId &&
-      lastId !== prevLastMessageId &&
-      isAtBottom
-    ) {
+    const lastId = msgs.length > 0 ? msgs[msgs.length - 1]?.id : undefined;
+    if (lastId && prevLastMessageId && lastId !== prevLastMessageId && isAtBottom) {
       scrollToBottom();
     }
     prevLastMessageId = lastId;
@@ -470,16 +436,15 @@
     lazyLoadState = { status: "idle" };
   });
 
-  // Trigger lazy load when materialized data can't fill the current window.
-  // When the query returns fewer rows than showLastN, we've exhausted what's
-  // in SQLite and need the backend to materialize more events from the stream.
+  // Trigger lazy load when there are fewer messages than expected.
+  // This fills in history from the server when SQLite doesn't have enough.
   $effect(() => {
     if (
-      timeline.status === "success" &&
-      timeline.data.length < showLastN &&
+      displayMessages.status === "success" &&
+      displayMessages.data.length < 50 &&
       hasMoreHistory &&
       !isLazyLoading &&
-      lazyLoadState.status !== "error" // Don't retry on error to prevent infinite loops
+      lazyLoadState.status !== "error"
     ) {
       loadMoreMessages();
     }
@@ -534,12 +499,14 @@
 
         <StateSuspense state={displayMessages} pending={messagesSkeleton}>
           {#snippet children(messages)}
-            <ol class="flex flex-col justify-end max-w-full h-full">
+            <ol class="max-w-full h-full">
               {#if messages.length === 0 && !hasMoreHistory && !isLazyLoading}
-                <p class="opacity-80 p-4 text-center text-sm">
-                  No messages here yet. This is the beginning of something
-                  beautiful.
-                </p>
+                <div class="flex items-end h-full">
+                  <p class="opacity-80 p-4 text-center text-sm w-full">
+                    No messages here yet. This is the beginning of something
+                    beautiful.
+                  </p>
+                </div>
               {/if}
 
               {#if messages.length > 0}
@@ -555,14 +522,7 @@
                     scrollRef={viewport}
                     overscan={5}
                     shift={true}
-                    getKey={(x) => {
-                      return x.id;
-                    }}
-                    onscroll={(o) => {
-                      if (o < 100 && messages.length >= showLastN) {
-                        showLastN += 50;
-                      }
-                    }}
+                    getKey={(x) => x?.id ?? ""}
                   >
                     {#snippet children(message?: Message)}
                       {#if message}
