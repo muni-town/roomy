@@ -71,4 +71,7 @@
   <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
     {@html renderMarkdownPlaintext(contextMessage?.content ?? "")}
   </div>
+{:else}
+  <!-- Reserve space while the reply query loads to prevent layout shift -->
+  <div class="h-5"></div>
 {/if}

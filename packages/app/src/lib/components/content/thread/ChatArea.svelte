@@ -61,7 +61,6 @@
       return;
     }
 
-    isShifting = true; // Enable shift during lazy load (prepends messages)
     lazyLoadState = { status: "loading" };
     try {
       const result = await tracer.startActiveSpan(
@@ -80,17 +79,11 @@
         },
       );
       lazyLoadState = { status: "success", data: result };
-
-      // Keep shift enabled briefly after load completes to allow rendering
-      setTimeout(() => {
-        isShifting = false;
-      }, 500);
     } catch (e) {
       lazyLoadState = {
         status: "error",
         message: e instanceof Error ? e.message : "Failed to load messages",
       };
-      isShifting = false;
     }
   }
 
@@ -356,8 +349,6 @@
 
   // Track initial load for auto-scroll
   let hasInitiallyScrolled = $state(false);
-  // Track timeline length to detect new messages
-  let prevTimelineLength = $state(0);
 
   // Lifted state for editing messages
   let editingMessageId = $state("");
@@ -430,27 +421,32 @@
       displayMessages.data.length > 0 &&
       virtualizer
     ) {
-      setTimeout(() => {
+      // Use rAF to scroll after the browser has painted the initial frame
+      requestAnimationFrame(() => {
         scrollToBottom();
         hasInitiallyScrolled = true;
-      }, 200);
+      });
     }
     chatArea.scrollToMessage = scrollToMessage;
   });
 
-  // Auto-scroll to bottom when new messages arrive and user is already at bottom
+  // Auto-scroll to bottom when new messages arrive at the END and user is already at bottom.
+  // Compare the last message ID to distinguish appends (new messages) from prepends (lazy load).
+  let prevLastMessageId = $state<string | undefined>();
   $effect(() => {
     if (displayMessages.status !== "success") return;
-    const len = displayMessages.data.length;
-    if (len > prevTimelineLength && prevTimelineLength > 0 && isAtBottom) {
+    const msgs = displayMessages.data;
+    const lastId = msgs.length > 0 ? msgs[msgs.length - 1].id : undefined;
+    if (
+      lastId &&
+      prevLastMessageId &&
+      lastId !== prevLastMessageId &&
+      isAtBottom
+    ) {
       scrollToBottom();
     }
-    prevTimelineLength = len;
+    prevLastMessageId = lastId;
   });
-
-  // Track shifting state for prepend operations (lazy load)
-  // We only want shift=true when messages are prepended at the top, not when new messages arrive at bottom
-  let isShifting = $state(false);
 
   // Track which room we've loaded for to prevent re-triggering
   let lastLoadedRoomId: string | undefined;
@@ -512,37 +508,35 @@
       class="relative max-w-full w-full h-full"
       onscroll={handleScroll}
     >
-      <div class="flex flex-col w-full h-full pb-16 pt-2">
+      <div class="relative flex flex-col w-full h-full pb-16 pt-2">
+        <!-- Lazy load indicators are absolutely positioned so they don't
+             shift the Virtualizer's content when they appear/disappear -->
+        {#if lazyLoadState.status === "loading"}
+          <div class="absolute top-2 left-0 right-0 z-10 flex justify-center py-2">
+            <IconLoading class="animate-spin text-base-500" />
+          </div>
+        {:else if lazyLoadState.status === "error"}
+          <div
+            class="absolute top-2 left-0 right-0 z-10 flex justify-center items-center gap-2 mx-4 py-2 text-sm"
+          >
+            <span>Failed to load older messages: {lazyLoadState.message}</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onclick={loadMoreMessages}>Retry</Button
+            >
+          </div>
+        {/if}
+
         <StateSuspense state={displayMessages} pending={messagesSkeleton}>
           {#snippet children(messages)}
-            <ol class="flex flex-col justify-end gap-2 max-w-full h-full">
-              <StateSuspense state={lazyLoadState}>
-                {#snippet children()}
-                  {#if messages.length === 0}
-                    <p class="opacity-80 p-4 text-center text-sm">
-                      No messages here yet. This is the beginning of something
-                      beautiful.
-                    </p>
-                  {/if}
-                {/snippet}
-                {#snippet pending()}
-                  <div class="flex justify-center py-2">
-                    <IconLoading class="animate-spin text-base-500" />
-                  </div>
-                {/snippet}
-                {#snippet error({ message })}
-                  <div
-                    class="flex justify-center items-center gap-2 mx-4 py-2 text-sm"
-                  >
-                    <span>Failed to load older messages: {message}</span>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onclick={loadMoreMessages}>Retry</Button
-                    >
-                  </div>
-                {/snippet}
-              </StateSuspense>
+            <ol class="flex flex-col justify-end max-w-full h-full">
+              {#if messages.length === 0 && !hasMoreHistory && !isLazyLoading}
+                <p class="opacity-80 p-4 text-center text-sm">
+                  No messages here yet. This is the beginning of something
+                  beautiful.
+                </p>
+              {/if}
 
               {#if messages.length > 0}
                 <!--
@@ -556,7 +550,7 @@
                     data={messages}
                     scrollRef={viewport}
                     overscan={5}
-                    shift={isShifting}
+                    shift={true}
                     getKey={(x) => {
                       return x.id;
                     }}
