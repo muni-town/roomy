@@ -24,7 +24,7 @@
 
 <div
   class={cn(
-    "h-dvh flex flex-col overflow-hidden",
+    "h-full flex flex-col overflow-hidden",
     hideSmallSidebar
       ? sidebar
         ? "sm:ml-64"

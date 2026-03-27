@@ -75,6 +75,7 @@
   .media-overlay {
     display: flex;
     position: fixed;
+    z-index: 50;
     top: 0px;
     bottom: 0px;
     right: 0px;

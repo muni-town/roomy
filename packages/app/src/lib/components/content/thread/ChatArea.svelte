@@ -22,7 +22,6 @@
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { onNavigate } from "$app/navigation";
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
@@ -61,7 +60,6 @@
       return;
     }
 
-    isShifting = true; // Enable shift during lazy load (prepends messages)
     lazyLoadState = { status: "loading" };
     try {
       const result = await tracer.startActiveSpan(
@@ -80,17 +78,11 @@
         },
       );
       lazyLoadState = { status: "success", data: result };
-
-      // Keep shift enabled briefly after load completes to allow rendering
-      setTimeout(() => {
-        isShifting = false;
-      }, 500);
     } catch (e) {
       lazyLoadState = {
         status: "error",
         message: e instanceof Error ? e.message : "Failed to load messages",
       };
-      isShifting = false;
     }
   }
 
@@ -304,26 +296,19 @@
     { cache: true, description: "Messages query", origin: "ChatArea.svelte" },
   );
 
-  let showLastN = $state(50);
-  onNavigate(() => {
-    showLastN = 50;
-  });
   let isAtBottom = $state(true);
   let showJumpToPresent = $derived(!isAtBottom);
 
-  let timeline = $derived(
+  let displayMessages = $derived(
     mapAsyncState(query.current, (results) => {
       if (!results) return [];
 
       // Results come in descending order (newest first), reverse to get chronological
       const reversed = results.toReversed();
 
-      const mapped = reversed.map((message, index) => {
-        // Get the previous message from the reversed array (if it exists)
+      return reversed.map((message, index) => {
         const prevMessage = index > 0 ? reversed[index - 1] : null;
 
-        // Calculate mergeWithPrevious
-        // Merge if same author AND within 5 minutes AND both authors exist
         let mergeWithPrevious: boolean | null = false;
         if (
           prevMessage &&
@@ -340,24 +325,13 @@
           mergeWithPrevious,
         };
       });
-
-      return mapped;
     }),
-  );
-
-  // Messages to display - ensures the Virtualizer gets proper reactivity when data changes
-  // This is computed as a derived state rather than a {@const} in the template to ensure
-  // the Virtualizer is properly notified of data changes
-  let displayMessages = $derived(
-    mapAsyncState(timeline, (t) => t.slice(-showLastN)),
   );
 
   let viewport: HTMLDivElement = $state(null!);
 
   // Track initial load for auto-scroll
   let hasInitiallyScrolled = $state(false);
-  // Track timeline length to detect new messages
-  let prevTimelineLength = $state(0);
 
   // Lifted state for editing messages
   let editingMessageId = $state("");
@@ -387,42 +361,38 @@
 
   function scrollToBottom() {
     if (!virtualizer || displayMessages.status !== "success") return;
-    virtualizer.scrollToIndex(displayMessages.data.length - 1, {
-      align: "start",
-    });
+    virtualizer.scrollToIndex(displayMessages.data.length - 1);
     isAtBottom = true;
   }
 
+  let scrollRaf: number | undefined;
   function handleScroll() {
-    if (!viewport || !virtualizer) return;
-    const { scrollTop, scrollHeight, clientHeight } = viewport;
-    const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 500;
-    isAtBottom = isNearBottom;
+    if (scrollRaf) return;
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = undefined;
+      if (!viewport || !virtualizer) return;
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      isAtBottom = scrollHeight - (scrollTop + clientHeight) < 500;
+    });
   }
 
   function scrollToMessage(id: string) {
     if (displayMessages.status !== "success") return;
-    const message = displayMessages.data.find((msg) => id === msg.id);
-    if (!message) {
-      toast.error("Message not found");
-      return;
-    }
-    const idx = displayMessages.data.indexOf(message);
+    const idx = displayMessages.data.findIndex((msg) => id === msg.id);
     if (idx >= 0) virtualizer?.scrollToIndex(idx);
-    else {
-      toast.error("Message not found");
-    }
+    else toast.error("Message not found");
   }
 
   setContext("scrollToMessage", scrollToMessage);
 
-  // Handle route changes and initial load - scroll to bottom once
+  // Reset scroll state on route changes
   $effect(() => {
-    page.route; // Trigger on route changes
-    hasInitiallyScrolled = false; // Reset for new route
+    page.route;
+    hasInitiallyScrolled = false;
   });
 
-  // Simple initial scroll to bottom when timeline first loads
+  // Scroll to bottom once when messages first appear, then stop.
+  // shift={true} on the Virtualizer keeps position stable as messages prepend.
   $effect(() => {
     if (
       !hasInitiallyScrolled &&
@@ -430,27 +400,23 @@
       displayMessages.data.length > 0 &&
       virtualizer
     ) {
-      setTimeout(() => {
-        scrollToBottom();
-        hasInitiallyScrolled = true;
-      }, 200);
+      scrollToBottom();
+      hasInitiallyScrolled = true;
     }
     chatArea.scrollToMessage = scrollToMessage;
   });
 
-  // Auto-scroll to bottom when new messages arrive and user is already at bottom
+  // Auto-scroll when a new message arrives at the bottom (not prepend from lazy load)
+  let prevLastMessageId = $state<string | undefined>();
   $effect(() => {
     if (displayMessages.status !== "success") return;
-    const len = displayMessages.data.length;
-    if (len > prevTimelineLength && prevTimelineLength > 0 && isAtBottom) {
+    const msgs = displayMessages.data;
+    const lastId = msgs.length > 0 ? msgs[msgs.length - 1]?.id : undefined;
+    if (lastId && prevLastMessageId && lastId !== prevLastMessageId && isAtBottom) {
       scrollToBottom();
     }
-    prevTimelineLength = len;
+    prevLastMessageId = lastId;
   });
-
-  // Track shifting state for prepend operations (lazy load)
-  // We only want shift=true when messages are prepended at the top, not when new messages arrive at bottom
-  let isShifting = $state(false);
 
   // Track which room we've loaded for to prevent re-triggering
   let lastLoadedRoomId: string | undefined;
@@ -470,16 +436,15 @@
     lazyLoadState = { status: "idle" };
   });
 
-  // Trigger lazy load when materialized data can't fill the current window.
-  // When the query returns fewer rows than showLastN, we've exhausted what's
-  // in SQLite and need the backend to materialize more events from the stream.
+  // Trigger lazy load when there are fewer messages than expected.
+  // This fills in history from the server when SQLite doesn't have enough.
   $effect(() => {
     if (
-      timeline.status === "success" &&
-      timeline.data.length < showLastN &&
+      displayMessages.status === "success" &&
+      displayMessages.data.length < 50 &&
       hasMoreHistory &&
       !isLazyLoading &&
-      lazyLoadState.status !== "error" // Don't retry on error to prevent infinite loops
+      lazyLoadState.status !== "error"
     ) {
       loadMoreMessages();
     }
@@ -512,37 +477,37 @@
       class="relative max-w-full w-full h-full"
       onscroll={handleScroll}
     >
-      <div class="flex flex-col w-full h-full pb-16 pt-2">
+      <div class="relative flex flex-col w-full h-full pb-16 pt-2">
+        <!-- Lazy load indicators are absolutely positioned so they don't
+             shift the Virtualizer's content when they appear/disappear -->
+        {#if lazyLoadState.status === "loading"}
+          <div class="absolute top-2 left-0 right-0 z-10 flex justify-center py-2">
+            <IconLoading class="animate-spin text-base-500" />
+          </div>
+        {:else if lazyLoadState.status === "error"}
+          <div
+            class="absolute top-2 left-0 right-0 z-10 flex justify-center items-center gap-2 mx-4 py-2 text-sm"
+          >
+            <span>Failed to load older messages: {lazyLoadState.message}</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onclick={loadMoreMessages}>Retry</Button
+            >
+          </div>
+        {/if}
+
         <StateSuspense state={displayMessages} pending={messagesSkeleton}>
           {#snippet children(messages)}
-            <ol class="flex flex-col justify-end gap-2 max-w-full h-full">
-              <StateSuspense state={lazyLoadState}>
-                {#snippet children()}
-                  {#if messages.length === 0}
-                    <p class="opacity-80 p-4 text-center text-sm">
-                      No messages here yet. This is the beginning of something
-                      beautiful.
-                    </p>
-                  {/if}
-                {/snippet}
-                {#snippet pending()}
-                  <div class="flex justify-center py-2">
-                    <IconLoading class="animate-spin text-base-500" />
-                  </div>
-                {/snippet}
-                {#snippet error({ message })}
-                  <div
-                    class="flex justify-center items-center gap-2 mx-4 py-2 text-sm"
-                  >
-                    <span>Failed to load older messages: {message}</span>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onclick={loadMoreMessages}>Retry</Button
-                    >
-                  </div>
-                {/snippet}
-              </StateSuspense>
+            <ol class="max-w-full h-full">
+              {#if messages.length === 0 && !hasMoreHistory && !isLazyLoading}
+                <div class="flex items-end h-full">
+                  <p class="opacity-80 p-4 text-center text-sm w-full">
+                    No messages here yet. This is the beginning of something
+                    beautiful.
+                  </p>
+                </div>
+              {/if}
 
               {#if messages.length > 0}
                 <!--
@@ -556,15 +521,8 @@
                     data={messages}
                     scrollRef={viewport}
                     overscan={5}
-                    shift={isShifting}
-                    getKey={(x) => {
-                      return x.id;
-                    }}
-                    onscroll={(o) => {
-                      if (o < 100 && messages.length >= showLastN) {
-                        showLastN += 50;
-                      }
-                    }}
+                    shift={true}
+                    getKey={(x) => x?.id ?? ""}
                   >
                     {#snippet children(message?: Message)}
                       {#if message}

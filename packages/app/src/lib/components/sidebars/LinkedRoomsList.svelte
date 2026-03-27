@@ -43,14 +43,12 @@
     `,
   );
 
-  let linkedRooms = $derived.by(() => {
-    if (!query.result) return null;
-    return query.result;
-    // idea to reorder to have the active room first
-    // const activeRoom = query.result.find((r) => r.id === page.params.object);
-    // const rooms = query.result.filter((r) => r.id !== page.params.object);
-    // if (activeRoom) rooms.unshift(activeRoom);
-    // return rooms;
+  // Keep showing previous results while loading to avoid flash on remount
+  let linkedRooms = $state<typeof query.result>(null);
+  $effect(() => {
+    if (query.result) {
+      linkedRooms = query.result;
+    }
   });
 </script>
 
