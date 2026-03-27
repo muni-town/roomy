@@ -17,19 +17,38 @@ marked.use({
   },
 });
 
+// LRU-style cache for rendered markdown to avoid re-parsing on every scroll
+const htmlCache = new Map<string, string>();
+const plaintextCache = new Map<string, string>();
+const MAX_CACHE = 500;
+
+function cachedGet(cache: Map<string, string>, key: string, compute: () => string): string {
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const result = compute();
+  if (cache.size >= MAX_CACHE) {
+    // Delete oldest entry
+    cache.delete(cache.keys().next().value!);
+  }
+  cache.set(key, result);
+  return result;
+}
+
 /** Render the markdown string to sanitized HTML, ready for display in the app. */
 export function renderMarkdownSanitized(markdown: string) {
-  return DOMPurify.sanitize(marked.parse(markdown, { async: false }), {
-    ADD_ATTR: ["target", "rel"],
-  }) as string;
+  return cachedGet(htmlCache, markdown, () =>
+    DOMPurify.sanitize(marked.parse(markdown, { async: false }), {
+      ADD_ATTR: ["target", "rel"],
+    }) as string,
+  );
 }
 
 export function renderMarkdownPlaintext(markdown: string): string {
-  const html = DOMPurify.sanitize(marked.parse(markdown, { async: false }), {
-    ADD_ATTR: ["target", "rel"],
-  }) as string;
-
-  // Use the browser’s HTML parser rather than regex
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  return doc.body.textContent ?? "";
+  return cachedGet(plaintextCache, markdown, () => {
+    const html = DOMPurify.sanitize(marked.parse(markdown, { async: false }), {
+      ADD_ATTR: ["target", "rel"],
+    }) as string;
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.body.textContent ?? "";
+  });
 }
