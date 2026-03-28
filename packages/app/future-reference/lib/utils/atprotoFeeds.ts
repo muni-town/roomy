@@ -504,17 +504,24 @@ export class AtprotoFeedAggregator {
         return false;
       }
 
-      await this.agent.api.com.atproto.repo.createRecord({
-        repo: did,
-        collection: "app.bsky.feed.like",
-        record: {
-          subject: {
-            uri: postUri,
-            cid: postCid,
+      await this.agent.api.com.atproto.repo.createRecord(
+        {
+          repo: did,
+          collection: "app.bsky.feed.like",
+          record: {
+            subject: {
+              uri: postUri,
+              cid: postCid,
+            },
+            createdAt: new Date().toISOString(),
           },
-          createdAt: new Date().toISOString(),
         },
-      });
+        {
+          headers: {
+            "atproto-proxy": `${this.agent.assertDid}#atproto_pds`,
+          },
+        },
+      );
       return true;
     } catch (error) {
       console.error(`Failed to like post ${postUri}:`, error);
@@ -531,17 +538,24 @@ export class AtprotoFeedAggregator {
         return false;
       }
 
-      await this.agent.api.com.atproto.repo.createRecord({
-        repo: did,
-        collection: "app.bsky.feed.repost",
-        record: {
-          subject: {
-            uri: postUri,
-            cid: postCid,
+      await this.agent.api.com.atproto.repo.createRecord(
+        {
+          repo: did,
+          collection: "app.bsky.feed.repost",
+          record: {
+            subject: {
+              uri: postUri,
+              cid: postCid,
+            },
+            createdAt: new Date().toISOString(),
           },
-          createdAt: new Date().toISOString(),
         },
-      });
+        {
+          headers: {
+            "atproto-proxy": `${this.agent.assertDid}#atproto_pds`,
+          },
+        },
+      );
       return true;
     } catch (error) {
       console.error(`Failed to repost post ${postUri}:`, error);
@@ -566,24 +580,31 @@ export class AtprotoFeedAggregator {
         return false;
       }
 
-      await this.agent.api.com.atproto.repo.createRecord({
-        repo: did,
-        collection: "app.bsky.feed.post",
-        record: {
-          text: text,
-          reply: {
-            root: {
-              uri: rootUri || postUri,
-              cid: rootCid || postCid,
+      await this.agent.api.com.atproto.repo.createRecord(
+        {
+          repo: did,
+          collection: "app.bsky.feed.post",
+          record: {
+            text: text,
+            reply: {
+              root: {
+                uri: rootUri || postUri,
+                cid: rootCid || postCid,
+              },
+              parent: {
+                uri: postUri,
+                cid: postCid,
+              },
             },
-            parent: {
-              uri: postUri,
-              cid: postCid,
-            },
+            createdAt: new Date().toISOString(),
           },
-          createdAt: new Date().toISOString(),
         },
-      });
+        {
+          headers: {
+            "atproto-proxy": `${this.agent.assertDid}#atproto_pds`,
+          },
+        },
+      );
       return true;
     } catch (error) {
       console.error(`Failed to reply to post ${postUri}:`, error);

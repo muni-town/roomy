@@ -20,10 +20,17 @@ export function createLeafClient(agent: Agent, config: LeafConfig): LeafClient {
       {},
       ctx,
       async (span) => {
-        const resp = await agent.com.atproto.server.getServiceAuth({
-          aud: config.leafDid,
-          lxm: "town.muni.leaf.authenticate",
-        });
+        const resp = await agent.com.atproto.server.getServiceAuth(
+          {
+            aud: config.leafDid,
+            lxm: "town.muni.leaf.authenticate",
+          },
+          {
+            headers: {
+              "atproto-proxy": `${agent.assertDid}#atproto_pds`,
+            },
+          },
+        );
         span.end();
         return resp;
       },

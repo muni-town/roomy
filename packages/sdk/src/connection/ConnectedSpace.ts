@@ -782,10 +782,17 @@ function createLeafClient(config: {
   leafDid: string;
 }): LeafClient {
   return new LeafClient(config.leafUrl, async () => {
-    const resp = await config.agent.com.atproto.server.getServiceAuth({
-      aud: config.leafDid,
-      lxm: "town.muni.leaf.authenticate",
-    });
+    const resp = await config.agent.com.atproto.server.getServiceAuth(
+      {
+        aud: config.leafDid,
+        lxm: "town.muni.leaf.authenticate",
+      },
+      {
+        headers: {
+          "atproto-proxy": `${config.agent.assertDid}#atproto_pds`,
+        },
+      },
+    );
     return resp.data.token;
   });
 }
