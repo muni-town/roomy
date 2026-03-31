@@ -239,10 +239,16 @@
           name="handle"
           id="atproto-handle"
           autocomplete="username"
+          list="past-handles"
           placeholder="name.bsky.social"
           class="w-full text-sm py-2 px-3 rounded-lg"
           bind:value={handle.value}
         />
+        {#if lastLogin?.handle}
+          <datalist id="past-handles">
+            <option value={lastLogin.handle} />
+          </datalist>
+        {/if}
         {#if error}
           <p
             class="text-red-600 dark:text-red-400 text-xs font-medium w-full pt-2"
