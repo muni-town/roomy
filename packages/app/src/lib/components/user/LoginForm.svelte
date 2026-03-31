@@ -236,8 +236,9 @@
         <Input
           bind:ref={input}
           type="text"
-          name="atproto-handle"
+          name="handle"
           id="atproto-handle"
+          autocomplete="username"
           placeholder="name.bsky.social"
           class="w-full text-sm py-2 px-3 rounded-lg"
           bind:value={handle.value}
@@ -273,7 +274,7 @@
       <div class="flex items-center relative h-9">
         <Input
           class="shrink grow min-w-0 flex justify-between absolute inset-0 w-full text-sm py-2 px-3 rounded-lg"
-          type="username"
+          type="text"
           bind:value={handle.value}
           id="atproto-reg-handle"
           placeholder="lovelyhandle"
@@ -297,6 +298,7 @@
       >
       <Input
         type="email"
+        autocomplete="email"
         bind:value={email}
         placeholder="your@email.com"
         id="atproto-reg-email"
