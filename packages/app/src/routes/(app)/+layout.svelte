@@ -12,6 +12,7 @@
   import { IconLoading } from "@roomy/design/icons";
   import Error from "$lib/components/modals/Error.svelte";
   import { AppState, setAppState } from "$lib/queries";
+  import { JUST_LOGGED_IN_KEY } from "$lib/utils/storageKeys";
 
   const app = new AppState();
   setAppState(app);
@@ -21,7 +22,7 @@
     if (
       peerStatus.authState?.state === "authenticated" &&
       peerStatus.profile &&
-      localStorage.getItem("just-logged-in") != undefined
+      localStorage.getItem(JUST_LOGGED_IN_KEY) !== null
     ) {
       localStorage.setItem(
         `last-login`,
@@ -31,7 +32,7 @@
           avatar: peerStatus.profile.avatar,
         }),
       );
-      localStorage.removeItem("just-logged-in");
+      localStorage.removeItem(JUST_LOGGED_IN_KEY);
     }
   });
 

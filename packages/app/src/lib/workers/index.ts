@@ -9,6 +9,10 @@ import type {
 } from "./peer/types";
 import type { SqliteStatus } from "./sqlite/types";
 import { CONFIG, flags } from "../config";
+import {
+  JUST_LOGGED_IN_KEY,
+  REDIRECT_AFTER_LOGIN_KEY,
+} from "../utils/storageKeys";
 import { context, trace } from "@opentelemetry/api";
 import { page } from "$app/state";
 import { Peer, peerStatusChannel } from "./peer/impl";
@@ -142,8 +146,40 @@ export const peer = tracer.startActiveSpan(
       [sqliteWorkerChannel.port2, workerStatusChannel.port2],
     );
 
-    if (page.route.id !== "/(internal)/oauth/callback") {
-      peer.initializePeer();
+    // window.location instead of page.route.id — at module init time the
+    // router may not have resolved yet, so page.route.id can be stale.
+    if (!window.location.pathname.startsWith("/oauth/callback")) {
+      // Skip scope check if user just completed login (prevents infinite redirect loop).
+      // The flag is set by the OAuth callback page and cleared by +layout.svelte
+      // after caching the user's profile. TTL prevents a stale flag from permanently
+      // disabling scope checks (e.g., if the user closed the tab mid-flow).
+      const JUST_LOGGED_IN_TTL_MS = 60_000;
+      const justLoggedInAt = localStorage.getItem(JUST_LOGGED_IN_KEY);
+      const skipScopeCheck =
+        justLoggedInAt !== null &&
+        Date.now() - Number(justLoggedInAt) < JUST_LOGGED_IN_TTL_MS;
+
+      peer
+        .initializePeer(
+          undefined,
+          skipScopeCheck ? { skipScopeCheck: true } : undefined,
+        )
+        .then((result) => {
+          if (result.redirectUrl) {
+            // Set just-logged-in BEFORE redirect so the callback page's
+            // module init skips the scope check (page.route.id guard is
+            // unreliable at module load time).
+            localStorage.setItem(JUST_LOGGED_IN_KEY, Date.now().toString());
+            localStorage.setItem(
+              REDIRECT_AFTER_LOGIN_KEY,
+              window.location.pathname || "/home",
+            );
+            window.location.href = result.redirectUrl;
+          }
+        })
+        .catch((e) => {
+          console.error("Peer initialization failed", e);
+        });
     }
 
     span.end();

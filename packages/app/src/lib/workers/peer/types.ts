@@ -38,7 +38,10 @@ export type PeerInterface = {
    * If `oauthCallbackSearchParams` is not provided, then it will try to restore the previous
    * session and initialize as unauthenticated if that is not possible.
    * */
-  initializePeer(oauthCallbackSearchParams?: string): Promise<{ did?: string }>;
+  initializePeer(
+    oauthCallbackSearchParams?: string,
+    opts?: { skipScopeCheck?: boolean },
+  ): Promise<{ did?: string; redirectUrl?: string }>;
   /** Get the login redirect URL for the user with the given handle. */
   login(username: Handle): Promise<string>;
   /** Logout of the existing user session. */
