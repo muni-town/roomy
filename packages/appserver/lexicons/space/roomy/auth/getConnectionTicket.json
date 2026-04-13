@@ -1,0 +1,23 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.auth.getConnectionTicket",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Issue a short-lived single-use ticket for authenticating a WebSocket subscription connection. Call via PDS proxy (atproto-proxy header) to establish identity; present the returned ticket as a ?ticket= query parameter on the WebSocket upgrade request.",
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["ticket"],
+          "properties": {
+            "ticket": {
+              "type": "string",
+              "description": "64-character hex string, valid for 60 seconds, single-use."
+            }
+          }
+        }
+      }
+    }
+  }
+}
