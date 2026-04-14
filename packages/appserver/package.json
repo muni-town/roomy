@@ -10,12 +10,10 @@
   },
   "dependencies": {
     "@atcute/cbor": "^2.2.8",
-    "@atcute/identity": "^1.1.3",
-    "@atcute/multibase": "^1.1.6",
     "@atproto/api": "*",
+    "@atproto/identity": "^0.4.12",
+    "@atproto/xrpc-server": "^0.10.19",
     "@muni-town/leaf-client": "link:../../leaf/clients/typescript",
-    "@noble/curves": "^1.9.2",
-    "@noble/hashes": "^1.8.0",
     "@roomy-space/sdk": "workspace:*"
   },
   "devDependencies": {
