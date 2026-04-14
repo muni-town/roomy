@@ -12,7 +12,7 @@
 | Client cache | TanStack Query (not TanStack DB) | Server sends denormalized results; IVM adds no value. TanStack Query is production-grade, runes-compatible, supports `invalidateQueries()` and `setQueryData()` |
 | Join ownership | Server-side | Appserver owns all SQL joins. Client never joins data. API returns fully assembled objects. |
 | Data freshness | WS is sole freshness authority | All queries use `staleTime: Infinity`. HTTP re-fetches only on WS invalidation signals. |
-| WS message categories | Message diffs + invalidation signals | Diffs applied via `setQueryData()` (hot path, no HTTP round-trip). Invalidation signals trigger `invalidateQueries()` → HTTP re-fetch. |
+| WS message categories | Message diffs + invalidation signals | Diffs applied via `setQueryData()` (hot path, no HTTP round-trip). Invalidation signals trigger `invalidateQueries()` → HTTP re-fetch. Server sends multiple `#invalidate` frames for events affecting multiple queries — no batch frame type needed. |
 | Endpoint granularity | Broad queries over narrow | Space metadata includes sidebar tree. Room metadata includes recent threads. Fewer round-trips, less client-side merging. |
 
 ### Frontend Data Flow Changes
@@ -88,7 +88,7 @@ Returns all spaces the caller is a member of, with metadata and per-space permis
 }
 ```
 
-**Invalidation signals:** `#spaceState` with `"membership"` when user joins/leaves a space.
+**Invalidation signals:** `#invalidate` for `space.roomy.space.getSpaces` when user joins/leaves a space.
 
 ---
 
@@ -321,7 +321,7 @@ If the message is in the room cache, `initialData` resolves immediately with no 
 A single multiplexed WebSocket connection carries all real-time data. The client subscribes/unsubscribes to topics; the server pushes two categories of messages:
 
 1. **Message diffs** (`#messageDiff`) — applied directly to TanStack Query cache via `setQueryData()`. No HTTP round-trip.
-2. **Invalidation signals** (`#invalidate`, `#spaceState`) — trigger `invalidateQueries()` → HTTP re-fetch.
+2. **Invalidation signals** (`#invalidate`) — trigger `invalidateQueries()` → HTTP re-fetch. Server sends multiple frames for events affecting multiple queries.
 
 ### Connection Lifecycle
 
@@ -330,10 +330,11 @@ A single multiplexed WebSocket connection carries all real-time data. The client
 2. Client opens WebSocket:
    wss://appserver.roomy.chat/xrpc/space.roomy.sync.subscribe?ticket=<ticket>
 3. Server validates ticket, accepts connection
-4. Client sends { "type": "cursor", "seq": N } if reconnecting
+4. Client sends { "type": "cursor", "seq": N } if reconnecting (0 for first connect)
 5. Client sends sub messages for active topics
-6. Server pushes frames for subscribed topics
-7. On disconnect: client reconnects with new ticket + last received seq
+6. Server replays missed diffs (if cursor is within buffer) + sends invalidation signals
+7. Server pushes frames for subscribed topics going forward
+8. On disconnect: client reconnects with new ticket + last received seq
 ```
 
 ### Client → Server Messages
@@ -366,7 +367,6 @@ CBOR-encoded binary frames using ATProto wire format (two consecutive CBOR value
 | --- | --- | --- |
 | `#messageDiff` | 1 | Message add/update/remove for a subscribed room |
 | `#invalidate` | 1 | Signal that a query's data is stale |
-| `#spaceState` | 1 | Atomic batch of invalidations for a space |
 | `#error` | -1 | Error frame (closes connection) |
 
 #### `#messageDiff`
@@ -418,38 +418,6 @@ The client maps this directly to:
 queryClient.invalidateQueries({ queryKey: [nsid, params] });
 ```
 
-#### `#spaceState`
-
-Atomic batch of invalidations for a space-level change. Useful for events that affect multiple queries simultaneously (e.g. a new thread invalidates both metadata/sidebar and the thread list).
-
-```typescript
-// Header: { op: 1, t: "#spaceState" }
-// Body:
-{
-  spaceId: string;
-  changes: Array<"metadata" | "membership" | "threads">;
-  seq: number;
-}
-```
-
-The client expands this into targeted invalidations:
-
-```typescript
-for (const change of body.changes) {
-  if (change === "metadata" || change === "membership") {
-    // metadata includes sidebar, so this covers sidebar changes too
-    queryClient.invalidateQueries({
-      queryKey: ["space.roomy.space.getMetadata", { spaceId }],
-    });
-  }
-  if (change === "membership" || change === "threads") {
-    queryClient.invalidateQueries({
-      queryKey: ["space.roomy.space.getThreads", { spaceId }],
-    });
-  }
-}
-```
-
 #### `#error`
 
 ```typescript
@@ -463,12 +431,17 @@ for (const change of body.changes) {
 
 ### Reconnection
 
-1. Client sends `{ "type": "cursor", "seq": N }` immediately after connecting
-2. Server replays missed `#messageDiff` frames from its SQLite event log (by seq number)
-3. Server sends broad `#invalidate` signals for any queries that may have changed during disconnection (conservative: invalidate broadly rather than risk stale data)
-4. If cursor is too old (server has pruned events), server invalidates all subscribed queries
+The appserver maintains a bounded in-memory event log (ring buffer, ~10k entries) with a global monotonically increasing sequence number. This is not the Leaf stream sequence — the appserver may filter, transform, or derive events during materialisation, so it maintains its own ordering.
 
-The sequence number is per-user, assigned by the appserver when writing events to its SQLite materialised views. It is not the Leaf stream sequence.
+1. Client reconnects with a new ticket
+2. Client sends `{ "type": "cursor", "seq": N }` immediately after connecting (where N is the last received seq)
+3. Client sends `sub` messages for its active topics
+4. If N is within the buffer: server replays missed `#messageDiff` frames where `seq > N` AND topic matches the client's current subscriptions, then sends `#invalidate` for all subscribed non-message queries (conservative: cheaper than tracking per-query staleness)
+5. If N is outside the buffer (or 0): server sends `#invalidate` for all subscribed queries (client re-fetches everything via HTTP)
+
+No persistence across restarts — clients receive full invalidation on appserver restart, same as the "cursor too old" path.
+
+The `seq` field appears in `#messageDiff` frames. The client tracks the highest seq it has received and sends it on reconnect.
 
 ---
 
@@ -483,10 +456,10 @@ The sequence number is per-user, assigned by the appserver when writing events t
 | Message delete in room X | `room:X` | `#messageDiff` (remove) |
 | Reaction add/remove in room X | `room:X` | `#messageDiff` (update — reaction field changed) |
 | Room name/kind change | `space:<parentSpace>` | `#invalidate` for `space.roomy.room.getMetadata` |
-| New thread in channel X (space Y) | `space:Y`, `room:X` | `#spaceState` with `["metadata", "threads"]` + `#invalidate` for room metadata |
+| New thread in channel X (space Y) | `space:Y`, `room:X` | `#invalidate` for `space.roomy.space.getMetadata`, `space.roomy.space.getThreads`, and `space.roomy.room.getMetadata` |
 | Space name/avatar/description change | `space:X` | `#invalidate` for `space.roomy.space.getMetadata` |
 | Sidebar config change | `space:X` | `#invalidate` for `space.roomy.space.getMetadata` (sidebar is part of this response) |
-| User join/leave space X | `space:X` | `#spaceState` with `["membership"]` |
+| User join/leave space X | `space:X` | `#invalidate` for `space.roomy.space.getSpaces`, `space.roomy.space.getMetadata`, and `space.roomy.space.getThreads` |
 | Unread count change | `room:X`, `space:<parent>` | `#invalidate` for `space.roomy.room.getMetadata` and `space.roomy.space.getMetadata` |
 | Thread activity in room X | `room:X` | `#invalidate` for `space.roomy.room.getMetadata` (recentThreads) |
 
@@ -597,23 +570,6 @@ ws.onmessage = (event) => {
       });
       break;
     }
-
-    case "#spaceState": {
-      const { spaceId, changes } = body;
-      for (const change of changes) {
-        if (change === "metadata" || change === "membership") {
-          queryClient.invalidateQueries({
-            queryKey: ["space.roomy.space.getMetadata", { spaceId }],
-          });
-        }
-        if (change === "membership" || change === "threads") {
-          queryClient.invalidateQueries({
-            queryKey: ["space.roomy.space.getThreads", { spaceId }],
-          });
-        }
-      }
-      break;
-    }
   }
 };
 ```
@@ -666,6 +622,32 @@ lexicons/
 ```
 
 Lexicons follow ATProto JSON schema format. The `space.roomy.sync.subscribe` lexicon defines the subscription NSID but does not prescribe individual message types — those are appserver-internal protocol details documented here.
+
+---
+
+## Future: Notifications
+
+Topic subscriptions (`sub`/`unsub`) are viewport-scoped — they control what the server sends over the WebSocket for real-time UI updates. They are intentionally not the mechanism for notification delivery.
+
+Notifications are a separate concern with different properties:
+
+- **Viewport subscriptions** are ephemeral (tied to navigation state), connection-scoped, and drive UI rendering. Unsubscribing means "stop sending me frames for this topic."
+- **Notification interest** is persistent (survives navigation and disconnection), user-scoped, and drives alerts. A user can have notifications enabled for rooms they're not currently viewing.
+
+When the appserver processes a new message, it will consult both systems:
+
+1. **Routing table** (viewport subscriptions) — send `#messageDiff` to connections subscribed to that room's topic
+2. **Notification preferences** (persistent, per-room/space config) — for users interested in this room who are NOT viewport-subscribed:
+   - If they have an active WS connection → send a lightweight notification frame (badge count, mention summary)
+   - If they have no active WS connection → deliver via push notification (Web Push API)
+
+The appserver is the natural place for this routing decision because it knows both the user's notification preferences and their current connection state.
+
+This design means:
+- No changes needed to the current `sub`/`unsub` protocol
+- Notification preferences will be managed via a separate HTTP endpoint (not yet specified)
+- A new WS frame type (e.g. `#notify`) will carry in-app notification data, distinct from `#messageDiff`/`#invalidate`
+- Push notification delivery is a separate subsystem that shares the same preference store
 
 ---
 
