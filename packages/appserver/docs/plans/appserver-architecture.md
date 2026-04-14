@@ -51,8 +51,7 @@ Reconnection:
 Browser WebSocket limits (~6 per domain) make the original design of one XRPC WebSocket subscription per LiveQuery unviable. Instead, a single `space.roomy.sync.subscribe` connection carries all real-time data as typed frames:
 
 - `#messageDiff` — message add/update/remove ops, applied directly to TanStack Query cache
-- `#invalidate` — signals that a specific query is stale, triggering HTTP re-fetch
-- `#spaceState` — atomic batch of invalidations for space-level changes
+- `#invalidate` — signals that a specific query is stale, triggering HTTP re-fetch (server sends multiple frames for events affecting multiple queries)
 
 Client sends subscribe/unsubscribe messages to control which topics the server sends frames for.
 
@@ -112,7 +111,6 @@ Client subscribes to topics (`space:<id>`, `room:<id>`), server pushes:
 |---|---|---|
 | `#messageDiff` | Message add/update/remove | `setQueryData()` — no HTTP |
 | `#invalidate` | Query data is stale | `invalidateQueries()` → HTTP re-fetch |
-| `#spaceState` | Space-level change (batch) | Multiple `invalidateQueries()` |
 | `#error` | Error | Close connection |
 
 ## What Disappears from the Client
