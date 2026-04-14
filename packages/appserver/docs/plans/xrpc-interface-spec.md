@@ -592,6 +592,10 @@ function applyMessageDiff(
       map.delete(op.key);
     }
   }
+  // NOTE: This re-sorts the entire array on every diff — O(n log n) per
+  // incoming message. For rooms with many messages, consider binary insert
+  // on "add" and in-place update on "update" for O(log n) typical perf.
+  // Low priority — candidate for the Rust rewrite.
   return [...map.values()].sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   );

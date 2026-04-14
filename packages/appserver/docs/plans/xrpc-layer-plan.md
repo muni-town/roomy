@@ -428,6 +428,11 @@ export function getMatchingTopics(event: LeafEvent): string[] {
     case "editPage":
       return [`page:${event.pageId}`];
 
+    // NOTE: membership events (join/leave) are not handled yet.
+    // When membership tracking is implemented, add cases here to
+    // route them to the appropriate topic (e.g. `room:${event.roomId}`
+    // or `space:${event.spaceId}`).
+
     default:
       return [];
   }
