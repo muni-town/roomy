@@ -68,7 +68,7 @@ export interface Frame {
 
 export interface FrameHeader {
   op: 1 | -1;  // 1 = message, -1 = error
-  t: string;   // event type: "#messageDiff", "#invalidate", "#spaceState", "#error"
+  t: string;   // event type: "#messageDiff", "#invalidate", "#error"
 }
 
 export type QueryParams = Record<string, string | string[] | undefined>;
@@ -457,26 +457,32 @@ export function eventToFrames(event: LeafEvent, topic: string): Frame[] {
   }
 
   if (topic.startsWith("space:")) {
-    // Space-level events → #spaceState or #invalidate
+    const spaceId = topic.slice(6);
+
     if (event.type === "createRoom") {
-      return [messageFrame("#spaceState", {
-        spaceId: topic.slice(6),
-        changes: ["metadata", "threads"],
-        seq: event.seq,
-      })];
+      return [
+        messageFrame("#invalidate", {
+          nsid: "space.roomy.space.getMetadata",
+          params: { spaceId },
+        }),
+        messageFrame("#invalidate", {
+          nsid: "space.roomy.space.getThreads",
+          params: { spaceId },
+        }),
+      ];
     }
 
     if (event.type === "updateSidebar") {
       return [messageFrame("#invalidate", {
         nsid: "space.roomy.space.getMetadata",
-        params: { spaceId: topic.slice(6) },
+        params: { spaceId },
       })];
     }
 
     if (event.type === "updateProfile") {
       return [messageFrame("#invalidate", {
         nsid: "space.roomy.space.getMetadata",
-        params: { spaceId: topic.slice(6) },
+        params: { spaceId },
       })];
     }
   }
