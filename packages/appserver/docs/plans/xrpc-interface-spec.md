@@ -31,10 +31,10 @@ Merging sidebar into `space.getMetadata` and linked rooms into `room.getMetadata
 
 | NSID | Source LiveQuery | Description |
 |------|-----------------|-------------|
-| `space.roomy.space.getSpaces` | #1 | All joined spaces with metadata and permissions |
-| `space.roomy.space.getMetadata` | #2, #3, #4 | Space name, avatar, description **+ complete sidebar tree** |
+| `space.roomy.space.getSpaces` | #1 | All joined spaces with metadata, permissions, and per-space unreadCount |
+| `space.roomy.space.getMetadata` | #2, #3, #4 | Space name, avatar, description, sidebar tree with unreadCount |
 | `space.roomy.space.getThreads` | #7 | Threads for space board/index view |
-| `space.roomy.room.getMetadata` | #6, #8, #10 | Room name, kind, spaceId, lastRead, unreadCount **+ recent threads** |
+| `space.roomy.room.getMetadata` | #6, #8, #10 | Room name, kind, spaceId, lastRead, unreadCount, recent threads |
 | `space.roomy.room.getMessages` | #5 | Paginated messages for a room |
 | `space.roomy.room.getThreads` | #11 | All threads within a channel |
 | `space.roomy.message.getMessage` | #14 | Single message by ID |
@@ -81,6 +81,7 @@ Returns all spaces the caller is a member of, with metadata and per-space permis
     name: string | null;
     avatar: string | null;
     description: string | null;
+    unreadCount: number;      // total unread messages across all rooms in this space
     permissions: {
       can: Array<string>;  // e.g. ["createRoom", "sendMessage", "manageSpace"]
     };
@@ -88,7 +89,7 @@ Returns all spaces the caller is a member of, with metadata and per-space permis
 }
 ```
 
-**Invalidation signals:** `#invalidate` for `space.roomy.space.getSpaces` when user joins/leaves a space.
+**Invalidation signals:** `#invalidate` for `space.roomy.space.getSpaces` when user joins/leaves a space or when unread counts change.
 
 ---
 
@@ -460,7 +461,7 @@ The `seq` field appears in `#messageDiff` frames. The client tracks the highest 
 | Space name/avatar/description change | `space:X` | `#invalidate` for `space.roomy.space.getMetadata` |
 | Sidebar config change | `space:X` | `#invalidate` for `space.roomy.space.getMetadata` (sidebar is part of this response) |
 | User join/leave space X | `space:X` | `#invalidate` for `space.roomy.space.getSpaces`, `space.roomy.space.getMetadata`, and `space.roomy.space.getThreads` |
-| Unread count change | `room:X`, `space:<parent>` | `#invalidate` for `space.roomy.room.getMetadata` and `space.roomy.space.getMetadata` |
+| Unread count change | `room:X`, `space:<parent>` | `#invalidate` for `space.roomy.room.getMetadata`, `space.roomy.space.getMetadata`, and `space.roomy.space.getSpaces` |
 | Thread activity in room X | `room:X` | `#invalidate` for `space.roomy.room.getMetadata` (recentThreads) |
 
 ### Server-side Pub/Sub
