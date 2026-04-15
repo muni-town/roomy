@@ -16,6 +16,10 @@ export interface CreateDefaultSpaceOptions {
   description?: string;
   /** Avatar URL (optional) */
   avatar?: string;
+  /** Whether to allow anyone to join without an invite (default: true) */
+  allowPublicJoin?: boolean;
+  /** Whether to allow any member to create invite links (default: false) */
+  allowMemberInvites?: boolean;
 }
 
 /**
@@ -79,6 +83,8 @@ export function createDefaultSpaceEvents(
       name: options.name,
       ...(options.description !== undefined && { description: options.description }),
       ...(options.avatar !== undefined && { avatar: options.avatar }),
+      ...(options.allowPublicJoin !== undefined && { allowPublicJoin: options.allowPublicJoin }),
+      ...(options.allowMemberInvites !== undefined && { allowMemberInvites: options.allowMemberInvites }),
     },
     // Create lobby channel
     {

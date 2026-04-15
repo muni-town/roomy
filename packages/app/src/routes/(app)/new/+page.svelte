@@ -5,12 +5,12 @@
   import { peerStatus } from "$lib/workers";
   import type { AsyncStateWithIdle, StreamDid } from "@roomy-space/sdk";
   import { IconXMark } from "@roomy/design/icons";
+  import { flags } from "$lib/config";
+  import ToggleGroup from "$lib/components/ui/ToggleGroup.svelte";
   import {
     Alert,
     Button,
-    // Checkbox,
     Input,
-    // Label,
     Textarea,
     toast,
   } from "@foxui/core";
@@ -23,12 +23,16 @@
     isDiscoverable: boolean;
     avatarFile: File | null;
     dismissAlert: boolean;
+    allowPublicJoin: string;
+    allowMemberInvites: string;
   }>({
     spaceName: "",
     spaceDescription: "",
     isDiscoverable: true,
     avatarFile: null,
     dismissAlert: false,
+    allowPublicJoin: "yes",
+    allowMemberInvites: "no",
   });
 
   let avatarUrl = $derived.by(() => {
@@ -67,6 +71,8 @@
         spaceName: form.spaceName,
         spaceDescription: form.spaceDescription || undefined,
         avatarFile: form.avatarFile || undefined,
+        allowPublicJoin: flags.inviteOnly ? form.allowPublicJoin === "yes" : undefined,
+        allowMemberInvites: flags.inviteOnly && form.allowPublicJoin === "no" ? form.allowMemberInvites === "yes" : undefined,
         creator: {
           did: peerStatus.authState.did,
           personalStreamId: peerStatus.roomyState.personalSpace,
@@ -113,10 +119,12 @@
             Spaces are a way to organize related rooms, pages, and members. You
             can think of them as communities or groups within the platform.
           </p>
-          <p>
-            <strong>We currently only support public spaces</strong>, meaning
-            anyone can find and join them.
-          </p>
+          {#if !flags.inviteOnly}
+            <p>
+              <strong>We currently only support public spaces</strong>, meaning
+              anyone can find and join them.
+            </p>
+          {/if}
         </div>
         <div>
           <Button
@@ -179,30 +187,39 @@
         </div>
       </div>
 
-      <!-- <div class="sm:col-span-full">
-        Spaces are currently publicly discoverable by default.
-        <label
-          for="username"
-          class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-          >Discovery</label
-        >
-        <div class="mt-4 flex items-center gap-x-2">
-          <Checkbox
-            id="discovery"
-            aria-labelledby="discovery-label"
-            variant="secondary"
-            checked={form.isDiscoverable}
-            disabled={true}
-          />
-          <Label
-            id="discovery-label"
-            for="discovery"
-            class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Allow space to be publicly discoverable.
-          </Label>
+      {#if flags.inviteOnly}
+        <div class="col-span-full flex flex-col gap-6">
+          <div>
+            <p class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1">
+              Allow anyone to join?
+            </p>
+            <ToggleGroup
+              name="allowPublicJoin"
+              bind:value={form.allowPublicJoin}
+              options={[
+                { label: "Yes", value: "yes" },
+                { label: "Require Invite", value: "no" },
+              ]}
+            />
+          </div>
+
+          {#if form.allowPublicJoin === "no"}
+            <div>
+              <p class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1">
+                Allow any member to create an invite link?
+              </p>
+              <ToggleGroup
+                name="allowMemberInvites"
+                bind:value={form.allowMemberInvites}
+                options={[
+                  { label: "Yes", value: "yes" },
+                  { label: "Admins Only", value: "no" },
+                ]}
+              />
+            </div>
+          {/if}
         </div>
-      </div> -->
+      {/if}
     </div>
   </div>
 

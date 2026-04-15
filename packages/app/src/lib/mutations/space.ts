@@ -37,6 +37,8 @@ export async function createSpace(opts: {
   spaceName: string;
   spaceDescription?: string;
   avatarFile?: File;
+  allowPublicJoin?: boolean;
+  allowMemberInvites?: boolean;
   creator: {
     did: Did;
     personalStreamId: StreamDid;
@@ -62,6 +64,8 @@ export async function createSpace(opts: {
     name: opts.spaceName,
     description: opts.spaceDescription,
     avatar: avatarUpload?.uri,
+    allowPublicJoin: opts.allowPublicJoin,
+    allowMemberInvites: opts.allowMemberInvites,
   });
 
   await peer.sendEventBatch(spaceDid, defaultSpaceEvents);
