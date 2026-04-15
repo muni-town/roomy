@@ -64,6 +64,8 @@ create table if not exists comp_space (
   handle_provider text,
   backfilled_to integer references events(idx) default 0,
   sidebar_config text not null default '{"categories": []}', -- JSON sidebar config
+  allow_public_join integer check(allow_public_join in (0, 1)), -- null = unset (defaults to open)
+  allow_member_invites integer check(allow_member_invites in (0, 1)), -- null = unset (defaults to yes)
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;

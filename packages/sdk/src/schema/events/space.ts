@@ -135,35 +135,54 @@ export const PersonalLeaveSpace = defineEvent(
 
 const UpdateSpaceInfoSchema = type({
   $type: "'space.roomy.space.updateSpaceInfo.v0'",
+  "allowPublicJoin?": "boolean | null",
+  "allowMemberInvites?": "boolean | null",
 })
   .and(BasicInfoUpdate)
   .describe(
     "Update a space's basic info. \
-This is used to set things like the name, icon, and description for a space.",
+This is used to set things like the name, icon, description, and join policy for a space.",
   );
 
 export const UpdateSpaceInfo = defineEvent(
   UpdateSpaceInfoSchema,
   ({ streamId, event }) => {
-    const updates = [
+    const infoUpdates = [
       { key: "name", value: event.name },
       { key: "avatar", value: event.avatar },
       { key: "description", value: event.description },
     ];
-    const setUpdates = updates.filter((x) => x.value !== undefined);
+    const setInfoUpdates = infoUpdates.filter((x) => x.value !== undefined);
+
+    const spaceUpdates = [
+      { key: "allow_public_join", value: event.allowPublicJoin },
+      { key: "allow_member_invites", value: event.allowMemberInvites },
+    ];
+    const setSpaceUpdates = spaceUpdates.filter((x) => x.value !== undefined);
 
     return [
       ensureEntity(streamId, event.id),
-      setUpdates.length > 0
+      setInfoUpdates.length > 0
         ? {
-            sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
-            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)})
-            on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
+            sql: `insert into comp_info (entity, ${setInfoUpdates.map((x) => x.key).join(", ")})
+            VALUES (:entity, ${setInfoUpdates.map((x) => `:${x.key}`)})
+            on conflict do update set ${setInfoUpdates.map((x) => `${x.key} = :${x.key}`)}`,
             params: Object.fromEntries([
               [":entity", streamId],
-              ...setUpdates.map((x) => [
+              ...setInfoUpdates.map((x) => [":" + x.key, x.value]),
+            ]),
+          }
+        : undefined,
+      setSpaceUpdates.length > 0
+        ? {
+            sql: `insert into comp_space (entity, ${setSpaceUpdates.map((x) => x.key).join(", ")})
+            VALUES (:entity, ${setSpaceUpdates.map((x) => `:${x.key}`)})
+            on conflict do update set ${setSpaceUpdates.map((x) => `${x.key} = :${x.key}`)}`,
+            params: Object.fromEntries([
+              [":entity", streamId],
+              ...setSpaceUpdates.map((x) => [
                 ":" + x.key,
-                "value" in x ? x.value : undefined,
+                typeof x.value === "boolean" ? (x.value ? 1 : 0) : null,
               ]),
             ]),
           }

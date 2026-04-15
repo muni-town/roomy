@@ -26,6 +26,13 @@
       slug: "bans",
     },
   ];
+  
+  if (flags.roles) {
+    sidebarLinks.push({
+      label: "Roles",
+      slug: "roles",
+    });
+  }
   if (flags.discordImport) {
     sidebarLinks.push({
       label: "Discord Import",
@@ -44,6 +51,7 @@
       slug: "calendar",
     });
   }
+
 
   let { children } = $props();
 </script>

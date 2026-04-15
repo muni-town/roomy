@@ -17,7 +17,7 @@ const CONFIG = {
   profileSpaceNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
   streamSchemaVersion: "4" as const,
-  databaseSchemaVersion: "4" as const,
+  databaseSchemaVersion: "5" as const,
 
   // testing credentials for auto-authentication in e2e tests
   testingHandle: import.meta.env.VITE_TESTING_HANDLE,
@@ -33,6 +33,8 @@ const CONFIG = {
     spaceMetaFastPath: true, // Use synthetic space_meta query for faster space initialization
     roomDeletion: true, // Allow deleting channels from the edit modal
     unreadNotifications: true, // Show unread message counts in sidebar
+    roles: false, // Roles and permissioned channel access
+    inviteOnly: false, // Invite-only spaces with access control
   },
 
   // OpenMeet integration defaults
