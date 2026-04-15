@@ -15,6 +15,7 @@ import {
   RoomEventVariant,
   UserEventVariant,
   CalendarEventVariant,
+  InviteEventVariant,
   StateEventVariant,
 } from "./events";
 
@@ -33,6 +34,7 @@ export const SpaceEventVariantUnion = type.or(
   RoomEventVariant,
   UserEventVariant,
   CalendarEventVariant,
+  InviteEventVariant,
   StateEventVariant,
 );
 

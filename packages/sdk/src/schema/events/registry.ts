@@ -31,6 +31,7 @@ import {
   UnbanAccount,
   BanAccount,
 } from "./space";
+import { CreateInvite, RevokeInvite } from "./invite";
 import { MarkRead } from "./state";
 import { DefinedEvent, MaterializeFn } from "./types";
 import { SetUserProfile } from "./user";
@@ -70,6 +71,8 @@ export const eventRegistry = {
   "space.roomy.state.markRead.v0": MarkRead,
   "space.roomy.space.banAccount.v0": BanAccount,
   "space.roomy.space.unbanAccount.v0": UnbanAccount,
+  "space.roomy.space.createInvite.v0": CreateInvite,
+  "space.roomy.space.revokeInvite.v0": RevokeInvite,
 } as const satisfies Record<EventType, DefinedEvent<any, boolean>>;
 
 /** Get the causal dependencies for an event */

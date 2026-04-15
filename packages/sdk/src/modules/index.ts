@@ -122,7 +122,9 @@ const spaceModuleDef: BasicModule = {
       name text,
       avatar text,
       description text,
-      handle_provider text
+      handle_provider text,
+      allow_public_join integer not null default 1 check(allow_public_join in (0, 1)),
+      allow_member_invites integer not null default 0 check(allow_member_invites in (0, 1))
     ) strict;
     delete from space_info;
     insert into space_info (name, avatar, description, handle_provider) values (null, null, null, null);
@@ -188,6 +190,12 @@ const spaceModuleDef: BasicModule = {
     ) strict;
     create index if not exists room_links_parent_idx on room_links(parent_room);
     create index if not exists room_links_child_idx on room_links(child_room, is_canonical desc);
+
+    create table if not exists invites (
+      token text primary key,
+      created_by text not null,
+      event_ulid text not null
+    ) strict;
   `.sql,
 
   stateInitSql: sql`
@@ -236,7 +244,35 @@ const spaceModuleDef: BasicModule = {
     where exists (select 1 from admins)
       and (select event_type from event_info) = 'space.roomy.openmeet.configure.v0'
       and not exists (select 1 from admins where user_id = (select author from event_info));
-      
+
+    -- Only admins or members (when allowMemberInvites is true) can create invites
+    with event_info as (
+      select
+        drisl_extract(payload, '.$type') as event_type,
+        user as author
+      from event
+    )
+    select unauthorized('must be admin to create invites, or space must allow member invites')
+    where (select event_type from event_info) = 'space.roomy.space.createInvite.v0'
+      and not exists (select 1 from admins where user_id = (select author from event_info))
+      and not exists (select 1 from space_info where allow_member_invites = 1);
+
+    -- Only admins or the invite creator can revoke invites
+    with event_info as (
+      select
+        drisl_extract(payload, '.$type') as event_type,
+        user as author
+      from event
+    )
+    select unauthorized('must be admin or invite creator to revoke invites')
+    where (select event_type from event_info) = 'space.roomy.space.revokeInvite.v0'
+      and not exists (select 1 from admins where user_id = (select author from event_info))
+      and not exists (
+        select 1 from invites
+        where token = (select drisl_extract(payload, '.token') from event)
+          and created_by = (select author from event_info)
+      );
+
     -- Users can update their own profile, admins can update any profile
     -- with event_info as (
     --   select
@@ -296,7 +332,11 @@ const spaceModuleDef: BasicModule = {
       avatar = case (select drisl_exists(payload, '.avatar') from event)
         when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end,
       description = case (select drisl_exists(payload, '.description') from event)
-        when 1 then (select drisl_extract(payload, '.description') from event) else description end
+        when 1 then (select drisl_extract(payload, '.description') from event) else description end,
+      allow_public_join = case (select drisl_exists(payload, '.allowPublicJoin') from event)
+        when 1 then (select drisl_extract(payload, '.allowPublicJoin') from event) else allow_public_join end,
+      allow_member_invites = case (select drisl_exists(payload, '.allowMemberInvites') from event)
+        when 1 then (select drisl_extract(payload, '.allowMemberInvites') from event) else allow_member_invites end
     where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.updateSpaceInfo.v0';
 
     -- Update sidebar config
@@ -451,6 +491,20 @@ const spaceModuleDef: BasicModule = {
     where user_id = (select drisl_extract(payload, '.did') from event)
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.user.updateProfile.v0'
       and (select drisl_exists(payload, '.extensions."space.roomy.extension.discordUserOrigin.v0".handle') from event) = 1;
+
+    -- Create invite
+    insert or ignore into invites (token, created_by, event_ulid)
+    select
+      drisl_extract(payload, '.token'),
+      user,
+      drisl_extract(payload, '.id')
+    from event
+    where drisl_extract(payload, '.$type') = 'space.roomy.space.createInvite.v0';
+
+    -- Revoke invite
+    delete from invites
+    where token = (select drisl_extract(payload, '.token') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.revokeInvite.v0';
   `,
 
   stateMaterializer: `
@@ -479,7 +533,7 @@ const spaceModuleDef: BasicModule = {
     },
     {
       name: "space_info",
-      sql: `select name, avatar, description, handle_provider from space_info;`,
+      sql: `select name, avatar, description, handle_provider, allow_public_join, allow_member_invites from space_info;`,
       params: [],
     },
     {
@@ -504,7 +558,9 @@ const spaceModuleDef: BasicModule = {
               'name', (select name from space_info),
               'avatar', (select avatar from space_info),
               'description', (select description from space_info),
-              'handleProvider', (select handle_provider from space_info)
+              'handleProvider', (select handle_provider from space_info),
+              'allowPublicJoin', (select allow_public_join from space_info),
+              'allowMemberInvites', (select allow_member_invites from space_info)
             ),
             'sidebar', (select config from sidebar_config),
             -- sidebar_config.config is already {"categories": [...]}, which is exactly the format we need
@@ -571,6 +627,9 @@ const spaceModuleDef: BasicModule = {
     {
       name: "events",
       sql: `
+        select unauthorized('only admins can query the full event stream')
+          where not exists (select 1 from admins where user_id = $requesting_user);
+
         select idx, user, payload from events.events
           where idx >= $start limit $limit;
       `,
@@ -666,6 +725,15 @@ const spaceModuleDef: BasicModule = {
         left join members m on j.value = m.user_id;
       `,
       params: [{ kind: "text", name: "user_dids", optional: false }],
+    },
+    {
+      name: "invites",
+      sql: `
+        select token, created_by, event_ulid from invites
+        where created_by = $requesting_user
+          or exists (select 1 from admins where user_id = $requesting_user);
+      `,
+      params: [],
     },
   ],
 };

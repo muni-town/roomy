@@ -16,6 +16,7 @@ export { PageEventVariant } from "./page";
 export { UserEventVariant } from "./user";
 export { LinkEventVariant } from "./link";
 export { CalendarEventVariant } from "./calendar";
+export { InviteEventVariant } from "./invite";
 export { StateEventVariant } from "./state";
 
 // Export synthetic events
@@ -58,6 +59,7 @@ export { EditPage } from "./page";
 export { SetUserProfile } from "./user";
 export { CreateRoomLink, RemoveRoomLink } from "./link";
 export { SetCalendarLink } from "./calendar";
+export { CreateInvite, RevokeInvite } from "./invite";
 export { MarkRead } from "./state";
 
 export {
