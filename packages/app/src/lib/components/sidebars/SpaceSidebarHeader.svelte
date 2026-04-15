@@ -17,6 +17,7 @@
     IconSettings,
     IconLogOut,
   } from "@roomy/design/icons";
+  import InviteModal from "$lib/components/modals/InviteModal.svelte";
 
   const app = getAppState();
 
@@ -25,6 +26,18 @@
   }: {
     isEditing?: boolean;
   } = $props();
+
+  let inviteModalOpen = $state(false);
+
+  let allowPublicJoin = $derived(
+    app.currentSpaceState?.allowPublicJoin ?? true,
+  );
+  let allowMemberInvites = $derived(
+    app.currentSpaceState?.allowMemberInvites ?? false,
+  );
+  let showInviteButton = $derived(
+    allowPublicJoin || allowMemberInvites || app.isSpaceAdmin,
+  );
 
   async function leaveSpace() {
     const spaceDid = app.joinedSpace?.id;
@@ -86,17 +99,24 @@
       </button>
     {/snippet}
     <div class="flex flex-col items-start justify-stretch gap-2 w-[204px]">
-      <Button
-        onclick={() => {
-          const url = new URL(page.url.href);
-          url.pathname = `/${page.params.space}`;
-          navigator.clipboard.writeText(url.href);
-          toast.success("Invite link copied to clipboard");
-        }}
-        class="w-full"
-      >
-        <IconShare class="size-4" /> Invite
-      </Button>
+      {#if showInviteButton}
+        <Button
+          onclick={() => {
+            if (allowPublicJoin) {
+              const url = new URL(page.url.href);
+              url.pathname = `/${page.params.space}`;
+              navigator.clipboard.writeText(url.href);
+              toast.success("Invite link copied to clipboard");
+            } else {
+              inviteModalOpen = true;
+              popoverOpen = false;
+            }
+          }}
+          class="w-full"
+        >
+          <IconShare class="size-4" /> Invite
+        </Button>
+      {/if}
 
       {#if app.isSpaceAdmin}
         <Button
@@ -133,3 +153,5 @@
     </div>
   </Popover>
 </div>
+
+<InviteModal bind:open={inviteModalOpen} />

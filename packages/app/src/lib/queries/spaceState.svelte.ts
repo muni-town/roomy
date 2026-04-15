@@ -17,6 +17,11 @@ type MetadataRow = {
   description: string | null;
 };
 
+type JoinPolicyRow = {
+  allow_public_join: number | null;
+  allow_member_invites: number | null;
+};
+
 type SidebarQueryRow = {
   id: string | null;
   name: string;
@@ -48,6 +53,7 @@ export class SpaceState {
 
   // === Own queries ===
   #metadataQuery: LiveQuery<MetadataRow>;
+  #joinPolicyQuery: LiveQuery<JoinPolicyRow>;
   #sidebarQuery: LiveQuery<SidebarQueryRow>;
   #allChannelsQuery: LiveQuery<ChannelQueryRow>;
 
@@ -68,6 +74,16 @@ export class SpaceState {
     return this.permissions.some((p) => p[0] === did && p[1] === "admin");
   }
 
+  /** True unless explicitly set to false (0). Null/undefined defaults to true. */
+  get allowPublicJoin(): boolean {
+    return this.#joinPolicyQuery.result?.[0]?.allow_public_join !== 0;
+  }
+
+  /** True only when explicitly set to true (1). Null/undefined defaults to false. */
+  get allowMemberInvites(): boolean {
+    return this.#joinPolicyQuery.result?.[0]?.allow_member_invites === 1;
+  }
+
   categories = $state<SidebarCategory[] | undefined>(undefined);
 
   /** Cleanup for the outer $effect.root that owns the LiveQuery effects.
@@ -83,6 +99,13 @@ export class SpaceState {
     this.#metadataQuery = new LiveQuery(
       () => sql`-- space-metadata
         SELECT name, avatar, description FROM comp_info WHERE entity = ${spaceId}
+      `,
+    );
+
+    // Join policy query
+    this.#joinPolicyQuery = new LiveQuery(
+      () => sql`-- space-join-policy
+        SELECT allow_public_join, allow_member_invites FROM comp_space WHERE entity = ${spaceId}
       `,
     );
 
