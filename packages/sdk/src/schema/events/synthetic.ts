@@ -246,8 +246,9 @@ export const SpaceMetaSynthetic = defineEvent(
       }
     }
 
-    // Admins (member edges with admin permission)
+    // Admins (member edges with admin permission + separate admin edges)
     // Edge: head=space, tail=user, label='member', payload={can: "admin"}
+    // Edge: head=space, tail=user, label='admin' (persists through leave/rejoin)
     if (data.admins !== null) {
       for (const adminDid of data.admins) {
         statements.push(sql`
@@ -263,6 +264,17 @@ export const SpaceMetaSynthetic = defineEvent(
           on conflict(head, tail, label) do update set
             payload = excluded.payload,
             updated_at = excluded.updated_at
+        `);
+        statements.push(sql`
+          insert into edges (head, tail, label, created_at, updated_at)
+          values (
+            ${streamId},
+            ${adminDid},
+            'admin',
+            ${timestamp},
+            ${timestamp}
+          )
+          on conflict(head, tail, label) do nothing
         `);
       }
     }

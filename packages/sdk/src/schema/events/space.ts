@@ -16,24 +16,36 @@ import { defineEvent, edgePayload, ensureEntity } from "./utils";
 
 const JoinSpaceSchema = type({
   $type: "'space.roomy.space.joinSpace.v0'",
+  "inviteToken?": "string",
 }).describe(
   "Join a Roomy space. \
 This must be sent in the space itself, announcing that you have joined. \
-If accepted by the space this will add you to the member list.",
+If accepted by the space this will add you to the member list. \
+For private spaces, an inviteToken matching a valid invite is required.",
 );
 
 export const JoinSpace = defineEvent(
   JoinSpaceSchema,
   ({ streamId, user, event }) => [
+    // Insert member edge, using admin permission if an 'admin' edge exists for this user.
+    // This ensures that admins who leave and rejoin retain their admin status.
     sql`
-      insert or ignore into edges (head, tail, label, payload)
-      values (
+      insert into edges (head, tail, label, payload)
+      select
         ${streamId},
         ${user},
         'member',
-        ${edgePayload({
-          can: "post",
-        })}
+        case when exists (
+          select 1 from edges
+          where head = ${streamId}
+            and tail = ${user}
+            and label = 'admin'
+        ) then '{"can":"admin"}' else '{"can":"post"}' end
+      where not exists (
+        select 1 from edges
+        where head = ${streamId}
+          and tail = ${user}
+          and label = 'member'
       )
     `,
     // Create a system message announcing the member joining
@@ -128,7 +140,7 @@ export const PersonalLeaveSpace = defineEvent(
   PersonalLeaveSpaceSchema,
   ({ event }) => [
     sql`
-      delete from comp_space where entity = ${event.spaceDid}
+      update comp_space set hidden = 1 where entity = ${event.spaceDid}
     `,
   ],
 );
@@ -322,6 +334,15 @@ export const AddAdmin = defineEvent(AddAdminSchema, ({ streamId, event }) => {
         })}
       )
     `,
+    // Track admin status in a separate edge so it survives leave/rejoin
+    sql`
+      insert or ignore into edges (head, tail, label)
+      values (
+        ${streamId},
+        ${event.userDid},
+        'admin'
+      )
+    `,
   ];
 });
 
@@ -341,6 +362,16 @@ export const RemoveAdmin = defineEvent(
         tail = ${event.userDid}
           and
         label = 'member'
+    `,
+    // Remove the separate admin edge
+    sql`
+      delete from edges
+      where
+        head = ${streamId}
+          and
+        tail = ${event.userDid}
+          and
+        label = 'admin'
     `,
   ],
 );
