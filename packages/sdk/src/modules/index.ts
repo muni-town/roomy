@@ -570,7 +570,7 @@ const spaceModuleDef: BasicModule = {
     },
     {
       name: "space_info",
-      sql: `select name, avatar, description, handle_provider, allow_public_join, allow_member_invites from space_info;`,
+      sql: `select name, avatar, description, handle_provider, allow_public_join, allow_member_invites, exists(select 1 from members where user_id = $requesting_user) as is_member, exists(select 1 from admins where user_id = $requesting_user) as is_admin from space_info;`,
       params: [],
     },
     {

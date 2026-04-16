@@ -357,6 +357,8 @@ export class RoomyClient {
         avatar?: string;
         handleProvider?: UserDid;
         allowPublicJoin?: boolean;
+        isMember: boolean;
+        isAdmin: boolean;
       }
     | undefined
   > {
@@ -384,6 +386,14 @@ export class RoomyClient {
         row.allow_public_join?.$type === "muni.town.sqliteValue.integer"
           ? row.allow_public_join.value === 1
           : undefined;
+      const isMember =
+        row.is_member?.$type === "muni.town.sqliteValue.integer"
+          ? row.is_member.value === 1
+          : false;
+      const isAdmin =
+        row.is_admin?.$type === "muni.town.sqliteValue.integer"
+          ? row.is_admin.value === 1
+          : false;
 
       return {
         name,
@@ -392,6 +402,8 @@ export class RoomyClient {
           ? UserDid.assert(handleProvider)
           : undefined,
         allowPublicJoin,
+        isMember,
+        isAdmin,
       };
     } catch (error) {
       console.error("Failed to load space info", { streamDid, error });

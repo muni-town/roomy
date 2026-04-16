@@ -12,8 +12,11 @@ export async function joinSpace(spaceId: StreamDid, inviteToken?: string) {
     throw new Error("Not connected. Please try again.");
   }
 
-  // Add the space to the personal list of joined spaces
-  await peer.sendEvent(peerStatus.roomyState.personalSpace, {
+  const personalSpace = peerStatus.roomyState.personalSpace;
+
+  // Add the space to the personal list of joined spaces so connectPendingSpaces
+  // can subscribe to it and allow us to send events to it.
+  await peer.sendEvent(personalSpace, {
     id: newUlid(),
     $type: "space.roomy.space.personal.joinSpace.v0",
     spaceDid: spaceId,
@@ -21,13 +24,24 @@ export async function joinSpace(spaceId: StreamDid, inviteToken?: string) {
 
   await peer.connectPendingSpaces();
 
-  // Tell the space that we joined.
-  // This will throw if the server rejects the event (e.g. invalid invite token).
-  await peer.sendEvent(spaceId, {
-    id: newUlid(),
-    $type: "space.roomy.space.joinSpace.v0",
-    ...(inviteToken ? { inviteToken } : {}),
-  });
+  try {
+    // Tell the space that we joined.
+    // This will throw if the server rejects the event (e.g. invalid invite token).
+    await peer.sendEvent(spaceId, {
+      id: newUlid(),
+      $type: "space.roomy.space.joinSpace.v0",
+      ...(inviteToken ? { inviteToken } : {}),
+    });
+  } catch (error) {
+    // Join was rejected — remove the space from the personal stream so it
+    // doesn't appear as a joined space.
+    await peer.sendEvent(personalSpace, {
+      id: newUlid(),
+      $type: "space.roomy.space.personal.leaveSpace.v0",
+      spaceDid: spaceId,
+    });
+    throw error;
+  }
 }
 
 export async function createSpace(opts: {

@@ -847,7 +847,53 @@ export class Peer {
 
     console.info("Peer initialised!");
 
+    // Run membership verification in the background to clean up any spaces
+    // the user is no longer (or was never) a member of.
+    this.#verifySpaceMemberships().catch((e) =>
+      console.error("[Peer] Space membership verification failed:", e),
+    );
+
     span.end();
+  }
+
+  /** Verify that the user is actually a member of each joined space.
+   * Sends personal.leaveSpace.v0 for any space where membership is denied,
+   * covering both failed private-space joins and admin-removed users. */
+  async #verifySpaceMemberships() {
+    const { personalSpace } = await this.#roomy.transitionedTo("connected");
+
+    const result = await this.#sqlite.runQuery<{ id: StreamDid }>(sql`
+      select e.id from comp_space cs
+      join entities e on e.id = cs.entity
+      where cs.hidden = 0
+    `);
+
+    const spaces = result.rows ?? [];
+    for (const { id: spaceId } of spaces) {
+      try {
+        const info = await this.client.getSpaceInfo(spaceId);
+        if (info && !info.isMember) {
+          console.log(
+            "[Peer] Not a member of space, removing from personal stream:",
+            spaceId,
+          );
+          await this.client.leaf.sendEvent(
+            personalSpace.streamDid,
+            encode({
+              id: newUlid(),
+              $type: "space.roomy.space.personal.leaveSpace.v0",
+              spaceDid: spaceId,
+            }),
+          );
+        }
+      } catch (e) {
+        console.warn(
+          "[Peer] Could not verify membership for space (skipping):",
+          spaceId,
+          e,
+        );
+      }
+    }
   }
 
   /** Get a URL for redirecting to the ATProto PDS for login */
