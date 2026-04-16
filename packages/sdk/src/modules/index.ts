@@ -211,6 +211,7 @@ const spaceModuleDef: BasicModule = {
     -- Banned users cannot do anything
     select unauthorized('Your account has been banned from this space.')
     where exists (select 1 from bans where user_did = (select user from event));
+
     -- No admins yet - only allow admin.add (bootstrap)
     with event_info as (
       select
@@ -221,73 +222,103 @@ const spaceModuleDef: BasicModule = {
     where not exists (select 1 from admins)
       and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0';
 
-    -- Admins exist - author must be an admin for admin management
+    -- Private spaces require a valid invite token to join
+    with event_info as (
+      select
+        drisl_extract(payload, '.$type') as event_type
+      from event
+    )
+    select unauthorized('this space requires an invite to join')
+    where (select event_type from event_info) = 'space.roomy.space.joinSpace.v0'
+      and (select allow_public_join from space_info) = 0
+      and not exists (
+        select 1 from invites
+        where token = (select drisl_extract(payload, '.inviteToken') from event)
+      );
+
+    -- Non-members can only send joinSpace events
     with event_info as (
       select
         drisl_extract(payload, '.$type') as event_type,
         user as author
       from event
     )
-    select unauthorized('must be admin to manage admins')
-    where exists (select 1 from admins)
-      and (select event_type from event_info) in ('space.roomy.space.addAdmin.v0', 'space.roomy.space.removeAdmin.v0')
+    select unauthorized('must be a member of this space')
+    where exists (select 1 from admins) -- space is initialized
+      and (select event_type from event_info) is not 'space.roomy.space.joinSpace.v0'
+      and not exists (select 1 from members where user_id = (select author from event_info))
       and not exists (select 1 from admins where user_id = (select author from event_info));
 
-    -- Only admins can configure OpenMeet calendar link
+    -- Non-admins are restricted to whitelisted member events.
+    -- Any event type not in this list requires admin.
     with event_info as (
       select
         drisl_extract(payload, '.$type') as event_type,
         user as author
       from event
     )
-    select unauthorized('must be admin to configure calendar')
-    where exists (select 1 from admins)
-      and (select event_type from event_info) = 'space.roomy.openmeet.configure.v0'
+    select unauthorized('must be admin to perform this action')
+    where exists (select 1 from admins) -- space is initialized
+      and (select event_type from event_info) not in (
+        'space.roomy.space.joinSpace.v0',
+        'space.roomy.space.leaveSpace.v0',
+        'space.roomy.message.createMessage.v0',
+        'space.roomy.message.editMessage.v0',
+        'space.roomy.message.deleteMessage.v0',
+        'space.roomy.message.moveMessages.v0',
+        'space.roomy.message.forwardMessages.v0',
+        'space.roomy.room.createRoom.v0',
+        'space.roomy.room.updateRoom.v0',
+        'space.roomy.reaction.addReaction.v0',
+        'space.roomy.reaction.removeReaction.v0',
+        'space.roomy.page.editPage.v0',
+        'space.roomy.user.updateProfile.v0',
+        'space.roomy.link.createRoomLink.v0',
+        'space.roomy.link.removeRoomLink.v0',
+        'space.roomy.state.markRead.v0',
+        'space.roomy.space.createInvite.v0',
+        'space.roomy.space.revokeInvite.v0',
+        'space.roomy.space.personal.joinSpace.v0',
+        'space.roomy.space.personal.leaveSpace.v0'
+      )
       and not exists (select 1 from admins where user_id = (select author from event_info));
 
-    -- Only admins or members (when allowMemberInvites is true) can create invites
+    -- createMessage with authorOverride extension requires admin (bridge use case)
     with event_info as (
       select
-        drisl_extract(payload, '.$type') as event_type,
+        user as author
+      from event
+    )
+    select unauthorized('must be admin to send messages with author override')
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.message.createMessage.v0'
+      and (select drisl_exists(payload, '.extensions."space.roomy.extension.authorOverride.v0"') from event) = 1
+      and not exists (select 1 from admins where user_id = (select author from event_info));
+
+    -- Only members can create invites when allowMemberInvites is enabled; otherwise admin required
+    with event_info as (
+      select
         user as author
       from event
     )
     select unauthorized('must be admin to create invites, or space must allow member invites')
-    where (select event_type from event_info) = 'space.roomy.space.createInvite.v0'
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.createInvite.v0'
       and not exists (select 1 from admins where user_id = (select author from event_info))
       and not exists (select 1 from space_info where allow_member_invites = 1);
 
     -- Only admins or the invite creator can revoke invites
     with event_info as (
       select
-        drisl_extract(payload, '.$type') as event_type,
         user as author
       from event
     )
     select unauthorized('must be admin or invite creator to revoke invites')
-    where (select event_type from event_info) = 'space.roomy.space.revokeInvite.v0'
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.revokeInvite.v0'
       and not exists (select 1 from admins where user_id = (select author from event_info))
       and not exists (
         select 1 from invites
         where token = (select drisl_extract(payload, '.token') from event)
           and created_by = (select author from event_info)
       );
-
-    -- Users can update their own profile, admins can update any profile
-    -- with event_info as (
-    --   select
-    --     drisl_extract(payload, '.$type') as event_type,
-    --     user as author,
-    --     drisl_extract(payload, '.did') as target_did
-    --   from event
-    -- )
-    -- select unauthorized('can only update your own profile unless you are an admin')
-    -- where (select event_type from event_info) = 'space.roomy.user.updateProfile.v0'
-    --   and (select author from event_info) != (select target_did from event_info)
-    --   and not exists (
-    --     select 1 from admins
-    --     where user_id = (select author from event_info)
-    --   );
   `.sql,
 
   materializer: `
@@ -528,7 +559,13 @@ const spaceModuleDef: BasicModule = {
     },
     {
       name: "members",
-      sql: `select user_id, name, avatar, handle from members`,
+      sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
+        select user_id, name, avatar, handle from members
+      `,
       params: [],
     },
     {
@@ -538,17 +575,32 @@ const spaceModuleDef: BasicModule = {
     },
     {
       name: "admins",
-      sql: `select * from admins;`,
+      sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
+        select * from admins;
+      `,
       params: [],
     },
     {
       name: "bans",
-      sql: `select * from bans`,
+      sql: `
+        select unauthorized('only admins can view the ban list')
+          where not exists (select 1 from admins where user_id = $requesting_user);
+
+        select * from bans
+      `,
       params: [],
     },
     {
       name: "space_meta",
       sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
         select
           json_object(
             '$type', 'space.roomy.query.spaceMeta.v0',
@@ -638,6 +690,10 @@ const spaceModuleDef: BasicModule = {
     {
       name: "metadata",
       sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
         select e.idx, e.user, e.payload
         from events.events e
         inner join metadata_events m on e.idx = m.idx
@@ -649,6 +705,11 @@ const spaceModuleDef: BasicModule = {
     {
       name: "room",
       sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
+
         select
           e.idx,
           e.user,
@@ -676,6 +737,10 @@ const spaceModuleDef: BasicModule = {
     {
       name: "links",
       sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
         select e.idx, e.user, e.payload
         from events.events e
         inner join link_events l on e.idx = l.idx
@@ -704,6 +769,10 @@ const spaceModuleDef: BasicModule = {
     {
       name: "rooms",
       sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
         select id, name, kind, deleted, parent
         from rooms
         where ($kind is null or kind = $kind)
@@ -714,6 +783,10 @@ const spaceModuleDef: BasicModule = {
     {
       name: "profiles",
       sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
         select
           json_object(
             'did', m.user_id,
