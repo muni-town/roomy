@@ -679,8 +679,9 @@ const spaceModuleDef: BasicModule = {
     {
       name: "events",
       sql: `
-        select unauthorized('only admins can query the full event stream')
-          where not exists (select 1 from admins where user_id = $requesting_user);
+      select unauthorized('must be a member or admin to view this data')
+        where not exists (select 1 from members where user_id = $requesting_user)
+          and not exists (select 1 from admins where user_id = $requesting_user);
 
         select idx, user, payload from events.events
           where idx >= $start limit $limit;
