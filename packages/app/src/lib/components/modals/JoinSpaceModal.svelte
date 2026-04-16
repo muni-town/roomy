@@ -16,12 +16,16 @@
     spaceId: StreamDid;
     name: string;
     avatar?: string;
+    allowPublicJoin: boolean;
   }> = $state({
     status: "loading",
   });
 
   // State for joining the space
   let joinState: AsyncStateWithIdle<void> = $state({ status: "idle" });
+
+  // Invite token from URL query param (e.g. ?invite=abc-123)
+  let inviteToken = $derived(page.url.searchParams.get("invite") ?? undefined);
 
   $effect(() => {
     (async () => {
@@ -57,6 +61,7 @@
               spaceId,
               name: info.name,
               avatar: info?.avatar,
+              allowPublicJoin: info.allowPublicJoin ?? true,
             },
           };
         else
@@ -72,7 +77,7 @@
     if (resolveState.status !== "success") return;
     joinState = { status: "loading" };
     try {
-      await joinSpace(resolveState.data.spaceId);
+      await joinSpace(resolveState.data.spaceId, inviteToken);
       joinState = { status: "success", data: undefined };
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to join space";
@@ -91,6 +96,7 @@
       {/if}
 
       {#if resolveState.status === "success"}
+        {@const canJoin = resolveState.data.allowPublicJoin || !!inviteToken}
         <div class="mb-5 flex justify-center items-center gap-3">
           <SpaceAvatar
             imageUrl={resolveState.data.avatar ?? ""}
@@ -101,9 +107,20 @@
 
           <h1 class="font-bold text-xl">{resolveState.data.name}</h1>
         </div>
-        <Button size="lg" asyncState={joinState} onclick={handleJoin}>
-          Join Space
-        </Button>
+        {#if canJoin}
+          <Button size="lg" asyncState={joinState} onclick={handleJoin}>
+            {inviteToken ? "Accept Invite" : "Join Space"}
+          </Button>
+          {#if joinState.status === "error"}
+            <p class="text-sm text-center text-red-600 dark:text-red-400 mt-2">
+              {joinState.message}
+            </p>
+          {/if}
+        {:else}
+          <p class="text-sm text-center text-base-500 dark:text-base-400">
+            This space is invite-only. You need an invite link to join.
+          </p>
+        {/if}
       {/if}
     </Box>
   {/if}
