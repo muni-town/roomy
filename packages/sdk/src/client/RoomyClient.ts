@@ -352,7 +352,13 @@ export class RoomyClient {
   async getSpaceInfo(
     streamDid: StreamDid,
   ): Promise<
-    { name?: string; avatar?: string; handleProvider?: UserDid } | undefined
+    | {
+        name?: string;
+        avatar?: string;
+        handleProvider?: UserDid;
+        allowPublicJoin?: boolean;
+      }
+    | undefined
   > {
     try {
       const resp = await this.leaf.query(streamDid, {
@@ -374,6 +380,10 @@ export class RoomyClient {
         row.handle_provider?.$type === "muni.town.sqliteValue.text"
           ? row.handle_provider.value
           : undefined;
+      const allowPublicJoin =
+        row.allow_public_join?.$type === "muni.town.sqliteValue.integer"
+          ? row.allow_public_join.value === 1
+          : undefined;
 
       return {
         name,
@@ -381,6 +391,7 @@ export class RoomyClient {
         handleProvider: handleProvider
           ? UserDid.assert(handleProvider)
           : undefined,
+        allowPublicJoin,
       };
     } catch (error) {
       console.error("Failed to load space info", { streamDid, error });

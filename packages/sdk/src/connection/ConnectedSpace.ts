@@ -425,6 +425,26 @@ export class ConnectedSpace {
   }
 
   /**
+   * Fetch active invite tokens for this space.
+   * Returns invites created by the requesting user, or all invites if the user is an admin.
+   */
+  async fetchInvites(): Promise<
+    { token: string; createdBy: string; eventUlid: string }[]
+  > {
+    const resp = await this.#leaf.query(this.streamDid, {
+      name: "invites",
+      params: {},
+    });
+
+    const unwrapped = unwrapSqlRows(resp);
+    return unwrapped.map((row) => ({
+      token: String(row["token"] ?? ""),
+      createdBy: String(row["created_by"] ?? ""),
+      eventUlid: String(row["event_ulid"] ?? ""),
+    }));
+  }
+
+  /**
    * Fetch room metadata from this space.
    * Returns all rooms, optionally filtered by kind.
    *

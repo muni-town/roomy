@@ -56,7 +56,12 @@ export type PeerInterface = {
   >;
   getSpaceInfo(
     streamDid: StreamDid,
-  ): Promise<{ name?: string; avatar?: string } | undefined>;
+  ): Promise<
+    { name?: string; avatar?: string; allowPublicJoin?: boolean } | undefined
+  >;
+  getInvites(
+    spaceDid: StreamDid,
+  ): Promise<{ token: string; createdBy: string; eventUlid: string }[]>;
   runQuery<T>(statement: SqlStatement): Promise<QueryResult<T>>;
   getProfiles(dids: UserDid[]): Promise<ProfileViewDetailed[]>;
   dangerousCompletelyDestroyDatabase(opts: {
