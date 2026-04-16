@@ -28,6 +28,8 @@ const SpaceInfoType = type({
   avatar: "string | null",
   description: "string | null",
   handleProvider: "string | null",
+  "allowPublicJoin?": "number | null",
+  "allowMemberInvites?": "number | null",
 });
 
 const SidebarType = type({
@@ -117,6 +119,20 @@ export const SpaceMetaSynthetic = defineEvent(
           values (${streamId}, ${data.info.handleProvider}, ${timestamp}, ${timestamp})
           on conflict(entity) do update set
             handle_provider = excluded.handle_provider,
+            updated_at = excluded.updated_at
+        `);
+      }
+
+      // Join policy (comp_space table)
+      const allowPublicJoin = data.info.allowPublicJoin ?? null;
+      const allowMemberInvites = data.info.allowMemberInvites ?? null;
+      if (allowPublicJoin !== null || allowMemberInvites !== null) {
+        statements.push(sql`
+          insert into comp_space (entity, allow_public_join, allow_member_invites, created_at, updated_at)
+          values (${streamId}, ${allowPublicJoin}, ${allowMemberInvites}, ${timestamp}, ${timestamp})
+          on conflict(entity) do update set
+            allow_public_join = coalesce(excluded.allow_public_join, comp_space.allow_public_join),
+            allow_member_invites = coalesce(excluded.allow_member_invites, comp_space.allow_member_invites),
             updated_at = excluded.updated_at
         `);
       }

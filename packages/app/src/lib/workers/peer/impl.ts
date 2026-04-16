@@ -872,7 +872,10 @@ export class Peer {
     for (const { id: spaceId } of spaces) {
       try {
         const info = await this.client.getSpaceInfo(spaceId);
-        if (info && !info.isMember) {
+        if (info && !info.isMember && info.isAdmin) {
+          console.warn("[Peer] User is an admin, but not a member.");
+        }
+        if (info && !info.isMember && !info.isAdmin) {
           console.log(
             "[Peer] Not a member of space, removing from personal stream:",
             spaceId,
