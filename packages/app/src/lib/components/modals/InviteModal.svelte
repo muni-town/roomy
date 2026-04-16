@@ -2,11 +2,10 @@
   import { Modal, Button, toast } from "@foxui/core";
   import { getAppState } from "$lib/queries";
   import { peer, peerStatus } from "$lib/workers";
-  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
-  import { sql } from "$lib/utils/sqlTemplate";
   import { newUlid } from "@roomy-space/sdk";
   import { page } from "$app/state";
   import { IconCopy, IconTrash, IconPlus } from "@roomy/design/icons";
+  import type { StreamDid } from "@roomy-space/sdk";
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -15,30 +14,21 @@
   let spaceId = $derived(app.joinedSpace?.id);
   let spaceParam = $derived(app.joinedSpace?.handle ?? page.params.space);
 
-  type InviteRow = { token: string; created_at: number };
+  type InviteRow = { token: string; createdBy: string; eventUlid: string };
 
-  const invitesQuery = new LiveQuery<InviteRow>(
-    () => sql`
-      SELECT
-        json_extract(payload, '$.token') as token,
-        created_at
-      FROM events
-      WHERE stream_id = ${spaceId}
-        AND json_extract(payload, '$.$type') = 'space.roomy.space.createInvite.v0'
-        AND applied = 1
-        AND NOT EXISTS (
-          SELECT 1 FROM events r
-          WHERE r.stream_id = ${spaceId}
-            AND json_extract(r.payload, '$.$type') = 'space.roomy.space.revokeInvite.v0'
-            AND json_extract(r.payload, '$.token') = json_extract(events.payload, '$.token')
-            AND r.applied = 1
-        )
-      ORDER BY created_at DESC
-    `,
-  );
-
-  let invites = $derived(invitesQuery.result ?? []);
+  let invites = $state<InviteRow[]>([]);
   let creating = $state(false);
+
+  async function loadInvites() {
+    if (!spaceId || peerStatus.roomyState?.state !== "connected") return;
+    invites = await peer.getInvites(spaceId as StreamDid);
+  }
+
+  $effect(() => {
+    if (open && spaceId) {
+      loadInvites();
+    }
+  });
 
   function inviteUrl(token: string) {
     const url = new URL(page.url.href);
