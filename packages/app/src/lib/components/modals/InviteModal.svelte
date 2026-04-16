@@ -49,6 +49,7 @@
       });
     } finally {
       creating = false;
+      await loadInvites();
     }
   }
 
@@ -59,6 +60,7 @@
       $type: "space.roomy.space.revokeInvite.v0",
       token,
     });
+    await loadInvites();
   }
 
   function copyInvite(token: string) {
