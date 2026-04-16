@@ -54,6 +54,7 @@ export class SpaceState {
   // === Own queries ===
   #metadataQuery: LiveQuery<MetadataRow>;
   #joinPolicyQuery: LiveQuery<JoinPolicyRow>;
+  #adminQuery: LiveQuery<{ is_admin: number }>;
   #sidebarQuery: LiveQuery<SidebarQueryRow>;
   #allChannelsQuery: LiveQuery<ChannelQueryRow>;
 
@@ -71,7 +72,12 @@ export class SpaceState {
   get isSpaceAdmin() {
     const did = this.did;
     if (!did) return false;
-    return this.permissions.some((p) => p[0] === did && p[1] === "admin");
+    // Check the persistent 'admin' edge (survives leave/rejoin) first,
+    // then fall back to checking the member edge payload for backwards compatibility.
+    return (
+      (this.#adminQuery.result?.length ?? 0) > 0 ||
+      this.permissions.some((p) => p[0] === did && p[1] === "admin")
+    );
   }
 
   /** True unless explicitly set to false (0). Null/undefined defaults to true. */
@@ -106,6 +112,16 @@ export class SpaceState {
     this.#joinPolicyQuery = new LiveQuery(
       () => sql`-- space-join-policy
         SELECT allow_public_join, allow_member_invites FROM comp_space WHERE entity = ${spaceId}
+      `,
+    );
+
+    // Admin edge query — checks the persistent 'admin' edge that survives leave/rejoin
+    this.#adminQuery = new LiveQuery(
+      () => sql`-- space-is-admin
+        SELECT 1 as is_admin FROM edges
+        WHERE head = ${spaceId}
+          AND tail = ${this.did ?? ""}
+          AND label = 'admin'
       `,
     );
 
