@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import { Box } from "@foxui/core";
   import Button from "$lib/components/ui/button/Button.svelte";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
@@ -26,6 +27,11 @@
 
   // Invite token from URL query param (e.g. ?invite=abc-123)
   let inviteToken = $derived(page.url.searchParams.get("invite") ?? undefined);
+
+  // Error from a previous failed join attempt — stored in the URL so it survives
+  // the component being destroyed and recreated when the space status briefly
+  // flips to "joined" then back to "invited" during the join flow.
+  let urlError = $derived(page.url.searchParams.get("joinError") ?? undefined);
 
   $effect(() => {
     (async () => {
@@ -76,12 +82,40 @@
   async function handleJoin() {
     if (resolveState.status !== "success") return;
     joinState = { status: "loading" };
+
+    // Clear any persisted error from a previous attempt
+    if (page.url.searchParams.has("joinError")) {
+      const url = new URL(page.url.href);
+      url.searchParams.delete("joinError");
+      await goto(url.toString(), {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true,
+      });
+    }
+
     try {
       await joinSpace(resolveState.data.spaceId, inviteToken);
       joinState = { status: "success", data: undefined };
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to join space";
+      const message =
+        e instanceof Error
+          ? e.message.includes("this space requires an invite to join")
+            ? "Invalid invite link"
+            : e.message
+          : "Failed to join space";
+
       joinState = { status: "error", message };
+      // Persist the error in the URL — this component may be destroyed and
+      // recreated before the catch block returns, so URL is the only safe
+      // place to carry the error across.
+      const url = new URL(page.url.href);
+      url.searchParams.set("joinError", message);
+      goto(url.toString(), {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true,
+      });
     }
   }
 </script>
@@ -114,6 +148,10 @@
           {#if joinState.status === "error"}
             <p class="text-sm text-center text-red-600 dark:text-red-400 mt-2">
               {joinState.message}
+            </p>
+          {:else if urlError}
+            <p class="text-sm text-center text-red-600 dark:text-red-400 mt-2">
+              {urlError}
             </p>
           {/if}
         {:else}
