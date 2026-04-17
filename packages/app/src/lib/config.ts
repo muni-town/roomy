@@ -99,19 +99,19 @@ CONFIG.atprotoOauthScope = [
 ].join(" ");
 
 /** Default feature flags, can be overridden per environment with
- * VITE_FEATURE_FLAGS env var as JSON string.
+ * PUBLIC_FEATURE_FLAGS env var as JSON string.
  */
 
 type Flags = typeof CONFIG.flags;
 
 function loadFlags(): Flags {
-  const overrides = import.meta.env.VITE_FEATURE_FLAGS;
+  const overrides = import.meta.env.PUBLIC_FEATURE_FLAGS;
   if (!overrides) return CONFIG.flags;
 
   try {
     return { ...CONFIG.flags, ...JSON.parse(overrides) };
   } catch {
-    console.warn("Invalid VITE_FEATURE_FLAGS JSON");
+    console.warn("Invalid PUBLIC_FEATURE_FLAGS JSON");
     return CONFIG.flags;
   }
 }
