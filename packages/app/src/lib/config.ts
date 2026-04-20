@@ -2,7 +2,7 @@ const CONFIG = {
   // service endpoints
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
   plcDirectory: (import.meta.env.VITE_PLC_DIRECTORY ||
-    import.meta.env.PUBLIC_PLC_DIRECTORY ||
+    import.meta.env.VITE_PLC_DIRECTORY ||
     "https://plc.directory") as string,
   faroEndpoint: (import.meta.env.VITE_FARO_ENDPOINT || undefined) as
     | string
@@ -99,21 +99,31 @@ CONFIG.atprotoOauthScope = [
 ].join(" ");
 
 /** Default feature flags, can be overridden per environment with
- * PUBLIC_FEATURE_FLAGS env var as JSON string.
+ * VITE_FEATURE_FLAGS env var as a comma-separated list of flag names to enable.
+ * Example: VITE_FEATURE_FLAGS=roles,inviteOnly,sharedWorker
  */
 
 type Flags = typeof CONFIG.flags;
 
 function loadFlags(): Flags {
-  const overrides = import.meta.env.PUBLIC_FEATURE_FLAGS;
+  const overrides: string | undefined = import.meta.env.VITE_FEATURE_FLAGS;
+
+  console.log("Overrides", overrides);
   if (!overrides) return CONFIG.flags;
 
-  try {
-    return { ...CONFIG.flags, ...JSON.parse(overrides) };
-  } catch {
-    console.warn("Invalid PUBLIC_FEATURE_FLAGS JSON");
-    return CONFIG.flags;
+  const enabled = new Set(
+    overrides
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean),
+  );
+  const result = { ...CONFIG.flags };
+  for (const key of enabled) {
+    if (key in result) {
+      (result as Record<string, boolean>)[key] = true;
+    }
   }
+  return result;
 }
 
 export const flags = loadFlags();

@@ -31,7 +31,7 @@
   async function updateBridgeStatus() {
     if (!space) return;
     try {
-      const aResp = await fetch(`${env.PUBLIC_DISCORD_BRIDGE}/info`);
+      const aResp = await fetch(`${env.VITE_DISCORD_BRIDGE}/info`);
       const info:
         | { discordAppId: string; bridgeDid: string }
         | { error: string; status: number } = await aResp.json();
@@ -41,7 +41,7 @@
         return;
       }
       const gResp = await fetch(
-        `${env.PUBLIC_DISCORD_BRIDGE}/get-guild-id?spaceId=${space}`,
+        `${env.VITE_DISCORD_BRIDGE}/get-guild-id?spaceId=${space}`,
       );
       // 404 means no guild is connected yet - that's expected for unconnected spaces
       let guildId: string | undefined;
@@ -52,9 +52,11 @@
 
       // Check if the bridge bot has admin permissions
       const currentSpaceState = app.currentSpaceState;
-      const hasAdminAccess = currentSpaceState?.permissions.some(
-        ([did, permission]) => did === BRIDGE_BOT_DID && permission === "admin",
-      ) ?? false;
+      const hasAdminAccess =
+        currentSpaceState?.permissions.some(
+          ([did, permission]) =>
+            did === BRIDGE_BOT_DID && permission === "admin",
+        ) ?? false;
 
       bridgeStatus = {
         type: "loaded",
