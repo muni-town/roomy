@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { env } from "$env/dynamic/public";
+  import { PUBLIC_DISCORD_BRIDGE, PUBLIC_BRIDGE_DID } from "$env/static/public";
   import { toast } from "@foxui/core";
   import Badge from "$lib/components/ui/badge/Badge.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
@@ -8,13 +8,12 @@
   import { IconCopy } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
   import { peer } from "$lib/workers";
-  import { newUlid, type Event } from "@roomy-space/sdk";
+  import { newUlid, UserDid, type Event } from "@roomy-space/sdk";
   const app = getAppState();
 
   const space = $derived(app.joinedSpace?.id);
 
   // Discord bridge bot DID that needs admin access
-  const BRIDGE_BOT_DID = "did:plc:vjztjtisourrydgksg44u7fe";
 
   let bridgeStatus:
     | { type: "checking" }
@@ -31,7 +30,7 @@
   async function updateBridgeStatus() {
     if (!space) return;
     try {
-      const aResp = await fetch(`${env.VITE_DISCORD_BRIDGE}/info`);
+      const aResp = await fetch(`${PUBLIC_DISCORD_BRIDGE}/info`);
       const info:
         | { discordAppId: string; bridgeDid: string }
         | { error: string; status: number } = await aResp.json();
@@ -41,7 +40,7 @@
         return;
       }
       const gResp = await fetch(
-        `${env.VITE_DISCORD_BRIDGE}/get-guild-id?spaceId=${space}`,
+        `${PUBLIC_DISCORD_BRIDGE}/get-guild-id?spaceId=${space}`,
       );
       // 404 means no guild is connected yet - that's expected for unconnected spaces
       let guildId: string | undefined;
@@ -55,7 +54,7 @@
       const hasAdminAccess =
         currentSpaceState?.permissions.some(
           ([did, permission]) =>
-            did === BRIDGE_BOT_DID && permission === "admin",
+            did === PUBLIC_BRIDGE_DID && permission === "admin",
         ) ?? false;
 
       bridgeStatus = {
@@ -82,7 +81,7 @@
       const event: Event = {
         id: newUlid(),
         $type: "space.roomy.space.addAdmin.v0",
-        userDid: BRIDGE_BOT_DID,
+        userDid: PUBLIC_BRIDGE_DID as UserDid,
       };
 
       await peer.sendEvent(space, event);
@@ -111,7 +110,7 @@
       const event: Event = {
         id: newUlid(),
         $type: "space.roomy.space.removeAdmin.v0",
-        userDid: BRIDGE_BOT_DID,
+        userDid: PUBLIC_BRIDGE_DID as UserDid,
       };
 
       await peer.sendEvent(space, event);

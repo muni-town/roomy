@@ -1,3 +1,5 @@
+import { PUBLIC_FEATURE_FLAGS } from "$env/static/public";
+
 const CONFIG = {
   // service endpoints
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
@@ -106,7 +108,7 @@ CONFIG.atprotoOauthScope = [
 type Flags = typeof CONFIG.flags;
 
 function loadFlags(): Flags {
-  const overrides: string | undefined = import.meta.env.VITE_FEATURE_FLAGS;
+  const overrides = PUBLIC_FEATURE_FLAGS;
 
   console.log("Overrides", overrides);
   if (!overrides) return CONFIG.flags;
