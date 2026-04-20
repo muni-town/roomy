@@ -1,4 +1,4 @@
-import { PUBLIC_FEATURE_FLAGS } from "$env/static/public";
+import { env } from "$env/dynamic/public";
 
 const CONFIG = {
   // service endpoints
@@ -108,7 +108,7 @@ CONFIG.atprotoOauthScope = [
 type Flags = typeof CONFIG.flags;
 
 function loadFlags(): Flags {
-  const overrides = PUBLIC_FEATURE_FLAGS;
+  const overrides = env.PUBLIC_FEATURE_FLAGS;
 
   console.log("Overrides", overrides);
   if (!overrides) return CONFIG.flags;
