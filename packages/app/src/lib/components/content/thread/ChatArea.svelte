@@ -43,6 +43,17 @@
     lazyLoadState.status !== "success" || lazyLoadState.data.hasMore,
   );
 
+  let autoRetryCount = $state(0);
+  const MAX_AUTO_RETRIES = 5;
+
+  function scheduleAutoRetry() {
+    const delay = Math.min(500 * 2 ** (autoRetryCount - 1), 4000);
+    lazyLoadState = { status: "loading" };
+    setTimeout(() => {
+      lazyLoadState = { status: "idle" };
+    }, delay);
+  }
+
   async function loadMoreMessages() {
     if (lazyLoadState.status === "loading") return;
     if (lazyLoadState.status === "success" && !lazyLoadState.data.hasMore)
@@ -54,6 +65,11 @@
     // Check if space is ready before attempting lazy load
     const isReady = await peer.isSpaceReady(spaceId);
     if (!isReady) {
+      if (autoRetryCount < MAX_AUTO_RETRIES) {
+        autoRetryCount++;
+        scheduleAutoRetry();
+        return;
+      }
       lazyLoadState = {
         status: "error",
         message: `Space ${spaceId} is not ready yet. It may still be loading. Please wait a moment and try again.`,
@@ -86,12 +102,23 @@
         isShifting = false;
       }, 500);
     } catch (e) {
+      if (autoRetryCount < MAX_AUTO_RETRIES) {
+        autoRetryCount++;
+        isShifting = false;
+        scheduleAutoRetry();
+        return;
+      }
       lazyLoadState = {
         status: "error",
         message: e instanceof Error ? e.message : "Failed to load messages",
       };
       isShifting = false;
     }
+  }
+
+  function retryLoadMessages() {
+    autoRetryCount = 0;
+    loadMoreMessages();
   }
 
   let {
@@ -467,6 +494,7 @@
     lastLoadedRoomId = roomId;
 
     // Reset state for new room
+    autoRetryCount = 0;
     lazyLoadState = { status: "idle" };
   });
 
@@ -538,7 +566,7 @@
                     <Button
                       size="sm"
                       variant="secondary"
-                      onclick={loadMoreMessages}>Retry</Button
+                      onclick={retryLoadMessages}>Retry</Button
                     >
                   </div>
                 {/snippet}
