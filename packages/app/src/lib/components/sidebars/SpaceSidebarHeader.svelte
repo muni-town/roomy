@@ -41,11 +41,12 @@
 
   async function leaveSpace() {
     const spaceDid = app.joinedSpace?.id;
+
     if (peerStatus.roomyState?.state !== "connected") return;
     if (!spaceDid || !peerStatus.roomyState.personalSpace) return;
 
     // Tell the space that we are leaving the member list
-    await peer.sendEvent(spaceDid, {
+    peer.sendEvent(spaceDid, {
       id: newUlid(),
       $type: "space.roomy.space.leaveSpace.v0",
     });
