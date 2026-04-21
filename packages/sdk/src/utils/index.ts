@@ -8,6 +8,7 @@ export {
 export { Deferred } from "./Deferred";
 export { sql } from "./sqlTemplate";
 export { withTimeoutWarning, withTimeoutCallback } from "./timeout";
+export { retryWithBackoff } from "./retry";
 export {
   type TrackableState,
   trackableState,

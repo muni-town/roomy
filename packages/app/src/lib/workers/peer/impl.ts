@@ -33,6 +33,7 @@ import {
   parseEvents,
   RoomyClient,
   withTimeoutCallback,
+  retryWithBackoff,
   type DecodedStreamEvent,
   type EncodedStreamEvent,
   type EventCallback,
@@ -1082,11 +1083,15 @@ export class Peer {
     )
       throw new Error("No event channel yet");
 
-    const space = await ConnectedSpace.connect({
-      client: this.client,
-      streamDid: streamId,
-      module: modules.space,
-    });
+    const space = await retryWithBackoff(
+      () =>
+        ConnectedSpace.connect({
+          client: this.client,
+          streamDid: streamId,
+          module: modules.space,
+        }),
+      { label: `ConnectedSpace.connect(${streamId})` },
+    );
 
     const callback = this.#createEventCallback(
       this.#roomy.current.eventChannel,
