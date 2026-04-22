@@ -7,6 +7,7 @@
   import { ScrollArea, Select } from "@foxui/core";
   import Button from "$lib/components/ui/button/Button.svelte";
   import Input from "$lib/components/ui/input/Input.svelte";
+  import ChannelPermissions from "$lib/components/ui/ChannelPermissions.svelte";
   import { Ulid, ulidFactory } from "@roomy-space/sdk";
   import { deepClone } from "@ark/util";
 
@@ -40,6 +41,9 @@
     }
   });
 
+  let accessMode = $state<"open" | "roles">("open");
+  let rolePermissions = $state<Record<string, "none" | "read" | "readwrite">>({});
+
   async function createRoom() {
     if (!spaceId || !categories) return;
 
@@ -67,6 +71,19 @@
 
       selected.children.push(id);
 
+      const permissionEvents =
+        accessMode === "roles"
+          ? Object.entries(rolePermissions)
+              .filter(([, perm]) => perm !== "none")
+              .map(([roleId, permission]) => ({
+                id: newUlid(),
+                $type: "space.roomy.role.setRoleRoomPermission.v0" as const,
+                roleId: Ulid.assert(roleId),
+                roomId: id,
+                permission: permission as "read" | "readwrite",
+              }))
+          : [];
+
       await peer.sendEventBatch(spaceId, [
         {
           id,
@@ -79,6 +96,7 @@
           $type: "space.roomy.space.updateSidebar.v1",
           categories: newCategories,
         },
+        ...permissionEvents,
       ]);
     }
 
@@ -162,6 +180,14 @@
             />
           </div>
         </div>
+      {/if}
+
+      {#if type === "Channel" && spaceId}
+        <ChannelPermissions
+          {spaceId}
+          bind:accessMode
+          bind:rolePermissions
+        />
       {/if}
 
       <div class="mt-4">

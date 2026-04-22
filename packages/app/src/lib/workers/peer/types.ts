@@ -62,6 +62,14 @@ export type PeerInterface = {
   getInvites(
     spaceDid: StreamDid,
   ): Promise<{ token: string; createdBy: string; eventUlid: string }[]>;
+  getRoles(spaceDid: StreamDid): Promise<{
+    id: string;
+    name: string | null;
+    avatar: string | null;
+    description: string | null;
+    rooms: { roomId: string; permission: "read" | "readwrite" }[];
+    members: string[];
+  }[]>;
   runQuery<T>(statement: SqlStatement): Promise<QueryResult<T>>;
   getProfiles(dids: UserDid[]): Promise<ProfileViewDetailed[]>;
   dangerousCompletelyDestroyDatabase(opts: {

@@ -230,3 +230,30 @@ create table if not exists comp_calendar_event (
 
 create index if not exists idx_calendar_event_start
   on comp_calendar_event(start_date);
+
+create table if not exists roles (
+  id text primary key, -- ulid of the createRole event
+  stream_id text not null, -- space stream did
+  name text,
+  avatar text,
+  description text,
+  deleted integer not null default 0 check(deleted in (0, 1))
+) strict;
+create index if not exists idx_roles_stream_id on roles(stream_id);
+
+create table if not exists member_roles (
+  user_id text not null, -- did
+  role_id text not null, -- references roles(id)
+  stream_id text not null,
+  primary key (user_id, role_id)
+) strict;
+create index if not exists idx_member_roles_role_id on member_roles(role_id);
+
+create table if not exists role_rooms (
+  role_id text not null, -- references roles(id)
+  room_id text not null, -- references entities(id)
+  stream_id text not null,
+  permission text not null check(permission in ('read', 'readwrite')),
+  primary key (role_id, room_id)
+) strict;
+create index if not exists idx_role_rooms_room_id on role_rooms(room_id);

@@ -97,6 +97,12 @@ const metadataQueryEvents: Event["$type"][] = [
   // 'space.roomy.room.removeMember.v0',
   "space.roomy.user.updateProfile.v0",
   "space.roomy.openmeet.configure.v0",
+  "space.roomy.role.createRole.v0",
+  "space.roomy.role.deleteRole.v0",
+  "space.roomy.role.updateRole.v0",
+  "space.roomy.role.addMemberRole.v0",
+  "space.roomy.role.removeMemberRole.v0",
+  "space.roomy.role.setRoleRoomPermission.v0",
 ];
 
 const metadataQueryEventsString = "'" + metadataQueryEvents.join("', '") + "'";
@@ -106,9 +112,8 @@ const spaceModuleDef: BasicModule = {
 
   initSql: sql`
     create table if not exists stream_info (
-
       type text not null default 'space.roomy.space.space',
-      schema_version text not null default '5'
+      schema_version text not null default '6'
     ) strict;
 
     insert into stream_info (type) select 'space.roomy.space.space'
@@ -196,6 +201,29 @@ const spaceModuleDef: BasicModule = {
       created_by text not null,
       event_ulid text not null
     ) strict;
+
+    create table if not exists roles (
+      id text primary key, -- ulid of the createRole event
+      name text,
+      avatar text,
+      description text,
+      deleted integer not null default 0 check(deleted in (0, 1))
+    ) strict;
+
+    create table if not exists member_roles (
+      user_id text not null, -- references members(user_id)
+      role_id text not null, -- references roles(id)
+      primary key (user_id, role_id)
+    ) strict;
+    create index if not exists member_roles_role_idx on member_roles(role_id);
+
+    create table if not exists role_rooms (
+      role_id text not null, -- references roles(id)
+      room_id text not null, -- references rooms(id)
+      permission text not null check(permission in ('read', 'readwrite')),
+      primary key (role_id, room_id)
+    ) strict;
+    create index if not exists role_rooms_room_idx on role_rooms(room_id);
   `.sql,
 
   stateInitSql: sql`
@@ -318,6 +346,64 @@ const spaceModuleDef: BasicModule = {
         select 1 from invites
         where token = (select drisl_extract(payload, '.token') from event)
           and created_by = (select author from event_info)
+      );
+
+    -- Role permissions can only be set on channels, not threads
+    select unauthorized('role permissions can only be set on channels, not threads')
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.role.setRoleRoomPermission.v0'
+      and exists (
+        select 1 from rooms
+        where id = (select drisl_extract(payload, '.roomId') from event)
+          and kind != 'space.roomy.channel'
+      );
+
+    -- addMemberRole must target an existing, non-deleted role
+    select unauthorized('role does not exist')
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.role.addMemberRole.v0'
+      and not exists (
+        select 1 from roles
+        where id = (select drisl_extract(payload, '.roleId') from event)
+          and deleted = 0
+      );
+
+    -- addMemberRole must target an existing member
+    select unauthorized('cannot assign role to non-member')
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.role.addMemberRole.v0'
+      and not exists (
+        select 1 from members
+        where user_id = (select drisl_extract(payload, '.userDid') from event)
+      );
+
+    -- Write permission check: if the target channel has role restrictions, the sender must
+    -- hold a role with 'readwrite' on that channel (admins bypass this).
+    -- Effective channel = the room itself if it's a channel, otherwise its parent channel.
+    with event_room as (
+      select drisl_extract(payload, '.room') as room_id
+      from event
+    ),
+    effective_channel as (
+      select coalesce(r.parent, r.id) as channel_id
+      from rooms r
+      where r.id = (select room_id from event_room)
+    )
+    select unauthorized('you do not have write access to this channel')
+    where (select room_id from event_room) is not null  -- is a room event
+      and not exists (select 1 from admins where user_id = (select user from event))
+      and exists (  -- channel has at least one active role restriction
+        select 1 from role_rooms rr
+        join roles ro on ro.id = rr.role_id
+        where rr.room_id = (select channel_id from effective_channel)
+          and ro.deleted = 0
+      )
+      and not exists (  -- sender does not hold a readwrite role on that channel
+        select 1
+        from member_roles mr
+        join role_rooms rr on rr.role_id = mr.role_id
+        join roles ro on ro.id = mr.role_id
+        where mr.user_id = (select user from event)
+          and rr.room_id = (select channel_id from effective_channel)
+          and rr.permission = 'readwrite'
+          and ro.deleted = 0
       );
   `.sql,
 
@@ -536,6 +622,63 @@ const spaceModuleDef: BasicModule = {
     delete from invites
     where token = (select drisl_extract(payload, '.token') from event)
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.revokeInvite.v0';
+
+    -- Create role
+    insert or ignore into roles (id, name, avatar, description)
+    select
+      drisl_extract(payload, '.id'),
+      drisl_extract(payload, '.name'),
+      drisl_extract(payload, '.avatar'),
+      drisl_extract(payload, '.description')
+    from event
+    where drisl_extract(payload, '.$type') = 'space.roomy.role.createRole.v0';
+
+    -- Update role
+    update roles
+    set
+      name = case (select drisl_exists(payload, '.name') from event)
+        when 1 then (select drisl_extract(payload, '.name') from event) else name end,
+      avatar = case (select drisl_exists(payload, '.avatar') from event)
+        when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end,
+      description = case (select drisl_exists(payload, '.description') from event)
+        when 1 then (select drisl_extract(payload, '.description') from event) else description end
+    where id = (select drisl_extract(payload, '.roleId') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.role.updateRole.v0';
+
+    -- Delete role (soft delete)
+    update roles
+    set deleted = 1
+    where id = (select drisl_extract(payload, '.roleId') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.role.deleteRole.v0';
+
+    -- Add member to role
+    insert or ignore into member_roles (user_id, role_id)
+    select
+      drisl_extract(payload, '.userDid'),
+      drisl_extract(payload, '.roleId')
+    from event
+    where drisl_extract(payload, '.$type') = 'space.roomy.role.addMemberRole.v0';
+
+    -- Remove member from role
+    delete from member_roles
+    where user_id = (select drisl_extract(payload, '.userDid') from event)
+      and role_id = (select drisl_extract(payload, '.roleId') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.role.removeMemberRole.v0';
+
+    -- Set role room permission (remove then re-insert if non-null)
+    delete from role_rooms
+    where role_id = (select drisl_extract(payload, '.roleId') from event)
+      and room_id = (select drisl_extract(payload, '.roomId') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.role.setRoleRoomPermission.v0';
+
+    insert or ignore into role_rooms (role_id, room_id, permission)
+    select
+      drisl_extract(payload, '.roleId'),
+      drisl_extract(payload, '.roomId'),
+      drisl_extract(payload, '.permission')
+    from event
+    where drisl_extract(payload, '.$type') = 'space.roomy.role.setRoleRoomPermission.v0'
+      and drisl_extract(payload, '.permission') is not null;
   `,
 
   stateMaterializer: `
@@ -659,11 +802,47 @@ const spaceModuleDef: BasicModule = {
               from rooms r
               where r.deleted = 0
               and r.kind = 'space.roomy.channel'
+              and (
+                exists (select 1 from admins where user_id = $requesting_user)
+                or not exists (
+                  select 1 from role_rooms rr
+                  join roles ro on ro.id = rr.role_id
+                  where rr.room_id = r.id and ro.deleted = 0
+                )
+                or exists (
+                  select 1
+                  from member_roles mr
+                  join role_rooms rr on rr.role_id = mr.role_id
+                  join roles ro on ro.id = mr.role_id
+                  where mr.user_id = $requesting_user
+                    and rr.room_id = r.id
+                    and ro.deleted = 0
+                )
+              )
             ),
             'admins', (
               select json_group_array(user_id)
               from admins
             ),
+            'allRoles', (
+              select json_group_array(r.id)
+              from roles r
+              where r.deleted = 0
+            ),
+            'channelRoles', (
+              select json_group_array(
+                json_object('roleId', rr.role_id, 'roomId', rr.room_id, 'permission', rr.permission)
+              )
+              from role_rooms rr
+              join roles ro on ro.id = rr.role_id
+              where ro.deleted = 0
+            ),
+            'userRoles', (
+              select json_group_array(mr.role_id)
+              from member_roles mr
+              where mr.user_id = $requesting_user
+            ),
+            'requestingUser', $requesting_user,
             'openmeetConfig', json_object(
               'groupSlug', (select group_slug from openmeet_config),
               'tenantId', (select tenant_id from openmeet_config),
@@ -683,8 +862,31 @@ const spaceModuleDef: BasicModule = {
         where not exists (select 1 from members where user_id = $requesting_user)
           and not exists (select 1 from admins where user_id = $requesting_user);
 
-        select idx, user, payload from events.events
-          where idx >= $start limit $limit;
+        select e.idx, e.user, e.payload
+        from events.events e
+        left join room_events re on re.idx = e.idx
+        left join rooms r on r.id = re.room
+        where e.idx >= $start
+          and (
+            re.room is null  -- space-level event: always visible
+            or exists (select 1 from admins where user_id = $requesting_user)
+            or not exists (  -- fast path: channel has no role restrictions
+              select 1 from role_rooms rr
+              join roles ro on ro.id = rr.role_id
+              where rr.room_id = coalesce(r.parent, r.id)
+                and ro.deleted = 0
+            )
+            or exists (  -- user holds a qualifying role on the effective channel
+              select 1
+              from member_roles mr
+              join role_rooms rr on rr.role_id = mr.role_id
+              join roles ro on ro.id = mr.role_id
+              where mr.user_id = $requesting_user
+                and rr.room_id = coalesce(r.parent, r.id)
+                and ro.deleted = 0
+            )
+          )
+        limit $limit;
       `,
       params: [],
     },
@@ -709,6 +911,30 @@ const spaceModuleDef: BasicModule = {
         select unauthorized('must be a member or admin to view this data')
           where not exists (select 1 from members where user_id = $requesting_user)
             and not exists (select 1 from admins where user_id = $requesting_user);
+
+        select unauthorized('you do not have access to this channel')
+          where not exists (select 1 from admins where user_id = $requesting_user)
+            and exists (
+              select 1 from role_rooms rr
+              join roles ro on ro.id = rr.role_id
+              where rr.room_id = coalesce(
+                (select parent from rooms where id = $room),
+                $room
+              )
+              and ro.deleted = 0
+            )
+            and not exists (
+              select 1
+              from member_roles mr
+              join role_rooms rr on rr.role_id = mr.role_id
+              join roles ro on ro.id = mr.role_id
+              where mr.user_id = $requesting_user
+                and rr.room_id = coalesce(
+                  (select parent from rooms where id = $room),
+                  $room
+                )
+                and ro.deleted = 0
+            );
 
 
         select
@@ -806,6 +1032,36 @@ const spaceModuleDef: BasicModule = {
         select token, created_by, event_ulid from invites
         where created_by = $requesting_user
           or exists (select 1 from admins where user_id = $requesting_user);
+      `,
+      params: [],
+    },
+    {
+      name: "roles",
+      sql: `
+        select unauthorized('must be a member or admin to view this data')
+          where not exists (select 1 from members where user_id = $requesting_user)
+            and not exists (select 1 from admins where user_id = $requesting_user);
+
+        select
+          r.id,
+          r.name,
+          r.avatar,
+          r.description,
+          (
+            select json_group_array(
+              json_object('roomId', rr.room_id, 'permission', rr.permission)
+            )
+            from role_rooms rr
+            where rr.role_id = r.id
+          ) as rooms,
+          (
+            select json_group_array(mr.user_id)
+            from member_roles mr
+            where mr.role_id = r.id
+          ) as members
+        from roles r
+        where r.deleted = 0
+        order by r.id;
       `,
       params: [],
     },

@@ -59,6 +59,12 @@ const OpenMeetConfigType = type({
   apiUrl: "string | null",
 });
 
+const ChannelRoleType = type({
+  roleId: "string",
+  roomId: "string",
+  permission: type("'read' | 'readwrite'"),
+});
+
 const SpaceMetaSyntheticSchema = type({
   $type: "'space.roomy.query.spaceMeta.v0'",
   latestIdx: type.or(StreamIndex, "null"),
@@ -67,6 +73,10 @@ const SpaceMetaSyntheticSchema = type({
   sidebar: type.or(SidebarType, "null"),
   channels: type.or(ChannelType.array(), "null"),
   admins: type.or(type.string.array(), "null"),
+  "allRoles?": type.or(type.string.array(), "null"),
+  "channelRoles?": type.or(ChannelRoleType.array(), "null"),
+  "userRoles?": type.or(type.string.array(), "null"),
+  "requestingUser?": type.or("string", "null"),
   openmeetConfig: type.or(OpenMeetConfigType, "null"),
 }).describe(
   "Synthetic event containing space metadata from the space_meta query",
@@ -291,6 +301,36 @@ export const SpaceMetaSynthetic = defineEvent(
             ${timestamp}
           )
           on conflict(head, tail, label) do nothing
+        `);
+      }
+    }
+
+    // Seed local roles table for non-deleted roles (needed for role filtering joins)
+    if (data.allRoles != null) {
+      for (const roleId of data.allRoles) {
+        statements.push(sql`
+          insert or ignore into roles (id, stream_id)
+          values (${roleId}, ${streamId})
+        `);
+      }
+    }
+
+    // Seed role_rooms from channelRoles
+    if (data.channelRoles != null) {
+      for (const rr of data.channelRoles) {
+        statements.push(sql`
+          insert or ignore into role_rooms (role_id, room_id, stream_id, permission)
+          values (${rr.roleId}, ${rr.roomId}, ${streamId}, ${rr.permission})
+        `);
+      }
+    }
+
+    // Seed member_roles from userRoles
+    if (data.userRoles != null && data.requestingUser != null) {
+      for (const roleId of data.userRoles) {
+        statements.push(sql`
+          insert or ignore into member_roles (user_id, role_id, stream_id)
+          values (${data.requestingUser}, ${roleId}, ${streamId})
         `);
       }
     }

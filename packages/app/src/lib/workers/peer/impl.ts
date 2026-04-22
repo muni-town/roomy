@@ -190,6 +190,7 @@ export class Peer {
         return this.#roomy.current.client.getSpaceInfo(streamDid);
       },
       getInvites: async (spaceDid) => this.getInvites(spaceDid),
+      getRoles: async (spaceDid) => this.getRoles(spaceDid),
       getProfiles: async (dids) => {
         const resp = await this.client.agent.getProfiles({ actors: dids });
         return resp.data.profiles;
@@ -1385,6 +1386,22 @@ export class Peer {
     if (!space) throw new Error("Could not find space in connected streams");
 
     return await space.fetchInvites();
+  }
+
+  async getRoles(spaceId: StreamDid): Promise<{
+    id: string;
+    name: string | null;
+    avatar: string | null;
+    description: string | null;
+    rooms: { roomId: string; permission: "read" | "readwrite" }[];
+    members: string[];
+  }[]> {
+    const { spaces } = await this.#roomy.transitionedTo("connected");
+
+    const space = spaces.get(spaceId);
+    if (!space) throw new Error("Could not find space in connected streams");
+
+    return await space.fetchRoles();
   }
 
   /** Create an event callback that pushes to the eventChannel.

@@ -33,12 +33,14 @@ export class AppState {
   did = $state<UserDid | undefined>(undefined);
   joinedSpace = $state<SpaceMeta | undefined>(undefined);
   isSpaceAdmin = $state(false);
+  canWriteInRoom = $state(true);
 
   // ═══════════ Sidebar ═══════════
   categories = $state<SidebarCategory[] | undefined>(undefined);
 
   // ═══════════ Private: Spaces ═══════════
   #spacesQuery: LiveQuery<SpaceMeta>;
+  #canWriteQuery: LiveQuery<{ can_write: number }>;
   #handlesForSpace = new SvelteMap<StreamDid, Handle | undefined>();
 
   // ═══════════ Private: Current space resolution ═══════════
@@ -134,6 +136,58 @@ export class AppState {
   }
 
   constructor() {
+    // ─── Write permission query ────────────────────────────────────────────
+    // Checks the current room AND any linked parent channels (for threads).
+    // Threads have no direct role_rooms entries — their parent channel does.
+    // We do NOT filter on canonical_parent because the synthetic space_meta
+    // event creates link edges without a payload, so that check would always
+    // fail for threads loaded from space_meta rather than lazy-loaded events.
+    this.#canWriteQuery = new LiveQuery(
+      () => sql`-- can-write-in-room
+        SELECT 1 as can_write
+        WHERE ${this.roomId ?? ""} != ''
+          AND ${this.joinedSpace?.id ?? ""} != ''
+          AND ${this.did ?? ""} != ''
+          AND (
+            exists (
+              SELECT 1 FROM edges
+              WHERE head = ${this.joinedSpace?.id ?? ""}
+                AND tail = ${this.did ?? ""}
+                AND label = 'admin'
+            )
+            OR NOT exists (
+              SELECT 1 FROM role_rooms rr
+              JOIN roles ro ON ro.id = rr.role_id
+              WHERE rr.room_id IN (
+                SELECT ${this.roomId ?? ""}
+                UNION ALL
+                SELECT e.head FROM edges e
+                WHERE e.tail = ${this.roomId ?? ""}
+                  AND e.label = 'link'
+              )
+              AND rr.stream_id = ${this.joinedSpace?.id ?? ""}
+              AND ro.deleted = 0
+            )
+            OR exists (
+              SELECT 1 FROM member_roles mr
+              JOIN role_rooms rr ON rr.role_id = mr.role_id
+              JOIN roles ro ON ro.id = mr.role_id
+              WHERE mr.user_id = ${this.did ?? ""}
+                AND rr.room_id IN (
+                  SELECT ${this.roomId ?? ""}
+                  UNION ALL
+                  SELECT e.head FROM edges e
+                  WHERE e.tail = ${this.roomId ?? ""}
+                    AND e.label = 'link'
+                )
+                AND rr.permission = 'readwrite'
+                AND rr.stream_id = ${this.joinedSpace?.id ?? ""}
+                AND ro.deleted = 0
+            )
+          )
+      `,
+    );
+
     // ─── Spaces query ──────────────────────────────────────────────────────
     this.#spacesQuery = new LiveQuery(
       () => sql`-- spaces
@@ -284,6 +338,15 @@ export class AppState {
         peerStatus.authState?.state === "authenticated"
           ? peerStatus.authState.did
           : undefined;
+    });
+
+    // ─── Write permission ──────────────────────────────────────────────────
+    $effect(() => {
+      if (!this.roomId || !this.joinedSpace || !this.did) {
+        this.canWriteInRoom = true;
+        return;
+      }
+      this.canWriteInRoom = (this.#canWriteQuery.result?.length ?? 0) > 0;
     });
 
     // ─── Sync public state from current SpaceState ─────────────────────────

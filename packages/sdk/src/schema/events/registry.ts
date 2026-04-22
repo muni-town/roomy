@@ -36,6 +36,14 @@ import { MarkRead } from "./state";
 import { DefinedEvent, MaterializeFn } from "./types";
 import { SetUserProfile } from "./user";
 import { SetCalendarLink } from "./calendar";
+import {
+  CreateRole,
+  DeleteRole,
+  UpdateRole,
+  AddMemberRole,
+  RemoveMemberRole,
+  SetRoleRoomPermission,
+} from "./roles";
 
 /** Registry of all defined events by their $type */
 export const eventRegistry = {
@@ -73,6 +81,12 @@ export const eventRegistry = {
   "space.roomy.space.unbanAccount.v0": UnbanAccount,
   "space.roomy.space.createInvite.v0": CreateInvite,
   "space.roomy.space.revokeInvite.v0": RevokeInvite,
+  "space.roomy.role.createRole.v0": CreateRole,
+  "space.roomy.role.deleteRole.v0": DeleteRole,
+  "space.roomy.role.updateRole.v0": UpdateRole,
+  "space.roomy.role.addMemberRole.v0": AddMemberRole,
+  "space.roomy.role.removeMemberRole.v0": RemoveMemberRole,
+  "space.roomy.role.setRoleRoomPermission.v0": SetRoleRoomPermission,
 } as const satisfies Record<EventType, DefinedEvent<any, boolean>>;
 
 /** Get the causal dependencies for an event */

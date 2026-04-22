@@ -17,7 +17,7 @@ const CONFIG = {
   profileSpaceNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
   streamSchemaVersion: "4" as const,
-  databaseSchemaVersion: "5" as const,
+  databaseSchemaVersion: "6" as const,
 
   // testing credentials for auto-authentication in e2e tests
   testingHandle: import.meta.env.VITE_TESTING_HANDLE,

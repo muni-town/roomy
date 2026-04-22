@@ -61,6 +61,15 @@ export { CreateRoomLink, RemoveRoomLink } from "./link";
 export { SetCalendarLink } from "./calendar";
 export { CreateInvite, RevokeInvite } from "./invite";
 export { MarkRead } from "./state";
+export {
+  CreateRole,
+  DeleteRole,
+  UpdateRole,
+  AddMemberRole,
+  RemoveMemberRole,
+  SetRoleRoomPermission,
+  RoleEventVariant,
+} from "./roles";
 
 export {
   type MaterializeContext,

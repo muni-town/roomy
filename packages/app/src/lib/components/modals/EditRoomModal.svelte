@@ -7,10 +7,12 @@
   import { Modal } from "@foxui/core";
   import Input from "$lib/components/ui/input/Input.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
-  import type { Ulid } from "@roomy-space/sdk";
+  import { newUlid, type Ulid, Ulid as UlidNS } from "@roomy-space/sdk";
+  import ChannelPermissions from "$lib/components/ui/ChannelPermissions.svelte";
   // import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
   import { IconSave, IconTrash } from "@roomy/design/icons";
   import { flags } from "$lib/config";
+  import { peer } from "$lib/workers";
 
   let {
     open = $bindable(false),
@@ -22,20 +24,41 @@
     renameCategory: (id: Ulid, newName: string) => void;
   } = $props();
 
+  let accessMode = $state<"open" | "roles">("open");
+  let rolePermissions = $state<Record<string, "none" | "read" | "readwrite">>({});
+
   async function save() {
     if (!app.joinedSpace || !id)
       throw new Error("Could not find current room ID");
     if (!name) return;
 
     if ("room" in id) {
-      console.log("Saving Room", name);
       await renameRoom({
         spaceId: app.joinedSpace.id,
         roomId: id.room,
         newName: name,
       });
+
+      if (kind === "Channel") {
+        const allRoles = await peer.getRoles(app.joinedSpace.id);
+        const permissionEvents = allRoles.flatMap((role) => {
+          const existing = role.rooms.find((r) => r.roomId === id.room);
+          const desired = accessMode === "roles" ? (rolePermissions[role.id] ?? "none") : "none";
+          const existingPerm = existing?.permission ?? "none";
+          if (desired === existingPerm) return [];
+          return [{
+            id: newUlid(),
+            $type: "space.roomy.role.setRoleRoomPermission.v0" as const,
+            roleId: UlidNS.assert(role.id),
+            roomId: id.room,
+            permission: desired === "none" ? null : desired as "read" | "readwrite",
+          }];
+        });
+        if (permissionEvents.length > 0) {
+          await peer.sendEventBatch(app.joinedSpace.id, permissionEvents);
+        }
+      }
     } else if ("categoryId" in id) {
-      console.log("Todo: save category name");
       renameCategory(id.categoryId, name);
     }
     open = false;
@@ -93,6 +116,18 @@
           </p>
         </div>
         <Input bind:value={name} placeholder="Name" type="text" required />
+
+        {#if kind === "Channel" && app.joinedSpace}
+          <div class="border-t border-base-200 dark:border-base-700 pt-4">
+            <ChannelPermissions
+              spaceId={app.joinedSpace.id}
+              roomId={id && "room" in id ? id.room : undefined}
+              bind:accessMode
+              bind:rolePermissions
+            />
+          </div>
+        {/if}
+
         <div class="flex justify-start">
           <Button type="submit" disabled={!name} class="justify-start">
             <IconSave class="size-4" />

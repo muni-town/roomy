@@ -151,6 +151,29 @@ export class SpaceState {
         left join comp_last_read child_read on child_read.entity = children.value
         where space.entity = ${spaceId}
           and coalesce(child_room.deleted, 0) = 0
+          and (
+            children.value is null
+            or exists (
+              select 1 from edges
+              where head = ${spaceId} and tail = ${this.did ?? ""} and label = 'admin'
+            )
+            or not exists (
+              select 1 from role_rooms rr
+              join roles ro on ro.id = rr.role_id
+              where rr.room_id = children.value
+                and rr.stream_id = ${spaceId}
+                and ro.deleted = 0
+            )
+            or exists (
+              select 1 from member_roles mr
+              join role_rooms rr on rr.role_id = mr.role_id
+              join roles ro on ro.id = mr.role_id
+              where mr.user_id = ${this.did ?? ""}
+                and rr.room_id = children.value
+                and rr.stream_id = ${spaceId}
+                and ro.deleted = 0
+            )
+          )
         group by categories.key, categories.value -> 'name'
         order by categories.key
       `,
@@ -175,6 +198,29 @@ export class SpaceState {
           e.stream_id = ${spaceId}
             and
           coalesce(r.deleted, 0) = 0
+            and
+          (
+            exists (
+              select 1 from edges
+              where head = ${spaceId} and tail = ${this.did ?? ""} and label = 'admin'
+            )
+            or not exists (
+              select 1 from role_rooms rr
+              join roles ro on ro.id = rr.role_id
+              where rr.room_id = e.id
+                and rr.stream_id = ${spaceId}
+                and ro.deleted = 0
+            )
+            or exists (
+              select 1 from member_roles mr
+              join role_rooms rr on rr.role_id = mr.role_id
+              join roles ro on ro.id = mr.role_id
+              where mr.user_id = ${this.did ?? ""}
+                and rr.room_id = e.id
+                and rr.stream_id = ${spaceId}
+                and ro.deleted = 0
+            )
+          )
       `,
     );
 

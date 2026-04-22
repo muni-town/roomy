@@ -32,6 +32,7 @@
   import { goto } from "$app/navigation";
 
   let spaceId = $derived(app.joinedSpace?.id);
+  let canWrite = $derived(app.canWriteInRoom);
   let isSendingMessage = $state(false);
   let previewImages: string[] = $state([]);
   let fileInput: HTMLInputElement | undefined = $state();
@@ -382,6 +383,11 @@
 
     <div class="w-full py-1">
       <div class="prose-a:text-primary prose-a:underline relative isolate">
+        {#if !canWrite}
+          <div class="flex items-center justify-center px-4 py-3 text-sm text-base-500 dark:text-base-400 bg-base-50 dark:bg-base-800 rounded-lg mx-2 mb-1">
+            You don't have permission to send messages in this channel.
+          </div>
+        {/if}
         {#if previewImages.length > 0}
           <div class="flex gap-2 my-2 overflow-x-auto w-full px-2">
             {#each previewImages as previewImage, index (previewImage)}
@@ -410,6 +416,7 @@
           </div>
         {/if}
 
+        {#if canWrite}
         <div class="flex w-full gap-2 items-center">
           {#if state.kind === "threading"}
             <form
@@ -507,6 +514,7 @@
             <!-- {/key} -->
           {/if}
         </div>
+        {/if}
         <FullscreenImageDropper {processImageFile} />
       </div>
     </div>

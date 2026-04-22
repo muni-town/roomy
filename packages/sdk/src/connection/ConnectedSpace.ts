@@ -444,6 +444,30 @@ export class ConnectedSpace {
     }));
   }
 
+  async fetchRoles(): Promise<{
+    id: string;
+    name: string | null;
+    avatar: string | null;
+    description: string | null;
+    rooms: { roomId: string; permission: "read" | "readwrite" }[];
+    members: string[];
+  }[]> {
+    const resp = await this.#leaf.query(this.streamDid, {
+      name: "roles",
+      params: {},
+    });
+
+    const unwrapped = unwrapSqlRows(resp);
+    return unwrapped.map((row) => ({
+      id: String(row["id"] ?? ""),
+      name: row["name"] != null ? String(row["name"]) : null,
+      avatar: row["avatar"] != null ? String(row["avatar"]) : null,
+      description: row["description"] != null ? String(row["description"]) : null,
+      rooms: row["rooms"] != null ? JSON.parse(String(row["rooms"])) : [],
+      members: row["members"] != null ? JSON.parse(String(row["members"])) : [],
+    }));
+  }
+
   /**
    * Fetch room metadata from this space.
    * Returns all rooms, optionally filtered by kind.
