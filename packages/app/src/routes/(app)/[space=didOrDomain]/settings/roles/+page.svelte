@@ -243,7 +243,7 @@
                 <span
                   class="text-xs shrink-0 rounded-2xl px-2.5 py-0.5 bg-base-200/70 dark:bg-base-700/50 text-base-600 dark:text-base-300 font-medium"
                 >
-                  {room.permission}
+                  {room.permission === "readwrite" ? "read and write" : room.permission}
                 </span>
               </li>
             {/each}
