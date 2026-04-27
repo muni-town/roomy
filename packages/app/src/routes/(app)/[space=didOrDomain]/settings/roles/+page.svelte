@@ -129,7 +129,7 @@
   }
 </script>
 
-<div class="space-y-6 pt-4 overflow-y-auto">
+<div class="space-y-6 pt-4 min-h-full">
   {#if selectedRole}
     <div class="space-y-6">
       <Button variant="ghost" onclick={() => (selectedRole = null)} class="justify-start">
