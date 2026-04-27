@@ -157,6 +157,7 @@ export class SpaceState {
               select 1 from edges
               where head = ${spaceId} and tail = ${this.did ?? ""} and label = 'admin'
             )
+            or coalesce(child_room.default_access, 'readwrite') != 'none'
             or not exists (
               select 1 from role_rooms rr
               join roles ro on ro.id = rr.role_id
@@ -204,6 +205,7 @@ export class SpaceState {
               select 1 from edges
               where head = ${spaceId} and tail = ${this.did ?? ""} and label = 'admin'
             )
+            or coalesce(r.default_access, 'readwrite') != 'none'
             or not exists (
               select 1 from role_rooms rr
               join roles ro on ro.id = rr.role_id

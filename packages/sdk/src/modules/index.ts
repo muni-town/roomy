@@ -146,6 +146,7 @@ const spaceModuleDef: BasicModule = {
       name text,
       description text,
       avatar text,
+      default_access text, -- check(default_access in ('readwrite', 'read', 'none')) default 'readwrite',
       deleted integer not null default 0 check(deleted in (0, 1)),
       message_count integer not null default 0,
       parent text -- canonical parent room id (set from first createRoomLink)
@@ -374,8 +375,8 @@ const spaceModuleDef: BasicModule = {
         where user_id = (select drisl_extract(payload, '.userDid') from event)
       );
 
-    -- Write permission check: if the target channel has role restrictions, the sender must
-    -- hold a role with 'readwrite' on that channel (admins bypass this).
+    -- Write permission check: if the target channel is read-restricted or has role restrictions,
+    -- the sender must hold a role with 'readwrite' on that channel (admins bypass this).
     -- Effective channel = the room itself if it's a channel, otherwise its parent channel.
     with event_room as (
       select drisl_extract(payload, '.room') as room_id
@@ -389,11 +390,16 @@ const spaceModuleDef: BasicModule = {
     select unauthorized('you do not have write access to this channel')
     where (select room_id from event_room) is not null  -- is a room event
       and not exists (select 1 from admins where user_id = (select user from event))
-      and exists (  -- channel has at least one active role restriction
-        select 1 from role_rooms rr
-        join roles ro on ro.id = rr.role_id
-        where rr.room_id = (select channel_id from effective_channel)
-          and ro.deleted = 0
+      and (
+        -- channel is read-only for general members
+        coalesce((select default_access from rooms where id = (select channel_id from effective_channel)), 'readwrite') = 'read'
+        -- channel has at least one active role restriction
+        or exists (
+          select 1 from role_rooms rr
+          join roles ro on ro.id = rr.role_id
+          where rr.room_id = (select channel_id from effective_channel)
+            and ro.deleted = 0
+        )
       )
       and not exists (  -- sender does not hold a readwrite role on that channel
         select 1
@@ -462,13 +468,14 @@ const spaceModuleDef: BasicModule = {
     where (select drisl_extract(payload, '.$type') from event) in ('space.roomy.space.updateSidebar.v0', 'space.roomy.space.updateSidebar.v1');
 
     -- Create room
-    insert or ignore into rooms (id, kind, name, description, avatar, deleted)
+    insert or ignore into rooms (id, kind, name, description, avatar, default_access, deleted)
     select
       drisl_extract(payload, '.id') as id,
       drisl_extract(payload, '.kind') as kind,
       drisl_extract(payload, '.name') as name,
       drisl_extract(payload, '.description') as description,
       drisl_extract(payload, '.avatar') as avatar,
+      coalesce(drisl_extract(payload, '.defaultAccess'), 'readwrite') as default_access,
       0 as deleted
     from event
     where drisl_extract(payload, '.$type') = 'space.roomy.room.createRoom.v0';
@@ -483,7 +490,9 @@ const spaceModuleDef: BasicModule = {
       description = case (select drisl_exists(payload, '.description') from event)
         when 1 then (select drisl_extract(payload, '.description') from event) else description end,
       avatar = case (select drisl_exists(payload, '.avatar') from event)
-        when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end
+        when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end,
+      default_access = case (select drisl_exists(payload, '.defaultAccess') from event)
+        when 1 then coalesce((select drisl_extract(payload, '.defaultAccess') from event), 'readwrite') else default_access end
     where id = (select drisl_extract(payload, '.roomId') from event)
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.room.updateRoom.v0';
 
@@ -914,14 +923,21 @@ const spaceModuleDef: BasicModule = {
 
         select unauthorized('you do not have access to this channel')
           where not exists (select 1 from admins where user_id = $requesting_user)
-            and exists (
-              select 1 from role_rooms rr
-              join roles ro on ro.id = rr.role_id
-              where rr.room_id = coalesce(
-                (select parent from rooms where id = $room),
-                $room
+            and (
+              -- channel is hidden from general members
+              coalesce((select default_access from rooms where id = coalesce(
+                (select parent from rooms where id = $room), $room
+              )), 'readwrite') = 'none'
+              -- channel has role restrictions
+              or exists (
+                select 1 from role_rooms rr
+                join roles ro on ro.id = rr.role_id
+                where rr.room_id = coalesce(
+                  (select parent from rooms where id = $room),
+                  $room
+                )
+                and ro.deleted = 0
               )
-              and ro.deleted = 0
             )
             and not exists (
               select 1

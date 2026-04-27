@@ -73,6 +73,7 @@ create table if not exists comp_space (
 create table if not exists comp_room (
   entity text primary key references entities(id) on delete cascade,
   label text, -- "space.roomy.channel", "space.roomy.category", "space.roomy.thread", "space.roomy.page" etc
+  default_access text check(default_access in ('readwrite', 'read', 'none')) default 'readwrite',
   deleted integer check(deleted in (0, 1)) default 0,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)

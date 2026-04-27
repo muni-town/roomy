@@ -43,6 +43,7 @@
 
   let accessMode = $state<"open" | "roles">("open");
   let rolePermissions = $state<Record<string, "none" | "read" | "readwrite">>({});
+  let defaultAccess = $state<"readwrite" | "read" | "none">("readwrite");
 
   async function createRoom() {
     if (!spaceId || !categories) return;
@@ -90,6 +91,7 @@
           $type: "space.roomy.room.createRoom.v0",
           kind: "space.roomy.channel",
           name,
+          ...(defaultAccess !== "readwrite" ? { defaultAccess } : {}),
         },
         {
           id: newUlid(),
@@ -187,6 +189,7 @@
           {spaceId}
           bind:accessMode
           bind:rolePermissions
+          bind:defaultAccess
         />
       {/if}
 

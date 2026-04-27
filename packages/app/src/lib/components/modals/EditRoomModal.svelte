@@ -25,39 +25,63 @@
   } = $props();
 
   let accessMode = $state<"open" | "roles">("open");
-  let rolePermissions = $state<Record<string, "none" | "read" | "readwrite">>({});
+  let rolePermissions = $state<Record<string, "none" | "read" | "readwrite">>(
+    {},
+  );
+  let defaultAccess = $state<"readwrite" | "read" | "none">("readwrite");
 
-  async function save() {
+  async function save(e: Event) {
+    e.preventDefault();
     if (!app.joinedSpace || !id)
       throw new Error("Could not find current room ID");
     if (!name) return;
 
     if ("room" in id) {
+      if (kind === "Channel") {
+        const events = [];
+
+        // Send updateRoom if defaultAccess changed
+        if (room?.defaultAccess !== defaultAccess) {
+          events.push({
+            id: newUlid(),
+            $type: "space.roomy.room.updateRoom.v0" as const,
+            roomId: id.room,
+            defaultAccess: defaultAccess as "readwrite" | "read" | "none",
+          });
+        }
+
+        const allRoles = await peer.getRoles(app.joinedSpace.id);
+        const permissionEvents = allRoles.flatMap((role) => {
+          const existing = role.rooms.find((r) => r.roomId === id.room);
+          const desired =
+            accessMode === "roles"
+              ? (rolePermissions[role.id] ?? "none")
+              : "none";
+          const existingPerm = existing?.permission ?? "none";
+          if (desired === existingPerm) return [];
+          return [
+            {
+              id: newUlid(),
+              $type: "space.roomy.role.setRoleRoomPermission.v0" as const,
+              roleId: UlidNS.assert(role.id),
+              roomId: id.room,
+              permission:
+                desired === "none" ? null : (desired as "read" | "readwrite"),
+            },
+          ];
+        });
+        events.push(...permissionEvents);
+
+        if (events.length > 0) {
+          await peer.sendEventBatch(app.joinedSpace.id, events);
+        }
+      }
+
       await renameRoom({
         spaceId: app.joinedSpace.id,
         roomId: id.room,
         newName: name,
       });
-
-      if (kind === "Channel") {
-        const allRoles = await peer.getRoles(app.joinedSpace.id);
-        const permissionEvents = allRoles.flatMap((role) => {
-          const existing = role.rooms.find((r) => r.roomId === id.room);
-          const desired = accessMode === "roles" ? (rolePermissions[role.id] ?? "none") : "none";
-          const existingPerm = existing?.permission ?? "none";
-          if (desired === existingPerm) return [];
-          return [{
-            id: newUlid(),
-            $type: "space.roomy.role.setRoleRoomPermission.v0" as const,
-            roleId: UlidNS.assert(role.id),
-            roomId: id.room,
-            permission: desired === "none" ? null : desired as "read" | "readwrite",
-          }];
-        });
-        if (permissionEvents.length > 0) {
-          await peer.sendEventBatch(app.joinedSpace.id, permissionEvents);
-        }
-      }
     } else if ("categoryId" in id) {
       renameCategory(id.categoryId, name);
     }
@@ -67,11 +91,13 @@
   const roomQuery = new LiveQuery<{
     name: string;
     kind: "space.roomy.channel" | "space.roomy.thread" | "space.roomy.page";
+    defaultAccess: "none" | "read" | "readwrite";
   }>(
     () => sql`
     select json_object(
       'name', name,
-      'kind', label
+      'kind', label,
+      'defaultAccess', default_access
     ) as json
     from comp_info ci
     left join comp_room cr on ci.entity = cr.entity
@@ -124,6 +150,7 @@
               roomId={id && "room" in id ? id.room : undefined}
               bind:accessMode
               bind:rolePermissions
+              bind:defaultAccess
             />
           </div>
         {/if}

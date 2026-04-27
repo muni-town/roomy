@@ -38,9 +38,16 @@ export const GroupMember = type
   )
   .describe("The group member identifier");
 
+export const DefaultAccess = type(
+  "'readwrite' | 'read' | 'none'",
+).describe(
+  "Default access level for members without a specific role assignment.",
+);
+
 const CreateRoomSchema = type({
   $type: "'space.roomy.room.createRoom.v0'",
   kind: RoomKind,
+  "defaultAccess?": DefaultAccess,
   "extensions?": RoomExtensionMap,
 })
   .and(BasicInfo)
@@ -51,6 +58,7 @@ const CreateRoomSchema = type({
 export const CreateRoom = defineEvent(
   CreateRoomSchema,
   ({ streamId, event }) => {
+    const access = event.defaultAccess ?? "readwrite";
     const statements = [
       ensureEntity(streamId, event.id),
       sql`
@@ -59,8 +67,8 @@ export const CreateRoom = defineEvent(
         on conflict do nothing
       `,
       sql`
-        insert into comp_room ( entity, label )
-        values ( ${event.id}, ${event.kind} ) on conflict do nothing
+        insert into comp_room ( entity, label, default_access )
+        values ( ${event.id}, ${event.kind}, ${access} ) on conflict do nothing
       `,
     ];
 
@@ -81,6 +89,7 @@ const UpdateRoomSchema = type({
   $type: "'space.roomy.room.updateRoom.v0'",
   roomId: Ulid.describe("The room to update"),
   "kind?": RoomKind.or(type.null),
+  "defaultAccess?": DefaultAccess.or(type.null),
 })
   .and(BasicInfoUpdate)
   .describe(
@@ -101,6 +110,13 @@ export const UpdateRoom = defineEvent(UpdateRoomSchema, ({ event }) => {
       ? sql`
           update comp_room set label = ${event.kind} where entity = ${event.roomId}
           `
+      : undefined,
+
+    // Update the default access
+    event.defaultAccess !== undefined
+      ? sql`
+          update comp_room set default_access = ${event.defaultAccess ?? "readwrite"} where entity = ${event.roomId}
+        `
       : undefined,
 
     // Update the room info
