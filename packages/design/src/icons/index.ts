@@ -9,6 +9,7 @@ export { default as IconHome } from "~icons/heroicons/home"
 // Actions
 export { default as IconCheck } from "~icons/heroicons/check"
 export { default as IconEdit } from "~icons/tabler/edit"
+export { default as IconEllipsisHorizontal } from "~icons/heroicons/ellipsis-horizontal"
 export { default as IconGripVertical } from "~icons/lucide/grip-vertical"
 export { default as IconLogOut } from "~icons/lucide/log-out"
 export { default as IconPencil } from "~icons/lucide/pencil"

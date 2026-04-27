@@ -84,10 +84,11 @@
 <div class="relative" onfocusin={() => (open = true)} onfocusout={onFocusOut}>
   <input
     type="text"
+    name="Add Member"
     bind:value={query}
     {placeholder}
     onkeydown={onKeyDown}
-    class="w-full focus:ring-2 ring-1 ring-inset ring-accent-500/30 dark:ring-accent-500/20 focus:ring-accent-500 dark:focus:ring-accent-500 bg-accent-400/5 dark:bg-accent-600/5 text-accent-700 dark:text-accent-400 placeholder:text-accent-700/50 dark:placeholder:text-accent-400/50 rounded-2xl px-3 py-1.5 text-sm font-medium outline-none"
+    class="w-full ring-1 ring-inset ring-base-300 dark:ring-base-700 focus:ring-2 focus:ring-accent-500 bg-base-100 dark:bg-base-800/50 focus:bg-accent-400/5 dark:focus:bg-accent-600/5 text-base-900 dark:text-base-100 placeholder:text-base-400 dark:placeholder:text-base-500 rounded-2xl px-3 py-1.5 text-sm font-medium outline-none border-0 transition-colors"
   />
 
   {#if open && filteredUsers.length > 0}
@@ -95,10 +96,10 @@
       class="absolute z-20 top-full mt-1 left-0 right-0 rounded-2xl border border-base-200 dark:border-base-800 bg-base-100/90 dark:bg-base-900/90 backdrop-blur-xl shadow-lg overflow-hidden py-1"
     >
       {#each filteredUsers as user, i}
-        <li>
+        <li class="mx-1">
           <button
             class={[
-              "w-full flex items-center gap-2.5 px-3 py-2 text-left",
+              "w-full flex items-center gap-2.5 px-3 py-1.5 text-left rounded-xl",
               i === activeIndex
                 ? "bg-accent-500/10 dark:bg-accent-500/15"
                 : "hover:bg-base-100 dark:hover:bg-base-800",
@@ -113,7 +114,9 @@
                 <AvatarBeam name={user.did} size={24} />
               </Avatar.Fallback>
             </Avatar.Root>
-            <span class="text-sm font-medium text-base-900 dark:text-base-100 truncate">
+            <span
+              class="text-sm font-medium text-base-900 dark:text-base-100 truncate"
+            >
               {displayName(user)}
             </span>
             {#if user.handle && user.name}

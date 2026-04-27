@@ -12,6 +12,7 @@
   import { IconLoading } from "@roomy/design/icons";
   import Error from "$lib/components/modals/Error.svelte";
   import { AppState, setAppState } from "$lib/queries";
+  import { flags } from "$lib/config";
 
   const app = new AppState();
   setAppState(app);
@@ -86,7 +87,7 @@
   </div>
 {/if}
 
-{#if peerStatus.authState?.state === "authenticated"}
+{#if peerStatus.authState?.state === "authenticated" || flags.devBypassAuth}
   <!-- Page Content -->
   <Tooltip.Provider>
     {@render children?.()}

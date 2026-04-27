@@ -1388,14 +1388,16 @@ export class Peer {
     return await space.fetchInvites();
   }
 
-  async getRoles(spaceId: StreamDid): Promise<{
-    id: string;
-    name: string | null;
-    avatar: string | null;
-    description: string | null;
-    rooms: { roomId: string; permission: "read" | "readwrite" }[];
-    members: string[];
-  }[]> {
+  async getRoles(spaceId: StreamDid): Promise<
+    {
+      id: string;
+      name: string | null;
+      avatar: string | null;
+      description: string | null;
+      rooms: { roomId: string; permission: "read" | "readwrite" }[];
+      members: string[];
+    }[]
+  > {
     const { spaces } = await this.#roomy.transitionedTo("connected");
 
     const space = spaces.get(spaceId);
