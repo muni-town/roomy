@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-27T00:00:00Z",
+  "title": "Design System: Roomy",
+  "extensions": {
+    "colorMeta": {
+      "surface-warm-light": {
+        "role": "neutral",
+        "displayName": "Parchment",
+        "canonical": "oklch(98.5% 0.001 106)",
+        "tonalRamp": [
+          "oklch(13% 0.004 286)",
+          "oklch(19.3% 0.003 265)",
+          "oklch(26.3% 0.005 13)",
+          "oklch(38.9% 0.008 31)",
+          "oklch(47.6% 0.010 62)",
+          "oklch(58.6% 0.012 49)",
+          "oklch(71.5% 0.011 56)",
+          "oklch(86.9% 0.005 56)",
+          "oklch(92.8% 0.003 49)",
+          "oklch(97% 0.001 106)",
+          "oklch(98.5% 0.001 106)"
+        ]
+      },
+      "accent-primary": {
+        "role": "primary",
+        "displayName": "Rosy Bloom (default accent)",
+        "canonical": "oklch(65.6% 0.241 354)",
+        "note": "This is the system default (pink). Actual value is runtime-variable via CSS custom properties (--color-accent-500). Tonal ramp shown for default pink hue.",
+        "tonalRamp": [
+          "oklch(23.6% 0.108 16)",
+          "oklch(34% 0.16 20)",
+          "oklch(42.3% 0.166 15)",
+          "oklch(52% 0.22 2)",
+          "oklch(59.2% 0.249 1)",
+          "oklch(65.6% 0.241 354)",
+          "oklch(71.8% 0.202 350)",
+          "oklch(80% 0.13 347)",
+          "oklch(89.9% 0.061 343)",
+          "oklch(95% 0.03 344)",
+          "oklch(98% 0.01 344)"
+        ]
+      },
+      "accent-wash": {
+        "role": "primary",
+        "displayName": "Bloom Wash",
+        "canonical": "oklch(89.9% 0.061 343)",
+        "note": "Used at 50% opacity as primary surface fill for buttons, badges. Runtime-variable with space accent."
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Dark Peat",
+        "canonical": "oklch(26.3% 0.005 13)"
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Night Soil",
+        "canonical": "oklch(19.3% 0.003 265)"
+      },
+      "surface-darkest": {
+        "role": "neutral",
+        "displayName": "Deep Root",
+        "canonical": "oklch(13% 0.004 286)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Space names, major page titles. Used rarely — weight contrast marks genuine hierarchy."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Channel names, section headers, modal titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Message content and long-form text. Cap at 65–75ch in document/page views."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Button labels, nav items, metadata. Most common weight in UI."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Timestamps, read receipts, secondary metadata."
+      }
+    },
+    "shadows": [
+      {
+        "name": "atmospheric-halo",
+        "value": "0 10px 15px -3px color-mix(in oklch, var(--color-accent-500) 5%, transparent)",
+        "purpose": "Outer shadow on buttons and badges. Tinted to accent at 5% — barely visible, lifts element microscopically."
+      },
+      {
+        "name": "inset-glow",
+        "value": "inset 0 1px 2px color-mix(in oklch, var(--color-accent-700) 5%, transparent)",
+        "purpose": "Inner top highlight on glass components. Gives a lit-from-above quality."
+      },
+      {
+        "name": "active-flatten",
+        "value": "0 4px 6px -1px color-mix(in oklch, var(--color-accent-500) 5%, transparent)",
+        "purpose": "Compressed halo on active/pressed state. Gives physical feedback."
+      },
+      {
+        "name": "panel-float",
+        "value": "0 20px 25px -5px oklch(19.3% 0.003 265 / 0.1), 0 8px 10px -6px oklch(19.3% 0.003 265 / 0.05)",
+        "purpose": "Larger floating panels, popovers, modals. Neutral (stone-tinted), not accent-colored."
+      }
+    ],
+    "motion": [
+      {
+        "name": "duration-default",
+        "value": "800ms",
+        "purpose": "Default transition duration. Deliberate, not sluggish."
+      },
+      {
+        "name": "duration-hover",
+        "value": "300ms",
+        "purpose": "Hover state transitions. Responsive feedback."
+      },
+      {
+        "name": "duration-active",
+        "value": "100ms",
+        "purpose": "Active/pressed state. Snaps — physical tactile quality."
+      },
+      {
+        "name": "scale-hover",
+        "value": "1.01",
+        "purpose": "Button hover scale. Subtle lift."
+      },
+      {
+        "name": "scale-active",
+        "value": "0.98",
+        "purpose": "Button active/press scale. Compression = tactile press."
+      },
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Standard easing for all transitions."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "640px" },
+      { "name": "tablet", "value": "768px" },
+      { "name": "desktop", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call-to-action button. Frosted glass with accent wash fill and scale micro-animation.",
+      "html": "<button class=\"ds-btn-primary\">Open Channel</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 12px; background-color: oklch(89.9% 0.061 343 / 0.5); color: oklch(26.3% 0.005 13); border: 1px solid oklch(65.6% 0.241 354 / 0.15); border-radius: 16px; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background-color 800ms, transform 800ms; backdrop-filter: blur(12px) brightness(1.05); box-shadow: 0 10px 15px -3px oklch(65.6% 0.241 354 / 0.05), inset 0 1px 2px oklch(59.2% 0.249 1 / 0.05); } .ds-btn-primary:hover { background-color: oklch(89.9% 0.061 343 / 0.6); transform: scale(1.01); transition-duration: 300ms; } .ds-btn-primary:active { transform: scale(0.98); box-shadow: 0 4px 6px -1px oklch(65.6% 0.241 354 / 0.05); transition-duration: 100ms; } .ds-btn-primary:focus-visible { outline: 2px solid oklch(65.6% 0.241 354); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Neutral-toned button for secondary actions. Same glass system, stone palette.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 12px; background-color: oklch(92.8% 0.003 49 / 0.4); color: oklch(26.3% 0.005 13); border: 1px solid oklch(86.9% 0.005 56 / 0.5); border-radius: 16px; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background-color 800ms, transform 800ms; backdrop-filter: blur(12px) brightness(1.05); box-shadow: 0 10px 15px -3px oklch(58.6% 0.012 49 / 0.05); } .ds-btn-secondary:hover { background-color: oklch(92.8% 0.003 49 / 0.45); transform: scale(1.01); transition-duration: 300ms; } .ds-btn-secondary:active { transform: scale(0.98); transition-duration: 100ms; } .ds-btn-secondary:focus-visible { outline: 2px solid oklch(26.3% 0.005 13); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Transparent nav button. Accent text on hover. Used extensively in sidebar navigation.",
+      "html": "<button class=\"ds-btn-ghost\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M3 7h18M3 12h18M3 17h18\"/></svg> general</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 12px; background-color: transparent; color: oklch(47.6% 0.010 62); border: none; border-radius: 16px; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: color 300ms, background-color 300ms, transform 800ms; width: 100%; justify-content: flex-start; } .ds-btn-ghost:hover { color: oklch(59.2% 0.249 1); background-color: oklch(65.6% 0.241 354 / 0.05); transform: scale(1.01); } .ds-btn-ghost:active { transform: scale(0.98); transition-duration: 100ms; } .ds-btn-ghost[data-current='true'] { color: oklch(59.2% 0.249 1); background-color: oklch(65.6% 0.241 354 / 0.05); } .ds-btn-ghost:focus-visible { outline: 2px solid oklch(26.3% 0.005 13); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-primary",
+      "description": "Primary text input. Ring-based focus, accent-tinted fill, pill radius.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search channels...\">",
+      "css": ".ds-input { display: block; width: 100%; padding: 6px 12px; background-color: oklch(65.6% 0.241 354 / 0.05); color: oklch(59.2% 0.249 1); border: none; border-radius: 16px; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 1rem; font-weight: 500; outline: none; box-shadow: inset 0 0 0 1px oklch(65.6% 0.241 354 / 0.3); transition: box-shadow 300ms; } .ds-input::placeholder { color: oklch(59.2% 0.249 1 / 0.5); } .ds-input:focus-visible { box-shadow: inset 0 0 0 2px oklch(65.6% 0.241 354); } .ds-input:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Primary Badge",
+      "kind": "chip",
+      "refersTo": "badge-primary",
+      "description": "Accent-tinted label. Same glass system as buttons, non-interactive.",
+      "html": "<span class=\"ds-badge\">Admin</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 2px 8px; background-color: oklch(89.9% 0.061 343 / 0.5); color: oklch(26.3% 0.005 13); border: 1px solid oklch(65.6% 0.241 354 / 0.15); border-radius: 16px; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; backdrop-filter: blur(12px) brightness(1.05); box-shadow: 0 10px 15px -3px oklch(65.6% 0.241 354 / 0.05), inset 0 1px 2px oklch(59.2% 0.249 1 / 0.05); white-space: nowrap; }"
+    },
+    {
+      "name": "Sidebar Navigation Item",
+      "kind": "nav",
+      "refersTo": "button-ghost",
+      "description": "Channel entry in the space sidebar. Ghost button with unread dot indicator. Active state is text-only — no stripe.",
+      "html": "<div class=\"ds-sidebar-item\"><button class=\"ds-sidebar-btn\" data-current=\"false\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M7 20l4-16m2 16l4-16M3 9h18M3 15h18\"/></svg><span class=\"ds-sidebar-name\">general</span><span class=\"ds-unread-count\">3</span></button><div class=\"ds-unread-dot\" aria-label=\"Has unread messages\"></div></div>",
+      "css": ".ds-sidebar-item { position: relative; display: flex; align-items: center; width: 100%; } .ds-sidebar-btn { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; width: 100%; background-color: transparent; color: oklch(47.6% 0.010 62); border: none; border-radius: 16px; font-family: 'Hanken Grotesk', system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: color 300ms, background-color 300ms; } .ds-sidebar-btn:hover { color: oklch(59.2% 0.249 1); background-color: oklch(65.6% 0.241 354 / 0.05); } .ds-sidebar-btn[data-current='true'] { color: oklch(59.2% 0.249 1); background-color: oklch(65.6% 0.241 354 / 0.05); } .ds-sidebar-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-unread-count { font-weight: 300; opacity: 0.6; font-size: 0.75rem; margin-left: auto; } .ds-unread-dot { position: absolute; left: 10px; top: 6px; width: 5px; height: 5px; border-radius: 50%; background-color: oklch(65.6% 0.241 354); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Inhabited Garden",
+    "overview": "Roomy's visual language is built around the feeling of a space that has been tended over time — not the pristine emptiness of a productivity tool, nor the noisy overgrowth of a Discord server, but a room that shows signs of habitation. The design carries warmth without sentimentality: warm stone surfaces, soft frosted-glass components that let the underlying warmth breathe through, and a color accent system that is personal to each community.\n\nWhere Discord optimizes for stimulation (red badges, dark chrome, notification anxiety), Roomy optimizes for settledness. The frosted-glass component system — backdrop blur with accent-colored inset glow and shadow — gives the interface a soft physical presence without weight. Nothing demands attention. The accent color adapts to each space, which is the system's most important design statement: this place belongs to the people in it.\n\nInformation is layered but navigable. The app holds depth — threads spiral into documents, channels nest into categories, messages grow into pages — but the surface reads calm.",
+    "keyCharacteristics": [
+      "Stone-warm neutrals as the canvas; everything sits on earth, not gray plastic",
+      "Frosted glass components with accent-colored atmospheric halos",
+      "Single swappable accent color per space — identity through theming, not chrome",
+      "rounded-2xl (16px) radius throughout — consistent, unhurried pill shape",
+      "Three-speed motion: deliberate default (800ms), responsive hover (300ms), snappy active (100ms)",
+      "Full dark mode with matched warmth — dark surfaces are stone-950, not black"
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "Any given space has one accent color. It appears in button fills, focus rings, unread dots, and themed UI surfaces. It does not appear as a decorative gradient, a text highlight, or a stripe. Its restraint is the point — when the accent fires, something matters.",
+        "section": "colors"
+      },
+      {
+        "name": "The Swappable Garden Rule",
+        "body": "The accent system is a CSS custom property architecture, not a hardcoded palette. Every component must work across the full hue range. Components built with hardcoded accent hues (e.g. hardcoded pink) are wrong.",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Black Rule",
+        "body": "Never use #000 or #fff. Even stone-950 has a trace of warmth. Tint every neutral toward the brand hue. Pure black makes the app feel like a terminal; pure white makes it feel like a hospital.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Family Rule",
+        "body": "Hanken Grotesk handles every typographic role. No separate mono for code, no decorative serif for marketing copy inside the app. One family, varied by weight and size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Frosted-Not-Glass Rule",
+        "body": "The blur + inset system marks interactive elements as distinct from passive content. Do not apply backdrop-blur to non-interactive containers. Glassmorphism as decoration is prohibited.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Colored Shadow Rule",
+        "body": "Outer shadows on interactive elements are tinted to the accent at 2–5% opacity, never neutral gray. Non-interactive shadows use a warm, very-low-opacity stone shadow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Scale-Not-Lift Rule",
+        "body": "Buttons respond to interaction through scale (hover: 101%, active: 98%), not through translateY lifts. The compressed active state gives tactile feedback without animation expense.",
+        "section": "components"
+      },
+      {
+        "name": "The No-Sidebar-Stripe Rule",
+        "body": "Active sidebar items are never marked with a colored left-border stripe. Active state uses text color shift and background tint only. This is the most overused pattern in chat tools and is explicitly prohibited.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do use rounded-2xl (16px) as the default radius for all interactive elements — buttons, inputs, badges, chips, popovers.",
+      "Do treat accent colors semantically (accent-500, accent-200/50) rather than as fixed values. Every component must work across the full hue range.",
+      "Do use stone neutrals, not gray. Stone has warmth; gray reads as infrastructure.",
+      "Do keep the frosted glass treatment (backdrop-blur + inset-shadow + accent-tinted outer shadow) reserved for interactive elements.",
+      "Do use the three-speed motion system: 800ms default, 300ms hover, 100ms active.",
+      "Do mark active sidebar items with text color shift and faint tinted fill only. No stripe, no border.",
+      "Do scale buttons on interaction (hover: 101%, active: 98%).",
+      "Do use motion-safe: conditionals on transform animations.",
+      "Do keep accent presence below 15% saturation on surface fills.",
+      "Do let dark mode surfaces use stone-900 / stone-950 (Night Soil / Deep Root)."
+    ],
+    "donts": [
+      "Don't use Discord's patterns: red notification badges engineered for urgency, unread counts that scream, sidebar chrome that competes with content.",
+      "Don't use Slack's visual language: corporate blues, tight-radius pills, dense toolbar rows.",
+      "Don't use gradient text (background-clip: text with a gradient). Ever.",
+      "Don't use left-border stripes greater than 1px as the active-state indicator on sidebar items or list elements.",
+      "Don't apply backdrop-blur to passive containers (cards, message bubbles, content sections).",
+      "Don't use #000 or #fff.",
+      "Don't use drop shadows in gray (rgba(0,0,0,x)). Shadows on interactive elements are tinted to the accent.",
+      "Don't design for a single accent color. The entire system must work across pink, teal, violet, amber, and every other hue.",
+      "Don't add notification anxiety patterns: pulsing badges, red indicators, numeric counts on anything that isn't a direct message.",
+      "Don't use modal dialogs as the first solution. Prefer inline editing, progressive disclosure, drawer panels.",
+      "Don't use SaaS dashboard clichés: hero metrics with big numbers, identical card grids, gradient text callouts."
+    ]
+  }
+}
