@@ -195,12 +195,13 @@
                     <AvatarBeam name={member.did} size={28} />
                   </Avatar.Fallback>
                 </Avatar.Root>
-                <span class="text-sm font-medium text-base-900 dark:text-base-100 flex-1 truncate">
+                <span class="text-sm font-medium text-base-900 dark:text-base-100 truncate">
                   {displayName(member)}
                 </span>
                 {#if member.handle && member.name}
-                  <span class="text-xs text-base-400">@{member.handle}</span>
+                  <span class="text-xs text-base-400 truncate">@{member.handle}</span>
                 {/if}
+                <span class="flex-1" />
                 <button
                   class="text-xs text-base-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded-xl"
                   onclick={() => removeMember(did)}
