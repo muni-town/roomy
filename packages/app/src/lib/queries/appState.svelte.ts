@@ -155,18 +155,21 @@ export class AppState {
                 AND tail = ${this.did ?? ""}
                 AND label = 'admin'
             )
-            OR NOT exists (
-              SELECT 1 FROM role_rooms rr
-              JOIN roles ro ON ro.id = rr.role_id
-              WHERE rr.room_id IN (
-                SELECT ${this.roomId ?? ""}
-                UNION ALL
-                SELECT e.head FROM edges e
-                WHERE e.tail = ${this.roomId ?? ""}
-                  AND e.label = 'link'
-              )
-              AND rr.stream_id = ${this.joinedSpace?.id ?? ""}
-              AND ro.deleted = 0
+            OR exists (
+              -- Non-thread channels: check own default_access
+              SELECT 1 FROM comp_room
+              WHERE entity = ${this.roomId}
+                AND label != 'space.roomy.thread'
+                AND default_access = 'readwrite'
+            )
+            OR exists (
+              -- Threads inherit default_access from parent channel via link edge
+              SELECT 1 FROM comp_room cr_thread
+              JOIN edges e ON e.tail = cr_thread.entity AND e.label = 'link'
+              JOIN comp_room cr_parent ON cr_parent.entity = e.head
+              WHERE cr_thread.entity = ${this.roomId}
+                AND cr_thread.label = 'space.roomy.thread'
+                AND cr_parent.default_access = 'readwrite'
             )
             OR exists (
               SELECT 1 FROM member_roles mr

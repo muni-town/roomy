@@ -775,6 +775,7 @@ const spaceModuleDef: BasicModule = {
                   'name', r.name,
                   'description', r.description,
                   'avatar', r.avatar,
+                  'defaultAccess', coalesce(r.default_access, 'readwrite'),
                   'messageCount', r.message_count,
                   'lastRead', coalesce(
                     (select last_read from state.reads

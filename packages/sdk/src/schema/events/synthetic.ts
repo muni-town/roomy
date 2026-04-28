@@ -48,6 +48,7 @@ const ChannelType = type({
   name: "string | null",
   description: "string | null",
   avatar: "string | null",
+  "defaultAccess?": type("'readwrite' | 'read' | 'none' | null"),
   "messageCount?": "number",
   "lastRead?": "number",
   threads: type.or(ThreadType.array(), "null"),
@@ -180,12 +181,14 @@ export const SpaceMetaSynthetic = defineEvent(
             updated_at = excluded.updated_at
         `);
 
-        // Room label
+        // Room label and default access
+        const defaultAccess = channel.defaultAccess ?? "readwrite";
         statements.push(sql`
-          insert into comp_room (entity, label, created_at, updated_at)
-          values (${channel.id}, 'space.roomy.channel', ${timestamp}, ${timestamp})
+          insert into comp_room (entity, label, default_access, created_at, updated_at)
+          values (${channel.id}, 'space.roomy.channel', ${defaultAccess}, ${timestamp}, ${timestamp})
           on conflict(entity) do update set
             label = excluded.label,
+            default_access = excluded.default_access,
             deleted = 0,
             updated_at = excluded.updated_at
         `);
