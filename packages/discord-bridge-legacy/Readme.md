@@ -1,4 +1,6 @@
-# Discord Bridge for Roomy
+# Discord Bridge for Roomy (Legacy)
+
+> **Frozen.** This package is the legacy bidirectional Discord ↔ Roomy bridge. It is kept in the monorepo for runtime continuity until the new unidirectional Discord → Roomy bridge at `packages/discord-bridge/` is in production. Do not add new features here. See chainlink epic #107 and `docs/plans/.llm.2026-04-30-discord-bridge-rebuild.md`.
 
 A bidirectional synchronization service that connects Discord servers with Roomy spaces, enabling seamless message, reaction, and profile sync between platforms.
 

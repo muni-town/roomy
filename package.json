@@ -13,7 +13,7 @@
     "publish-packages": "turbo build && beachball publish -m 'chore: publish packages.'",
     "prepare": "node ./.husky/install.mjs",
     "dev": "turbo run dev --filter=roomy.chat",
-    "dev:bridge": "turbo run dev --filter=discord-bridge",
+    "dev:bridge": "turbo run dev --filter=@roomy/discord-bridge-legacy",
     "dev:all": "turbo dev"
   },
   "devDependencies": {
