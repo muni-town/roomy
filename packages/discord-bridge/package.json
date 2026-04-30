@@ -1,0 +1,28 @@
+{
+  "name": "@roomy/discord-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "description": "Unidirectional Discord-to-Roomy bridge (Bun runtime)",
+  "type": "module",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "bun build src/index.ts --target=bun --outdir=dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.14.22",
+    "@discordeno/bot": "^21.0.0",
+    "@muni-town/leaf-client": "link:../leaf/clients/typescript",
+    "@roomy-space/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "^5.8.3"
+  }
+}
