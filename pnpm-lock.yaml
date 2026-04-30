@@ -380,6 +380,9 @@ importers:
       '@roomy-space/sdk':
         specifier: workspace:*
         version: link:../sdk
+      dd-cache-proxy:
+        specifier: ^2.7.0
+        version: 2.7.0(@discordeno/bot@21.0.0)
     devDependencies:
       '@repo/tsconfig':
         specifier: workspace:*
@@ -7710,7 +7713,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -7801,7 +7804,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
   '@vitest/utils@2.1.9':
     dependencies:
