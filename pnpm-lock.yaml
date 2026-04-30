@@ -366,7 +366,7 @@ importers:
 
   packages/design: {}
 
-  packages/discord-bridge:
+  packages/discord-bridge-legacy:
     dependencies:
       '@atproto/api':
         specifier: ^0.14.22
@@ -424,7 +424,7 @@ importers:
         version: 7.2.1
       undici:
         specifier: ^7
-        version: 7.16.0
+        version: 7.22.0
     devDependencies:
       '@types/node':
         specifier: ^22.15.17
@@ -4113,9 +4113,6 @@ packages:
   multimath@2.0.0:
     resolution: {integrity: sha512-toRx66cAMJ+Ccz7pMIg38xSIrtnbozk0dchXezwQDMgQmbGpfxjtv68H+L00iFL8hxDaVjrmwAFSb3I6bg8Q2g==}
 
-  multipasta@0.2.5:
-    resolution: {integrity: sha512-c8eMDb1WwZcE02WVjHoOmUVk7fnKU/RmUcosHACglrWAuPQsEJv+E8430sXj6jNc1jHw0zrS16aCjQh4BcEb4A==}
-
   multipasta@0.2.7:
     resolution: {integrity: sha512-KPA58d68KgGil15oDqXjkUBEBYc00XvbPj5/X+dyzeo/lWm9Nc25pQRlf1D+gv4OpK7NM0J1odrbu9JNNGvynA==}
 
@@ -4939,10 +4936,6 @@ packages:
     resolution: {integrity: sha512-gBLkYIlEnSp8pFbT64yFgGE6UIB9tAkhukC23PmMDCe5Nd+cRqKxSjw5y54MK2AZMgZfJWMaNE4nYUHgi1XEOw==}
     engines: {node: '>=18.17'}
 
-  undici@7.16.0:
-    resolution: {integrity: sha512-QEg3HPMll0o3t2ourKwOeUAZ159Kn9mx5pnzHRQO8+Wixmh88YdZRiIwat0iNzNNXn0yoEtXJqFpyW7eM8BV7g==}
-    engines: {node: '>=20.18.1'}
-
   undici@7.22.0:
     resolution: {integrity: sha512-RqslV2Us5BrllB+JeiZnK4peryVTndy9Dnqq62S3yYRRTj0tFQCwEniUy2167skdGOy3vqRzEvl1Dm4sV2ReDg==}
     engines: {node: '>=20.18.1'}
@@ -5691,7 +5684,7 @@ snapshots:
       '@effect/platform': 0.62.5(@effect/schema@0.71.4(effect@3.16.13))(effect@3.16.13)
       '@parcel/watcher': 2.5.1
       effect: 3.16.13
-      multipasta: 0.2.5
+      multipasta: 0.2.7
 
   '@effect/platform-node@0.57.5(@effect/platform@0.62.5(@effect/schema@0.71.4(effect@3.16.13))(effect@3.16.13))(effect@3.16.13)':
     dependencies:
@@ -8246,7 +8239,7 @@ snapshots:
 
   effect@3.16.13:
     dependencies:
-      '@standard-schema/spec': 1.0.0
+      '@standard-schema/spec': 1.1.0
       fast-check: 3.23.2
 
   emoji-picker-element@1.29.0: {}
@@ -9053,8 +9046,6 @@ snapshots:
     dependencies:
       glur: 1.1.2
       object-assign: 4.1.1
-
-  multipasta@0.2.5: {}
 
   multipasta@0.2.7: {}
 
@@ -9949,8 +9940,6 @@ snapshots:
   undici-types@7.14.0: {}
 
   undici@6.21.3: {}
-
-  undici@7.16.0: {}
 
   undici@7.22.0: {}
 

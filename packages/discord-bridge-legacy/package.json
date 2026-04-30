@@ -1,5 +1,5 @@
 {
-  "name": "discord-bridge",
+  "name": "@roomy/discord-bridge-legacy",
   "version": "0.2.0-alpha.1",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Bridge between Discord and Roomy - Node.js Server",

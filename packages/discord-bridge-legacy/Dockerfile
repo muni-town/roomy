@@ -8,8 +8,8 @@ COPY . /project
 WORKDIR /project
 RUN npm i -g pnpm
 RUN pnpm i
-RUN cd packages/discord-bridge && pnpm build
-WORKDIR /project/packages/discord-bridge
+RUN cd packages/discord-bridge-legacy && pnpm build
+WORKDIR /project/packages/discord-bridge-legacy
 
 ENV PORT=3301
 ENV DISCORD_TOKEN=""
