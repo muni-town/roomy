@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+session.json
+.env
+.env.local
