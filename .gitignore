@@ -10,6 +10,7 @@ node_modules
 .wrangler
 /.svelte-kit
 /dist
+data
 **/dist
 **/.llm.**
 **/.claude/*
