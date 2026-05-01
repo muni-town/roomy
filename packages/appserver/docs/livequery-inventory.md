@@ -29,6 +29,12 @@ All `LiveQuery` instantiation sites in `packages/app/src`. Each row maps to a ca
 | 14 | `components/thread/message/MessageContextReply.svelte:16` | `query` | `entities`, `comp_content`, `edges`, `comp_user`, `comp_info` | Single message by id: content, authorDid, authorName, authorAvatar, timestamp | `roomy.message.getMessage` | query | Used to render reply preview in thread. One call per replied-to message visible on screen. With Tanstack DB, this may be satisfiable from the already-subscribed message cache without a separate request — only needed for messages outside the loaded window. |
 | 15 | `queries/calendar.svelte.ts:12` | (from `calendarLinkQuery`) | `comp_calendar_link` | Calendar integration config: groupSlug, tenantId, apiUrl | `roomy.space.getCalendarLink` | query | External calendar integration data stored in a custom component table. Low churn. Likely a candidate for deferral — calendar feature may be re-evaluated in the new architecture. |
 | 16 | `queries/calendar.svelte.ts:38` | (from `calendarEventsQuery`) | `comp_calendar_event` | All calendar events for a stream: entity, slug, name, dates, location, status, syncedAt | `roomy.space.getCalendarEvents` | query | Full event list, ordered by start date. Calendar feature may not be carried forward in the immediate migration. Low priority. |
+| 17 | `queries/spaceState.svelte.ts:112` | `#joinPolicyQuery` | `comp_space` | `allow_public_join`, `allow_member_invites` for a space | (merged into `roomy.space.getMetadata`) | inline | Two-row scalar — folds into `getMetadata` as `joinPolicy`. |
+| 18 | `queries/spaceState.svelte.ts:119` | `#adminQuery` | `edges` | Whether caller has the persistent `admin` edge on this space (admin ⊥ membership) | (caller-scoped on `roomy.space.getMetadata` and `roomy.space.getSpaces`) | inline | Drives `isSpaceAdmin`. Computed server-side as `isAdmin` on every relevant response. |
+| 19 | `queries/appState.svelte.ts:145` | `#canWriteQuery` | `comp_room`, `edges`, `member_roles`, `role_rooms`, `roles` | Whether caller can post in a given room (admin OR `default_access=readwrite` OR matching `readwrite` role grant; threads inherit parent's `default_access`) | (caller-scoped on `roomy.room.getMetadata` as `canWrite`) | inline | Replaces the post-permission gate on `ChatInputArea`. Read access (`canRead`) follows the same union with `read` permitted. |
+| 20 | `queries/spaceState.svelte.ts` (roles fetch) | `peer.fetchRoles` / `getRoles` | `roles`, `role_rooms`, `member_roles`, `members` | All roles in a space with their room permissions and assigned member DIDs | `roomy.space.getRoles` | query | Drives roles settings page and `EditRoomModal`'s role permission picker. Soft-deleted roles excluded. |
+| 21 | (used in `RoleModal` / `UserTypeahead`) | `peer.fetchProfiles` / `members` query | `members`, `admins`, profile components | Space members + external admins with profile data | `roomy.space.getMembers` | query | Returns members and externalAdmins separately to preserve admin ⊥ membership. |
+| 22 | `queries/spaceState.svelte.ts` (invites fetch) | `peer.fetchInvites` / `invites` | `invites`, `admins` | Active invite tokens — admins see all, members see own | `roomy.space.getInvites` | query | Drives `InviteModal`. Caller-scoped result set. |
 
 ---
 
@@ -49,9 +55,13 @@ All `LiveQuery` instantiation sites in `packages/app/src`. Each row maps to a ca
 | `roomy.message.getMessage` | query | #14 (may be cache-hit) |
 | `roomy.space.getCalendarLink` | query | #15 (low priority) |
 | `roomy.space.getCalendarEvents` | query | #16 (low priority) |
+| `roomy.space.getRoles` | query | #20 |
+| `roomy.space.getMembers` | query | #21 |
+| `roomy.space.getInvites` | query | #22 |
 | ~~EntityName~~ | ~~inline~~ | #9 — eliminate |
+| ~~joinPolicy / isSpaceAdmin / canWrite / canRead~~ | ~~inline~~ | #17, #18, #19 — folded into existing endpoints as caller-scoped fields |
 
-**3 subscriptions, 8–10 queries.** The critical migration path is the 3 subscriptions (#1, #3, #5) — these are the high-churn, always-live queries that drive the majority of reactive UI updates.
+**3 subscriptions, 11–13 queries.** The critical migration path is the 3 subscriptions (#1, #3, #5) — these are the high-churn, always-live queries that drive the majority of reactive UI updates. The new role/member/invite queries (#20–#22) are low-churn and tied to settings UIs, but their underlying state changes (role permission edits, admin edge changes) drive invalidation across many other endpoints — see `xrpc-interface-spec.md` § Invalidation Signal Routing.
 
 ---
 
@@ -62,3 +72,6 @@ All `LiveQuery` instantiation sites in `packages/app/src`. Each row maps to a ca
 - **Unread counts** appear in sidebar (#3), room metadata (#6), and linked rooms (#8). They require per-user state keyed on `comp_last_read`. The server must be auth-aware to serve correct unread counts per caller.
 - **EntityName (#9)** is a symptom of the current architecture's granular querying — in the target architecture, parent queries include names, making this unnecessary.
 - **Calendar (#15, #16)** uses custom component tables (`comp_calendar_link`, `comp_calendar_event`) not present in the core schema. Worth confirming the feature is in scope before designing XRPC procedures.
+- **Roles and per-room permissions (#19, #20)** require joining `roles`, `member_roles`, and `role_rooms` against the caller's DID for every room-access decision. The same union appears in `canWrite` (#19), the sidebar filter (#3), and read-access enforcement on `getMessages`/`getThreads`/`getMessage`. Implement as a shared SQL fragment or helper to avoid drift.
+- **Admin orthogonality (#18, #21)** — admin and membership are independent edges. `getMembers` returns `members` and `externalAdmins` separately so callers can distinguish a "member with admin role" from an "admin who is not a member". Auth predicates throughout the appserver compute the **union** of admin-edge presence and member/role signals.
+- **Caller-scoped fields** — `isMember`, `isAdmin`, `canRead`, `canWrite`, and the access-filtered sidebar are all caller-scoped. They cannot be pre-materialised into a per-space view; handlers compute them per request from the caller's DID. The TanStack Query cache is per-browser-session so this is safe.

@@ -31,13 +31,16 @@ Merging sidebar into `space.getMetadata` and linked rooms into `room.getMetadata
 
 | NSID | Source LiveQuery | Description |
 |------|-----------------|-------------|
-| `space.roomy.space.getSpaces` | #1 | All joined spaces with metadata, permissions, and per-space unreadCount |
-| `space.roomy.space.getMetadata` | #2, #3, #4 | Space name, avatar, description, sidebar tree with unreadCount |
+| `space.roomy.space.getSpaces` | #1 | All joined or admin-of spaces with metadata, caller capabilities, per-space unreadCount |
+| `space.roomy.space.getMetadata` | #2, #3, #4 | Space name, avatar, description, join policy, caller capabilities, sidebar tree with per-channel access |
 | `space.roomy.space.getThreads` | #7 | Threads for space board/index view |
-| `space.roomy.room.getMetadata` | #6, #8, #10 | Room name, kind, spaceId, lastRead, unreadCount, recent threads |
-| `space.roomy.room.getMessages` | #5 | Paginated messages for a room |
-| `space.roomy.room.getThreads` | #11 | All threads within a channel |
-| `space.roomy.message.getMessage` | #14 | Single message by ID |
+| `space.roomy.space.getRoles` | (new) | Roles, their room permissions, and assigned members |
+| `space.roomy.space.getMembers` | (new) | Space members with profile data |
+| `space.roomy.space.getInvites` | (new) | Active invite tokens (caller-scoped: creator's own, or all if admin) |
+| `space.roomy.room.getMetadata` | #6, #8, #10 | Room name, kind, spaceId, defaultAccess, caller capabilities, lastRead, unreadCount, recent threads |
+| `space.roomy.room.getMessages` | #5 | Paginated messages for a room (read-access enforced) |
+| `space.roomy.room.getThreads` | #11 | All threads within a channel (read-access enforced) |
+| `space.roomy.message.getMessage` | #14 | Single message by ID (read-access enforced) |
 
 ### HTTP Procedures (POST, authenticated via PDS proxy)
 
@@ -51,7 +54,7 @@ Merging sidebar into `space.getMetadata` and linked rooms into `room.getMetadata
 |------|-------------|
 | `space.roomy.sync.subscribe` | Multiplexed real-time sync: message diffs + invalidation signals |
 
-**Total: 7 queries, 1 procedure, 1 subscription = 9 XRPC methods.**
+**Total: 10 queries, 1 procedure, 1 subscription = 12 XRPC methods.**
 
 Eliminated from initial scope:
 - `space.roomy.space.getSidebar` — merged into `getMetadata`
@@ -62,13 +65,47 @@ Eliminated from initial scope:
 
 ---
 
+## Authorization Model
+
+The appserver mirrors the authorization model already implemented in the SDK (`packages/sdk/src/modules/index.ts`). Two key facts:
+
+1. **Admin and membership are orthogonal.** A caller may be an admin without being a member, or a member without being an admin. Every authorization decision is the **union** of (a) admin-edge presence and (b) role-derived permissions. The persistent `admin` edge survives leave/rejoin and is the canonical admin signal; the legacy `member` edge `can` payload is read for backward compatibility only.
+
+2. **Per-room access is the union of three signals:**
+   - Caller has the `admin` edge on the space, **or**
+   - The room's `default_access` (or its parent channel's `default_access`, for threads — inherited via `link` edge) permits the operation, **or**
+   - The caller has a role assigned via `member_roles` whose `role_rooms` entry for that room grants the required permission level.
+
+   `default_access` ∈ `readwrite | read | none` and defaults to `readwrite`. Threads do not have their own `default_access` — they inherit from the channel reached via their `link` edge.
+
+3. **Per-endpoint requirements:**
+
+   | Endpoint | Caller must be |
+   |---|---|
+   | `getSpaces` | Authenticated; returns spaces where caller is member OR admin |
+   | `getMetadata` (space) | Member OR admin of the space |
+   | `getThreads` (space) | Member OR admin of the space |
+   | `getRoles` | Member OR admin of the space |
+   | `getMembers` | Member OR admin of the space |
+   | `getInvites` | Admin (sees all) OR creator (sees own only) |
+   | `getMetadata` (room) | Has read access to the room (admin OR default_access ≠ none OR matching role grant) |
+   | `getMessages` / `getThreads` (room) / `getMessage` | Has read access to the room |
+   | `getConnectionTicket` | Authenticated |
+   | `sync.subscribe` topics | Per-topic: must have read access to the room/space the topic refers to |
+
+   Endpoints that fail authorization return XRPC `AuthRequired` (HTTP 401) for missing identity or `Forbidden` (HTTP 403) for insufficient permissions.
+
+4. **Caller-scoped fields.** Several response objects include caller-derived capability fields (`isAdmin`, `canRead`, `canWrite`). These are computed per-request from the caller's DID and are not cacheable across users. The `nsid + params` query key already isolates caches per browser session.
+
+---
+
 ## HTTP Query Endpoints
 
 All HTTP queries are authenticated via PDS proxy with inter-service JWT (see `authentication.md`).
 
 ### `space.roomy.space.getSpaces`
 
-Returns all spaces the caller is a member of, with metadata and per-space permissions.
+Returns all spaces where the caller is a member OR an admin (the two are orthogonal — see Authorization Model). Includes per-space metadata and caller capabilities.
 
 **Params:** *(none)*
 
@@ -81,15 +118,22 @@ Returns all spaces the caller is a member of, with metadata and per-space permis
     name: string | null;
     avatar: string | null;
     description: string | null;
-    unreadCount: number;      // total unread messages across all rooms in this space
-    permissions: {
-      can: Array<string>;  // e.g. ["createRoom", "sendMessage", "manageSpace"]
-    };
+    unreadCount: number;      // total unread messages across rooms the caller can read
+    isMember: boolean;        // caller has 'member' edge on this space
+    isAdmin: boolean;         // caller has 'admin' edge on this space
+    roleIds: string[];        // role IDs assigned to the caller in this space (may be empty)
   }>;
 }
 ```
 
-**Invalidation signals:** `#invalidate` for `space.roomy.space.getSpaces` when user joins/leaves a space or when unread counts change.
+`isMember` and `isAdmin` are independent — both, either, or neither may be true. `unreadCount` is computed only over rooms the caller has read access to (admin override, default_access, or matching role grant).
+
+**Invalidation signals:** `#invalidate` for `space.roomy.space.getSpaces` when:
+- Caller joins/leaves a space (member edge added/removed)
+- Caller's admin edge added/removed
+- Caller's role assignments change (`addMemberRole`/`removeMemberRole`)
+- Unread counts change in any reachable room
+- A role's room permissions change in a way that adds/removes reachable rooms (recompute `unreadCount`)
 
 ---
 
@@ -106,6 +150,12 @@ Returns space metadata **and the complete sidebar tree** in a single response. T
   name: string | null;
   avatar: string | null;
   description: string | null;
+  joinPolicy: {
+    allowPublicJoin: boolean;     // default true
+    allowMemberInvites: boolean;  // default false
+  };
+  isMember: boolean;       // caller has 'member' edge
+  isAdmin: boolean;        // caller has 'admin' edge (orthogonal to membership)
   sidebar: {
     categories: Array<{
       id: string;           // category entity ID
@@ -114,6 +164,9 @@ Returns space metadata **and the complete sidebar tree** in a single response. T
       channels: Array<{
         id: string;         // channel entity ID
         name: string;
+        defaultAccess: "readwrite" | "read" | "none";
+        canRead: boolean;   // caller-scoped — admin OR default_access≠none OR role grant
+        canWrite: boolean;  // caller-scoped — admin OR default_access=readwrite OR role 'readwrite'
         unreadCount: number;
         lastRead: string | null;  // ISO timestamp
       }>;
@@ -121,6 +174,9 @@ Returns space metadata **and the complete sidebar tree** in a single response. T
     orphans: Array<{        // channels not in any category
       id: string;
       name: string;
+      defaultAccess: "readwrite" | "read" | "none";
+      canRead: boolean;
+      canWrite: boolean;
       unreadCount: number;
       lastRead: string | null;
     }>;
@@ -128,7 +184,18 @@ Returns space metadata **and the complete sidebar tree** in a single response. T
 }
 ```
 
-**Invalidation signals:** `#invalidate` targeting this endpoint on sidebar config changes, channel creation, message activity (unread count changes), space name/avatar changes.
+The sidebar is filtered server-side: channels the caller cannot read (no admin, `default_access = none`, no matching role grant) are omitted. `canRead` is therefore always true on returned entries; it is included for completeness and forward-compatibility (future hidden-but-listable channels). `canWrite` distinguishes read-only from read-write access.
+
+**Invalidation signals:** `#invalidate` targeting this endpoint on:
+- Sidebar config changes
+- Channel creation, deletion, rename
+- Channel `default_access` changes (`updateRoom.v0`)
+- Message activity (unread count changes)
+- Space name/avatar/description changes
+- Join policy changes (`updateSpaceInfo.v0` `allowPublicJoin`/`allowMemberInvites`)
+- Caller's admin edge added/removed
+- Caller's role assignments change
+- Any role's `role_rooms` entry changes for this space (sidebar visibility may shift)
 
 **Frontend note:** This replaces the separate `#metadataQuery` and `#sidebarQuery` in `SpaceState`. The sidebar component reads `data.sidebar` directly from this query's result.
 
@@ -162,6 +229,93 @@ Returns all threads in a space for the board/index view, with latest activity me
 
 ---
 
+### `space.roomy.space.getRoles`
+
+Returns all roles defined in a space, with their per-room permissions and assigned members. Drives the roles settings page and the role-permission picker in `EditRoomModal`.
+
+**Params:** `spaceId` (required)
+
+**Response:**
+
+```typescript
+{
+  roles: Array<{
+    id: string;                  // role ULID (the createRole event ID)
+    name: string | null;
+    avatar: string | null;
+    description: string | null;
+    rooms: Array<{
+      roomId: string;
+      permission: "read" | "readwrite";
+    }>;
+    memberDids: string[];        // DIDs of members assigned to this role
+  }>;
+}
+```
+
+Soft-deleted roles (`roles.deleted = 1`) are omitted.
+
+**Invalidation signals:** Role create/update/delete, addMemberRole/removeMemberRole, setRoleRoomPermission — any of these targeting this `spaceId`.
+
+---
+
+### `space.roomy.space.getMembers`
+
+Returns all members of a space with profile data. Drives `RoleModal`'s member picker and `UserTypeahead`.
+
+**Params:** `spaceId` (required)
+
+**Response:**
+
+```typescript
+{
+  members: Array<{
+    did: string;
+    handle: string | null;
+    name: string | null;
+    avatar: string | null;
+    isAdmin: boolean;             // has 'admin' edge (orthogonal to membership)
+    roleIds: string[];            // role IDs assigned to this member in this space
+  }>;
+  // Admins who are NOT members (admin ⊥ membership) are returned separately
+  // so callers can distinguish "member with admin role" from "external admin".
+  externalAdmins: Array<{
+    did: string;
+    handle: string | null;
+    name: string | null;
+    avatar: string | null;
+  }>;
+}
+```
+
+**Invalidation signals:** Member join/leave (member edge add/remove), admin edge add/remove, role assignment changes for any member, profile updates for any member of this space.
+
+---
+
+### `space.roomy.space.getInvites`
+
+Returns active invite tokens. Caller-scoped: admins see all invites for the space; non-admin members see only invites they themselves created.
+
+**Params:** `spaceId` (required)
+
+**Response:**
+
+```typescript
+{
+  invites: Array<{
+    token: string;
+    createdBy: string;     // DID of the creator
+    eventUlid: string;     // ULID of the createInvite event
+  }>;
+}
+```
+
+Returns `Forbidden` if caller is neither a member nor an admin. Returns `Forbidden` for non-admin members when `allow_member_invites = 0` (they cannot have created any invites in that case, so the response would be empty anyway, but the check makes intent explicit).
+
+**Invalidation signals:** `createInvite` / `revokeInvite` events targeting this `spaceId`. Caller's admin edge changes (admins see a different set than non-admins).
+
+---
+
 ### `space.roomy.room.getMetadata`
 
 Returns room metadata **with recently active threads** included. The `recentThreads` field replaces the separate `getLinkedRooms` query — it provides enough data for the linked rooms panel in the room view.
@@ -173,20 +327,33 @@ Returns room metadata **with recently active threads** included. The `recentThre
 ```typescript
 {
   name: string;
-  kind: string;              // "channel" | "thread"
+  kind: string;              // "channel" | "thread" | "page"
   spaceId: string;
+  defaultAccess: "readwrite" | "read" | "none";  // for threads: inherited from parent channel
+  canRead: boolean;          // caller-scoped
+  canWrite: boolean;         // caller-scoped
   lastRead: string | null;   // ISO timestamp
   unreadCount: number;
   recentThreads: Array<{     // recently active threads (linked or child threads)
     id: string;
     name: string;
+    canRead: boolean;
+    canWrite: boolean;
     unreadCount: number;
     lastRead: string | null;
   }>;
 }
 ```
 
-**Invalidation signals:** `#invalidate` targeting this endpoint on room name changes, unread count changes, thread activity.
+For threads, `defaultAccess` is resolved server-side by following the `link` edge to the parent channel. The endpoint returns `Forbidden` if the caller has no read access (admin, default_access ≠ none, and role grants all checked).
+
+**Invalidation signals:** `#invalidate` targeting this endpoint on:
+- Room name/kind changes
+- Room `default_access` changes (channel directly, or for threads: parent channel)
+- Unread count changes
+- Thread activity in this room
+- Caller's admin edge or role assignments change
+- A role's permission for this room changes (`setRoleRoomPermission`)
 
 **Frontend note:** The `LinkedRoomsList` component reads `data.recentThreads` instead of issuing a separate query. For the full thread list in a channel, use `space.roomy.room.getThreads`.
 
@@ -460,17 +627,24 @@ The `seq` field appears in `#messageDiff` frames. The client tracks the highest 
 | New thread in channel X (space Y) | `space:Y`, `room:X` | `#invalidate` for `space.roomy.space.getMetadata`, `space.roomy.space.getThreads`, and `space.roomy.room.getMetadata` |
 | Space name/avatar/description change | `space:X` | `#invalidate` for `space.roomy.space.getMetadata` |
 | Sidebar config change | `space:X` | `#invalidate` for `space.roomy.space.getMetadata` (sidebar is part of this response) |
-| User join/leave space X | `space:X` | `#invalidate` for `space.roomy.space.getSpaces`, `space.roomy.space.getMetadata`, and `space.roomy.space.getThreads` |
+| User join/leave space X | `space:X` | `#invalidate` for `space.roomy.space.getSpaces`, `space.roomy.space.getMetadata`, `space.roomy.space.getThreads`, `space.roomy.space.getMembers` |
+| Admin edge add/remove on space X | `space:X` | `#invalidate` for `space.roomy.space.getSpaces`, `space.roomy.space.getMetadata`, `space.roomy.space.getMembers`, and (for the affected user only) all room metadata and sidebar visibility — admins see everything |
 | Unread count change | `room:X`, `space:<parent>` | `#invalidate` for `space.roomy.room.getMetadata`, `space.roomy.space.getMetadata`, and `space.roomy.space.getSpaces` |
 | Thread activity in room X | `room:X` | `#invalidate` for `space.roomy.room.getMetadata` (recentThreads) |
+| Channel `default_access` change in space Y | `space:Y`, `room:<channel>` | `#invalidate` for `space.roomy.space.getMetadata` (sidebar visibility may change), `space.roomy.room.getMetadata` for the channel and all its threads |
+| Role create/update/delete in space Y | `space:Y` | `#invalidate` for `space.roomy.space.getRoles`. If permissions change in a way that affects sidebar/room visibility for any subscriber, also `space.roomy.space.getMetadata` and `space.roomy.room.getMetadata` for affected rooms |
+| addMemberRole / removeMemberRole in space Y | `space:Y` | `#invalidate` for `space.roomy.space.getRoles`, `space.roomy.space.getMembers`. For the affected user only: `space.roomy.space.getSpaces`, `space.roomy.space.getMetadata` (sidebar), and `space.roomy.room.getMetadata` for any rooms whose access changes |
+| setRoleRoomPermission in space Y for room X | `space:Y`, `room:X` | `#invalidate` for `space.roomy.space.getRoles`, `space.roomy.space.getMetadata` (sidebar visibility), and `space.roomy.room.getMetadata` for room X. For users assigned to that role: also `space.roomy.space.getSpaces` (unread/reachability may shift) |
+| createInvite / revokeInvite in space Y | `space:Y` | `#invalidate` for `space.roomy.space.getInvites` |
+| Space join policy change (allowPublicJoin / allowMemberInvites) | `space:Y` | `#invalidate` for `space.roomy.space.getMetadata` |
 
 ### Server-side Pub/Sub
 
 The appserver maintains an in-memory routing table:
 
 ```text
-connection_id → Set<topic>        // what this WS connection is subscribed to
-topic          → Set<connection_id> // which connections care about this topic
+connection_id → { did, Set<topic> }    // identity + topics this WS connection is subscribed to
+topic          → Set<connection_id>     // which connections care about this topic
 ```
 
 When a Leaf event arrives:
@@ -479,6 +653,10 @@ When a Leaf event arrives:
 3. Generate frame(s) and send to matching connections
 
 Memory cost is bounded by: `(active connections) × (avg subscriptions per connection)`. Typical session: 1 space + 1 room = 2 topics.
+
+**Per-user invalidation.** Some invalidations (admin edge changes, role assignment changes) only affect a specific user — sending `#invalidate` to every subscriber of `space:Y` would cause needless re-fetches. The connection's authenticated `did` is recorded at WS handshake time; routing for these events filters by `did` against the topic's subscribers. The table above marks rows with "for the affected user only" where this filtering applies.
+
+**Caller-scoped responses and cache safety.** Several endpoints return caller-scoped fields (`isAdmin`, `canRead`, `canWrite`, filtered sidebar). The TanStack Query cache is per-browser-session and keyed by `[nsid, params]`, so there is no risk of one user seeing another's cached response. The appserver must, however, never return a cached response across different authenticated callers — handlers compute caller-scoped fields per request.
 
 ---
 
@@ -616,6 +794,9 @@ lexicons/
         getSpaces.json
         getMetadata.json
         getThreads.json
+        getRoles.json
+        getMembers.json
+        getInvites.json
       room/
         getMetadata.json
         getMessages.json
