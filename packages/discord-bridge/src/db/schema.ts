@@ -1,17 +1,17 @@
-import type { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite"
 
 export type Migration = {
-  version: number;
-  name: string;
-  up: (db: Database) => void;
-};
+  version: number
+  name: string
+  up: (db: Database) => void
+}
 
 export const MIGRATIONS: Migration[] = [
   {
     version: 1,
     name: "initial",
     up(db) {
-      db.exec(`
+      db.run(`
         CREATE TABLE bridge_config (
           guild_id   TEXT NOT NULL,
           space_did  TEXT NOT NULL,
@@ -61,31 +61,44 @@ export const MIGRATIONS: Migration[] = [
           webhook_id TEXT NOT NULL,
           token      TEXT NOT NULL
         );
-      `);
-    },
-  },
-];
+      `)
+    }
+  }
+]
 
-export function runMigrations(db: Database): { applied: number[]; current: number } {
-  db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)`);
+export function runMigrations(db: Database): {
+  applied: number[]
+  current: number
+} {
+  db.run(
+    `CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)`
+  )
   const row = db
-    .query<{ v: number | null }, []>("SELECT MAX(version) AS v FROM schema_version")
-    .get();
-  const current = row?.v ?? 0;
-  const applied: number[] = [];
-  const insertVersion = db.prepare("INSERT INTO schema_version (version) VALUES (?)");
+    .query<
+      { v: number | null },
+      []
+    >("SELECT MAX(version) AS v FROM schema_version")
+    .get()
+  const current = row?.v ?? 0
+  const applied: number[] = []
+  const insertVersion = db.prepare(
+    "INSERT INTO schema_version (version) VALUES (?)"
+  )
 
   for (const migration of MIGRATIONS) {
-    if (migration.version <= current) continue;
+    if (migration.version <= current) continue
     db.transaction(() => {
-      migration.up(db);
-      insertVersion.run(migration.version);
-    })();
-    applied.push(migration.version);
+      migration.up(db)
+      insertVersion.run(migration.version)
+    })()
+    applied.push(migration.version)
   }
 
   const after = db
-    .query<{ v: number | null }, []>("SELECT MAX(version) AS v FROM schema_version")
-    .get();
-  return { applied, current: after?.v ?? 0 };
+    .query<
+      { v: number | null },
+      []
+    >("SELECT MAX(version) AS v FROM schema_version")
+    .get()
+  return { applied, current: after?.v ?? 0 }
 }
