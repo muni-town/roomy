@@ -77,31 +77,43 @@ The appserver owns all SQL joins. Every query endpoint returns fully assembled o
 - **WebSocket:** Pre-auth ticket exchange (browser gets ticket via PDS-proxied POST, opens WS directly with ticket)
 - See [`auth-design.md`](auth-design.md) and [`authentication.md`](authentication.md)
 
+### 5. Authorization: admin ⊥ membership, role grants for rooms
+
+The appserver mirrors the SDK's authorization model:
+
+- **Admin and membership are orthogonal.** A caller can be an admin without being a member, or vice versa. Every authz predicate is the **union** of admin-edge presence and member-derived signals. This is the current behaviour and is intentionally preserved in the appserver.
+- **The persistent `admin` edge** (added in `2a45883e` / `5174cff7`) survives leave/rejoin and is the canonical admin signal. The legacy member-edge `can` payload is read for backward compatibility only.
+- **Per-room read/write access** is the union of: (a) admin edge, (b) channel `default_access` (threads inherit from parent channel via `link` edge), and (c) role grants via `member_roles` ⨝ `role_rooms` (`read` or `readwrite`).
+- **Caller-scoped fields** (`isMember`, `isAdmin`, `canRead`, `canWrite`, filtered sidebars) are computed per request from the caller's DID. The full predicate definitions live in `xrpc-interface-spec.md` § Authorization Model.
+
 ## XRPC Interface
 
 See the full specification: [`xrpc-interface-spec.md`](xrpc-interface-spec.md)
 
-**Summary: 7 HTTP queries + 1 procedure + 1 subscription = 9 XRPC methods.**
+**Summary: 10 HTTP queries + 1 procedure + 1 subscription = 12 XRPC methods.**
 
 | Type | Count | Methods |
 |------|-------|---------|
-| HTTP GET queries | 7 | Space/room/message metadata and data retrieval |
+| HTTP GET queries | 10 | Space/room/message metadata, roles/members/invites, and data retrieval |
 | HTTP POST procedure | 1 | `space.roomy.auth.getConnectionTicket` |
 | WebSocket subscription | 1 | `space.roomy.sync.subscribe` (multiplexed) |
 
 ### HTTP Queries
 
-All authenticated via PDS proxy (inter-service JWT in `Authorization` header).
+All authenticated via PDS proxy (inter-service JWT in `Authorization` header). Authorization treats space membership and admin status as orthogonal — most endpoints are accessible to either members or admins, and per-room access is the union of admin override, channel `default_access`, and role grants. See `xrpc-interface-spec.md` § Authorization Model.
 
 | NSID | Description |
 |------|-------------|
-| `space.roomy.space.getSpaces` | All joined spaces with metadata and permissions |
-| `space.roomy.space.getMetadata` | Space name, avatar, description + sidebar tree |
+| `space.roomy.space.getSpaces` | All spaces caller is member or admin of, with caller capabilities |
+| `space.roomy.space.getMetadata` | Space name, avatar, description, join policy, caller capabilities, filtered sidebar |
 | `space.roomy.space.getThreads` | Threads for space board/index view |
-| `space.roomy.room.getMetadata` | Room name, kind, lastRead, unreadCount + recent threads |
-| `space.roomy.room.getMessages` | Paginated message history (most complex query) |
-| `space.roomy.room.getThreads` | Threads within a channel |
-| `space.roomy.message.getMessage` | Single message by ID |
+| `space.roomy.space.getRoles` | Roles + per-room permissions + assigned members |
+| `space.roomy.space.getMembers` | Space members (and external admins) with profile data |
+| `space.roomy.space.getInvites` | Active invite tokens (admins see all; members see own) |
+| `space.roomy.room.getMetadata` | Room name, kind, defaultAccess, caller capabilities, lastRead, unreadCount + recent threads |
+| `space.roomy.room.getMessages` | Paginated message history (read-access enforced; most complex query) |
+| `space.roomy.room.getThreads` | Threads within a channel (read-access enforced) |
+| `space.roomy.message.getMessage` | Single message by ID (read-access enforced) |
 
 ### WebSocket: `space.roomy.sync.subscribe`
 
@@ -173,14 +185,19 @@ packages/appserver/
       handler.ts                          ← Multiplexed WS sync handler (topic pub/sub)
       topics.ts                           ← Topic matching + invalidation routing
     handlers/
-      space.getSpaces.ts
-      space.getMetadata.ts                ← includes sidebar tree
+      space.getSpaces.ts                  ← caller-scoped isMember/isAdmin/roleIds
+      space.getMetadata.ts                ← join policy, caller capabilities, access-filtered sidebar
       space.getThreads.ts
-      room.getMetadata.ts                 ← includes recent threads
-      room.getMessages.ts
-      room.getThreads.ts
-      message.getMessage.ts
+      space.getRoles.ts                   ← roles + role_rooms + member_roles
+      space.getMembers.ts                 ← members + externalAdmins (admin ⊥ membership)
+      space.getInvites.ts                 ← admin sees all; member sees own
+      room.getMetadata.ts                 ← defaultAccess, caller capabilities, recent threads
+      room.getMessages.ts                 ← read-access enforced
+      room.getThreads.ts                  ← read-access enforced
+      message.getMessage.ts               ← read-access enforced
       auth.getConnectionTicket.ts         ← Already exists
+    auth/
+      authorize.ts                        ← shared predicates: isMember, isAdmin, canRead(room), canWrite(room)
     db/
       schema.ts                           ← SQLite schema + materialised view tables
       queries.ts                          ← Query helpers for handlers
@@ -190,6 +207,9 @@ packages/appserver/
       space/getSpaces.json
       space/getMetadata.json
       space/getThreads.json
+      space/getRoles.json
+      space/getMembers.json
+      space/getInvites.json
       room/getMetadata.json
       room/getMessages.json
       room/getThreads.json
