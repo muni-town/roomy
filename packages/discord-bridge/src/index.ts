@@ -106,7 +106,7 @@ async function main() {
         },
 
         async interactionCreate(interaction: InteractionProperties) {
-          await handleInteractionCreate(interaction, repo, spaceManager);
+          await handleInteractionCreate(interaction, repo, spaceManager, bot);
         },
       },
     }),

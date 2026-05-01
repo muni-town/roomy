@@ -101,6 +101,15 @@ function collectBridgedChannels(
   return channels;
 }
 
+export async function backfillSingleChannel(
+  bot: DiscordBot,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  channelId: string,
+): Promise<void> {
+  await backfillChannel(bot as unknown as BotWithCache, repo, spaceManager, channelId);
+}
+
 async function backfillChannel(
   bot: BotWithCache,
   repo: BridgeRepository,
