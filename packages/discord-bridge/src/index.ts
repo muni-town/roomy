@@ -17,6 +17,11 @@ import {
   handleReactionRemove,
   handleThreadCreate,
 } from "./services/stub-handlers.ts";
+import {
+  registerSlashCommands,
+  handleInteractionCreate,
+} from "./discord/slash-commands.ts";
+import type { InteractionProperties } from "./discord/types.ts";
 
 const log = createLogger("bridge");
 let backfillRunning = false;
@@ -53,9 +58,9 @@ async function main() {
           log.info(
             `Discord bot connected — app ${data.applicationId}, ${data.guilds.length} guilds, shard ${data.shardId}`,
           );
-          // Backfill on connect and reconnect (non-blocking, guarded against
-          // concurrent runs if a reconnect fires before the previous backfill
-          // finishes).
+          registerSlashCommands(bot).catch((err) =>
+            log.error("Slash command registration failed", err),
+          );
           if (!backfillRunning) {
             backfillRunning = true;
             runBackfill(bot, repo, spaceManager)
@@ -98,6 +103,10 @@ async function main() {
 
         threadCreate(channel) {
           handleThreadCreate(channel as ChannelProperties & { parentId: bigint });
+        },
+
+        async interactionCreate(interaction: InteractionProperties) {
+          await handleInteractionCreate(interaction, repo, spaceManager);
         },
       },
     }),
