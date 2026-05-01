@@ -1,0 +1,11 @@
+dbs:
+  - path: /data/bridge.sqlite
+    replicas:
+      - type: s3
+        bucket: ${S3_BUCKET}
+        path: discord-bridge
+        endpoint: ${S3_ENDPOINT}
+        region: ${S3_REGION}
+        access-key-id: ${S3_ACCESS_KEY_ID}
+        secret-access-key: ${S3_SECRET_ACCESS_KEY}
+        force-path-style: true
