@@ -10,6 +10,7 @@ import type { BridgeRepository } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { MessageProperties } from "../discord/types.ts";
 import { handleThreadStarterMessage } from "./thread-ingestion.ts";
+import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("ingest");
@@ -83,6 +84,14 @@ export async function ingestDiscordMessage(
 
     // Get connected space
     const connected = await spaceManager.getOrConnect(spaceDid);
+
+    // Sync author profile before sending the message
+    await syncUserProfile(
+      message.author,
+      [spaceDid],
+      repo,
+      spaceManager,
+    );
 
     // Build and send the event
     const eventUlid = newUlid();
