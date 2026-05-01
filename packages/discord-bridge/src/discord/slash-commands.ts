@@ -495,7 +495,7 @@ async function handleChannelAdd(
 
   await interaction.edit({ content: message });
 
-  backfillSingleChannel(bot, repo, spaceManager, channelId).catch((err) => {
+  backfillSingleChannel(bot, repo, spaceManager, channelId, guildId).catch((err) => {
     log.error(`Backfill failed for channel ${channelId}`, err);
   });
 }
@@ -606,7 +606,7 @@ async function handleBackfill(
         content: `Re-backfilling <#${channelStr}> from the beginning. Already-synced messages will be skipped.`,
       });
 
-      backfillSingleChannel(bot, repo, spaceManager, channelStr).catch((err) => {
+      backfillSingleChannel(bot, repo, spaceManager, channelStr, guildId).catch((err) => {
         log.error(`Re-backfill failed for channel ${channelStr}`, err);
       });
     } else {
