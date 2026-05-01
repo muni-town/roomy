@@ -57,7 +57,9 @@ export async function handleReactionAdd(
 
     // Resolve the Roomy room
     const roomKey = `room:${channelIdStr}`;
-    const roomyRoomId = repo.getRoomyId(spaceDid, "channel", roomKey);
+    const roomyRoomId =
+      repo.getRoomyId(spaceDid, "channel", roomKey) ??
+      repo.getRoomyId(spaceDid, "thread", roomKey);
     if (!roomyRoomId) {
       log.warn(
         `No Roomy room for channel ${channelIdStr} in ${spaceDid}, skipping reaction`,
@@ -144,7 +146,9 @@ export async function handleReactionRemove(
 
     // Resolve the Roomy room
     const roomKey = `room:${channelIdStr}`;
-    const roomyRoomId = repo.getRoomyId(spaceDid, "channel", roomKey);
+    const roomyRoomId =
+      repo.getRoomyId(spaceDid, "channel", roomKey) ??
+      repo.getRoomyId(spaceDid, "thread", roomKey);
     if (!roomyRoomId) {
       log.warn(
         `No Roomy room for channel ${channelIdStr} in ${spaceDid}, skipping reaction remove`,
