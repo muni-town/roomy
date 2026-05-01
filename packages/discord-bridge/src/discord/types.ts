@@ -43,6 +43,7 @@ export const desiredProperties = createDesiredPropertiesObject({
     avatar: true,
     id: true,
     discriminator: true,
+    globalName: true,
   },
   interaction: {
     id: true,
