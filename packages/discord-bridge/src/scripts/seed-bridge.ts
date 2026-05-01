@@ -106,6 +106,7 @@ async function seed() {
       $type: "space.roomy.room.createRoom.v0" as const,
       kind: "space.roomy.channel" as const,
       name: channelName,
+      defaultAccess: "read" as const,
       extensions: {
         "space.roomy.extension.discordOrigin.v0": {
           $type: "space.roomy.extension.discordOrigin.v0",

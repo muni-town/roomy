@@ -55,6 +55,7 @@ export async function handleThreadCreate(
         $type: "space.roomy.room.createRoom.v0",
         kind: "space.roomy.thread",
         name: threadName,
+        defaultAccess: "read",
         extensions: {
           "space.roomy.extension.discordOrigin.v0": {
             snowflake: threadId,

@@ -1,6 +1,7 @@
 import type { Collection } from "@discordeno/bot";
+import { newUlid, type Event } from "@roomy-space/sdk";
 import type { DiscordBot, MessageProperties } from "../discord/types.ts";
-import type { BridgeRepository } from "../db/repository.ts";
+import type { BridgeRepository, BridgeConfig } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
 import { createLogger } from "../logger.ts";
@@ -16,6 +17,7 @@ const MESSAGE_CHANNEL_TYPES = new Set([0, 5, 11, 12]);
 interface CachedChannel {
   id: bigint;
   type: number;
+  name?: string;
 }
 
 interface CachedGuild {
@@ -50,6 +52,9 @@ export async function runBackfill(
     return;
   }
 
+  // Ensure Roomy rooms exist for all bridged channels before backfilling
+  await ensureRoomyRooms(cached, repo, spaceManager, configs);
+
   const channels = collectBridgedChannels(cached, repo, configs);
   if (channels.size === 0) {
     log.info("No channels to backfill");
@@ -67,6 +72,66 @@ export async function runBackfill(
   const succeeded = results.filter((r) => r.status === "fulfilled").length;
   const failed = results.filter((r) => r.status === "rejected").length;
   log.info(`Backfill complete: ${succeeded} succeeded, ${failed} failed`);
+}
+
+async function ensureRoomyRooms(
+  bot: BotWithCache,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  configs: BridgeConfig[],
+): Promise<void> {
+  for (const config of configs) {
+    const { guildId, spaceDid, mode } = config;
+    let channelIds: string[];
+
+    if (mode === "full") {
+      const guild = bot.cache.guilds.memory.get(BigInt(guildId));
+      if (!guild?.channels) continue;
+      channelIds = [...guild.channels.values()]
+        .filter((ch) => MESSAGE_CHANNEL_TYPES.has(ch.type))
+        .map((ch) => ch.id.toString());
+    } else {
+      channelIds = repo.listAllowlistForBridge(spaceDid).map((e) => e.channelId);
+    }
+
+    const connected = await spaceManager.getOrConnect(spaceDid);
+    let created = 0;
+
+    for (const channelId of channelIds) {
+      const roomKey = `room:${channelId}`;
+      if (repo.getRoomyId(spaceDid, "channel", roomKey)) continue;
+
+      const channelName = resolveChannelName(bot, channelId) ?? `discord-${channelId}`;
+      const roomUlid = newUlid();
+
+      const event = {
+        id: roomUlid,
+        $type: "space.roomy.room.createRoom.v0",
+        kind: "space.roomy.channel",
+        name: channelName,
+        defaultAccess: "read",
+        extensions: {
+          "space.roomy.extension.discordOrigin.v0": {
+            snowflake: channelId,
+            guildId,
+          },
+        },
+      } as Event;
+
+      await connected.sendEvent(event);
+      repo.registerMapping(spaceDid, "channel", roomKey, roomUlid);
+      created++;
+    }
+
+    if (created > 0) {
+      log.info(`Created ${created} Roomy rooms for ${channelIds.length} bridged channels in ${spaceDid}`);
+    }
+  }
+}
+
+function resolveChannelName(bot: BotWithCache, channelId: string): string | undefined {
+  const channel = bot.cache.channels.memory.get(BigInt(channelId));
+  return channel?.name || undefined;
 }
 
 function collectBridgedChannels(
@@ -106,7 +171,40 @@ export async function backfillSingleChannel(
   repo: BridgeRepository,
   spaceManager: SpaceManager,
   channelId: string,
+  guildId?: string,
 ): Promise<void> {
+  // Ensure Roomy room exists for this channel in all relevant spaces
+  if (guildId) {
+    const cached = bot as unknown as BotWithCache;
+    const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
+    for (const spaceDid of targetSpaces) {
+      const roomKey = `room:${channelId}`;
+      if (repo.getRoomyId(spaceDid, "channel", roomKey)) continue;
+
+      const channelName = resolveChannelName(cached, channelId) ?? `discord-${channelId}`;
+      const roomUlid = newUlid();
+      const connected = await spaceManager.getOrConnect(spaceDid);
+
+      const event = {
+        id: roomUlid,
+        $type: "space.roomy.room.createRoom.v0",
+        kind: "space.roomy.channel",
+        name: channelName,
+        defaultAccess: "read",
+        extensions: {
+          "space.roomy.extension.discordOrigin.v0": {
+            snowflake: channelId,
+            guildId,
+          },
+        },
+      } as Event;
+
+      await connected.sendEvent(event);
+      repo.registerMapping(spaceDid, "channel", roomKey, roomUlid);
+      log.info(`Created Roomy room ${roomUlid} for Discord channel ${channelId} in ${spaceDid}`);
+    }
+  }
+
   await backfillChannel(bot as unknown as BotWithCache, repo, spaceManager, channelId);
 }
 
