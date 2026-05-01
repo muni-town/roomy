@@ -7,9 +7,10 @@ import {
   MessageFlags,
 } from "@discordeno/bot";
 import { StreamDid } from "@roomy-space/sdk";
-import type { BridgeRepository } from "../db/repository.ts";
+import type { BridgeRepository, BridgeConfig } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { DiscordBot, InteractionProperties } from "./types.ts";
+import { backfillSingleChannel } from "../services/backfill.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("slash");
@@ -54,6 +55,66 @@ export const slashCommands = [
     contexts: [DiscordInteractionContextType.Guild],
     integrationTypes: [DiscordApplicationIntegrationType.GuildInstall],
     defaultMemberPermissions: ["ADMINISTRATOR"],
+  },
+  {
+    name: "roomy-bridge-channel",
+    description: "Manage which Discord channels are bridged (subset mode).",
+    contexts: [DiscordInteractionContextType.Guild],
+    integrationTypes: [DiscordApplicationIntegrationType.GuildInstall],
+    defaultMemberPermissions: ["ADMINISTRATOR"],
+    options: [
+      {
+        name: "add",
+        description: "Add a channel to the bridge allowlist.",
+        type: ApplicationCommandOptionTypes.SubCommand,
+        options: [
+          {
+            name: "channel",
+            description: "The channel to bridge.",
+            type: ApplicationCommandOptionTypes.Channel,
+            required: true,
+          },
+          {
+            name: "space-id",
+            description: "The space DID (if multiple bridges).",
+            type: ApplicationCommandOptionTypes.String,
+            required: false,
+          },
+        ],
+      },
+      {
+        name: "remove",
+        description: "Remove a channel from the bridge allowlist.",
+        type: ApplicationCommandOptionTypes.SubCommand,
+        options: [
+          {
+            name: "channel",
+            description: "The channel to remove.",
+            type: ApplicationCommandOptionTypes.Channel,
+            required: true,
+          },
+          {
+            name: "space-id",
+            description: "The space DID (if multiple bridges).",
+            type: ApplicationCommandOptionTypes.String,
+            required: false,
+          },
+        ],
+      },
+      {
+        name: "list",
+        description: "List channels in the bridge allowlist.",
+        type: ApplicationCommandOptionTypes.SubCommand,
+        options: [
+          {
+            name: "space-id",
+            description: "The space DID (if multiple bridges).",
+            type: ApplicationCommandOptionTypes.String,
+            required: false,
+          },
+        ],
+      },
+    ],
   },
 ] satisfies CreateApplicationCommand[];
 
@@ -111,6 +172,7 @@ export async function handleInteractionCreate(
   interaction: InteractionProperties,
   repo: BridgeRepository,
   spaceManager: SpaceManager,
+  bot: DiscordBot,
 ): Promise<void> {
   if (interaction.type !== InteractionTypes.ApplicationCommand) return;
   if (!interaction.guildId) return;
@@ -124,6 +186,8 @@ export async function handleInteractionCreate(
     await handleConnect(interaction, repo, spaceManager, guildId);
   } else if (commandName === "disconnect-roomy-space") {
     await handleDisconnect(interaction, repo, spaceManager, guildId);
+  } else if (commandName === "roomy-bridge-channel") {
+    await handleBridgeChannel(interaction, repo, spaceManager, bot, guildId);
   }
 }
 
@@ -290,4 +354,202 @@ async function handleDisconnect(
       });
     } catch {}
   }
+}
+
+// ─── Bridge config resolver ───────────────────────────────────────────
+
+function resolveBridgeConfig(
+  configs: BridgeConfig[],
+  spaceIdOption: string | undefined,
+): { config: BridgeConfig; error?: undefined } | { config: undefined; error: string } {
+  if (configs.length === 0) {
+    return {
+      config: undefined,
+      error: "No Roomy spaces are connected. Use `/connect-roomy-space` first.",
+    };
+  }
+
+  if (spaceIdOption) {
+    const config = configs.find((c) => c.spaceDid === spaceIdOption);
+    if (!config) {
+      return {
+        config: undefined,
+        error: `No bridge found for space \`${spaceIdOption}\` in this guild.`,
+      };
+    }
+    return { config };
+  }
+
+  if (configs.length === 1) {
+    return { config: configs[0]! };
+  }
+
+  const spaceList = configs.map((c) => `- \`${c.spaceDid}\``).join("\n");
+  return {
+    config: undefined,
+    error: `Multiple spaces are connected. Specify which one:\n${spaceList}\n\nUse the \`space-id\` option.`,
+  };
+}
+
+// ─── /roomy-bridge-channel ────────────────────────────────────────────
+
+async function handleBridgeChannel(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  bot: DiscordBot,
+  guildId: string,
+): Promise<void> {
+  if (!(await safeDefer(interaction, true))) return;
+
+  try {
+    const subcommand = interaction.data?.options?.[0];
+    if (!subcommand) return;
+
+    const configs = repo.listBridgeConfigsForGuild(guildId);
+    const getSubOption = (name: string) =>
+      (subcommand.options as any[])?.find((o: any) => o.name === name)
+        ?.value as string | undefined;
+
+    if (subcommand.name === "add") {
+      await handleChannelAdd(
+        interaction,
+        repo,
+        spaceManager,
+        bot,
+        guildId,
+        configs,
+        getSubOption,
+      );
+    } else if (subcommand.name === "remove") {
+      await handleChannelRemove(interaction, repo, guildId, configs, getSubOption);
+    } else if (subcommand.name === "list") {
+      await handleChannelList(interaction, repo, guildId, configs, getSubOption);
+    }
+  } catch (e) {
+    log.error("Error handling roomy-bridge-channel", e);
+    try {
+      await interaction.edit({
+        content: "An error occurred while managing the channel allowlist.",
+      });
+    } catch {}
+  }
+}
+
+async function handleChannelAdd(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  bot: DiscordBot,
+  guildId: string,
+  configs: BridgeConfig[],
+  getOption: (name: string) => string | undefined,
+): Promise<void> {
+  const channelId = getOption("channel");
+  if (!channelId) {
+    await interaction.edit({ content: "Please specify a channel." });
+    return;
+  }
+
+  const resolved = resolveBridgeConfig(configs, getOption("space-id"));
+  if (!resolved.config) {
+    await interaction.edit({ content: resolved.error });
+    return;
+  }
+
+  const config = resolved.config;
+  let switchedToSubset = false;
+
+  if (config.mode === "full") {
+    repo.upsertBridgeConfig(guildId, config.spaceDid, "subset");
+    switchedToSubset = true;
+    log.info(`Switched bridge ${config.spaceDid} from full to subset mode`);
+  }
+
+  repo.addToAllowlist(config.spaceDid, channelId, guildId);
+  log.info(`Added channel ${channelId} to allowlist for ${config.spaceDid}`);
+
+  let message = `Added <#${channelId}> to the bridge allowlist.`;
+  if (switchedToSubset) {
+    message +=
+      "\n\nSwitched bridge from full to **subset** mode — only allowlisted channels will now be synced. Use `/roomy-bridge-channel add` to add more.";
+  }
+
+  await interaction.edit({ content: message });
+
+  backfillSingleChannel(bot, repo, spaceManager, channelId).catch((err) => {
+    log.error(`Backfill failed for channel ${channelId}`, err);
+  });
+}
+
+async function handleChannelRemove(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  guildId: string,
+  configs: BridgeConfig[],
+  getOption: (name: string) => string | undefined,
+): Promise<void> {
+  const channelId = getOption("channel");
+  if (!channelId) {
+    await interaction.edit({ content: "Please specify a channel." });
+    return;
+  }
+
+  const resolved = resolveBridgeConfig(configs, getOption("space-id"));
+  if (!resolved.config) {
+    await interaction.edit({ content: resolved.error });
+    return;
+  }
+
+  const config = resolved.config;
+
+  if (!repo.isAllowlisted(config.spaceDid, channelId)) {
+    await interaction.edit({
+      content: `<#${channelId}> is not in the allowlist.`,
+    });
+    return;
+  }
+
+  repo.removeFromAllowlist(config.spaceDid, channelId);
+  log.info(`Removed channel ${channelId} from allowlist for ${config.spaceDid}`);
+
+  await interaction.edit({
+    content: `Removed <#${channelId}> from the bridge allowlist. Existing synced messages are preserved.`,
+  });
+}
+
+async function handleChannelList(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  guildId: string,
+  configs: BridgeConfig[],
+  getOption: (name: string) => string | undefined,
+): Promise<void> {
+  const resolved = resolveBridgeConfig(configs, getOption("space-id"));
+  if (!resolved.config) {
+    await interaction.edit({ content: resolved.error });
+    return;
+  }
+
+  const config = resolved.config;
+
+  if (config.mode === "full") {
+    await interaction.edit({
+      content: `Bridge \`${config.spaceDid}\` is in **full** mode — all channels are synced. Use \`/roomy-bridge-channel add\` to switch to subset mode.`,
+    });
+    return;
+  }
+
+  const entries = repo.listAllowlistForBridge(config.spaceDid);
+  if (entries.length === 0) {
+    await interaction.edit({
+      content: `No channels in the allowlist for \`${config.spaceDid}\`. Use \`/roomy-bridge-channel add\` to add channels.`,
+    });
+    return;
+  }
+
+  const channelList = entries.map((e) => `- <#${e.channelId}>`).join("\n");
+  await interaction.edit({
+    content: `**Allowlist for \`${config.spaceDid}\` (${entries.length} channels):**\n${channelList}`,
+  });
 }
