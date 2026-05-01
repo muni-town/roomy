@@ -11,12 +11,14 @@ import { getProxyCacheBot } from "./discord/cache.ts";
 import { ingestDiscordMessage } from "./services/message-ingestion.ts";
 import { runBackfill } from "./services/backfill.ts";
 import {
-  handleMessageUpdate,
+  handleMessageEdit,
   handleMessageDelete,
+} from "./services/message-edit-delete.ts";
+import {
   handleReactionAdd,
   handleReactionRemove,
-  handleThreadCreate,
 } from "./services/stub-handlers.ts";
+import { handleThreadCreate } from "./services/thread-ingestion.ts";
 import {
   registerSlashCommands,
   handleInteractionCreate,
@@ -73,12 +75,12 @@ async function main() {
           await ingestDiscordMessage(message, repo, spaceManager);
         },
 
-        messageUpdate(message: MessageProperties) {
-          handleMessageUpdate(message);
+        async messageUpdate(message: MessageProperties) {
+          await handleMessageEdit(message, repo, spaceManager);
         },
 
-        messageDelete(data) {
-          handleMessageDelete(data.id, data.channelId, data.guildId);
+        async messageDelete(data) {
+          await handleMessageDelete(data.id, data.channelId, data.guildId, repo, spaceManager);
         },
 
         reactionAdd(data) {
@@ -101,8 +103,8 @@ async function main() {
           );
         },
 
-        threadCreate(channel) {
-          handleThreadCreate(channel as ChannelProperties & { parentId: bigint });
+        async threadCreate(channel) {
+          await handleThreadCreate(channel as ChannelProperties, repo, spaceManager);
         },
 
         async interactionCreate(interaction: InteractionProperties) {

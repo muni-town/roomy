@@ -9,6 +9,7 @@ import {
 import type { BridgeRepository } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { MessageProperties } from "../discord/types.ts";
+import { handleThreadStarterMessage } from "./thread-ingestion.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("ingest");
@@ -39,6 +40,11 @@ export async function ingestDiscordMessage(
   if (targetSpaces.length === 0) {
     log.debug(`Skipping message ${messageId}: channel ${channelId} not bridged`);
     return { synced: 0, skipped: 1 };
+  }
+
+  // ThreadStarterMessage (type 21): forward original message into thread
+  if (message.type === DISCORD_MESSAGE_TYPES.THREAD_STARTER_MESSAGE) {
+    return handleThreadStarterMessage(message, repo, spaceManager);
   }
 
   // Skip system messages
