@@ -1,7 +1,7 @@
 import { createLogger } from "./logger.ts";
-import { BRIDGE_DATA_DIR, DISCORD_TOKEN } from "./env.ts";
+import { BRIDGE_DATA_DIR, BRIDGE_DB_PATH, DISCORD_TOKEN } from "./env.ts";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname } from "node:path";
 import { BridgeRepository } from "./db/repository.ts";
 import { initRoomyClient } from "./roomy/client.ts";
 import { SpaceManager } from "./roomy/space-manager.ts";
@@ -26,9 +26,9 @@ async function main() {
   await mkdir(BRIDGE_DATA_DIR, { recursive: true });
   log.info(`data dir ready at ${BRIDGE_DATA_DIR}`);
 
-  const dbPath = join(BRIDGE_DATA_DIR, "bridge.sqlite");
-  const repo = BridgeRepository.open(dbPath);
-  log.info(`sqlite store opened at ${dbPath}`);
+  await mkdir(dirname(BRIDGE_DB_PATH), { recursive: true });
+  const repo = BridgeRepository.open(BRIDGE_DB_PATH);
+  log.info(`sqlite store opened at ${BRIDGE_DB_PATH}`);
 
   // Initialize Roomy client
   const roomyClient = await initRoomyClient();

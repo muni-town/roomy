@@ -1,0 +1,9 @@
+node_modules
+data
+dist
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.*
+README.md

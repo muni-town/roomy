@@ -32,5 +32,9 @@ export const STREAM_HANDLE_NSID = optional(
 );
 
 export const BRIDGE_DATA_DIR = optional("BRIDGE_DATA_DIR", "./data");
+export const BRIDGE_DB_PATH = optional(
+  "BRIDGE_DB_PATH",
+  `${BRIDGE_DATA_DIR}/bridge.sqlite`,
+);
 export const PORT = parseInt(optional("PORT", "3301"), 10);
 export const LOG_LEVEL = optional("LOG_LEVEL", "info");
