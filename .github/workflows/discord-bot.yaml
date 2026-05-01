@@ -56,7 +56,7 @@ jobs:
             target
             registry
             git
-          key: cache-${{ hashFiles('packages/discord-bridge-legacy/Dockerfile') }}
+          key: cache-${{ hashFiles('packages/discord-bridge/Dockerfile') }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -64,7 +64,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           context: .
-          file: packages/discord-bridge-legacy/Dockerfile
+          file: packages/discord-bridge/Dockerfile
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
