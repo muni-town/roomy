@@ -264,6 +264,12 @@ export class BridgeRepository {
       .run(channelId, lastMessageId, Date.now());
   }
 
+  resetChannelCursor(channelId: string): void {
+    this.db
+      .prepare("DELETE FROM channel_cursors WHERE channel_id = ?")
+      .run(channelId);
+  }
+
   // === Allowlist (subset mode only) ===
 
   addToAllowlist(spaceDid: string, channelId: string, guildId: string): void {
