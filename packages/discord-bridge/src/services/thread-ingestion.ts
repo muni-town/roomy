@@ -52,18 +52,16 @@ export async function handleThreadCreate(
     const events: Event[] = [
       {
         id: threadUlid,
-        room: threadUlid,
         $type: "space.roomy.room.createRoom.v0",
         kind: "space.roomy.thread",
         name: threadName,
         extensions: {
           "space.roomy.extension.discordOrigin.v0": {
-            $type: "space.roomy.extension.discordOrigin.v0",
             snowflake: threadId,
             guildId,
           },
         },
-      },
+      } as Event,
       {
         id: linkUlid,
         room: parentRoomyId as Ulid,
