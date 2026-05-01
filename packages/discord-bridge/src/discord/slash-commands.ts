@@ -1,5 +1,6 @@
 import {
   ApplicationCommandOptionTypes,
+  type Collection,
   type CreateApplicationCommand,
   DiscordApplicationIntegrationType,
   DiscordInteractionContextType,
@@ -10,7 +11,7 @@ import { StreamDid } from "@roomy-space/sdk";
 import type { BridgeRepository, BridgeConfig } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { DiscordBot, InteractionProperties } from "./types.ts";
-import { backfillSingleChannel } from "../services/backfill.ts";
+import { backfillSingleChannel, runBackfill } from "../services/backfill.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("slash");
@@ -116,6 +117,21 @@ export const slashCommands = [
       },
     ],
   },
+  {
+    name: "roomy-backfill",
+    description: "Re-backfill from Discord history. Resets cursors so gaps are caught; dedup prevents duplicates.",
+    contexts: [DiscordInteractionContextType.Guild],
+    integrationTypes: [DiscordApplicationIntegrationType.GuildInstall],
+    defaultMemberPermissions: ["ADMINISTRATOR"],
+    options: [
+      {
+        name: "channel",
+        description: "A specific channel to re-backfill. Omit to re-backfill all bridged channels.",
+        type: ApplicationCommandOptionTypes.Channel,
+        required: false,
+      },
+    ],
+  },
 ] satisfies CreateApplicationCommand[];
 
 // ─── Registration ─────────────────────────────────────────────────────
@@ -188,6 +204,8 @@ export async function handleInteractionCreate(
     await handleDisconnect(interaction, repo, spaceManager, guildId);
   } else if (commandName === "roomy-bridge-channel") {
     await handleBridgeChannel(interaction, repo, spaceManager, bot, guildId);
+  } else if (commandName === "roomy-backfill") {
+    await handleBackfill(interaction, repo, spaceManager, bot, guildId);
   }
 }
 
@@ -552,4 +570,108 @@ async function handleChannelList(
   await interaction.edit({
     content: `**Allowlist for \`${config.spaceDid}\` (${entries.length} channels):**\n${channelList}`,
   });
+}
+
+// ─── /roomy-backfill ──────────────────────────────────────────────────
+
+async function handleBackfill(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  bot: DiscordBot,
+  guildId: string,
+): Promise<void> {
+  if (!(await safeDefer(interaction, true))) return;
+
+  try {
+    const configs = repo.listBridgeConfigsForGuild(guildId);
+    if (configs.length === 0) {
+      await interaction.edit({
+        content: "No Roomy spaces are connected. Use `/connect-roomy-space` first.",
+      });
+      return;
+    }
+
+    const channelOption = interaction.data?.options?.find(
+      (x: any) => x.name === "channel",
+    )?.value as string | undefined;
+
+    if (channelOption) {
+      // Single-channel re-backfill
+      const channelStr = channelOption.toString();
+      repo.resetChannelCursor(channelStr);
+      log.info(`Reset cursor for channel ${channelStr}, starting re-backfill`);
+
+      await interaction.edit({
+        content: `Re-backfilling <#${channelStr}> from the beginning. Already-synced messages will be skipped.`,
+      });
+
+      backfillSingleChannel(bot, repo, spaceManager, channelStr).catch((err) => {
+        log.error(`Re-backfill failed for channel ${channelStr}`, err);
+      });
+    } else {
+      // Full re-backfill: reset all cursors for this guild's channels
+      const channels = collectGuildChannelIds(bot, repo, configs);
+      if (channels.size === 0) {
+        await interaction.edit({
+          content: "No bridged channels found to backfill.",
+        });
+        return;
+      }
+
+      for (const channelId of channels) {
+        repo.resetChannelCursor(channelId);
+      }
+      log.info(`Reset cursors for ${channels.size} channels, starting full re-backfill`);
+
+      await interaction.edit({
+        content: `Re-backfilling ${channels.size} channel(s) from the beginning. Already-synced messages will be skipped.`,
+      });
+
+      runBackfill(bot, repo, spaceManager).catch((err) => {
+        log.error("Full re-backfill failed", err);
+      });
+    }
+  } catch (e) {
+    log.error("Error handling roomy-backfill", e);
+    try {
+      await interaction.edit({
+        content: "An error occurred while triggering re-backfill.",
+      });
+    } catch {}
+  }
+}
+
+function collectGuildChannelIds(
+  bot: DiscordBot,
+  repo: BridgeRepository,
+  configs: BridgeConfig[],
+): Set<string> {
+  const channels = new Set<string>();
+
+  for (const config of configs) {
+    if (config.mode === "full") {
+      const cached = bot as unknown as {
+        cache: {
+          guilds: {
+            memory: Collection<bigint, { id: bigint; channels?: Collection<bigint, { id: bigint; type: number }> }>;
+          };
+        };
+      };
+      const guild = cached.cache.guilds.memory.get(BigInt(config.guildId));
+      if (!guild?.channels) continue;
+      for (const [channelId, channel] of guild.channels) {
+        if ([0, 5, 11, 12].includes(channel.type)) {
+          channels.add(channelId.toString());
+        }
+      }
+    } else {
+      const allowlist = repo.listAllowlistForBridge(config.spaceDid);
+      for (const entry of allowlist) {
+        channels.add(entry.channelId);
+      }
+    }
+  }
+
+  return channels;
 }
