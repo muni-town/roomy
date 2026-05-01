@@ -1,12 +1,14 @@
 import {
   newUlid,
   toBytes,
+  type Did,
   type Event,
   type Ulid,
 } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { MessageProperties } from "../discord/types.ts";
+import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("edit-delete");
@@ -48,6 +50,11 @@ export async function handleMessageEdit(
 
     const connected = await spaceManager.getOrConnect(spaceDid);
 
+    // Sync author profile before edit
+    if (message.author) {
+      await syncUserProfile(message.author, [spaceDid], repo, spaceManager);
+    }
+
     const eventUlid = newUlid();
     const extensions: Record<string, unknown> = {
       "space.roomy.extension.discordMessageOrigin.v0": {
@@ -55,6 +62,10 @@ export async function handleMessageEdit(
         snowflake: messageId,
         channelId,
         guildId,
+      },
+      "space.roomy.extension.authorOverride.v0": {
+        $type: "space.roomy.extension.authorOverride.v0",
+        did: `did:discord:${message.author.id}` as Did,
       },
     };
 
