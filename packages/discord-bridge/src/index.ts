@@ -17,7 +17,7 @@ import {
 import {
   handleReactionAdd,
   handleReactionRemove,
-} from "./services/stub-handlers.ts";
+} from "./services/reaction-sync.ts";
 import { handleThreadCreate } from "./services/thread-ingestion.ts";
 import {
   registerSlashCommands,
@@ -90,6 +90,8 @@ async function main() {
             data.userId,
             data.emoji,
             data.guildId ?? 0n,
+            repo,
+            spaceManager,
           );
         },
 
@@ -100,6 +102,8 @@ async function main() {
             data.userId,
             data.emoji,
             data.guildId ?? 0n,
+            repo,
+            spaceManager,
           );
         },
 
