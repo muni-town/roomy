@@ -6,6 +6,17 @@ import { createLogger } from "../logger.ts";
 
 const log = createLogger("profile");
 
+/**
+ * Reverse discordeno's iconHashToBigInt: strips the prefix ('b' for static,
+ * 'a' for animated → prepends 'a_') to recover the original CDN hash string.
+ */
+function iconBigintToHash(icon: bigint): string {
+  const hex = icon.toString(16);
+  return hex.startsWith("a")
+    ? `a_${hex.substring(1)}`
+    : hex.substring(1);
+}
+
 export interface DiscordUserProfile {
   id: bigint;
   username: string;
@@ -16,7 +27,9 @@ export interface DiscordUserProfile {
 
 function discordAvatarUrl(userId: bigint, avatar: bigint | undefined, discriminator: string): string {
   if (avatar) {
-    return `https://cdn.discordapp.com/avatars/${userId}/${avatar.toString(16)}.webp?size=256`;
+    const hash = iconBigintToHash(avatar);
+    const ext = hash.startsWith("a_") ? "gif" : "webp";
+    return `https://cdn.discordapp.com/avatars/${userId}/${hash}.${ext}?size=256`;
   }
   const mod = discriminator !== "0"
     ? parseInt(discriminator) % 5
@@ -35,11 +48,11 @@ export async function syncUserProfile(
   spaceManager: SpaceManager,
 ): Promise<void> {
   const userIdStr = user.id.toString();
-  const avatarHex = user.avatar?.toString(16) ?? null;
+  const avatarHash = user.avatar ? iconBigintToHash(user.avatar) : null;
   const hash = computeProfileHash(
     user.username,
     user.globalName ?? null,
-    avatarHex,
+    avatarHash,
   );
 
   const avatar = discordAvatarUrl(user.id, user.avatar, user.discriminator);
