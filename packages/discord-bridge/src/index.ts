@@ -9,6 +9,7 @@ import { createBot, Intents } from "@discordeno/bot";
 import { desiredProperties, type DiscordBot, type MessageProperties, type ChannelProperties } from "./discord/types.ts";
 import { getProxyCacheBot } from "./discord/cache.ts";
 import { ingestDiscordMessage } from "./services/message-ingestion.ts";
+import { runBackfill } from "./services/backfill.ts";
 import {
   handleMessageUpdate,
   handleMessageDelete,
@@ -18,6 +19,7 @@ import {
 } from "./services/stub-handlers.ts";
 
 const log = createLogger("bridge");
+let backfillRunning = false;
 
 async function main() {
   log.info("bridge starting");
@@ -33,7 +35,11 @@ async function main() {
   const spaceManager = new SpaceManager(roomyClient);
 
   // Start Discord gateway
-  const bot = getProxyCacheBot(
+  // bot is assigned immediately after createBot; event handlers fire
+  // asynchronously on gateway events, so the reference is always valid.
+  let bot!: DiscordBot;
+
+  bot = getProxyCacheBot(
     createBot({
       token: DISCORD_TOKEN,
       intents:
@@ -47,6 +53,15 @@ async function main() {
           log.info(
             `Discord bot connected — app ${data.applicationId}, ${data.guilds.length} guilds, shard ${data.shardId}`,
           );
+          // Backfill on connect and reconnect (non-blocking, guarded against
+          // concurrent runs if a reconnect fires before the previous backfill
+          // finishes).
+          if (!backfillRunning) {
+            backfillRunning = true;
+            runBackfill(bot, repo, spaceManager)
+              .catch((err) => log.error("Backfill failed", err))
+              .finally(() => { backfillRunning = false; });
+          }
         },
 
         async messageCreate(message: MessageProperties) {
