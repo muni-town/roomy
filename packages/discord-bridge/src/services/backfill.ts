@@ -153,16 +153,29 @@ async function ensureRoomyThreads(
   for (const config of configs) {
     const { guildId, spaceDid, mode } = config;
 
-    // Subset mode threads are handled at thread-create time (auto-allowlisted);
-    // skip thread backfill here to keep behavior aligned with the live path.
-    if (mode !== "full") continue;
-
     const guild = bot.cache.guilds.memory.get(BigInt(guildId));
     if (!guild?.channels) continue;
 
-    const threads = [...guild.channels.values()].filter((ch) =>
-      THREAD_TYPES.has(ch.type),
+    // Discover threads that belong to bridged channels.
+    const bridgedChannelIds: Set<string> =
+      mode === "full"
+        ? new Set(
+            [...guild.channels.values()]
+              .filter((ch) => CHANNEL_TYPES.has(ch.type))
+              .map((ch) => ch.id.toString()),
+          )
+        : new Set(
+            repo.listAllowlistForBridge(spaceDid).map((e) => e.channelId),
+          );
+
+    const threads = [...guild.channels.values()].filter(
+      (ch) =>
+        THREAD_TYPES.has(ch.type) &&
+        ch.parentId &&
+        bridgedChannelIds.has(ch.parentId.toString()),
     );
+
+    if (threads.length === 0) continue;
 
     const connected = await spaceManager.getOrConnect(spaceDid);
     let created = 0;
@@ -171,11 +184,7 @@ async function ensureRoomyThreads(
       const threadId = thread.id.toString();
       if (repo.getRoomyId(spaceDid, "thread", threadId)) continue;
 
-      if (!thread.parentId) {
-        log.warn(`Thread ${threadId} has no parentId; skipping`);
-        continue;
-      }
-      const parentId = thread.parentId.toString();
+      const parentId = thread.parentId!.toString();
       const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
       if (!parentRoomyId) {
         log.warn(
@@ -219,6 +228,11 @@ async function ensureRoomyThreads(
 
       await connected.sendEvents(events);
       repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
+
+      if (mode === "subset") {
+        repo.addToAllowlist(spaceDid, threadId, guildId);
+      }
+
       created++;
     }
 
