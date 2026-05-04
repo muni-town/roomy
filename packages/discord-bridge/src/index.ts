@@ -1,60 +1,65 @@
-import { createLogger } from "./logger.ts";
-import { BRIDGE_DATA_DIR, BRIDGE_DB_PATH, DISCORD_TOKEN } from "./env.ts";
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
-import { BridgeRepository } from "./db/repository.ts";
-import { initRoomyClient } from "./roomy/client.ts";
-import { SpaceManager } from "./roomy/space-manager.ts";
-import { createBot, Intents } from "@discordeno/bot";
-import { desiredProperties, type DiscordBot, type MessageProperties, type ChannelProperties } from "./discord/types.ts";
-import { getProxyCacheBot } from "./discord/cache.ts";
-import { ingestDiscordMessage } from "./services/message-ingestion.ts";
-import { runBackfill } from "./services/backfill.ts";
+import { createLogger } from "./logger.ts"
+import { BRIDGE_DATA_DIR, BRIDGE_DB_PATH, DISCORD_TOKEN } from "./env.ts"
+import { mkdir } from "node:fs/promises"
+import { dirname } from "node:path"
+import { BridgeRepository } from "./db/repository.ts"
+import { initRoomyClient } from "./roomy/client.ts"
+import { SpaceManager } from "./roomy/space-manager.ts"
+import { createBot, Intents } from "@discordeno/bot"
+import {
+  desiredProperties,
+  type DiscordBot,
+  type MessageProperties,
+  type ChannelProperties
+} from "./discord/types.ts"
+import { getProxyCacheBot } from "./discord/cache.ts"
+import { ingestDiscordMessage } from "./services/message-ingestion.ts"
+import { runBackfill } from "./services/backfill.ts"
 import {
   handleMessageEdit,
-  handleMessageDelete,
-} from "./services/message-edit-delete.ts";
+  handleMessageDelete
+} from "./services/message-edit-delete.ts"
 import {
   handleReactionAdd,
-  handleReactionRemove,
-} from "./services/reaction-sync.ts";
+  handleReactionRemove
+} from "./services/reaction-sync.ts"
 import {
   handleChannelCreate,
   handleThreadCreate,
   handleRoomUpdate,
-  handleRoomDelete,
-} from "./services/room-sync.ts";
+  handleRoomDelete
+} from "./services/room-sync.ts"
 import {
   registerSlashCommands,
-  handleInteractionCreate,
-} from "./discord/slash-commands.ts";
-import type { InteractionProperties } from "./discord/types.ts";
-import { startApi } from "./api.ts";
+  handleInteractionCreate
+} from "./discord/slash-commands.ts"
+import type { InteractionProperties } from "./discord/types.ts"
+import { startApi } from "./api.ts"
 
-const log = createLogger("bridge");
-let backfillRunning = false;
-let _appId: string | undefined;
+const log = createLogger("bridge")
+let backfillRunning = false
+let appId: string | undefined
 
 async function main() {
-  log.info("bridge starting");
-  await mkdir(BRIDGE_DATA_DIR, { recursive: true });
-  log.info(`data dir ready at ${BRIDGE_DATA_DIR}`);
+  log.info("bridge starting")
+  await mkdir(BRIDGE_DATA_DIR, { recursive: true })
+  log.info(`data dir ready at ${BRIDGE_DATA_DIR}`)
 
-  await mkdir(dirname(BRIDGE_DB_PATH), { recursive: true });
-  const repo = BridgeRepository.open(BRIDGE_DB_PATH);
-  log.info(`sqlite store opened at ${BRIDGE_DB_PATH}`);
+  await mkdir(dirname(BRIDGE_DB_PATH), { recursive: true })
+  const repo = BridgeRepository.open(BRIDGE_DB_PATH)
+  log.info(`sqlite store opened at ${BRIDGE_DB_PATH}`)
 
   // Initialize Roomy client
-  const roomyClient = await initRoomyClient();
-  const spaceManager = new SpaceManager(roomyClient);
+  const roomyClient = await initRoomyClient()
+  const spaceManager = new SpaceManager(roomyClient)
 
   // Start HTTP API
-  startApi(repo, () => _appId);
+  startApi(repo, () => appId)
 
   // Start Discord gateway
   // bot is assigned immediately after createBot; event handlers fire
   // asynchronously on gateway events, so the reference is always valid.
-  let bot!: DiscordBot;
+  let bot!: DiscordBot
 
   bot = getProxyCacheBot(
     createBot({
@@ -67,31 +72,39 @@ async function main() {
       desiredProperties,
       events: {
         ready(data) {
-          _appId = data.applicationId.toString();
+          appId = data.applicationId.toString()
           log.info(
-            `Discord bot connected — app ${_appId}, ${data.guilds.length} guilds, shard ${data.shardId}`,
-          );
+            `Discord bot connected — app ${appId}, ${data.guilds.length} guilds, shard ${data.shardId}`
+          )
           registerSlashCommands(bot).catch((err) =>
-            log.error("Slash command registration failed", err),
-          );
+            log.error("Slash command registration failed", err)
+          )
           if (!backfillRunning) {
-            backfillRunning = true;
+            backfillRunning = true
             runBackfill(bot, repo, spaceManager)
               .catch((err) => log.error("Backfill failed", err))
-              .finally(() => { backfillRunning = false; });
+              .finally(() => {
+                backfillRunning = false
+              })
           }
         },
 
         async messageCreate(message: MessageProperties) {
-          await ingestDiscordMessage(message, repo, spaceManager);
+          await ingestDiscordMessage(message, repo, spaceManager)
         },
 
         async messageUpdate(message: MessageProperties) {
-          await handleMessageEdit(message, repo, spaceManager);
+          await handleMessageEdit(message, repo, spaceManager)
         },
 
         async messageDelete(data) {
-          await handleMessageDelete(data.id, data.channelId, data.guildId, repo, spaceManager);
+          await handleMessageDelete(
+            data.id,
+            data.channelId,
+            data.guildId,
+            repo,
+            spaceManager
+          )
         },
 
         reactionAdd(data) {
@@ -102,8 +115,8 @@ async function main() {
             data.emoji,
             data.guildId ?? 0n,
             repo,
-            spaceManager,
-          );
+            spaceManager
+          )
         },
 
         reactionRemove(data) {
@@ -114,68 +127,92 @@ async function main() {
             data.emoji,
             data.guildId ?? 0n,
             repo,
-            spaceManager,
-          );
+            spaceManager
+          )
         },
 
         async channelCreate(channel) {
-          await handleChannelCreate(channel as ChannelProperties, repo, spaceManager);
+          await handleChannelCreate(
+            channel as ChannelProperties,
+            repo,
+            spaceManager
+          )
         },
 
         async channelUpdate(channel) {
-          await handleRoomUpdate(channel as ChannelProperties, repo, spaceManager);
+          await handleRoomUpdate(
+            channel as ChannelProperties,
+            repo,
+            spaceManager
+          )
         },
 
         async channelDelete(channel) {
-          await handleRoomDelete(channel as ChannelProperties, repo, spaceManager);
+          await handleRoomDelete(
+            channel as ChannelProperties,
+            repo,
+            spaceManager
+          )
         },
 
         async threadCreate(channel) {
-          await handleThreadCreate(channel as ChannelProperties, repo, spaceManager);
+          await handleThreadCreate(
+            channel as ChannelProperties,
+            repo,
+            spaceManager
+          )
         },
 
         async threadUpdate(channel) {
-          await handleRoomUpdate(channel as ChannelProperties, repo, spaceManager);
+          await handleRoomUpdate(
+            channel as ChannelProperties,
+            repo,
+            spaceManager
+          )
         },
 
         async threadDelete(channel) {
-          await handleRoomDelete(channel as ChannelProperties, repo, spaceManager);
+          await handleRoomDelete(
+            channel as ChannelProperties,
+            repo,
+            spaceManager
+          )
         },
 
         async interactionCreate(interaction: InteractionProperties) {
-          await handleInteractionCreate(interaction, repo, spaceManager, bot);
-        },
-      },
-    }),
-  ) as DiscordBot;
+          await handleInteractionCreate(interaction, repo, spaceManager, bot)
+        }
+      }
+    })
+  ) as DiscordBot
 
-  await bot.start();
-  log.info("Discord gateway connected");
+  await bot.start()
+  log.info("Discord gateway connected")
 
   // Graceful shutdown
-  let shuttingDown = false;
+  let shuttingDown = false
   const shutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    log.info(`received ${signal}, shutting down`);
+    if (shuttingDown) return
+    shuttingDown = true
+    log.info(`received ${signal}, shutting down`)
 
     try {
-      await spaceManager.disconnectAll();
+      await spaceManager.disconnectAll()
     } catch (err) {
-      log.error("Error disconnecting spaces", err);
+      log.error("Error disconnecting spaces", err)
     }
 
-    repo.close();
-    log.info("shutdown complete");
-    process.exit(0);
-  };
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
+    repo.close()
+    log.info("shutdown complete")
+    process.exit(0)
+  }
+  process.on("SIGINT", () => shutdown("SIGINT"))
+  process.on("SIGTERM", () => shutdown("SIGTERM"))
 
-  log.info("bridge running");
+  log.info("bridge running")
 }
 
 main().catch((err) => {
-  console.error("fatal:", err);
-  process.exit(1);
-});
+  console.error("fatal:", err)
+  process.exit(1)
+})
