@@ -19,19 +19,19 @@ const MESSAGE_CHANNEL_TYPES = new Set([...CHANNEL_TYPES, ...THREAD_TYPES]);
 
 // The proxy cache bot has .cache which DiscordBot doesn't encode in its type.
 // Narrow to what backfill actually needs.
-interface CachedChannel {
+export interface CachedChannel {
   id: bigint;
   type: number;
   name?: string;
   parentId?: bigint;
 }
 
-interface CachedGuild {
+export interface CachedGuild {
   id: bigint;
   channels?: Collection<bigint, CachedChannel>;
 }
 
-interface BotWithCache extends DiscordBot {
+export interface BotWithCache extends DiscordBot {
   cache: {
     guilds: {
       memory: Collection<bigint, CachedGuild>;
