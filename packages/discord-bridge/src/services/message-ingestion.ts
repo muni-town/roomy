@@ -9,7 +9,6 @@ import {
 import type { BridgeRepository } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { MessageProperties } from "../discord/types.ts";
-import { handleThreadStarterMessage } from "./thread-ingestion.ts";
 import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
 
@@ -26,18 +25,30 @@ export async function ingestDiscordMessage(
   message: MessageProperties,
   repo: BridgeRepository,
   spaceManager: SpaceManager,
+  guildIdOverride?: string,
+  spaceDidOverride?: string,
 ): Promise<{ synced: number; skipped: number }> {
   const channelId = message.channelId.toString();
   const messageId = message.id.toString();
-  const guildId = message.guildId?.toString();
+  // REST endpoint GET /channels/{id}/messages does not include guild_id, so
+  // backfill must pass it explicitly. Gateway events have it on the message.
+  const guildId = guildIdOverride ?? message.guildId?.toString();
 
   if (!guildId) {
     log.debug(`Skipping message ${messageId}: no guildId`);
     return { synced: 0, skipped: 1 };
   }
 
-  // Determine which spaces should receive this channel's events
-  const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
+  // Determine which spaces should receive this channel's events.
+  // Backfill restricts to a single space (spaceDidOverride); live ingestion
+  // fans out to every bridged space for the channel.
+  let targetSpaces: string[];
+  if (spaceDidOverride) {
+    const allTargets = repo.getTargetSpacesForChannel(guildId, channelId);
+    targetSpaces = allTargets.includes(spaceDidOverride) ? [spaceDidOverride] : [];
+  } else {
+    targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
+  }
   if (targetSpaces.length === 0) {
     log.debug(`Skipping message ${messageId}: channel ${channelId} not bridged`);
     return { synced: 0, skipped: 1 };
@@ -139,7 +150,7 @@ export async function ingestDiscordMessage(
 
       // Register mapping and advance cursor
       repo.registerMapping(spaceDid, "message", messageId, eventUlid);
-      repo.setChannelCursor(channelId, messageId);
+      repo.setChannelCursor(spaceDid, channelId, messageId);
 
       log.info(
         `Synced message ${messageId} → ${eventUlid} in ${spaceDid}`,
@@ -223,4 +234,84 @@ function buildAttachments(
   }
 
   return attachments;
+}
+
+/**
+ * Handle Discord ThreadStarterMessage (type 21): forward the original message
+ * into the thread's Roomy room. Skipped if the original message hasn't been synced yet.
+ */
+async function handleThreadStarterMessage(
+  message: MessageProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+): Promise<{ synced: number; skipped: number }> {
+  const threadId = message.channelId.toString();
+  const messageId = message.id.toString();
+  const guildId = message.guildId?.toString();
+
+  if (!guildId || !message.messageReference?.messageId || !message.messageReference?.channelId) {
+    return { synced: 0, skipped: 1 };
+  }
+
+  const originalMsgId = message.messageReference.messageId.toString();
+  const parentChannelId = message.messageReference.channelId.toString();
+
+  const targetSpaces = repo.getTargetSpacesForChannel(guildId, threadId);
+  if (targetSpaces.length === 0) {
+    log.debug(`Skipping thread starter ${messageId}: thread ${threadId} not bridged`);
+    return { synced: 0, skipped: 1 };
+  }
+
+  let synced = 0;
+
+  for (const spaceDid of targetSpaces) {
+    const existing = repo.getRoomyId(spaceDid, "message", messageId);
+    if (existing) {
+      log.debug(`Skipping thread starter ${messageId}: already synced to ${spaceDid}`);
+      continue;
+    }
+
+    const threadKey = `room:${threadId}`;
+    const threadRoomyId = repo.getRoomyId(spaceDid, "thread", threadKey);
+    if (!threadRoomyId) {
+      log.debug(`No Roomy room for thread ${threadId} in ${spaceDid}, skipping forward`);
+      continue;
+    }
+
+    const originalRoomyId = repo.getRoomyId(spaceDid, "message", originalMsgId);
+    if (!originalRoomyId) {
+      log.debug(`Original message ${originalMsgId} not synced to ${spaceDid}, skipping forward`);
+      continue;
+    }
+
+    const parentKey = `room:${parentChannelId}`;
+    const fromRoomId = repo.getRoomyId(spaceDid, "channel", parentKey);
+    if (!fromRoomId) {
+      log.debug(`No Roomy room for parent channel ${parentChannelId} in ${spaceDid}, skipping forward`);
+      continue;
+    }
+
+    const forwardUlid = newUlid();
+    const forwardEvent: Event = {
+      id: forwardUlid,
+      room: threadRoomyId as Ulid,
+      $type: "space.roomy.message.forwardMessages.v0",
+      messageIds: [originalRoomyId as Ulid],
+      fromRoomId: fromRoomId as Ulid,
+    };
+
+    try {
+      const connected = await spaceManager.getOrConnect(spaceDid);
+      await connected.sendEvent(forwardEvent);
+
+      repo.registerMapping(spaceDid, "message", messageId, forwardUlid);
+
+      log.info(`Forwarded original message ${originalMsgId} to thread ${threadId} in ${spaceDid}`);
+      synced++;
+    } catch (err) {
+      log.error(`Failed to forward message to thread ${threadId} in ${spaceDid}`, err);
+    }
+  }
+
+  return { synced, skipped: targetSpaces.length - synced };
 }

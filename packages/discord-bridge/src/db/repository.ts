@@ -28,6 +28,7 @@ export type AllowlistEntry = {
 };
 
 export type ChannelCursor = {
+  spaceDid: string;
   channelId: string;
   lastMessageId: string | null;
   updatedAt: number;
@@ -235,39 +236,50 @@ export class BridgeRepository {
       .run(spaceDid, kind, discordId);
   }
 
-  // === Channel cursors (shared across bridges) ===
+  // === Channel cursors (per (space, channel)) ===
 
-  getChannelCursor(channelId: string): ChannelCursor | undefined {
+  getChannelCursor(spaceDid: string, channelId: string): ChannelCursor | undefined {
     const row = this.db
       .query<
-        { channel_id: string; last_message_id: string | null; updated_at: number },
-        [string]
-      >("SELECT channel_id, last_message_id, updated_at FROM channel_cursors WHERE channel_id = ?")
-      .get(channelId);
+        { space_did: string; channel_id: string; last_message_id: string | null; updated_at: number },
+        [string, string]
+      >(
+        "SELECT space_did, channel_id, last_message_id, updated_at FROM channel_cursors WHERE space_did = ? AND channel_id = ?",
+      )
+      .get(spaceDid, channelId);
     if (!row) return undefined;
     return {
+      spaceDid: row.space_did,
       channelId: row.channel_id,
       lastMessageId: row.last_message_id,
       updatedAt: row.updated_at,
     };
   }
 
-  setChannelCursor(channelId: string, lastMessageId: string | null): void {
+  setChannelCursor(spaceDid: string, channelId: string, lastMessageId: string | null): void {
     this.db
       .prepare(
-        `INSERT INTO channel_cursors (channel_id, last_message_id, updated_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(channel_id) DO UPDATE SET
+        `INSERT INTO channel_cursors (space_did, channel_id, last_message_id, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(space_did, channel_id) DO UPDATE SET
            last_message_id = excluded.last_message_id,
            updated_at = excluded.updated_at`,
       )
-      .run(channelId, lastMessageId, Date.now());
+      .run(spaceDid, channelId, lastMessageId, Date.now());
   }
 
-  resetChannelCursor(channelId: string): void {
-    this.db
-      .prepare("DELETE FROM channel_cursors WHERE channel_id = ?")
-      .run(channelId);
+  // Reset cursor for one (space, channel). Pass spaceDid=undefined to reset
+  // across all bridges for this channel.
+  resetChannelCursor(channelId: string, spaceDid?: string): void {
+    if (spaceDid) {
+      this.db
+        .prepare("DELETE FROM channel_cursors WHERE space_did = ? AND channel_id = ?")
+        .run(spaceDid, channelId);
+    } else {
+      this.db
+        .prepare("DELETE FROM channel_cursors WHERE channel_id = ?")
+        .run(channelId);
+    }
   }
 
   // === Allowlist (subset mode only) ===
