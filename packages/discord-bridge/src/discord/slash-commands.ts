@@ -225,9 +225,9 @@ async function handleComponentInteraction(
   guildId: string,
 ): Promise<void> {
   const customId = (interaction as any).data?.customId as string | undefined;
-  if (!customId?.startsWith("roomy:")) return;
+  if (!customId?.startsWith("roomy|")) return;
 
-  const parts = customId.split(":");
+  const parts = customId.split("|");
   const action = parts[1];
 
   try {
@@ -337,13 +337,13 @@ async function handleConnect(
               type: MessageComponentTypes.Button,
               style: ButtonStyles.Primary,
               label: "Bridge All Channels",
-              customId: `roomy:bridge-mode:${guildId}:${spaceDid}:full`,
+              customId: `roomy|bridge-mode|${guildId}|${spaceDid}|full`,
             },
             {
               type: MessageComponentTypes.Button,
               style: ButtonStyles.Secondary,
               label: "Select Specific Channels",
-              customId: `roomy:bridge-mode:${guildId}:${spaceDid}:subset`,
+              customId: `roomy|bridge-mode|${guildId}|${spaceDid}|subset`,
             },
           ],
         },
@@ -359,8 +359,7 @@ async function handleConnect(
   }
 }
 
-// customId: roomy:bridge-mode:<guildId>:<spaceDid>:full|subset
-// spaceDid contains colons (did:plc:xxx) so reconstruct from parts.slice(3, -1)
+// customId: roomy|bridge-mode|<guildId>|<spaceDid>|full|subset
 async function handleBridgeModeButton(
   interaction: InteractionProperties,
   repo: BridgeRepository,
@@ -371,8 +370,8 @@ async function handleBridgeModeButton(
 ): Promise<void> {
   if (!(await safeDefer(interaction, true))) return;
 
-  const mode = parts[parts.length - 1] as "full" | "subset";
-  const spaceDid = parts.slice(3, -1).join(":");
+  const mode = parts[4] as "full" | "subset";
+  const spaceDid = parts[3];
 
   if (mode === "full") {
     try {
@@ -409,7 +408,7 @@ async function handleBridgeModeButton(
         components: [
           {
             type: MessageComponentTypes.SelectMenuChannels,
-            customId: `roomy:channel-select:${guildId}:${spaceDid}`,
+            customId: `roomy|channel-select|${guildId}|${spaceDid}`,
             channelTypes: [0],
             minValues: 1,
             maxValues: 25,
@@ -421,7 +420,7 @@ async function handleBridgeModeButton(
   });
 }
 
-// customId: roomy:channel-select:<guildId>:<spaceDid>
+// customId: roomy|channel-select|<guildId>|<spaceDid>
 async function handleChannelSelect(
   interaction: InteractionProperties,
   repo: BridgeRepository,
@@ -432,7 +431,7 @@ async function handleChannelSelect(
 ): Promise<void> {
   if (!(await safeDefer(interaction, true))) return;
 
-  const spaceDid = parts.slice(3).join(":");
+  const spaceDid = parts[3];
   const selectedChannels: string[] =
     ((interaction as any).data?.values as string[]) ?? [];
 
