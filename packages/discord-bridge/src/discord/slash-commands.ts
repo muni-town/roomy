@@ -1,10 +1,12 @@
 import {
   ApplicationCommandOptionTypes,
+  ButtonStyles,
   type Collection,
   type CreateApplicationCommand,
   DiscordApplicationIntegrationType,
   DiscordInteractionContextType,
   InteractionTypes,
+  MessageComponentTypes,
   MessageFlags,
 } from "@discordeno/bot";
 import { StreamDid } from "@roomy-space/sdk";
@@ -190,22 +192,58 @@ export async function handleInteractionCreate(
   spaceManager: SpaceManager,
   bot: DiscordBot,
 ): Promise<void> {
-  if (interaction.type !== InteractionTypes.ApplicationCommand) return;
   if (!interaction.guildId) return;
-
   const guildId = interaction.guildId.toString();
-  const commandName = interaction.data?.name;
 
-  if (commandName === "roomy-status") {
-    await handleStatus(interaction, repo, guildId);
-  } else if (commandName === "connect-roomy-space") {
-    await handleConnect(interaction, repo, spaceManager, guildId);
-  } else if (commandName === "disconnect-roomy-space") {
-    await handleDisconnect(interaction, repo, spaceManager, guildId);
-  } else if (commandName === "roomy-bridge-channel") {
-    await handleBridgeChannel(interaction, repo, spaceManager, bot, guildId);
-  } else if (commandName === "roomy-backfill") {
-    await handleBackfill(interaction, repo, spaceManager, bot, guildId);
+  if (interaction.type === InteractionTypes.ApplicationCommand) {
+    const commandName = interaction.data?.name;
+    if (commandName === "roomy-status") {
+      await handleStatus(interaction, repo, guildId);
+    } else if (commandName === "connect-roomy-space") {
+      await handleConnect(interaction, repo, guildId);
+    } else if (commandName === "disconnect-roomy-space") {
+      await handleDisconnect(interaction, repo, spaceManager, guildId);
+    } else if (commandName === "roomy-bridge-channel") {
+      await handleBridgeChannel(interaction, repo, spaceManager, bot, guildId);
+    } else if (commandName === "roomy-backfill") {
+      await handleBackfill(interaction, repo, spaceManager, bot, guildId);
+    }
+    return;
+  }
+
+  if (interaction.type === InteractionTypes.MessageComponent) {
+    await handleComponentInteraction(interaction, repo, spaceManager, bot, guildId);
+    return;
+  }
+}
+
+async function handleComponentInteraction(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  bot: DiscordBot,
+  guildId: string,
+): Promise<void> {
+  const customId = (interaction as any).data?.customId as string | undefined;
+  if (!customId?.startsWith("roomy:")) return;
+
+  const parts = customId.split(":");
+  const action = parts[1];
+
+  try {
+    if (action === "bridge-mode") {
+      await handleBridgeModeButton(interaction, repo, spaceManager, bot, guildId, parts);
+    } else if (action === "channel-select") {
+      await handleChannelSelect(interaction, repo, spaceManager, bot, guildId, parts);
+    }
+  } catch (e) {
+    log.error(`Error handling component interaction ${customId}`, e);
+    try {
+      await interaction.respond({
+        flags: MessageFlags.Ephemeral,
+        content: "An error occurred. Please try again.",
+      });
+    } catch {}
   }
 }
 
@@ -247,7 +285,6 @@ async function handleStatus(
 async function handleConnect(
   interaction: InteractionProperties,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
   guildId: string,
 ): Promise<void> {
   if (!(await safeDefer(interaction, true))) return;
@@ -258,9 +295,7 @@ async function handleConnect(
     )?.value;
 
     if (!spaceIdOption || typeof spaceIdOption !== "string") {
-      await interaction.edit({
-        content: "Please provide a valid space ID.",
-      });
+      await interaction.edit({ content: "Please provide a valid space ID." });
       return;
     }
 
@@ -269,8 +304,7 @@ async function handleConnect(
       spaceDid = StreamDid.assert(spaceIdOption);
     } catch {
       await interaction.edit({
-        content:
-          "Invalid space ID. Please provide a valid stream DID.",
+        content: "Invalid space ID. Please provide a valid stream DID.",
       });
       return;
     }
@@ -283,32 +317,160 @@ async function handleConnect(
       return;
     }
 
-    try {
-      await spaceManager.getOrConnect(spaceDid);
-    } catch (e) {
-      log.error("Failed to connect to space", e);
+    // Reject a second full bridge in the same guild
+    const existingForGuild = repo.listBridgeConfigsForGuild(guildId);
+    if (existingForGuild.some((c) => c.mode === "full")) {
       await interaction.edit({
         content:
-          "Could not connect to that space. Make sure the space DID is correct and the bridge has access.",
+          "This guild already has a full bridge. Disconnect it first with `/disconnect-roomy-space`, or pick subset mode.",
       });
       return;
     }
 
-    repo.upsertBridgeConfig(guildId, spaceDid, "full");
-    log.info(`Connected space ${spaceDid} to guild ${guildId}`);
-
     await interaction.edit({
-      content: `Roomy space \`${spaceDid}\` connected in full mode! Starting sync...`,
+      content: "How would you like to bridge this space?",
+      components: [
+        {
+          type: MessageComponentTypes.ActionRow,
+          components: [
+            {
+              type: MessageComponentTypes.Button,
+              style: ButtonStyles.Primary,
+              label: "Bridge All Channels",
+              customId: `roomy:bridge-mode:${guildId}:${spaceDid}:full`,
+            },
+            {
+              type: MessageComponentTypes.Button,
+              style: ButtonStyles.Secondary,
+              label: "Select Specific Channels",
+              customId: `roomy:bridge-mode:${guildId}:${spaceDid}:subset`,
+            },
+          ],
+        },
+      ],
     });
   } catch (e) {
     log.error("Error handling connect-roomy-space", e);
     try {
       await interaction.edit({
-        content:
-          "An error occurred while connecting the space.",
+        content: "An error occurred while connecting the space.",
       });
     } catch {}
   }
+}
+
+// customId: roomy:bridge-mode:<guildId>:<spaceDid>:full|subset
+// spaceDid contains colons (did:plc:xxx) so reconstruct from parts.slice(3, -1)
+async function handleBridgeModeButton(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  bot: DiscordBot,
+  guildId: string,
+  parts: string[],
+): Promise<void> {
+  if (!(await safeDefer(interaction, true))) return;
+
+  const mode = parts[parts.length - 1] as "full" | "subset";
+  const spaceDid = parts.slice(3, -1).join(":");
+
+  if (mode === "full") {
+    try {
+      await spaceManager.getOrConnect(spaceDid);
+    } catch (e) {
+      log.error("Failed to connect to space", e);
+      await interaction.edit({
+        content: "Could not connect to that space. Make sure the bridge has access.",
+        components: [],
+      });
+      return;
+    }
+
+    repo.upsertBridgeConfig(guildId, spaceDid, "full");
+    log.info(`Connected space ${spaceDid} to guild ${guildId} in full mode`);
+
+    await interaction.edit({
+      content: `Roomy space \`${spaceDid}\` connected in **full** mode! Starting sync...`,
+      components: [],
+    });
+
+    runBackfill(bot, repo, spaceManager).catch((err) => {
+      log.error(`Initial backfill failed for space ${spaceDid}`, err);
+    });
+    return;
+  }
+
+  // Subset — show channel select menu
+  await interaction.edit({
+    content: "Select the channels to bridge:",
+    components: [
+      {
+        type: MessageComponentTypes.ActionRow,
+        components: [
+          {
+            type: MessageComponentTypes.SelectMenuChannels,
+            customId: `roomy:channel-select:${guildId}:${spaceDid}`,
+            channelTypes: [0],
+            minValues: 1,
+            maxValues: 25,
+            placeholder: "Select channels to bridge...",
+          } as any,
+        ],
+      },
+    ],
+  });
+}
+
+// customId: roomy:channel-select:<guildId>:<spaceDid>
+async function handleChannelSelect(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  bot: DiscordBot,
+  guildId: string,
+  parts: string[],
+): Promise<void> {
+  if (!(await safeDefer(interaction, true))) return;
+
+  const spaceDid = parts.slice(3).join(":");
+  const selectedChannels: string[] =
+    ((interaction as any).data?.values as string[]) ?? [];
+
+  if (selectedChannels.length === 0) {
+    await interaction.edit({
+      content: "No channels selected. Please try again.",
+      components: [],
+    });
+    return;
+  }
+
+  try {
+    await spaceManager.getOrConnect(spaceDid);
+  } catch (e) {
+    log.error("Failed to connect to space", e);
+    await interaction.edit({
+      content: "Could not connect to that space. Make sure the bridge has access.",
+      components: [],
+    });
+    return;
+  }
+
+  repo.upsertBridgeConfig(guildId, spaceDid, "subset");
+  for (const channelId of selectedChannels) {
+    repo.addToAllowlist(spaceDid, channelId, guildId);
+  }
+  log.info(
+    `Connected space ${spaceDid} to guild ${guildId} in subset mode with ${selectedChannels.length} channels`,
+  );
+
+  await interaction.edit({
+    content: `Roomy space \`${spaceDid}\` connected in **subset** mode with ${selectedChannels.length} channel(s). Starting sync...`,
+    components: [],
+  });
+
+  runBackfill(bot, repo, spaceManager).catch((err) => {
+    log.error(`Initial backfill failed for space ${spaceDid}`, err);
+  });
 }
 
 // ─── /disconnect-roomy-space ──────────────────────────────────────────

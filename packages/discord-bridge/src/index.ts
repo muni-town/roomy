@@ -18,7 +18,12 @@ import {
   handleReactionAdd,
   handleReactionRemove,
 } from "./services/reaction-sync.ts";
-import { handleThreadCreate } from "./services/thread-ingestion.ts";
+import {
+  handleChannelCreate,
+  handleThreadCreate,
+  handleRoomUpdate,
+  handleRoomDelete,
+} from "./services/room-sync.ts";
 import {
   registerSlashCommands,
   handleInteractionCreate,
@@ -113,8 +118,28 @@ async function main() {
           );
         },
 
+        async channelCreate(channel) {
+          await handleChannelCreate(channel as ChannelProperties, repo, spaceManager);
+        },
+
+        async channelUpdate(channel) {
+          await handleRoomUpdate(channel as ChannelProperties, repo, spaceManager);
+        },
+
+        async channelDelete(channel) {
+          await handleRoomDelete(channel as ChannelProperties, repo, spaceManager);
+        },
+
         async threadCreate(channel) {
           await handleThreadCreate(channel as ChannelProperties, repo, spaceManager);
+        },
+
+        async threadUpdate(channel) {
+          await handleRoomUpdate(channel as ChannelProperties, repo, spaceManager);
+        },
+
+        async threadDelete(channel) {
+          await handleRoomDelete(channel as ChannelProperties, repo, spaceManager);
         },
 
         async interactionCreate(interaction: InteractionProperties) {

@@ -63,6 +63,28 @@ export const MIGRATIONS: Migration[] = [
         );
       `)
     }
+  },
+  {
+    version: 2,
+    name: "channel_cursors_per_space",
+    up(db) {
+      // Cursors were keyed by channel_id alone, which meant connecting a
+      // channel to a second Roomy space inherited the first space's cursor
+      // and silently skipped backfill. Re-key by (space_did, channel_id).
+      // Existing cursor rows are dropped — they were never correct under
+      // multi-bridge conditions.
+      db.run(`
+        DROP TABLE channel_cursors;
+
+        CREATE TABLE channel_cursors (
+          space_did       TEXT NOT NULL,
+          channel_id      TEXT NOT NULL,
+          last_message_id TEXT,
+          updated_at      INTEGER NOT NULL,
+          PRIMARY KEY (space_did, channel_id)
+        );
+      `)
+    }
   }
 ]
 

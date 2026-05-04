@@ -15,8 +15,8 @@ describe("migrations", () => {
   test("apply cleanly on a fresh database", () => {
     const db = new Database(":memory:");
     const result = runMigrations(db);
-    expect(result.applied).toEqual([1]);
-    expect(result.current).toBe(1);
+    expect(result.applied).toEqual([1, 2]);
+    expect(result.current).toBe(2);
   });
 
   test("are idempotent across re-runs", () => {
@@ -24,7 +24,7 @@ describe("migrations", () => {
     runMigrations(db);
     const second = runMigrations(db);
     expect(second.applied).toEqual([]);
-    expect(second.current).toBe(1);
+    expect(second.current).toBe(2);
   });
 });
 
@@ -150,13 +150,21 @@ describe("id_mappings", () => {
 describe("channel_cursors", () => {
   test("set, get, upsert, null cursor", () => {
     const r = repo();
-    expect(r.getChannelCursor("c1")).toBeUndefined();
-    r.setChannelCursor("c1", "msg-100");
-    expect(r.getChannelCursor("c1")?.lastMessageId).toBe("msg-100");
-    r.setChannelCursor("c1", "msg-200");
-    expect(r.getChannelCursor("c1")?.lastMessageId).toBe("msg-200");
-    r.setChannelCursor("c2", null);
-    expect(r.getChannelCursor("c2")?.lastMessageId).toBeNull();
+    expect(r.getChannelCursor(SPACE_A, "c1")).toBeUndefined();
+    r.setChannelCursor(SPACE_A, "c1", "msg-100");
+    expect(r.getChannelCursor(SPACE_A, "c1")?.lastMessageId).toBe("msg-100");
+    r.setChannelCursor(SPACE_A, "c1", "msg-200");
+    expect(r.getChannelCursor(SPACE_A, "c1")?.lastMessageId).toBe("msg-200");
+    r.setChannelCursor(SPACE_A, "c2", null);
+    expect(r.getChannelCursor(SPACE_A, "c2")?.lastMessageId).toBeNull();
+  });
+
+  test("scoped per (space, channel)", () => {
+    const r = repo();
+    r.setChannelCursor(SPACE_A, "c1", "msg-A");
+    r.setChannelCursor(SPACE_B, "c1", "msg-B");
+    expect(r.getChannelCursor(SPACE_A, "c1")?.lastMessageId).toBe("msg-A");
+    expect(r.getChannelCursor(SPACE_B, "c1")?.lastMessageId).toBe("msg-B");
   });
 });
 
