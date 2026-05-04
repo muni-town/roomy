@@ -78,10 +78,9 @@ export async function ingestDiscordMessage(
     }
 
     // Resolve the Roomy room for this channel or thread
-    const roomKey = `room:${channelId}`;
     const roomyRoomId =
-      repo.getRoomyId(spaceDid, "channel", roomKey) ??
-      repo.getRoomyId(spaceDid, "thread", roomKey);
+      repo.getRoomyId(spaceDid, "channel", channelId) ??
+      repo.getRoomyId(spaceDid, "thread", channelId);
     if (!roomyRoomId) {
       log.warn(`No Roomy room mapping for channel ${channelId} in ${spaceDid}, skipping message`);
       continue;
@@ -271,8 +270,7 @@ async function handleThreadStarterMessage(
       continue;
     }
 
-    const threadKey = `room:${threadId}`;
-    const threadRoomyId = repo.getRoomyId(spaceDid, "thread", threadKey);
+    const threadRoomyId = repo.getRoomyId(spaceDid, "thread", threadId);
     if (!threadRoomyId) {
       log.debug(`No Roomy room for thread ${threadId} in ${spaceDid}, skipping forward`);
       continue;
@@ -284,8 +282,7 @@ async function handleThreadStarterMessage(
       continue;
     }
 
-    const parentKey = `room:${parentChannelId}`;
-    const fromRoomId = repo.getRoomyId(spaceDid, "channel", parentKey);
+    const fromRoomId = repo.getRoomyId(spaceDid, "channel", parentChannelId);
     if (!fromRoomId) {
       log.debug(`No Roomy room for parent channel ${parentChannelId} in ${spaceDid}, skipping forward`);
       continue;

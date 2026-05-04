@@ -9,10 +9,6 @@ const log = createLogger("room");
 const CHANNEL_TYPES = new Set([0, 5]);
 const THREAD_TYPES = new Set([11, 12]);
 
-function roomKey(snowflake: string): string {
-  return `room:${snowflake}`;
-}
-
 function mappingKindFor(channel: ChannelProperties): MappingKind {
   return THREAD_TYPES.has(channel.type) ? "thread" : "channel";
 }
@@ -47,8 +43,7 @@ export async function handleChannelCreate(
   }
 
   for (const spaceDid of targetSpaces) {
-    const key = roomKey(channelId);
-    if (repo.getRoomyId(spaceDid, "channel", key)) {
+    if (repo.getRoomyId(spaceDid, "channel", channelId)) {
       log.debug(`Channel ${channelId} already synced to ${spaceDid}`);
       continue;
     }
@@ -71,7 +66,7 @@ export async function handleChannelCreate(
     try {
       const connected = await spaceManager.getOrConnect(spaceDid);
       await connected.sendEvent(event);
-      repo.registerMapping(spaceDid, "channel", key, roomUlid);
+      repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
       log.info(
         `Created Roomy room ${roomUlid} for Discord channel ${channelId} in ${spaceDid}`,
       );
@@ -110,13 +105,12 @@ export async function handleThreadCreate(
   }
 
   for (const spaceDid of targetSpaces) {
-    const threadKey = roomKey(threadId);
-    if (repo.getRoomyId(spaceDid, "thread", threadKey)) {
+    if (repo.getRoomyId(spaceDid, "thread", threadId)) {
       log.debug(`Thread ${threadId} already synced to ${spaceDid}`);
       continue;
     }
 
-    const parentRoomyId = repo.getRoomyId(spaceDid, "channel", roomKey(parentId));
+    const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
     if (!parentRoomyId) {
       log.warn(`No Roomy room for parent channel ${parentId} in ${spaceDid}, skipping thread`);
       continue;
@@ -152,7 +146,7 @@ export async function handleThreadCreate(
       const connected = await spaceManager.getOrConnect(spaceDid);
       await connected.sendEvents(events);
 
-      repo.registerMapping(spaceDid, "thread", threadKey, threadUlid);
+      repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
 
       // Auto-add thread to allowlist for subset mode bridges
       const config = repo.getBridgeConfig(guildId, spaceDid);
@@ -185,13 +179,12 @@ export async function handleRoomUpdate(
   if (!channel.name) return;
 
   const kind = mappingKindFor(channel);
-  const key = roomKey(channelId);
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
   if (targetSpaces.length === 0) return;
 
   for (const spaceDid of targetSpaces) {
-    const roomyId = repo.getRoomyId(spaceDid, kind, key);
+    const roomyId = repo.getRoomyId(spaceDid, kind, channelId);
     if (!roomyId) {
       log.debug(`No Roomy room mapped for ${kind} ${channelId} in ${spaceDid}`);
       continue;
@@ -234,13 +227,12 @@ export async function handleRoomDelete(
   if (!guildId) return;
 
   const kind = mappingKindFor(channel);
-  const key = roomKey(channelId);
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
   if (targetSpaces.length === 0) return;
 
   for (const spaceDid of targetSpaces) {
-    const roomyId = repo.getRoomyId(spaceDid, kind, key);
+    const roomyId = repo.getRoomyId(spaceDid, kind, channelId);
     if (!roomyId) continue;
 
     const event = {
@@ -252,7 +244,7 @@ export async function handleRoomDelete(
     try {
       const connected = await spaceManager.getOrConnect(spaceDid);
       await connected.sendEvent(event);
-      repo.unregisterMapping(spaceDid, kind, key);
+      repo.unregisterMapping(spaceDid, kind, channelId);
       log.info(
         `Deleted Roomy ${kind} ${roomyId} for Discord channel ${channelId} in ${spaceDid}`,
       );
