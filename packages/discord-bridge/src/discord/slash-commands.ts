@@ -1,7 +1,6 @@
 import {
   ApplicationCommandOptionTypes,
   ButtonStyles,
-  type Collection,
   type CreateApplicationCommand,
   DiscordApplicationIntegrationType,
   DiscordInteractionContextType,
@@ -13,7 +12,7 @@ import { StreamDid } from "@roomy-space/sdk";
 import type { BridgeRepository, BridgeConfig } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { DiscordBot, InteractionProperties } from "./types.ts";
-import { backfillSingleChannel, runBackfill } from "../services/backfill.ts";
+import { backfillSingleChannel, runBackfill, type BotWithCache } from "../services/backfill.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("slash");
@@ -813,13 +812,7 @@ function collectGuildChannelIds(
 
   for (const config of configs) {
     if (config.mode === "full") {
-      const cached = bot as unknown as {
-        cache: {
-          guilds: {
-            memory: Collection<bigint, { id: bigint; channels?: Collection<bigint, { id: bigint; type: number }> }>;
-          };
-        };
-      };
+      const cached = bot as unknown as BotWithCache;
       const guild = cached.cache.guilds.memory.get(BigInt(config.guildId));
       if (!guild?.channels) continue;
       for (const [channelId, channel] of guild.channels) {
