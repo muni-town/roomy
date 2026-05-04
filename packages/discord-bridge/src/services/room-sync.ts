@@ -2,7 +2,7 @@ import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
 import type { BridgeRepository, MappingKind } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import { CHANNEL_TYPES, THREAD_TYPES } from "../discord/types.ts";
-import type { ChannelProperties } from "../discord/types.ts";
+import type { ChannelProperties, DiscordBot } from "../discord/types.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("room");
@@ -12,34 +12,17 @@ function mappingKindFor(channel: ChannelProperties): MappingKind {
 }
 
 /**
- * Handle Discord CHANNEL_CREATE: create a Roomy room for the new channel
- * in every space that bridges this guild in `full` mode. Subset bridges are
- * skipped — the channel must be added to their allowlist explicitly.
- * Threads are not handled here; see handleThreadCreate.
+ * Ensure a Roomy room exists for a Discord channel in the given spaces.
+ * Skips spaces that already have a mapping. Idempotent per space.
  */
-export async function handleChannelCreate(
-  channel: ChannelProperties,
+export async function ensureRoomyChannel(
   repo: BridgeRepository,
   spaceManager: SpaceManager,
+  channelId: string,
+  guildId: string,
+  channelName: string,
+  targetSpaces: string[],
 ): Promise<void> {
-  const channelId = channel.id.toString();
-  const guildId = channel.guildId?.toString();
-
-  if (!guildId) return;
-  if (!CHANNEL_TYPES.has(channel.type)) return;
-
-  const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
-  if (targetSpaces.length === 0) {
-    log.debug(`Skipping channel ${channelId}: no bridges target it`);
-    return;
-  }
-
-  const channelName = channel.name;
-  if (!channelName) {
-    log.error(`Channel ${channelId} has no name; skipping create`);
-    return;
-  }
-
   for (const spaceDid of targetSpaces) {
     if (repo.getRoomyId(spaceDid, "channel", channelId)) {
       log.debug(`Channel ${channelId} already synced to ${spaceDid}`);
@@ -75,6 +58,38 @@ export async function handleChannelCreate(
       );
     }
   }
+}
+
+/**
+ * Handle Discord CHANNEL_CREATE: create a Roomy room for the new channel
+ * in every space that bridges this guild in `full` mode. Subset bridges are
+ * skipped — the channel must be added to their allowlist explicitly.
+ * Threads are not handled here; see handleThreadCreate.
+ */
+export async function handleChannelCreate(
+  channel: ChannelProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+): Promise<void> {
+  const channelId = channel.id.toString();
+  const guildId = channel.guildId?.toString();
+
+  if (!guildId) return;
+  if (!CHANNEL_TYPES.has(channel.type)) return;
+
+  const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
+  if (targetSpaces.length === 0) {
+    log.debug(`Skipping channel ${channelId}: no bridges target it`);
+    return;
+  }
+
+  const channelName = channel.name;
+  if (!channelName) {
+    log.error(`Channel ${channelId} has no name; skipping create`);
+    return;
+  }
+
+  await ensureRoomyChannel(repo, spaceManager, channelId, guildId, channelName, targetSpaces);
 }
 
 /**
