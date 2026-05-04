@@ -12,6 +12,8 @@ COPY patches patches
 
 RUN pnpm install --frozen-lockfile --filter @roomy/discord-bridge... --ignore-scripts
 
+RUN pnpm --filter @roomy-space/sdk build
+
 RUN npm install -g bun@1.1
 
 WORKDIR /build/packages/discord-bridge
