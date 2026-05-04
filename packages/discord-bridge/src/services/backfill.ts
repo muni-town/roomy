@@ -1,5 +1,6 @@
 import type { Collection } from "@discordeno/bot";
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
+import { CHANNEL_TYPES, THREAD_TYPES, MESSAGE_CHANNEL_TYPES } from "../discord/types.ts";
 import type { DiscordBot, MessageProperties } from "../discord/types.ts";
 import type { BridgeRepository, BridgeConfig, BridgeMode } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
@@ -9,13 +10,6 @@ import { createLogger } from "../logger.ts";
 const log = createLogger("backfill");
 
 const activeBackfills = new Set<string>();
-
-// 0 = GUILD_TEXT, 5 = GUILD_ANNOUNCEMENT
-const CHANNEL_TYPES = new Set([0, 5]);
-// 11 = PUBLIC_THREAD, 12 = PRIVATE_THREAD
-const THREAD_TYPES = new Set([11, 12]);
-// Union: anything that can carry messages (used for message backfill enumeration)
-const MESSAGE_CHANNEL_TYPES = new Set([...CHANNEL_TYPES, ...THREAD_TYPES]);
 
 // The proxy cache bot has .cache which DiscordBot doesn't encode in its type.
 // Narrow to what backfill actually needs.

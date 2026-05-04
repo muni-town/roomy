@@ -1,13 +1,11 @@
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
 import type { BridgeRepository, MappingKind } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
+import { CHANNEL_TYPES, THREAD_TYPES } from "../discord/types.ts";
 import type { ChannelProperties } from "../discord/types.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("room");
-
-const CHANNEL_TYPES = new Set([0, 5]);
-const THREAD_TYPES = new Set([11, 12]);
 
 function mappingKindFor(channel: ChannelProperties): MappingKind {
   return THREAD_TYPES.has(channel.type) ? "thread" : "channel";
