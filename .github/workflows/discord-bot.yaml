@@ -63,7 +63,7 @@ jobs:
         with:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          context: .
+          context: packages/discord-bridge
           file: packages/discord-bridge/Dockerfile
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
