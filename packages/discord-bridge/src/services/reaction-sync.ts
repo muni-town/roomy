@@ -71,7 +71,6 @@ export async function handleReactionAdd(
     const extensions: Record<string, unknown> = {
       "space.roomy.extension.discordReactionOrigin.v0": {
         $type: "space.roomy.extension.discordReactionOrigin.v0",
-        snowflake: eventUlid,
         messageId: messageIdStr,
         channelId: channelIdStr,
         userId: userId.toString(),
@@ -158,7 +157,6 @@ export async function handleReactionRemove(
     const extensions: Record<string, unknown> = {
       "space.roomy.extension.discordReactionOrigin.v0": {
         $type: "space.roomy.extension.discordReactionOrigin.v0",
-        snowflake: eventUlid,
         messageId: messageId.toString(),
         channelId: channelIdStr,
         userId: userId.toString(),
