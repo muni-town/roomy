@@ -110,8 +110,7 @@ async function ensureRoomyRooms(
     let created = 0;
 
     for (const channelId of channelIds) {
-      const roomKey = `room:${channelId}`;
-      if (repo.getRoomyId(spaceDid, "channel", roomKey)) continue;
+      if (repo.getRoomyId(spaceDid, "channel", channelId)) continue;
 
       const channelName = resolveChannelName(bot, channelId);
       if (!channelName) {
@@ -138,7 +137,7 @@ async function ensureRoomyRooms(
       } as Event;
 
       await connected.sendEvent(event);
-      repo.registerMapping(spaceDid, "channel", roomKey, roomUlid);
+      repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
       created++;
     }
 
@@ -173,16 +172,14 @@ async function ensureRoomyThreads(
 
     for (const thread of threads) {
       const threadId = thread.id.toString();
-      const threadKey = `room:${threadId}`;
-      if (repo.getRoomyId(spaceDid, "thread", threadKey)) continue;
+      if (repo.getRoomyId(spaceDid, "thread", threadId)) continue;
 
       if (!thread.parentId) {
         log.warn(`Thread ${threadId} has no parentId; skipping`);
         continue;
       }
       const parentId = thread.parentId.toString();
-      const parentKey = `room:${parentId}`;
-      const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentKey);
+      const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
       if (!parentRoomyId) {
         log.warn(
           `Parent channel ${parentId} not bridged in ${spaceDid}; skipping thread ${threadId}`,
@@ -224,7 +221,7 @@ async function ensureRoomyThreads(
       ];
 
       await connected.sendEvents(events);
-      repo.registerMapping(spaceDid, "thread", threadKey, threadUlid);
+      repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
       created++;
     }
 
@@ -296,8 +293,7 @@ export async function backfillSingleChannel(
     const cached = bot as unknown as BotWithCache;
     const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
     for (const spaceDid of targetSpaces) {
-      const roomKey = `room:${channelId}`;
-      if (repo.getRoomyId(spaceDid, "channel", roomKey)) continue;
+      if (repo.getRoomyId(spaceDid, "channel", channelId)) continue;
 
       const channelName = resolveChannelName(cached, channelId);
       if (!channelName) {
@@ -324,7 +320,7 @@ export async function backfillSingleChannel(
       } as Event;
 
       await connected.sendEvent(event);
-      repo.registerMapping(spaceDid, "channel", roomKey, roomUlid);
+      repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
       log.info(`Created Roomy room ${roomUlid} for Discord channel ${channelId} in ${spaceDid}`);
     }
   }
