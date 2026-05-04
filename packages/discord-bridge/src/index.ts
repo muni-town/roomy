@@ -24,9 +24,11 @@ import {
   handleInteractionCreate,
 } from "./discord/slash-commands.ts";
 import type { InteractionProperties } from "./discord/types.ts";
+import { startApi } from "./api.ts";
 
 const log = createLogger("bridge");
 let backfillRunning = false;
+let _appId: string | undefined;
 
 async function main() {
   log.info("bridge starting");
@@ -40,6 +42,9 @@ async function main() {
   // Initialize Roomy client
   const roomyClient = await initRoomyClient();
   const spaceManager = new SpaceManager(roomyClient);
+
+  // Start HTTP API
+  startApi(repo, () => _appId);
 
   // Start Discord gateway
   // bot is assigned immediately after createBot; event handlers fire
@@ -57,8 +62,9 @@ async function main() {
       desiredProperties,
       events: {
         ready(data) {
+          _appId = data.applicationId.toString();
           log.info(
-            `Discord bot connected — app ${data.applicationId}, ${data.guilds.length} guilds, shard ${data.shardId}`,
+            `Discord bot connected — app ${_appId}, ${data.guilds.length} guilds, shard ${data.shardId}`,
           );
           registerSlashCommands(bot).catch((err) =>
             log.error("Slash command registration failed", err),
