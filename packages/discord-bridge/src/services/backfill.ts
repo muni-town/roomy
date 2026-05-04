@@ -1,7 +1,7 @@
 import type { Collection } from "@discordeno/bot";
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
 import type { DiscordBot, MessageProperties } from "../discord/types.ts";
-import type { BridgeRepository, BridgeConfig } from "../db/repository.ts";
+import type { BridgeRepository, BridgeConfig, BridgeMode } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
 import { createLogger } from "../logger.ts";
@@ -257,7 +257,7 @@ function resolveChannelName(bot: BotWithCache, channelId: string): string | unde
 function channelsForConfig(
   bot: BotWithCache,
   repo: BridgeRepository,
-  config: { guildId: string; spaceDid: string; mode: string },
+  config: { guildId: string; spaceDid: string; mode: BridgeMode },
 ): string[] {
   const channels: string[] = [];
 
