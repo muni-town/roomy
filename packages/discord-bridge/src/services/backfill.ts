@@ -5,6 +5,7 @@ import type { DiscordBot, MessageProperties } from "../discord/types.ts";
 import type { BridgeRepository, BridgeConfig, BridgeMode } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
+import { ensureRoomyChannel } from "./room-sync.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("backfill");
@@ -288,36 +289,9 @@ export async function backfillSingleChannel(
   if (guildId) {
     const cached = bot as unknown as BotWithCache;
     const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
-    for (const spaceDid of targetSpaces) {
-      if (repo.getRoomyId(spaceDid, "channel", channelId)) continue;
-
-      const channelName = resolveChannelName(cached, channelId);
-      if (!channelName) {
-        log.error(
-          `Cannot resolve name for Discord channel ${channelId} in guild ${guildId}; skipping room creation in ${spaceDid}`,
-        );
-        continue;
-      }
-      const roomUlid = newUlid();
-      const connected = await spaceManager.getOrConnect(spaceDid);
-
-      const event = {
-        id: roomUlid,
-        $type: "space.roomy.room.createRoom.v0",
-        kind: "space.roomy.channel",
-        name: channelName,
-        defaultAccess: "read",
-        extensions: {
-          "space.roomy.extension.discordOrigin.v0": {
-            snowflake: channelId,
-            guildId,
-          },
-        },
-      } as Event;
-
-      await connected.sendEvent(event);
-      repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
-      log.info(`Created Roomy room ${roomUlid} for Discord channel ${channelId} in ${spaceDid}`);
+    const channelName = resolveChannelName(cached, channelId);
+    if (channelName) {
+      await ensureRoomyChannel(repo, spaceManager, channelId, guildId, channelName, targetSpaces);
     }
   }
 
