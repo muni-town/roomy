@@ -92,3 +92,20 @@ export type InteractionProperties = SetupDesiredProps<
 export type DiscordBot = Bot<
   CompleteDesiredProperties<typeof desiredProperties>
 >;
+
+/** Channel types that represent top-level text channels. */
+export const CHANNEL_TYPES = new Set([0, 5]); // GuildText, GuildAnnouncement
+
+/** Channel types that represent threads (public, private, announcement). */
+export const THREAD_TYPES = new Set([11, 12, 10]); // PublicThread, PrivateThread, AnnouncementThread
+
+/** Any channel type that can carry messages. */
+export const MESSAGE_CHANNEL_TYPES = new Set([...CHANNEL_TYPES, ...THREAD_TYPES]);
+
+/** Discord message types the bridge cares about. */
+export const MsgType = {
+  Default: 0,
+  ChannelNameChange: 4,
+  ThreadCreated: 18,
+  ThreadStarterMessage: 21,
+} as const;

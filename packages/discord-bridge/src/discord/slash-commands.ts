@@ -12,6 +12,7 @@ import { StreamDid } from "@roomy-space/sdk";
 import type { BridgeRepository, BridgeConfig } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { DiscordBot, InteractionProperties } from "./types.ts";
+import { MESSAGE_CHANNEL_TYPES } from "./types.ts";
 import { backfillSingleChannel, runBackfill, type BotWithCache } from "../services/backfill.ts";
 import { createLogger } from "../logger.ts";
 
@@ -816,7 +817,7 @@ function collectGuildChannelIds(
       const guild = cached.cache.guilds.memory.get(BigInt(config.guildId));
       if (!guild?.channels) continue;
       for (const [channelId, channel] of guild.channels) {
-        if ([0, 5, 11, 12].includes(channel.type)) {
+        if (MESSAGE_CHANNEL_TYPES.has(channel.type)) {
           channels.add(channelId.toString());
         }
       }

@@ -9,17 +9,11 @@ import {
 import type { BridgeRepository } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { MessageProperties } from "../discord/types.ts";
+import { MsgType } from "../discord/types.ts";
 import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("ingest");
-
-const DISCORD_MESSAGE_TYPES = {
-  DEFAULT: 0,
-  CHANNEL_NAME_CHANGE: 4,
-  THREAD_STARTER_MESSAGE: 21,
-  THREAD_CREATED: 18,
-} as const;
 
 export async function ingestDiscordMessage(
   message: MessageProperties,
@@ -55,14 +49,14 @@ export async function ingestDiscordMessage(
   }
 
   // ThreadStarterMessage (type 21): forward original message into thread
-  if (message.type === DISCORD_MESSAGE_TYPES.THREAD_STARTER_MESSAGE) {
+  if (message.type === MsgType.ThreadStarterMessage) {
     return handleThreadStarterMessage(message, repo, spaceManager);
   }
 
   // Skip system messages
   if (
-    message.type === DISCORD_MESSAGE_TYPES.THREAD_CREATED ||
-    message.type === DISCORD_MESSAGE_TYPES.CHANNEL_NAME_CHANGE
+    message.type === MsgType.ThreadCreated ||
+    message.type === MsgType.ChannelNameChange
   ) {
     return { synced: 0, skipped: 1 };
   }
