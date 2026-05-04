@@ -8,6 +8,8 @@ import { createLogger } from "../logger.ts";
 
 const log = createLogger("backfill");
 
+const activeBackfills = new Set<string>();
+
 // 0 = GUILD_TEXT, 5 = GUILD_ANNOUNCEMENT
 const CHANNEL_TYPES = new Set([0, 5]);
 // 11 = PUBLIC_THREAD, 12 = PRIVATE_THREAD
@@ -342,6 +344,14 @@ async function backfillChannel(
   channelId: string,
   spaceDid: string,
 ): Promise<void> {
+  const key = `${channelId}:${spaceDid}`;
+  if (activeBackfills.has(key)) {
+    log.debug(`Skipping backfill for ${key}: already in progress`);
+    return;
+  }
+  activeBackfills.add(key);
+
+  try {
   const guildId = resolveGuildIdForChannel(bot, channelId);
   if (!guildId) {
     log.error(`Cannot resolve guildId for channel ${channelId}; skipping backfill`);
@@ -393,4 +403,7 @@ async function backfillChannel(
   log.info(
     `Channel ${channelId} → ${spaceDid} backfill done: ${totalSynced} synced, ${totalSkipped} skipped`,
   );
+  } finally {
+    activeBackfills.delete(key);
+  }
 }

@@ -37,7 +37,6 @@ import type { InteractionProperties } from "./discord/types.ts"
 import { startApi } from "./api.ts"
 
 const log = createLogger("bridge")
-let backfillRunning = false
 let appId: string | undefined
 
 async function main() {
@@ -79,14 +78,9 @@ async function main() {
           registerSlashCommands(bot).catch((err) =>
             log.error("Slash command registration failed", err)
           )
-          if (!backfillRunning) {
-            backfillRunning = true
-            runBackfill(bot, repo, spaceManager)
-              .catch((err) => log.error("Backfill failed", err))
-              .finally(() => {
-                backfillRunning = false
-              })
-          }
+          runBackfill(bot, repo, spaceManager).catch((err) =>
+            log.error("Backfill failed", err)
+          )
         },
 
         async messageCreate(message: MessageProperties) {
