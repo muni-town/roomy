@@ -1,6 +1,6 @@
 # PolyForm NonCommercial
 
-`discord-bridge` source code is Copyright (c) 2026 Roomy team ( [Erlend Sogge Heggen](https://github.com/erlend-sh/), [Kapono Haws](https://github.com/zicklag/) & [Meri Leeworthy](https://github.com/meri-leeworthy) )
+`discord-bridge-legacy` source code is Copyright (c) 2026 Roomy team ( [Erlend Sogge Heggen](https://github.com/erlend-sh/), [Kapono Haws](https://github.com/zicklag/) & [Meri Leeworthy](https://github.com/meri-leeworthy) )
 and licensed as [PolyForm NonCommercial v1.0](https://polyformproject.org/licenses/noncommercial/1.0.0).
 
 ### PolyForm Countdown to Blue Oak
