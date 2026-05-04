@@ -32,6 +32,7 @@ Discord Gateway ──► Bot event handlers
 src/
 ├── index.ts                   # Entry point, gateway wiring, graceful shutdown
 ├── env.ts                     # Environment variable validation
+├── api.ts                     # HTTP API server (/info, /get-guild-id, /get-space-id, /bridges)
 ├── logger.ts                  # Structured logging
 ├── db/
 │   ├── schema.ts              # SQLite migrations
@@ -48,7 +49,7 @@ src/
 │   ├── message-edit-delete.ts # Edit and delete propagation
 │   ├── reaction-sync.ts       # Reaction add/remove sync
 │   ├── profile-sync.ts        # Discord user profile → updateProfile events
-│   ├── thread-ingestion.ts    # Discord thread → Roomy thread + forward
+│   ├── room-sync.ts           # Room/sidebar/thread creation + thread handling
 │   └── backfill.ts            # History backfill on READY
 └── utils/
     ├── hash.ts                # SHA-256 fingerprinting for profile dedup
@@ -91,7 +92,7 @@ Events carry two extensions:
 | `STREAM_HANDLE_NSID` | `space.roomy.space.handle.dev` | Handle NSID |
 | `BRIDGE_DATA_DIR` | `./data` | Directory for SQLite database |
 | `BRIDGE_DB_PATH` | `${BRIDGE_DATA_DIR}/bridge.sqlite` | Path to SQLite database |
-| `PORT` | `3301` | HTTP port (reserved for future health endpoint) |
+| `PORT` | `3301` | HTTP port for bridge API (`/info`, `/get-guild-id`, `/get-space-id`, `/bridges`) |
 | `LOG_LEVEL` | `info` | Log level |
 
 ## Slash commands
