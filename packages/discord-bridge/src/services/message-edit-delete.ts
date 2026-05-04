@@ -40,8 +40,7 @@ export async function handleMessageEdit(
     }
 
     const roomyRoomId =
-      repo.getRoomyId(spaceDid, "channel", channelId) ??
-      repo.getRoomyId(spaceDid, "thread", channelId);
+      repo.getRoomyRoomId(spaceDid, channelId);
     if (!roomyRoomId) {
       log.warn(
         `No Roomy room for channel ${channelId} in ${spaceDid}, skipping edit`,
@@ -122,8 +121,7 @@ export async function handleMessageDelete(
     }
 
     const roomyRoomId =
-      repo.getRoomyId(spaceDid, "channel", channelIdStr) ??
-      repo.getRoomyId(spaceDid, "thread", channelIdStr);
+      repo.getRoomyRoomId(spaceDid, channelIdStr);
     if (!roomyRoomId) {
       log.warn(
         `No Roomy room for channel ${channelIdStr} in ${spaceDid}, skipping delete`,

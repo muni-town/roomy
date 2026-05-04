@@ -79,8 +79,7 @@ export async function ingestDiscordMessage(
 
     // Resolve the Roomy room for this channel or thread
     const roomyRoomId =
-      repo.getRoomyId(spaceDid, "channel", channelId) ??
-      repo.getRoomyId(spaceDid, "thread", channelId);
+      repo.getRoomyRoomId(spaceDid, channelId);
     if (!roomyRoomId) {
       log.warn(`No Roomy room mapping for channel ${channelId} in ${spaceDid}, skipping message`);
       continue;

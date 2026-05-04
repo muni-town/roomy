@@ -213,6 +213,12 @@ export class BridgeRepository {
     return row?.roomy_id
   }
 
+  /** Resolve a channel or thread to its Roomy room ID. */
+  getRoomyRoomId(spaceDid: string, channelOrThreadId: string): string | undefined {
+    return this.getRoomyId(spaceDid, "channel", channelOrThreadId) ??
+      this.getRoomyId(spaceDid, "thread", channelOrThreadId)
+  }
+
   getDiscordId(
     spaceDid: string,
     kind: MappingKind,
