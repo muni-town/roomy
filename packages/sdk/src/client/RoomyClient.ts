@@ -29,8 +29,7 @@ import {
 import { ConnectedSpace } from "../connection/ConnectedSpace";
 import { modules, type ModuleWithCid } from "../modules";
 import { withTimeoutWarning } from "../utils/timeout";
-
-const DEFAULT_PLC_DIRECTORY = "https://plc.directory";
+import { RoomyClientBase } from "./RoomyClientBase";
 
 export interface RoomyClientConfig extends LeafConfig {
   agent: Agent;
@@ -61,11 +60,9 @@ interface ProfileResponse {
   };
 }
 
-export class RoomyClient {
+export class RoomyClient extends RoomyClientBase {
   readonly agent: Agent;
-  readonly leaf: LeafClient;
   readonly #config: RoomyClientConfig;
-  readonly plcDirectory: string;
 
   // Caches
   readonly #profileCache = new Map<string, ProfileResponse>();
@@ -82,10 +79,9 @@ export class RoomyClient {
   }
 
   private constructor(config: RoomyClientConfig, leaf: LeafClient) {
+    super({ leaf, plcDirectory: config.plcDirectory });
     this.agent = config.agent;
     this.#config = config;
-    this.leaf = leaf;
-    this.plcDirectory = config.plcDirectory ?? DEFAULT_PLC_DIRECTORY;
   }
 
   /**
@@ -99,10 +95,13 @@ export class RoomyClient {
     config: RoomyClientConfig,
     events?: RoomyClientEvents,
   ): Promise<RoomyClient> {
-    const leaf = createLeafClient(config.agent, {
-      leafUrl: config.leafUrl,
-      leafDid: config.leafDid,
-    });
+    const leaf = createLeafClient(
+      { type: "atproto", agent: config.agent },
+      {
+        leafUrl: config.leafUrl,
+        leafDid: config.leafDid,
+      },
+    );
 
     const authenticated = new Deferred<void>();
 
@@ -251,7 +250,7 @@ export class RoomyClient {
     spaceDid: StreamDid;
     handle?: Handle;
   }> {
-    const idType = this.#parseIdType(spaceIdOrHandle);
+    const idType = this.parseIdType(spaceIdOrHandle);
 
     if ("handle" in idType) {
       // There are two ways to resolve the handle to the space:
@@ -344,71 +343,6 @@ export class RoomyClient {
     if (!profile) return undefined;
 
     return profile.handle as Handle;
-  }
-
-  /**
-   * Get space info from the Leaf server.
-   */
-  async getSpaceInfo(
-    streamDid: StreamDid,
-  ): Promise<
-    | {
-        name?: string;
-        avatar?: string;
-        handleProvider?: UserDid;
-        allowPublicJoin?: boolean;
-        isMember: boolean;
-        isAdmin: boolean;
-      }
-    | undefined
-  > {
-    try {
-      const resp = await this.leaf.query(streamDid, {
-        name: "space_info",
-        params: {},
-      });
-      const row = resp[0];
-      if (!row) return undefined;
-
-      const name =
-        row.name?.$type === "muni.town.sqliteValue.text"
-          ? row.name.value
-          : undefined;
-      const avatar =
-        row.avatar?.$type === "muni.town.sqliteValue.text"
-          ? row.avatar.value
-          : undefined;
-      const handleProvider =
-        row.handle_provider?.$type === "muni.town.sqliteValue.text"
-          ? row.handle_provider.value
-          : undefined;
-      const allowPublicJoin =
-        row.allow_public_join?.$type === "muni.town.sqliteValue.integer"
-          ? row.allow_public_join.value === 1
-          : undefined;
-      const isMember =
-        row.is_member?.$type === "muni.town.sqliteValue.integer"
-          ? row.is_member.value === 1
-          : false;
-      const isAdmin =
-        row.is_admin?.$type === "muni.town.sqliteValue.integer"
-          ? row.is_admin.value === 1
-          : false;
-
-      return {
-        name,
-        avatar,
-        handleProvider: handleProvider
-          ? UserDid.assert(handleProvider)
-          : undefined,
-        allowPublicJoin,
-        isMember,
-        isAdmin,
-      };
-    } catch (error) {
-      console.error("Failed to load space info", { streamDid, error });
-      return undefined;
-    }
   }
 
   /**
@@ -573,41 +507,6 @@ export class RoomyClient {
     return space;
   }
 
-  /**
-   * Set the leaf handle for a stream. This updates the DID document with a `leaf://example.handle`
-   * alias, or removes an existing alias if the handle is `null`.
-   */
-  setHandle(streamDid: StreamDid, handle: string | null): Promise<void> {
-    return this.leaf.setHandle(streamDid, handle);
-  }
-
-  /**
-   * Parse whether an identifier is a DID or handle.
-   */
-  #parseIdType(value: string): { did: Did } | { handle: Handle } {
-    const didParsed = Did(value);
-    if (!(didParsed instanceof type.errors)) return { did: didParsed };
-    const handleParsed = Handle(value);
-    if (!(handleParsed instanceof type.errors)) return { handle: handleParsed };
-    throw new Error(`Invalid identifier: ${value}`);
-  }
-
-  /**
-   * Resolves the Leaf handle from a stream's DID document.
-   */
-  async resolveHandleFromLeafDid(
-    streamDid: StreamDid,
-  ): Promise<Handle | undefined> {
-    const resp: { alsoKnownAs: string[] } = await (
-      await fetch(`${this.plcDirectory}/${streamDid}`)
-    ).json();
-
-    const handle = resp.alsoKnownAs
-      .filter((x) => x.startsWith("leaf://"))[0]
-      ?.split("leaf://")[1] as Handle | undefined;
-
-    return handle;
-  }
 }
 
 /**

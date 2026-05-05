@@ -397,9 +397,6 @@ importers:
       "@atcute/cbor":
         specifier: ^2.2.8
         version: 2.2.8
-      '@atproto-labs/handle-resolver':
-        specifier: ^0.3.6
-        version: 0.3.6
       '@atproto/api':
         specifier: '*'
         version: 0.14.22
@@ -777,9 +774,6 @@ packages:
         integrity: sha512-r3b+plCh/0arN535Aool9gL6yTSbAPDOyReURbA2TWAaeW4vrSJPwR6yYUx0k0vmVPjkZPIdUVd63bG/+VG5MA==
       }
 
-  '@atproto-labs/handle-resolver@0.3.6':
-    resolution: {integrity: sha512-qnSTXvOBNj1EHhp2qTWSX8MS5q3AwYU5LKlt5fBvSbCjgmTr2j0URHCv+ydrwO55KvsojIkTMgeMOh4YuY4fCA==}
-
   '@atproto-labs/identity-resolver@0.3.1':
     resolution: {integrity: sha512-jCgotRRqPykPwh4gh0FBLOqeofv1G8OH/DZ5s88HWm7biUZeksZwDrEvL5TnqEFUpXT3O9Hcyp/XEpfCAplRoQ==}
 
@@ -841,9 +835,6 @@ packages:
       {
         integrity: sha512-nxNiCgXeo7pfjojq9fpfZxCO0X0xUipNVKW+AHNZwQKiUDt6zYL0VXEfm8HBUwQOCmKvj2pRRSM1Cur+tUWk3g==
       }
-
-  '@atproto/did@0.3.0':
-    resolution: {integrity: sha512-raUPzUGegtW/6OxwCmM8bhZvuIMzxG5t9oWsth6Tp91Kb5fTnHV2h/KKNF1C82doeA4BdXCErTyg7ISwLbQkzA==}
 
   '@atproto/identity@0.4.12':
     resolution: {integrity: sha512-P+Jn0HvKhIh1tps5n3xGrCxt+XiFWzp4kdgloyFhFmVLwjDU547DQkWx4r5Vhuiah7fRZGVSlk39R4U6SPrACg==}
@@ -9036,13 +9027,6 @@ snapshots:
       "@atproto/did": 0.2.4
       zod: 3.25.76
 
-  '@atproto-labs/handle-resolver@0.3.6':
-    dependencies:
-      '@atproto-labs/simple-store': 0.3.0
-      '@atproto-labs/simple-store-memory': 0.1.4
-      '@atproto/did': 0.3.0
-      zod: 3.25.76
-
   '@atproto-labs/identity-resolver@0.3.1':
     dependencies:
       "@atproto-labs/did-resolver": 0.2.1
@@ -9112,10 +9096,6 @@ snapshots:
       zod: 3.25.76
 
   "@atproto/did@0.2.4":
-    dependencies:
-      zod: 3.25.76
-
-  '@atproto/did@0.3.0':
     dependencies:
       zod: 3.25.76
 
@@ -11400,7 +11380,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -11491,7 +11471,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
   "@vitest/utils@2.1.9":
     dependencies:

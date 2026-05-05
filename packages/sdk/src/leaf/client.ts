@@ -9,10 +9,35 @@ export interface LeafConfig {
 }
 
 /**
- * Create a LeafClient authenticated via ATProto service auth.
- * The agent handles token refresh automatically.
+ * Authentication strategy for the Leaf client.
+ *
+ * - `atproto`: mint short-lived ATProto service-auth JWTs from a logged-in
+ *   user's `Agent` (the standard end-user flow).
+ * - `static`: present a static token directly. Intended for trusted
+ *   service-to-service scenarios where the Leaf server is configured with
+ *   `UNSAFE_AUTH_TOKEN`. The token authenticates the connection as the Leaf
+ *   server's own DID; never expose it to untrusted callers.
  */
-export function createLeafClient(agent: Agent, config: LeafConfig): LeafClient {
+export type LeafAuth =
+  | { type: "atproto"; agent: Agent }
+  | { type: "static"; token: string };
+
+/**
+ * Create a LeafClient using the provided auth strategy.
+ *
+ * For ATProto auth, the agent handles token refresh automatically. For static
+ * tokens, the same value is returned on each (re)connect.
+ */
+export function createLeafClient(
+  auth: LeafAuth,
+  config: LeafConfig,
+): LeafClient {
+  if (auth.type === "static") {
+    const { token } = auth;
+    return new LeafClient(config.leafUrl, async () => token);
+  }
+
+  const { agent } = auth;
   const ctx = context.active();
   return new LeafClient(config.leafUrl, async () => {
     const resp = await tracer.startActiveSpan(
