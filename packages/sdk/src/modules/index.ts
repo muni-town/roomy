@@ -165,6 +165,9 @@ const spaceModuleDef: BasicModule = {
       user_id text primary key -- did
     ) strict;
 
+    insert into admins (user_id) values ('did:web:localhost');
+    insert into admins (user_id) values ('did:web:leaf.muni.town');
+
     create table if not exists members (
       user_id text primary key,
       name text,
@@ -216,6 +219,7 @@ const spaceModuleDef: BasicModule = {
       role_id text not null, -- references roles(id)
       primary key (user_id, role_id)
     ) strict;
+    
     create index if not exists member_roles_role_idx on member_roles(role_id);
 
     create table if not exists role_rooms (
