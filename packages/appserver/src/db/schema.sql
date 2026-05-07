@@ -13,25 +13,11 @@ create table if not exists roomy_schema_version (
   version text not null
 ) strict;
 
-create table if not exists events (
-  idx integer not null,
-  stream_id text not null,
-  user text not null,
-  entity_ulid text references entities(ulid) on delete cascade,
-  depends_on text,
-  payload text,  -- json
-  created_at integer not null default (unixepoch() * 1000),
-  applied integer default 0,
-  primary key (idx, stream_id)
-) strict;
-
--- Index for efficiently finding stashed events when a dependency is satisfied
-create index if not exists idx_events_depends_on
-  on events(depends_on) where applied = 0;
-
--- Index for checking if a dependency exists and is applied
-create index if not exists idx_events_entity_applied
-  on events(entity_ulid, applied);
+-- NOTE: the frontend schema includes an `events` table used for stash/unstash
+-- of out-of-order events. The appserver materialises strictly in increasing
+-- `idx` order from a single Leaf subscription, so dependencies are always
+-- already applied — no stash machinery is needed and the table is omitted.
+-- The backfill cursor lives on `comp_space.backfilled_to`.
 
 create table if not exists entities (
   id text primary key, -- did or ulid
@@ -68,7 +54,7 @@ create table if not exists comp_space (
   hidden integer not null default 0 check(hidden in (0, 1)),
   handle text, -- domain
   handle_provider text,
-  backfilled_to integer references events(idx) default 0,
+  backfilled_to integer default 0,
   sidebar_config text not null default '{"categories": []}', -- JSON sidebar config
   allow_public_join integer check(allow_public_join in (0, 1)), -- null = unset (defaults to open)
   allow_member_invites integer check(allow_member_invites in (0, 1)), -- null = unset (defaults to yes)

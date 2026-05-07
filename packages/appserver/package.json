@@ -14,7 +14,8 @@
     "@atproto/identity": "^0.4.12",
     "@atproto/xrpc-server": "^0.10.19",
     "@muni-town/leaf-client": "link:../../leaf/clients/typescript",
-    "@roomy-space/sdk": "workspace:*"
+    "@roomy-space/sdk": "workspace:*",
+    "ulidx": "^2.4.1"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",

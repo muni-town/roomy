@@ -31,7 +31,6 @@ describe("appserver schema", () => {
       .map((r) => r.name);
 
     for (const expected of [
-      "events",
       "entities",
       "edges",
       "comp_space",
