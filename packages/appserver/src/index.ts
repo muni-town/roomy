@@ -1,6 +1,7 @@
 import { XrpcRouter, prodAuthVerifier } from "./xrpc/index.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { handleDebugConnectSpace } from "./handlers/debug.connectSpace.ts";
+import { handleDebugMaterializeSpace } from "./handlers/debug.materializeSpace.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const OWN_DID = process.env.APPSERVER_DID ?? "did:web:appserver.roomy.chat";
@@ -46,6 +47,14 @@ Bun.serve({
 
     if (url.pathname === "/debug/connect-space") {
       const debugRes = await handleDebugConnectSpace(req);
+      for (const [k, v] of Object.entries(corsHeaders)) {
+        debugRes.headers.set(k, v);
+      }
+      return debugRes;
+    }
+
+    if (url.pathname === "/debug/materialize-space") {
+      const debugRes = await handleDebugMaterializeSpace(req);
       for (const [k, v] of Object.entries(corsHeaders)) {
         debugRes.headers.set(k, v);
       }
