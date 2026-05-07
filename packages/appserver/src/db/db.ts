@@ -12,7 +12,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,6 +47,9 @@ export function openDb(opts: OpenDbOptions = {}): Database {
   if (!opts.isolated && dbInstance) return dbInstance;
 
   const path = opts.path ?? DEFAULT_DB_PATH;
+  if (path !== ":memory:") {
+    mkdirSync(dirname(path), { recursive: true });
+  }
   const db = new Database(path, { create: true });
 
   db.exec("pragma journal_mode = wal");

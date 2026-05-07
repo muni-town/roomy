@@ -1,16 +1,16 @@
 /**
- * Admin DID allowlist + request guard.
+ * Admin DID allowlist.
  *
  * Reads `APPSERVER_ADMIN_DIDS` (comma-separated) at module load. The list is
- * the authoritative gate for the debug endpoints — and, eventually, an admin
- * web UI sharing the same surface.
+ * the authoritative gate for admin XRPC procedures and any future admin UI
+ * surface.
  *
- * Fails closed: an unset or empty allowlist locks the endpoints out entirely.
- * Set at least one DID in development.
+ * Fails closed: an unset or empty allowlist locks admin endpoints out
+ * entirely. Set at least one DID in development.
  */
 
-import { prodAuthVerifier } from "./xrpc/auth.ts";
-import { XrpcError, toErrorResponse } from "./xrpc/errors.ts";
+import { XrpcError } from "./xrpc/errors.ts";
+import type { AuthCtx } from "./xrpc/types.ts";
 
 const RAW = process.env.APPSERVER_ADMIN_DIDS ?? "";
 
@@ -22,7 +22,7 @@ export const ADMIN_DIDS: ReadonlySet<string> = new Set(
 
 if (ADMIN_DIDS.size === 0) {
   console.warn(
-    "[admin] APPSERVER_ADMIN_DIDS is unset; admin/debug endpoints will reject all requests. " +
+    "[admin] APPSERVER_ADMIN_DIDS is unset; admin endpoints will reject all requests. " +
       "Set a comma-separated list of DIDs (e.g. did:plc:abc...,did:web:foo.bar) to allow access.",
   );
 } else {
@@ -31,38 +31,17 @@ if (ADMIN_DIDS.size === 0) {
   );
 }
 
-export interface AdminCtx {
-  did: string;
-}
-
 /**
- * Verify the request bears a valid inter-service JWT and the caller's DID is
- * on the admin allowlist. Throws `XrpcError(401|403)` otherwise.
+ * Throws `XrpcError(403)` if the caller is not on the admin allowlist.
+ * Intended for use inside XRPC handlers — the router has already verified
+ * the caller's JWT and produced the AuthCtx.
  */
-export async function requireAdmin(req: Request): Promise<AdminCtx> {
-  const ctx = await prodAuthVerifier(req);
-  if (!ADMIN_DIDS.has(ctx.did)) {
+export function requireAdmin(auth: AuthCtx): void {
+  if (!ADMIN_DIDS.has(auth.did)) {
     throw new XrpcError(
       403,
       "Forbidden",
       "Caller DID is not on the admin allowlist",
     );
-  }
-  return ctx;
-}
-
-/**
- * Run a request handler under the admin guard, converting `XrpcError`s into
- * the appserver's standard error response shape.
- */
-export async function withAdmin(
-  req: Request,
-  handler: (admin: AdminCtx) => Promise<Response>,
-): Promise<Response> {
-  try {
-    const admin = await requireAdmin(req);
-    return await handler(admin);
-  } catch (err) {
-    return toErrorResponse(err);
   }
 }

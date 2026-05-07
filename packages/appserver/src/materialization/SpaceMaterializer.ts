@@ -112,6 +112,18 @@ export class SpaceMaterializer {
     opts: SpaceMaterializerStartOpts,
   ): Promise<SpaceMaterializer> {
     const cursor = readBackfilledTo(opts.db, opts.streamDid);
+
+    // The very first space-stream events (addAdmin, updateSpaceInfo) write
+    // rows whose FKs reference an entity row for the space itself
+    // (edges.head, comp_info.entity, comp_space.entity). The frontend never
+    // hits this because PersonalJoinSpace seeds the row from the user's
+    // personal stream — but on the appserver we only see the space stream,
+    // so we have to seed it ourselves before any events apply.
+    opts.db.run(
+      "insert into entities (id, stream_id, created_at) values (?, ?, ?) on conflict(id) do nothing",
+      [opts.streamDid, opts.streamDid, Date.now()],
+    );
+
     const space = await opts.getConnectedSpace(opts.streamDid);
 
     // Construct first so the callback can close over `inst`.

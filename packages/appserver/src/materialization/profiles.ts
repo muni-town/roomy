@@ -67,6 +67,19 @@ function collectCandidateDids(events: DecodedStreamEvent[]): Set<UserDid> {
 
     if (UserDid.allows(e.user)) out.add(UserDid.assert(e.user));
 
+    // addAdmin / joinSpace may name a different DID than the event author —
+    // e.g. an existing admin promotes someone else, or a personal-stream
+    // joinSpace.v0 names the joining user via event.userDid (not e.user).
+    if (
+      ev.$type === "space.roomy.space.addAdmin.v0" ||
+      ev.$type === "space.roomy.space.joinSpace.v0"
+    ) {
+      const target = (ev as { userDid?: string }).userDid;
+      if (target && UserDid.allows(target)) {
+        out.add(UserDid.assert(target));
+      }
+    }
+
     // createMessage may carry an authorOverride extension that names a
     // different user. Pull that DID too so the override author has a profile.
     if (ev.$type === "space.roomy.message.createMessage.v0") {
