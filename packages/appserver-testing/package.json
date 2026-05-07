@@ -1,0 +1,16 @@
+{
+  "name": "appserver-testing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5199 --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.14.22",
+    "@atproto/oauth-client-browser": "^0.3.39"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.6"
+  }
+}
