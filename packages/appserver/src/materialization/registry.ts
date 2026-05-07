@@ -8,13 +8,17 @@
  */
 
 import { Database } from "bun:sqlite";
-import { type StreamDid } from "@roomy-space/sdk";
+import { type StreamDid, type UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
-import { getConnectedSpace as defaultGetConnectedSpace } from "../serviceClient.ts";
+import {
+  getConnectedSpace as defaultGetConnectedSpace,
+  getServiceClient,
+} from "../serviceClient.ts";
 import {
   SpaceMaterializer,
   type ConnectedSpaceLike,
 } from "./SpaceMaterializer.ts";
+import type { GetProfilesFn } from "./profiles.ts";
 
 const materializers = new Map<StreamDid, Promise<SpaceMaterializer>>();
 
@@ -23,7 +27,19 @@ export interface GetOrCreateOpts {
   db?: Database;
   /** Override the space resolver (tests). Defaults to the live service client. */
   getConnectedSpace?: (streamDid: StreamDid) => Promise<ConnectedSpaceLike>;
+  /** Override the profile fetcher (tests). Defaults to the service client's `getProfiles`. */
+  getProfiles?: GetProfilesFn;
 }
+
+/**
+ * Default profile fetcher: lazily resolves the `RoomyServiceClient` on first
+ * call and reuses it thereafter. Lazy resolution means the appserver can boot
+ * without Leaf reachable, matching the `serviceClient` singleton's behaviour.
+ */
+const defaultGetProfiles: GetProfilesFn = async (dids: UserDid[]) => {
+  const client = await getServiceClient();
+  return client.getProfiles(dids);
+};
 
 export function getOrCreateMaterializer(
   streamDid: StreamDid,
@@ -36,6 +52,7 @@ export function getOrCreateMaterializer(
     streamDid,
     db: opts.db ?? openDb(),
     getConnectedSpace: opts.getConnectedSpace ?? defaultGetConnectedSpace,
+    getProfiles: opts.getProfiles ?? defaultGetProfiles,
   }).catch((err) => {
     materializers.delete(streamDid);
     throw err;

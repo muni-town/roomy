@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   StreamDid,
@@ -135,6 +135,7 @@ describe("SpaceMaterializer.start", () => {
 
     const room = createRoomEvent("general");
     fake.emit([decoded(room, 8)], { isBackfill: true });
+    await mat.drain();
 
     expect(mat.getStats().applied).toBe(1);
     expect(mat.getStats().batches).toBe(1);
@@ -179,6 +180,7 @@ describe("SpaceMaterializer.start", () => {
       ],
       { isBackfill: true },
     );
+    await mat.drain();
 
     const s = mat.getStats();
     expect(s.applied).toBe(3);
@@ -211,6 +213,99 @@ describe("SpaceMaterializer.start", () => {
     fake.finishBackfill();
     await mat.backfillDone;
     expect(resolved).toBe(true);
+  });
+
+  test("prefetches profiles before applying a batch", async () => {
+    const db = freshDb();
+    seedSpace(db, STREAM);
+
+    const { fake, getConnectedSpace } = withFake(STREAM);
+    const getProfiles = mock(async () => [
+      {
+        did: USER,
+        handle: "fake-user.test",
+        displayName: "Fake User",
+        avatar: "https://cdn.example/fake.png",
+      },
+    ]) as unknown as Parameters<
+      typeof SpaceMaterializer.start
+    >[0]["getProfiles"];
+
+    const mat = await SpaceMaterializer.start({
+      streamDid: STREAM,
+      db,
+      getConnectedSpace,
+      getProfiles,
+    });
+
+    fake.emit(
+      [
+        decoded(
+          {
+            $type: "space.roomy.space.joinSpace.v0",
+            id: newUlid(),
+          } as unknown as Event,
+          1,
+        ),
+      ],
+      { isBackfill: true },
+    );
+    await mat.drain();
+
+    // Profile fetched and persisted, even though the joinSpace materialiser
+    // itself may have failed (it depends on fields we didn't populate).
+    expect(
+      db
+        .query<{ handle: string }, [string]>(
+          "select handle from comp_user where did = ?",
+        )
+        .get(USER)?.handle,
+    ).toBe("fake-user.test");
+  });
+
+  test("a profile fetch failure does not block batch application", async () => {
+    const db = freshDb();
+    seedSpace(db, STREAM);
+
+    const { fake, getConnectedSpace } = withFake(STREAM);
+    const getProfiles = mock(async () => {
+      throw new Error("appview down");
+    }) as unknown as Parameters<
+      typeof SpaceMaterializer.start
+    >[0]["getProfiles"];
+
+    const mat = await SpaceMaterializer.start({
+      streamDid: STREAM,
+      db,
+      getConnectedSpace,
+      getProfiles,
+    });
+
+    fake.emit(
+      [
+        // joinSpace triggers profile lookup (which will throw); the createRoom
+        // event in the same batch must still apply.
+        decoded(
+          {
+            $type: "space.roomy.space.joinSpace.v0",
+            id: newUlid(),
+          } as unknown as Event,
+          1,
+        ),
+        decoded(createRoomEvent("survives"), 2),
+      ],
+      { isBackfill: true },
+    );
+    await mat.drain();
+
+    expect(mat.getStats().applied).toBeGreaterThanOrEqual(1);
+    expect(
+      db
+        .query<{ count: number }, []>(
+          "select count(*) as count from comp_room",
+        )
+        .get()?.count,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   test("starts at idx 1 when no prior cursor exists", async () => {

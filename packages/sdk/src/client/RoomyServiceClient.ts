@@ -13,6 +13,8 @@
  */
 
 import type { LeafClient } from "@muni-town/leaf-client";
+import { AtpAgent } from "@atproto/api";
+import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import { Deferred } from "../utils/Deferred";
 import { createLeafClient, type LeafConfig } from "../leaf";
 import { withTimeoutWarning } from "../utils/timeout";
@@ -20,6 +22,12 @@ import { RoomyClientBase } from "./RoomyClientBase";
 import { ConnectedSpace } from "../connection/ConnectedSpace";
 import type { ModuleWithCid } from "../modules";
 import type { StreamDid, UserDid } from "../schema";
+
+/** Default unauthenticated bsky appview endpoint for read-only profile queries. */
+export const DEFAULT_BSKY_APPVIEW_URL = "https://api.bsky.app";
+
+/** Bsky's bulk profile API caps actors at 25 per request. */
+const GET_PROFILES_CHUNK_SIZE = 25;
 
 export interface RoomyServiceClientConfig extends LeafConfig {
   /**
@@ -30,6 +38,12 @@ export interface RoomyServiceClientConfig extends LeafConfig {
   unsafeAuthToken: string;
   /** PLC directory URL for resolving DIDs. Defaults to https://plc.directory */
   plcDirectory?: string;
+  /**
+   * Public bsky appview URL for unauthenticated profile reads. Defaults to
+   * `https://api.bsky.app`. The appview is the canonical source for bulk
+   * `app.bsky.actor.getProfiles` queries and does not require auth.
+   */
+  bskyAppviewUrl?: string;
 }
 
 export interface RoomyServiceClientEvents {
@@ -43,6 +57,13 @@ export class RoomyServiceClient extends RoomyClientBase {
   /** DID this client is authenticated as (the Leaf server's own DID). */
   readonly serviceDid: string;
 
+  /**
+   * Unauthenticated AtpAgent pointed at the public bsky appview, used for
+   * read-only queries like bulk profile fetches. We cache one agent per
+   * client; the appview rate-limits per source IP, not per agent.
+   */
+  private readonly bskyAgent: AtpAgent;
+
   private constructor(
     leaf: LeafClient,
     config: RoomyServiceClientConfig,
@@ -50,6 +71,48 @@ export class RoomyServiceClient extends RoomyClientBase {
   ) {
     super({ leaf, plcDirectory: config.plcDirectory });
     this.serviceDid = serviceDid;
+    this.bskyAgent = new AtpAgent({
+      service: config.bskyAppviewUrl ?? DEFAULT_BSKY_APPVIEW_URL,
+    });
+  }
+
+  /**
+   * Bulk-fetch public profiles via the unauthenticated bsky appview.
+   *
+   * Splits requests into chunks of 25 (the API limit). DIDs that the appview
+   * cannot resolve are silently dropped from the result; the caller should
+   * tolerate a return list shorter than its input.
+   *
+   * Mirrors the frontend `peer.getProfiles(dids)` shape so callers can move
+   * between the two without reshaping records.
+   */
+  async getProfiles(dids: UserDid[]): Promise<ProfileViewDetailed[]> {
+    if (dids.length === 0) return [];
+
+    const chunks: UserDid[][] = [];
+    for (let i = 0; i < dids.length; i += GET_PROFILES_CHUNK_SIZE) {
+      chunks.push(dids.slice(i, i + GET_PROFILES_CHUNK_SIZE));
+    }
+
+    const results = await Promise.all(
+      chunks.map(async (chunk) => {
+        try {
+          const resp = await this.bskyAgent.getProfiles({ actors: chunk });
+          return resp.data.profiles;
+        } catch (err) {
+          // The appview returns 400 for batches containing any unresolvable
+          // DID. We don't want one bad DID to poison a whole space's worth
+          // of profile fetches, so log and return an empty chunk; callers
+          // will retry next batch if a DID becomes resolvable later.
+          console.warn(
+            `RoomyServiceClient.getProfiles: chunk failed (${chunk.length} dids): ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return [];
+        }
+      }),
+    );
+
+    return results.flat();
   }
 
   /**

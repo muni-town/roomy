@@ -21,6 +21,7 @@ import {
 } from "@roomy-space/sdk";
 
 import { applyBatch, type MaterializationStats } from "./applyBatch.ts";
+import { ensureProfilesForBatch, type GetProfilesFn } from "./profiles.ts";
 
 export type ConnectedSpaceLike = Pick<ConnectedSpace, "subscribe" | "streamDid">;
 
@@ -33,6 +34,12 @@ export interface SpaceMaterializerStartOpts {
    * trivially injectable in tests.
    */
   getConnectedSpace: (streamDid: StreamDid) => Promise<ConnectedSpaceLike>;
+  /**
+   * Bulk profile fetcher (typically `RoomyServiceClient.getProfiles`).
+   * Optional so tests can omit it; when omitted, profile prefetch is a no-op
+   * and entities for users will be created lazily by individual materialisers.
+   */
+  getProfiles?: GetProfilesFn;
 }
 
 export interface AggregateStats {
@@ -72,16 +79,28 @@ export class SpaceMaterializer {
 
   private readonly db: Database;
   private readonly space: ConnectedSpaceLike;
+  private readonly getProfiles: GetProfilesFn | undefined;
+
+  /**
+   * Serial chain of in-flight batch processing. Subscriptions deliver events
+   * synchronously into `onBatch`, but our processing is now async (profile
+   * prefetch). Appending to a single chain preserves idx ordering and
+   * provides natural backpressure: if profile fetches stall, subsequent
+   * batches queue up rather than racing.
+   */
+  private chain: Promise<void> = Promise.resolve();
 
   private constructor(
     db: Database,
     space: ConnectedSpaceLike,
     backfillDone: Promise<Ulid>,
+    getProfiles: GetProfilesFn | undefined,
   ) {
     this.db = db;
     this.space = space;
     this.streamDid = space.streamDid;
     this.backfillDone = backfillDone;
+    this.getProfiles = getProfiles;
   }
 
   /**
@@ -116,14 +135,38 @@ export class SpaceMaterializer {
       );
     });
 
-    inst = new SpaceMaterializer(opts.db, space, backfillDone);
+    inst = new SpaceMaterializer(opts.db, space, backfillDone, opts.getProfiles);
     return inst;
   }
 
+  /**
+   * Subscription callback. Synchronous on the wire (matches `EventCallback`'s
+   * void return), but the actual work is enqueued onto a serial chain so
+   * profile prefetch awaits don't reorder batches.
+   */
   private onBatch(
     events: Parameters<EventCallback>[0],
     meta: Parameters<EventCallback>[1],
   ): void {
+    this.chain = this.chain.then(() => this.processBatch(events, meta));
+  }
+
+  private async processBatch(
+    events: Parameters<EventCallback>[0],
+    meta: Parameters<EventCallback>[1],
+  ): Promise<void> {
+    try {
+      await ensureProfilesForBatch(this.db, events, this.getProfiles);
+    } catch (err) {
+      // Profile prefetch is best-effort — a transient appview outage
+      // shouldn't block materialisation. Materialisers' own ensureEntity
+      // calls will still create rows for referenced DIDs without profile data.
+      console.warn(
+        `[SpaceMaterializer] ${this.streamDid} profile prefetch failed:`,
+        err,
+      );
+    }
+
     const stats = applyBatch(this.db, this.streamDid, events, {
       isBackfill: meta.isBackfill,
     });
@@ -137,6 +180,14 @@ export class SpaceMaterializer {
         `[SpaceMaterializer] ${this.streamDid} batch: applied=${stats.applied} matErrors=${stats.materializerErrors} applyErrors=${stats.applyErrors} (isBackfill=${meta.isBackfill})`,
       );
     }
+  }
+
+  /**
+   * Resolves once all currently-queued batches have finished processing.
+   * Useful for tests that emit synchronously and then want to assert state.
+   */
+  async drain(): Promise<void> {
+    await this.chain;
   }
 
   /** Aggregate per-batch stats for ops/inspection. */
