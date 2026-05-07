@@ -247,3 +247,25 @@ create table if not exists role_rooms (
   primary key (role_id, room_id)
 ) strict;
 create index if not exists idx_role_rooms_room_id on role_rooms(room_id);
+
+-- Banned users per space. Written by the SDK's BanAccount materializer
+-- (`insert into comp_bans (entity, user_did)`). Notably the frontend schema
+-- never declared this table — banAccount events silently no-op there because
+-- the worker swallows per-statement errors. The appserver applies events
+-- transactionally so we need a real table.
+create table if not exists comp_bans (
+  entity text not null references entities(id) on delete cascade,
+  user_did text not null,
+  created_at integer not null default (unixepoch() * 1000),
+  primary key (entity, user_did)
+) strict;
+create index if not exists idx_comp_bans_user_did on comp_bans(user_did);
+
+-- Cache of user DID → personal stream DID, resolved from the user's PDS via
+-- com.atproto.repo.getRecord. The record on the PDS is meant to be stable per
+-- user so we don't TTL these. Appserver-only; no frontend equivalent.
+create table if not exists comp_user_personal_stream (
+  user_did text primary key,
+  personal_stream_did text not null,
+  resolved_at integer not null default (unixepoch() * 1000)
+) strict;

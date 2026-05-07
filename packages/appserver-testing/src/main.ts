@@ -13,6 +13,7 @@ const DEFAULT_APPSERVER_DID = "did:web:appserver.roomy.chat";
 const NSID_TICKET = "space.roomy.auth.getConnectionTicket";
 const NSID_CONNECT_SPACE = "space.roomy.admin.connectSpace";
 const NSID_MATERIALIZE_SPACE = "space.roomy.admin.materializeSpace";
+const NSID_GET_SPACES = "space.roomy.space.getSpaces";
 
 // ── Lexicons ──────────────────────────────────────────────────────────────
 
@@ -45,6 +46,19 @@ const LEXICONS = [
           required: ["did"],
           properties: { did: { type: "string" } },
         },
+        output: {
+          encoding: "application/json",
+          schema: { type: "object" },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
+    id: NSID_GET_SPACES,
+    defs: {
+      main: {
+        type: "query",
         output: {
           encoding: "application/json",
           schema: { type: "object" },
@@ -184,6 +198,9 @@ function showAuthenticated(agent: Agent, appserverDid: string) {
     <button id="materialize-space">Materialize Space</button>
     <button id="materialize-space-wait">Materialize + Wait Backfill</button>
 
+    <h2>Reads</h2>
+    <button id="get-spaces" class="primary">Get My Spaces</button>
+
     <button id="logout">Logout</button>
     <pre id="result" class="status">Ready</pre>
   `;
@@ -194,6 +211,7 @@ function showAuthenticated(agent: Agent, appserverDid: string) {
     callMaterializeSpace(agent, appserverDid, false);
   $("materialize-space-wait").onclick = () =>
     callMaterializeSpace(agent, appserverDid, true);
+  $("get-spaces").onclick = () => callGetSpaces(agent, appserverDid);
   $("logout").onclick = async () => {
     if (currentSession) {
       await currentSession.signOut();
@@ -242,6 +260,7 @@ function disableButtons(disabled: boolean) {
     "connect-space",
     "materialize-space",
     "materialize-space-wait",
+    "get-spaces",
   ]) {
     $<HTMLButtonElement>(id).disabled = disabled;
   }
@@ -303,6 +322,14 @@ async function callMaterializeSpace(
       return response.data;
     },
   );
+}
+
+async function callGetSpaces(agent: Agent, appserverDid: string) {
+  await runCall("Fetching joined spaces", async () => {
+    const proxied = makeProxiedAgent(agent, appserverDid);
+    const response = await proxied.call(NSID_GET_SPACES);
+    return response.data;
+  });
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { XrpcRouter, prodAuthVerifier } from "./xrpc/index.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
 import { materializeSpaceHandler } from "./handlers/space.roomy.admin.materializeSpace.ts";
+import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const OWN_DID = process.env.APPSERVER_DID ?? "did:web:appserver.roomy.chat";
@@ -28,6 +29,9 @@ const router = new XrpcRouter(prodAuthVerifier)
   })
   .query("space.roomy.admin.materializeSpace", {
     handler: materializeSpaceHandler,
+  })
+  .query("space.roomy.space.getSpaces", {
+    handler: getSpacesHandler,
   });
 
 const corsHeaders = {
