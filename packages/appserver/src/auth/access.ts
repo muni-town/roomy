@@ -272,10 +272,16 @@ export function roomAccess(
   const defaultGrantsRead = row.defaultAccess !== "none";
   const defaultGrantsWrite = row.defaultAccess === "readwrite";
 
+  // Writing always requires membership for non-admins, in any space config.
+  // (See specCanWrite in specs/auth.qnt.) TODO: also gate canRead on
+  // membership when the space is invite-only — schema doesn't track join
+  // config yet.
+  const member = isMember(db, spaceId, did);
+
   return {
     exists: true,
     canRead: defaultGrantsRead || grant.canRead,
-    canWrite: defaultGrantsWrite || grant.canWrite,
+    canWrite: member && (defaultGrantsWrite || grant.canWrite),
     isAdmin: false,
     defaultAccess: row.defaultAccess,
     spaceId,
