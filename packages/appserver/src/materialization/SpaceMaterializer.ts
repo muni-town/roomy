@@ -20,8 +20,10 @@ import {
   type Ulid,
 } from "@roomy-space/sdk";
 
+import type { InvalidationRouter } from "../invalidation/types.ts";
 import { applyBatch, type MaterializationStats } from "./applyBatch.ts";
 import { ensureProfilesForBatch, type GetProfilesFn } from "./profiles.ts";
+import { toAppliedEvent } from "./toAppliedEvent.ts";
 
 export type ConnectedSpaceLike = Pick<ConnectedSpace, "subscribe" | "streamDid">;
 
@@ -40,6 +42,11 @@ export interface SpaceMaterializerStartOpts {
    * and entities for users will be created lazily by individual materialisers.
    */
   getProfiles?: GetProfilesFn;
+  /**
+   * Invalidation router to notify after events are materialised.
+   * Optional so tests can run without one.
+   */
+  invalidationRouter?: InvalidationRouter;
 }
 
 export interface AggregateStats {
@@ -80,6 +87,7 @@ export class SpaceMaterializer {
   private readonly db: Database;
   private readonly space: ConnectedSpaceLike;
   private readonly getProfiles: GetProfilesFn | undefined;
+  private readonly invalidationRouter: InvalidationRouter | undefined;
 
   /**
    * Serial chain of in-flight batch processing. Subscriptions deliver events
@@ -95,12 +103,14 @@ export class SpaceMaterializer {
     space: ConnectedSpaceLike,
     backfillDone: Promise<Ulid>,
     getProfiles: GetProfilesFn | undefined,
+    invalidationRouter: InvalidationRouter | undefined,
   ) {
     this.db = db;
     this.space = space;
     this.streamDid = space.streamDid;
     this.backfillDone = backfillDone;
     this.getProfiles = getProfiles;
+    this.invalidationRouter = invalidationRouter;
   }
 
   /**
@@ -147,7 +157,7 @@ export class SpaceMaterializer {
       );
     });
 
-    inst = new SpaceMaterializer(opts.db, space, backfillDone, opts.getProfiles);
+    inst = new SpaceMaterializer(opts.db, space, backfillDone, opts.getProfiles, opts.invalidationRouter);
     return inst;
   }
 
@@ -191,6 +201,14 @@ export class SpaceMaterializer {
       console.warn(
         `[SpaceMaterializer] ${this.streamDid} batch: applied=${stats.applied} matErrors=${stats.materializerErrors} applyErrors=${stats.applyErrors} (isBackfill=${meta.isBackfill})`,
       );
+    }
+
+    // Notify invalidation router (only for live events).
+    if (this.invalidationRouter && !meta.isBackfill) {
+      const applied = events.map((e) => toAppliedEvent(e, this.streamDid));
+      this.invalidationRouter.onEventsApplied(this.streamDid, applied, {
+        isBackfill: meta.isBackfill,
+      });
     }
   }
 

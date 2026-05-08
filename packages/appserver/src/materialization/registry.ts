@@ -10,6 +10,7 @@
 import { Database } from "bun:sqlite";
 import { type StreamDid, type UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
+import type { InvalidationRouter } from "../invalidation/types.ts";
 import {
   getConnectedSpace as defaultGetConnectedSpace,
   getServiceClient,
@@ -29,6 +30,8 @@ export interface GetOrCreateOpts {
   getConnectedSpace?: (streamDid: StreamDid) => Promise<ConnectedSpaceLike>;
   /** Override the profile fetcher (tests). Defaults to the service client's `getProfiles`. */
   getProfiles?: GetProfilesFn;
+  /** Invalidation router for real-time signal dispatch. */
+  invalidationRouter?: InvalidationRouter;
 }
 
 /**
@@ -53,6 +56,7 @@ export function getOrCreateMaterializer(
     db: opts.db ?? openDb(),
     getConnectedSpace: opts.getConnectedSpace ?? defaultGetConnectedSpace,
     getProfiles: opts.getProfiles ?? defaultGetProfiles,
+    invalidationRouter: opts.invalidationRouter,
   }).catch((err) => {
     materializers.delete(streamDid);
     throw err;
