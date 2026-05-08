@@ -168,19 +168,26 @@ describe("auth/access — room access", () => {
     expect(result.spaceId).toBe(null);
   });
 
-  test("default_access=readwrite grants read+write to anyone", () => {
+  test("default_access=readwrite grants read to anyone, write to members", () => {
     const db = freshDb();
     seedSpace(db);
     seedChannel(db, CHANNEL, SPACE, "readwrite");
     seedUser(db, USER);
 
-    const result = roomAccess(db, CHANNEL, USER);
-    expect(result.exists).toBe(true);
-    expect(result.canRead).toBe(true);
-    expect(result.canWrite).toBe(true);
-    expect(result.isAdmin).toBe(false);
-    expect(result.defaultAccess).toBe("readwrite");
-    expect(result.spaceId).toBe(SPACE);
+    // Non-member: read yes, write no.
+    const nonMember = roomAccess(db, CHANNEL, USER);
+    expect(nonMember.exists).toBe(true);
+    expect(nonMember.canRead).toBe(true);
+    expect(nonMember.canWrite).toBe(false);
+    expect(nonMember.isAdmin).toBe(false);
+    expect(nonMember.defaultAccess).toBe("readwrite");
+    expect(nonMember.spaceId).toBe(SPACE);
+
+    // After joining: write also granted.
+    addEdge(db, SPACE, USER, "member");
+    const member = roomAccess(db, CHANNEL, USER);
+    expect(member.canRead).toBe(true);
+    expect(member.canWrite).toBe(true);
   });
 
   test("default_access=read grants read only", () => {
@@ -246,6 +253,7 @@ describe("auth/access — room access", () => {
     seedSpace(db);
     seedChannel(db, CHANNEL, SPACE, "read");
     seedUser(db, USER);
+    addEdge(db, SPACE, USER, "member"); // write requires membership
     addRole(db, ROLE, SPACE, USER, CHANNEL, "readwrite");
 
     const result = roomAccess(db, CHANNEL, USER);
@@ -297,6 +305,7 @@ describe("auth/access — room access", () => {
     seedChannel(db, CHANNEL, SPACE, "none");
     seedThread(db, THREAD, CHANNEL, SPACE);
     seedUser(db, USER);
+    addEdge(db, SPACE, USER, "member"); // write requires membership
     addRole(db, ROLE, SPACE, USER, CHANNEL, "readwrite");
 
     const result = roomAccess(db, THREAD, USER);
@@ -310,6 +319,7 @@ describe("auth/access — room access", () => {
     seedChannel(db, CHANNEL, SPACE, "readwrite");
     seedThread(db, THREAD, CHANNEL, SPACE);
     seedUser(db, USER);
+    addEdge(db, SPACE, USER, "member"); // write requires membership
 
     const result = roomAccess(db, THREAD, USER);
     expect(result.defaultAccess).toBe("readwrite");
