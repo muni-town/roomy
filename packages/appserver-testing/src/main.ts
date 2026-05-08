@@ -14,6 +14,7 @@ const NSID_TICKET = "space.roomy.auth.getConnectionTicket";
 const NSID_CONNECT_SPACE = "space.roomy.admin.connectSpace";
 const NSID_MATERIALIZE_SPACE = "space.roomy.admin.materializeSpace";
 const NSID_GET_SPACES = "space.roomy.space.getSpaces";
+const NSID_GET_MEMBERS = "space.roomy.space.getMembers";
 
 // ── Lexicons ──────────────────────────────────────────────────────────────
 
@@ -59,6 +60,24 @@ const LEXICONS = [
     defs: {
       main: {
         type: "query",
+        output: {
+          encoding: "application/json",
+          schema: { type: "object" },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
+    id: NSID_GET_MEMBERS,
+    defs: {
+      main: {
+        type: "query",
+        parameters: {
+          type: "params",
+          required: ["spaceId"],
+          properties: { spaceId: { type: "string" } },
+        },
         output: {
           encoding: "application/json",
           schema: { type: "object" },
@@ -201,6 +220,12 @@ function showAuthenticated(agent: Agent, appserverDid: string) {
     <h2>Reads</h2>
     <button id="get-spaces" class="primary">Get My Spaces</button>
 
+    <h3>Space queries</h3>
+    <label for="space-id">Space ID</label>
+    <input id="space-id" type="text" placeholder="did:web:..." value="${sessionStorage.getItem("space-id") ?? ""}" />
+    <br />
+    <button id="get-members">Get Members</button>
+
     <button id="logout">Logout</button>
     <pre id="result" class="status">Ready</pre>
   `;
@@ -212,6 +237,7 @@ function showAuthenticated(agent: Agent, appserverDid: string) {
   $("materialize-space-wait").onclick = () =>
     callMaterializeSpace(agent, appserverDid, true);
   $("get-spaces").onclick = () => callGetSpaces(agent, appserverDid);
+  $("get-members").onclick = () => callGetMembers(agent, appserverDid);
   $("logout").onclick = async () => {
     if (currentSession) {
       await currentSession.signOut();
@@ -261,9 +287,20 @@ function disableButtons(disabled: boolean) {
     "materialize-space",
     "materialize-space-wait",
     "get-spaces",
+    "get-members",
   ]) {
     $<HTMLButtonElement>(id).disabled = disabled;
   }
+}
+
+function readSpaceId(): string | null {
+  const value = $<HTMLInputElement>("space-id").value.trim();
+  if (!value) {
+    renderResult({ error: "Missing space ID" }, true);
+    return null;
+  }
+  sessionStorage.setItem("space-id", value);
+  return value;
 }
 
 async function runCall(label: string, fn: () => Promise<unknown>) {
@@ -328,6 +365,16 @@ async function callGetSpaces(agent: Agent, appserverDid: string) {
   await runCall("Fetching joined spaces", async () => {
     const proxied = makeProxiedAgent(agent, appserverDid);
     const response = await proxied.call(NSID_GET_SPACES);
+    return response.data;
+  });
+}
+
+async function callGetMembers(agent: Agent, appserverDid: string) {
+  const spaceId = readSpaceId();
+  if (!spaceId) return;
+  await runCall("Fetching members", async () => {
+    const proxied = makeProxiedAgent(agent, appserverDid);
+    const response = await proxied.call(NSID_GET_MEMBERS, { spaceId });
     return response.data;
   });
 }
