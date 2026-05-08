@@ -2,6 +2,7 @@ import { XrpcRouter, prodAuthVerifier } from "./xrpc/index.ts";
 import { Router as InvalidationRouter } from "./invalidation/index.ts";
 import { setInvalidationRouter } from "./materialization/registry.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
+import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
 import { materializeSpaceHandler } from "./handlers/space.roomy.admin.materializeSpace.ts";
 import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
@@ -31,12 +32,14 @@ const DID_DOCUMENT = {
   ],
 };
 
-// ─── Invalidation ───────────────────────────────────────────────────────
+// ─── Invalidation + Sync ────────────────────────────────────────────────
 // Singleton router — live events flow through every SpaceMaterializer
-// created by the registry into this router, then out to subscribers
-// (WS handler, server cache, future notification router).
+// created by the registry into this router, then out to the SyncManager
+// which routes frames to WS connections.
 const invalidationRouter = new InvalidationRouter();
 setInvalidationRouter(invalidationRouter);
+
+const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter);
 
 // ─── XRPC routes ────────────────────────────────────────────────────────
 
@@ -79,6 +82,9 @@ const router = new XrpcRouter(prodAuthVerifier)
   })
   .query("space.roomy.message.getMessage", {
     handler: getMessageHandler,
+  })
+  .sync("space.roomy.sync.subscribe", {
+    handler: syncSubscribeHandler,
   });
 
 // ─── Server ─────────────────────────────────────────────────────────────

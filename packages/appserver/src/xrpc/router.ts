@@ -1,15 +1,19 @@
 import type { Server } from "bun";
-import type { AuthCtx, QueryParams, RouteDef } from "./types.ts";
+import type { AuthCtx, QueryParams, RouteDef, ClientMessage, SyncSocket } from "./types.ts";
 import type { AuthVerifier } from "./auth.ts";
 import { consumeTicket } from "./auth.ts";
 import { encodeFrame, errorFrame } from "./frame.ts";
 import { XrpcError, toErrorResponse } from "./errors.ts";
 
 interface WsData {
-  nsid: string;
-  params: QueryParams;
+  nsid?: string;
+  params?: QueryParams;
   auth: AuthCtx;
   abort: AbortController;
+  /** Callback set by the sync handler via SyncSocket.onMessage(). */
+  onMessage?: (msg: ClientMessage) => void;
+  /** Callback set by the sync handler via SyncSocket.onClose(). */
+  onClose?: () => void;
 }
 
 export class XrpcRouter {
@@ -32,6 +36,11 @@ export class XrpcRouter {
 
   subscription(nsid: string, def: Omit<import("./types.ts").SubscriptionDef, "kind">): this {
     this.#routes.set(nsid, { kind: "subscription", ...def });
+    return this;
+  }
+
+  sync(nsid: string, def: Omit<import("./types.ts").SyncDef, "kind">): this {
+    this.#routes.set(nsid, { kind: "sync", ...def });
     return this;
   }
 
@@ -88,8 +97,6 @@ export class XrpcRouter {
         }
 
         if (route.kind === "subscription") {
-          // Subscriptions auth via pre-issued ticket, not the inter-service JWT verifier,
-          // because PDS cannot proxy long-lived WebSocket connections.
           const ticket = rawParams["ticket"];
           if (typeof ticket !== "string" || ticket === "") {
             return Response.json(
@@ -97,11 +104,9 @@ export class XrpcRouter {
               { status: 401 },
             );
           }
-          // consumeTicket throws XrpcError(401) if not found or expired
           const did = consumeTicket(ticket);
           const auth: AuthCtx = { did };
 
-          // Remove ticket from params before handing to handler
           const { ticket: _removed, ...paramsWithoutTicket } = rawParams;
           const params = route.parseParams
             ? route.parseParams(paramsWithoutTicket)
@@ -116,6 +121,27 @@ export class XrpcRouter {
           }
           return undefined;
         }
+
+        if (route.kind === "sync") {
+          const ticket = rawParams["ticket"];
+          if (typeof ticket !== "string" || ticket === "") {
+            return Response.json(
+              { error: "AuthRequired", message: "ticket query parameter required for subscriptions" },
+              { status: 401 },
+            );
+          }
+          const did = consumeTicket(ticket);
+          const auth: AuthCtx = { did };
+
+          const abort = new AbortController();
+          const upgraded = server.upgrade(req, {
+            data: { nsid, auth, abort } satisfies WsData,
+          });
+          if (!upgraded) {
+            return new Response("Expected WebSocket upgrade", { status: 426 });
+          }
+          return undefined;
+        }
       } catch (err) {
         return toErrorResponse(err);
       }
@@ -124,32 +150,93 @@ export class XrpcRouter {
 
   get websocket(): import("bun").WebSocketHandler<WsData> {
     return {
-      open: async (ws) => {
-        const { nsid, params, auth, abort } = ws.data;
-        const route = this.#routes.get(nsid);
-        if (!route || route.kind !== "subscription") {
-          ws.close(1011, "Internal error");
+      open: (ws) => {
+        const { auth, abort } = ws.data;
+        const routeNsid = ws.data.nsid;
+
+        const route = routeNsid ? this.#routes.get(routeNsid) : undefined;
+        if (!route) {
+          ws.close(1011, "Internal error: unknown NSID");
           return;
         }
-        try {
-          const iterable = route.handler(params, auth, abort.signal);
-          for await (const frame of iterable) {
-            if (ws.readyState !== WebSocket.OPEN) break;
-            const result = ws.send(encodeFrame(frame));
-            if (result === -1) break; // send buffer full
+
+        // Legacy subscription (AsyncIterable)
+        if (route.kind === "subscription") {
+          const rawParams = ws.data.params ?? {};
+          const parsedParams = route.parseParams ? route.parseParams(rawParams) : rawParams;
+          this.#runSubscription(ws, parsedParams, auth, abort, route);
+          return;
+        }
+
+        // Sync (multiplexed bidirectional)
+        if (route.kind === "sync") {
+          const socket: SyncSocket = {
+            send: (frame) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(encodeFrame(frame));
+              }
+            },
+            onMessage: (handler) => {
+              ws.data.onMessage = handler;
+            },
+            onClose: (handler) => {
+              ws.data.onClose = handler;
+            },
+            get isOpen() {
+              return ws.readyState === WebSocket.OPEN;
+            },
+            get did() {
+              return auth.did;
+            },
+          };
+
+          route.handler(socket);
+          return;
+        }
+
+        ws.close(1011, "Internal error: unexpected route kind");
+      },
+
+      message: (ws, msg) => {
+        // Sync handler: JSON text frames from client (sub/unsub/cursor).
+        if (typeof msg === "string") {
+          try {
+            const parsed = JSON.parse(msg) as ClientMessage;
+            ws.data.onMessage?.(parsed);
+          } catch {
+            // Malformed client message — ignore.
           }
-          ws.close(1000, "Stream ended");
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Stream error";
-          const errType = err instanceof XrpcError ? err.xrpcError : "InternalServerError";
-          ws.send(encodeFrame(errorFrame(errType, msg)));
-          ws.close(1011, msg);
         }
       },
+
       close: (ws) => {
         ws.data.abort.abort();
+        ws.data.onClose?.();
       },
-      message: (_ws, _msg) => {},
     };
+  }
+
+  /** Run a legacy subscription handler (AsyncIterable). */
+  async #runSubscription(
+    ws: import("bun").ServerWebSocket<WsData>,
+    params: QueryParams,
+    auth: AuthCtx,
+    abort: AbortController,
+    route: import("./types.ts").SubscriptionDef,
+  ): Promise<void> {
+    try {
+      const iterable = route.handler(params, auth, abort.signal);
+      for await (const frame of iterable) {
+        if (ws.readyState !== WebSocket.OPEN) break;
+        const result = ws.send(encodeFrame(frame));
+        if (result === -1) break; // send buffer full
+      }
+      ws.close(1000, "Stream ended");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Stream error";
+      const errType = err instanceof XrpcError ? err.xrpcError : "InternalServerError";
+      ws.send(encodeFrame(errorFrame(errType, msg)));
+      ws.close(1011, msg);
+    }
   }
 }
