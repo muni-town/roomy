@@ -1,4 +1,6 @@
 import { XrpcRouter, prodAuthVerifier } from "./xrpc/index.ts";
+import { Router as InvalidationRouter } from "./invalidation/index.ts";
+import { setInvalidationRouter } from "./materialization/registry.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
 import { materializeSpaceHandler } from "./handlers/space.roomy.admin.materializeSpace.ts";
@@ -28,6 +30,15 @@ const DID_DOCUMENT = {
     },
   ],
 };
+
+// ─── Invalidation ───────────────────────────────────────────────────────
+// Singleton router — live events flow through every SpaceMaterializer
+// created by the registry into this router, then out to subscribers
+// (WS handler, server cache, future notification router).
+const invalidationRouter = new InvalidationRouter();
+setInvalidationRouter(invalidationRouter);
+
+// ─── XRPC routes ────────────────────────────────────────────────────────
 
 const router = new XrpcRouter(prodAuthVerifier)
   .procedure("space.roomy.auth.getConnectionTicket", {
@@ -69,6 +80,8 @@ const router = new XrpcRouter(prodAuthVerifier)
   .query("space.roomy.message.getMessage", {
     handler: getMessageHandler,
   });
+
+// ─── Server ─────────────────────────────────────────────────────────────
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": process.env.CORS_ORIGIN ?? "*",

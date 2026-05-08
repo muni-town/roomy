@@ -23,6 +23,22 @@ import type { GetProfilesFn } from "./profiles.ts";
 
 const materializers = new Map<StreamDid, Promise<SpaceMaterializer>>();
 
+/**
+ * Process-wide invalidation router. Set once at startup via
+ * `setInvalidationRouter()`. Forwarded to every SpaceMaterializer
+ * created by the registry.
+ */
+let globalInvalidationRouter: InvalidationRouter | undefined;
+
+/**
+ * Set the process-wide invalidation router. Called once from `index.ts`
+ * at startup. All subsequently created SpaceMaterializers will forward
+ * live events to this router.
+ */
+export function setInvalidationRouter(router: InvalidationRouter): void {
+  globalInvalidationRouter = router;
+}
+
 export interface GetOrCreateOpts {
   /** Override the DB handle (tests). Defaults to the process-wide singleton. */
   db?: Database;
@@ -30,8 +46,12 @@ export interface GetOrCreateOpts {
   getConnectedSpace?: (streamDid: StreamDid) => Promise<ConnectedSpaceLike>;
   /** Override the profile fetcher (tests). Defaults to the service client's `getProfiles`. */
   getProfiles?: GetProfilesFn;
-  /** Invalidation router for real-time signal dispatch. */
-  invalidationRouter?: InvalidationRouter;
+  /**
+   * Override the invalidation router. If omitted, falls back to the
+   * process-wide router set via `setInvalidationRouter()`.
+   * Pass `null` explicitly to disable for a specific materializer (tests).
+   */
+  invalidationRouter?: InvalidationRouter | null;
 }
 
 /**
@@ -51,12 +71,17 @@ export function getOrCreateMaterializer(
   const existing = materializers.get(streamDid);
   if (existing) return existing;
 
+  // Resolve invalidation router: explicit opt > process-wide > undefined.
+  const invalidationRouter = opts.invalidationRouter === null
+    ? undefined
+    : (opts.invalidationRouter ?? globalInvalidationRouter);
+
   const promise = SpaceMaterializer.start({
     streamDid,
     db: opts.db ?? openDb(),
     getConnectedSpace: opts.getConnectedSpace ?? defaultGetConnectedSpace,
     getProfiles: opts.getProfiles ?? defaultGetProfiles,
-    invalidationRouter: opts.invalidationRouter,
+    invalidationRouter,
   }).catch((err) => {
     materializers.delete(streamDid);
     throw err;
@@ -66,7 +91,8 @@ export function getOrCreateMaterializer(
   return promise;
 }
 
-/** Clear cached materializers. Tests only. */
+/** Clear cached materializers and the global router. Tests only. */
 export function _resetMaterializerRegistry(): void {
   materializers.clear();
+  globalInvalidationRouter = undefined;
 }
