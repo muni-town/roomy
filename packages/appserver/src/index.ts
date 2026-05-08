@@ -4,6 +4,14 @@ import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.t
 import { materializeSpaceHandler } from "./handlers/space.roomy.admin.materializeSpace.ts";
 import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
 import { getMembersHandler } from "./handlers/space.roomy.space.getMembers.ts";
+import { getMetadataHandler } from "./handlers/space.roomy.space.getMetadata.ts";
+import { getSpaceThreadsHandler } from "./handlers/space.roomy.space.getThreads.ts";
+import { getRolesHandler } from "./handlers/space.roomy.space.getRoles.ts";
+import { getInvitesHandler } from "./handlers/space.roomy.space.getInvites.ts";
+import { getRoomMetadataHandler } from "./handlers/space.roomy.room.getMetadata.ts";
+import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts";
+import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
+import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const OWN_DID = process.env.APPSERVER_DID ?? "did:web:appserver.roomy.chat";
@@ -36,6 +44,30 @@ const router = new XrpcRouter(prodAuthVerifier)
   })
   .query("space.roomy.space.getMembers", {
     handler: getMembersHandler,
+  })
+  .query("space.roomy.space.getMetadata", {
+    handler: getMetadataHandler,
+  })
+  .query("space.roomy.space.getThreads", {
+    handler: getSpaceThreadsHandler,
+  })
+  .query("space.roomy.space.getRoles", {
+    handler: getRolesHandler,
+  })
+  .query("space.roomy.space.getInvites", {
+    handler: getInvitesHandler,
+  })
+  .query("space.roomy.room.getMetadata", {
+    handler: getRoomMetadataHandler,
+  })
+  .query("space.roomy.room.getThreads", {
+    handler: getRoomThreadsHandler,
+  })
+  .query("space.roomy.room.getMessages", {
+    handler: getMessagesHandler,
+  })
+  .query("space.roomy.message.getMessage", {
+    handler: getMessageHandler,
   });
 
 const corsHeaders = {

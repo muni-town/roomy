@@ -12,6 +12,8 @@ module auth {
     roles: Map(),
     admins: Set(),
     channels: Map(),
+    invites: Set(),
+    bans: Set(),
     result: AuthOk
   }
 
@@ -111,6 +113,8 @@ module auth_types {
     roles: RoleId -> Role,
     admins: Set[UserId],
     channels: RoomId -> Channel,
+    invites: Set[InviteToken],
+    bans: Set[UserId],
     result: LastAuthResult, // was the previous event applied?
   }
 

@@ -15,6 +15,53 @@ const NSID_CONNECT_SPACE = "space.roomy.admin.connectSpace";
 const NSID_MATERIALIZE_SPACE = "space.roomy.admin.materializeSpace";
 const NSID_GET_SPACES = "space.roomy.space.getSpaces";
 const NSID_GET_MEMBERS = "space.roomy.space.getMembers";
+const NSID_GET_SPACE_METADATA = "space.roomy.space.getMetadata";
+const NSID_GET_SPACE_THREADS = "space.roomy.space.getThreads";
+const NSID_GET_ROLES = "space.roomy.space.getRoles";
+const NSID_GET_INVITES = "space.roomy.space.getInvites";
+const NSID_GET_ROOM_METADATA = "space.roomy.room.getMetadata";
+const NSID_GET_ROOM_THREADS = "space.roomy.room.getThreads";
+const NSID_GET_MESSAGES = "space.roomy.room.getMessages";
+const NSID_GET_MESSAGE = "space.roomy.message.getMessage";
+
+function spaceQueryLexicon(id: string) {
+  return {
+    lexicon: 1,
+    id,
+    defs: {
+      main: {
+        type: "query",
+        parameters: {
+          type: "params",
+          required: ["spaceId"],
+          properties: { spaceId: { type: "string" } },
+        },
+        output: { encoding: "application/json", schema: { type: "object" } },
+      },
+    },
+  };
+}
+
+function roomQueryLexicon(
+  id: string,
+  extraProps: Record<string, { type: string }> = {},
+) {
+  return {
+    lexicon: 1,
+    id,
+    defs: {
+      main: {
+        type: "query",
+        parameters: {
+          type: "params",
+          required: ["roomId"],
+          properties: { roomId: { type: "string" }, ...extraProps },
+        },
+        output: { encoding: "application/json", schema: { type: "object" } },
+      },
+    },
+  };
+}
 
 // ── Lexicons ──────────────────────────────────────────────────────────────
 
@@ -67,21 +114,29 @@ const LEXICONS = [
       },
     },
   },
+  spaceQueryLexicon(NSID_GET_MEMBERS),
+  spaceQueryLexicon(NSID_GET_SPACE_METADATA),
+  spaceQueryLexicon(NSID_GET_SPACE_THREADS),
+  spaceQueryLexicon(NSID_GET_ROLES),
+  spaceQueryLexicon(NSID_GET_INVITES),
+  roomQueryLexicon(NSID_GET_ROOM_METADATA),
+  roomQueryLexicon(NSID_GET_ROOM_THREADS),
+  roomQueryLexicon(NSID_GET_MESSAGES, {
+    limit: { type: "string" },
+    cursor: { type: "string" },
+  }),
   {
     lexicon: 1,
-    id: NSID_GET_MEMBERS,
+    id: NSID_GET_MESSAGE,
     defs: {
       main: {
         type: "query",
         parameters: {
           type: "params",
-          required: ["spaceId"],
-          properties: { spaceId: { type: "string" } },
+          required: ["messageId"],
+          properties: { messageId: { type: "string" } },
         },
-        output: {
-          encoding: "application/json",
-          schema: { type: "object" },
-        },
+        output: { encoding: "application/json", schema: { type: "object" } },
       },
     },
   },
@@ -224,7 +279,30 @@ function showAuthenticated(agent: Agent, appserverDid: string) {
     <label for="space-id">Space ID</label>
     <input id="space-id" type="text" placeholder="did:web:..." value="${sessionStorage.getItem("space-id") ?? ""}" />
     <br />
+    <button id="get-space-metadata">Get Metadata</button>
     <button id="get-members">Get Members</button>
+    <button id="get-space-threads">Get Threads</button>
+    <button id="get-roles">Get Roles</button>
+    <button id="get-invites">Get Invites</button>
+
+    <h3>Room queries</h3>
+    <label for="room-id">Room ID</label>
+    <input id="room-id" type="text" placeholder="01..." value="${sessionStorage.getItem("room-id") ?? ""}" />
+    <br />
+    <label for="message-limit">limit</label>
+    <input id="message-limit" type="number" min="1" max="100" value="${sessionStorage.getItem("message-limit") ?? "50"}" style="width:5em" />
+    <label for="message-cursor">cursor</label>
+    <input id="message-cursor" type="text" placeholder="(optional)" value="${sessionStorage.getItem("message-cursor") ?? ""}" />
+    <br />
+    <button id="get-room-metadata">Get Metadata</button>
+    <button id="get-room-threads">Get Threads</button>
+    <button id="get-messages">Get Messages</button>
+
+    <h3>Message query</h3>
+    <label for="message-id">Message ID</label>
+    <input id="message-id" type="text" placeholder="01..." value="${sessionStorage.getItem("message-id") ?? ""}" />
+    <br />
+    <button id="get-message">Get Message</button>
 
     <button id="logout">Logout</button>
     <pre id="result" class="status">Ready</pre>
@@ -237,7 +315,15 @@ function showAuthenticated(agent: Agent, appserverDid: string) {
   $("materialize-space-wait").onclick = () =>
     callMaterializeSpace(agent, appserverDid, true);
   $("get-spaces").onclick = () => callGetSpaces(agent, appserverDid);
-  $("get-members").onclick = () => callGetMembers(agent, appserverDid);
+  $("get-members").onclick = () => callSpaceQuery(agent, appserverDid, NSID_GET_MEMBERS, "Fetching members");
+  $("get-space-metadata").onclick = () => callSpaceQuery(agent, appserverDid, NSID_GET_SPACE_METADATA, "Fetching space metadata");
+  $("get-space-threads").onclick = () => callSpaceQuery(agent, appserverDid, NSID_GET_SPACE_THREADS, "Fetching threads");
+  $("get-roles").onclick = () => callSpaceQuery(agent, appserverDid, NSID_GET_ROLES, "Fetching roles");
+  $("get-invites").onclick = () => callSpaceQuery(agent, appserverDid, NSID_GET_INVITES, "Fetching invites");
+  $("get-room-metadata").onclick = () => callRoomQuery(agent, appserverDid, NSID_GET_ROOM_METADATA, "Fetching room metadata");
+  $("get-room-threads").onclick = () => callRoomQuery(agent, appserverDid, NSID_GET_ROOM_THREADS, "Fetching room threads");
+  $("get-messages").onclick = () => callGetMessages(agent, appserverDid);
+  $("get-message").onclick = () => callGetMessage(agent, appserverDid);
   $("logout").onclick = async () => {
     if (currentSession) {
       await currentSession.signOut();
@@ -288,19 +374,39 @@ function disableButtons(disabled: boolean) {
     "materialize-space-wait",
     "get-spaces",
     "get-members",
+    "get-space-metadata",
+    "get-space-threads",
+    "get-roles",
+    "get-invites",
+    "get-room-metadata",
+    "get-room-threads",
+    "get-messages",
+    "get-message",
   ]) {
     $<HTMLButtonElement>(id).disabled = disabled;
   }
 }
 
-function readSpaceId(): string | null {
-  const value = $<HTMLInputElement>("space-id").value.trim();
+function readPersistedInput(id: string, label: string): string | null {
+  const value = $<HTMLInputElement>(id).value.trim();
   if (!value) {
-    renderResult({ error: "Missing space ID" }, true);
+    renderResult({ error: `Missing ${label}` }, true);
     return null;
   }
-  sessionStorage.setItem("space-id", value);
+  sessionStorage.setItem(id, value);
   return value;
+}
+
+function readSpaceId(): string | null {
+  return readPersistedInput("space-id", "space ID");
+}
+
+function readRoomId(): string | null {
+  return readPersistedInput("room-id", "room ID");
+}
+
+function readMessageId(): string | null {
+  return readPersistedInput("message-id", "message ID");
 }
 
 async function runCall(label: string, fn: () => Promise<unknown>) {
@@ -369,12 +475,59 @@ async function callGetSpaces(agent: Agent, appserverDid: string) {
   });
 }
 
-async function callGetMembers(agent: Agent, appserverDid: string) {
+async function callSpaceQuery(
+  agent: Agent,
+  appserverDid: string,
+  nsid: string,
+  label: string,
+) {
   const spaceId = readSpaceId();
   if (!spaceId) return;
-  await runCall("Fetching members", async () => {
+  await runCall(label, async () => {
     const proxied = makeProxiedAgent(agent, appserverDid);
-    const response = await proxied.call(NSID_GET_MEMBERS, { spaceId });
+    const response = await proxied.call(nsid, { spaceId });
+    return response.data;
+  });
+}
+
+async function callRoomQuery(
+  agent: Agent,
+  appserverDid: string,
+  nsid: string,
+  label: string,
+) {
+  const roomId = readRoomId();
+  if (!roomId) return;
+  await runCall(label, async () => {
+    const proxied = makeProxiedAgent(agent, appserverDid);
+    const response = await proxied.call(nsid, { roomId });
+    return response.data;
+  });
+}
+
+async function callGetMessages(agent: Agent, appserverDid: string) {
+  const roomId = readRoomId();
+  if (!roomId) return;
+  const limit = $<HTMLInputElement>("message-limit").value.trim();
+  const cursor = $<HTMLInputElement>("message-cursor").value.trim();
+  if (limit) sessionStorage.setItem("message-limit", limit);
+  if (cursor) sessionStorage.setItem("message-cursor", cursor);
+  await runCall("Fetching messages", async () => {
+    const proxied = makeProxiedAgent(agent, appserverDid);
+    const params: Record<string, string> = { roomId };
+    if (limit) params.limit = limit;
+    if (cursor) params.cursor = cursor;
+    const response = await proxied.call(NSID_GET_MESSAGES, params);
+    return response.data;
+  });
+}
+
+async function callGetMessage(agent: Agent, appserverDid: string) {
+  const messageId = readMessageId();
+  if (!messageId) return;
+  await runCall("Fetching message", async () => {
+    const proxied = makeProxiedAgent(agent, appserverDid);
+    const response = await proxied.call(NSID_GET_MESSAGE, { messageId });
     return response.data;
   });
 }

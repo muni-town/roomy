@@ -261,6 +261,19 @@ create table if not exists comp_bans (
 ) strict;
 create index if not exists idx_comp_bans_user_did on comp_bans(user_did);
 
+-- Active invite tokens per space. Written by the SDK's CreateInvite/RevokeInvite
+-- materializers. Frontend has no equivalent table today; the worker swallows
+-- per-statement errors there, so this is appserver-only.
+create table if not exists comp_invite (
+  entity text not null references entities(id) on delete cascade,
+  token text not null,
+  created_by_did text not null,
+  event_ulid text not null,
+  created_at integer not null default (unixepoch() * 1000),
+  primary key (entity, token)
+) strict;
+create index if not exists idx_comp_invite_creator on comp_invite(entity, created_by_did);
+
 -- Cache of user DID → personal stream DID, resolved from the user's PDS via
 -- com.atproto.repo.getRecord. The record on the PDS is meant to be stable per
 -- user so we don't TTL these. Appserver-only; no frontend equivalent.
