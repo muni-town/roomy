@@ -1,0 +1,140 @@
+/**
+ * Types for the invalidation system.
+ *
+ * An InvalidationSignal is emitted whenever a Leaf event changes data that
+ * one or more XRPC query endpoints depend on. Signals are consumed by:
+ *
+ *   1. The WS sync handler → #invalidate / #messageDiff frames to clients
+ *   2. The server-side response cache → evict stale entries
+ *   3. (future) Notification router → push alerts
+ *
+ * The mapping from event → signals is pure and stateless (lives in
+ * `inferSignals`). The `InvalidationRouter` wraps it in a typed pub/sub bus.
+ */
+
+import type { EventType, StreamDid, UserDid, Ulid } from "@roomy-space/sdk";
+
+// ─── NSIDs for XRPC query endpoints ─────────────────────────────────────
+
+/** The set of XRPC query NSIDs that the invalidation system can target. */
+export type QueryNsid =
+  | "space.roomy.space.getSpaces"
+  | "space.roomy.space.getMetadata"
+  | "space.roomy.space.getThreads"
+  | "space.roomy.space.getRoles"
+  | "space.roomy.space.getMembers"
+  | "space.roomy.space.getInvites"
+  | "space.roomy.room.getMetadata"
+  | "space.roomy.room.getMessages"
+  | "space.roomy.room.getThreads"
+  | "space.roomy.message.getMessage";
+
+// ─── Signals ────────────────────────────────────────────────────────────
+
+/** A query endpoint whose cached data is now stale. */
+export interface QueryInvalidation {
+  /** The NSID of the affected query. */
+  nsid: QueryNsid;
+  /** Query params that identify the stale cache entry. */
+  params: Readonly<Record<string, string>>;
+  /**
+   * If set, this invalidation only matters for a specific user's cache.
+   * Used for caller-scoped fields (isAdmin, canRead, sidebar visibility).
+   * WS handler uses this to filter which connections receive the frame.
+   * Server cache uses this to evict only per-user entries.
+   */
+  affectedUser?: UserDid;
+}
+
+/** A message-level add/update/remove within a room. */
+export interface MessageDiff {
+  roomId: Ulid;
+  /** Monotonically increasing sequence number for cursor replay. */
+  seq: number;
+  ops: MessageDiffOp[];
+}
+
+export type MessageDiffOp =
+  | { op: "add"; key: Ulid; message: MessageSnapshot }
+  | { op: "update"; key: Ulid; message: MessageSnapshot }
+  | { op: "remove"; key: Ulid };
+
+/**
+ * Enough message data to apply a diff without re-fetching.
+ * Mirrors the `#messageDiff` body from the XRPC spec.
+ *
+ * For the initial implementation, this is a lightweight snapshot — just enough
+ * for the WS frame. The server-side cache may choose to store fuller objects.
+ */
+export interface MessageSnapshot {
+  id: Ulid;
+  content: string;
+  authorDid: UserDid;
+  authorName: string;
+  authorAvatar: string | null;
+  timestamp: string;
+  replyTo: Ulid | null;
+  reactions: ReadonlyArray<{ emoji: string; dids: UserDid[] }>;
+}
+
+/** The union of what the invalidation system can emit. */
+export type InvalidationEvent =
+  | { kind: "queryInvalidation"; signal: QueryInvalidation }
+  | { kind: "messageDiff"; signal: MessageDiff };
+
+// ─── Router ─────────────────────────────────────────────────────────────
+
+export type InvalidationListener = (events: readonly InvalidationEvent[]) => void;
+
+/**
+ * InvalidationRouter is a typed pub/sub bus.
+ *
+ * SpaceMaterializer calls `onEventsApplied` after each batch. The router
+ * runs `inferSignals` for each event and broadcasts the resulting signals
+ * to all registered listeners.
+ *
+ * Listeners are expected to be lightweight (WS handler: enqueue frame;
+ * cache: mark entry stale). Heavy work (SQL, network I/O) should be
+ * deferred or batched by the listener.
+ */
+export interface InvalidationRouter {
+  /**
+   * Called by SpaceMaterializer after events have been committed to SQLite.
+   * During backfill (`isBackfill: true`), signals are suppressed — there
+   * are no active subscribers who care about historical data yet.
+   */
+  onEventsApplied(
+    streamDid: StreamDid,
+    events: readonly AppliedEvent[],
+    meta: { isBackfill: boolean },
+  ): void;
+
+  /** Register a listener. Returns an unsubscribe function. */
+  subscribe(listener: InvalidationListener): () => void;
+}
+
+/**
+ * A decoded event that has been successfully materialised to SQLite.
+ * Carries enough context to infer invalidation signals without hitting
+ * the database.
+ */
+export interface AppliedEvent {
+  /** The event's $type. */
+  type: EventType;
+  /** The stream this event belongs to (space DID or personal stream DID). */
+  streamDid: StreamDid;
+  /** The authenticated user who created this event. */
+  user: UserDid;
+  /** The event's ULID. */
+  id: Ulid;
+  /**
+   * The room the event was sent in, if applicable.
+   * Present for message, reaction, link events; absent for space-level events.
+   */
+  roomId?: Ulid;
+  /**
+   * Additional event-specific fields needed for signal inference.
+   * Populated by the caller based on the event $type.
+   */
+  details?: Readonly<Record<string, unknown>>;
+}
