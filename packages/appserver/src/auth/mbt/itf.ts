@@ -24,10 +24,17 @@ export type Decoded =
   | number
   | bigint
   | boolean
-  | Decoded[]
-  | Set<Decoded>
-  | Variant<string, Decoded>
-  | { [key: string]: Decoded };
+  | DecodedArray
+  | DecodedSet
+  | DecodedVariant
+  | DecodedRecord;
+
+export interface DecodedArray extends Array<Decoded> {}
+export interface DecodedSet extends Set<Decoded> {}
+export interface DecodedVariant extends Variant<string, Decoded> {}
+export interface DecodedRecord {
+  [key: string]: Decoded;
+}
 
 /** Map entries with possibly non-string keys. Tuple-keyed maps stay as pairs. */
 export type DecodedMap<K = Decoded, V = Decoded> = [K, V][];
