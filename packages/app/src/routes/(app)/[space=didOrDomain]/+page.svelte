@@ -9,17 +9,21 @@
   const app = getAppState();
   import { navigate } from "$lib/utils.svelte";
   import InlineMono from "$lib/components/helper/InlineMono.svelte";
+  import { goto } from "$app/navigation";
 
   $effect(() => {
     if (!app.joinedSpace) return;
     const firstCategory = app.categories?.[0];
     if (firstCategory?.type === "space.roomy.category") {
       const firstChild = firstCategory.children?.[0]?.id;
-      if (firstChild)
+      if (firstChild) {
         navigate({
           space: app.joinedSpace.handle || app.joinedSpace.id,
           channel: firstChild,
         });
+      } else {
+        goto(`/${page.params.space}/index`)
+      }
     }
   });
 </script>
