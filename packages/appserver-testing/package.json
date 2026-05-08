@@ -6,6 +6,7 @@
     "dev": "vite --port 5199 --host 127.0.0.1"
   },
   "dependencies": {
+    "@atcute/cbor": "^2.2.8",
     "@atproto/api": "^0.14.22",
     "@atproto/oauth-client-browser": "^0.3.39"
   },

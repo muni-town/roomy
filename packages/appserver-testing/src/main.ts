@@ -4,6 +4,7 @@ import {
   buildLoopbackClientId,
 } from "@atproto/oauth-client-browser";
 import { Agent } from "@atproto/api";
+import { decodeFirst } from "@atcute/cbor";
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -304,6 +305,31 @@ function showAuthenticated(agent: Agent, appserverDid: string) {
     <br />
     <button id="get-message">Get Message</button>
 
+    <h2>WebSocket Sync</h2>
+    <p class="subtitle">Connects directly to the appserver (not proxied through PDS).</p>
+    <label for="ws-url">Appserver WS URL</label>
+    <input id="ws-url" type="text" placeholder="ws://localhost:8080" value="${sessionStorage.getItem("ws-url") ?? "ws://localhost:8080"}" />
+    <br />
+    <button id="ws-connect" class="primary">Connect</button>
+    <button id="ws-disconnect" disabled>Disconnect</button>
+    <span id="ws-status" class="status">Disconnected</span>
+
+    <h3>Subscriptions</h3>
+    <label for="ws-sub-topic">Topic</label>
+    <select id="ws-sub-topic">
+      <option value="space">space</option>
+      <option value="room">room</option>
+    </select>
+    <label for="ws-sub-id">ID</label>
+    <input id="ws-sub-id" type="text" placeholder="space DID or room ULID" value="${sessionStorage.getItem("ws-sub-id") ?? ""}" />
+    <br />
+    <button id="ws-sub">Subscribe</button>
+    <button id="ws-unsub">Unsubscribe</button>
+    <button id="ws-cursor">Send Cursor (seq=0)</button>
+    <br />
+    <button id="ws-clear-log">Clear Log</button>
+    <div id="ws-log" style="background:#f4f4f5;padding:0.75rem;border-radius:4px;overflow-y:auto;max-height:300px;font-size:0.8rem;font-family:monospace;white-space:pre-wrap;margin-top:0.5rem">No events yet.</div>
+
     <button id="logout">Logout</button>
     <pre id="result" class="status">Ready</pre>
   `;
@@ -324,6 +350,7 @@ function showAuthenticated(agent: Agent, appserverDid: string) {
   $("get-room-threads").onclick = () => callRoomQuery(agent, appserverDid, NSID_GET_ROOM_THREADS, "Fetching room threads");
   $("get-messages").onclick = () => callGetMessages(agent, appserverDid);
   $("get-message").onclick = () => callGetMessage(agent, appserverDid);
+  wireSync(agent, appserverDid);
   $("logout").onclick = async () => {
     if (currentSession) {
       await currentSession.signOut();
@@ -382,6 +409,7 @@ function disableButtons(disabled: boolean) {
     "get-room-threads",
     "get-messages",
     "get-message",
+    "ws-connect",
   ]) {
     $<HTMLButtonElement>(id).disabled = disabled;
   }
@@ -530,6 +558,171 @@ async function callGetMessage(agent: Agent, appserverDid: string) {
     const response = await proxied.call(NSID_GET_MESSAGE, { messageId });
     return response.data;
   });
+}
+
+// ── WebSocket Sync ───────────────────────────────────────────────────────
+
+let syncWs: WebSocket | null = null;
+let lastSeq = 0;
+
+/**
+ * ATProto wire format: two consecutive CBOR values in one binary frame.
+ * `decodeFirst` returns [value, remainder] so we can split them cleanly.
+ */
+function decodeCborFrame(data: ArrayBuffer): { header: Record<string, unknown>; body: Record<string, unknown> } {
+  const bytes = new Uint8Array(data);
+  const [header, remainder] = decodeFirst(bytes);
+  const body = remainder.byteLength > 0 ? decodeFirst(remainder)[0] as Record<string, unknown> : {};
+  return { header: header as Record<string, unknown>, body };
+}
+
+function appendWsLog(text: string, cls?: string) {
+  const log = $("ws-log")!;
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function wireSync(agent: Agent, appserverDid: string) {
+  $("ws-connect").onclick = () => connectSync(agent, appserverDid);
+  $("ws-disconnect").onclick = () => disconnectSync();
+  $("ws-sub").onclick = () => sendSub();
+  $("ws-unsub").onclick = () => sendUnsub();
+  $("ws-cursor").onclick = () => sendCursor();
+  $("ws-clear-log").onclick = () => {
+    $("ws-log")!.innerHTML = "Log cleared.";
+  };
+}
+
+async function connectSync(agent: Agent, appserverDid: string) {
+  const wsUrl = $("ws-url")!.querySelector("input")?.value?.trim()
+    ?? $<HTMLInputElement>("ws-url").value.trim();
+  if (!wsUrl) {
+    renderResult({ error: "Missing WS URL" }, true);
+    return;
+  }
+  sessionStorage.setItem("ws-url", wsUrl);
+
+  // Get a ticket first.
+  appendWsLog("Requesting ticket…");
+  let ticket: string;
+  try {
+    const proxied = makeProxiedAgent(agent, appserverDid);
+    const response = await proxied.call(NSID_TICKET);
+    ticket = (response.data as any).ticket;
+    appendWsLog(`Got ticket: ${ticket.slice(0, 12)}…`);
+  } catch (err: any) {
+    appendWsLog(`Ticket failed: ${err?.message ?? err}`, "error");
+    return;
+  }
+
+  const url = `${wsUrl}/xrpc/space.roomy.sync.subscribe?ticket=${encodeURIComponent(ticket)}`;
+  appendWsLog(`Connecting to ${url.split("?")[0]}…`);
+
+  const ws = new WebSocket(url);
+  ws.binaryType = "arraybuffer";
+  syncWs = ws;
+
+  ws.onopen = () => {
+    $("ws-status")!.textContent = "Connected";
+    $("ws-status")!.className = "status";
+    $<HTMLButtonElement>("ws-connect").disabled = true;
+    $<HTMLButtonElement>("ws-disconnect").disabled = false;
+    appendWsLog("Connected.");
+  };
+
+  ws.onmessage = (event) => {
+    if (typeof event.data === "string") {
+      appendWsLog(`[text] ${event.data}`);
+      return;
+    }
+
+    // Binary CBOR frame.
+    try {
+      const { header, body } = decodeCborFrame(event.data as ArrayBuffer);
+      const t = header["t"] as string;
+      const op = header["op"] as number;
+
+      if (t === "#messageDiff") {
+        const roomId = body["roomId"] as string;
+        const seq = body["seq"] as number;
+        if (seq > lastSeq) lastSeq = seq;
+        const ops = body["ops"] as Array<Record<string, unknown>>;
+        const summary = ops.map((o) => `${o.op} ${o.key}`).join(", ");
+        appendWsLog(`[${t}] room=${roomId.slice(0, 8)}… seq=${seq} ops: ${summary}`);
+      } else if (t === "#invalidate") {
+        const nsid = body["nsid"] as string;
+        const params = body["params"] as Record<string, string>;
+        appendWsLog(`[${t}] ${nsid} ${JSON.stringify(params)}`);
+      } else if (t === "#error") {
+        appendWsLog(`[ERROR] ${body["error"]}: ${body["message"]}`, "error");
+      } else {
+        appendWsLog(`[unknown t=${t} op=${op}] ${JSON.stringify(body)}`);
+      }
+    } catch (err) {
+      appendWsLog(`[decode error] ${err}`, "error");
+    }
+  };
+
+  ws.onclose = (event) => {
+    $("ws-status")!.textContent = `Disconnected (code=${event.code})`;
+    $("ws-status")!.className = "error";
+    $<HTMLButtonElement>("ws-connect").disabled = false;
+    $<HTMLButtonElement>("ws-disconnect").disabled = true;
+    syncWs = null;
+    appendWsLog(`Connection closed: code=${event.code} reason=${event.reason}`);
+  };
+
+  ws.onerror = () => {
+    appendWsLog("WebSocket error (see console).", "error");
+  };
+}
+
+function disconnectSync() {
+  syncWs?.close();
+  syncWs = null;
+}
+
+function sendSub() {
+  if (!syncWs || syncWs.readyState !== WebSocket.OPEN) {
+    appendWsLog("Not connected.", "error");
+    return;
+  }
+  const topic = $<HTMLSelectElement>("ws-sub-topic").value as "space" | "room";
+  const id = $<HTMLInputElement>("ws-sub-id").value.trim();
+  if (!id) {
+    appendWsLog("Missing ID.", "error");
+    return;
+  }
+  sessionStorage.setItem("ws-sub-id", id);
+  const msg = JSON.stringify({ type: "sub", topic, id });
+  syncWs.send(msg);
+  appendWsLog(`→ sub ${topic}:${id}`);
+}
+
+function sendUnsub() {
+  if (!syncWs || syncWs.readyState !== WebSocket.OPEN) {
+    appendWsLog("Not connected.", "error");
+    return;
+  }
+  const topic = $<HTMLSelectElement>("ws-sub-topic").value as "space" | "room";
+  const id = $<HTMLInputElement>("ws-sub-id").value.trim();
+  if (!id) return;
+  const msg = JSON.stringify({ type: "unsub", topic, id });
+  syncWs.send(msg);
+  appendWsLog(`→ unsub ${topic}:${id}`);
+}
+
+function sendCursor() {
+  if (!syncWs || syncWs.readyState !== WebSocket.OPEN) {
+    appendWsLog("Not connected.", "error");
+    return;
+  }
+  const msg = JSON.stringify({ type: "cursor", seq: lastSeq });
+  syncWs.send(msg);
+  appendWsLog(`→ cursor seq=${lastSeq}`);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────

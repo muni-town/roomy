@@ -428,6 +428,9 @@ importers:
 
   packages/appserver-testing:
     dependencies:
+      '@atcute/cbor':
+        specifier: ^2.2.8
+        version: 2.2.8
       '@atproto/api':
         specifier: ^0.14.22
         version: 0.14.22
