@@ -21,12 +21,13 @@ module auth {
   pure val permissions = Set(None, Read, ReadWrite)
   pure val roomKinds = Set(ChannelKind, ThreadKind)
   pure val invites = Set(NoInvite, HasInvite("inv1"), HasInvite("inv2"))
+  pure val boolUpdates = Set(LeaveBool, SetBool(true), SetBool(false))
 
   var state: AuthState
   var oracleSnapshot: OracleSnapshot
 
   pure val initialState: AuthState = {
-    allowPublicJoin: AllowPublicJoin,
+    allowPublicJoin: { publicJoin: true, allowMemberInvites: false },
     roles: Map(),
     admins: Set(),
     rooms: Map(),
@@ -76,6 +77,7 @@ module auth {
     createInviteAny,
     revokeInviteAny,
     createRoomLinkAny,
+    updateSpaceInfoAny,
   }
 
   // ── State-derived helper sets ─────────────────────────────────────────
@@ -231,6 +233,14 @@ module auth {
     applyEvent(state.createRoomLink(
       { fromRoomId: fromRoom, toRoomId: toRoom }, { userId: sender }))
 
+  action updateSpaceInfoAny =
+    nondet sender = state.admins.oneOf()
+    nondet pubJoin = boolUpdates.oneOf()
+    nondet memInvites = boolUpdates.oneOf()
+    applyEvent(state.updateSpaceInfo(
+      { allowPublicJoin: pubJoin, allowMemberInvites: memInvites },
+      { userId: sender }))
+
   // --- Invariants ---
   // Check with: quint run auth.qnt --invariant=<name>
   //         or: quint verify auth.qnt --invariant=<name>
@@ -297,11 +307,7 @@ module events {
     invite: MaybeInvite
   }
 
-  pure def allowsPublicJoin(c: PublicJoinConfig): bool =
-    match (c) {
-      | AllowPublicJoin => true
-      | InviteOnly => false
-    }
+  pure def allowsPublicJoin(c: PublicJoinConfig): bool = c.publicJoin
 
   pure def joinSpace(s: AuthState, e: JoinSpace, ctx: EventContext): AuthState =
     if (s.bans.contains(ctx.userId)) s.throw()
@@ -499,8 +505,37 @@ module events {
     token: InviteToken
   }
 
-  pure def createInvite(s: AuthState, e: CreateInvite, ctx: EventContext): AuthState =
+  // Mirror of space.roomy.space.updateSpaceInfo.v0. Each field is optional —
+  // LeaveBool means "don't change", SetBool(b) means "set to b".
+  type UpdateSpaceInfo = {
+    allowPublicJoin: BoolUpdate,
+    allowMemberInvites: BoolUpdate,
+  }
+
+  pure def applyBoolUpdate(current: bool, u: BoolUpdate): bool =
+    match u {
+      | LeaveBool => current
+      | SetBool(b) => b
+    }
+
+  pure def updateSpaceInfo(s: AuthState, e: UpdateSpaceInfo, ctx: EventContext): AuthState =
     if (not (s.isAdmin(ctx))) s.throw()
+    else
+      val cfg = s.allowPublicJoin
+      val nextCfg: PublicJoinConfig = {
+        publicJoin: applyBoolUpdate(cfg.publicJoin, e.allowPublicJoin),
+        allowMemberInvites: applyBoolUpdate(cfg.allowMemberInvites, e.allowMemberInvites),
+      }
+      ok(s.with("allowPublicJoin", nextCfg))
+
+  // Admins can always create invites. Members can too iff allowMemberInvites
+  // is set on the space's PublicJoinConfig.
+  pure def canCreateInvite(s: AuthState, ctx: EventContext): bool =
+    s.isAdmin(ctx)
+      or (s.allowPublicJoin.allowMemberInvites and s.members.contains(ctx.userId))
+
+  pure def createInvite(s: AuthState, e: CreateInvite, ctx: EventContext): AuthState =
+    if (not (s.canCreateInvite(ctx))) s.throw()
     else if (s.invites.contains(e.token)) s.throw()
     else ok(s.with("invites", s.invites.union(Set(e.token))))
 
@@ -739,9 +774,20 @@ module auth_types {
     | Read
     | ReadWrite
 
-  type PublicJoinConfig = 
-    | AllowPublicJoin
-    | InviteOnly(Set[InviteToken])
+  // Space-level join/invite config. `publicJoin=true` lets anyone join without
+  // an invite. `allowMemberInvites=true` lets members (not just admins) issue
+  // invites. The fields are independent — public spaces can still allow members
+  // to share invite links, even though they're not strictly required.
+  type PublicJoinConfig = {
+    publicJoin: bool,
+    allowMemberInvites: bool,
+  }
+
+  // Optional bool field on UpdateSpaceInfo. Mirrors `boolean | null` (with
+  // `null`/missing = LeaveBool) in space.roomy.space.updateSpaceInfo.v0.
+  type BoolUpdate =
+    | LeaveBool
+    | SetBool(bool)
   
   type MaybeInvite = HasInvite(InviteToken) | NoInvite
 

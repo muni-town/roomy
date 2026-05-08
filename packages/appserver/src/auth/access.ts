@@ -95,6 +95,19 @@ export function spaceAccess(
   };
 }
 
+/**
+ * Whether the space allows public (no-invite) joining. NULL in the DB means
+ * unset; per schema docs that defaults to "open" (true).
+ */
+function allowsPublicJoin(db: Database, spaceId: string): boolean {
+  const row = db
+    .query<{ v: number }, [string]>(
+      "select coalesce(allow_public_join, 1) as v from comp_space where entity = ?",
+    )
+    .get(spaceId);
+  return row === null ? true : row.v === 1;
+}
+
 // ── Room access ───────────────────────────────────────────────────────────
 
 interface RoomRow {
@@ -272,15 +285,16 @@ export function roomAccess(
   const defaultGrantsRead = row.defaultAccess !== "none";
   const defaultGrantsWrite = row.defaultAccess === "readwrite";
 
-  // Writing always requires membership for non-admins, in any space config.
-  // (See specCanWrite in specs/auth.qnt.) TODO: also gate canRead on
-  // membership when the space is invite-only — schema doesn't track join
-  // config yet.
+  // Space-level gates: invite-only spaces require membership for read; all
+  // spaces require membership for write (non-admins). See specCanRead /
+  // specCanWrite in specs/auth.qnt.
   const member = isMember(db, spaceId, did);
+  const publicJoin = allowsPublicJoin(db, spaceId);
+  const passesReadGate = publicJoin || member;
 
   return {
     exists: true,
-    canRead: defaultGrantsRead || grant.canRead,
+    canRead: passesReadGate && (defaultGrantsRead || grant.canRead),
     canWrite: member && (defaultGrantsWrite || grant.canWrite),
     isAdmin: false,
     defaultAccess: row.defaultAccess,

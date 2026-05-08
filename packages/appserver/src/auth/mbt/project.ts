@@ -36,12 +36,19 @@ export function project(
 ): void {
   const spaceId = opts.spaceId ?? SPACE_ID;
 
-  // 1. Space entity.
+  // 1. Space entity + join config.
   db.run("insert into entities (id, stream_id) values (?, ?)", [
     spaceId,
     spaceId,
   ]);
-  db.run("insert into comp_space (entity) values (?)", [spaceId]);
+  db.run(
+    "insert into comp_space (entity, allow_public_join, allow_member_invites) values (?, ?, ?)",
+    [
+      spaceId,
+      spec.allowPublicJoin.publicJoin ? 1 : 0,
+      spec.allowPublicJoin.allowMemberInvites ? 1 : 0,
+    ],
+  );
 
   // 1a. User entities. `edges` has FK on both head and tail → each did
   //     referenced by member/admin/role edges must have an entity row.

@@ -23,11 +23,10 @@ export type Permission =
 
 export type PermissionTag = Permission["tag"];
 
-export type PublicJoinConfig =
-  | Variant<"AllowPublicJoin", []>
-  // The spec models invite-only as carrying its own token set, but no event
-  // populates it; the trace value will be an empty/default payload.
-  | Variant<"InviteOnly", unknown>;
+export interface PublicJoinConfig {
+  publicJoin: boolean;
+  allowMemberInvites: boolean;
+}
 
 export type LastAuthResult =
   | Variant<"AuthOk", []>
@@ -137,5 +136,5 @@ export function parentOf(r: Room): RoomId | null {
 }
 
 export function isInviteOnly(c: PublicJoinConfig): boolean {
-  return c.tag === "InviteOnly";
+  return !c.publicJoin;
 }
