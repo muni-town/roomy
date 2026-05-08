@@ -645,16 +645,29 @@ module events {
     parentChannel: MaybeParent,
   }
 
-  pure def specRoomAccess(s: AuthState, roomId: RoomId, userId: UserId): SpecRoomAccess = {
-    exists: s.specRoomExists(roomId),
-    canRead: s.specCanRead(roomId, userId),
-    canWrite: s.specCanWrite(roomId, userId),
-    // Impl returns isAdmin=false in the banned branch — mirror that.
-    isAdmin: s.admins.contains(userId) and not (s.bans.contains(userId)),
-    isBanned: s.bans.contains(userId),
-    defaultAccess: s.specEffectiveDefaultAccess(roomId),
-    parentChannel: s.specParentChannel(roomId),
-  }
+  // Impl forces all fields to false/defaults when the room doesn't exist
+  // (defensive early return in access.ts — no spaceId is available without
+  // a known room). Mirror that here so MBT parity holds. Within the existing
+  // branch, banned also suppresses isAdmin.
+  pure def specRoomAccess(s: AuthState, roomId: RoomId, userId: UserId): SpecRoomAccess =
+    if (not (s.specRoomExists(roomId))) {
+      exists: false,
+      canRead: false,
+      canWrite: false,
+      isAdmin: false,
+      isBanned: false,
+      defaultAccess: ReadWrite,
+      parentChannel: NoParent,
+    }
+    else {
+      exists: true,
+      canRead: s.specCanRead(roomId, userId),
+      canWrite: s.specCanWrite(roomId, userId),
+      isAdmin: s.admins.contains(userId) and not (s.bans.contains(userId)),
+      isBanned: s.bans.contains(userId),
+      defaultAccess: s.specEffectiveDefaultAccess(roomId),
+      parentChannel: s.specParentChannel(roomId),
+    }
 
   type SpecSpaceAccess = {
     isMember: bool,
