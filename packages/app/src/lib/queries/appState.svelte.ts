@@ -25,6 +25,7 @@ type SpaceStatus =
 export class AppState {
   // ═══════════ Spaces ═══════════
   spaces = $state<SpaceMeta[]>([]);
+  leftSpaces = $state<SpaceMeta[]>([]);
   spacesLoading = $state(true);
 
   // ═══════════ Current Navigation ═══════════
@@ -40,8 +41,14 @@ export class AppState {
 
   // ═══════════ Private: Spaces ═══════════
   #spacesQuery: LiveQuery<SpaceMeta>;
+  #leftSpacesQuery: LiveQuery<SpaceMeta>;
   #canWriteQuery: LiveQuery<{ can_write: number }>;
   #handlesForSpace = new SvelteMap<StreamDid, Handle | undefined>();
+
+  /** Cache for left-space metadata fetched on-demand from the Leaf server. */
+  #leftSpaceMetadata = new SvelteMap<StreamDid, { name?: string; avatar?: string }>();
+  /** Tracks which left-space DIDs have already been fetched to avoid re-fetching. */
+  #leftSpaceMetadataFetched = new Set<StreamDid>();
 
   // ═══════════ Private: Current space resolution ═══════════
   #resolvedSpaceIds = new SvelteMap<
@@ -215,6 +222,30 @@ export class AppState {
       (row) => JSON.parse(row.json),
     );
 
+    // ─── Left spaces query ─────────────────────────────────────────────────
+    this.#leftSpacesQuery = new LiveQuery(
+      () => sql`-- left-spaces
+        select json_object(
+            'id', cs.entity,
+            'name', ci.name,
+            'avatar', ci.avatar,
+            'description', ci.description,
+            'permissions', (
+              select json_group_array(
+                json_array(cu.did, json_extract(e.payload, '$.can')))
+              from edges e
+              join comp_user cu on cu.did = e.tail
+              where e.head = cs.entity and e.label = 'member'
+          )) as json
+        from comp_space cs
+        join entities e on e.id = cs.entity
+        left join comp_info ci on cs.entity = ci.entity
+        where e.stream_id = ${getPersonalSpaceId()}
+          and hidden = 1
+      `,
+      (row) => JSON.parse(row.json),
+    );
+
     // ─── Handle resolution ─────────────────────────────────────────────────
     $effect(() => {
       if (
@@ -255,6 +286,51 @@ export class AppState {
 
       this.spaces = list;
       this.spacesLoading = false;
+    });
+
+    // ─── Hydrate left spaces list ──────────────────────────────────────────
+    $effect(() => {
+      if (
+        peerStatus.authState?.state !== "authenticated" ||
+        peerStatus.roomyState?.state !== "connected" ||
+        this.#leftSpacesQuery.result === undefined
+      )
+        return;
+
+      const rows = this.#leftSpacesQuery.result.filter(
+        (r) => r.id !== getPersonalSpaceId(),
+      );
+
+      // Kick off on-demand metadata fetch for left spaces missing name/avatar.
+      const needsFetch = rows.filter(
+        (r) =>
+          !this.#leftSpaceMetadataFetched.has(r.id) &&
+          (!r.name || !r.avatar),
+      );
+      if (needsFetch.length > 0) {
+        needsFetch.forEach(({ id }) => {
+          this.#leftSpaceMetadataFetched.add(id);
+          peer.getSpaceInfo(id).then((info) => {
+            if (info) {
+              this.#leftSpaceMetadata.set(id, {
+                name: info.name,
+                avatar: info.avatar,
+              });
+            }
+          });
+        });
+      }
+
+      this.leftSpaces = rows.map((spaceRow) => {
+        const meta = this.#leftSpaceMetadata.get(spaceRow.id);
+        return {
+          ...spaceRow,
+          name: spaceRow.name || meta?.name,
+          avatar: spaceRow.avatar || meta?.avatar,
+          handle: this.#handlesForSpace.get(spaceRow.id),
+          backfill_status: peerStatus.spaces?.[spaceRow.id] || "error",
+        };
+      });
     });
 
     // ─── Current space (from page.params.space) ────────────────────────────
