@@ -47,6 +47,7 @@ Merging sidebar into `space.getMetadata` and linked rooms into `room.getMetadata
 | NSID | Description |
 |------|-------------|
 | `space.roomy.auth.getConnectionTicket` | Obtain WS pre-auth ticket |
+| `space.roomy.room.updateSeen` | Mark messages in a room as read |
 
 ### WebSocket Subscription (single connection)
 
@@ -54,7 +55,7 @@ Merging sidebar into `space.getMetadata` and linked rooms into `room.getMetadata
 |------|-------------|
 | `space.roomy.sync.subscribe` | Multiplexed real-time sync: message diffs + invalidation signals |
 
-**Total: 10 queries, 1 procedure, 1 subscription = 12 XRPC methods.**
+**Total: 10 queries, 2 procedures, 1 subscription = 13 XRPC methods.**
 
 Eliminated from initial scope:
 - `space.roomy.space.getSidebar` — merged into `getMetadata`
@@ -91,11 +92,109 @@ The appserver mirrors the authorization model already implemented in the SDK (`p
    | `getMetadata` (room) | Has read access to the room (admin OR default_access ≠ none OR matching role grant) |
    | `getMessages` / `getThreads` (room) / `getMessage` | Has read access to the room |
    | `getConnectionTicket` | Authenticated |
+   | `updateSeen` | Has read access to the room (admin OR default_access ≠ none OR matching role grant) |
    | `sync.subscribe` topics | Per-topic: must have read access to the room/space the topic refers to |
 
    Endpoints that fail authorization return XRPC `AuthRequired` (HTTP 401) for missing identity or `Forbidden` (HTTP 403) for insufficient permissions.
 
 4. **Caller-scoped fields.** Several response objects include caller-derived capability fields (`isAdmin`, `canRead`, `canWrite`). These are computed per-request from the caller's DID and are not cacheable across users. The `nsid + params` query key already isolates caches per browser session.
+
+---
+
+## HTTP Procedure Endpoints
+
+All HTTP procedures are authenticated via PDS proxy with inter-service JWT (see `authentication.md`).
+
+### `space.roomy.room.updateSeen`
+
+Notify the appserver that the caller has read messages in a room up to a given message. The appserver is the **source of truth** for read positions — this replaces the previous flow where clients sent `space.roomy.state.markRead.v0` state events to the Leaf server.
+
+**Background:** In the Leaf/SDK model, the space module's `stateMaterializer` handled read receipts by storing `(user_did, room_id, last_read)` in a Leaf-side `state.reads` table, where `last_read` was set to the room's integer `message_count` at the time of the event. Unread count was derived as `message_count - last_read`. This approach required the appserver to actively poll Leaf for state — an impractical data access pattern. Moving read-position ownership to the appserver eliminates this polling requirement.
+
+**Authorization:** Caller must have read access to the room (same gate as `room.getMetadata`): admin, or `default_access ≠ none`, or a matching role grant. Returns `Forbidden` (403) if the caller has no read access.
+
+**Input:**
+
+```typescript
+{
+  roomId: string;              // required — the room to mark as seen
+  seenUpTo?: string;           // optional — message entity ID (ULID) to use as
+                               // the high-water mark. Omit to mark all current
+                               // messages as seen.
+}
+```
+
+**Response:** `200 OK` (empty body)
+
+**Behavior:**
+1. Verify caller has read access to the room → 403 if not
+2. Resolve the read watermark and compute remaining unread:
+   - If `seenUpTo` is provided: look up the `sort_idx` for that message entity. Returns 400 if the message doesn't exist or isn't in this room. Remaining `unread_count = (SELECT COUNT(*) FROM entities WHERE room = ? AND sort_idx > ?)` — one-time computation at write time.
+   - If `seenUpTo` is omitted: `seen_up_to = MAX(sort_idx)` for the room, `unread_count = 0` — marks everything as read.
+3. Upsert into the `read_positions` table:
+   ```sql
+   insert into read_positions (user_did, room_id, seen_up_to, unread_count, updated_at)
+   values (?, ?, ?, ?, unixepoch() * 1000)
+   on conflict(user_did, room_id) do update set
+     seen_up_to = excluded.seen_up_to,
+     unread_count = excluded.unread_count,
+     updated_at = excluded.updated_at;
+   ```
+4. Push `#invalidate` signals scoped to the caller:
+   - `space.roomy.room.getMetadata` for this room
+   - `space.roomy.space.getMetadata` for the room's parent space
+   - `space.roomy.space.getSpaces` (total unread counts change)
+
+**New database table:**
+
+```sql
+create table if not exists read_positions (
+  user_did    text not null,
+  room_id     text not null,
+  seen_up_to  text not null,   -- sort_idx of the last-read message entity
+  unread_count integer not null default 0,
+  updated_at  integer not null default (unixepoch() * 1000),
+  primary key (user_did, room_id)
+) strict;
+```
+
+This table **replaces** `comp_last_read` (which was per-room, not per-user). The `comp_last_read` table can be dropped once `read_positions` is live.
+
+**Write-time aggregation (read-heavy optimization):**
+
+Roomy is read-heavy — `getSpaces`, `getMetadata`, etc. are called far more often than messages are sent. Unread counts must be pre-computed on writes, not computed on reads. This mirrors the SDK's approach where the space module's materializer increments a counter on each `createMessage`.
+
+1. **On `createMessage` materialization** (in `applyBundle.ts`): instead of incrementing the old per-room `comp_last_read.unread_count`, increment `read_positions.unread_count` for every user who has a row for this room:
+
+   ```sql
+   update read_positions
+     set unread_count = unread_count + 1,
+         updated_at = (unixepoch() * 1000)
+   where room_id = ?;
+   ```
+
+   This is a single-row update per user per room — bounded by membership, not by message volume. Users without a `read_positions` row (e.g. not yet initialized) are unaffected; they'll get a row on join or first `updateSeen` call.
+
+2. **On `updateSeen` call**: compute and store the remaining unread count, then zero it:
+   - If `seenUpTo` is omitted: `unread_count = 0` (mark all read)
+   - If `seenUpTo` is provided: `unread_count = (SELECT COUNT(*) FROM entities WHERE room = ? AND sort_idx > ?)` — this is a one-time computation at write time, acceptable since `updateSeen` is called infrequently (once per room navigation)
+
+3. **On read queries** (`getSpaces`, `getMetadata`, `room.getMetadata`): return `read_positions.unread_count` directly. No `COUNT(*)`, no joins against `entities`. This is O(1) per room.
+
+4. **If no `read_positions` row exists** for a `(user_did, room_id)` pair, the user has never marked read and has not been initialized. Return `unreadCount = 0` for now — the row will be created on join or first `updateSeen`.
+
+**Join handling:** When a user joins a space (`joinSpace.v0`), the SDK's materializer pre-marks all existing channels as read. The appserver should perform the same initialization — insert `read_positions` rows for all visible rooms in the space with `seen_up_to` set to the current max `sort_idx` for each room and `unread_count = 0`. This prevents existing messages from appearing as unread on join.
+
+**Backfill note:** During backfill, `opts.isBackfill = true` — the existing code already skips the `comp_last_read` increment for backfilled messages. The same guard should apply to the `read_positions` increment. Backfilled messages are historical and should not inflate unread counts.
+
+**Invalidation signals:** `#invalidate` targeting the caller for:
+- `space.roomy.room.getMetadata` (this room)
+- `space.roomy.space.getMetadata` (parent space — sidebar unread badges)
+- `space.roomy.space.getSpaces` (space list unread totals)
+
+These are the same targets as the existing `handleMarkRead` in `inferSignals.ts`, but triggered by the XRPC handler instead of a Leaf state event.
+
+**Migration note:** The client currently calls `peer.sendStateEvent(streamId, { $type: "space.roomy.state.markRead.v0", room })`. The thin-client migration replaces this with a direct call to `POST /xrpc/space.roomy.room.updateSeen`. The Leaf state event path is no longer needed for read receipts.
 
 ---
 
@@ -629,7 +728,8 @@ The `seq` field appears in `#messageDiff` frames. The client tracks the highest 
 | Sidebar config change | `space:X` | `#invalidate` for `space.roomy.space.getMetadata` (sidebar is part of this response) |
 | User join/leave space X | `space:X` | `#invalidate` for `space.roomy.space.getSpaces`, `space.roomy.space.getMetadata`, `space.roomy.space.getThreads`, `space.roomy.space.getMembers` |
 | Admin edge add/remove on space X | `space:X` | `#invalidate` for `space.roomy.space.getSpaces`, `space.roomy.space.getMetadata`, `space.roomy.space.getMembers`, and (for the affected user only) all room metadata and sidebar visibility — admins see everything |
-| Unread count change | `room:X`, `space:<parent>` | `#invalidate` for `space.roomy.room.getMetadata`, `space.roomy.space.getMetadata`, and `space.roomy.space.getSpaces` |
+| Unread count change (new message increments `comp_last_read.unread_count`) | `room:X`, `space:<parent>` | `#invalidate` for `space.roomy.room.getMetadata`, `space.roomy.space.getMetadata`, and `space.roomy.space.getSpaces` |
+| `updateSeen` procedure called by user U for room X | (no Leaf event — direct appserver state) | `#invalidate` for `space.roomy.room.getMetadata` (room X), `space.roomy.space.getMetadata`, `space.roomy.space.getSpaces` — scoped to user U only |
 | Thread activity in room X | `room:X` | `#invalidate` for `space.roomy.room.getMetadata` (recentThreads) |
 | Channel `default_access` change in space Y | `space:Y`, `room:<channel>` | `#invalidate` for `space.roomy.space.getMetadata` (sidebar visibility may change), `space.roomy.room.getMetadata` for the channel and all its threads |
 | Role create/update/delete in space Y | `space:Y` | `#invalidate` for `space.roomy.space.getRoles`. If permissions change in a way that affects sidebar/room visibility for any subscriber, also `space.roomy.space.getMetadata` and `space.roomy.room.getMetadata` for affected rooms |
@@ -798,6 +898,7 @@ lexicons/
         getMembers.json
         getInvites.json
       room/
+        updateSeen.json
         getMetadata.json
         getMessages.json
         getThreads.json
