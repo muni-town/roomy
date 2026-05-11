@@ -15,6 +15,7 @@ import { getRoomMetadataHandler } from "./handlers/space.roomy.room.getMetadata.
 import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts";
 import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
 import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
+import { updateSeenHandler } from "./handlers/space.roomy.room.updateSeen.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const OWN_DID = process.env.APPSERVER_DID ?? "did:web:appserver.roomy.chat";
@@ -37,6 +38,7 @@ const DID_DOCUMENT = {
 // created by the registry into this router, then out to the SyncManager
 // which routes frames to WS connections.
 const invalidationRouter = new InvalidationRouter();
+InvalidationRouter.setInstance(invalidationRouter);
 setInvalidationRouter(invalidationRouter);
 
 const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter);
@@ -46,6 +48,9 @@ const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter);
 const router = new XrpcRouter(prodAuthVerifier)
   .procedure("space.roomy.auth.getConnectionTicket", {
     handler: getConnectionTicketHandler,
+  })
+  .procedure("space.roomy.room.updateSeen", {
+    handler: updateSeenHandler,
   })
   .query("space.roomy.admin.connectSpace", {
     handler: connectSpaceHandler,

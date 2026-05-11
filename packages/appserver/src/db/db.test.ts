@@ -40,6 +40,7 @@ describe("appserver schema", () => {
       "comp_info",
       "comp_reaction",
       "comp_last_read",
+      "read_positions",
       "roles",
       "member_roles",
       "role_rooms",

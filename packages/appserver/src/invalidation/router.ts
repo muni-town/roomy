@@ -26,6 +26,22 @@ export class Router implements IInvalidationRouter {
   readonly #listeners = new Set<InvalidationListener>();
   #seq = 0;
 
+  // ─── Singleton accessor ──────────────────────────────────────────
+
+  static #instance: Router | undefined;
+
+  /** Set the process-wide router. Called once from index.ts. */
+  static setInstance(router: Router): void {
+    Router.#instance = router;
+  }
+
+  /** Get the process-wide router. Handlers call this to emit signals. */
+  static getInstance(): Router | undefined {
+    return Router.#instance;
+  }
+
+  // ─── Leaf event pipeline ─────────────────────────────────────────
+
   onEventsApplied(
     streamDid: import("@roomy-space/sdk").StreamDid,
     events: AppliedEvent[],
@@ -67,6 +83,21 @@ export class Router implements IInvalidationRouter {
     return () => {
       this.#listeners.delete(listener);
     };
+  }
+
+  /**
+   * Emit invalidation signals directly (not from Leaf events).
+   * Used by procedure handlers that mutate appserver-local state.
+   */
+  emit(signals: readonly InvalidationEvent[]): void {
+    if (signals.length === 0 || this.#listeners.size === 0) return;
+    for (const listener of this.#listeners) {
+      try {
+        listener(signals);
+      } catch (err) {
+        console.error("[InvalidationRouter] listener threw:", err);
+      }
+    }
   }
 
   /** Current sequence number (for testing / diagnostics). */

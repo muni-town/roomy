@@ -46,14 +46,13 @@ export function applyBundle(
       bundle.event.$type === "space.roomy.message.createMessage.v0" &&
       bundle.event.room
     ) {
-      // Increment unread for live createMessage events. Mirrors the frontend
-      // patch in worker.ts → listenEvents.
+      // Increment unread for all users tracking this room. Replaces the old
+      // per-room comp_last_read counter with per-user read_positions rows.
       db.prepare(
-        `insert into comp_last_read (entity, last_read, unread_count)
-         values (?, 0, 1)
-         on conflict(entity) do update set
-           unread_count = comp_last_read.unread_count + 1,
-           updated_at = (unixepoch() * 1000)`,
+        `update read_positions
+            set unread_count = unread_count + 1,
+                updated_at = (unixepoch() * 1000)
+          where room_id = ?`,
       ).run(bundle.event.room);
     }
 

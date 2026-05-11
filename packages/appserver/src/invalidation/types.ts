@@ -109,6 +109,13 @@ export interface InvalidationRouter {
     meta: { isBackfill: boolean },
   ): void;
 
+  /**
+   * Emit invalidation signals directly, outside the Leaf event pipeline.
+   * Used by XRPC procedure handlers that mutate appserver-local state
+   * (e.g. `updateSeen` writing to `read_positions`).
+   */
+  emit(signals: readonly InvalidationEvent[]): void;
+
   /** Register a listener. Returns an unsubscribe function. */
   subscribe(listener: InvalidationListener): () => void;
 }

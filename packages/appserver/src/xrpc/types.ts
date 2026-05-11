@@ -29,10 +29,14 @@ export interface QueryDef {
   parseParams?: (raw: QueryParams) => QueryParams;
 }
 
-// HTTP POST — no request body parsing; params come from URL query string only
+export type ProcedureHandler<
+  TBody = Record<string, unknown>,
+  TResult = unknown,
+> = (params: QueryParams, auth: AuthCtx, body: TBody) => Promise<TResult>;
+
 export interface ProcedureDef {
   kind: "procedure";
-  handler: QueryHandler;
+  handler: ProcedureHandler;
   parseParams?: (raw: QueryParams) => QueryParams;
 }
 

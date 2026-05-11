@@ -92,7 +92,19 @@ export class XrpcRouter {
           }
           const auth = await this.#auth(req);
           const params = route.parseParams ? route.parseParams(rawParams) : rawParams;
-          const result = await route.handler(params, auth);
+          let body: Record<string, unknown> = {};
+          const contentType = req.headers.get("content-type");
+          if (contentType?.includes("application/json")) {
+            try {
+              body = (await req.json()) as Record<string, unknown>;
+            } catch {
+              return Response.json(
+                { error: "InvalidRequest", message: "Malformed JSON body" },
+                { status: 400 },
+              );
+            }
+          }
+          const result = await route.handler(params, auth, body);
           return Response.json(result);
         }
 

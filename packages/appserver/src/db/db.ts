@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
  * `CONFIG.databaseSchemaVersion`. Strings, not numbers, so we can use
  * suffixes (e.g. `"6-appserver.1"`) once the two diverge.
  */
-export const SCHEMA_VERSION = "7-appserver.3";
+export const SCHEMA_VERSION = "7-appserver.4";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 

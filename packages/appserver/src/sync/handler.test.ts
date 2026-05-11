@@ -65,6 +65,12 @@ class MockRouter implements InvalidationRouter {
     };
   }
 
+  emit(signals: readonly InvalidationEvent[]): void {
+    for (const listener of this.listeners) {
+      listener(signals);
+    }
+  }
+
   /** Emit signals to all subscribers (test helper). */
   emitSignals(events: InvalidationEvent[]): void {
     for (const listener of this.listeners) {

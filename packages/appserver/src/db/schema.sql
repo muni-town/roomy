@@ -198,6 +198,19 @@ create table if not exists comp_reaction (
 
 create index if not exists idx_comp_last_read_last_read on comp_last_read(last_read);
 
+-- Per-user read positions, replacing the per-room comp_last_read table.
+-- The appserver is the source of truth for unread counts; this table is
+-- incremented on createMessage materialisation and read directly by
+-- getSpaces/getMetadata/room.getMetadata handlers (O(1) per room).
+create table if not exists read_positions (
+  user_did    text not null,
+  room_id     text not null,
+  seen_up_to  text not null,   -- sort_idx of the last-read message entity
+  unread_count integer not null default 0,
+  updated_at  integer not null default (unixepoch() * 1000),
+  primary key (user_did, room_id)
+) strict;
+
 -- OpenMeet calendar integration
 create table if not exists comp_calendar_link (
   entity text primary key,

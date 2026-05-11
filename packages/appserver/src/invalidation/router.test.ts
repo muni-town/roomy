@@ -151,4 +151,59 @@ describe("Router", () => {
 
     expect(events).toHaveLength(0);
   });
+
+  it("emit delivers signals directly to subscribers", () => {
+    const router = new Router();
+    const { events, listener } = collect();
+    router.subscribe(listener);
+
+    const signals: InvalidationEvent[] = [
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.room.getMetadata",
+          params: { roomId: "01ROOM" },
+          affectedUser: USER_DID,
+        },
+      },
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getSpaces",
+          params: {},
+          affectedUser: USER_DID,
+        },
+      },
+    ];
+
+    router.emit(signals);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toHaveLength(2);
+    expect(events[0]![0]!.kind).toBe("queryInvalidation");
+  });
+
+  it("emit is a no-op when there are no subscribers", () => {
+    const router = new Router();
+    // Should not throw.
+    router.emit([
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getMetadata",
+          params: { spaceId: "01SPACE" },
+        },
+      },
+    ]);
+  });
+
+  it("emit is a no-op for empty signals", () => {
+    const router = new Router();
+    const { events, listener } = collect();
+    router.subscribe(listener);
+
+    router.emit([]);
+
+    expect(events).toHaveLength(0);
+  });
 });
