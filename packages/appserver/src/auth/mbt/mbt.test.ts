@@ -1,0 +1,134 @@
+/**
+ * Model-based test driver: spec oracle ↔ src/auth/access.ts parity.
+ *
+ * Workflow (see specs/auth.qnt + the mbt/README plans):
+ *   1. Generate traces:
+ *      quint run --main=auth --mbt --max-steps=N --max-samples=M \
+ *        --out-itf=specs/traces/out.itf.json packages/appserver/specs/auth.qnt
+ *   2. Run this test file. For every state in every trace we:
+ *      - build a fresh in-memory SQLite DB,
+ *      - project the spec state (and *only* that) into the DB,
+ *      - call spaceAccess()/roomAccess() and compare each field-by-field
+ *        against the trace's oracleSnapshot.
+ *
+ * One bun test per trace file. State index is included in failure messages.
+ */
+
+import { describe, test, expect } from "bun:test";
+import { existsSync, readdirSync, readFileSync } from "fs";
+import { resolve } from "path";
+
+import { parseTrace } from "./itf.ts";
+import {
+  permissionToString,
+  type SpecRoomAccess,
+  type SpecSpaceAccess,
+  type SpecVars,
+} from "./types.ts";
+import { project, SPACE_ID } from "./project.ts";
+import { openDb } from "../../db/db.ts";
+import {
+  roomAccess,
+  spaceAccess,
+  type RoomAccess,
+  type SpaceAccess,
+} from "../access.ts";
+
+const TRACES_DIR = resolve(import.meta.dir, "../../../specs/traces");
+
+function listTraces(): string[] {
+  if (!existsSync(TRACES_DIR)) return [];
+  return readdirSync(TRACES_DIR)
+    .filter((f) => f.endsWith(".itf.json"))
+    .sort();
+}
+
+function expectedRoomAccess(s: SpecRoomAccess): RoomAccess {
+  return {
+    exists: s.exists,
+    canRead: s.canRead,
+    canWrite: s.canWrite,
+    isAdmin: s.isAdmin,
+    isBanned: s.isBanned,
+    defaultAccess: permissionToString(s.defaultAccess),
+    // The impl returns spaceId=null when the room doesn't exist, otherwise
+    // the SPACE DID. The harness uses a single space, so this is constant.
+    spaceId: s.exists ? SPACE_ID : null,
+    parentChannelId:
+      s.parentChannel.tag === "HasParent"
+        ? (s.parentChannel.value as string)
+        : null,
+  };
+}
+
+function expectedSpaceAccess(s: SpecSpaceAccess): SpaceAccess {
+  return {
+    isMember: s.isMember,
+    isAdmin: s.isAdmin,
+    isBanned: s.isBanned,
+  };
+}
+
+const traceFiles = listTraces();
+
+describe("MBT: spec oracle ↔ access.ts parity", () => {
+  if (traceFiles.length === 0) {
+    test("no trace files found — run quint to generate them", () => {
+      throw new Error(
+        `no .itf.json files in ${TRACES_DIR}. Generate with:\n` +
+          `  quint run --main=auth --mbt --max-steps=20 --max-samples=10 \\\n` +
+          `    --out-itf=specs/traces/out.itf.json specs/auth.qnt`,
+      );
+    });
+    return;
+  }
+
+  for (const file of traceFiles) {
+    test(file, () => {
+      const raw = JSON.parse(readFileSync(`${TRACES_DIR}/${file}`, "utf8"));
+      const trace = parseTrace<SpecVars>(raw);
+
+      for (const stateEntry of trace.states) {
+        const db = openDb({ path: ":memory:", isolated: true });
+        try {
+          project(db, stateEntry.vars.state);
+
+          const ctx = `${file} state[${stateEntry.index}] action=${stateEntry.actionTaken}`;
+
+          // spaceAccess parity over every user in the snapshot.
+          for (const [uid, expected] of stateEntry.vars.oracleSnapshot.spaces) {
+            const got = spaceAccess(db, SPACE_ID, uid);
+            const want = expectedSpaceAccess(expected);
+            try {
+              expect(got).toEqual(want);
+            } catch (e) {
+              throw new Error(
+                `[${ctx}] spaceAccess mismatch for ${uid}\n` +
+                  `  got:  ${JSON.stringify(got)}\n` +
+                  `  want: ${JSON.stringify(want)}`,
+              );
+            }
+          }
+
+          // roomAccess parity over every (user, room) in the snapshot.
+          for (const [[uid, rid], expected] of stateEntry.vars.oracleSnapshot
+            .rooms) {
+            const got = roomAccess(db, rid, uid);
+            const want = expectedRoomAccess(expected);
+            try {
+              expect(got).toEqual(want);
+            } catch (e) {
+              throw new Error(
+                `[${ctx}] roomAccess mismatch for (${uid}, ${rid})\n` +
+                  `  got:  ${JSON.stringify(got)}\n` +
+                  `  want: ${JSON.stringify(want)}`,
+              );
+            }
+          }
+        } finally {
+          db.close();
+        }
+      }
+    });
+  }
+});

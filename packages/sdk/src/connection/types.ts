@@ -2,18 +2,20 @@
  * Types for the ConnectedSpace connection module.
  */
 
-import type { Agent } from "@atproto/api";
 import type { StreamDid, StreamIndex, UserDid, Event, Ulid } from "../schema";
 import type { ModuleWithCid } from "../modules";
 import { LeafClient } from "@muni-town/leaf-client";
-import { RoomyClient } from "../client";
+import { RoomyClientBase } from "../client/RoomyClientBase";
 
 /**
  * Configuration for connecting to a Roomy space.
+ *
+ * `client` only needs the Leaf-side surface, so either `RoomyClient` (user) or
+ * `RoomyServiceClient` (service-to-service) can be passed.
  */
 export interface ConnectedSpaceConfig {
-  /** Client for Roomy containing both ATProto and Leaf clients */
-  client: RoomyClient;
+  /** Client for Roomy. Provides the LeafClient used to talk to the space. */
+  client: RoomyClientBase;
   /** DID of the stream (space) to connect to */
   streamDid: StreamDid;
   /** Module definition for the space */

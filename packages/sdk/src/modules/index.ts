@@ -165,6 +165,9 @@ const spaceModuleDef: BasicModule = {
       user_id text primary key -- did
     ) strict;
 
+    insert or ignore into admins (user_id) values ('did:web:localhost');
+    insert or ignore into admins (user_id) values ('did:web:leaf.muni.town');
+
     create table if not exists members (
       user_id text primary key,
       name text,
@@ -241,14 +244,14 @@ const spaceModuleDef: BasicModule = {
     select unauthorized('Your account has been banned from this space.')
     where exists (select 1 from bans where user_did = (select user from event));
 
-    -- No admins yet - only allow admin.add (bootstrap)
+    -- No real admins yet - only allow admin.add (bootstrap; did:web admins are infrastructure)
     with event_info as (
       select
         drisl_extract(payload, '.$type') as event_type
       from event
     )
     select unauthorized('space not initialized - need admin.add')
-    where not exists (select 1 from admins)
+    where not exists (select 1 from admins where user_id not like 'did:web:%')
       and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0';
 
     -- Private spaces require a valid invite token to join
@@ -273,7 +276,7 @@ const spaceModuleDef: BasicModule = {
       from event
     )
     select unauthorized('must be a member of this space')
-    where exists (select 1 from admins) -- space is initialized
+    where exists (select 1 from admins where user_id not like 'did:web:%') -- space is initialized
       and (select event_type from event_info) is not 'space.roomy.space.joinSpace.v0'
       and not exists (select 1 from members where user_id = (select author from event_info))
       and not exists (select 1 from admins where user_id = (select author from event_info));
@@ -287,7 +290,7 @@ const spaceModuleDef: BasicModule = {
       from event
     )
     select unauthorized('must be admin to perform this action')
-    where exists (select 1 from admins) -- space is initialized
+    where exists (select 1 from admins where user_id not like 'did:web:%') -- space is initialized
       and (select event_type from event_info) not in (
         'space.roomy.space.joinSpace.v0',
         'space.roomy.space.leaveSpace.v0',
