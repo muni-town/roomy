@@ -2,14 +2,28 @@
 
 Guidance for AI coding agents working with this monorepo.
 
-**Updated:** 2026-01-27
+**Updated:** 2026-04-13
+
+## Architecture Direction
+
+Roomy is migrating from a local-first architecture to a **thin-client / appserver model**:
+
+- **Removing** SQLite WASM in the browser, the three-tier worker architecture, and client-side materialisation
+- **Adding** `packages/appserver` — a Bun/TypeScript service exposing an XRPC interface (HTTP queries + WebSocket subscriptions)
+- **Replacing** `LiveQuery` calls in the client with WebSocket XRPC subscriptions
+- **Adapter pattern** — the appserver wraps the existing Leaf event-stream backend; it is intentionally temporary and will be replaced by a Rust service
+
+See `packages/appserver/docs/plans/appserver-architecture.md` for full design, migration phases, and research requirements.
+
+**Current phase:** Phase 0 — scaffolding, lexicon design, research.
 
 ## Monorepo Structure
 
 ```
 roomy/
 ├── packages/
-│   ├── app/              # SvelteKit web application
+│   ├── app/              # SvelteKit web application (being simplified)
+│   ├── appserver/        # XRPC appserver — NEW (Bun + TypeScript)
 │   ├── sdk/              # @roomy-space/sdk - Core SDK for Roomy clients
 │   ├── discord-bridge/   # Discord↔Roomy bridge service
 │   └── tsconfig/         # Shared TypeScript configuration
@@ -57,53 +71,39 @@ pnpm test src/lib/workers/encoding.test.ts
 
 ## Package: app (Web Application)
 
-The main SvelteKit application. Uses a three-tier worker architecture:
+The main SvelteKit application. **Under active refactor** — the three-tier worker architecture is being replaced by a thin client that delegates to `packages/appserver` via XRPC.
 
+**Current (legacy) architecture:**
 ```
 UI Thread (Svelte Components)
     ↓
-Shared Worker (Peer Worker)
+Shared Worker (Peer Worker)        ← being removed
     - Authentication & OAuth
     - Stream subscriptions
-    - Multi-tab coordination
     ↓
-Dedicated Worker (SQLite Worker)
+Dedicated Worker (SQLite Worker)   ← being removed
     - SQLite WASM database
     - Event materialization
     - Live queries
 ```
 
+**Target architecture:**
+```
+UI Thread (Svelte Components)
+    Tanstack DB (in-memory IVM, reactive)
+        ↓ XRPC fetch / WebSocket
+    Appserver (packages/appserver)
+```
+
+Server pushes row-level diffs → Tanstack DB mutates in-memory tables → Svelte 5 runes observe query results.
+
 ### Key Directories
 
-- `src/lib/workers/` - Worker architecture (backend, sqlite)
+- `src/lib/workers/` - Worker architecture (being removed)
 - `src/lib/components/` - UI components
-- `src/lib/queries/` - Live query system
+- `src/lib/queries/` - Live query system (being replaced by XRPC client wrappers)
 - `src/lib/mutations/` - State mutations
 - `src/routes/` - SvelteKit routes
-
-### SQLite Storage
-
-The SQLite worker uses a fallback strategy:
-
-1. **Primary:** OPFS (Origin Private File System) with SAH Pool VFS
-   - Persistent storage, best performance
-   - Requires COOP/COEP headers
-
-2. **Fallback:** In-memory database (`:memory:`)
-   - Activates when OPFS fails (missing headers, unsupported browser)
-   - Data lost on page refresh
-
-Check storage type via `getVfsType()` → `"opfs-sahpool"` | `"memory"` | `null`
-
-**Schema:** `src/lib/workers/sqlite/schema.sql` (ECS pattern: entities, events, edges, comp\_\* tables)
-
-### Data Flow
-
-1. User authenticates → `Client` created in Peer Worker
-2. `Client` connects to AT Protocol PDS and Leaf server
-3. Events stream through `ConnectedStream` instances
-4. SQLite worker materializes events into relational tables
-5. Live queries auto-invalidate on changes → reactive UI updates
 
 ### Feature Flags
 
@@ -143,6 +143,27 @@ Core SDK for building Roomy clients. Published to npm.
 - `src/client/` - RoomyClient implementation
 - `src/connection/` - Stream connection logic
 - `src/leaf/` - Leaf server integration
+
+## Package: appserver (NEW — Phase 0)
+
+Bun/TypeScript service providing the XRPC interface between the thin client and the Leaf event-stream backend. **No running code yet — scaffolding and research phase.**
+
+**Planned structure:**
+- `src/index.ts` - Bun server entry point
+- `src/auth.ts` - ATProto JWT validation middleware
+- `src/routes/` - XRPC handler registry
+- `src/materializers/` - Event materialisation (ported from `packages/sdk/src/schema/events/`)
+- `src/db/` - SQLite/LibSQL schema + query helpers (server-side persistence)
+- `lexicons/` - ATProto JSON lexicon definitions
+
+**Key design constraints:**
+- Server-side persistence: SQLite (`bun:sqlite`) or LibSQL — materialised views survive restarts
+- Client-side IVM: Tanstack DB in the browser (reactive in-memory, no persistence needed)
+- Auth required: ATProto session JWT validation, per-space access control
+- Dockerised for deployment
+- Interface is the contract: lexicons defined here become the real on-protocol interface
+
+See `packages/appserver/docs/plans/appserver-architecture.md` for full spec, research requirements, and migration phases.
 
 ## Package: discord-bridge
 

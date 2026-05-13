@@ -3,7 +3,7 @@ import { StreamIndex, UserDid } from "../schema";
 import { SqlRows } from "@muni-town/leaf-client";
 import { EncodedStreamEvent } from "../connection";
 
-export { createLeafClient, type LeafConfig } from "./client";
+export { createLeafClient, type LeafConfig, type LeafAuth } from "./client";
 
 const encodedStreamEvent = type({
   idx: { $type: "'muni.town.sqliteValue.integer'", value: StreamIndex },

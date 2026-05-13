@@ -1,0 +1,25 @@
+{
+  "name": "@roomy/appserver",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@atcute/cbor": "^2.2.8",
+    "@atproto/api": "*",
+    "@atproto/identity": "^0.4.12",
+    "@atproto/xrpc-server": "^0.10.19",
+    "@muni-town/leaf-client": "link:../../leaf/clients/typescript",
+    "@roomy-space/sdk": "workspace:*",
+    "ulidx": "^2.4.1"
+  },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "typescript": "^5.8.3",
+    "bun-types": "latest"
+  }
+}

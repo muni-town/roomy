@@ -3,7 +3,7 @@
 
 services:
   leaf-server:
-    image: ghcr.io/muni-town/leaf:sha-d54ee4f
+    image: ghcr.io/muni-town/leaf:sha-2bb1f30
     platform: linux/amd64 # no arm64 build available
     # Uncomment if you are also dev-ing the leaf server
     # scale: 0
@@ -17,6 +17,8 @@ services:
       DID: did:web:localhost
       PLC_DIRECTORY: http://plc-directory:3000
       ENDPOINT: http://locahost:5530
+      MODULE_ADMINS: did:web:localhost
+      UNSAFE_AUTH_TOKEN: token123
     networks:
       - roomy-dev
 

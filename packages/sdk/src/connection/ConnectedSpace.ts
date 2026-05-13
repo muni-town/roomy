@@ -5,7 +5,6 @@
  * and event decoding. Consumers receive decoded events via callbacks.
  */
 
-import type { Agent } from "@atproto/api";
 import {
   LeafClient,
   type LeafQuery,
@@ -81,7 +80,6 @@ export class ConnectedSpace {
   readonly connection: StateMachine<ConnectionState>;
 
   #leaf: LeafClient;
-  #agent: Agent;
   #config: ConnectedSpaceConfig;
 
   #eventSubscription: (() => Promise<void>) | null = null;
@@ -107,7 +105,6 @@ export class ConnectedSpace {
   private constructor(config: ConnectedSpaceConfig) {
     this.streamDid = config.streamDid;
     this.#config = config;
-    this.#agent = config.client.agent;
     this.#leaf = config.client.leaf;
     this.connection = stateMachine<ConnectionState>({ state: "connected" });
 
@@ -817,29 +814,6 @@ export class ConnectedSpace {
   }
 }
 
-/**
- * Create a LeafClient with ATProto service auth.
- */
-function createLeafClient(config: {
-  agent: Agent;
-  leafUrl: string;
-  leafDid: string;
-}): LeafClient {
-  return new LeafClient(config.leafUrl, async () => {
-    const resp = await config.agent.com.atproto.server.getServiceAuth(
-      {
-        aud: config.leafDid,
-        lxm: "town.muni.leaf.authenticate",
-      },
-      {
-        headers: {
-          "atproto-proxy": `${config.agent.assertDid}#atproto_pds`,
-        },
-      },
-    );
-    return resp.data.token;
-  });
-}
 
 /**
  * Parse SQL rows into encoded stream events.
