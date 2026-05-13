@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Drawer from "$lib/components/helper/Drawer.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Drawer from "@roomy/design/components/helper/Drawer.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { PopoverEmojiPicker } from "@foxui/social";
   import { messagingState } from "../TimelineView.svelte";
   import type { Message } from "../ChatArea.svelte";

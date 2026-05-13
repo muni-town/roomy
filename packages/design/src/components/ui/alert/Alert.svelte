@@ -24,7 +24,7 @@ SOFTWARE.
 <script lang="ts" module>
   import { type VariantProps, tv } from "tailwind-variants";
 
-  import { cn } from "$lib/utils.svelte";
+  import { cn } from "../../../utils/index.js";
 
   export const alertVariants = tv({
     base: "text-xs relative w-full rounded-2xl border p-4 sm:p-8 lg:p-12 [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:size-4 [&>svg~*]:pl-7 ",

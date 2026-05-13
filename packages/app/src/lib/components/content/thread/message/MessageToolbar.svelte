@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Toolbar, Tooltip as BitsTooltip } from "bits-ui";
-  import Tooltip from "$lib/components/helper/Tooltip.svelte";
-  import { buttonVariants } from "$lib/components/ui/button/Button.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Tooltip from "@roomy/design/components/helper/Tooltip.svelte";
+  import { buttonVariants } from "@roomy/design/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { PopoverEmojiPicker } from "@foxui/social";
   import { messagingState } from "../TimelineView.svelte";
   import type { Message } from "../ChatArea.svelte";

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { NumberInput } from "@foxui/core";
-  import Badge from "$lib/components/ui/badge/Badge.svelte";
+  import Badge from "@roomy/design/components/ui/badge/Badge.svelte";
 
   import SpaceButton from "./SpaceButton.svelte";
   import type { LoadedSpace } from "./type";

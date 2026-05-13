@@ -23,7 +23,7 @@ SOFTWARE.
 -->
 <script lang="ts" module>
   import { type VariantProps, tv } from "tailwind-variants";
-  import { cn } from "$lib/utils.svelte";
+  import { cn } from "../../../utils/index.js";
 
   export const badgeVariants = tv({
     base: "inline-flex items-center backdrop-blur-sm justify-center whitespace-nowrap rounded-2xl text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 duration-300 active:duration-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn } from "@foxui/core";
+  import { cn } from "../../utils/index.js";
 
   const {
     class: className,

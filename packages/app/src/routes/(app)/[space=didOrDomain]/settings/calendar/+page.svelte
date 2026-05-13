@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { toast } from "@foxui/core";
   import { calendarLinkQuery } from "$lib/queries/calendar.svelte";
   import { CONFIG } from "$lib/config";

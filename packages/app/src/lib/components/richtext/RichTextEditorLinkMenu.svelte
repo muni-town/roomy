@@ -4,8 +4,8 @@
    * https://github.com/flo-bit/ui-kit/tree/main/packages/text/src/lib/components/rich-text-editor
    */
 
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import Input from "$lib/components/ui/input/Input.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
   import type { Editor } from "@tiptap/core";
 
   let {

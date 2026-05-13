@@ -2,7 +2,7 @@
   import { peer } from "$lib/workers";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import ToggleGroup from "$lib/components/ui/ToggleGroup.svelte";
+  import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
   import { IconLoading } from "@roomy/design/icons";
   import type { StreamDid, Ulid } from "@roomy-space/sdk";
 

@@ -6,12 +6,12 @@
   import { peer } from "$lib/workers";
   import { newUlid, Ulid, UserDid } from "@roomy-space/sdk";
   import { IconLoading, IconTrash, IconHashtag, IconPencil, IconArrowLeft, IconEllipsisHorizontal, IconPlus } from "@roomy/design/icons";
-  import Popover from "$lib/components/ui/popover/Popover.svelte";
+  import Popover from "@roomy/design/components/ui/popover/Popover.svelte";
   import RoleModal from "$lib/components/modals/RoleModal.svelte";
   import CreateRoleModal from "$lib/components/modals/CreateRoleModal.svelte";
-  import UserTypeahead from "$lib/components/ui/UserTypeahead.svelte";
+  import UserTypeahead from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
   import EntityName from "$lib/components/helper/EntityName.svelte";
-  import type { TypeaheadUser } from "$lib/components/ui/UserTypeahead.svelte";
+  import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
 

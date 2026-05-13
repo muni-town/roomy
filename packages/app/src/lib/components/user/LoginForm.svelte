@@ -6,8 +6,8 @@
   import { Subheading, Label, Avatar, Box, Tabs, toast } from "@foxui/core";
   import { Handle } from "@roomy-space/sdk";
   import { onMount } from "svelte";
-  import Button from "../ui/button/Button.svelte";
-  import Input from "../ui/input/Input.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
 
   const tabs = ["Login", "Register"] as const;
   let tab = $state(tabs[0]) as (typeof tabs)[number];

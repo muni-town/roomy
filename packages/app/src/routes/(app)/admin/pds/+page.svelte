@@ -2,8 +2,8 @@
   import type { InviteCode } from "@atproto/api/dist/client/types/com/atproto/server/defs";
   import type { Repo } from "@atproto/api/dist/client/types/com/atproto/sync/listRepos";
   import { Tabs, toast } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import Input from "$lib/components/ui/input/Input.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
 
   const tabs = ["Users", "Invite Codes"] as const;
   let tab = $state("Users") as (typeof tabs)[number];

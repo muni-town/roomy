@@ -8,7 +8,7 @@
 
   const app = getAppState();
   import { navigate } from "$lib/utils.svelte";
-  import InlineMono from "$lib/components/helper/InlineMono.svelte";
+  import InlineMono from "@roomy/design/components/helper/InlineMono.svelte";
   import { goto } from "$app/navigation";
 
   $effect(() => {

@@ -50,7 +50,7 @@
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { toast } from "@foxui/core";
-  import Badge from "$lib/components/ui/badge/Badge.svelte";
+  import Badge from "@roomy/design/components/ui/badge/Badge.svelte";
   import type { MessagingState } from "../TimelineView.svelte";
   import { messagingState as importedMessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";

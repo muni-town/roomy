@@ -24,7 +24,7 @@ SOFTWARE.
 <script lang="ts" module>
 	import type { WithElementRef } from 'bits-ui';
 	import { type VariantProps, tv } from 'tailwind-variants';
-	import { cn } from '$lib/utils.svelte.ts';
+	import { cn } from '../../../utils/index.js';
 
 	import type { HTMLInputAttributes, HTMLInputTypeAttribute } from 'svelte/elements';
 

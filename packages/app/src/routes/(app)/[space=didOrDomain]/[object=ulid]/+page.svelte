@@ -29,14 +29,14 @@
   import { navigate, scrollContainerRef } from "$lib/utils.svelte";
 
   import { Modal, Popover, toast } from "@foxui/core";
-  import Input from "$lib/components/ui/input/Input.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import ToggleTabs from "$lib/components/layout/ToggleTabs.svelte";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
-  import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
+  import LoadingLine from "@roomy/design/components/helper/LoadingLine.svelte";
   import PageView from "$lib/components/content/page/PageView.svelte";
   import PageHistory from "$lib/components/content/page/PageHistory.svelte";
   import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
@@ -52,7 +52,7 @@
 
   import { flags } from "$lib/config";
   import { deleteRoom, newUlid, Ulid } from "@roomy-space/sdk";
-  import LoadingSpinner from "$lib/components/helper/LoadingSpinner.svelte";
+  import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
   import { goto } from "$app/navigation";
   // import EditRoomModal from "$lib/components/modals/EditRoomModal.svelte";
 

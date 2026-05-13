@@ -1,12 +1,12 @@
 <script lang="ts">
   import { toast } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import Input from "$lib/components/ui/input/Input.svelte";
-  import Popover from "$lib/components/ui/popover/Popover.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
+  import Popover from "@roomy/design/components/ui/popover/Popover.svelte";
   import MessageContext, {
     type MessageContext as MessageContextType,
   } from "./message/MessageContext.svelte";
-  import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
+  import FullscreenImageDropper from "@roomy/design/components/helper/FullscreenImageDropper.svelte";
 
   import {
     IconCloseCircle,

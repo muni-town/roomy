@@ -1,14 +1,18 @@
 <script lang="ts">
   import type { WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn, ScrollArea } from "@foxui/core";
-  import * as rawEnv from "$env/static/public";
+  import { cn } from "../../utils/index.js";
+  import { ScrollArea } from "@foxui/core";
 
   const {
     class: className,
     children,
+    showBranding = false,
     ...restProps
-  }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {} = $props();
+  }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
+    /** Whether to show the "powered by roomy" branding footer */
+    showBranding?: boolean;
+  } = $props();
 </script>
 
 <div
@@ -25,7 +29,7 @@
     {@render children?.()}
   </ScrollArea>
 
-  {#if "PUBLIC_SHOW_BRANDING" in rawEnv && rawEnv.PUBLIC_SHOW_BRANDING === "true"}
+  {#if showBranding}
     <div class="text-xs p-2">
       <span class="text-base-500 dark:text-base-300">powered by</span>
       <a

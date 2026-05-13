@@ -1,11 +1,16 @@
 <script lang="ts">
   import { Button } from "bits-ui";
-  import type { Item } from "$lib/tiptap/editor";
 
-  type Option = Item & { category: string };
+  export type SuggestionItem = {
+    value: string;
+    label: string;
+    disabled?: boolean;
+    category: string;
+    [x: string]: unknown;
+  };
 
   type Props = {
-    items: Option[];
+    items: SuggestionItem[];
     callback: ({ id, label }: { id: string; label: string }) => void;
   };
 
@@ -19,7 +24,7 @@
     return [...name.values()];
   });
 
-  export function setItems(value: any[]) {
+  export function setItems(value: SuggestionItem[]) {
     items = value;
   }
   export function onKeyDown(event: KeyboardEvent) {
