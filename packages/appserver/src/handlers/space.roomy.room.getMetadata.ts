@@ -9,6 +9,7 @@ import { type, UserDid } from "@roomy-space/sdk";
 import { roomAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
+import { getReadPosition, getReadPositions } from "../queries/readPositions.ts";
 import { listThreadActivity } from "../queries/threadActivity.ts";
 import { requireRoomRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
@@ -78,20 +79,28 @@ export const getRoomMetadataHandler: QueryHandler<
   );
 
   const recentThreads: RecentThread[] = [];
-  for (const t of threadActivity) {
-    if (t.id === roomId) continue; // don't list self
+  const threadRoomIds = threadActivity
+    .filter((t) => t.id !== roomId)
+    .filter((t) => roomAccess(db, t.id, userDid).canRead);
+  const threadPositions = getReadPositions(
+    db,
+    userDid,
+    threadRoomIds.map((t) => t.id),
+  );
+  for (const t of threadRoomIds) {
     const acc = roomAccess(db, t.id, userDid);
-    if (!acc.canRead) continue;
+    const pos = threadPositions.get(t.id);
     recentThreads.push({
       id: t.id,
       name: t.name,
       canRead: acc.canRead,
       canWrite: acc.canWrite,
-      unreadCount: 0,
-      lastRead: null,
+      unreadCount: pos?.unreadCount ?? 0,
+      lastRead: pos?.lastRead ?? null,
     });
   }
 
+  const pos = getReadPosition(db, userDid, roomId);
   return {
     name: row?.name ?? null,
     kind: stripLabel(row?.label ?? null),
@@ -99,8 +108,8 @@ export const getRoomMetadataHandler: QueryHandler<
     defaultAccess: access.defaultAccess,
     canRead: access.canRead,
     canWrite: access.canWrite,
-    lastRead: null, // stage-1
-    unreadCount: 0, // stage-1
+    lastRead: pos.lastRead,
+    unreadCount: pos.unreadCount,
     recentThreads,
   };
 };

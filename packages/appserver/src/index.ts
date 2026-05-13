@@ -1,6 +1,8 @@
 import { XrpcRouter, prodAuthVerifier } from "./xrpc/index.ts";
 import { Router as InvalidationRouter } from "./invalidation/index.ts";
 import { setInvalidationRouter } from "./materialization/registry.ts";
+import { openDb } from "./db/db.ts";
+import { attachReadState, openReadStateDb } from "./db/readStateDb.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
@@ -32,6 +34,14 @@ const DID_DOCUMENT = {
     },
   ],
 };
+
+// ─── Databases ──────────────────────────────────────────────────────────
+// Materialisation DB (derived from Leaf, can be wiped + re-backfilled).
+const mainDb = openDb();
+// Read-state DB (appserver-owned, survives materialisation resets).
+const readStateDb = openReadStateDb();
+// ATTACH read-state to main DB so SQL can reference readstate.read_positions.
+attachReadState(mainDb, readStateDb);
 
 // ─── Invalidation + Sync ────────────────────────────────────────────────
 // Singleton router — live events flow through every SpaceMaterializer

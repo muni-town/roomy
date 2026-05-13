@@ -5,11 +5,11 @@
  * COUNT(*) against entities. This is O(1) per room.
  */
 
-import type { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite"
 
 export interface ReadPosition {
-  unreadCount: number;
-  lastRead: string | null; // ISO datetime derived from sort_idx
+  unreadCount: number
+  lastRead: string | null // ISO datetime derived from sort_idx
 }
 
 /**
@@ -24,22 +24,24 @@ export interface ReadPosition {
 export function ensureReadPositions(
   db: Database,
   userDid: string,
-  roomIds: string[],
+  roomIds: string[]
 ): void {
-  if (roomIds.length === 0) return;
+  if (roomIds.length === 0) return
 
-  const now = Date.now();
+  const now = Date.now()
   const insert = db.prepare(
     `insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count, updated_at)
      values (?, ?, coalesce(
        (select max(sort_idx) from entities where room = ?), '0'
      ), 0, ?)
-     on conflict(user_did, room_id) do nothing`,
-  );
+     on conflict(user_did, room_id) do nothing`
+  )
 
   for (const roomId of roomIds) {
-    insert.run(userDid, roomId, roomId, now);
+    insert.run(userDid, roomId, roomId, now)
   }
+
+  console.log("ensured read positions for", roomIds)
 }
 
 /**
@@ -49,23 +51,21 @@ export function ensureReadPositions(
 export function getReadPosition(
   db: Database,
   userDid: string,
-  roomId: string,
+  roomId: string
 ): ReadPosition {
-  ensureReadPositions(db, userDid, [roomId]);
+  ensureReadPositions(db, userDid, [roomId])
 
   const row = db
     .query<
       { unread_count: number; seen_up_to: string },
       [string, string]
-    >(
-      "select unread_count, seen_up_to from readstate.read_positions where user_did = ? and room_id = ?",
-    )
-    .get(userDid, roomId);
+    >("select unread_count, seen_up_to from readstate.read_positions where user_did = ? and room_id = ?")
+    .get(userDid, roomId)
 
   return {
     unreadCount: row?.unread_count ?? 0,
-    lastRead: null,
-  };
+    lastRead: null
+  }
 }
 
 /**
@@ -78,31 +78,33 @@ export function getReadPosition(
 export function getReadPositions(
   db: Database,
   userDid: string,
-  roomIds: string[],
+  roomIds: string[]
 ): Map<string, ReadPosition> {
-  const result = new Map<string, ReadPosition>();
+  const result = new Map<string, ReadPosition>()
 
-  if (roomIds.length === 0) return result;
+  if (roomIds.length === 0) return result
 
   // Lazily create rows for any rooms that don't have one yet.
-  ensureReadPositions(db, userDid, roomIds);
+  ensureReadPositions(db, userDid, roomIds)
 
   // Batch query. For the small number of rooms in a sidebar (typically < 50),
   // individual lookups via a prepared statement are fine.
   const stmt = db.prepare<
     { room_id: string; unread_count: number; seen_up_to: string },
     [string, string]
-  >("select room_id, unread_count, seen_up_to from readstate.read_positions where user_did = ? and room_id = ?");
+  >(
+    "select room_id, unread_count, seen_up_to from readstate.read_positions where user_did = ? and room_id = ?"
+  )
 
   for (const roomId of roomIds) {
-    const row = stmt.get(userDid, roomId);
+    const row = stmt.get(userDid, roomId)
     result.set(roomId, {
       unreadCount: row?.unread_count ?? 0,
-      lastRead: null,
-    });
+      lastRead: null
+    })
   }
 
-  return result;
+  return result
 }
 
 /**
@@ -114,9 +116,9 @@ export function getReadPositions(
 export function getSpaceUnreadCount(
   db: Database,
   userDid: string,
-  spaceId: string,
+  spaceId: string
 ): number {
-  ensureSpaceReadPositions(db, userDid, spaceId);
+  ensureSpaceReadPositions(db, userDid, spaceId)
 
   const row = db
     .query<{ total: number }, [string, string]>(
@@ -124,11 +126,11 @@ export function getSpaceUnreadCount(
          from readstate.read_positions rp
          join entities e on e.id = rp.room_id
         where rp.user_did = ?
-          and e.stream_id = ?`,
+          and e.stream_id = ?`
     )
-    .get(userDid, spaceId);
+    .get(userDid, spaceId)
 
-  return row?.total ?? 0;
+  return row?.total ?? 0
 }
 
 /**
@@ -137,7 +139,7 @@ export function getSpaceUnreadCount(
 function ensureSpaceReadPositions(
   db: Database,
   userDid: string,
-  spaceId: string,
+  spaceId: string
 ): void {
   const roomIds = db
     .query<{ id: string }, [string]>(
@@ -145,10 +147,10 @@ function ensureSpaceReadPositions(
          join comp_room cr on cr.entity = e.id
         where e.stream_id = ?
           and cr.label = 'space.roomy.channel'
-          and coalesce(cr.deleted, 0) = 0`,
+          and coalesce(cr.deleted, 0) = 0`
     )
     .all(spaceId)
-    .map((r) => r.id);
+    .map((r) => r.id)
 
-  ensureReadPositions(db, userDid, roomIds);
+  ensureReadPositions(db, userDid, roomIds)
 }

@@ -13,6 +13,7 @@
 import { type, UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
+import { getSpaceUnreadCount } from "../queries/readPositions.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
@@ -104,7 +105,7 @@ export const getSpacesHandler: QueryHandler<QueryParams, GetSpacesResult> =
       name: r.name,
       avatar: r.avatar,
       description: r.description,
-      unreadCount: 0,
+      unreadCount: getSpaceUnreadCount(db, userDid, r.id),
       isMember: !!r.is_member,
       isAdmin: !!r.is_admin,
       roleIds: [],

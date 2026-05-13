@@ -12,95 +12,93 @@
  * could depend on is already applied.
  */
 
-import { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite"
 import type {
   DecodedStreamEvent,
   StreamDid,
   StreamIndex,
-  Ulid,
-} from "@roomy-space/sdk";
+  Ulid
+} from "@roomy-space/sdk"
 
-import { materialize } from "./materializer.ts";
-import { applyBundle } from "./applyBundle.ts";
+import { materialize } from "./materializer.ts"
+import { applyBundle } from "./applyBundle.ts"
 
-const MAX_TRACKED_FAILURES = 100;
+const MAX_TRACKED_FAILURES = 100
 
 export interface ApplyBatchOpts {
   /** True for backfill events — skips the unread-counter increment. */
-  isBackfill: boolean;
+  isBackfill: boolean
 }
 
 export interface MaterializationStats {
-  applied: number;
+  applied: number
   /** SDK materialiser threw or no handler is registered for this $type. */
-  materializerErrors: number;
+  materializerErrors: number
   /** A SQL statement threw while applying the bundle. */
-  applyErrors: number;
+  applyErrors: number
   /** Up to MAX_TRACKED_FAILURES recent failures, for ops/inspection. */
   failed: Array<{
-    eventId: Ulid;
-    type: string;
-    reason: "materializer" | "apply";
-    message: string;
-  }>;
+    eventId: Ulid
+    type: string
+    reason: "materializer" | "apply"
+    message: string
+  }>
 }
 
 export function applyBatch(
   db: Database,
   streamId: StreamDid,
   events: DecodedStreamEvent[],
-  opts: ApplyBatchOpts,
+  opts: ApplyBatchOpts
 ): MaterializationStats {
   const stats: MaterializationStats = {
     applied: 0,
     materializerErrors: 0,
     applyErrors: 0,
-    failed: [],
-  };
+    failed: []
+  }
 
-  if (events.length === 0) return stats;
+  if (events.length === 0) return stats
 
-  let latestIdx: StreamIndex = 0 as StreamIndex;
+  let latestIdx: StreamIndex = 0 as StreamIndex
   for (const e of events) {
-    if (e.idx > latestIdx) latestIdx = e.idx;
+    if (e.idx > latestIdx) latestIdx = e.idx
   }
 
   // bun:sqlite's Database.transaction(fn) returns a function; calling it
   // wraps `fn` in BEGIN/COMMIT (with rollback on throw).
   const run = db.transaction(() => {
     for (const e of events) {
-      const bundle = materialize(
-        e.event,
-        { streamId, user: e.user },
-        e.idx,
-      );
+      const bundle = materialize(e.event, { streamId, user: e.user }, e.idx)
+
+      // console.log("bundle: ", bundle)
 
       if (bundle.status === "error") {
-        stats.materializerErrors++;
+        stats.materializerErrors++
         recordFailure(stats, {
           eventId: bundle.eventId,
           type: e.event.$type,
           reason: "materializer",
-          message: bundle.message,
-        });
-        continue;
+          message: bundle.message
+        })
+        continue
       }
 
       try {
-        applyBundle(db, bundle, { isBackfill: opts.isBackfill, streamId });
-        stats.applied++;
+        applyBundle(db, bundle, { isBackfill: opts.isBackfill, streamId })
+        stats.applied++
       } catch (err) {
-        stats.applyErrors++;
-        const message = err instanceof Error ? err.message : String(err);
+        stats.applyErrors++
+        const message = err instanceof Error ? err.message : String(err)
         console.warn(
-          `[materialize] apply failed for ${e.event.$type} ${e.event.id} (idx ${e.idx}) on stream ${streamId}: ${message}`,
-        );
+          `[materialize] apply failed for ${e.event.$type} ${e.event.id} (idx ${e.idx}) on stream ${streamId}: ${message}`
+        )
         recordFailure(stats, {
           eventId: e.event.id,
           type: e.event.$type,
           reason: "apply",
-          message,
-        });
+          message
+        })
       }
     }
 
@@ -113,19 +111,19 @@ export function applyBatch(
        set backfilled_to = ?,
            updated_at = (unixepoch() * 1000)
        where entity = ?
-         and (backfilled_to is null or backfilled_to < ?)`,
-    ).run(latestIdx, streamId, latestIdx);
-  });
+         and (backfilled_to is null or backfilled_to < ?)`
+    ).run(latestIdx, streamId, latestIdx)
+  })
 
-  run();
-  return stats;
+  run()
+  return stats
 }
 
 function recordFailure(
   stats: MaterializationStats,
-  failure: MaterializationStats["failed"][number],
+  failure: MaterializationStats["failed"][number]
 ): void {
   if (stats.failed.length < MAX_TRACKED_FAILURES) {
-    stats.failed.push(failure);
+    stats.failed.push(failure)
   }
 }

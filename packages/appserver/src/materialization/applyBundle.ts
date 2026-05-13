@@ -49,7 +49,7 @@ export function applyBundle(
       // Increment unread for all users tracking this room. Replaces the old
       // per-room comp_last_read counter with per-user read_positions rows.
       db.prepare(
-        `update read_positions
+        `update readstate.read_positions
             set unread_count = unread_count + 1,
                 updated_at = (unixepoch() * 1000)
           where room_id = ?`,
