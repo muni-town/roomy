@@ -7,7 +7,7 @@
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
   import EditRoomModal from "../modals/EditRoomModal.svelte";
   import RestoreRoomModal from "../modals/RestoreRoomModal.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
 
   import {
     IconCalendar,

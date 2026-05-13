@@ -4,6 +4,27 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./icons": "./src/icons/index.ts"
-  }
+    ".": {
+      "svelte": "./src/index.ts"
+    },
+    "./icons": "./src/icons/index.ts",
+    "./icons/*": "./src/icons/*",
+    "./utils": "./src/utils/index.ts",
+    "./utils/*": "./src/utils/*",
+    "./components/*": "./src/components/*"
+  },
+  "dependencies": {
+    "@foxui/core": "^0.6.0",
+    "@roomy-space/sdk": "workspace:*",
+    "bits-ui": "^1.8.0",
+    "clsx": "^2.1.1",
+    "svelte-boring-avatars": "^1.2.6",
+    "tailwind-merge": "^3.5.0",
+    "vaul-svelte": "^0.3.2"
+  },
+  "peerDependencies": {
+    "svelte": ">=5",
+    "tailwind-variants": "^3.2.2"
+  },
+  "svelte": "./src/index.ts"
 }

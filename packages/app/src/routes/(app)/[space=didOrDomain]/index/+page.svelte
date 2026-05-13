@@ -10,11 +10,11 @@
   import { sql } from "$lib/utils/sqlTemplate";
 
   import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
-  import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
+  import LoadingLine from "@roomy/design/components/helper/LoadingLine.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import StateSuspense from "$lib/components/helper/StateSuspense.svelte";
+  import StateSuspense from "@roomy/design/components/helper/StateSuspense.svelte";
 
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import Error from "$lib/components/modals/Error.svelte";

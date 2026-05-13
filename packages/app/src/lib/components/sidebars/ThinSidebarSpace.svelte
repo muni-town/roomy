@@ -1,6 +1,6 @@
 <script lang="ts">
   import { navigate, navigateSync } from "$lib/utils.svelte";
-  import Tooltip from "$lib/components/helper/Tooltip.svelte";
+  import Tooltip from "@roomy/design/components/helper/Tooltip.svelte";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { getAppState, type SpaceMeta } from "$lib/queries";
   const app = getAppState();

@@ -2,7 +2,7 @@
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { peer } from "$lib/workers";
   import { Textarea, ScrollArea } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
 
   let query = $state(
     localStorage.getItem("roomy-debug-query") || "select * from entities;",

@@ -5,8 +5,8 @@
   import { navigate } from "$lib/utils.svelte";
   import { peer } from "$lib/workers";
   import { ScrollArea, Select } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import Input from "$lib/components/ui/input/Input.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
   import ChannelPermissions from "$lib/components/ui/ChannelPermissions.svelte";
   import { Ulid, ulidFactory } from "@roomy-space/sdk";
   import { deepClone } from "@ark/util";

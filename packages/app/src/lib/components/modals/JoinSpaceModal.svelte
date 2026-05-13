@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { Box } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";

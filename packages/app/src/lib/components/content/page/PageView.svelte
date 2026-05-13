@@ -7,8 +7,8 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { peer } from "$lib/workers";
   import { Prose } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import ScrollArea from "$lib/components/layout/ScrollArea.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import ScrollArea from "@roomy/design/components/layout/ScrollArea.svelte";
   import { RichTextEditor } from "$lib/components/richtext";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";

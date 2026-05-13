@@ -29,7 +29,7 @@ SOFTWARE.
 
 <script lang="ts">
 	import Button from '../button/Button.svelte';
-	import { cn } from '$lib/utils.svelte';
+	import { cn } from '../../../utils/index.js';
 
 	let {
 		class: className,

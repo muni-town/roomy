@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import type { SidebarCategory } from "$lib/queries";
   import { dragHandleZone, dragHandle } from "svelte-dnd-action";
   import {

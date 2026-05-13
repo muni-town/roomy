@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import {
     calendarLinkQuery,
     calendarEventsQuery,
@@ -18,7 +18,7 @@
     clearTokens,
   } from "$lib/services/openmeet";
 
-  import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
+  import LoadingLine from "@roomy/design/components/helper/LoadingLine.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import {

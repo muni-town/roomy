@@ -6,9 +6,9 @@
   import { type Snippet } from "svelte";
   import { onNavigate } from "$app/navigation";
 
-  import SmallSidebar from "./SmallSidebar.svelte";
+  import SmallSidebar from "@roomy/design/components/layout/SmallSidebar.svelte";
   import ServerBar from "../sidebars/ThinSidebar.svelte";
-  import BigSidebar from "./BigSidebar.svelte";
+  import BigSidebar from "@roomy/design/components/layout/BigSidebar.svelte";
   import MainPanel from "./MainPanel.svelte";
   import * as rawEnv from "$env/static/public";
 

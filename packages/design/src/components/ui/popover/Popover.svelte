@@ -43,9 +43,9 @@ SOFTWARE.
     buttonVariants,
     type ButtonSize,
     type ButtonVariant,
-  } from "$lib/components/ui/button/Button.svelte";
+  } from "../button/Button.svelte";
   import PopoverContent from "./PopoverContent.svelte";
-  import { cn } from "$lib/utils.svelte";
+  import { cn } from "../../../utils/index.js";
 
   let {
     open = $bindable(false),

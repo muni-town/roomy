@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import type { SidebarItem } from "$lib/queries";
   import { flags } from "$lib/config";

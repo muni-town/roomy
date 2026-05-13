@@ -28,7 +28,7 @@ SOFTWARE.
     HTMLButtonAttributes,
   } from "svelte/elements";
   import { type VariantProps, tv } from "tailwind-variants";
-  import { cn } from "$lib/utils.svelte";
+  import { cn } from "../../../utils/index.js";
   import type { AsyncStateWithIdle } from "@roomy-space/sdk";
 
   export const buttonVariants = tv({

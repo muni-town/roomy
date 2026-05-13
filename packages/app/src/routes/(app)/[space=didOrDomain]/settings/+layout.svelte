@@ -4,7 +4,7 @@
   import MainSidebarSpace from "$lib/components/sidebars/SpaceSidebarHeader.svelte";
   import { flags } from "$lib/config";
   import { ScrollArea } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
 
   import { IconArrowLeft } from "@roomy/design/icons";
 
