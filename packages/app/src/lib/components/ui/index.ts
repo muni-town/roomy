@@ -1,19 +1,13 @@
-// UI Components - based on fox-ui by Florian (https://github.com/flo-bit)
+// UI Components have been moved to @roomy/design.
+// Import directly from the design package:
 //
-// For component imports, import directly from the .svelte files:
-// import { Button } from '$lib/components/ui/button/Button.svelte';
-// import { Badge } from '$lib/components/ui/badge/Badge.svelte';
-// import { Input } from '$lib/components/ui/input/Input.svelte';
-// import { Popover } from '$lib/components/ui/popover/Popover.svelte';
-// import PopoverContent from '$lib/components/ui/popover/PopoverContent.svelte';
-// import ThemeToggle from '$lib/components/ui/theme-toggle/ThemeToggle.svelte';
-//
-// For types and utilities, import from the component files:
-// import type { BadgeVariant, BadgeSize } from '$lib/components/ui/badge/Badge.svelte';
-// import { badgeVariants } from '$lib/components/ui/badge/Badge.svelte';
-// import type { ThemeToggleProps } from '$lib/components/ui/theme-toggle/ThemeToggle.svelte';
-//
-// Note: Due to TypeScript limitations with Svelte 5, this index file cannot re-export
-// the components. Please import directly from the .svelte files.
+//   import Button from "@roomy/design/components/ui/button/Button.svelte";
+//   import Badge from "@roomy/design/components/ui/badge/Badge.svelte";
+//   import Input from "@roomy/design/components/ui/input/Input.svelte";
+//   import { Alert } from "@roomy/design/components/ui/alert/index.ts";
+//   import Popover from "@roomy/design/components/ui/popover/Popover.svelte";
+//   import ThemeToggle from "@roomy/design/components/ui/theme-toggle/ThemeToggle.svelte";
+//   import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
+//   import UserTypeahead from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
 
 export {};

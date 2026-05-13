@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type Snippet } from "svelte";
-  import ToggleNavigation from "../helper/ToggleNavigation.svelte";
-  import Navbar from "./Navbar.svelte";
+  import ToggleNavigation from "@roomy/design/components/helper/ToggleNavigation.svelte";
+  import Navbar from "@roomy/design/components/layout/Navbar.svelte";
   import { isSidebarVisible } from "./MainLayout.svelte";
   import { cn } from "@foxui/core";
   import * as rawEnv from "$env/static/public";

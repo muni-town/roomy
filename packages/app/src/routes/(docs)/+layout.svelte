@@ -1,8 +1,8 @@
 <script lang="ts">
   import "../../app.css";
   import { dev } from "$app/environment";
-  import Navbar from "$lib/components/layout/Navbar.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Navbar from "@roomy/design/components/layout/Navbar.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { Prose, ScrollArea } from "@foxui/core";
 
   let { children } = $props();

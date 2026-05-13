@@ -1,7 +1,7 @@
 <script lang="ts">
   import { toast } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import Input from "$lib/components/ui/input/Input.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
   import { Slider } from "@foxui/core";
   import { Stopwatch, StopwatchState } from "@foxui/time";
   import { launchConfetti } from "@foxui/visual";

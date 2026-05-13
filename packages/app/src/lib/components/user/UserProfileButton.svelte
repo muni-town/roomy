@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Avatar } from "@foxui/core";
-  import Popover from "$lib/components/ui/popover/Popover.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Popover from "@roomy/design/components/ui/popover/Popover.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import ThemeSettings from "./ThemeSettings.svelte";
   import { peer, peerStatus } from "$lib/workers";
 

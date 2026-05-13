@@ -5,8 +5,8 @@
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { Modal } from "@foxui/core";
-  import Input from "$lib/components/ui/input/Input.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { newUlid, type Ulid, Ulid as UlidNS } from "@roomy-space/sdk";
   import ChannelPermissions from "$lib/components/ui/ChannelPermissions.svelte";
   // import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";

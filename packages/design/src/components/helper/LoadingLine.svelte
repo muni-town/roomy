@@ -1,3 +1,5 @@
+<script lang="ts">
+</script>
 <div class="progress-bar" title="Loading space history">
   <div class="progress-bar-value"></div>
 </div>

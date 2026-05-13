@@ -1,7 +1,7 @@
 <script lang="ts">
   import { PopoverEmojiPicker } from "@foxui/social";
   import { Toggle } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconSmilePlus } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
   const app = getAppState();

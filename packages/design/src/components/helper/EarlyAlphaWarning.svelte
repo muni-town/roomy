@@ -1,11 +1,7 @@
 <script lang="ts">
-  import { Alert } from "$lib/components/ui/alert";
-  // import { onMount } from "svelte";
+  import { Alert } from "../ui/alert/index.js";
 
   let showAlphaWarning = $state(true);
-  // onMount(() => {
-  //   showAlphaWarning = localStorage.getItem("showAlphaWarning") !== "false";
-  // });
 </script>
 
 {#if showAlphaWarning}
@@ -34,14 +30,6 @@
       </div>
 
       <span class="flex flex-row-reverse grow">
-        <!-- <Button
-            size="sm"
-            variant="amber"
-            onclick={() => {
-              showAlphaWarning = false;
-              localStorage.setItem("showAlphaWarning", "false");
-            }}>Dismiss</Button
-          > -->
       </span>
     </Alert>
   </div>

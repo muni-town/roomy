@@ -22,30 +22,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 -->
 <script lang="ts">
-  import type { HTMLAttributes } from "svelte/elements";
-  import type { WithElementRef } from "bits-ui";
-  import { cn } from "$lib/utils.svelte";
+	import { cn } from '../../../utils/index.js';
+	import * as PopoverPrimitive from 'bits-ui';
 
-  let {
-    ref = $bindable(null),
-    class: className,
-    level = 5,
-    children,
-    ...restProps
-  }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
-    level?: 1 | 2 | 3 | 4 | 5 | 6;
-  } = $props();
+	let {
+		ref = $bindable(null),
+		class: className,
+		sideOffset = 4,
+		align = 'center',
+		portalProps,
+		...restProps
+	}: PopoverPrimitive.Popover.ContentProps & {
+		portalProps?: PopoverPrimitive.Popover.PortalProps;
+	} = $props();
 </script>
 
-<div
-  role="heading"
-  aria-level={level}
-  bind:this={ref}
-  class={cn(
-    "mb-4 py-2 text-lg leading-none font-medium last:mb-0 text-center",
-    className,
-  )}
-  {...restProps}
->
-  {@render children?.()}
-</div>
+<PopoverPrimitive.Popover.Portal {...portalProps}>
+	<PopoverPrimitive.Popover.Content
+		bind:ref
+		{sideOffset}
+		{align}
+		class={cn(
+			'bg-base-100/70 dark:bg-base-900/50 backdrop-blur-xl border-base-200 dark:border-base-800 text-base-900 dark:text-base-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-fit rounded-2xl border p-4 shadow-md outline-none',
+			className
+		)}
+		{...restProps}
+	/>
+</PopoverPrimitive.Popover.Portal>

@@ -7,7 +7,7 @@
     AccordionTrigger,
     AccordionContent,
   } from "@foxui/core";
-  import ThemeToggle from "$lib/components/ui/theme-toggle/ThemeToggle.svelte";
+  import ThemeToggle from "@roomy/design/components/ui/theme-toggle/ThemeToggle.svelte";
   import { onMount } from "svelte";
 
   const accentColors = [

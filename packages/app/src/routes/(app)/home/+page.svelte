@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
-  import EarlyAlphaWarning from "$lib/components/helper/EarlyAlphaWarning.svelte";
+  import EarlyAlphaWarning from "@roomy/design/components/helper/EarlyAlphaWarning.svelte";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { getAppState } from "$lib/queries";
   import { joinSpace } from "$lib/mutations/space";

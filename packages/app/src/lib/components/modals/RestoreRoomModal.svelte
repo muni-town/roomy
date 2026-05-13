@@ -3,7 +3,7 @@
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { Modal } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconArrowUturnLeft } from "@roomy/design/icons";
   import { peer } from "$lib/workers";
   import { type AsyncStateWithIdle, type RoomMetadata } from "@roomy-space/sdk";

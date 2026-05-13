@@ -1,0 +1,16 @@
+{
+  "extends": ["@repo/tsconfig/base.json"],
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "module": "es2022",
+    "target": "es2022",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitAny": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["src/**/*"]
+}
