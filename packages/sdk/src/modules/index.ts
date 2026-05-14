@@ -166,6 +166,7 @@ const spaceModuleDef: BasicModule = {
     ) strict;
 
     insert or ignore into admins (user_id) values ('did:web:localhost');
+    insert or ignore into admins (user_id) values ('did:web:leaf-dev.muni.town');
     insert or ignore into admins (user_id) values ('did:web:leaf.muni.town');
 
     create table if not exists members (
