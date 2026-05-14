@@ -13,7 +13,7 @@
     "@atproto/api": "*",
     "@atproto/identity": "^0.4.12",
     "@atproto/xrpc-server": "^0.10.19",
-    "@muni-town/leaf-client": "link:../../leaf/clients/typescript",
+    "@muni-town/leaf-client": "0.1.0-alpha.17",
     "@roomy-space/sdk": "workspace:*",
     "ulidx": "^2.4.1"
   },
