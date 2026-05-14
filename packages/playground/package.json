@@ -1,0 +1,25 @@
+{
+  "name": "playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port 5199",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@atcute/cbor": "^2.2.8",
+    "@atproto/api": "^0.14.22",
+    "@atproto/oauth-client-browser": "^0.3.39"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.0",
+    "@sveltejs/kit": "^2.49.3",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "svelte": "^5.40.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.6"
+  }
+}

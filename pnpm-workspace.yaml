@@ -1,7 +1,7 @@
 packages:
   - packages/app
   - packages/appserver
-  - packages/appserver-testing
+  - packages/playground
   - packages/design
   - packages/sdk
   - packages/discord-bridge
