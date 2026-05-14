@@ -53,7 +53,11 @@ export function requireRoomRead(
     throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
   }
   if (!access.canRead) {
-    throw new XrpcError(403, "Forbidden", "Caller has no read access to this room");
+    throw new XrpcError(
+      403,
+      "Forbidden",
+      "Caller has no read access to this room",
+    );
   }
   return access;
 }

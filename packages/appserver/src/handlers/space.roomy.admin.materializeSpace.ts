@@ -36,11 +36,7 @@ export const materializeSpaceHandler: QueryHandler<
 
   const did = params["did"];
   if (typeof did !== "string" || did === "") {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      "missing 'did' query parameter",
-    );
+    throw new XrpcError(400, "InvalidRequest", "missing 'did' query parameter");
   }
 
   const parsed = StreamDid(did);

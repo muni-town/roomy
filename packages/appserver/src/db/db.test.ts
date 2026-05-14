@@ -16,9 +16,10 @@ describe("appserver schema", () => {
     const db = freshDb();
 
     const version = db
-      .query<{ version: string }, []>(
-        "select version from roomy_schema_version where id = 1",
-      )
+      .query<
+        { version: string },
+        []
+      >("select version from roomy_schema_version where id = 1")
       .get();
     expect(version?.version).toBe(SCHEMA_VERSION);
 
@@ -55,9 +56,10 @@ describe("appserver schema", () => {
     expect(() => initializeSchema(db)).not.toThrow();
 
     const versionRows = db
-      .query<{ count: number }, []>(
-        "select count(*) as count from roomy_schema_version",
-      )
+      .query<
+        { count: number },
+        []
+      >("select count(*) as count from roomy_schema_version")
       .get();
     expect(versionRows?.count).toBe(1);
   });
@@ -73,16 +75,16 @@ describe("appserver schema", () => {
   test("foreign keys are enforced", () => {
     const db = freshDb();
     expect(
-      db
-        .query<{ foreign_keys: number }, []>("pragma foreign_keys")
-        .get()?.foreign_keys,
+      db.query<{ foreign_keys: number }, []>("pragma foreign_keys").get()
+        ?.foreign_keys,
     ).toBe(1);
 
     expect(() =>
-      db.run(
-        "insert into edges (head, tail, label) values (?, ?, ?)",
-        ["nonexistent-head", "nonexistent-tail", "member"],
-      ),
+      db.run("insert into edges (head, tail, label) values (?, ?, ?)", [
+        "nonexistent-head",
+        "nonexistent-tail",
+        "member",
+      ]),
     ).toThrow();
   });
 
@@ -92,15 +94,16 @@ describe("appserver schema", () => {
       "ent-1",
       "did:web:example.com",
     ]);
-    db.run(
-      "insert into comp_room (entity, label) values (?, ?)",
-      ["ent-1", "space.roomy.channel"],
-    );
+    db.run("insert into comp_room (entity, label) values (?, ?)", [
+      "ent-1",
+      "space.roomy.channel",
+    ]);
 
     const room = db
-      .query<{ entity: string; label: string }, []>(
-        "select entity, label from comp_room where entity = 'ent-1'",
-      )
+      .query<
+        { entity: string; label: string },
+        []
+      >("select entity, label from comp_room where entity = 'ent-1'")
       .get();
     expect(room).toEqual({ entity: "ent-1", label: "space.roomy.channel" });
   });

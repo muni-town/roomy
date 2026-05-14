@@ -12,9 +12,10 @@ describe("read-state schema", () => {
     const db = openReadStateDb({ path: ":memory:", isolated: true });
 
     const version = db
-      .query<{ version: string }, []>(
-        "select version from readstate_schema_version where id = 1",
-      )
+      .query<
+        { version: string },
+        []
+      >("select version from readstate_schema_version where id = 1")
       .get();
     expect(version?.version).toBe(READSTATE_SCHEMA_VERSION);
 
@@ -41,17 +42,19 @@ describe("read-state schema", () => {
 
     // Read it back.
     const row = mainDb
-      .query<{ unread_count: number }, [string, string]>(
-        "select unread_count from readstate.read_positions where user_did = ? and room_id = ?",
-      )
+      .query<
+        { unread_count: number },
+        [string, string]
+      >("select unread_count from readstate.read_positions where user_did = ? and room_id = ?")
       .get("did:plc:test", "room-1");
     expect(row?.unread_count).toBe(5);
 
     // Also accessible via the direct read-state DB handle.
     const direct = readStateDb
-      .query<{ unread_count: number }, [string, string]>(
-        "select unread_count from read_positions where user_did = ? and room_id = ?",
-      )
+      .query<
+        { unread_count: number },
+        [string, string]
+      >("select unread_count from read_positions where user_did = ? and room_id = ?")
       .get("did:plc:test", "room-1");
     expect(direct?.unread_count).toBe(5);
   });

@@ -57,10 +57,10 @@ export function project(
   const remember = (did: string) => {
     if (seenUsers.has(did)) return;
     seenUsers.add(did);
-    db.run(
-      "insert or ignore into entities (id, stream_id) values (?, ?)",
-      [did, did],
-    );
+    db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      did,
+      did,
+    ]);
   };
   for (const did of spec.admins) remember(did);
   for (const did of spec.members) remember(did);
@@ -106,24 +106,24 @@ export function project(
 
   // 4. Membership / admin edges.
   for (const did of spec.members) {
-    db.run(
-      "insert into edges (head, tail, label) values (?, ?, 'member')",
-      [spaceId, did satisfies UserId],
-    );
+    db.run("insert into edges (head, tail, label) values (?, ?, 'member')", [
+      spaceId,
+      did satisfies UserId,
+    ]);
   }
   for (const did of spec.admins) {
-    db.run(
-      "insert into edges (head, tail, label) values (?, ?, 'admin')",
-      [spaceId, did],
-    );
+    db.run("insert into edges (head, tail, label) values (?, ?, 'admin')", [
+      spaceId,
+      did,
+    ]);
   }
 
   // 5. Bans.
   for (const did of spec.bans) {
-    db.run(
-      "insert into comp_bans (entity, user_did) values (?, ?)",
-      [spaceId, did],
-    );
+    db.run("insert into comp_bans (entity, user_did) values (?, ?)", [
+      spaceId,
+      did,
+    ]);
   }
 
   // 6. Roles + member assignments + per-room permissions.
@@ -131,10 +131,10 @@ export function project(
   //    them, which is equivalent (the role_rooms CHECK only allows
   //    'read'/'readwrite' anyway).
   for (const [roleId, role] of spec.roles) {
-    db.run(
-      "insert into roles (id, stream_id, deleted) values (?, ?, 0)",
-      [roleId satisfies RoleId, spaceId],
-    );
+    db.run("insert into roles (id, stream_id, deleted) values (?, ?, 0)", [
+      roleId satisfies RoleId,
+      spaceId,
+    ]);
 
     for (const userId of role.members) {
       db.run(

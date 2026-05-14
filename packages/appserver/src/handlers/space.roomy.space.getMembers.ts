@@ -37,36 +37,38 @@ interface GetMembersResult {
   externalAdmins: ExternalAdminRow[];
 }
 
-export const getMembersHandler: QueryHandler<QueryParams, GetMembersResult> =
-  async (params: QueryParams, auth: AuthCtx) => {
-    const userDid = UserDid(auth.did);
-    if (userDid instanceof type.errors) {
-      throw new XrpcError(
-        400,
-        "InvalidRequest",
-        `Caller DID is not a valid UserDid: ${userDid.summary}`,
-      );
-    }
-    const spaceId = requireString(params, "spaceId");
+export const getMembersHandler: QueryHandler<
+  QueryParams,
+  GetMembersResult
+> = async (params: QueryParams, auth: AuthCtx) => {
+  const userDid = UserDid(auth.did);
+  if (userDid instanceof type.errors) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      `Caller DID is not a valid UserDid: ${userDid.summary}`,
+    );
+  }
+  const spaceId = requireString(params, "spaceId");
 
-    await hydrateUserMembership(userDid);
+  await hydrateUserMembership(userDid);
 
-    const db = openDb();
-    requireSpaceAccess(db, spaceId, userDid);
+  const db = openDb();
+  requireSpaceAccess(db, spaceId, userDid);
 
-    // Members: edges where head=spaceId, tail=user, label='member'.
-    const memberRows = db
-      .query<
-        {
-          did: string;
-          handle: string | null;
-          name: string | null;
-          avatar: string | null;
-          is_admin: number;
-        },
-        [string]
-      >(
-        `select
+  // Members: edges where head=spaceId, tail=user, label='member'.
+  const memberRows = db
+    .query<
+      {
+        did: string;
+        handle: string | null;
+        name: string | null;
+        avatar: string | null;
+        is_admin: number;
+      },
+      [string]
+    >(
+      `select
            m.tail as did,
            cu.handle as handle,
            ci.name as name,
@@ -79,39 +81,36 @@ export const getMembersHandler: QueryHandler<QueryParams, GetMembersResult> =
          left join comp_user cu on cu.did = m.tail
          left join comp_info ci on ci.entity = m.tail
         where m.head = ? and m.label = 'member'`,
-      )
-      .all(spaceId);
+    )
+    .all(spaceId);
 
-    // Role assignments per member, scoped to this space's stream.
-    const roleStmt = db.query<
-      { role_id: string },
-      [string, string]
-    >(
-      `select role_id from member_roles
+  // Role assignments per member, scoped to this space's stream.
+  const roleStmt = db.query<{ role_id: string }, [string, string]>(
+    `select role_id from member_roles
         where user_id = ? and stream_id = ?`,
-    );
+  );
 
-    const members: MemberRow[] = memberRows.map((r) => ({
-      did: r.did,
-      handle: r.handle,
-      name: r.name,
-      avatar: r.avatar,
-      isAdmin: !!r.is_admin,
-      roleIds: roleStmt.all(r.did, spaceId).map((row) => row.role_id),
-    }));
+  const members: MemberRow[] = memberRows.map((r) => ({
+    did: r.did,
+    handle: r.handle,
+    name: r.name,
+    avatar: r.avatar,
+    isAdmin: !!r.is_admin,
+    roleIds: roleStmt.all(r.did, spaceId).map((row) => row.role_id),
+  }));
 
-    // External admins: admin edge present, member edge absent.
-    const externalAdminRows = db
-      .query<
-        {
-          did: string;
-          handle: string | null;
-          name: string | null;
-          avatar: string | null;
-        },
-        [string]
-      >(
-        `select
+  // External admins: admin edge present, member edge absent.
+  const externalAdminRows = db
+    .query<
+      {
+        did: string;
+        handle: string | null;
+        name: string | null;
+        avatar: string | null;
+      },
+      [string]
+    >(
+      `select
            a.tail as did,
            cu.handle as handle,
            ci.name as name,
@@ -125,16 +124,16 @@ export const getMembersHandler: QueryHandler<QueryParams, GetMembersResult> =
             select 1 from edges m
              where m.head = a.head and m.tail = a.tail and m.label = 'member'
           )`,
-      )
-      .all(spaceId);
+    )
+    .all(spaceId);
 
-    return {
-      members,
-      externalAdmins: externalAdminRows.map((r) => ({
-        did: r.did,
-        handle: r.handle,
-        name: r.name,
-        avatar: r.avatar,
-      })),
-    };
+  return {
+    members,
+    externalAdmins: externalAdminRows.map((r) => ({
+      did: r.did,
+      handle: r.handle,
+      name: r.name,
+      avatar: r.avatar,
+    })),
   };
+};

@@ -14,11 +14,7 @@
  */
 
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
-import type {
-  AppliedEvent,
-  InvalidationEvent,
-  QueryNsid,
-} from "./types.ts";
+import type { AppliedEvent, InvalidationEvent, QueryNsid } from "./types.ts";
 
 // ─── Public API ─────────────────────────────────────────────────────────
 
@@ -84,19 +80,20 @@ function handleCreateMessage(event: AppliedEvent): InvalidationEvent[] {
       kind: "messageDiff",
       signal: {
         roomId,
-        seq: details.seq as number ?? 0,
+        seq: (details.seq as number) ?? 0,
         ops: [
           {
             op: "add",
             key: event.id,
             message: {
               id: event.id,
-              content: details.content as string ?? "",
+              content: (details.content as string) ?? "",
               authorDid: event.user,
-              authorName: details.authorName as string ?? "",
-              authorAvatar: details.authorAvatar as string | null ?? null,
-              timestamp: details.timestamp as string ?? new Date().toISOString(),
-              replyTo: details.replyTo as Ulid | null ?? null,
+              authorName: (details.authorName as string) ?? "",
+              authorAvatar: (details.authorAvatar as string | null) ?? null,
+              timestamp:
+                (details.timestamp as string) ?? new Date().toISOString(),
+              replyTo: (details.replyTo as Ulid | null) ?? null,
               reactions: [],
             },
           },
@@ -122,20 +119,26 @@ function handleEditMessage(event: AppliedEvent): InvalidationEvent[] {
       kind: "messageDiff",
       signal: {
         roomId,
-        seq: details.seq as number ?? 0,
+        seq: (details.seq as number) ?? 0,
         ops: [
           {
             op: "update",
             key: event.id,
             message: {
               id: event.id,
-              content: details.content as string ?? "",
-              authorDid: (details.authorDid as UserDid | undefined) ?? event.user,
-              authorName: details.authorName as string ?? "",
-              authorAvatar: details.authorAvatar as string | null ?? null,
-              timestamp: details.timestamp as string ?? new Date().toISOString(),
-              replyTo: details.replyTo as Ulid | null ?? null,
-              reactions: details.reactions as Array<{ emoji: string; dids: UserDid[] }> ?? [],
+              content: (details.content as string) ?? "",
+              authorDid:
+                (details.authorDid as UserDid | undefined) ?? event.user,
+              authorName: (details.authorName as string) ?? "",
+              authorAvatar: (details.authorAvatar as string | null) ?? null,
+              timestamp:
+                (details.timestamp as string) ?? new Date().toISOString(),
+              replyTo: (details.replyTo as Ulid | null) ?? null,
+              reactions:
+                (details.reactions as Array<{
+                  emoji: string;
+                  dids: UserDid[];
+                }>) ?? [],
             },
           },
         ],
@@ -158,7 +161,7 @@ function handleDeleteMessage(event: AppliedEvent): InvalidationEvent[] {
       kind: "messageDiff",
       signal: {
         roomId,
-        seq: details.seq as number ?? 0,
+        seq: (details.seq as number) ?? 0,
         ops: [{ op: "remove", key: event.id }],
       },
     },
@@ -177,7 +180,11 @@ function handleReactionChange(event: AppliedEvent): InvalidationEvent[] {
   return [
     invalidate("space.roomy.room.getMessages", { roomId }),
     ...(details.messageId
-      ? [invalidate("space.roomy.message.getMessage", { messageId: details.messageId as string })]
+      ? [
+          invalidate("space.roomy.message.getMessage", {
+            messageId: details.messageId as string,
+          }),
+        ]
       : []),
   ];
 }
@@ -215,9 +222,7 @@ function handleDeleteRoom(event: AppliedEvent): InvalidationEvent[] {
   const details = event.details ?? {};
   const roomId = (details.roomId as Ulid | undefined) ?? event.roomId;
 
-  const signals: InvalidationEvent[] = [
-    ...invalidateSpace(spaceId),
-  ];
+  const signals: InvalidationEvent[] = [...invalidateSpace(spaceId)];
   if (roomId) {
     signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));
   }
@@ -240,9 +245,7 @@ function handleUpdateSpaceInfo(event: AppliedEvent): InvalidationEvent[] {
 
 function handleUpdateSidebar(event: AppliedEvent): InvalidationEvent[] {
   const spaceId = event.streamDid;
-  return [
-    invalidate("space.roomy.space.getMetadata", { spaceId }),
-  ];
+  return [invalidate("space.roomy.space.getMetadata", { spaceId })];
 }
 
 function handleJoinSpace(event: AppliedEvent): InvalidationEvent[] {
@@ -268,11 +271,13 @@ function handleAddAdmin(event: AppliedEvent): InvalidationEvent[] {
 
   return [
     ...invalidateSpace(spaceId),
-    ...(targetUser ? [
-      invalidate("space.roomy.space.getSpaces", {}, targetUser),
-      invalidate("space.roomy.space.getMetadata", { spaceId }, targetUser),
-      invalidate("space.roomy.space.getMembers", { spaceId }),
-    ] : []),
+    ...(targetUser
+      ? [
+          invalidate("space.roomy.space.getSpaces", {}, targetUser),
+          invalidate("space.roomy.space.getMetadata", { spaceId }, targetUser),
+          invalidate("space.roomy.space.getMembers", { spaceId }),
+        ]
+      : []),
   ];
 }
 
@@ -283,11 +288,13 @@ function handleRemoveAdmin(event: AppliedEvent): InvalidationEvent[] {
 
   return [
     ...invalidateSpace(spaceId),
-    ...(targetUser ? [
-      invalidate("space.roomy.space.getSpaces", {}, targetUser),
-      invalidate("space.roomy.space.getMetadata", { spaceId }, targetUser),
-      invalidate("space.roomy.space.getMembers", { spaceId }),
-    ] : []),
+    ...(targetUser
+      ? [
+          invalidate("space.roomy.space.getSpaces", {}, targetUser),
+          invalidate("space.roomy.space.getMetadata", { spaceId }, targetUser),
+          invalidate("space.roomy.space.getMembers", { spaceId }),
+        ]
+      : []),
   ];
 }
 
@@ -298,9 +305,9 @@ function handleBanAccount(event: AppliedEvent): InvalidationEvent[] {
 
   return [
     ...invalidateSpace(spaceId),
-    ...(targetUser ? [
-      invalidate("space.roomy.space.getSpaces", {}, targetUser),
-    ] : []),
+    ...(targetUser
+      ? [invalidate("space.roomy.space.getSpaces", {}, targetUser)]
+      : []),
   ];
 }
 
@@ -332,9 +339,7 @@ function handlePersonalLeaveSpace(event: AppliedEvent): InvalidationEvent[] {
     invalidate("space.roomy.space.getSpaces", {}, event.user),
   ];
   if (spaceId) {
-    signals.push(
-      invalidate("space.roomy.space.getMembers", { spaceId }),
-    );
+    signals.push(invalidate("space.roomy.space.getMembers", { spaceId }));
   }
   return signals;
 }
@@ -360,9 +365,7 @@ function handleRemoveRoomLink(event: AppliedEvent): InvalidationEvent[] {
 
 function handleCreateRole(event: AppliedEvent): InvalidationEvent[] {
   const spaceId = event.streamDid;
-  return [
-    invalidate("space.roomy.space.getRoles", { spaceId }),
-  ];
+  return [invalidate("space.roomy.space.getRoles", { spaceId })];
 }
 
 function handleDeleteRole(event: AppliedEvent): InvalidationEvent[] {
@@ -376,9 +379,7 @@ function handleDeleteRole(event: AppliedEvent): InvalidationEvent[] {
 
 function handleUpdateRole(event: AppliedEvent): InvalidationEvent[] {
   const spaceId = event.streamDid;
-  return [
-    invalidate("space.roomy.space.getRoles", { spaceId }),
-  ];
+  return [invalidate("space.roomy.space.getRoles", { spaceId })];
 }
 
 function handleAddMemberRole(event: AppliedEvent): InvalidationEvent[] {
@@ -389,10 +390,12 @@ function handleAddMemberRole(event: AppliedEvent): InvalidationEvent[] {
   return [
     invalidate("space.roomy.space.getRoles", { spaceId }),
     invalidate("space.roomy.space.getMembers", { spaceId }),
-    ...(targetUser ? [
-      invalidate("space.roomy.space.getSpaces", {}, targetUser),
-      invalidate("space.roomy.space.getMetadata", { spaceId }, targetUser),
-    ] : []),
+    ...(targetUser
+      ? [
+          invalidate("space.roomy.space.getSpaces", {}, targetUser),
+          invalidate("space.roomy.space.getMetadata", { spaceId }, targetUser),
+        ]
+      : []),
   ];
 }
 
@@ -435,9 +438,7 @@ function handleRevokeInvite(event: AppliedEvent): InvalidationEvent[] {
 function handleUpdateProfile(event: AppliedEvent): InvalidationEvent[] {
   const spaceId = event.streamDid;
   // Profile update in a space affects member display names/avatars.
-  return [
-    invalidate("space.roomy.space.getMembers", { spaceId }),
-  ];
+  return [invalidate("space.roomy.space.getMembers", { spaceId })];
 }
 
 // ─── State events ───────────────────────────────────────────────────────

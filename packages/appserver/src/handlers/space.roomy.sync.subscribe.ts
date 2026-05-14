@@ -14,7 +14,9 @@ import { SyncManager } from "../sync/handler.ts";
  * Create the sync handler. Called once at startup — the returned handler
  * is invoked for every new WS connection.
  */
-export function createSyncSubscribeHandler(router: InvalidationRouter): SyncHandler {
+export function createSyncSubscribeHandler(
+  router: InvalidationRouter,
+): SyncHandler {
   const manager = new SyncManager(router);
   return (socket) => manager.register(socket);
 }

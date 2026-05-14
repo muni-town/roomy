@@ -27,9 +27,7 @@ const NEW_USER_SIGNALS: EventType[] = [
   "space.roomy.message.createMessage.v0",
 ];
 
-export type GetProfilesFn = (
-  dids: UserDid[],
-) => Promise<ProfileViewDetailed[]>;
+export type GetProfilesFn = (dids: UserDid[]) => Promise<ProfileViewDetailed[]>;
 
 /**
  * Ensure entities + comp_user + comp_info rows exist for every user DID

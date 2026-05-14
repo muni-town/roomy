@@ -128,7 +128,9 @@ export async function handleThreadCreate(
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, parentId);
   if (targetSpaces.length === 0) {
-    log.debug(`Skipping thread ${threadId}: parent channel ${parentId} not bridged`);
+    log.debug(
+      `Skipping thread ${threadId}: parent channel ${parentId} not bridged`,
+    );
     return;
   }
 
@@ -140,7 +142,9 @@ export async function handleThreadCreate(
 
     const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
     if (!parentRoomyId) {
-      log.warn(`No Roomy room for parent channel ${parentId} in ${spaceDid}, skipping thread`);
+      log.warn(
+        `No Roomy room for parent channel ${parentId} in ${spaceDid}, skipping thread`,
+      );
       continue;
     }
 
@@ -182,9 +186,14 @@ export async function handleThreadCreate(
         repo.addToAllowlist(spaceDid, threadId, guildId);
       }
 
-      log.info(`Created Roomy thread ${threadUlid} for Discord thread ${threadId} in ${spaceDid}`);
+      log.info(
+        `Created Roomy thread ${threadUlid} for Discord thread ${threadId} in ${spaceDid}`,
+      );
     } catch (err) {
-      log.error(`Failed to create Roomy thread for ${threadId} in ${spaceDid}`, err);
+      log.error(
+        `Failed to create Roomy thread for ${threadId} in ${spaceDid}`,
+        err,
+      );
     }
   }
 }

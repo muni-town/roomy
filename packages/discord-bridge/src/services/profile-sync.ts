@@ -12,9 +12,7 @@ const log = createLogger("profile");
  */
 function iconBigintToHash(icon: bigint): string {
   const hex = icon.toString(16);
-  return hex.startsWith("a")
-    ? `a_${hex.substring(1)}`
-    : hex.substring(1);
+  return hex.startsWith("a") ? `a_${hex.substring(1)}` : hex.substring(1);
 }
 
 export interface DiscordUserProfile {
@@ -25,15 +23,17 @@ export interface DiscordUserProfile {
   discriminator: string;
 }
 
-function discordAvatarUrl(userId: bigint, avatar: bigint | undefined, discriminator: string): string {
+function discordAvatarUrl(
+  userId: bigint,
+  avatar: bigint | undefined,
+  discriminator: string,
+): string {
   if (avatar) {
     const hash = iconBigintToHash(avatar);
     const ext = hash.startsWith("a_") ? "gif" : "webp";
     return `https://cdn.discordapp.com/avatars/${userId}/${hash}.${ext}?size=256`;
   }
-  const mod = discriminator !== "0"
-    ? parseInt(discriminator) % 5
-    : 0;
+  const mod = discriminator !== "0" ? parseInt(discriminator) % 5 : 0;
   return `https://cdn.discordapp.com/embed/avatars/${mod}.png`;
 }
 
@@ -56,9 +56,10 @@ export async function syncUserProfile(
   );
 
   const avatar = discordAvatarUrl(user.id, user.avatar, user.discriminator);
-  const handle = user.discriminator !== "0"
-    ? `${user.username}#${user.discriminator}`
-    : user.username;
+  const handle =
+    user.discriminator !== "0"
+      ? `${user.username}#${user.discriminator}`
+      : user.username;
 
   for (const spaceDid of targetSpaces) {
     const existingHash = repo.getProfileHash(spaceDid, userIdStr);
@@ -86,7 +87,10 @@ export async function syncUserProfile(
       repo.setProfileHash(spaceDid, userIdStr, hash);
       log.info(`Synced profile for Discord user ${userIdStr} to ${spaceDid}`);
     } catch (err) {
-      log.error(`Failed to sync profile for Discord user ${userIdStr} to ${spaceDid}`, err);
+      log.error(
+        `Failed to sync profile for Discord user ${userIdStr} to ${spaceDid}`,
+        err,
+      );
     }
   }
 }

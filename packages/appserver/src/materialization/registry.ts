@@ -72,9 +72,10 @@ export function getOrCreateMaterializer(
   if (existing) return existing;
 
   // Resolve invalidation router: explicit opt > process-wide > undefined.
-  const invalidationRouter = opts.invalidationRouter === null
-    ? undefined
-    : (opts.invalidationRouter ?? globalInvalidationRouter);
+  const invalidationRouter =
+    opts.invalidationRouter === null
+      ? undefined
+      : (opts.invalidationRouter ?? globalInvalidationRouter);
 
   const promise = SpaceMaterializer.start({
     streamDid,

@@ -9,14 +9,21 @@ import type { SqlValue } from "@muni-town/leaf-client";
  * - { $type: "muni.town.sqliteValue.null" } → null
  * - undefined → undefined
  */
-export type SqlValueToPrimitive<T> =
-  T extends { $type: 'muni.town.sqliteValue.null' } ? null :
-  T extends { $type: 'muni.town.sqliteValue.integer', value: infer V } ? V :
-  T extends { $type: 'muni.town.sqliteValue.real', value: infer V } ? V :
-  T extends { $type: 'muni.town.sqliteValue.text', value: infer V } ? V :
-  T extends { $type: 'muni.town.sqliteValue.blob', value: infer V } ? V :
-  T extends undefined ? undefined :
-  unknown;
+export type SqlValueToPrimitive<T> = T extends {
+  $type: "muni.town.sqliteValue.null";
+}
+  ? null
+  : T extends { $type: "muni.town.sqliteValue.integer"; value: infer V }
+    ? V
+    : T extends { $type: "muni.town.sqliteValue.real"; value: infer V }
+      ? V
+      : T extends { $type: "muni.town.sqliteValue.text"; value: infer V }
+        ? V
+        : T extends { $type: "muni.town.sqliteValue.blob"; value: infer V }
+          ? V
+          : T extends undefined
+            ? undefined
+            : unknown;
 
 /**
  * Unwrap a single SQLite value wrapper.
@@ -34,12 +41,12 @@ export type SqlValueToPrimitive<T> =
  * ```
  */
 export function unwrapSqlValue<T extends SqlValue>(
-  value: T | undefined
+  value: T | undefined,
 ): SqlValueToPrimitive<T> {
   if (value === undefined || value === null) {
     return undefined as any;
   }
-  if (value.$type === 'muni.town.sqliteValue.null') {
+  if (value.$type === "muni.town.sqliteValue.null") {
     return null as any;
   }
   // All other types have a .value property
@@ -64,7 +71,7 @@ export function unwrapSqlValue<T extends SqlValue>(
  * ```
  */
 export function unwrapSqlRow<T extends Record<string, SqlValue>>(
-  row: T
+  row: T,
 ): { [K in keyof T]: SqlValueToPrimitive<T[K]> } {
   const unwrapped = {} as any;
   for (const key in row) {
@@ -91,7 +98,7 @@ export function unwrapSqlRow<T extends Record<string, SqlValue>>(
  * ```
  */
 export function unwrapSqlRows<T extends Record<string, SqlValue>>(
-  rows: T[]
+  rows: T[],
 ): Array<{ [K in keyof T]: SqlValueToPrimitive<T[K]> }> {
   return rows.map(unwrapSqlRow);
 }

@@ -17,5 +17,8 @@ export function toErrorResponse(err: unknown): Response {
     );
   }
   const message = err instanceof Error ? err.message : "Internal server error";
-  return Response.json({ error: "InternalServerError", message }, { status: 500 });
+  return Response.json(
+    { error: "InternalServerError", message },
+    { status: 500 },
+  );
 }

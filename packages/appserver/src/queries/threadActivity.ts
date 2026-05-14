@@ -54,10 +54,7 @@ export function listThreadActivity(
   const threads =
     scope.kind === "space"
       ? db
-          .query<
-            { id: string; name: string | null },
-            [string]
-          >(
+          .query<{ id: string; name: string | null }, [string]>(
             `select e.id as id, ci.name as name
                from entities e
                join comp_room cr on cr.entity = e.id
@@ -68,10 +65,7 @@ export function listThreadActivity(
           )
           .all(scope.spaceId)
       : db
-          .query<
-            { id: string; name: string | null },
-            [string]
-          >(
+          .query<{ id: string; name: string | null }, [string]>(
             `select e.id as id, ci.name as name
                from entities e
                join comp_room cr on cr.entity = e.id
@@ -90,10 +84,7 @@ export function listThreadActivity(
   // Step 2: for each thread, fetch latest timestamp + up to 3 recent participants.
   // Doing this per-thread keeps the SQL legible and avoids the partition-by-alias
   // pitfall noted above. Most rooms have few threads; if hot, batch this later.
-  const latestStmt = db.query<
-    { ts: number | null },
-    [string]
-  >(
+  const latestStmt = db.query<{ ts: number | null }, [string]>(
     `select max(cc.timestamp) as ts
        from entities e
        join comp_content cc on cc.entity = e.id
@@ -127,10 +118,7 @@ export function listThreadActivity(
      limit 3`,
   );
 
-  const parentStmt = db.query<
-    { head: string },
-    [string]
-  >(
+  const parentStmt = db.query<{ head: string }, [string]>(
     `select head from edges
       where tail = ? and label = 'link'
         and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1

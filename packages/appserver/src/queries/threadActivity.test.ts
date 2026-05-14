@@ -46,10 +46,10 @@ function seed(db: Database) {
          values (?, ?, 'link', json_object('canonical_parent', 1))`,
       [parent, tid],
     );
-    db.run(
-      "insert into comp_info (entity, name) values (?, ?)",
-      [tid, `Thread ${tid.slice(8, 9)}`],
-    );
+    db.run("insert into comp_info (entity, name) values (?, ?)", [
+      tid,
+      `Thread ${tid.slice(8, 9)}`,
+    ]);
   }
 
   for (const did of [ALICE, BOB, CAROL, DAVE]) {
@@ -57,10 +57,11 @@ function seed(db: Database) {
       did,
       did,
     ]);
-    db.run(
-      "insert into comp_info (entity, name, avatar) values (?, ?, ?)",
-      [did, did.split(":")[2] ?? did, null],
-    );
+    db.run("insert into comp_info (entity, name, avatar) values (?, ?, ?)", [
+      did,
+      did.split(":")[2] ?? did,
+      null,
+    ]);
   }
 }
 
@@ -72,10 +73,11 @@ function postMessage(
   ts: number,
 ) {
   const msgId = `01MSG${String(messageCounter++).padStart(20, "0")}`;
-  db.run(
-    "insert into entities (id, stream_id, room) values (?, ?, ?)",
-    [msgId, SPACE, threadId],
-  );
+  db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+    msgId,
+    SPACE,
+    threadId,
+  ]);
   db.run(
     "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/plain', ?, ?, ?)",
     [msgId, Buffer.from(""), msgId, ts],
@@ -132,11 +134,7 @@ describe("threadActivity", () => {
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     // Most recent 3 distinct: carol(5000), dave(4000), bob(2000). Alice drops.
-    expect(threadA.latestMembers.map((m) => m.did)).toEqual([
-      CAROL,
-      DAVE,
-      BOB,
-    ]);
+    expect(threadA.latestMembers.map((m) => m.did)).toEqual([CAROL, DAVE, BOB]);
   });
 
   test("threads with no messages have null latestTimestamp and empty members", () => {

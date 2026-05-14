@@ -10,7 +10,10 @@ import type { AppliedEvent, InvalidationEvent } from "./types.ts";
 const STREAM_DID = "did:web:space.example.com" as StreamDid;
 const USER_DID = "did:plc:alice" as UserDid;
 
-function makeEvent(type: EventType, overrides?: Partial<AppliedEvent>): AppliedEvent {
+function makeEvent(
+  type: EventType,
+  overrides?: Partial<AppliedEvent>,
+): AppliedEvent {
   return {
     streamDid: STREAM_DID,
     user: USER_DID,
@@ -21,7 +24,10 @@ function makeEvent(type: EventType, overrides?: Partial<AppliedEvent>): AppliedE
 }
 
 /** Collect events from a listener into a mutable array. */
-function collect(): { events: InvalidationEvent[][]; listener: (e: readonly InvalidationEvent[]) => void } {
+function collect(): {
+  events: InvalidationEvent[][];
+  listener: (e: readonly InvalidationEvent[]) => void;
+} {
   const events: InvalidationEvent[][] = [];
   return {
     events,
@@ -35,9 +41,11 @@ describe("Router", () => {
     const { events, listener } = collect();
     router.subscribe(listener);
 
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.space.updateSidebar.v1"),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [makeEvent("space.roomy.space.updateSidebar.v1")],
+      { isBackfill: false },
+    );
 
     expect(events).toHaveLength(1);
     expect(events[0]!.length).toBeGreaterThan(0);
@@ -49,9 +57,11 @@ describe("Router", () => {
     const { events, listener } = collect();
     router.subscribe(listener);
 
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.space.updateSidebar.v1"),
-    ], { isBackfill: true });
+    router.onEventsApplied(
+      STREAM_DID,
+      [makeEvent("space.roomy.space.updateSidebar.v1")],
+      { isBackfill: true },
+    );
 
     expect(events).toHaveLength(0);
   });
@@ -59,9 +69,11 @@ describe("Router", () => {
   it("does not call listeners when there are no subscribers", () => {
     const router = new Router();
     // Should not throw.
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.space.updateSidebar.v1"),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [makeEvent("space.roomy.space.updateSidebar.v1")],
+      { isBackfill: false },
+    );
   });
 
   it("assigns monotonically increasing seq to message diffs", () => {
@@ -76,13 +88,25 @@ describe("Router", () => {
       }
     });
 
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.message.createMessage.v0", { roomId: "01ROOM1AAAAAAAAAAAAAA000" as Ulid }),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [
+        makeEvent("space.roomy.message.createMessage.v0", {
+          roomId: "01ROOM1AAAAAAAAAAAAAA000" as Ulid,
+        }),
+      ],
+      { isBackfill: false },
+    );
 
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.message.createMessage.v0", { roomId: "01ROOM2AAAAAAAAAAAAAA000" as Ulid }),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [
+        makeEvent("space.roomy.message.createMessage.v0", {
+          roomId: "01ROOM2AAAAAAAAAAAAAA000" as Ulid,
+        }),
+      ],
+      { isBackfill: false },
+    );
 
     expect(seqs).toHaveLength(2);
     expect(seqs[1]!).toBeGreaterThan(seqs[0]!);
@@ -94,16 +118,20 @@ describe("Router", () => {
 
     const unsub = router.subscribe(() => count++);
 
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.space.updateSidebar.v1"),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [makeEvent("space.roomy.space.updateSidebar.v1")],
+      { isBackfill: false },
+    );
     expect(count).toBe(1);
 
     unsub();
 
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.space.updateSidebar.v1"),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [makeEvent("space.roomy.space.updateSidebar.v1")],
+      { isBackfill: false },
+    );
     expect(count).toBe(1); // No increase.
   });
 
@@ -117,9 +145,11 @@ describe("Router", () => {
     router.subscribe(() => secondReceived++);
 
     // Should not throw, and second listener should still be called.
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.space.updateSidebar.v1"),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [makeEvent("space.roomy.space.updateSidebar.v1")],
+      { isBackfill: false },
+    );
 
     expect(secondReceived).toBe(1);
   });
@@ -129,10 +159,14 @@ describe("Router", () => {
     const { events, listener } = collect();
     router.subscribe(listener);
 
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.space.updateSidebar.v1"),
-      makeEvent("space.roomy.space.updateSpaceInfo.v0"),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [
+        makeEvent("space.roomy.space.updateSidebar.v1"),
+        makeEvent("space.roomy.space.updateSpaceInfo.v0"),
+      ],
+      { isBackfill: false },
+    );
 
     // One call, with signals from both events.
     expect(events).toHaveLength(1);
@@ -145,9 +179,11 @@ describe("Router", () => {
     router.subscribe(listener);
 
     // page edit is out of scope → no signals.
-    router.onEventsApplied(STREAM_DID, [
-      makeEvent("space.roomy.page.editPage.v0"),
-    ], { isBackfill: false });
+    router.onEventsApplied(
+      STREAM_DID,
+      [makeEvent("space.roomy.page.editPage.v0")],
+      { isBackfill: false },
+    );
 
     expect(events).toHaveLength(0);
   });

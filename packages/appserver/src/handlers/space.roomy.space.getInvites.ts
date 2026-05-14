@@ -25,68 +25,68 @@ interface GetInvitesResult {
   invites: InviteRow[];
 }
 
-export const getInvitesHandler: QueryHandler<QueryParams, GetInvitesResult> =
-  async (params: QueryParams, auth: AuthCtx) => {
-    const userDid = UserDid(auth.did);
-    if (userDid instanceof type.errors) {
+export const getInvitesHandler: QueryHandler<
+  QueryParams,
+  GetInvitesResult
+> = async (params: QueryParams, auth: AuthCtx) => {
+  const userDid = UserDid(auth.did);
+  if (userDid instanceof type.errors) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      `Caller DID is not a valid UserDid: ${userDid.summary}`,
+    );
+  }
+  const spaceId = requireString(params, "spaceId");
+
+  await hydrateUserMembership(userDid);
+
+  const db = openDb();
+  const access = requireSpaceAccess(db, spaceId, userDid);
+
+  if (!access.isAdmin) {
+    const policy = db
+      .query<
+        { allow_member_invites: number | null },
+        [string]
+      >("select allow_member_invites from comp_space where entity = ?")
+      .get(spaceId);
+    // null = unset; spec default is "false" — non-admins are blocked.
+    if (policy?.allow_member_invites !== 1) {
       throw new XrpcError(
-        400,
-        "InvalidRequest",
-        `Caller DID is not a valid UserDid: ${userDid.summary}`,
+        403,
+        "Forbidden",
+        "Member-created invites are disabled in this space",
       );
     }
-    const spaceId = requireString(params, "spaceId");
+  }
 
-    await hydrateUserMembership(userDid);
-
-    const db = openDb();
-    const access = requireSpaceAccess(db, spaceId, userDid);
-
-    if (!access.isAdmin) {
-      const policy = db
+  const rows = access.isAdmin
+    ? db
         .query<
-          { allow_member_invites: number | null },
+          { token: string; created_by_did: string; event_ulid: string },
           [string]
         >(
-          "select allow_member_invites from comp_space where entity = ?",
-        )
-        .get(spaceId);
-      // null = unset; spec default is "false" — non-admins are blocked.
-      if (policy?.allow_member_invites !== 1) {
-        throw new XrpcError(
-          403,
-          "Forbidden",
-          "Member-created invites are disabled in this space",
-        );
-      }
-    }
-
-    const rows = access.isAdmin
-      ? db
-          .query<
-            { token: string; created_by_did: string; event_ulid: string },
-            [string]
-          >(
-            `select token, created_by_did, event_ulid
+          `select token, created_by_did, event_ulid
                from comp_invite where entity = ?`,
-          )
-          .all(spaceId)
-      : db
-          .query<
-            { token: string; created_by_did: string; event_ulid: string },
-            [string, string]
-          >(
-            `select token, created_by_did, event_ulid
+        )
+        .all(spaceId)
+    : db
+        .query<
+          { token: string; created_by_did: string; event_ulid: string },
+          [string, string]
+        >(
+          `select token, created_by_did, event_ulid
                from comp_invite
               where entity = ? and created_by_did = ?`,
-          )
-          .all(spaceId, userDid);
+        )
+        .all(spaceId, userDid);
 
-    return {
-      invites: rows.map((r) => ({
-        token: r.token,
-        createdBy: r.created_by_did,
-        eventUlid: r.event_ulid,
-      })),
-    };
+  return {
+    invites: rows.map((r) => ({
+      token: r.token,
+      createdBy: r.created_by_did,
+      eventUlid: r.event_ulid,
+    })),
   };
+};

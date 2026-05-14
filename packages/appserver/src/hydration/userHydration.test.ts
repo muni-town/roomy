@@ -57,29 +57,26 @@ function seedPersonalIntent(
   leftSpaces: StreamDid[] = [],
 ) {
   for (const did of [personalStreamDid, ...joinedSpaces, ...leftSpaces]) {
-    db.run(
-      "insert or ignore into entities (id, stream_id) values (?, ?)",
-      [did, personalStreamDid],
-    );
+    db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      did,
+      personalStreamDid,
+    ]);
   }
   // Personal stream's own comp_space row (PersonalJoinSpace seeds this for
   // the spaceDid; the personal stream itself gets one from
   // SpaceMaterializer's seed).
-  db.run(
-    "insert or ignore into comp_space (entity, hidden) values (?, 0)",
-    [personalStreamDid],
-  );
+  db.run("insert or ignore into comp_space (entity, hidden) values (?, 0)", [
+    personalStreamDid,
+  ]);
   for (const did of joinedSpaces) {
-    db.run(
-      "insert or ignore into comp_space (entity, hidden) values (?, 0)",
-      [did],
-    );
+    db.run("insert or ignore into comp_space (entity, hidden) values (?, 0)", [
+      did,
+    ]);
   }
   for (const did of leftSpaces) {
-    db.run(
-      "insert or ignore into comp_space (entity, hidden) values (?, 1)",
-      [did],
-    );
+    db.run("insert or ignore into comp_space (entity, hidden) values (?, 1)", [
+      did,
+    ]);
   }
 }
 

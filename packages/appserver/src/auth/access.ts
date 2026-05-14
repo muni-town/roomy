@@ -44,41 +44,32 @@ export interface RoomAccess {
 
 // ── Membership / admin / ban ──────────────────────────────────────────────
 
-export function isMember(
-  db: Database,
-  spaceId: string,
-  did: string,
-): boolean {
+export function isMember(db: Database, spaceId: string, did: string): boolean {
   const row = db
-    .query<{ n: number }, [string, string]>(
-      "select 1 as n from edges where head = ? and tail = ? and label = 'member' limit 1",
-    )
+    .query<
+      { n: number },
+      [string, string]
+    >("select 1 as n from edges where head = ? and tail = ? and label = 'member' limit 1")
     .get(spaceId, did);
   return row !== null;
 }
 
-export function isAdmin(
-  db: Database,
-  spaceId: string,
-  did: string,
-): boolean {
+export function isAdmin(db: Database, spaceId: string, did: string): boolean {
   const row = db
-    .query<{ n: number }, [string, string]>(
-      "select 1 as n from edges where head = ? and tail = ? and label = 'admin' limit 1",
-    )
+    .query<
+      { n: number },
+      [string, string]
+    >("select 1 as n from edges where head = ? and tail = ? and label = 'admin' limit 1")
     .get(spaceId, did);
   return row !== null;
 }
 
-export function isBanned(
-  db: Database,
-  spaceId: string,
-  did: string,
-): boolean {
+export function isBanned(db: Database, spaceId: string, did: string): boolean {
   const row = db
-    .query<{ n: number }, [string, string]>(
-      "select 1 as n from comp_bans where entity = ? and user_did = ? limit 1",
-    )
+    .query<
+      { n: number },
+      [string, string]
+    >("select 1 as n from comp_bans where entity = ? and user_did = ? limit 1")
     .get(spaceId, did);
   return row !== null;
 }
@@ -101,9 +92,10 @@ export function spaceAccess(
  */
 function allowsPublicJoin(db: Database, spaceId: string): boolean {
   const row = db
-    .query<{ v: number }, [string]>(
-      "select coalesce(allow_public_join, 1) as v from comp_space where entity = ?",
-    )
+    .query<
+      { v: number },
+      [string]
+    >("select coalesce(allow_public_join, 1) as v from comp_space where entity = ?")
     .get(spaceId);
   return row === null ? true : row.v === 1;
 }
@@ -160,9 +152,10 @@ function resolveRoom(
   // If this room has no default_access of its own, inherit from canonical parent.
   if (row.default_access === null && parentChannelId !== null) {
     const parentRow = db
-      .query<{ default_access: string | null }, [string]>(
-        "select default_access from comp_room where entity = ?",
-      )
+      .query<
+        { default_access: string | null },
+        [string]
+      >("select default_access from comp_room where entity = ?")
       .get(parentChannelId);
     return {
       row: {
@@ -201,10 +194,7 @@ function roleGrant(
   did: string,
 ): { canRead: boolean; canWrite: boolean } {
   const row = db
-    .query<
-      { has_read: number; has_write: number },
-      [string, string, string]
-    >(
+    .query<{ has_read: number; has_write: number }, [string, string, string]>(
       `select
          max(case when rr.permission in ('read', 'readwrite') then 1 else 0 end) as has_read,
          max(case when rr.permission = 'readwrite' then 1 else 0 end) as has_write

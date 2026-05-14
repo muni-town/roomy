@@ -25,10 +25,7 @@ export const SCHEMA_VERSION = "7-appserver.5";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 
-const SCHEMA_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "schema.sql",
-);
+const SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), "schema.sql");
 
 let dbInstance: Database | null = null;
 
@@ -76,14 +73,16 @@ export function initializeSchema(db: Database): void {
   db.exec(schemaSql);
 
   const row = db
-    .query<{ version: string }, []>("select version from roomy_schema_version where id = 1")
+    .query<
+      { version: string },
+      []
+    >("select version from roomy_schema_version where id = 1")
     .get();
 
   if (!row) {
-    db.run(
-      "insert into roomy_schema_version (id, version) values (1, ?)",
-      [SCHEMA_VERSION],
-    );
+    db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
+      SCHEMA_VERSION,
+    ]);
     return;
   }
 

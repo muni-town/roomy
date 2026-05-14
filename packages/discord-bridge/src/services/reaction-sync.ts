@@ -40,9 +40,7 @@ export async function handleReactionAdd(
     // Idempotency: already synced this reaction to this space?
     const existing = repo.getRoomyId(spaceDid, "reaction", key);
     if (existing) {
-      log.debug(
-        `Skipping reaction add ${key}: already synced to ${spaceDid}`,
-      );
+      log.debug(`Skipping reaction add ${key}: already synced to ${spaceDid}`);
       continue;
     }
 
@@ -56,8 +54,7 @@ export async function handleReactionAdd(
     }
 
     // Resolve the Roomy room
-    const roomyRoomId =
-      repo.getRoomyRoomId(spaceDid, channelIdStr);
+    const roomyRoomId = repo.getRoomyRoomId(spaceDid, channelIdStr);
     if (!roomyRoomId) {
       log.warn(
         `No Roomy room for channel ${channelIdStr} in ${spaceDid}, skipping reaction`,
@@ -135,15 +132,12 @@ export async function handleReactionRemove(
     // Find the Roomy reaction event we previously registered
     const reactionEventId = repo.getRoomyId(spaceDid, "reaction", key);
     if (!reactionEventId) {
-      log.debug(
-        `Skipping reaction remove ${key}: no mapping in ${spaceDid}`,
-      );
+      log.debug(`Skipping reaction remove ${key}: no mapping in ${spaceDid}`);
       continue;
     }
 
     // Resolve the Roomy room
-    const roomyRoomId =
-      repo.getRoomyRoomId(spaceDid, channelIdStr);
+    const roomyRoomId = repo.getRoomyRoomId(spaceDid, channelIdStr);
     if (!roomyRoomId) {
       log.warn(
         `No Roomy room for channel ${channelIdStr} in ${spaceDid}, skipping reaction remove`,

@@ -441,14 +441,16 @@ export class ConnectedSpace {
     }));
   }
 
-  async fetchRoles(): Promise<{
-    id: string;
-    name: string | null;
-    avatar: string | null;
-    description: string | null;
-    rooms: { roomId: string; permission: "read" | "readwrite" }[];
-    members: string[];
-  }[]> {
+  async fetchRoles(): Promise<
+    {
+      id: string;
+      name: string | null;
+      avatar: string | null;
+      description: string | null;
+      rooms: { roomId: string; permission: "read" | "readwrite" }[];
+      members: string[];
+    }[]
+  > {
     const resp = await this.#leaf.query(this.streamDid, {
       name: "roles",
       params: {},
@@ -459,7 +461,8 @@ export class ConnectedSpace {
       id: String(row["id"] ?? ""),
       name: row["name"] != null ? String(row["name"]) : null,
       avatar: row["avatar"] != null ? String(row["avatar"]) : null,
-      description: row["description"] != null ? String(row["description"]) : null,
+      description:
+        row["description"] != null ? String(row["description"]) : null,
       rooms: row["rooms"] != null ? JSON.parse(String(row["rooms"])) : [],
       members: row["members"] != null ? JSON.parse(String(row["members"])) : [],
     }));
@@ -813,7 +816,6 @@ export class ConnectedSpace {
     }
   }
 }
-
 
 /**
  * Parse SQL rows into encoded stream events.

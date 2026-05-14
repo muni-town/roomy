@@ -6,79 +6,79 @@
  * (and from `orphans`). Stage-1: unreadCount/lastRead are 0/null.
  */
 
-import { type, UserDid } from "@roomy-space/sdk"
-import { roomAccess } from "../auth/access.ts"
-import { openDb } from "../db/db.ts"
-import { hydrateUserMembership } from "../hydration/userHydration.ts"
-import { getReadPositions } from "../queries/readPositions.ts"
-import { requireSpaceAccess } from "../xrpc/authGuards.ts"
-import { XrpcError } from "../xrpc/errors.ts"
-import { requireString } from "../xrpc/params.ts"
-import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts"
+import { type, UserDid } from "@roomy-space/sdk";
+import { roomAccess } from "../auth/access.ts";
+import { openDb } from "../db/db.ts";
+import { hydrateUserMembership } from "../hydration/userHydration.ts";
+import { getReadPositions } from "../queries/readPositions.ts";
+import { requireSpaceAccess } from "../xrpc/authGuards.ts";
+import { XrpcError } from "../xrpc/errors.ts";
+import { requireString } from "../xrpc/params.ts";
+import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface SidebarChannel {
-  id: string
-  name: string | null
-  defaultAccess: "readwrite" | "read" | "none"
-  canRead: boolean
-  canWrite: boolean
-  unreadCount: number
-  lastRead: string | null
+  id: string;
+  name: string | null;
+  defaultAccess: "readwrite" | "read" | "none";
+  canRead: boolean;
+  canWrite: boolean;
+  unreadCount: number;
+  lastRead: string | null;
 }
 
 interface SidebarCategory {
-  id: string | null // null for v0 (legacy categories with no stable id)
-  name: string
-  position: number
-  channels: SidebarChannel[]
+  id: string | null; // null for v0 (legacy categories with no stable id)
+  name: string;
+  position: number;
+  channels: SidebarChannel[];
 }
 
 interface GetMetadataResult {
-  name: string | null
-  avatar: string | null
-  description: string | null
-  joinPolicy: { allowPublicJoin: boolean; allowMemberInvites: boolean }
-  isMember: boolean
-  isAdmin: boolean
-  sidebar: { categories: SidebarCategory[]; orphans: SidebarChannel[] }
+  name: string | null;
+  avatar: string | null;
+  description: string | null;
+  joinPolicy: { allowPublicJoin: boolean; allowMemberInvites: boolean };
+  isMember: boolean;
+  isAdmin: boolean;
+  sidebar: { categories: SidebarCategory[]; orphans: SidebarChannel[] };
 }
 
 interface SidebarConfig {
   categories: Array<{
-    id?: string
-    name: string
-    children: string[]
-  }>
+    id?: string;
+    name: string;
+    children: string[];
+  }>;
 }
 
 export const getMetadataHandler: QueryHandler<
   QueryParams,
   GetMetadataResult
 > = async (params: QueryParams, auth: AuthCtx) => {
-  const userDid = UserDid(auth.did)
+  const userDid = UserDid(auth.did);
   if (userDid instanceof type.errors) {
     throw new XrpcError(
       400,
       "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`
-    )
+      `Caller DID is not a valid UserDid: ${userDid.summary}`,
+    );
   }
-  const spaceId = requireString(params, "spaceId")
+  const spaceId = requireString(params, "spaceId");
 
-  await hydrateUserMembership(userDid)
+  await hydrateUserMembership(userDid);
 
-  const db = openDb()
-  const access = requireSpaceAccess(db, spaceId, userDid)
+  const db = openDb();
+  const access = requireSpaceAccess(db, spaceId, userDid);
 
   const spaceRow = db
     .query<
       {
-        name: string | null
-        avatar: string | null
-        description: string | null
-        allow_public_join: number | null
-        allow_member_invites: number | null
-        sidebar_config: string
+        name: string | null;
+        avatar: string | null;
+        description: string | null;
+        allow_public_join: number | null;
+        allow_member_invites: number | null;
+        sidebar_config: string;
       },
       [string]
     >(
@@ -91,22 +91,22 @@ export const getMetadataHandler: QueryHandler<
            cs.sidebar_config as sidebar_config
          from comp_space cs
          left join comp_info ci on ci.entity = cs.entity
-        where cs.entity = ?`
+        where cs.entity = ?`,
     )
-    .get(spaceId)
+    .get(spaceId);
 
   if (spaceRow === null) {
-    throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`)
+    throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`);
   }
 
-  let config: SidebarConfig
+  let config: SidebarConfig;
   try {
-    const parsed = JSON.parse(spaceRow.sidebar_config)
+    const parsed = JSON.parse(spaceRow.sidebar_config);
     config = {
-      categories: Array.isArray(parsed?.categories) ? parsed.categories : []
-    }
+      categories: Array.isArray(parsed?.categories) ? parsed.categories : [],
+    };
   } catch {
-    config = { categories: [] }
+    config = { categories: [] };
   }
 
   // Resolve every channel referenced in the config (and the full set of
@@ -114,9 +114,9 @@ export const getMetadataHandler: QueryHandler<
   const allChannelRows = db
     .query<
       {
-        id: string
-        name: string | null
-        default_access: string | null
+        id: string;
+        name: string | null;
+        default_access: string | null;
       },
       [string]
     >(
@@ -126,27 +126,27 @@ export const getMetadataHandler: QueryHandler<
            left join comp_info ci on ci.entity = e.id
           where e.stream_id = ?
             and cr.label = 'space.roomy.channel'
-            and coalesce(cr.deleted, 0) = 0`
+            and coalesce(cr.deleted, 0) = 0`,
     )
-    .all(spaceId)
+    .all(spaceId);
 
-  const channelById = new Map(allChannelRows.map((r) => [r.id, r]))
+  const channelById = new Map(allChannelRows.map((r) => [r.id, r]));
 
   // Batch-fetch read positions for all channels in this space.
   const readPositions = getReadPositions(
     db,
     userDid,
-    allChannelRows.map((r) => r.id)
-  )
+    allChannelRows.map((r) => r.id),
+  );
 
-  console.log("read positions", readPositions)
+  console.log("read positions", readPositions);
 
   const buildChannel = (id: string): SidebarChannel | null => {
-    const row = channelById.get(id)
-    if (!row) return null
-    const acc = roomAccess(db, id, userDid)
-    if (!acc.canRead) return null
-    const pos = readPositions.get(id)
+    const row = channelById.get(id);
+    if (!row) return null;
+    const acc = roomAccess(db, id, userDid);
+    if (!acc.canRead) return null;
+    const pos = readPositions.get(id);
     return {
       id: row.id,
       name: row.name,
@@ -154,31 +154,31 @@ export const getMetadataHandler: QueryHandler<
       canRead: acc.canRead,
       canWrite: acc.canWrite,
       unreadCount: pos?.unreadCount ?? 0,
-      lastRead: pos?.lastRead ?? null
-    }
-  }
+      lastRead: pos?.lastRead ?? null,
+    };
+  };
 
-  const referencedIds = new Set<string>()
+  const referencedIds = new Set<string>();
   const categories: SidebarCategory[] = config.categories.map((cat, idx) => {
-    const channels: SidebarChannel[] = []
+    const channels: SidebarChannel[] = [];
     for (const childId of cat.children ?? []) {
-      referencedIds.add(childId)
-      const ch = buildChannel(childId)
-      if (ch) channels.push(ch)
+      referencedIds.add(childId);
+      const ch = buildChannel(childId);
+      if (ch) channels.push(ch);
     }
     return {
       id: cat.id ?? null,
       name: cat.name,
       position: idx,
-      channels
-    }
-  })
+      channels,
+    };
+  });
 
-  const orphans: SidebarChannel[] = []
+  const orphans: SidebarChannel[] = [];
   for (const row of allChannelRows) {
-    if (referencedIds.has(row.id)) continue
-    const ch = buildChannel(row.id)
-    if (ch) orphans.push(ch)
+    if (referencedIds.has(row.id)) continue;
+    const ch = buildChannel(row.id);
+    if (ch) orphans.push(ch);
   }
 
   return {
@@ -188,10 +188,10 @@ export const getMetadataHandler: QueryHandler<
     joinPolicy: {
       // null = unset → defaults per schema comments.
       allowPublicJoin: spaceRow.allow_public_join !== 0,
-      allowMemberInvites: spaceRow.allow_member_invites === 1
+      allowMemberInvites: spaceRow.allow_member_invites === 1,
     },
     isMember: access.isMember,
     isAdmin: access.isAdmin,
-    sidebar: { categories, orphans }
-  }
-}
+    sidebar: { categories, orphans },
+  };
+};

@@ -7,7 +7,12 @@
  * all fields available — we just pick the ones we need.
  */
 
-import type { DecodedStreamEvent, StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
+import type {
+  DecodedStreamEvent,
+  StreamDid,
+  Ulid,
+  UserDid,
+} from "@roomy-space/sdk";
 import type { AppliedEvent } from "../invalidation/types.ts";
 
 /**
@@ -17,7 +22,9 @@ import type { AppliedEvent } from "../invalidation/types.ts";
  * own fields. We read them generically here since the event has already
  * been validated by the SDK parser.
  */
-function extractDetails(event: Record<string, unknown>): Record<string, unknown> | undefined {
+function extractDetails(
+  event: Record<string, unknown>,
+): Record<string, unknown> | undefined {
   const type = event["$type"] as string;
 
   switch (type) {
@@ -32,15 +39,22 @@ function extractDetails(event: Record<string, unknown>): Record<string, unknown>
       //
       // The `room` field is on the event envelope, not details.
       // Author comes from the authenticated `user` on the stream event.
-      const extensions = event["extensions"] as Record<string, unknown> | undefined;
-      const authorOverride = extensions?.["space.roomy.extension.authorOverride.v0"] as { did?: string } | undefined;
-      const timestampOverride = extensions?.["space.roomy.extension.timestampOverride.v0"] as { timestamp?: number } | undefined;
+      const extensions = event["extensions"] as
+        | Record<string, unknown>
+        | undefined;
+      const authorOverride = extensions?.[
+        "space.roomy.extension.authorOverride.v0"
+      ] as { did?: string } | undefined;
+      const timestampOverride = extensions?.[
+        "space.roomy.extension.timestampOverride.v0"
+      ] as { timestamp?: number } | undefined;
 
       return {
         authorDid: authorOverride?.did,
-        timestamp: timestampOverride?.timestamp != null
-          ? new Date(timestampOverride.timestamp).toISOString()
-          : undefined,
+        timestamp:
+          timestampOverride?.timestamp != null
+            ? new Date(timestampOverride.timestamp).toISOString()
+            : undefined,
         replyTo: undefined, // resolved from edges after materialization
       };
     }

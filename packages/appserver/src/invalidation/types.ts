@@ -84,7 +84,9 @@ export type InvalidationEvent =
 
 // ─── Router ─────────────────────────────────────────────────────────────
 
-export type InvalidationListener = (events: readonly InvalidationEvent[]) => void;
+export type InvalidationListener = (
+  events: readonly InvalidationEvent[],
+) => void;
 
 /**
  * InvalidationRouter is a typed pub/sub bus.

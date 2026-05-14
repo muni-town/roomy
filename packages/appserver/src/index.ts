@@ -20,8 +20,9 @@ import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts"
 import { updateSeenHandler } from "./handlers/space.roomy.room.updateSeen.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
-const OWN_DID = process.env.APPSERVER_DID ?? "did:web:appserver.roomy.chat";
-const SERVICE_ENDPOINT = process.env.APPSERVER_ORIGIN ?? "https://appserver.roomy.chat";
+const OWN_DID = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
+const SERVICE_ENDPOINT =
+  process.env.APPSERVER_ORIGIN ?? "https://api.roomy.space";
 
 const DID_DOCUMENT = {
   "@context": ["https://www.w3.org/ns/did/v1"],

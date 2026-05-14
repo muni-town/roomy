@@ -141,9 +141,10 @@ describe("SpaceMaterializer.start", () => {
     expect(mat.getStats().batches).toBe(1);
     expect(
       db
-        .query<{ count: number }, [string]>(
-          "select count(*) as count from comp_room where entity = ?",
-        )
+        .query<
+          { count: number },
+          [string]
+        >("select count(*) as count from comp_room where entity = ?")
         .get(room.id)?.count,
     ).toBe(1);
     expect(readBackfilledTo(db, STREAM)).toBe(8);
@@ -161,10 +162,7 @@ describe("SpaceMaterializer.start", () => {
     });
 
     fake.emit(
-      [
-        decoded(createRoomEvent("a"), 1),
-        decoded(createRoomEvent("b"), 2),
-      ],
+      [decoded(createRoomEvent("a"), 1), decoded(createRoomEvent("b"), 2)],
       { isBackfill: true },
     );
     fake.emit(
@@ -256,9 +254,10 @@ describe("SpaceMaterializer.start", () => {
     // itself may have failed (it depends on fields we didn't populate).
     expect(
       db
-        .query<{ handle: string }, [string]>(
-          "select handle from comp_user where did = ?",
-        )
+        .query<
+          { handle: string },
+          [string]
+        >("select handle from comp_user where did = ?")
         .get(USER)?.handle,
     ).toBe("fake-user.test");
   });
@@ -301,9 +300,7 @@ describe("SpaceMaterializer.start", () => {
     expect(mat.getStats().applied).toBeGreaterThanOrEqual(1);
     expect(
       db
-        .query<{ count: number }, []>(
-          "select count(*) as count from comp_room",
-        )
+        .query<{ count: number }, []>("select count(*) as count from comp_room")
         .get()?.count,
     ).toBeGreaterThanOrEqual(1);
   });

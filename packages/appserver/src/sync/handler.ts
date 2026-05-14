@@ -17,7 +17,11 @@
 
 import type { UserDid } from "@roomy-space/sdk";
 import type { ClientMessage, SyncSocket } from "../xrpc/types.ts";
-import type { InvalidationEvent, InvalidationRouter, QueryNsid } from "../invalidation/types.ts";
+import type {
+  InvalidationEvent,
+  InvalidationRouter,
+  QueryNsid,
+} from "../invalidation/types.ts";
 import { messageFrame } from "../xrpc/frame.ts";
 
 // ─── Topic helpers ───────────────────────────────────────────────────────
@@ -47,11 +51,15 @@ function topicsForSignal(signal: InvalidationEvent["signal"]): Topic[] {
       case "space.roomy.space.getRoles":
       case "space.roomy.space.getMembers":
       case "space.roomy.space.getInvites":
-        return qi.params["spaceId"] ? [topicKey("space", qi.params["spaceId"])] : [];
+        return qi.params["spaceId"]
+          ? [topicKey("space", qi.params["spaceId"])]
+          : [];
       case "space.roomy.room.getMetadata":
       case "space.roomy.room.getMessages":
       case "space.roomy.room.getThreads":
-        return qi.params["roomId"] ? [topicKey("room", qi.params["roomId"])] : [];
+        return qi.params["roomId"]
+          ? [topicKey("room", qi.params["roomId"])]
+          : [];
       case "space.roomy.message.getMessage":
         // No specific topic — message invalidation doesn't map to a single room.
         // The client handles this via invalidating the specific query key.
@@ -173,7 +181,13 @@ export class SyncManager {
     }
   }
 
-  #routeMessageDiff(signal: InvalidationEvent["signal"] & { roomId: string; seq: number; ops: unknown[] }): void {
+  #routeMessageDiff(
+    signal: InvalidationEvent["signal"] & {
+      roomId: string;
+      seq: number;
+      ops: unknown[];
+    },
+  ): void {
     const topic = topicKey("room", signal.roomId);
     const connIds = this.#topicIndex.get(topic);
     if (!connIds) return;
@@ -192,11 +206,13 @@ export class SyncManager {
     }
   }
 
-  #routeQueryInvalidation(signal: InvalidationEvent["signal"] & {
-    nsid: QueryNsid;
-    params: Record<string, string>;
-    affectedUser?: UserDid;
-  }): void {
+  #routeQueryInvalidation(
+    signal: InvalidationEvent["signal"] & {
+      nsid: QueryNsid;
+      params: Record<string, string>;
+      affectedUser?: UserDid;
+    },
+  ): void {
     const topics = topicsForSignal(signal);
 
     // getSpaces has no specific topic — broadcast to ALL connections
@@ -267,19 +283,26 @@ export class SyncManager {
     }
 
     // Invalidate getSpaces (no params needed).
-    state.send(messageFrame("#invalidate", {
-      nsid: "space.roomy.space.getSpaces",
-      params: {},
-    }));
+    state.send(
+      messageFrame("#invalidate", {
+        nsid: "space.roomy.space.getSpaces",
+        params: {},
+      }),
+    );
 
     // Invalidate per-space endpoints.
     for (const spaceId of spaceIds) {
       for (const nsid of nsids) {
-        if (nsid.startsWith("space.roomy.space.") && nsid !== "space.roomy.space.getSpaces") {
-          state.send(messageFrame("#invalidate", {
-            nsid,
-            params: { spaceId },
-          }));
+        if (
+          nsid.startsWith("space.roomy.space.") &&
+          nsid !== "space.roomy.space.getSpaces"
+        ) {
+          state.send(
+            messageFrame("#invalidate", {
+              nsid,
+              params: { spaceId },
+            }),
+          );
         }
       }
     }
@@ -288,10 +311,12 @@ export class SyncManager {
     for (const roomId of roomIds) {
       for (const nsid of nsids) {
         if (nsid.startsWith("space.roomy.room.")) {
-          state.send(messageFrame("#invalidate", {
-            nsid,
-            params: { roomId },
-          }));
+          state.send(
+            messageFrame("#invalidate", {
+              nsid,
+              params: { roomId },
+            }),
+          );
         }
       }
     }

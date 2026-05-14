@@ -32,9 +32,10 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
 
   const db = openDb();
   const row = db
-    .query<{ room: string | null }, [string]>(
-      "select room from entities where id = ?",
-    )
+    .query<
+      { room: string | null },
+      [string]
+    >("select room from entities where id = ?")
     .get(messageId);
 
   if (row === null) {
