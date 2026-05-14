@@ -39,8 +39,7 @@ export async function handleMessageEdit(
       continue;
     }
 
-    const roomyRoomId =
-      repo.getRoomyRoomId(spaceDid, channelId);
+    const roomyRoomId = repo.getRoomyRoomId(spaceDid, channelId);
     if (!roomyRoomId) {
       log.warn(
         `No Roomy room for channel ${channelId} in ${spaceDid}, skipping edit`,
@@ -120,8 +119,7 @@ export async function handleMessageDelete(
       continue;
     }
 
-    const roomyRoomId =
-      repo.getRoomyRoomId(spaceDid, channelIdStr);
+    const roomyRoomId = repo.getRoomyRoomId(spaceDid, channelIdStr);
     if (!roomyRoomId) {
       log.warn(
         `No Roomy room for channel ${channelIdStr} in ${spaceDid}, skipping delete`,

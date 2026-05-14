@@ -81,10 +81,16 @@ export function createDefaultSpaceEvents(
       id: infoEventId,
       $type: "space.roomy.space.updateSpaceInfo.v0",
       name: options.name,
-      ...(options.description !== undefined && { description: options.description }),
+      ...(options.description !== undefined && {
+        description: options.description,
+      }),
       ...(options.avatar !== undefined && { avatar: options.avatar }),
-      ...(options.allowPublicJoin !== undefined && { allowPublicJoin: options.allowPublicJoin }),
-      ...(options.allowMemberInvites !== undefined && { allowMemberInvites: options.allowMemberInvites }),
+      ...(options.allowPublicJoin !== undefined && {
+        allowPublicJoin: options.allowPublicJoin,
+      }),
+      ...(options.allowMemberInvites !== undefined && {
+        allowMemberInvites: options.allowMemberInvites,
+      }),
     },
     // Create lobby channel
     {
@@ -142,7 +148,10 @@ export function createDefaultSpaceEvents(
  * ```
  */
 export async function createDefaultSpace(
-  space: { sendEvent(event: Event): Promise<void>; sendEventBatch(events: Event[]): Promise<void> },
+  space: {
+    sendEvent(event: Event): Promise<void>;
+    sendEventBatch(events: Event[]): Promise<void>;
+  },
   options: CreateDefaultSpaceOptions,
 ): Promise<CreateDefaultSpaceResult> {
   const events = createDefaultSpaceEvents(options);
@@ -179,7 +188,9 @@ export function updateSpaceInfoEvents(
     id: infoEventId,
     $type: "space.roomy.space.updateSpaceInfo.v0",
     ...(options.name !== undefined && { name: options.name }),
-    ...(options.description !== undefined && { description: options.description }),
+    ...(options.description !== undefined && {
+      description: options.description,
+    }),
     ...(options.avatar !== undefined && { avatar: options.avatar }),
   };
 }

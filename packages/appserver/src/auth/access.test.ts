@@ -21,10 +21,10 @@ const THREAD = "01THREAD000000000000000000";
 const ROLE = "01ROLE0000000000000000000";
 
 function seedSpace(db: Database, spaceId = SPACE): void {
-  db.run(
-    "insert into entities (id, stream_id) values (?, ?)",
-    [spaceId, spaceId],
-  );
+  db.run("insert into entities (id, stream_id) values (?, ?)", [
+    spaceId,
+    spaceId,
+  ]);
   db.run("insert into comp_space (entity) values (?)", [spaceId]);
 }
 

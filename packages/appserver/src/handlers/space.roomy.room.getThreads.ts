@@ -21,7 +21,11 @@ interface ThreadRow {
   canonicalParent: string | null;
   activity: {
     latestTimestamp: string | null;
-    latestMembers: Array<{ did: string; name: string | null; avatar: string | null }>;
+    latestMembers: Array<{
+      did: string;
+      name: string | null;
+      avatar: string | null;
+    }>;
   };
 }
 

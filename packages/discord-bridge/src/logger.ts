@@ -2,8 +2,14 @@ import { LOG_LEVEL } from "./env.ts";
 
 type Level = "debug" | "info" | "warn" | "error";
 
-const order: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
-const threshold = order[(LOG_LEVEL as Level) in order ? (LOG_LEVEL as Level) : "info"];
+const order: Record<Level, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+};
+const threshold =
+  order[(LOG_LEVEL as Level) in order ? (LOG_LEVEL as Level) : "info"];
 
 function emit(level: Level, scope: string, msg: string, extra?: unknown) {
   if (order[level] < threshold) return;

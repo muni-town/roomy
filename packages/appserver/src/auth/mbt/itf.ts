@@ -40,7 +40,12 @@ export interface DecodedRecord {
 export type DecodedMap<K = Decoded, V = Decoded> = [K, V][];
 
 export interface ItfTrace<S = Record<string, Decoded>> {
-  meta: { format: string; source: string; status: string; description?: string };
+  meta: {
+    format: string;
+    source: string;
+    status: string;
+    description?: string;
+  };
   vars: string[];
   states: ItfState<S>[];
 }
@@ -123,7 +128,11 @@ export function parseTrace<S = Record<string, Decoded>>(
 
     const decodedVars: Record<string, Decoded> = {};
     for (const k of Object.keys(raw)) {
-      if (k === "#meta" || k === "mbt::actionTaken" || k === "mbt::nondetPicks") {
+      if (
+        k === "#meta" ||
+        k === "mbt::actionTaken" ||
+        k === "mbt::nondetPicks"
+      ) {
         continue;
       }
       decodedVars[k] = decode(raw[k]);

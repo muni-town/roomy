@@ -1,8 +1,17 @@
 import type { Collection } from "@discordeno/bot";
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
-import { CHANNEL_TYPES, THREAD_TYPES, MESSAGE_CHANNEL_TYPES, isChannelPublic } from "../discord/types.ts";
+import {
+  CHANNEL_TYPES,
+  THREAD_TYPES,
+  MESSAGE_CHANNEL_TYPES,
+  isChannelPublic,
+} from "../discord/types.ts";
 import type { DiscordBot, MessageProperties } from "../discord/types.ts";
-import type { BridgeRepository, BridgeConfig, BridgeMode } from "../db/repository.ts";
+import type {
+  BridgeRepository,
+  BridgeConfig,
+  BridgeMode,
+} from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
 import { ensureRoomyChannel } from "./room-sync.ts";
@@ -76,7 +85,9 @@ export async function runBackfill(
   log.info(`Backfilling ${tasks.length} (channel, space) pairs`);
 
   const results = await Promise.allSettled(
-    tasks.map((t) => backfillChannel(cached, repo, spaceManager, t.channelId, t.spaceDid)),
+    tasks.map((t) =>
+      backfillChannel(cached, repo, spaceManager, t.channelId, t.spaceDid),
+    ),
   );
 
   const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -98,10 +109,14 @@ async function ensureRoomyRooms(
       const guild = bot.cache.guilds.memory.get(BigInt(guildId));
       if (!guild?.channels) continue;
       channelIds = [...guild.channels.values()]
-        .filter((ch) => CHANNEL_TYPES.has(ch.type) && isChannelPublic(ch, guildId))
+        .filter(
+          (ch) => CHANNEL_TYPES.has(ch.type) && isChannelPublic(ch, guildId),
+        )
         .map((ch) => ch.id.toString());
     } else {
-      channelIds = repo.listAllowlistForBridge(spaceDid).map((e) => e.channelId);
+      channelIds = repo
+        .listAllowlistForBridge(spaceDid)
+        .map((e) => e.channelId);
     }
 
     const connected = await spaceManager.getOrConnect(spaceDid);
@@ -140,7 +155,9 @@ async function ensureRoomyRooms(
     }
 
     if (created > 0) {
-      log.info(`Created ${created} Roomy rooms for ${channelIds.length} bridged channels in ${spaceDid}`);
+      log.info(
+        `Created ${created} Roomy rooms for ${channelIds.length} bridged channels in ${spaceDid}`,
+      );
     }
   }
 }
@@ -162,7 +179,10 @@ async function ensureRoomyThreads(
       mode === "full"
         ? new Set(
             [...guild.channels.values()]
-              .filter((ch) => CHANNEL_TYPES.has(ch.type) && isChannelPublic(ch, guildId))
+              .filter(
+                (ch) =>
+                  CHANNEL_TYPES.has(ch.type) && isChannelPublic(ch, guildId),
+              )
               .map((ch) => ch.id.toString()),
           )
         : new Set(
@@ -243,7 +263,10 @@ async function ensureRoomyThreads(
   }
 }
 
-function resolveGuildIdForChannel(bot: BotWithCache, channelId: string): string | undefined {
+function resolveGuildIdForChannel(
+  bot: BotWithCache,
+  channelId: string,
+): string | undefined {
   const id = BigInt(channelId);
   for (const guild of bot.cache.guilds.memory.values()) {
     if (guild.channels?.has(id)) return guild.id.toString();
@@ -251,7 +274,10 @@ function resolveGuildIdForChannel(bot: BotWithCache, channelId: string): string 
   return undefined;
 }
 
-function resolveChannelName(bot: BotWithCache, channelId: string): string | undefined {
+function resolveChannelName(
+  bot: BotWithCache,
+  channelId: string,
+): string | undefined {
   const id = BigInt(channelId);
   const direct = bot.cache.channels.memory.get(id);
   if (direct?.name) return direct.name;
@@ -279,7 +305,10 @@ function channelsForConfig(
     }
     if (!guild.channels) return channels;
     for (const [channelId, channel] of guild.channels) {
-      if (MESSAGE_CHANNEL_TYPES.has(channel.type) && isChannelPublic(channel, config.guildId)) {
+      if (
+        MESSAGE_CHANNEL_TYPES.has(channel.type) &&
+        isChannelPublic(channel, config.guildId)
+      ) {
         channels.push(channelId.toString());
       }
     }
@@ -306,7 +335,14 @@ export async function backfillSingleChannel(
     const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
     const channelName = resolveChannelName(cached, channelId);
     if (channelName) {
-      await ensureRoomyChannel(repo, spaceManager, channelId, guildId, channelName, targetSpaces);
+      await ensureRoomyChannel(
+        repo,
+        spaceManager,
+        channelId,
+        guildId,
+        channelName,
+        targetSpaces,
+      );
     }
   }
 
@@ -335,57 +371,62 @@ async function backfillChannel(
   activeBackfills.add(key);
 
   try {
-  const guildId = resolveGuildIdForChannel(bot, channelId);
-  if (!guildId) {
-    log.error(`Cannot resolve guildId for channel ${channelId}; skipping backfill`);
-    return;
-  }
-
-  const cursor = repo.getChannelCursor(spaceDid, channelId);
-  // First-time backfill: start from snowflake 0 (before all valid IDs)
-  // Resume: start from last cursor
-  let afterCursor = cursor?.lastMessageId ?? "0";
-
-  log.info(
-    `Backfilling channel ${channelId} → ${spaceDid} (cursor: ${cursor?.lastMessageId ?? "none"})`,
-  );
-
-  let totalSynced = 0;
-  let totalSkipped = 0;
-
-  while (true) {
-    const messages = await bot.helpers.getMessages(
-      BigInt(channelId),
-      { after: BigInt(afterCursor), limit: 100 },
-    );
-
-    if (messages.length === 0) break;
-
-    for (const message of messages) {
-      try {
-        const result = await ingestDiscordMessage(
-          message as MessageProperties,
-          repo,
-          spaceManager,
-          guildId,
-          spaceDid,
-        );
-        totalSynced += result.synced;
-        totalSkipped += result.skipped;
-      } catch (err) {
-        log.error(`Error processing message in backfill for channel ${channelId}`, err);
-      }
+    const guildId = resolveGuildIdForChannel(bot, channelId);
+    if (!guildId) {
+      log.error(
+        `Cannot resolve guildId for channel ${channelId}; skipping backfill`,
+      );
+      return;
     }
 
-    const lastMessage = messages[messages.length - 1]!;
-    afterCursor = lastMessage.id.toString();
+    const cursor = repo.getChannelCursor(spaceDid, channelId);
+    // First-time backfill: start from snowflake 0 (before all valid IDs)
+    // Resume: start from last cursor
+    let afterCursor = cursor?.lastMessageId ?? "0";
 
-    if (messages.length < 100) break;
-  }
+    log.info(
+      `Backfilling channel ${channelId} → ${spaceDid} (cursor: ${cursor?.lastMessageId ?? "none"})`,
+    );
 
-  log.info(
-    `Channel ${channelId} → ${spaceDid} backfill done: ${totalSynced} synced, ${totalSkipped} skipped`,
-  );
+    let totalSynced = 0;
+    let totalSkipped = 0;
+
+    while (true) {
+      const messages = await bot.helpers.getMessages(BigInt(channelId), {
+        after: BigInt(afterCursor),
+        limit: 100,
+      });
+
+      if (messages.length === 0) break;
+
+      for (const message of messages) {
+        try {
+          const result = await ingestDiscordMessage(
+            message as MessageProperties,
+            repo,
+            spaceManager,
+            guildId,
+            spaceDid,
+          );
+          totalSynced += result.synced;
+          totalSkipped += result.skipped;
+        } catch (err) {
+          log.error(
+            `Error processing message in backfill for channel ${channelId}`,
+            err,
+          );
+        }
+      }
+
+      const lastMessage = messages[messages.length - 1]!;
+      afterCursor = lastMessage.id.toString();
+
+      if (messages.length < 100) break;
+    }
+
+    log.info(
+      `Channel ${channelId} → ${spaceDid} backfill done: ${totalSynced} synced, ${totalSkipped} skipped`,
+    );
   } finally {
     activeBackfills.delete(key);
   }

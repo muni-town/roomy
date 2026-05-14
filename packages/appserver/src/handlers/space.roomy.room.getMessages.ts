@@ -19,31 +19,37 @@ interface GetMessagesResult {
   cursor: string | null;
 }
 
-export const getMessagesHandler: QueryHandler<QueryParams, GetMessagesResult> =
-  async (params: QueryParams, auth: AuthCtx) => {
-    const userDid = UserDid(auth.did);
-    if (userDid instanceof type.errors) {
-      throw new XrpcError(
-        400,
-        "InvalidRequest",
-        `Caller DID is not a valid UserDid: ${userDid.summary}`,
-      );
-    }
-    const roomId = requireString(params, "roomId");
-    const limit = optionalInt(params, "limit", { min: 1, max: 100, default: 50 })!;
-    const cursor = optionalString(params, "cursor") ?? null;
+export const getMessagesHandler: QueryHandler<
+  QueryParams,
+  GetMessagesResult
+> = async (params: QueryParams, auth: AuthCtx) => {
+  const userDid = UserDid(auth.did);
+  if (userDid instanceof type.errors) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      `Caller DID is not a valid UserDid: ${userDid.summary}`,
+    );
+  }
+  const roomId = requireString(params, "roomId");
+  const limit = optionalInt(params, "limit", {
+    min: 1,
+    max: 100,
+    default: 50,
+  })!;
+  const cursor = optionalString(params, "cursor") ?? null;
 
-    await hydrateUserMembership(userDid);
+  await hydrateUserMembership(userDid);
 
-    const db = openDb();
-    requireRoomRead(db, roomId, userDid);
+  const db = openDb();
+  requireRoomRead(db, roomId, userDid);
 
-    const { messages, nextCursor } = selectMessages(db, {
-      kind: "room",
-      roomId,
-      limit,
-      cursor,
-    });
+  const { messages, nextCursor } = selectMessages(db, {
+    kind: "room",
+    roomId,
+    limit,
+    cursor,
+  });
 
-    return { messages, cursor: nextCursor };
-  };
+  return { messages, cursor: nextCursor };
+};

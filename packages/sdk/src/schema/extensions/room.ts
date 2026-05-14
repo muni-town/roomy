@@ -10,13 +10,19 @@ import { unionToMap } from "../primitives";
  * Snowflakes are 64-bit integers encoding timestamp + worker + sequence.
  */
 export const DiscordSnowflake = type.string
-  .narrow((v, ctx) => (/^\d{17,20}$/.test(v) ? true : ctx.mustBe("a valid Discord snowflake")))
+  .narrow((v, ctx) =>
+    /^\d{17,20}$/.test(v) ? true : ctx.mustBe("a valid Discord snowflake"),
+  )
   .describe("A Discord snowflake ID (17-20 digit string).");
 
 export const DiscordOrigin = type({
   $type: "'space.roomy.extension.discordOrigin.v0'",
-  snowflake: DiscordSnowflake.describe("The Discord channel/category snowflake ID."),
-  guildId: DiscordSnowflake.describe("The Discord guild (server) snowflake ID."),
+  snowflake: DiscordSnowflake.describe(
+    "The Discord channel/category snowflake ID.",
+  ),
+  guildId: DiscordSnowflake.describe(
+    "The Discord guild (server) snowflake ID.",
+  ),
 }).describe(
   "Origin metadata for rooms bridged from Discord. \
 Used for idempotency checks and linking back to Discord.",

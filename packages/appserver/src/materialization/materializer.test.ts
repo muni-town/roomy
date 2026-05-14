@@ -21,7 +21,11 @@ describe("materialize", () => {
       name: "general",
     } as unknown as Event;
 
-    const bundle = materialize(event, { streamId: STREAM, user: USER }, 1 as StreamIndex);
+    const bundle = materialize(
+      event,
+      { streamId: STREAM, user: USER },
+      1 as StreamIndex,
+    );
 
     expect(bundle.status).toBe("success");
     if (bundle.status !== "success") return;
@@ -40,7 +44,11 @@ describe("materialize", () => {
       id,
     } as unknown as Event;
 
-    const bundle = materialize(event, { streamId: STREAM, user: USER }, 1 as StreamIndex);
+    const bundle = materialize(
+      event,
+      { streamId: STREAM, user: USER },
+      1 as StreamIndex,
+    );
 
     expect(bundle.status).toBe("error");
     if (bundle.status !== "error") return;
@@ -60,7 +68,11 @@ describe("materialize", () => {
       content: "edited",
     } as unknown as Event;
 
-    const bundle = materialize(event, { streamId: STREAM, user: USER }, 2 as StreamIndex);
+    const bundle = materialize(
+      event,
+      { streamId: STREAM, user: USER },
+      2 as StreamIndex,
+    );
 
     if (bundle.status !== "success") {
       // editMessage materialiser may throw on a minimal fixture; that's fine

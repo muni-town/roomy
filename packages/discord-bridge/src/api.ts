@@ -44,13 +44,18 @@ function route(
   switch (url.pathname) {
     case "/info": {
       const appId = getAppId();
-      if (!appId) return jsonResponse({ error: "Discord bot still starting" }, 500);
-      return jsonResponse({ discordAppId: appId, bridgeDid: ATPROTO_BRIDGE_DID });
+      if (!appId)
+        return jsonResponse({ error: "Discord bot still starting" }, 500);
+      return jsonResponse({
+        discordAppId: appId,
+        bridgeDid: ATPROTO_BRIDGE_DID,
+      });
     }
 
     case "/get-guild-id": {
       const spaceId = url.searchParams.get("spaceId");
-      if (!spaceId) return jsonResponse({ error: "spaceId query parameter required" }, 400);
+      if (!spaceId)
+        return jsonResponse({ error: "spaceId query parameter required" }, 400);
       const configs = repo.listAllBridgeConfigs();
       const match = configs.find((c) => c.spaceDid === spaceId);
       if (match) return jsonResponse({ guildId: match.guildId });
@@ -59,9 +64,11 @@ function route(
 
     case "/get-space-id": {
       const guildId = url.searchParams.get("guildId");
-      if (!guildId) return jsonResponse({ error: "guildId query parameter required" }, 400);
+      if (!guildId)
+        return jsonResponse({ error: "guildId query parameter required" }, 400);
       const configs = repo.listBridgeConfigsForGuild(guildId);
-      if (configs.length > 0) return jsonResponse({ spaceIds: configs.map((c) => c.spaceDid) });
+      if (configs.length > 0)
+        return jsonResponse({ spaceIds: configs.map((c) => c.spaceDid) });
       return jsonResponse({ error: "Space not found for provided guild" }, 404);
     }
 

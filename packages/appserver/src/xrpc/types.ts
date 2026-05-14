@@ -19,9 +19,11 @@ export type QueryHandler<
   TResult = unknown,
 > = (params: TParams, auth: AuthCtx) => Promise<TResult>;
 
-export type SubscriptionHandler<
-  TParams extends QueryParams = QueryParams,
-> = (params: TParams, auth: AuthCtx, signal: AbortSignal) => AsyncIterable<Frame>;
+export type SubscriptionHandler<TParams extends QueryParams = QueryParams> = (
+  params: TParams,
+  auth: AuthCtx,
+  signal: AbortSignal,
+) => AsyncIterable<Frame>;
 
 export interface QueryDef {
   kind: "query";

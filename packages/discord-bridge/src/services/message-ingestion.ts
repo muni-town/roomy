@@ -39,12 +39,16 @@ export async function ingestDiscordMessage(
   let targetSpaces: string[];
   if (spaceDidOverride) {
     const allTargets = repo.getTargetSpacesForChannel(guildId, channelId);
-    targetSpaces = allTargets.includes(spaceDidOverride) ? [spaceDidOverride] : [];
+    targetSpaces = allTargets.includes(spaceDidOverride)
+      ? [spaceDidOverride]
+      : [];
   } else {
     targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
   }
   if (targetSpaces.length === 0) {
-    log.debug(`Skipping message ${messageId}: channel ${channelId} not bridged`);
+    log.debug(
+      `Skipping message ${messageId}: channel ${channelId} not bridged`,
+    );
     return { synced: 0, skipped: 1 };
   }
 
@@ -72,10 +76,11 @@ export async function ingestDiscordMessage(
     }
 
     // Resolve the Roomy room for this channel or thread
-    const roomyRoomId =
-      repo.getRoomyRoomId(spaceDid, channelId);
+    const roomyRoomId = repo.getRoomyRoomId(spaceDid, channelId);
     if (!roomyRoomId) {
-      log.warn(`No Roomy room mapping for channel ${channelId} in ${spaceDid}, skipping message`);
+      log.warn(
+        `No Roomy room mapping for channel ${channelId} in ${spaceDid}, skipping message`,
+      );
       continue;
     }
 
@@ -91,12 +96,7 @@ export async function ingestDiscordMessage(
     const connected = await spaceManager.getOrConnect(spaceDid);
 
     // Sync author profile before sending the message
-    await syncUserProfile(
-      message.author,
-      [spaceDid],
-      repo,
-      spaceManager,
-    );
+    await syncUserProfile(message.author, [spaceDid], repo, spaceManager);
 
     // Build and send the event
     const eventUlid = newUlid();
@@ -144,9 +144,7 @@ export async function ingestDiscordMessage(
       repo.registerMapping(spaceDid, "message", messageId, eventUlid);
       repo.setChannelCursor(spaceDid, channelId, messageId);
 
-      log.info(
-        `Synced message ${messageId} → ${eventUlid} in ${spaceDid}`,
-      );
+      log.info(`Synced message ${messageId} → ${eventUlid} in ${spaceDid}`);
       synced++;
     } catch (err) {
       log.error(`Failed to send message ${messageId} to ${spaceDid}`, err);
@@ -241,7 +239,11 @@ async function handleThreadStarterMessage(
   const messageId = message.id.toString();
   const guildId = message.guildId?.toString();
 
-  if (!guildId || !message.messageReference?.messageId || !message.messageReference?.channelId) {
+  if (
+    !guildId ||
+    !message.messageReference?.messageId ||
+    !message.messageReference?.channelId
+  ) {
     return { synced: 0, skipped: 1 };
   }
 
@@ -250,7 +252,9 @@ async function handleThreadStarterMessage(
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, threadId);
   if (targetSpaces.length === 0) {
-    log.debug(`Skipping thread starter ${messageId}: thread ${threadId} not bridged`);
+    log.debug(
+      `Skipping thread starter ${messageId}: thread ${threadId} not bridged`,
+    );
     return { synced: 0, skipped: 1 };
   }
 
@@ -259,25 +263,33 @@ async function handleThreadStarterMessage(
   for (const spaceDid of targetSpaces) {
     const existing = repo.getRoomyId(spaceDid, "message", messageId);
     if (existing) {
-      log.debug(`Skipping thread starter ${messageId}: already synced to ${spaceDid}`);
+      log.debug(
+        `Skipping thread starter ${messageId}: already synced to ${spaceDid}`,
+      );
       continue;
     }
 
     const threadRoomyId = repo.getRoomyId(spaceDid, "thread", threadId);
     if (!threadRoomyId) {
-      log.debug(`No Roomy room for thread ${threadId} in ${spaceDid}, skipping forward`);
+      log.debug(
+        `No Roomy room for thread ${threadId} in ${spaceDid}, skipping forward`,
+      );
       continue;
     }
 
     const originalRoomyId = repo.getRoomyId(spaceDid, "message", originalMsgId);
     if (!originalRoomyId) {
-      log.debug(`Original message ${originalMsgId} not synced to ${spaceDid}, skipping forward`);
+      log.debug(
+        `Original message ${originalMsgId} not synced to ${spaceDid}, skipping forward`,
+      );
       continue;
     }
 
     const fromRoomId = repo.getRoomyId(spaceDid, "channel", parentChannelId);
     if (!fromRoomId) {
-      log.debug(`No Roomy room for parent channel ${parentChannelId} in ${spaceDid}, skipping forward`);
+      log.debug(
+        `No Roomy room for parent channel ${parentChannelId} in ${spaceDid}, skipping forward`,
+      );
       continue;
     }
 
@@ -296,10 +308,15 @@ async function handleThreadStarterMessage(
 
       repo.registerMapping(spaceDid, "message", messageId, forwardUlid);
 
-      log.info(`Forwarded original message ${originalMsgId} to thread ${threadId} in ${spaceDid}`);
+      log.info(
+        `Forwarded original message ${originalMsgId} to thread ${threadId} in ${spaceDid}`,
+      );
       synced++;
     } catch (err) {
-      log.error(`Failed to forward message to thread ${threadId} in ${spaceDid}`, err);
+      log.error(
+        `Failed to forward message to thread ${threadId} in ${spaceDid}`,
+        err,
+      );
     }
   }
 

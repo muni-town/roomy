@@ -10,7 +10,10 @@ export function encodeFrame(frame: Frame): Uint8Array {
   return out;
 }
 
-export function messageFrame(eventType: string, body: Record<string, unknown>): Frame {
+export function messageFrame(
+  eventType: string,
+  body: Record<string, unknown>,
+): Frame {
   return { header: { op: 1, t: eventType }, body };
 }
 

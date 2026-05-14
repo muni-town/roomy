@@ -76,16 +76,16 @@ export function initializeReadStateSchema(db: Database): void {
   db.exec(schemaSql);
 
   const row = db
-    .query<{ version: string }, []>(
-      "select version from readstate_schema_version where id = 1",
-    )
+    .query<
+      { version: string },
+      []
+    >("select version from readstate_schema_version where id = 1")
     .get();
 
   if (!row) {
-    db.run(
-      "insert into readstate_schema_version (id, version) values (1, ?)",
-      [READSTATE_SCHEMA_VERSION],
-    );
+    db.run("insert into readstate_schema_version (id, version) values (1, ?)", [
+      READSTATE_SCHEMA_VERSION,
+    ]);
     return;
   }
 
@@ -102,10 +102,7 @@ export function initializeReadStateSchema(db: Database): void {
  * After this, SQL on the materialisation DB can reference
  * `readstate.read_positions` for cross-database operations.
  */
-export function attachReadState(
-  mainDb: Database,
-  readStateDb: Database,
-): void {
+export function attachReadState(mainDb: Database, readStateDb: Database): void {
   const row = readStateDb
     .query<{ file: string }, []>("pragma database_list")
     .all()

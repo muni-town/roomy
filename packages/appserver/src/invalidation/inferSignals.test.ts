@@ -9,7 +9,12 @@
 import { describe, it, expect } from "bun:test";
 import type { StreamDid, UserDid, Ulid, EventType } from "@roomy-space/sdk";
 import { inferSignals } from "./inferSignals.ts";
-import type { AppliedEvent, InvalidationEvent, QueryInvalidation, QueryNsid } from "./types.ts";
+import type {
+  AppliedEvent,
+  InvalidationEvent,
+  QueryInvalidation,
+  QueryNsid,
+} from "./types.ts";
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -33,8 +38,10 @@ function makeEvent(
 /** Collect just the query invalidation NSIDs from a list of signals. */
 function invalidatedNsids(signals: InvalidationEvent[]): QueryNsid[] {
   return signals
-    .filter((s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
-      s.kind === "queryInvalidation")
+    .filter(
+      (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
+        s.kind === "queryInvalidation",
+    )
     .map((s) => s.signal.nsid);
 }
 
@@ -46,15 +53,17 @@ function findMessageDiff(signals: InvalidationEvent[]) {
 
 describe("inferSignals: message events", () => {
   it("createMessage produces a messageDiff + room/space invalidation", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.message.createMessage.v0",
-      roomId: ROOM_ID,
-      details: {
-        content: "hello",
-        authorName: "Alice",
-        timestamp: "2026-05-08T12:00:00Z",
-      },
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.message.createMessage.v0",
+        roomId: ROOM_ID,
+        details: {
+          content: "hello",
+          authorName: "Alice",
+          timestamp: "2026-05-08T12:00:00Z",
+        },
+      }),
+    );
 
     const diff = findMessageDiff(signals);
     expect(diff).toBeDefined();
@@ -83,23 +92,27 @@ describe("inferSignals: message events", () => {
   });
 
   it("createMessage without roomId produces no signals", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.message.createMessage.v0",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.message.createMessage.v0",
+      }),
+    );
     expect(signals).toHaveLength(0);
   });
 
   it("editMessage produces a messageDiff update + room invalidation", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.message.editMessage.v0",
-      roomId: ROOM_ID,
-      details: {
-        content: "edited",
-        authorDid: USER_DID,
-        authorName: "Alice",
-        timestamp: "2026-05-08T12:00:00Z",
-      },
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.message.editMessage.v0",
+        roomId: ROOM_ID,
+        details: {
+          content: "edited",
+          authorDid: USER_DID,
+          authorName: "Alice",
+          timestamp: "2026-05-08T12:00:00Z",
+        },
+      }),
+    );
 
     const diff = findMessageDiff(signals);
     expect(diff).toBeDefined();
@@ -114,10 +127,12 @@ describe("inferSignals: message events", () => {
   });
 
   it("deleteMessage produces a remove diff + room/space invalidation", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.message.deleteMessage.v0",
-      roomId: ROOM_ID,
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.message.deleteMessage.v0",
+        roomId: ROOM_ID,
+      }),
+    );
 
     const diff = findMessageDiff(signals);
     expect(diff).toBeDefined();
@@ -135,11 +150,13 @@ describe("inferSignals: message events", () => {
 
 describe("inferSignals: reaction events", () => {
   it("addReaction invalidates room messages and the specific message", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.reaction.addReaction.v0",
-      roomId: ROOM_ID,
-      details: { messageId: "msg123" },
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.reaction.addReaction.v0",
+        roomId: ROOM_ID,
+        details: { messageId: "msg123" },
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMessages");
@@ -147,11 +164,13 @@ describe("inferSignals: reaction events", () => {
   });
 
   it("removeReaction does the same", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.reaction.removeReaction.v0",
-      roomId: ROOM_ID,
-      details: { messageId: "msg123" },
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.reaction.removeReaction.v0",
+        roomId: ROOM_ID,
+        details: { messageId: "msg123" },
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMessages");
@@ -162,9 +181,11 @@ describe("inferSignals: reaction events", () => {
 
 describe("inferSignals: room events", () => {
   it("createRoom invalidates space-level queries", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.room.createRoom.v0",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.room.createRoom.v0",
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getMetadata");
@@ -174,11 +195,13 @@ describe("inferSignals: room events", () => {
   });
 
   it("updateRoom with roomId invalidates room + space", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.room.updateRoom.v0",
-      roomId: ROOM_ID,
-      details: { roomId: ROOM_ID },
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.room.updateRoom.v0",
+        roomId: ROOM_ID,
+        details: { roomId: ROOM_ID },
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMetadata");
@@ -190,9 +213,11 @@ describe("inferSignals: room events", () => {
 
 describe("inferSignals: space events", () => {
   it("updateSpaceInfo invalidates metadata + spaces list", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.space.updateSpaceInfo.v0",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.space.updateSpaceInfo.v0",
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getMetadata");
@@ -200,9 +225,11 @@ describe("inferSignals: space events", () => {
   });
 
   it("updateSidebar invalidates only metadata (sidebar is part of it)", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.space.updateSidebar.v1",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.space.updateSidebar.v1",
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getMetadata");
@@ -210,9 +237,11 @@ describe("inferSignals: space events", () => {
   });
 
   it("joinSpace invalidates space queries + the joining user's space list", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.space.joinSpace.v0",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.space.joinSpace.v0",
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getMembers");
@@ -220,17 +249,22 @@ describe("inferSignals: space events", () => {
     // The joining user's getSpaces should be invalidated.
     const userScoped = signals.filter(
       (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
-        s.kind === "queryInvalidation" && s.signal.nsid === "space.roomy.space.getSpaces",
+        s.kind === "queryInvalidation" &&
+        s.signal.nsid === "space.roomy.space.getSpaces",
     );
-    expect(userScoped.some((s) => s.signal.affectedUser === USER_DID)).toBe(true);
+    expect(userScoped.some((s) => s.signal.affectedUser === USER_DID)).toBe(
+      true,
+    );
   });
 
   it("addAdmin invalidates space queries + target user's view", () => {
     const targetDid = "did:plc:bob" as import("@roomy-space/sdk").UserDid;
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.space.addAdmin.v0",
-      details: { userDid: targetDid },
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.space.addAdmin.v0",
+        details: { userDid: targetDid },
+      }),
+    );
 
     const userScoped = signals.filter(
       (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
@@ -247,18 +281,22 @@ describe("inferSignals: space events", () => {
 
 describe("inferSignals: role events", () => {
   it("createRole only invalidates getRoles", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.role.createRole.v0",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.role.createRole.v0",
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toEqual(["space.roomy.space.getRoles"]);
   });
 
   it("deleteRole invalidates roles + space metadata (permissions may have changed)", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.role.deleteRole.v0",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.role.deleteRole.v0",
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getRoles");
@@ -267,10 +305,12 @@ describe("inferSignals: role events", () => {
 
   it("addMemberRole invalidates roles + members + affected user's view", () => {
     const targetDid = "did:plc:carol" as import("@roomy-space/sdk").UserDid;
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.role.addMemberRole.v0",
-      details: { userDid: targetDid },
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.role.addMemberRole.v0",
+        details: { userDid: targetDid },
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getRoles");
@@ -284,10 +324,12 @@ describe("inferSignals: role events", () => {
   });
 
   it("setRoleRoomPermission invalidates roles + room + space", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.role.setRoleRoomPermission.v0",
-      details: { roomId: ROOM_ID },
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.role.setRoleRoomPermission.v0",
+        details: { roomId: ROOM_ID },
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getRoles");
@@ -300,9 +342,11 @@ describe("inferSignals: role events", () => {
 
 describe("inferSignals: invite events", () => {
   it("createInvite invalidates only getInvites", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.space.createInvite.v0",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.space.createInvite.v0",
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toEqual(["space.roomy.space.getInvites"]);
@@ -313,11 +357,14 @@ describe("inferSignals: invite events", () => {
 
 describe("inferSignals: personal stream events", () => {
   it("personalJoinSpace invalidates user's space list + target space members", () => {
-    const targetSpace = "did:web:target.space" as import("@roomy-space/sdk").StreamDid;
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.space.personal.joinSpace.v0",
-      details: { spaceDid: targetSpace },
-    }));
+    const targetSpace =
+      "did:web:target.space" as import("@roomy-space/sdk").StreamDid;
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.space.personal.joinSpace.v0",
+        details: { spaceDid: targetSpace },
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getSpaces");
@@ -328,9 +375,12 @@ describe("inferSignals: personal stream events", () => {
     // should target the joined space.
     const memberInvalidations = signals.filter(
       (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
-        s.kind === "queryInvalidation" && s.signal.nsid === "space.roomy.space.getMembers",
+        s.kind === "queryInvalidation" &&
+        s.signal.nsid === "space.roomy.space.getMembers",
     );
-    expect(memberInvalidations.some((s) => s.signal.params.spaceId === targetSpace)).toBe(true);
+    expect(
+      memberInvalidations.some((s) => s.signal.params.spaceId === targetSpace),
+    ).toBe(true);
   });
 });
 
@@ -338,10 +388,12 @@ describe("inferSignals: personal stream events", () => {
 
 describe("inferSignals: state events", () => {
   it("markRead invalidates room + space only for the reading user", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.state.markRead.v0",
-      roomId: ROOM_ID,
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.state.markRead.v0",
+        roomId: ROOM_ID,
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMetadata");
@@ -361,10 +413,12 @@ describe("inferSignals: state events", () => {
 
 describe("inferSignals: link events", () => {
   it("createRoomLink invalidates room + space threads + space metadata", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.link.createRoomLink.v0",
-      roomId: ROOM_ID,
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.link.createRoomLink.v0",
+        roomId: ROOM_ID,
+      }),
+    );
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMetadata");
@@ -377,23 +431,29 @@ describe("inferSignals: link events", () => {
 
 describe("inferSignals: edge cases", () => {
   it("synthetic events produce no signals", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.query.spaceMeta.v0" as EventType,
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.query.spaceMeta.v0" as EventType,
+      }),
+    );
     expect(signals).toHaveLength(0);
   });
 
   it("unknown event types produce no signals", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.unknown.futureEvent.v0" as EventType,
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.unknown.futureEvent.v0" as EventType,
+      }),
+    );
     expect(signals).toHaveLength(0);
   });
 
   it("page edit produces no signals (out of scope)", () => {
-    const signals = inferSignals(makeEvent({
-      type: "space.roomy.page.editPage.v0",
-    }));
+    const signals = inferSignals(
+      makeEvent({
+        type: "space.roomy.page.editPage.v0",
+      }),
+    );
     expect(signals).toHaveLength(0);
   });
 });

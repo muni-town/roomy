@@ -36,13 +36,21 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
 
   // Body params (not URL query params — this is a POST procedure).
   if (typeof body.roomId !== "string" || body.roomId === "") {
-    throw new XrpcError(400, "InvalidRequest", "Missing or empty required field: roomId");
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      "Missing or empty required field: roomId",
+    );
   }
   const roomId = body.roomId;
 
   const seenUpToRaw = body.seenUpTo;
   if (seenUpToRaw !== undefined && typeof seenUpToRaw !== "string") {
-    throw new XrpcError(400, "InvalidRequest", "Field seenUpTo must be a string if provided");
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      "Field seenUpTo must be a string if provided",
+    );
   }
 
   await hydrateUserMembership(userDid);
@@ -56,9 +64,10 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   if (seenUpToRaw === undefined) {
     // No watermark → mark everything as read up to the latest message.
     const maxRow = db
-      .query<{ max_sort: string | null }, [string]>(
-        "select max(sort_idx) as max_sort from entities where room = ?",
-      )
+      .query<
+        { max_sort: string | null },
+        [string]
+      >("select max(sort_idx) as max_sort from entities where room = ?")
       .get(roomId);
 
     seenUpTo = maxRow?.max_sort ?? "";
@@ -66,9 +75,10 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   } else {
     // Validate that the message exists and belongs to this room.
     const msgRow = db
-      .query<{ sort_idx: string }, [string, string]>(
-        "select sort_idx from entities where id = ? and room = ?",
-      )
+      .query<
+        { sort_idx: string },
+        [string, string]
+      >("select sort_idx from entities where id = ? and room = ?")
       .get(seenUpToRaw, roomId);
 
     if (!msgRow) {
@@ -83,9 +93,10 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
 
     // One-time count of remaining messages after the watermark.
     const countRow = db
-      .query<{ n: number }, [string, string]>(
-        "select count(*) as n from entities where room = ? and sort_idx > ?",
-      )
+      .query<
+        { n: number },
+        [string, string]
+      >("select count(*) as n from entities where room = ? and sort_idx > ?")
       .get(roomId, seenUpTo);
 
     unreadCount = countRow?.n ?? 0;
@@ -105,9 +116,30 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   const router = Router.getInstance();
   if (router && access.spaceId) {
     const signals: InvalidationEvent[] = [
-      { kind: "queryInvalidation", signal: { nsid: "space.roomy.room.getMetadata" as QueryNsid, params: { roomId }, affectedUser: userDid } },
-      { kind: "queryInvalidation", signal: { nsid: "space.roomy.space.getMetadata" as QueryNsid, params: { spaceId: access.spaceId }, affectedUser: userDid } },
-      { kind: "queryInvalidation", signal: { nsid: "space.roomy.space.getSpaces" as QueryNsid, params: {}, affectedUser: userDid } },
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.room.getMetadata" as QueryNsid,
+          params: { roomId },
+          affectedUser: userDid,
+        },
+      },
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getMetadata" as QueryNsid,
+          params: { spaceId: access.spaceId },
+          affectedUser: userDid,
+        },
+      },
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getSpaces" as QueryNsid,
+          params: {},
+          affectedUser: userDid,
+        },
+      },
     ];
     router.emit(signals);
   }

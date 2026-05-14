@@ -57,10 +57,7 @@ export const getRoomMetadataHandler: QueryHandler<
   const access = requireRoomRead(db, roomId, userDid);
 
   const row = db
-    .query<
-      { name: string | null; label: string | null },
-      [string]
-    >(
+    .query<{ name: string | null; label: string | null }, [string]>(
       `select ci.name as name, cr.label as label
          from comp_room cr
          left join comp_info ci on ci.entity = cr.entity

@@ -22,7 +22,11 @@ interface ThreadRow {
   channel: string | null;
   activity: {
     latestTimestamp: string | null;
-    latestMembers: Array<{ did: string; name: string | null; avatar: string | null }>;
+    latestMembers: Array<{
+      did: string;
+      name: string | null;
+      avatar: string | null;
+    }>;
   };
 }
 
@@ -30,43 +34,45 @@ interface GetThreadsResult {
   threads: ThreadRow[];
 }
 
-export const getSpaceThreadsHandler: QueryHandler<QueryParams, GetThreadsResult> =
-  async (params: QueryParams, auth: AuthCtx) => {
-    const userDid = UserDid(auth.did);
-    if (userDid instanceof type.errors) {
-      throw new XrpcError(
-        400,
-        "InvalidRequest",
-        `Caller DID is not a valid UserDid: ${userDid.summary}`,
-      );
-    }
-    const spaceId = requireString(params, "spaceId");
+export const getSpaceThreadsHandler: QueryHandler<
+  QueryParams,
+  GetThreadsResult
+> = async (params: QueryParams, auth: AuthCtx) => {
+  const userDid = UserDid(auth.did);
+  if (userDid instanceof type.errors) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      `Caller DID is not a valid UserDid: ${userDid.summary}`,
+    );
+  }
+  const spaceId = requireString(params, "spaceId");
 
-    await hydrateUserMembership(userDid);
+  await hydrateUserMembership(userDid);
 
-    const db = openDb();
-    requireSpaceAccess(db, spaceId, userDid);
+  const db = openDb();
+  requireSpaceAccess(db, spaceId, userDid);
 
-    const all = listThreadActivity(db, { kind: "space", spaceId });
+  const all = listThreadActivity(db, { kind: "space", spaceId });
 
-    const threads: ThreadRow[] = [];
-    for (const t of all) {
-      // Thread visibility hangs off the canonical parent channel — re-use
-      // the auth unit to compute it. (The thread itself inherits via 'link',
-      // so checking the thread directly would also work; checking via
-      // canonicalParent matches the spec's "channel grants visibility" model.)
-      const acc = roomAccess(db, t.id, userDid);
-      if (!acc.canRead) continue;
-      threads.push({
-        id: t.id,
-        name: t.name,
-        channel: t.canonicalParent,
-        activity: {
-          latestTimestamp: t.latestTimestamp,
-          latestMembers: t.latestMembers,
-        },
-      });
-    }
+  const threads: ThreadRow[] = [];
+  for (const t of all) {
+    // Thread visibility hangs off the canonical parent channel — re-use
+    // the auth unit to compute it. (The thread itself inherits via 'link',
+    // so checking the thread directly would also work; checking via
+    // canonicalParent matches the spec's "channel grants visibility" model.)
+    const acc = roomAccess(db, t.id, userDid);
+    if (!acc.canRead) continue;
+    threads.push({
+      id: t.id,
+      name: t.name,
+      channel: t.canonicalParent,
+      activity: {
+        latestTimestamp: t.latestTimestamp,
+        latestMembers: t.latestMembers,
+      },
+    });
+  }
 
-    return { threads };
-  };
+  return { threads };
+};

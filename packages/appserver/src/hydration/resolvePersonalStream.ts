@@ -49,9 +49,10 @@ export function readCachedPersonalStreamDid(
   userDid: UserDid,
 ): StreamDid | undefined {
   const row = db
-    .query<{ personal_stream_did: string }, [string]>(
-      "select personal_stream_did from comp_user_personal_stream where user_did = ?",
-    )
+    .query<
+      { personal_stream_did: string },
+      [string]
+    >("select personal_stream_did from comp_user_personal_stream where user_did = ?")
     .get(userDid);
   if (!row) return undefined;
   const parsed = StreamDid(row.personal_stream_did);
@@ -89,9 +90,9 @@ export async function resolvePersonalStreamDid(
   const cached = readCachedPersonalStreamDid(db, userDid);
   if (cached) return cached;
 
-  const pdsEndpoint = await (
-    opts.resolveDid ?? defaultResolveDid
-  )(userDid).then((r) => r.pdsEndpoint);
+  const pdsEndpoint = await (opts.resolveDid ?? defaultResolveDid)(
+    userDid,
+  ).then((r) => r.pdsEndpoint);
 
   const record = await (opts.fetchRecord ?? defaultFetchRecord)(
     pdsEndpoint,

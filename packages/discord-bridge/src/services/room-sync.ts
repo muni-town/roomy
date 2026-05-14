@@ -1,7 +1,11 @@
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
 import type { BridgeRepository, MappingKind } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
-import { CHANNEL_TYPES, THREAD_TYPES, isChannelPublic } from "../discord/types.ts";
+import {
+  CHANNEL_TYPES,
+  THREAD_TYPES,
+  isChannelPublic,
+} from "../discord/types.ts";
 import type { ChannelProperties, DiscordBot } from "../discord/types.ts";
 import { createLogger } from "../logger.ts";
 
@@ -88,7 +92,9 @@ export async function handleChannelCreate(
       return config?.mode === "subset";
     });
     if (targetSpaces.length === 0) {
-      log.debug(`Skipping private channel ${channelId}: no subset bridges target it`);
+      log.debug(
+        `Skipping private channel ${channelId}: no subset bridges target it`,
+      );
       return;
     }
   }
@@ -104,7 +110,14 @@ export async function handleChannelCreate(
     return;
   }
 
-  await ensureRoomyChannel(repo, spaceManager, channelId, guildId, channelName, targetSpaces);
+  await ensureRoomyChannel(
+    repo,
+    spaceManager,
+    channelId,
+    guildId,
+    channelName,
+    targetSpaces,
+  );
 }
 
 /**
@@ -128,7 +141,9 @@ export async function handleThreadCreate(
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, parentId);
   if (targetSpaces.length === 0) {
-    log.debug(`Skipping thread ${threadId}: parent channel ${parentId} not bridged`);
+    log.debug(
+      `Skipping thread ${threadId}: parent channel ${parentId} not bridged`,
+    );
     return;
   }
 
@@ -140,7 +155,9 @@ export async function handleThreadCreate(
 
     const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
     if (!parentRoomyId) {
-      log.warn(`No Roomy room for parent channel ${parentId} in ${spaceDid}, skipping thread`);
+      log.warn(
+        `No Roomy room for parent channel ${parentId} in ${spaceDid}, skipping thread`,
+      );
       continue;
     }
 
@@ -182,9 +199,14 @@ export async function handleThreadCreate(
         repo.addToAllowlist(spaceDid, threadId, guildId);
       }
 
-      log.info(`Created Roomy thread ${threadUlid} for Discord thread ${threadId} in ${spaceDid}`);
+      log.info(
+        `Created Roomy thread ${threadUlid} for Discord thread ${threadId} in ${spaceDid}`,
+      );
     } catch (err) {
-      log.error(`Failed to create Roomy thread for ${threadId} in ${spaceDid}`, err);
+      log.error(
+        `Failed to create Roomy thread for ${threadId} in ${spaceDid}`,
+        err,
+      );
     }
   }
 }

@@ -13,7 +13,7 @@ export interface Profile {
 /** Fetch a profile from ATProto. */
 export async function getProfile(
   agent: Agent,
-  did?: Did
+  did?: Did,
 ): Promise<Profile | undefined> {
   const targetDid = did || agent.did;
   if (!targetDid) throw new Error("No DID provided and agent has no DID");

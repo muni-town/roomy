@@ -22,7 +22,11 @@ function freshDb(): Database {
   return openDb({ path: ":memory:", isolated: true });
 }
 
-function decodedAs(event: Event, idx: number, user: UserDid): DecodedStreamEvent {
+function decodedAs(
+  event: Event,
+  idx: number,
+  user: UserDid,
+): DecodedStreamEvent {
   return { event, idx: idx as StreamIndex, user };
 }
 
@@ -105,16 +109,18 @@ describe("ensureProfilesForBatch", () => {
     ).toBe(ALICE);
     expect(
       db
-        .query<{ handle: string }, [string]>(
-          "select handle from comp_user where did = ?",
-        )
+        .query<
+          { handle: string },
+          [string]
+        >("select handle from comp_user where did = ?")
         .get(ALICE)?.handle,
     ).toBe("alice.test");
     expect(
       db
-        .query<{ name: string; avatar: string }, [string]>(
-          "select name, avatar from comp_info where entity = ?",
-        )
+        .query<
+          { name: string; avatar: string },
+          [string]
+        >("select name, avatar from comp_info where entity = ?")
         .get(ALICE),
     ).toEqual({
       name: "alice.test display",

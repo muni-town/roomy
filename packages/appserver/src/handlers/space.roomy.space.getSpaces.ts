@@ -32,39 +32,41 @@ interface GetSpacesResult {
   spaces: SpaceRow[];
 }
 
-export const getSpacesHandler: QueryHandler<QueryParams, GetSpacesResult> =
-  async (_params: QueryParams, auth: AuthCtx) => {
-    const userDid = UserDid(auth.did);
-    if (userDid instanceof type.errors) {
-      throw new XrpcError(
-        400,
-        "InvalidRequest",
-        `Caller DID is not a valid UserDid: ${userDid.summary}`,
-      );
-    }
+export const getSpacesHandler: QueryHandler<
+  QueryParams,
+  GetSpacesResult
+> = async (_params: QueryParams, auth: AuthCtx) => {
+  const userDid = UserDid(auth.did);
+  if (userDid instanceof type.errors) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      `Caller DID is not a valid UserDid: ${userDid.summary}`,
+    );
+  }
 
-    const { personalStreamDid } = await hydrateUserMembership(userDid);
-    if (!personalStreamDid) {
-      return { spaces: [] };
-    }
+  const { personalStreamDid } = await hydrateUserMembership(userDid);
+  if (!personalStreamDid) {
+    return { spaces: [] };
+  }
 
-    const db = openDb();
-    const rows = db
-      .query<
-        {
-          id: string;
-          name: string | null;
-          avatar: string | null;
-          description: string | null;
-          is_member: number;
-          is_admin: number;
-        },
-        [string, string]
-      >(
-        // Intent (personal-stream comp_space rows where hidden=0) joined with
-        // each space's actual edge state. Excludes banned users and the
-        // personal stream's own entity row.
-        `select
+  const db = openDb();
+  const rows = db
+    .query<
+      {
+        id: string;
+        name: string | null;
+        avatar: string | null;
+        description: string | null;
+        is_member: number;
+        is_admin: number;
+      },
+      [string, string]
+    >(
+      // Intent (personal-stream comp_space rows where hidden=0) joined with
+      // each space's actual edge state. Excludes banned users and the
+      // personal stream's own entity row.
+      `select
            cs.entity as id,
            ci.name as name,
            ci.avatar as avatar,
@@ -97,19 +99,19 @@ export const getSpacesHandler: QueryHandler<QueryParams, GetSpacesResult> =
                where head = cs.entity and tail = ?1 and label = 'admin'
             )
           )`,
-      )
-      .all(userDid, personalStreamDid);
+    )
+    .all(userDid, personalStreamDid);
 
-    const spaces: SpaceRow[] = rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      avatar: r.avatar,
-      description: r.description,
-      unreadCount: getSpaceUnreadCount(db, userDid, r.id),
-      isMember: !!r.is_member,
-      isAdmin: !!r.is_admin,
-      roleIds: [],
-    }));
+  const spaces: SpaceRow[] = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    avatar: r.avatar,
+    description: r.description,
+    unreadCount: getSpaceUnreadCount(db, userDid, r.id),
+    isMember: !!r.is_member,
+    isAdmin: !!r.is_admin,
+    roleIds: [],
+  }));
 
-    return { spaces };
-  };
+  return { spaces };
+};

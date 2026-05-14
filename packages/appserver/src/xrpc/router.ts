@@ -1,5 +1,11 @@
 import type { Server } from "bun";
-import type { AuthCtx, QueryParams, RouteDef, ClientMessage, SyncSocket } from "./types.ts";
+import type {
+  AuthCtx,
+  QueryParams,
+  RouteDef,
+  ClientMessage,
+  SyncSocket,
+} from "./types.ts";
 import type { AuthVerifier } from "./auth.ts";
 import { consumeTicket } from "./auth.ts";
 import { encodeFrame, errorFrame } from "./frame.ts";
@@ -29,12 +35,18 @@ export class XrpcRouter {
     return this;
   }
 
-  procedure(nsid: string, def: Omit<import("./types.ts").ProcedureDef, "kind">): this {
+  procedure(
+    nsid: string,
+    def: Omit<import("./types.ts").ProcedureDef, "kind">,
+  ): this {
     this.#routes.set(nsid, { kind: "procedure", ...def });
     return this;
   }
 
-  subscription(nsid: string, def: Omit<import("./types.ts").SubscriptionDef, "kind">): this {
+  subscription(
+    nsid: string,
+    def: Omit<import("./types.ts").SubscriptionDef, "kind">,
+  ): this {
     this.#routes.set(nsid, { kind: "subscription", ...def });
     return this;
   }
@@ -44,7 +56,10 @@ export class XrpcRouter {
     return this;
   }
 
-  get fetch(): (req: Request, server: Server<WsData>) => Promise<Response | undefined> {
+  get fetch(): (
+    req: Request,
+    server: Server<WsData>,
+  ) => Promise<Response | undefined> {
     return async (req, server) => {
       const url = new URL(req.url);
       const match = url.pathname.match(/^\/xrpc\/(.+)$/);
@@ -63,7 +78,9 @@ export class XrpcRouter {
       for (const [k, v] of url.searchParams.entries()) {
         const existing = rawParams[k];
         if (existing !== undefined) {
-          rawParams[k] = Array.isArray(existing) ? [...existing, v] : [existing, v];
+          rawParams[k] = Array.isArray(existing)
+            ? [...existing, v]
+            : [existing, v];
         } else {
           rawParams[k] = v;
         }
@@ -78,7 +95,9 @@ export class XrpcRouter {
             );
           }
           const auth = await this.#auth(req);
-          const params = route.parseParams ? route.parseParams(rawParams) : rawParams;
+          const params = route.parseParams
+            ? route.parseParams(rawParams)
+            : rawParams;
           const result = await route.handler(params, auth);
           return Response.json(result);
         }
@@ -91,7 +110,9 @@ export class XrpcRouter {
             );
           }
           const auth = await this.#auth(req);
-          const params = route.parseParams ? route.parseParams(rawParams) : rawParams;
+          const params = route.parseParams
+            ? route.parseParams(rawParams)
+            : rawParams;
           let body: Record<string, unknown> = {};
           const contentType = req.headers.get("content-type");
           if (contentType?.includes("application/json")) {
@@ -112,7 +133,10 @@ export class XrpcRouter {
           const ticket = rawParams["ticket"];
           if (typeof ticket !== "string" || ticket === "") {
             return Response.json(
-              { error: "AuthRequired", message: "ticket query parameter required for subscriptions" },
+              {
+                error: "AuthRequired",
+                message: "ticket query parameter required for subscriptions",
+              },
               { status: 401 },
             );
           }
@@ -138,7 +162,10 @@ export class XrpcRouter {
           const ticket = rawParams["ticket"];
           if (typeof ticket !== "string" || ticket === "") {
             return Response.json(
-              { error: "AuthRequired", message: "ticket query parameter required for subscriptions" },
+              {
+                error: "AuthRequired",
+                message: "ticket query parameter required for subscriptions",
+              },
               { status: 401 },
             );
           }
@@ -175,7 +202,9 @@ export class XrpcRouter {
         // Legacy subscription (AsyncIterable)
         if (route.kind === "subscription") {
           const rawParams = ws.data.params ?? {};
-          const parsedParams = route.parseParams ? route.parseParams(rawParams) : rawParams;
+          const parsedParams = route.parseParams
+            ? route.parseParams(rawParams)
+            : rawParams;
           this.#runSubscription(ws, parsedParams, auth, abort, route);
           return;
         }
@@ -246,7 +275,8 @@ export class XrpcRouter {
       ws.close(1000, "Stream ended");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Stream error";
-      const errType = err instanceof XrpcError ? err.xrpcError : "InternalServerError";
+      const errType =
+        err instanceof XrpcError ? err.xrpcError : "InternalServerError";
       ws.send(encodeFrame(errorFrame(errType, msg)));
       ws.close(1011, msg);
     }

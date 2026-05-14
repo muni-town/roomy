@@ -1,10 +1,10 @@
-import type { Database } from "bun:sqlite"
+import type { Database } from "bun:sqlite";
 
 export type Migration = {
-  version: number
-  name: string
-  up: (db: Database) => void
-}
+  version: number;
+  name: string;
+  up: (db: Database) => void;
+};
 
 export const MIGRATIONS: Migration[] = [
   {
@@ -61,8 +61,8 @@ export const MIGRATIONS: Migration[] = [
           webhook_id TEXT NOT NULL,
           token      TEXT NOT NULL
         );
-      `)
-    }
+      `);
+    },
   },
   {
     version: 2,
@@ -83,37 +83,37 @@ export const MIGRATIONS: Migration[] = [
           updated_at      INTEGER NOT NULL,
           PRIMARY KEY (space_did, channel_id)
         );
-      `)
-    }
-  }
-]
+      `);
+    },
+  },
+];
 
 export function runMigrations(db: Database): {
-  applied: number[]
-  current: number
+  applied: number[];
+  current: number;
 } {
   db.run(
-    `CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)`
-  )
+    `CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)`,
+  );
   const row = db
     .query<
       { v: number | null },
       []
     >("SELECT MAX(version) AS v FROM schema_version")
-    .get()
-  const current = row?.v ?? 0
-  const applied: number[] = []
+    .get();
+  const current = row?.v ?? 0;
+  const applied: number[] = [];
   const insertVersion = db.prepare(
-    "INSERT INTO schema_version (version) VALUES (?)"
-  )
+    "INSERT INTO schema_version (version) VALUES (?)",
+  );
 
   for (const migration of MIGRATIONS) {
-    if (migration.version <= current) continue
+    if (migration.version <= current) continue;
     db.transaction(() => {
-      migration.up(db)
-      insertVersion.run(migration.version)
-    })()
-    applied.push(migration.version)
+      migration.up(db);
+      insertVersion.run(migration.version);
+    })();
+    applied.push(migration.version);
   }
 
   const after = db
@@ -121,6 +121,6 @@ export function runMigrations(db: Database): {
       { v: number | null },
       []
     >("SELECT MAX(version) AS v FROM schema_version")
-    .get()
-  return { applied, current: after?.v ?? 0 }
+    .get();
+  return { applied, current: after?.v ?? 0 };
 }

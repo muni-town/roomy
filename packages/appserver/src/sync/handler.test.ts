@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ClientMessage, Frame } from "../xrpc/types.ts";
-import type { InvalidationEvent, InvalidationRouter, AppliedEvent } from "../invalidation/types.ts";
+import type {
+  InvalidationEvent,
+  InvalidationRouter,
+  AppliedEvent,
+} from "../invalidation/types.ts";
 import type { StreamDid, UserDid, Ulid } from "@roomy-space/sdk";
 import { SyncManager } from "./handler.ts";
 
@@ -58,7 +62,9 @@ class MockRouter implements InvalidationRouter {
     // Not used in sync tests — we call emitSignals directly.
   }
 
-  subscribe(listener: (events: readonly InvalidationEvent[]) => void): () => void {
+  subscribe(
+    listener: (events: readonly InvalidationEvent[]) => void,
+  ): () => void {
     this.listeners.push(listener);
     return () => {
       this.listeners = this.listeners.filter((l) => l !== listener);
@@ -93,29 +99,38 @@ function queryInvalidation(
 ): InvalidationEvent {
   return {
     kind: "queryInvalidation",
-    signal: { nsid: nsid as InvalidationEvent["signal"] extends { nsid: infer N } ? N : never, params, affectedUser },
+    signal: {
+      nsid: nsid as InvalidationEvent["signal"] extends { nsid: infer N }
+        ? N
+        : never,
+      params,
+      affectedUser,
+    },
   };
 }
 
-function messageDiff(
-  roomId: Ulid,
-  seq: number,
-): InvalidationEvent {
+function messageDiff(roomId: Ulid, seq: number): InvalidationEvent {
   return {
     kind: "messageDiff",
     signal: {
       roomId,
       seq,
-      ops: [{ op: "add", key: "01KR32FDQCCCEB8FEK76SQST9Z" as Ulid, message: {
-        id: "01KR32FDQCCCEB8FEK76SQST9Z" as Ulid,
-        content: "hello",
-        authorDid: USER_A,
-        authorName: "User A",
-        authorAvatar: null,
-        timestamp: new Date().toISOString(),
-        replyTo: null,
-        reactions: [],
-      } }],
+      ops: [
+        {
+          op: "add",
+          key: "01KR32FDQCCCEB8FEK76SQST9Z" as Ulid,
+          message: {
+            id: "01KR32FDQCCCEB8FEK76SQST9Z" as Ulid,
+            content: "hello",
+            authorDid: USER_A,
+            authorName: "User A",
+            authorAvatar: null,
+            timestamp: new Date().toISOString(),
+            replyTo: null,
+            reactions: [],
+          },
+        },
+      ],
     },
   };
 }
@@ -133,7 +148,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     // Subscribe to room topic.
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
@@ -158,7 +175,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     // Subscribe to a different room.
     socket.receive({ type: "sub", topic: "room", id: "other-room" as Ulid });
@@ -176,7 +195,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     socket.receive({ type: "sub", topic: "space", id: SPACE_ID });
 
@@ -199,7 +220,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     // Not subscribed to any topic.
     router.emitSignals([
@@ -217,8 +240,12 @@ describe("SyncManager", () => {
 
     const socketA = new MockSocket(USER_A);
     const socketB = new MockSocket(USER_B);
-    manager.register(socketA as unknown as import("../xrpc/types.ts").SyncSocket);
-    manager.register(socketB as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socketA as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
+    manager.register(
+      socketB as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     // Both subscribed to the same space.
     socketA.receive({ type: "sub", topic: "space", id: SPACE_ID });
@@ -226,7 +253,11 @@ describe("SyncManager", () => {
 
     // Invalidation only for USER_A.
     router.emitSignals([
-      queryInvalidation("space.roomy.space.getMetadata", { spaceId: SPACE_ID }, USER_A),
+      queryInvalidation(
+        "space.roomy.space.getMetadata",
+        { spaceId: SPACE_ID },
+        USER_A,
+      ),
     ]);
 
     expect(socketA.sentFrames.length).toBe(1);
@@ -240,7 +271,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
     socket.receive({ type: "unsub", topic: "room", id: ROOM_ID });
@@ -257,7 +290,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
     socket.close();
@@ -276,16 +311,18 @@ describe("SyncManager", () => {
 
     const socketA = new MockSocket(USER_A);
     const socketB = new MockSocket(USER_B);
-    manager.register(socketA as unknown as import("../xrpc/types.ts").SyncSocket);
-    manager.register(socketB as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socketA as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
+    manager.register(
+      socketB as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     // A subscribed to a space, B subscribed only to a room.
     socketA.receive({ type: "sub", topic: "space", id: SPACE_ID });
     socketB.receive({ type: "sub", topic: "room", id: ROOM_ID });
 
-    router.emitSignals([
-      queryInvalidation("space.roomy.space.getSpaces", {}),
-    ]);
+    router.emitSignals([queryInvalidation("space.roomy.space.getSpaces", {})]);
 
     expect(socketA.sentFrames.length).toBe(1);
     expect(socketB.sentFrames.length).toBe(0); // no space topic
@@ -299,8 +336,12 @@ describe("SyncManager", () => {
 
     const socketA = new MockSocket(USER_A);
     const socketB = new MockSocket(USER_B);
-    manager.register(socketA as unknown as import("../xrpc/types.ts").SyncSocket);
-    manager.register(socketB as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socketA as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
+    manager.register(
+      socketB as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     // Both subscribed to a space.
     socketA.receive({ type: "sub", topic: "space", id: SPACE_ID });
@@ -322,7 +363,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     socket.receive({ type: "sub", topic: "space", id: SPACE_ID });
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
@@ -331,7 +374,9 @@ describe("SyncManager", () => {
     socket.receive({ type: "cursor", seq: 0 });
 
     // Should have invalidate frames for space + room queries.
-    const nsids = socket.sentFrames.map((f) => decodeFrameBody(f).nsid as string);
+    const nsids = socket.sentFrames.map(
+      (f) => decodeFrameBody(f).nsid as string,
+    );
     expect(nsids).toContain("space.roomy.space.getSpaces");
     expect(nsids).toContain("space.roomy.space.getMetadata");
     expect(nsids).toContain("space.roomy.room.getMetadata");
@@ -345,7 +390,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
 
@@ -354,7 +401,9 @@ describe("SyncManager", () => {
     ]);
 
     expect(socket.sentFrames.length).toBe(1);
-    expect(decodeFrameBody(socket.sentFrames[0]!).nsid).toBe("space.roomy.room.getMessages");
+    expect(decodeFrameBody(socket.sentFrames[0]!).nsid).toBe(
+      "space.roomy.room.getMessages",
+    );
 
     manager.destroy();
   });
@@ -364,7 +413,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
 
     manager.destroy();
@@ -379,7 +430,9 @@ describe("SyncManager", () => {
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
-    manager.register(socket as unknown as import("../xrpc/types.ts").SyncSocket);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
 
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
 

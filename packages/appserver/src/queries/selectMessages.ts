@@ -201,20 +201,14 @@ export function selectMessages(
   const idPh = ids.map(() => "?").join(",");
 
   const reactionRows = db
-    .query<
-      { entity: string; reaction: string; user: string },
-      string[]
-    >(
+    .query<{ entity: string; reaction: string; user: string }, string[]>(
       `select entity, reaction, user from comp_reaction
         where entity in (${idPh})`,
     )
     .all(...ids);
 
   const tagRows = db
-    .query<
-      { head: string; tail: string },
-      string[]
-    >(
+    .query<{ head: string; tail: string }, string[]>(
       `select head, tail from edges
         where head in (${idPh}) and label = 'tag'`,
     )

@@ -21,10 +21,7 @@ import type { Event, StreamDid, Ulid } from "@roomy-space/sdk";
  * No-op if the entity row is missing (materialiser failed earlier in the
  * batch) or if a sort_idx is already set.
  */
-export function setMessageSortIdxByTimestamp(
-  db: Database,
-  event: Event,
-): void {
+export function setMessageSortIdxByTimestamp(db: Database, event: Event): void {
   if (event.$type !== "space.roomy.message.createMessage.v0") return;
 
   const overrideExt =
@@ -34,9 +31,10 @@ export function setMessageSortIdxByTimestamp(
     : decodeTime(event.id);
 
   const existing = db
-    .query<{ sort_idx: string | null }, [string]>(
-      "select sort_idx from entities where id = ?",
-    )
+    .query<
+      { sort_idx: string | null },
+      [string]
+    >("select sort_idx from entities where id = ?")
     .get(event.id);
 
   if (!existing || existing.sort_idx) return;
@@ -68,9 +66,10 @@ export function setMessageSortIdxByReorder(
   const after = event.after as Ulid;
 
   const existing = db
-    .query<{ sort_idx: string | null }, [string]>(
-      "select sort_idx from entities where id = ?",
-    )
+    .query<
+      { sort_idx: string | null },
+      [string]
+    >("select sort_idx from entities where id = ?")
     .get(messageId);
   if (!existing) return; // materialiser failed earlier
 
@@ -107,7 +106,10 @@ export function setMessageSortIdxByReorder(
 
   let sortIdx: string;
   try {
-    sortIdx = midpointUlid(before.sort_idx as Ulid, next?.sort_idx as Ulid | undefined);
+    sortIdx = midpointUlid(
+      before.sort_idx as Ulid,
+      next?.sort_idx as Ulid | undefined,
+    );
   } catch (e) {
     console.warn(
       `[materialize] reorderMessage: could not compute midpoint for ${messageId}:`,

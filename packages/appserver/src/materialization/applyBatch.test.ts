@@ -58,16 +58,18 @@ describe("applyBatch", () => {
     expect(stats.applyErrors).toBe(0);
 
     const room = db
-      .query<{ entity: string; label: string }, [string]>(
-        "select entity, label from comp_room where entity = ?",
-      )
+      .query<
+        { entity: string; label: string },
+        [string]
+      >("select entity, label from comp_room where entity = ?")
       .get(event.id);
     expect(room?.label).toBe("space.roomy.channel");
 
     const cursor = db
-      .query<{ backfilled_to: number }, [string]>(
-        "select backfilled_to from comp_space where entity = ?",
-      )
+      .query<
+        { backfilled_to: number },
+        [string]
+      >("select backfilled_to from comp_space where entity = ?")
       .get(STREAM);
     expect(cursor?.backfilled_to).toBe(5);
   });
@@ -107,9 +109,10 @@ describe("applyBatch", () => {
     // on a permanently-broken event.
     expect(
       db
-        .query<{ backfilled_to: number }, [string]>(
-          "select backfilled_to from comp_space where entity = ?",
-        )
+        .query<
+          { backfilled_to: number },
+          [string]
+        >("select backfilled_to from comp_space where entity = ?")
         .get(STREAM)?.backfilled_to,
     ).toBe(3);
   });
@@ -126,9 +129,10 @@ describe("applyBatch", () => {
     });
 
     const cursor = db
-      .query<{ backfilled_to: number }, [string]>(
-        "select backfilled_to from comp_space where entity = ?",
-      )
+      .query<
+        { backfilled_to: number },
+        [string]
+      >("select backfilled_to from comp_space where entity = ?")
       .get(STREAM);
     expect(cursor?.backfilled_to).toBe(10);
   });
@@ -148,9 +152,10 @@ describe("applyBatch", () => {
 
     expect(
       db
-        .query<{ backfilled_to: number }, [string]>(
-          "select backfilled_to from comp_space where entity = ?",
-        )
+        .query<
+          { backfilled_to: number },
+          [string]
+        >("select backfilled_to from comp_space where entity = ?")
         .get(STREAM)?.backfilled_to,
     ).toBe(7);
   });
@@ -200,9 +205,10 @@ describe("applyBatch", () => {
     expect(stats.applied).toBeGreaterThanOrEqual(1);
     expect(
       db
-        .query<{ name: string | null }, [string]>(
-          "select name from comp_info where entity = ?",
-        )
+        .query<
+          { name: string | null },
+          [string]
+        >("select name from comp_info where entity = ?")
         .get(goodB.id)?.name,
     ).toBe("b");
 
@@ -210,9 +216,10 @@ describe("applyBatch", () => {
     // savepoint should have rolled back.
     expect(
       db
-        .query<{ count: number }, [string]>(
-          "select count(*) as count from entities where id = ?",
-        )
+        .query<
+          { count: number },
+          [string]
+        >("select count(*) as count from entities where id = ?")
         .get(broken.id)?.count,
     ).toBe(0);
   });

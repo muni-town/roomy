@@ -506,7 +506,6 @@ export class RoomyClient extends RoomyClientBase {
 
     return space;
   }
-
 }
 
 /**
