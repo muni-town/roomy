@@ -4,6 +4,7 @@
 @plugin '@tailwindcss/forms';
 
 @source "../node_modules/@foxui";
+@source "../node_modules/@roomy/design";
 
 @custom-variant dark (&:is(.dark *));
 
