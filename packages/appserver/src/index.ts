@@ -122,7 +122,7 @@ Bun.serve({
 
     if (url.pathname === "/.well-known/did.json") {
       return new Response(JSON.stringify(DID_DOCUMENT), {
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...corsHeaders },
       });
     }
 
