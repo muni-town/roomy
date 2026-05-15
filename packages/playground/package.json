@@ -12,7 +12,8 @@
     "@atcute/cbor": "^2.2.8",
     "@atproto/api": "^0.14.22",
     "@atproto/oauth-client-browser": "^0.3.39",
-    "@roomy/design": "workspace:*"
+    "@roomy/design": "workspace:*",
+    "@tanstack/svelte-query": "^6.1.29"
   },
   "devDependencies": {
     "@iconify-json/heroicons": "^1.2.3",
