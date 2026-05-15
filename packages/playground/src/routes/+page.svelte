@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
   import {
     callTicket,
     callConnectSpace,
@@ -101,10 +103,10 @@
   onMount(async () => {
     try {
       const storedDid = loadAppserverDid();
-      const result = await initSession(storedDid);
-      if (result) {
-        session = result.session;
-        agent = result.agent;
+      const res = await initSession(storedDid);
+      if (res) {
+        session = res.session;
+        agent = res.agent;
         authenticated = true;
         appserverDid = storedDid;
       }
@@ -282,175 +284,133 @@
   }
 </script>
 
-{#if initError}
-  <pre class="error">Init failed: {initError}</pre>
-{:else if !authenticated}
-  <h1>Playground</h1>
-  <p class="subtitle">PDS proxy auth validation</p>
-  <div class="steps">
-    <strong>Prerequisites:</strong> Start a tunnel to the appserver and set
-    <code>APPSERVER_DID</code> / <code>APPSERVER_ORIGIN</code> accordingly.
-    For example with Tailscale Funnel:<br />
-    <code>tailscale serve --bg --tunneled-port 8080 http://localhost:8080</code>
-  </div>
-  <label for="appserver-did">Appserver DID</label>
-  <input id="appserver-did" type="text" bind:value={appserverDid} />
-  <label for="handle">ATProto handle</label>
-  <input id="handle" type="text" placeholder="user.bsky.social" bind:value={handle} />
-  <br />
-  <button class="primary" onclick={handleLogin} disabled={!handle.trim() || !appserverDid.trim()}>Login</button>
-{:else}
-  <h1>Playground</h1>
-  <p>Authenticated as <strong>{agent?.did}</strong></p>
-  <p>Appserver DID: <strong>{appserverDid}</strong></p>
-  <p class="status">Scope: <code>atproto transition:generic</code></p>
+<div class="mx-auto max-w-[640px] px-4 py-8 text-base-800 dark:text-base-200">
+  {#if initError}
+    <pre class="text-red-800 bg-red-50 p-3 rounded-2xl text-sm whitespace-pre-wrap">{initError}</pre>
+  {:else if !authenticated}
+    <h1 class="text-2xl font-bold mb-1">Playground</h1>
+    <p class="text-base-500 dark:text-base-400 mb-4">PDS proxy auth validation</p>
+    <div class="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl p-4 text-sm mb-4">
+      <strong>Prerequisites:</strong> Start a tunnel to the appserver and set
+      <code class="bg-sky-100 dark:bg-sky-900/50 px-1 rounded">APPSERVER_DID</code> /
+      <code class="bg-sky-100 dark:bg-sky-900/50 px-1 rounded">APPSERVER_ORIGIN</code> accordingly.
+      For example with Tailscale Funnel:<br />
+      <code class="bg-sky-100 dark:bg-sky-900/50 px-1 rounded">tailscale serve --bg --tunneled-port 8080 http://localhost:8080</code>
+    </div>
 
-  <h2>Auth ticket</h2>
-  <button class="primary" onclick={onCallTicket} disabled={loading}>Get Connection Ticket</button>
+    <label for="appserver-did" class="block mt-3 mb-1 font-medium text-sm">Appserver DID</label>
+    <Input id="appserver-did" bind:value={appserverDid} />
 
-  <h2>Admin: space ops</h2>
-  <p class="subtitle">Caller DID must be on the appserver's
-    <code>APPSERVER_ADMIN_DIDS</code> allowlist.</p>
-  <label for="stream-did">Stream DID</label>
-  <input id="stream-did" type="text" placeholder="did:key:..." bind:value={streamDid} />
-  <br />
-  <button onclick={() => onConnectSpace()} disabled={loading}>Connect Space</button>
-  <button onclick={() => onMaterializeSpace(false)} disabled={loading}>Materialize Space</button>
-  <button onclick={() => onMaterializeSpace(true)} disabled={loading}>Materialize + Wait Backfill</button>
+    <label for="handle" class="block mt-3 mb-1 font-medium text-sm">ATProto handle</label>
+    <Input id="handle" placeholder="user.bsky.social" bind:value={handle} />
 
-  <h2>Reads</h2>
-  <button class="primary" onclick={onGetSpaces} disabled={loading}>Get My Spaces</button>
+    <Button class="mt-3" onclick={handleLogin} disabled={!handle.trim() || !appserverDid.trim()}>Login</Button>
+  {:else}
+    <h1 class="text-2xl font-bold mb-1">Playground</h1>
+    <p class="mb-1">Authenticated as <strong>{agent?.did}</strong></p>
+    <p class="mb-1">Appserver DID: <strong>{appserverDid}</strong></p>
+    <p class="text-base-500 dark:text-base-400 italic text-sm mb-6">Scope: <code class="bg-base-200/50 dark:bg-base-800/50 px-1 rounded">atproto transition:generic</code></p>
 
-  <h3>Space queries</h3>
-  <label for="space-id">Space ID</label>
-  <input id="space-id" type="text" placeholder="did:web:..." bind:value={spaceId} />
-  <br />
-  <button onclick={() => onSpaceQuery(NSIDS.GET_SPACE_METADATA, "Fetching space metadata")} disabled={loading}>Get Metadata</button>
-  <button onclick={() => onSpaceQuery(NSIDS.GET_MEMBERS, "Fetching members")} disabled={loading}>Get Members</button>
-  <button onclick={() => onSpaceQuery(NSIDS.GET_SPACE_THREADS, "Fetching threads")} disabled={loading}>Get Threads</button>
-  <button onclick={() => onSpaceQuery(NSIDS.GET_ROLES, "Fetching roles")} disabled={loading}>Get Roles</button>
-  <button onclick={() => onSpaceQuery(NSIDS.GET_INVITES, "Fetching invites")} disabled={loading}>Get Invites</button>
+    <section class="mb-6">
+      <h2 class="text-lg font-semibold mb-2">Auth ticket</h2>
+      <Button onclick={onCallTicket} disabled={loading}>Get Connection Ticket</Button>
+    </section>
 
-  <h3>Room queries</h3>
-  <label for="room-id">Room ID</label>
-  <input id="room-id" type="text" placeholder="01..." bind:value={roomId} />
-  <br />
-  <label for="message-limit">limit</label>
-  <input id="message-limit" type="number" min="1" max="100" style="width:5em" bind:value={messageLimit} />
-  <label for="message-cursor">cursor</label>
-  <input id="message-cursor" type="text" placeholder="(optional)" bind:value={messageCursor} />
-  <br />
-  <button onclick={() => onRoomQuery(NSIDS.GET_ROOM_METADATA, "Fetching room metadata")} disabled={loading}>Get Metadata</button>
-  <button onclick={() => onRoomQuery(NSIDS.GET_ROOM_THREADS, "Fetching room threads")} disabled={loading}>Get Threads</button>
-  <button onclick={onGetMessages} disabled={loading}>Get Messages</button>
+    <section class="mb-6">
+      <h2 class="text-lg font-semibold mb-1">Admin: space ops</h2>
+      <p class="text-base-500 dark:text-base-400 text-sm mb-2">Caller DID must be on the appserver's
+        <code class="bg-base-200/50 dark:bg-base-800/50 px-1 rounded">APPSERVER_ADMIN_DIDS</code> allowlist.</p>
+      <label for="stream-did" class="block mb-1 font-medium text-sm">Stream DID</label>
+      <Input id="stream-did" placeholder="did:key:..." bind:value={streamDid} />
+      <div class="flex flex-wrap gap-1 mt-2">
+        <Button variant="secondary" onclick={() => onConnectSpace()} disabled={loading}>Connect Space</Button>
+        <Button variant="secondary" onclick={() => onMaterializeSpace(false)} disabled={loading}>Materialize Space</Button>
+        <Button variant="secondary" onclick={() => onMaterializeSpace(true)} disabled={loading}>Materialize + Wait Backfill</Button>
+      </div>
+    </section>
 
-  <h3>Message query</h3>
-  <label for="message-id">Message ID</label>
-  <input id="message-id" type="text" placeholder="01..." bind:value={messageId} />
-  <br />
-  <button onclick={onGetMessage} disabled={loading}>Get Message</button>
+    <section class="mb-6">
+      <h2 class="text-lg font-semibold mb-2">Reads</h2>
+      <Button onclick={onGetSpaces} disabled={loading}>Get My Spaces</Button>
+    </section>
 
-  <h2>WebSocket Sync</h2>
-  <p class="subtitle">Connects directly to the appserver (not proxied through PDS).</p>
-  <label for="ws-url">Appserver WS URL</label>
-  <input id="ws-url" type="text" placeholder="ws://localhost:8080" bind:value={wsUrl} />
-  <br />
-  <button class="primary" onclick={onWsConnect} disabled={wsConnected}>Connect</button>
-  <button onclick={onWsDisconnect} disabled={!wsConnected}>Disconnect</button>
-  <span class="status">{wsConnected ? "Connected" : "Disconnected"}</span>
+    <section class="mb-6">
+      <h3 class="text-base font-semibold mb-2">Space queries</h3>
+      <label for="space-id" class="block mb-1 font-medium text-sm">Space ID</label>
+      <Input id="space-id" placeholder="did:web:..." bind:value={spaceId} />
+      <div class="flex flex-wrap gap-1 mt-2">
+        <Button variant="secondary" onclick={() => onSpaceQuery(NSIDS.GET_SPACE_METADATA, "Fetching space metadata")} disabled={loading}>Get Metadata</Button>
+        <Button variant="secondary" onclick={() => onSpaceQuery(NSIDS.GET_MEMBERS, "Fetching members")} disabled={loading}>Get Members</Button>
+        <Button variant="secondary" onclick={() => onSpaceQuery(NSIDS.GET_SPACE_THREADS, "Fetching threads")} disabled={loading}>Get Threads</Button>
+        <Button variant="secondary" onclick={() => onSpaceQuery(NSIDS.GET_ROLES, "Fetching roles")} disabled={loading}>Get Roles</Button>
+        <Button variant="secondary" onclick={() => onSpaceQuery(NSIDS.GET_INVITES, "Fetching invites")} disabled={loading}>Get Invites</Button>
+      </div>
+    </section>
 
-  <h3>Subscriptions</h3>
-  <label for="ws-sub-topic">Topic</label>
-  <select id="ws-sub-topic" bind:value={wsSubTopic}>
-    <option value="space">space</option>
-    <option value="room">room</option>
-  </select>
-  <label for="ws-sub-id">ID</label>
-  <input id="ws-sub-id" type="text" placeholder="space DID or room ULID" bind:value={wsSubId} />
-  <br />
-  <button onclick={onWsSub}>Subscribe</button>
-  <button onclick={onWsUnsub}>Unsubscribe</button>
-  <button onclick={onWsCursor}>Send Cursor (seq=0)</button>
-  <br />
-  <button onclick={onWsClearLog}>Clear Log</button>
-  <div class="ws-log">
-    {#each wsLog as line}
-      <div>{line}</div>
-    {/each}
-  </div>
+    <section class="mb-6">
+      <h3 class="text-base font-semibold mb-2">Room queries</h3>
+      <label for="room-id" class="block mb-1 font-medium text-sm">Room ID</label>
+      <Input id="room-id" placeholder="01..." bind:value={roomId} />
+      <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center mt-2">
+        <label for="message-limit" class="text-sm font-medium">limit</label>
+        <Input id="message-limit" type="number" min={1} max={100} bind:value={messageLimit} />
+        <label for="message-cursor" class="text-sm font-medium">cursor</label>
+        <Input id="message-cursor" placeholder="(optional)" bind:value={messageCursor} />
+      </div>
+      <div class="flex flex-wrap gap-1 mt-2">
+        <Button variant="secondary" onclick={() => onRoomQuery(NSIDS.GET_ROOM_METADATA, "Fetching room metadata")} disabled={loading}>Get Metadata</Button>
+        <Button variant="secondary" onclick={() => onRoomQuery(NSIDS.GET_ROOM_THREADS, "Fetching room threads")} disabled={loading}>Get Threads</Button>
+        <Button variant="secondary" onclick={onGetMessages} disabled={loading}>Get Messages</Button>
+      </div>
+    </section>
 
-  <br />
-  <button onclick={handleLogout}>Logout</button>
-{/if}
+    <section class="mb-6">
+      <h3 class="text-base font-semibold mb-2">Message query</h3>
+      <label for="message-id" class="block mb-1 font-medium text-sm">Message ID</label>
+      <Input id="message-id" placeholder="01..." bind:value={messageId} />
+      <Button variant="secondary" class="mt-2" onclick={onGetMessage} disabled={loading}>Get Message</Button>
+    </section>
 
-<pre class={resultError ? "error" : "status"}>{result}</pre>
+    <section class="mb-6">
+      <h2 class="text-lg font-semibold mb-1">WebSocket Sync</h2>
+      <p class="text-base-500 dark:text-base-400 text-sm mb-2">Connects directly to the appserver (not proxied through PDS).</p>
+      <label for="ws-url" class="block mb-1 font-medium text-sm">Appserver WS URL</label>
+      <Input id="ws-url" placeholder="ws://localhost:8080" bind:value={wsUrl} />
+      <div class="flex flex-wrap items-center gap-1 mt-2">
+        <Button onclick={onWsConnect} disabled={wsConnected}>Connect</Button>
+        <Button variant="secondary" onclick={onWsDisconnect} disabled={!wsConnected}>Disconnect</Button>
+        <span class="text-sm italic text-base-500 dark:text-base-400">{wsConnected ? "Connected" : "Disconnected"}</span>
+      </div>
 
-<style>
-  :global(body) {
-    font-family: -apple-system, system-ui, sans-serif;
-    max-width: 640px;
-    margin: 2rem auto;
-    padding: 0 1rem;
-    color: #1a1a1a;
-  }
-  h1 { margin-bottom: 0.25rem; }
-  .subtitle { color: #666; margin-top: 0; }
-  label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 500; }
-  input[type="text"], input[type="number"], select {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 0.95rem;
-    box-sizing: border-box;
-  }
-  select { width: auto; }
-  button {
-    margin: 0.75rem 0.25rem 0;
-    padding: 0.5rem 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.95rem;
-  }
-  button.primary {
-    background: #2563eb;
-    color: white;
-    border-color: #2563eb;
-  }
-  button.primary:hover { background: #1d4ed8; }
-  button:hover { background: #f5f5f5; }
-  button.primary:hover { background: #1d4ed8; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  pre {
-    background: #f4f4f5;
-    padding: 0.75rem;
-    border-radius: 4px;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    font-size: 0.85rem;
-    margin-top: 1rem;
-  }
-  pre.error { background: #fef2f2; color: #991b1b; }
-  .steps {
-    background: #f0f9ff;
-    border: 1px solid #bae6fd;
-    border-radius: 4px;
-    padding: 0.75rem 1rem;
-    margin: 1rem 0;
-    font-size: 0.85rem;
-  }
-  .steps :global(code) { background: #e0f2fe; padding: 0.1em 0.3em; border-radius: 3px; }
-  .status { color: #666; font-style: italic; }
-  .ws-log {
-    background: #f4f4f5;
-    padding: 0.75rem;
-    border-radius: 4px;
-    overflow-y: auto;
-    max-height: 300px;
-    font-size: 0.8rem;
-    font-family: monospace;
-    white-space: pre-wrap;
-    margin-top: 0.5rem;
-  }
-</style>
+      <h3 class="text-base font-semibold mt-4 mb-2">Subscriptions</h3>
+      <div class="flex flex-wrap items-end gap-2">
+        <div>
+          <label for="ws-sub-topic" class="block mb-1 font-medium text-sm">Topic</label>
+          <select id="ws-sub-topic" bind:value={wsSubTopic} class="rounded-2xl border-0 text-sm font-medium bg-base-200/50 dark:bg-base-800/50 px-3 py-1.5">
+            <option value="space">space</option>
+            <option value="room">room</option>
+          </select>
+        </div>
+        <div class="flex-1 min-w-[200px]">
+          <label for="ws-sub-id" class="block mb-1 font-medium text-sm">ID</label>
+          <Input id="ws-sub-id" placeholder="space DID or room ULID" bind:value={wsSubId} />
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-1 mt-2">
+        <Button variant="secondary" onclick={onWsSub}>Subscribe</Button>
+        <Button variant="secondary" onclick={onWsUnsub}>Unsubscribe</Button>
+        <Button variant="secondary" onclick={onWsCursor}>Send Cursor (seq=0)</Button>
+        <Button variant="ghost" onclick={onWsClearLog}>Clear Log</Button>
+      </div>
+      <div class="bg-base-100 dark:bg-base-900/50 p-3 rounded-2xl max-h-[300px] overflow-y-auto text-xs font-mono whitespace-pre-wrap mt-2">
+        {#each wsLog as line}
+          <div>{line}</div>
+        {/each}
+      </div>
+    </section>
+
+    <Button variant="ghost" onclick={handleLogout}>Logout</Button>
+  {/if}
+
+  <pre class="mt-4 p-3 rounded-2xl text-sm whitespace-pre-wrap overflow-x-auto {resultError ? 'bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300' : 'bg-base-100 dark:bg-base-900/50 text-base-600 dark:text-base-400'}">{result}</pre>
+</div>
