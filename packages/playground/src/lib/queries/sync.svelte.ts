@@ -159,15 +159,14 @@ export function createSyncConnection(deps: {
 		const summary = ops.map((o) => `${o.op} ${o.key.slice(0, 8)}…`).join(", ");
 		log(`[#messageDiff] room=${diff.roomId.slice(0, 8)}… seq=${diff.seq} ops: ${summary}`);
 
-		// Apply diff directly to TanStack Query cache — no HTTP round-trip
+		// Apply diff directly to TanStack Query cache — no HTTP round-trip.
+		// The query stores Message[] (unwrapped from the response),
+		// so setQueryData receives Message[] and must return Message[].
 		queryClient.setQueryData(
 			["space.roomy.room.getMessages", { roomId: diff.roomId }],
-			(old: GetMessagesResponse | undefined) => {
+			(old: Message[] | undefined) => {
 				if (!old) return old;
-				return {
-					...old,
-					messages: applyMessageDiff(old.messages, ops),
-				};
+				return applyMessageDiff(old, ops);
 			},
 		);
 	}
@@ -192,11 +191,6 @@ export function createSyncConnection(deps: {
 }
 
 // ── Diff application ──────────────────────────────────────────────────────
-
-interface GetMessagesResponse {
-	messages: Message[];
-	cursor: string | null;
-}
 
 function applyMessageDiff(messages: Message[], ops: MessageDiffOp[]): Message[] {
 	const map = new Map(messages.map((m) => [m.id, m]));
