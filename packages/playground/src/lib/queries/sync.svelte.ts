@@ -28,8 +28,9 @@ export function createSyncConnection(deps: {
 	fetchTicket: () => Promise<string>;
 	appserverDid: string;
 	onLog?: (msg: string) => void;
+	onMessageDiff?: (diff: MessageDiffFrame) => void;
 }): SyncConnection {
-	const { queryClient, fetchTicket, appserverDid, onLog } = deps;
+	const { queryClient, fetchTicket, appserverDid, onLog, onMessageDiff } = deps;
 
 	let ws: WebSocket | null = null;
 	let state = $state<ConnectionState>("disconnected");
@@ -158,6 +159,9 @@ export function createSyncConnection(deps: {
 		const ops = diff.ops;
 		const summary = ops.map((o) => `${o.op} ${o.key.slice(0, 8)}…`).join(", ");
 		log(`[#messageDiff] room=${diff.roomId.slice(0, 8)}… seq=${diff.seq} ops: ${summary}`);
+
+		// Notify listener (e.g. to trigger updateSeen)
+		onMessageDiff?.(diff);
 
 		// Apply diff directly to TanStack Query cache — no HTTP round-trip.
 		// The query stores Message[] (unwrapped from the response),

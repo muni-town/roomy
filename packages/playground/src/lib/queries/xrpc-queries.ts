@@ -1,5 +1,5 @@
 import type { Agent } from "@atproto/api";
-import { makeProxiedAgent } from "$lib/xrpc";
+import { makeProxiedAgent, callUpdateSeen } from "$lib/xrpc";
 
 // ── NSIDs ─────────────────────────────────────────────────────────────────
 
@@ -15,6 +15,7 @@ export const NSID = {
 	GET_MESSAGES: "space.roomy.room.getMessages",
 	GET_MESSAGE: "space.roomy.message.getMessage",
 	GET_TICKET: "space.roomy.auth.getConnectionTicket",
+	UPDATE_SEEN: "space.roomy.room.updateSeen",
 } as const;
 
 // ── Query key helpers ─────────────────────────────────────────────────────
@@ -95,6 +96,15 @@ export function fetchRoles(agent: Agent, appserverDid: string, spaceId: string) 
 	return () => xrpcFetch<import("./types").GetRolesResponse>(
 		agent, appserverDid, NSID.GET_ROLES, { spaceId },
 	);
+}
+
+export function callUpdateSeenRoom(
+	agent: Agent,
+	appserverDid: string,
+	roomId: string,
+	seenUpTo?: string,
+) {
+	return () => callUpdateSeen(agent, appserverDid, roomId, seenUpTo);
 }
 
 export function fetchTicket(agent: Agent, appserverDid: string) {
