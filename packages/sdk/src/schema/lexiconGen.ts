@@ -150,14 +150,12 @@ const schemaToObjProp = (
     };
   } else if (
     "type" in schema &&
-    schema.type == "object" &&
-    "properties" in schema &&
-    schema.properties
+    schema.type == "object"
   ) {
     // If this is an object with properties
 
     // If this is an object with a single `$bytes` field, then it should be a bytes type.
-    const propNames = Object.keys(schema.properties);
+    const propNames = Object.keys(schema.properties || {});
     if (propNames.length == 1 && propNames[0] == "$bytes") {
       return {
         prop: {
@@ -235,7 +233,7 @@ const schemaToLexiconDefs = (
   schema: JsonSchema.NonBooleanBranch,
   defN: number,
 ): { main: LexObject } | Record<string, LexObject> => {
-  if ("type" in schema && schema.type == "object" && "properties" in schema) {
+  if ("type" in schema && schema.type == "object") {
     // If this is an object definition.
 
     // Remove the $type field if present since it doesn't need to get listed in the properties

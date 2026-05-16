@@ -12,7 +12,7 @@
  */
 
 import { writeFileSync, mkdirSync } from "fs";
-import { eventLexicons } from "../src/lib/schema/lexiconGen";
+import { eventLexicons } from "../../sdk/src/schema/lexiconGen";
 
 // Output directory for generated lexicons
 const OUTPUT_DIR = "./lexicons";
