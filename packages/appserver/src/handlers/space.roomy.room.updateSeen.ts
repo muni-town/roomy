@@ -103,7 +103,7 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   }
 
   db.prepare(
-    `insert into read_positions (user_did, room_id, seen_up_to, unread_count, updated_at)
+    `insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count, updated_at)
      values (?, ?, ?, ?, (unixepoch() * 1000))
      on conflict(user_did, room_id) do update set
        seen_up_to = excluded.seen_up_to,
