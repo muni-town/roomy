@@ -6,13 +6,11 @@
  * can be reused unchanged.
  *
  * Materialisation is fully deterministic from the Leaf event log, so on a
- * schema-version mismatch the safe move is to drop the file and re-backfill.
- * For now we throw — wiring the wipe-on-mismatch path lives with the bootstrap
- * step (step 4 of the materialisation plan).
+ * schema-version mismatch the file is automatically deleted and re-created.
  */
 
 import { Database } from "bun:sqlite";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,31 +37,58 @@ export interface OpenDbOptions {
 /**
  * Open (or return) the appserver's SQLite database, applying the schema and
  * verifying the version row.
+ *
+ * On schema-version mismatch the file is deleted and recreated (materialisation
+ * is deterministic from the Leaf event log so this is always safe).
  */
 export function openDb(opts: OpenDbOptions = {}): Database {
   if (!opts.isolated && dbInstance) return dbInstance;
 
   const path = opts.path ?? DEFAULT_DB_PATH;
-  if (path !== ":memory:") {
-    mkdirSync(dirname(path), { recursive: true });
-  }
-  const db = new Database(path, { create: true });
+  const isFile = path !== ":memory:";
 
+  if (isFile) mkdirSync(dirname(path), { recursive: true });
+
+  const db = new Database(path, { create: true });
   db.exec("pragma journal_mode = wal");
   db.exec("pragma synchronous = normal");
   db.exec("pragma foreign_keys = on");
 
-  initializeSchema(db);
+  try {
+    initializeSchema(db);
+  } catch (err) {
+    if (err instanceof SchemaVersionMismatchError && isFile) {
+      db.close();
+      console.warn(
+        `[db] Schema version mismatch (${err.onDiskVersion} → ${err.expectedVersion}). ` +
+          "Wiping and re-creating.",
+      );
+      // Remove the DB file and its WAL/SHM companions.
+      for (const suffix of ["", "-wal", "-shm"]) {
+        try { unlinkSync(path + suffix); } catch { /* already gone */ }
+      }
+      mkdirSync(dirname(path), { recursive: true });
+      const rebuilt = new Database(path, { create: true });
+      rebuilt.exec("pragma journal_mode = wal");
+      rebuilt.exec("pragma synchronous = normal");
+      rebuilt.exec("pragma foreign_keys = on");
+      initializeSchema(rebuilt);
+      if (!opts.isolated) dbInstance = rebuilt;
+      return rebuilt;
+    }
+    throw err;
+  }
 
   if (!opts.isolated) dbInstance = db;
   return db;
 }
 
 /**
- * Apply schema.sql and reconcile the schema version row.
+ * Apply schema.sql and write the schema version row.
  *
- * Throws if the on-disk version differs from `SCHEMA_VERSION` — the caller is
- * expected to wipe the file and re-open. Idempotent on a matching DB.
+ * Throws `SchemaVersionMismatchError` if the on-disk version differs from
+ * `SCHEMA_VERSION`. The caller (`openDb`) catches this and auto-wipes.
+ * Idempotent on a matching DB.
  */
 export function initializeSchema(db: Database): void {
   const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
