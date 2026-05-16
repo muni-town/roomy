@@ -126,7 +126,9 @@ export class XrpcRouter {
             }
           }
           const result = await route.handler(params, auth, body);
-          return Response.json(result);
+          return result !== undefined
+            ? Response.json(result)
+            : new Response(null, { status: 200 });
         }
 
         if (route.kind === "subscription") {
