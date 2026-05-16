@@ -11,6 +11,7 @@
 		fetchRoomMetadata,
 		fetchMessages,
 		fetchTicket,
+		callUpdateSeenRoom,
 	} from "$lib/queries/xrpc-queries";
 	import { createSyncConnection } from "$lib/queries/sync.svelte";
 	import {
@@ -48,6 +49,18 @@
 		untrack(() => {
 			syncLog = [...syncLog, `[${time}] ${msg}`];
 		});
+	}
+
+	// ── Mark room as seen ───────────────────────────────────────────────
+
+	async function markRoomSeen(roomId: string) {
+		if (!agent) return;
+		try {
+			await callUpdateSeenRoom(agent, appserverDid, roomId)();
+			appendLog(`updateSeen → ${roomId.slice(0, 8)}…`);
+		} catch (err: any) {
+			appendLog(`updateSeen error: ${err?.message ?? err}`);
+		}
 	}
 
 	// ── Init ────────────────────────────────────────────────────────────
@@ -90,6 +103,14 @@
 			fetchTicket: fetchTicket(agent, appserverDid),
 			appserverDid,
 			onLog: appendLog,
+			onMessageDiff: (diff) => {
+				// If a message arrives in the currently-open room, mark it as seen
+				untrack(() => {
+					if (selectedRoomId === diff.roomId) {
+						markRoomSeen(diff.roomId);
+					}
+				});
+			},
 		});
 		syncConn = conn;
 		conn.connect();
@@ -114,6 +135,14 @@
 		if (selectedRoomId) {
 			conn.subscribe("room", selectedRoomId);
 		}
+	});
+
+	// ── Mark room as seen when opened ───────────────────────────────────
+
+	$effect(() => {
+		const roomId = selectedRoomId;
+		if (!roomId || !agent) return;
+		markRoomSeen(roomId);
 	});
 </script>
 

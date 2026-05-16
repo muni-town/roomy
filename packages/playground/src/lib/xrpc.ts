@@ -67,6 +67,8 @@ function roomQueryLexicon(
 
 // ── Lexicons ──────────────────────────────────────────────────────────────
 
+const NSID_UPDATE_SEEN = "space.roomy.room.updateSeen";
+
 const LEXICONS = [
   {
     lexicon: 1,
@@ -127,6 +129,26 @@ const LEXICONS = [
     limit: { type: "string" },
     cursor: { type: "string" },
   }),
+  {
+    lexicon: 1,
+    id: NSID_UPDATE_SEEN,
+    defs: {
+      main: {
+        type: "procedure",
+        input: {
+          encoding: "application/json",
+          schema: {
+            type: "object",
+            required: ["roomId"],
+            properties: {
+              roomId: { type: "string" },
+              seenUpTo: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  },
   {
     lexicon: 1,
     id: NSID_GET_MESSAGE,
@@ -272,6 +294,19 @@ export async function callGetMessages(
   if (limit) params.limit = limit;
   if (cursor) params.cursor = cursor;
   const response = await proxied.call(NSID_GET_MESSAGES, params);
+  return response.data;
+}
+
+export async function callUpdateSeen(
+  agent: Agent,
+  appserverDid: string,
+  roomId: string,
+  seenUpTo?: string,
+) {
+  const proxied = makeProxiedAgent(agent, appserverDid);
+  const body: Record<string, string> = { roomId };
+  if (seenUpTo) body.seenUpTo = seenUpTo;
+  const response = await proxied.call(NSID_UPDATE_SEEN, {}, body);
   return response.data;
 }
 
