@@ -1,5 +1,6 @@
 import type { Agent } from "@atproto/api";
-import { makeProxiedAgent, callUpdateSeen } from "$lib/xrpc";
+import { makeProxiedAgent } from "@roomy-space/sdk/browser";
+import { callUpdateSeen } from "$lib/xrpc";
 
 // ── NSIDs ─────────────────────────────────────────────────────────────────
 

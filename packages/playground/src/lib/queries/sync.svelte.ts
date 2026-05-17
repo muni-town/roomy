@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/svelte-query";
-import { decodeCborFrame } from "$lib/xrpc";
+import { sync } from "@roomy-space/sdk";
+const { decodeCborFrame } = sync;
 import { resolveAppserverWsOrigin } from "./did-resolve";
 import type {
 	Message,

@@ -1,0 +1,16 @@
+/**
+ * Namespaced re-exports of every XRPC query schema (params + response).
+ * Import as:
+ *   import { queries } from "@roomy-space/sdk/schemas";
+ *   queries.getSpaces.Response(json);
+ */
+export * as getSpaces from "./getSpaces";
+export * as getSpaceMetadata from "./getSpaceMetadata";
+export * as getSpaceThreads from "./getSpaceThreads";
+export * as getRoles from "./getRoles";
+export * as getMembers from "./getMembers";
+export * as getInvites from "./getInvites";
+export * as getRoomMetadata from "./getRoomMetadata";
+export * as getRoomThreads from "./getRoomThreads";
+export * as getMessages from "./getMessages";
+export * as getMessage from "./getMessage";

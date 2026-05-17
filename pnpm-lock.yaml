@@ -561,9 +561,9 @@ importers:
       '@atproto/api':
         specifier: ^0.14.22
         version: 0.14.22
-      '@atproto/oauth-client-browser':
-        specifier: ^0.3.39
-        version: 0.3.39
+      '@roomy-space/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@roomy/design':
         specifier: workspace:*
         version: link:../design
@@ -634,12 +634,18 @@ importers:
       '@atproto/oauth-client':
         specifier: ^0.5.6
         version: 0.5.6
+      '@atproto/oauth-client-browser':
+        specifier: ^0.3.39
+        version: 0.3.39
       '@muni-town/leaf-client':
         specifier: 0.1.0-alpha.17
         version: 0.1.0-alpha.17
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
+      '@tanstack/query-core':
+        specifier: 5.100.10
+        version: 5.100.10
       arktype:
         specifier: ^2.1.29
         version: 2.1.29
@@ -8323,7 +8329,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -8414,7 +8420,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
   '@vitest/utils@2.1.9':
     dependencies:
