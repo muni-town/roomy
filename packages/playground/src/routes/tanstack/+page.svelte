@@ -20,9 +20,9 @@
 		logout,
 		loadAppserverDid,
 		saveAppserverDid,
-	} from "$lib/xrpc";
+	} from "@roomy-space/sdk/browser";
 	import type { Agent } from "@atproto/api";
-	import type { OAuthSession } from "@atproto/oauth-client-browser";
+	import type { OAuthSession } from "@roomy-space/sdk/browser";
 	import type { Space, SidebarChannel, Message } from "$lib/queries/types";
 
 	// ── Auth state ──────────────────────────────────────────────────────

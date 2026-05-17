@@ -12,16 +12,19 @@
     callGetMessages,
     callGetMessage,
     NSIDS,
-    decodeCborFrame,
-    saveAppserverDid,
-    loadAppserverDid,
+  } from "$lib/xrpc";
+  import {
     initSession,
     login,
     logout,
+    saveAppserverDid,
+    loadAppserverDid,
     makeProxiedAgent,
-  } from "$lib/xrpc";
+  } from "@roomy-space/sdk/browser";
+  import { sync } from "@roomy-space/sdk";
+  const { decodeCborFrame } = sync;
   import type { Agent } from "@atproto/api";
-  import type { OAuthSession } from "@atproto/oauth-client-browser";
+  import type { OAuthSession } from "@roomy-space/sdk/browser";
 
   // ── Auth state ──────────────────────────────────────────────────────────
 
