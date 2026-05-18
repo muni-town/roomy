@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@foxui/core": "^0.6.0",
+    "@foxui/social": "^0.6.0",
     "@iconify/svelte": "^4.2.0",
     "@roomy-space/sdk": "workspace:*",
     "@tiptap/core": "^2.26.1",
@@ -29,6 +30,8 @@
     "@tiptap/suggestion": "^2.26.1",
     "bits-ui": "^1.8.0",
     "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "svelte-dnd-action": "^0.9.65",
     "svelte-boring-avatars": "^1.2.6",
     "svelte-tiptap": "^2.2.0",
     "tailwind-merge": "^3.5.0",
