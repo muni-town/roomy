@@ -1,11 +1,11 @@
 /**
  * Build-time smoke test: the core SDK entry (`@roomy-space/sdk`) must NOT
- * pull in `@atproto/oauth-client-browser` — that dependency is isolated
- * behind the `/browser` subpath export.
+ * pull in `@atproto/oauth-client-browser` or `svelte` — those dependencies
+ * are isolated behind the `/browser` and `/svelte` subpath exports respectively.
  *
  * This test imports the **built** `dist/index.js` (not `src/index.ts`) so
  * it reflects what downstream consumers actually resolve.  It checks the
- * resolved module tree for any reference to `oauth-client-browser`.
+ * resolved module tree for any reference to the forbidden packages.
  *
  * Run via:  pnpm vitest run tests/smoke/no-browser-in-core.test.ts
  */
@@ -17,8 +17,6 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = resolve(__dirname, "../../dist");
-
-const FORBIDDEN = "oauth-client-browser";
 
 function walkJsFiles(dir: string): string[] {
   const entries: string[] = [];
@@ -39,20 +37,44 @@ function walkJsFiles(dir: string): string[] {
   return entries;
 }
 
-describe("Core SDK isolation from @atproto/oauth-client-browser", () => {
-  it("dist/index.js does not reference oauth-client-browser", () => {
+/**
+ * Core files = everything under dist/ EXCEPT the isolated subpath dirs
+ * (browser/, svelte/). Files in those subpaths are allowed to import
+ * their respective heavy deps; the core must stay clean.
+ */
+function coreJsFiles(): string[] {
+  const allJs = walkJsFiles(distDir);
+  const isolated = [resolve(distDir, "browser"), resolve(distDir, "svelte")];
+  return allJs.filter((f) => !isolated.some((dir) => f.startsWith(dir + "/")));
+}
+
+describe("Core SDK isolation from /browser and /svelte deps", () => {
+  it("dist/index.js does not reference oauth-client-browser or svelte", () => {
     const indexPath = resolve(distDir, "index.js");
     const content = readFileSync(indexPath, "utf-8");
-    expect(content).not.toContain(FORBIDDEN);
+    expect(content).not.toContain("oauth-client-browser");
+    expect(content).not.toContain('from "svelte"');
+    expect(content).not.toContain("from 'svelte'");
   });
 
-  it("no file under dist/ (outside dist/browser/) references oauth-client-browser", () => {
-    const allJs = walkJsFiles(distDir);
-    const browserDir = resolve(distDir, "browser");
-    const coreFiles = allJs.filter((f) => !f.startsWith(browserDir + "/"));
-    for (const file of coreFiles) {
+  it("no core file under dist/ references oauth-client-browser", () => {
+    for (const file of coreJsFiles()) {
       const content = readFileSync(file, "utf-8");
-      expect(content).not.toContain(FORBIDDEN);
+      expect(content, `${file} references oauth-client-browser`).not.toContain(
+        "oauth-client-browser",
+      );
+    }
+  });
+
+  it("no core file under dist/ imports from svelte", () => {
+    for (const file of coreJsFiles()) {
+      const content = readFileSync(file, "utf-8");
+      expect(content, `${file} imports from svelte`).not.toContain(
+        'from "svelte"',
+      );
+      expect(content, `${file} imports from svelte`).not.toContain(
+        "from 'svelte'",
+      );
     }
   });
 });

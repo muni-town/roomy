@@ -53,7 +53,19 @@
     "./package/operations/reaction": {
       "development": "./src/operations/reaction.ts",
       "import": "./dist/operations/reaction.js"
+    },
+    "./svelte": {
+      "svelte": "./src/svelte/index.svelte.ts",
+      "default": "./src/svelte/index.svelte.ts"
     }
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0",
+    "@tanstack/svelte-query": "^6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "svelte": { "optional": true },
+    "@tanstack/svelte-query": { "optional": true }
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
