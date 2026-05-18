@@ -1,21 +1,34 @@
 /**
+ * DID → service endpoint resolution.
+ *
+ * Resolves a DID document and extracts the `#space_roomy_appserver`
+ * service endpoint, converting it to a WebSocket origin.
+ *
+ * Currently supports `did:web` only. `did:plc` can be added later
+ * by extending `resolveDidDocument`.
+ */
+
+/**
  * Resolve the WebSocket origin from an appserver DID by fetching
- * its DID document and reading the #space_roomy_appserver service endpoint.
+ * its DID document and reading the `#space_roomy_appserver` service endpoint.
+ *
+ * Converts `https://` → `wss://` and `http://` → `ws://`.
  */
 export async function resolveAppserverWsOrigin(appserverDid: string): Promise<string> {
-	// Resolve DID document
 	const didDoc = await resolveDidDocument(appserverDid);
 
-	// Find the #space_roomy_appserver service
 	const service = didDoc.service?.find(
-		(s: any) => s.id === "#space_roomy_appserver" || s.id === `${appserverDid}#space_roomy_appserver`,
+		(s: any) =>
+			s.id === "#space_roomy_appserver" ||
+			s.id === `${appserverDid}#space_roomy_appserver`,
 	);
 
 	if (!service?.serviceEndpoint) {
-		throw new Error(`No #space_roomy_appserver service found in DID document for ${appserverDid}`);
+		throw new Error(
+			`No #space_roomy_appserver service found in DID document for ${appserverDid}`,
+		);
 	}
 
-	// Convert https:// → wss://, http:// → ws://
 	const endpoint: string = service.serviceEndpoint;
 	return endpoint.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
 }
