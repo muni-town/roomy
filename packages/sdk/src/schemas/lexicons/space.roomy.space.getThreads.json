@@ -1,0 +1,9 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.getThreads",
+  "defs": {
+    "main": {
+      "type": "query"
+    }
+  }
+}

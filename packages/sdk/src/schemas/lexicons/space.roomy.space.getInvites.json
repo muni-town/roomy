@@ -1,0 +1,9 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.getInvites",
+  "defs": {
+    "main": {
+      "type": "query"
+    }
+  }
+}

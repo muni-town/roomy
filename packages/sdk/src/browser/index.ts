@@ -24,3 +24,5 @@ export {
   type CreateOAuthClientOptions,
   type InitSessionOptions,
 } from "./oauth";
+
+export { createTanstackCacheAdapter } from "./tanstack";

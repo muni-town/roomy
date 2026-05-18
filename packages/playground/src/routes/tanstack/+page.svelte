@@ -106,11 +106,11 @@
 			fetchTicket: fetchTicket(agent, appserverDid),
 			appserverDid,
 			onLog: appendLog,
-			onMessageDiff: (diff) => {
+			onMessageDiff: (roomId, _seq) => {
 				// If a message arrives in the currently-open room, mark it as seen
 				untrack(() => {
-					if (selectedRoomId === diff.roomId) {
-						markRoomSeen(diff.roomId);
+					if (selectedRoomId === roomId) {
+						markRoomSeen(roomId);
 					}
 				});
 			},

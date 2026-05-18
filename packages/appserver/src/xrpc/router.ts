@@ -10,6 +10,43 @@ import type { AuthVerifier } from "./auth.ts";
 import { consumeTicket } from "./auth.ts";
 import { encodeFrame, errorFrame } from "./frame.ts";
 import { XrpcError, toErrorResponse } from "./errors.ts";
+import { type } from "arktype";
+
+function validateOrReject(
+  schema: import("arktype").Type<any>,
+  data: unknown,
+  nsid: string,
+  kind: "params" | "input",
+): { ok: true; data: any } | { ok: false; response: Response } {
+  const result = schema(data);
+  if (result instanceof type.errors) {
+    return {
+      ok: false,
+      response: Response.json(
+        {
+          error: "InvalidRequest",
+          message: `${nsid} ${kind} validation failed: ${result.summary}`,
+        },
+        { status: 400 },
+      ),
+    };
+  }
+  return { ok: true, data: result };
+}
+
+function validateOutputOrThrow(
+  schema: import("arktype").Type<any>,
+  data: unknown,
+  nsid: string,
+): unknown {
+  const result = schema(data);
+  if (result instanceof type.errors) {
+    throw new Error(
+      `${nsid} output validation failed (server bug): ${result.summary}`,
+    );
+  }
+  return result;
+}
 
 interface WsData {
   nsid?: string;
@@ -95,11 +132,24 @@ export class XrpcRouter {
             );
           }
           const auth = await this.#auth(req);
-          const params = route.parseParams
+          let params: QueryParams | unknown = route.parseParams
             ? route.parseParams(rawParams)
             : rawParams;
-          const result = await route.handler(params, auth);
-          return Response.json(result);
+          if (route.paramsSchema) {
+            const v = validateOrReject(
+              route.paramsSchema,
+              params,
+              nsid,
+              "params",
+            );
+            if (!v.ok) return v.response;
+            params = v.data;
+          }
+          const result = await route.handler(params as QueryParams, auth);
+          const validated = route.outputSchema
+            ? validateOutputOrThrow(route.outputSchema, result, nsid)
+            : result;
+          return Response.json(validated);
         }
 
         if (route.kind === "procedure") {
@@ -125,7 +175,26 @@ export class XrpcRouter {
               );
             }
           }
-          const result = await route.handler(params, auth, body);
+          let validatedBody: unknown = body;
+          if (route.inputSchema) {
+            const v = validateOrReject(route.inputSchema, body, nsid, "input");
+            if (!v.ok) return v.response;
+            validatedBody = v.data;
+          }
+          const result = await route.handler(
+            params,
+            auth,
+            validatedBody as Record<string, unknown>,
+          );
+          if (route.outputSchema) {
+            const validated = validateOutputOrThrow(
+              route.outputSchema,
+              result,
+              nsid,
+            );
+            return Response.json(validated);
+          }
+          // Void short-circuit (b57ad1ca): no outputSchema means void return.
           return result !== undefined
             ? Response.json(result)
             : new Response(null, { status: 200 });

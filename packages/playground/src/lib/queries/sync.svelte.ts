@@ -1,15 +1,9 @@
 import type { QueryClient } from "@tanstack/svelte-query";
 import { sync } from "@roomy-space/sdk";
-const { decodeCborFrame } = sync;
+import { createTanstackCacheAdapter } from "@roomy-space/sdk/browser";
 import { resolveAppserverWsOrigin } from "./did-resolve";
-// Slice 3: types now sourced from arktype schemas in `@roomy-space/sdk`.
-// (This block is the only line edited in this file by Slice 3; full WS
-// migration into the SDK belongs to Slice 6.)
-import { schemas } from "@roomy-space/sdk";
-type Message = typeof schemas.queries.getMessages.Message.infer;
-type MessageDiffFrame = typeof schemas.frames.messageDiff.Body.infer;
-type InvalidationFrame = typeof schemas.frames.invalidate.Body.infer;
-type MessageDiffOp = typeof schemas.frames.messageDiff.Op.infer;
+
+const { SyncConnection: SdkSyncConnection, SyncRouter, TopicManager } = sync;
 
 // ── Sync connection state ─────────────────────────────────────────────────
 
@@ -31,26 +25,26 @@ export function createSyncConnection(deps: {
 	fetchTicket: () => Promise<string>;
 	appserverDid: string;
 	onLog?: (msg: string) => void;
-	onMessageDiff?: (diff: MessageDiffFrame) => void;
+	onMessageDiff?: (roomId: string, seq: number) => void;
 }): SyncConnection {
 	const { queryClient, fetchTicket, appserverDid, onLog, onMessageDiff } = deps;
 
-	let ws: WebSocket | null = null;
+	let connection: InstanceType<typeof SdkSyncConnection> | null = null;
+	let router: InstanceType<typeof SyncRouter> | null = null;
+	let topics: InstanceType<typeof TopicManager> | null = null;
+	const topicHolds = new Map<string, () => void>();
+
 	let state = $state<ConnectionState>("disconnected");
 	let lastSeq = $state(0);
-	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-	let intentionalClose = false;
 
 	function log(msg: string) {
 		onLog?.(msg);
 	}
 
 	async function connect() {
-		if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) return;
+		if (connection) return; // already wired
 
-		intentionalClose = false;
 		state = "connecting";
-
 		let wsOrigin: string;
 		try {
 			log(`Resolving WS origin from ${appserverDid}…`);
@@ -62,129 +56,92 @@ export function createSyncConnection(deps: {
 			return;
 		}
 
-		log("Requesting ticket…");
-		let ticket: string;
-		try {
-			ticket = await fetchTicket();
-			log(`Got ticket: ${ticket.slice(0, 12)}…`);
-		} catch (err: any) {
-			log(`Ticket failed: ${err?.message ?? err}`);
-			state = "error";
-			return;
-		}
+		// Build SDK connection. SyncConnection handles ticket fetch + reconnect.
+		connection = new SdkSyncConnection({
+			wsUrl: `${wsOrigin}/xrpc/space.roomy.sync.subscribe`,
+			fetchTicket,
+			logger: log,
+		});
 
-		const url = `${wsOrigin}/xrpc/space.roomy.sync.subscribe?ticket=${encodeURIComponent(ticket)}`;
-		log(`Connecting to ${url.split("?")[0]}…`);
-
-		const socket = new WebSocket(url);
-		socket.binaryType = "arraybuffer";
-		ws = socket;
-
-		socket.onopen = () => {
-			state = "connected";
-			log("Connected.");
-		};
-
-		socket.onmessage = (event) => {
-			if (typeof event.data === "string") {
-				log(`[text] ${event.data}`);
-				return;
+		// Mirror SDK status into Svelte $state.
+		connection.onStatusChange((s) => {
+			switch (s.state) {
+				case "connecting":
+				case "reconnecting":
+					state = "connecting";
+					break;
+				case "open":
+					state = "connected";
+					break;
+				case "closing":
+				case "idle":
+					state = "disconnected";
+					break;
+				case "closed":
+					state = "disconnected";
+					break;
 			}
+		});
 
-			try {
-				const { header, body } = decodeCborFrame(event.data as ArrayBuffer);
-				const t = header["t"] as string;
-
-				if (t === "#messageDiff") {
-					handleMessageDiff(body as unknown as MessageDiffFrame);
-				} else if (t === "#invalidate") {
-					handleInvalidation(body as unknown as InvalidationFrame);
-				} else if (t === "#error") {
-					log(`[ERROR] ${(body as any).error}: ${(body as any).message}`);
-				} else {
-					log(`[unknown t=${t}] ${JSON.stringify(body)}`);
+		// Route #invalidate / #messageDiff into TanStack via the SDK adapter.
+		// Also track lastSeq from messageDiff frames + notify caller.
+		connection.onFrame((frame) => {
+			const t = frame.header["t"];
+			if (t === "#messageDiff") {
+				const seq = (frame.body as { seq?: number }).seq;
+				const roomId = (frame.body as { roomId?: string }).roomId;
+				if (typeof seq === "number" && seq > lastSeq) lastSeq = seq;
+				if (typeof roomId === "string" && typeof seq === "number") {
+					onMessageDiff?.(roomId, seq);
 				}
-			} catch (err) {
-				log(`[decode error] ${err}`);
 			}
-		};
+		});
 
-		socket.onclose = (event) => {
-			state = "disconnected";
-			ws = null;
-			log(`Closed: code=${event.code} reason=${event.reason}`);
+		router = new SyncRouter(connection, createTanstackCacheAdapter(queryClient), {
+			onValidationError: ({ frameType, summary }) =>
+				log(`[validation error ${frameType}] ${summary}`),
+			onUnknownFrame: (f) => log(`[unknown frame] ${JSON.stringify(f.header)}`),
+		});
+		router.start();
+		topics = new TopicManager(connection);
 
-			// Auto-reconnect with backoff unless intentional
-			if (!intentionalClose) {
-				const delay = 2000 + Math.random() * 1000;
-				log(`Reconnecting in ${Math.round(delay)}ms…`);
-				reconnectTimer = setTimeout(() => connect(), delay);
-			}
-		};
-
-		socket.onerror = () => {
-			log("WebSocket error.");
+		try {
+			await connection.connect();
+		} catch (err: any) {
+			log(`Connect failed: ${err?.message ?? err}`);
 			state = "error";
-		};
+		}
 	}
 
 	function disconnect() {
-		intentionalClose = true;
-		if (reconnectTimer) {
-			clearTimeout(reconnectTimer);
-			reconnectTimer = null;
-		}
-		ws?.close();
-		ws = null;
+		router?.stop();
+		connection?.close();
+		for (const dispose of topicHolds.values()) dispose();
+		topicHolds.clear();
+		connection = null;
+		router = null;
+		topics = null;
 		state = "disconnected";
 	}
 
 	function subscribe(topic: "space" | "room", id: string) {
-		if (!ws || ws.readyState !== WebSocket.OPEN) {
+		if (!topics) {
 			log("Cannot subscribe — not connected.");
 			return;
 		}
-		ws.send(JSON.stringify({ type: "sub", topic, id }));
+		const key = `${topic}:${id}`;
+		if (topicHolds.has(key)) return;
+		topicHolds.set(key, topics.acquire({ kind: topic, id }));
 		log(`→ sub ${topic}:${id.slice(0, 8)}…`);
 	}
 
 	function unsubscribe(topic: "space" | "room", id: string) {
-		if (!ws || ws.readyState !== WebSocket.OPEN) return;
-		ws.send(JSON.stringify({ type: "unsub", topic, id }));
+		const key = `${topic}:${id}`;
+		const dispose = topicHolds.get(key);
+		if (!dispose) return;
+		dispose();
+		topicHolds.delete(key);
 		log(`→ unsub ${topic}:${id.slice(0, 8)}…`);
-	}
-
-	// ── Frame handlers ───────────────────────────────────────────────────
-
-	function handleMessageDiff(diff: MessageDiffFrame) {
-		if (diff.seq > lastSeq) lastSeq = diff.seq;
-
-		const ops = diff.ops;
-		const summary = ops.map((o) => `${o.op} ${o.key.slice(0, 8)}…`).join(", ");
-		log(`[#messageDiff] room=${diff.roomId.slice(0, 8)}… seq=${diff.seq} ops: ${summary}`);
-
-		// Notify listener (e.g. to trigger updateSeen)
-		onMessageDiff?.(diff);
-
-		// Apply diff directly to TanStack Query cache — no HTTP round-trip.
-		// The query stores Message[] (unwrapped from the response),
-		// so setQueryData receives Message[] and must return Message[].
-		queryClient.setQueryData(
-			["space.roomy.room.getMessages", { roomId: diff.roomId }],
-			(old: Message[] | undefined) => {
-				if (!old) return old;
-				return applyMessageDiff(old, ops);
-			},
-		);
-	}
-
-	function handleInvalidation(frame: InvalidationFrame) {
-		log(`[#invalidate] ${frame.nsid} ${JSON.stringify(frame.params)}`);
-
-		// Trigger HTTP re-fetch for the specified query
-		queryClient.invalidateQueries({
-			queryKey: [frame.nsid, frame.params],
-		});
 	}
 
 	return {
@@ -195,23 +152,4 @@ export function createSyncConnection(deps: {
 		subscribe,
 		unsubscribe,
 	};
-}
-
-// ── Diff application ──────────────────────────────────────────────────────
-
-function applyMessageDiff(messages: Message[], ops: MessageDiffOp[]): Message[] {
-	const map = new Map(messages.map((m) => [m.id, m]));
-	for (const op of ops) {
-		if (op.op === "add" && op.message) {
-			map.set(op.key, op.message);
-		} else if (op.op === "update" && op.message) {
-			const existing = map.get(op.key);
-			map.set(op.key, existing ? { ...existing, ...op.message } : op.message);
-		} else if (op.op === "remove") {
-			map.delete(op.key);
-		}
-	}
-	return [...map.values()].sort(
-		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-	);
 }

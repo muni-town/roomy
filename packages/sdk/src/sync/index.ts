@@ -21,3 +21,8 @@ export {
   type TopicKind,
   type Unsubscribe,
 } from "./connection";
+
+// Slice 6: invalidation router + refcounted topic subscriptions.
+export { SyncRouter, type SyncRouterOptions } from "./router";
+export { TopicManager } from "./topics";
+export { applyMessageDiff, type Message, type MessageDiffOp } from "./diff";
