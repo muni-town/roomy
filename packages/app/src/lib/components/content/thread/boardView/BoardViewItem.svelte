@@ -5,7 +5,7 @@
   import { formatDistanceToNowStrict, type Locale } from "date-fns";
   import type { ThreadInfo } from "./types";
   import { IconDocument, IconHashtag } from "@roomy/design/icons";
-  import AvatarGroup from "$lib/components/user/AvatarGroup.svelte";
+  import AvatarGroup from "@roomy/design/components/user/AvatarGroup.svelte";
   import type { Ulid } from "@roomy-space/sdk";
 
   let {

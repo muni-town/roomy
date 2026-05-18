@@ -1,0 +1,103 @@
+<script lang="ts">
+  import type { Snippet } from "svelte";
+  import Button from "../ui/button/Button.svelte";
+  import { IconHashtag, IconDocument } from "../../icons/index";
+
+  type Variant = "channel" | "page";
+
+  let {
+    variant,
+    name,
+    href,
+    active = false,
+    hasUnreadDot = false,
+    unreadCount,
+    showUnreadCount = false,
+    icon,
+    trailing,
+    children,
+  }: {
+    variant: Variant;
+    name: string;
+    href?: string;
+    active?: boolean;
+    /** Show the small accent dot indicating unread messages */
+    hasUnreadDot?: boolean;
+    /** Numeric unread count to display at the trailing edge */
+    unreadCount?: number;
+    /** Whether to render the unread count number */
+    showUnreadCount?: boolean;
+    /** Optional override for the leading icon */
+    icon?: Snippet;
+    /** Optional trailing content (e.g., an edit button) */
+    trailing?: Snippet;
+    /** Optional children to render below the row (e.g., linked rooms) */
+    children?: Snippet;
+  } = $props();
+</script>
+
+{#if variant === "channel"}
+  <div class="inline-flex min-w-0 flex-col w-full max-w-full shrink">
+    <div
+      class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
+    >
+      <Button
+        {href}
+        variant="ghost"
+        class="w-full justify-start min-w-0"
+        data-current={active}
+      >
+        {#if icon}
+          {@render icon()}
+        {:else}
+          <IconHashtag class="shrink-0" />
+        {/if}
+        {#if hasUnreadDot}
+          <div
+            aria-label="Has unread messages"
+            class="size-1.25 rounded-full bg-accent-500 absolute left-2.5 top-1.5"
+          ></div>
+        {/if}
+        <span
+          class={[
+            "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
+          ]}>{name}</span
+        >
+        {#if showUnreadCount && unreadCount !== undefined && unreadCount > 0}
+          <span
+            aria-label="Unread message count"
+            class="font-light opacity-60 ml-auto text-xs">{unreadCount}</span
+          >
+        {/if}
+      </Button>
+      {#if trailing}{@render trailing()}{/if}
+    </div>
+
+    {#if children}
+      <div class={"w-full max-w-full shrink min-w-0"}>
+        {@render children()}
+      </div>
+    {/if}
+  </div>
+{:else if variant === "page"}
+  <div
+    class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
+  >
+    <Button
+      {href}
+      variant="ghost"
+      class={["w-full justify-start min-w-0 font-semibold"]}
+      data-current={active}
+    >
+      {#if icon}
+        {@render icon()}
+      {:else}
+        <IconDocument class="shrink-0" />
+      {/if}
+      <span class="truncate min-w-0 whitespace-nowrap overflow-hidden"
+        >{name}</span
+      >
+    </Button>
+    {#if trailing}{@render trailing()}{/if}
+  </div>
+{/if}

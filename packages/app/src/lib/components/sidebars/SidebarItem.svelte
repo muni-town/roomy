@@ -2,11 +2,11 @@
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
-  // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
+  import SidebarItemShell from "@roomy/design/components/sidebars/SidebarItemShell.svelte";
   import type { SidebarItem } from "$lib/queries";
   import { flags } from "$lib/config";
 
-  import { IconPencil, IconHashtag, IconDocument } from "@roomy/design/icons";
+  import { IconPencil } from "@roomy/design/icons";
   import LinkedRoomsList from "./LinkedRoomsList.svelte";
   import { Ulid } from "@roomy-space/sdk";
 
@@ -23,16 +23,20 @@
     ) => void;
   } = $props();
 
-  // let showEditModal = $state(false);
-  // let editName = $state(item.name);
   let hasUnread = $derived(
     flags.unreadNotifications && item.lastRead > 0 && item.unreadCount > 0,
   );
-  // let notificationCount = 0;
 
   const itemActive = $derived(
     page.params.object === item.id ||
       page.url.searchParams.get("parent") === item.id,
+  );
+
+  const href = $derived(
+    navigateSync({
+      space: page.params.space!,
+      object: item.id,
+    }),
   );
 </script>
 
@@ -50,110 +54,28 @@
 {/snippet}
 
 {#if item.type == "space.roomy.channel"}
-  <div class="inline-flex min-w-0 flex-col w-full max-w-full shrink">
-    <div
-      class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
-    >
-      <Button
-        href={navigateSync({
-          space: page.params.space!,
-          object: item.id,
-        })}
-        variant="ghost"
-        class="w-full justify-start min-w-0"
-        data-current={item.id === page.params.object && !isEditing}
-      >
-        <IconHashtag class="shrink-0" />
-        {#if hasUnread && !isEditing && item.id !== page.params.object}
-          <div
-            aria-label="Has unread messages"
-            class="size-1.25 rounded-full bg-accent-500 absolute left-2.5 top-1.5"
-          ></div>
-        {/if}
-        <span
-          class={[
-            "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
-          ]}>{item.name}</span
-        >
-        {#if flags.unreadNotifications && item.lastRead > 0 && !itemActive && item.unreadCount > 0}
-          <span
-            aria-label="Unread message count"
-            class="font-light opacity-60 ml-auto text-xs"
-            >{item.unreadCount}</span
-          >
-        {/if}
-      </Button>
-      {@render editButton?.()}
-    </div>
-
-    <!-- Group children (pages, channels) -->
-    {#if itemActive && !isEditing}
-      <div class={"w-full max-w-full shrink min-w-0"}>
-        <LinkedRoomsList bind:roomId={item.id as Ulid} />
-      </div>
-    {/if}
-  </div>
-  <!-- {:else if level >= 2 || item.type == "space.roomy.thread"}
-  <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
-    <div
-      class="inline-flex items-start justify-between w-full min-w-0 group pl-3"
-    >
-      <div class="max-h-4 overflow-visible">
-        <IconCustomThread
-          class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2 ml-[2px] -mr-[2px]"
-        />
-      </div>
-      <Button
-        href={navigateSync({
-          space: page.params.space!,
-          object: item.id,
-        })}
-        variant="ghost"
-        class="w-full justify-start min-w-0 px-1 rounded-sm py-1 text-base-600"
-        data-current={item.id === page.params.object && !isEditing}
-      >
-        {#if hasUnread && !isEditing}
-          <div
-            class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
-          ></div>
-        {/if}
-        <!-- {#if isSubthread}<IconCornerDownRight />{:else}
-          <IconHashtag class="shrink-0" />{/if} --
-
-        <span
-          class="truncate whitespace-nowrap overflow-hidden min-w-0 font-normal"
-          >{item.name}</span
-        >
-        {#if notificationCount && !isEditing}
-          <Badge>
-            {notificationCount}
-          </Badge>
-        {/if}
-        <!-- {#if item.type === "space.roomy.page"}<div class="ml-auto">
-            <IconDocument class="opacity-60 shrink" />
-          </div>{/if} --
-      </Button>
-      {@render editButton?.()}
-    </div>
-  </div> -->
-{:else if item.type == "space.roomy.page"}
-  <div
-    class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
+  <SidebarItemShell
+    variant="channel"
+    name={item.name}
+    {href}
+    active={item.id === page.params.object && !isEditing}
+    hasUnreadDot={hasUnread && !isEditing && item.id !== page.params.object}
+    unreadCount={item.unreadCount}
+    showUnreadCount={!!flags.unreadNotifications &&
+      item.lastRead > 0 &&
+      !itemActive}
+    trailing={editButton}
   >
-    <Button
-      href={navigateSync({
-        space: page.params.space!,
-        object: item.id,
-      })}
-      variant="ghost"
-      class={["w-full justify-start min-w-0 font-semibold"]}
-      data-current={item.id === page.params.object && !isEditing}
-    >
-      <IconDocument class="shrink-0" />
-      <span class="truncate min-w-0 whitespace-nowrap overflow-hidden"
-        >{item.name}</span
-      >
-    </Button>
-    {@render editButton?.()}
-  </div>
+    {#if itemActive && !isEditing}
+      <LinkedRoomsList bind:roomId={item.id as Ulid} />
+    {/if}
+  </SidebarItemShell>
+{:else if item.type == "space.roomy.page"}
+  <SidebarItemShell
+    variant="page"
+    name={item.name}
+    {href}
+    active={item.id === page.params.object && !isEditing}
+    trailing={editButton}
+  />
 {/if}

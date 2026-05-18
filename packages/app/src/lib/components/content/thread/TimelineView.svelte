@@ -2,6 +2,8 @@
   import { setInputFocus } from "./ChatInput.svelte";
   import { renderMarkdownPlaintext } from "$lib/utils/markdown";
   import type { Message } from "./types";
+  import type { Comment } from "@roomy/design/components/richtext/types.ts";
+  export type { Comment };
 
   export type Normal = {
     kind: "normal";
@@ -20,13 +22,6 @@
     kind: "threading";
     name: string;
     selectedMessages: Message[];
-  };
-
-  export type Comment = {
-    snippet?: string; // limit length
-    docVersion: Ulid; // ULID of the edit version
-    from: number;
-    to: number;
   };
 
   export type Commenting = {

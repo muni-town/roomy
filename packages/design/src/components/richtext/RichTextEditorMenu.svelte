@@ -58,6 +58,7 @@
     editable;
   });
 
+  // @ts-expect-error - bound to hidden file input DOM element
   let _fileInput = $state<HTMLInputElement | null>(null);
 </script>
 

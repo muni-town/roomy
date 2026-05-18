@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import UserProfile from "$lib/components/user/UserProfile.svelte";
+  import UserProfile from "@roomy/design/components/user/UserProfile.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { peer } from "$lib/workers";
   import type { UserDid } from "@roomy-space/sdk";

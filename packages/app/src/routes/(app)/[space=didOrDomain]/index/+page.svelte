@@ -17,7 +17,7 @@
   import StateSuspense from "@roomy/design/components/helper/StateSuspense.svelte";
 
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
-  import Error from "$lib/components/modals/Error.svelte";
+  import Error from "@roomy/design/components/modals/Error.svelte";
   import { IconLoading } from "@roomy/design/icons";
   import type { StreamIndex } from "@roomy-space/sdk";
 

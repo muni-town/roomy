@@ -409,9 +409,42 @@ importers:
       '@foxui/core':
         specifier: ^0.6.0
         version: 0.6.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@iconify/svelte':
+        specifier: ^4.2.0
+        version: 4.2.0(svelte@5.53.0)
       '@roomy-space/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@tiptap/core':
+        specifier: ^2.26.1
+        version: 2.26.1(@tiptap/pm@2.26.1)
+      '@tiptap/extension-bubble-menu':
+        specifier: ^3.9.0
+        version: 3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
+      '@tiptap/extension-image':
+        specifier: ^2.26.1
+        version: 2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))
+      '@tiptap/extension-link':
+        specifier: ^2.26.1
+        version: 2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
+      '@tiptap/extension-placeholder':
+        specifier: ^2.26.1
+        version: 2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
+      '@tiptap/extension-typography':
+        specifier: ^3.9.0
+        version: 3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))
+      '@tiptap/extension-underline':
+        specifier: ^3.9.0
+        version: 3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))
+      '@tiptap/pm':
+        specifier: ^2.26.1
+        version: 2.26.1
+      '@tiptap/starter-kit':
+        specifier: ^2.26.1
+        version: 2.26.1
+      '@tiptap/suggestion':
+        specifier: ^2.26.1
+        version: 2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
       bits-ui:
         specifier: ^1.8.0
         version: 1.8.0(svelte@5.53.0)
@@ -424,12 +457,18 @@ importers:
       svelte-boring-avatars:
         specifier: ^1.2.6
         version: 1.2.6
+      svelte-tiptap:
+        specifier: ^2.2.0
+        version: 2.2.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/extension-bubble-menu@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@3.20.0(@floating-ui/dom@1.7.4)(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(svelte@5.53.0)
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
       tailwind-variants:
         specifier: ^3.2.2
         version: 3.2.2(tailwind-merge@3.5.0)(tailwindcss@4.2.1)
+      tippy.js:
+        specifier: ^6.3.7
+        version: 6.3.7
       vaul-svelte:
         specifier: ^0.3.2
         version: 0.3.2(svelte@5.53.0)
@@ -1518,6 +1557,11 @@ packages:
 
   '@iconify-json/tabler@1.2.23':
     resolution: {integrity: sha512-Knb8ykgMwB5uSoqrDv1xIdJYM03OP06OXjN6QvGXaTNtdHkW9ciKA+aftz6lwM2jwJA+bsUWeDzLBlPt2uJm4w==}
+
+  '@iconify/svelte@4.2.0':
+    resolution: {integrity: sha512-fEl0T7SAPonK7xk6xUlRPDmFDZVDe2Z7ZstlqeDS/sS8ve2uyU+Qa8rTWbIqzZJlRvONkK5kVXiUf9nIc+6OOQ==}
+    peerDependencies:
+      svelte: '>4.0.0'
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -6677,6 +6721,11 @@ snapshots:
     dependencies:
       '@iconify/types': 2.0.0
 
+  '@iconify/svelte@4.2.0(svelte@5.53.0)':
+    dependencies:
+      '@iconify/types': 2.0.0
+      svelte: 5.53.0
+
   '@iconify/types@2.0.0': {}
 
   '@iconify/utils@3.0.2':
@@ -8205,7 +8254,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -8296,7 +8345,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
   '@vitest/utils@2.1.9':
     dependencies:

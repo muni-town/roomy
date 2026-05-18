@@ -2,7 +2,7 @@
   import { Avatar } from "@foxui/core";
   import Popover from "@roomy/design/components/ui/popover/Popover.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
-  import ThemeSettings from "./ThemeSettings.svelte";
+  import ThemeSettings from "@roomy/design/components/user/ThemeSettings.svelte";
   import { peer, peerStatus } from "$lib/workers";
 
   let popoverOpen = $state(false);
