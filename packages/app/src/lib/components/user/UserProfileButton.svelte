@@ -1,71 +1,26 @@
 <script lang="ts">
-  import { Avatar } from "@foxui/core";
-  import Popover from "@roomy/design/components/ui/popover/Popover.svelte";
-  import Button from "@roomy/design/components/ui/button/Button.svelte";
-  import ThemeSettings from "@roomy/design/components/user/ThemeSettings.svelte";
+  import UserMenu from "@roomy/design/components/user/UserMenu.svelte";
   import { peer, peerStatus } from "$lib/workers";
-
-  let popoverOpen = $state(false);
 
   const connected = $derived(peerStatus.authState?.state === "authenticated");
 
-  function handleLogout() {
+  const versionLabel = $derived(
+    `Roomy ${__APP_VERSION__}${__BUILD_ID__ ? ` ( ${__BUILD_ID__} )` : ""}`,
+  );
+
+  function onLogout() {
     peer.logout().then(() => {
-      popoverOpen = false;
       window.location.reload();
     });
   }
 </script>
 
-<Popover bind:open={popoverOpen} side="right" sideOffset={12} class="my-4 w-80">
-  {#snippet child({ props })}
-    <button
-      {...props}
-      class="cursor-pointer opacity-90 hover:opacity-100 transition-opacity duration-200 group overflow-hidden rounded-full border-2 border-solid"
-      class:border-green-500={connected}
-      class:border-red-500={!connected}
-    >
-      <Avatar
-        src={peerStatus.profile?.avatar}
-        fallback={peerStatus.profile?.displayName}
-        class="group-hover:scale-110 transition-transform duration-200"
-      ></Avatar>
-      {#if peerStatus.profile}
-        <span class="sr-only">{peerStatus.profile.handle}</span>
-      {:else}
-        <span class="sr-only">Log in</span>
-      {/if}
-    </button>
-  {/snippet}
-
-  <div class="flex flex-col">
-    {#if connected}
-      <div
-        class="border-b border-base-300 dark:border-base-700 pb-4 mb-2 flex items-center gap-2"
-      >
-        <Avatar
-          src={peerStatus.profile?.avatar}
-          fallback={peerStatus.profile?.displayName}
-          class="group-hover:scale-110 transition-transform duration-200"
-        ></Avatar><a
-          class="mr-auto font-medium truncate"
-          title={`@${peerStatus.profile?.handle}`}
-          href={"/user/" + peerStatus.profile?.id}
-          >@{peerStatus.profile?.handle}</a
-        >
-        <Button variant="ghost" class="" onclick={handleLogout}>Log Out</Button>
-      </div>
-    {/if}
-
-    <ThemeSettings />
-
-    <div
-      class="border-t border-base-300 dark:border-base-700 pt-2 mt-2 flex items-center gap-2"
-    >
-      <span class="opacity-50 text-xs"
-        >Roomy {__APP_VERSION__}
-        {__BUILD_ID__ ? `( ${__BUILD_ID__} )` : ""}</span
-      >
-    </div>
-  </div>
-</Popover>
+<UserMenu
+  {connected}
+  avatar={peerStatus.profile?.avatar}
+  displayName={peerStatus.profile?.displayName}
+  handle={peerStatus.profile?.handle}
+  profileHref={peerStatus.profile ? `/user/${peerStatus.profile.id}` : undefined}
+  {versionLabel}
+  {onLogout}
+/>
