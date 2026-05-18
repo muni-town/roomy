@@ -3,7 +3,24 @@
   "id": "space.roomy.room.updateSeen",
   "defs": {
     "main": {
-      "type": "procedure"
+      "type": "procedure",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "roomId"
+          ],
+          "properties": {
+            "roomId": {
+              "type": "string"
+            },
+            "seenUpTo": {
+              "type": "string"
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -2,8 +2,96 @@
   "lexicon": 1,
   "id": "space.roomy.space.getMembers",
   "defs": {
+    "externalAdmins": {
+      "type": "object",
+      "required": [
+        "did"
+      ],
+      "properties": {
+        "avatar": {
+          "type": "string"
+        },
+        "did": {
+          "type": "string"
+        },
+        "handle": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "members": {
+      "type": "object",
+      "required": [
+        "did",
+        "isAdmin",
+        "roleIds"
+      ],
+      "properties": {
+        "avatar": {
+          "type": "string"
+        },
+        "did": {
+          "type": "string"
+        },
+        "handle": {
+          "type": "string"
+        },
+        "isAdmin": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "roleIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "main": {
-      "type": "query"
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "spaceId"
+        ],
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "externalAdmins",
+            "members"
+          ],
+          "properties": {
+            "externalAdmins": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#externalAdmins"
+              }
+            },
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#members"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -2,8 +2,65 @@
   "lexicon": 1,
   "id": "space.roomy.space.getSpaces",
   "defs": {
+    "spaces": {
+      "type": "object",
+      "required": [
+        "id",
+        "isAdmin",
+        "isMember",
+        "roleIds",
+        "unreadCount"
+      ],
+      "properties": {
+        "avatar": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isAdmin": {
+          "type": "boolean"
+        },
+        "isMember": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "roleIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unreadCount": {
+          "type": "integer"
+        }
+      }
+    },
     "main": {
-      "type": "query"
+      "type": "query",
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "spaces"
+          ],
+          "properties": {
+            "spaces": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#spaces"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

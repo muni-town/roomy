@@ -2,8 +2,101 @@
   "lexicon": 1,
   "id": "space.roomy.room.getMetadata",
   "defs": {
+    "recentThreads": {
+      "type": "object",
+      "required": [
+        "canRead",
+        "canWrite",
+        "id",
+        "unreadCount"
+      ],
+      "properties": {
+        "canRead": {
+          "type": "boolean"
+        },
+        "canWrite": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lastRead": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "unreadCount": {
+          "type": "integer"
+        }
+      }
+    },
     "main": {
-      "type": "query"
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "roomId"
+        ],
+        "properties": {
+          "roomId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "canRead",
+            "canWrite",
+            "defaultAccess",
+            "kind",
+            "recentThreads",
+            "spaceId",
+            "unreadCount"
+          ],
+          "properties": {
+            "canRead": {
+              "type": "boolean"
+            },
+            "canWrite": {
+              "type": "boolean"
+            },
+            "defaultAccess": {
+              "type": "string",
+              "knownValues": [
+                "none",
+                "read",
+                "readwrite"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "lastRead": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "recentThreads": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#recentThreads"
+              }
+            },
+            "spaceId": {
+              "type": "string"
+            },
+            "unreadCount": {
+              "type": "integer"
+            }
+          }
+        }
+      }
     }
   }
 }
