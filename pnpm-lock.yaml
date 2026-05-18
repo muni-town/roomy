@@ -649,9 +649,15 @@ importers:
       '@tanstack/query-core':
         specifier: 5.100.10
         version: 5.100.10
+      '@tanstack/svelte-query':
+        specifier: ^6.0.0
+        version: 6.1.29(svelte@5.53.0)
       arktype:
         specifier: ^2.1.29
         version: 2.1.29
+      svelte:
+        specifier: ^5.0.0
+        version: 5.53.0
       ulidx:
         specifier: ^2.4.1
         version: 2.4.1
@@ -8332,7 +8338,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -8423,7 +8429,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
   '@vitest/utils@2.1.9':
     dependencies:

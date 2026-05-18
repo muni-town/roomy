@@ -13,7 +13,12 @@
 		fetchTicket,
 		callUpdateSeenRoom,
 	} from "$lib/queries/xrpc-queries";
-	import { createSyncConnection } from "$lib/queries/sync.svelte";
+	import { createSyncContext, type SyncContext } from "$lib/queries/sync.svelte";
+	import {
+		useConnectionStatus,
+		useTopicSubscription,
+	} from "@roomy-space/sdk/svelte";
+	import type { Topic } from "@roomy-space/sdk/svelte";
 	import {
 		initSession,
 		login,
@@ -45,7 +50,7 @@
 	// ── Sync state ──────────────────────────────────────────────────────
 
 	let syncLog = $state<string[]>([]);
-	let syncConn = $state<ReturnType<typeof createSyncConnection> | null>(null);
+	let syncCtx = $state<SyncContext | null>(null);
 
 	function appendLog(msg: string) {
 		const time = new Date().toLocaleTimeString("en", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -101,7 +106,7 @@
 	$effect(() => {
 		if (!authenticated || !agent) return;
 
-		const conn = createSyncConnection({
+		const ctx = createSyncContext({
 			queryClient,
 			fetchTicket: fetchTicket(agent, appserverDid),
 			appserverDid,
@@ -115,30 +120,25 @@
 				});
 			},
 		});
-		syncConn = conn;
-		conn.connect();
+		syncCtx = ctx;
+		ctx.connect();
 
 		return () => {
-			conn.disconnect();
+			ctx.disconnect();
 		};
 	});
 
-	// ── Auto-subscribe to visible data ──────────────────────────────────
+	// ── Reactive connection status + topic subscriptions (SDK runes) ────
 
-	$effect(() => {
-		const conn = syncConn;
-		if (!conn || conn.state !== "connected") return;
+	const connectionStatus = useConnectionStatus(() => syncCtx?.connection ?? null);
 
-		// Always subscribe to spaces (for getSpaces invalidations)
-		// Subscribe to selected space (for sidebar + metadata)
-		if (selectedSpaceId) {
-			conn.subscribe("space", selectedSpaceId);
-		}
-		// Subscribe to selected room (for message diffs)
-		if (selectedRoomId) {
-			conn.subscribe("room", selectedRoomId);
-		}
-	});
+	useTopicSubscription(
+		() => syncCtx?.topicManager ?? null,
+		() => [
+			selectedSpaceId ? { kind: "space", id: selectedSpaceId } : null,
+			selectedRoomId ? { kind: "room", id: selectedRoomId } : null,
+		].filter(Boolean) as Topic[],
+	);
 
 	// ── Mark room as seen when opened ───────────────────────────────────
 
@@ -193,7 +193,7 @@
 			<span class="text-sm text-base-500 dark:text-base-400">TanStack Query prototype</span>
 		</div>
 		<div class="flex items-center gap-2">
-			{@render syncBadge(syncConn?.state ?? "disconnected")}
+			{@render syncBadge(connectionStatus.state)}
 			<Button variant="ghost" size="sm" onclick={handleLogout}>Logout</Button>
 		</div>
 	</header>
