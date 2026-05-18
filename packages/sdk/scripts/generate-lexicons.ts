@@ -12,18 +12,28 @@
  * `Type.toJsonSchema()`, then maps the JSON Schema subset we support to
  * an atproto lexicon definition.
  *
+ * # Atproto lexicon constraints
+ *
+ * The atproto lexicon format is restrictive about type composition:
+ *   - `parameters` properties must be scalars (string, integer, boolean).
+ *   - Body `schema` may be an inline object at the top level, OR a ref.
+ *   - Object-typed properties and array items must use `{ type: "ref", ref: "#defName" }`.
+ *   - Each named object def lives in the lexicon's `defs` alongside `main`.
+ *   - Nullable fields (string | null) are expressed by omitting them from `required`.
+ *
  * # Supported arktype subset
  *
  * Each field's JSON Schema must reduce to one of:
  *   - `{ type: "string" }`                        → lex string
  *   - `{ type: "string", enum: [...] }`           → lex string with knownValues
+ *   - `{ enum: [...] }` (no type)                 → lex string with knownValues (string literal union)
  *   - `{ type: "number" }`, `{ type: "integer" }` → lex integer
  *   - `{ type: "boolean" }`                       → lex boolean
  *   - `{ type: "array", items: <recursive> }`     → lex array
- *   - `{ type: "object", properties, required }`  → lex object (nested)
+ *   - `{ type: "object", properties, required }`  → extracted to a named def, referenced
  *   - `{ anyOf: [<T>, { type: "null" }] }`        → <T>, omitted from `required`
  *
- * Anything else (intersections, refs, complex unions, regex constraints) is
+ * Anything else (intersections, complex unions, regex constraints) is
  * UNSUPPORTED — the generator throws with the offending NSID + field path.
  *
  * # Output
@@ -35,8 +45,9 @@
 
 import { readdir, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { isValidLexiconDoc } from "@atproto/lexicon";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SDK_ROOT = resolve(__dirname, "..");
@@ -45,30 +56,71 @@ const QUERIES_DIR = join(SCHEMAS_DIR, "queries");
 const PROCEDURES_DIR = join(SCHEMAS_DIR, "procedures");
 const LEXICONS_DIR = join(SCHEMAS_DIR, "lexicons");
 
-type LexProp =
+// ─── Types ────────────────────────────────────────────────────────────────
+
+/** Property-level types valid inside a lexicon object def. */
+type LexSlot =
   | { type: "string"; knownValues?: string[] }
   | { type: "integer" }
   | { type: "boolean" }
-  | { type: "array"; items: LexProp }
-  | { type: "object"; required?: string[]; properties: Record<string, LexProp> };
+  | { type: "array"; items: LexSlot }
+  | { type: "ref"; ref: string };
+
+/** A named object definition to add to `defs`. */
+interface LexObjDef {
+  type: "object";
+  required?: string[];
+  properties: Record<string, LexSlot>;
+}
+
+/** Accumulator for named defs extracted during schema conversion. */
+class DefCollector {
+  readonly defs = new Map<string, LexObjDef>();
+  readonly #usedNames = new Set<string>();
+
+  constructor(private nsid: string) {}
+
+  /**
+   * Register a named def. If the name collides, appends a numeric suffix.
+   * Returns the final def name (without the `#` prefix).
+   */
+  register(baseName: string, def: LexObjDef): string {
+    let name = baseName;
+    let suffix = 2;
+    while (this.#usedNames.has(name)) {
+      name = `${baseName}${suffix++}`;
+    }
+    this.#usedNames.add(name);
+    this.defs.set(name, def);
+    return name;
+  }
+}
+
+// ─── Arktype helpers ──────────────────────────────────────────────────────
 
 interface ArkLike {
   toJsonSchema?: () => unknown;
 }
 
 function isArkType(v: unknown): v is ArkLike {
-  // arktype Type is a callable function with extra methods attached.
   return (
     (typeof v === "function" || (typeof v === "object" && v !== null)) &&
     typeof (v as ArkLike).toJsonSchema === "function"
   );
 }
 
-function jsonSchemaToLex(
+// ─── JSON Schema → Lexicon conversion ─────────────────────────────────────
+
+/**
+ * Convert a JSON Schema node into a "slot" (property value or array item).
+ * Object types are extracted into named defs and returned as refs.
+ */
+function convertSlot(
   schema: unknown,
   nsid: string,
   path: string,
-): LexProp {
+  collector: DefCollector,
+): LexSlot {
   if (typeof schema !== "object" || schema === null) {
     throw new Error(
       `${nsid}: ${path} → not an object JSON Schema: ${JSON.stringify(schema)}`,
@@ -81,15 +133,21 @@ function jsonSchemaToLex(
     const branches = s["anyOf"] as Array<Record<string, unknown>>;
     const nonNull = branches.filter((b) => b["type"] !== "null");
     if (nonNull.length === 1 && branches.length === 2) {
-      // Caller should drop this field from `required` to express the
-      // nullable nature; the lex prop itself is just the non-null branch.
-      return jsonSchemaToLex(nonNull[0], nsid, `${path}|nullable`);
+      return convertSlot(nonNull[0], nsid, `${path}|nullable`, collector);
     }
     throw new Error(
-      `${nsid}: ${path} → unsupported anyOf (only T|null is supported), got ${JSON.stringify(
-        s["anyOf"],
-      )}`,
+      `${nsid}: ${path} → unsupported anyOf (only T|null is supported), got ${JSON.stringify(s["anyOf"])}`,
     );
+  }
+
+  // String literal unions ('read' | 'readwrite') emit { enum: [...] } without a
+  // `type` field. Treat as string with knownValues.
+  if (!("type" in s) && Array.isArray(s["enum"])) {
+    const vals = s["enum"].map((v: unknown) => String(v));
+    if (vals.length === 0) {
+      throw new Error(`${nsid}: ${path} → empty enum`);
+    }
+    return { type: "string", knownValues: vals };
   }
 
   const t = s["type"];
@@ -97,7 +155,7 @@ function jsonSchemaToLex(
     if (Array.isArray(s["enum"])) {
       return {
         type: "string",
-        knownValues: s["enum"].map((v) => String(v)),
+        knownValues: (s["enum"] as unknown[]).map((v) => String(v)),
       };
     }
     return { type: "string" };
@@ -107,38 +165,74 @@ function jsonSchemaToLex(
   if (t === "array") {
     return {
       type: "array",
-      items: jsonSchemaToLex(s["items"], nsid, `${path}[]`),
+      items: convertSlot(s["items"], nsid, `${path}[]`, collector),
     };
   }
   if (t === "object") {
-    const props = (s["properties"] ?? {}) as Record<string, unknown>;
-    const required = Array.isArray(s["required"])
-      ? (s["required"] as string[])
-      : [];
-    const out: Record<string, LexProp> = {};
-    const outRequired: string[] = [];
-    for (const [k, v] of Object.entries(props)) {
-      const lex = jsonSchemaToLex(v, nsid, `${path}.${k}`);
-      out[k] = lex;
-      // Drop nullable fields from `required` even if the original schema
-      // listed them, since lex props express nullability via absence-from-required.
-      const isNullable =
-        typeof v === "object" &&
-        v !== null &&
-        Array.isArray((v as Record<string, unknown>)["anyOf"]) &&
-        ((v as Record<string, unknown>)["anyOf"] as Array<Record<string, unknown>>).some(
-          (b) => b["type"] === "null",
-        );
-      if (required.includes(k) && !isNullable) outRequired.push(k);
-    }
-    return {
-      type: "object",
-      ...(outRequired.length > 0 ? { required: outRequired } : {}),
-      properties: out,
-    };
+    // Extract to a named def and return a ref.
+    const def = convertObjectDef(schema, nsid, path, collector);
+    // Derive def name from the path: use the last segment, cleaned of
+    // array/nullable suffixes (e.g. "output.messages[]" → "message",
+    // "output.messages[].forwardedFrom|nullable" → "forwardedFrom").
+    const raw = path.split(".").pop() || "obj";
+    // Strip array/nullable suffixes but keep the original property name
+    // (e.g. "output.messages[]" → "messages", not "message").
+    const baseName = raw.replace(/\[\]$/, "").replace(/\|nullable$/, "");
+    const defName = collector.register(baseName, def);
+    return { type: "ref", ref: `#${defName}` };
   }
-  throw new Error(`${nsid}: ${path} → unsupported JSON Schema type: ${String(t)}`);
+  throw new Error(
+    `${nsid}: ${path} → unsupported JSON Schema type: ${String(t)}`,
+  );
 }
+
+/**
+ * Convert a JSON Schema object into a lexicon object def.
+ * All property values are converted via `convertSlot` (which extracts
+ * nested objects to refs).
+ */
+function convertObjectDef(
+  schema: unknown,
+  nsid: string,
+  path: string,
+  collector: DefCollector,
+): LexObjDef {
+  const s = schema as Record<string, unknown>;
+  const props = (s["properties"] ?? {}) as Record<string, unknown>;
+  const required = Array.isArray(s["required"])
+    ? (s["required"] as string[])
+    : [];
+
+  const outProps: Record<string, LexSlot> = {};
+  const outRequired: string[] = [];
+
+  for (const [k, v] of Object.entries(props)) {
+    const slot = convertSlot(v, nsid, `${path}.${k}`, collector);
+    outProps[k] = slot;
+
+    // Determine if this field is nullable (anyOf with null branch).
+    const isNullable = isNullableSchema(v);
+    if (required.includes(k) && !isNullable) outRequired.push(k);
+  }
+
+  return {
+    type: "object",
+    ...(outRequired.length > 0 ? { required: outRequired } : {}),
+    properties: outProps,
+  };
+}
+
+/** Check if a JSON Schema node represents a nullable type. */
+function isNullableSchema(schema: unknown): boolean {
+  if (typeof schema !== "object" || schema === null) return false;
+  const s = schema as Record<string, unknown>;
+  if (!Array.isArray(s["anyOf"])) return false;
+  return (s["anyOf"] as Array<Record<string, unknown>>).some(
+    (b) => b["type"] === "null",
+  );
+}
+
+// ─── Parameters (flat scalars only) ───────────────────────────────────────
 
 /** Lex `parameters` only accepts a flat scalar-property `params` def. */
 function lexParameters(arkType: ArkLike, nsid: string): unknown {
@@ -157,18 +251,10 @@ function lexParameters(arkType: ArkLike, nsid: string): unknown {
   const outProps: Record<string, unknown> = {};
   const outRequired: string[] = [];
   for (const [k, v] of Object.entries(props)) {
-    const lex = jsonSchemaToLex(v, nsid, `params.${k}`);
-    if (
-      lex.type !== "string" &&
-      lex.type !== "integer" &&
-      lex.type !== "boolean"
-    ) {
-      throw new Error(
-        `${nsid}: params.${k} must be scalar (string|integer|boolean) for atproto lex; got ${lex.type}`,
-      );
-    }
+    // Params must be scalars; use a minimal conversion without def extraction.
+    const lex = scalarOnlyLex(v, nsid, `params.${k}`);
     outProps[k] = lex;
-    if (required.includes(k)) outRequired.push(k);
+    if (required.includes(k) && !isNullableSchema(v)) outRequired.push(k);
   }
   return {
     type: "params",
@@ -177,10 +263,84 @@ function lexParameters(arkType: ArkLike, nsid: string): unknown {
   };
 }
 
-function lexBodySchema(arkType: ArkLike, nsid: string, kind: string): unknown {
-  const js = arkType.toJsonSchema!() as Record<string, unknown>;
-  return jsonSchemaToLex(js, nsid, kind);
+/** Convert a JSON Schema to a scalar-only lexicon prop (for parameters). */
+function scalarOnlyLex(
+  schema: unknown,
+  nsid: string,
+  path: string,
+): LexSlot {
+  if (typeof schema !== "object" || schema === null) {
+    throw new Error(
+      `${nsid}: ${path} → not an object JSON Schema: ${JSON.stringify(schema)}`,
+    );
+  }
+  const s = schema as Record<string, unknown>;
+
+  if (Array.isArray(s["anyOf"])) {
+    const branches = s["anyOf"] as Array<Record<string, unknown>>;
+    const nonNull = branches.filter((b) => b["type"] !== "null");
+    if (nonNull.length === 1 && branches.length === 2) {
+      return scalarOnlyLex(nonNull[0], nsid, `${path}|nullable`);
+    }
+    throw new Error(`${nsid}: ${path} → unsupported anyOf in params`);
+  }
+
+  if (!("type" in s) && Array.isArray(s["enum"])) {
+    return {
+      type: "string",
+      knownValues: (s["enum"] as unknown[]).map((v) => String(v)),
+    };
+  }
+
+  const t = s["type"];
+  if (t === "string") {
+    if (Array.isArray(s["enum"])) {
+      return {
+        type: "string",
+        knownValues: (s["enum"] as unknown[]).map((v) => String(v)),
+      };
+    }
+    return { type: "string" };
+  }
+  if (t === "number" || t === "integer") return { type: "integer" };
+  if (t === "boolean") return { type: "boolean" };
+  throw new Error(
+    `${nsid}: ${path} must be scalar (string|integer|boolean) for atproto lex params; got ${String(t)}`,
+  );
 }
+
+// ─── Body schema (input/output) ───────────────────────────────────────────
+
+/**
+ * Convert a body schema into:
+ *   - `schema`: the top-level schema value (either an inline object or a ref)
+ *   - `defs`: additional named defs to merge into the lexicon's `defs`
+ */
+function lexBodySchema(
+  arkType: ArkLike,
+  nsid: string,
+  kind: string,
+): { schema: unknown; defs: Record<string, LexObjDef> } {
+  const js = arkType.toJsonSchema!() as Record<string, unknown>;
+  const collector = new DefCollector(nsid);
+
+  // If the top-level is an object, we can inline it in the schema
+  // (atproto allows this) — but its properties must use refs for nested objects.
+  if (js["type"] === "object") {
+    const def = convertObjectDef(js, nsid, kind, collector);
+    const additionalDefs: Record<string, LexObjDef> = {};
+    for (const [name, d] of collector.defs) {
+      additionalDefs[name] = d;
+    }
+    return { schema: def, defs: additionalDefs };
+  }
+
+  throw new Error(
+    `${nsid}: ${kind} body schema must be an object, got ${String(js["type"])}`,
+  );
+}
+
+// ─── Per-file generation ──────────────────────────────────────────────────
 
 interface ProcedureModule {
   NSID: string;
@@ -206,47 +366,49 @@ async function generateForFile(
     return null;
   }
 
+  const allDefs: Record<string, unknown> = {};
+
   if (kind === "query") {
     const q = mod as unknown as QueryModule;
-    const defs: Record<string, unknown> = { type: "query" };
+    const main: Record<string, unknown> = { type: "query" };
     if (q.Params && isArkType(q.Params)) {
       const params = lexParameters(q.Params, nsid);
-      if (params) defs["parameters"] = params;
+      if (params) main["parameters"] = params;
     }
     if (q.Response && isArkType(q.Response)) {
-      defs["output"] = {
-        encoding: "application/json",
-        schema: lexBodySchema(q.Response, nsid, "output"),
-      };
+      const { schema, defs } = lexBodySchema(q.Response, nsid, "output");
+      main["output"] = { encoding: "application/json", schema };
+      Object.assign(allDefs, defs);
     }
-    return { nsid, lexicon: { lexicon: 1, id: nsid, defs: { main: defs } } };
+    allDefs["main"] = main;
+    return { nsid, lexicon: { lexicon: 1, id: nsid, defs: allDefs } };
   }
 
   const p = mod as unknown as ProcedureModule;
-  const defs: Record<string, unknown> = { type: "procedure" };
+  const main: Record<string, unknown> = { type: "procedure" };
   if (p.Input && isArkType(p.Input)) {
-    // Empty arktype object schemas have no properties → skip `input` block.
     const js = p.Input.toJsonSchema!() as Record<string, unknown>;
     const props = (js["properties"] ?? {}) as Record<string, unknown>;
     if (Object.keys(props).length > 0) {
-      defs["input"] = {
-        encoding: "application/json",
-        schema: lexBodySchema(p.Input, nsid, "input"),
-      };
+      const { schema, defs } = lexBodySchema(p.Input, nsid, "input");
+      main["input"] = { encoding: "application/json", schema };
+      Object.assign(allDefs, defs);
     }
   }
   if (p.Output && isArkType(p.Output)) {
     const js = p.Output.toJsonSchema!() as Record<string, unknown>;
     const props = (js["properties"] ?? {}) as Record<string, unknown>;
     if (Object.keys(props).length > 0) {
-      defs["output"] = {
-        encoding: "application/json",
-        schema: lexBodySchema(p.Output, nsid, "output"),
-      };
+      const { schema, defs } = lexBodySchema(p.Output, nsid, "output");
+      main["output"] = { encoding: "application/json", schema };
+      Object.assign(allDefs, defs);
     }
   }
-  return { nsid, lexicon: { lexicon: 1, id: nsid, defs: { main: defs } } };
+  allDefs["main"] = main;
+  return { nsid, lexicon: { lexicon: 1, id: nsid, defs: allDefs } };
 }
+
+// ─── Main ─────────────────────────────────────────────────────────────────
 
 async function listSchemaFiles(dir: string): Promise<string[]> {
   if (!existsSync(dir)) return [];
@@ -301,6 +463,26 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     console.log(`✓ All ${generated.size} lexicon(s) match generator output.`);
+
+    // Also validate against atproto's lexicon schema.
+    let validationErrors = 0;
+    for (const [nsid] of generated) {
+      const path = join(LEXICONS_DIR, `${nsid}.json`);
+      const json = JSON.parse(readFileSync(path, "utf8"));
+      if (!isValidLexiconDoc(json)) {
+        console.error(`INVALID: ${nsid} failed atproto lexicon validation`);
+        validationErrors++;
+      }
+    }
+    if (validationErrors > 0) {
+      console.error(
+        `\n${validationErrors} lexicon(s) failed atproto validation.`,
+      );
+      process.exit(1);
+    }
+    console.log(
+      `✓ All ${generated.size} lexicon(s) pass atproto lexicon validation.`,
+    );
     return;
   }
 
