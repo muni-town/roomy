@@ -34,9 +34,9 @@ export function createSyncContext(deps: {
 }): SyncContext {
 	const { queryClient, fetchTicket, appserverDid, onLog, onMessageDiff } = deps;
 
-	let connection: InstanceType<typeof SyncConnection> | null = null;
+	let connection = $state<InstanceType<typeof SyncConnection> | null>(null);
 	let router: InstanceType<typeof SyncRouter> | null = null;
-	let topics: InstanceType<typeof TopicManager> | null = null;
+	let topics = $state<InstanceType<typeof TopicManager> | null>(null);
 
 	function log(msg: string) {
 		onLog?.(msg);
