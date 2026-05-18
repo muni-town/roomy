@@ -28,8 +28,14 @@ function mockAdapter(): {
   patch: ReturnType<typeof vi.fn>;
 } {
   const invalidate = vi.fn((_k: QueryKey) => {});
-  const patch = vi.fn(<T>(_k: QueryKey, _p: CachePatcher<T>) => {});
-  return { adapter: { invalidate, patch }, invalidate, patch };
+  const patch = vi.fn((_key: QueryKey, _patcher: CachePatcher<never>) => {});
+  const adapter: CacheAdapter = {
+    invalidate,
+    patch<T>(_key: QueryKey, patcher: CachePatcher<T>) {
+      patch(_key, patcher as unknown as CachePatcher<never>);
+    },
+  };
+  return { adapter, invalidate, patch };
 }
 
 function makeFrame(t: string, body: Record<string, unknown>): SyncFrame {
