@@ -71,8 +71,6 @@ export function applyBatch(
     for (const e of events) {
       const bundle = materialize(e.event, { streamId, user: e.user }, e.idx);
 
-      // console.log("bundle: ", bundle)
-
       if (bundle.status === "error") {
         stats.materializerErrors++;
         recordFailure(stats, {
