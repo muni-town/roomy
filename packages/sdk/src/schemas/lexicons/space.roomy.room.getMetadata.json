@@ -1,0 +1,9 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.room.getMetadata",
+  "defs": {
+    "main": {
+      "type": "query"
+    }
+  }
+}

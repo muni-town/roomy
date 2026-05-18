@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "dev": "pkgroll --watch",
-    "build": "pkgroll",
+    "build": "pnpm generate:lexicons && pkgroll",
     "format": "prettier . --write",
     "build-lib": "pnpm build",
     "test": "vitest",
@@ -22,7 +22,9 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run tests/integration",
-    "test:unit": "vitest run tests/operations"
+    "test:unit": "vitest run tests/operations",
+    "generate:lexicons": "tsx scripts/generate-lexicons.ts",
+    "check:lexicons": "tsx scripts/generate-lexicons.ts --check"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

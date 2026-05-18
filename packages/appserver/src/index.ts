@@ -18,6 +18,7 @@ import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts
 import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
 import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
 import { updateSeenHandler } from "./handlers/space.roomy.room.updateSeen.ts";
+import { schemas } from "@roomy-space/sdk";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const OWN_DID = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
@@ -59,10 +60,17 @@ const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter);
 const router = new XrpcRouter(prodAuthVerifier)
   .procedure("space.roomy.auth.getConnectionTicket", {
     handler: getConnectionTicketHandler,
+    inputSchema: schemas.procedures.getConnectionTicket.Input,
+    outputSchema: schemas.procedures.getConnectionTicket.Output,
   })
   .procedure("space.roomy.room.updateSeen", {
     handler: updateSeenHandler,
+    inputSchema: schemas.procedures.updateSeen.Input,
+    // No outputSchema: void return; short-circuits to 200 with empty body.
   })
+  // Admin routes (connectSpace, materializeSpace) intentionally have no
+  // arktype schemas — they're internal/admin endpoints not part of the
+  // public XRPC interface spec.
   .query("space.roomy.admin.connectSpace", {
     handler: connectSpaceHandler,
   })
@@ -71,33 +79,53 @@ const router = new XrpcRouter(prodAuthVerifier)
   })
   .query("space.roomy.space.getSpaces", {
     handler: getSpacesHandler,
+    paramsSchema: schemas.queries.getSpaces.Params,
+    outputSchema: schemas.queries.getSpaces.Response,
   })
   .query("space.roomy.space.getMembers", {
     handler: getMembersHandler,
+    paramsSchema: schemas.queries.getMembers.Params,
+    outputSchema: schemas.queries.getMembers.Response,
   })
   .query("space.roomy.space.getMetadata", {
     handler: getMetadataHandler,
+    paramsSchema: schemas.queries.getSpaceMetadata.Params,
+    outputSchema: schemas.queries.getSpaceMetadata.Response,
   })
   .query("space.roomy.space.getThreads", {
     handler: getSpaceThreadsHandler,
+    paramsSchema: schemas.queries.getSpaceThreads.Params,
+    outputSchema: schemas.queries.getSpaceThreads.Response,
   })
   .query("space.roomy.space.getRoles", {
     handler: getRolesHandler,
+    paramsSchema: schemas.queries.getRoles.Params,
+    outputSchema: schemas.queries.getRoles.Response,
   })
   .query("space.roomy.space.getInvites", {
     handler: getInvitesHandler,
+    paramsSchema: schemas.queries.getInvites.Params,
+    outputSchema: schemas.queries.getInvites.Response,
   })
   .query("space.roomy.room.getMetadata", {
     handler: getRoomMetadataHandler,
+    paramsSchema: schemas.queries.getRoomMetadata.Params,
+    outputSchema: schemas.queries.getRoomMetadata.Response,
   })
   .query("space.roomy.room.getThreads", {
     handler: getRoomThreadsHandler,
+    paramsSchema: schemas.queries.getRoomThreads.Params,
+    outputSchema: schemas.queries.getRoomThreads.Response,
   })
   .query("space.roomy.room.getMessages", {
     handler: getMessagesHandler,
+    paramsSchema: schemas.queries.getMessages.Params,
+    outputSchema: schemas.queries.getMessages.Response,
   })
   .query("space.roomy.message.getMessage", {
     handler: getMessageHandler,
+    paramsSchema: schemas.queries.getMessage.Params,
+    outputSchema: schemas.queries.getMessage.Response,
   })
   .sync("space.roomy.sync.subscribe", {
     handler: syncSubscribeHandler,

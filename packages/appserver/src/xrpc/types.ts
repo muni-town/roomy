@@ -1,3 +1,5 @@
+import type { Type } from "arktype";
+
 export interface AuthCtx {
   did: string;
 }
@@ -29,6 +31,10 @@ export interface QueryDef {
   kind: "query";
   handler: QueryHandler;
   parseParams?: (raw: QueryParams) => QueryParams;
+  /** Arktype schema for incoming query-string params. Rejects on parse failure. */
+  paramsSchema?: Type<any>;
+  /** Arktype schema for outgoing JSON response. Throws (500) on parse failure. */
+  outputSchema?: Type<any>;
 }
 
 export type ProcedureHandler<
@@ -40,6 +46,12 @@ export interface ProcedureDef {
   kind: "procedure";
   handler: ProcedureHandler;
   parseParams?: (raw: QueryParams) => QueryParams;
+  /** Arktype schema for incoming JSON body. Rejects on parse failure. */
+  inputSchema?: Type<any>;
+  /** Arktype schema for outgoing JSON response. Throws (500) on parse failure.
+   * If omitted, the handler is expected to return void/undefined and the
+   * response short-circuits to 200 with no body (b57ad1ca behaviour). */
+  outputSchema?: Type<any>;
 }
 
 export interface SubscriptionDef {

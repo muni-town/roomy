@@ -15,11 +15,12 @@
     "@atproto/xrpc-server": "^0.10.19",
     "@muni-town/leaf-client": "0.1.0-alpha.17",
     "@roomy-space/sdk": "workspace:*",
+    "arktype": "^2.1.29",
     "ulidx": "^2.4.1"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
-    "typescript": "^5.8.3",
-    "bun-types": "latest"
+    "bun-types": "latest",
+    "typescript": "^5.8.3"
   }
 }
