@@ -21,7 +21,7 @@ export async function createProfileSpaceRecord(
       collection: config.collection,
       repo: agent.assertDid,
       rkey: "self",
-      record: { id: spaceId },
+      record: { $type: config.collection, id: spaceId },
     },
 
     {
@@ -131,7 +131,7 @@ export async function savePersonalStreamId(
       collection: config.collection,
       repo: agent.assertDid,
       rkey: config.schemaVersion,
-      record: { id: streamDid },
+      record: { $type: config.collection, id: streamDid },
     },
     {
       headers: {

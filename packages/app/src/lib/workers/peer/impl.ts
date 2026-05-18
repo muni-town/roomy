@@ -192,7 +192,14 @@ export class Peer {
       getInvites: async (spaceDid) => this.getInvites(spaceDid),
       getRoles: async (spaceDid) => this.getRoles(spaceDid),
       getProfiles: async (dids) => {
-        const resp = await this.client.agent.getProfiles({ actors: dids });
+        const resp = await this.client.agent.getProfiles(
+          { actors: dids },
+          {
+            headers: {
+              "atproto-proxy": `did:web:api.bsky.app#bsky_appview`,
+            },
+          },
+        );
         return resp.data.profiles;
       },
       runQuery: async (statement) => {
@@ -352,9 +359,16 @@ export class Peer {
         const profiles = (
           await Promise.all(
             memberDidChunks.map(async (dids) => {
-              const resp = await this.client.agent.getProfiles({
-                actors: dids,
-              });
+              const resp = await this.client.agent.getProfiles(
+                {
+                  actors: dids,
+                },
+                {
+                  headers: {
+                    "atproto-proxy": `did:web:api.bsky.app#bsky_appview`,
+                  },
+                },
+              );
               return resp.data.profiles;
             }),
           )
@@ -396,9 +410,16 @@ export class Peer {
         const profiles = (
           await Promise.all(
             memberDidChunks.map(async (dids) => {
-              const resp = await this.client.agent.getProfiles({
-                actors: dids,
-              });
+              const resp = await this.client.agent.getProfiles(
+                {
+                  actors: dids,
+                },
+                {
+                  headers: {
+                    "atproto-proxy": `did:web:api.bsky.app#bsky_appview`,
+                  },
+                },
+              );
               return resp.data.profiles;
             }),
           )

@@ -145,7 +145,14 @@ export class RoomyClient {
     const cached = this.#profileCache.get(actor);
     if (cached) return cached;
 
-    const resp = await this.agent.getProfile({ actor });
+    const resp = await this.agent.getProfile(
+      { actor },
+      {
+        headers: {
+          "atproto-proxy": `did:web:api.bsky.app#bsky_appview`,
+        },
+      },
+    );
     this.#profileCache.set(actor, resp as ProfileResponse);
     return resp as ProfileResponse;
   }
@@ -349,9 +356,7 @@ export class RoomyClient {
   /**
    * Get space info from the Leaf server.
    */
-  async getSpaceInfo(
-    streamDid: StreamDid,
-  ): Promise<
+  async getSpaceInfo(streamDid: StreamDid): Promise<
     | {
         name?: string;
         avatar?: string;

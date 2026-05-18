@@ -4,15 +4,22 @@ import { Did, Handle, UserDid, type } from "../schema";
 /** Resolve a handle to a DID via ATProto. */
 export async function resolveDidFromHandle(
   agent: Agent,
-  handle: Handle
+  handle: Handle,
 ): Promise<UserDid> {
-  const profile = await agent.getProfile({ actor: handle });
+  const profile = await agent.getProfile(
+    { actor: handle },
+    {
+      headers: {
+        "atproto-proxy": `did:web:api.bsky.app#bsky_appview`,
+      },
+    },
+  );
   return profile.data.did as UserDid;
 }
 
 /** Check if a string is a DID or handle. */
 export function parseIdentifier(
-  value: string
+  value: string,
 ): { type: "did"; did: Did } | { type: "handle"; handle: Handle } {
   const didParsed = Did(value);
   if (!(didParsed instanceof type.errors)) {

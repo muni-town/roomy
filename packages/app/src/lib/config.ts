@@ -58,6 +58,8 @@ CONFIG.atprotoOauthScope = [
 
   // Access to query the Bluesky profile
   `rpc:app.bsky.actor.getProfiles?aud=did:web:api.bsky.app%23bsky_appview rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview`,
+  `rpc:com.atproto.repo.getRecord?aud=*`,
+  `rpc:com.atproto.repo.putRecord?aud=*`,
 
   // These are the scopes needed for accessing Bluesky DMs, but since we don't have the UI for that
   // yet, lets not ask for permission to it.
