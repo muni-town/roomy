@@ -32,7 +32,7 @@
   import { cn } from "@foxui/core";
   import { ImageUploadNode } from "./image-upload/ImageUploadNode";
   import { Transaction } from "@tiptap/pm/state";
-  import type { Comment as CommentType } from "../content/thread/TimelineView.svelte";
+  import type { Comment as CommentType } from "./types";
 
   let {
     content = $bindable({}),
@@ -84,7 +84,8 @@
     }
   });
 
-  let hasFocus = true;
+  // @ts-expect-error - used internally for focus tracking, may be used by consumers later
+  let _hasFocus = $state(true);
 
   let menu: HTMLElement | null = $state(null);
   let menuLink: HTMLElement | null = $state(null);
@@ -271,10 +272,10 @@
         onupdate?.(content, ctx);
       },
       onFocus: () => {
-        hasFocus = true;
+        _hasFocus = true;
       },
       onBlur: () => {
-        hasFocus = false;
+        _hasFocus = false;
       },
       onTransaction: (ctx) => {
         isBold = ctx.editor.isActive("bold");
@@ -309,7 +310,8 @@
   });
 
   // Flag to track whether a file is being dragged over the drop area
-  let isDragOver = $state(false);
+  // @ts-expect-error - used internally for drag state tracking
+  let _isDragOver = $state(false);
 
   // Store local image files for later upload
   let localImages: Map<string, File> = $state(new Map());
@@ -369,17 +371,17 @@
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
     event.stopPropagation();
-    isDragOver = true;
+    _isDragOver = true;
   }
   function handleDragLeave(event: DragEvent) {
     event.preventDefault();
     event.stopPropagation();
-    isDragOver = false;
+    _isDragOver = false;
   }
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     event.stopPropagation();
-    isDragOver = false;
+    _isDragOver = false;
     if (!event.dataTransfer?.files?.length) return;
     const file = event.dataTransfer.files[0];
     if (file?.type.startsWith("image/")) {

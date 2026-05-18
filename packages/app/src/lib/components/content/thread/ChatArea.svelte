@@ -30,8 +30,8 @@
   import StateSuspense from "@roomy/design/components/helper/StateSuspense.svelte";
   import { peer } from "$lib/workers";
   import { getAppState } from "$lib/queries";
-  import ErrorModal from "$lib/components/modals/Error.svelte";
-  import ChatMessageSkeleton from "./message/ChatMessageSkeleton.svelte";
+  import ErrorModal from "@roomy/design/components/modals/Error.svelte";
+  import ChatMessageSkeleton from "@roomy/design/components/content/thread/message/ChatMessageSkeleton.svelte";
   const app = getAppState();
 
   // Lazy loading state (AsyncStateWithIdle pattern)

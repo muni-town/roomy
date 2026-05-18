@@ -9,7 +9,7 @@
   import { Prose } from "@foxui/core";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import ScrollArea from "@roomy/design/components/layout/ScrollArea.svelte";
-  import { RichTextEditor } from "$lib/components/richtext";
+  import RichTextEditor from "@roomy/design/components/richtext/RichTextEditor.svelte";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
   import { newUlid, toBytes, Ulid } from "@roomy-space/sdk";

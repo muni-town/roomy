@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getAppState } from "$lib/queries";
-  import Error from "$lib/components/modals/Error.svelte";
+  import Error from "@roomy/design/components/modals/Error.svelte";
   import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { IconLoading } from "@roomy/design/icons";

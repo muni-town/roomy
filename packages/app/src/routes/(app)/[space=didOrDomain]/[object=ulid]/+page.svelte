@@ -48,7 +48,7 @@
     IconBars,
   } from "@roomy/design/icons";
 
-  import Error from "$lib/components/modals/Error.svelte";
+  import Error from "@roomy/design/components/modals/Error.svelte";
 
   import { flags } from "$lib/config";
   import { deleteRoom, newUlid, Ulid } from "@roomy-space/sdk";
