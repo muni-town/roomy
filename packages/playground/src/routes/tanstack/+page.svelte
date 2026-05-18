@@ -4,15 +4,6 @@
 	import Button from "@roomy/design/components/ui/button/Button.svelte";
 	import Input from "@roomy/design/components/ui/input/Input.svelte";
 	import { queryClient } from "$lib/queries/query-client";
-	import {
-		NSID,
-		fetchGetSpaces,
-		fetchSpaceMetadata,
-		fetchRoomMetadata,
-		fetchMessages,
-		fetchTicket,
-		callUpdateSeenRoom,
-	} from "$lib/queries/xrpc-queries";
 	import { createSyncContext, type SyncContext } from "$lib/queries/sync.svelte";
 	import {
 		useConnectionStatus,
@@ -25,10 +16,15 @@
 		logout,
 		loadAppserverDid,
 		saveAppserverDid,
+		makeProxiedAgent,
 	} from "@roomy-space/sdk/browser";
+	import { transport, cache, schemas } from "@roomy-space/sdk";
 	import type { Agent } from "@atproto/api";
 	import type { OAuthSession } from "@roomy-space/sdk/browser";
-	import { schemas } from "@roomy-space/sdk";
+
+	const { agentQuery, agentProcedure } = transport;
+	const { queryKey } = cache;
+
 	type Space = typeof schemas.queries.getSpaces.Space.infer;
 	type SidebarChannel = typeof schemas.queries.getSpaceMetadata.SidebarChannel.infer;
 	type Message = typeof schemas.queries.getMessages.Message.infer;
@@ -59,12 +55,43 @@
 		});
 	}
 
-	// ── Mark room as seen ───────────────────────────────────────────────
+	// ── Query helpers (inline — just SDK transport + queryKey) ──────────
 
-	async function markRoomSeen(roomId: string) {
+	function px(): Agent {
+		return makeProxiedAgent(agent!, appserverDid);
+	}
+
+	async function fetchSpaces() {
+		return agentQuery(px(), "space.roomy.space.getSpaces", {});
+	}
+
+	async function fetchSpaceMetadata(spaceId: string) {
+		return agentQuery(px(), "space.roomy.space.getMetadata", { spaceId });
+	}
+
+	async function fetchRoomMetadata(roomId: string) {
+		return agentQuery(px(), "space.roomy.room.getMetadata", { roomId });
+	}
+
+	async function fetchMessages(roomId: string, limit = 50, cursor?: string) {
+		const params: { roomId: string; limit?: string; cursor?: string } = { roomId };
+		if (limit) params.limit = String(limit);
+		if (cursor) params.cursor = cursor;
+		const res = await agentQuery(px(), "space.roomy.room.getMessages", params);
+		return res.messages;
+	}
+
+	async function fetchTicket(): Promise<string> {
+		const res = await agentProcedure(px(), "space.roomy.auth.getConnectionTicket", {});
+		return res.ticket;
+	}
+
+	async function markRoomSeen(roomId: string, seenUpTo?: string) {
 		if (!agent) return;
+		const body: { roomId: string; seenUpTo?: string } = { roomId };
+		if (seenUpTo) body.seenUpTo = seenUpTo;
 		try {
-			await callUpdateSeenRoom(agent, appserverDid, roomId)();
+			await agentProcedure(px(), "space.roomy.room.updateSeen", body);
 			appendLog(`updateSeen → ${roomId.slice(0, 8)}…`);
 		} catch (err: any) {
 			appendLog(`updateSeen error: ${err?.message ?? err}`);
@@ -82,7 +109,7 @@
 				agent = res.agent;
 				authenticated = true;
 				appserverDid = storedDid;
-		}
+			}
 		} catch (err) {
 			initError = String(err);
 		}
@@ -108,11 +135,10 @@
 
 		const ctx = createSyncContext({
 			queryClient,
-			fetchTicket: fetchTicket(agent, appserverDid),
+			fetchTicket,
 			appserverDid,
 			onLog: appendLog,
 			onMessageDiff: (roomId, _seq) => {
-				// If a message arrives in the currently-open room, mark it as seen
 				untrack(() => {
 					if (selectedRoomId === roomId) {
 						markRoomSeen(roomId);
@@ -236,8 +262,8 @@
 
 {#snippet spaceList()}
 {@const spacesQuery = createQuery(() => ({
-	queryKey: [NSID.GET_SPACES, {}],
-	queryFn: fetchGetSpaces(agent!, appserverDid),
+	queryKey: queryKey("space.roomy.space.getSpaces"),
+	queryFn: fetchSpaces,
 }))}
 
 {#if spacesQuery.isPending}
@@ -290,8 +316,8 @@
 
 {#snippet channelList(spaceId: string)}
 {@const metadataQuery = createQuery(() => ({
-	queryKey: [NSID.GET_SPACE_METADATA, { spaceId }],
-	queryFn: fetchSpaceMetadata(agent!, appserverDid, spaceId),
+	queryKey: queryKey("space.roomy.space.getMetadata", { spaceId }),
+	queryFn: () => fetchSpaceMetadata(spaceId),
 }))}
 
 {#if metadataQuery.isPending}
@@ -344,8 +370,8 @@
 
 {#snippet roomView()}
 {@const roomMetaQuery = createQuery(() => ({
-	queryKey: [NSID.GET_ROOM_METADATA, { roomId: selectedRoomId! }],
-	queryFn: fetchRoomMetadata(agent!, appserverDid, selectedRoomId!),
+	queryKey: queryKey("space.roomy.room.getMetadata", { roomId: selectedRoomId! }),
+	queryFn: () => fetchRoomMetadata(selectedRoomId!),
 }))}
 
 {#if roomMetaQuery.isPending}
@@ -375,11 +401,8 @@
 
 {#snippet messageList(roomId: string)}
 {@const messagesQuery = createQuery<Message[]>(() => ({
-	queryKey: [NSID.GET_MESSAGES, { roomId }],
-	queryFn: async () => {
-		const res = await fetchMessages(agent!, appserverDid, roomId, 50)();
-		return res.messages;
-	},
+	queryKey: queryKey("space.roomy.room.getMessages", { roomId }),
+	queryFn: () => fetchMessages(roomId, 50),
 }))}
 
 {#if messagesQuery.isPending}
