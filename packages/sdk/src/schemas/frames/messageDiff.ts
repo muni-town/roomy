@@ -17,11 +17,9 @@ export const Op = type({
   key: "string",
   "message?": Message,
 });
-export type Op = typeof Op.infer;
 
 export const Body = type({
   roomId: "string",
   seq: "number",
   ops: Op.array(),
 });
-export type Body = typeof Body.infer;

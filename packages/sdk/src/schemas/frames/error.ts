@@ -13,4 +13,3 @@ export const Body = type({
   error: "string",
   message: "string",
 });
-export type Body = typeof Body.infer;

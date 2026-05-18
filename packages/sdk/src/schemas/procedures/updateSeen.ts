@@ -15,8 +15,6 @@ export const Input = type({
   roomId: "string",
   "seenUpTo?": "string",
 });
-export type Input = typeof Input.infer;
 
 /** Void: handler returns nothing. The wire payload is empty. */
 export const Output = type({});
-export type Output = typeof Output.infer;

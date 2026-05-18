@@ -11,7 +11,6 @@ import { type } from "arktype";
 export const NSID = "space.roomy.room.getMetadata" as const;
 
 export const Params = type({ roomId: "string" });
-export type Params = typeof Params.infer;
 
 export const RecentThread = type({
   id: "string",
@@ -21,7 +20,6 @@ export const RecentThread = type({
   unreadCount: "number",
   lastRead: "string | null",
 });
-export type RecentThread = typeof RecentThread.infer;
 
 export const Response = type({
   name: "string | null",
@@ -34,4 +32,3 @@ export const Response = type({
   unreadCount: "number",
   recentThreads: RecentThread.array(),
 });
-export type Response = typeof Response.infer;

@@ -7,7 +7,6 @@ import { type } from "arktype";
 export const NSID = "space.roomy.space.getMembers" as const;
 
 export const Params = type({ spaceId: "string" });
-export type Params = typeof Params.infer;
 
 export const Member = type({
   did: "string",
@@ -17,7 +16,6 @@ export const Member = type({
   isAdmin: "boolean",
   roleIds: "string[]",
 });
-export type Member = typeof Member.infer;
 
 export const ExternalAdmin = type({
   did: "string",
@@ -25,10 +23,8 @@ export const ExternalAdmin = type({
   name: "string | null",
   avatar: "string | null",
 });
-export type ExternalAdmin = typeof ExternalAdmin.infer;
 
 export const Response = type({
   members: Member.array(),
   externalAdmins: ExternalAdmin.array(),
 });
-export type Response = typeof Response.infer;

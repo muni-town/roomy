@@ -2,12 +2,14 @@ import type { QueryClient } from "@tanstack/svelte-query";
 import { sync } from "@roomy-space/sdk";
 const { decodeCborFrame } = sync;
 import { resolveAppserverWsOrigin } from "./did-resolve";
-import type {
-	Message,
-	MessageDiffFrame,
-	InvalidationFrame,
-	MessageDiffOp,
-} from "./types";
+// Slice 3: types now sourced from arktype schemas in `@roomy-space/sdk`.
+// (This block is the only line edited in this file by Slice 3; full WS
+// migration into the SDK belongs to Slice 6.)
+import { schemas } from "@roomy-space/sdk";
+type Message = typeof schemas.queries.getMessages.Message.infer;
+type MessageDiffFrame = typeof schemas.frames.messageDiff.Body.infer;
+type InvalidationFrame = typeof schemas.frames.invalidate.Body.infer;
+type MessageDiffOp = typeof schemas.frames.messageDiff.Op.infer;
 
 // ── Sync connection state ─────────────────────────────────────────────────
 
