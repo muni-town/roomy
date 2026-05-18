@@ -5,6 +5,7 @@
  * schemas used by the appserver, plus the registry mapping NSIDs to schemas.
  */
 export { agentQuery, agentProcedure } from "./xrpc";
+export { resolveAppserverWsOrigin } from "./did-resolve";
 export { XrpcResponseValidationError } from "./errors";
 export {
   QUERY_SCHEMAS,
