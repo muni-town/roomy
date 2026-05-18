@@ -13,7 +13,6 @@ export const Params = type({
   "limit?": "string",
   "cursor?": "string",
 });
-export type Params = typeof Params.infer;
 
 export { Message };
 
@@ -21,4 +20,3 @@ export const Response = type({
   messages: Message.array(),
   cursor: "string | null",
 });
-export type Response = typeof Response.infer;

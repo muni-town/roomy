@@ -10,20 +10,16 @@ export const Sub = type({
   topic: "'space' | 'room'",
   id: "string",
 });
-export type Sub = typeof Sub.infer;
 
 export const Unsub = type({
   type: "'unsub'",
   topic: "'space' | 'room'",
   id: "string",
 });
-export type Unsub = typeof Unsub.infer;
 
 export const Cursor = type({
   type: "'cursor'",
   seq: "number",
 });
-export type Cursor = typeof Cursor.infer;
 
 export const ClientMessage = Sub.or(Unsub).or(Cursor);
-export type ClientMessage = typeof ClientMessage.infer;

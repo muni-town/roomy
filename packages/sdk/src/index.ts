@@ -20,3 +20,7 @@ export * as sync from "./sync";
 // (e.g. `@roomy-space/sdk/browser`) so library-specific deps stay
 // out of non-consuming bundles.
 export * as cache from "./cache";
+
+// Arktype schemas (Slice 1) and validated XRPC transport (Slice 3).
+export * as schemas from "./schemas/index";
+export * as transport from "./transport/index";

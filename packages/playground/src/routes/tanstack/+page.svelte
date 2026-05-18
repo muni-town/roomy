@@ -23,7 +23,10 @@
 	} from "@roomy-space/sdk/browser";
 	import type { Agent } from "@atproto/api";
 	import type { OAuthSession } from "@roomy-space/sdk/browser";
-	import type { Space, SidebarChannel, Message } from "$lib/queries/types";
+	import { schemas } from "@roomy-space/sdk";
+	type Space = typeof schemas.queries.getSpaces.Space.infer;
+	type SidebarChannel = typeof schemas.queries.getSpaceMetadata.SidebarChannel.infer;
+	type Message = typeof schemas.queries.getMessages.Message.infer;
 
 	// ── Auth state ──────────────────────────────────────────────────────
 

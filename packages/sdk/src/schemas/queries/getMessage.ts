@@ -10,7 +10,5 @@ import { Message } from "./_message";
 export const NSID = "space.roomy.message.getMessage" as const;
 
 export const Params = type({ messageId: "string" });
-export type Params = typeof Params.infer;
 
 export const Response = Message;
-export type Response = typeof Response.infer;

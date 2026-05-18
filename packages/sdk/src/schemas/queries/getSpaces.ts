@@ -8,7 +8,6 @@ export const NSID = "space.roomy.space.getSpaces" as const;
 
 /** No params. */
 export const Params = type({});
-export type Params = typeof Params.infer;
 
 export const Space = type({
   id: "string",
@@ -20,9 +19,7 @@ export const Space = type({
   isAdmin: "boolean",
   roleIds: "string[]",
 });
-export type Space = typeof Space.infer;
 
 export const Response = type({
   spaces: Space.array(),
 });
-export type Response = typeof Response.infer;

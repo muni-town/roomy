@@ -1,117 +1,88 @@
-import type { Agent } from "@atproto/api";
-import { makeProxiedAgent } from "@roomy-space/sdk/browser";
-import { callUpdateSeen } from "$lib/xrpc";
+/**
+ * TanStack query factories — thin wrappers over the validated XRPC helpers
+ * in `$lib/xrpc`. Each factory returns a `queryFn`-compatible thunk so
+ * `createQuery({ queryFn: fetchXxx(agent, did, ...) })` stays a one-liner.
+ */
 
-// ── NSIDs ─────────────────────────────────────────────────────────────────
+import type { Agent } from "@atproto/api";
+import {
+  callTicket,
+  callGetSpaces,
+  callGetSpaceMetadata,
+  callGetSpaceThreads,
+  callGetRoles,
+  callGetMembers,
+  callGetRoomMetadata,
+  callGetRoomThreads,
+  callGetMessages,
+  callUpdateSeen,
+} from "$lib/xrpc";
+
+// ── NSIDs (kept as string constants for `queryKey` use) ───────────────────
 
 export const NSID = {
-	GET_SPACES: "space.roomy.space.getSpaces",
-	GET_SPACE_METADATA: "space.roomy.space.getMetadata",
-	GET_SPACE_THREADS: "space.roomy.space.getThreads",
-	GET_ROLES: "space.roomy.space.getRoles",
-	GET_MEMBERS: "space.roomy.space.getMembers",
-	GET_INVITES: "space.roomy.space.getInvites",
-	GET_ROOM_METADATA: "space.roomy.room.getMetadata",
-	GET_ROOM_THREADS: "space.roomy.room.getThreads",
-	GET_MESSAGES: "space.roomy.room.getMessages",
-	GET_MESSAGE: "space.roomy.message.getMessage",
-	GET_TICKET: "space.roomy.auth.getConnectionTicket",
-	UPDATE_SEEN: "space.roomy.room.updateSeen",
+  GET_SPACES: "space.roomy.space.getSpaces",
+  GET_SPACE_METADATA: "space.roomy.space.getMetadata",
+  GET_SPACE_THREADS: "space.roomy.space.getThreads",
+  GET_ROLES: "space.roomy.space.getRoles",
+  GET_MEMBERS: "space.roomy.space.getMembers",
+  GET_INVITES: "space.roomy.space.getInvites",
+  GET_ROOM_METADATA: "space.roomy.room.getMetadata",
+  GET_ROOM_THREADS: "space.roomy.room.getThreads",
+  GET_MESSAGES: "space.roomy.room.getMessages",
+  GET_MESSAGE: "space.roomy.message.getMessage",
+  GET_TICKET: "space.roomy.auth.getConnectionTicket",
+  UPDATE_SEEN: "space.roomy.room.updateSeen",
 } as const;
 
 // ── Query key helpers ─────────────────────────────────────────────────────
-// Every query uses [nsid, params] — maps directly to #invalidate frame format.
 
-export function queryKey(nsid: string, params: Record<string, string>): [string, Record<string, string>] {
-	return [nsid, params];
+export function queryKey(
+  nsid: string,
+  params: Record<string, string>,
+): [string, Record<string, string>] {
+  return [nsid, params];
 }
 
-// ── XRPC fetch wrapper ────────────────────────────────────────────────────
+// ── Query factories (queryFn thunks for TanStack `createQuery`) ───────────
 
-function proxied(agent: Agent, appserverDid: string): Agent {
-	return makeProxiedAgent(agent, appserverDid);
-}
+export const fetchGetSpaces = (agent: Agent, did: string) => () =>
+  callGetSpaces(agent, did);
 
-async function xrpcFetch<T>(
-	agent: Agent,
-	appserverDid: string,
-	nsid: string,
-	params: Record<string, string> = {},
-): Promise<T> {
-	const p = proxied(agent, appserverDid);
-	const response = await p.call(nsid, params);
-	return response.data as T;
-}
+export const fetchSpaceMetadata =
+  (agent: Agent, did: string, spaceId: string) => () =>
+    callGetSpaceMetadata(agent, did, spaceId);
 
-// ── Query functions (for use in createQuery queryFn) ──────────────────────
+export const fetchSpaceThreads =
+  (agent: Agent, did: string, spaceId: string) => () =>
+    callGetSpaceThreads(agent, did, spaceId);
 
-export function fetchGetSpaces(agent: Agent, appserverDid: string) {
-	return () => xrpcFetch<import("./types").GetSpacesResponse>(agent, appserverDid, NSID.GET_SPACES);
-}
+export const fetchRoomMetadata =
+  (agent: Agent, did: string, roomId: string) => () =>
+    callGetRoomMetadata(agent, did, roomId);
 
-export function fetchSpaceMetadata(agent: Agent, appserverDid: string, spaceId: string) {
-	return () => xrpcFetch<import("./types").GetSpaceMetadataResponse>(
-		agent, appserverDid, NSID.GET_SPACE_METADATA, { spaceId },
-	);
-}
+export const fetchMessages =
+  (agent: Agent, did: string, roomId: string, limit = 50, cursor?: string) =>
+  () =>
+    callGetMessages(agent, did, roomId, String(limit), cursor);
 
-export function fetchSpaceThreads(agent: Agent, appserverDid: string, spaceId: string) {
-	return () => xrpcFetch<import("./types").GetSpaceThreadsResponse>(
-		agent, appserverDid, NSID.GET_SPACE_THREADS, { spaceId },
-	);
-}
+export const fetchRoomThreads =
+  (agent: Agent, did: string, roomId: string) => () =>
+    callGetRoomThreads(agent, did, roomId);
 
-export function fetchRoomMetadata(agent: Agent, appserverDid: string, roomId: string) {
-	return () => xrpcFetch<import("./types").GetRoomMetadataResponse>(
-		agent, appserverDid, NSID.GET_ROOM_METADATA, { roomId },
-	);
-}
+export const fetchMembers =
+  (agent: Agent, did: string, spaceId: string) => () =>
+    callGetMembers(agent, did, spaceId);
 
-export function fetchMessages(
-	agent: Agent,
-	appserverDid: string,
-	roomId: string,
-	limit = 50,
-	cursor?: string,
-) {
-	const params: Record<string, string> = { roomId, limit: String(limit) };
-	if (cursor) params.cursor = cursor;
-	return () => xrpcFetch<import("./types").GetMessagesResponse>(
-		agent, appserverDid, NSID.GET_MESSAGES, params,
-	);
-}
+export const fetchRoles =
+  (agent: Agent, did: string, spaceId: string) => () =>
+    callGetRoles(agent, did, spaceId);
 
-export function fetchRoomThreads(agent: Agent, appserverDid: string, roomId: string) {
-	return () => xrpcFetch<import("./types").GetRoomThreadsResponse>(
-		agent, appserverDid, NSID.GET_ROOM_THREADS, { roomId },
-	);
-}
+export const callUpdateSeenRoom =
+  (agent: Agent, did: string, roomId: string, seenUpTo?: string) => () =>
+    callUpdateSeen(agent, did, roomId, seenUpTo);
 
-export function fetchMembers(agent: Agent, appserverDid: string, spaceId: string) {
-	return () => xrpcFetch<import("./types").GetMembersResponse>(
-		agent, appserverDid, NSID.GET_MEMBERS, { spaceId },
-	);
-}
-
-export function fetchRoles(agent: Agent, appserverDid: string, spaceId: string) {
-	return () => xrpcFetch<import("./types").GetRolesResponse>(
-		agent, appserverDid, NSID.GET_ROLES, { spaceId },
-	);
-}
-
-export function callUpdateSeenRoom(
-	agent: Agent,
-	appserverDid: string,
-	roomId: string,
-	seenUpTo?: string,
-) {
-	return () => callUpdateSeen(agent, appserverDid, roomId, seenUpTo);
-}
-
-export function fetchTicket(agent: Agent, appserverDid: string) {
-	return async () => {
-		const p = proxied(agent, appserverDid);
-		const response = await p.call(NSID.GET_TICKET);
-		return (response.data as { ticket: string }).ticket;
-	};
-}
+export const fetchTicket = (agent: Agent, did: string) => async () => {
+  const res = await callTicket(agent, did);
+  return res.ticket;
+};

@@ -12,9 +12,7 @@ export const NSID = "space.roomy.auth.getConnectionTicket" as const;
 
 /** No input body. */
 export const Input = type({});
-export type Input = typeof Input.infer;
 
 export const Output = type({
   ticket: "string",
 });
-export type Output = typeof Output.infer;

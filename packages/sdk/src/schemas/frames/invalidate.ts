@@ -15,4 +15,3 @@ export const Body = type({
   nsid: "string",
   params: { "[string]": "string" },
 });
-export type Body = typeof Body.infer;

@@ -7,13 +7,11 @@ import { type } from "arktype";
 export const NSID = "space.roomy.space.getRoles" as const;
 
 export const Params = type({ spaceId: "string" });
-export type Params = typeof Params.infer;
 
 export const RoleRoom = type({
   roomId: "string",
   permission: "'read' | 'readwrite'",
 });
-export type RoleRoom = typeof RoleRoom.infer;
 
 export const Role = type({
   id: "string",
@@ -23,9 +21,7 @@ export const Role = type({
   rooms: RoleRoom.array(),
   memberDids: "string[]",
 });
-export type Role = typeof Role.infer;
 
 export const Response = type({
   roles: Role.array(),
 });
-export type Response = typeof Response.infer;

@@ -12,7 +12,6 @@ import { type } from "arktype";
 export const NSID = "space.roomy.space.getMetadata" as const;
 
 export const Params = type({ spaceId: "string" });
-export type Params = typeof Params.infer;
 
 export const SidebarChannel = type({
   id: "string",
@@ -23,7 +22,6 @@ export const SidebarChannel = type({
   unreadCount: "number",
   lastRead: "string | null",
 });
-export type SidebarChannel = typeof SidebarChannel.infer;
 
 export const SidebarCategory = type({
   id: "string | null",
@@ -31,13 +29,11 @@ export const SidebarCategory = type({
   position: "number",
   channels: SidebarChannel.array(),
 });
-export type SidebarCategory = typeof SidebarCategory.infer;
 
 export const JoinPolicy = type({
   allowPublicJoin: "boolean",
   allowMemberInvites: "boolean",
 });
-export type JoinPolicy = typeof JoinPolicy.infer;
 
 export const Response = type({
   name: "string | null",
@@ -51,4 +47,3 @@ export const Response = type({
     orphans: SidebarChannel.array(),
   },
 });
-export type Response = typeof Response.infer;
