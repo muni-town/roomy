@@ -139,8 +139,6 @@ export const getMetadataHandler: QueryHandler<
     allChannelRows.map((r) => r.id),
   );
 
-  console.log("read positions", readPositions);
-
   const buildChannel = (id: string): SidebarChannel | null => {
     const row = channelById.get(id);
     if (!row) return null;

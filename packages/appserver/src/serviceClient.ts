@@ -31,7 +31,6 @@ export function getServiceClient(): Promise<RoomyServiceClient> {
     );
   }
 
-  console.log("Client env:", { UNSAFE_AUTH_TOKEN, LEAF_DID });
   clientPromise = RoomyServiceClient.create({
     leafUrl: LEAF_URL,
     leafDid: LEAF_DID,

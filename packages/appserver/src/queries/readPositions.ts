@@ -40,8 +40,6 @@ export function ensureReadPositions(
   for (const roomId of roomIds) {
     insert.run(userDid, roomId, roomId, now);
   }
-
-  console.log("ensured read positions for", roomIds);
 }
 
 /**
