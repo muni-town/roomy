@@ -60,12 +60,16 @@
     }
   },
   "peerDependencies": {
-    "svelte": "^5.0.0",
-    "@tanstack/svelte-query": "^6.0.0"
+    "@tanstack/svelte-query": "^6.0.0",
+    "svelte": "^5.0.0"
   },
   "peerDependenciesMeta": {
-    "svelte": { "optional": true },
-    "@tanstack/svelte-query": { "optional": true }
+    "svelte": {
+      "optional": true
+    },
+    "@tanstack/svelte-query": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
@@ -76,6 +80,7 @@
     "pkgroll": "^2.12.2",
     "prettier": "3.5.3",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.20.3",
     "turbo": "^2.5.2",
     "typescript": "^5.8.3",
     "vitest": "^2.1.8"
