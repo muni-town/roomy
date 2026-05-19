@@ -293,7 +293,7 @@ on each reaction in the DTO, fill the removal branch left open in Task 7.
 
 ---
 
-### Task 13: Threading flow
+### ~~Task 13: Threading flow~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/mutations/thread.ts`
