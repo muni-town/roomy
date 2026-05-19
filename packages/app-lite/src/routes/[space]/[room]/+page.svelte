@@ -7,6 +7,7 @@
   import { sync_ } from "$lib/sync.svelte";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
   import { createMessagesQuery, type Message } from "$lib/queries/messages";
+  import { createMessageQuery } from "$lib/queries/message";
   import { sendMessage } from "$lib/mutations/message";
   import { updateSeen } from "$lib/mutations/update-seen";
 
@@ -120,6 +121,9 @@
       {(message.authorName || "?")[0]?.toUpperCase() ?? "?"}
     </div>
     <div class="flex-1 min-w-0">
+      {#if message.replyTo}
+        {@render replyPreview(message.replyTo)}
+      {/if}
       <div class="flex items-baseline gap-2">
         <span class="font-medium text-sm">{message.authorName || message.authorDid.slice(0, 12)}</span>
         <span class="text-[11px] text-base-400">
@@ -137,5 +141,19 @@
         </div>
       {/if}
     </div>
+  </div>
+{/snippet}
+
+{#snippet replyPreview(targetId: string)}
+  {@const target = createMessageQuery(() => targetId, () => roomId)}
+  <div class="text-xs text-base-500 dark:text-base-400 border-l-2 border-base-300 dark:border-base-700 pl-2 mb-1 truncate">
+    {#if target.data}
+      <span class="font-medium">{target.data.authorName || target.data.authorDid.slice(0, 12)}</span>:
+      {target.data.content.slice(0, 120)}
+    {:else if target.isPending}
+      <span class="italic">Loading reply…</span>
+    {:else}
+      <span class="italic">Reply unavailable</span>
+    {/if}
   </div>
 {/snippet}
