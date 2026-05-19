@@ -208,13 +208,18 @@ function buildScope(_appserverDid: string) {
 export interface CreateOAuthClientOptions {
   /** The port the local app listens on (for the loopback redirect URI). */
   port?: number;
+  /**
+   * OAuth scope string. If omitted, defaults to `atproto transition:generic`.
+   * Callers that need explicit `rpc:` scopes (e.g. app-lite) pass them here.
+   */
+  scope?: string;
 }
 
 export function createOAuthClient(
   appserverDid: string,
   opts: CreateOAuthClientOptions = {},
 ) {
-  const scope = buildScope(appserverDid);
+  const scope = opts.scope ?? buildScope(appserverDid);
   const port = opts.port ?? 5199;
 
   const baseUrl = new URL(`http://127.0.0.1:${port}`);
@@ -269,6 +274,7 @@ export function loadAppserverDid(): string {
 
 export interface InitSessionOptions {
   port?: number;
+  scope?: string;
 }
 
 /**
