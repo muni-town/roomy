@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./fonts-hanken-grotesk.css";
 
 @source "../node_modules/@roomy/design";
 
