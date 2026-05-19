@@ -56,13 +56,15 @@
 </script>
 
 {#snippet tabsUi()}
-  <Tabs
-    class="p-0 m-0"
-    items={tab === "Login"
-      ? [{ name: "Register", onclick: () => (tab = "Register") }]
-      : [{ name: "Login", onclick: () => (tab = "Login") }]}
-    active={tab}
-  />
+  {#if onRegister}
+    <Tabs
+      class="p-0 m-0"
+      items={tab === "Login"
+        ? [{ name: "Register", onclick: () => (tab = "Register") }]
+        : [{ name: "Login", onclick: () => (tab = "Login") }]}
+      active={tab}
+    />
+  {/if}
 {/snippet}
 
 <Box {...props}>

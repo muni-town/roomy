@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import { env } from "$env/dynamic/public";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
-  import Input from "@roomy/design/components/ui/input/Input.svelte";
+  import LoginScreen from "@roomy/design/components/user/LoginScreen.svelte";
   import { auth, login, logout } from "$lib/auth.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
   import { schemas } from "@roomy-space/sdk";
@@ -8,11 +10,95 @@
   type Space = typeof schemas.queries.getSpaces.Space.infer;
 
   let handle = $state("");
+  let email = $state("");
+  let password = $state("");
+  let tab = $state<"Login" | "Register">("Login");
+  let loading = $state(false);
+  let error = $state<string | null>(null);
 
-  async function onLogin() {
+  function setHandle(v: string) {
+    handle = v.trim().replace("@", "").toLowerCase();
+  }
+
+  async function onLogin(evt: Event) {
+    evt.preventDefault();
     const h = handle.trim();
-    if (!h) return;
-    await login(h);
+    if (!h || loading) return;
+    loading = true;
+    error = null;
+    try {
+      localStorage.setItem("just-logged-in", "1");
+      await login(h);
+    } catch (err) {
+      localStorage.removeItem("just-logged-in");
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function xrpcFetch<T>(
+    xrpc: string,
+    opts?: { query?: Record<string, string>; body?: unknown },
+  ): Promise<T> {
+    if (!env.PUBLIC_PDS) throw new Error("No public PDS defined");
+    const url = new URL(env.PUBLIC_PDS);
+    url.pathname = `/xrpc/${xrpc}`;
+    if (opts?.query) {
+      for (const [key, value] of Object.entries(opts.query)) {
+        if (key && value) url.searchParams.set(key, value);
+      }
+    }
+    const resp = await fetch(url, {
+      headers: [["content-type", "application/json"]],
+      method: opts?.body ? "post" : "get",
+      body: opts?.body ? JSON.stringify(opts.body) : undefined,
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    return await resp.json();
+  }
+
+  async function onRegister(evt: Event) {
+    evt.preventDefault();
+    if (loading) return;
+    loading = true;
+    error = null;
+    try {
+      const suffix = env.PUBLIC_PDS_HANDLE_SUFFIX ?? "";
+      const fullHandle = `${handle}${suffix}`;
+      await xrpcFetch<{
+        accessJwt: string;
+        refreshJwt: string;
+        handle: string;
+        did: string;
+      }>("com.atproto.server.createAccount", {
+        body: {
+          email,
+          inviteCode: env.PUBLIC_PDS_INVITE_CODE,
+          handle: fullHandle,
+          password,
+        },
+      });
+      tab = "Login";
+      setHandle(fullHandle);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  type LastLogin = { handle: string; did: string; avatar: string };
+  let lastLogin = $state<LastLogin | undefined>(undefined);
+
+  onMount(() => {
+    const raw = localStorage.getItem("last-login");
+    lastLogin = raw ? JSON.parse(raw) : undefined;
+  });
+
+  function onLastLoginClick(evt: Event) {
+    setHandle(lastLogin?.handle ?? "");
+    onLogin(evt);
   }
 </script>
 
@@ -20,18 +106,21 @@
   {#if auth.initError}
     <pre class="m-4 p-3 rounded-2xl text-sm whitespace-pre-wrap bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300">{auth.initError}</pre>
   {:else if !auth.authenticated}
-    <div class="flex items-center justify-center min-h-screen">
-      <div class="w-full max-w-sm px-4">
-        <h1 class="text-2xl font-bold mb-1">Roomy</h1>
-        <p class="text-base-500 dark:text-base-400 mb-6 text-sm">Sign in with your ATProto handle</p>
-
-        <label for="handle" class="block mb-1 font-medium text-sm">ATProto handle</label>
-        <Input id="handle" placeholder="user.bsky.social" bind:value={handle} />
-
-        <Button class="mt-4 w-full" onclick={onLogin} disabled={!handle.trim()}>
-          Login
-        </Button>
-      </div>
+    <div class="flex items-center justify-center min-h-screen px-4">
+      <LoginScreen
+        class="w-full max-w-sm"
+        bind:handle={() => handle, (v: string) => setHandle(v)}
+        bind:email
+        bind:password
+        bind:tab
+        {loading}
+        {error}
+        {lastLogin}
+        handleSuffix={env.PUBLIC_PDS_HANDLE_SUFFIX ?? ""}
+        onLogin={onLogin}
+        onRegister={onRegister}
+        {onLastLoginClick}
+      />
     </div>
   {:else}
     {@render spaceList()}
