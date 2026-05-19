@@ -154,7 +154,7 @@
 
 ---
 
-### Task 7: MessageReactions wrapper (add-only)
+### ~~Task 7: MessageReactions wrapper (add-only)~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/MessageReactions.svelte`

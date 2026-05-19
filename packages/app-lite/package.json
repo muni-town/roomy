@@ -22,6 +22,7 @@
     "@tiptap/pm": "^2.26.1",
     "@tiptap/starter-kit": "^2.26.1",
     "@tiptap/suggestion": "^2.26.1",
+    "bits-ui": "^1.8.0",
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {
