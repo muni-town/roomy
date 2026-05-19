@@ -198,7 +198,7 @@ on each reaction in the DTO, fill the removal branch left open in Task 7.
 
 ---
 
-### Task 9: MessageToolbar + MobileMessageDrawer wrappers
+### ~~Task 9: MessageToolbar + MobileMessageDrawer wrappers~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/MessageToolbar.svelte`
