@@ -136,9 +136,9 @@ These components import from `$lib/workers`, `$lib/queries`, `$lib/mutations`, o
 | Utility | Location | Extract to | Status |
 |---------|----------|-----------|--------|
 | `cn()` (clsx + twMerge) | `$lib/utils.svelte.ts` | `@roomy/design/utils` (already there) | n/a |
-| `navigate()` / `NavigationTarget` | `$lib/utils.svelte.ts` | App-specific — keep in `app-lite` |
-| `markdown.ts` | `$lib/utils/markdown.ts` | Consider `@roomy/design/utils/markdown` if generally useful |
-| `reactions.ts` | `$lib/utils/reactions.ts` | Consider `@roomy/design/utils` if generally useful |
+| `navigate()` / `NavigationTarget` | `$lib/utils.svelte.ts` | App-specific — keep in `app-lite` | n/a |
+| `markdown.ts` | `$lib/utils/markdown.ts` | `@roomy/design/utils/markdown` | ✅ Moved. Exported from `@roomy/design/utils` barrel; 5 app call sites updated to import from `@roomy/design/utils`. Added `marked` + `dompurify` to design package deps. Note: imports use the barrel (`@roomy/design/utils`) rather than the subpath (`@roomy/design/utils/markdown`) because the `./utils/*` export maps to `./src/utils/*` without an extension, which TS can't resolve. |
+| `reactions.ts` | `$lib/utils/reactions.ts` | n/a | ✅ Deleted. Dead code — no call sites, imported removed `@roomy-chat/sdk` and `jazz-tools`. |
 
 ### Phase 0 execution order
 
@@ -650,7 +650,7 @@ Feature-specific wiring (query integration, mutation handlers) lives in `app-lit
   - `SpaceButton` → `SpaceCard`
   - `ChatInputArea` → `ChatInputShell`
   - `LoginForm` → `LoginScreen`
-- [ ] Extract utilities (`markdown`, `reactions`) to `@roomy/design/utils` if generally useful
+- [x] Extract utilities (`markdown`, `reactions`) to `@roomy/design/utils` if generally useful — `markdown` moved; `reactions` deleted as dead code
 
 **Verification:** `packages/app` still works. `@roomy/design` has ~40+ components.
 

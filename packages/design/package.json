@@ -31,6 +31,8 @@
     "bits-ui": "^1.8.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "dompurify": "^3.3.0",
+    "marked": "^15.0.12",
     "svelte-dnd-action": "^0.9.65",
     "svelte-boring-avatars": "^1.2.6",
     "svelte-tiptap": "^2.2.0",

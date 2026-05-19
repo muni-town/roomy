@@ -5,7 +5,7 @@
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
   import { goto } from "$app/navigation";
-  import { renderMarkdownSanitized } from "$lib/utils/markdown";
+  import { renderMarkdownSanitized } from "@roomy/design/utils";
 
   function resolveDiscordMentions(
     content: string,

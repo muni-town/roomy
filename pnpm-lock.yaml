@@ -457,6 +457,12 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
+      dompurify:
+        specifier: ^3.3.0
+        version: 3.3.3
+      marked:
+        specifier: ^15.0.12
+        version: 15.0.12
       svelte:
         specifier: '>=5'
         version: 5.53.0
