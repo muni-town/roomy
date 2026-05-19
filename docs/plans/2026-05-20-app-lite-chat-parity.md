@@ -28,7 +28,7 @@
 
 ## Phase 1 — Composer foundation
 
-### Task 1: Add TipTap deps + port the chat editor setup into app-lite
+### ~~Task 1: Add TipTap deps + port the chat editor setup into app-lite~~ ✅
 
 **Files:**
 - Modify: `packages/app-lite/package.json` (dependencies)
@@ -48,7 +48,7 @@
 
 ---
 
-### Task 2: ChatInput composer component
+### ~~Task 2: ChatInput composer component~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/ChatInput.svelte`
@@ -68,7 +68,7 @@
 
 ---
 
-### Task 3: Messaging-state machine
+### ~~Task 3: Messaging-state machine~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/messaging-state.svelte.ts`

@@ -39,6 +39,7 @@ const NSID_GET_ROOM_THREADS = "space.roomy.room.getThreads";
 const NSID_GET_MESSAGES = "space.roomy.room.getMessages";
 const NSID_GET_MESSAGE = "space.roomy.message.getMessage";
 const NSID_UPDATE_SEEN = "space.roomy.room.updateSeen";
+const NSID_SEND_EVENTS = "space.roomy.space.sendEvents";
 
 // ── Lexicon definitions (for atproto agent proxy) ─────────────────────────
 
@@ -173,6 +174,26 @@ const LEXICONS = [
           properties: { messageId: { type: "string" as const } },
         },
         output: { encoding: "application/json", schema: { type: "object" as const } },
+      },
+    },
+  },
+  {
+    lexicon: 1,
+    id: NSID_SEND_EVENTS,
+    defs: {
+      main: {
+        type: "procedure" as const,
+        input: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["spaceId", "events"],
+            properties: {
+              spaceId: { type: "string" as const },
+              events: { type: "array" as const },
+            },
+          },
+        },
       },
     },
   },

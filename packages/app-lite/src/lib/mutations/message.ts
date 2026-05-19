@@ -32,3 +32,43 @@ export async function sendMessage(
   await sendEvents(spaceId, [event]);
   return id;
 }
+
+export async function editMessage(
+  spaceId: string,
+  roomId: string,
+  messageId: string,
+  body: string,
+  opts: { mimeType?: string } = {},
+): Promise<string> {
+  const id = newUlid();
+  const event: Record<string, unknown> = {
+    id,
+    room: roomId,
+    $type: "space.roomy.message.editMessage.v0",
+    messageId,
+    body: {
+      mimeType: opts.mimeType ?? "text/markdown",
+      data: toBytes(new TextEncoder().encode(body)),
+    },
+  };
+
+  await sendEvents(spaceId, [event]);
+  return id;
+}
+
+export async function deleteMessage(
+  spaceId: string,
+  roomId: string,
+  messageId: string,
+): Promise<string> {
+  const id = newUlid();
+  const event: Record<string, unknown> = {
+    id,
+    room: roomId,
+    $type: "space.roomy.message.deleteMessage.v0",
+    messageId,
+  };
+
+  await sendEvents(spaceId, [event]);
+  return id;
+}
