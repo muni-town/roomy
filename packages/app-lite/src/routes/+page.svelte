@@ -20,6 +20,17 @@
     handle = v.trim().replace("@", "").toLowerCase();
   }
 
+  function friendlyAuthError(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (/Failed to resolve OAuth server metadata/i.test(raw)) {
+      return "Couldn't reach your PDS to start login. It may be rate-limiting this device (HTTP 429) or temporarily unavailable. Wait a few minutes, or check https://status.bsky.app, then try again.";
+    }
+    if (/\b429\b|Too Many Requests|RateLimit/i.test(raw)) {
+      return "Your PDS is rate-limiting login attempts (HTTP 429). Wait a few minutes before trying again.";
+    }
+    return raw;
+  }
+
   async function onLogin(evt: Event) {
     evt.preventDefault();
     const h = handle.trim();
@@ -31,7 +42,7 @@
       await login(h);
     } catch (err) {
       localStorage.removeItem("just-logged-in");
-      error = err instanceof Error ? err.message : String(err);
+      error = friendlyAuthError(err);
     } finally {
       loading = false;
     }
@@ -82,7 +93,7 @@
       tab = "Login";
       setHandle(fullHandle);
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = friendlyAuthError(e);
     } finally {
       loading = false;
     }
@@ -104,7 +115,7 @@
 
 <div class="min-h-screen bg-base-50 dark:bg-base-950 text-base-800 dark:text-base-200">
   {#if auth.initError}
-    <pre class="m-4 p-3 rounded-2xl text-sm whitespace-pre-wrap bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300">{auth.initError}</pre>
+    <pre class="m-4 p-3 rounded-2xl text-sm whitespace-pre-wrap bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300">{friendlyAuthError(auth.initError)}</pre>
   {:else if !auth.authenticated}
     <div class="flex items-center justify-center min-h-screen px-4">
       <LoginScreen
