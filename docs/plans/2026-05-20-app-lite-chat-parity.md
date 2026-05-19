@@ -313,7 +313,7 @@ on each reaction in the DTO, fill the removal branch left open in Task 7.
 
 ---
 
-### Task 14: Wire the room page
+### ~~Task 14: Wire the room page~~ ✅
 
 **Files:**
 - Modify: `packages/app-lite/src/routes/[space]/[room]/+page.svelte`
@@ -341,7 +341,7 @@ on each reaction in the DTO, fill the removal branch left open in Task 7.
 
 ## Phase 4 — Verify
 
-### Task 15: Full verification + parity review
+### ~~Task 15: Full verification + parity review~~ ✅
 
 **Steps:**
 
