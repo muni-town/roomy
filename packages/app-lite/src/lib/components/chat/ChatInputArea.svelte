@@ -12,6 +12,7 @@
   import { sendMessage as sendMessageMutation } from "$lib/mutations/message";
   import { uploadFile } from "$lib/mutations/upload";
   import { sendEvents } from "$lib/mutations/send-events";
+  import { createThread } from "$lib/mutations/thread";
   import MessageContext from "./MessageContext.svelte";
 
   type Props = {
@@ -190,9 +191,28 @@
     }
   }
 
-  // Thread creation is handled in Task 13 — placeholder for now
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
+
+  // Thread creation
   async function handleCreateThread() {
-    // Will be implemented in Task 13
+    const state = messagingState.current;
+    if (state.kind !== "threading") return;
+
+    const name = state.name;
+    const selectedIds = state.selectedMessages.map((m) => m.id);
+
+    const threadId = await createThread({
+      spaceId,
+      parentRoomId: roomId,
+      threadName: name,
+      messageIds: selectedIds,
+    });
+
+    messagingState.set({ kind: "normal", input: "", files: [] });
+    clearInput();
+
+    goto(`/${page.params.space}/${threadId}?parent=${roomId}`);
   }
 </script>
 

@@ -267,7 +267,7 @@ on each reaction in the DTO, fill the removal branch left open in Task 7.
 
 ## Phase 3 — List & threading
 
-### Task 12: ChatArea — virtualized list + lazy load
+### ~~Task 12: ChatArea — virtualized list + lazy load~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/ChatArea.svelte`
