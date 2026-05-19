@@ -1,6 +1,6 @@
 <script lang="ts">
   import "../app.css";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "$lib/client";
   import { auth, init } from "$lib/auth.svelte";
@@ -14,8 +14,8 @@
 
   $effect(() => {
     if (auth.authenticated) {
-      startSync();
-      return () => stopSync();
+      untrack(() => startSync());
+      return () => untrack(() => stopSync());
     }
   });
 
