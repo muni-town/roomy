@@ -61,3 +61,29 @@ export function requireRoomRead(
   }
   return access;
 }
+
+/**
+ * Caller must have write access to the room. 404 if the room doesn't exist,
+ * 403 if banned or no write permission. Returns the full access decision.
+ */
+export function requireRoomWrite(
+  db: Database,
+  roomId: string,
+  did: string,
+): RoomAccess {
+  const access = roomAccess(db, roomId, did);
+  if (!access.exists) {
+    throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
+  }
+  if (access.isBanned) {
+    throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
+  }
+  if (!access.canWrite) {
+    throw new XrpcError(
+      403,
+      "Forbidden",
+      "Caller does not have write access to this room",
+    );
+  }
+  return access;
+}

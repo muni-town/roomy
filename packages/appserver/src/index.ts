@@ -18,6 +18,7 @@ import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts
 import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
 import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
 import { updateSeenHandler } from "./handlers/space.roomy.room.updateSeen.ts";
+import { sendEventsHandler } from "./handlers/space.roomy.space.sendEvents.ts";
 import { schemas } from "@roomy-space/sdk";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -66,6 +67,11 @@ const router = new XrpcRouter(prodAuthVerifier)
   .procedure("space.roomy.room.updateSeen", {
     handler: updateSeenHandler,
     inputSchema: schemas.procedures.updateSeen.Input,
+    // No outputSchema: void return; short-circuits to 200 with empty body.
+  })
+  .procedure("space.roomy.space.sendEvents", {
+    handler: sendEventsHandler,
+    inputSchema: schemas.procedures.sendEvents.Input,
     // No outputSchema: void return; short-circuits to 200 with empty body.
   })
   // Admin routes (connectSpace, materializeSpace) intentionally have no

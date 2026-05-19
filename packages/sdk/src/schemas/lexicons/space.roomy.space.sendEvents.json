@@ -1,0 +1,35 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.sendEvents",
+  "defs": {
+    "events": {
+      "type": "object",
+      "properties": {}
+    },
+    "main": {
+      "type": "procedure",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "events",
+            "spaceId"
+          ],
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#events"
+              }
+            },
+            "spaceId": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

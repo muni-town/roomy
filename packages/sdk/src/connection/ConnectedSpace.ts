@@ -498,19 +498,20 @@ export class ConnectedSpace {
   /**
    * Send an event to this space.
    */
-  async sendEvent(event: Event): Promise<void> {
-    await this.#leaf.sendEvent(this.streamDid, encode(event));
+  async sendEvent(event: Event, userOverride?: string): Promise<void> {
+    await (this.#leaf as any).sendEvent(this.streamDid, encode(event), userOverride);
   }
 
   /**
    * Send multiple events to this space in a single batch.
    * More efficient than calling sendEvent multiple times.
    */
-  async sendEvents(events: Event[]): Promise<void> {
+  async sendEvents(events: Event[], userOverride?: string): Promise<void> {
     if (events.length === 0) return;
-    await this.#leaf.sendEvents(
+    await (this.#leaf as any).sendEvents(
       this.streamDid,
       events.map((event) => encode(event)),
+      userOverride,
     );
   }
 
@@ -518,8 +519,8 @@ export class ConnectedSpace {
    * Send a state event to this space.
    * State events are not persisted to the stream — they only update the state database.
    */
-  async sendStateEvent(event: Event): Promise<void> {
-    await this.#leaf.sendStateEvents(this.streamDid, [encode(event)]);
+  async sendStateEvent(event: Event, userOverride?: string): Promise<void> {
+    await (this.#leaf as any).sendStateEvents(this.streamDid, [encode(event)], userOverride);
   }
 
   /**
