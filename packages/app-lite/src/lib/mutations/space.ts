@@ -13,3 +13,12 @@ export async function joinSpace(
     },
   ]);
 }
+
+export async function leaveSpace(spaceId: string): Promise<void> {
+  await sendEvents(spaceId, [
+    {
+      id: newUlid(),
+      $type: "space.roomy.space.leaveSpace.v0",
+    },
+  ]);
+}

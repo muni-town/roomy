@@ -4,7 +4,9 @@
   import type { Topic } from "@roomy-space/sdk/svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
+  import { IconHashtag } from "@roomy/design/icons";
   import { sync_ } from "$lib/sync.svelte";
+  import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
   import { createMessagesQuery, type Message } from "$lib/queries/messages";
   import { createMessageQuery } from "$lib/queries/message";
@@ -29,6 +31,11 @@
     return () => {
       if (sync_.activeRoomId === roomId) sync_.setActiveRoom(null);
     };
+  });
+
+  $effect(() => {
+    setNavbar(roomNavbar);
+    return () => setNavbar(undefined);
   });
 
   const roomQuery = createRoomMetadataQuery(() => roomId);
@@ -57,27 +64,21 @@
   }
 </script>
 
-<div class="h-full flex flex-col">
-  <!-- Room header -->
-  {#if roomQuery.isPending}
-    <div class="px-4 py-2 border-b border-base-200 dark:border-base-800 text-sm text-base-400">Loading room…</div>
-  {:else if roomQuery.isError}
-    <div class="px-4 py-2 border-b border-base-200 dark:border-base-800 text-sm text-red-600">{roomQuery.error.message}</div>
-  {:else if roomQuery.data}
-    {@const room = roomQuery.data}
-    <header class="px-4 py-2 border-b border-base-200 dark:border-base-800 bg-white dark:bg-base-900 flex items-center justify-between shrink-0">
-      <div>
-        <h2 class="font-semibold">{room.name}</h2>
-        <span class="text-xs text-base-400">{room.kind} · {room.canWrite ? "can write" : "read only"}</span>
-      </div>
-      {#if room.unreadCount > 0}
-        <span class="text-xs bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400 px-2 py-0.5 rounded-full">
-          {room.unreadCount} unread
-        </span>
-      {/if}
-    </header>
-  {/if}
+{#snippet roomNavbar()}
+  <div class="flex items-center gap-2 px-2 min-w-0 grow">
+    <IconHashtag class="size-5 shrink-0 text-base-500" />
+    <h2 class="font-semibold truncate text-base-900 dark:text-base-100">
+      {roomQuery.data?.name ?? "Channel"}
+    </h2>
+    {#if roomQuery.data && roomQuery.data.unreadCount > 0}
+      <span class="text-xs bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400 px-2 py-0.5 rounded-full">
+        {roomQuery.data.unreadCount} unread
+      </span>
+    {/if}
+  </div>
+{/snippet}
 
+<div class="h-full flex flex-col bg-white dark:bg-base-950">
   <!-- Messages -->
   <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2">
     {#if messagesQuery.isPending}

@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { env } from "$env/dynamic/public";
-  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import LoginScreen from "@roomy/design/components/user/LoginScreen.svelte";
-  import { auth, login, logout } from "$lib/auth.svelte";
+  import MainLayout from "$lib/components/layout/MainLayout.svelte";
+  import ThinSidebar from "$lib/components/sidebar/ThinSidebar.svelte";
+  import { setNavbar } from "$lib/components/layout/navbar.svelte";
+  import { auth, login } from "$lib/auth.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
   import { schemas } from "@roomy-space/sdk";
 
@@ -111,9 +113,16 @@
     setHandle(lastLogin?.handle ?? "");
     onLogin(evt);
   }
+
+  $effect(() => {
+    if (auth.authenticated) {
+      setNavbar(homeNavbar);
+      return () => setNavbar(undefined);
+    }
+  });
 </script>
 
-<div class="min-h-screen bg-base-50 dark:bg-base-950 text-base-800 dark:text-base-200">
+<div class="h-full overflow-y-auto bg-base-50 dark:bg-base-950 text-base-800 dark:text-base-200">
   {#if auth.initError}
     <pre class="m-4 p-3 rounded-2xl text-sm whitespace-pre-wrap bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300">{friendlyAuthError(auth.initError)}</pre>
   {:else if !auth.authenticated}
@@ -134,40 +143,45 @@
       />
     </div>
   {:else}
-    {@render spaceList()}
+    <MainLayout>
+      {#snippet serverBar()}
+        <ThinSidebar />
+      {/snippet}
+      {@render spaceList()}
+    </MainLayout>
   {/if}
 </div>
+
+{#snippet homeNavbar()}
+  <div class="flex-1 text-center font-bold text-lg text-base-900 dark:text-base-100">
+    Spaces
+  </div>
+{/snippet}
 
 {#snippet spaceList()}
   {@const spacesQuery = createSpacesQuery()}
 
-  <header class="flex items-center justify-between px-4 py-2 border-b border-base-200 dark:border-base-800 bg-white dark:bg-base-900">
-    <div class="flex items-center gap-3">
-      <span class="font-bold text-lg">Roomy</span>
-      <span class="text-sm text-base-500 dark:text-base-400">{auth.agent?.did}</span>
-    </div>
-    <Button variant="ghost" size="sm" onclick={logout}>Logout</Button>
-  </header>
+  <main class="h-full overflow-y-auto">
+    <div class="max-w-2xl mx-auto px-4 py-6">
+      <h2 class="text-lg font-semibold mb-3">Your spaces</h2>
 
-  <main class="max-w-2xl mx-auto px-4 py-6">
-    <h2 class="text-lg font-semibold mb-3">Your spaces</h2>
-
-    {#if spacesQuery.isPending}
-      <p class="text-sm text-base-400">Loading spaces…</p>
-    {:else if spacesQuery.isError}
-      <p class="text-sm text-red-600">Error: {spacesQuery.error.message}</p>
-    {:else if spacesQuery.data}
-      {@const spaces = spacesQuery.data.spaces}
-      {#if spaces.length === 0}
-        <p class="text-sm text-base-400">No spaces found.</p>
-      {:else}
-        <ul class="space-y-2">
-          {#each spaces as space (space.id)}
-            {@render spaceItem(space)}
-          {/each}
-        </ul>
+      {#if spacesQuery.isPending}
+        <p class="text-sm text-base-400">Loading spaces…</p>
+      {:else if spacesQuery.isError}
+        <p class="text-sm text-red-600">Error: {spacesQuery.error.message}</p>
+      {:else if spacesQuery.data}
+        {@const spaces = spacesQuery.data.spaces}
+        {#if spaces.length === 0}
+          <p class="text-sm text-base-400">No spaces found.</p>
+        {:else}
+          <ul class="space-y-2">
+            {#each spaces as space (space.id)}
+              {@render spaceItem(space)}
+            {/each}
+          </ul>
+        {/if}
       {/if}
-    {/if}
+    </div>
   </main>
 {/snippet}
 

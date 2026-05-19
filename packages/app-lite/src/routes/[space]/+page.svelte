@@ -1,9 +1,15 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { createSpaceThreadsQuery, type SpaceThread } from "$lib/queries/threads";
 
   const spaceId = $derived(page.params.space!);
   const threadsQuery = createSpaceThreadsQuery(() => spaceId);
+
+  $effect(() => {
+    setNavbar(indexNavbar);
+    return () => setNavbar(undefined);
+  });
 
   function formatTime(iso: string | null) {
     if (!iso) return "";
@@ -18,9 +24,13 @@
   }
 </script>
 
-<div class="h-full overflow-y-auto px-6 py-6">
-  <h2 class="text-xl font-semibold mb-4">Threads</h2>
+{#snippet indexNavbar()}
+  <div class="flex-1 text-center font-bold text-lg text-base-900 dark:text-base-100">
+    Index
+  </div>
+{/snippet}
 
+<div class="h-full overflow-y-auto px-6 py-6">
   {#if threadsQuery.isPending}
     <p class="text-sm text-base-400">Loading threads…</p>
   {:else if threadsQuery.isError}

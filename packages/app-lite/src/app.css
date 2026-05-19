@@ -60,8 +60,15 @@
     --base-950: var(--color-stone-950);
   }
 
+  html {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     @apply font-sans tracking-normal;
+    height: 100%;
+    overflow: hidden;
   }
 
   h1,
