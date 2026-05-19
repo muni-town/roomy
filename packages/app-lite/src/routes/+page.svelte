@@ -72,7 +72,11 @@
 {/snippet}
 
 {#snippet spaceItem(space: Space)}
-  <li class="p-3 rounded-2xl border border-base-200 dark:border-base-800 bg-white dark:bg-base-900">
+  <li>
+    <a
+      href={`/${space.id}`}
+      class="block p-3 rounded-2xl border border-base-200 dark:border-base-800 bg-white dark:bg-base-900 hover:border-base-300 dark:hover:border-base-700"
+    >
     <div class="flex items-center justify-between">
       <span class="font-medium text-sm truncate">{space.name || space.id.slice(0, 12) + "…"}</span>
       {#if space.unreadCount > 0}
@@ -89,5 +93,6 @@
         <span class="text-[10px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">admin</span>
       {/if}
     </div>
+    </a>
   </li>
 {/snippet}

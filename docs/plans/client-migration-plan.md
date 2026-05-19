@@ -676,13 +676,14 @@ Feature-specific wiring (query integration, mutation handlers) lives in `app-lit
 
 **Goal:** Open a space, see the sidebar with channels, real-time updates.
 
-- [ ] `src/lib/sync.svelte.ts` — SyncConnection + SyncRouter + TopicManager
-- [ ] `src/lib/queries/space-metadata.ts` — `createSpaceMetadataQuery(spaceId)`
-- [ ] `[space]/+layout.svelte` — sidebar layout with channel list
-- [ ] Topic subscription for active space
-- [ ] Sidebar renders categories + channels with unread badges
+- [x] `src/lib/sync.svelte.ts` — SyncConnection + SyncRouter + TopicManager with `startSync`/`stopSync` singleton wrapper
+- [x] `src/lib/queries/space-metadata.ts` — `createSpaceMetadataQuery(spaceId)` (reactive `spaceId` getter)
+- [x] `[space]/+layout.svelte` — sidebar layout with channel list (links to `/[space]/[channel]`)
+- [x] Topic subscription for active space (via `useTopicSubscription` rune)
+- [x] Sidebar renders categories + channels with unread badges + orphans
+- [x] Root `+layout.svelte` auto-connects sync via `$effect` when authenticated
 
-**Verification:** Open a space, see sidebar with channels, real-time sidebar updates via WS.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Runtime WS sync verification deferred to manual test against running appserver.
 
 ### Phase 3: Room view + messages
 
