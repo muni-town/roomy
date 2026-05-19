@@ -89,7 +89,7 @@
 
 ---
 
-### Task 4: Message edit/delete mutations
+### ~~Task 4: Message edit/delete mutations~~ ✅
 
 **Files:**
 - Modify: `packages/app-lite/src/lib/mutations/message.ts`
