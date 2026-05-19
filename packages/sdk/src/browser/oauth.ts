@@ -19,7 +19,7 @@ import type { OAuthSession } from "@atproto/oauth-client-browser";
 
 // ── Config ────────────────────────────────────────────────────────────────
 
-const HANDLE_RESOLVER = "https://resolver.roomy.chat";
+const HANDLE_RESOLVER = "https://bsky.social";
 
 export const DEFAULT_APPSERVER_DID = "did:web:appserver.roomy.chat";
 
