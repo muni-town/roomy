@@ -133,7 +133,7 @@
 
 ## Phase 2 — Message rendering
 
-### Task 6: MessageContext + reply preview
+### ~~Task 6: MessageContext + reply preview~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/MessageContext.svelte`
