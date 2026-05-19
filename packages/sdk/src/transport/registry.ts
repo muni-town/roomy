@@ -64,6 +64,10 @@ export const PROCEDURE_SCHEMAS = {
     input: procedures.updateSeen.Input,
     output: procedures.updateSeen.Output,
   },
+  "space.roomy.space.sendEvents": {
+    input: procedures.sendEvents.Input,
+    output: procedures.sendEvents.Output,
+  },
 } as const;
 
 export type QueryNsid = keyof typeof QUERY_SCHEMAS;

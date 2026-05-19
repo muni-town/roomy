@@ -689,17 +689,18 @@ Feature-specific wiring (query integration, mutation handlers) lives in `app-lit
 
 **Goal:** Open a room, see messages, send messages, real-time updates.
 
-- [ ] `src/lib/queries/room-metadata.ts` — `createRoomMetadataQuery(roomId)`
-- [ ] `src/lib/queries/messages.ts` — `createMessagesQuery(roomId)` + diff application
-- [ ] `src/lib/mutations/send-events.ts` — sendEvents batch wrapper
-- [ ] `src/lib/mutations/update-seen.ts` — updateSeen with room-open + on-diff triggers
-- [ ] `src/lib/mutations/message.ts` — sendMessage
-- [ ] `[space]/[room]/+page.svelte` — room header + message list + chat input
-- [ ] Topic subscription for active room
-- [ ] `updateSeen` on room open + on each `#messageDiff` while viewing
-- [ ] Message diff application (add/update/remove via `setQueryData`)
+- [x] `src/lib/queries/room-metadata.ts` — `createRoomMetadataQuery(roomId)` (reactive getter)
+- [x] `src/lib/queries/messages.ts` — `createMessagesQuery(roomId)` keyed by `{ roomId }` only to match SyncRouter's diff patch key
+- [x] `src/lib/mutations/send-events.ts` — sendEvents batch wrapper
+- [x] `src/lib/mutations/update-seen.ts` — `updateSeen(roomId, seenUpTo?)`
+- [x] `src/lib/mutations/message.ts` — `sendMessage(spaceId, roomId, body)` builds `space.roomy.message.createMessage.v0` event with `{mimeType, data: toBytes(...)}` body
+- [x] `[space]/[room]/+page.svelte` — room header + virtualised-style message list + chat input
+- [x] Topic subscription for active room via `useTopicSubscription`
+- [x] `updateSeen` on room open + on `#messageDiff` for active room (via `sync_.setActiveRoom`)
+- [x] Message diff application: handled automatically by SDK `SyncRouter` + `createTanstackCacheAdapter` (no per-route wiring needed)
+- [x] SDK: registered `space.roomy.space.sendEvents` in `PROCEDURE_SCHEMAS` transport registry (was missing) + rebuilt SDK dist
 
-**Verification:** Open a room, see messages, send a message, see it appear via WS, unread badge clears.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Runtime room-view verification deferred to manual test against running appserver.
 
 ### Phase 4: Threads + message details
 

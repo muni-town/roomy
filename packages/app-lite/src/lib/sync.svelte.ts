@@ -107,22 +107,33 @@ export function createSyncContext(deps: {
 // ── Singleton wiring ──────────────────────────────────────────────────────
 
 let ctx = $state<SyncContext | null>(null);
+let activeRoomId = $state<string | null>(null);
 
 export const sync_ = {
   get ctx() {
     return ctx;
   },
+  get activeRoomId() {
+    return activeRoomId;
+  },
+  setActiveRoom(roomId: string | null) {
+    activeRoomId = roomId;
+  },
 };
 
-export function startSync(opts: {
-  onLog?: (msg: string) => void;
-  onMessageDiff?: (roomId: string, seq: number) => void;
-} = {}) {
+export function startSync(opts: { onLog?: (msg: string) => void } = {}) {
   if (ctx) return ctx;
   ctx = createSyncContext({
     queryClient,
     appserverDid: CONFIG.appserverDid,
-    ...opts,
+    onLog: opts.onLog,
+    onMessageDiff: (roomId) => {
+      if (roomId === activeRoomId) {
+        import("./mutations/update-seen").then(({ updateSeen }) => {
+          updateSeen(roomId).catch(() => {});
+        });
+      }
+    },
   });
   ctx.connect().catch((err) => {
     opts.onLog?.(`Sync connect failed: ${err?.message ?? err}`);
