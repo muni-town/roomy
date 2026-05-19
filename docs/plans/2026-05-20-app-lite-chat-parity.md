@@ -239,7 +239,7 @@ on each reaction in the DTO, fill the removal branch left open in Task 7.
 
 ---
 
-### Task 11: ChatMessage wrapper
+### ~~Task 11: ChatMessage wrapper~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/ChatMessage.svelte`

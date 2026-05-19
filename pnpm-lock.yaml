@@ -414,6 +414,9 @@ importers:
       tiptap-markdown:
         specifier: ^0.8.10
         version: 0.8.10(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))
+      virtua:
+        specifier: ^0.43.2
+        version: 0.43.2(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)
     devDependencies:
       '@iconify-json/heroicons':
         specifier: ^1.2.3
