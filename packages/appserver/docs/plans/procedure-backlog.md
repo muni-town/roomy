@@ -154,9 +154,48 @@ an already-existing space, and the client has all the context. Keep them in
   mention `sendEvents`, which was added later. Refresh the endpoint summary
   when the procedures above land.
 
+### Message DTO: surface viewer reaction identity
+
+**Problem.** The `Message` DTO returned by `space.roomy.room.getMessages` /
+`space.roomy.message.getMessage` (and carried by the `#messageDiff` WS frame)
+collapses reactions to `{ emoji, dids[] }`. It carries **no reaction event id**.
+`space.roomy.reaction.removeReaction.v0` requires a `reactionId` (the ULID of
+the original `addReaction` event), so a client cannot remove the viewing user's
+own reaction from DTO data alone.
+
+This surfaced in `app-lite` chat parity work (see
+`../../../../docs/plans/2026-05-20-app-lite-chat-parity.md`, Task 7/8):
+adding a reaction works; toggling one off does not.
+
+**Context.** `src/queries/selectMessages.ts` already batch-reads `comp_reaction`
+rows (`entity, reaction, user`). `comp_reaction` also has a `reaction_id`
+column (the app's legacy live query selects it). The requesting DID is known to
+the handler. So the fix is a small, additive DTO change — no new table reads
+beyond one extra column.
+
+**Proposed shape.**
+
+- Extend the reaction batch query in `selectMessages.ts` to also select
+  `reaction_id`.
+- Thread the requesting DID into `selectMessages` (the handler has it).
+- Change the DTO reaction from `{ emoji, dids[] }` to
+  `{ emoji, dids[], myReactionId: string | null }`, where `myReactionId` is the
+  `reaction_id` of the reaction authored by the requesting DID for that emoji,
+  or `null` if the viewer has not reacted with it.
+- Mirror the change in the SDK arktype schema
+  (`packages/sdk/src/schemas/queries/_message.ts`, the `Reaction` type) and
+  rebuild the SDK dist. Because `#messageDiff` reuses the same `Message`
+  schema, real-time reaction updates pick up `myReactionId` for free.
+
+**Open point.** `myReactionId` is viewer-scoped, so message DTOs are no longer
+identical across users — confirm nothing caches `getMessages` responses across
+DIDs.
+
 ---
 
 ## Changelog
 
 - 2026-05-20 — Initial draft. Candidates: `createSpace`, `joinSpace`,
   `leaveSpace`.
+- 2026-05-20 — Added "Message DTO: surface viewer reaction identity" to related
+  open items (from `app-lite` chat parity work).
