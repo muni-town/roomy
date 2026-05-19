@@ -53,6 +53,6 @@ export { default as IconBars } from "~icons/heroicons/bars-4"
 export { default as IconSquaresPlus } from "~icons/heroicons/squares-plus"
 
 // Special
-export { default as IconSqlQuery } from "~icons/mdi/sql-query"
+export { default as IconDatabase } from "~icons/mdi/database"
 export { default as IconThread } from "~icons/custom/thread"
 export { default as IconReplyLine } from "~icons/custom/reply-line"

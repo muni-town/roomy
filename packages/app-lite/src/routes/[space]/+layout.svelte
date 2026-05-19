@@ -33,8 +33,9 @@
 {#snippet sidebar()}
   {@const metaQuery = createSpaceMetadataQuery(() => spaceId)}
   <aside class="w-64 shrink-0 border-r border-base-200 dark:border-base-800 bg-white dark:bg-base-900 flex flex-col">
-    <div class="px-3 py-2 border-b border-base-200 dark:border-base-800 flex items-center gap-2">
+    <div class="px-3 py-2 border-b border-base-200 dark:border-base-800 flex items-center justify-between gap-2">
       <a href="/" class="text-xs text-base-500 hover:text-base-700 dark:hover:text-base-300">← Spaces</a>
+      <a href={`/${spaceId}/settings`} class="text-xs text-base-500 hover:text-base-700 dark:hover:text-base-300">Settings</a>
     </div>
 
     {#if metaQuery.isPending}

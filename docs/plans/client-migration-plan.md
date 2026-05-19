@@ -718,20 +718,21 @@ Feature-specific wiring (query integration, mutation handlers) lives in `app-lit
 
 **Goal:** Space settings pages + calendar view — full feature parity (pages excluded).
 
-- [ ] `src/lib/queries/roles.ts` / `members.ts` / `invites.ts`
-- [ ] `src/lib/queries/calendar.ts` — calendar link + events queries
-- [ ] `src/lib/mutations/room.ts` — create/update/delete room via sendEvents
-- [ ] `src/lib/mutations/reaction.ts` — add/remove reaction
-- [ ] `src/lib/mutations/space.ts` — join space
-- [ ] `src/lib/mutations/invite.ts` — create/revoke invite
-- [ ] Settings pages: general, roles, members, invites
-- [ ] Calendar events page
-- [ ] EditRoomModal
-- [ ] RoleModal / CreateRoleModal
-- [ ] InviteModal
-- [ ] JoinSpaceModal
+- [x] `src/lib/queries/roles.ts` / `members.ts` / `invites.ts`
+- [~] `src/lib/queries/calendar.ts` — **blocked** by open question #1 (calendar XRPC endpoints not yet implemented on appserver). Will land when handlers + lexicons exist.
+- [x] `src/lib/mutations/room.ts` — `createRoom` / `updateRoom` / `deleteRoom` via sendEvents
+- [x] `src/lib/mutations/reaction.ts` — `addReaction` / `removeReaction`
+- [x] `src/lib/mutations/space.ts` — `joinSpace`
+- [x] `src/lib/mutations/invite.ts` — `createInvite` (client-generated random token) / `revokeInvite`
+- [x] `src/lib/mutations/role.ts` — `createRole` / `updateRole` / `deleteRole`
+- [x] Settings pages: `[space]/settings/{+page,roles,members,invites}` with tabbed layout
+- [~] Calendar events page — blocked alongside calendar query.
+- [~] EditRoomModal wired in app-lite — deferred; settings only shows general read-only view. RoomEditForm shell is available in design package for future wiring.
+- [x] RoleModal / CreateRoleModal — wired in roles settings page using design-package shells
+- [x] InviteModal — wired in invites settings page using `InviteManager` shell
+- [x] JoinSpaceModal — new `/join?space={did}&invite={token}` route using `JoinDialog` shell; auto-redirects existing members to space page
 
-**Verification:** Full feature parity with `packages/app` (minus page editing). Calendar integration displays events.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Calendar parity blocked on appserver work; UI parity for settings/invites/roles complete.
 
 ### Phase 6: Polish + deployment
 
