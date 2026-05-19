@@ -658,18 +658,19 @@ Feature-specific wiring (query integration, mutation handlers) lives in `app-lit
 
 **Goal:** Login, show spaces, open a space sidebar.
 
-- [ ] Create `packages/app-lite/` with SvelteKit + Tailwind + `@tanstack/svelte-query`
-- [ ] Add to `pnpm-workspace.yaml`
-- [ ] Copy `vite.config.ts` / `svelte.config.js` / `app.css` from playground (port 5180)
-- [ ] `src/lib/config.ts` — env vars, appserver DID
-- [ ] `src/lib/auth.svelte.ts` — init/login/logout via SDK
-- [ ] `src/lib/client.ts` — QueryClient singleton
-- [ ] `src/routes/+layout.svelte` — QueryClientProvider + auth gate
-- [ ] `src/routes/+page.svelte` — Login screen → space list
-- [ ] `src/lib/queries/spaces.ts` — `createSpacesQuery()`
-- [ ] Space list component showing joined spaces
+- [x] Create `packages/app-lite/` with SvelteKit + Tailwind + `@tanstack/svelte-query`
+- [x] Add to `pnpm-workspace.yaml`
+- [x] Copy `vite.config.ts` / `svelte.config.js` / `app.css` from playground (port 5180)
+- [x] `src/lib/config.ts` — env vars, appserver DID, `OAUTH_SCOPE` (explicit `rpc:` scopes)
+- [x] `src/lib/auth.svelte.ts` — init/login/logout via SDK
+- [x] `src/lib/client.ts` — QueryClient singleton
+- [x] `src/routes/+layout.svelte` — QueryClientProvider + `init()` on mount
+- [x] `src/routes/+page.svelte` — Login screen → space list (auth gate inline)
+- [x] `src/lib/queries/spaces.ts` — `createSpacesQuery()`
+- [x] Space list component showing joined spaces
+- [x] SDK: added `scope` option to `CreateOAuthClientOptions` + `InitSessionOptions` (defaults to `atproto transition:generic` for existing callers)
 
-**Verification:** Can log in, see list of spaces.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Runtime login/space-list verification deferred to manual test against a running appserver.
 
 ### Phase 2: Sync + space sidebar
 
