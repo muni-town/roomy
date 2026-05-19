@@ -108,7 +108,7 @@
 
 ---
 
-### Task 5: ChatInputArea wrapper
+### ~~Task 5: ChatInputArea wrapper~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/ChatInputArea.svelte`

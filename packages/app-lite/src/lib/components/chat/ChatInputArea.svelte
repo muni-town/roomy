@@ -12,6 +12,7 @@
   import { sendMessage as sendMessageMutation } from "$lib/mutations/message";
   import { uploadFile } from "$lib/mutations/upload";
   import { sendEvents } from "$lib/mutations/send-events";
+  import MessageContext from "./MessageContext.svelte";
 
   type Props = {
     spaceId: string;
@@ -217,7 +218,11 @@
   bindFileInput={(el) => (fileInput = el)}
 >
   {#snippet contextPreview()}
-    <!-- Task 6 will wire MessageContext here -->
+    {#if messagingState.current.kind === "replying"}
+      <MessageContext context={{ kind: "replying", replyTo: { id: messagingState.current.replyTo.id } }} roomId={roomId} />
+    {:else if messagingState.current.kind === "threading"}
+      <MessageContext context={{ kind: "threading", selectedMessages: messagingState.current.selectedMessages }} roomId={roomId} />
+    {/if}
   {/snippet}
   {#snippet input()}
     {#if messagingState.current.kind !== "threading"}
