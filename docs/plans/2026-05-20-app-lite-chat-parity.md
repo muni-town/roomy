@@ -218,7 +218,7 @@ on each reaction in the DTO, fill the removal branch left open in Task 7.
 
 ---
 
-### Task 10: Media embeds
+### ~~Task 10: Media embeds~~ ✅
 
 **Files:**
 - Create: `packages/app-lite/src/lib/components/chat/embeds/MediaEmbed.svelte`
