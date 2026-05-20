@@ -11,7 +11,9 @@ import {
   ConnectedSpace,
   modules,
   StreamDid,
+  Event,
 } from "@roomy-space/sdk";
+import { encode, decode, BytesWrapper } from "@atcute/cbor";
 
 const LEAF_URL = process.env.LEAF_URL ?? "https://leaf-dev.muni.town";
 const LEAF_DID =
@@ -57,4 +59,48 @@ export function getConnectedSpace(
   });
   spaces.set(streamDid, promise);
   return promise;
+}
+
+/**
+ * Send events directly through the Leaf WebSocket, bypassing ConnectedSpace.
+ *
+ * ConnectedSpace.connect() runs streamInfo, module CID computation, and
+ * potentially module upload/update — all of which is unnecessary for sending
+ * events. This function talks straight to the Leaf socket, which is already
+ * authenticated and connected via the service client singleton.
+ */
+export async function sendEventsToStream(
+  streamDid: StreamDid,
+  events: (typeof Event.infer)[],
+  userOverride?: string,
+): Promise<void> {
+  const client = await getServiceClient();
+
+  const payload: Record<string, unknown> = {
+    streamDid,
+    events: events.map((event) => new BytesWrapper(encode(event))),
+  };
+  if (userOverride) {
+    payload.userOverride = userOverride;
+  }
+
+  const encoded = encode(payload);
+  const binary = Buffer.from(encoded);
+
+  const respBytes = await (client.leaf as any).socket.emitWithAck(
+    "stream/event_batch",
+    binary,
+  );
+  const resp = decode(
+    respBytes instanceof Uint8Array
+      ? respBytes
+      : new Uint8Array(respBytes),
+  );
+  if (
+    resp &&
+    typeof resp === "object" &&
+    "Err" in (resp as Record<string, unknown>)
+  ) {
+    throw new Error((resp as { Err: string }).Err);
+  }
 }

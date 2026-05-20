@@ -10,7 +10,7 @@
 
 import { parseEvent, type Event } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
-import { getConnectedSpace } from "../serviceClient.ts";
+import { sendEventsToStream } from "../serviceClient.ts";
 import { checkWriteAuth } from "../auth/writeAuth.ts";
 import { requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
@@ -86,7 +86,6 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
     parsedEvents.push(result.data);
   }
 
-  // 4. Proxy to Leaf
-  const space = await getConnectedSpace(spaceId as any /* StreamDid */);
-  await space.sendEvents(parsedEvents, callerDid);
+  // 4. Proxy to Leaf (bypasses ConnectedSpace module check)
+  await sendEventsToStream(spaceId as any /* StreamDid */, parsedEvents, callerDid);
 };

@@ -9,7 +9,7 @@
  * The handler layer translates denials into XrpcErrors.
  */
 
-import type { Database } from "bun:sqlite";
+import type { Database, Statement } from "bun:sqlite";
 import {
   spaceAccess,
   roomAccess,
@@ -246,6 +246,20 @@ function requireRoomWriteCheck(
  * For editMessage/deleteMessage: the caller must be the original author
  * OR a space admin.
  */
+// Prepared statement cache for writeAuth queries.
+const msgAuthorStmt = new WeakMap<Database, Statement<{ tail: string }, [string]>>();
+
+function getMsgAuthorStmt(db: Database): Statement<{ tail: string }, [string]> {
+  let stmt = msgAuthorStmt.get(db);
+  if (!stmt) {
+    stmt = db.prepare<{ tail: string }, [string]>(
+      "SELECT tail FROM edges WHERE head = ? AND label = 'author' LIMIT 1",
+    );
+    msgAuthorStmt.set(db, stmt);
+  }
+  return stmt;
+}
+
 function checkMessageAuthorOrAdmin(
   db: Database,
   messageId: string,
@@ -255,11 +269,7 @@ function checkMessageAuthorOrAdmin(
   const admin = isAdmin(db, spaceId, callerDid);
   if (admin) return undefined;
 
-  const row = db
-    .query<{ tail: string }, [string]>(
-      "SELECT tail FROM edges WHERE head = ? AND label = 'author' LIMIT 1",
-    )
-    .get(messageId);
+  const row = getMsgAuthorStmt(db).get(messageId);
   if (!row || row.tail !== callerDid) {
     return denied(
       403,
