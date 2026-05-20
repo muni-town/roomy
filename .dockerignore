@@ -6,7 +6,6 @@
 data/
 packages/app
 packages/appserver-testing
-packages/design
 packages/discord-bridge
 packages/discord-bridge-legacy
 Dockerfile
