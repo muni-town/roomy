@@ -121,6 +121,7 @@ export const CreateMessage = defineEvent(
 
     if (!overrideAuthorExt) {
       // normal messages - create 'author' edge
+      statements.push(ensureEntity(streamId, user));
       statements.push(sql`
         insert or replace into edges (head, tail, label)
         select
