@@ -15,6 +15,13 @@
 
 import type { Database } from "bun:sqlite";
 
+export interface ReactionDto {
+  emoji: string;
+  dids: string[];
+  /** reaction_id of the viewer's own reaction for this emoji, or null. */
+  myReactionId: string | null;
+}
+
 export interface MessageDto {
   id: string;
   /** Sort index for timeline ordering. ULID based on canonical timestamp. */
@@ -26,7 +33,7 @@ export interface MessageDto {
   timestamp: string;
   replyTo: string | null;
   forwardedFrom: { name: string; roomId: string } | null;
-  reactions: Array<{ emoji: string; dids: string[] }>;
+  reactions: Array<ReactionDto>;
   media: Array<{ url: string; type: string; alt: string | null }>;
   tags: string[];
 }
@@ -54,6 +61,7 @@ interface BaseRow {
 export function selectMessages(
   db: Database,
   scope: SelectScope,
+  viewerDid?: string,
 ): { messages: MessageDto[]; nextCursor: string | null } {
   // ── Step 1: pull the base rows ────────────────────────────────────────
   let baseRows: BaseRow[];
@@ -206,8 +214,11 @@ export function selectMessages(
   const idPh = ids.map(() => "?").join(",");
 
   const reactionRows = db
-    .query<{ entity: string; reaction: string; user: string }, string[]>(
-      `select entity, reaction, user from comp_reaction
+    .query<
+      { entity: string; reaction: string; user: string; reaction_id: string },
+      string[]
+    >(
+      `select entity, reaction, user, reaction_id from comp_reaction
         where entity in (${idPh})`,
     )
     .all(...ids);
@@ -262,6 +273,8 @@ export function selectMessages(
 
   // ── Step 4: assemble ──────────────────────────────────────────────────
   const reactionMap = new Map<string, Map<string, Set<string>>>();
+  // Viewer's reaction_id per (message, emoji) for myReactionId.
+  const viewerReactionId = new Map<string, Map<string, string>>();
   for (const r of reactionRows) {
     let perMsg = reactionMap.get(r.entity);
     if (!perMsg) {
@@ -274,6 +287,16 @@ export function selectMessages(
       perMsg.set(r.reaction, dids);
     }
     dids.add(r.user);
+
+    // Track the viewer's reaction_id for this (entity, emoji) pair.
+    if (viewerDid && r.user === viewerDid) {
+      let perMsgViewer = viewerReactionId.get(r.entity);
+      if (!perMsgViewer) {
+        perMsgViewer = new Map();
+        viewerReactionId.set(r.entity, perMsgViewer);
+      }
+      perMsgViewer.set(r.reaction, r.reaction_id);
+    }
   }
 
   const tagMap = new Map<string, string[]>();
@@ -323,11 +346,16 @@ export function selectMessages(
 
     const content = decodeContent(mime, data);
 
-    const reactions: Array<{ emoji: string; dids: string[] }> = [];
+    const reactions: Array<ReactionDto> = [];
     const perMsg = reactionMap.get(r.id);
+    const perMsgViewer = viewerReactionId.get(r.id);
     if (perMsg) {
       for (const [emoji, dids] of perMsg.entries()) {
-        reactions.push({ emoji, dids: [...dids].sort() });
+        reactions.push({
+          emoji,
+          dids: [...dids].sort(),
+          myReactionId: perMsgViewer?.get(emoji) ?? null,
+        });
       }
     }
 
