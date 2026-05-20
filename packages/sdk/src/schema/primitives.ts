@@ -41,8 +41,12 @@ export { type };
 
 export function toBytes(buf: Uint8Array): BytesLink {
   // Since the BytesWrapper class won't go across the worker boundary correctly, we convert to the
-  // plain JSON version.
-  return new BytesWrapper(buf).toJSON();
+  // plain JSON version. We pad the base64 because arktype's `string.base64` validator (and the
+  // AT Protocol spec) require standard padded base64. BytesWrapper.toJSON() uses unpadded base64
+  // which fails validation.
+  const { $bytes } = new BytesWrapper(buf).toJSON();
+  const padLen = (4 - ($bytes.length % 4)) % 4;
+  return { $bytes: $bytes + "===".slice(0, padLen) };
 }
 
 export const Ulid = type.string
