@@ -128,6 +128,9 @@
             },
             "timestamp": {
               "type": "string"
+            },
+            "sort_idx": {
+              "type": "string"
             }
           }
         }
