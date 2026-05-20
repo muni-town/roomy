@@ -528,24 +528,32 @@ function resolveReplyTo(messageId: Ulid): Ulid | null {
 
 function resolveReactions(
   messageId: Ulid,
-): Array<{ emoji: string; dids: UserDid[] }> {
+  viewerDid?: UserDid,
+): Array<{ emoji: string; dids: UserDid[]; myReactionId: string | null }> {
   try {
     const rows = openDb()
-      .query<{ reaction: string; user: string }, [string]>(
-        "SELECT reaction, user FROM comp_reaction WHERE entity = ?",
+      .query<{ reaction: string; user: string; reaction_id: string }, [string]>(
+        "SELECT reaction, user, reaction_id FROM comp_reaction WHERE entity = ?",
       )
       .all(messageId);
     if (rows.length === 0) return [];
-    const map = new Map<string, UserDid[]>();
+    const map = new Map<string, { dids: UserDid[]; viewerReactionId: string | null }>();
     for (const r of rows) {
-      let dids = map.get(r.reaction);
-      if (!dids) {
-        dids = [];
-        map.set(r.reaction, dids);
+      let entry = map.get(r.reaction);
+      if (!entry) {
+        entry = { dids: [], viewerReactionId: null };
+        map.set(r.reaction, entry);
       }
-      dids.push(r.user as UserDid);
+      entry.dids.push(r.user as UserDid);
+      if (viewerDid && r.user === viewerDid) {
+        entry.viewerReactionId = r.reaction_id;
+      }
     }
-    return [...map.entries()].map(([emoji, dids]) => ({ emoji, dids }));
+    return [...map.entries()].map(([emoji, { dids, viewerReactionId }]) => ({
+      emoji,
+      dids,
+      myReactionId: viewerReactionId,
+    }));
   } catch {
     return [];
   }

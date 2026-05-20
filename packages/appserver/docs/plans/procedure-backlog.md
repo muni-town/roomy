@@ -1,7 +1,7 @@
 # Appserver XRPC Procedure Backlog
 
 **Date:** 2026-05-20
-**Status:** Draft — backlog for the next wave of appserver work
+**Status:** In progress — `createSpace`, `joinSpace`, `leaveSpace` implemented; reaction `myReactionId` pending
 **Related:** `xrpc-interface-spec.md`, `sendEvents-procedure.md`, `../../../../docs/plans/client-migration-plan.md`
 
 ---
@@ -64,11 +64,11 @@ keep it as an event through `sendEvents`.
 
 ## Candidate procedures
 
-| NSID (proposed) | Priority | Why it can't stay an event |
-|-----------------|----------|----------------------------|
-| `space.roomy.space.createSpace` | High | No stream exists yet — criterion 1 + 3 |
-| `space.roomy.space.joinSpace` | Medium | Cross-stream personal-space bookkeeping + invite-token validation — criteria 2, 3, 4 |
-| `space.roomy.space.leaveSpace` | Medium | Cross-stream personal-space bookkeeping — criterion 2 |
+| NSID (proposed) | Priority | Why it can't stay an event | Status |
+|-----------------|----------|----------------------------|--------|
+| `space.roomy.space.createSpace` | High | No stream exists yet — criterion 1 + 3 | ✅ Implemented |
+| `space.roomy.space.joinSpace` | Medium | Cross-stream personal-space bookkeeping + invite-token validation — criteria 2, 3, 4 | ✅ Implemented |
+| `space.roomy.space.leaveSpace` | Medium | Cross-stream personal-space bookkeeping — criterion 2 | ✅ Implemented |
 
 ### `space.roomy.space.createSpace`
 
@@ -199,3 +199,7 @@ DIDs.
   `leaveSpace`.
 - 2026-05-20 — Added "Message DTO: surface viewer reaction identity" to related
   open items (from `app-lite` chat parity work).
+- 2026-05-20 — Implemented `createSpace`, `joinSpace`, `leaveSpace` as XRPC
+  procedures. SDK schemas added under `src/schemas/procedures/`; appserver
+  handlers added under `src/handlers/`; routes registered in `src/index.ts`.
+  Remaining: reaction `myReactionId` DTO change.

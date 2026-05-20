@@ -51,7 +51,7 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
 
   requireRoomRead(db, row.room, userDid);
 
-  const { messages } = selectMessages(db, { kind: "ids", ids: [messageId] });
+  const { messages } = selectMessages(db, { kind: "ids", ids: [messageId] }, userDid);
   const message = messages[0];
   if (!message) {
     throw new XrpcError(404, "NotFound", `Message not found: ${messageId}`);

@@ -50,6 +50,9 @@
         },
         "emoji": {
           "type": "string"
+        },
+        "myReactionId": {
+          "type": "string"
         }
       }
     },
