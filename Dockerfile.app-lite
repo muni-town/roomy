@@ -1,0 +1,34 @@
+FROM node:24 AS build
+
+# Extract the first 8 characters of the git commit from railway as the build ID if present
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
+
+ARG PUBLIC_PDS_INVITE_CODE
+ENV PUBLIC_PDS_INVITE_CODE=$PUBLIC_PDS_INVITE_CODE
+
+ARG PUBLIC_PDS
+ENV PUBLIC_PDS=$PUBLIC_PDS
+
+ARG PUBLIC_PDS_HANDLE_SUFFIX
+ENV PUBLIC_PDS_HANDLE_SUFFIX=$PUBLIC_PDS_HANDLE_SUFFIX
+
+ARG VITE_APPSERVER_DID
+ENV VITE_APPSERVER_DID=$VITE_APPSERVER_DID
+
+# Uncomment if building on network with a custom certificate
+# COPY ./gitignore/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+# ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+
+COPY . /project
+WORKDIR /project
+RUN npm i -g pnpm
+RUN pnpm i
+
+RUN pnpm --filter @roomy-space/sdk build
+RUN pnpm --filter app-lite build
+
+FROM caddy:alpine
+
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /project/packages/app-lite/build /usr/share/caddy
