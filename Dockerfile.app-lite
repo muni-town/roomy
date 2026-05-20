@@ -16,6 +16,9 @@ ENV PUBLIC_PDS_HANDLE_SUFFIX=$PUBLIC_PDS_HANDLE_SUFFIX
 ARG VITE_APPSERVER_DID
 ENV VITE_APPSERVER_DID=$VITE_APPSERVER_DID
 
+ARG OAUTH_HOST
+ENV OAUTH_HOST=$OAUTH_HOST
+
 # Uncomment if building on network with a custom certificate
 # COPY ./gitignore/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
@@ -43,7 +46,7 @@ COPY packages/design/ packages/design/
 COPY packages/app-lite/ packages/app-lite/
 
 RUN pnpm --filter @roomy-space/sdk build
-RUN pnpm --filter app-lite build
+RUN cd packages/app-lite && bash scripts/build-prod.sh
 
 FROM caddy:alpine
 

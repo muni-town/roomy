@@ -28,4 +28,5 @@ export const CONFIG = {
   appserverDid:
     import.meta.env.VITE_APPSERVER_DID || "did:web:appserver.roomy.chat",
   port: 5180,
+  usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
 };

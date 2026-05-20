@@ -234,15 +234,34 @@ export interface CreateOAuthClientOptions {
    * Callers that need explicit `rpc:` scopes (e.g. app-lite) pass them here.
    */
   scope?: string;
+  /**
+   * If true, fetch client metadata from `/oauth-client-metadata.json` instead
+   * of building a loopback client. Used in production deployments.
+   */
+  usePublicClient?: boolean;
 }
 
-export function createOAuthClient(
+export async function createOAuthClient(
   appserverDid: string,
   opts: CreateOAuthClientOptions = {},
-) {
+): Promise<BrowserOAuthClient> {
   const scope = opts.scope ?? buildScope(appserverDid);
-  const port = opts.port ?? 5199;
 
+  // Production: fetch public client metadata deployed alongside the static build
+  if (opts.usePublicClient) {
+    const resp = await fetch("/oauth-client-metadata.json", {
+      headers: [["accept", "application/json"]],
+    });
+    const clientMetadata = await resp.json();
+    return new BrowserOAuthClient({
+      clientMetadata,
+      handleResolver: HANDLE_RESOLVER,
+      responseMode: "query",
+    });
+  }
+
+  // Development: loopback client
+  const port = opts.port ?? 5199;
   const baseUrl = new URL(`http://127.0.0.1:${port}`);
   baseUrl.hash = "";
   baseUrl.pathname = "/";
@@ -296,6 +315,7 @@ export function loadAppserverDid(): string {
 export interface InitSessionOptions {
   port?: number;
   scope?: string;
+  usePublicClient?: boolean;
 }
 
 /**
@@ -307,7 +327,7 @@ export async function initSession(
   appserverDid: string,
   opts: InitSessionOptions = {},
 ): Promise<{ session: OAuthSession; agent: Agent } | null> {
-  const client = createOAuthClient(appserverDid, opts);
+  const client = await createOAuthClient(appserverDid, opts);
   const result = await client.init();
   if (result?.session) {
     return {
@@ -328,7 +348,7 @@ export async function login(
   handle: string,
   opts: InitSessionOptions = {},
 ): Promise<void> {
-  const client = createOAuthClient(appserverDid, opts);
+  const client = await createOAuthClient(appserverDid, opts);
   await client.signIn(handle);
 }
 

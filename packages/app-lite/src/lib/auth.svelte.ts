@@ -35,6 +35,7 @@ export async function init() {
     const result = await initSession(CONFIG.appserverDid, {
       port: CONFIG.port,
       scope: OAUTH_SCOPE,
+      usePublicClient: CONFIG.usePublicClient,
     });
     if (result) {
       session = result.session;
@@ -51,6 +52,7 @@ export async function login(handle: string) {
   await sdkLogin(CONFIG.appserverDid, handle, {
     port: CONFIG.port,
     scope: OAUTH_SCOPE,
+    usePublicClient: CONFIG.usePublicClient,
   });
 }
 
