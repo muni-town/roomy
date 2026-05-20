@@ -1,4 +1,4 @@
-FROM node:24 AS build
+FROM node:22 AS build
 
 # Extract the first 8 characters of the git commit from railway as the build ID if present
 ARG RAILWAY_GIT_COMMIT_SHA
@@ -23,7 +23,7 @@ ENV VITE_APPSERVER_DID=$VITE_APPSERVER_DID
 COPY . /project
 WORKDIR /project
 RUN npm i -g pnpm
-RUN pnpm i
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 RUN pnpm --filter @roomy-space/sdk build
 RUN pnpm --filter app-lite build
