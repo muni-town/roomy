@@ -13,6 +13,7 @@
  */
 
 import type { EventType, StreamDid, UserDid, Ulid } from "@roomy-space/sdk";
+import type { MessageDto } from "../queries/selectMessages.ts";
 
 // ─── NSIDs for XRPC query endpoints ─────────────────────────────────────
 
@@ -60,22 +61,14 @@ export type MessageDiffOp =
   | { op: "remove"; key: Ulid };
 
 /**
- * Enough message data to apply a diff without re-fetching.
- * Mirrors the `#messageDiff` body from the XRPC spec.
+ * Full message object carried by a `#messageDiff` `add`/`update` op.
  *
- * For the initial implementation, this is a lightweight snapshot — just enough
- * for the WS frame. The server-side cache may choose to store fuller objects.
+ * Identical to a `room.getMessages` row (`MessageDto`) so the client can
+ * apply it to the query cache without re-fetching. It MUST stay a complete
+ * `MessageDto` — the client validates the frame against the SDK `Message`
+ * schema and silently drops the frame if any required field is missing.
  */
-export interface MessageSnapshot {
-  id: Ulid;
-  content: string;
-  authorDid: UserDid;
-  authorName: string;
-  authorAvatar: string | null;
-  timestamp: string;
-  replyTo: Ulid | null;
-  reactions: ReadonlyArray<{ emoji: string; dids: UserDid[] }>;
-}
+export type MessageSnapshot = MessageDto;
 
 /** The union of what the invalidation system can emit. */
 export type InvalidationEvent =

@@ -6,8 +6,11 @@
  * logic). Simple pass-through handlers are covered implicitly.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, afterAll } from "bun:test";
+import { Database } from "bun:sqlite";
 import type { StreamDid, UserDid, Ulid, EventType } from "@roomy-space/sdk";
+import { type, schemas } from "@roomy-space/sdk";
+import { openDb, closeDb } from "../db/db.ts";
 import { inferSignals } from "./inferSignals.ts";
 import type {
   AppliedEvent,
@@ -49,10 +52,66 @@ function findMessageDiff(signals: InvalidationEvent[]) {
   return signals.find((s) => s.kind === "messageDiff");
 }
 
+/**
+ * Materialize a message into a fresh in-memory DB and install it as the
+ * process-wide singleton, so `inferSignals`' internal `openDb()` reads it.
+ *
+ * `handleCreateMessage` / `handleEditMessage` build the #messageDiff payload
+ * via `selectMessages`, which reads back the materialized row — so the row
+ * must exist before `inferSignals` runs (as it does in production, where the
+ * event is applied to SQLite first).
+ */
+function seedMessageDb(opts: {
+  id: string;
+  roomId: string;
+  authorDid: string;
+  authorName: string;
+  content: string;
+}): Database {
+  closeDb();
+  const db = openDb({ path: ":memory:" });
+  const ts = Date.parse("2026-05-08T12:00:00Z");
+
+  db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+    opts.authorDid,
+    opts.authorDid,
+  ]);
+  db.run(
+    "insert or ignore into comp_info (entity, name, avatar) values (?, ?, ?)",
+    [opts.authorDid, opts.authorName, null],
+  );
+  db.run(
+    "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+    [opts.id, STREAM_DID, opts.roomId, opts.id],
+  );
+  db.run(
+    "insert into comp_content (entity, mime_type, data, last_edit, timestamp) " +
+      "values (?, 'text/plain', ?, ?, ?)",
+    [opts.id, Buffer.from(opts.content), opts.id, ts],
+  );
+  db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+    opts.id,
+    opts.authorDid,
+  ]);
+  return db;
+}
+
+// `seedMessageDb` installs an in-memory DB as the process-wide singleton.
+// Restore the default so later test files aren't affected.
+afterAll(() => closeDb());
+
 // ─── Message events ─────────────────────────────────────────────────────
 
 describe("inferSignals: message events", () => {
   it("createMessage produces a messageDiff + room/space invalidation", () => {
+    seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "hello",
+    });
+
     const signals = inferSignals(
       makeEvent({
         type: "space.roomy.message.createMessage.v0",
@@ -71,15 +130,23 @@ describe("inferSignals: message events", () => {
     if (diff!.kind === "messageDiff") {
       expect(diff!.signal.roomId).toBe(ROOM_ID);
       expect(diff!.signal.ops).toHaveLength(1);
-      expect(diff!.signal.ops[0]).toEqual({
-        op: "add",
-        key: EVENT_ID,
-        message: expect.objectContaining({
-          id: EVENT_ID,
-          content: "hello",
-          authorDid: USER_DID,
-        }),
-      });
+      const op = diff!.signal.ops[0]!;
+      expect(op.op).toBe("add");
+      expect(op.key).toBe(EVENT_ID);
+      if (op.op === "add") {
+        expect(op.message).toEqual(
+          expect.objectContaining({
+            id: EVENT_ID,
+            content: "hello",
+            authorDid: USER_DID,
+          }),
+        );
+        // The diff payload MUST satisfy the SDK `Message` schema — the client
+        // SyncRouter validates the #messageDiff frame and silently drops it
+        // if any required field (forwardedFrom, media, tags) is missing.
+        const validated = schemas.queries.getMessages.Message(op.message);
+        expect(validated instanceof type.errors).toBe(false);
+      }
       // seq is 0 here — it's only assigned by the Router when dispatching.
       // inferSignals returns the raw signal without seq assignment.
       expect(diff!.signal.seq).toBe(0);
@@ -101,6 +168,14 @@ describe("inferSignals: message events", () => {
   });
 
   it("editMessage produces a messageDiff update + room invalidation", () => {
+    seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "edited",
+    });
+
     const signals = inferSignals(
       makeEvent({
         type: "space.roomy.message.editMessage.v0",
@@ -117,7 +192,12 @@ describe("inferSignals: message events", () => {
     const diff = findMessageDiff(signals);
     expect(diff).toBeDefined();
     if (diff!.kind === "messageDiff") {
-      expect(diff!.signal.ops[0]!.op).toBe("update");
+      const op = diff!.signal.ops[0]!;
+      expect(op.op).toBe("update");
+      if (op.op === "update") {
+        const validated = schemas.queries.getMessages.Message(op.message);
+        expect(validated instanceof type.errors).toBe(false);
+      }
     }
 
     const nsids = invalidatedNsids(signals);

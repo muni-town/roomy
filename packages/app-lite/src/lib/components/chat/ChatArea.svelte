@@ -53,8 +53,9 @@
     const data = messagesQuery.data;
     if (!data) return [];
 
-    // Data arrives newest-first from the appserver; reverse to chronological
-    const chronological = [...data].reverse();
+    // Data arrives oldest-first (ascending) from the appserver and from the
+    // SDK's applyMessageDiff — already chronological, so use it as-is.
+    const chronological = data;
 
     return chronological.map((message, index) => {
       const prev = index > 0 ? chronological[index - 1] : null;
@@ -95,7 +96,8 @@
     isShifting = true;
 
     try {
-      const oldestId = data[data.length - 1]?.id;
+      // Cache is oldest-first, so the oldest message is at index 0.
+      const oldestId = data[0]?.id;
       const res = await agentQuery(
         px(),
         "space.roomy.room.getMessages",
@@ -112,13 +114,15 @@
       if (olderMessages.length === 0) {
         hasMore = false;
       } else {
-        // Prepend older messages to the TanStack cache
+        // Prepend older messages to the TanStack cache. The cache is
+        // oldest-first, and `olderMessages` (also oldest-first) are all
+        // older than the current window, so they go at the front.
         const key = queryKey("space.roomy.room.getMessages", { roomId });
         queryClient.setQueryData<Message[]>(key, (existing) => {
           if (!existing) return olderMessages;
           const existingIds = new Set(existing.map((m) => m.id));
           const deduped = olderMessages.filter((m) => !existingIds.has(m.id));
-          return [...existing, ...deduped];
+          return [...deduped, ...existing];
         });
 
         if (olderMessages.length < 50) {
