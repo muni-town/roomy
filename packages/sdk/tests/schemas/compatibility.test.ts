@@ -197,7 +197,7 @@ describe("schemas/queries", () => {
           timestamp: "2026-05-17T00:00:00.000Z",
           replyTo: null,
           forwardedFrom: null,
-          reactions: [{ emoji: "👍", dids: ["did:plc:abcdef"] }],
+          reactions: [{ emoji: "👍", dids: ["did:plc:abcdef"], myReactionId: null }],
           media: [{ url: "https://x/y.png", type: "image/png", alt: null }],
           tags: [],
         },

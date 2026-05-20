@@ -13,7 +13,7 @@
  * The unit is the surface that a model-based test harness drives directly.
  */
 
-import type { Database } from "bun:sqlite";
+import type { Database, Statement } from "bun:sqlite";
 
 export type DefaultAccess = "readwrite" | "read" | "none";
 
@@ -42,36 +42,107 @@ export interface RoomAccess {
   isBanned: boolean;
 }
 
+// ── Prepared statement cache ─────────────────────────────────────────────
+// bun:sqlite's .query() prepares SQL on every call. Caching Statement objects
+// avoids redundant compilation, which matters when the auth unit runs 8+
+// queries per sendEvent request.
+
+interface AuthStmts {
+  isMember: Statement<{ n: number }, [string, string]>;
+  isAdmin: Statement<{ n: number }, [string, string]>;
+  isBanned: Statement<{ n: number }, [string, string]>;
+  allowsPublicJoin: Statement<{ v: number }, [string]>;
+  resolveRoom: Statement<{ space_id: string | null; default_access: string | null }, [string]>;
+  canonicalParent: Statement<{ head: string }, [string]>;
+  parentDefaultAccess: Statement<{ default_access: string | null }, [string]>;
+  roleGrant: Statement<{ has_read: number; has_write: number }, [string, string, string]>;
+}
+
+const stmtCache = new WeakMap<Database, AuthStmts>();
+
+function stmts(db: Database): AuthStmts {
+  let cached = stmtCache.get(db);
+  if (cached) return cached;
+
+  cached = {
+    isMember: db.prepare<
+      { n: number },
+      [string, string]
+    >("select 1 as n from edges where head = ? and tail = ? and label = 'member' limit 1"),
+
+    isAdmin: db.prepare<
+      { n: number },
+      [string, string]
+    >("select 1 as n from edges where head = ? and tail = ? and label = 'admin' limit 1"),
+
+    isBanned: db.prepare<
+      { n: number },
+      [string, string]
+    >("select 1 as n from comp_bans where entity = ? and user_did = ? limit 1"),
+
+    allowsPublicJoin: db.prepare<
+      { v: number },
+      [string]
+    >("select coalesce(allow_public_join, 1) as v from comp_space where entity = ?"),
+
+    resolveRoom: db.prepare<
+      { space_id: string | null; default_access: string | null },
+      [string]
+    >(
+      `select e.stream_id as space_id, cr.default_access as default_access
+         from entities e
+         left join comp_room cr on cr.entity = e.id
+        where e.id = ?`,
+    ),
+
+    canonicalParent: db.prepare<
+      { head: string },
+      [string]
+    >(
+      `select head from edges
+        where tail = ? and label = 'link'
+          and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1
+        limit 1`,
+    ),
+
+    parentDefaultAccess: db.prepare<
+      { default_access: string | null },
+      [string]
+    >("select default_access from comp_room where entity = ?"),
+
+    roleGrant: db.prepare<
+      { has_read: number; has_write: number },
+      [string, string, string]
+    >(
+      `select
+         max(case when rr.permission in ('read', 'readwrite') then 1 else 0 end) as has_read,
+         max(case when rr.permission = 'readwrite' then 1 else 0 end) as has_write
+         from member_roles mr
+         join role_rooms rr on rr.role_id = mr.role_id
+         join roles ro on ro.id = mr.role_id
+        where mr.user_id = ?1
+          and rr.room_id = ?2
+          and ro.stream_id = ?3
+          and ro.deleted = 0`,
+    ),
+  };
+
+  stmtCache.set(db, cached);
+  return cached;
+}
+
 // ── Membership / admin / ban ──────────────────────────────────────────────
 
 export function isMember(db: Database, spaceId: string, did: string): boolean {
-  const row = db
-    .query<
-      { n: number },
-      [string, string]
-    >("select 1 as n from edges where head = ? and tail = ? and label = 'member' limit 1")
-    .get(spaceId, did);
-  return row !== null;
+  return stmts(db).isMember.get(spaceId, did) !== null;
 }
 
 export function isAdmin(db: Database, spaceId: string, did: string): boolean {
-  const row = db
-    .query<
-      { n: number },
-      [string, string]
-    >("select 1 as n from edges where head = ? and tail = ? and label = 'admin' limit 1")
-    .get(spaceId, did);
-  return row !== null;
+  return stmts(db).isAdmin.get(spaceId, did) !== null;
 }
 
 export function isBanned(db: Database, spaceId: string, did: string): boolean {
-  const row = db
-    .query<
-      { n: number },
-      [string, string]
-    >("select 1 as n from comp_bans where entity = ? and user_did = ? limit 1")
-    .get(spaceId, did);
-  return row !== null;
+  return stmts(db).isBanned.get(spaceId, did) !== null;
 }
 
 export function spaceAccess(
@@ -91,12 +162,7 @@ export function spaceAccess(
  * unset; per schema docs that defaults to "open" (true).
  */
 function allowsPublicJoin(db: Database, spaceId: string): boolean {
-  const row = db
-    .query<
-      { v: number },
-      [string]
-    >("select coalesce(allow_public_join, 1) as v from comp_space where entity = ?")
-    .get(spaceId);
+  const row = stmts(db).allowsPublicJoin.get(spaceId);
   return row === null ? true : row.v === 1;
 }
 
@@ -120,43 +186,19 @@ function resolveRoom(
   db: Database,
   roomId: string,
 ): { row: RoomRow | null; parentChannelId: string | null } {
-  const row = db
-    .query<
-      {
-        space_id: string | null;
-        default_access: string | null;
-      },
-      [string]
-    >(
-      `select e.stream_id as space_id, cr.default_access as default_access
-         from entities e
-         left join comp_room cr on cr.entity = e.id
-        where e.id = ?`,
-    )
-    .get(roomId);
+  const s = stmts(db);
+  const row = s.resolveRoom.get(roomId);
 
   if (row === null) return { row: null, parentChannelId: null };
 
   // Find canonical parent channel (if this room is a thread linked from a channel).
-  const parent = db
-    .query<{ head: string }, [string]>(
-      `select head from edges
-        where tail = ? and label = 'link'
-          and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1
-        limit 1`,
-    )
-    .get(roomId);
+  const parent = s.canonicalParent.get(roomId);
 
   const parentChannelId = parent?.head ?? null;
 
   // If this room has no default_access of its own, inherit from canonical parent.
   if (row.default_access === null && parentChannelId !== null) {
-    const parentRow = db
-      .query<
-        { default_access: string | null },
-        [string]
-      >("select default_access from comp_room where entity = ?")
-      .get(parentChannelId);
+    const parentRow = s.parentDefaultAccess.get(parentChannelId);
     return {
       row: {
         spaceId: row.space_id,
@@ -193,20 +235,7 @@ function roleGrant(
   roomId: string,
   did: string,
 ): { canRead: boolean; canWrite: boolean } {
-  const row = db
-    .query<{ has_read: number; has_write: number }, [string, string, string]>(
-      `select
-         max(case when rr.permission in ('read', 'readwrite') then 1 else 0 end) as has_read,
-         max(case when rr.permission = 'readwrite' then 1 else 0 end) as has_write
-         from member_roles mr
-         join role_rooms rr on rr.role_id = mr.role_id
-         join roles ro on ro.id = mr.role_id
-        where mr.user_id = ?1
-          and rr.room_id = ?2
-          and ro.stream_id = ?3
-          and ro.deleted = 0`,
-    )
-    .get(did, roomId, spaceId);
+  const row = stmts(db).roleGrant.get(did, roomId, spaceId);
 
   return {
     canRead: !!row?.has_read,

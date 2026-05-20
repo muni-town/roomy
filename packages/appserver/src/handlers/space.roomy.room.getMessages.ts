@@ -49,7 +49,7 @@ export const getMessagesHandler: QueryHandler<
     roomId,
     limit,
     cursor,
-  });
+  }, userDid);
 
   return { messages, cursor: nextCursor };
 };

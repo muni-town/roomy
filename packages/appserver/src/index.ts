@@ -18,6 +18,10 @@ import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts
 import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
 import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
 import { updateSeenHandler } from "./handlers/space.roomy.room.updateSeen.ts";
+import { sendEventsHandler } from "./handlers/space.roomy.space.sendEvents.ts";
+import { createSpaceHandler } from "./handlers/space.roomy.space.createSpace.ts";
+import { joinSpaceHandler } from "./handlers/space.roomy.space.joinSpace.ts";
+import { leaveSpaceHandler } from "./handlers/space.roomy.space.leaveSpace.ts";
 import { schemas } from "@roomy-space/sdk";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -66,6 +70,26 @@ const router = new XrpcRouter(prodAuthVerifier)
   .procedure("space.roomy.room.updateSeen", {
     handler: updateSeenHandler,
     inputSchema: schemas.procedures.updateSeen.Input,
+    // No outputSchema: void return; short-circuits to 200 with empty body.
+  })
+  .procedure("space.roomy.space.sendEvents", {
+    handler: sendEventsHandler,
+    inputSchema: schemas.procedures.sendEvents.Input,
+    // No outputSchema: void return; short-circuits to 200 with empty body.
+  })
+  .procedure("space.roomy.space.createSpace", {
+    handler: createSpaceHandler,
+    inputSchema: schemas.procedures.createSpace.Input,
+    outputSchema: schemas.procedures.createSpace.Output,
+  })
+  .procedure("space.roomy.space.joinSpace", {
+    handler: joinSpaceHandler,
+    inputSchema: schemas.procedures.joinSpace.Input,
+    outputSchema: schemas.procedures.joinSpace.Output,
+  })
+  .procedure("space.roomy.space.leaveSpace", {
+    handler: leaveSpaceHandler,
+    inputSchema: schemas.procedures.leaveSpace.Input,
     // No outputSchema: void return; short-circuits to 200 with empty body.
   })
   // Admin routes (connectSpace, materializeSpace) intentionally have no
@@ -155,10 +179,15 @@ Bun.serve({
     }
 
     const res = await router.fetch(req, server);
-    if (res) {
-      for (const [k, v] of Object.entries(corsHeaders)) {
-        res.headers.set(k, v);
-      }
+    if (res === undefined) {
+      // Successful WebSocket upgrade — no HTTP response to send.
+      console.log(`${req.method} ${url.pathname} → [ws upgrade]`);
+      return undefined;
+    }
+    const status = res.status;
+    console.log(`${req.method} ${url.pathname} → ${status}`);
+    for (const [k, v] of Object.entries(corsHeaders)) {
+      res.headers.set(k, v);
     }
     return res;
   },

@@ -1,0 +1,16 @@
+{
+  "extends": ["@repo/tsconfig/base.json", "./.svelte-kit/tsconfig.json"],
+  "compilerOptions": {
+    "allowJs": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitAny": true,
+    "noEmit": true,
+    "moduleResolution": "bundler"
+  }
+}

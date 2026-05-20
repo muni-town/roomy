@@ -19,7 +19,7 @@ import type { OAuthSession } from "@atproto/oauth-client-browser";
 
 // ── Config ────────────────────────────────────────────────────────────────
 
-const HANDLE_RESOLVER = "https://resolver.roomy.chat";
+const HANDLE_RESOLVER = "https://bsky.social";
 
 export const DEFAULT_APPSERVER_DID = "did:web:appserver.roomy.chat";
 
@@ -39,6 +39,7 @@ const NSID_GET_ROOM_THREADS = "space.roomy.room.getThreads";
 const NSID_GET_MESSAGES = "space.roomy.room.getMessages";
 const NSID_GET_MESSAGE = "space.roomy.message.getMessage";
 const NSID_UPDATE_SEEN = "space.roomy.room.updateSeen";
+const NSID_SEND_EVENTS = "space.roomy.space.sendEvents";
 
 // ── Lexicon definitions (for atproto agent proxy) ─────────────────────────
 
@@ -178,6 +179,26 @@ const LEXICONS = [
   },
   {
     lexicon: 1,
+    id: NSID_SEND_EVENTS,
+    defs: {
+      main: {
+        type: "procedure" as const,
+        input: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["spaceId", "events"],
+            properties: {
+              spaceId: { type: "string" as const },
+              events: { type: "array" as const },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
     id: NSID_MATERIALIZE_SPACE,
     defs: {
       main: {
@@ -208,13 +229,18 @@ function buildScope(_appserverDid: string) {
 export interface CreateOAuthClientOptions {
   /** The port the local app listens on (for the loopback redirect URI). */
   port?: number;
+  /**
+   * OAuth scope string. If omitted, defaults to `atproto transition:generic`.
+   * Callers that need explicit `rpc:` scopes (e.g. app-lite) pass them here.
+   */
+  scope?: string;
 }
 
 export function createOAuthClient(
   appserverDid: string,
   opts: CreateOAuthClientOptions = {},
 ) {
-  const scope = buildScope(appserverDid);
+  const scope = opts.scope ?? buildScope(appserverDid);
   const port = opts.port ?? 5199;
 
   const baseUrl = new URL(`http://127.0.0.1:${port}`);
@@ -269,6 +295,7 @@ export function loadAppserverDid(): string {
 
 export interface InitSessionOptions {
   port?: number;
+  scope?: string;
 }
 
 /**

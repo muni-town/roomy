@@ -8,6 +8,8 @@ import { type } from "arktype";
 export const Reaction = type({
   emoji: "string",
   dids: "string[]",
+  /** reaction_id of the viewer's own reaction for this emoji, or null. */
+  "myReactionId": "string | null",
 });
 
 export const Media = type({
@@ -23,6 +25,8 @@ export const ForwardedFrom = type({
 
 export const Message = type({
   id: "string",
+  /** Sort index for timeline ordering. ULID based on canonical timestamp. */
+  "sort_idx?": "string | null",
   content: "string",
   authorDid: "string",
   authorName: "string",

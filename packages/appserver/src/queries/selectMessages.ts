@@ -15,8 +15,17 @@
 
 import type { Database } from "bun:sqlite";
 
+export interface ReactionDto {
+  emoji: string;
+  dids: string[];
+  /** reaction_id of the viewer's own reaction for this emoji, or null. */
+  myReactionId: string | null;
+}
+
 export interface MessageDto {
   id: string;
+  /** Sort index for timeline ordering. ULID based on canonical timestamp. */
+  sort_idx: string | null;
   content: string;
   authorDid: string;
   authorName: string;
@@ -24,7 +33,7 @@ export interface MessageDto {
   timestamp: string;
   replyTo: string | null;
   forwardedFrom: { name: string; roomId: string } | null;
-  reactions: Array<{ emoji: string; dids: string[] }>;
+  reactions: Array<ReactionDto>;
   media: Array<{ url: string; type: string; alt: string | null }>;
   tags: string[];
 }
@@ -35,6 +44,7 @@ export type SelectScope =
 
 interface BaseRow {
   id: string;
+  sort_idx: string | null;
   room: string | null;
   mime_type: string | null;
   data: Buffer | Uint8Array | null;
@@ -51,6 +61,7 @@ interface BaseRow {
 export function selectMessages(
   db: Database,
   scope: SelectScope,
+  viewerDid?: string,
 ): { messages: MessageDto[]; nextCursor: string | null } {
   // ── Step 1: pull the base rows ────────────────────────────────────────
   let baseRows: BaseRow[];
@@ -58,6 +69,7 @@ export function selectMessages(
     const sql = `
       select
         e.id as id,
+        e.sort_idx as sort_idx,
         e.room as room,
         cc.mime_type as mime_type,
         cc.data as data,
@@ -85,7 +97,7 @@ export function selectMessages(
       where e.room = ?1
         and (cc.entity is not null or forward_e.tail is not null)
         ${scope.cursor ? "and e.id < ?2" : ""}
-      order by e.id desc
+      order by coalesce(e.sort_idx, e.id) desc
       limit ${Math.max(1, Math.min(scope.limit, 100))}
     `;
     const stmt = db.query<BaseRow, string[]>(sql);
@@ -102,6 +114,7 @@ export function selectMessages(
         `
         select
           e.id as id,
+          e.sort_idx as sort_idx,
           e.room as room,
           cc.mime_type as mime_type,
           cc.data as data,
@@ -201,8 +214,11 @@ export function selectMessages(
   const idPh = ids.map(() => "?").join(",");
 
   const reactionRows = db
-    .query<{ entity: string; reaction: string; user: string }, string[]>(
-      `select entity, reaction, user from comp_reaction
+    .query<
+      { entity: string; reaction: string; user: string; reaction_id: string },
+      string[]
+    >(
+      `select entity, reaction, user, reaction_id from comp_reaction
         where entity in (${idPh})`,
     )
     .all(...ids);
@@ -257,6 +273,8 @@ export function selectMessages(
 
   // ── Step 4: assemble ──────────────────────────────────────────────────
   const reactionMap = new Map<string, Map<string, Set<string>>>();
+  // Viewer's reaction_id per (message, emoji) for myReactionId.
+  const viewerReactionId = new Map<string, Map<string, string>>();
   for (const r of reactionRows) {
     let perMsg = reactionMap.get(r.entity);
     if (!perMsg) {
@@ -269,6 +287,16 @@ export function selectMessages(
       perMsg.set(r.reaction, dids);
     }
     dids.add(r.user);
+
+    // Track the viewer's reaction_id for this (entity, emoji) pair.
+    if (viewerDid && r.user === viewerDid) {
+      let perMsgViewer = viewerReactionId.get(r.entity);
+      if (!perMsgViewer) {
+        perMsgViewer = new Map();
+        viewerReactionId.set(r.entity, perMsgViewer);
+      }
+      perMsgViewer.set(r.reaction, r.reaction_id);
+    }
   }
 
   const tagMap = new Map<string, string[]>();
@@ -318,16 +346,22 @@ export function selectMessages(
 
     const content = decodeContent(mime, data);
 
-    const reactions: Array<{ emoji: string; dids: string[] }> = [];
+    const reactions: Array<ReactionDto> = [];
     const perMsg = reactionMap.get(r.id);
+    const perMsgViewer = viewerReactionId.get(r.id);
     if (perMsg) {
       for (const [emoji, dids] of perMsg.entries()) {
-        reactions.push({ emoji, dids: [...dids].sort() });
+        reactions.push({
+          emoji,
+          dids: [...dids].sort(),
+          myReactionId: perMsgViewer?.get(emoji) ?? null,
+        });
       }
     }
 
     return {
       id: r.id,
+      sort_idx: r.sort_idx,
       content,
       authorDid: authorDid ?? "",
       authorName: authorName ?? "",
@@ -348,7 +382,12 @@ export function selectMessages(
   });
 
   // Sort ascending so callers get oldest → newest (matches spec example).
-  messages.sort((a, b) => a.id.localeCompare(b.id));
+  // sort_idx is set by the materializer for messages (using the canonical
+  // timestamp from the ULID or timestampOverride extension). Fall back to
+  // entity id (ULID-encoded timestamp) for entities without sort_idx.
+  messages.sort((a, b) =>
+    (a.sort_idx ?? a.id).localeCompare(b.sort_idx ?? b.id),
+  );
 
   // Pagination cursor: only meaningful for room scope.
   let nextCursor: string | null = null;

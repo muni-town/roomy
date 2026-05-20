@@ -1,0 +1,47 @@
+{
+  "name": "app-lite",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port 5180",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.14.22",
+    "@foxui/core": "^0.6.2",
+    "@foxui/social": "^0.6.3",
+    "@roomy-space/sdk": "workspace:*",
+    "@roomy/design": "workspace:*",
+    "@tanstack/svelte-query": "^6.1.29",
+    "@tiptap/core": "^2.26.1",
+    "@tiptap/extension-link": "^2.26.1",
+    "@tiptap/extension-mention": "^2.26.1",
+    "@tiptap/extension-placeholder": "^2.26.1",
+    "@tiptap/pm": "^2.26.1",
+    "@tiptap/starter-kit": "^2.26.1",
+    "@tiptap/suggestion": "^2.26.1",
+    "bits-ui": "^1.8.0",
+    "tiptap-markdown": "^0.8.10",
+    "virtua": "^0.43.2"
+  },
+  "devDependencies": {
+    "@iconify-json/heroicons": "^1.2.3",
+    "@iconify-json/lucide": "^1.2.68",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify-json/tabler": "^1.2.23",
+    "@repo/tsconfig": "workspace:*",
+    "@sveltejs/adapter-static": "^3.0.0",
+    "@sveltejs/kit": "^2.49.3",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tailwindcss/vite": "^4.1.13",
+    "svelte": "^5.40.0",
+    "svelte-check": "^4.0.0",
+    "tailwind-variants": "^3.2.2",
+    "tailwindcss": "^4.2.0",
+    "typescript": "^5.8.3",
+    "unplugin-icons": "^22.3.0",
+    "vite": "^6.3.6"
+  }
+}

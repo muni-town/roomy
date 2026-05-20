@@ -16,6 +16,7 @@
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
 import type { AppliedEvent, InvalidationEvent, QueryNsid } from "./types.ts";
 import { openDb } from "../db/db.ts";
+import { selectMessages } from "../queries/selectMessages.ts";
 
 // ─── Public API ─────────────────────────────────────────────────────────
 
@@ -75,45 +76,31 @@ function handleCreateMessage(event: AppliedEvent): InvalidationEvent[] {
   const spaceId = event.streamDid;
   const details = event.details ?? {};
 
-  // Resolve author profile from materialized DB.
-  // By this point the event has been applied to SQLite, so the author
-  // edge and comp_info row exist.
-  const authorDid = (details.authorDid as UserDid | undefined) ?? event.user;
-  const authorProfile = resolveProfile(authorDid);
+  // Build the full message row from the materialized DB. By this point the
+  // event has been applied to SQLite, so `selectMessages` resolves the exact
+  // shape `room.getMessages` returns. The client validates the #messageDiff
+  // frame against that schema and silently drops it if any field is missing.
+  const { messages } = selectMessages(openDb(), {
+    kind: "ids",
+    ids: [event.id],
+  });
+  const message = messages[0];
 
-  // Resolve message content from materialized DB.
-  const content = resolveContent(event.id);
-
-  const signals: InvalidationEvent[] = [
+  const signals: InvalidationEvent[] = [];
+  if (message) {
     // Message diff — applied directly to WS client cache, no HTTP re-fetch.
-    {
+    signals.push({
       kind: "messageDiff",
       signal: {
         roomId,
         seq: (details.seq as number) ?? 0,
-        ops: [
-          {
-            op: "add",
-            key: event.id,
-            message: {
-              id: event.id,
-              content,
-              authorDid,
-              authorName: authorProfile.name,
-              authorAvatar: authorProfile.avatar,
-              timestamp:
-                (details.timestamp as string) ?? new Date().toISOString(),
-              replyTo: resolveReplyTo(event.id),
-              reactions: [],
-            },
-          },
-        ],
+        ops: [{ op: "add", key: event.id, message }],
       },
-    },
-    // Room metadata may update (unread count, recentThreads).
-    // Sidebar may update (unread count on the channel).
-    ...invalidateRoom(roomId, spaceId),
-  ];
+    });
+  }
+  // Room metadata may update (unread count, recentThreads).
+  // Sidebar may update (unread count on the channel).
+  signals.push(...invalidateRoom(roomId, spaceId));
 
   return signals;
 }
@@ -123,41 +110,31 @@ function handleEditMessage(event: AppliedEvent): InvalidationEvent[] {
   if (!roomId) return [];
 
   const details = event.details ?? {};
-  const authorDid =
-    (details.authorDid as UserDid | undefined) ?? event.user;
-  const authorProfile = resolveProfile(authorDid);
-  const content = resolveContent(event.id);
-  const reactions = resolveReactions(event.id);
 
-  return [
-    {
+  // Re-read the full message row post-materialization so the diff carries
+  // the complete, schema-valid shape (see `handleCreateMessage`).
+  const { messages } = selectMessages(openDb(), {
+    kind: "ids",
+    ids: [event.id],
+  });
+  const message = messages[0];
+
+  const signals: InvalidationEvent[] = [];
+  if (message) {
+    signals.push({
       kind: "messageDiff",
       signal: {
         roomId,
         seq: (details.seq as number) ?? 0,
-        ops: [
-          {
-            op: "update",
-            key: event.id,
-            message: {
-              id: event.id,
-              content,
-              authorDid,
-              authorName: authorProfile.name,
-              authorAvatar: authorProfile.avatar,
-              timestamp:
-                (details.timestamp as string) ?? new Date().toISOString(),
-              replyTo: resolveReplyTo(event.id),
-              reactions,
-            },
-          },
-        ],
+        ops: [{ op: "update", key: event.id, message }],
       },
-    },
-    // Edit doesn't change unread count, but room metadata's recentThreads
-    // might reference this message's activity.
-    invalidate("space.roomy.room.getMetadata", { roomId }),
-  ];
+    });
+  }
+  // Edit doesn't change unread count, but room metadata's recentThreads
+  // might reference this message's activity.
+  signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));
+
+  return signals;
 }
 
 function handleDeleteMessage(event: AppliedEvent): InvalidationEvent[] {
@@ -463,92 +440,6 @@ function handleMarkRead(event: AppliedEvent): InvalidationEvent[] {
     invalidate("space.roomy.space.getMetadata", { spaceId }, event.user),
     invalidate("space.roomy.space.getSpaces", {}, event.user),
   ];
-}
-
-// ─── DB lookups for message diff hydration ────────────────────────────
-//
-// By the time inferSignals runs, the event has been materialized to SQLite.
-// We can read back the resolved data (author profile, content, reactions)
-// from the materialized tables.
-// ───────────────────────────────────────────────────────────────────────
-
-interface AuthorProfile {
-  name: string;
-  avatar: string | null;
-}
-
-const UNKNOWN_PROFILE: AuthorProfile = { name: "", avatar: null };
-
-function resolveProfile(did: UserDid): AuthorProfile {
-  try {
-    const row = openDb()
-      .query<
-        { name: string | null; avatar: string | null },
-        [string]
-      >("SELECT name, avatar FROM comp_info WHERE entity = ?")
-      .get(did);
-    if (!row) return UNKNOWN_PROFILE;
-    return { name: row.name ?? "", avatar: row.avatar ?? null };
-  } catch {
-    return UNKNOWN_PROFILE;
-  }
-}
-
-function resolveContent(messageId: Ulid): string {
-  try {
-    const row = openDb()
-      .query<
-        { mime_type: string | null; data: Buffer | null },
-        [string]
-      >("SELECT mime_type, data FROM comp_content WHERE entity = ?")
-      .get(messageId);
-    if (!row || !row.data) return "";
-    const buf = row.data instanceof Buffer ? row.data : Buffer.from(row.data);
-    if (!row.mime_type || row.mime_type.startsWith("text/") || row.mime_type === "application/json") {
-      return buf.toString("utf8");
-    }
-    return buf.toString("base64");
-  } catch {
-    return "";
-  }
-}
-
-function resolveReplyTo(messageId: Ulid): Ulid | null {
-  try {
-    const row = openDb()
-      .query<{ tail: string }, [string]>(
-        "SELECT tail FROM edges WHERE head = ? AND label = 'reply'",
-      )
-      .get(messageId);
-    return (row?.tail as Ulid | null) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveReactions(
-  messageId: Ulid,
-): Array<{ emoji: string; dids: UserDid[] }> {
-  try {
-    const rows = openDb()
-      .query<{ reaction: string; user: string }, [string]>(
-        "SELECT reaction, user FROM comp_reaction WHERE entity = ?",
-      )
-      .all(messageId);
-    if (rows.length === 0) return [];
-    const map = new Map<string, UserDid[]>();
-    for (const r of rows) {
-      let dids = map.get(r.reaction);
-      if (!dids) {
-        dids = [];
-        map.set(r.reaction, dids);
-      }
-      dids.push(r.user as UserDid);
-    }
-    return [...map.entries()].map(([emoji, dids]) => ({ emoji, dids }));
-  } catch {
-    return [];
-  }
 }
 
 // ─── Dispatch table ─────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
-  import { renderMarkdownSanitized } from "$lib/utils/markdown";
+  import { renderMarkdownSanitized } from "@roomy/design/utils";
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { sql } from "$lib/utils/sqlTemplate";

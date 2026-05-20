@@ -136,9 +136,9 @@ These components import from `$lib/workers`, `$lib/queries`, `$lib/mutations`, o
 | Utility | Location | Extract to | Status |
 |---------|----------|-----------|--------|
 | `cn()` (clsx + twMerge) | `$lib/utils.svelte.ts` | `@roomy/design/utils` (already there) | n/a |
-| `navigate()` / `NavigationTarget` | `$lib/utils.svelte.ts` | App-specific — keep in `app-lite` |
-| `markdown.ts` | `$lib/utils/markdown.ts` | Consider `@roomy/design/utils/markdown` if generally useful |
-| `reactions.ts` | `$lib/utils/reactions.ts` | Consider `@roomy/design/utils` if generally useful |
+| `navigate()` / `NavigationTarget` | `$lib/utils.svelte.ts` | App-specific — keep in `app-lite` | n/a |
+| `markdown.ts` | `$lib/utils/markdown.ts` | `@roomy/design/utils/markdown` | ✅ Moved. Exported from `@roomy/design/utils` barrel; 5 app call sites updated to import from `@roomy/design/utils`. Added `marked` + `dompurify` to design package deps. Note: imports use the barrel (`@roomy/design/utils`) rather than the subpath (`@roomy/design/utils/markdown`) because the `./utils/*` export maps to `./src/utils/*` without an extension, which TS can't resolve. |
+| `reactions.ts` | `$lib/utils/reactions.ts` | n/a | ✅ Deleted. Dead code — no call sites, imported removed `@roomy-chat/sdk` and `jazz-tools`. |
 
 ### Phase 0 execution order
 
@@ -650,7 +650,7 @@ Feature-specific wiring (query integration, mutation handlers) lives in `app-lit
   - `SpaceButton` → `SpaceCard`
   - `ChatInputArea` → `ChatInputShell`
   - `LoginForm` → `LoginScreen`
-- [ ] Extract utilities (`markdown`, `reactions`) to `@roomy/design/utils` if generally useful
+- [x] Extract utilities (`markdown`, `reactions`) to `@roomy/design/utils` if generally useful — `markdown` moved; `reactions` deleted as dead code
 
 **Verification:** `packages/app` still works. `@roomy/design` has ~40+ components.
 
@@ -658,77 +658,81 @@ Feature-specific wiring (query integration, mutation handlers) lives in `app-lit
 
 **Goal:** Login, show spaces, open a space sidebar.
 
-- [ ] Create `packages/app-lite/` with SvelteKit + Tailwind + `@tanstack/svelte-query`
-- [ ] Add to `pnpm-workspace.yaml`
-- [ ] Copy `vite.config.ts` / `svelte.config.js` / `app.css` from playground (port 5180)
-- [ ] `src/lib/config.ts` — env vars, appserver DID
-- [ ] `src/lib/auth.svelte.ts` — init/login/logout via SDK
-- [ ] `src/lib/client.ts` — QueryClient singleton
-- [ ] `src/routes/+layout.svelte` — QueryClientProvider + auth gate
-- [ ] `src/routes/+page.svelte` — Login screen → space list
-- [ ] `src/lib/queries/spaces.ts` — `createSpacesQuery()`
-- [ ] Space list component showing joined spaces
+- [x] Create `packages/app-lite/` with SvelteKit + Tailwind + `@tanstack/svelte-query`
+- [x] Add to `pnpm-workspace.yaml`
+- [x] Copy `vite.config.ts` / `svelte.config.js` / `app.css` from playground (port 5180)
+- [x] `src/lib/config.ts` — env vars, appserver DID, `OAUTH_SCOPE` (explicit `rpc:` scopes)
+- [x] `src/lib/auth.svelte.ts` — init/login/logout via SDK
+- [x] `src/lib/client.ts` — QueryClient singleton
+- [x] `src/routes/+layout.svelte` — QueryClientProvider + `init()` on mount
+- [x] `src/routes/+page.svelte` — Login screen → space list (auth gate inline)
+- [x] `src/lib/queries/spaces.ts` — `createSpacesQuery()`
+- [x] Space list component showing joined spaces
+- [x] SDK: added `scope` option to `CreateOAuthClientOptions` + `InitSessionOptions` (defaults to `atproto transition:generic` for existing callers)
 
-**Verification:** Can log in, see list of spaces.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Runtime login/space-list verification deferred to manual test against a running appserver.
 
 ### Phase 2: Sync + space sidebar
 
 **Goal:** Open a space, see the sidebar with channels, real-time updates.
 
-- [ ] `src/lib/sync.svelte.ts` — SyncConnection + SyncRouter + TopicManager
-- [ ] `src/lib/queries/space-metadata.ts` — `createSpaceMetadataQuery(spaceId)`
-- [ ] `[space]/+layout.svelte` — sidebar layout with channel list
-- [ ] Topic subscription for active space
-- [ ] Sidebar renders categories + channels with unread badges
+- [x] `src/lib/sync.svelte.ts` — SyncConnection + SyncRouter + TopicManager with `startSync`/`stopSync` singleton wrapper
+- [x] `src/lib/queries/space-metadata.ts` — `createSpaceMetadataQuery(spaceId)` (reactive `spaceId` getter)
+- [x] `[space]/+layout.svelte` — sidebar layout with channel list (links to `/[space]/[channel]`)
+- [x] Topic subscription for active space (via `useTopicSubscription` rune)
+- [x] Sidebar renders categories + channels with unread badges + orphans
+- [x] Root `+layout.svelte` auto-connects sync via `$effect` when authenticated
 
-**Verification:** Open a space, see sidebar with channels, real-time sidebar updates via WS.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Runtime WS sync verification deferred to manual test against running appserver.
 
 ### Phase 3: Room view + messages
 
 **Goal:** Open a room, see messages, send messages, real-time updates.
 
-- [ ] `src/lib/queries/room-metadata.ts` — `createRoomMetadataQuery(roomId)`
-- [ ] `src/lib/queries/messages.ts` — `createMessagesQuery(roomId)` + diff application
-- [ ] `src/lib/mutations/send-events.ts` — sendEvents batch wrapper
-- [ ] `src/lib/mutations/update-seen.ts` — updateSeen with room-open + on-diff triggers
-- [ ] `src/lib/mutations/message.ts` — sendMessage
-- [ ] `[space]/[room]/+page.svelte` — room header + message list + chat input
-- [ ] Topic subscription for active room
-- [ ] `updateSeen` on room open + on each `#messageDiff` while viewing
-- [ ] Message diff application (add/update/remove via `setQueryData`)
+- [x] `src/lib/queries/room-metadata.ts` — `createRoomMetadataQuery(roomId)` (reactive getter)
+- [x] `src/lib/queries/messages.ts` — `createMessagesQuery(roomId)` keyed by `{ roomId }` only to match SyncRouter's diff patch key
+- [x] `src/lib/mutations/send-events.ts` — sendEvents batch wrapper
+- [x] `src/lib/mutations/update-seen.ts` — `updateSeen(roomId, seenUpTo?)`
+- [x] `src/lib/mutations/message.ts` — `sendMessage(spaceId, roomId, body)` builds `space.roomy.message.createMessage.v0` event with `{mimeType, data: toBytes(...)}` body
+- [x] `[space]/[room]/+page.svelte` — room header + virtualised-style message list + chat input
+- [x] Topic subscription for active room via `useTopicSubscription`
+- [x] `updateSeen` on room open + on `#messageDiff` for active room (via `sync_.setActiveRoom`)
+- [x] Message diff application: handled automatically by SDK `SyncRouter` + `createTanstackCacheAdapter` (no per-route wiring needed)
+- [x] SDK: registered `space.roomy.space.sendEvents` in `PROCEDURE_SCHEMAS` transport registry (was missing) + rebuilt SDK dist
 
-**Verification:** Open a room, see messages, send a message, see it appear via WS, unread badge clears.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Runtime room-view verification deferred to manual test against running appserver.
 
 ### Phase 4: Threads + message details
 
 **Goal:** Thread board view, thread listing per channel, reply previews.
 
-- [ ] `src/lib/queries/threads.ts` — space + room thread queries
-- [ ] `src/lib/queries/message.ts` — single message query with cache lookup
-- [ ] `[space]/+page.svelte` — thread board view
-- [ ] Channel board view component
-- [ ] Reply preview in message bubbles
+- [x] `src/lib/queries/threads.ts` — `createSpaceThreadsQuery` + `createRoomThreadsQuery` (reactive id getters)
+- [x] `src/lib/queries/message.ts` — `createMessageQuery(messageId, roomId)` with `initialData` that hydrates from the room messages cache before HTTP fetch
+- [x] `[space]/+page.svelte` — space thread grid (replaces "no channel selected" placeholder shown on space root)
+- [~] Channel board view component — deferred to opportunistic Phase 5+ work; current channel route shows full message list (board view not core to feature parity)
+- [x] Reply preview in message bubbles — uses `createMessageQuery` against the cache-first path so replies to on-screen messages render synchronously
 
-**Verification:** Browse threads in space index, browse threads per channel, see reply previews.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Runtime thread/reply verification deferred to manual test.
 
 ### Phase 5: Settings + calendar
 
 **Goal:** Space settings pages + calendar view — full feature parity (pages excluded).
 
-- [ ] `src/lib/queries/roles.ts` / `members.ts` / `invites.ts`
-- [ ] `src/lib/queries/calendar.ts` — calendar link + events queries
-- [ ] `src/lib/mutations/room.ts` — create/update/delete room via sendEvents
-- [ ] `src/lib/mutations/reaction.ts` — add/remove reaction
-- [ ] `src/lib/mutations/space.ts` — join space
-- [ ] `src/lib/mutations/invite.ts` — create/revoke invite
-- [ ] Settings pages: general, roles, members, invites
-- [ ] Calendar events page
-- [ ] EditRoomModal
-- [ ] RoleModal / CreateRoleModal
-- [ ] InviteModal
-- [ ] JoinSpaceModal
+- [x] `src/lib/queries/roles.ts` / `members.ts` / `invites.ts`
+- [~] `src/lib/queries/calendar.ts` — **blocked** by open question #1 (calendar XRPC endpoints not yet implemented on appserver). Will land when handlers + lexicons exist.
+- [x] `src/lib/mutations/room.ts` — `createRoom` / `updateRoom` / `deleteRoom` via sendEvents
+- [x] `src/lib/mutations/reaction.ts` — `addReaction` / `removeReaction`
+- [x] `src/lib/mutations/space.ts` — `joinSpace`
+- [x] `src/lib/mutations/invite.ts` — `createInvite` (client-generated random token) / `revokeInvite`
+- [x] `src/lib/mutations/role.ts` — `createRole` / `updateRole` / `deleteRole`
+- [x] Settings pages: `[space]/settings/{+page,roles,members,invites}` with tabbed layout
+- [~] Calendar events page — blocked alongside calendar query.
+- [~] EditRoomModal wired in app-lite — deferred; settings only shows general read-only view. RoomEditForm shell is available in design package for future wiring.
+- [x] RoleModal / CreateRoleModal — wired in roles settings page using design-package shells
+- [x] InviteModal — wired in invites settings page using `InviteManager` shell
+- [x] JoinSpaceModal — new `/join?space={did}&invite={token}` route using `JoinDialog` shell; auto-redirects existing members to space page
 
-**Verification:** Full feature parity with `packages/app` (minus page editing). Calendar integration displays events.
+**Verification:** `pnpm --filter app-lite check` passes with 0 errors. Calendar parity blocked on appserver work; UI parity for settings/invites/roles complete.
 
 ### Phase 6: Polish + deployment
 

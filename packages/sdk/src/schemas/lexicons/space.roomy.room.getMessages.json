@@ -50,6 +50,9 @@
         },
         "emoji": {
           "type": "string"
+        },
+        "myReactionId": {
+          "type": "string"
         }
       }
     },
@@ -109,6 +112,9 @@
           }
         },
         "timestamp": {
+          "type": "string"
+        },
+        "sort_idx": {
           "type": "string"
         }
       }

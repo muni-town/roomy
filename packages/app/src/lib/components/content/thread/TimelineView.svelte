@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import { setInputFocus } from "./ChatInput.svelte";
-  import { renderMarkdownPlaintext } from "$lib/utils/markdown";
+  import { renderMarkdownPlaintext } from "@roomy/design/utils";
   import type { Message } from "./types";
   import type { Comment } from "@roomy/design/components/richtext/types.ts";
   export type { Comment };
