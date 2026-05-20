@@ -46,7 +46,7 @@ COPY packages/design/ packages/design/
 COPY packages/app-lite/ packages/app-lite/
 
 RUN pnpm --filter @roomy-space/sdk build
-RUN cd packages/app-lite && bash scripts/build-prod.sh
+RUN bash packages/app-lite/scripts/build-prod.sh
 
 FROM caddy:alpine
 
