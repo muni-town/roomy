@@ -179,12 +179,15 @@ Bun.serve({
     }
 
     const res = await router.fetch(req, server);
-    const status = res?.status ?? 502;
+    if (res === undefined) {
+      // Successful WebSocket upgrade — no HTTP response to send.
+      console.log(`${req.method} ${url.pathname} → [ws upgrade]`);
+      return undefined;
+    }
+    const status = res.status;
     console.log(`${req.method} ${url.pathname} → ${status}`);
-    if (res) {
-      for (const [k, v] of Object.entries(corsHeaders)) {
-        res.headers.set(k, v);
-      }
+    for (const [k, v] of Object.entries(corsHeaders)) {
+      res.headers.set(k, v);
     }
     return res;
   },
