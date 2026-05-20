@@ -19,6 +19,9 @@ ENV VITE_APPSERVER_DID=$VITE_APPSERVER_DID
 ARG OAUTH_HOST
 ENV OAUTH_HOST=$OAUTH_HOST
 
+ARG VITE_OAUTH_PUBLIC_CLIENT=true
+ENV VITE_OAUTH_PUBLIC_CLIENT=$VITE_OAUTH_PUBLIC_CLIENT
+
 # Uncomment if building on network with a custom certificate
 # COPY ./gitignore/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
