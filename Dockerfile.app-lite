@@ -20,10 +20,27 @@ ENV VITE_APPSERVER_DID=$VITE_APPSERVER_DID
 # COPY ./gitignore/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
-COPY . /project
 WORKDIR /project
+
+# Copy workspace manifests and patches for install
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
+COPY patches/ patches/
+COPY packages/tsconfig/package.json packages/tsconfig/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/design/package.json packages/design/package.json
+COPY packages/app-lite/package.json packages/app-lite/package.json
+
 RUN npm i -g pnpm
 RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# Rebuild esbuild native binaries (skipped by --ignore-scripts, needed by Vite)
+RUN node node_modules/.pnpm/esbuild@*/node_modules/esbuild/install.js
+
+# Copy source for all required packages
+COPY packages/tsconfig/ packages/tsconfig/
+COPY packages/sdk/ packages/sdk/
+COPY packages/design/ packages/design/
+COPY packages/app-lite/ packages/app-lite/
 
 RUN pnpm --filter @roomy-space/sdk build
 RUN pnpm --filter app-lite build
