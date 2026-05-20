@@ -7,6 +7,7 @@
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import ThinSidebar from "$lib/components/sidebar/ThinSidebar.svelte";
   import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
+  import { sidebarOverride } from "$lib/components/layout/sidebar.svelte";
 
   let { children } = $props();
 
@@ -27,7 +28,11 @@
         <ThinSidebar />
       {/snippet}
       {#snippet sidebar()}
-        <SpaceSidebar {spaceId} />
+        {#if sidebarOverride.content}
+          {@render sidebarOverride.content()}
+        {:else}
+          <SpaceSidebar {spaceId} />
+        {/if}
       {/snippet}
       {@render children()}
     </MainLayout>
