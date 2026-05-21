@@ -90,27 +90,16 @@ export const createSpaceHandler: ProcedureHandler<
 
   // ── 4. Write personal.joinSpace to creator's personal stream ─────────
   const db = openDb();
-  try {
-    const personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
-    const personalSpace = await getConnectedSpace(personalStreamDid);
-    await personalSpace.sendEvent(
-      {
-        id: newUlid(),
-        $type: "space.roomy.space.personal.joinSpace.v0",
-        spaceDid: spaceId,
-      },
-      callerDid,
-    );
-  } catch (err) {
-    // Personal stream write is best-effort. First-login users may not have
-    // a personal stream record yet. The space will still be materialised
-    // via the space stream subscription and will appear in getSpaces once
-    // the personal stream is eventually resolved.
-    console.warn(
-      `[createSpace] Failed to write personal join for ${callerDid}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
+  const personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
+  const personalSpace = await getConnectedSpace(personalStreamDid);
+  await personalSpace.sendEvent(
+    {
+      id: newUlid(),
+      $type: "space.roomy.space.personal.joinSpace.v0",
+      spaceDid: spaceId,
+    },
+    callerDid,
+  );
 
   // ── 5. Start materialiser for the new space ──────────────────────────
   const mat = await getOrCreateMaterializer(spaceId);

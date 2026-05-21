@@ -102,7 +102,22 @@ export const joinSpaceHandler: ProcedureHandler<
     }
   }
 
-  // ── 1. Send space-side joinSpace event ───────────────────────────────
+  // ── 1. Write personal.joinSpace to user's personal stream (first) ─────
+  // Must succeed before the space-side join so we don't end up in a
+  // state where the user has joined the space but can't see it in their
+  // space list.
+  const personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
+  const personalSpace = await getConnectedSpace(personalStreamDid);
+  await personalSpace.sendEvent(
+    {
+      id: newUlid(),
+      $type: "space.roomy.space.personal.joinSpace.v0",
+      spaceDid: spaceId as any /* StreamDid */,
+    },
+    callerDid,
+  );
+
+  // ── 2. Send space-side joinSpace event ───────────────────────────────
   const space = await getConnectedSpace(spaceId as any /* StreamDid */);
   await space.sendEvent(
     {
@@ -112,25 +127,6 @@ export const joinSpaceHandler: ProcedureHandler<
     },
     callerDid,
   );
-
-  // ── 2. Write personal.joinSpace to user's personal stream ────────────
-  try {
-    const personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
-    const personalSpace = await getConnectedSpace(personalStreamDid);
-    await personalSpace.sendEvent(
-      {
-        id: newUlid(),
-        $type: "space.roomy.space.personal.joinSpace.v0",
-        spaceDid: spaceId as any /* StreamDid */,
-      },
-      callerDid,
-    );
-  } catch (err) {
-    console.warn(
-      `[joinSpace] Failed to write personal join for ${callerDid}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
 
   return { spaceId };
 };
