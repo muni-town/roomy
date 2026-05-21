@@ -68,6 +68,18 @@ export const PROCEDURE_SCHEMAS = {
     input: procedures.sendEvents.Input,
     output: procedures.sendEvents.Output,
   },
+  "space.roomy.space.createSpace": {
+    input: procedures.createSpace.Input,
+    output: procedures.createSpace.Output,
+  },
+  "space.roomy.space.joinSpace": {
+    input: procedures.joinSpace.Input,
+    output: procedures.joinSpace.Output,
+  },
+  "space.roomy.space.leaveSpace": {
+    input: procedures.leaveSpace.Input,
+    output: procedures.leaveSpace.Output,
+  },
 } as const;
 
 export type QueryNsid = keyof typeof QUERY_SCHEMAS;

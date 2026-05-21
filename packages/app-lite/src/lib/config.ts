@@ -12,6 +12,9 @@ const APPSERVER_RPCS = [
   "space.roomy.auth.getConnectionTicket",
   "space.roomy.room.updateSeen",
   "space.roomy.space.sendEvents",
+  "space.roomy.space.createSpace",
+  "space.roomy.space.joinSpace",
+  "space.roomy.space.leaveSpace",
   "space.roomy.space.getCalendarLink",
   "space.roomy.space.getCalendarEvents",
 ];
