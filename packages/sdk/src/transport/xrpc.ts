@@ -28,23 +28,7 @@ import {
 } from "./registry";
 import { XrpcResponseValidationError } from "./errors";
 
-/**
- * The `@atproto/xrpc` client wraps lexicon validation failures in
- * `XRPCInvalidResponseError` with a generic message. This helper enriches
- * the error with the actual validation details from `error.cause`.
- */
-function enrichXrpcError(err: unknown): never {
-  // XRPCInvalidResponseError has a `cause` (ValidationError) with details.
-  const cause = (err as any)?.cause;
-  if (cause?.message) {
-    console.error(
-      `[XRPC] Lexicon validation failed for ${(err as any)?.nsid ?? "unknown"}:`,
-      cause.message,
-    );
-    console.error("[XRPC] Response body:", (err as any)?.responseJson);
-  }
-  throw err;
-}
+
 
 export async function agentQuery<N extends QueryNsid>(
   agent: Agent,
@@ -56,11 +40,7 @@ export async function agentQuery<N extends QueryNsid>(
   // Stringify all values for XRPC query string semantics.
   const stringParams = stringifyParams(params as Record<string, unknown>);
   let response;
-  try {
-    response = await agent.call(nsid, stringParams);
-  } catch (err) {
-    enrichXrpcError(err);
-  }
+  response = await agent.call(nsid, stringParams);
   const parsed = entry.response(response.data);
   if (parsed instanceof type.errors) {
     throw new XrpcResponseValidationError(nsid, parsed);
@@ -75,11 +55,7 @@ export async function agentProcedure<N extends ProcedureNsid>(
 ): Promise<ProcedureOutput<N>> {
   const entry = PROCEDURE_SCHEMAS[nsid];
   let response;
-  try {
-    response = await agent.call(nsid, {}, input as Record<string, unknown>);
-  } catch (err) {
-    enrichXrpcError(err);
-  }
+  response = await agent.call(nsid, {}, input as Record<string, unknown>);
   // Void outputs: appserver short-circuits to empty body. Treat `undefined`
   // or `null` as `{}` so the empty-object schema parses cleanly.
   const data =
