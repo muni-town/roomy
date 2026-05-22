@@ -59,11 +59,15 @@ export const joinSpaceHandler: ProcedureHandler<
   const db = openDb();
 
   // ── Verify space exists ──────────────────────────────────────────────
+  // `entities.stream_id` isn't a reliable space-identity check — when both
+  // a personal stream and the space itself materialise it, the first writer
+  // wins and the value depends on event ordering. The entity row's mere
+  // presence is enough here; Leaf is the source of truth on the join path.
   const spaceRow = db
-    .query<{ n: number }, [string, string]>(
-      "SELECT 1 AS n FROM entities WHERE id = ? AND stream_id = ? LIMIT 1",
+    .query<{ n: number }, [string]>(
+      "SELECT 1 AS n FROM entities WHERE id = ? LIMIT 1",
     )
-    .get(spaceId, spaceId);
+    .get(spaceId);
   if (!spaceRow) {
     throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`);
   }

@@ -48,17 +48,13 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
 
   const db = openDb();
 
-  // ── Verify space exists ──────────────────────────────────────────────
-  const spaceRow = db
-    .query<{ n: number }, [string, string]>(
-      "SELECT 1 AS n FROM entities WHERE id = ? AND stream_id = ? LIMIT 1",
-    )
-    .get(spaceId, spaceId);
-  if (!spaceRow) {
-    throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`);
-  }
-
   // ── Authorisation: caller must be a member or admin ──────────────────
+  // The auth check doubles as the existence check: member/admin edges have
+  // FKs onto entities(spaceId), so if either edge is present the space is
+  // known. A bogus spaceId yields neither edge and a 403. (An older
+  // `entities WHERE id = ? AND stream_id = ?` existence check was unreliable
+  // because stream_id depends on which materialiser wrote the entity row
+  // first — see queries/joinedSpaces.ts.)
   const member = isMember(db, spaceId, callerDid);
   const admin = isAdmin(db, spaceId, callerDid);
   if (!member && !admin) {
