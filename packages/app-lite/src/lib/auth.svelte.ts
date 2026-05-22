@@ -12,6 +12,7 @@ import { CONFIG, OAUTH_SCOPE } from "./config";
 let agent = $state<Agent | null>(null);
 let session = $state<OAuthSession | null>(null);
 let authenticated = $state(false);
+let initializing = $state(true);
 let initError = $state<string | null>(null);
 
 export const auth = {
@@ -23,6 +24,10 @@ export const auth = {
   },
   get authenticated() {
     return authenticated;
+  },
+  /** True while `init()` is in progress (session restoration / OAuth callback). */
+  get initializing() {
+    return initializing;
   },
   get initError() {
     return initError;
@@ -44,6 +49,8 @@ export async function init() {
     }
   } catch (err) {
     initError = String(err);
+  } finally {
+    initializing = false;
   }
 }
 
