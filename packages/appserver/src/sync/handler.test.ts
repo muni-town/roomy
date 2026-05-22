@@ -126,7 +126,6 @@ function messageDiff(roomId: Ulid, seq: number): InvalidationEvent {
             authorDid: USER_A,
             authorName: "User A",
             timestamp: new Date().toISOString(),
-            forwardedFrom: null,
             reactions: [],
             media: [],
             tags: [],

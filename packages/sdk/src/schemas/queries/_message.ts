@@ -33,7 +33,7 @@ export const Message = type({
   "authorAvatar?": "string",
   timestamp: "string",
   "replyTo?": "string",
-  forwardedFrom: ForwardedFrom.or("null"),
+  "forwardedFrom?": ForwardedFrom,
   reactions: Reaction.array(),
   media: Media.array(),
   tags: "string[]",

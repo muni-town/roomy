@@ -33,7 +33,7 @@ export interface MessageDto {
   authorAvatar?: string;
   timestamp: string;
   replyTo?: string;
-  forwardedFrom: { name: string; roomId: string } | null;
+  forwardedFrom?: { name: string; roomId: string };
   reactions: Array<ReactionDto>;
   media: Array<{ url: string; type: string; alt?: string }>;
   tags: string[];
