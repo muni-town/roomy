@@ -66,17 +66,20 @@
 </script>
 
 {#snippet timestampLabel(date: Date)}
-  {@const formattedDate = isTomorrow(date)
-    ? "Tomorrow at "
-    : isToday(date)
-      ? "Today at "
-      : isYesterday(date)
-        ? "Yesterday at "
-        : format(date, "P") + ", "}
+  {@const isValid = !isNaN(date.getTime())}
+  {@const formattedDate = !isValid
+    ? ""
+    : isTomorrow(date)
+      ? "Tomorrow at "
+      : isToday(date)
+        ? "Today at "
+        : isYesterday(date)
+          ? "Yesterday at "
+          : format(date, "P") + ", "}
   <time
     class="text-[13px] align-middle font-medium text-base-700 dark:text-base-400"
   >
-    {formattedDate}{format(date, "p")}
+    {formattedDate}{isValid ? format(date, "p") : ""}
   </time>
 {/snippet}
 

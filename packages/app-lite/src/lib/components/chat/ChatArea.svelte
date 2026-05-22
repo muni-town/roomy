@@ -65,8 +65,8 @@
         message.authorDid &&
         prev.authorDid === message.authorDid &&
         !message.replyTo &&
-        new Date(message.timestamp).getTime() -
-          new Date(prev.timestamp).getTime() <
+        new Date(message.timestamp || 0).getTime() -
+          new Date(prev.timestamp || 0).getTime() <
           1000 * 60 * 5
       ) {
         mergeWithPrevious = true;
