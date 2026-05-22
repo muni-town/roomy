@@ -14,27 +14,28 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { stripNulls } from "../xrpc/strip-nulls.ts";
 
 export interface ReactionDto {
   emoji: string;
   dids: string[];
-  /** reaction_id of the viewer's own reaction for this emoji, or null. */
-  myReactionId: string | null;
+  /** reaction_id of the viewer's own reaction for this emoji; absent when not reacted. */
+  myReactionId?: string;
 }
 
 export interface MessageDto {
   id: string;
   /** Sort index for timeline ordering. ULID based on canonical timestamp. */
-  sort_idx: string | null;
+  sort_idx?: string;
   content: string;
   authorDid: string;
   authorName: string;
-  authorAvatar: string | null;
+  authorAvatar?: string;
   timestamp: string;
-  replyTo: string | null;
+  replyTo?: string;
   forwardedFrom: { name: string; roomId: string } | null;
   reactions: Array<ReactionDto>;
-  media: Array<{ url: string; type: string; alt: string | null }>;
+  media: Array<{ url: string; type: string; alt?: string }>;
   tags: string[];
 }
 
@@ -351,15 +352,17 @@ export function selectMessages(
     const perMsgViewer = viewerReactionId.get(r.id);
     if (perMsg) {
       for (const [emoji, dids] of perMsg.entries()) {
-        reactions.push({
+        reactions.push(stripNulls({
           emoji,
           dids: [...dids].sort(),
           myReactionId: perMsgViewer?.get(emoji) ?? null,
-        });
+        }) as ReactionDto);
       }
     }
 
-    return {
+    const mediaForMsg = (mediaMap.get(r.id) ?? []).map((m) => stripNulls(m) as { url: string; type: string; alt?: string });
+
+    return stripNulls({
       id: r.id,
       sort_idx: r.sort_idx,
       content,
@@ -376,9 +379,9 @@ export function selectMessages(
             }
           : null,
       reactions,
-      media: mediaMap.get(r.id) ?? [],
+      media: mediaForMsg,
       tags: tagMap.get(r.id) ?? [],
-    };
+    }) as MessageDto;
   });
 
   // Sort ascending so callers get oldest → newest (matches spec example).

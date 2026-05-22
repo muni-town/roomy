@@ -12,11 +12,12 @@ import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
 import { requireRoomRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { optionalInt, optionalString, requireString } from "../xrpc/params.ts";
+import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface GetMessagesResult {
   messages: MessageDto[];
-  cursor: string | null;
+  cursor?: string;
 }
 
 export const getMessagesHandler: QueryHandler<
@@ -51,5 +52,5 @@ export const getMessagesHandler: QueryHandler<
     cursor,
   }, userDid);
 
-  return { messages, cursor: nextCursor };
+  return stripNulls({ messages, cursor: nextCursor }) as GetMessagesResult;
 };

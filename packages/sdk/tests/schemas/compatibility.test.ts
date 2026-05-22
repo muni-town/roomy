@@ -24,8 +24,6 @@ describe("schemas/queries", () => {
         {
           id: "01H000000000000000000000XX",
           name: "Roomy Dev",
-          avatar: null,
-          description: null,
           unreadCount: 0,
           isMember: true,
           isAdmin: false,
@@ -40,27 +38,23 @@ describe("schemas/queries", () => {
 
   it("getSpaceMetadata parses a response with null sidebar category id and null channel name", () => {
     const ex = {
-      name: "Space",
-      avatar: null,
-      description: null,
       joinPolicy: { allowPublicJoin: true, allowMemberInvites: false },
       isMember: true,
       isAdmin: false,
       sidebar: {
         categories: [
           {
-            id: null, // v0 legacy categories — appserver returns null
+            // v0 legacy categories — appserver omits id
             name: "General",
             position: 0,
             channels: [
               {
                 id: "01CH0000000000000000000000",
-                name: null, // info row may be missing
+                // info row may be missing — field omitted
                 defaultAccess: "readwrite",
                 canRead: true,
                 canWrite: true,
                 unreadCount: 0,
-                lastRead: null,
               },
             ],
           },
@@ -80,10 +74,8 @@ describe("schemas/queries", () => {
       threads: [
         {
           id: "01T0000000000000000000000X",
-          name: null,
           channel: "01CH00000000000000000000X0",
           activity: {
-            latestTimestamp: null,
             latestMembers: [],
           },
         },
@@ -99,8 +91,6 @@ describe("schemas/queries", () => {
         {
           id: "01R000000000000000000000XX",
           name: "Mods",
-          avatar: null,
-          description: null,
           rooms: [{ roomId: "01CH0000000000000000000000", permission: "readwrite" }],
           memberDids: ["did:plc:abcdef"],
         },
@@ -117,7 +107,6 @@ describe("schemas/queries", () => {
           did: "did:plc:abcdef",
           handle: "alice.bsky.social",
           name: "Alice",
-          avatar: null,
           isAdmin: true,
           roleIds: ["01R000000000000000000000XX"],
         },
@@ -125,9 +114,6 @@ describe("schemas/queries", () => {
       externalAdmins: [
         {
           did: "did:plc:ghijkl",
-          handle: null,
-          name: null,
-          avatar: null,
         },
       ],
     };
@@ -158,11 +144,9 @@ describe("schemas/queries", () => {
       recentThreads: [
         {
           id: "01T0000000000000000000000X",
-          name: null,
           canRead: true,
           canWrite: true,
           unreadCount: 0,
-          lastRead: null,
         },
       ],
     };
@@ -177,7 +161,7 @@ describe("schemas/queries", () => {
           id: "01T0000000000000000000000X",
           name: "thread",
           canonicalParent: "01CH0000000000000000000000",
-          activity: { latestTimestamp: null, latestMembers: [] },
+          activity: { latestMembers: [] },
         },
       ],
     };
@@ -193,16 +177,13 @@ describe("schemas/queries", () => {
           content: "hi",
           authorDid: "did:plc:abcdef",
           authorName: "alice",
-          authorAvatar: null,
           timestamp: "2026-05-17T00:00:00.000Z",
-          replyTo: null,
           forwardedFrom: null,
-          reactions: [{ emoji: "👍", dids: ["did:plc:abcdef"], myReactionId: null }],
-          media: [{ url: "https://x/y.png", type: "image/png", alt: null }],
+          reactions: [{ emoji: "👍", dids: ["did:plc:abcdef"] }],
+          media: [{ url: "https://x/y.png", type: "image/png" }],
           tags: [],
         },
       ],
-      cursor: null,
     };
     const parsed = queries.getMessages.Response(ex);
     assertOk(parsed);
@@ -215,9 +196,7 @@ describe("schemas/queries", () => {
       content: "hi",
       authorDid: "did:plc:abcdef",
       authorName: "alice",
-      authorAvatar: null,
       timestamp: "2026-05-17T00:00:00.000Z",
-      replyTo: null,
       forwardedFrom: { name: "other-room", roomId: "01CH0000000000000000000000" },
       reactions: [],
       media: [],
@@ -256,9 +235,7 @@ describe("schemas/frames", () => {
       content: "hi",
       authorDid: "did:plc:abcdef",
       authorName: "alice",
-      authorAvatar: null,
       timestamp: "2026-05-17T00:00:00.000Z",
-      replyTo: null,
       forwardedFrom: null,
       reactions: [],
       media: [],

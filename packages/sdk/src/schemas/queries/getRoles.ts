@@ -15,9 +15,9 @@ export const RoleRoom = type({
 
 export const Role = type({
   id: "string",
-  name: "string | null",
-  avatar: "string | null",
-  description: "string | null",
+  "name?": "string",
+  "avatar?": "string",
+  "description?": "string",
   rooms: RoleRoom.array(),
   memberDids: "string[]",
 });

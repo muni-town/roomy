@@ -10,18 +10,18 @@ export const Params = type({ spaceId: "string" });
 
 export const Member = type({
   did: "string",
-  handle: "string | null",
-  name: "string | null",
-  avatar: "string | null",
+  "handle?": "string",
+  "name?": "string",
+  "avatar?": "string",
   isAdmin: "boolean",
   roleIds: "string[]",
 });
 
 export const ExternalAdmin = type({
   did: "string",
-  handle: "string | null",
-  name: "string | null",
-  avatar: "string | null",
+  "handle?": "string",
+  "name?": "string",
+  "avatar?": "string",
 });
 
 export const Response = type({

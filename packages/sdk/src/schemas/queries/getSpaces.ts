@@ -11,9 +11,9 @@ export const Params = type({});
 
 export const Space = type({
   id: "string",
-  name: "string | null",
-  avatar: "string | null",
-  description: "string | null",
+  "name?": "string",
+  "avatar?": "string",
+  "description?": "string",
   unreadCount: "number",
   isMember: "boolean",
   isAdmin: "boolean",

@@ -1,10 +1,6 @@
 /**
  * Schema for `space.roomy.space.getThreads` (query).
  * Source of truth: packages/appserver/src/handlers/space.roomy.space.getThreads.ts
- *
- * Note: appserver returns `name: string | null` and `latestTimestamp: string | null`
- * (also `latestMembers[].name: string | null`), while the playground's
- * hand-authored types declared them as non-null. We follow the appserver.
  */
 import { type } from "arktype";
 
@@ -14,19 +10,19 @@ export const Params = type({ spaceId: "string" });
 
 export const ThreadMember = type({
   did: "string",
-  name: "string | null",
-  avatar: "string | null",
+  "name?": "string",
+  "avatar?": "string",
 });
 
 export const ThreadActivity = type({
-  latestTimestamp: "string | null",
+  "latestTimestamp?": "string",
   latestMembers: ThreadMember.array(),
 });
 
 export const Thread = type({
   id: "string",
-  name: "string | null",
-  channel: "string | null",
+  "name?": "string",
+  "channel?": "string",
   activity: ThreadActivity,
 });
 

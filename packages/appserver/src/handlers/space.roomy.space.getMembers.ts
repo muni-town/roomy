@@ -14,22 +14,23 @@ import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
+import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface MemberRow {
   did: string;
-  handle: string | null;
-  name: string | null;
-  avatar: string | null;
+  handle?: string;
+  name?: string;
+  avatar?: string;
   isAdmin: boolean;
   roleIds: string[];
 }
 
 interface ExternalAdminRow {
   did: string;
-  handle: string | null;
-  name: string | null;
-  avatar: string | null;
+  handle?: string;
+  name?: string;
+  avatar?: string;
 }
 
 interface GetMembersResult {
@@ -90,14 +91,16 @@ export const getMembersHandler: QueryHandler<
         where user_id = ? and stream_id = ?`,
   );
 
-  const members: MemberRow[] = memberRows.map((r) => ({
-    did: r.did,
-    handle: r.handle,
-    name: r.name,
-    avatar: r.avatar,
-    isAdmin: !!r.is_admin,
-    roleIds: roleStmt.all(r.did, spaceId).map((row) => row.role_id),
-  }));
+  const members: MemberRow[] = memberRows.map((r) =>
+    stripNulls({
+      did: r.did,
+      handle: r.handle,
+      name: r.name,
+      avatar: r.avatar,
+      isAdmin: !!r.is_admin,
+      roleIds: roleStmt.all(r.did, spaceId).map((row) => row.role_id),
+    }) as MemberRow,
+  );
 
   // External admins: admin edge present, member edge absent.
   const externalAdminRows = db
@@ -129,11 +132,13 @@ export const getMembersHandler: QueryHandler<
 
   return {
     members,
-    externalAdmins: externalAdminRows.map((r) => ({
-      did: r.did,
-      handle: r.handle,
-      name: r.name,
-      avatar: r.avatar,
-    })),
+    externalAdmins: externalAdminRows.map((r) =>
+      stripNulls({
+        did: r.did,
+        handle: r.handle,
+        name: r.name,
+        avatar: r.avatar,
+      }) as ExternalAdminRow,
+    ),
   };
 };

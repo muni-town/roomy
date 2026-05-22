@@ -14,29 +14,30 @@ import { getReadPositions } from "../queries/readPositions.ts";
 import { requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
+import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface SidebarChannel {
   id: string;
-  name: string | null;
+  name?: string;
   defaultAccess: "readwrite" | "read" | "none";
   canRead: boolean;
   canWrite: boolean;
   unreadCount: number;
-  lastRead: string | null;
+  lastRead?: string;
 }
 
 interface SidebarCategory {
-  id: string | null; // null for v0 (legacy categories with no stable id)
+  id?: string; // absent for v0 (legacy categories with no stable id)
   name: string;
   position: number;
   channels: SidebarChannel[];
 }
 
 interface GetMetadataResult {
-  name: string | null;
-  avatar: string | null;
-  description: string | null;
+  name?: string;
+  avatar?: string;
+  description?: string;
   joinPolicy: { allowPublicJoin: boolean; allowMemberInvites: boolean };
   isMember: boolean;
   isAdmin: boolean;
@@ -145,7 +146,7 @@ export const getMetadataHandler: QueryHandler<
     const acc = roomAccess(db, id, userDid);
     if (!acc.canRead) return null;
     const pos = readPositions.get(id);
-    return {
+    return stripNulls({
       id: row.id,
       name: row.name,
       defaultAccess: acc.defaultAccess,
@@ -153,7 +154,7 @@ export const getMetadataHandler: QueryHandler<
       canWrite: acc.canWrite,
       unreadCount: pos?.unreadCount ?? 0,
       lastRead: pos?.lastRead ?? null,
-    };
+    }) as SidebarChannel;
   };
 
   const referencedIds = new Set<string>();
@@ -164,12 +165,12 @@ export const getMetadataHandler: QueryHandler<
       const ch = buildChannel(childId);
       if (ch) channels.push(ch);
     }
-    return {
+    return stripNulls({
       id: cat.id ?? null,
       name: cat.name,
       position: idx,
       channels,
-    };
+    }) as SidebarCategory;
   });
 
   const orphans: SidebarChannel[] = [];
@@ -179,7 +180,7 @@ export const getMetadataHandler: QueryHandler<
     if (ch) orphans.push(ch);
   }
 
-  return {
+  return stripNulls({
     name: spaceRow.name,
     avatar: spaceRow.avatar,
     description: spaceRow.description,
@@ -191,5 +192,5 @@ export const getMetadataHandler: QueryHandler<
     isMember: access.isMember,
     isAdmin: access.isAdmin,
     sidebar: { categories, orphans },
-  };
+  }) as GetMetadataResult;
 };

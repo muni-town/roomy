@@ -18,5 +18,5 @@ export { Message };
 
 export const Response = type({
   messages: Message.array(),
-  cursor: "string | null",
+  "cursor?": "string",
 });

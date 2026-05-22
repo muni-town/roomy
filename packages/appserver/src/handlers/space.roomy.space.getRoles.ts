@@ -11,6 +11,7 @@ import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
+import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface RoleRoom {
@@ -20,9 +21,9 @@ interface RoleRoom {
 
 interface RoleRow {
   id: string;
-  name: string | null;
-  avatar: string | null;
-  description: string | null;
+  name?: string;
+  avatar?: string;
+  description?: string;
   rooms: RoleRoom[];
   memberDids: string[];
 }
@@ -80,17 +81,19 @@ export const getRolesHandler: QueryHandler<
         where role_id = ? and stream_id = ?`,
   );
 
-  const roles: RoleRow[] = roleRows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    avatar: r.avatar,
-    description: r.description,
-    rooms: roomsStmt.all(r.id, spaceId).map((row) => ({
-      roomId: row.room_id,
-      permission: row.permission,
-    })),
-    memberDids: membersStmt.all(r.id, spaceId).map((row) => row.user_id),
-  }));
+  const roles: RoleRow[] = roleRows.map((r) =>
+    stripNulls({
+      id: r.id,
+      name: r.name,
+      avatar: r.avatar,
+      description: r.description,
+      rooms: roomsStmt.all(r.id, spaceId).map((row) => ({
+        roomId: row.room_id,
+        permission: row.permission,
+      })),
+      memberDids: membersStmt.all(r.id, spaceId).map((row) => row.user_id),
+    }) as RoleRow,
+  );
 
   return { roles };
 };

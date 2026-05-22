@@ -17,14 +17,14 @@ import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface ThreadRow {
   id: string;
-  name: string | null;
-  canonicalParent: string | null;
+  name?: string;
+  canonicalParent?: string;
   activity: {
-    latestTimestamp: string | null;
+    latestTimestamp?: string;
     latestMembers: Array<{
       did: string;
-      name: string | null;
-      avatar: string | null;
+      name?: string;
+      avatar?: string;
     }>;
   };
 }
@@ -58,15 +58,21 @@ export const getRoomThreadsHandler: QueryHandler<
   for (const t of all) {
     const acc = roomAccess(db, t.id, userDid);
     if (!acc.canRead) continue;
-    threads.push({
-      id: t.id,
-      name: t.name,
-      canonicalParent: t.canonicalParent,
-      activity: {
-        latestTimestamp: t.latestTimestamp,
-        latestMembers: t.latestMembers,
-      },
+    const members = t.latestMembers.map((m) => {
+      const out: { did: string; name?: string; avatar?: string } = { did: m.did };
+      if (m.name != null) out.name = m.name;
+      if (m.avatar != null) out.avatar = m.avatar;
+      return out;
     });
+    const activity: { latestTimestamp?: string; latestMembers: typeof members } = {
+      latestMembers: members,
+    };
+    if (t.latestTimestamp != null) activity.latestTimestamp = t.latestTimestamp;
+
+    const thread: ThreadRow = { id: t.id, activity };
+    if (t.name != null) thread.name = t.name;
+    if (t.canonicalParent != null) thread.canonicalParent = t.canonicalParent;
+    threads.push(thread);
   }
 
   return { threads };

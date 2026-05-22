@@ -19,9 +19,9 @@ import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface SpaceRow {
   id: string;
-  name: string | null;
-  avatar: string | null;
-  description: string | null;
+  name?: string;
+  avatar?: string;
+  description?: string;
   unreadCount: number;
   isMember: boolean;
   isAdmin: boolean;
@@ -102,16 +102,21 @@ export const getSpacesHandler: QueryHandler<
     )
     .all(userDid, personalStreamDid);
 
-  const spaces: SpaceRow[] = rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    avatar: r.avatar,
-    description: r.description,
-    unreadCount: getSpaceUnreadCount(db, userDid, r.id),
-    isMember: !!r.is_member,
-    isAdmin: !!r.is_admin,
-    roleIds: [],
-  }));
+  const spaces: SpaceRow[] = rows.map((r) => {
+    const space: SpaceRow = {
+      id: r.id,
+      unreadCount: getSpaceUnreadCount(db, userDid, r.id),
+      isMember: !!r.is_member,
+      isAdmin: !!r.is_admin,
+      roleIds: [],
+    };
+    // Omit optional string fields when null — AT Protocol lexicon
+    // validation rejects null for non-nullable string properties.
+    if (r.name !== null) space.name = r.name;
+    if (r.avatar !== null) space.avatar = r.avatar;
+    if (r.description !== null) space.description = r.description;
+    return space;
+  });
 
   return { spaces };
 };

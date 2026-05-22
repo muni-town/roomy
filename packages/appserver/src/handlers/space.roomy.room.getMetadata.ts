@@ -14,25 +14,26 @@ import { listThreadActivity } from "../queries/threadActivity.ts";
 import { requireRoomRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
+import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface RecentThread {
   id: string;
-  name: string | null;
+  name?: string;
   canRead: boolean;
   canWrite: boolean;
   unreadCount: number;
-  lastRead: string | null;
+  lastRead?: string;
 }
 
 interface GetRoomMetadataResult {
-  name: string | null;
+  name?: string;
   kind: string;
   spaceId: string;
   defaultAccess: "readwrite" | "read" | "none";
   canRead: boolean;
   canWrite: boolean;
-  lastRead: string | null;
+  lastRead?: string;
   unreadCount: number;
   recentThreads: RecentThread[];
 }
@@ -87,18 +88,18 @@ export const getRoomMetadataHandler: QueryHandler<
   for (const t of threadRoomIds) {
     const acc = roomAccess(db, t.id, userDid);
     const pos = threadPositions.get(t.id);
-    recentThreads.push({
+    recentThreads.push(stripNulls({
       id: t.id,
       name: t.name,
       canRead: acc.canRead,
       canWrite: acc.canWrite,
       unreadCount: pos?.unreadCount ?? 0,
       lastRead: pos?.lastRead ?? null,
-    });
+    }) as RecentThread);
   }
 
   const pos = getReadPosition(db, userDid, roomId);
-  return {
+  return stripNulls({
     name: row?.name ?? null,
     kind: stripLabel(row?.label ?? null),
     spaceId: access.spaceId ?? "",
@@ -108,7 +109,7 @@ export const getRoomMetadataHandler: QueryHandler<
     lastRead: pos.lastRead,
     unreadCount: pos.unreadCount,
     recentThreads,
-  };
+  }) as GetRoomMetadataResult;
 };
 
 /**
