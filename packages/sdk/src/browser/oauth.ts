@@ -40,6 +40,9 @@ const NSID_GET_MESSAGES = "space.roomy.room.getMessages";
 const NSID_GET_MESSAGE = "space.roomy.message.getMessage";
 const NSID_UPDATE_SEEN = "space.roomy.room.updateSeen";
 const NSID_SEND_EVENTS = "space.roomy.space.sendEvents";
+const NSID_CREATE_SPACE = "space.roomy.space.createSpace";
+const NSID_JOIN_SPACE = "space.roomy.space.joinSpace";
+const NSID_LEAVE_SPACE = "space.roomy.space.leaveSpace";
 
 // ── Lexicon definitions (for atproto agent proxy) ─────────────────────────
 
@@ -191,6 +194,82 @@ const LEXICONS = [
             properties: {
               spaceId: { type: "string" as const },
               events: { type: "array" as const },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
+    id: NSID_CREATE_SPACE,
+    defs: {
+      main: {
+        type: "procedure" as const,
+        input: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["name"],
+            properties: {
+              name: { type: "string" as const },
+              description: { type: "string" as const },
+              avatar: { type: "string" as const },
+            },
+          },
+        },
+        output: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["spaceId"],
+            properties: { spaceId: { type: "string" as const } },
+          },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
+    id: NSID_JOIN_SPACE,
+    defs: {
+      main: {
+        type: "procedure" as const,
+        input: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["spaceId"],
+            properties: {
+              spaceId: { type: "string" as const },
+              inviteToken: { type: "string" as const },
+            },
+          },
+        },
+        output: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["spaceId"],
+            properties: { spaceId: { type: "string" as const } },
+          },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
+    id: NSID_LEAVE_SPACE,
+    defs: {
+      main: {
+        type: "procedure" as const,
+        input: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["spaceId"],
+            properties: {
+              spaceId: { type: "string" as const },
             },
           },
         },
