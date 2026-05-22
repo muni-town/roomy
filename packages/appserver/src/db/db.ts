@@ -15,11 +15,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Bump whenever schema.sql changes. Mirrors the frontend's
+ * Bump whenever schema.sql OR materialiser logic changes — a bump triggers
+ * a wipe + full re-materialisation from the Leaf log, which is how a
+ * materialiser change is rolled out to existing data. Mirrors the frontend's
  * `CONFIG.databaseSchemaVersion`. Strings, not numbers, so we can use
  * suffixes (e.g. `"6-appserver.1"`) once the two diverge.
+ *
+ * `.7`: getSpaces/hydration now read membership from `joinedSpace` edges
+ * instead of `comp_space.hidden`; needs a re-materialise to seed the edges.
  */
-export const SCHEMA_VERSION = "7-appserver.6";
+export const SCHEMA_VERSION = "7-appserver.7";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 

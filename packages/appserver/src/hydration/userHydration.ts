@@ -20,6 +20,7 @@ import {
   getOrCreateMaterializer,
   type GetOrCreateOpts,
 } from "../materialization/registry.ts";
+import { JOINED_SPACE_LABEL } from "../queries/joinedSpaces.ts";
 import {
   PersonalStreamRecordNotFound,
   resolvePersonalStreamDid,
@@ -132,9 +133,10 @@ async function run(
 
 /**
  * Read the user's intended (joined-and-not-left) spaces from their personal
- * stream's materialised state. Personal stream's `PersonalJoinSpace` inserts
- * an entity row for each spaceDid (with stream_id = personalStreamDid) and a
- * comp_space row; `PersonalLeaveSpace` flips `hidden = 1`.
+ * stream's materialised state. `PersonalJoinSpace` writes a `joinedSpace`
+ * edge (head = personal stream, tail = space); `PersonalLeaveSpace` deletes
+ * it. Membership is per-user, so it lives in `edges` rather than on the
+ * single global `comp_space` row a space has.
  */
 function readIntendedSpaceDids(
   db: Database,
@@ -142,14 +144,12 @@ function readIntendedSpaceDids(
 ): StreamDid[] {
   const rows = db
     .query<{ id: string }, [string, string]>(
-      `select e.id
-         from entities e
-         join comp_space cs on cs.entity = e.id
-        where e.stream_id = ?
-          and cs.hidden = 0
-          and e.id != ?`,
+      `select tail as id
+         from edges
+        where head = ?
+          and label = ?`,
     )
-    .all(personalStreamDid, personalStreamDid);
+    .all(personalStreamDid, JOINED_SPACE_LABEL);
   return rows.map((r) => r.id as StreamDid);
 }
 

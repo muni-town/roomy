@@ -49,6 +49,9 @@ function failingSpace(streamDid: StreamDid, msg: string): ConnectedSpaceLike {
  * Fake-personal-stream seeding: the production materializer would write these
  * rows from PersonalJoinSpace events. We bypass the materializer here and
  * write the rows directly so we can test hydration in isolation.
+ *
+ * A joined space is a `joinedSpace` edge from the personal stream; a left
+ * space has no such edge (PersonalLeaveSpace deletes it).
  */
 function seedPersonalIntent(
   db: Database,
@@ -56,27 +59,19 @@ function seedPersonalIntent(
   joinedSpaces: StreamDid[],
   leftSpaces: StreamDid[] = [],
 ) {
+  // Entity rows are the FK targets for the joinedSpace edges. Each entity is
+  // scoped to its own stream.
   for (const did of [personalStreamDid, ...joinedSpaces, ...leftSpaces]) {
     db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
       did,
-      personalStreamDid,
+      did,
     ]);
   }
-  // Personal stream's own comp_space row (PersonalJoinSpace seeds this for
-  // the spaceDid; the personal stream itself gets one from
-  // SpaceMaterializer's seed).
-  db.run("insert or ignore into comp_space (entity, hidden) values (?, 0)", [
-    personalStreamDid,
-  ]);
   for (const did of joinedSpaces) {
-    db.run("insert or ignore into comp_space (entity, hidden) values (?, 0)", [
-      did,
-    ]);
-  }
-  for (const did of leftSpaces) {
-    db.run("insert or ignore into comp_space (entity, hidden) values (?, 1)", [
-      did,
-    ]);
+    db.run(
+      "insert or ignore into edges (head, tail, label) values (?, ?, 'joinedSpace')",
+      [personalStreamDid, did],
+    );
   }
 }
 
@@ -131,7 +126,7 @@ describe("hydrateUserMembership", () => {
     expect(new Set(calls)).toEqual(new Set([PERSONAL, SPACE_A, SPACE_B]));
   });
 
-  test("left spaces (hidden=1) are excluded from intent", async () => {
+  test("left spaces (no joinedSpace edge) are excluded from intent", async () => {
     _resetMaterializerRegistry();
     _resetHydrationInflight();
     const db = freshDb();

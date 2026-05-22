@@ -49,6 +49,14 @@ create index if not exists idx_edges_label on edges(label);
 create index if not exists idx_edges_label_head on edges(label, head);
 create index if not exists idx_edges_label_tail on edges(label, tail);
 
+-- Space-global config + the backfill cursor. One row per space.
+--
+-- NOTE: `hidden` is per-user join intent and so does NOT belong on this
+-- global row — with multiple members one user leaving would hide the space
+-- for everyone. The appserver reads membership from `edges` rows labelled
+-- 'joinedSpace' instead (see queries/joinedSpaces.ts). `hidden` is still
+-- written by the shared SDK materialiser (the main app's local DB reads it)
+-- but the appserver ignores it. Drop it once the main app also migrates.
 create table if not exists comp_space (
   entity text primary key references entities(id) on delete cascade,
   hidden integer not null default 0 check(hidden in (0, 1)),
