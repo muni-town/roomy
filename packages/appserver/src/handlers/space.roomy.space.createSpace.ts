@@ -21,6 +21,7 @@ import { getServiceClient, getConnectedSpace } from "../serviceClient.ts";
 import { getOrCreateMaterializer } from "../materialization/registry.ts";
 import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
 import { XrpcError } from "../xrpc/errors.ts";
+import { Router as InvalidationRouter } from "../invalidation/index.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
 interface CreateSpaceBody {
@@ -105,6 +106,31 @@ export const createSpaceHandler: ProcedureHandler<
   const mat = await getOrCreateMaterializer(spaceId);
   await mat.backfillDone;
   await mat.drain();
+
+  // ── 6. Drain personal stream materialiser so the joinSpace event is
+  //        visible to subsequent getSpaces HTTP queries ────────────────
+  const personalMat = await getOrCreateMaterializer(personalStreamDid);
+  await personalMat.drain();
+
+  // ── 7. Emit direct getSpaces invalidation signal ──────────────────────
+  // The personal stream materializer will also emit this signal when it
+  // processes the personal.joinSpace event via its live subscription, but
+  // that delivery is asynchronous and may race with the HTTP response.
+  // Emitting directly ensures the sync client receives the signal
+  // immediately.
+  const router = InvalidationRouter.getInstance();
+  if (router) {
+    router.emit([
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getSpaces",
+          params: {},
+          affectedUser: callerDid,
+        },
+      },
+    ]);
+  }
 
   return { spaceId };
 };

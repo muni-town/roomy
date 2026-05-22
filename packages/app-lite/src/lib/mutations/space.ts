@@ -1,6 +1,5 @@
-import { transport, cache } from "@roomy-space/sdk";
+import { transport } from "@roomy-space/sdk";
 import { px } from "$lib/auth.svelte";
-import { queryClient } from "$lib/client";
 import { sendEvents } from "./send-events";
 
 const { agentProcedure } = transport;
@@ -9,21 +8,19 @@ export async function joinSpace(
   spaceId: string,
   inviteToken?: string,
 ): Promise<void> {
+  // Invalidation is handled by the appserver's sync signal
+  // (personal.joinSpace → getSpaces invalidation via WebSocket).
   await agentProcedure(px(), "space.roomy.space.joinSpace", {
     spaceId,
     ...(inviteToken ? { inviteToken } : {}),
   });
-  await queryClient.invalidateQueries({
-    queryKey: cache.queryKey("space.roomy.space.getSpaces"),
-  });
 }
 
 export async function leaveSpace(spaceId: string): Promise<void> {
+  // Invalidation is handled by the appserver's sync signal
+  // (personal.leaveSpace → getSpaces invalidation via WebSocket).
   await agentProcedure(px(), "space.roomy.space.leaveSpace", {
     spaceId,
-  });
-  await queryClient.invalidateQueries({
-    queryKey: cache.queryKey("space.roomy.space.getSpaces"),
   });
 }
 
@@ -32,13 +29,12 @@ export async function createSpace(opts: {
   description?: string;
   avatar?: string;
 }): Promise<{ spaceId: string }> {
+  // Invalidation is handled by the appserver's sync signal
+  // (personal.joinSpace → getSpaces invalidation via WebSocket).
   const result = await agentProcedure(px(), "space.roomy.space.createSpace", {
     name: opts.name,
     ...(opts.description ? { description: opts.description } : {}),
     ...(opts.avatar ? { avatar: opts.avatar } : {}),
-  });
-  await queryClient.invalidateQueries({
-    queryKey: cache.queryKey("space.roomy.space.getSpaces"),
   });
   return result;
 }

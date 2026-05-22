@@ -306,7 +306,7 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("getSpaces invalidation reaches all connections with a space topic", () => {
+  test("getSpaces invalidation reaches all connections regardless of topic subscriptions", () => {
     const router = new MockRouter();
     const manager = new SyncManager(router as unknown as InvalidationRouter);
 
@@ -325,8 +325,9 @@ describe("SyncManager", () => {
 
     router.emitSignals([queryInvalidation("space.roomy.space.getSpaces", {})]);
 
+    // getSpaces is user-scoped — both connections receive it.
     expect(socketA.sentFrames.length).toBe(1);
-    expect(socketB.sentFrames.length).toBe(0); // no space topic
+    expect(socketB.sentFrames.length).toBe(1);
 
     manager.destroy();
   });

@@ -216,7 +216,11 @@ export class SyncManager {
     const topics = topicsForSignal(signal);
 
     // getSpaces has no specific topic — broadcast to ALL connections
-    // filtered by affectedUser.
+    // filtered by affectedUser. Unlike space/room-scoped queries,
+    // getSpaces is user-scoped and relevant regardless of which topics
+    // the connection is currently subscribed to (e.g. the user may be
+    // on /new or / with no space topic, but still needs their space
+    // list to update when a space is created or joined).
     if (signal.nsid === "space.roomy.space.getSpaces") {
       const frame = messageFrame("#invalidate", {
         nsid: signal.nsid,
@@ -226,8 +230,6 @@ export class SyncManager {
         if (!conn.isOpen) continue;
         // If affectedUser is set, only send to that user.
         if (signal.affectedUser && conn.did !== signal.affectedUser) continue;
-        // Only send if they're subscribed to at least one space topic.
-        if (!hasSpaceTopic(conn.topics)) continue;
         conn.send(frame);
       }
       return;

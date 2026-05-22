@@ -8,12 +8,14 @@
  * @see packages/appserver/docs/plans/procedure-backlog.md
  */
 
-import { newUlid, UserDid, type } from "@roomy-space/sdk";
+import { newUlid, UserDid, type, type StreamDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { getConnectedSpace } from "../serviceClient.ts";
 import { isMember, isAdmin } from "../auth/access.ts";
 import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
 import { XrpcError } from "../xrpc/errors.ts";
+import { Router as InvalidationRouter } from "../invalidation/index.ts";
+import { getOrCreateMaterializer } from "../materialization/registry.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
 interface LeaveSpaceBody {
@@ -78,8 +80,9 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
   );
 
   // ── 2. Write personal.leaveSpace to user's personal stream ───────────
+  let personalStreamDid: StreamDid | undefined;
   try {
-    const personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
+    personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
     const personalSpace = await getConnectedSpace(personalStreamDid);
     await personalSpace.sendEvent(
       {
@@ -94,5 +97,30 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
       `[leaveSpace] Failed to write personal leave for ${callerDid}:`,
       err instanceof Error ? err.message : err,
     );
+  }
+
+  // ── 3. Drain personal stream materialiser ────────────────────────────
+  if (personalStreamDid) {
+    try {
+      const personalMat = await getOrCreateMaterializer(personalStreamDid);
+      await personalMat.drain();
+    } catch {
+      // Best-effort — the materializer pipeline will catch up asynchronously.
+    }
+  }
+
+  // ── 4. Emit direct getSpaces invalidation signal ─────────────────────
+  const router = InvalidationRouter.getInstance();
+  if (router) {
+    router.emit([
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getSpaces",
+          params: {},
+          affectedUser: callerDid,
+        },
+      },
+    ]);
   }
 };

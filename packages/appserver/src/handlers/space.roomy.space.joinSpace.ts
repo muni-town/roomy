@@ -14,6 +14,8 @@ import { getConnectedSpace } from "../serviceClient.ts";
 import { isBanned } from "../auth/access.ts";
 import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
 import { XrpcError } from "../xrpc/errors.ts";
+import { Router as InvalidationRouter } from "../invalidation/index.ts";
+import { getOrCreateMaterializer } from "../materialization/registry.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
 interface JoinSpaceBody {
@@ -127,6 +129,26 @@ export const joinSpaceHandler: ProcedureHandler<
     },
     callerDid,
   );
+
+  // ── 3. Drain personal stream materialiser so the joinSpace event is
+  //        visible to subsequent getSpaces HTTP queries ────────────────
+  const personalMat = await getOrCreateMaterializer(personalStreamDid);
+  await personalMat.drain();
+
+  // ── 4. Emit direct getSpaces invalidation signal ──────────────────────
+  const router = InvalidationRouter.getInstance();
+  if (router) {
+    router.emit([
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getSpaces",
+          params: {},
+          affectedUser: callerDid,
+        },
+      },
+    ]);
+  }
 
   return { spaceId };
 };
