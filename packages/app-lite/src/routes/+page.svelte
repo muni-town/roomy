@@ -12,8 +12,7 @@
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { auth, login } from "$lib/auth.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
-  import { joinSpace, createSpace } from "$lib/mutations/space";
-  import { goto } from "$app/navigation";
+  import { joinSpace } from "$lib/mutations/space";
   import { queryClient } from "$lib/client";
   import { schemas, cache } from "@roomy-space/sdk";
 
@@ -122,20 +121,7 @@
     onLogin(evt);
   }
 
-  let creating = $state(false);
-  async function onCreateSpace() {
-    const name = window.prompt("Space name:");
-    if (!name || creating) return;
-    creating = true;
-    try {
-      const { spaceId } = await createSpace({ name });
-      goto(`/${spaceId}`);
-    } catch (e) {
-      console.error("Failed to create space", e);
-    } finally {
-      creating = false;
-    }
-  }
+
 
   let rejoining = $state<string | null>(null);
 
@@ -215,9 +201,9 @@
 
         <hr class="w-full max-w-2xl border-base-200 dark:border-base-800" />
 
-        <Button class="gap-2" onclick={onCreateSpace} disabled={creating}>
+        <Button class="gap-2" href="/new">
           <IconPlus />
-          {creating ? 'Creating…' : 'Create Space'}
+          Create Space
         </Button>
 
         {#if spacesQuery.isPending}
