@@ -23,89 +23,34 @@ const HANDLE_RESOLVER = "https://bsky.social";
 
 export const DEFAULT_APPSERVER_DID = "did:web:appserver.roomy.chat";
 
-// ── NSID constants ────────────────────────────────────────────────────────
-
-const NSID_TICKET = "space.roomy.auth.getConnectionTicket";
-const NSID_CONNECT_SPACE = "space.roomy.admin.connectSpace";
-const NSID_MATERIALIZE_SPACE = "space.roomy.admin.materializeSpace";
-const NSID_GET_SPACES = "space.roomy.space.getSpaces";
-const NSID_GET_MEMBERS = "space.roomy.space.getMembers";
-const NSID_GET_SPACE_METADATA = "space.roomy.space.getMetadata";
-const NSID_GET_SPACE_THREADS = "space.roomy.space.getThreads";
-const NSID_GET_ROLES = "space.roomy.space.getRoles";
-const NSID_GET_INVITES = "space.roomy.space.getInvites";
-const NSID_GET_ROOM_METADATA = "space.roomy.room.getMetadata";
-const NSID_GET_ROOM_THREADS = "space.roomy.room.getThreads";
-const NSID_GET_MESSAGES = "space.roomy.room.getMessages";
-const NSID_GET_MESSAGE = "space.roomy.message.getMessage";
-const NSID_UPDATE_SEEN = "space.roomy.room.updateSeen";
-const NSID_SEND_EVENTS = "space.roomy.space.sendEvents";
-const NSID_CREATE_SPACE = "space.roomy.space.createSpace";
-const NSID_JOIN_SPACE = "space.roomy.space.joinSpace";
-const NSID_LEAVE_SPACE = "space.roomy.space.leaveSpace";
-
 // ── Lexicon definitions (for atproto agent proxy) ─────────────────────────
+//
+// Generated lexicons live in ../schemas/lexicons/*.json and are auto-generated
+// from the arktype schemas by `pnpm generate:lexicons`. Two admin-only NSIDs
+// that have no arktype schema are defined inline below.
 
-function spaceQueryLexicon(id: string) {
-  return {
-    lexicon: 1,
-    id,
-    defs: {
-      main: {
-        type: "query" as const,
-        parameters: {
-          type: "params" as const,
-          required: ["spaceId"],
-          properties: { spaceId: { type: "string" as const } },
-        },
-        output: { encoding: "application/json", schema: { type: "object" as const } },
-      },
-    },
-  };
-}
+import lexGetConnectionTicket from "../schemas/lexicons/space.roomy.auth.getConnectionTicket.json";
+import lexGetMessage from "../schemas/lexicons/space.roomy.message.getMessage.json";
+import lexGetMessages from "../schemas/lexicons/space.roomy.room.getMessages.json";
+import lexGetRoomMetadata from "../schemas/lexicons/space.roomy.room.getMetadata.json";
+import lexGetRoomThreads from "../schemas/lexicons/space.roomy.room.getThreads.json";
+import lexUpdateSeen from "../schemas/lexicons/space.roomy.room.updateSeen.json";
+import lexCreateSpace from "../schemas/lexicons/space.roomy.space.createSpace.json";
+import lexGetInvites from "../schemas/lexicons/space.roomy.space.getInvites.json";
+import lexGetMembers from "../schemas/lexicons/space.roomy.space.getMembers.json";
+import lexGetSpaceMetadata from "../schemas/lexicons/space.roomy.space.getMetadata.json";
+import lexGetRoles from "../schemas/lexicons/space.roomy.space.getRoles.json";
+import lexGetSpaces from "../schemas/lexicons/space.roomy.space.getSpaces.json";
+import lexGetSpaceThreads from "../schemas/lexicons/space.roomy.space.getThreads.json";
+import lexJoinSpace from "../schemas/lexicons/space.roomy.space.joinSpace.json";
+import lexLeaveSpace from "../schemas/lexicons/space.roomy.space.leaveSpace.json";
+import lexSendEvents from "../schemas/lexicons/space.roomy.space.sendEvents.json";
 
-function roomQueryLexicon(
-  id: string,
-  extraProps: Record<string, { type: string }> = {},
-) {
-  return {
-    lexicon: 1,
-    id,
-    defs: {
-      main: {
-        type: "query" as const,
-        parameters: {
-          type: "params" as const,
-          required: ["roomId"],
-          properties: { roomId: { type: "string" as const }, ...extraProps },
-        },
-        output: { encoding: "application/json", schema: { type: "object" as const } },
-      },
-    },
-  };
-}
-
-const LEXICONS = [
+/** Admin/internal NSIDs that have no arktype schema (so no generated lexicon). */
+const ADMIN_LEXICONS = [
   {
     lexicon: 1,
-    id: NSID_TICKET,
-    defs: {
-      main: {
-        type: "procedure" as const,
-        output: {
-          encoding: "application/json",
-          schema: {
-            type: "object" as const,
-            required: ["ticket"],
-            properties: { ticket: { type: "string" as const } },
-          },
-        },
-      },
-    },
-  },
-  {
-    lexicon: 1,
-    id: NSID_CONNECT_SPACE,
+    id: "space.roomy.admin.connectSpace",
     defs: {
       main: {
         type: "query" as const,
@@ -123,162 +68,7 @@ const LEXICONS = [
   },
   {
     lexicon: 1,
-    id: NSID_GET_SPACES,
-    defs: {
-      main: {
-        type: "query" as const,
-        output: {
-          encoding: "application/json",
-          schema: { type: "object" as const },
-        },
-      },
-    },
-  },
-  spaceQueryLexicon(NSID_GET_MEMBERS),
-  spaceQueryLexicon(NSID_GET_SPACE_METADATA),
-  spaceQueryLexicon(NSID_GET_SPACE_THREADS),
-  spaceQueryLexicon(NSID_GET_ROLES),
-  spaceQueryLexicon(NSID_GET_INVITES),
-  roomQueryLexicon(NSID_GET_ROOM_METADATA),
-  roomQueryLexicon(NSID_GET_ROOM_THREADS),
-  roomQueryLexicon(NSID_GET_MESSAGES, {
-    limit: { type: "string" },
-    cursor: { type: "string" },
-  }),
-  {
-    lexicon: 1,
-    id: NSID_UPDATE_SEEN,
-    defs: {
-      main: {
-        type: "procedure" as const,
-        input: {
-          encoding: "application/json",
-          schema: {
-            type: "object" as const,
-            required: ["roomId"],
-            properties: {
-              roomId: { type: "string" as const },
-              seenUpTo: { type: "string" as const },
-            },
-          },
-        },
-      },
-    },
-  },
-  {
-    lexicon: 1,
-    id: NSID_GET_MESSAGE,
-    defs: {
-      main: {
-        type: "query" as const,
-        parameters: {
-          type: "params" as const,
-          required: ["messageId"],
-          properties: { messageId: { type: "string" as const } },
-        },
-        output: { encoding: "application/json", schema: { type: "object" as const } },
-      },
-    },
-  },
-  {
-    lexicon: 1,
-    id: NSID_SEND_EVENTS,
-    defs: {
-      main: {
-        type: "procedure" as const,
-        input: {
-          encoding: "application/json",
-          schema: {
-            type: "object" as const,
-            required: ["spaceId", "events"],
-            properties: {
-              spaceId: { type: "string" as const },
-              events: { type: "array" as const },
-            },
-          },
-        },
-      },
-    },
-  },
-  {
-    lexicon: 1,
-    id: NSID_CREATE_SPACE,
-    defs: {
-      main: {
-        type: "procedure" as const,
-        input: {
-          encoding: "application/json",
-          schema: {
-            type: "object" as const,
-            required: ["name"],
-            properties: {
-              name: { type: "string" as const },
-              description: { type: "string" as const },
-              avatar: { type: "string" as const },
-            },
-          },
-        },
-        output: {
-          encoding: "application/json",
-          schema: {
-            type: "object" as const,
-            required: ["spaceId"],
-            properties: { spaceId: { type: "string" as const } },
-          },
-        },
-      },
-    },
-  },
-  {
-    lexicon: 1,
-    id: NSID_JOIN_SPACE,
-    defs: {
-      main: {
-        type: "procedure" as const,
-        input: {
-          encoding: "application/json",
-          schema: {
-            type: "object" as const,
-            required: ["spaceId"],
-            properties: {
-              spaceId: { type: "string" as const },
-              inviteToken: { type: "string" as const },
-            },
-          },
-        },
-        output: {
-          encoding: "application/json",
-          schema: {
-            type: "object" as const,
-            required: ["spaceId"],
-            properties: { spaceId: { type: "string" as const } },
-          },
-        },
-      },
-    },
-  },
-  {
-    lexicon: 1,
-    id: NSID_LEAVE_SPACE,
-    defs: {
-      main: {
-        type: "procedure" as const,
-        input: {
-          encoding: "application/json",
-          schema: {
-            type: "object" as const,
-            required: ["spaceId"],
-            properties: {
-              spaceId: { type: "string" as const },
-            },
-          },
-        },
-      },
-    },
-  },
-  {
-    lexicon: 1,
-    id: NSID_MATERIALIZE_SPACE,
+    id: "space.roomy.admin.materializeSpace",
     defs: {
       main: {
         type: "query" as const,
@@ -297,6 +87,27 @@ const LEXICONS = [
       },
     },
   },
+];
+
+/** All Roomy lexicons, used by `makeProxiedAgent` to register on the atproto Agent. */
+const LEXICONS = [
+  lexGetConnectionTicket,
+  lexGetMessage,
+  lexGetMessages,
+  lexGetRoomMetadata,
+  lexGetRoomThreads,
+  lexUpdateSeen,
+  lexCreateSpace,
+  lexGetInvites,
+  lexGetMembers,
+  lexGetSpaceMetadata,
+  lexGetRoles,
+  lexGetSpaces,
+  lexGetSpaceThreads,
+  lexJoinSpace,
+  lexLeaveSpace,
+  lexSendEvents,
+  ...ADMIN_LEXICONS,
 ];
 
 // ── OAuth client setup ────────────────────────────────────────────────────
