@@ -57,3 +57,26 @@ export async function deleteRoom(spaceId: string, roomId: string): Promise<strin
   ]);
   return id;
 }
+
+export async function restoreRoom(spaceId: string, roomId: string): Promise<void> {
+  await sendEvents(spaceId, [
+    {
+      id: newUlid(),
+      $type: "space.roomy.room.restoreRoom.v0",
+      roomId,
+    },
+  ]);
+}
+
+export async function updateSidebar(
+  spaceId: string,
+  categories: Array<{ id: string; name: string; children: string[] }>,
+): Promise<void> {
+  await sendEvents(spaceId, [
+    {
+      id: newUlid(),
+      $type: "space.roomy.space.updateSidebar.v1",
+      categories,
+    },
+  ]);
+}

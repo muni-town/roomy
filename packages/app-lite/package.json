@@ -23,6 +23,7 @@
     "@tiptap/starter-kit": "^2.26.1",
     "@tiptap/suggestion": "^2.26.1",
     "bits-ui": "^1.8.0",
+    "svelte-dnd-action": "^0.9.65",
     "tiptap-markdown": "^0.8.10",
     "virtua": "^0.43.2"
   },

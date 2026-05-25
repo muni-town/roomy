@@ -2,6 +2,7 @@
 @import "./fonts-hanken-grotesk.css";
 
 @source "../node_modules/@roomy/design";
+@source "../node_modules/@foxui";
 
 @custom-variant dark (&:is(.dark *));
 
