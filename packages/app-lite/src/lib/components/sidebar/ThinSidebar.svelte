@@ -4,6 +4,7 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import UserMenu from "@roomy/design/components/user/UserMenu.svelte";
+  import Tooltip from "@roomy/design/components/helper/Tooltip.svelte";
   import { IconSquaresPlus } from "@roomy/design/icons";
   import { logout } from "$lib/auth.svelte";
   import { sync_ } from "$lib/sync.svelte";
@@ -41,23 +42,27 @@
       {#if spacesQuery.data}
         {#each spacesQuery.data.spaces as space (space.id)}
           {@const isActive = activeSpace === space.id}
-          <a
-            href={`/${space.id}`}
-            title={space.name ?? space.id}
-            class={[
-              "size-10 rounded-full relative group outline-accent-500 transition-all duration-200 bg-base-300",
-              isActive ? "outline-2 cursor-default" : "cursor-pointer hover:outline-3",
-            ]}
-          >
-            <div class="flex items-center justify-center overflow-hidden rounded-full">
-              <SpaceAvatar
-                src={space.avatar ?? undefined}
-                id={space.id}
-                name={space.name ?? undefined}
-                size={40}
-              />
-            </div>
-          </a>
+          <Tooltip tip={space.name ?? space.id} contentProps={{ side: "right", sideOffset: 5, class: "opacity-full" }}>
+            {#snippet trigger(props)}
+              <a
+                {...props}
+                href={`/${space.id}`}
+                class={[
+                  "size-10 rounded-full relative group outline-accent-500 transition-all duration-200 bg-base-300",
+                  isActive ? "outline-2 cursor-default" : "cursor-pointer hover:outline-3",
+                ]}
+              >
+                <div class="flex items-center justify-center overflow-hidden rounded-full">
+                  <SpaceAvatar
+                    src={space.avatar ?? undefined}
+                    id={space.id}
+                    name={space.name ?? undefined}
+                    size={40}
+                  />
+                </div>
+              </a>
+            {/snippet}
+          </Tooltip>
         {/each}
       {/if}
     </div>

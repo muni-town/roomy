@@ -8,6 +8,7 @@
   import { requireAuth } from "$lib/components/layout/auth-guard.svelte";
   import LoginModal from "$lib/components/auth/LoginModal.svelte";
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
+  import { Tooltip } from "bits-ui";
 
   let { children } = $props();
 
@@ -54,7 +55,9 @@
 </script>
 
 <QueryClientProvider client={queryClient}>
-  {@render children()}
+  <Tooltip.Provider>
+    {@render children()}
+  </Tooltip.Provider>
 
   {#if auth.initError && requireAuth.value}
     <!-- init failed — show error behind modal -->

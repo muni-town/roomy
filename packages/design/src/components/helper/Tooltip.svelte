@@ -27,10 +27,10 @@
     <Tooltip.Content
       sideOffset={contentProps.sideOffset ?? 6}
       side={contentProps.side ?? "top"}
-      class={contentProps.class}
+      class="z-50 {contentProps.class ?? ''}"
     >
       <span
-        class="rounded-lg border-base-200 dark:border-base-800 shadow-xs bg-base-100/80 dark:bg-base-900/80 text-base-800/75 dark:text-base-200/75 outline-hidden z-0 flex items-center justify-center border p-1 px-2 text-sm"
+        class="rounded-lg border-base-200 dark:border-base-800 shadow-xs bg-base-100 dark:bg-base-900 text-base-800 dark:text-base-200 outline-hidden flex items-center justify-center border p-1 px-2 text-sm"
       >
         {#if typeof tip === "string"}
           {tip}
