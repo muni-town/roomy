@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#
+# wt-setup — Create a git worktree and prepare it for development.
+#
+# Usage: ./scripts/wt-setup <branch-name> [base-branch]
+#
+# Steps:
+#   1. git worktree add (branches from HEAD or specified base)
+#   2. Copy .env from packages with env files (app, app-lite, discord-bridge, appserver, playground)
+#   3. Install dependencies in a node:22 container
+#
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WORKTREES_DIR="$REPO_ROOT/worktrees"
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <branch-name> [base-branch]"
+  echo ""
+  echo "Creates a worktree at $WORKTREES_DIR/<branch-name>"
+  exit 1
+fi
+
+BRANCH="$1"
+BASE="${2:-HEAD}"
+WORKTREE_PATH="$WORKTREES_DIR/$BRANCH"
+
+# --- 1. Create worktree ---
+if [[ -d "$WORKTREE_PATH" ]]; then
+  echo "✗ Worktree already exists at $WORKTREE_PATH"
+  exit 1
+fi
+
+mkdir -p "$WORKTREES_DIR"
+git worktree add "$WORKTREE_PATH" -b "$BRANCH" "$BASE"
+echo "✔ Worktree created at $WORKTREE_PATH"
+
+# --- 2. Copy .env files ---
+# Packages that may have .env files
+ENV_PACKAGES=(app app-lite discord-bridge appserver playground)
+
+for pkg in "${ENV_PACKAGES[@]}"; do
+  SRC_DIR="$REPO_ROOT/packages/$pkg"
+  DST_DIR="$WORKTREE_PATH/packages/$pkg"
+  mkdir -p "$DST_DIR"
+
+  if [[ -f "$SRC_DIR/.env" ]]; then
+    cp "$SRC_DIR/.env" "$DST_DIR/.env"
+    echo "✔ Copied packages/$pkg/.env"
+  elif [[ -f "$SRC_DIR/.env.example" ]]; then
+    cp "$SRC_DIR/.env.example" "$DST_DIR/.env"
+    echo "✔ Copied packages/$pkg/.env.example as packages/$pkg/.env"
+  else
+    echo "⚠ No .env or .env.example found for packages/$pkg — skipped"
+  fi
+done
+
+# --- 3. Install dependencies in container ---
+SAFE_NAME="${BRANCH//\//-}"
+SETUP_NAME="setup-$SAFE_NAME"
+
+echo ""
+echo "Installing dependencies in node:22 container..."
+docker rm -f "$SETUP_NAME" 2>/dev/null || true
+docker run --rm \
+  --name "$SETUP_NAME" \
+  -v "$WORKTREE_PATH:/app" \
+  node:22 \
+  bash -c "cd /app && npm i -g pnpm && pnpm install && pnpm build --filter=@roomy-space/sdk"
+echo "✔ Dependencies installed, SDK built"
+
+echo ""
+echo "Worktree ready! Next step:"
+echo "  ./scripts/wt-run $BRANCH --port <port>"

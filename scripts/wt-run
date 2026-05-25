@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# wt-run — Spin up a dev server for a worktree.
+#
+# Usage: wt-run --port <port>
+#
+# Run this from inside the worktree directory.
+#
+set -euo pipefail
+
+WORKTREE_PATH="$(pwd)"
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 --port <port>"
+  exit 1
+fi
+
+PORT=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port) PORT="$2"; shift 2 ;;
+    *)      echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+if [[ -z "$PORT" ]]; then
+  echo "✗ --port is required"
+  exit 1
+fi
+
+SAFE_NAME="$(basename "$WORKTREE_PATH")"
+DEV_NAME="dev-${SAFE_NAME//\//-}"
+
+# --- Clean up any previous container ---
+docker rm -f "$DEV_NAME" 2>/dev/null || true
+
+# --- Start dev server ---
+echo "Starting dev server: $DEV_NAME on port $PORT"
+docker run -d \
+  --name "$DEV_NAME" \
+  -v "$WORKTREE_PATH:/app" \
+  -p "$PORT:$PORT" \
+  -e "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=dev-$SAFE_NAME" \
+  node:22 \
+  bash -c "cd /app/packages/app && npm i -g pnpm && npx vite dev --host 0.0.0.0 --port $PORT"
+echo "✔ Dev server started (http://localhost:$PORT)"
+echo "To stop: docker rm -f $DEV_NAME"
