@@ -18,7 +18,7 @@
   type Props = {
     spaceId: string;
     roomId: string;
-    canWrite: boolean;
+    canWrite: boolean | undefined;
   };
 
   let { spaceId, roomId, canWrite }: Props = $props();

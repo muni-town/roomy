@@ -18,8 +18,8 @@
   } from "../../../icons";
 
   type Props = {
-    /** Whether the current user can post in this room. */
-    canWrite: boolean;
+    /** Whether the current user can post in this room. `undefined` while loading. */
+    canWrite: boolean | undefined;
     /** Whether a message is currently being sent. */
     isSendingMessage: boolean;
     /** Local object-URLs for image / video previews. */
@@ -162,11 +162,17 @@
 
   <div class="w-full py-1">
     <div class="prose-a:text-primary prose-a:underline relative isolate">
-      {#if !canWrite}
+      {#if canWrite === false}
         <div
           class="flex items-center justify-center px-4 py-3 text-sm text-base-500 dark:text-base-400 bg-base-50 dark:bg-base-800 rounded-lg mx-2 mb-1"
         >
           You don't have permission to send messages in this channel.
+        </div>
+      {:else if canWrite === undefined}
+        <div
+          class="flex items-center justify-center px-4 py-3 bg-base-50 dark:bg-base-800 rounded-lg mx-2 mb-1"
+        >
+          <div class="h-4 w-64 animate-pulse rounded bg-base-200 dark:bg-base-700"></div>
         </div>
       {/if}
       {#if previewImages.length > 0}
@@ -197,7 +203,7 @@
         </div>
       {/if}
 
-      {#if canWrite}
+      {#if canWrite === true}
         <div class="flex w-full gap-2 items-center">
           {#if mode === "threading"}
             <form

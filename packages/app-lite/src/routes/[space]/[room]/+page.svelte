@@ -50,5 +50,5 @@
 
 <div class="h-full flex flex-col bg-white dark:bg-base-950">
   <ChatArea {spaceId} {roomId} />
-  <ChatInputArea {spaceId} {roomId} canWrite={roomQuery.data?.canWrite ?? false} />
+  <ChatInputArea {spaceId} {roomId} canWrite={roomQuery.data?.canWrite} />
 </div>
