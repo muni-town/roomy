@@ -6,7 +6,12 @@ import { type } from "arktype";
 
 export const NSID = "space.roomy.space.getMetadata" as const;
 
-export const Params = type({ spaceId: "string" });
+export const Params = type({ spaceId: "string", "includeDeleted?": "string" });
+
+export const DeletedRoom = type({
+  id: "string",
+  "name?": "string",
+});
 
 export const SidebarChannel = type({
   id: "string",
@@ -41,4 +46,5 @@ export const Response = type({
     categories: SidebarCategory.array(),
     orphans: SidebarChannel.array(),
   },
+  "deletedRooms?": DeletedRoom.array(),
 });

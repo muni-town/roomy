@@ -119,6 +119,20 @@
         }
       }
     },
+    "deletedRoom": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "sidebar": {
       "type": "object",
       "required": [
@@ -152,6 +166,9 @@
         "properties": {
           "spaceId": {
             "type": "string"
+          },
+          "includeDeleted": {
+            "type": "string"
           }
         }
       },
@@ -168,6 +185,13 @@
           "properties": {
             "avatar": {
               "type": "string"
+            },
+            "deletedRooms": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#deletedRoom"
+              }
             },
             "description": {
               "type": "string"

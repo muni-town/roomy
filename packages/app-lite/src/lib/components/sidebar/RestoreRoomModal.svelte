@@ -19,9 +19,15 @@
   } = $props();
 
   const deletedRoomsQuery = createQuery(() => ({
-    queryKey: queryKey("space.roomy.space.getMetadata", { spaceId }),
+    queryKey: queryKey("space.roomy.space.getMetadata", {
+      spaceId,
+      includeDeleted: "true",
+    }),
     queryFn: () =>
-      agentQuery(px(), "space.roomy.space.getMetadata", { spaceId }),
+      agentQuery(px(), "space.roomy.space.getMetadata", {
+        spaceId,
+        includeDeleted: "true",
+      }),
     enabled: open,
   }));
 
@@ -36,9 +42,8 @@
             ? deletedRoomsQuery.error.message
             : "Failed to load rooms",
       };
-    // For now, the metadata query doesn't return deleted rooms separately.
-    // We'll show an empty list until a dedicated endpoint is available.
-    return { status: "success", data: [] };
+    const rooms = deletedRoomsQuery.data?.deletedRooms ?? [];
+    return { status: "success", data: rooms };
   });
 
   async function onRestore(roomId: string) {

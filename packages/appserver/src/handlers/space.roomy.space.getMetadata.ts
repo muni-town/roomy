@@ -33,6 +33,11 @@ interface SidebarCategory {
   channels: SidebarChannel[];
 }
 
+interface DeletedRoom {
+  id: string;
+  name?: string;
+}
+
 interface GetMetadataResult {
   name?: string;
   avatar?: string;
@@ -41,6 +46,7 @@ interface GetMetadataResult {
   isMember: boolean;
   isAdmin: boolean;
   sidebar: { categories: SidebarCategory[]; orphans: SidebarChannel[] };
+  deletedRooms?: DeletedRoom[];
 }
 
 interface SidebarConfig {
@@ -191,6 +197,28 @@ export const getMetadataHandler: QueryHandler<
     }
   }
 
+  // Deleted rooms — only fetched when explicitly requested
+  let deletedRooms: DeletedRoom[] | undefined;
+  if (params.includeDeleted === "true") {
+    const deletedRows = db
+      .query<
+        { id: string; name: string | null },
+        [string]
+      >(
+        `select e.id as id, ci.name as name
+           from entities e
+           join comp_room cr on cr.entity = e.id
+           left join comp_info ci on ci.entity = e.id
+          where e.stream_id = ?
+            and cr.label = 'space.roomy.channel'
+            and cr.deleted = 1`,
+      )
+      .all(spaceId);
+    deletedRooms = deletedRows.map((r) =>
+      stripNulls({ id: r.id, name: r.name }) as DeletedRoom,
+    );
+  }
+
   return stripNulls({
     name: spaceRow.name,
     avatar: spaceRow.avatar,
@@ -203,5 +231,6 @@ export const getMetadataHandler: QueryHandler<
     isMember: access.isMember,
     isAdmin: access.isAdmin,
     sidebar: { categories, orphans },
+    deletedRooms,
   }) as GetMetadataResult;
 };
