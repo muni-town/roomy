@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Checkbox } from "bits-ui";
   import MessageBubble from "@roomy/design/components/content/thread/message/MessageBubble.svelte";
   import { messagingState } from "./messaging-state.svelte";
   import { renderMarkdownSanitized } from "@roomy/design/utils";
@@ -37,9 +38,12 @@
   let hovered = $state(false);
   let keepToolbarOpen = $state(false);
   let isEditing = $derived(editingMessageId === message.id);
-  let threading = $derived(messagingState.current.kind === "threading");
+  let isThreading = $derived(messagingState.current.kind === "threading");
+  let isSelected = $derived(
+    isThreading && messagingState.current.selectedMessages.some((m) => m.id === message.id),
+  );
   let showToolbar = $derived(
-    (!isEditing && hovered && !threading) || keepToolbarOpen,
+    (!isEditing && hovered && !isThreading) || keepToolbarOpen,
   );
   let isBridged = $derived(message.authorDid.startsWith("did:discord:"));
   let canEditDelete = $derived(message.authorDid === currentUserDid);
@@ -73,84 +77,91 @@
   }
 </script>
 
-<!-- svelte-ignore binding_property_non_reactive -->
-<div
-  class="relative"
-  onmouseenter={() => (hovered = true)}
-  onmouseleave={() => (hovered = false)}
-  oncontextmenu={handleContextAction}
->
-  {#if threading}
-    <div class="absolute top-0 left-0 z-10 p-1">
-      <input
-        type="checkbox"
-        checked={messagingState.current.kind === "threading" &&
-          messagingState.current.selectedMessages.some((m) => m.id === message.id)}
-        onchange={() => messagingState.toggleMessageSelection(message)}
-        class="size-5 accent-primary cursor-pointer"
-        aria-label="Select message"
-      />
-    </div>
-  {/if}
-
-  <MessageBubble
-    authorDid={message.authorDid}
-    authorName={message.authorName ?? undefined}
-    authorHandle={undefined}
-    authorAvatarUrl={message.authorAvatar ?? undefined}
-    avatarSrc={resolveAvatarUrl(message.authorAvatar)}
-    timestamp={new Date(message.timestamp)}
-    {isBridged}
-    {mergeWithPrevious}
-    {showToolbar}
+{#snippet messageBox()}
+  <div
+    class="relative"
+    onmouseenter={() => (hovered = true)}
+    onmouseleave={() => (hovered = false)}
+    oncontextmenu={handleContextAction}
   >
-    {#snippet replyContext()}
-      {#if message.replyTo}
-        <MessageContext context={{ kind: "replying", replyTo: { id: message.replyTo } }} roomId={roomId} />
-      {/if}
-    {/snippet}
+    <MessageBubble
+      authorDid={message.authorDid}
+      authorName={message.authorName ?? undefined}
+      authorHandle={undefined}
+      authorAvatarUrl={message.authorAvatar ?? undefined}
+      avatarSrc={resolveAvatarUrl(message.authorAvatar)}
+      timestamp={new Date(message.timestamp)}
+      {isBridged}
+      {mergeWithPrevious}
+      {isSelected}
+      {showToolbar}
+    >
+      {#snippet replyContext()}
+        {#if message.replyTo}
+          <MessageContext context={{ kind: "replying", replyTo: { id: message.replyTo } }} roomId={roomId} />
+        {/if}
+      {/snippet}
 
-    {#snippet content()}
-      {#if isEditing}
-        <ChatInput
-          content={message.content}
-          onEnter={handleEdit}
-          placeholder="Edit message..."
-          disabled={false}
-        />
-        <button onclick={onCancelEdit} class="text-xs text-base-400 mt-1 hover:underline">Cancel</button>
-      {:else}
-        {@html renderMarkdownSanitized(message.content)}
-      {/if}
-    {/snippet}
+      {#snippet content()}
+        {#if isEditing}
+          <ChatInput
+            content={message.content}
+            onEnter={handleEdit}
+            placeholder="Edit message..."
+            disabled={false}
+          />
+          <button onclick={onCancelEdit} class="text-xs text-base-400 mt-1 hover:underline">Cancel</button>
+        {:else}
+          {@html renderMarkdownSanitized(message.content)}
+        {/if}
+      {/snippet}
 
-    {#snippet media()}
-      {#if message.media && message.media.length > 0}
-        <MediaEmbed media={message.media.map((m) => ({ ...m, alt: m.alt ?? undefined }))} />
-      {/if}
-    {/snippet}
+      {#snippet media()}
+        {#if message.media && message.media.length > 0}
+          <MediaEmbed media={message.media.map((m) => ({ ...m, alt: m.alt ?? undefined }))} />
+        {/if}
+      {/snippet}
 
-    {#snippet toolbar()}
-      <MessageToolbar
-        {spaceId}
-        {roomId}
-        {message}
-        {canEditDelete}
-        bind:keepToolbarOpen
-        {onStartEdit}
-      />
-    {/snippet}
-
-    {#snippet reactions()}
-      {#if message.reactions.length > 0}
-        <MessageReactions
+      {#snippet toolbar()}
+        <MessageToolbar
           {spaceId}
           {roomId}
-          messageId={message.id}
-          reactions={message.reactions}
-          currentUserDid={currentUserDid}
+          {message}
+          {canEditDelete}
+          bind:keepToolbarOpen
+          {onStartEdit}
         />
-      {/if}
-    {/snippet}
-  </MessageBubble>
-</div>
+      {/snippet}
+
+      {#snippet reactions()}
+        {#if message.reactions.length > 0}
+          <MessageReactions
+            {spaceId}
+            {roomId}
+            messageId={message.id}
+            reactions={message.reactions}
+            currentUserDid={currentUserDid}
+          />
+        {/if}
+      {/snippet}
+    </MessageBubble>
+  </div>
+{/snippet}
+
+{#if isThreading}
+  <Checkbox.Root
+    aria-label="Select message"
+    onclick={(e) => e.stopPropagation()}
+    bind:checked={
+      () => isSelected,
+      () => messagingState.toggleMessageSelection(message)
+    }
+    class="flex flex-col w-full relative max-w-full isolate px-4 select-none"
+  >
+    {@render messageBox()}
+  </Checkbox.Root>
+{:else}
+  <div class="flex flex-col w-full relative max-w-full isolate px-4">
+    {@render messageBox()}
+  </div>
+{/if}
