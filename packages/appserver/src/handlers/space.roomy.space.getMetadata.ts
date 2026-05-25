@@ -7,11 +7,10 @@
  */
 
 import { type, UserDid } from "@roomy-space/sdk";
-import { roomAccess } from "../auth/access.ts";
+import { roomAccess, spaceAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { getReadPositions } from "../queries/readPositions.ts";
-import { requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
@@ -69,7 +68,15 @@ export const getMetadataHandler: QueryHandler<
   await hydrateUserMembership(userDid);
 
   const db = openDb();
-  const access = requireSpaceAccess(db, spaceId, userDid);
+  const access = spaceAccess(db, spaceId, userDid);
+
+  if (access.isBanned) {
+    throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
+  }
+
+  // Non-members get public info only (name, avatar, joinPolicy) — no sidebar.
+  // This allows the join-space modal to show in the UI.
+  const isMemberOrAdmin = access.isMember || access.isAdmin;
 
   const spaceRow = db
     .query<
@@ -112,72 +119,76 @@ export const getMetadataHandler: QueryHandler<
 
   // Resolve every channel referenced in the config (and the full set of
   // channels in the space, so we can compute orphans).
-  const allChannelRows = db
-    .query<
-      {
-        id: string;
-        name: string | null;
-        default_access: string | null;
-      },
-      [string]
-    >(
-      `select e.id as id, ci.name as name, cr.default_access as default_access
-           from entities e
-           join comp_room cr on cr.entity = e.id
-           left join comp_info ci on ci.entity = e.id
-          where e.stream_id = ?
-            and cr.label = 'space.roomy.channel'
-            and coalesce(cr.deleted, 0) = 0`,
-    )
-    .all(spaceId);
+  let categories: SidebarCategory[] = [];
+  let orphans: SidebarChannel[] = [];
 
-  const channelById = new Map(allChannelRows.map((r) => [r.id, r]));
+  if (isMemberOrAdmin) {
+    const allChannelRows = db
+      .query<
+        {
+          id: string;
+          name: string | null;
+          default_access: string | null;
+        },
+        [string]
+      >(
+        `select e.id as id, ci.name as name, cr.default_access as default_access
+             from entities e
+             join comp_room cr on cr.entity = e.id
+             left join comp_info ci on ci.entity = e.id
+            where e.stream_id = ?
+              and cr.label = 'space.roomy.channel'
+              and coalesce(cr.deleted, 0) = 0`,
+      )
+      .all(spaceId);
 
-  // Batch-fetch read positions for all channels in this space.
-  const readPositions = getReadPositions(
-    db,
-    userDid,
-    allChannelRows.map((r) => r.id),
-  );
+    const channelById = new Map(allChannelRows.map((r) => [r.id, r]));
 
-  const buildChannel = (id: string): SidebarChannel | null => {
-    const row = channelById.get(id);
-    if (!row) return null;
-    const acc = roomAccess(db, id, userDid);
-    if (!acc.canRead) return null;
-    const pos = readPositions.get(id);
-    return stripNulls({
-      id: row.id,
-      name: row.name,
-      defaultAccess: acc.defaultAccess,
-      canRead: acc.canRead,
-      canWrite: acc.canWrite,
-      unreadCount: pos?.unreadCount ?? 0,
-      lastRead: pos?.lastRead ?? null,
-    }) as SidebarChannel;
-  };
+    // Batch-fetch read positions for all channels in this space.
+    const readPositions = getReadPositions(
+      db,
+      userDid,
+      allChannelRows.map((r) => r.id),
+    );
 
-  const referencedIds = new Set<string>();
-  const categories: SidebarCategory[] = config.categories.map((cat, idx) => {
-    const channels: SidebarChannel[] = [];
-    for (const childId of cat.children ?? []) {
-      referencedIds.add(childId);
-      const ch = buildChannel(childId);
-      if (ch) channels.push(ch);
+    const buildChannel = (id: string): SidebarChannel | null => {
+      const row = channelById.get(id);
+      if (!row) return null;
+      const acc = roomAccess(db, id, userDid);
+      if (!acc.canRead) return null;
+      const pos = readPositions.get(id);
+      return stripNulls({
+        id: row.id,
+        name: row.name,
+        defaultAccess: acc.defaultAccess,
+        canRead: acc.canRead,
+        canWrite: acc.canWrite,
+        unreadCount: pos?.unreadCount ?? 0,
+        lastRead: pos?.lastRead ?? null,
+      }) as SidebarChannel;
+    };
+
+    const referencedIds = new Set<string>();
+    categories = config.categories.map((cat, idx) => {
+      const channels: SidebarChannel[] = [];
+      for (const childId of cat.children ?? []) {
+        referencedIds.add(childId);
+        const ch = buildChannel(childId);
+        if (ch) channels.push(ch);
+      }
+      return stripNulls({
+        id: cat.id ?? null,
+        name: cat.name,
+        position: idx,
+        channels,
+      }) as SidebarCategory;
+    });
+
+    for (const row of allChannelRows) {
+      if (referencedIds.has(row.id)) continue;
+      const ch = buildChannel(row.id);
+      if (ch) orphans.push(ch);
     }
-    return stripNulls({
-      id: cat.id ?? null,
-      name: cat.name,
-      position: idx,
-      channels,
-    }) as SidebarCategory;
-  });
-
-  const orphans: SidebarChannel[] = [];
-  for (const row of allChannelRows) {
-    if (referencedIds.has(row.id)) continue;
-    const ch = buildChannel(row.id);
-    if (ch) orphans.push(ch);
   }
 
   return stripNulls({

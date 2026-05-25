@@ -7,10 +7,24 @@
   import ThinSidebar from "$lib/components/sidebar/ThinSidebar.svelte";
   import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
   import { sidebarOverride } from "$lib/components/layout/sidebar.svelte";
+  import JoinSpaceModal from "$lib/components/layout/JoinSpaceModal.svelte";
+  import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
 
   let { children } = $props();
 
   const spaceId = $derived(page.params.space!);
+
+  const metaQuery = createSpaceMetadataQuery(() => spaceId);
+
+  $effect(() => {
+    console.log($state.snapshot(metaQuery))
+  })
+
+  // Show join modal when we have metadata and user is not a member.
+  // While loading, render the layout underneath (spinner is inside the modal).
+  const showJoinModal = $derived(
+    metaQuery.isSuccess && metaQuery.data && !metaQuery.data.isMember,
+  );
 
   useTopicSubscription(
     () => sync_.ctx?.topicManager ?? null,
@@ -33,3 +47,7 @@
     {@render children()}
   </MainLayout>
 </div>
+
+{#if showJoinModal}
+  <JoinSpaceModal {spaceId} />
+{/if}
