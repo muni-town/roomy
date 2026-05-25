@@ -9,7 +9,6 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { joinSpace } from "$lib/mutations/space";
   import { queryClient } from "$lib/client";
-  import { cache } from "@roomy-space/sdk";
 
   let { spaceId }: { spaceId: string } = $props();
 
@@ -25,7 +24,7 @@
   const metaQuery = createSpaceMetadataQuery(() => spaceId);
 
   // Derive resolveState from the metadata query
-  let resolveState = $derived<JoinResolveState>(() => {
+  let resolveState = $derived.by<JoinResolveState>(() => {
     if (metaQuery.isPending) return { status: "loading" };
     if (metaQuery.isError) {
       const message =
@@ -50,14 +49,33 @@
     joinState = { status: "loading" };
     try {
       await joinSpace(spaceId, inviteToken);
-      // Invalidate metadata + spaces lists so membership state refreshes
+      // Invalidate ALL cached queries for this space so stale error
+      // responses (e.g. getThreads "you need to be a member", room
+      // metadata canWrite=false) are cleared after joining.
+      // Uses a predicate because room-scoped queries key on roomId
+      // (not spaceId) — we match them by NSID prefix instead.
       await queryClient.invalidateQueries({
-        queryKey: cache.queryKey("space.roomy.space.getMetadata", {
-          spaceId,
-        }),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: cache.queryKey("space.roomy.space.getSpaces"),
+        predicate: (query) => {
+          const nsid = query.queryKey[0];
+          if (typeof nsid !== "string") return false;
+
+          // Match space-scoped queries by their spaceId param.
+          const params = query.queryKey[1];
+          if (
+            params != null &&
+            typeof params === "object" &&
+            !Array.isArray(params) &&
+            (params as Record<string, unknown>).spaceId === spaceId
+          ) {
+            return true;
+          }
+
+          // Also invalidate room-scoped queries so stale canWrite=false
+          // and "no read access" errors are cleared after joining.
+          if (nsid.startsWith("space.roomy.room.")) return true;
+
+          return false;
+        },
       });
       joinState = { status: "success" };
     } catch (e) {
