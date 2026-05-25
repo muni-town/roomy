@@ -41,7 +41,8 @@ docker run -d \
   -v "$WORKTREE_PATH:/app" \
   -p "$PORT:$PORT" \
   -e "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=dev-$SAFE_NAME" \
+  -e "VITE_PORT=$PORT" \
   node:22 \
-  bash -c "cd /app/packages/app && npm i -g pnpm && npx vite dev --host 0.0.0.0 --port $PORT"
+  bash -c "cd /app/packages/app-lite && npm i -g pnpm && npx vite dev --host 0.0.0.0 --port $PORT"
 echo "✔ Dev server started (http://localhost:$PORT)"
 echo "To stop: docker rm -f $DEV_NAME"
