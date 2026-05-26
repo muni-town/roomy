@@ -45,7 +45,7 @@ SCOPE+=" rpc:space.roomy.space.getCalendarEvents?aud=*"
 # ── Build-time verification ──────────────────────────────────────────────
 # Ensure every NSID in APPSERVER_RPCS (config.ts) is present in the scope.
 # This catches drift at build time instead of at the PDS consent screen.
-MISSING=$(node -e "
+MISSING=$(SCOPE="${SCOPE}" node -e "
 const fs = require('fs');
 const src = fs.readFileSync('src/lib/config.ts', 'utf-8');
 const match = src.match(/const APPSERVER_RPCS\s*=\s*\[([\s\S]*?)\];/);
