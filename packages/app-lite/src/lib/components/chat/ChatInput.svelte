@@ -141,3 +141,13 @@
   role="region"
   aria-label="Chat editor"
 ></div>
+
+<style>
+  :global(.tiptap .is-empty::before) {
+    color: var(--color-base-500);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+</style>
