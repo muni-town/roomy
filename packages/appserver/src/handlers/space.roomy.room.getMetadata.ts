@@ -103,6 +103,7 @@ export const getRoomMetadataHandler: QueryHandler<
     name: row?.name ?? null,
     kind: stripLabel(row?.label ?? null),
     spaceId: access.spaceId ?? "",
+    parentChannelId: access.parentChannelId,
     defaultAccess: access.defaultAccess,
     canRead: access.canRead,
     canWrite: access.canWrite,

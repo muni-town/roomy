@@ -23,9 +23,18 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { leaveSpace } from "$lib/mutations/space";
   import { updateSidebar } from "$lib/mutations/room";
+  import { createQuery } from "@tanstack/svelte-query";
+  import { transport, cache } from "@roomy-space/sdk";
+  import { px } from "$lib/auth.svelte";
+  import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
   import EditRoomModal from "./EditRoomModal.svelte";
   import RestoreRoomModal from "./RestoreRoomModal.svelte";
   import EditableChannelItem from "./EditableChannelItem.svelte";
+
+  const { agentQuery } = transport;
+  const { queryKey } = cache;
+
+  type RoomMetadata = typeof schemas.queries.getRoomMetadata.Response.infer;
 
   type SidebarChannel =
     typeof schemas.queries.getSpaceMetadata.SidebarChannel.infer;
@@ -67,6 +76,31 @@
       goto("/");
     }
   }
+
+  // --- Room metadata for thread-aware sidebar ---
+
+  const roomMetaQuery = createQuery(() => ({
+    queryKey: queryKey("space.roomy.room.getMetadata", {
+      roomId: page.params.room ?? "",
+    }),
+    queryFn: () =>
+      agentQuery(px(), "space.roomy.room.getMetadata", {
+        roomId: page.params.room!,
+      }),
+    enabled: !!page.params.room,
+  }));
+
+  /**
+   * The channel ID that should appear "active" in the sidebar.
+   * - Direct match: user is on a channel (`page.params.room`)
+   * - Parent match: user is on a thread, parent channel comes from server
+   */
+  const activeChannelId = $derived.by(() => {
+    const room = page.params.room;
+    if (!room) return null;
+    if (channelMap.has(room)) return room;
+    return roomMetaQuery.data?.parentChannelId ?? null;
+  });
 
   function editSidebarItem(
     id: { room: string } | { categoryId: string; categoryName: string },
@@ -307,7 +341,7 @@
                       {channel}
                       {spaceId}
                       {isEditing}
-                      active={page.params.room === channel.id}
+                      active={activeChannelId === channel.id}
                       onedit={(roomId) => editSidebarItem({ room: roomId })}
                     />
                   {/snippet}
@@ -356,15 +390,30 @@
 <RestoreRoomModal bind:open={openRestoreRoomModal} {spaceId} />
 
 {#snippet channelItem(channel: SidebarChannel)}
+  {@const isActive = activeChannelId === channel.id}
   <div class={!channel.canRead ? "opacity-50 pointer-events-none" : ""}>
     <SidebarItemShell
       variant="channel"
       name={channel.name ?? channel.id}
       href={`/${spaceId}/${channel.id}`}
-      active={page.params.room === channel.id}
+      active={isActive}
       hasUnreadDot={channel.unreadCount > 0}
       unreadCount={channel.unreadCount}
       showUnreadCount={channel.unreadCount > 0}
-    />
+    >
+      {#if !isEditing && isActive && roomMetaQuery.data?.recentThreads?.length}
+        <LinkedRoomList
+          rooms={roomMetaQuery.data.recentThreads.map((t) => ({
+            id: t.id,
+            name: t.name ?? t.id,
+            unreadCount: t.unreadCount,
+            lastRead: -1,
+          }))}
+          currentRoomId={page.params.room}
+          showUnreadCount={false}
+          hrefFor={(threadId: string) => `/${spaceId}/${threadId}`}
+        />
+      {/if}
+    </SidebarItemShell>
   </div>
 {/snippet}

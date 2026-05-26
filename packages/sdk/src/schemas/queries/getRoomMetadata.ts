@@ -21,6 +21,7 @@ export const Response = type({
   "name?": "string",
   kind: "string",
   spaceId: "string",
+  "parentChannelId?": "string",
   defaultAccess: "'readwrite' | 'read' | 'none'",
   canRead: "boolean",
   canWrite: "boolean",
