@@ -13,6 +13,7 @@ import { openDb } from "../db/db.ts";
 import { getConnectedSpace } from "../serviceClient.ts";
 import { isMember, isAdmin } from "../auth/access.ts";
 import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
+import { recordLeftSpaceEdge } from "../queries/joinedSpaces.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { Router as InvalidationRouter } from "../invalidation/index.ts";
 import { getOrCreateMaterializer } from "../materialization/registry.ts";
@@ -105,7 +106,12 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
     }
   }
 
-  // ── 4. Emit direct getSpaces invalidation signal ─────────────────────
+  // ── 4. Write leftSpace edge so the space appears with includeLeft ─────
+  if (personalStreamDid) {
+    recordLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
+  }
+
+  // ── 5. Emit direct getSpaces invalidation signal ─────────────────────
   const router = InvalidationRouter.getInstance();
   if (router) {
     router.emit([

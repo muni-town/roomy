@@ -5,9 +5,8 @@
  * personal stream + each referenced space, then queries local SQLite for
  * the union of personal-stream intent and per-space membership truth.
  *
- * Stage 1 limitations:
- *   - unreadCount = 0 (no unread materialisation yet)
- *   - roleIds = [] (no roles materialisation yet)
+ * When `includeLeft=true`, also returns spaces the user has previously left
+ * (with `isMember=false`).
  */
 
 import { type, UserDid } from "@roomy-space/sdk";
@@ -17,6 +16,10 @@ import { selectJoinedSpaces, type SpaceRow } from "../queries/joinedSpaces.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
+interface GetSpacesParams {
+  includeLeft?: string;
+}
+
 interface GetSpacesResult {
   spaces: SpaceRow[];
 }
@@ -24,7 +27,7 @@ interface GetSpacesResult {
 export const getSpacesHandler: QueryHandler<
   QueryParams,
   GetSpacesResult
-> = async (_params: QueryParams, auth: AuthCtx) => {
+> = async (rawParams: QueryParams, auth: AuthCtx) => {
   const userDid = UserDid(auth.did);
   if (userDid instanceof type.errors) {
     throw new XrpcError(
@@ -39,6 +42,11 @@ export const getSpacesHandler: QueryHandler<
     return { spaces: [] };
   }
 
+  const params = rawParams as unknown as GetSpacesParams;
+  const includeLeft = params.includeLeft === "true" || params.includeLeft === "1";
+
   const db = openDb();
-  return { spaces: selectJoinedSpaces(db, userDid, personalStreamDid) };
+  return {
+    spaces: selectJoinedSpaces(db, userDid, personalStreamDid, { includeLeft }),
+  };
 };

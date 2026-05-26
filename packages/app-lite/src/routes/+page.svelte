@@ -51,7 +51,7 @@
 {/snippet}
 
 {#snippet homeContent()}
-  {@const spacesQuery = createSpacesQuery()}
+  {@const spacesQuery = createSpacesQuery({ includeLeft: true })}
 
   <main class="h-full overflow-y-auto px-4">
     <div class="flex flex-col items-center justify-start py-8">

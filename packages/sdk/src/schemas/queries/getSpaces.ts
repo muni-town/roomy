@@ -6,8 +6,10 @@ import { type } from "arktype";
 
 export const NSID = "space.roomy.space.getSpaces" as const;
 
-/** No params. */
-export const Params = type({});
+/** Params. `includeLeft` — when "true", also includes spaces the user has left. */
+export const Params = type({
+  "includeLeft?": "string",
+});
 
 export const Space = type({
   id: "string",

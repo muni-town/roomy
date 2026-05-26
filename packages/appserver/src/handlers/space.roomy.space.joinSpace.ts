@@ -13,6 +13,7 @@ import { openDb } from "../db/db.ts";
 import { getConnectedSpace } from "../serviceClient.ts";
 import { isBanned } from "../auth/access.ts";
 import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
+import { removeLeftSpaceEdge } from "../queries/joinedSpaces.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { Router as InvalidationRouter } from "../invalidation/index.ts";
 import { getOrCreateMaterializer } from "../materialization/registry.ts";
@@ -138,6 +139,9 @@ export const joinSpaceHandler: ProcedureHandler<
   //        visible to subsequent getSpaces HTTP queries ────────────────
   const personalMat = await getOrCreateMaterializer(personalStreamDid);
   await personalMat.drain();
+
+  // ── 3.5. Remove any leftSpace edge since the user is now rejoined ────
+  removeLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
 
   // ── 4. Emit direct getSpaces invalidation signal ──────────────────────
   const router = InvalidationRouter.getInstance();
