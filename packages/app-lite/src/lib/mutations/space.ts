@@ -1,4 +1,4 @@
-import { transport } from "@roomy-space/sdk";
+import { newUlid, transport } from "@roomy-space/sdk";
 import { px } from "$lib/auth.svelte";
 import { sendEvents } from "./send-events";
 
@@ -43,7 +43,7 @@ export async function updateSpaceInfo(
   spaceId: string,
   opts: {
     name?: string;
-    desc?: string;
+    description?: string;
     avatar?: string;
     allowPublicJoin?: boolean;
     allowMemberInvites?: boolean;
@@ -51,10 +51,10 @@ export async function updateSpaceInfo(
 ): Promise<void> {
   await sendEvents(spaceId, [
     {
-      id: crypto.randomUUID(),
+      id: newUlid(),
       $type: "space.roomy.space.updateSpaceInfo.v0",
       ...(opts.name !== undefined && { name: opts.name }),
-      ...(opts.desc !== undefined && { desc: opts.desc }),
+      ...(opts.description !== undefined && { description: opts.description }),
       ...(opts.avatar !== undefined && { avatar: opts.avatar }),
       ...(opts.allowPublicJoin !== undefined && {
         allowPublicJoin: opts.allowPublicJoin,
