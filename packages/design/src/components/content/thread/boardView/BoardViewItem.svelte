@@ -42,22 +42,33 @@
 </script>
 
 <a {href}>
-  <Box class="flex items-center p-3 bg-white dark:bg-base-900">
-    <div
+  <Box class="flex items-baseline gap-1 p-3 bg-white dark:bg-base-900">
+    <!-- <div
       class="flex items-center relative -bottom-1 justify-between gap-2 mr-2"
     >
       {#if thread.kind == "space.roomy.page"}
         <IconDocument class="shrink-0" />
       {:else if thread.kind == "space.roomy.thread"}{/if}
-    </div>
-    <div class="text-ellipsis min-w-0 shrink w-full max-w-full">
+    </div> -->
+    <div class="text-ellipsis min-w-0 shrink text-xl font-bold">
       {#if thread.kind == "space.roomy.channel"}
         #&nbsp;
       {/if}
       {thread.name}
     </div>
+    <span class="text-base-500 text-xs"
+      >{#if lastMessageTimestamp}
+        {#if Date.now() - lastMessageTimestamp < 60 * 1000}
+          Just Now
+        {:else}
+          {formatDistanceToNowStrict(lastMessageTimestamp, {
+            locale: formatDistanceLocale,
+          })}
+        {/if}
+      {/if}</span
+    >
 
-    <div class="ml-auto flex items-center shrink-0">
+    <div class="ml-auto flex self-center items-center shrink-0">
       <AvatarGroup
         avatarClass="size-8"
         users={thread.activity.members
@@ -68,7 +79,7 @@
             alt: "User Avatar for " + (m.name || "Unknown User"),
           }))}
       />
-      <div class="grow shrink-0 flex justify-between text-end w-40">
+      <div class="flex justify-between text-end">
         {#if thread.channel}
           <Badge class="mx-2" size="sm" variant="secondary"
             ><IconHashtag
@@ -76,17 +87,6 @@
             />{thread.channel}</Badge
           >
         {/if}
-        <span class="text-base-500 text-sm"
-          >{#if lastMessageTimestamp}
-            {#if Date.now() - lastMessageTimestamp < 60 * 1000}
-              Just Now
-            {:else}
-              {formatDistanceToNowStrict(lastMessageTimestamp, {
-                locale: formatDistanceLocale,
-              })}
-            {/if}
-          {/if}</span
-        >
       </div>
     </div>
   </Box>

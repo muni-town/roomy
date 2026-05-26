@@ -5,10 +5,12 @@
   import { IconHashtag } from "@roomy/design/icons";
   import { sync_ } from "$lib/sync.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
+  import ToggleTabs from "$lib/components/layout/ToggleTabs.svelte";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
   import { updateSeen } from "$lib/mutations/update-seen";
   import ChatArea from "$lib/components/chat/ChatArea.svelte";
   import ChatInputArea from "$lib/components/chat/ChatInputArea.svelte";
+  import ChannelBoardView from "$lib/components/thread/ChannelBoardView.svelte";
 
   const spaceId = $derived(page.params.space!);
   const roomId = $derived(page.params.room!);
@@ -32,6 +34,20 @@
   });
 
   const roomQuery = createRoomMetadataQuery(() => roomId);
+
+  // ── Tab state ─────────────────────────────────────────────────────────────
+  const channelTabList = ["Chat", "Threads"] as const;
+  let channelActiveTab = $state<(typeof channelTabList)[number]>("Chat");
+
+  $effect(() => {
+    if (page.url.hash == "#chat") {
+      channelActiveTab = "Chat";
+    } else if (page.url.hash == "#threads") {
+      channelActiveTab = "Threads";
+    } else {
+      channelActiveTab = "Chat";
+    }
+  });
 </script>
 
 {#snippet roomNavbar()}
@@ -45,10 +61,25 @@
         {roomQuery.data.unreadCount} unread
       </span>
     {/if}
+
+    {#if roomQuery.data?.kind === "channel"}
+      <span class="grow"></span>
+      <ToggleTabs
+        items={channelTabList.map((x) => ({
+          name: x,
+          href: `#${x.toLowerCase()}`,
+        }))}
+        active={channelActiveTab}
+      />
+    {/if}
   </div>
 {/snippet}
 
 <div class="h-full flex flex-col bg-white dark:bg-base-950">
-  <ChatArea {spaceId} {roomId} />
-  <ChatInputArea {spaceId} {roomId} canWrite={roomQuery.data?.canWrite} />
+  {#if channelActiveTab === "Chat"}
+    <ChatArea {spaceId} {roomId} />
+    <ChatInputArea {spaceId} {roomId} canWrite={roomQuery.data?.canWrite} />
+  {:else}
+    <ChannelBoardView />
+  {/if}
 </div>
