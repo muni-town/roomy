@@ -20,6 +20,49 @@
     console.log($state.snapshot(metaQuery))
   })
 
+  // Dynamic title & favicon based on the currently active space.
+  $effect(() => {
+    const spaceName = metaQuery.data?.name;
+    const spaceAvatar = metaQuery.data?.avatar;
+
+    // Update document title
+    document.title = spaceName ? `${spaceName} - Roomy` : "Roomy";
+
+    // Update favicon link
+    let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.append(link);
+    }
+
+    if (spaceAvatar) {
+      link.href = resolveBlobUrl(spaceAvatar) ?? "";
+    } else {
+      link.href = "";
+    }
+
+    // Cleanup: reset title and remove the dynamic favicon when leaving this space
+    return () => {
+      document.title = "Roomy";
+      link?.remove();
+    };
+  });
+
+  function resolveBlobUrl(uri: string | null | undefined): string | undefined {
+    if (!uri) return undefined;
+    if (uri.startsWith("atblob://")) {
+      const rest = uri.slice("atblob://".length);
+      const slash = rest.indexOf("/");
+      if (slash === -1) return undefined;
+      const did = rest.slice(0, slash);
+      const cid = rest.slice(slash + 1);
+      if (!did || !cid) return undefined;
+      return `https://cdn.bsky.app/img/feed_fullsize/plain/${did}/${cid}`;
+    }
+    return uri;
+  }
+
   // Show join modal when we have metadata and user is not a member.
   // While loading, render the layout underneath (spinner is inside the modal).
   const showJoinModal = $derived(
