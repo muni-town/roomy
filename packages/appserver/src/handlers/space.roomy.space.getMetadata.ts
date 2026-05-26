@@ -231,6 +231,6 @@ export const getMetadataHandler: QueryHandler<
     isMember: access.isMember,
     isAdmin: access.isAdmin,
     sidebar: { categories, orphans },
-    deletedRooms,
+    ...(deletedRooms !== undefined ? { deletedRooms } : {}),
   }) as GetMetadataResult;
 };
