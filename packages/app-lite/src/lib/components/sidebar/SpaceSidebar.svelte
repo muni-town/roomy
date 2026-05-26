@@ -22,7 +22,7 @@
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { leaveSpace } from "$lib/mutations/space";
-  import { updateSidebar } from "$lib/mutations/room";
+  import { createRoom, updateSidebar } from "$lib/mutations/room";
   import { createQuery } from "@tanstack/svelte-query";
   import { transport, cache } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
@@ -31,6 +31,7 @@
   import RestoreRoomModal from "./RestoreRoomModal.svelte";
   import EditableChannelItem from "./EditableChannelItem.svelte";
   import InviteModal from "$lib/components/InviteModal.svelte";
+import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
 
   const { agentQuery } = transport;
   const { queryKey } = cache;
@@ -53,6 +54,7 @@
   let openEditRoomModal = $state(false);
   let openRestoreRoomModal = $state(false);
   let openInviteModal = $state(false);
+  let createModalOpen = $state(false);
 
   const meta = $derived(metaQuery.data);
   const showInviteButton = $derived(
@@ -250,6 +252,33 @@
     draftOrder = null;
     isEditing = false;
   }
+
+  async function handleCreate(opts: {
+    type: "Channel" | "Category";
+    name: string;
+  }) {
+    if (opts.type === "Category") {
+      const cats = meta?.sidebar.categories ?? [];
+      const newCategories = cats.map((c) => ({
+        id: c.id ?? c.name,
+        name: c.name,
+        children: c.channels.map((ch) => ch.id),
+      }));
+      newCategories.push({
+        id: crypto.randomUUID(),
+        name: opts.name,
+        children: [],
+      });
+      await updateSidebar(spaceId, newCategories);
+    } else {
+      const roomId = await createRoom(spaceId, {
+        kind: "space.roomy.channel",
+        name: opts.name,
+      });
+
+      goto(`/${spaceId}/${roomId}`);
+    }
+  }
 </script>
 
 <SidebarLayout loading={metaQuery.isPending}>
@@ -259,6 +288,7 @@
       isAdmin={meta?.isAdmin ?? false}
       {showInviteButton}
       bind:isEditing
+      onNew={() => (createModalOpen = true)}
       settingsHref={`/${spaceId}/settings`}
       {onInvite}
       {onLeave}
@@ -392,6 +422,12 @@
   {renameCategory}
 />
 <RestoreRoomModal bind:open={openRestoreRoomModal} {spaceId} />
+
+<CreateRoomModal
+  bind:open={createModalOpen}
+  {spaceId}
+  onCreate={handleCreate}
+/>
 
 {#snippet channelItem(channel: SidebarChannel)}
   {@const isActive = activeChannelId === channel.id}

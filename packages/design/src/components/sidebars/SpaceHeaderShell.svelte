@@ -19,7 +19,7 @@
     isAdmin,
     showInviteButton,
     isEditing = $bindable(false),
-    newHref,
+    onNew,
     settingsHref,
     onInvite,
     onLeave,
@@ -30,8 +30,8 @@
     isAdmin: boolean;
     showInviteButton: boolean;
     isEditing?: boolean;
-    /** Href for the "New" admin action */
-    newHref?: string;
+    /** Called when the "+" button is clicked to create a room or category. Only shown when isAdmin. */
+    onNew?: () => void;
     /** Href for the "Space settings" admin action */
     settingsHref?: string;
     /** Called when Invite button is clicked. Wrapper decides between copy-link vs open modal. */
@@ -44,11 +44,11 @@
 </script>
 
 <div
-  class="w-full pt-0.5 pb-1 px-2 h-fit flex mb-4 justify-between items-center"
+  class="w-full pt-0.5 pb-1 px-2 h-fit flex mb-4 justify-between items-center gap-1"
 >
   <Popover
     side="bottom"
-    class="w-full"
+    class="grow"
     align="end"
     bind:open={popoverOpen}
     sideOffset={5}
@@ -58,18 +58,18 @@
         {...props}
         class="flex justify-between items-center mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 w-full text-left transition-colors"
       >
-        <div class="flex items-center gap-4 max-w-full">
+        <div class="flex items-center gap-4 max-w-full min-w-0">
           {@render avatar()}
 
           <h1
-            class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow"
+            class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
           >
             {spaceName ?? ""}
           </h1>
         </div>
         <IconChevronDown
           class={cn(
-            "size-4 text-base-700 dark:text-base-300 transition-transform duration-200",
+            "size-4 text-base-700 dark:text-base-300 transition-transform duration-200 shrink-0",
             popoverOpen && "rotate-180",
           )}
         />
@@ -89,11 +89,6 @@
       {/if}
 
       {#if isAdmin}
-        {#if newHref}
-          <Button class="w-full" href={newHref} variant="secondary">
-            <IconPlus class="size-4" /> New
-          </Button>
-        {/if}
         <Button
           class="w-full"
           onclick={() => {
@@ -118,4 +113,14 @@
       </Button>
     </div>
   </Popover>
+
+  {#if isAdmin && onNew}
+    <button
+      onclick={onNew}
+      class="shrink-0 mt-2 flex items-center justify-center size-8 rounded-full hover:bg-accent-200/70 dark:hover:bg-base-900/70 text-base-500 hover:text-accent-600 dark:hover:text-accent-400 transition-colors cursor-pointer"
+      aria-label="Create new room or category"
+    >
+      <IconPlus class="size-4" />
+    </button>
+  {/if}
 </div>
