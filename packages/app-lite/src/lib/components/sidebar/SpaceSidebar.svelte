@@ -30,6 +30,7 @@
   import EditRoomModal from "./EditRoomModal.svelte";
   import RestoreRoomModal from "./RestoreRoomModal.svelte";
   import EditableChannelItem from "./EditableChannelItem.svelte";
+  import InviteModal from "$lib/components/InviteModal.svelte";
 
   const { agentQuery } = transport;
   const { queryKey } = cache;
@@ -51,6 +52,7 @@
   >(null);
   let openEditRoomModal = $state(false);
   let openRestoreRoomModal = $state(false);
+  let openInviteModal = $state(false);
 
   const meta = $derived(metaQuery.data);
   const showInviteButton = $derived(
@@ -65,7 +67,7 @@
       url.pathname = `/${spaceId}`;
       navigator.clipboard.writeText(url.href);
     } else {
-      goto(`/${spaceId}/settings/invites`);
+      openInviteModal = true;
     }
   }
 
@@ -380,6 +382,8 @@
     {/if}
   {/snippet}
 </SidebarLayout>
+
+<InviteModal bind:open={openInviteModal} {spaceId} />
 
 <EditRoomModal
   bind:open={openEditRoomModal}
