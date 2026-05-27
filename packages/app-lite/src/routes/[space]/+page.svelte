@@ -1,7 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
-  import { createSpaceThreadsQuery, type SpaceThread } from "$lib/queries/threads";
+  import { createSpaceThreadsQuery } from "$lib/queries/threads";
+  import BoardViewShell from "@roomy/design/components/content/thread/boardView/BoardView.svelte";
+  import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
 
   const spaceId = $derived(page.params.space!);
   const threadsQuery = createSpaceThreadsQuery(() => spaceId);
@@ -11,16 +13,45 @@
     return () => setNavbar(undefined);
   });
 
-  function formatTime(iso: string | null) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    return d.toLocaleString("en", {
-      hour12: false,
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  type RawThread = {
+    id: string;
+    name?: string;
+    channel?: string;
+    activity: {
+      latestTimestamp?: string;
+      latestMembers: Array<{ did: string; name?: string; avatar?: string }>;
+    };
+  };
+
+  // Map SDK SpaceThread → design ThreadInfo
+  let threads = $derived<ThreadInfo[]>(
+    ((threadsQuery.data?.threads ?? []) as RawThread[]).map(mapThread),
+  );
+
+  function mapThread(t: RawThread): ThreadInfo {
+    return {
+      id: t.id,
+      name: t.name ?? t.id.slice(0, 12) + "…",
+      kind: "space.roomy.thread",
+      channel: t.channel,
+      activity: {
+        members: t.activity.latestMembers.map((m) => ({
+          id: m.did,
+          name: m.name ?? null,
+          avatar: m.avatar ?? null,
+        })),
+        latestTimestamp: t.activity.latestTimestamp
+          ? new Date(t.activity.latestTimestamp).getTime()
+          : 0,
+      },
+    };
+  }
+
+  function hrefFor(thread: ThreadInfo): string {
+    if (thread.channel) {
+      return `/${spaceId}/${thread.channel}`;
+    }
+    return `/${spaceId}/${thread.id}`;
   }
 </script>
 
@@ -30,49 +61,16 @@
   </div>
 {/snippet}
 
-<div class="h-full overflow-y-auto px-6 py-6">
+<div class="h-full">
   {#if threadsQuery.isPending}
-    <p class="text-sm text-base-400">Loading threads…</p>
+    <div class="h-full w-full flex items-center justify-center">
+      <div class="text-sm text-base-400 p-2">Loading threads…</div>
+    </div>
   {:else if threadsQuery.isError}
-    <p class="text-sm text-red-600">{threadsQuery.error.message}</p>
-  {:else if threadsQuery.data}
-    {@const threads = threadsQuery.data.threads}
-    {#if threads.length === 0}
-      <p class="text-sm text-base-400">No threads in this space yet.</p>
-    {:else}
-      <ul class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {#each threads as thread (thread.id)}
-          {@render threadCard(thread)}
-        {/each}
-      </ul>
-    {/if}
+    <div class="h-full w-full flex items-center justify-center">
+      <div class="text-sm text-red-600 p-2">{threadsQuery.error.message}</div>
+    </div>
+  {:else}
+    <BoardViewShell {threads} emptyMessage="No threads in this space yet." {hrefFor} />
   {/if}
 </div>
-
-{#snippet threadCard(thread: SpaceThread)}
-  <li>
-    <a
-      href={thread.channel ? `/${spaceId}/${thread.channel}` : `/${spaceId}/${thread.id}`}
-      class="block p-3 rounded-2xl border border-base-200 dark:border-base-800 bg-white dark:bg-base-900 hover:border-base-300 dark:hover:border-base-700"
-    >
-      <div class="flex items-start justify-between gap-2">
-        <h3 class="font-medium text-sm truncate flex-1">{thread.name || thread.id.slice(0, 12) + "…"}</h3>
-        {#if thread.activity.latestTimestamp}
-          <span class="text-[11px] text-base-400 shrink-0">{formatTime(thread.activity.latestTimestamp)}</span>
-        {/if}
-      </div>
-      {#if thread.activity.latestMembers.length > 0}
-        <div class="flex -space-x-1 mt-2">
-          {#each thread.activity.latestMembers.slice(0, 5) as member}
-            <span
-              class="w-6 h-6 rounded-full border-2 border-white dark:border-base-900 bg-base-200 dark:bg-base-700 flex items-center justify-center text-[10px] font-semibold text-base-500"
-              title={member.name ?? member.did}
-            >
-              {(member.name ?? "?")[0]?.toUpperCase() ?? "?"}
-            </span>
-          {/each}
-        </div>
-      {/if}
-    </a>
-  </li>
-{/snippet}
