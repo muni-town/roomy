@@ -2,6 +2,7 @@ import {
   ApplicationCommandOptionTypes,
   ButtonStyles,
   type CreateApplicationCommand,
+  ChannelTypes,
   DiscordApplicationIntegrationType,
   DiscordInteractionContextType,
   InteractionTypes,
@@ -79,6 +80,7 @@ export const slashCommands = [
             name: "channel",
             description: "The channel to bridge.",
             type: ApplicationCommandOptionTypes.Channel,
+            channelTypes: [ChannelTypes.GuildText, ChannelTypes.GuildAnnouncement],
             required: true
           },
           {
@@ -98,6 +100,7 @@ export const slashCommands = [
             name: "channel",
             description: "The channel to remove.",
             type: ApplicationCommandOptionTypes.Channel,
+            channelTypes: [ChannelTypes.GuildText, ChannelTypes.GuildAnnouncement],
             required: true
           },
           {
@@ -136,11 +139,12 @@ export const slashCommands = [
         description:
           "A specific channel to re-backfill. Omit to re-backfill all bridged channels.",
         type: ApplicationCommandOptionTypes.Channel,
-        required: false
-      }
-    ]
-  }
-] satisfies CreateApplicationCommand[]
+        channelTypes: [ChannelTypes.GuildText, ChannelTypes.GuildAnnouncement],
+        required: false,
+      },
+    ],
+  },
+] satisfies CreateApplicationCommand[];
 
 // ─── Registration ─────────────────────────────────────────────────────
 
@@ -435,7 +439,7 @@ async function handleBridgeModeButton(
           {
             type: MessageComponentTypes.SelectMenuChannels,
             customId: `roomy|channel-select|${guildId}|${spaceDid}`,
-            channelTypes: [0],
+            channelTypes: [ChannelTypes.GuildText, ChannelTypes.GuildAnnouncement],
             minValues: 1,
             maxValues: 25,
             placeholder: "Select channels to bridge..."
