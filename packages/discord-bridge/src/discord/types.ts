@@ -100,6 +100,9 @@ export const CHANNEL_TYPES = new Set([0, 5]); // GuildText, GuildAnnouncement
 /** Channel types that represent threads (public, private, announcement). */
 export const THREAD_TYPES = new Set([11, 12, 10]); // PublicThread, PrivateThread, AnnouncementThread
 
+/** Private thread type — excluded from sync since Roomy can't model thread-level access. */
+export const PRIVATE_THREAD = 12;
+
 /** Any channel type that can carry messages. */
 export const MESSAGE_CHANNEL_TYPES = new Set([...CHANNEL_TYPES, ...THREAD_TYPES]);
 

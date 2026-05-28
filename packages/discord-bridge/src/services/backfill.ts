@@ -1,6 +1,6 @@
 import type { Collection } from "@discordeno/bot";
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
-import { CHANNEL_TYPES, THREAD_TYPES, MESSAGE_CHANNEL_TYPES, isChannelPublic } from "../discord/types.ts";
+import { CHANNEL_TYPES, THREAD_TYPES, PRIVATE_THREAD, MESSAGE_CHANNEL_TYPES, isChannelPublic } from "../discord/types.ts";
 import type { DiscordBot, MessageProperties } from "../discord/types.ts";
 import type { BridgeRepository, BridgeConfig, BridgeMode } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
@@ -108,7 +108,7 @@ async function ensureRoomyRooms(
       const guild = bot.cache.guilds.memory.get(BigInt(guildId));
       if (!guild?.channels) continue;
       channelIds = [...guild.channels.values()]
-        .filter((ch) => CHANNEL_TYPES.has(ch.type) && isChannelPublic(ch, guildId))
+        .filter((ch) => CHANNEL_TYPES.has(ch.type))
         .map((ch) => ch.id.toString());
     } else {
       channelIds = repo.listAllowlistForBridge(spaceDid).map((e) => e.channelId);
@@ -130,12 +130,18 @@ async function ensureRoomyRooms(
 
       const roomUlid = newUlid();
 
+      // Determine default access: "none" for private channels, "read" for public.
+      const guildCache = bot.cache.guilds.memory.get(BigInt(guildId));
+      const cachedCh = guildCache?.channels?.get(BigInt(channelId));
+      const defaultAccess: "read" | "none" =
+        cachedCh && !isChannelPublic(cachedCh, guildId) ? "none" : "read";
+
       const event = {
         id: roomUlid,
         $type: "space.roomy.room.createRoom.v0",
         kind: "space.roomy.channel",
         name: channelName,
-        defaultAccess: "read",
+        defaultAccess,
         extensions: {
           "space.roomy.extension.discordOrigin.v0": {
             snowflake: channelId,
@@ -172,7 +178,7 @@ async function ensureRoomyThreads(
       mode === "full"
         ? new Set(
             [...guild.channels.values()]
-              .filter((ch) => CHANNEL_TYPES.has(ch.type) && isChannelPublic(ch, guildId))
+              .filter((ch) => CHANNEL_TYPES.has(ch.type))
               .map((ch) => ch.id.toString()),
           )
         : new Set(
@@ -182,6 +188,7 @@ async function ensureRoomyThreads(
     const threads = [...guild.channels.values()].filter(
       (ch) =>
         THREAD_TYPES.has(ch.type) &&
+        ch.type !== PRIVATE_THREAD &&
         ch.parentId &&
         bridgedChannelIds.has(ch.parentId.toString()),
     );
@@ -289,7 +296,7 @@ function channelsForConfig(
     }
     if (!guild.channels) return channels;
     for (const [channelId, channel] of guild.channels) {
-      if (MESSAGE_CHANNEL_TYPES.has(channel.type) && isChannelPublic(channel, config.guildId)) {
+      if (MESSAGE_CHANNEL_TYPES.has(channel.type)) {
         channels.push(channelId.toString());
       }
     }
@@ -430,9 +437,8 @@ async function ensureAndBackfillArchivedThreads(
     // Determine bridged parent channels (same logic as ensureRoomyThreads).
     const bridgedParentChannels =
       mode === "full"
-        ? [...guild.channels.values()].filter(
-            (ch) =>
-              CHANNEL_TYPES.has(ch.type) && isChannelPublic(ch, guildId),
+        ? [...guild.channels.values()].filter((ch) =>
+            CHANNEL_TYPES.has(ch.type),
           )
         : [...guild.channels.values()].filter((ch) => {
             if (!CHANNEL_TYPES.has(ch.type)) return false;

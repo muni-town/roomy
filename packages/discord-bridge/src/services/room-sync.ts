@@ -1,7 +1,7 @@
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
 import type { BridgeRepository, MappingKind } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
-import { CHANNEL_TYPES, THREAD_TYPES, isChannelPublic } from "../discord/types.ts";
+import { CHANNEL_TYPES, THREAD_TYPES, PRIVATE_THREAD, isChannelPublic } from "../discord/types.ts";
 import type { ChannelProperties, DiscordBot } from "../discord/types.ts";
 import { createLogger } from "../logger.ts";
 
@@ -14,6 +14,9 @@ function mappingKindFor(channel: ChannelProperties): MappingKind {
 /**
  * Ensure a Roomy room exists for a Discord channel in the given spaces.
  * Skips spaces that already have a mapping. Idempotent per space.
+ *
+ * @param defaultAccess Access level for the room — "read" for public channels,
+ *                      "none" for private channels (no default visibility).
  */
 export async function ensureRoomyChannel(
   repo: BridgeRepository,
@@ -22,6 +25,7 @@ export async function ensureRoomyChannel(
   guildId: string,
   channelName: string,
   targetSpaces: string[],
+  defaultAccess: "read" | "none" = "read",
 ): Promise<void> {
   for (const spaceDid of targetSpaces) {
     if (repo.getRoomyId(spaceDid, "channel", channelId)) {
@@ -35,7 +39,7 @@ export async function ensureRoomyChannel(
       $type: "space.roomy.room.createRoom.v0",
       kind: "space.roomy.channel",
       name: channelName,
-      defaultAccess: "read",
+      defaultAccess,
       extensions: {
         "space.roomy.extension.discordOrigin.v0": {
           snowflake: channelId,
@@ -79,19 +83,9 @@ export async function handleChannelCreate(
 
   let targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
 
-  // In full mode, skip private channels. Subset mode allows private channels
-  // that are explicitly in the allowlist.
+  // Determine access level based on whether the channel is public or private.
   const isPublic = isChannelPublic(channel, guildId);
-  if (!isPublic) {
-    targetSpaces = targetSpaces.filter((spaceDid) => {
-      const config = repo.getBridgeConfig(guildId, spaceDid);
-      return config?.mode === "subset";
-    });
-    if (targetSpaces.length === 0) {
-      log.debug(`Skipping private channel ${channelId}: no subset bridges target it`);
-      return;
-    }
-  }
+  const defaultAccess: "read" | "none" = isPublic ? "read" : "none";
 
   if (targetSpaces.length === 0) {
     log.debug(`Skipping channel ${channelId}: no bridges target it`);
@@ -104,7 +98,7 @@ export async function handleChannelCreate(
     return;
   }
 
-  await ensureRoomyChannel(repo, spaceManager, channelId, guildId, channelName, targetSpaces);
+  await ensureRoomyChannel(repo, spaceManager, channelId, guildId, channelName, targetSpaces, defaultAccess);
 }
 
 /**
@@ -123,6 +117,12 @@ export async function handleThreadCreate(
 
   if (!parentId || !guildId) {
     log.debug(`Skipping thread ${threadId}: no parentId or guildId`);
+    return;
+  }
+
+  // Skip private threads — Roomy can't model thread-level access boundaries.
+  if (channel.type === PRIVATE_THREAD) {
+    log.debug(`Skipping private thread ${threadId}: not syncing thread-level access`);
     return;
   }
 
