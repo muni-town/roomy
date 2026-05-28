@@ -13,7 +13,7 @@ import { StreamDid } from "@roomy-space/sdk"
 import type { BridgeRepository, BridgeConfig } from "../db/repository.ts"
 import type { SpaceManager } from "../roomy/space-manager.ts"
 import type { DiscordBot, InteractionProperties } from "./types.ts"
-import { MESSAGE_CHANNEL_TYPES } from "./types.ts"
+import { CHANNEL_TYPES, MESSAGE_CHANNEL_TYPES } from "./types.ts"
 import {
   backfillSingleChannel,
   runBackfill,
@@ -22,6 +22,138 @@ import {
 import { createLogger } from "../logger.ts"
 
 const log = createLogger("slash")
+
+// ─── Channel selection pagination state ───────────────────────────────
+// Key: `${guildId}:${userId}:${spaceDid}`
+// Tracks selections across pages of the paginated channel picker.
+interface PageState {
+  spaceDid: string
+  /** All message-capable channels in the guild, sorted alphabetically */
+  channels: Array<{ id: string; name: string }>
+  /** Currently visible page (0-indexed) */
+  page: number
+  /** Total number of pages */
+  totalPages: number
+  /** Selections per page: Map<pageIndex, Set<channelId>> */
+  selections: Map<number, Set<string>>
+}
+
+const PAGE_SIZE = 25
+const pageStates = new Map<string, PageState>()
+
+function getOrCreatePageState(
+  bot: DiscordBot,
+  guildId: string,
+  userId: string,
+  spaceDid: string
+): PageState {
+  const key = `${guildId}:${userId}:${spaceDid}`
+  const existing = pageStates.get(key)
+  if (existing) return existing
+
+  // Fetch all message-capable channels from cache, sorted alphabetically
+  const cached = bot as unknown as BotWithCache
+  const guild = cached.cache.guilds.memory.get(BigInt(guildId))
+  const allChannels: Array<{ id: string; name: string }> = []
+  if (guild?.channels) {
+    for (const [id, ch] of guild.channels) {
+      if (CHANNEL_TYPES.has(ch.type)) {
+        allChannels.push({ id: id.toString(), name: (ch as any).name ?? `#${id}` })
+      }
+    }
+  }
+  allChannels.sort((a, b) => a.name.localeCompare(b.name))
+
+  const totalPages = Math.max(1, Math.ceil(allChannels.length / PAGE_SIZE))
+  const state: PageState = {
+    spaceDid,
+    channels: allChannels,
+    page: 0,
+    totalPages,
+    selections: new Map(),
+  }
+  pageStates.set(key, state)
+  return state
+}
+
+function buildChannelPageComponents(state: PageState, guildId: string, userId: string, spaceDid: string) {
+  const { channels, page, totalPages, selections } = state
+  const start = page * PAGE_SIZE
+  const pageChannels = channels.slice(start, start + PAGE_SIZE)
+
+  // Build the select menu options for this page
+  const options = pageChannels.map((ch) => ({
+    label: `#${ch.name}`,
+    value: ch.id,
+    // Mark channels already selected on this page as default
+    default: selections.get(page)?.has(ch.id) ?? false,
+  }))
+
+  const components: any[] = []
+
+  // Select menu row
+  if (options.length > 0) {
+    components.push({
+      type: MessageComponentTypes.ActionRow,
+      components: [
+        {
+          type: MessageComponentTypes.SelectMenu,
+          customId: `roomy|channel-page|${guildId}|${userId}|${spaceDid}|${page}`,
+          placeholder: `Select channels (page ${page + 1}/${totalPages})`,
+          minValues: 0,
+          maxValues: options.length,
+          options,
+        },
+      ],
+    })
+  }
+
+  // Navigation + confirmation buttons
+  const navButtons: any[] = []
+  if (page > 0) {
+    navButtons.push({
+      type: MessageComponentTypes.Button,
+      style: ButtonStyles.Secondary,
+      label: "◀ Previous",
+      customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|prev`,
+    })
+  }
+  if (page < totalPages - 1) {
+    navButtons.push({
+      type: MessageComponentTypes.Button,
+      style: ButtonStyles.Secondary,
+      label: `Next ▶ (page ${page + 1}/${totalPages})`,
+      customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|next`,
+    })
+  }
+  navButtons.push({
+    type: MessageComponentTypes.Button,
+    style: ButtonStyles.Success,
+    label: "✅ Confirm Selection",
+    customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|confirm`,
+  })
+  navButtons.push({
+    type: MessageComponentTypes.Button,
+    style: ButtonStyles.Danger,
+    label: "Cancel",
+    customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|cancel`,
+  })
+
+  components.push({
+    type: MessageComponentTypes.ActionRow,
+    components: navButtons,
+  })
+
+  return components
+}
+
+function totalSelectedCount(state: PageState): number {
+  let count = 0
+  for (const sel of state.selections.values()) {
+    count += sel.size
+  }
+  return count
+}
 
 // ─── Command definitions ──────────────────────────────────────────────
 
@@ -265,6 +397,24 @@ async function handleComponentInteraction(
         guildId,
         parts
       )
+    } else if (action === "channel-page") {
+      await handleChannelPageSelect(
+        interaction,
+        repo,
+        spaceManager,
+        bot,
+        guildId,
+        parts
+      )
+    } else if (action === "channel-nav") {
+      await handleChannelNav(
+        interaction,
+        repo,
+        spaceManager,
+        bot,
+        guildId,
+        parts
+      )
     }
   } catch (e) {
     log.error(`Error handling component interaction ${customId}`, e)
@@ -429,28 +579,189 @@ async function handleBridgeModeButton(
     return
   }
 
-  // Subset — show channel select menu
+  // Subset — show paginated channel select menu (string-based to avoid Discord's 15-item limit)
+  const userId = interaction.member?.id?.toString() ?? interaction.user?.id?.toString()
+  if (!userId) {
+    await interaction.edit({
+      content: "Could not determine user. Please try again.",
+      components: [],
+    })
+    return
+  }
+
+  const state = getOrCreatePageState(bot, guildId, userId, spaceDid)
+  if (state.channels.length === 0) {
+    await interaction.edit({
+      content:
+        "No text channels found in this guild. Make sure the bridge has access to at least one channel.",
+      components: [],
+    })
+    return
+  }
+
+  const components = buildChannelPageComponents(state, guildId, userId, spaceDid)
+  const selectedSoFar = totalSelectedCount(state)
+  const summary =
+    selectedSoFar > 0
+      ? `\n\n**${selectedSoFar} channel(s) selected so far.**`
+      : ""
+
   await interaction.edit({
-    content: "Select the channels to bridge:",
-    components: [
-      {
-        type: MessageComponentTypes.ActionRow,
-        components: [
-          {
-            type: MessageComponentTypes.SelectMenuChannels,
-            customId: `roomy|channel-select|${guildId}|${spaceDid}`,
-            channelTypes: [ChannelTypes.GuildText, ChannelTypes.GuildAnnouncement],
-            minValues: 1,
-            maxValues: 25,
-            placeholder: "Select channels to bridge..."
-          } as any
-        ]
-      }
-    ]
+    content: `Select channels to bridge — page **${state.page + 1}/${state.totalPages}** (${state.channels.length} total text channels):${summary}`,
+    components,
   })
 }
 
 // customId: roomy|channel-select|<guildId>|<spaceDid>
+async function handleChannelPageSelect(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  bot: DiscordBot,
+  guildId: string,
+  parts: string[]
+): Promise<void> {
+  if (!(await safeDefer(interaction, true))) return
+
+  // parts: roomy|channel-page|<guildId>|<userId>|<spaceDid>|<pageNum>
+  const userId = parts[3]!
+  const spaceDid = parts[4]!
+  const pageStr = parts[5]!
+  const page = parseInt(pageStr, 10)
+
+  const key = `${guildId}:${userId}:${spaceDid}`
+  const state = pageStates.get(key)
+  if (!state) {
+    await interaction.edit({
+      content: "Session expired. Please start again with `/connect-roomy-space`.",
+      components: [],
+    })
+    return
+  }
+
+  // Store the current page's selections
+  const selections: string[] =
+    ((interaction as any).data?.values as string[]) ?? []
+  state.selections.set(page, new Set(selections))
+
+  const selectedSoFar = totalSelectedCount(state)
+  const components = buildChannelPageComponents(state, guildId, userId, spaceDid)
+
+  await interaction.edit({
+    content: `Select channels to bridge — page **${state.page + 1}/${state.totalPages}** (${state.channels.length} total text channels):\n\n**${selectedSoFar} channel(s) selected so far.**`,
+    components,
+  })
+}
+
+async function handleChannelNav(
+  interaction: InteractionProperties,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  bot: DiscordBot,
+  guildId: string,
+  parts: string[]
+): Promise<void> {
+  if (!(await safeDefer(interaction, true))) return
+
+  // parts: roomy|channel-nav|<guildId>|<userId>|<spaceDid>|<action>
+  const userId = parts[3]!
+  const spaceDid = parts[4]!
+  const navAction = parts[5]!
+
+  const key = `${guildId}:${userId}:${spaceDid}`
+  const state = pageStates.get(key)
+  if (!state) {
+    await interaction.edit({
+      content: "Session expired. Please start again with `/connect-roomy-space`.",
+      components: [],
+    })
+    return
+  }
+
+  if (navAction === "prev") {
+    state.page = Math.max(0, state.page - 1)
+    const components = buildChannelPageComponents(state, guildId, userId, spaceDid)
+    const selectedSoFar = totalSelectedCount(state)
+    await interaction.edit({
+      content: `Select channels to bridge — page **${state.page + 1}/${state.totalPages}** (${state.channels.length} total text channels):\n\n**${selectedSoFar} channel(s) selected so far.**`,
+      components,
+    })
+    return
+  }
+
+  if (navAction === "next") {
+    state.page = Math.min(state.totalPages - 1, state.page + 1)
+    const components = buildChannelPageComponents(state, guildId, userId, spaceDid)
+    const selectedSoFar = totalSelectedCount(state)
+    await interaction.edit({
+      content: `Select channels to bridge — page **${state.page + 1}/${state.totalPages}** (${state.channels.length} total text channels):\n\n**${selectedSoFar} channel(s) selected so far.**`,
+      components,
+    })
+    return
+  }
+
+  if (navAction === "cancel") {
+    pageStates.delete(key)
+    await interaction.edit({
+      content: "Channel selection cancelled. Use `/connect-roomy-space` to try again.",
+      components: [],
+    })
+    return
+  }
+
+  if (navAction === "confirm") {
+    // Collect all selected channel IDs across pages
+    const selectedChannels: string[] = []
+    for (const sel of state.selections.values()) {
+      for (const chId of sel) {
+        selectedChannels.push(chId)
+      }
+    }
+
+    if (selectedChannels.length === 0) {
+      await interaction.edit({
+        content: "No channels selected. Please go back and select at least one channel, or Cancel.",
+        components: [],
+      })
+      return
+    }
+
+    // Connect to space and persist
+    try {
+      await spaceManager.getOrConnect(spaceDid)
+    } catch (e) {
+      log.error("Failed to connect to space", e)
+      await interaction.edit({
+        content:
+          "Could not connect to that space. Make sure the bridge has access.",
+        components: [],
+      })
+      return
+    }
+
+    repo.upsertBridgeConfig(guildId, spaceDid, "subset")
+    for (const channelId of selectedChannels) {
+      repo.addToAllowlist(spaceDid, channelId, guildId)
+    }
+    log.info(
+      `Connected space ${spaceDid} to guild ${guildId} in subset mode with ${selectedChannels.length} channels`
+    )
+
+    pageStates.delete(key)
+
+    await interaction.edit({
+      content: `Roomy space \`${spaceDid}\` connected in **subset** mode with ${selectedChannels.length} channel(s). Starting sync...`,
+      components: [],
+    })
+
+    runBackfill(bot, repo, spaceManager).catch((err) => {
+      log.error(`Initial backfill failed for space ${spaceDid}`, err)
+    })
+    return
+  }
+}
+
+// Deprecated — kept for compatibility with old component interactions
 async function handleChannelSelect(
   interaction: InteractionProperties,
   repo: BridgeRepository,

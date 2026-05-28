@@ -61,8 +61,16 @@ export async function runBackfill(
 
   // Ensure Roomy rooms exist for all bridged channels before backfilling.
   // Channels first, then threads (threads need parent channel mappings).
-  await ensureRoomyRooms(cached, repo, spaceManager, configs);
-  await ensureRoomyThreads(cached, repo, spaceManager, configs);
+  try {
+    await ensureRoomyRooms(cached, repo, spaceManager, configs);
+  } catch (err) {
+    log.error("ensureRoomyRooms failed", err);
+  }
+  try {
+    await ensureRoomyThreads(cached, repo, spaceManager, configs);
+  } catch (err) {
+    log.error("ensureRoomyThreads failed", err);
+  }
 
   // Backfill is per (channel, space) — each pair has its own cursor.
   const tasks: Array<{ channelId: string; spaceDid: string }> = [];
@@ -91,7 +99,11 @@ export async function runBackfill(
   // Deprioritized: fetch public archived threads, create rooms, and backfill
   // their messages with rate limiting. Archived threads aren't in the guild
   // cache so they must be fetched via REST API per parent channel.
-  await ensureAndBackfillArchivedThreads(cached, repo, spaceManager, configs);
+  try {
+    await ensureAndBackfillArchivedThreads(cached, repo, spaceManager, configs);
+  } catch (err) {
+    log.error("ensureAndBackfillArchivedThreads failed", err);
+  }
 }
 
 async function ensureRoomyRooms(
@@ -101,6 +113,7 @@ async function ensureRoomyRooms(
   configs: BridgeConfig[],
 ): Promise<void> {
   for (const config of configs) {
+    try {
     const { guildId, spaceDid, mode } = config;
     let channelIds: string[];
 
@@ -118,6 +131,7 @@ async function ensureRoomyRooms(
     let created = 0;
 
     for (const channelId of channelIds) {
+      try {
       if (repo.getRoomyId(spaceDid, "channel", channelId)) continue;
 
       const channelName = resolveChannelName(bot, channelId);
@@ -153,10 +167,16 @@ async function ensureRoomyRooms(
       await connected.sendEvent(event);
       repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
       created++;
+      } catch (err) {
+        log.error(`Failed to create Roomy room for channel ${channelId} in ${spaceDid}`, err);
+      }
     }
 
     if (created > 0) {
       log.info(`Created ${created} Roomy rooms for ${channelIds.length} bridged channels in ${spaceDid}`);
+    }
+    } catch (err) {
+      log.error(`Failed to ensure Roomy rooms for space ${config.spaceDid}`, err);
     }
   }
 }
@@ -168,6 +188,7 @@ async function ensureRoomyThreads(
   configs: BridgeConfig[],
 ): Promise<void> {
   for (const config of configs) {
+    try {
     const { guildId, spaceDid, mode } = config;
 
     const guild = bot.cache.guilds.memory.get(BigInt(guildId));
@@ -199,6 +220,7 @@ async function ensureRoomyThreads(
     let created = 0;
 
     for (const thread of threads) {
+      try {
       const threadId = thread.id.toString();
       if (repo.getRoomyId(spaceDid, "thread", threadId)) continue;
 
@@ -252,10 +274,16 @@ async function ensureRoomyThreads(
       }
 
       created++;
+      } catch (err) {
+        log.error(`Failed to create Roomy thread for ${thread.id.toString()} in ${spaceDid}`, err);
+      }
     }
 
     if (created > 0) {
       log.info(`Created ${created} Roomy threads in ${spaceDid}`);
+    }
+    } catch (err) {
+      log.error(`Failed to ensure Roomy threads for space ${config.spaceDid}`, err);
     }
   }
 }
@@ -430,6 +458,7 @@ async function ensureAndBackfillArchivedThreads(
   let totalThreads = 0;
 
   for (const config of configs) {
+    try {
     const { guildId, spaceDid, mode } = config;
     const guild = bot.cache.guilds.memory.get(BigInt(guildId));
     if (!guild?.channels) continue;
@@ -453,6 +482,7 @@ async function ensureAndBackfillArchivedThreads(
     let parentChannelsProcessed = 0;
 
     for (const parentChannel of bridgedParentChannels) {
+      try {
       const parentChannelId = parentChannel.id.toString();
       const parentRoomyId = repo.getRoomyId(
         spaceDid,
@@ -547,11 +577,17 @@ async function ensureAndBackfillArchivedThreads(
         // Rate limiting delay between parent channels
         await delay(CHANNEL_DELAY_MS);
       }
+      } catch (err) {
+        log.error(`Failed to backfill archived threads for parent channel ${parentChannel.id.toString()} in ${spaceDid}`, err);
+      }
     }
 
     log.info(
       `Archived thread backfill for ${spaceDid}: processed ${totalThreads} threads across ${parentChannelsProcessed} parent channels`,
     );
+    } catch (err) {
+      log.error(`Failed to backfill archived threads for space ${config.spaceDid}`, err);
+    }
   }
 
   log.info("Archived thread backfill complete");

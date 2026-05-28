@@ -52,6 +52,8 @@ export const desiredProperties = createDesiredPropertiesObject({
     data: true,
     token: true,
     guildId: true,
+    member: true,
+    user: true,
     authorizingIntegrationOwners: true,
   },
   attachment: {
@@ -72,6 +74,9 @@ export const desiredProperties = createDesiredPropertiesObject({
     messageId: true,
     channelId: true,
     guildId: true,
+  },
+  member: {
+    id: true,
   },
 } satisfies RecursivePartial<TransformersDesiredProperties>);
 
