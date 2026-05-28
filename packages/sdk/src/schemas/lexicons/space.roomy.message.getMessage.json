@@ -2,21 +2,6 @@
   "lexicon": 1,
   "id": "space.roomy.message.getMessage",
   "defs": {
-    "forwardedFrom": {
-      "type": "object",
-      "required": [
-        "name",
-        "roomId"
-      ],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "roomId": {
-          "type": "string"
-        }
-      }
-    },
     "media": {
       "type": "object",
       "required": [
@@ -24,13 +9,13 @@
         "url"
       ],
       "properties": {
-        "alt": {
-          "type": "string"
-        },
         "type": {
           "type": "string"
         },
         "url": {
+          "type": "string"
+        },
+        "alt": {
           "type": "string"
         }
       }
@@ -52,6 +37,21 @@
           "type": "string"
         },
         "myReactionId": {
+          "type": "string"
+        }
+      }
+    },
+    "forwardedFrom": {
+      "type": "object",
+      "required": [
+        "name",
+        "roomId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "roomId": {
           "type": "string"
         }
       }
@@ -84,9 +84,6 @@
             "timestamp"
           ],
           "properties": {
-            "authorAvatar": {
-              "type": "string"
-            },
             "authorDid": {
               "type": "string"
             },
@@ -95,10 +92,6 @@
             },
             "content": {
               "type": "string"
-            },
-            "forwardedFrom": {
-              "type": "ref",
-              "ref": "#forwardedFrom"
             },
             "id": {
               "type": "string"
@@ -117,9 +110,6 @@
                 "ref": "#reactions"
               }
             },
-            "replyTo": {
-              "type": "string"
-            },
             "tags": {
               "type": "array",
               "items": {
@@ -127,6 +117,16 @@
               }
             },
             "timestamp": {
+              "type": "string"
+            },
+            "authorAvatar": {
+              "type": "string"
+            },
+            "forwardedFrom": {
+              "type": "ref",
+              "ref": "#forwardedFrom"
+            },
+            "replyTo": {
               "type": "string"
             },
             "sort_idx": {

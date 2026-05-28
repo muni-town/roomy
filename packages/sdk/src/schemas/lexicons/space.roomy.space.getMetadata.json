@@ -44,14 +44,14 @@
         "id": {
           "type": "string"
         },
+        "unreadCount": {
+          "type": "integer"
+        },
         "lastRead": {
           "type": "string"
         },
         "name": {
           "type": "string"
-        },
-        "unreadCount": {
-          "type": "integer"
         }
       }
     },
@@ -70,14 +70,14 @@
             "ref": "#channels"
           }
         },
-        "id": {
-          "type": "string"
-        },
         "name": {
           "type": "string"
         },
         "position": {
           "type": "integer"
+        },
+        "id": {
+          "type": "string"
         }
       }
     },
@@ -108,24 +108,10 @@
         "id": {
           "type": "string"
         },
-        "lastRead": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
         "unreadCount": {
           "type": "integer"
-        }
-      }
-    },
-    "deletedRoom": {
-      "type": "object",
-      "required": [
-        "id"
-      ],
-      "properties": {
-        "id": {
+        },
+        "lastRead": {
           "type": "string"
         },
         "name": {
@@ -156,6 +142,20 @@
         }
       }
     },
+    "deletedRooms": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "main": {
       "type": "query",
       "parameters": {
@@ -183,19 +183,6 @@
             "sidebar"
           ],
           "properties": {
-            "avatar": {
-              "type": "string"
-            },
-            "deletedRooms": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "#deletedRoom"
-              }
-            },
-            "description": {
-              "type": "string"
-            },
             "isAdmin": {
               "type": "boolean"
             },
@@ -206,12 +193,25 @@
               "type": "ref",
               "ref": "#joinPolicy"
             },
-            "name": {
-              "type": "string"
-            },
             "sidebar": {
               "type": "ref",
               "ref": "#sidebar"
+            },
+            "avatar": {
+              "type": "string"
+            },
+            "deletedRooms": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#deletedRooms"
+              }
+            },
+            "description": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
             }
           }
         }

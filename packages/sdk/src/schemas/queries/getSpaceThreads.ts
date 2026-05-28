@@ -23,6 +23,7 @@ export const Thread = type({
   id: "string",
   "name?": "string",
   "channel?": "string",
+  "channelName?": "string",
   activity: ThreadActivity,
 });
 

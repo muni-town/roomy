@@ -80,11 +80,11 @@
           }))}
       />
       <div class="flex justify-between text-end">
-        {#if thread.channel}
+        {#if thread.channelName}
           <Badge class="mx-2" size="sm" variant="secondary"
             ><IconHashtag
               class="shrink-0 size-3 -mr-1"
-            />{thread.channel}</Badge
+            />{thread.channelName}</Badge
           >
         {/if}
       </div>

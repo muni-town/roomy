@@ -31,7 +31,7 @@
   function mapThread(t: RawThread): ThreadInfo {
     return {
       id: t.id,
-      name: t.name ?? t.id.slice(0, 12) + "…",
+      name: t.name ?? "Unnamed Thread",
       kind: "space.roomy.thread",
       canonicalParent: t.canonicalParent,
       activity: {

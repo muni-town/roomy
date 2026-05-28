@@ -8,10 +8,10 @@
         "did"
       ],
       "properties": {
-        "avatar": {
+        "did": {
           "type": "string"
         },
-        "did": {
+        "avatar": {
           "type": "string"
         },
         "name": {
@@ -48,10 +48,10 @@
           "type": "ref",
           "ref": "#activity"
         },
-        "canonicalParent": {
+        "id": {
           "type": "string"
         },
-        "id": {
+        "canonicalParent": {
           "type": "string"
         },
         "name": {

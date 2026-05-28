@@ -20,14 +20,14 @@
         "id": {
           "type": "string"
         },
+        "unreadCount": {
+          "type": "integer"
+        },
         "lastRead": {
           "type": "string"
         },
         "name": {
           "type": "string"
-        },
-        "unreadCount": {
-          "type": "integer"
         }
       }
     },
@@ -75,12 +75,6 @@
             "kind": {
               "type": "string"
             },
-            "lastRead": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
             "recentThreads": {
               "type": "array",
               "items": {
@@ -93,6 +87,15 @@
             },
             "unreadCount": {
               "type": "integer"
+            },
+            "lastRead": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parentChannelId": {
+              "type": "string"
             }
           }
         }

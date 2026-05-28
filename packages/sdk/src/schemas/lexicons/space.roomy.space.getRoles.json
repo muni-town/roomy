@@ -29,12 +29,6 @@
         "rooms"
       ],
       "properties": {
-        "avatar": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
         "id": {
           "type": "string"
         },
@@ -44,15 +38,21 @@
             "type": "string"
           }
         },
-        "name": {
-          "type": "string"
-        },
         "rooms": {
           "type": "array",
           "items": {
             "type": "ref",
             "ref": "#rooms"
           }
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
         }
       }
     },

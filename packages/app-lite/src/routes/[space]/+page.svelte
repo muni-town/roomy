@@ -17,6 +17,7 @@
     id: string;
     name?: string;
     channel?: string;
+    channelName?: string;
     activity: {
       latestTimestamp?: string;
       latestMembers: Array<{ did: string; name?: string; avatar?: string }>;
@@ -31,9 +32,10 @@
   function mapThread(t: RawThread): ThreadInfo {
     return {
       id: t.id,
-      name: t.name ?? t.id.slice(0, 12) + "…",
+      name: t.name ?? "Unnamed Thread",
       kind: "space.roomy.thread",
       channel: t.channel,
+      channelName: t.channelName,
       activity: {
         members: t.activity.latestMembers.map((m) => ({
           id: m.did,

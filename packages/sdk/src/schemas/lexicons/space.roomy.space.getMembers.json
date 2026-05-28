@@ -8,10 +8,10 @@
         "did"
       ],
       "properties": {
-        "avatar": {
+        "did": {
           "type": "string"
         },
-        "did": {
+        "avatar": {
           "type": "string"
         },
         "handle": {
@@ -30,26 +30,26 @@
         "roleIds"
       ],
       "properties": {
-        "avatar": {
-          "type": "string"
-        },
         "did": {
-          "type": "string"
-        },
-        "handle": {
           "type": "string"
         },
         "isAdmin": {
           "type": "boolean"
-        },
-        "name": {
-          "type": "string"
         },
         "roleIds": {
           "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "handle": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
         }
       }
     },
