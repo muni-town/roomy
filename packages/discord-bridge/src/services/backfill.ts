@@ -12,6 +12,11 @@ const log = createLogger("backfill");
 
 const activeBackfills = new Set<string>();
 
+/** Sleep for a given number of milliseconds. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // The proxy cache bot has .cache which DiscordBot doesn't encode in its type.
 // Narrow to what backfill actually needs.
 export interface CachedChannel {
@@ -82,6 +87,11 @@ export async function runBackfill(
   const succeeded = results.filter((r) => r.status === "fulfilled").length;
   const failed = results.filter((r) => r.status === "rejected").length;
   log.info(`Backfill complete: ${succeeded} succeeded, ${failed} failed`);
+
+  // Deprioritized: fetch public archived threads, create rooms, and backfill
+  // their messages with rate limiting. Archived threads aren't in the guild
+  // cache so they must be fetched via REST API per parent channel.
+  await ensureAndBackfillArchivedThreads(cached, repo, spaceManager, configs);
 }
 
 async function ensureRoomyRooms(
@@ -326,6 +336,7 @@ async function backfillChannel(
   spaceManager: SpaceManager,
   channelId: string,
   spaceDid: string,
+  guildIdOverride?: string,
 ): Promise<void> {
   const key = `${channelId}:${spaceDid}`;
   if (activeBackfills.has(key)) {
@@ -335,7 +346,7 @@ async function backfillChannel(
   activeBackfills.add(key);
 
   try {
-  const guildId = resolveGuildIdForChannel(bot, channelId);
+  const guildId = guildIdOverride ?? resolveGuildIdForChannel(bot, channelId);
   if (!guildId) {
     log.error(`Cannot resolve guildId for channel ${channelId}; skipping backfill`);
     return;
@@ -389,4 +400,153 @@ async function backfillChannel(
   } finally {
     activeBackfills.delete(key);
   }
+}
+
+/**
+ * Fetch public archived threads for all bridged parent channels, create Roomy
+ * rooms for any that aren't yet mapped, and backfill their messages.
+ *
+ * Deprioritised — runs after active channels and threads are fully backfilled.
+ * Adds a delay between each parent channel's archived fetch and between each
+ * archived thread backfill to avoid hitting Discord rate limits.
+ */
+async function ensureAndBackfillArchivedThreads(
+  bot: BotWithCache,
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+  configs: BridgeConfig[],
+): Promise<void> {
+  log.info("Starting archived thread backfill...");
+
+  const CHANNEL_DELAY_MS = 1_000; // between parent channel fetches
+  const BACKFILL_DELAY_MS = 500; // between individual archived thread backfills
+  let totalThreads = 0;
+
+  for (const config of configs) {
+    const { guildId, spaceDid, mode } = config;
+    const guild = bot.cache.guilds.memory.get(BigInt(guildId));
+    if (!guild?.channels) continue;
+
+    // Determine bridged parent channels (same logic as ensureRoomyThreads).
+    const bridgedParentChannels =
+      mode === "full"
+        ? [...guild.channels.values()].filter(
+            (ch) =>
+              CHANNEL_TYPES.has(ch.type) && isChannelPublic(ch, guildId),
+          )
+        : [...guild.channels.values()].filter((ch) => {
+            if (!CHANNEL_TYPES.has(ch.type)) return false;
+            return repo
+              .listAllowlistForBridge(spaceDid)
+              .some((e) => e.channelId === ch.id.toString());
+          });
+
+    if (bridgedParentChannels.length === 0) continue;
+
+    const connected = await spaceManager.getOrConnect(spaceDid);
+    let parentChannelsProcessed = 0;
+
+    for (const parentChannel of bridgedParentChannels) {
+      const parentChannelId = parentChannel.id.toString();
+      const parentRoomyId = repo.getRoomyId(
+        spaceDid,
+        "channel",
+        parentChannelId,
+      );
+      if (!parentRoomyId) continue;
+
+      let cursor: string | undefined;
+      let hasMore = true;
+
+      while (hasMore) {
+        const options: Record<string, unknown> = { limit: 100 };
+        if (cursor) {
+          options.before = cursor;
+        }
+
+        const result = await (bot.helpers as any).getPublicArchivedThreads(
+          parentChannel.id,
+          options,
+        );
+
+        if (!result.threads?.length) break;
+
+        for (const thread of result.threads) {
+          const threadId = String(thread.id);
+          if (repo.getRoomyId(spaceDid, "thread", threadId)) continue;
+          if (!thread.name) continue;
+
+          // Create Roomy room + parent link (same pattern as ensureRoomyThreads)
+          const threadUlid = newUlid();
+          const linkUlid = newUlid();
+
+          const events: Event[] = [
+            {
+              id: threadUlid,
+              $type: "space.roomy.room.createRoom.v0",
+              kind: "space.roomy.thread",
+              name: thread.name,
+              defaultAccess: "read",
+              extensions: {
+                "space.roomy.extension.discordOrigin.v0": {
+                  snowflake: threadId,
+                  guildId,
+                },
+              },
+            } as Event,
+            {
+              id: linkUlid,
+              room: parentRoomyId as Ulid,
+              $type: "space.roomy.link.createRoomLink.v0",
+              linkToRoom: threadUlid,
+              isCreationLink: true,
+            },
+          ];
+
+          await connected.sendEvents(events);
+          repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
+
+          if (mode === "subset") {
+            repo.addToAllowlist(spaceDid, threadId, guildId);
+          }
+
+          totalThreads++;
+
+          // Backfill this archived thread's messages (pass guildId explicitly
+          // since the thread isn't in the guild cache).
+          await backfillChannel(
+            bot,
+            repo,
+            spaceManager,
+            threadId,
+            spaceDid,
+            guildId,
+          );
+
+          // Rate limiting delay between individual thread backfills
+          await delay(BACKFILL_DELAY_MS);
+        }
+
+        hasMore = result.hasMore ?? false;
+        if (result.threads.length > 0) {
+          cursor = String(result.threads[result.threads.length - 1].id);
+        } else {
+          break;
+        }
+      }
+
+      parentChannelsProcessed++;
+
+      if (parentChannelsProcessed < bridgedParentChannels.length) {
+        // Rate limiting delay between parent channels
+        await delay(CHANNEL_DELAY_MS);
+      }
+    }
+
+    log.info(
+      `Archived thread backfill for ${spaceDid}: processed ${totalThreads} threads across ${parentChannelsProcessed} parent channels`,
+    );
+  }
+
+  log.info("Archived thread backfill complete");
 }
