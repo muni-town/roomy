@@ -27,6 +27,7 @@
     { slug: "roles", label: "Roles" },
     { slug: "members", label: "Members" },
     { slug: "invites", label: "Invites" },
+    { slug: "discord-bridge", label: "Discord Bridge" },
   ];
 
   function isActive(slug: string) {
