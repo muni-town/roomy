@@ -129,14 +129,14 @@ create table if not exists comp_page_edits (
   -- This is the ID of the edit event
   edit_id text primary key, -- ulid
   -- The page entity that is being edited
-  entity text references entities(ulid) on delete cascade,
+  entity text references entities(id) on delete cascade,
   mime_type text not null,
   data blob not null,
   user_id text not null -- did -- author of each edit
 ) strict;
 
 create table if not exists comp_comment (
-  entity text primary key references entities(ulid) on delete cascade,
+  entity text primary key references entities(id) on delete cascade,
   version text references comp_page_edits(edit_id) on delete cascade,
   snippet text not null,
   idx_from integer not null,
@@ -146,7 +146,7 @@ create table if not exists comp_comment (
 ) strict;
 
 create table if not exists comp_embed_image (
-  entity text primary key references entities(ulid) on delete cascade, -- URI
+  entity text primary key references entities(id) on delete cascade, -- URI
   mime_type text not null,
   size integer,
   width integer,
@@ -158,7 +158,7 @@ create table if not exists comp_embed_image (
 ) strict;
 
 create table if not exists comp_embed_video (
-  entity text primary key references entities(ulid) on delete cascade, -- URI
+  entity text primary key references entities(id) on delete cascade, -- URI
   mime_type text not null,
   size integer,
   width integer,
@@ -171,7 +171,7 @@ create table if not exists comp_embed_video (
 ) strict;
 
 create table if not exists comp_embed_file (
-  entity text primary key references entities(ulid) on delete cascade, -- URI
+  entity text primary key references entities(id) on delete cascade, -- URI
   mime_type text not null,
   size integer,
   name text,
@@ -180,7 +180,7 @@ create table if not exists comp_embed_file (
 ) strict;
 
 create table if not exists comp_embed_link (
-  entity text primary key references entities(ulid) on delete cascade, -- URI
+  entity text primary key references entities(id) on delete cascade, -- URI
   show_preview integer check(show_preview in (0, 1)) default 1,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
