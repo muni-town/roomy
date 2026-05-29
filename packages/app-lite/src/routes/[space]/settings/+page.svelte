@@ -4,6 +4,7 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { updateSpaceInfo } from "$lib/mutations/space";
   import { uploadFile } from "$lib/mutations/upload";
+  import { resolveBlobUrl } from "$lib/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input, {
@@ -43,16 +44,6 @@
     allowMemberInvites = meta.joinPolicy.allowMemberInvites ? "yes" : "no";
     untrack(clearAvatarSelection);
   });
-
-  function resolveBlobUrl(uri: string | null | undefined): string | undefined {
-    if (!uri) return undefined;
-    if (uri.startsWith("atblob://")) {
-      const [did, cid] = uri.slice("atblob://".length).split("/");
-      if (!did || !cid) return undefined;
-      return `https://cdn.bsky.app/img/feed_fullsize/plain/${did}/${cid}`;
-    }
-    return uri;
-  }
 
   const avatarSrc = $derived(avatarPreview ?? resolveBlobUrl(meta?.avatar));
 

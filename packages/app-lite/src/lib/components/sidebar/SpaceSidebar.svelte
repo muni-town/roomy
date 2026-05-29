@@ -18,6 +18,7 @@
   import SidebarCategoryShell from "@roomy/design/components/sidebars/SidebarCategoryShell.svelte";
   import SidebarItemShell from "@roomy/design/components/sidebars/SidebarItemShell.svelte";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import {
     IconCheck,
@@ -325,7 +326,7 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
       {onLeave}
     >
       {#snippet avatar()}
-        <SpaceAvatar src={meta?.avatar ?? undefined} id={spaceId} name={meta?.name ?? undefined} />
+        <SpaceAvatar src={resolveBlobUrl(meta?.avatar)} id={spaceId} name={meta?.name ?? undefined} />
       {/snippet}
     </SpaceHeaderShell>
   {/snippet}

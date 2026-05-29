@@ -7,6 +7,7 @@
   import Tooltip from "@roomy/design/components/helper/Tooltip.svelte";
   import { IconSquaresPlus } from "@roomy/design/icons";
   import { logout } from "$lib/auth.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
   import { sync_ } from "$lib/sync.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
 
@@ -54,7 +55,7 @@
               >
                 <div class="flex items-center justify-center overflow-hidden rounded-full">
                   <SpaceAvatar
-                    src={space.avatar ?? undefined}
+                    src={resolveBlobUrl(space.avatar)}
                     id={space.id}
                     name={space.name ?? undefined}
                     size={40}

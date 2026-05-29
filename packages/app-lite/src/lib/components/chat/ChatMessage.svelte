@@ -10,6 +10,7 @@
   import ChatInput from "./ChatInput.svelte";
   import { editMessage } from "$lib/mutations/message";
   import type { Message } from "$lib/queries/messages";
+  import { resolveBlobUrl } from "$lib/utils";
 
   type Props = {
     spaceId: string;
@@ -56,16 +57,6 @@
     }
   }
 
-  function resolveAvatarUrl(uri: string | null | undefined): string | undefined {
-    if (!uri) return undefined;
-    if (uri.startsWith("atblob://")) {
-      const split = uri.split("atblob://")[1]?.split("/");
-      if (!split || split.length !== 2) return undefined;
-      const [did, cid] = split;
-      return `https://cdn.bsky.app/img/feed_fullsize/plain/${did}/${cid}`;
-    }
-    return uri;
-  }
 
   async function handleEdit(newContent: string) {
     if (newContent === message.content) {
@@ -89,7 +80,7 @@
       authorName={message.authorName ?? undefined}
       authorHandle={undefined}
       authorAvatarUrl={message.authorAvatar ?? undefined}
-      avatarSrc={resolveAvatarUrl(message.authorAvatar)}
+      avatarSrc={resolveBlobUrl(message.authorAvatar)}
       timestamp={new Date(message.timestamp)}
       {isBridged}
       {mergeWithPrevious}

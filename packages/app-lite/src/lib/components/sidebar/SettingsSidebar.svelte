@@ -4,6 +4,7 @@
   import SidebarLayout from "@roomy/design/components/sidebars/SidebarLayout.svelte";
   import SpaceHeaderShell from "@roomy/design/components/sidebars/SpaceHeaderShell.svelte";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconArrowLeft } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
@@ -68,7 +69,7 @@
       {onLeave}
     >
       {#snippet avatar()}
-        <SpaceAvatar src={meta?.avatar ?? undefined} id={spaceId} name={meta?.name ?? undefined} />
+        <SpaceAvatar src={resolveBlobUrl(meta?.avatar)} id={spaceId} name={meta?.name ?? undefined} />
       {/snippet}
     </SpaceHeaderShell>
   {/snippet}

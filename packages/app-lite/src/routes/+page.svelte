@@ -12,6 +12,7 @@
   import { joinSpace } from "$lib/mutations/space";
   import { queryClient } from "$lib/client";
   import { schemas, cache } from "@roomy-space/sdk";
+  import { resolveBlobUrl } from "$lib/utils";
 
   type Space = typeof schemas.queries.getSpaces.Space.infer;
 
@@ -110,7 +111,7 @@
                     class="flex flex-col items-center gap-2 w-32 opacity-60 hover:opacity-100 transition-opacity"
                   >
                     <SpaceAvatar
-                      src={space.avatar ?? undefined}
+                      src={resolveBlobUrl(space.avatar)}
                       id={space.id}
                       name={space.name ?? undefined}
                       size={64}
@@ -147,7 +148,7 @@
   >
     {#snippet avatar()}
       <SpaceAvatar
-        src={space.avatar ?? undefined}
+        src={resolveBlobUrl(space.avatar)}
         id={space.id}
         name={space.name ?? undefined}
         size={96}
