@@ -32,21 +32,24 @@ SOFTWARE.
   import type { AsyncStateWithIdle } from "@roomy-space/sdk";
 
   export const buttonVariants = tv({
-    base: "touch-manipulation hover:cursor-pointer hover:scale-101 focus-visible:scale-101 disabled:hover:scale-100 motion-safe:focus-visible:transition-transform focus-visible:outline-2 outline-offset-2 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl active:scale-98 text-sm font-medium motion-safe:transition-all disabled:pointer-events-none disabled:opacity-60 duration-800 active:duration-100 hover:duration-300 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+    base: "touch-manipulation hover:cursor-pointer focus-visible:outline-2 outline-offset-2 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[10px] text-sm font-medium disabled:pointer-events-none disabled:opacity-60 disabled:translate-0.5 active:duration-100 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 duration-50",
     variants: {
       variant: {
         primary:
+<<<<<<< HEAD:packages/design/src/components/ui/button/Button.svelte
 <<<<<<< HEAD:packages/design/src/components/ui/button/Button.svelte
           "backdrop-blur-md backdrop-brightness-105 shadow-lg transform-all shadow-accent-500/5 dark:shadow-accent-500/2 disabled:shadow-md active:shadow-md  inset-shadow-sm inset-shadow-accent-700/5 dark:inset-shadow-accent-500/2 focus-visible:outline-accent-500 border border-accent-500/15 dark:border-accent-500/15 hover:bg-accent-200/60 dark:hover:bg-accent-950/25 bg-accent-200/50 dark:bg-accent-950/20 text-accent-950 dark:text-accent-400",
 =======
           "bg-accent-400 dark:bg-accent-400 text-accent-950 hover:bg-accent-400 backdrop-blur-md border border-px border-accent-400 hover:shadow-button active:translate-[2px] active:shadow-none",
 >>>>>>> 7a13ba43 (input & text fields adjusted):packages/app/src/lib/components/ui/button/Button.svelte
+=======
+          "bg-accent-400 dark:bg-accent-500 text-accent-950 hover:bg-accent-400 backdrop-blur-md border border-px border-accent-400 hover:shadow-button active:translate-[2px] active:shadow-none",
+>>>>>>> 97ea992c (updated ui components):packages/app/src/lib/components/ui/button/Button.svelte
         secondary:
-          "backdrop-blur-md backdrop-brightness-105 shadow-lg transform-all shadow-base-500/5 dark:shadow-base-500/2 active:shadow-md inset-shadow-sm inset-shadow-base-700/2 dark:inset-shadow-base-500/2 focus-visible:outline-base-800 dark:focus-visible:outline-base-200 bg-base-300/40 dark:bg-base-800/30 text-base-900 dark:text-base-50 hover:bg-base-300/45 dark:hover:bg-base-800/35 border border-base-300/50 dark:border-base-700/30",
+          "bg-accent-100 [&_svg]:stroke-red-900 text-accent-950 dark:bg-accent-700/30 dark:text-accent-300 hover:shadow-button border border-px border-accent-600 dark:border-accent-800 hover:border-accent-600 active:translate-[2px] active:shadow-none",
         link: "focus-visible:outline-base-900 dark:focus-visible:outline-base-50 text-base-800 dark:text-base-200 font-semibold hover:text-accent-600 dark:hover:text-accent-400 data-[current=true]:text-accent-600 dark:data-[current=true]:text-accent-400",
         ghost:
           "focus-visible:outline-base-900 dark:focus-visible:outline-base-50 text-base-800 dark:text-base-200 font-semibold hover:text-accent-600 hover:bg-accent-400/5 data-[current=true]:bg-accent-500/5 dark:hover:text-accent-400 dark:hover:bg-accent-700/5 data-[current=true]:text-accent-600 dark:data-[current=true]:text-accent-400 dark:data-[current=true]:bg-accent-500/5",
-
         red: "backdrop-blur-md backdrop-brightness-105 shadow-lg transform-all shadow-red-500/5 dark:shadow-red-500/2 disabled:shadow-md active:shadow-md focus-visible:inset-shadow-red-500/15 inset-shadow-sm inset-shadow-red-700/5 dark:inset-shadow-red-500/2 focus-visible:outline-red-500 border border-red-500/15 dark:border-red-500/15 hover:bg-red-200/60 dark:hover:bg-red-950/30 bg-red-200/50 dark:bg-red-950/20 text-red-800 dark:text-red-400",
         orange:
           "backdrop-blur-md backdrop-brightness-105 shadow-lg transform-all shadow-orange-500/5 dark:shadow-orange-500/2 disabled:shadow-md active:shadow-md focus-visible:inset-shadow-orange-500/15 inset-shadow-sm inset-shadow-orange-700/5 dark:inset-shadow-orange-500/2 focus-visible:outline-orange-500 border border-orange-500/15 dark:border-orange-500/15 hover:bg-orange-200/60 dark:hover:bg-orange-950/30 bg-orange-200/50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-400",
@@ -75,7 +78,7 @@ SOFTWARE.
         rose: "backdrop-blur-md backdrop-brightness-105 shadow-lg transform-all shadow-rose-500/5 dark:shadow-rose-500/2 disabled:shadow-md active:shadow-md focus-visible:inset-shadow-rose-500/15 inset-shadow-sm inset-shadow-rose-700/5 dark:inset-shadow-rose-500/2 focus-visible:outline-rose-500 border border-rose-500/15 dark:border-rose-500/15 hover:bg-rose-200/60 dark:hover:bg-rose-950/30 bg-rose-200/50 dark:bg-rose-950/20 text-rose-800 dark:text-rose-400",
       },
       size: {
-        default: "px-3 py-1.5",
+        default: "px-2.5 py-1.5",
         sm: "px-2 text-xs py-1 font-base [&_svg]:size-3 gap-1.5",
         lg: "px-4 gap-2.5 text-lg py-2 font-semibold [&_svg]:size-5 gap-2.5",
         icon: "p-2",

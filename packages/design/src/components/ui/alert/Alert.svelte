@@ -27,7 +27,7 @@ SOFTWARE.
   import { cn } from "../../../utils/index.js";
 
   export const alertVariants = tv({
-    base: "text-xs relative w-full rounded-2xl border p-4 sm:p-8 lg:p-12 [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:size-4 [&>svg~*]:pl-7 ",
+    base: "text-xs relative w-full rounded-2xl border px-5 py-4 md:px-6 md:py-5 [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:size-4 [&>svg~*]:pl-7 ",
     variants: {
       variant: {
         default:

@@ -52,8 +52,6 @@
 
       <EarlyAlphaWarning />
 
-      <div class="divider"></div>
-
       <!-- {#if publicDemoSpaces.length > 0}
         <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">
           Public Demo Spaces
@@ -70,8 +68,12 @@
         Create Space
       </Button>
 
+      <Button variant="secondary" class="gap-2">Not now</Button>
+
       {#if app.spaces.length || 0 > 0}
-        <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">
+        <h2
+          class="text-3xl font-bold text-base-900 dark:text-base-100 translate-0.5"
+        >
           Your Spaces
         </h2>
         <section

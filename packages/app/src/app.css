@@ -21,6 +21,18 @@ div {
 /* To switch fonts, replace with: @import "./fonts-sans-flex.css"; */
 
 @theme inline {
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-800: var(--accent-800);
+  --color-accent-900: var(--accent-900);
+  --color-accent-950: var(--accent-950);
+
   --color-base-50: var(--base-50);
   --color-base-100: var(--base-100);
   --color-base-200: var(--base-200);
@@ -33,6 +45,7 @@ div {
   --color-base-900: var(--base-900);
   --color-base-950: var(--base-950);
 
+<<<<<<< HEAD
   --color-accent-50: var(--accent-50);
   --color-accent-100: var(--accent-100);
   --color-accent-200: var(--accent-200);
@@ -47,6 +60,10 @@ div {
 
   --shadow-button: 2px 2px 0 0 var(--accent-700);
   --shadow-input: 2px 2px 0 0 var(--accent-700);
+=======
+  --shadow-button: 2px 2px 0 0 var(--accent-700);
+  --inset-shadow-input: inset 0 2px 0 0 var(--accent-700);
+>>>>>>> 97ea992c (updated ui components)
 }
 
 @layer base {
@@ -63,17 +80,17 @@ div {
     --accent-900: var(--color-pink-900);
     --accent-950: var(--color-pink-950);
 
-    --base-50: var(--color-stone-50);
-    --base-100: var(--color-stone-100);
-    --base-200: var(--color-stone-200);
-    --base-300: var(--color-stone-300);
-    --base-400: var(--color-stone-400);
-    --base-500: var(--color-stone-500);
-    --base-600: var(--color-stone-600);
-    --base-700: var(--color-stone-700);
-    --base-800: var(--color-stone-800);
-    --base-900: var(--color-stone-900);
-    --base-950: var(--color-stone-950);
+    --base-50: var(--color-neutral-50);
+    --base-100: var(--color-neutral-100);
+    --base-200: var(--color-neutral-200);
+    --base-300: var(--color-neutral-300);
+    --base-400: var(--color-neutral-400);
+    --base-500: var(--color-neutral-500);
+    --base-600: var(--color-neutral-600);
+    --base-700: var(--color-neutral-700);
+    --base-800: var(--color-neutral-800);
+    --base-900: var(--color-neutral-900);
+    --base-950: var(--color-neutral-950);
   }
 
   html {
@@ -237,6 +254,7 @@ div {
     --accent-900: var(--color-sky-900);
     --accent-950: var(--color-sky-950);
   }
+
   .blue {
     --accent-50: var(--color-blue-50);
     --accent-100: var(--color-blue-100);

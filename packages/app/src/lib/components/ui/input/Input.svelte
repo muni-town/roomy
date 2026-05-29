@@ -32,6 +32,7 @@ SOFTWARE.
   } from "svelte/elements";
 
   export const inputVariants = tv({
+<<<<<<< HEAD
     base: "rounded-md text-sm border-1 font-medium focus-visible:outline-0 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed",
     variants: {
       variant: {
@@ -39,6 +40,15 @@ SOFTWARE.
           "focus:shadow-input focus:bg-accent-50 dark:focus:border-accent-400 border-neutral-400/50 dark:border-neutral-700 bg-neutral-300/50 dark:bg-neutral-900 text-neutral-950 dark:text-neutral-100 placeholder:text-base-500 dark:placeholder:text-base-50/50",
         secondary:
           "focus:ring-base-800 dark:focus:ring-base-200 bg-base-100/50 dark:bg-base-900/50 text-base-900 dark:text-base-50 ring-base-200 dark:ring-base-800 placeholder:text-base-900/50 dark:placeholder:text-base-100",
+=======
+    base: "rounded-md  text-sm border-2 font-medium disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed",
+    variants: {
+      variant: {
+        primary:
+          "focus:border-accent-300 focus:outline-hidden inset-shadow-input  border-accent-500 bg-accent-100 dark:bg-accent-950/20 text-accent-950 dark:text-accent-400 placeholder:text-accent-800",
+        secondary:
+          "focus:ring-base-800 dark:focus:ring-base-200 bg-base-100/50 dark:bg-base-900/50 text-base-900 dark:text-base-50 ring-base-200 dark:ring-base-800 placeholder:text-base-900/50 dark:placeholder:text-base-50/50",
+>>>>>>> 97ea992c (updated ui components)
       },
       sizeVariant: {
         default: "px-3.5 py-1.5 text-base",
