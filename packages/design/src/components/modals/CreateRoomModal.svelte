@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { Modal } from "@foxui/core";
   import Input from "../ui/input/Input.svelte";
   import Button from "../ui/button/Button.svelte";
@@ -7,11 +8,14 @@
   let {
     open = $bindable(false),
     spaceId,
+    permissions,
     onCreate,
   }: {
     open: boolean;
     /** The space ID — used to form the default category link. */
     spaceId: string;
+    /** Optional permissions editor snippet (e.g. ChannelPermissions component). */
+    permissions?: Snippet<[{ type: "Channel" | "Category" }]>;
     /** Called when the user submits the form. */
     onCreate: (opts: { type: "Channel" | "Category"; name: string }) => void | Promise<void>;
   } = $props();
@@ -82,6 +86,14 @@
         onkeydown={(e: KeyboardEvent) => e.key === "Enter" && submit()}
       />
     </div>
+
+    {#if permissions}
+      {#if type === "Channel"}
+        <div class="border-t border-base-200 dark:border-base-700 pt-4">
+          {@render permissions({ type })}
+        </div>
+      {/if}
+    {/if}
 
     <div class="flex justify-end mt-2">
       <Button onclick={submit} disabled={!name.trim() || creating}>

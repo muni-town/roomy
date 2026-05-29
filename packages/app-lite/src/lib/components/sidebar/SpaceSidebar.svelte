@@ -3,6 +3,11 @@
   import { goto } from "$app/navigation";
   import { schemas } from "@roomy-space/sdk";
   import { untrack } from "svelte";
+  import ChannelPermissions from "$lib/components/ui/ChannelPermissions.svelte";
+  import {
+    type Permission,
+  } from "$lib/mutations/room";
+  import { sendEvents } from "$lib/mutations/send-events";
   import {
     dragHandleZone,
     dragHandle,
@@ -24,7 +29,7 @@
   import { leaveSpace } from "$lib/mutations/space";
   import { createRoom, updateSidebar } from "$lib/mutations/room";
   import { createQuery } from "@tanstack/svelte-query";
-  import { transport, cache } from "@roomy-space/sdk";
+  import { transport, cache, newUlid } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
   import EditRoomModal from "./EditRoomModal.svelte";
@@ -54,6 +59,11 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
   let openEditRoomModal = $state(false);
   let openRestoreRoomModal = $state(false);
   let openInviteModal = $state(false);
+  // Channel creation permissions state
+  let createAccessMode = $state<"open" | "roles">("open");
+  let createRolePermissions = $state<Record<string, Permission>>({});
+  let createDefaultAccess = $state<Permission>("readwrite");
+
   let createModalOpen = $state(false);
 
   const meta = $derived(metaQuery.data);
@@ -274,7 +284,28 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
       const roomId = await createRoom(spaceId, {
         kind: "space.roomy.channel",
         name: opts.name,
+        ...(createDefaultAccess !== "readwrite" && {
+          defaultAccess: createDefaultAccess,
+        }),
       });
+
+      // Send role permission events if access is role-based
+      const permissionEvents =
+        createAccessMode === "roles"
+          ? Object.entries(createRolePermissions)
+              .filter(([, perm]) => perm !== "none")
+              .map(([roleId, permission]) => ({
+                id: newUlid(),
+                $type: "space.roomy.role.setRoleRoomPermission.v0",
+                roleId,
+                roomId,
+                permission: permission as "read" | "readwrite",
+              }))
+          : [];
+
+      if (permissionEvents.length > 0) {
+        await sendEvents(spaceId, permissionEvents);
+      }
 
       goto(`/${spaceId}/${roomId}`);
     }
@@ -427,7 +458,18 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
   bind:open={createModalOpen}
   {spaceId}
   onCreate={handleCreate}
-/>
+>
+  {#snippet permissions({ type })}
+    {#if type === "Channel"}
+      <ChannelPermissions
+        {spaceId}
+        bind:accessMode={createAccessMode}
+        bind:rolePermissions={createRolePermissions}
+        bind:defaultAccess={createDefaultAccess}
+      />
+    {/if}
+  {/snippet}
+</CreateRoomModal>
 
 {#snippet channelItem(channel: SidebarChannel)}
   {@const isActive = activeChannelId === channel.id}

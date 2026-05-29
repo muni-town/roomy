@@ -3,9 +3,18 @@ import { sendEvents } from "./send-events";
 
 export type RoomKind = "space.roomy.channel" | "space.roomy.thread" | "space.roomy.page";
 
+export type DefaultAccess = "readwrite" | "read" | "none";
+export type Permission = "none" | "read" | "readwrite";
+
 export async function createRoom(
   spaceId: string,
-  opts: { kind: RoomKind; name?: string; description?: string; avatar?: string },
+  opts: {
+    kind: RoomKind;
+    name?: string;
+    description?: string;
+    avatar?: string;
+    defaultAccess?: DefaultAccess;
+  },
 ): Promise<string> {
   const id = newUlid();
   await sendEvents(spaceId, [
@@ -16,6 +25,8 @@ export async function createRoom(
       ...(opts.name !== undefined && { name: opts.name }),
       ...(opts.description !== undefined && { description: opts.description }),
       ...(opts.avatar !== undefined && { avatar: opts.avatar }),
+      ...(opts.defaultAccess !== undefined &&
+        opts.defaultAccess !== "readwrite" && { defaultAccess: opts.defaultAccess }),
     },
   ]);
   return id;
@@ -29,6 +40,7 @@ export async function updateRoom(
     name?: string;
     description?: string;
     avatar?: string;
+    defaultAccess?: DefaultAccess;
   },
 ): Promise<string> {
   const id = newUlid();
@@ -41,6 +53,7 @@ export async function updateRoom(
       ...(opts.name !== undefined && { name: opts.name }),
       ...(opts.description !== undefined && { description: opts.description }),
       ...(opts.avatar !== undefined && { avatar: opts.avatar }),
+      ...(opts.defaultAccess !== undefined && { defaultAccess: opts.defaultAccess }),
     },
   ]);
   return id;
