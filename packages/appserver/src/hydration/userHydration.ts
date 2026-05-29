@@ -86,21 +86,28 @@ async function run(
     throw err;
   }
 
-  // Stage 1: personal stream must be caught up before we can read its
-  // comp_space rows. Failures here are fatal — without it we have nothing
-  // to scope by.
-  //
-  // `backfillDone` resolves when the SDK has *delivered* backfill events to
-  // our callback; the actual SQL writes happen asynchronously via the
-  // SpaceMaterializer's serial chain. We have to `drain()` as well to
-  // guarantee the writes are visible — without it, the first request after
-  // a fresh subscription often races and returns stale (empty) results.
+  // Stage 1: start materialising the personal stream. We intentionally
+  // do NOT await backfillDone here — doing so blocks the request handler
+  // until every historical event is applied, which can exceed Bun's
+  // idleTimeout on large spaces. Instead we read whatever state is currently
+  // materialised and return it. If backfill is still in progress the
+  // returned membership may be partial; the client will see a complete
+  // view once the materializer finishes and invalidation signals arrive.
   const personalMat = await getOrCreateMaterializer(
     personalStreamDid,
     opts.materializerOpts,
   );
-  await personalMat.backfillDone;
-  await personalMat.drain();
+  // If the materializer already completed backfill, drain to ensure writes
+  // are visible. If not, we serve whatever is on disk — worst case the user
+  // sees an empty list that fills in over the next few seconds.
+  if (personalMat.backfillSettled) {
+    if (personalMat.backfillError) {
+      throw new Error(
+        `Personal stream backfill failed for ${personalStreamDid}`,
+      );
+    }
+    await personalMat.drain();
+  }
 
   const intendedSpaceDids = readIntendedSpaceDids(db, personalStreamDid);
 
@@ -113,8 +120,15 @@ async function run(
           spaceDid,
           opts.materializerOpts,
         );
-        await mat.backfillDone;
-        await mat.drain();
+        // Same non-blocking strategy as Stage 1: if backfill is already
+        // done, drain so reads see the latest writes. Otherwise proceed
+        // with whatever is on disk.
+        if (mat.backfillSettled) {
+          if (mat.backfillError) {
+            throw new Error(`Space backfill failed for ${spaceDid}`);
+          }
+          await mat.drain();
+        }
       } catch (err) {
         hydrationFailures.push({
           streamDid: spaceDid,

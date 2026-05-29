@@ -88,6 +88,12 @@ export class SpaceMaterializer {
   /** Resolves once the initial backfill completes (or rejects on subscribe failure). */
   readonly backfillDone: Promise<Ulid>;
 
+  /** True once `backfillDone` has settled (resolved or rejected). */
+  backfillSettled = false;
+
+  /** If `backfillDone` rejected, the error. Null otherwise. */
+  backfillError: unknown = null;
+
   private readonly db: Database;
   private readonly space: ConnectedSpaceLike;
   private readonly getProfiles: GetProfilesFn | undefined;
@@ -112,9 +118,14 @@ export class SpaceMaterializer {
     this.db = db;
     this.space = space;
     this.streamDid = space.streamDid;
-    this.backfillDone = backfillDone;
     this.getProfiles = getProfiles;
     this.invalidationRouter = invalidationRouter;
+
+    // Track settlement so callers can check without awaiting.
+    this.backfillDone = backfillDone.then(
+      (v) => { this.backfillSettled = true; return v; },
+      (e) => { this.backfillSettled = true; this.backfillError = e; throw e; },
+    );
   }
 
   /**

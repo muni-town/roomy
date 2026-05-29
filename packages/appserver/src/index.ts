@@ -165,6 +165,13 @@ const corsHeaders = {
 
 Bun.serve({
   port: PORT,
+  // Backfill of large spaces (tens of thousands of events) can take
+  // significantly longer than Bun's default 10s. Hydration no longer
+  // blocks on backfill completion (see userHydration.ts), but the admin
+  // materializeSpace handler with wait=backfill may legitimately take
+  // a long time. Set a generous idle timeout so those requests don't
+  // get killed mid-flight.
+  idleTimeout: 255, // seconds (max allowed by Bun)
   fetch: async (req, server) => {
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
