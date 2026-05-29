@@ -1,5 +1,8 @@
 FROM node:22 AS build
 
+# Invalidate build cache on each deploy
+ARG CACHEBUST=0
+
 # Extract the first 8 characters of the git commit from railway as the build ID if present
 ARG RAILWAY_GIT_COMMIT_SHA
 ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
