@@ -5,7 +5,7 @@
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import type { Message } from "../ChatArea.svelte";
-  import { renderMarkdownPlaintext } from "$lib/utils/markdown";
+  import { renderMarkdownPlaintext } from "@roomy/design/utils";
 
   let {
     replyToId,

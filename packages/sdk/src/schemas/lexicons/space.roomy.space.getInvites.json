@@ -1,0 +1,57 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.getInvites",
+  "defs": {
+    "invites": {
+      "type": "object",
+      "required": [
+        "createdBy",
+        "eventUlid",
+        "token"
+      ],
+      "properties": {
+        "createdBy": {
+          "type": "string"
+        },
+        "eventUlid": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "spaceId"
+        ],
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "invites"
+          ],
+          "properties": {
+            "invites": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#invites"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

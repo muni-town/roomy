@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ScrollArea } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { page } from "$app/state";
 

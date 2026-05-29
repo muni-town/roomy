@@ -1,7 +1,7 @@
 <script lang="ts">
-  import BoardViewItem from "./BoardViewItem.svelte";
-  import { ScrollArea } from "@foxui/core";
-  import type { ThreadInfo } from "./types";
+  import { page } from "$app/state";
+  import BoardViewShell from "@roomy/design/components/content/thread/boardView/BoardView.svelte";
+  import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
   import type { Ulid } from "@roomy-space/sdk";
 
   const {
@@ -13,18 +13,15 @@
     emptyMessage?: string;
     parent?: Ulid;
   } = $props();
+
+  function hrefFor(thread: ThreadInfo): string {
+    const parentParam = parent
+      ? "?parent=" + parent
+      : thread.canonicalParent
+        ? "?parent=" + thread.canonicalParent
+        : "";
+    return `/${page.params.space}/${thread.id}${parentParam}`;
+  }
 </script>
 
-{#if threads.length}
-  <ScrollArea class="h-full px-4 pb-4 lg:max-w-[80%] w-full self-center">
-    {#each threads as thread}
-      <div class="mt-4">
-        <BoardViewItem {thread} {parent} />
-      </div>
-    {/each}
-  </ScrollArea>
-{:else}
-  <div class="h-full w-full flex items-center justify-center">
-    <div class="p-2">{emptyMessage}</div>
-  </div>
-{/if}
+<BoardViewShell {threads} {emptyMessage} {hrefFor} />

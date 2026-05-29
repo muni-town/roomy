@@ -1,5 +1,8 @@
 packages:
   - packages/app
+  - packages/app-lite
+  - packages/appserver
+  - packages/playground
   - packages/design
   - packages/sdk
   - packages/discord-bridge

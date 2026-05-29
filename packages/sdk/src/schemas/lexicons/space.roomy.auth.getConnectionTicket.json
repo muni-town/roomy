@@ -1,0 +1,23 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.auth.getConnectionTicket",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "ticket"
+          ],
+          "properties": {
+            "ticket": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -5,7 +5,6 @@
  * and event decoding. Consumers receive decoded events via callbacks.
  */
 
-import type { Agent } from "@atproto/api";
 import {
   LeafClient,
   type LeafQuery,
@@ -13,7 +12,7 @@ import {
   type Result,
   type SubscribeEventsResp,
 } from "@muni-town/leaf-client";
-import { decode, encode } from "@atcute/cbor";
+import { decode, encode, BytesWrapper } from "@atcute/cbor";
 
 import {
   StreamDid,
@@ -81,7 +80,6 @@ export class ConnectedSpace {
   readonly connection: StateMachine<ConnectionState>;
 
   #leaf: LeafClient;
-  #agent: Agent;
   #config: ConnectedSpaceConfig;
 
   #eventSubscription: (() => Promise<void>) | null = null;
@@ -107,7 +105,6 @@ export class ConnectedSpace {
   private constructor(config: ConnectedSpaceConfig) {
     this.streamDid = config.streamDid;
     this.#config = config;
-    this.#agent = config.client.agent;
     this.#leaf = config.client.leaf;
     this.connection = stateMachine<ConnectionState>({ state: "connected" });
 
@@ -444,14 +441,16 @@ export class ConnectedSpace {
     }));
   }
 
-  async fetchRoles(): Promise<{
-    id: string;
-    name: string | null;
-    avatar: string | null;
-    description: string | null;
-    rooms: { roomId: string; permission: "read" | "readwrite" }[];
-    members: string[];
-  }[]> {
+  async fetchRoles(): Promise<
+    {
+      id: string;
+      name: string | null;
+      avatar: string | null;
+      description: string | null;
+      rooms: { roomId: string; permission: "read" | "readwrite" }[];
+      members: string[];
+    }[]
+  > {
     const resp = await this.#leaf.query(this.streamDid, {
       name: "roles",
       params: {},
@@ -462,7 +461,8 @@ export class ConnectedSpace {
       id: String(row["id"] ?? ""),
       name: row["name"] != null ? String(row["name"]) : null,
       avatar: row["avatar"] != null ? String(row["avatar"]) : null,
-      description: row["description"] != null ? String(row["description"]) : null,
+      description:
+        row["description"] != null ? String(row["description"]) : null,
       rooms: row["rooms"] != null ? JSON.parse(String(row["rooms"])) : [],
       members: row["members"] != null ? JSON.parse(String(row["members"])) : [],
     }));
@@ -498,28 +498,84 @@ export class ConnectedSpace {
   /**
    * Send an event to this space.
    */
-  async sendEvent(event: Event): Promise<void> {
-    await this.#leaf.sendEvent(this.streamDid, encode(event));
+  async sendEvent(event: Event, userOverride?: string): Promise<void> {
+    await this.sendEvents([event], userOverride);
   }
 
   /**
    * Send multiple events to this space in a single batch.
    * More efficient than calling sendEvent multiple times.
+   *
+   * When `userOverride` is provided, it is included as `userOverride` in the
+   * CBOR payload so the Leaf server records the specified DID as the event
+   * author (only allowed for unsafe_auth_token connections).
    */
-  async sendEvents(events: Event[]): Promise<void> {
+  async sendEvents(events: Event[], userOverride?: string): Promise<void> {
     if (events.length === 0) return;
-    await this.#leaf.sendEvents(
-      this.streamDid,
-      events.map((event) => encode(event)),
+
+    const payload: Record<string, unknown> = {
+      streamDid: this.streamDid,
+      events: events.map((event) => new BytesWrapper(encode(event))),
+    };
+    if (userOverride) {
+      payload.userOverride = userOverride;
+    }
+
+    const encoded = encode(payload);
+    const binary =
+      typeof Buffer !== "undefined" && Buffer.from
+        ? Buffer.from(encoded)
+        : encoded.buffer.slice(0, encoded.length);
+
+    const respBytes = await (this.#leaf as any).socket.emitWithAck(
+      "stream/event_batch",
+      binary,
     );
+    const resp = decode(
+      respBytes instanceof Uint8Array ? respBytes : new Uint8Array(respBytes),
+    );
+    if (
+      resp &&
+      typeof resp === "object" &&
+      "Err" in (resp as Record<string, unknown>)
+    ) {
+      throw new Error((resp as { Err: string }).Err);
+    }
   }
 
   /**
    * Send a state event to this space.
    * State events are not persisted to the stream — they only update the state database.
    */
-  async sendStateEvent(event: Event): Promise<void> {
-    await this.#leaf.sendStateEvents(this.streamDid, [encode(event)]);
+  async sendStateEvent(event: Event, userOverride?: string): Promise<void> {
+    const payload: Record<string, unknown> = {
+      streamDid: this.streamDid,
+      events: [new BytesWrapper(encode(event))],
+    };
+    if (userOverride) {
+      payload.userOverride = userOverride;
+    }
+
+    const encoded = encode(payload);
+    const binary =
+      typeof Buffer !== "undefined" && Buffer.from
+        ? Buffer.from(encoded)
+        : encoded.buffer.slice(0, encoded.length);
+
+    const respBytes = await (this.#leaf as any).socket.emitWithAck(
+      "stream/state_event_batch",
+      binary,
+    );
+    const resp = decode(
+      respBytes instanceof Uint8Array ? respBytes : new Uint8Array(respBytes),
+    );
+    if (
+      resp &&
+      typeof resp === "object" &&
+      "Err" in (resp as Record<string, unknown>)
+    ) {
+      throw new Error((resp as { Err: string }).Err);
+    }
   }
 
   /**
@@ -815,30 +871,6 @@ export class ConnectedSpace {
       return null;
     }
   }
-}
-
-/**
- * Create a LeafClient with ATProto service auth.
- */
-function createLeafClient(config: {
-  agent: Agent;
-  leafUrl: string;
-  leafDid: string;
-}): LeafClient {
-  return new LeafClient(config.leafUrl, async () => {
-    const resp = await config.agent.com.atproto.server.getServiceAuth(
-      {
-        aud: config.leafDid,
-        lxm: "town.muni.leaf.authenticate",
-      },
-      {
-        headers: {
-          "atproto-proxy": `${config.agent.assertDid}#atproto_pds`,
-        },
-      },
-    );
-    return resp.data.token;
-  });
 }
 
 /**

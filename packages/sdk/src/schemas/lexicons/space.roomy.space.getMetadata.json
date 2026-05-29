@@ -1,0 +1,221 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.getMetadata",
+  "defs": {
+    "joinPolicy": {
+      "type": "object",
+      "required": [
+        "allowMemberInvites",
+        "allowPublicJoin"
+      ],
+      "properties": {
+        "allowMemberInvites": {
+          "type": "boolean"
+        },
+        "allowPublicJoin": {
+          "type": "boolean"
+        }
+      }
+    },
+    "channels": {
+      "type": "object",
+      "required": [
+        "canRead",
+        "canWrite",
+        "defaultAccess",
+        "id",
+        "unreadCount"
+      ],
+      "properties": {
+        "canRead": {
+          "type": "boolean"
+        },
+        "canWrite": {
+          "type": "boolean"
+        },
+        "defaultAccess": {
+          "type": "string",
+          "knownValues": [
+            "none",
+            "read",
+            "readwrite"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "unreadCount": {
+          "type": "integer"
+        },
+        "lastRead": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "categories": {
+      "type": "object",
+      "required": [
+        "channels",
+        "name",
+        "position"
+      ],
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#channels"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "position": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "orphans": {
+      "type": "object",
+      "required": [
+        "canRead",
+        "canWrite",
+        "defaultAccess",
+        "id",
+        "unreadCount"
+      ],
+      "properties": {
+        "canRead": {
+          "type": "boolean"
+        },
+        "canWrite": {
+          "type": "boolean"
+        },
+        "defaultAccess": {
+          "type": "string",
+          "knownValues": [
+            "none",
+            "read",
+            "readwrite"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "unreadCount": {
+          "type": "integer"
+        },
+        "lastRead": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "sidebar": {
+      "type": "object",
+      "required": [
+        "categories",
+        "orphans"
+      ],
+      "properties": {
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#categories"
+          }
+        },
+        "orphans": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#orphans"
+          }
+        }
+      }
+    },
+    "deletedRooms": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "spaceId"
+        ],
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          },
+          "includeDeleted": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "isAdmin",
+            "isMember",
+            "joinPolicy",
+            "sidebar"
+          ],
+          "properties": {
+            "isAdmin": {
+              "type": "boolean"
+            },
+            "isMember": {
+              "type": "boolean"
+            },
+            "joinPolicy": {
+              "type": "ref",
+              "ref": "#joinPolicy"
+            },
+            "sidebar": {
+              "type": "ref",
+              "ref": "#sidebar"
+            },
+            "avatar": {
+              "type": "string"
+            },
+            "deletedRooms": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#deletedRooms"
+              }
+            },
+            "description": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

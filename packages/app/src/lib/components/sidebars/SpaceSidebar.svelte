@@ -7,7 +7,8 @@
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
   import EditRoomModal from "../modals/EditRoomModal.svelte";
   import RestoreRoomModal from "../modals/RestoreRoomModal.svelte";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import SidebarLayout from "@roomy/design/components/sidebars/SidebarLayout.svelte";
 
   import {
     IconCalendar,
@@ -30,9 +31,6 @@
   } from "svelte-dnd-action";
   import { peer } from "$lib/workers";
   import { calendarLinkQuery } from "$lib/queries/calendar.svelte";
-  // at the top level there can be categories, channels or pages
-  // under categories there can be channels or pages
-  // under channels there can be threads or pages
 
   let isEditing = $state(false);
   let editingId = $state<
@@ -42,7 +40,6 @@
   function editSidebarItem(
     id: { room: Ulid } | { categoryId: Ulid; categoryName: string },
   ) {
-    console.debug("Edit sidebar item");
     openEditRoomModal = true;
     editingId = id;
   }
@@ -61,9 +58,6 @@
   let openRestoreRoomModal = $state(false);
 
   function renameCategory(id: Ulid, newName: string) {
-    // keep the 'id' (old name) the same in the categoryMap
-    // but change the name in state
-    console.debug("Rename category", { id, newName });
     const category = categoryMap.get(id);
     const renamed = {
       ...category,
@@ -71,20 +65,15 @@
     } as SidebarCategoryType;
     categoryMap.set(id, renamed);
     categoryMap = new Map(categoryMap);
-    // draftOrder = draftOrder;
-    console.debug("new categoryMap", $state.snapshot(categoryMap));
   }
 
   async function saveChanges() {
     if (draftOrder && app.joinedSpace) {
-      // TODO: persist draftCategories to peer
-      // Generate ULIDs for v0 categories that used name as id
       const newSidebar = draftOrder.map((c) => ({
         id: Ulid.allows(c.id) ? c.id : newUlid(),
         name: categoryMap.get(c.id)?.name ?? "",
         children: c.childIds as Ulid[],
       }));
-      console.log("newSidebar", $state.snapshot(newSidebar));
       await peer.sendEvent(app.joinedSpace.id, {
         id: newUlid(),
         $type: "space.roomy.space.updateSidebar.v1",
@@ -105,7 +94,6 @@
 
   let draftOrder = $state<DraftOrder | null>(null);
 
-  // Build lookup maps from the latest sidebar data
   let categoryMap = $derived(
     new Map(app.categories?.map((c) => [c.id, c]) ?? []),
   );
@@ -115,11 +103,9 @@
     ),
   );
 
-  // Derive display by merging draft order with latest names
   const displayCategories: (SidebarCategoryType & {
     [SHADOW_ITEM_MARKER_PROPERTY_NAME]?: boolean;
   })[] = $derived.by(() => {
-    console.debug("evaluating displayCategories");
     if (!draftOrder) return categories;
 
     return draftOrder
@@ -144,13 +130,11 @@
   let calendarLink = $derived(
     flags.calendar && spaceId && calendarLinkQuery(spaceId),
   );
-  // Check whether a calendar has been connected to this space
   let hasCalendar = $derived(
     (calendarLink && calendarLink.result && calendarLink.result.length) ||
       0 > 0,
   );
 
-  // Update the effect that initializes draft state
   $effect(() => {
     if (isEditing && !draftOrder) {
       draftOrder = categories.map((c) => ({
@@ -163,7 +147,6 @@
     }
   });
 
-  // Merge rooms that become available during editing (e.g. after restore) into draftOrder
   $effect(() => {
     if (!app.categories) return;
     const currentDraft = untrack(() => draftOrder);
@@ -183,7 +166,6 @@
     );
   });
 
-  // Update handlers to work with the new structure
   function handleCategoryReorder(newCategories: SidebarCategoryType[]) {
     draftOrder = newCategories.map((c) => ({
       id: c.id,
@@ -203,25 +185,29 @@
         : cat,
     );
   }
+
+  let isLoneRoomVisible = $derived(
+    !!page.params.object &&
+      !roomsInSidebar.has(page.params.object as Ulid) &&
+      !parentContext,
+  );
 </script>
 
-<!-- Header -->
-<SpaceSidebarHeader bind:isEditing />
+<SidebarLayout loading={app.space.status === "loading"}>
+  {#snippet header()}
+    <SpaceSidebarHeader bind:isEditing />
+  {/snippet}
 
-{#if app.space.status === "loading"}
-  <div class="px-4 mt-2">
-    <div class="h-4 bg-base-200 rounded animate-pulse w-3/4 mb-2"></div>
-    <div class="h-3 bg-base-200 rounded animate-pulse w-1/2"></div>
-  </div>
-{:else}
-  {#if isEditing}
-    <Button class="justify-start mb-4 mx-2 self-stretch" onclick={saveChanges}>
-      <IconCheck class="size-4" />
-      Finish editing</Button
-    >
-  {/if}
+  {#snippet saveAction()}
+    {#if isEditing}
+      <Button class="justify-start mb-4 mx-2 self-stretch" onclick={saveChanges}>
+        <IconCheck class="size-4" />
+        Finish editing</Button
+      >
+    {/if}
+  {/snippet}
 
-  <div class="w-full pt-2 px-2">
+  {#snippet prefix()}
     {#if flags.threadsList}
       <Button
         class="w-full justify-start mb-2"
@@ -233,7 +219,6 @@
         Index
       </Button>
 
-      <!-- Show the events link if we have a calendar configured. -->
       {#if hasCalendar}
         <Button
           class="w-full justify-start mb-2"
@@ -248,8 +233,10 @@
 
       <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
     {/if}
+  {/snippet}
 
-    {#if page.params.object && !roomsInSidebar.has(page.params.object as Ulid) && !parentContext}
+  {#snippet loneRoom()}
+    {#if isLoneRoomVisible}
       <Button
         variant="ghost"
         class="w-full justify-start min-w-0 my-4"
@@ -265,7 +252,9 @@
         >
       </Button>
     {/if}
+  {/snippet}
 
+  {#snippet body()}
     {#if isEditing}
       <div
         class="flex flex-col w-full min-h-4"
@@ -308,26 +297,28 @@
       </div>
     {:else}
       <div class="flex flex-col w-full min-h-4">
-        {#each app.categories as category (category.id)}
+        {#each app.categories ?? [] as category (category.id)}
           <div class="flex items-start w-full" id={category.id}>
             <SidebarCategory bind:isEditing {editSidebarItem} {category} />
           </div>
         {/each}
       </div>
     {/if}
-  </div>
+  {/snippet}
 
-  {#if isEditing}
-    <Button
-      class="mt-auto justify-start mb-4 mx-2 self-stretch"
-      variant="ghost"
-      onclick={() => (openRestoreRoomModal = true)}
-    >
-      <IconTrash class="size-4" />
-      Archive
-    </Button>
-  {/if}
-{/if}
+  {#snippet footer()}
+    {#if isEditing}
+      <Button
+        class="mt-auto justify-start mb-4 mx-2 self-stretch"
+        variant="ghost"
+        onclick={() => (openRestoreRoomModal = true)}
+      >
+        <IconTrash class="size-4" />
+        Archive
+      </Button>
+    {/if}
+  {/snippet}
+</SidebarLayout>
 
 <EditRoomModal bind:open={openEditRoomModal} id={editingId} {renameCategory} />
 <RestoreRoomModal bind:open={openRestoreRoomModal} />

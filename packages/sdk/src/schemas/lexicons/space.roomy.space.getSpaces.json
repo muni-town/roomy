@@ -1,0 +1,74 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.getSpaces",
+  "defs": {
+    "spaces": {
+      "type": "object",
+      "required": [
+        "id",
+        "isAdmin",
+        "isMember",
+        "roleIds",
+        "unreadCount"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "isAdmin": {
+          "type": "boolean"
+        },
+        "isMember": {
+          "type": "boolean"
+        },
+        "roleIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unreadCount": {
+          "type": "integer"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "includeLeft": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "spaces"
+          ],
+          "properties": {
+            "spaces": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#spaces"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

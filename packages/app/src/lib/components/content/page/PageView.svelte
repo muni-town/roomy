@@ -1,15 +1,15 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
-  import { renderMarkdownSanitized } from "$lib/utils/markdown";
+  import { renderMarkdownSanitized } from "@roomy/design/utils";
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { sql } from "$lib/utils/sqlTemplate";
   import { peer } from "$lib/workers";
   import { Prose } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import ScrollArea from "$lib/components/layout/ScrollArea.svelte";
-  import { RichTextEditor } from "$lib/components/richtext";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import ScrollArea from "@roomy/design/components/layout/ScrollArea.svelte";
+  import RichTextEditor from "@roomy/design/components/richtext/RichTextEditor.svelte";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
   import { newUlid, toBytes, Ulid } from "@roomy-space/sdk";

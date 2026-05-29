@@ -1,29 +1,19 @@
 <script lang="ts">
   import SpaceAvatar from "./SpaceAvatar.svelte";
   import type { SpaceMeta } from "$lib/queries";
+  import SpaceCard from "@roomy/design/components/spaces/SpaceCard.svelte";
 
   let { space }: { space: SpaceMeta | undefined } = $props();
+
+  const href = $derived(space ? `/${space.handle || space.id}` : undefined);
 </script>
 
-<div class="relative flex flex-col items-center justify-start gap-2 max-w-42">
-  <SpaceAvatar imageUrl={space?.avatar} id={space?.id} size={96} />
-
-  <span class="text-lg font-semibold text-center">{space?.name}</span>
-
-  {#if space?.description}
-    <p
-      class="text-sm text-base-500 dark:text-base-400 max-w-full text-center line-clamp-3"
-    >
-      {space?.description}
-    </p>
-  {/if}
-
-  {#if space}
-    <a
-      href={`/${space.handle || space.id}`}
-      class="absolute -inset-2 hover:bg-accent-500/5 rounded-xl"
-    >
-      <span class="sr-only">Go to {space.name}</span>
-    </a>
-  {/if}
-</div>
+<SpaceCard
+  name={space?.name}
+  description={space?.description}
+  {href}
+>
+  {#snippet avatar()}
+    <SpaceAvatar imageUrl={space?.avatar} id={space?.id} size={96} />
+  {/snippet}
+</SpaceCard>

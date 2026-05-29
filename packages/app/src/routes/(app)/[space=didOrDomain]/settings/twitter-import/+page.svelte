@@ -361,8 +361,8 @@
 
 <script lang="ts">
   import { page } from "$app/state";
-  import { Alert } from "$lib/components/ui/alert";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import { Alert } from "@roomy/design/components/ui/alert/index.ts";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { writable } from "svelte/store";
 
   function mapStore<T>(initial: Map<string, T>) {

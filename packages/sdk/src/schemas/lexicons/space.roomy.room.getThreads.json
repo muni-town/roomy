@@ -1,0 +1,95 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.room.getThreads",
+  "defs": {
+    "latestMembers": {
+      "type": "object",
+      "required": [
+        "did"
+      ],
+      "properties": {
+        "did": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "required": [
+        "latestMembers"
+      ],
+      "properties": {
+        "latestMembers": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#latestMembers"
+          }
+        },
+        "latestTimestamp": {
+          "type": "string"
+        }
+      }
+    },
+    "threads": {
+      "type": "object",
+      "required": [
+        "activity",
+        "id"
+      ],
+      "properties": {
+        "activity": {
+          "type": "ref",
+          "ref": "#activity"
+        },
+        "id": {
+          "type": "string"
+        },
+        "canonicalParent": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "roomId"
+        ],
+        "properties": {
+          "roomId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "threads"
+          ],
+          "properties": {
+            "threads": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#threads"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

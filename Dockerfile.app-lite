@@ -1,0 +1,57 @@
+FROM node:22 AS build
+
+# Extract the first 8 characters of the git commit from railway as the build ID if present
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
+
+ARG PUBLIC_PDS_INVITE_CODE
+ENV PUBLIC_PDS_INVITE_CODE=$PUBLIC_PDS_INVITE_CODE
+
+ARG PUBLIC_PDS
+ENV PUBLIC_PDS=$PUBLIC_PDS
+
+ARG PUBLIC_PDS_HANDLE_SUFFIX
+ENV PUBLIC_PDS_HANDLE_SUFFIX=$PUBLIC_PDS_HANDLE_SUFFIX
+
+ARG VITE_APPSERVER_DID
+ENV VITE_APPSERVER_DID=$VITE_APPSERVER_DID
+
+ARG OAUTH_HOST
+ENV OAUTH_HOST=$OAUTH_HOST
+
+ARG VITE_OAUTH_PUBLIC_CLIENT=true
+ENV VITE_OAUTH_PUBLIC_CLIENT=$VITE_OAUTH_PUBLIC_CLIENT
+
+# Uncomment if building on network with a custom certificate
+# COPY ./gitignore/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+# ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+
+WORKDIR /project
+
+# Copy workspace manifests and patches for install
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
+COPY patches/ patches/
+COPY packages/tsconfig/package.json packages/tsconfig/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/design/package.json packages/design/package.json
+COPY packages/app-lite/package.json packages/app-lite/package.json
+
+RUN npm i -g pnpm
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# Rebuild esbuild native binaries (skipped by --ignore-scripts, needed by Vite)
+RUN node node_modules/.pnpm/esbuild@*/node_modules/esbuild/install.js
+
+# Copy source for all required packages
+COPY packages/tsconfig/ packages/tsconfig/
+COPY packages/sdk/ packages/sdk/
+COPY packages/design/ packages/design/
+COPY packages/app-lite/ packages/app-lite/
+
+RUN pnpm --filter @roomy-space/sdk build
+RUN bash packages/app-lite/scripts/build-prod.sh
+
+FROM caddy:alpine
+
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /project/packages/app-lite/build /usr/share/caddy

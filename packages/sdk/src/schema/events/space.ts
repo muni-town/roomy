@@ -124,6 +124,14 @@ export const PersonalJoinSpace = defineEvent(
         values (${event.spaceDid})
         on conflict do update set hidden = 0
       `,
+      // Per-user join intent as an edge (head = personal stream, tail =
+      // space). `comp_space.hidden` above is a single global row per space
+      // and so can't represent which users have joined; this edge can. The
+      // appserver reads joined-space membership from these edges.
+      sql`
+        insert or ignore into edges (head, tail, label)
+        values (${streamId}, ${event.spaceDid}, 'joinedSpace')
+      `,
     ];
   },
 );
@@ -138,9 +146,16 @@ This must be sent in a user's personal stream and is how you update the joined s
 
 export const PersonalLeaveSpace = defineEvent(
   PersonalLeaveSpaceSchema,
-  ({ event }) => [
+  ({ streamId, event }) => [
     sql`
       update comp_space set hidden = 1 where entity = ${event.spaceDid}
+    `,
+    // Remove the join-intent edge written by PersonalJoinSpace.
+    sql`
+      delete from edges
+      where head = ${streamId}
+        and tail = ${event.spaceDid}
+        and label = 'joinedSpace'
     `,
   ],
 );
@@ -291,14 +306,17 @@ const BanAccountSchema = type({
   userDid: UserDid.describe("The user to ban."),
 }).describe("Ban an account so they may not send events in this stream.");
 
-export const BanAccount = defineEvent(BanAccountSchema, ({streamId, event: { userDid }}) => {
-  return [
-    sql`
+export const BanAccount = defineEvent(
+  BanAccountSchema,
+  ({ streamId, event: { userDid } }) => {
+    return [
+      sql`
       insert into comp_bans (entity, user_did)
       values (${streamId}, ${userDid})
     `,
-  ];
-});
+    ];
+  },
+);
 
 const UnbanAccountSchema = type({
   $type: "'space.roomy.space.unbanAccount.v0'",
@@ -307,14 +325,17 @@ const UnbanAccountSchema = type({
   "Unban a previously banned account so that they may send events in this stream again.",
 );
 
-export const UnbanAccount = defineEvent(UnbanAccountSchema, ({streamId, event: { userDid }}) => {
-  return [
-    sql`
+export const UnbanAccount = defineEvent(
+  UnbanAccountSchema,
+  ({ streamId, event: { userDid } }) => {
+    return [
+      sql`
       delete from comp_bans
       where entity = ${streamId} and user_did = ${userDid}
     `,
-  ];
-});
+    ];
+  },
+);
 
 const AddAdminSchema = type({
   $type: "'space.roomy.space.addAdmin.v0'",

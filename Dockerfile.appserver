@@ -1,0 +1,62 @@
+# ── Appserver Dockerfile ──────────────────────────────────────────────────
+# Multi-stage build for the Roomy appserver (Bun + SQLite).
+#
+# The appserver depends on workspace packages (SDK, tsconfig) and uses
+# bun:sqlite + Bun.serve at runtime, so it must run on Bun.
+#
+# Build stage uses Node.js because some transitive workspace dependencies
+# fail during pnpm install under Bun (node:sqlite not yet available).
+#
+# The SQL schema files are loaded at runtime via readFileSync relative to
+# import.meta.url, so we run from source rather than a bun build bundle.
+
+# ── Stage 1: Install dependencies & build workspace packages ──────────────
+FROM node:22 AS build
+
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
+
+WORKDIR /project
+
+RUN npm i -g pnpm
+
+# Copy workspace manifests and patches for install
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
+COPY patches/ patches/
+COPY packages/tsconfig/package.json packages/tsconfig/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/appserver/package.json packages/appserver/package.json
+
+# Install dependencies (ignore scripts — husky prepare not needed in Docker)
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# Copy source for packages the appserver depends on
+COPY packages/tsconfig/ packages/tsconfig/
+COPY packages/sdk/ packages/sdk/
+COPY packages/appserver/ packages/appserver/
+
+# Build the SDK (appserver depends on its dist output)
+RUN pnpm --filter @roomy-space/sdk build
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────
+FROM oven/bun:1 AS runtime
+
+WORKDIR /app
+
+# Copy built workspace from build stage
+COPY --from=build /project/packages/sdk packages/sdk
+COPY --from=build /project/packages/tsconfig packages/tsconfig
+COPY --from=build /project/packages/appserver packages/appserver
+COPY --from=build /project/node_modules node_modules
+COPY --from=build /project/package.json .
+
+# Create data directory for SQLite databases
+RUN mkdir -p /app/data
+
+ENV APPSERVER_DB_PATH=/app/data/roomy.sqlite
+ENV READSTATE_DB_PATH=/app/data/roomy-readstate.sqlite
+
+EXPOSE 8080
+
+# Run from source — bun:sqlite and runtime SQL file reads require it
+CMD ["bun", "run", "packages/appserver/src/index.ts"]

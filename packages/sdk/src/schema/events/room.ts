@@ -38,9 +38,7 @@ export const GroupMember = type
   )
   .describe("The group member identifier");
 
-export const DefaultAccess = type(
-  "'readwrite' | 'read' | 'none'",
-).describe(
+export const DefaultAccess = type("'readwrite' | 'read' | 'none'").describe(
   "Default access level for members without a specific role assignment.",
 );
 

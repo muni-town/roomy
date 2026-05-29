@@ -1,0 +1,92 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.getRoles",
+  "defs": {
+    "rooms": {
+      "type": "object",
+      "required": [
+        "permission",
+        "roomId"
+      ],
+      "properties": {
+        "permission": {
+          "type": "string",
+          "knownValues": [
+            "read",
+            "readwrite"
+          ]
+        },
+        "roomId": {
+          "type": "string"
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "required": [
+        "id",
+        "memberDids",
+        "rooms"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "memberDids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rooms": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#rooms"
+          }
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "spaceId"
+        ],
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "roles"
+          ],
+          "properties": {
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#roles"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -6,7 +6,7 @@
   import type { AsyncStateWithIdle, StreamDid } from "@roomy-space/sdk";
   import { IconXMark } from "@roomy/design/icons";
   import { flags } from "$lib/config";
-  import ToggleGroup from "$lib/components/ui/ToggleGroup.svelte";
+  import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
   import {
     Alert,
     Button,

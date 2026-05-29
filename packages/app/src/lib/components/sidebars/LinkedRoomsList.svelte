@@ -4,8 +4,9 @@
   import { navigateSync } from "$lib/utils.svelte";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import { IconThread } from "@roomy/design/icons";
+  import LinkedRoomList, {
+    type LinkedRoom,
+  } from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
   import { getAppState } from "$lib/queries";
   import { flags } from "$lib/config";
 
@@ -43,55 +44,28 @@
     `,
   );
 
-  // Keep showing previous results while loading to avoid flash on remount
-  let linkedRooms = $state<typeof query.result>(null);
+  let linkedRooms = $state<LinkedRoom[]>([]);
   $effect(() => {
     if (query.result) {
       linkedRooms = query.result;
     }
   });
+
+  function hrefFor(id: string): string {
+    return (
+      navigateSync({
+        space: page.params.space!,
+        object: id as Ulid,
+      }) +
+      "?parent=" +
+      (page.url.searchParams.get("parent") || page.params.object)
+    );
+  }
 </script>
 
-{#if linkedRooms && linkedRooms.length}
-  <div
-    class="flex flex-col items-start justify-between w-full min-w-0 group pl-3"
-  >
-    {#each linkedRooms as room}
-      {@const hasUnreads =
-        flags.unreadNotifications &&
-        room.lastRead > 0 &&
-        room.unreadCount > 0 &&
-        room.id !== page.params.object}
-      <div class="inline-flex w-full items-start justify-between min-w-0">
-        <div class="max-h-4 overflow-visible">
-          <IconThread
-            class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2 ml-0.5 -mr-0.5"
-          />
-        </div>
-        <Button
-          href={navigateSync({
-            space: page.params.space!,
-            object: room.id,
-          }) +
-            "?parent=" +
-            (page.url.searchParams.get("parent") || page.params.object)}
-          variant="ghost"
-          class="justify-start min-w-0 w-full rounded-full p-0.75 pt-0.5 pl-2 text-base-600 hover:bg-transparent"
-          data-current={room.id === page.params.object}
-        >
-          <span
-            class={`truncate whitespace-nowrap overflow-hidden min-w-0 ${hasUnreads ? "font-semibold" : "font-normal"}`}
-            >{room.name}</span
-          >
-          {#if hasUnreads}
-            <span
-              aria-label="Unread message count"
-              class="font-light opacity-60 ml-auto text-xs pr-2"
-              >{room.unreadCount}</span
-            >
-          {/if}
-        </Button>
-      </div>
-    {/each}
-  </div>
-{/if}
+<LinkedRoomList
+  rooms={linkedRooms}
+  currentRoomId={page.params.object}
+  showUnreadCount={flags.unreadNotifications}
+  {hrefFor}
+/>

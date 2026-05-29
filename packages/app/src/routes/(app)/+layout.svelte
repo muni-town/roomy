@@ -10,7 +10,7 @@
   import { Tooltip } from "bits-ui";
 
   import { IconLoading } from "@roomy/design/icons";
-  import Error from "$lib/components/modals/Error.svelte";
+  import Error from "@roomy/design/components/modals/Error.svelte";
   import { AppState, setAppState } from "$lib/queries";
   import { flags } from "$lib/config";
 

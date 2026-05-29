@@ -1,0 +1,140 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.message.getMessage",
+  "defs": {
+    "media": {
+      "type": "object",
+      "required": [
+        "type",
+        "url"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "alt": {
+          "type": "string"
+        }
+      }
+    },
+    "reactions": {
+      "type": "object",
+      "required": [
+        "dids",
+        "emoji"
+      ],
+      "properties": {
+        "dids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "emoji": {
+          "type": "string"
+        },
+        "myReactionId": {
+          "type": "string"
+        }
+      }
+    },
+    "forwardedFrom": {
+      "type": "object",
+      "required": [
+        "name",
+        "roomId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "roomId": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "messageId"
+        ],
+        "properties": {
+          "messageId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "authorDid",
+            "authorName",
+            "content",
+            "id",
+            "media",
+            "reactions",
+            "tags",
+            "timestamp"
+          ],
+          "properties": {
+            "authorDid": {
+              "type": "string"
+            },
+            "authorName": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "media": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#media"
+              }
+            },
+            "reactions": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#reactions"
+              }
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "authorAvatar": {
+              "type": "string"
+            },
+            "forwardedFrom": {
+              "type": "ref",
+              "ref": "#forwardedFrom"
+            },
+            "replyTo": {
+              "type": "string"
+            },
+            "sort_idx": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

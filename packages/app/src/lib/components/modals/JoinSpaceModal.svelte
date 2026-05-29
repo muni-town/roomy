@@ -1,36 +1,29 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import { Box } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import JoinDialog, {
+    type JoinResolveState,
+    type JoinState,
+  } from "@roomy/design/components/modals/JoinDialog.svelte";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { peer } from "$lib/workers";
-  import { StreamDid, type AsyncStateWithIdle } from "@roomy-space/sdk";
-  import ErrorModal from "./Error.svelte";
+  import { StreamDid } from "@roomy-space/sdk";
 
   let spaceDid = $state<StreamDid>();
 
-  // State for resolving the space
-  let resolveState: AsyncStateWithIdle<{
+  let resolved = $state<{
     spaceId: StreamDid;
     name: string;
     avatar?: string;
     allowPublicJoin: boolean;
-  }> = $state({
-    status: "loading",
-  });
+  } | null>(null);
 
-  // State for joining the space
-  let joinState: AsyncStateWithIdle<void> = $state({ status: "idle" });
+  let resolveState = $state<JoinResolveState>({ status: "loading" });
+  let joinState = $state<JoinState>({ status: "idle" });
 
-  // Invite token from URL query param (e.g. ?invite=abc-123)
   let inviteToken = $derived(page.url.searchParams.get("invite") ?? undefined);
-
-  // Error from a previous failed join attempt — stored in the URL so it survives
-  // the component being destroyed and recreated when the space status briefly
-  // flips to "joined" then back to "invited" during the join flow.
   let urlError = $derived(page.url.searchParams.get("joinError") ?? undefined);
 
   $effect(() => {
@@ -60,30 +53,34 @@
     const spaceId = spaceDid;
     if (spaceId) {
       peer.getSpaceInfo(spaceId).then((info) => {
-        if (info && info.name)
+        if (info && info.name) {
+          resolved = {
+            spaceId,
+            name: info.name,
+            avatar: info?.avatar,
+            allowPublicJoin: info.allowPublicJoin ?? true,
+          };
           resolveState = {
             status: "success",
             data: {
-              spaceId,
               name: info.name,
-              avatar: info?.avatar,
               allowPublicJoin: info.allowPublicJoin ?? true,
             },
           };
-        else
+        } else {
           resolveState = {
             status: "error",
             message: "This space doesn't exist or has been deleted...",
           };
+        }
       });
     }
   });
 
-  async function handleJoin() {
-    if (resolveState.status !== "success") return;
+  async function onJoin() {
+    if (!resolved) return;
     joinState = { status: "loading" };
 
-    // Clear any persisted error from a previous attempt
     if (page.url.searchParams.has("joinError")) {
       const url = new URL(page.url.href);
       url.searchParams.delete("joinError");
@@ -95,7 +92,7 @@
     }
 
     try {
-      await joinSpace(resolveState.data.spaceId, inviteToken);
+      await joinSpace(resolved.spaceId, inviteToken);
       joinState = { status: "success", data: undefined };
     } catch (e) {
       const message =
@@ -106,9 +103,6 @@
           : "Failed to join space";
 
       joinState = { status: "error", message };
-      // Persist the error in the URL — this component may be destroyed and
-      // recreated before the catch block returns, so URL is the only safe
-      // place to carry the error across.
       const url = new URL(page.url.href);
       url.searchParams.set("joinError", message);
       goto(url.toString(), {
@@ -120,46 +114,13 @@
   }
 </script>
 
-<div class="flex items-center justify-center h-full">
-  {#if resolveState.status === "error"}
-    <ErrorModal message={resolveState.message} goHome />
-  {:else}
-    <Box class="w-[20em] flex flex-col">
-      {#if resolveState.status === "loading"}
-        <p class="text-sm text-center">Loading space...</p>
-      {/if}
-
-      {#if resolveState.status === "success"}
-        {@const canJoin = resolveState.data.allowPublicJoin || !!inviteToken}
-        <div class="mb-5 flex justify-center items-center gap-3">
-          <SpaceAvatar
-            imageUrl={resolveState.data.avatar ?? ""}
-            id={page.params.space}
-            name={resolveState.data.name ?? ""}
-            size={50}
-          />
-
-          <h1 class="font-bold text-xl">{resolveState.data.name}</h1>
-        </div>
-        {#if canJoin}
-          <Button size="lg" asyncState={joinState} onclick={handleJoin}>
-            {inviteToken ? "Accept Invite" : "Join Space"}
-          </Button>
-          {#if joinState.status === "error"}
-            <p class="text-sm text-center text-red-600 dark:text-red-400 mt-2">
-              {joinState.message}
-            </p>
-          {:else if urlError}
-            <p class="text-sm text-center text-red-600 dark:text-red-400 mt-2">
-              {urlError}
-            </p>
-          {/if}
-        {:else}
-          <p class="text-sm text-center text-base-500 dark:text-base-400">
-            This space is invite-only. You need an invite link to join.
-          </p>
-        {/if}
-      {/if}
-    </Box>
-  {/if}
-</div>
+<JoinDialog {resolveState} {joinState} {inviteToken} {urlError} {onJoin}>
+  {#snippet avatar()}
+    <SpaceAvatar
+      imageUrl={resolved?.avatar ?? ""}
+      id={page.params.space}
+      name={resolved?.name ?? ""}
+      size={50}
+    />
+  {/snippet}
+</JoinDialog>

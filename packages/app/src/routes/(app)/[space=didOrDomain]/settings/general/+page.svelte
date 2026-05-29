@@ -7,7 +7,7 @@
   import { newUlid } from "@roomy-space/sdk";
   import { page } from "$app/state";
   import { flags } from "$lib/config";
-  import ToggleGroup from "$lib/components/ui/ToggleGroup.svelte";
+  import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
 

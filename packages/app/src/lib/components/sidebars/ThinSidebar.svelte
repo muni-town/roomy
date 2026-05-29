@@ -3,14 +3,14 @@
   import SidebarSpace from "./ThinSidebarSpace.svelte";
   import { page } from "$app/state";
   import { ScrollArea } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import UserProfileButton from "../user/UserProfileButton.svelte";
   import { getAppState } from "$lib/queries";
 
   const app = getAppState();
   import { dev } from "$app/environment";
 
-  import { IconSquaresPlus, IconSqlQuery } from "@roomy/design/icons";
+  import { IconSquaresPlus, IconDatabase } from "@roomy/design/icons";
 
   let openSpace = $derived(app.joinedSpace?.id);
   let isOpenSpaceJoined = $derived(true);
@@ -63,7 +63,7 @@
 <section class="flex flex-col items-center gap-2 p-0 pb-2">
   {#if dev}
     <a href="/query">
-      <IconSqlQuery font-size="2em" />
+      <IconDatabase font-size="2em" />
     </a>
   {/if}
   <UserProfileButton />

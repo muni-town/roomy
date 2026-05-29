@@ -44,7 +44,9 @@ describe("bridge_config", () => {
     r.upsertBridgeConfig(GUILD, SPACE_B, "subset");
     const list = r.listBridgeConfigsForGuild(GUILD);
     expect(list.length).toBe(2);
-    expect(list.map((c) => c.spaceDid).sort()).toEqual([SPACE_A, SPACE_B].sort());
+    expect(list.map((c) => c.spaceDid).sort()).toEqual(
+      [SPACE_A, SPACE_B].sort(),
+    );
   });
 
   test("upsert flips mode (full → subset preserves allowlist)", () => {
@@ -82,7 +84,9 @@ describe("getTargetSpacesForChannel", () => {
   test("includes full bridges regardless of channel", () => {
     const r = repo();
     r.upsertBridgeConfig(GUILD, SPACE_A, "full");
-    expect(r.getTargetSpacesForChannel(GUILD, "any-channel")).toEqual([SPACE_A]);
+    expect(r.getTargetSpacesForChannel(GUILD, "any-channel")).toEqual([
+      SPACE_A,
+    ]);
   });
 
   test("subset bridge requires allowlist entry", () => {

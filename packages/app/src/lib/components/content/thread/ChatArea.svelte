@@ -17,7 +17,7 @@
   import { setContext } from "svelte";
   import { page } from "$app/state";
   import { toast } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
 
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
@@ -27,11 +27,11 @@
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
   import { mapAsyncState, type AsyncStateWithIdle } from "@roomy-space/sdk";
-  import StateSuspense from "$lib/components/helper/StateSuspense.svelte";
+  import StateSuspense from "@roomy/design/components/helper/StateSuspense.svelte";
   import { peer } from "$lib/workers";
   import { getAppState } from "$lib/queries";
-  import ErrorModal from "$lib/components/modals/Error.svelte";
-  import ChatMessageSkeleton from "./message/ChatMessageSkeleton.svelte";
+  import ErrorModal from "@roomy/design/components/modals/Error.svelte";
+  import ChatMessageSkeleton from "@roomy/design/components/content/thread/message/ChatMessageSkeleton.svelte";
   const app = getAppState();
 
   // Lazy loading state (AsyncStateWithIdle pattern)

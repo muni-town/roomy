@@ -1,0 +1,128 @@
+/**
+ * XRPC: space.roomy.space.leaveSpace (procedure).
+ *
+ * Appends the space-side leaveSpace event AND the personal-space
+ * leaveSpace event server-side, so every client leaves a space consistently
+ * regardless of whether it tracks the personal space.
+ *
+ * @see packages/appserver/docs/plans/procedure-backlog.md
+ */
+
+import { newUlid, UserDid, type, type StreamDid } from "@roomy-space/sdk";
+import { openDb } from "../db/db.ts";
+import { getConnectedSpace } from "../serviceClient.ts";
+import { isMember, isAdmin } from "../auth/access.ts";
+import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
+import { recordLeftSpaceEdge } from "../queries/joinedSpaces.ts";
+import { XrpcError } from "../xrpc/errors.ts";
+import { Router as InvalidationRouter } from "../invalidation/index.ts";
+import { getOrCreateMaterializer } from "../materialization/registry.ts";
+import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
+
+interface LeaveSpaceBody {
+  spaceId?: unknown;
+}
+
+export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
+  _params: QueryParams,
+  auth: AuthCtx,
+  body: LeaveSpaceBody,
+) => {
+  // ── Validate input ───────────────────────────────────────────────────
+  if (typeof body.spaceId !== "string" || body.spaceId === "") {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      "Missing or empty required field: spaceId",
+    );
+  }
+
+  const spaceId = body.spaceId;
+  const callerDid = UserDid(auth.did);
+  if (callerDid instanceof type.errors) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      `Caller DID is not a valid UserDid: ${callerDid.summary}`,
+    );
+  }
+
+  const db = openDb();
+
+  // ── Authorisation: caller must be a member or admin ──────────────────
+  // The auth check doubles as the existence check: member/admin edges have
+  // FKs onto entities(spaceId), so if either edge is present the space is
+  // known. A bogus spaceId yields neither edge and a 403. (An older
+  // `entities WHERE id = ? AND stream_id = ?` existence check was unreliable
+  // because stream_id depends on which materialiser wrote the entity row
+  // first — see queries/joinedSpaces.ts.)
+  const member = isMember(db, spaceId, callerDid);
+  const admin = isAdmin(db, spaceId, callerDid);
+  if (!member && !admin) {
+    throw new XrpcError(
+      403,
+      "Forbidden",
+      "Caller is not a member of this space",
+    );
+  }
+
+  // ── 1. Send space-side leaveSpace event ──────────────────────────────
+  const space = await getConnectedSpace(spaceId as any /* StreamDid */);
+  await space.sendEvent(
+    {
+      id: newUlid(),
+      $type: "space.roomy.space.leaveSpace.v0",
+    },
+    callerDid,
+  );
+
+  // ── 2. Write personal.leaveSpace to user's personal stream ───────────
+  let personalStreamDid: StreamDid | undefined;
+  try {
+    personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
+    const personalSpace = await getConnectedSpace(personalStreamDid);
+    await personalSpace.sendEvent(
+      {
+        id: newUlid(),
+        $type: "space.roomy.space.personal.leaveSpace.v0",
+        spaceDid: spaceId as any /* StreamDid */,
+      },
+      callerDid,
+    );
+  } catch (err) {
+    console.warn(
+      `[leaveSpace] Failed to write personal leave for ${callerDid}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // ── 3. Drain personal stream materialiser ────────────────────────────
+  if (personalStreamDid) {
+    try {
+      const personalMat = await getOrCreateMaterializer(personalStreamDid);
+      await personalMat.drain();
+    } catch {
+      // Best-effort — the materializer pipeline will catch up asynchronously.
+    }
+  }
+
+  // ── 4. Write leftSpace edge so the space appears with includeLeft ─────
+  if (personalStreamDid) {
+    recordLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
+  }
+
+  // ── 5. Emit direct getSpaces invalidation signal ─────────────────────
+  const router = InvalidationRouter.getInstance();
+  if (router) {
+    router.emit([
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getSpaces",
+          params: {},
+          affectedUser: callerDid,
+        },
+      },
+    ]);
+  }
+};

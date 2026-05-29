@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roomy</title>
+    %sveltekit.head%
+    <script>
+      let dark = localStorage.getItem("darkMode");
+      if (dark) {
+        dark = JSON.parse(dark);
+      } else {
+        dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      }
+      const root = document.documentElement;
+      if (dark) {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+
+      const accentColor = localStorage.getItem("accentColor");
+      if (accentColor) root.classList.add(JSON.parse(accentColor));
+
+      const baseColor = localStorage.getItem("baseColor");
+      if (baseColor) root.classList.add(JSON.parse(baseColor));
+    </script>
+  </head>
+  <body
+    data-sveltekit-preload-data="hover"
+    class="bg-base-100 dark:bg-base-950"
+  >
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>

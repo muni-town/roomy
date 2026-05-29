@@ -1,0 +1,43 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.createSpace",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "name"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "avatar": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "spaceId"
+          ],
+          "properties": {
+            "spaceId": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

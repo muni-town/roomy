@@ -278,7 +278,7 @@ const schemaToLexiconDefs = (
   };
 };
 
-schemaToObjProp(eventJsonSchema, 0)
+schemaToObjProp(eventJsonSchema, 0);
 
 // Return the lexicons and the JSON schema
 export { eventLexicons, eventJsonSchema };

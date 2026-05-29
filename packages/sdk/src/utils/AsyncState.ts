@@ -64,9 +64,7 @@ export function combineAsyncState<
   const data = Object.fromEntries(
     entries.map(([k, s]) => [k, (s as SuccessState<unknown>).data]),
   );
-  const stale = entries.some(
-    ([_, s]) => (s as SuccessState<unknown>).stale,
-  );
+  const stale = entries.some(([_, s]) => (s as SuccessState<unknown>).stale);
   return { status: "success", data, stale: stale || undefined } as any;
 }
 

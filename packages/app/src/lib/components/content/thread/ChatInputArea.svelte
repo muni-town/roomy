@@ -1,29 +1,20 @@
 <script lang="ts">
   import { toast } from "@foxui/core";
-  import Button from "$lib/components/ui/button/Button.svelte";
-  import Input from "$lib/components/ui/input/Input.svelte";
-  import Popover from "$lib/components/ui/popover/Popover.svelte";
   import MessageContext, {
     type MessageContext as MessageContextType,
   } from "./message/MessageContext.svelte";
-  import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
+  import FullscreenImageDropper from "@roomy/design/components/helper/FullscreenImageDropper.svelte";
+  import ChatInputShell, {
+    type ChatInputShellMode,
+  } from "@roomy/design/components/content/thread/ChatInputShell.svelte";
 
-  import {
-    IconCloseCircle,
-    IconNeedleThread,
-    IconX,
-    IconSend,
-    IconImage,
-    IconPlus,
-    IconLoading,
-  } from "@roomy/design/icons";
   import { peer } from "$lib/workers";
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
   import { messagingState, type Commenting } from "./TimelineView.svelte";
-  import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
+  import { markCommentForRemoval } from "@roomy/design/components/richtext/RichTextEditor.svelte";
   import { getImagePreloadData } from "$lib/utils/media";
   import { newUlid, toBytes, Ulid, type Event as RoomyEvent } from "@roomy-space/sdk";
   import type { Attachment } from "@roomy-space/sdk";
@@ -38,18 +29,62 @@
   let fileInput: HTMLInputElement | undefined = $state();
   let actionMenuOpen = $state(false);
 
+  let stateKind = $derived(messagingState.current.kind);
+  let shellMode = $derived(stateKind as ChatInputShellMode);
+  let threadName = $derived(
+    messagingState.current.kind === "threading"
+      ? messagingState.current.name
+      : "",
+  );
+  let threadSelectedCount = $derived(
+    messagingState.current.kind === "threading"
+      ? messagingState.current.selectedMessages.length
+      : 0,
+  );
+  let canSend = $derived(
+    messagingState.current.kind !== "threading" &&
+      (("input" in messagingState.current && !!messagingState.current.input) ||
+        ("files" in messagingState.current &&
+          messagingState.current.files.length > 0)),
+  );
+  let showContextPreview = $derived(
+    messagingState.current.kind === "replying" ||
+      messagingState.current.kind === "threading" ||
+      messagingState.current.kind === "commenting",
+  );
+
+  let messageContext = $derived.by((): MessageContextType | null => {
+    const state = messagingState.current;
+    if (state.kind === "replying") {
+      return { kind: "replying", replyTo: state.replyTo };
+    } else if (state.kind === "threading") {
+      return { kind: "threading", selectedMessages: state.selectedMessages };
+    } else if (state.kind === "commenting") {
+      return {
+        kind: "commenting",
+        messageId: undefined,
+        comment: {
+          snippet: state.comment.snippet,
+          version: state.comment.docVersion,
+          from: state.comment.from,
+          to: state.comment.to,
+        },
+      };
+    }
+    return null;
+  });
+
   function getVideoThumbnail(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const video = document.createElement("video");
       video.src = URL.createObjectURL(file);
       video.crossOrigin = "anonymous";
-      video.muted = true; // required for autoplay
+      video.muted = true;
       video.currentTime = 0;
 
       video.addEventListener("loadeddata", () => {
-        // Wait until some data is loaded so we can capture a frame
         const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth / 2; // scale it down
+        canvas.width = video.videoWidth / 2;
         canvas.height = video.videoHeight / 2;
 
         const ctx = canvas.getContext("2d");
@@ -125,9 +160,14 @@
     actionMenuOpen = false;
   }
 
-  /** Needs to be called in an anonymous function to preserve messagingStateManager.this binding
-   * see https://svelte.dev/docs/svelte/$state#Classes
-   */
+  function handleClearContext() {
+    const state = messagingState.current;
+    if (state.kind === "commenting") {
+      markCommentForRemoval((state as Commenting).comment);
+    }
+    messagingState.setNormal();
+  }
+
   async function handleCreateThread() {
     if (!spaceId || !app.roomId) return;
     const state = messagingState.current;
@@ -147,7 +187,6 @@
 
     const events: RoomyEvent[] = [];
 
-    // link thread to current room
     events.push({
       id: newUlid(),
       room: app.roomId,
@@ -156,13 +195,12 @@
       isCreationLink: true,
     });
 
-    // move selected messages into thread
     for (const msg of state.selectedMessages) {
       events.push({
         id: newUlid(),
         room: app.roomId,
         $type: "space.roomy.message.moveMessages.v0",
-        messageIds: [msg.id], // We must only have one message in array until we have TVFs on peer
+        messageIds: [msg.id],
         toRoomId: threadId,
       });
     }
@@ -181,7 +219,7 @@
       "?parent=" +
       app.roomId;
 
-    console.log("threadUrl", threadUrl); // not working
+    console.log("threadUrl", threadUrl);
 
     goto(threadUrl);
   }
@@ -287,238 +325,53 @@
   }
 </script>
 
-{#snippet messagingStateContext()}
-  {@const state = messagingState.current}
-  {@const messageContext = (() => {
-    if (state.kind === "replying") {
-      return {
-        kind: "replying",
-        replyTo: state.replyTo,
-      } satisfies MessageContextType;
-    } else if (state.kind === "threading") {
-      return {
-        kind: "threading",
-        selectedMessages: state.selectedMessages,
-      } satisfies MessageContextType;
-    } else if (state.kind === "commenting") {
-      return {
-        kind: "commenting",
-        messageId: undefined,
-        comment: {
-          snippet: state.comment.snippet,
-          version: state.comment.docVersion,
-          from: state.comment.from,
-          to: state.comment.to,
-        },
-      } satisfies MessageContextType;
-    }
-    return null;
-  })()}
-  <div class="flex-none pt-2 pb-2 pr-2">
-    <!-- Message context: reply, threading, or comment -->
+<ChatInputShell
+  {canWrite}
+  {isSendingMessage}
+  {previewImages}
+  mode={shellMode}
+  {actionMenuOpen}
+  onActionMenuOpenChange={(o) => (actionMenuOpen = o)}
+  {threadName}
+  {threadSelectedCount}
+  {canSend}
+  {showContextPreview}
+  onClearContext={handleClearContext}
+  onSend={sendMessage}
+  onUploadMedia={handleUploadMedia}
+  onCreateThreadFromMenu={handleCreateThreadFromMenu}
+  onCreateThread={handleCreateThread}
+  onRemoveImage={removeImageFile}
+  onThreadNameChange={(name) => (messagingState.name = name)}
+  onFileInput={handleFileProcess}
+  bindFileInput={(el) => (fileInput = el)}
+>
+  {#snippet contextPreview()}
     {#if messageContext}
-      <div
-        class="flex justify-between bg-secondary text-secondary-content rounded-t-lg p-2 gap-2 pr-0"
-      >
-        {#if state.kind === "replying"}
-          <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
-            <MessageContext context={messageContext} />
-          </div>
-          <Button
-            variant="ghost"
-            onclick={() => messagingState.setNormal()}
-            class="flex-shrink-0"
-          >
-            <IconCloseCircle />
-          </Button>
-        {:else if state.kind === "threading"}
-          <div
-            class="px-2 flex flex-wrap items-center gap-1 overflow-hidden text-xs w-full"
-          >
-            <span class="shrink-0 text-base-900 dark:text-base-100"
-              >Creating thread with</span
-            >
-            {#if state.selectedMessages[0]}
-              <div class="max-w-[28rem]">
-                <MessageContext context={messageContext} />
-              </div>
-            {/if}
-            {#if state.selectedMessages.length > 1}
-              <span class="shrink-0 text-base-900 dark:text-base-100"
-                >and {state.selectedMessages.length - 1} other message{state
-                  .selectedMessages.length > 2
-                  ? "s"
-                  : ""}</span
-              >
-            {:else if state.selectedMessages.length === 0}
-              <span class="shrink-0 text-base-900 dark:text-base-100"
-                >no messages</span
-              >
-            {/if}
-          </div>
-          <Button
-            variant="ghost"
-            onclick={() => messagingState.setNormal()}
-            class="flex-shrink-0"
-          >
-            <IconCloseCircle />
-          </Button>
-        {:else if state.kind === "commenting"}
-          <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
-            <MessageContext context={messageContext} />
-          </div>
-          <Button
-            variant="ghost"
-            onclick={() => {
-              markCommentForRemoval((state as Commenting).comment);
-              messagingState.setNormal();
-            }}
-            class="flex-shrink-0"
-          >
-            <IconCloseCircle />
-          </Button>
-        {/if}
-      </div>
+      <MessageContext context={messageContext} />
     {/if}
-
-    <div class="w-full py-1">
-      <div class="prose-a:text-primary prose-a:underline relative isolate">
-        {#if !canWrite}
-          <div class="flex items-center justify-center px-4 py-3 text-sm text-base-500 dark:text-base-400 bg-base-50 dark:bg-base-800 rounded-lg mx-2 mb-1">
-            You don't have permission to send messages in this channel.
-          </div>
-        {/if}
-        {#if previewImages.length > 0}
-          <div class="flex gap-2 my-2 overflow-x-auto w-full px-2">
-            {#each previewImages as previewImage, index (previewImage)}
-              <div
-                class={[
-                  "size-24 relative shrink-0",
-                  isSendingMessage ? "opacity-60" : "",
-                ]}
-              >
-                <img
-                  src={previewImage}
-                  alt="Preview"
-                  class="absolute inset-0 w-full h-full object-cover"
-                />
-
-                <Button
-                  disabled={isSendingMessage}
-                  variant="ghost"
-                  class="absolute p-0.5 top-1 right-1 bg-base-100 hover:bg-base-200 dark:bg-base-900 dark:hover:bg-base-800 rounded-full disabled:hidden"
-                  onclick={() => removeImageFile(index)}
-                >
-                  <IconX class="size-4" />
-                </Button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-
-        {#if canWrite}
-        <div class="flex w-full gap-2 items-center">
-          {#if state.kind === "threading"}
-            <form
-              onsubmit={() => handleCreateThread()}
-              class="flex w-full gap-2"
-            >
-              <label for="thread-name" class="pl-4 py-2 text-xs font-medium"
-                >Thread name:</label
-              >
-              <Input
-                disabled={isSendingMessage}
-                value={state.name}
-                oninput={(e) => (messagingState.name = e.currentTarget.value)}
-                id="thread-name"
-                class="grow ml-2 disabled:opacity-50"
-              />
-
-              <Button type="submit"><IconNeedleThread />Create Thread</Button>
-            </form>
-          {:else}
-            {#if isSendingMessage}
-              <div class="flex items-center justify-center p-3 ml-2">
-                <IconLoading class="animate-spin text-base-500" />
-              </div>
-            {:else}
-              <Popover
-                bind:open={actionMenuOpen}
-                side="top"
-                sideOffset={8}
-                align="start"
-                class="p-2"
-              >
-                {#snippet child({ props })}
-                  <Button
-                    variant="ghost"
-                    {...props}
-                    class="ml-2 rounded-full"
-                    size="iconLg"
-                    aria-label="Actions"
-                  >
-                    <IconPlus class="" />
-                  </Button>
-                {/snippet}
-                <div class="flex flex-col items-start justify-stretch gap-1">
-                  <Button
-                    variant="ghost"
-                    class="w-full justify-start gap-2"
-                    onclick={handleUploadMedia}
-                  >
-                    <IconImage class="size-4" />
-                    Upload Media
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    class="w-full justify-start gap-2"
-                    onclick={handleCreateThreadFromMenu}
-                  >
-                    <IconNeedleThread class="size-4" />
-                    Create Thread
-                  </Button>
-                </div>
-              </Popover>
-
-              <input
-                type="file"
-                multiple
-                accept="image/*,video/mp4"
-                onchange={handleFileProcess}
-                class="hidden"
-                bind:this={fileInput}
-              />
-            {/if}
-
-            <!-- {#key users.length + context.length} TODO: get users + context to pass in -->
-            <ChatInput
-              bind:content={state.input}
-              users={undefined}
-              context={undefined}
-              onEnter={sendMessage}
-              disabled={isSendingMessage}
-              {processImageFile}
-            />
-            <!-- Send button - visible on mobile, useful for testing -->
-            {#if !isSendingMessage && (state.input || state.files.length > 0)}
-              <Button
-                data-testid="send-message-button"
-                onclick={sendMessage}
-                variant="primary"
-                size="icon"
-                class="shrink-0 rounded-full"
-              >
-                <IconSend />
-              </Button>
-            {/if}
-            <!-- {/key} -->
-          {/if}
-        </div>
-        {/if}
-        <FullscreenImageDropper {processImageFile} />
-      </div>
-    </div>
-  </div>
-{/snippet}
-
-{@render messagingStateContext()}
+  {/snippet}
+  {#snippet input()}
+    {#if messagingState.current.kind !== "threading"}
+      <ChatInput
+        bind:content={
+          () =>
+            "input" in messagingState.current ? messagingState.current.input : "",
+          (v) => {
+            if ("input" in messagingState.current) {
+              messagingState.input = v;
+            }
+          }
+        }
+        users={undefined}
+        context={undefined}
+        onEnter={sendMessage}
+        disabled={isSendingMessage}
+        {processImageFile}
+      />
+    {/if}
+  {/snippet}
+  {#snippet fullscreenDropper()}
+    <FullscreenImageDropper {processImageFile} />
+  {/snippet}
+</ChatInputShell>
