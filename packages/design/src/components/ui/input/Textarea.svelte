@@ -22,25 +22,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 -->
 <script lang="ts" module>
-	import type { WithElementRef } from 'bits-ui';
-	import { type VariantProps, tv } from 'tailwind-variants';
-	import { cn } from '../../../utils/index.js';
+  import type { WithElementRef, WithoutChildren } from "bits-ui";
+  import { type VariantProps, tv } from "tailwind-variants";
+ 	import { cn } from '../../../utils/index.js';
 
-	import type { HTMLInputAttributes, HTMLInputTypeAttribute } from 'svelte/elements';
+  import type { HTMLTextareaAttributes } from "svelte/elements";
 
-	export const inputVariants = tv({
+  export const inputVariants = tv({
     base: "rounded-md text-sm border-1 font-medium focus-visible:outline-0 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed",
     variants: {
       variant: {
         primary:
           "focus:shadow-input focus:bg-accent-50 dark:focus:border-accent-400 border-neutral-400/50 dark:border-neutral-700 bg-neutral-300/50 dark:bg-neutral-900 text-neutral-950 dark:text-neutral-100 placeholder:text-base-500 dark:placeholder:text-base-50/50",
         secondary:
-          "focus:ring-base-800 dark:focus:ring-base-200 bg-base-100/50 dark:bg-base-900/50 text-base-900 dark:text-base-50 ring-base-200 dark:ring-base-800 placeholder:text-base-900/50 dark:placeholder:text-base-100",
+          "focus:ring-base-800 dark:focus:ring-base-200 bg-base-100/50 dark:bg-base-900/50 text-base-900 dark:text-base-50 ring-base-200 dark:ring-base-800",
       },
       sizeVariant: {
-        default: "px-3.5 py-1.5 text-base",
-        sm: "px-3 text-xs py-1.5 font-base",
-        lg: "px-4 text-lg py-2 font-semibold",
+        default: "px-3 py-1.5 text-base min-h-[80px]",
+        sm: "px-3 text-xs py-1.5 font-base min-h-[60px]",
+        lg: "px-4 text-lg py-2 font-semibold min-h-[100px]",
       },
     },
     defaultVariants: {
@@ -49,35 +49,32 @@ SOFTWARE.
     },
   });
 
-	export type InputVariant = VariantProps<typeof inputVariants>['variant'];
-	export type InputSize = VariantProps<typeof inputVariants>['sizeVariant'];
+  export type InputVariant = VariantProps<typeof inputVariants>["variant"];
+  export type InputSize = VariantProps<typeof inputVariants>["sizeVariant"];
 
-	type InputType = Exclude<HTMLInputTypeAttribute, 'file'>;
-
-	export type InputProps = WithElementRef<
-		Omit<HTMLInputAttributes, 'type'> & { type?: InputType }
-	> & {
-		variant?: InputVariant;
-		sizeVariant?: InputSize;
-	};
+  export type InputProps = WithElementRef<HTMLTextareaAttributes> & {
+    variant?: InputVariant;
+    sizeVariant?: InputSize;
+  };
 </script>
 
 <script lang="ts">
-	let {
-		ref = $bindable(null),
-		value = $bindable(),
-		type,
-		class: className,
-		variant = 'primary',
-		sizeVariant = 'default',
-		...restProps
-	}: InputProps = $props();
+  let {
+    ref = $bindable(null),
+    value = $bindable(),
+    class: className,
+    variant = "primary",
+    sizeVariant = "default",
+    ...restProps
+  }: WithoutChildren<WithElementRef<HTMLTextareaAttributes>> & {
+    variant?: InputVariant;
+    sizeVariant?: InputSize;
+  } = $props();
 </script>
 
-<input
-	bind:this={ref}
-	class={cn(inputVariants({ variant, sizeVariant }), className)}
-	{type}
-	bind:value
-	{...restProps}
-/>
+<textarea
+  bind:this={ref}
+  class={cn(inputVariants({ variant, sizeVariant }), className)}
+  bind:value
+  {...restProps}
+></textarea>
