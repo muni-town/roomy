@@ -45,25 +45,8 @@ div {
   --color-base-900: var(--base-900);
   --color-base-950: var(--base-950);
 
-<<<<<<< HEAD
-  --color-accent-50: var(--accent-50);
-  --color-accent-100: var(--accent-100);
-  --color-accent-200: var(--accent-200);
-  --color-accent-300: var(--accent-300);
-  --color-accent-400: var(--accent-400);
-  --color-accent-500: var(--accent-500);
-  --color-accent-600: var(--accent-600);
-  --color-accent-700: var(--accent-700);
-  --color-accent-800: var(--accent-800);
-  --color-accent-900: var(--accent-900);
-  --color-accent-950: var(--accent-950);
-
-  --shadow-button: 2px 2px 0 0 var(--accent-700);
-  --shadow-input: 2px 2px 0 0 var(--accent-700);
-=======
   --shadow-button: 2px 2px 0 0 var(--accent-700);
   --inset-shadow-input: inset 0 2px 0 0 var(--accent-700);
->>>>>>> 97ea992c (updated ui components)
 }
 
 @layer base {
