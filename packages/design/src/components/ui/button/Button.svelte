@@ -36,7 +36,11 @@ SOFTWARE.
     variants: {
       variant: {
         primary:
+<<<<<<< HEAD:packages/design/src/components/ui/button/Button.svelte
           "backdrop-blur-md backdrop-brightness-105 shadow-lg transform-all shadow-accent-500/5 dark:shadow-accent-500/2 disabled:shadow-md active:shadow-md  inset-shadow-sm inset-shadow-accent-700/5 dark:inset-shadow-accent-500/2 focus-visible:outline-accent-500 border border-accent-500/15 dark:border-accent-500/15 hover:bg-accent-200/60 dark:hover:bg-accent-950/25 bg-accent-200/50 dark:bg-accent-950/20 text-accent-950 dark:text-accent-400",
+=======
+          "bg-accent-400 dark:bg-accent-400 text-accent-950 hover:bg-accent-400 backdrop-blur-md border border-px border-accent-400 hover:shadow-button active:translate-[2px] active:shadow-none",
+>>>>>>> 7a13ba43 (input & text fields adjusted):packages/app/src/lib/components/ui/button/Button.svelte
         secondary:
           "backdrop-blur-md backdrop-brightness-105 shadow-lg transform-all shadow-base-500/5 dark:shadow-base-500/2 active:shadow-md inset-shadow-sm inset-shadow-base-700/2 dark:inset-shadow-base-500/2 focus-visible:outline-base-800 dark:focus-visible:outline-base-200 bg-base-300/40 dark:bg-base-800/30 text-base-900 dark:text-base-50 hover:bg-base-300/45 dark:hover:bg-base-800/35 border border-base-300/50 dark:border-base-700/30",
         link: "focus-visible:outline-base-900 dark:focus-visible:outline-base-50 text-base-800 dark:text-base-200 font-semibold hover:text-accent-600 dark:hover:text-accent-400 data-[current=true]:text-accent-600 dark:data-[current=true]:text-accent-400",

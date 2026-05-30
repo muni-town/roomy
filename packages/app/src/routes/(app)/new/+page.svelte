@@ -107,6 +107,7 @@
   }
 </script>
 
+<<<<<<< HEAD
 <form class="pt-4" onsubmit={createSpaceSubmit}>
   <div class="space-y-8">
     <h2 class="text-base/7 font-semibold text-base-900 dark:text-base-100">
@@ -138,6 +139,23 @@
     {/if}
 
     <div class=" grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
+=======
+<form onsubmit={createSpaceSubmit}>
+  <div class="space-y-10">
+    <div>
+      <h2 class="text-xl font-semibold text-base-900 dark:text-base-100 mb-4">
+        Create Your space
+      </h2>
+
+      <p>Spaces are made of related rooms, pages, and members.</p>
+
+      {#if !flags.inviteOnly}
+        <p><i>Currently, We only support public spaces.</i></p>
+      {/if}
+    </div>
+
+    <div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-6">
+>>>>>>> 7a13ba43 (input & text fields adjusted)
       <div class="sm:col-span-4">
         <label
           for="name"
@@ -145,7 +163,17 @@
           >Name</label
         >
         <div class="mt-2">
+<<<<<<< HEAD
           <Input id="name" bind:value={form.spaceName} class="w-full" />
+=======
+          <Input
+            id="name"
+            placeholder="Foolish Mortals"
+            bind:value={form.spaceName}
+            class="w-full"
+            autofocus
+          />
+>>>>>>> 7a13ba43 (input & text fields adjusted)
         </div>
       </div>
 
