@@ -276,7 +276,7 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
         children: c.channels.map((ch) => ch.id),
       }));
       newCategories.push({
-        id: crypto.randomUUID(),
+        id: newUlid(),
         name: opts.name,
         children: [],
       });
