@@ -9,6 +9,7 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { joinSpace } from "$lib/mutations/space";
   import { queryClient } from "$lib/client";
+  import { resolveBlobUrl } from "$lib/utils";
 
   let { spaceId }: { spaceId: string } = $props();
 
@@ -94,7 +95,7 @@
   <JoinDialog {resolveState} {joinState} {inviteToken} {urlError} {onJoin}>
     {#snippet avatar()}
       <SpaceAvatar
-        src={metaQuery.data?.avatar ?? undefined}
+        src={resolveBlobUrl(metaQuery.data?.avatar)}
         id={spaceId}
         name={metaQuery.data?.name ?? ""}
         size={50}
