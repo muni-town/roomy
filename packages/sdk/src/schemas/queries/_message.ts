@@ -30,6 +30,7 @@ export const Message = type({
   content: "string",
   authorDid: "string",
   authorName: "string",
+  "authorHandle?": "string",
   "authorAvatar?": "string",
   timestamp: "string",
   "replyTo?": "string",

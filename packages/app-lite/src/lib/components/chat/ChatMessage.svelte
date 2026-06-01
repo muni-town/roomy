@@ -78,7 +78,7 @@
     <MessageBubble
       authorDid={message.authorDid}
       authorName={message.authorName ?? undefined}
-      authorHandle={undefined}
+      authorHandle={message.authorHandle ?? undefined}
       authorAvatarUrl={message.authorAvatar ?? undefined}
       avatarSrc={resolveBlobUrl(message.authorAvatar)}
       timestamp={new Date(message.timestamp)}

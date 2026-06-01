@@ -30,6 +30,7 @@ export interface MessageDto {
   content: string;
   authorDid: string;
   authorName: string;
+  authorHandle?: string;
   authorAvatar?: string;
   timestamp: string;
   replyTo?: string;
@@ -52,6 +53,7 @@ interface BaseRow {
   timestamp: number | null;
   author_did: string | null;
   author_name: string | null;
+  author_handle: string | null;
   author_avatar: string | null;
   reply_to: string | null;
   forward_target: string | null;
@@ -78,6 +80,7 @@ export function selectMessages(
         author_e.tail as author_did,
         author_info.name as author_name,
         author_info.avatar as author_avatar,
+        author_user.handle as author_handle,
         reply_e.tail as reply_to,
         forward_e.tail as forward_target,
         forward_target_entity.room as forward_target_room,
@@ -87,6 +90,7 @@ export function selectMessages(
       left join edges author_e
         on author_e.head = e.id and author_e.label = 'author'
       left join comp_info author_info on author_info.entity = author_e.tail
+      left join comp_user author_user on author_user.did = author_e.tail
       left join edges reply_e
         on reply_e.head = e.id and reply_e.label = 'reply'
       left join edges forward_e
@@ -123,6 +127,7 @@ export function selectMessages(
           author_e.tail as author_did,
           author_info.name as author_name,
           author_info.avatar as author_avatar,
+          author_user.handle as author_handle,
           reply_e.tail as reply_to,
           forward_e.tail as forward_target,
           forward_target_entity.room as forward_target_room,
@@ -132,6 +137,7 @@ export function selectMessages(
         left join edges author_e
           on author_e.head = e.id and author_e.label = 'author'
         left join comp_info author_info on author_info.entity = author_e.tail
+        left join comp_user author_user on author_user.did = author_e.tail
         left join edges reply_e
           on reply_e.head = e.id and reply_e.label = 'reply'
         left join edges forward_e
@@ -165,6 +171,7 @@ export function selectMessages(
       timestamp: number | null;
       author_did: string | null;
       author_name: string | null;
+      author_handle: string | null;
       author_avatar: string | null;
     }
   >();
@@ -190,12 +197,14 @@ export function selectMessages(
            cc.timestamp as timestamp,
            author_e.tail as author_did,
            author_info.name as author_name,
-           author_info.avatar as author_avatar
+           author_info.avatar as author_avatar,
+           author_user.handle as author_handle
          from entities e
          left join comp_content cc on cc.entity = e.id
          left join edges author_e
            on author_e.head = e.id and author_e.label = 'author'
          left join comp_info author_info on author_info.entity = author_e.tail
+         left join comp_user author_user on author_user.did = author_e.tail
          where e.id in (${ph})`,
       )
       .all(...forwardTargets);
@@ -206,6 +215,7 @@ export function selectMessages(
         timestamp: r.timestamp,
         author_did: r.author_did,
         author_name: r.author_name,
+        author_handle: r.author_handle,
         author_avatar: r.author_avatar,
       });
     }
@@ -331,6 +341,7 @@ export function selectMessages(
     let ts = r.timestamp;
     let authorDid = r.author_did;
     let authorName = r.author_name;
+    let authorHandle = r.author_handle;
     let authorAvatar = r.author_avatar;
 
     if (r.data === null && r.forward_target) {
@@ -341,6 +352,7 @@ export function selectMessages(
         ts = orig.timestamp;
         authorDid = orig.author_did;
         authorName = orig.author_name;
+        authorHandle = orig.author_handle;
         authorAvatar = orig.author_avatar;
       }
     }
@@ -368,6 +380,7 @@ export function selectMessages(
       content,
       authorDid: authorDid ?? "",
       authorName: authorName ?? "",
+      authorHandle: authorHandle,
       authorAvatar: authorAvatar,
       timestamp: ts != null ? new Date(ts).toISOString() : "",
       replyTo: r.reply_to,
