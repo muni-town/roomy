@@ -22,6 +22,7 @@ import { sendEventsHandler } from "./handlers/space.roomy.space.sendEvents.ts";
 import { createSpaceHandler } from "./handlers/space.roomy.space.createSpace.ts";
 import { joinSpaceHandler } from "./handlers/space.roomy.space.joinSpace.ts";
 import { leaveSpaceHandler } from "./handlers/space.roomy.space.leaveSpace.ts";
+import { setHandleHandler } from "./handlers/space.roomy.space.setHandle.ts";
 import { schemas } from "@roomy-space/sdk";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -90,6 +91,11 @@ const router = new XrpcRouter(prodAuthVerifier)
   .procedure("space.roomy.space.leaveSpace", {
     handler: leaveSpaceHandler,
     inputSchema: schemas.procedures.leaveSpace.Input,
+    // No outputSchema: void return; short-circuits to 200 with empty body.
+  })
+  .procedure("space.roomy.space.setHandle", {
+    handler: setHandleHandler,
+    inputSchema: schemas.procedures.setHandle.Input,
     // No outputSchema: void return; short-circuits to 200 with empty body.
   })
   // Admin routes (connectSpace, materializeSpace) intentionally have no

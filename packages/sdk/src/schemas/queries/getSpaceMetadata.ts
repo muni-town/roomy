@@ -39,6 +39,7 @@ export const Response = type({
   "name?": "string",
   "avatar?": "string",
   "description?": "string",
+  "handle?": "string",
   joinPolicy: JoinPolicy,
   isMember: "boolean",
   isAdmin: "boolean",

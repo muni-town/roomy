@@ -36,6 +36,7 @@ export interface SpaceRow {
   name?: string;
   avatar?: string;
   description?: string;
+  handle?: string;
   unreadCount: number;
   isMember: boolean;
   isAdmin: boolean;
@@ -57,6 +58,7 @@ function rowToSpace(
     name: string | null;
     avatar: string | null;
     description: string | null;
+    handle: string | null;
     is_member: number;
     is_admin: number;
   },
@@ -72,6 +74,7 @@ function rowToSpace(
   if (r.name !== null) space.name = r.name;
   if (r.avatar !== null) space.avatar = r.avatar;
   if (r.description !== null) space.description = r.description;
+  if (r.handle !== null) space.handle = r.handle;
   return space;
 }
 
@@ -114,6 +117,7 @@ function selectJoinedSpacesOnly(
         name: string | null;
         avatar: string | null;
         description: string | null;
+        handle: string | null;
         is_member: number;
         is_admin: number;
       },
@@ -124,6 +128,7 @@ function selectJoinedSpacesOnly(
            ci.name as name,
            ci.avatar as avatar,
            ci.description as description,
+           cs.handle as handle,
            exists (
              select 1 from edges
               where head = je.tail and tail = ?1 and label = 'member'
@@ -134,6 +139,7 @@ function selectJoinedSpacesOnly(
            ) as is_admin
          from edges je
          left join comp_info ci on ci.entity = je.tail
+         left join comp_space cs on cs.entity = je.tail
         where je.head = ?2
           and je.label = ?3
           and not exists (
@@ -174,6 +180,7 @@ function selectJoinedAndLeftSpaces(
         name: string | null;
         avatar: string | null;
         description: string | null;
+        handle: string | null;
         is_member: number;
         is_admin: number;
       },
@@ -184,6 +191,7 @@ function selectJoinedAndLeftSpaces(
            ci.name as name,
            ci.avatar as avatar,
            ci.description as description,
+           cs.handle as handle,
            exists (
              select 1 from edges
               where head = je.tail and tail = ?1 and label = 'member'
@@ -194,6 +202,7 @@ function selectJoinedAndLeftSpaces(
            ) as is_admin
          from edges je
          left join comp_info ci on ci.entity = je.tail
+         left join comp_space cs on cs.entity = je.tail
         where je.head = ?2
           and (
             je.label = ?3   -- joinedSpace
