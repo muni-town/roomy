@@ -19,18 +19,21 @@ const APPSERVER_RPCS = [
   "space.roomy.space.getCalendarEvents",
 ];
 
+export const CONFIG = {
+  appserverDid:
+    import.meta.env.VITE_APPSERVER_DID || "did:web:appserver.roomy.chat",
+  port: Number(import.meta.env.VITE_PORT) || 5180,
+  usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
+  profileSpaceNsid:
+    import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
+};
+
 export const OAUTH_SCOPE = [
   "atproto",
   "rpc:app.bsky.actor.getProfiles?aud=did:web:api.bsky.app%23bsky_appview",
   "rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview",
   "blob:*/*",
   "repo:space.roomy.upload.v0?action=create",
+  `repo:${CONFIG.profileSpaceNsid}`,
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
 ].join(" ");
-
-export const CONFIG = {
-  appserverDid:
-    import.meta.env.VITE_APPSERVER_DID || "did:web:appserver.roomy.chat",
-  port: Number(import.meta.env.VITE_PORT) || 5180,
-  usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
-};
