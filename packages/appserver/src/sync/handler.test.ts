@@ -128,7 +128,6 @@ function messageDiff(roomId: Ulid, seq: number): InvalidationEvent {
             timestamp: new Date().toISOString(),
             reactions: [],
             media: [],
-            tags: [],
           },
         },
       ],

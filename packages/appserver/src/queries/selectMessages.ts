@@ -2,10 +2,10 @@
  * Message selection helper used by `room.getMessages` and `message.getMessage`.
  *
  * Returns fully denormalised message objects with all joins resolved
- * server-side: author, content, replyTo, forwardedFrom, reactions, media, tags.
+ * server-side: author, content, replyTo, forwardedFrom, reactions, media.
  *
  * Strategy: 1 query for the message rows + singleton-edge joins (author,
- * reply, forward), then 4 small batch queries (reactions, tags, image+video+
+ * reply, forward), then 2 small batch queries (reactions, image+video+
  * file+link embeds) keyed on the page's IDs. Constant query count, regardless
  * of page size.
  *
@@ -37,7 +37,6 @@ export interface MessageDto {
   forwardedFrom?: { name: string; roomId: string };
   reactions: Array<ReactionDto>;
   media: Array<{ url: string; type: string; alt?: string }>;
-  tags: string[];
 }
 
 export type SelectScope =
@@ -221,7 +220,7 @@ export function selectMessages(
     }
   }
 
-  // ── Step 3: batch-fetch reactions / tags / embeds keyed by id ─────────
+  // ── Step 3: batch-fetch reactions / embeds keyed by id ─────────
   const idPh = ids.map(() => "?").join(",");
 
   const reactionRows = db
@@ -231,13 +230,6 @@ export function selectMessages(
     >(
       `select entity, reaction, user, reaction_id from comp_reaction
         where entity in (${idPh})`,
-    )
-    .all(...ids);
-
-  const tagRows = db
-    .query<{ head: string; tail: string }, string[]>(
-      `select head, tail from edges
-        where head in (${idPh}) and label = 'tag'`,
     )
     .all(...ids);
 
@@ -308,16 +300,6 @@ export function selectMessages(
       }
       perMsgViewer.set(r.reaction, r.reaction_id);
     }
-  }
-
-  const tagMap = new Map<string, string[]>();
-  for (const t of tagRows) {
-    let arr = tagMap.get(t.head);
-    if (!arr) {
-      arr = [];
-      tagMap.set(t.head, arr);
-    }
-    arr.push(t.tail);
   }
 
   const mediaMap = new Map<
@@ -393,7 +375,6 @@ export function selectMessages(
           : null,
       reactions,
       media: mediaForMsg,
-      tags: tagMap.get(r.id) ?? [],
     }) as MessageDto;
   });
 

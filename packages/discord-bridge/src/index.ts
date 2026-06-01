@@ -14,7 +14,7 @@ import {
 } from "./discord/types.ts";
 import { getProxyCacheBot } from "./discord/cache.ts";
 import { ingestDiscordMessage } from "./services/message-ingestion.ts";
-import { runBackfill } from "./services/backfill.ts";
+import { runBackfill, type BotWithCache } from "./services/backfill.ts";
 import {
   syncUserProfile,
   retryStaleProfileSyncs,
@@ -101,11 +101,47 @@ async function main() {
         },
 
         async messageCreate(message: MessageProperties) {
-          await ingestDiscordMessage(message, repo, spaceManager);
+          await ingestDiscordMessage(
+            message,
+            repo,
+            spaceManager,
+            undefined,
+            undefined,
+            // channel name resolver: cache + REST fallback
+            async (snowflake) => {
+              const cached = (bot as unknown as BotWithCache).cache.channels.memory.get(
+                BigInt(snowflake),
+              )?.name;
+              if (cached) return cached;
+              try {
+                const channel = await bot.helpers.getChannel(BigInt(snowflake));
+                return (channel as { name?: string }).name;
+              } catch {
+                return undefined;
+              }
+            },
+          );
         },
 
         async messageUpdate(message: MessageProperties) {
-          await handleMessageEdit(message, repo, spaceManager);
+          await handleMessageEdit(
+            message,
+            repo,
+            spaceManager,
+            // channel name resolver: cache + REST fallback
+            async (snowflake) => {
+              const cached = (bot as unknown as BotWithCache).cache.channels.memory.get(
+                BigInt(snowflake),
+              )?.name;
+              if (cached) return cached;
+              try {
+                const channel = await bot.helpers.getChannel(BigInt(snowflake));
+                return (channel as { name?: string }).name;
+              } catch {
+                return undefined;
+              }
+            },
+          );
         },
 
         async messageDelete(data) {

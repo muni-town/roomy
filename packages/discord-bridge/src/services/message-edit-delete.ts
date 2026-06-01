@@ -10,6 +10,7 @@ import type { SpaceManager } from "../roomy/space-manager.ts";
 import type { MessageProperties } from "../discord/types.ts";
 import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
+import { resolveMentions, type MentionContext } from "./mention-resolver.ts";
 
 const log = createLogger("edit-delete");
 
@@ -17,6 +18,7 @@ export async function handleMessageEdit(
   message: MessageProperties,
   repo: BridgeRepository,
   spaceManager: SpaceManager,
+  resolveChannelName?: (snowflake: string) => Promise<string | undefined>,
 ): Promise<void> {
   const messageId = message.id.toString();
   const channelId = message.channelId.toString();
@@ -29,6 +31,21 @@ export async function handleMessageEdit(
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
   if (targetSpaces.length === 0) return;
+
+  // Pre-resolve channel names from mentionedChannelIds (with REST fallback)
+  const channelNames = new Map<string, string>();
+  if (resolveChannelName && message.mentionedChannelIds) {
+    const results = await Promise.all(
+      message.mentionedChannelIds.map(async (id) => {
+        const idStr = id.toString();
+        const name = await resolveChannelName(idStr);
+        return { idStr, name } as const;
+      }),
+    );
+    for (const { idStr, name } of results) {
+      if (name) channelNames.set(idStr, name);
+    }
+  }
 
   for (const spaceDid of targetSpaces) {
     const roomyMessageId = repo.getRoomyId(spaceDid, "message", messageId);
@@ -55,6 +72,21 @@ export async function handleMessageEdit(
     }
 
     const eventUlid = newUlid();
+
+    // Resolve Discord mention syntax into clean Markdown (per-space, so
+    // channel mentions resolve to the correct Roomy room ULID).
+    const roomyRoomIds = new Map<string, string>();
+    for (const [snowflake] of channelNames) {
+      const roomyId = repo.getRoomyRoomId(spaceDid, snowflake);
+      if (roomyId) roomyRoomIds.set(snowflake, roomyId);
+    }
+    const mentionCtx: MentionContext = { channelNames, roomyRoomIds };
+    const resolvedContent = resolveMentions(
+      message.content || "",
+      message.mentions,
+      mentionCtx,
+    );
+
     const extensions: Record<string, unknown> = {
       "space.roomy.extension.discordMessageOrigin.v0": {
         $type: "space.roomy.extension.discordMessageOrigin.v0",
@@ -75,7 +107,7 @@ export async function handleMessageEdit(
       messageId: roomyMessageId as Ulid,
       body: {
         mimeType: "text/markdown",
-        data: toBytes(new TextEncoder().encode(message.content || "")),
+        data: toBytes(new TextEncoder().encode(resolvedContent)),
       },
       extensions,
     };

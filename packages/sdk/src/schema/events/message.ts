@@ -11,68 +11,6 @@ import {
 import { defineEvent, ensureEntity } from "./utils";
 import { sql } from "../../utils";
 import { decodeTime } from "ulidx";
-import { fromBytes } from "@atcute/cbor";
-
-/** Strip Discord custom emoji syntax (<:name:id> and <a:name:id>) from text body bytes. */
-function stripDiscordCustomEmojis(
-  buf: Uint8Array,
-  mimeType: string,
-): Uint8Array {
-  if (!mimeType.startsWith("text/")) return buf;
-  const text = new TextDecoder().decode(buf);
-  const stripped = text.replace(/<a?:\w+:\d+>/g, "");
-  return new TextEncoder().encode(stripped);
-}
-
-/**
- * Extract Discord user mention snowflakes (<@id> / <@!id>) and channel mention
- * snowflakes (<#id>) from body text, and return SQL statements creating 'tag' edges.
- * User mentions point to did:discord:<snowflake> entities.
- * Channel mentions point to the Roomy room ULID via a subquery on comp_discord_origin.
- */
-function discordTagEdges(
-  streamId: string,
-  messageId: string,
-  buf: Uint8Array,
-  mimeType: string,
-  guildId?: string,
-) {
-  if (!mimeType.startsWith("text/")) return [];
-  const text = new TextDecoder().decode(buf);
-
-  const userSnowflakes = new Set<string>();
-  for (const m of text.matchAll(/<@!?(\d+)>/g))
-    if (m[1]) userSnowflakes.add(m[1]);
-
-  const channelSnowflakes = new Set<string>();
-  for (const m of text.matchAll(/<#(\d+)>/g))
-    if (m[1]) channelSnowflakes.add(m[1]);
-
-  return [
-    ...[...userSnowflakes].flatMap((snowflake) => {
-      const did = `did:discord:${snowflake}`;
-      return [
-        ensureEntity(streamId, did),
-        sql`insert or ignore into edges (head, tail, label) values (${messageId}, ${did}, 'tag')`,
-      ];
-    }),
-    ...[...channelSnowflakes].map((snowflake) =>
-      guildId
-        ? sql`
-            insert or ignore into edges (head, tail, label)
-            select ${messageId}, entity, 'tag'
-            from comp_discord_origin
-            where snowflake = ${snowflake} and guild_id = ${guildId}
-          `
-        : sql`
-            insert or ignore into edges (head, tail, label)
-            select ${messageId}, entity, 'tag'
-            from comp_discord_origin
-            where snowflake = ${snowflake}
-          `,
-    ),
-  ];
-}
 
 const CreateMessageSchema = type({
   $type: "'space.roomy.message.createMessage.v0'",
@@ -86,14 +24,8 @@ export const CreateMessage = defineEvent(
   CreateMessageSchema,
   ({ streamId, user, event }) => {
     if (!event.room) throw new Error("No room for message");
-    const hasDiscordOrigin =
-      "space.roomy.extension.discordMessageOrigin.v0" in event.extensions;
-    const bodyData = hasDiscordOrigin
-      ? stripDiscordCustomEmojis(
-          (event.body.data as { buf: Uint8Array }).buf,
-          event.body.mimeType,
-        )
-      : (event.body.data as { buf: Uint8Array }).buf;
+
+    const bodyData = (event.body.data as { buf: Uint8Array }).buf;
 
     // Handle overrideAuthorDid, overrideTimestamp extensions
     const overrideAuthorExt =
@@ -229,43 +161,6 @@ export const CreateMessage = defineEvent(
       }
     }
 
-    /** Note: the purpose of this is because we don't have an explicit signal in the
-     * stream that a channel on Discord has been created to bridge from a Roomy room.
-     * Therefore we don't have a canonical way to get the snowflake for the channel.
-     * This makes it hard to process Discord room tags which look like <#123456789>
-     * However we can infer the bridged snowflake if we see Discord-origin messages
-     * in the bridged room.
-     *
-     * This is a bit hacky and there is a known issue with this
-     * approach which is that if the room has been synced to Discord but nobody on
-     * Discord has sent a message in it, but somebody on Discord tags that channel in
-     * a different channel, we won't know how to resolve the tag.
-     *
-     * Ultimately we may need to accept that more of the bridging data is stored in
-     * the Roomy stream - at least for important bits like rooms.
-     */
-    if (hasDiscordOrigin) {
-      const discordOriginExt =
-        event.extensions["space.roomy.extension.discordMessageOrigin.v0"];
-      const guildId = discordOriginExt?.guildId;
-      const channelId = discordOriginExt?.channelId;
-      if (channelId && guildId) {
-        statements.push(sql`
-          insert or ignore into comp_discord_origin (entity, snowflake, guild_id)
-          values (${event.room}, ${channelId}, ${guildId})
-        `);
-      }
-      statements.push(
-        ...discordTagEdges(
-          streamId,
-          event.id,
-          bodyData,
-          event.body.mimeType,
-          guildId,
-        ),
-      );
-    }
-
     return statements;
   },
 );
@@ -289,18 +184,7 @@ export const EditMessage = defineEvent(
       return [];
     }
 
-    // TODO: fix the issue wehre we have to manually cast event.body.data
-
-    const hasDiscordOrigin =
-      !!event.extensions &&
-      "space.roomy.extension.discordMessageOrigin.v0" in event.extensions;
-    const editBodyData =
-      hasDiscordOrigin && event.body.mimeType !== "text/x-dmp-patch"
-        ? stripDiscordCustomEmojis(
-            (event.body.data as { buf: Uint8Array }).buf,
-            event.body.mimeType,
-          )
-        : (event.body.data as { buf: Uint8Array }).buf;
+    const editBodyData = (event.body.data as { buf: Uint8Array }).buf;
     const statements = [
       ensureEntity(streamId, event.id, event.room),
       event.body.mimeType == "text/x-dmp-patch"
@@ -437,22 +321,6 @@ export const EditMessage = defineEvent(
           }
         }
       }
-    }
-
-    if (hasDiscordOrigin && event.body.mimeType !== "text/x-dmp-patch") {
-      const guildId =
-        event.extensions?.["space.roomy.extension.discordMessageOrigin.v0"]
-          ?.guildId;
-      statements.push(
-        sql`delete from edges where head = ${event.messageId} and label = 'tag'`,
-        ...discordTagEdges(
-          streamId,
-          event.messageId,
-          editBodyData,
-          event.body.mimeType,
-          guildId,
-        ),
-      );
     }
 
     return statements;

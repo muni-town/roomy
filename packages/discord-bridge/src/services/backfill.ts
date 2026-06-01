@@ -438,6 +438,10 @@ async function backfillChannel(
           spaceManager,
           guildId,
           spaceDid,
+          (snowflake) => {
+            const name = resolveChannelName(bot, snowflake);
+            return Promise.resolve(name);
+          },
         );
         totalSynced += result.synced;
         totalSkipped += result.skipped;

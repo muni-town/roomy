@@ -37,5 +37,4 @@ export const Message = type({
   "forwardedFrom?": ForwardedFrom,
   reactions: Reaction.array(),
   media: Media.array(),
-  tags: "string[]",
 });
