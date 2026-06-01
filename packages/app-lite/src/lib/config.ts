@@ -24,6 +24,7 @@ export const OAUTH_SCOPE = [
   "rpc:app.bsky.actor.getProfiles?aud=did:web:api.bsky.app%23bsky_appview",
   "rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview",
   "blob:*/*",
+  "repo:space.roomy.upload.v0?action=create",
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
 ].join(" ");
 
