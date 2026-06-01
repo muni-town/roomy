@@ -1,5 +1,5 @@
 import { createLogger } from "./logger.ts";
-import { BRIDGE_DATA_DIR, BRIDGE_DB_PATH, DISCORD_TOKEN } from "./env.ts";
+import { BRIDGE_DATA_DIR, BRIDGE_DB_PATH, DISCORD_TOKEN, ENABLE_GUILD_MEMBERS_INTENT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { BridgeRepository } from "./db/repository.ts";
@@ -15,6 +15,10 @@ import {
 import { getProxyCacheBot } from "./discord/cache.ts";
 import { ingestDiscordMessage } from "./services/message-ingestion.ts";
 import { runBackfill } from "./services/backfill.ts";
+import {
+  syncUserProfile,
+  retryStaleProfileSyncs,
+} from "./services/profile-sync.ts";
 import {
   handleMessageEdit,
   handleMessageDelete,
@@ -69,7 +73,8 @@ async function main() {
         Intents.MessageContent |
         Intents.Guilds |
         Intents.GuildMessages |
-        Intents.GuildMessageReactions,
+        Intents.GuildMessageReactions |
+        (ENABLE_GUILD_MEMBERS_INTENT ? Intents.GuildMembers : 0),
       desiredProperties,
       events: {
         ready(data) {
@@ -83,6 +88,16 @@ async function main() {
           runBackfill(bot, repo, spaceManager).catch((err) =>
             log.error("Backfill failed", err),
           );
+
+          // Periodic profile sync retry: every 5 minutes, drain the
+          // stale profile sync queue with exponential backoff.
+          setInterval(async () => {
+            try {
+              await retryStaleProfileSyncs(repo, spaceManager);
+            } catch (err) {
+              log.error("Profile sync retry sweep failed", err);
+            }
+          }, 5 * 60 * 1000);
         },
 
         async messageCreate(message: MessageProperties) {
@@ -177,6 +192,26 @@ async function main() {
 
         async interactionCreate(interaction: InteractionProperties) {
           await handleInteractionCreate(interaction, repo, spaceManager, bot);
+        },
+
+        async guildMemberAdd(member, user) {
+          if (!ENABLE_GUILD_MEMBERS_INTENT) return;
+
+          const guildIdStr = member.guildId?.toString();
+          if (!guildIdStr) return;
+
+          const configs = repo.listBridgeConfigsForGuild(guildIdStr);
+          const targetSpaces = configs
+            .filter(
+              (c) =>
+                c.mode === "full" ||
+                repo.isAllowlisted(c.spaceDid, member.id.toString()),
+            )
+            .map((c) => c.spaceDid);
+
+          if (targetSpaces.length === 0) return;
+
+          await syncUserProfile(user, targetSpaces, repo, spaceManager);
         },
       },
     }),

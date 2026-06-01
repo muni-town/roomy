@@ -87,16 +87,19 @@ export async function ingestDiscordMessage(
     // Build attachments
     const attachments = buildAttachments(message, repo, spaceDid);
 
+    // Get connected space
+    const connected = await spaceManager.getOrConnect(spaceDid);
+
+    // Sync author profile before sending the message.
+    // This runs even for content-less messages so that users whose only
+    // Discord activity is embeds, stickers, or reactions still get their
+    // profile synced to Roomy.
+    await syncUserProfile(message.author, [spaceDid], repo, spaceManager);
+
     // Skip messages with no content and no attachments
     if (!message.content && attachments.length === 0) {
       continue;
     }
-
-    // Get connected space
-    const connected = await spaceManager.getOrConnect(spaceDid);
-
-    // Sync author profile before sending the message
-    await syncUserProfile(message.author, [spaceDid], repo, spaceManager);
 
     // Build and send the event
     const eventUlid = newUlid();

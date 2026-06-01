@@ -77,6 +77,7 @@ export const desiredProperties = createDesiredPropertiesObject({
   },
   member: {
     id: true,
+    guildId: true,
   },
 } satisfies RecursivePartial<TransformersDesiredProperties>);
 

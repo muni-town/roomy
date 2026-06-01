@@ -19,3 +19,12 @@ export function computeProfileHash(
   const data = `${username}|${globalName ?? ""}|${avatar ?? ""}`;
   return fingerprint(data);
 }
+
+/**
+ * Reverse discordeno's iconHashToBigInt: strips the prefix ('b' for static,
+ * 'a' for animated → prepends 'a_') to recover the original CDN hash string.
+ */
+export function iconBigintToHash(icon: bigint): string {
+  const hex = icon.toString(16);
+  return hex.startsWith("a") ? `a_${hex.substring(1)}` : hex.substring(1);
+}
