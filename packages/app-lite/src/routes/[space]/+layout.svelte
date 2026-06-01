@@ -20,7 +20,10 @@
     console.log($state.snapshot(metaQuery))
   })
 
+  import { base } from "$app/paths";
   import { resolveBlobUrl } from "$lib/utils";
+
+  const defaultFavicon = `${base}/favicon.png`;
 
   // Dynamic title & favicon based on the currently active space.
   $effect(() => {
@@ -41,13 +44,13 @@
     if (spaceAvatar) {
       link.href = resolveBlobUrl(spaceAvatar) ?? "";
     } else {
-      link.href = "";
+      link.href = defaultFavicon;
     }
 
-    // Cleanup: reset title and remove the dynamic favicon when leaving this space
+    // Cleanup: reset title and favicon when leaving this space
     return () => {
       document.title = "Roomy";
-      link?.remove();
+      if (link) link.href = defaultFavicon;
     };
   });
 
