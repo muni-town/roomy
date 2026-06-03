@@ -193,10 +193,24 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
 
   $effect(() => {
     if (isEditing && !draftOrder) {
-      draftOrder = categories.map((c) => ({
-        id: c.id ?? c.name,
-        childIds: c.channels.map((ch) => ch.id),
-      }));
+      const orphans = meta?.sidebar.orphans ?? [];
+      if (categories.length === 0 && orphans.length > 0) {
+        // No categories exist — show orphans in a virtual edit group
+        draftOrder = [
+          {
+            id: "__orphans__",
+            childIds: orphans.map((ch) => ch.id),
+          },
+        ];
+      } else {
+        draftOrder = categories.map((c, i) => ({
+          id: c.id ?? c.name,
+          childIds: [
+            ...c.channels.map((ch) => ch.id),
+            ...(i === 0 ? orphans.map((ch) => ch.id) : []),
+          ],
+        }));
+      }
     }
     if (!isEditing && draftOrder) {
       draftOrder = null;
@@ -205,20 +219,29 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
 
   $effect(() => {
     const currentCats = meta?.sidebar.categories;
+    const currentOrphans = meta?.sidebar.orphans;
     if (!currentCats) return;
     const currentDraft = untrack(() => draftOrder);
     if (!currentDraft) return;
 
     const draftRoomIds = new Set(currentDraft.flatMap((c) => c.childIds));
-    const newRooms = currentCats
+
+    // Check for new rooms in categories that aren't in draft
+    const newCategoryRooms = currentCats
       .flatMap((c) => c.channels)
       .filter((r) => !draftRoomIds.has(r.id));
 
-    if (newRooms.length === 0) return;
+    // Check for new orphan channels that aren't in draft
+    const newOrphanRooms =
+      currentOrphans?.filter((r) => !draftRoomIds.has(r.id)) ?? [];
+
+    const allNewRooms = [...newCategoryRooms, ...newOrphanRooms];
+
+    if (allNewRooms.length === 0) return;
 
     draftOrder = currentDraft.map((cat, i) =>
       i === 0
-        ? { ...cat, childIds: [...cat.childIds, ...newRooms.map((r) => r.id)] }
+        ? { ...cat, childIds: [...cat.childIds, ...allNewRooms.map((r) => r.id)] }
         : cat,
     );
   });
@@ -276,7 +299,7 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
         children: c.channels.map((ch) => ch.id),
       }));
       newCategories.push({
-        id: crypto.randomUUID(),
+        id: newUlid(),
         name: opts.name,
         children: [],
       });

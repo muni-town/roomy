@@ -28,8 +28,7 @@ import {
 } from "../utils/event-extensions.js";
 import { DISCORD_MESSAGE_TYPES } from "../constants.js";
 import { computeEditHash } from "../utils/hash.js";
-import {
-  getOrCreateWebhook,
+import {  getOrCreateWebhook,
   executeWebhookWithRetry,
 } from "../discord/webhooks.js";
 import { getRoomKey } from "../utils/room.js";

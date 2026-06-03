@@ -7,3 +7,4 @@ export * as updateSeen from "./updateSeen";
 export * as createSpace from "./createSpace";
 export * as joinSpace from "./joinSpace";
 export * as leaveSpace from "./leaveSpace";
+export * as setHandle from "./setHandle";

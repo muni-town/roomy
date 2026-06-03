@@ -1,19 +1,10 @@
 import { newUlid, type Did, type Event } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
-import { computeProfileHash } from "../utils/hash.ts";
+import { computeProfileHash, iconBigintToHash } from "../utils/hash.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("profile");
-
-/**
- * Reverse discordeno's iconHashToBigInt: strips the prefix ('b' for static,
- * 'a' for animated → prepends 'a_') to recover the original CDN hash string.
- */
-function iconBigintToHash(icon: bigint): string {
-  const hex = icon.toString(16);
-  return hex.startsWith("a") ? `a_${hex.substring(1)}` : hex.substring(1);
-}
 
 export interface DiscordUserProfile {
   id: bigint;
@@ -37,9 +28,23 @@ function discordAvatarUrl(
   return `https://cdn.discordapp.com/embed/avatars/${mod}.png`;
 }
 
+function discordAvatarUrlFromHash(
+  userId: string,
+  avatarHash: string | null,
+  discriminator: string,
+): string {
+  if (avatarHash) {
+    const ext = avatarHash.startsWith("a_") ? "gif" : "webp";
+    return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${ext}?size=256`;
+  }
+  const mod = discriminator !== "0" ? parseInt(discriminator) % 5 : 0;
+  return `https://cdn.discordapp.com/embed/avatars/${mod}.png`;
+}
+
 /**
  * Sync a Discord user profile to Roomy for all target spaces.
  * Uses hash-based change detection to skip unchanged profiles.
+ * On failure, enqueues the sync for retry with exponential backoff.
  */
 export async function syncUserProfile(
   user: DiscordUserProfile,
@@ -85,12 +90,110 @@ export async function syncUserProfile(
       const connected = await spaceManager.getOrConnect(spaceDid);
       await connected.sendEvent(event);
       repo.setProfileHash(spaceDid, userIdStr, hash);
+      // Clear any stale retry entry on success
+      repo.deleteProfileSyncEntry(spaceDid, userIdStr);
       log.info(`Synced profile for Discord user ${userIdStr} to ${spaceDid}`);
     } catch (err) {
       log.error(
         `Failed to sync profile for Discord user ${userIdStr} to ${spaceDid}`,
         err,
       );
+      // Enqueue for later retry with exponential backoff
+      repo.enqueueProfileSync(
+        spaceDid,
+        userIdStr,
+        user.username,
+        user.globalName ?? null,
+        avatarHash,
+        user.discriminator,
+      );
     }
+  }
+}
+
+/**
+ * Process the profile sync retry queue: drain all stale entries and attempt
+ * each sync. Entries that succeed are removed; entries that fail again are
+ * updated with bumped retry_count and next_retry_at.
+ */
+export async function retryStaleProfileSyncs(
+  repo: BridgeRepository,
+  spaceManager: SpaceManager,
+): Promise<void> {
+  const stale = repo.getStaleProfileSyncEntries();
+  if (stale.length === 0) return;
+
+  log.info(`Processing ${stale.length} stale profile sync entries`);
+
+  let succeeded = 0;
+  for (const entry of stale) {
+    const hash = computeProfileHash(
+      entry.username,
+      entry.globalName,
+      entry.avatarHash,
+    );
+
+    const existingHash = repo.getProfileHash(entry.spaceDid, entry.discordUserId);
+    // If the hash already matches, the profile is up to date — clear the queue.
+    if (existingHash === hash) {
+      repo.deleteProfileSyncEntry(entry.spaceDid, entry.discordUserId);
+      succeeded++;
+      continue;
+    }
+
+    const avatar = discordAvatarUrlFromHash(
+      entry.discordUserId,
+      entry.avatarHash,
+      entry.discriminator,
+    );
+    const handle =
+      entry.discriminator !== "0"
+        ? `${entry.username}#${entry.discriminator}`
+        : entry.username;
+
+    const event: Event = {
+      id: newUlid(),
+      $type: "space.roomy.user.updateProfile.v0",
+      did: `did:discord:${entry.discordUserId}` as Did,
+      name: entry.globalName ?? entry.username,
+      avatar,
+      extensions: {
+        "space.roomy.extension.discordUserOrigin.v0": {
+          $type: "space.roomy.extension.discordUserOrigin.v0",
+          snowflake: entry.discordUserId,
+          profileHash: hash,
+          handle,
+        },
+      },
+    };
+
+    try {
+      const connected = await spaceManager.getOrConnect(entry.spaceDid);
+      await connected.sendEvent(event);
+      repo.setProfileHash(entry.spaceDid, entry.discordUserId, hash);
+      repo.deleteProfileSyncEntry(entry.spaceDid, entry.discordUserId);
+      succeeded++;
+      log.info(
+        `Retried profile sync for Discord user ${entry.discordUserId} to ${entry.spaceDid} (attempt ${entry.retryCount + 1})`,
+      );
+    } catch (err) {
+      log.error(
+        `Retry failed for profile sync of user ${entry.discordUserId} to ${entry.spaceDid} (attempt ${entry.retryCount + 1})`,
+        err,
+      );
+      // enqueueProfileSync bumps retry_count and updates next_retry_at
+      repo.enqueueProfileSync(
+        entry.spaceDid,
+        entry.discordUserId,
+        entry.username,
+        entry.globalName,
+        entry.avatarHash,
+        entry.discriminator,
+      );
+    }
+  }
+
+  if (succeeded > 0) {
+    log.info(`Retry sweep: ${succeeded}/${stale.length} profile syncs resolved`);
   }
 }

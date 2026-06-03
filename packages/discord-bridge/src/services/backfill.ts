@@ -423,10 +423,10 @@ async function backfillChannel(
   let totalSkipped = 0;
 
   while (true) {
-    const messages = await bot.helpers.getMessages(
-      BigInt(channelId),
-      { after: BigInt(afterCursor), limit: 100 },
-    );
+    const messages = await bot.helpers.getMessages(BigInt(channelId), {
+      after: BigInt(afterCursor),
+      limit: 100,
+    });
 
     if (messages.length === 0) break;
 
@@ -438,62 +438,30 @@ async function backfillChannel(
           spaceManager,
           guildId,
           spaceDid,
+          (snowflake) => {
+            const name = resolveChannelName(bot, snowflake);
+            return Promise.resolve(name);
+          },
         );
         totalSynced += result.synced;
         totalSkipped += result.skipped;
       } catch (err) {
-        log.error(`Error processing message in backfill for channel ${channelId}`, err);
+        log.error(
+          `Error processing message in backfill for channel ${channelId}`,
+          err,
+        );
       }
     }
 
-    const cursor = repo.getChannelCursor(spaceDid, channelId);
-    // First-time backfill: start from snowflake 0 (before all valid IDs)
-    // Resume: start from last cursor
-    let afterCursor = cursor?.lastMessageId ?? "0";
+    const lastMessage = messages[messages.length - 1]!;
+    afterCursor = lastMessage.id.toString();
 
-    log.info(
-      `Backfilling channel ${channelId} → ${spaceDid} (cursor: ${cursor?.lastMessageId ?? "none"})`,
-    );
+    if (messages.length < 100) break;
+  }
 
-    let totalSynced = 0;
-    let totalSkipped = 0;
-
-    while (true) {
-      const messages = await bot.helpers.getMessages(BigInt(channelId), {
-        after: BigInt(afterCursor),
-        limit: 100,
-      });
-
-      if (messages.length === 0) break;
-
-      for (const message of messages) {
-        try {
-          const result = await ingestDiscordMessage(
-            message as MessageProperties,
-            repo,
-            spaceManager,
-            guildId,
-            spaceDid,
-          );
-          totalSynced += result.synced;
-          totalSkipped += result.skipped;
-        } catch (err) {
-          log.error(
-            `Error processing message in backfill for channel ${channelId}`,
-            err,
-          );
-        }
-      }
-
-      const lastMessage = messages[messages.length - 1]!;
-      afterCursor = lastMessage.id.toString();
-
-      if (messages.length < 100) break;
-    }
-
-    log.info(
-      `Channel ${channelId} → ${spaceDid} backfill done: ${totalSynced} synced, ${totalSkipped} skipped`,
-    );
+  log.info(
+    `Channel ${channelId} → ${spaceDid} backfill done: ${totalSynced} synced, ${totalSkipped} skipped`,
+  );
   } finally {
     activeBackfills.delete(key);
   }

@@ -107,6 +107,9 @@
         "authorAvatar": {
           "type": "string"
         },
+        "authorHandle": {
+          "type": "string"
+        },
         "forwardedFrom": {
           "type": "ref",
           "ref": "#forwardedFrom"

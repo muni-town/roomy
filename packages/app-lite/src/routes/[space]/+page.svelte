@@ -63,7 +63,7 @@
   </div>
 {/snippet}
 
-<div class="h-full">
+<div class="h-full flex flex-col">
   {#if threadsQuery.isPending}
     <div class="h-full w-full flex items-center justify-center">
       <div class="text-sm text-base-400 p-2">Loading threads…</div>

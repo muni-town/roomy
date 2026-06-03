@@ -86,6 +86,28 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    name: "profile_sync_queue",
+    up(db) {
+      db.run(`
+        CREATE TABLE profile_sync_queue (
+          space_did        TEXT NOT NULL,
+          discord_user_id  TEXT NOT NULL,
+          username         TEXT NOT NULL,
+          global_name      TEXT,
+          avatar_hash      TEXT,
+          discriminator    TEXT NOT NULL,
+          retry_count      INTEGER NOT NULL DEFAULT 0,
+          last_error       TEXT,
+          next_retry_at    INTEGER NOT NULL,
+          created_at       INTEGER NOT NULL,
+          updated_at       INTEGER NOT NULL,
+          PRIMARY KEY (space_did, discord_user_id)
+        );
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Database): {

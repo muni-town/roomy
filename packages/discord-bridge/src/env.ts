@@ -38,3 +38,5 @@ export const BRIDGE_DB_PATH = optional(
 );
 export const PORT = parseInt(optional("PORT", "3301"), 10);
 export const LOG_LEVEL = optional("LOG_LEVEL", "info");
+export const ENABLE_GUILD_MEMBERS_INTENT =
+  process.env["ENABLE_GUILD_MEMBERS_INTENT"] !== "false";

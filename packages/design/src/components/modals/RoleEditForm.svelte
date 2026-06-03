@@ -18,15 +18,13 @@
     onSave: (name: string, description: string) => void;
   } = $props();
 
-  let name = $state("");
-  let description = $state("");
-
-  $effect(() => {
-    if (role) {
-      name = role.name ?? "";
-      description = role.description ?? "";
-    }
-  });
+  // State initialised from props. No $effect sync needed because the
+  // parent keys this component on role.id, so it's destroyed &
+  // recreated whenever the target role changes. This avoids the
+  // effect_update_depth_exceeded error caused by writing $state
+  // inside $effect.
+  let name = $state(role?.name ?? "");
+  let description = $state(role?.description ?? "");
 
   function submit() {
     if (!role || !name.trim()) return;

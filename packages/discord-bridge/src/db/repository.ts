@@ -424,4 +424,96 @@ export class BridgeRepository {
       .prepare("DELETE FROM webhook_tokens WHERE channel_id = ?")
       .run(channelId);
   }
+
+  // === Profile sync queue (retry queue) ===
+
+  enqueueProfileSync(
+    spaceDid: string,
+    discordUserId: string,
+    username: string,
+    globalName: string | null,
+    avatarHash: string | null,
+    discriminator: string,
+  ): void {
+    const now = Date.now();
+    const existing = this.db
+      .query<{ retry_count: number }, [string, string]>(
+        "SELECT retry_count FROM profile_sync_queue WHERE space_did = ? AND discord_user_id = ?",
+      )
+      .get(spaceDid, discordUserId);
+
+    if (existing) {
+      // Bump retry_count and reset the timer
+      const nextRetry = now + backoffMs(existing.retry_count + 1);
+      this.db
+        .prepare(
+          `UPDATE profile_sync_queue SET
+             username = ?, global_name = ?, avatar_hash = ?, discriminator = ?,
+             retry_count = retry_count + 1, next_retry_at = ?, updated_at = ?
+           WHERE space_did = ? AND discord_user_id = ?`,
+        )
+        .run(username, globalName, avatarHash, discriminator, nextRetry, now, spaceDid, discordUserId);
+    } else {
+      const nextRetry = now + backoffMs(0);
+      this.db
+        .prepare(
+          `INSERT INTO profile_sync_queue (space_did, discord_user_id, username, global_name, avatar_hash, discriminator, retry_count, next_retry_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+        )
+        .run(spaceDid, discordUserId, username, globalName, avatarHash, discriminator, nextRetry, now, now);
+    }
+  }
+
+  /** Get all stale queue entries whose next_retry_at is in the past. */
+  getStaleProfileSyncEntries(): Array<{
+    spaceDid: string;
+    discordUserId: string;
+    username: string;
+    globalName: string | null;
+    avatarHash: string | null;
+    discriminator: string;
+    retryCount: number;
+  }> {
+    return this.db
+      .query<
+        {
+          space_did: string;
+          discord_user_id: string;
+          username: string;
+          global_name: string | null;
+          avatar_hash: string | null;
+          discriminator: string;
+          retry_count: number;
+        },
+        [number]
+      >(
+        `SELECT space_did, discord_user_id, username, global_name, avatar_hash, discriminator, retry_count
+         FROM profile_sync_queue WHERE next_retry_at < ? ORDER BY next_retry_at ASC`,
+      )
+      .all(Date.now())
+      .map((r) => ({
+        spaceDid: r.space_did,
+        discordUserId: r.discord_user_id,
+        username: r.username,
+        globalName: r.global_name,
+        avatarHash: r.avatar_hash,
+        discriminator: r.discriminator,
+        retryCount: r.retry_count,
+      }));
+  }
+
+  /** Remove a queue entry after a successful retry. */
+  deleteProfileSyncEntry(spaceDid: string, discordUserId: string): void {
+    this.db
+      .prepare(
+        "DELETE FROM profile_sync_queue WHERE space_did = ? AND discord_user_id = ?",
+      )
+      .run(spaceDid, discordUserId);
+  }
+}
+
+/** Exponential backoff in milliseconds: ~2^attempts minutes (capped at ~4 hours). */
+function backoffMs(attempt: number): number {
+  const ms = Math.pow(2, attempt) * 60_000; // 2^attempt minutes
+  return Math.min(ms, 4 * 60 * 60 * 1000); // cap at ~4 hours
 }

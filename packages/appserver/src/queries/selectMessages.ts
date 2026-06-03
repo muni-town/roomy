@@ -2,10 +2,10 @@
  * Message selection helper used by `room.getMessages` and `message.getMessage`.
  *
  * Returns fully denormalised message objects with all joins resolved
- * server-side: author, content, replyTo, forwardedFrom, reactions, media, tags.
+ * server-side: author, content, replyTo, forwardedFrom, reactions, media.
  *
  * Strategy: 1 query for the message rows + singleton-edge joins (author,
- * reply, forward), then 4 small batch queries (reactions, tags, image+video+
+ * reply, forward), then 2 small batch queries (reactions, image+video+
  * file+link embeds) keyed on the page's IDs. Constant query count, regardless
  * of page size.
  *
@@ -30,13 +30,13 @@ export interface MessageDto {
   content: string;
   authorDid: string;
   authorName: string;
+  authorHandle?: string;
   authorAvatar?: string;
   timestamp: string;
   replyTo?: string;
   forwardedFrom?: { name: string; roomId: string };
   reactions: Array<ReactionDto>;
   media: Array<{ url: string; type: string; alt?: string }>;
-  tags: string[];
 }
 
 export type SelectScope =
@@ -52,6 +52,7 @@ interface BaseRow {
   timestamp: number | null;
   author_did: string | null;
   author_name: string | null;
+  author_handle: string | null;
   author_avatar: string | null;
   reply_to: string | null;
   forward_target: string | null;
@@ -78,6 +79,7 @@ export function selectMessages(
         author_e.tail as author_did,
         author_info.name as author_name,
         author_info.avatar as author_avatar,
+        author_user.handle as author_handle,
         reply_e.tail as reply_to,
         forward_e.tail as forward_target,
         forward_target_entity.room as forward_target_room,
@@ -87,6 +89,7 @@ export function selectMessages(
       left join edges author_e
         on author_e.head = e.id and author_e.label = 'author'
       left join comp_info author_info on author_info.entity = author_e.tail
+      left join comp_user author_user on author_user.did = author_e.tail
       left join edges reply_e
         on reply_e.head = e.id and reply_e.label = 'reply'
       left join edges forward_e
@@ -123,6 +126,7 @@ export function selectMessages(
           author_e.tail as author_did,
           author_info.name as author_name,
           author_info.avatar as author_avatar,
+          author_user.handle as author_handle,
           reply_e.tail as reply_to,
           forward_e.tail as forward_target,
           forward_target_entity.room as forward_target_room,
@@ -132,6 +136,7 @@ export function selectMessages(
         left join edges author_e
           on author_e.head = e.id and author_e.label = 'author'
         left join comp_info author_info on author_info.entity = author_e.tail
+        left join comp_user author_user on author_user.did = author_e.tail
         left join edges reply_e
           on reply_e.head = e.id and reply_e.label = 'reply'
         left join edges forward_e
@@ -165,6 +170,7 @@ export function selectMessages(
       timestamp: number | null;
       author_did: string | null;
       author_name: string | null;
+      author_handle: string | null;
       author_avatar: string | null;
     }
   >();
@@ -190,12 +196,14 @@ export function selectMessages(
            cc.timestamp as timestamp,
            author_e.tail as author_did,
            author_info.name as author_name,
-           author_info.avatar as author_avatar
+           author_info.avatar as author_avatar,
+           author_user.handle as author_handle
          from entities e
          left join comp_content cc on cc.entity = e.id
          left join edges author_e
            on author_e.head = e.id and author_e.label = 'author'
          left join comp_info author_info on author_info.entity = author_e.tail
+         left join comp_user author_user on author_user.did = author_e.tail
          where e.id in (${ph})`,
       )
       .all(...forwardTargets);
@@ -206,12 +214,13 @@ export function selectMessages(
         timestamp: r.timestamp,
         author_did: r.author_did,
         author_name: r.author_name,
+        author_handle: r.author_handle,
         author_avatar: r.author_avatar,
       });
     }
   }
 
-  // ── Step 3: batch-fetch reactions / tags / embeds keyed by id ─────────
+  // ── Step 3: batch-fetch reactions / embeds keyed by id ─────────
   const idPh = ids.map(() => "?").join(",");
 
   const reactionRows = db
@@ -221,13 +230,6 @@ export function selectMessages(
     >(
       `select entity, reaction, user, reaction_id from comp_reaction
         where entity in (${idPh})`,
-    )
-    .all(...ids);
-
-  const tagRows = db
-    .query<{ head: string; tail: string }, string[]>(
-      `select head, tail from edges
-        where head in (${idPh}) and label = 'tag'`,
     )
     .all(...ids);
 
@@ -300,16 +302,6 @@ export function selectMessages(
     }
   }
 
-  const tagMap = new Map<string, string[]>();
-  for (const t of tagRows) {
-    let arr = tagMap.get(t.head);
-    if (!arr) {
-      arr = [];
-      tagMap.set(t.head, arr);
-    }
-    arr.push(t.tail);
-  }
-
   const mediaMap = new Map<
     string,
     Array<{ url: string; type: string; alt: string | null }>
@@ -331,6 +323,7 @@ export function selectMessages(
     let ts = r.timestamp;
     let authorDid = r.author_did;
     let authorName = r.author_name;
+    let authorHandle = r.author_handle;
     let authorAvatar = r.author_avatar;
 
     if (r.data === null && r.forward_target) {
@@ -341,6 +334,7 @@ export function selectMessages(
         ts = orig.timestamp;
         authorDid = orig.author_did;
         authorName = orig.author_name;
+        authorHandle = orig.author_handle;
         authorAvatar = orig.author_avatar;
       }
     }
@@ -368,6 +362,7 @@ export function selectMessages(
       content,
       authorDid: authorDid ?? "",
       authorName: authorName ?? "",
+      authorHandle: authorHandle,
       authorAvatar: authorAvatar,
       timestamp: ts != null ? new Date(ts).toISOString() : "",
       replyTo: r.reply_to,
@@ -380,7 +375,6 @@ export function selectMessages(
           : null,
       reactions,
       media: mediaForMsg,
-      tags: tagMap.get(r.id) ?? [],
     }) as MessageDto;
   });
 

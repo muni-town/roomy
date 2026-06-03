@@ -25,6 +25,9 @@ export const desiredProperties = createDesiredPropertiesObject({
     type: true,
     reactions: true,
     stickerItems: true,
+    mentions: true,
+    mentionedChannelIds: true,
+    mentionedRoleIds: true,
   },
   guild: {
     id: true,
@@ -77,6 +80,7 @@ export const desiredProperties = createDesiredPropertiesObject({
   },
   member: {
     id: true,
+    guildId: true,
   },
 } satisfies RecursivePartial<TransformersDesiredProperties>);
 

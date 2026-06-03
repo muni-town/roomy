@@ -194,23 +194,7 @@
             'to', cc.idx_to
           )
         ),
-        'forwardedFrom', null,
-        'tags', (
-          select json_group_array(json_object(
-            'snowflake', case
-              when te.tail like 'did:discord:%' then substr(te.tail, 13)
-              else cdo.snowflake
-            end,
-            'name', ti.name,
-            'handle', tu.handle,
-            'roomId', case when te.tail not like 'did:discord:%' then te.tail else null end
-          ))
-          from edges te
-          left join comp_info ti on ti.entity = te.tail
-          left join comp_user tu on tu.did = te.tail
-          left join comp_discord_origin cdo on cdo.entity = te.tail
-          where te.head = e.id and te.label = 'tag'
-        )
+        'forwardedFrom', null
       ) as json, c.timestamp as canonical_timestamp, e.id as msg_id
       from entities e -- message
         join comp_content c on c.entity = e.id -- message content
@@ -293,23 +277,7 @@
             from comp_comment cc
             where cc.entity = orig.id
           ),
-          'forwardedFrom', orig.id,
-          'tags', (
-            select json_group_array(json_object(
-              'snowflake', case
-                when te.tail like 'did:discord:%' then substr(te.tail, 13)
-                else cdo.snowflake
-              end,
-              'name', ti.name,
-              'handle', tu.handle,
-              'roomId', case when te.tail not like 'did:discord:%' then te.tail else null end
-            ))
-            from edges te
-            left join comp_info ti on ti.entity = te.tail
-            left join comp_user tu on tu.did = te.tail
-            left join comp_discord_origin cdo on cdo.entity = te.tail
-            where te.head = orig.id and te.label = 'tag'
-          )
+          'forwardedFrom', orig.id
         ) as json, c.timestamp as canonical_timestamp, fwd.id as msg_id
         from entities fwd -- forward reference entity
           join edges fwd_edge on fwd_edge.head = fwd.id and fwd_edge.label = 'forward' -- forward edge

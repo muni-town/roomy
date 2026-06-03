@@ -42,6 +42,7 @@ interface GetMetadataResult {
   name?: string;
   avatar?: string;
   description?: string;
+  handle?: string;
   joinPolicy: { allowPublicJoin: boolean; allowMemberInvites: boolean };
   isMember: boolean;
   isAdmin: boolean;
@@ -90,6 +91,7 @@ export const getMetadataHandler: QueryHandler<
         name: string | null;
         avatar: string | null;
         description: string | null;
+        handle: string | null;
         allow_public_join: number | null;
         allow_member_invites: number | null;
         sidebar_config: string;
@@ -100,6 +102,7 @@ export const getMetadataHandler: QueryHandler<
            ci.name as name,
            ci.avatar as avatar,
            ci.description as description,
+           cs.handle as handle,
            cs.allow_public_join as allow_public_join,
            cs.allow_member_invites as allow_member_invites,
            cs.sidebar_config as sidebar_config
@@ -223,6 +226,7 @@ export const getMetadataHandler: QueryHandler<
     name: spaceRow.name,
     avatar: spaceRow.avatar,
     description: spaceRow.description,
+    handle: spaceRow.handle,
     joinPolicy: {
       // null = unset → defaults per schema comments.
       allowPublicJoin: spaceRow.allow_public_join !== 0,

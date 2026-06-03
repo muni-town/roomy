@@ -12,6 +12,7 @@ import type { MessageProperties } from "../discord/types.ts";
 import { MsgType } from "../discord/types.ts";
 import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
+import { resolveMentions, type MentionContext } from "./mention-resolver.ts";
 
 const log = createLogger("ingest");
 
@@ -21,6 +22,7 @@ export async function ingestDiscordMessage(
   spaceManager: SpaceManager,
   guildIdOverride?: string,
   spaceDidOverride?: string,
+  resolveChannelName?: (snowflake: string) => Promise<string | undefined>,
 ): Promise<{ synced: number; skipped: number }> {
   const channelId = message.channelId.toString();
   const messageId = message.id.toString();
@@ -65,6 +67,22 @@ export async function ingestDiscordMessage(
     return { synced: 0, skipped: 1 };
   }
 
+  // Pre-resolve channel names from mentionedChannelIds (before per-space loop).
+  // Resolves asynchronously so cache misses can fall back to the REST API.
+  const channelNames = new Map<string, string>();
+  if (resolveChannelName && message.mentionedChannelIds) {
+    const results = await Promise.all(
+      message.mentionedChannelIds.map(async (id) => {
+        const idStr = id.toString();
+        const name = await resolveChannelName(idStr);
+        return { idStr, name } as const;
+      }),
+    );
+    for (const { idStr, name } of results) {
+      if (name) channelNames.set(idStr, name);
+    }
+  }
+
   let synced = 0;
 
   for (const spaceDid of targetSpaces) {
@@ -87,16 +105,37 @@ export async function ingestDiscordMessage(
     // Build attachments
     const attachments = buildAttachments(message, repo, spaceDid);
 
+    // Get connected space
+    const connected = await spaceManager.getOrConnect(spaceDid);
+
+    // Sync author profile before sending the message.
+    // This runs even for content-less messages so that users whose only
+    // Discord activity is embeds, stickers, or reactions still get their
+    // profile synced to Roomy.
+    await syncUserProfile(message.author, [spaceDid], repo, spaceManager);
+
     // Skip messages with no content and no attachments
     if (!message.content && attachments.length === 0) {
       continue;
     }
 
-    // Get connected space
-    const connected = await spaceManager.getOrConnect(spaceDid);
-
-    // Sync author profile before sending the message
-    await syncUserProfile(message.author, [spaceDid], repo, spaceManager);
+    // Resolve Discord mention syntax into clean Markdown (per-space, so
+    // channel mentions resolve to the correct Roomy room ULID).
+    // Resolve room IDs for all mentioned channels in this space.
+    const roomyRoomIds = new Map<string, string>();
+    for (const [snowflake] of channelNames) {
+      const roomyId = repo.getRoomyRoomId(spaceDid, snowflake);
+      if (roomyId) roomyRoomIds.set(snowflake, roomyId);
+    }
+    const mentionCtx: MentionContext = {
+      channelNames,
+      roomyRoomIds,
+    };
+    const resolvedContent = resolveMentions(
+      message.content || "",
+      message.mentions,
+      mentionCtx,
+    );
 
     // Build and send the event
     const eventUlid = newUlid();
@@ -132,7 +171,7 @@ export async function ingestDiscordMessage(
       $type: "space.roomy.message.createMessage.v0",
       body: {
         mimeType: "text/markdown",
-        data: toBytes(new TextEncoder().encode(message.content || "")),
+        data: toBytes(new TextEncoder().encode(resolvedContent)),
       },
       extensions,
     };

@@ -210,6 +210,9 @@
             "description": {
               "type": "string"
             },
+            "handle": {
+              "type": "string"
+            },
             "name": {
               "type": "string"
             }

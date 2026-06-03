@@ -39,6 +39,7 @@ SCOPE+=" rpc:space.roomy.space.sendEvents?aud=*"
 SCOPE+=" rpc:space.roomy.space.createSpace?aud=*"
 SCOPE+=" rpc:space.roomy.space.joinSpace?aud=*"
 SCOPE+=" rpc:space.roomy.space.leaveSpace?aud=*"
+SCOPE+=" rpc:space.roomy.space.setHandle?aud=*"
 SCOPE+=" rpc:space.roomy.space.getCalendarLink?aud=*"
 SCOPE+=" rpc:space.roomy.space.getCalendarEvents?aud=*"
 

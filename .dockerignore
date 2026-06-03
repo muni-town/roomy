@@ -5,7 +5,6 @@
 .git
 data/
 packages/appserver-testing
-packages/discord-bridge
 packages/discord-bridge-legacy
 Dockerfile
 Dockerfile.appserver

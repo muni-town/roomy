@@ -16,6 +16,7 @@ export const Space = type({
   "name?": "string",
   "avatar?": "string",
   "description?": "string",
+  "handle?": "string",
   unreadCount: "number",
   isMember: "boolean",
   isAdmin: "boolean",

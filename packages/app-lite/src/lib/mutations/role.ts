@@ -43,3 +43,31 @@ export async function deleteRole(spaceId: string, roleId: string): Promise<void>
     },
   ]);
 }
+
+export async function addMemberRole(
+  spaceId: string,
+  opts: { roleId: string; userDid: string },
+): Promise<void> {
+  await sendEvents(spaceId, [
+    {
+      id: newUlid(),
+      $type: "space.roomy.role.addMemberRole.v0",
+      roleId: opts.roleId,
+      userDid: opts.userDid,
+    },
+  ]);
+}
+
+export async function removeMemberRole(
+  spaceId: string,
+  opts: { roleId: string; userDid: string },
+): Promise<void> {
+  await sendEvents(spaceId, [
+    {
+      id: newUlid(),
+      $type: "space.roomy.role.removeMemberRole.v0",
+      roleId: opts.roleId,
+      userDid: opts.userDid,
+    },
+  ]);
+}

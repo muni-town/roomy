@@ -7,42 +7,6 @@
   import { goto } from "$app/navigation";
   import { renderMarkdownSanitized } from "@roomy/design/utils";
 
-  function resolveDiscordMentions(
-    content: string,
-    tags: {
-      snowflake: string;
-      name: string | null;
-      handle: string | null;
-      roomId: string | null;
-    }[],
-  ): string {
-    if (!tags.length) return content;
-    const userMap = new Map(
-      tags
-        .filter((t) => !t.roomId)
-        .map((t) => [t.snowflake, t.name || t.handle || t.snowflake]),
-    );
-    const roomMap = new Map(
-      tags
-        .filter((t) => t.roomId)
-        .map((t) => [
-          t.snowflake,
-          { name: t.name || t.snowflake, roomId: t.roomId },
-        ]),
-    );
-    return content
-      .replace(/<@!?(\d+)>/g, (_, snowflake) => {
-        const name = userMap.get(snowflake) ?? snowflake;
-        const escaped = name.replace(/[_*~`[\]\\]/g, "\\$&");
-        return `[@${escaped}]()`;
-      })
-      .replace(/<#(\d+)>/g, (_, snowflake) => {
-        const room = roomMap.get(snowflake);
-        const name = room?.name ?? snowflake;
-        const escaped = name.replace(/[_*~`[\]\\]/g, "\\$&");
-        return `[#${escaped}](${room?.roomId || ""})`;
-      });
-  }
   import type { Message } from "../ChatArea.svelte";
   import { peer, peerStatus } from "$lib/workers";
   import { getAppState } from "$lib/queries";
@@ -245,7 +209,7 @@
     </div>
   {:else}
     {@html renderMarkdownSanitized(
-      resolveDiscordMentions(message.content, message.tags),
+      message.content,
     )}
   {/if}
 {/snippet}
