@@ -10,9 +10,27 @@
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
   import { Tooltip } from "bits-ui";
 
+  // Debug: log all public env vars
+  import { env as dynamicEnv } from "$env/dynamic/public";
+
+  console.log("[app-lite env debug] import.meta.env (static):", {
+    VITE_APPSERVER_DID: import.meta.env.VITE_APPSERVER_DID,
+    VITE_APPSERVER_WS_ORIGIN: import.meta.env.VITE_APPSERVER_WS_ORIGIN,
+    VITE_PORT: import.meta.env.VITE_PORT,
+    VITE_OAUTH_PUBLIC_CLIENT: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT,
+    VITE_STREAM_HANDLE_NSID: import.meta.env.VITE_STREAM_HANDLE_NSID,
+  });
+
   let { children } = $props();
 
   onMount(() => {
+    console.log("[app-lite env debug] $env/dynamic/public:", {
+      PUBLIC_PDS: dynamicEnv.PUBLIC_PDS,
+      PUBLIC_PDS_HANDLE_SUFFIX: dynamicEnv.PUBLIC_PDS_HANDLE_SUFFIX,
+      PUBLIC_PDS_INVITE_CODE: dynamicEnv.PUBLIC_PDS_INVITE_CODE,
+      PUBLIC_DISCORD_BRIDGE: dynamicEnv.PUBLIC_DISCORD_BRIDGE,
+      PUBLIC_BRIDGE_DID: dynamicEnv.PUBLIC_BRIDGE_DID,
+    });
     init();
   });
 
