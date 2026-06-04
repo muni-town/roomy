@@ -33,6 +33,10 @@ export const CONFIG = {
   usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
   profileSpaceNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
+  personalStreamNsid:
+    import.meta.env.VITE_PERSONAL_STREAM_NSID || "space.roomy.space.personal.dev",
+  personalStreamSchemaVersion:
+    import.meta.env.VITE_PERSONAL_STREAM_SCHEMA_VERSION || "4",
 };
 
 export const OAUTH_SCOPE = [
@@ -42,5 +46,6 @@ export const OAUTH_SCOPE = [
   "blob:*/*",
   "repo:space.roomy.upload.v0", // Grant all actions (create, update, delete)
   `repo:${CONFIG.profileSpaceNsid}`,
+  `repo:${CONFIG.personalStreamNsid}`,
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
 ].join(" ");
