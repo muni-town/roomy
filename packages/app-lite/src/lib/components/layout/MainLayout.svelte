@@ -10,6 +10,7 @@
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
   import ToggleNavigation from "@roomy/design/components/helper/ToggleNavigation.svelte";
   import { navbar } from "./navbar.svelte";
+  import SyncStatusBanner from "./SyncStatusBanner.svelte";
 
   let {
     serverBar,
@@ -47,6 +48,7 @@
   </Navbar>
 
   <div class="flex flex-col h-full max-h-full overflow-y-hidden">
+    <SyncStatusBanner />
     {@render children()}
   </div>
 </div>
