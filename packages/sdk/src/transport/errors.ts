@@ -60,7 +60,7 @@ export function getRetryAfterMs(err: unknown, defaultMs = 5000): number | null {
   if (err && typeof err === "object") {
     const headers = (err as Record<string, unknown>).headers;
     if (headers && typeof headers === "object") {
-      const ra = (headers as Record<string, unknown>).get?.("retry-after");
+      const ra = (headers as Headers).get("retry-after");
       if (typeof ra === "string") {
         const sec = Number(ra);
         if (Number.isFinite(sec) && sec > 0) return sec * 1000;
