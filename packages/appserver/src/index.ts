@@ -3,6 +3,7 @@ import { Router as InvalidationRouter } from "./invalidation/index.ts";
 import { setInvalidationRouter } from "./materialization/registry.ts";
 import { openDb } from "./db/db.ts";
 import { attachReadState, openReadStateDb } from "./db/readStateDb.ts";
+import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
@@ -49,6 +50,16 @@ const mainDb = openDb();
 const readStateDb = openReadStateDb();
 // ATTACH read-state to main DB so SQL can reference readstate.read_positions.
 attachReadState(mainDb, readStateDb);
+
+// ─── Periodic maintenance ──────────────────────────────────────────────
+// Purge stale user_thread_activity rows older than 72 hours once per hour.
+setInterval(() => {
+  const cutoff = Date.now() - 72 * 60 * 60 * 1000;
+  const purged = purgeStaleThreadActivity(mainDb, cutoff);
+  if (purged > 0) {
+    console.log(`[maintenance] purged ${purged} stale user_thread_activity rows`);
+  }
+}, 60 * 60 * 1000); // 1 hour
 
 // ─── Invalidation + Sync ────────────────────────────────────────────────
 // Singleton router — live events flow through every SpaceMaterializer

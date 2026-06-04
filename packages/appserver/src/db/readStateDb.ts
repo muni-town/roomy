@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
  * Bump whenever readStateSchema.sql changes.
  * Uses a separate versioning namespace from the materialisation DB.
  */
-export const READSTATE_SCHEMA_VERSION = "1";
+export const READSTATE_SCHEMA_VERSION = "2";
 
 const DEFAULT_DB_PATH =
   process.env.READSTATE_DB_PATH ?? "data/roomy-readstate.sqlite";
@@ -64,35 +64,110 @@ export function openReadStateDb(opts: OpenReadStateDbOpts = {}): Database {
 }
 
 /**
- * Apply readStateSchema.sql and reconcile the version row.
+ * A single read-state schema migration.
+ * Each migration applies DDL/DML needed to reach the next schema version.
+ * Migrations must be idempotent (use IF NOT EXISTS / IF EXISTS) so that
+ * re-applying the same migration is safe (though in practice each runs
+ * inside its own transaction, so a crash mid-migration rolls back entirely).
+ *
+ * Adding a migration:
+ *   1. Bump `READSTATE_SCHEMA_VERSION`
+ *   2. Update `readStateSchema.sql` to reflect the final desired schema
+ *   3. Append a `Migration` entry to the `MIGRATIONS` array
+ */
+interface Migration {
+  version: number;
+  name: string;
+  up: (db: Database) => void;
+}
+
+const MIGRATIONS: Migration[] = [
+  {
+    version: 1,
+    name: "initial",
+    up: () => {
+      // Schema v1 is the base — created by readStateSchema.sql directly.
+      // This entry exists so the migration machinery accounts for it.
+    },
+  },
+  {
+    version: 2,
+    name: "user_thread_activity",
+    up: (db) => {
+      db.exec(`
+        create table if not exists user_thread_activity (
+          user_did      text not null,
+          thread_id     text not null,
+          last_active_at integer not null,
+          updated_at    integer not null default (unixepoch() * 1000),
+          primary key (user_did, thread_id)
+        ) strict;
+
+        create index if not exists idx_user_thread_activity_user
+          on user_thread_activity(user_did, last_active_at desc);
+      `);
+    },
+  },
+];
+
+/**
+ * Apply readStateSchema.sql and run any pending migrations.
  *
  * Unlike the materialisation DB (which throws on version mismatch and
- * expects a wipe + re-backfill), the read-state DB should handle
- * migrations. For now we throw on mismatch — migration logic will be
- * added when the schema actually changes.
+ * expects a wipe + re-backfill), the read-state DB runs migrations.
+ * The schema.sql is always applied fresh (it uses CREATE IF NOT EXISTS),
+ * then any pending migrations run in order to bring the on-disk
+ * version up to READSTATE_SCHEMA_VERSION.
  */
 export function initializeReadStateSchema(db: Database): void {
+  // Always apply the full schema (idempotent via IF NOT EXISTS).
+  // This ensures a fresh DB has the latest schema directly, without
+  // needing to run every migration sequentially.
   const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
   db.exec(schemaSql);
 
-  const row = db
+  // Determine current on-disk version. The schema_version table stores
+  // version as text; max() works lexicographically, which is safe because
+  // versions are monotonically increasing positive integers.
+  const currentVersionRow = db
     .query<
-      { version: string },
+      { v: string | null },
       []
-    >("select version from readstate_schema_version where id = 1")
+    >("select max(version) as v from readstate_schema_version")
     .get();
+  const currentVersion = Number(currentVersionRow?.v ?? 0);
 
-  if (!row) {
-    db.run("insert into readstate_schema_version (id, version) values (1, ?)", [
-      READSTATE_SCHEMA_VERSION,
-    ]);
-    return;
+  // Run pending migrations in order.
+  // Each migration runs inside its own transaction so a crash mid-migration
+  // rolls back cleanly without leaving the DB in a partial state.
+  const upsertVersion = db.prepare(
+    "insert or replace into readstate_schema_version (id, version) values (1, ?)",
+  );
+
+  for (const migration of MIGRATIONS) {
+    if (migration.version <= currentVersion) continue;
+
+    db.transaction(() => {
+      migration.up(db);
+      upsertVersion.run(migration.version);
+    })();
   }
 
-  if (row.version !== READSTATE_SCHEMA_VERSION) {
+  // Verify the final version matches expected (sanity check).
+  const finalVersionRow = db
+    .query<
+      { v: string | null },
+      []
+    >("select max(version) as v from readstate_schema_version")
+    .get();
+  const finalVersion = Number(finalVersionRow?.v ?? 0);
+
+  if (finalVersion !== Number(READSTATE_SCHEMA_VERSION)) {
     throw new Error(
-      `Read-state schema version mismatch: on disk = ${row.version}, expected = ${READSTATE_SCHEMA_VERSION}. ` +
-        `Migration is required.`,
+      `Read-state schema version mismatch: on disk = ${finalVersion}, ` +
+        `expected = ${READSTATE_SCHEMA_VERSION}. ` +
+        `If this is a fresh start after a downgrade, delete or reset ` +
+        `the read-state database at ${db.path}.`,
     );
   }
 }

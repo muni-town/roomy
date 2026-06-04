@@ -30,7 +30,8 @@ export async function resolveAppserverWsOrigin(appserverDid: string): Promise<st
 	}
 
 	const endpoint: string = service.serviceEndpoint;
-	return endpoint.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+	// Strip trailing slash so callers can safely append paths like /xrpc/...
+	return endpoint.replace(/^https:/, "wss:").replace(/^http:/, "ws:").replace(/\/+$/, "");
 }
 
 async function resolveDidDocument(did: string): Promise<any> {

@@ -62,11 +62,17 @@ export function createSyncContext(deps: {
   async function connect() {
     if (connection) return;
 
-    const wsOrigin = await resolveAppserverWsOrigin(appserverDid);
-    log(`Resolved WS origin: ${wsOrigin}`);
+    let wsOrigin: string;
+    if (CONFIG.appserverWsOrigin) {
+      wsOrigin = CONFIG.appserverWsOrigin;
+      log(`Using configured WS origin: ${wsOrigin}`);
+    } else {
+      wsOrigin = await resolveAppserverWsOrigin(appserverDid);
+      log(`Resolved WS origin from DID: ${wsOrigin}`);
+    }
 
     connection = new SyncConnection({
-      wsUrl: `${wsOrigin}/xrpc/space.roomy.sync.subscribe`,
+      wsUrl: `${wsOrigin.replace(/\/+$/, "")}/xrpc/space.roomy.sync.subscribe`,
       fetchTicket,
       logger: log,
     });

@@ -21,3 +21,14 @@ create table if not exists read_positions (
   updated_at  integer not null default (unixepoch() * 1000),
   primary key (user_did, room_id)
 ) strict;
+
+create table if not exists user_thread_activity (
+  user_did      text not null,
+  thread_id     text not null,
+  last_active_at integer not null,   -- unix epoch milliseconds
+  updated_at    integer not null default (unixepoch() * 1000),
+  primary key (user_did, thread_id)
+) strict;
+
+create index if not exists idx_user_thread_activity_user
+  on user_thread_activity(user_did, last_active_at desc);

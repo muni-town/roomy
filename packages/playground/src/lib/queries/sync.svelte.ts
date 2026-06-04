@@ -58,7 +58,7 @@ export function createSyncContext(deps: {
 
     // Build SDK connection. SyncConnection handles ticket fetch + reconnect.
     connection = new SyncConnection({
-      wsUrl: `${wsOrigin}/xrpc/space.roomy.sync.subscribe`,
+      wsUrl: `${wsOrigin.replace(/\/+$/, "")}/xrpc/space.roomy.sync.subscribe`,
       fetchTicket,
       logger: log,
     });
