@@ -58,6 +58,15 @@ COPY packages/design/ packages/design/
 COPY packages/app-lite/ packages/app-lite/
 
 RUN pnpm --filter @roomy-space/sdk build
+
+# Debug: verify PUBLIC_ env vars are present at build time
+RUN echo "[app-lite build debug] PUBLIC_PDS=$PUBLIC_PDS" && \
+    echo "[app-lite build debug] PUBLIC_PDS_HANDLE_SUFFIX=$PUBLIC_PDS_HANDLE_SUFFIX" && \
+    echo "[app-lite build debug] PUBLIC_PDS_INVITE_CODE=$PUBLIC_PDS_INVITE_CODE" && \
+    echo "[app-lite build debug] PUBLIC_DISCORD_BRIDGE=$PUBLIC_DISCORD_BRIDGE" && \
+    echo "[app-lite build debug] PUBLIC_BRIDGE_DID=$PUBLIC_BRIDGE_DID" && \
+    echo "[app-lite build debug] VITE_APPSERVER_DID=$VITE_APPSERVER_DID"
+
 RUN bash packages/app-lite/scripts/build-prod.sh
 
 FROM caddy:alpine
