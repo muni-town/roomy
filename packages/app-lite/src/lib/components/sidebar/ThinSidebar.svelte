@@ -19,6 +19,10 @@
   type LastLogin = { handle: string; did: string; avatar: string };
   let lastLogin = $state<LastLogin | undefined>(undefined);
 
+  const versionLabel = $derived(
+    `Roomy ${__APP_VERSION__}${__BUILD_ID__ ? ` ( ${__BUILD_ID__} )` : ""}`,
+  );
+
   $effect(() => {
     const raw = localStorage.getItem("last-login");
     lastLogin = raw ? JSON.parse(raw) : undefined;
@@ -76,6 +80,7 @@
     avatar={lastLogin?.avatar || undefined}
     displayName={lastLogin?.handle}
     handle={lastLogin?.handle}
+    {versionLabel}
     onLogout={logout}
   />
 </section>
