@@ -24,7 +24,7 @@ SCOPE+=" rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview"
 SCOPE+=" blob:*/*"
 
 # ── Repo Scopes (blob uploads + handle writes) ───────────────────────────
-SCOPE+=" repo:space.roomy.upload.v0?action=create"
+SCOPE+=" repo:space.roomy.upload.v0"
 SCOPE+=" repo:${VITE_STREAM_HANDLE_NSID:-space.roomy.space.handle.dev}"
 
 # ── Appserver RPCs (must match APPSERVER_RPCS in config.ts) ──────────────
