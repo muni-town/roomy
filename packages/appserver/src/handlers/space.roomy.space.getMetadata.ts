@@ -11,10 +11,24 @@ import { roomAccess, spaceAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { getReadPositions } from "../queries/readPositions.ts";
+import { queryActiveThreads, resolveThreadsByIds } from "../queries/userActiveThreads.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
+
+interface ActiveSidebarThread {
+  id: string;
+  name?: string;
+  activity: {
+    latestTimestamp: string | null;
+    latestMembers: Array<{ did: string; name: string | null; avatar: string | null }>;
+  };
+  canRead: boolean;
+  canWrite: boolean;
+  unreadCount: number;
+  lastRead: string | null;
+}
 
 interface SidebarChannel {
   id: string;
@@ -24,6 +38,7 @@ interface SidebarChannel {
   canWrite: boolean;
   unreadCount: number;
   lastRead?: string;
+  activeThreads?: ActiveSidebarThread[];
 }
 
 interface SidebarCategory {
@@ -197,6 +212,69 @@ export const getMetadataHandler: QueryHandler<
       if (referencedIds.has(row.id)) continue;
       const ch = buildChannel(row.id);
       if (ch) orphans.push(ch);
+    }
+
+    // ── Active threads ────────────────────────────────────────────────
+    // Fetch up to 8 threads the user has recently interacted with and
+    // distribute them into their parent channels for the sidebar.
+    const activeThreadEntries = queryActiveThreads(db, userDid, spaceId);
+
+    if (activeThreadEntries.length > 0) {
+      const threadIds = activeThreadEntries.map((t) => t.id);
+      const threadMetaMap = resolveThreadsByIds(db, threadIds);
+
+      // Build active thread objects with access checks and read positions.
+      const threadReadPositions = getReadPositions(db, userDid, threadIds);
+      const activeThreadsByParent = new Map<string, ActiveSidebarThread[]>();
+
+      for (const entry of activeThreadEntries) {
+        const meta = threadMetaMap.get(entry.id);
+        if (!meta) continue;
+
+        const acc = roomAccess(db, entry.id, userDid);
+        if (!acc.canRead) continue;
+
+        const parentId = meta.canonicalParent;
+        if (!parentId) continue; // orphan thread — not navigable
+
+        const pos = threadReadPositions.get(entry.id);
+        const threadItem: ActiveSidebarThread = {
+          id: entry.id,
+          name: meta.name ?? undefined,
+          activity: {
+            latestTimestamp: meta.latestTimestamp,
+            latestMembers: meta.latestMembers,
+          },
+          canRead: acc.canRead,
+          canWrite: acc.canWrite,
+          unreadCount: pos?.unreadCount ?? 0,
+          lastRead: pos?.lastRead ?? null,
+        };
+
+        const existing = activeThreadsByParent.get(parentId) ?? [];
+        existing.push(threadItem);
+        activeThreadsByParent.set(parentId, existing);
+      }
+
+      // Distribute threads into channels, sorted by last active (already
+      // ordered from queryActiveThreads).
+      if (activeThreadsByParent.size > 0) {
+        const setActiveThreads = (ch: SidebarChannel) => {
+          const threads = activeThreadsByParent.get(ch.id);
+          if (threads && threads.length > 0) {
+            ch.activeThreads = threads;
+          }
+        };
+
+        for (const cat of categories) {
+          for (const ch of cat.channels) {
+            setActiveThreads(ch);
+          }
+        }
+        for (const ch of orphans) {
+          setActiveThreads(ch);
+        }
+      }
     }
   }
 

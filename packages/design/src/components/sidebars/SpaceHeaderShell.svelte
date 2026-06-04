@@ -58,7 +58,7 @@
         {...props}
         class="flex justify-between items-center mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 w-full text-left transition-colors"
       >
-        <div class="flex items-center gap-4 max-w-full min-w-0">
+        <div class="flex items-center gap-2 max-w-full min-w-0">
           {@render avatar()}
 
           <h1

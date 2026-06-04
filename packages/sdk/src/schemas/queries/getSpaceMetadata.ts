@@ -13,6 +13,27 @@ export const DeletedRoom = type({
   "name?": "string",
 });
 
+export const ActiveThreadMember = type({
+  did: "string",
+  "name?": "string | null",
+  "avatar?": "string | null",
+});
+
+export const ThreadActivity = type({
+  "latestTimestamp?": "string | null",
+  latestMembers: ActiveThreadMember.array(),
+});
+
+export const ActiveSidebarThread = type({
+  id: "string",
+  "name?": "string",
+  activity: ThreadActivity,
+  canRead: "boolean",
+  canWrite: "boolean",
+  unreadCount: "number",
+  "lastRead?": "string | null",
+});
+
 export const SidebarChannel = type({
   id: "string",
   "name?": "string",
@@ -21,6 +42,7 @@ export const SidebarChannel = type({
   canWrite: "boolean",
   unreadCount: "number",
   "lastRead?": "string",
+  "activeThreads?": ActiveSidebarThread.array(),
 });
 
 export const SidebarCategory = type({

@@ -102,6 +102,12 @@ function handleCreateMessage(event: AppliedEvent): InvalidationEvent[] {
   // Sidebar may update (unread count on the channel).
   signals.push(...invalidateRoom(roomId, spaceId));
 
+  // If the message was sent in a thread, also invalidate sidebar for the
+  // author so activeThreads refreshes.
+  signals.push(
+    invalidate("space.roomy.space.getMetadata", { spaceId }, event.user),
+  );
+
   return signals;
 }
 
@@ -163,8 +169,9 @@ function handleReactionChange(event: AppliedEvent): InvalidationEvent[] {
   if (!roomId) return [];
 
   const details = event.details ?? {};
+  const spaceId = event.streamDid;
 
-  return [
+  const signals: InvalidationEvent[] = [
     invalidate("space.roomy.room.getMessages", { roomId }),
     ...(details.messageId
       ? [
@@ -174,6 +181,16 @@ function handleReactionChange(event: AppliedEvent): InvalidationEvent[] {
         ]
       : []),
   ];
+
+  // Reaction in a thread may update the user's activeThreads sidebar.
+  // Scope invalidation to the reacting user only.
+  if (roomId) {
+    signals.push(
+      invalidate("space.roomy.space.getMetadata", { spaceId }, event.user),
+    );
+  }
+
+  return signals;
 }
 
 // ─── Room events ────────────────────────────────────────────────────────

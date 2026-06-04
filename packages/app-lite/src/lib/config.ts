@@ -23,6 +23,12 @@ const APPSERVER_RPCS = [
 export const CONFIG = {
   appserverDid:
     import.meta.env.VITE_APPSERVER_DID || "did:web:appserver.roomy.chat",
+  /**
+   * Override the WebSocket origin for the sync connection.
+   * When set, bypasses DID document resolution and uses this URL directly.
+   * Useful for local development: VITE_APPSERVER_WS_ORIGIN=ws://127.0.0.1:8080
+   */
+  appserverWsOrigin: import.meta.env.VITE_APPSERVER_WS_ORIGIN || null,
   port: Number(import.meta.env.VITE_PORT) || 5180,
   usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
   profileSpaceNsid:

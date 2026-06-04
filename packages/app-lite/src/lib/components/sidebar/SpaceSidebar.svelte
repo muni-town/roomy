@@ -506,20 +506,19 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
       hasUnreadDot={channel.unreadCount > 0}
       unreadCount={channel.unreadCount}
       showUnreadCount={channel.unreadCount > 0}
-    >
-      {#if !isEditing && isActive && roomMetaQuery.data?.recentThreads?.length}
-        <LinkedRoomList
-          rooms={roomMetaQuery.data.recentThreads.map((t) => ({
-            id: t.id,
-            name: t.name ?? t.id,
-            unreadCount: t.unreadCount,
-            lastRead: -1,
-          }))}
-          currentRoomId={page.params.room}
-          showUnreadCount={false}
-          hrefFor={(threadId: string) => `/${spaceId}/${threadId}`}
-        />
-      {/if}
-    </SidebarItemShell>
+    />
+    {#if !isEditing && channel.activeThreads?.length}
+      <LinkedRoomList
+        rooms={channel.activeThreads.map((t) => ({
+          id: t.id,
+          name: t.name ?? t.id,
+          unreadCount: t.unreadCount,
+          lastRead: t.lastRead ? new Date(t.lastRead).getTime() : -1,
+        }))}
+        currentRoomId={page.params.room}
+        showUnreadCount={true}
+        hrefFor={(threadId: string) => `/${spaceId}/${threadId}`}
+      />
+    {/if}
   </div>
 {/snippet}
