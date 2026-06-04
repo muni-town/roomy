@@ -6,7 +6,7 @@
  */
 export { agentQuery, agentProcedure } from "./xrpc";
 export { resolveAppserverWsOrigin } from "./did-resolve";
-export { XrpcResponseValidationError } from "./errors";
+export { XrpcResponseValidationError, RateLimitError, isRateLimitError, getRetryAfterMs } from "./errors";
 export {
   QUERY_SCHEMAS,
   PROCEDURE_SCHEMAS,

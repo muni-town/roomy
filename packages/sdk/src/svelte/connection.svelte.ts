@@ -21,6 +21,7 @@ export type ConnectionState =
   | "disconnected"
   | "connecting"
   | "connected"
+  | "reconnecting"
   | "error";
 
 /**
@@ -43,8 +44,9 @@ export interface SyncConnectionLike {
 function mapConnectionStatus(status: ConnectionStatus): ConnectionState {
   switch (status.state) {
     case "connecting":
-    case "reconnecting":
       return "connecting";
+    case "reconnecting":
+      return "reconnecting";
     case "open":
       return "connected";
     case "closing":
@@ -74,22 +76,41 @@ function mapConnectionStatus(status: ConnectionStatus): ConnectionState {
  */
 export function useConnectionStatus(
   getConnection: () => SyncConnectionLike | null,
-): { readonly state: ConnectionState } {
+): { readonly state: ConnectionState; readonly reconnectAttempt: number; readonly reconnectDelayMs: number } {
   let state = $state<ConnectionState>("disconnected");
+  let reconnectAttempt = $state(0);
+  let reconnectDelayMs = $state(0);
 
   $effect(() => {
     const conn = getConnection();
     if (!conn) {
       state = "disconnected";
+      reconnectAttempt = 0;
+      reconnectDelayMs = 0;
       return;
     }
 
     // Seed from current status immediately.
-    state = mapConnectionStatus(conn.status);
+    const current = conn.status;
+    state = mapConnectionStatus(current);
+    if (current.state === "reconnecting") {
+      reconnectAttempt = current.attempt;
+      reconnectDelayMs = current.delayMs;
+    } else {
+      reconnectAttempt = 0;
+      reconnectDelayMs = 0;
+    }
 
     // Subscribe to future changes.
     const unsubscribe = conn.onStatusChange((s: ConnectionStatus) => {
       state = mapConnectionStatus(s);
+      if (s.state === "reconnecting") {
+        reconnectAttempt = s.attempt;
+        reconnectDelayMs = s.delayMs;
+      } else {
+        reconnectAttempt = 0;
+        reconnectDelayMs = 0;
+      }
     });
 
     return unsubscribe;
@@ -98,6 +119,12 @@ export function useConnectionStatus(
   return {
     get state() {
       return state;
+    },
+    get reconnectAttempt() {
+      return reconnectAttempt;
+    },
+    get reconnectDelayMs() {
+      return reconnectDelayMs;
     },
   };
 }
