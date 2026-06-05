@@ -79,7 +79,10 @@ export async function handleChannelCreate(
   const guildId = channel.guildId?.toString();
 
   if (!guildId) return;
-  if (!CHANNEL_TYPES.has(channel.type)) return;
+  // Defense-in-depth: also exclude thread types explicitly, in case Discord
+  // dispatches CHANNEL_CREATE for a thread-type channel (e.g. during
+  // gateway replay or a reconnect-resume edge case).
+  if (!CHANNEL_TYPES.has(channel.type) || THREAD_TYPES.has(channel.type)) return;
 
   let targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
 
