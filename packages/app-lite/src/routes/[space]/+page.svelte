@@ -19,6 +19,6 @@
 
 <main class="h-full overflow-y-auto px-4 py-6">
   <div class="mx-auto max-w-2xl">
-    <ActivityFeed {spaceId} limit={50} />
+    <ActivityFeed {spaceId} limit={50} showSpaceInfo={false} />
   </div>
 </main>

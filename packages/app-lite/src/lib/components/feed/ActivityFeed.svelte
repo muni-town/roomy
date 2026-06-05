@@ -4,7 +4,7 @@
   import { renderMarkdownSanitized } from "@roomy/design/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
 
-  let { spaceId, limit = 20 }: { spaceId?: string; limit?: number } = $props();
+  let { spaceId, showSpaceInfo = true, limit = 20 }: { spaceId?: string; showSpaceInfo?: boolean; limit?: number } = $props();
 
   const feedQuery = createActivityFeedQuery(() => ({ spaceId, limit }));
 
@@ -53,22 +53,24 @@
         >
           <!-- Header: space avatar + space/channel context -->
           <div class="flex items-center gap-2 text-xs text-base-500">
-            {#if item.spaceAvatar || item.spaceName}
-              <SpaceAvatar
-                src={resolveBlobUrl(item.spaceAvatar)}
-                id={item.spaceId}
-                name={item.spaceName ?? undefined}
-                size={30}
-              />
-            {/if}
-            {#if item.spaceName}
-              <span class="font-medium">{item.spaceName}</span>
-            {/if}
-            {#if item.channelName}
-              <span>in #{item.channelName}</span>
+            {#if showSpaceInfo}
+              {#if item.spaceAvatar || item.spaceName}
+                <SpaceAvatar
+                  src={resolveBlobUrl(item.spaceAvatar)}
+                  id={item.spaceId}
+                  name={item.spaceName ?? undefined}
+                  size={30}
+                />
+              {/if}
+              {#if item.spaceName}
+                <span class="font-medium">{item.spaceName}</span>
+              {/if}
             {/if}
             {#if item.threadName}
               <span class="truncate">{item.threadName}</span>
+            {/if}
+            {#if item.channelName}
+              <span>#{item.channelName}</span>
             {/if}
             {#if item.unreadCount > 0}
               <span

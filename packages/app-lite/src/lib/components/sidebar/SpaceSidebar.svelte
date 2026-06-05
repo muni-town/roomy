@@ -91,6 +91,7 @@ import { createSpacesQuery } from "$lib/queries/spaces";
   let createAccessMode = $state<"open" | "roles">("open");
   let createRolePermissions = $state<Record<string, Permission>>({});
   let createDefaultAccess = $state<Permission>("readwrite");
+  const isHomepage = $derived(page.route.id === "/")
 
   let createModalOpen = $state(false);
 
@@ -367,7 +368,7 @@ import { createSpacesQuery } from "$lib/queries/spaces";
   {#snippet header()}
     {#if showSpacePicker}
       <!-- Roomy home card (navigates to homepage when in picker-inside-space mode) -->
-      <RoomyHomeCard onClick={() => {if (spaceId) {showSpacePicker = false; goto("/");}}} />
+      <RoomyHomeCard onClick={() => {if (spaceId) {showSpacePicker = false; goto("/");}}} small={!isHomepage} />
       <!-- Current space card, always at the top (only when on a space page) -->
       {#if spaceId}
         {#each joinedSpaces as space (space.id)}
