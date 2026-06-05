@@ -14,6 +14,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { decodeContent } from "../db/content.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
 
 export interface ReactionDto {
@@ -397,19 +398,4 @@ export function selectMessages(
   }
 
   return { messages, nextCursor };
-}
-
-function decodeContent(
-  mime: string | null,
-  data: Buffer | Uint8Array | null,
-): string {
-  if (data === null) return "";
-  // The content blob is opaque from the appserver's perspective — for
-  // text/* we decode utf-8; for everything else we return base64 so the
-  // wire format stays JSON-safe. Real callers care about text/markdown.
-  const buf = data instanceof Buffer ? data : Buffer.from(data);
-  if (!mime || mime.startsWith("text/") || mime === "application/json") {
-    return buf.toString("utf8");
-  }
-  return buf.toString("base64");
 }

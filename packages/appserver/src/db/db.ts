@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
  * `.7`: getSpaces/hydration now read membership from `joinedSpace` edges
  * instead of `comp_space.hidden`; needs a re-materialise to seed the edges.
  */
-export const SCHEMA_VERSION = "7-appserver.8";
+export const SCHEMA_VERSION = "7-appserver.9";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 

@@ -1,0 +1,137 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.getActivityFeed",
+  "defs": {
+    "author": {
+      "type": "object",
+      "required": [
+        "did"
+      ],
+      "properties": {
+        "did": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "messages": {
+      "type": "object",
+      "required": [
+        "author",
+        "content",
+        "id"
+      ],
+      "properties": {
+        "author": {
+          "type": "ref",
+          "ref": "#author"
+        },
+        "content": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      }
+    },
+    "feed": {
+      "type": "object",
+      "required": [
+        "activityType",
+        "lastActivityAt",
+        "messages",
+        "spaceId",
+        "threadId",
+        "unreadCount"
+      ],
+      "properties": {
+        "activityType": {
+          "type": "string",
+          "knownValues": [
+            "message"
+          ]
+        },
+        "lastActivityAt": {
+          "type": "string"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#messages"
+          }
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "unreadCount": {
+          "type": "integer"
+        },
+        "channelId": {
+          "type": "string"
+        },
+        "channelName": {
+          "type": "string"
+        },
+        "spaceAvatar": {
+          "type": "string"
+        },
+        "spaceName": {
+          "type": "string"
+        },
+        "threadName": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "feed"
+          ],
+          "properties": {
+            "feed": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#feed"
+              }
+            },
+            "cursor": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

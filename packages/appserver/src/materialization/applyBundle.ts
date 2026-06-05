@@ -19,6 +19,7 @@ import {
   setMessageSortIdxByTimestamp,
 } from "./sortIdx.ts";
 import { isThread, upsertUserThreadActivity } from "../queries/userActiveThreads.ts";
+import { upsertActivityItem } from "./activityItem.ts";
 import { decodeTime } from "ulidx";
 
 const decodeTimeFromId = (id: string): number => decodeTime(id);
@@ -44,6 +45,19 @@ export function applyBundle(
 
     setMessageSortIdxByTimestamp(db, bundle.event);
     setMessageSortIdxByReorder(db, opts.streamId, bundle.event);
+
+    // Activity feed: upsert the activity item for every createMessage event
+    // (including backfill, so existing rooms get populated).
+    if (
+      bundle.event.$type === "space.roomy.message.createMessage.v0" &&
+      bundle.event.room
+    ) {
+      upsertActivityItem(db, {
+        roomId: bundle.event.room,
+        spaceId: opts.streamId,
+        messageId: bundle.event.id,
+      });
+    }
 
     if (
       !opts.isBackfill &&
