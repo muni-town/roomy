@@ -45,7 +45,8 @@ div {
   --color-accent-900: var(--accent-900);
   --color-accent-950: var(--accent-950);
 
-  --shadow-button: 2px 2px 0 0 var(--accent-700);
+  --shadow-button: 2px 2px 0 0
+    var(--shadow-button-color, var(--color-accent-700));
   --shadow-input: 2px 2px 0 0 var(--accent-700);
 }
 

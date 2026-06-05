@@ -16,15 +16,15 @@
   let isOpenSpaceJoined = $derived(true);
 </script>
 
-<div class="flex flex-col gap-1 items-center justify-center pt-4">
+<div class="flex flex-col gap-1 items-center justify-center pt-3">
   <Button
-    variant="link"
+    variant="ghost"
+    size="iconLg"
     type="button"
     onclick={() => navigate("home")}
-    class="px-0 aspect-square [&_svg]:size-8  hover:bg-accent-500/20"
     data-current={page.url.pathname.startsWith("/home")}
   >
-    <IconSquaresPlus font-size="1.75em" />
+    <IconSquaresPlus />
   </Button>
 
   {#if app.did}
