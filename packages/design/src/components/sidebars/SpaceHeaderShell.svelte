@@ -56,7 +56,7 @@
     {#snippet child({ props })}
       <button
         {...props}
-        class="flex justify-between items-center mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 w-full text-left transition-colors"
+        class="flex justify-between items-center mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 gap-1 w-full text-left transition-colors"
       >
         <div class="flex items-center gap-2 max-w-full min-w-0">
           {@render avatar()}
@@ -70,7 +70,7 @@
         <IconChevronDown
           class={cn(
             "size-4 text-base-700 dark:text-base-300 transition-transform duration-200 shrink-0",
-            popoverOpen && "rotate-180",
+            popoverOpen && "-rotate-90",
           )}
         />
       </button>

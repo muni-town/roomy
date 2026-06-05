@@ -86,11 +86,7 @@
         >
           <Avatar src={lastLogin.avatar} class="size-6" />
 
-          <div
-            class="text-accent-600 dark:text-accent-400 text-md max-w-full truncate overflow-x-hidden font-semibold"
-          >
-            <p>{loading ? "Loading..." : lastLogin.handle}</p>
-          </div>
+          {loading ? "Loading..." : lastLogin.handle}
         </Button>
       {/if}
       <Label

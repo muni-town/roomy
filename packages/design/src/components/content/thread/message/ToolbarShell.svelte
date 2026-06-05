@@ -44,14 +44,14 @@
 
 <BitsTooltip.Provider>
   <Toolbar.Root
-    class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-2 bg-base-100/80 dark:bg-base-800/70 p-px rounded-xl items-center`}
+    class={`${isEmojiToolbarPickerOpen ? "flex" : "flex"} shadow-lg border border-base-200 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-0 bg-base-50 dark:bg-base-900/50 p-0.5 rounded-[12px] items-center`}
     onclick={(e) => e.stopPropagation()}
   >
     <Toolbar.Button
       onclick={() => onToggleReaction("👍")}
       class={[
         buttonVariants({ variant: "ghost", size: "iconSm" }),
-        "backdrop-blur-none text-lg",
+        "backdrop-blur-none h-[34px]",
       ]}
     >
       👍
@@ -60,7 +60,7 @@
       onclick={() => onToggleReaction("😂")}
       class={[
         buttonVariants({ variant: "ghost", size: "iconSm" }),
-        "backdrop-blur-none text-lg",
+        "backdrop-blur-none h-[34px]",
       ]}
     >
       😂
@@ -76,7 +76,7 @@
             {...props}
             size="icon"
             variant="ghost"
-            class="backdrop-blur-none"
+            class="backdrop-blur-none h-[34px]"
             aria-label="Pick an emoji"
           >
             <IconSmilePlus class="text-primary text-lg" />
@@ -91,7 +91,7 @@
           onclick={onEdit}
           class={[
             buttonVariants({ variant: "ghost", size: "icon" }),
-            "backdrop-blur-none",
+            "backdrop-blur-none h-[34px]",
           ]}
           aria-label="Edit Message"
         >
@@ -104,7 +104,7 @@
           onclick={onDelete}
           class={[
             buttonVariants({ variant: "ghost", size: "icon" }),
-            "backdrop-blur-none",
+            "backdrop-blur-none h-[34px]",
           ]}
           aria-label="Delete Message"
         >
@@ -118,7 +118,7 @@
         onclick={onStartThreading}
         class={[
           buttonVariants({ variant: "ghost", size: "icon" }),
-          "backdrop-blur-none",
+          "backdrop-blur-none h-[34px]",
         ]}
         aria-label="Create Thread"
       >
@@ -131,7 +131,7 @@
         onclick={onReply}
         class={[
           buttonVariants({ variant: "ghost", size: "icon" }),
-          "backdrop-blur-none",
+          "backdrop-blur-none h-[34px]",
         ]}
         aria-label="Reply"
       >

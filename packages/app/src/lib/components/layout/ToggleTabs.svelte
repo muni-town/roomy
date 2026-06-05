@@ -18,17 +18,44 @@
 <div class="hidden md:block shrink-0">
   <Tabs.Root bind:value={active}>
     <Tabs.List
-      class="rounded-[12px] bg-base-200/50 dark:bg-base-900/50 grid grid-cols-{items.length} p-[2px] text-sm border border-base-800/10 dark:border-base-100/10"
+      class="rounded-lg text-accent-950 dark:text-base-50"
+      style="display: inline-grid; grid-auto-flow: column; grid-auto-columns: 2fr;"
     >
       {#each items as { name, href }}
-        <a {href}>
-          <Tabs.Trigger
-            value={name}
-            class="px-2 py-1 cursor-pointer w-full opacity-60 data-[state=active]:opacity-100 rounded-[10px] bg-transparent data-[state=active]:bg-base-200 dark:data-[state=active]:bg-base-900 transition-colors duration-75 ease-out"
-          >
-            {name}
-          </Tabs.Trigger>
-        </a>
+        <Tabs.Trigger value={name}>
+          {#snippet child({ props })}
+            <a
+              {href}
+              {...props}
+              class="
+              text-center
+              px-2 py-1.5 cursor-pointer w-full text-sm
+              bg-base-50 dark:bg-base-950
+              hover:bg-accent-50 hover:dark:bg-base-800
+
+              border border-y first:border-l last:border-r border-accent-500
+              first:rounded-l-md last:rounded-r-md not-first:-ml-px
+              
+              transition-[box-shadow,translate] ease-out duration-75
+                
+              -translate-y-[2px]
+              shadow-[0_2px_0_0] shadow-accent-500
+              
+              active:translate-y-0
+              active:shadow-none
+              
+              data-[state=active]:bg-accent-200
+              data-[state=active]:dark:bg-accent-200
+              data-[state=active]:text-accent-950
+              data-[state=active]:translate-y-0
+              data-[state=active]:shadow-none
+              
+              "
+            >
+              {name}
+            </a>
+          {/snippet}
+        </Tabs.Trigger>
       {/each}
     </Tabs.List>
   </Tabs.Root>

@@ -43,21 +43,21 @@
   >
     <Button
       variant="ghost"
-      class="w-full shrink min-w-0 justify-start hover:bg-transparent hover:text-base-900 dark:hover:bg-transparent dark:hover:text-base-100 hover:cursor-default active:scale-100"
+      class="w-full shrink min-w-0 justify-start hover:cursor-default text-base-600 dark:text-base-400 "
       data-current={active && !isEditing}
       onclick={() => {
         showGroupChildren = !showGroupChildren;
       }}
     >
       <span
-        class="truncate font-regular text-base-600 dark:text-base-400 text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
+        class="truncate font-regular text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
         >{name}</span
       >
       {#if !isEditing}
         {#if showGroupChildren}
-          <IconChevronDown class="shrink-0 size-2!" />
+          <IconChevronDown class="shrink-0 size-3!" />
         {:else}
-          <IconChevronUp class="shrink-0 size-2!" />
+          <IconChevronDown class="shrink-0 size-3! -rotate-90" />
         {/if}
       {/if}
     </Button>
@@ -105,7 +105,7 @@
       {/each}
     </div>
   {:else if showGroupChildren}
-    <div class="w-full max-w-full shrink min-w-0 min-h-4 p-1">
+    <div class="w-full max-w-full shrink min-w-0 min-h-4 p-1 space-y-[1px]">
       {#each items as child, index (child.id)}
         <div id={child.id} class="flex items-start w-full relative">
           {@render item(child, index)}
