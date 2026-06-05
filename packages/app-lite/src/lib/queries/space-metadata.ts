@@ -5,12 +5,16 @@ import { px } from "$lib/auth.svelte";
 const { agentQuery } = transport;
 const { queryKey } = cache;
 
-export function createSpaceMetadataQuery(spaceId: () => string) {
+export function createSpaceMetadataQuery(
+  spaceId: () => string,
+  opts?: { enabled?: boolean },
+) {
   return createQuery(() => ({
     queryKey: queryKey("space.roomy.space.getMetadata", { spaceId: spaceId() }),
     queryFn: () =>
       agentQuery(px(), "space.roomy.space.getMetadata", {
         spaceId: spaceId(),
       }),
+    enabled: opts?.enabled,
   }));
 }

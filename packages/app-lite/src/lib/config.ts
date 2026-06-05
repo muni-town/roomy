@@ -18,6 +18,7 @@ const APPSERVER_RPCS = [
   "space.roomy.space.setHandle",
   "space.roomy.space.getCalendarLink",
   "space.roomy.space.getCalendarEvents",
+  "space.roomy.space.getActivityFeed",
 ];
 
 export const CONFIG = {

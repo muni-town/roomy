@@ -27,17 +27,20 @@
   } = $props();
 </script>
 
+<div class="flex flex-col h-full">
+<div class="w-64">
 {@render header()}
+</div>
 
 {#if loading}
-  <div class="px-4 mt-2">
+  <div class="px-4 mt-14">
     <div class="h-4 bg-base-200 rounded animate-pulse w-3/4 mb-2"></div>
     <div class="h-3 bg-base-200 rounded animate-pulse w-1/2"></div>
   </div>
 {:else}
   {#if saveAction}{@render saveAction()}{/if}
 
-  <div class="w-full pt-2 px-2">
+  <div class="w-full px-2 pt-2 mask-[linear-gradient(to_bottom,transparent_0%,black_5%,black_90%,transparent_100%)] h-full overflow-y-scroll">
     {#if prefix}{@render prefix()}{/if}
     {#if loneRoom}{@render loneRoom()}{/if}
     {#if body}{@render body()}{/if}
@@ -45,3 +48,4 @@
 
   {#if footer}{@render footer()}{/if}
 {/if}
+</div>

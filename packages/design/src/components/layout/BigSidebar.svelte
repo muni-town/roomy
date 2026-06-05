@@ -1,15 +1,19 @@
 <script lang="ts">
   import type { WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
+  import type { Snippet } from "svelte";
   import { cn } from "../../utils/index.js";
   import { ScrollArea } from "@foxui/core";
 
-  const {
+  let {
     class: className,
     children,
+    footer,
     showBranding = false,
     ...restProps
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
+    /** Content rendered below the scroll area, pinned to the bottom (e.g. user card) */
+    footer?: Snippet;
     /** Whether to show the "powered by roomy" branding footer */
     showBranding?: boolean;
   } = $props();
@@ -28,6 +32,10 @@
   >
     {@render children?.()}
   </ScrollArea>
+
+  {#if footer}
+    {@render footer()}
+  {/if}
 
   {#if showBranding}
     <div class="text-xs p-2">

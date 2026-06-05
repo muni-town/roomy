@@ -1,11 +1,10 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { cn } from "@foxui/core";
   import Button from "../ui/button/Button.svelte";
   import Popover from "../ui/popover/Popover.svelte";
 
   import {
-    IconChevronDown,
+    IconEllipsisHorizontal,
     IconShare,
     IconPlus,
     IconPencil,
@@ -18,6 +17,7 @@
     avatar,
     isAdmin,
     showInviteButton,
+    onSpacePicker,
     isEditing = $bindable(false),
     onNew,
     settingsHref,
@@ -29,6 +29,8 @@
     avatar: Snippet;
     isAdmin: boolean;
     showInviteButton: boolean;
+    /** Called when clicking the space name/avatar to open the space picker. */
+    onSpacePicker?: () => void;
     isEditing?: boolean;
     /** Called when the "+" button is clicked to create a room or category. Only shown when isAdmin. */
     onNew?: () => void;
@@ -46,9 +48,22 @@
 <div
   class="w-full pt-0.5 pb-1 px-2 h-fit flex mb-4 justify-between items-center gap-1"
 >
+  <!-- Clickable header area – opens space picker -->
+  <button
+    onclick={onSpacePicker}
+    class="flex items-center gap-2 mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 flex-1 min-w-0 text-left transition-colors"
+  >
+    {@render avatar()}
+
+    <h1
+      class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
+    >
+      {spaceName ?? ""}
+    </h1>
+  </button>
+
   <Popover
     side="bottom"
-    class="grow"
     align="end"
     bind:open={popoverOpen}
     sideOffset={5}
@@ -56,23 +71,10 @@
     {#snippet child({ props })}
       <button
         {...props}
-        class="flex justify-between items-center mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 w-full text-left transition-colors"
+        class="shrink-0 mt-2 flex items-center justify-center size-8 rounded-full hover:bg-accent-200/70 dark:hover:bg-base-900/70 text-base-400 hover:text-base-600 dark:hover:text-base-300 transition-colors cursor-pointer"
+        aria-label="Space menu"
       >
-        <div class="flex items-center gap-2 max-w-full min-w-0">
-          {@render avatar()}
-
-          <h1
-            class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
-          >
-            {spaceName ?? ""}
-          </h1>
-        </div>
-        <IconChevronDown
-          class={cn(
-            "size-4 text-base-700 dark:text-base-300 transition-transform duration-200 shrink-0",
-            popoverOpen && "rotate-180",
-          )}
-        />
+        <IconEllipsisHorizontal class="size-4" />
       </button>
     {/snippet}
     <div class="flex flex-col items-start justify-stretch gap-2 w-[204px]">
