@@ -29,15 +29,18 @@
         {...props}
         class="flex items-center gap-3 w-full rounded-lg px-3 py-2 bg-white dark:bg-base-950 border border-accent-500/20 hover:border-accent-500/40 hover:bg-base-100 dark:hover:bg-base-900 transition-colors cursor-pointer group"
       >
-        <div
-          class="size-10 shrink-0 rounded-full border-2 overflow-hidden"
-          class:border-green-500={connected}
-          class:border-red-500={!connected}
-        >
-          <Avatar
-            src={lastLogin?.avatar}
-            fallback={lastLogin?.handle}
-            class="size-full"
+        <div class="relative size-10 shrink-0">
+          <div class="size-full rounded-full overflow-hidden">
+            <Avatar
+              src={lastLogin?.avatar}
+              fallback={lastLogin?.handle}
+              class="size-full"
+            />
+          </div>
+          <div
+            class="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-white dark:border-base-950"
+            class:bg-green-500={connected}
+            class:bg-red-500={!connected}
           />
         </div>
         <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate min-w-0 flex-1 text-left">

@@ -55,13 +55,13 @@
   <main class="h-full overflow-y-auto px-4 text-base-950 dark:text-base-50">
     <div class="flex flex-col items-center justify-start py-8">
       <div class="flex flex-col gap-8 items-center w-full">
-        <h1 class="text-5xl font-bold text-center">
+        <!-- <h1 class="text-5xl font-bold text-center">
           Hi Roomy 👋
         </h1>
         <p class="text-lg font-medium max-w-2xl text-center text-pretty">
           A digital gardening platform for communities. Flourish in Spaces,
           curating knowledge and conversations together.
-        </p>
+        </p> -->
 
 
         {#if spacesQuery.isPending}

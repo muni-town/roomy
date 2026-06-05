@@ -24,6 +24,7 @@
     IconCheck,
     IconGripVertical,
     IconHome,
+    IconPlus,
     IconTrash,
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
@@ -452,6 +453,11 @@ import { createSpacesQuery } from "$lib/queries/spaces";
             </button>
           {/if}
         {/each}
+        
+        <Button class="gap-3 mx-2" variant="ghost" href="/new">
+          <IconPlus />
+          Create Space
+        </Button>
       </div>
     {:else if metaQuery.isError}
       <p class="text-sm text-red-600">{metaQuery.error.message}</p>
