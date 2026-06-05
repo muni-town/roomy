@@ -5,20 +5,18 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { onNavigate } from "$app/navigation";
-  import SmallSidebar from "@roomy/design/components/layout/SmallSidebar.svelte";
   import BigSidebar from "@roomy/design/components/layout/BigSidebar.svelte";
+  import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
   import ToggleNavigation from "@roomy/design/components/helper/ToggleNavigation.svelte";
   import { navbar } from "./navbar.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
 
   let {
-    serverBar,
     sidebar,
     children,
     chatArea = false,
   }: {
-    serverBar?: Snippet;
     sidebar?: Snippet;
     children: Snippet;
     chatArea?: boolean;
@@ -29,11 +27,10 @@
   });
 </script>
 
-<!-- Main panel: navbar + page content, offset to clear the fixed sidebars -->
+<!-- Main panel: navbar + page content, offset to clear the fixed sidebar -->
 <div
   class={[
-    "h-full flex flex-col overflow-hidden",
-    sidebar ? "sm:ml-82" : "sm:ml-18",
+    "h-full flex flex-col overflow-hidden sm:ml-64",
     chatArea ? "bg-white dark:bg-base-950" : "",
   ]}
 >
@@ -70,15 +67,13 @@
   ]}
 >
   <div class="flex h-full w-fit">
-    {#if serverBar}
-      <SmallSidebar>
-        {@render serverBar()}
-      </SmallSidebar>
-    {/if}
-    {#if sidebar}
-      <BigSidebar>
+    <BigSidebar>
+      {#if sidebar}
         {@render sidebar()}
-      </BigSidebar>
-    {/if}
+      {/if}
+      {#snippet footer()}
+        <SidebarUserCard />
+      {/snippet}
+    </BigSidebar>
   </div>
 </div>

@@ -3,14 +3,16 @@
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import { IconPlus } from "@roomy/design/icons";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import HomeSidebar from "$lib/components/sidebar/HomeSidebar.svelte";
+  import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
   import { joinSpace } from "$lib/mutations/space";
   import { queryClient } from "$lib/client";
-  import { cache } from "@roomy-space/sdk";
+  import { schemas, cache } from "@roomy-space/sdk";
   import { resolveBlobUrl } from "$lib/utils";
   import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
+
+  type Space = typeof schemas.queries.getSpaces.Space.infer;
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
@@ -38,7 +40,7 @@
 
 <MainLayout>
   {#snippet sidebar()}
-    <HomeSidebar />
+    <SpaceSidebar />
   {/snippet}
   {@render homeContent()}
 </MainLayout>
@@ -61,10 +63,6 @@
           curating knowledge and conversations together.
         </p>
 
-        <Button class="gap-2" href="/new">
-          <IconPlus />
-          Create Space
-        </Button>
 
         {#if spacesQuery.isPending}
           <p class="text-sm text-base-400">Loading spaces…</p>

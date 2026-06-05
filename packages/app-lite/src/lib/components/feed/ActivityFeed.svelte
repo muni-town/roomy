@@ -1,11 +1,12 @@
 <script lang="ts">
   import { createActivityFeedQuery, type ActivityItem } from "$lib/queries/activity-feed";
   import { resolveBlobUrl } from "$lib/utils";
+  import { renderMarkdownSanitized } from "@roomy/design/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
 
-  let { limit = 20 }: { limit?: number } = $props();
+  let { spaceId, limit = 20 }: { spaceId?: string; limit?: number } = $props();
 
-  const feedQuery = createActivityFeedQuery(() => ({ limit }));
+  const feedQuery = createActivityFeedQuery(() => ({ spaceId, limit }));
 
   function timeAgo(iso: string): string {
     const ms = Date.now() - new Date(iso).getTime();
@@ -93,8 +94,8 @@
                   <span class="font-medium text-base-700 dark:text-base-300">
                     {msg.author.name ?? msg.author.did.slice(0, 8)}
                   </span>
-                  <span class="text-base-600 dark:text-base-400">
-                    {msg.content}
+                  <span class="text-base-600 dark:text-base-400 [&_p]:inline [&_p]:m-0">
+                    {@html renderMarkdownSanitized(msg.content)}
                   </span>
                 </div>
               </div>
