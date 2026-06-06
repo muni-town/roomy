@@ -31,12 +31,13 @@
               text-center
               px-2 py-1.5 cursor-pointer w-full text-sm
               bg-base-50 dark:bg-base-950
+              text-base-950 dark:text-base-50
               hover:bg-accent-50 hover:dark:bg-base-800
 
               border border-y first:border-l last:border-r border-accent-500
               first:rounded-l-md last:rounded-r-md not-first:-ml-px
               
-              transition-[box-shadow,translate] ease-out duration-75
+              transition-[box-shadow,translate] ease-in duration-75
                 
               -translate-y-[2px]
               shadow-[0_2px_0_0] shadow-accent-500
@@ -45,8 +46,9 @@
               active:shadow-none
               
               data-[state=active]:bg-accent-200
-              data-[state=active]:dark:bg-accent-200
+              data-[state=active]:dark:bg-accent-600
               data-[state=active]:text-accent-950
+              data-[state=active]:dark:text-base-50
               data-[state=active]:translate-y-0
               data-[state=active]:shadow-none
               

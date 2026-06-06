@@ -11,6 +11,8 @@
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import Textarea from "@roomy/design/components/ui/input/Textarea.svelte";
   import { Alert, toast } from "@foxui/core";
+  import { resolve } from "$app/paths";
+  import { goto } from "$app/navigation";
 
   type SpaceCreationState = AsyncStateWithIdle<{ spaceDid: StreamDid }>;
 
@@ -150,17 +152,17 @@
         <div class="mt-2 flex items-center gap-x-3">
           <SpaceAvatar imageUrl={avatarUrl} size={64} />
 
-          <!-- <input
+          <input
             type="file"
             accept="image/*"
             class="hidden"
             id="photo"
             onchange={handleAvatarSelect}
             bind:this={fileInput}
-          /> -->
-          <Button variant="secondary" onclick={() => fileInput?.click()}
-            >Upload Avatar</Button
-          >
+          />
+          <Button variant="secondary" onclick={() => fileInput?.click()}>
+            Upload Avatar
+          </Button>
         </div>
       </div>
 

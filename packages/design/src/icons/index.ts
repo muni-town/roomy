@@ -32,6 +32,7 @@ export { default as IconXMark } from "~icons/ph/x-bold";
 export { default as IconCalendar } from "~icons/ph/calendar-dots-bold";
 export { default as IconDocument } from "~icons/ph/file-text-bold";
 export { default as IconHashtag } from "~icons/ph/hash-bold";
+export { default as IconHashtagStraight } from "~icons/ph/hash-straight-bold";
 export { default as IconImage } from "~icons/ph/image-bold";
 export { default as IconImageOff } from "~icons/ph/image-broken-bold";
 

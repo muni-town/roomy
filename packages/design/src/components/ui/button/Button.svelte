@@ -40,13 +40,13 @@ SOFTWARE.
       "outline-offset-2 focus-visible:outline-2",
       "duration-50 active:duration-100",
       "disabled:pointer-events-none disabled:opacity-60 disabled:translate-0.5",
-      "[&>svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0",
+      "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
     ],
     variants: {
       variant: {
         cta: [
           "bg-accent-400 dark:bg-accent-400",
-          "text-accent-950 [&>svg]:text-accent-700",
+          "text-accent-950 [&_svg]:text-accent-700",
           "border border-px border-accent-400 [--shadow-button-color:var(--color-accent-700)]",
           "hover:bg-accent-400 hover:shadow-button",
           "focus-visible:outline-accent-500 dark:focus-visible:outline-accent-300",
@@ -55,7 +55,7 @@ SOFTWARE.
         ],
         primary: [
           "bg-accent-300/90 dark:bg-accent-200",
-          "text-accent-950 [&>svg]:text-accent-900",
+          "text-accent-950 [&_svg]:text-accent-900",
           "border border-px border-accent-600",
           "hover:bg-accent-300 hover:shadow-button [--shadow-button-color:var(--color-accent-600)]",
           "focus-visible:outline-accent-950 dark:focus-visible:outline-accent-300",
@@ -64,7 +64,7 @@ SOFTWARE.
         ],
         secondary: [
           "bg-base-50 dark:bg-accent-700/30",
-          "text-accent-950 dark:text-accent-300 [&>svg]:dark:text-accent-500",
+          "text-accent-950 dark:text-accent-300 [&_svg]:dark:text-accent-500",
           "border border-px border-accent-500 dark:border-accent-800",
           "hover:bg-accent-50 hover:border-accent-600 hover:shadow-button [--shadow-button-color:var(--color-accent-500)]",
           "focus-visible:outline-accent-950 dark:focus-visible:outline-accent-300",
@@ -84,7 +84,7 @@ SOFTWARE.
           "font-semibold",
           "focus-visible:outline-base-900 dark:focus-visible:outline-base-50",
           "data-[current=true]:bg-accent-300/90 dark:data-[current=true]:bg-accent-500/20",
-          "data-[current=true]:text-accent-950 dark:data-[current=true]:text-accent-400",
+          "data-[current=true]:text-accent-950 dark:data-[current=true]:text-accent-50",
         ],
         red: [
           "bg-red-200 dark:bg-red-700/40",
@@ -289,11 +289,11 @@ SOFTWARE.
       },
       size: {
         default: "px-2.5 py-1.5",
-        sm: "px-2 py-1 gap-1.5 text-xs font-base [&>svg]:size-3",
-        lg: "px-4 py-2 gap-2.5 text-lg font-semibold [&>svg]:size-5",
+        sm: "px-2 py-1 gap-1.5 text-xs font-base [&_svg]:size-3",
+        lg: "px-4 py-2 gap-2.5 text-lg font-semibold [&_svg]:size-5",
         icon: "p-2",
-        iconSm: "p-1.5 [&>svg]:size-3",
-        iconLg: "p-2.5 [&>svg]:size-6",
+        iconSm: "p-1.5 [&_svg]:size-3",
+        iconLg: "p-2.5 [&_svg]:size-6",
       },
     },
     defaultVariants: {
