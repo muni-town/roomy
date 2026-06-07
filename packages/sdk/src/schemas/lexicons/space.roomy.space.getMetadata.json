@@ -17,6 +17,75 @@
         }
       }
     },
+    "latestMembers": {
+      "type": "object",
+      "required": [
+        "did"
+      ],
+      "properties": {
+        "did": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "required": [
+        "latestMembers"
+      ],
+      "properties": {
+        "latestMembers": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#latestMembers"
+          }
+        },
+        "latestTimestamp": {
+          "type": "string"
+        }
+      }
+    },
+    "activeThreads": {
+      "type": "object",
+      "required": [
+        "activity",
+        "canRead",
+        "canWrite",
+        "id",
+        "unreadCount"
+      ],
+      "properties": {
+        "activity": {
+          "type": "ref",
+          "ref": "#activity"
+        },
+        "canRead": {
+          "type": "boolean"
+        },
+        "canWrite": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "unreadCount": {
+          "type": "integer"
+        },
+        "lastRead": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "channels": {
       "type": "object",
       "required": [
@@ -46,6 +115,13 @@
         },
         "unreadCount": {
           "type": "integer"
+        },
+        "activeThreads": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#activeThreads"
+          }
         },
         "lastRead": {
           "type": "string"
@@ -81,6 +157,75 @@
         }
       }
     },
+    "latestMembers2": {
+      "type": "object",
+      "required": [
+        "did"
+      ],
+      "properties": {
+        "did": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "activity2": {
+      "type": "object",
+      "required": [
+        "latestMembers"
+      ],
+      "properties": {
+        "latestMembers": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#latestMembers2"
+          }
+        },
+        "latestTimestamp": {
+          "type": "string"
+        }
+      }
+    },
+    "activeThreads2": {
+      "type": "object",
+      "required": [
+        "activity",
+        "canRead",
+        "canWrite",
+        "id",
+        "unreadCount"
+      ],
+      "properties": {
+        "activity": {
+          "type": "ref",
+          "ref": "#activity2"
+        },
+        "canRead": {
+          "type": "boolean"
+        },
+        "canWrite": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "unreadCount": {
+          "type": "integer"
+        },
+        "lastRead": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "orphans": {
       "type": "object",
       "required": [
@@ -110,6 +255,13 @@
         },
         "unreadCount": {
           "type": "integer"
+        },
+        "activeThreads": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#activeThreads2"
+          }
         },
         "lastRead": {
           "type": "string"

@@ -65,7 +65,6 @@
         "id",
         "media",
         "reactions",
-        "tags",
         "timestamp"
       ],
       "properties": {
@@ -93,12 +92,6 @@
           "items": {
             "type": "ref",
             "ref": "#reactions"
-          }
-        },
-        "tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
           }
         },
         "timestamp": {

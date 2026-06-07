@@ -13,15 +13,41 @@ import type { QueryClient } from "@tanstack/svelte-query";
 import { queryClient } from "./client";
 import { px } from "./auth.svelte";
 import { CONFIG } from "./config";
+import type { ConnectionStatus } from "@roomy-space/sdk/sync";
 
 const { SyncConnection, SyncRouter, TopicManager } = sync;
 const { agentProcedure, resolveAppserverWsOrigin } = transport;
+
+/** Simplified sync status for UI consumption. */
+export type SyncStatus =
+  | { state: "idle" }
+  | { state: "connecting" }
+  | { state: "connected" }
+  | { state: "reconnecting"; attempt: number; delayMs: number }
+  | { state: "disconnected" };
 
 export interface SyncContext {
   connect: () => Promise<void>;
   disconnect: () => void;
   readonly connection: SyncConnectionLike;
   readonly topicManager: TopicManagerLike;
+  readonly status: SyncStatus;
+}
+
+function mapStatus(s: ConnectionStatus): SyncStatus {
+  switch (s.state) {
+    case "idle":
+      return { state: "idle" };
+    case "connecting":
+      return { state: "connecting" };
+    case "open":
+      return { state: "connected" };
+    case "reconnecting":
+      return { state: "reconnecting", attempt: s.attempt, delayMs: s.delayMs };
+    case "closing":
+    case "closed":
+      return { state: "disconnected" };
+  }
 }
 
 export function createSyncContext(deps: {
@@ -35,6 +61,7 @@ export function createSyncContext(deps: {
   let connection = $state<InstanceType<typeof SyncConnection> | null>(null);
   let router: InstanceType<typeof SyncRouter> | null = null;
   let topics = $state<InstanceType<typeof TopicManager> | null>(null);
+  let syncStatus = $state<SyncStatus>({ state: "idle" });
 
   function log(msg: string) {
     console.log(`[sync] ${msg}`);
@@ -101,11 +128,17 @@ export function createSyncContext(deps: {
     });
 
     connection.onStatusChange((status) => {
+      syncStatus = mapStatus(status);
       log(`[status] ${JSON.stringify(status)}`);
     });
 
     connection.onError((err) => {
-      log(`[error] ${err instanceof Error ? err.message : String(err)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      log(`[error] ${msg}`);
+      // Detect rate-limit (429) errors from ticket fetches or PDS proxy
+      if (msg.includes("429") || msg.includes("RateLimit")) {
+        log(`[error] Rate limited by server — backing off`);
+      }
     });
 
     connection.onClose((info) => {
@@ -139,6 +172,9 @@ export function createSyncContext(deps: {
     },
     get topicManager() {
       return topics!;
+    },
+    get status() {
+      return syncStatus;
     },
     connect,
     disconnect,

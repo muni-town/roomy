@@ -364,6 +364,16 @@ export async function backfillSingleChannel(
   // Ensure Roomy room exists for this channel in all relevant spaces
   if (guildId) {
     const cached = bot as unknown as BotWithCache;
+
+    // Type guard: skip threads — they have their own creation path
+    // (ensureRoomyThreads or handleThreadCreate).
+    const cachedChannel = cached.cache.channels.memory.get(BigInt(channelId))
+      ?? cached.cache.guilds.memory.get(BigInt(guildId))?.channels?.get(BigInt(channelId));
+    if (cachedChannel && THREAD_TYPES.has(cachedChannel.type)) {
+      log.debug(`backfillSingleChannel: channel ${channelId} is a thread (type ${cachedChannel.type}); skipping channel-kind creation`);
+      return;
+    }
+
     const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
     const channelName = resolveChannelName(cached, channelId);
     if (channelName) {

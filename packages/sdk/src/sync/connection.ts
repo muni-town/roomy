@@ -7,9 +7,11 @@
  *  - Ticket-based auth: callers provide a `fetchTicket` function (typically
  *    wrapping the `space.roomy.auth.getConnectionTicket` procedure). The
  *    ticket is appended as a query param to the WS URL.
- *  - Reconnect-with-backoff: on abnormal close, reconnects after
- *    ~2000–3000 ms (`2000 + random*1000`, matching the playground's
- *    behaviour). Intentional `close()` calls disable reconnection.
+ *  - Reconnect-with-exponential-backoff: on abnormal close, reconnects after
+ *    an exponentially increasing delay with jitter. The initial attempt waits
+ *    ~1–2 s, doubling each time up to a configurable max (default 30 s).
+ *    The attempt counter resets on a successful open. Intentional `close()`
+ *    calls disable reconnection entirely.
  *  - CBOR frame decoding: binary frames are decoded via `@atcute/cbor`'s
  *    `decodeFirst` (header + body). Frames are surfaced through `onFrame`
  *    without interpretation — frame-type routing belongs to a higher layer
@@ -46,7 +48,7 @@ export type ConnectionStatus =
   | { state: "idle" }
   | { state: "connecting" }
   | { state: "open" }
-  | { state: "reconnecting"; delayMs: number }
+  | { state: "reconnecting"; delayMs: number; attempt: number }
   | { state: "closing" }
   | { state: "closed"; intentional: boolean; code?: number; reason?: string };
 
@@ -80,11 +82,24 @@ export interface SyncConnectionOptions {
    */
   webSocketImpl?: typeof WebSocket;
   /**
-   * Override the reconnect-delay calculator. Defaults to
-   * `() => 2000 + Math.random() * 1000` to match the playground. Return a
-   * non-positive number to disable auto-reconnect entirely.
+   * Override the reconnect-delay calculator. Receives the 0-based
+   * consecutive-failure attempt number and must return a delay in ms.
+   * Return a non-positive number to disable auto-reconnect for that attempt.
+   *
+   * Defaults to exponential backoff with full jitter:
+   * `min(baseDelay * 2^attempt, maxDelay) * random()`
    */
-  reconnectDelay?: () => number;
+  reconnectDelay?: (attempt: number) => number;
+  /**
+   * Base delay for the default exponential backoff (ms).
+   * Default: 1000 (1 second).
+   */
+  backoffBaseMs?: number;
+  /**
+   * Maximum delay cap for the default exponential backoff (ms).
+   * Default: 30000 (30 seconds).
+   */
+  backoffMaxMs?: number;
 }
 
 export type Unsubscribe = () => void;
@@ -107,12 +122,16 @@ const TOPIC_KEY = (t: Topic) => `${t.kind}:${t.id}`;
 export class SyncConnection {
   readonly #opts: SyncConnectionOptions;
   readonly #WS: typeof WebSocket;
-  readonly #reconnectDelay: () => number;
+  readonly #reconnectDelay: (attempt: number) => number;
+  readonly #backoffBaseMs: number;
+  readonly #backoffMaxMs: number;
 
   #ws: AnyWebSocket | null = null;
   #status: ConnectionStatus = { state: "idle" };
   #intentionalClose = false;
   #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Consecutive reconnect attempts since last successful open. Reset on connect. */
+  #reconnectAttempt = 0;
   /** Topics the caller has asked us to be subscribed to. Replayed on reconnect. */
   readonly #topics = new Map<string, Topic>();
 
@@ -132,7 +151,13 @@ export class SyncConnection {
       );
     }
     this.#WS = WS;
-    this.#reconnectDelay = opts.reconnectDelay ?? (() => 2000 + Math.random() * 1000);
+    this.#backoffBaseMs = opts.backoffBaseMs ?? 1000;
+    this.#backoffMaxMs = opts.backoffMaxMs ?? 30_000;
+    this.#reconnectDelay = opts.reconnectDelay ?? ((attempt: number) => {
+      const cap = Math.min(this.#backoffBaseMs * 2 ** attempt, this.#backoffMaxMs);
+      // Full jitter: random value in [0, cap]
+      return Math.floor(Math.random() * cap);
+    });
   }
 
   // ── Status ──────────────────────────────────────────────────────────
@@ -217,6 +242,8 @@ export class SyncConnection {
       socket.onopen = () => {
         this.#setStatus({ state: "open" });
         this.#log("Connected.");
+        // Reset reconnect attempt counter on successful connection.
+        this.#reconnectAttempt = 0;
         // Replay topic subscriptions.
         for (const topic of this.#topics.values()) {
           this.#sendSubMessage("sub", topic);
@@ -309,6 +336,7 @@ export class SyncConnection {
    */
   close(): void {
     this.#intentionalClose = true;
+    this.#reconnectAttempt = 0;
     if (this.#reconnectTimer) {
       clearTimeout(this.#reconnectTimer);
       this.#reconnectTimer = null;
@@ -382,13 +410,15 @@ export class SyncConnection {
 
   #handleAbnormalClose(_code: number, _reason: string): void {
     if (this.#intentionalClose) return;
-    const delay = this.#reconnectDelay();
+    const attempt = this.#reconnectAttempt;
+    this.#reconnectAttempt++;
+    const delay = this.#reconnectDelay(attempt);
     if (!Number.isFinite(delay) || delay <= 0) {
       this.#setStatus({ state: "closed", intentional: false });
       return;
     }
-    this.#setStatus({ state: "reconnecting", delayMs: delay });
-    this.#log(`Reconnecting in ${Math.round(delay)}ms…`);
+    this.#setStatus({ state: "reconnecting", delayMs: delay, attempt: attempt + 1 });
+    this.#log(`Reconnect attempt ${attempt + 1} in ${Math.round(delay)}ms…`);
     this.#reconnectTimer = setTimeout(() => {
       this.#reconnectTimer = null;
       // Swallow errors — reconnect attempts will re-schedule themselves

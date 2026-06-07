@@ -1,8 +1,41 @@
 import { newUlid, transport } from "@roomy-space/sdk";
-import { px } from "$lib/auth.svelte";
+import { auth, px } from "$lib/auth.svelte";
+import { CONFIG } from "$lib/config";
 import { sendEvents } from "./send-events";
 
 const { agentProcedure } = transport;
+
+/**
+ * If the appserver tells us a personal stream was created but the PDS record
+ * hasn't been saved yet, persist it now.
+ */
+async function maybeSavePersonalStreamRecord(
+  result: { personalStreamDid?: string; needsPersonalStreamRecord?: boolean },
+): Promise<void> {
+  if (result.needsPersonalStreamRecord && result.personalStreamDid) {
+    const agent = auth.agent;
+    if (!agent) {
+      console.warn(
+        "[space] appserver created personal stream but no agent available to save PDS record",
+      );
+      return;
+    }
+    try {
+      await agent.com.atproto.repo.putRecord({
+        collection: CONFIG.personalStreamNsid,
+        repo: agent.assertDid,
+        rkey: CONFIG.personalStreamSchemaVersion,
+        record: {
+          $type: CONFIG.personalStreamNsid,
+          id: result.personalStreamDid,
+        },
+      });
+      console.log("[space] Saved personal stream PDS record");
+    } catch (err) {
+      console.error("[space] Failed to save personal stream PDS record:", err);
+    }
+  }
+}
 
 export async function joinSpace(
   spaceId: string,
@@ -10,10 +43,12 @@ export async function joinSpace(
 ): Promise<void> {
   // Invalidation is handled by the appserver's sync signal
   // (personal.joinSpace → getSpaces invalidation via WebSocket).
-  await agentProcedure(px(), "space.roomy.space.joinSpace", {
+  const result = await agentProcedure(px(), "space.roomy.space.joinSpace", {
     spaceId,
     ...(inviteToken ? { inviteToken } : {}),
   });
+
+  await maybeSavePersonalStreamRecord(result);
 }
 
 export async function leaveSpace(spaceId: string): Promise<void> {
@@ -36,6 +71,8 @@ export async function createSpace(opts: {
     ...(opts.description ? { description: opts.description } : {}),
     ...(opts.avatar ? { avatar: opts.avatar } : {}),
   });
+
+  await maybeSavePersonalStreamRecord(result);
   return result;
 }
 

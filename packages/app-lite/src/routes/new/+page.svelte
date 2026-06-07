@@ -5,7 +5,6 @@
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import Textarea from "@roomy/design/components/ui/input/Textarea.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import ThinSidebar from "$lib/components/sidebar/ThinSidebar.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { createSpace } from "$lib/mutations/space";
   import { uploadFile } from "$lib/mutations/upload";
@@ -64,9 +63,6 @@
 </script>
 
 <MainLayout>
-  {#snippet serverBar()}
-    <ThinSidebar />
-  {/snippet}
   <div class="h-full overflow-y-auto">
     
     <form

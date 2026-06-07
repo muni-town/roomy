@@ -41,6 +41,7 @@ import lexGetMembers from "../schemas/lexicons/space.roomy.space.getMembers.json
 import lexGetSpaceMetadata from "../schemas/lexicons/space.roomy.space.getMetadata.json";
 import lexGetRoles from "../schemas/lexicons/space.roomy.space.getRoles.json";
 import lexGetSpaces from "../schemas/lexicons/space.roomy.space.getSpaces.json";
+import lexGetActivityFeed from "../schemas/lexicons/space.roomy.space.getActivityFeed.json";
 import lexGetSpaceThreads from "../schemas/lexicons/space.roomy.space.getThreads.json";
 import lexJoinSpace from "../schemas/lexicons/space.roomy.space.joinSpace.json";
 import lexLeaveSpace from "../schemas/lexicons/space.roomy.space.leaveSpace.json";
@@ -103,6 +104,7 @@ const LEXICONS = [
   lexGetSpaceMetadata,
   lexGetRoles,
   lexGetSpaces,
+  lexGetActivityFeed,
   lexGetSpaceThreads,
   lexJoinSpace,
   lexLeaveSpace,

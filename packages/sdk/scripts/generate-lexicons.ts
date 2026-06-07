@@ -150,6 +150,16 @@ function convertSlot(
     return { type: "string", knownValues: vals };
   }
 
+  // Single string literal (e.g. `'message'` → { const: "message" }).
+  if ("const" in s && typeof s["const"] === "string") {
+    return { type: "string", knownValues: [s["const"]] };
+  }
+
+  // Single number literal const.
+  if ("const" in s && typeof s["const"] === "number") {
+    return { type: "integer" };
+  }
+
   const t = s["type"];
   if (t === "string") {
     if (Array.isArray(s["enum"])) {
@@ -290,6 +300,11 @@ function scalarOnlyLex(
       type: "string",
       knownValues: (s["enum"] as unknown[]).map((v) => String(v)),
     };
+  }
+
+  // Single string literal const.
+  if ("const" in s && typeof s["const"] === "string") {
+    return { type: "string", knownValues: [s["const"]] };
   }
 
   const t = s["type"];

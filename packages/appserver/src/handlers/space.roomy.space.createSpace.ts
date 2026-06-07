@@ -13,13 +13,18 @@ import {
   modules,
   newUlid,
   createDefaultSpaceEvents,
+  StreamDid,
   UserDid,
   type,
 } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { getServiceClient, getConnectedSpace } from "../serviceClient.ts";
 import { getOrCreateMaterializer } from "../materialization/registry.ts";
-import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
+import {
+  PersonalStreamRecordNotFound,
+  createAndCachePersonalStream,
+  resolvePersonalStreamDid,
+} from "../hydration/resolvePersonalStream.ts";
 import { recordPersonalSpaceMembership } from "../queries/joinedSpaces.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { Router as InvalidationRouter } from "../invalidation/index.ts";
@@ -31,9 +36,21 @@ interface CreateSpaceBody {
   avatar?: unknown;
 }
 
+interface CreateSpaceResult {
+  spaceId: string;
+  /** The personal stream DID, if one was created on-the-fly. */
+  personalStreamDid?: string;
+  /**
+   * True when the appserver created a new personal stream on Leaf but
+   * could not write the PDS record on the user's behalf. The client should
+   * call `savePersonalStreamId` to persist the mapping.
+   */
+  needsPersonalStreamRecord?: boolean;
+}
+
 export const createSpaceHandler: ProcedureHandler<
   CreateSpaceBody,
-  { spaceId: string }
+  CreateSpaceResult
 > = async (_params: QueryParams, auth: AuthCtx, body: CreateSpaceBody) => {
   // ── Validate input ───────────────────────────────────────────────────
   if (typeof body.name !== "string" || body.name.trim() === "") {
@@ -92,7 +109,22 @@ export const createSpaceHandler: ProcedureHandler<
 
   // ── 4. Write personal.joinSpace to creator's personal stream ─────────
   const db = openDb();
-  const personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
+  let personalStreamDid: StreamDid;
+  let needsPersonalStreamRecord = false;
+  try {
+    personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
+  } catch (err) {
+    if (err instanceof PersonalStreamRecordNotFound) {
+      // New user without a personal stream record on their PDS.
+      // Create the stream on Leaf and cache the mapping; the client
+      // will be instructed to save the PDS record.
+      personalStreamDid = await createAndCachePersonalStream(db, callerDid);
+      needsPersonalStreamRecord = true;
+    } else {
+      throw err;
+    }
+  }
+
   const personalSpace = await getConnectedSpace(personalStreamDid);
   await personalSpace.sendEvent(
     {
@@ -141,5 +173,5 @@ export const createSpaceHandler: ProcedureHandler<
     ]);
   }
 
-  return { spaceId };
+  return { spaceId, personalStreamDid, needsPersonalStreamRecord };
 };

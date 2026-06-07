@@ -290,3 +290,28 @@ create table if not exists comp_user_personal_stream (
   personal_stream_did text not null,
   resolved_at integer not null default (unixepoch() * 1000)
 ) strict;
+
+-- Materialized activity feed items. One row per room (channel or thread) that
+-- has seen at least one message. Upserted on every createMessage event.
+-- recent_message_ids stores a JSON array of up to 5 most recent message ULIDs
+-- (newest first) so the read path can batch-query full message data.
+create table if not exists activity_item (
+  room_id text primary key,
+  space_id text not null,
+  is_thread integer not null default 0,
+  parent_channel_id text,
+  parent_channel_name text,
+  last_activity_at integer not null,
+  recent_message_ids text not null default '[]',  -- JSON array of ULIDs, newest first
+  room_name text,
+  space_name text,
+  space_avatar text,
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create index if not exists idx_activity_item_space
+  on activity_item(space_id, last_activity_at desc);
+
+create index if not exists idx_activity_item_global
+  on activity_item(last_activity_at desc);

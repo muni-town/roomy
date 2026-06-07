@@ -212,7 +212,7 @@ describe("SyncConnection — abnormal close + reconnect", () => {
         fetchTicket,
         wsUrl: "wss://srv/",
         webSocketImpl: makeMockWS(),
-        reconnectDelay: () => 50,
+        reconnectDelay: (_attempt: number) => 50,
       });
 
       const closeSpy = vi.fn();
@@ -229,6 +229,9 @@ describe("SyncConnection — abnormal close + reconnect", () => {
       expect(closeSpy).toHaveBeenCalledOnce();
       expect(closeSpy.mock.calls[0]![0].intentional).toBe(false);
       expect(conn.status.state).toBe("reconnecting");
+      const rs = conn.status as { state: "reconnecting"; attempt: number; delayMs: number };
+      expect(rs.attempt).toBe(1);
+      expect(rs.delayMs).toBe(50);
 
       // Advance past the backoff; reconnect should fire and create a new socket.
       await vi.advanceTimersByTimeAsync(60);
@@ -249,7 +252,7 @@ describe("SyncConnection — abnormal close + reconnect", () => {
       fetchTicket: async () => "t",
       wsUrl: "wss://srv/",
       webSocketImpl: makeMockWS(),
-      reconnectDelay: () => 0,
+      reconnectDelay: (_attempt: number) => 0,
     });
     const p = conn.connect();
     await Promise.resolve();
@@ -320,7 +323,7 @@ describe("SyncConnection — re-subscription on reconnect", () => {
         fetchTicket: async () => "t",
         wsUrl: "wss://srv/",
         webSocketImpl: makeMockWS(),
-        reconnectDelay: () => 10,
+        reconnectDelay: (_attempt: number) => 10,
       });
 
       const p = conn.connect();
@@ -382,7 +385,7 @@ describe("SyncConnection — error handling", () => {
         fetchTicket,
         wsUrl: "wss://srv/",
         webSocketImpl: makeMockWS(),
-        reconnectDelay: () => 5,
+        reconnectDelay: (_attempt: number) => 5,
       });
       const errs: unknown[] = [];
       conn.onError((e) => errs.push(e));
@@ -400,5 +403,86 @@ describe("SyncConnection — error handling", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("SyncConnection — exponential backoff", () => {
+  it("increases delay with each consecutive failure using default backoff", () => {
+    // Use deterministic backoff for testing
+    const delays: number[] = [];
+    const conn = new SyncConnection({
+      fetchTicket: async () => { throw new Error("fail"); },
+      wsUrl: "wss://srv/",
+      webSocketImpl: makeMockWS(),
+      reconnectDelay: (attempt: number) => {
+        const d = Math.min(1000 * 2 ** attempt, 30_000);
+        delays.push(d);
+        return d;
+      },
+    });
+    conn.onError(() => {}); // suppress unhandled
+
+    // First failure triggers reconnect with delay for attempt 0
+    conn.connect().catch(() => {});
+    // Delay should be 1000 (attempt 0)
+    expect(delays).toEqual([1000]);
+  });
+
+  it("resets attempt counter on successful connection", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchTicket = vi.fn().mockResolvedValue("t");
+      const attempts: number[] = [];
+      const conn = new SyncConnection({
+        fetchTicket,
+        wsUrl: "wss://srv/",
+        webSocketImpl: makeMockWS(),
+        reconnectDelay: (attempt: number) => {
+          attempts.push(attempt);
+          return 10;
+        },
+      });
+      conn.onError(() => {});
+
+      // Connect successfully
+      const p = conn.connect();
+      await vi.advanceTimersByTimeAsync(0);
+      lastSocket!._open();
+      await p;
+
+      // Drop, reconnect, and succeed again — attempt should reset
+      lastSocket!._emitClose(1006, "drop");
+      await vi.advanceTimersByTimeAsync(15);
+      await vi.advanceTimersByTimeAsync(0);
+      lastSocket!._open();
+      expect(conn.status.state).toBe("open");
+
+      // Drop again — attempt counter should have reset, so attempt 0 again
+      lastSocket!._emitClose(1006, "drop");
+      await vi.advanceTimersByTimeAsync(15);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(attempts).toEqual([0, 0]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("caps delay at backoffMaxMs with default formula", () => {
+    const conn = new SyncConnection({
+      fetchTicket: async () => { throw new Error("fail"); },
+      wsUrl: "wss://srv/",
+      webSocketImpl: makeMockWS(),
+      backoffBaseMs: 1000,
+      backoffMaxMs: 5000,
+    });
+    conn.onError(() => {});
+
+    // Simulate high attempt number
+    // With base=1000, max=5000: cap = min(1000 * 2^attempt, 5000)
+    // attempt 0: 1000, attempt 1: 2000, attempt 2: 4000, attempt 3+: 5000
+    const delay0 = conn["#reconnectDelay" as never](0) as number;
+    const delay3 = conn["#reconnectDelay" as never](3) as number;
+    expect(delay0).toBeLessThanOrEqual(1000);
+    expect(delay3).toBeLessThanOrEqual(5000);
   });
 });

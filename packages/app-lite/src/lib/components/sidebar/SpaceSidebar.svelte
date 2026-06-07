@@ -24,6 +24,7 @@
     IconCheck,
     IconGripVertical,
     IconHome,
+    IconPlus,
     IconTrash,
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
@@ -38,6 +39,8 @@
   import EditableChannelItem from "./EditableChannelItem.svelte";
   import InviteModal from "$lib/components/InviteModal.svelte";
 import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
+import { createSpacesQuery } from "$lib/queries/spaces";
+  import RoomyHomeCard from "./RoomyHomeCard.svelte";
 
   const { agentQuery } = transport;
   const { queryKey } = cache;
@@ -49,9 +52,33 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
   type SidebarCategory =
     typeof schemas.queries.getSpaceMetadata.categories.infer;
 
-  let { spaceId }: { spaceId: string } = $props();
+  let { spaceId }: { spaceId?: string } = $props();
 
-  const metaQuery = createSpaceMetadataQuery(() => spaceId);
+  const metaQuery = createSpaceMetadataQuery(
+    () => spaceId ?? "",
+    { enabled: !!spaceId },
+  );
+
+  // --- Space picker mode — shows all joined spaces, current one highlighted ---
+  const spacesQuery = createSpacesQuery({ includeLeft: true });
+  // On the homepage (no spaceId), always show the space picker
+  let showSpacePicker = $state(!spaceId);
+
+  const joinedSpaces = $derived((spacesQuery.data?.spaces ?? []).filter((s) => s.isMember));
+
+  function openSpacePicker() {
+    if (!spaceId) return; // already in picker mode on homepage
+    showSpacePicker = true;
+  }
+
+  function navigateToSpace(targetSpaceId: string) {
+    if (!spaceId) {
+      goto(`/${targetSpaceId}`);
+      return;
+    }
+    showSpacePicker = false;
+    goto(`/${targetSpaceId}`);
+  }
 
   let isEditing = $state(false);
   let editingId = $state<
@@ -64,10 +91,11 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
   let createAccessMode = $state<"open" | "roles">("open");
   let createRolePermissions = $state<Record<string, Permission>>({});
   let createDefaultAccess = $state<Permission>("readwrite");
+  const isHomepage = $derived(page.route.id === "/")
 
   let createModalOpen = $state(false);
 
-  const meta = $derived(metaQuery.data);
+  const meta = $derived(spaceId ? metaQuery.data : null);
   const showInviteButton = $derived(
     (meta?.joinPolicy.allowPublicJoin ?? false) ||
       (meta?.joinPolicy.allowMemberInvites ?? false) ||
@@ -86,7 +114,7 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
 
   async function onLeave() {
     try {
-      await leaveSpace(spaceId);
+      await leaveSpace(spaceId!);
     } finally {
       goto("/");
     }
@@ -281,7 +309,7 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
           name: categoryMap.get(c.id)?.name ?? "",
           children: c.childIds,
         }));
-      await updateSidebar(spaceId, newSidebar);
+      await updateSidebar(spaceId!, newSidebar);
     }
     draftOrder = null;
     isEditing = false;
@@ -303,9 +331,9 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
         name: opts.name,
         children: [],
       });
-      await updateSidebar(spaceId, newCategories);
+      await updateSidebar(spaceId!, newCategories);
     } else {
-      const roomId = await createRoom(spaceId, {
+      const roomId = await createRoom(spaceId!, {
         kind: "space.roomy.channel",
         name: opts.name,
         ...(createDefaultAccess !== "readwrite" && {
@@ -328,7 +356,7 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
           : [];
 
       if (permissionEvents.length > 0) {
-        await sendEvents(spaceId, permissionEvents);
+        await sendEvents(spaceId!, permissionEvents);
       }
 
       goto(`/${spaceId}/${roomId}`);
@@ -336,26 +364,53 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
   }
 </script>
 
-<SidebarLayout loading={metaQuery.isPending}>
+<SidebarLayout loading={!!spaceId && metaQuery.isPending}>
   {#snippet header()}
-    <SpaceHeaderShell
-      spaceName={meta?.name ?? spaceId}
-      isAdmin={meta?.isAdmin ?? false}
-      {showInviteButton}
-      bind:isEditing
-      onNew={() => (createModalOpen = true)}
-      settingsHref={`/${spaceId}/settings`}
-      {onInvite}
-      {onLeave}
-    >
-      {#snippet avatar()}
-        <SpaceAvatar src={resolveBlobUrl(meta?.avatar)} id={spaceId} name={meta?.name ?? undefined} />
-      {/snippet}
-    </SpaceHeaderShell>
+    {#if showSpacePicker}
+      <!-- Roomy home card (navigates to homepage when in picker-inside-space mode) -->
+      <RoomyHomeCard onClick={() => {if (spaceId) {showSpacePicker = false; goto("/");}}} small={!isHomepage} />
+      <!-- Current space card, always at the top (only when on a space page) -->
+      {#if spaceId}
+        {#each joinedSpaces as space (space.id)}
+          {#if space.id === spaceId}
+            <button
+              onclick={() => navigateToSpace(space.id)}
+              class="flex items-center gap-3 rounded-lg my-2 mx-2 w-60 px-3 py-2 bg-accent-50 dark:bg-accent-900/20 ring-1 ring-accent-500/30 hover:bg-accent-100 dark:hover:bg-accent-900/30 transition-colors text-left cursor-pointer"
+            >
+              <SpaceAvatar
+                src={resolveBlobUrl(space.avatar)}
+                id={space.id}
+                name={space.name ?? undefined}
+                size={36}
+              />
+              <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate flex-1">
+                {space.name || "Unnamed Space"}
+              </span>
+            </button>
+          {/if}
+        {/each}
+      {/if}
+    {:else}
+      <SpaceHeaderShell
+        spaceName={meta?.name ?? spaceId}
+        isAdmin={meta?.isAdmin ?? false}
+        {showInviteButton}
+        bind:isEditing
+        onSpacePicker={openSpacePicker}
+        onNew={() => (createModalOpen = true)}
+        settingsHref={`/${spaceId}/settings`}
+        {onInvite}
+        {onLeave}
+      >
+        {#snippet avatar()}
+          <SpaceAvatar src={resolveBlobUrl(meta?.avatar)} id={spaceId!} name={meta?.name ?? undefined} />
+        {/snippet}
+      </SpaceHeaderShell>
+    {/if}
   {/snippet}
 
   {#snippet saveAction()}
-    {#if isEditing}
+    {#if spaceId && !showSpacePicker && isEditing}
       <Button class="justify-start mb-4 mx-2 self-stretch" onclick={saveChanges}>
         <IconCheck class="size-4" />
         Finish editing
@@ -364,21 +419,49 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
   {/snippet}
 
   {#snippet prefix()}
-    <Button
-      class="w-full justify-start mb-2"
-      variant="ghost"
-      href={`/${spaceId}`}
-      data-current={page.url.pathname === `/${spaceId}`}
-    >
-      <IconHome class="shrink-0" />
-      Index
-    </Button>
-    <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
+    {#if spaceId && !showSpacePicker}
+      <Button
+        class="w-full justify-start mb-2"
+        variant="ghost"
+        href={`/${spaceId}`}
+        data-current={page.url.pathname === `/${spaceId}`}
+      >
+        <IconHome class="shrink-0" />
+        Index
+      </Button>
+      <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
+    {/if}
   {/snippet}
 
   {#snippet body()}
-    {#if metaQuery.isError}
-      <p class="px-2 text-sm text-red-600">{metaQuery.error.message}</p>
+    {#if showSpacePicker}
+      <div class="py-2 space-y-1 pb-12">
+        {#each joinedSpaces as space (space.id)}
+          {#if !spaceId || space.id !== spaceId}
+            <button
+              onclick={() => navigateToSpace(space.id)}
+              class="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-white dark:hover:bg-base-800 transition-colors text-left w-full cursor-pointer"
+            >
+              <SpaceAvatar
+                src={resolveBlobUrl(space.avatar)}
+                id={space.id}
+                name={space.name ?? undefined}
+                size={36}
+              />
+              <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate flex-1">
+                {space.name || "Unnamed Space"}
+              </span>
+            </button>
+          {/if}
+        {/each}
+        
+        <Button class="gap-3 mx-2" variant="ghost" href="/new">
+          <IconPlus />
+          Create Space
+        </Button>
+      </div>
+    {:else if metaQuery.isError}
+      <p class="text-sm text-red-600">{metaQuery.error.message}</p>
     {:else if meta}
       {#if isEditing}
         <div
@@ -455,7 +538,7 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
   {/snippet}
 
   {#snippet footer()}
-    {#if isEditing}
+    {#if spaceId && !showSpacePicker && isEditing}
       <Button
         class="mt-auto justify-start mb-4 mx-2 self-stretch"
         variant="ghost"
@@ -468,32 +551,34 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
   {/snippet}
 </SidebarLayout>
 
-<InviteModal bind:open={openInviteModal} {spaceId} />
+{#if spaceId}
+  <InviteModal bind:open={openInviteModal} {spaceId} />
 
-<EditRoomModal
-  bind:open={openEditRoomModal}
-  {spaceId}
-  id={editingId}
-  {renameCategory}
-/>
-<RestoreRoomModal bind:open={openRestoreRoomModal} {spaceId} />
+  <EditRoomModal
+    bind:open={openEditRoomModal}
+    {spaceId}
+    id={editingId}
+    {renameCategory}
+  />
+  <RestoreRoomModal bind:open={openRestoreRoomModal} {spaceId} />
 
-<CreateRoomModal
-  bind:open={createModalOpen}
-  {spaceId}
-  onCreate={handleCreate}
->
-  {#snippet permissions({ type })}
-    {#if type === "Channel"}
-      <ChannelPermissions
-        {spaceId}
-        bind:accessMode={createAccessMode}
-        bind:rolePermissions={createRolePermissions}
-        bind:defaultAccess={createDefaultAccess}
-      />
-    {/if}
-  {/snippet}
-</CreateRoomModal>
+  <CreateRoomModal
+    bind:open={createModalOpen}
+    {spaceId}
+    onCreate={handleCreate}
+  >
+    {#snippet permissions({ type })}
+      {#if type === "Channel"}
+        <ChannelPermissions
+          {spaceId}
+          bind:accessMode={createAccessMode}
+          bind:rolePermissions={createRolePermissions}
+          bind:defaultAccess={createDefaultAccess}
+        />
+      {/if}
+    {/snippet}
+  </CreateRoomModal>
+{/if}
 
 {#snippet channelItem(channel: SidebarChannel)}
   {@const isActive = activeChannelId === channel.id}

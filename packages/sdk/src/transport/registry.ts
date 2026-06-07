@@ -53,6 +53,10 @@ export const QUERY_SCHEMAS = {
     params: queries.getMessage.Params,
     response: queries.getMessage.Response,
   },
+  "space.roomy.space.getActivityFeed": {
+    params: queries.getActivityFeed.Params,
+    response: queries.getActivityFeed.Response,
+  },
 } as const;
 
 export const PROCEDURE_SCHEMAS = {

@@ -24,6 +24,7 @@ import { createSpaceHandler } from "./handlers/space.roomy.space.createSpace.ts"
 import { joinSpaceHandler } from "./handlers/space.roomy.space.joinSpace.ts";
 import { leaveSpaceHandler } from "./handlers/space.roomy.space.leaveSpace.ts";
 import { setHandleHandler } from "./handlers/space.roomy.space.setHandle.ts";
+import { getActivityFeedHandler } from "./handlers/space.roomy.space.getActivityFeed.ts";
 import { schemas } from "@roomy-space/sdk";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -122,6 +123,11 @@ const router = new XrpcRouter(prodAuthVerifier)
     handler: getSpacesHandler,
     paramsSchema: schemas.queries.getSpaces.Params,
     outputSchema: schemas.queries.getSpaces.Response,
+  })
+  .query("space.roomy.space.getActivityFeed", {
+    handler: getActivityFeedHandler,
+    paramsSchema: schemas.queries.getActivityFeed.Params,
+    outputSchema: schemas.queries.getActivityFeed.Response,
   })
   .query("space.roomy.space.getMembers", {
     handler: getMembersHandler,
