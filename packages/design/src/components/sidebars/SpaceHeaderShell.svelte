@@ -46,7 +46,7 @@
 </script>
 
 <div
-  class="w-full py-2 px-1.5 h-fit flex mb-4 justify-between items-center gap-1"
+  class="w-full py-2 px-1.5 h-fit flex justify-between items-center gap-1"
 >
   <!-- Clickable header area – opens space picker -->
   <button
