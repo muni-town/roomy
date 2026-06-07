@@ -51,7 +51,7 @@
   <!-- Clickable header area – opens space picker -->
   <button
     onclick={onSpacePicker}
-    class="flex items-center gap-2 mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 flex-1 min-w-0 text-left transition-colors"
+    class="flex items-center gap-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 flex-1 min-w-0 text-left transition-colors"
   >
     {@render avatar()}
 
@@ -71,11 +71,12 @@
     {#snippet child({ props })}
       <Button
         {...props}
-        class="shrink-0 mt-2 flex items-center justify-center size-8 rounded-full hover:bg-accent-200/70 dark:hover:bg-base-900/70 text-base-400 hover:text-base-600 dark:hover:text-base-300 transition-colors cursor-pointer"
+        variant="primary"
+        class="p-2"
         aria-label="Space menu"
       >
         <IconEllipsisHorizontal class="size-4" />
-      </button>
+      </Button>
     {/snippet}
     <div class="flex flex-col items-start justify-stretch gap-2 w-[204px]">
       {#if showInviteButton}
