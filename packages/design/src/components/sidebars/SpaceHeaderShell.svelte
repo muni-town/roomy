@@ -71,7 +71,7 @@
     {#snippet child({ props })}
       <Button
         {...props}
-        variant="primary"
+        variant="ghost"
         class="p-2"
         aria-label="Space menu"
       >

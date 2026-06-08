@@ -61,10 +61,13 @@
               {member.handle ? "@" + member.handle : ""}</a
             >
             {#if app.space.status == "joined" && !app.space.space.permissions.find(([user, perm]) => user == member.did && perm == "admin")}
-              <Button onclick={() => addAdmin(member.did)}>Make Admin</Button>
+              <Button onclick={() => addAdmin(member.did)} variant="secondary"
+                >Make Admin</Button
+              >
             {:else if peerStatus.authState?.state === "authenticated" && member.did != peerStatus.authState.did}
-              <Button onclick={() => removeAdmin(member.did)}
-                >Demote Admin</Button
+              <Button
+                onclick={() => removeAdmin(member.did)}
+                variant="secondary">Demote Admin</Button
               >
             {/if}
           </li>
