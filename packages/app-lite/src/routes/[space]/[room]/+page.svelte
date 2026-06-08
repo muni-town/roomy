@@ -5,7 +5,7 @@
   import { IconHashtag } from "@roomy/design/icons";
   import { sync_ } from "$lib/sync.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
-  import ToggleTabs from "$lib/components/layout/ToggleTabs.svelte";
+  import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
   import { updateSeen } from "$lib/mutations/update-seen";
   import ChatArea from "$lib/components/chat/ChatArea.svelte";

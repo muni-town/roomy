@@ -92,7 +92,7 @@ Audit assumption: zero `$lib/` imports. In practice the audit missed several `.t
 | `user/ThemeSettings.svelte` | 185 | Theme picker | ✅ Moved |
 | `layout/MainLayout.svelte` | 72 | Sidebar + main panel shell | ⏳ Deferred. Has `<ThinSidebar />` fallback for unfilled `serverBar?: Snippet`; every current call site relies on the fallback. Also uses `$app/navigation`. Needs decision: drop fallback + update ~9 routes, or leave in app. |
 | `layout/MainPanel.svelte` | 53 | Main content area | ⏳ Deferred. Uses `$app/navigation` / `$env/static/public`; design package has no SvelteKit setup. |
-| `layout/ToggleTabs.svelte` | 73 | Tab switcher | ⏳ Deferred (same SvelteKit dep). |
+| `layout/ToggleTabs.svelte` | 73 | Tab switcher | ✅ Moved |
 | `content/thread/boardView/BoardView.svelte` | 30 | Board grid layout | ⏳ Deferred. Imports `BoardViewItem` (category C with `$lib`). Move BoardViewItem first. |
 | `content/thread/message/ChatMessageSkeleton.svelte` | 63 | Loading skeleton | ✅ Moved |
 | `content/thread/message/embeds/MediaEmbed.svelte` | 30 | Media embed wrapper | ⏳ Deferred. Imports `ImageUrlEmbed` (`$lib/utils.svelte`) and `VideoUrlEmbed` (`$lib/actions/hls`). Move siblings first. |

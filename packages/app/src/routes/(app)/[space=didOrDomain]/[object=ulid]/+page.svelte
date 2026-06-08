@@ -34,7 +34,7 @@
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import ToggleTabs from "$lib/components/layout/ToggleTabs.svelte";
+  import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
   import LoadingLine from "@roomy/design/components/helper/LoadingLine.svelte";
   import PageView from "$lib/components/content/page/PageView.svelte";
