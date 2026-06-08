@@ -7,13 +7,12 @@
   import { IconXMark } from "@roomy/design/icons";
   import { flags } from "$lib/config";
   import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
-  import {
-    Alert,
-    Button,
-    Input,
-    Textarea,
-    toast,
-  } from "@foxui/core";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Input from "@roomy/design/components/ui/input/Input.svelte";
+  import Textarea from "@roomy/design/components/ui/input/Textarea.svelte";
+  import { Alert, toast } from "@foxui/core";
+  import { resolve } from "$app/paths";
+  import { goto } from "$app/navigation";
 
   type SpaceCreationState = AsyncStateWithIdle<{ spaceDid: StreamDid }>;
 
@@ -71,8 +70,13 @@
         spaceName: form.spaceName,
         spaceDescription: form.spaceDescription || undefined,
         avatarFile: form.avatarFile || undefined,
-        allowPublicJoin: flags.inviteOnly ? form.allowPublicJoin === "yes" : undefined,
-        allowMemberInvites: flags.inviteOnly && form.allowPublicJoin === "no" ? form.allowMemberInvites === "yes" : undefined,
+        allowPublicJoin: flags.inviteOnly
+          ? form.allowPublicJoin === "yes"
+          : undefined,
+        allowMemberInvites:
+          flags.inviteOnly && form.allowPublicJoin === "no"
+            ? form.allowMemberInvites === "yes"
+            : undefined,
         creator: {
           did: peerStatus.authState.did,
           personalStreamId: peerStatus.roomyState.personalSpace,
@@ -107,37 +111,21 @@
   }
 </script>
 
-<form class="pt-4" onsubmit={createSpaceSubmit}>
-  <div class="space-y-8">
-    <h2 class="text-base/7 font-semibold text-base-900 dark:text-base-100">
-      Create a new space
-    </h2>
-    {#if !form.dismissAlert}
-      <Alert type="info" class="text-sm flex items-start gap-2"
-        ><div class="space-y-2 grow">
-          <p>
-            Spaces are a way to organize related rooms, pages, and members. You
-            can think of them as communities or groups within the platform.
-          </p>
-          {#if !flags.inviteOnly}
-            <p>
-              <strong>We currently only support public spaces</strong>, meaning
-              anyone can find and join them.
-            </p>
-          {/if}
-        </div>
-        <div>
-          <Button
-            class="hover:bg-blue-400/30 hover:text-black p-1.5"
-            type="button"
-            variant="ghost"
-            onclick={() => (form.dismissAlert = true)}><IconXMark /></Button
-          >
-        </div>
-      </Alert>
-    {/if}
+<form onsubmit={createSpaceSubmit}>
+  <div class="space-y-10">
+    <div>
+      <h2 class="text-xl font-semibold text-base-900 dark:text-base-100 mb-4">
+        Create Your space
+      </h2>
 
-    <div class=" grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
+      <p>Spaces are made of related rooms, pages, and members.</p>
+
+      {#if !flags.inviteOnly}
+        <p><i>Currently, We only support public spaces.</i></p>
+      {/if}
+    </div>
+
+    <div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-6">
       <div class="sm:col-span-4">
         <label
           for="name"
@@ -145,7 +133,13 @@
           >Name</label
         >
         <div class="mt-2">
-          <Input id="name" bind:value={form.spaceName} class="w-full" />
+          <Input
+            id="name"
+            placeholder="Foolish Mortals"
+            bind:value={form.spaceName}
+            class="w-full"
+            autofocus
+          />
         </div>
       </div>
 
@@ -166,9 +160,9 @@
             onchange={handleAvatarSelect}
             bind:this={fileInput}
           />
-          <Button variant="secondary" onclick={() => fileInput?.click()}
-            >Upload Avatar</Button
-          >
+          <Button variant="secondary" onclick={() => fileInput?.click()}>
+            Upload Avatar
+          </Button>
         </div>
       </div>
 
@@ -190,7 +184,9 @@
       {#if flags.inviteOnly}
         <div class="col-span-full flex flex-col gap-6">
           <div>
-            <p class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1">
+            <p
+              class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1"
+            >
               Allow anyone to join?
             </p>
             <ToggleGroup
@@ -205,7 +201,9 @@
 
           {#if form.allowPublicJoin === "no"}
             <div>
-              <p class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1">
+              <p
+                class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1"
+              >
                 Allow any member to create an invite link?
               </p>
               <ToggleGroup

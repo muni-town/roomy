@@ -231,61 +231,61 @@
 
 {#snippet navbar()}
   <div class="relative w-full">
-    <div class="flex items-center gap-2 w-full max-w-full pr-2">
-      <h2
-        class="mr-2 w-full max-w-full truncate font-regular py-4 text-base-900 dark:text-base-100 flex items-center gap-2 transition-all duration-300"
-      >
-        {#if room?.kind === "space.roomy.channel" || room?.kind === "space.roomy.thread"}
-          <div>
-            <IconHashtag
-              class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300"
+    {#if room?.kind == "space.roomy.channel"}
+      <div class="grid grid-cols-3 items-center w-full">
+        <!-- Left: channel name -->
+        <h2 class="flex items-center gap-2 min-w-0">
+          <IconHashtag
+            class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300"
+          />
+          <span class="truncate max-w-[45ch] text-base-900 dark:text-base-100"
+            >{room?.name}</span
+          >
+        </h2>
+
+        <!-- Center: tabs -->
+        {#if flags.threadsList}
+          <div class="flex justify-center">
+            <ToggleTabs
+              items={channelTabList.map((x) => ({
+                name: x,
+                href: `#${x.toLowerCase()}`,
+              }))}
+              active={channelActiveTab}
             />
           </div>
         {/if}
 
-        {#if room?.kind === "space.roomy.page" && shouldShowPageTitle}
-          <div in:fade={{ duration: 300 }} out:fade={{ duration: 100 }}>
-            <IconDocument
-              class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300 mr-1"
-            />
-          </div>
-        {/if}
-
-        {#if room?.kind !== "space.roomy.page"}
-          <span class="truncate">{room?.name}</span>
-        {:else if shouldShowPageTitle}
-          <div class="grow w-full">
-            <span
-              class="truncate"
-              in:fade={{ duration: 300 }}
-              out:fade={{ duration: 100 }}>{room?.name}</span
-            >
-          </div>
-        {/if}
-      </h2>
-
-      {#if spaceId && peerStatus.authState?.state === "loading"}
-        <div class="dark:text-base-400 text-base-600 mx-3">
-          Downloading Entire Space...
+        <!-- Right: button -->
+        <div class="flex justify-end">
+          <Button variant="secondary" size="icon">
+            <IconBars />
+          </Button>
         </div>
-      {:else if room?.kind == "space.roomy.thread"}
+      </div>
+    {:else if room?.kind == "space.roomy.thread"}
+      <div class="flex items-center gap-2 w-full max-w-full pr-2">
+        <h2
+          class="mr-2 truncate font-regular py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+        >
+          <IconHashtag
+            class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300"
+          />
+          <span class="truncate">{room?.name}</span>
+        </h2>
+
         <span class="grow"></span>
 
         {#if app.isSpaceAdmin}
           <Popover>
             {#snippet child({ props })}
               <Button {...props} variant="secondary" size="icon">
-                <IconBars class="shrink-0" /></Button
-              >
+                <IconBars class="shrink-0" />
+              </Button>
             {/snippet}
-
-            <Button onclick={() => (deleteThreadDialogOpen = true)}
-              >Delete Thread</Button
-            >
-
-            <!-- <Button onclick={() => (promoteChannelDialogOpen = true)}
-              >Promote to Channel</Button
-            > -->
+            <Button onclick={() => (deleteThreadDialogOpen = true)}>
+              Delete Thread
+            </Button>
           </Popover>
         {/if}
 
@@ -296,9 +296,9 @@
           >
             Are you Sure you want to delete this thread?
             <div class="flex justify-end">
-              <Button type="submit" disabled={loading}
-                >{#if loading}<LoadingSpinner />{/if} Delete</Button
-              >
+              <Button type="submit" disabled={loading}>
+                {#if loading}<LoadingSpinner />{/if} Delete
+              </Button>
             </div>
           </form>
         </Modal>
@@ -307,15 +307,6 @@
           <form
             class="flex flex-col items-stretch gap-4"
             onsubmit={async () => {
-              // await addRoomToSidebar({
-              //   spaceId: spaceId!,
-              //   room: {
-              //     id: Ulid.assert(page.params.object),
-              //     name: room.name,
-              //     parent: room.parent,
-              //   },
-              //   channelName: promoteChannelName,
-              // });
               promoteChannelDialogOpen = false;
             }}
           >
@@ -323,95 +314,35 @@
               New Channel Name
               <Input bind:value={promoteChannelName} />
             </label>
-
             <div class="flex justify-end">
               <Button type="submit">Promote</Button>
             </div>
           </form>
         </Modal>
-      {:else if room?.kind == "space.roomy.channel"}
-        <span class="grow"></span>
-
-        {#if flags.threadsList}
-          <ToggleTabs
-            items={channelTabList.map((x) => ({
-              name: x,
-              href: `#${x.toLowerCase()}`,
-            }))}
-            active={channelActiveTab}
-          />
-        {/if}
-
-        <!-- <div class="grow w-1/2"></div> -->
-
-        <!-- <Popover>
-          {#snippet child({ props })}
-            <Button {...props} variant="secondary" size="icon">
-              <IconTablerClick class="shrink-0" />
-            </Button>
-          {/snippet}
-
-          <div class="flex flex-col gap-2">
-            <Button onclick={() => (createPageDialogOpen = true)}
-              >Create Page</Button
-            >
-            <Button
-              onclick={async () => {
-                if (!spaceId) return;
-                await convertToThread({
-                  spaceId,
-                  roomId: Ulid.assert(page.params.object),
-                });
-              }}>Convert to Thread</Button
-            >
-            <Button
-              onclick={async () => {
-                if (!spaceId) return;
-                await convertToPage({
-                  spaceId,
-                  room: {
-                    id: Ulid.assert(page.params.object),
-                    name: room.name,
-                  },
-                });
-              }}>Convert to Page</Button
-            >
-          </div>
-        </Popover> -->
-
-        <Modal bind:open={createPageDialogOpen} title="Create Page">
-          <form
-            class="flex flex-col items-stretch gap-4"
-            onsubmit={async () => {
-              promoteChannelDialogOpen = false;
-              try {
-                const roomId = page.params.object;
-                const pageId = await createPage({
-                  spaceId: spaceId!,
-                  parentRoomId: Ulid.assert(roomId),
-                  pageName: createPageName,
-                });
-                toast.success(`Created page: ${createPageName}`);
-                navigate({ space: spaceId, object: pageId });
-              } catch (e) {
-                toast.error(`Error creating page: ${e}`);
-              } finally {
-                createPageDialogOpen = false;
-              }
-            }}
-          >
-            <label class="flex flex-col gap-2">
-              Page Name
-              <Input bind:value={createPageName} />
-            </label>
-
-            <div class="flex justify-end">
-              <Button type="submit">Create</Button>
+      </div>
+    {:else if room?.kind == "space.roomy.page"}
+      <div class="flex items-center gap-2 w-full max-w-full pr-2">
+        <h2
+          class="mr-2 truncate font-regular py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+        >
+          {#if shouldShowPageTitle}
+            <div in:fade={{ duration: 300 }} out:fade={{ duration: 100 }}>
+              <IconDocument
+                class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300 mr-1"
+              />
             </div>
-          </form>
-        </Modal>
-      {:else if room?.kind == "space.roomy.page"}
+            <div class="grow w-full">
+              <span
+                class="truncate"
+                in:fade={{ duration: 300 }}
+                out:fade={{ duration: 100 }}>{room?.name}</span
+              >
+            </div>
+          {/if}
+        </h2>
+
         <span class="grow"></span>
+
         <ToggleTabs
           items={pageTabList.map((x) => ({
             name: x,
@@ -419,6 +350,7 @@
           }))}
           active={pageActiveTab}
         />
+
         <span class="grow w-2/3"></span>
 
         {#if pageActiveTab == "Page"}
@@ -426,16 +358,17 @@
             data-active={showPageChat}
             variant={showPageChat ? "primary" : "secondary"}
             onclick={() => toggleShowPageChat()}
-            ><IconChatBubble class="shrink-0" />Chat</Button
           >
+            <IconChatBubble class="shrink-0" />Chat
+          </Button>
         {/if}
-      {/if}
-    </div>
-  </div>
+      </div>
+    {/if}
 
-  {#if spaceId && peerStatus.authState?.state === "loading"}
-    <LoadingLine />
-  {/if}
+    {#if spaceId && peerStatus.authState?.state === "loading"}
+      <LoadingLine />
+    {/if}
+  </div>
 {/snippet}
 
 {#if app.space.status === "error"}

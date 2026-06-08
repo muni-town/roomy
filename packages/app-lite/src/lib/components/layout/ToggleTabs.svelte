@@ -21,7 +21,7 @@
         <a {href}>
           <Tabs.Trigger
             value={name}
-            class="px-2 py-1 cursor-pointer w-full opacity-60 data-[state=active]:opacity-100 rounded-[10px] bg-transparent data-[state=active]:bg-base-200 dark:data-[state=active]:bg-base-900 transition-colors duration-75 ease-out"
+            class="px-2 py-1 cursor-pointer w-full opacity-60 data-[state=active]:opacity-100 rounded-[10px] bg-transparent data-[state=active]:bg-red-200 dark:data-[state=active]:bg-accent-900 transition-colors duration-75 ease-out"
           >
             {name}
           </Tabs.Trigger>

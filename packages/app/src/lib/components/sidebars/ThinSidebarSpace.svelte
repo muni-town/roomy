@@ -16,9 +16,11 @@
       {...props}
       href={navigateSync({ space: space.handle || space.id })}
       class={[
-        "size-10 rounded-full relative group outline-accent-500",
-        isActive ? "outline-2  cursor-default" : "cursor-pointer",
-        "transition-all duration-200 bg-base-300 hover:outline-3",
+        "size-10 rounded-full relative group outline-2 ",
+        isActive
+          ? "outline-accent-600 cursor-default"
+          : "outline-base-400 cursor-pointer",
+        "transition-all duration-200 bg-base-300 hover:brightness-105",
       ]}
       onmousedown={() => {
         if (isActive) return;

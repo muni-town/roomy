@@ -3,12 +3,12 @@
   import Alert from "@roomy/design/components/ui/alert/Alert.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
+  import Textarea from "@roomy/design/components/ui/input/Textarea.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { createSpace } from "$lib/mutations/space";
   import { uploadFile } from "$lib/mutations/upload";
   import { goto } from "$app/navigation";
-  import { IconXMark } from "@roomy/design/icons";
 
   let form = $state({
     spaceName: "",
@@ -64,44 +64,25 @@
 
 <MainLayout>
   <div class="h-full overflow-y-auto">
+    
     <form
       class="px-4 flex flex-col gap-8 py-8 max-w-3xl mx-auto w-full"
       onsubmit={handleSubmit}
     >
-      <div class="space-y-8">
-        <h2
-          class="text-base/7 font-semibold text-base-900 dark:text-base-100"
-        >
-          Create a new space
-        </h2>
-
-        {#if !form.dismissAlert}
-          <Alert type="info" class="text-sm flex items-start gap-2">
-            <div class="space-y-2 grow">
-              <p>
-                Spaces are a way to organize related rooms, pages, and members.
-                You can think of them as communities or groups within the
-                platform.
-              </p>
-              <p>
-                <strong>We currently only support public spaces</strong>,
-                meaning anyone can find and join them.
-              </p>
-            </div>
-            <div>
-              <Button
-                class="hover:bg-sky-400/30 hover:text-black p-1.5"
-                type="button"
-                variant="ghost"
-                onclick={() => (form.dismissAlert = true)}
-              >
-                <IconXMark />
-              </Button>
-            </div>
-          </Alert>
-        {/if}
-
-        <div class="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
+        
+        <div class="text-base-900 dark:text-base-100">
+          <h2 class="text-xl font-semibold text-base-900 dark:text-base-100 mb-4">
+            Create Your space
+          </h2>
+    
+          <p>Spaces are made of related rooms, pages, and members.</p>
+    
+          
+          <p><i>Currently, We only support public spaces.</i></p>
+          
+        </div>
+    
+        <div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-6">
           <div class="sm:col-span-4">
             <label
               for="name"
@@ -109,10 +90,16 @@
               >Name</label
             >
             <div class="mt-2">
-              <Input id="name" bind:value={form.spaceName} class="w-full" />
+              <Input
+                id="name"
+                placeholder="Foolish Mortals"
+                bind:value={form.spaceName}
+                class="w-full"
+                autofocus
+              />
             </div>
           </div>
-
+    
           <div class="col-span-full">
             <label
               for="photo"
@@ -120,7 +107,8 @@
               >Avatar (optional)</label
             >
             <div class="mt-2 flex items-center gap-x-3">
-              <SpaceAvatar src={avatarUrl} size={64} />
+              <SpaceAvatar imageUrl={avatarUrl} size={64} />
+    
               <input
                 type="file"
                 accept="image/*"
@@ -129,11 +117,7 @@
                 onchange={handleAvatarSelect}
                 bind:this={fileInput}
               />
-              <Button
-                variant="secondary"
-                type="button"
-                onclick={() => fileInput?.click()}
-              >
+              <Button variant="secondary" onclick={() => fileInput?.click()}>
                 Upload Avatar
               </Button>
             </div>
@@ -141,21 +125,19 @@
 
           <div class="sm:col-span-full">
             <label
-              for="description"
+              for="username"
               class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
               >Description (optional)</label
             >
             <div class="mt-2">
-              <textarea
-                id="description"
+              <Textarea
                 bind:value={form.spaceDescription}
-                class="w-full rounded-2xl text-sm font-medium transition-all duration-300 focus:ring-2 ring-1 ring-inset border-0 bg-accent-400/5 dark:bg-accent-600/5 text-accent-700 dark:text-accent-400 placeholder:text-accent-700/50 dark:placeholder:text-accent-400/50 ring-accent-500/30 dark:ring-accent-500/20 focus:ring-accent-500 dark:focus:ring-accent-500 px-3 py-1.5 text-base focus:transition-transform active:duration-100"
+                class="w-full"
                 rows={4}
-              ></textarea>
+              />
             </div>
           </div>
         </div>
-      </div>
 
       {#if error}
         <Alert type="error" class="text-sm">
@@ -175,7 +157,8 @@
           {/if}
         </Button>
       </div>
-    </form>
+      </form>
+      
   </div>
 </MainLayout>
 

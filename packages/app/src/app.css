@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @plugin "@tailwindcss/typography";
-@plugin '@tailwindcss/forms';
+/*@plugin '@tailwindcss/forms';*/
 
 @source "../node_modules/@foxui";
 @source "../node_modules/@roomy/design";
@@ -44,6 +44,10 @@ div {
   --color-accent-800: var(--accent-800);
   --color-accent-900: var(--accent-900);
   --color-accent-950: var(--accent-950);
+
+  --shadow-button: 2px 2px 0 0
+    var(--shadow-button-color, var(--color-accent-700));
+  --shadow-input: 2px 2px 0 0 var(--accent-700);
 }
 
 @layer base {

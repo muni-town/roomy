@@ -40,7 +40,7 @@
 {:else}
   {#if saveAction}{@render saveAction()}{/if}
 
-  <div class="w-full px-2 pt-2 mask-[linear-gradient(to_bottom,transparent_0%,black_5%,black_90%,transparent_100%)] h-full overflow-y-scroll">
+  <div class="w-full px-2 pt-3 mask-[linear-gradient(to_bottom,transparent_0%,black_5%,black_90%,transparent_100%)] h-full overflow-y-scroll">
     {#if prefix}{@render prefix()}{/if}
     {#if loneRoom}{@render loneRoom()}{/if}
     {#if body}{@render body()}{/if}

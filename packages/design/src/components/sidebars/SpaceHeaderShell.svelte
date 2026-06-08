@@ -46,12 +46,12 @@
 </script>
 
 <div
-  class="w-full pt-0.5 pb-1 px-2 h-fit flex mb-4 justify-between items-center gap-1"
+  class="w-full py-2 px-1.5 h-fit flex justify-between items-center gap-1"
 >
   <!-- Clickable header area – opens space picker -->
   <button
     onclick={onSpacePicker}
-    class="flex items-center gap-2 mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 flex-1 min-w-0 text-left transition-colors"
+    class="flex items-center gap-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 flex-1 min-w-0 text-left transition-colors"
   >
     {@render avatar()}
 
@@ -63,19 +63,20 @@
   </button>
 
   <Popover
-    side="bottom"
-    align="end"
+    side="bottom"   
+    align="start"
     bind:open={popoverOpen}
     sideOffset={5}
   >
     {#snippet child({ props })}
-      <button
+      <Button
         {...props}
-        class="shrink-0 mt-2 flex items-center justify-center size-8 rounded-full hover:bg-accent-200/70 dark:hover:bg-base-900/70 text-base-400 hover:text-base-600 dark:hover:text-base-300 transition-colors cursor-pointer"
+        variant="ghost"
+        class="p-2"
         aria-label="Space menu"
       >
         <IconEllipsisHorizontal class="size-4" />
-      </button>
+      </Button>
     {/snippet}
     <div class="flex flex-col items-start justify-stretch gap-2 w-[204px]">
       {#if showInviteButton}
@@ -86,43 +87,45 @@
           }}
           class="w-full"
         >
-          <IconShare class="size-4" /> Invite
+          <IconShare /> 
+          Invite
         </Button>
       {/if}
 
       {#if isAdmin}
         <Button
+          variant="secondary"
           class="w-full"
           onclick={() => {
             isEditing = !isEditing;
             popoverOpen = false;
           }}
-          variant="secondary"
         >
-          <IconPencil class="size-4" />
+          <IconPencil/>
           {isEditing ? "Finish editing" : "Edit Sidebar"}
         </Button>
 
         {#if settingsHref}
-          <Button class="w-full" href={settingsHref} variant="secondary">
-            <IconSettings class="size-4" /> Space settings
+          <Button variant="secondary" class="w-full" href={settingsHref}>
+            <IconSettings/> Space settings
           </Button>
         {/if}
       {/if}
 
       <Button variant="red" class="w-full" onclick={onLeave}>
-        <IconLogOut class="size-4" /> Leave Space
+        <IconLogOut /> Leave Space
       </Button>
     </div>
   </Popover>
 
   {#if isAdmin && onNew}
-    <button
+    <Button
+      variant="secondary"
+      class="p-2"
       onclick={onNew}
-      class="shrink-0 mt-2 flex items-center justify-center size-8 rounded-full hover:bg-accent-200/70 dark:hover:bg-base-900/70 text-base-500 hover:text-accent-600 dark:hover:text-accent-400 transition-colors cursor-pointer"
       aria-label="Create new room or category"
     >
-      <IconPlus class="size-4" />
-    </button>
+      <IconPlus />
+    </Button>
   {/if}
 </div>

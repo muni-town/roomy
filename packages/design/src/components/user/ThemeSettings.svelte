@@ -102,7 +102,7 @@
         </div>
       </AccordionTrigger>
       <AccordionContent class="pt-0 pb-3">
-        <div class="flex overflow-x-auto gap-3 px-2 py-1.5">
+        <div class="flex overflow-x-auto gap-3 px-2 pt-1.5 pb-4">
           {#each accentColors as color}
             <button
               type="button"

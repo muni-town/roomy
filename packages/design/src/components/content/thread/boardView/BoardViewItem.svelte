@@ -50,7 +50,7 @@
         <IconDocument class="shrink-0" />
       {:else if thread.kind == "space.roomy.thread"}{/if}
     </div> -->
-    <div class="text-ellipsis min-w-0 shrink text-xl font-bold">
+    <div class="text-ellipsis min-w-0 shrink text-xl font-light">
       {#if thread.kind == "space.roomy.channel"}
         #&nbsp;
       {/if}

@@ -30,7 +30,7 @@
       class="z-50 {contentProps.class ?? ''}"
     >
       <span
-        class="rounded-lg border-base-200 dark:border-base-800 shadow-xs bg-base-100 dark:bg-base-900 text-base-800 dark:text-base-200 outline-hidden flex items-center justify-center border p-1 px-2 text-sm"
+        class="rounded-lg border-base-200 dark:border-base-800 shadow-xs bg-base-50/50 dark:bg-base-900/50 backdrop-blur-md text-base-800 dark:text-base-200 outline-hidden flex items-center justify-center border p-1 px-2 text-sm"
       >
         {#if typeof tip === "string"}
           {tip}
