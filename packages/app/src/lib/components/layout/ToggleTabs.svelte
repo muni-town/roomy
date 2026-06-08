@@ -30,7 +30,7 @@
               class="
               text-center
               px-2 py-1.5 cursor-pointer w-full text-sm
-              bg-base-50 dark:bg-base-950
+              bg-accent-200 dark:bg-base-950
               text-base-950 dark:text-base-50
               hover:bg-accent-50 hover:dark:bg-base-800
 
@@ -45,7 +45,7 @@
               active:translate-y-0
               active:shadow-none
               
-              data-[state=active]:bg-accent-200
+              data-[state=active]:bg-base-50
               data-[state=active]:dark:bg-accent-600
               data-[state=active]:text-accent-950
               data-[state=active]:dark:text-base-50
