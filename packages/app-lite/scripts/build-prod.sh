@@ -47,6 +47,7 @@ SCOPE+=" rpc:space.roomy.space.leaveSpace?aud=*"
 SCOPE+=" rpc:space.roomy.space.setHandle?aud=*"
 SCOPE+=" rpc:space.roomy.space.getCalendarLink?aud=*"
 SCOPE+=" rpc:space.roomy.space.getCalendarEvents?aud=*"
+SCOPE+=" rpc:space.roomy.space.getActivityFeed?aud=*"
 
 # Build the OAuth client metadata JSON
 oauth_config=$(
