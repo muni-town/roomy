@@ -65,7 +65,7 @@ const personalModuleDef: BasicModule = {
           where $requesting_user != (select admin from stream_info);
 
         select idx, user, payload from events.events
-          where idx >= $start limit $limit;
+          where idx >= $start order by idx limit $limit;
       `.sql,
       params: [],
     },
@@ -900,6 +900,7 @@ const spaceModuleDef: BasicModule = {
                 and ro.deleted = 0
             )
           )
+        order by e.idx
         limit $limit;
       `,
       params: [],
@@ -912,9 +913,9 @@ const spaceModuleDef: BasicModule = {
             and not exists (select 1 from admins where user_id = $requesting_user);
 
         select e.idx, e.user, e.payload
-        from events.events e
-        inner join metadata_events m on e.idx = m.idx
+        from events.events e inner join metadata_events m on e.idx = m.idx
         where e.idx >= $start
+        order by e.idx
         limit $limit;
       `,
       params: [],

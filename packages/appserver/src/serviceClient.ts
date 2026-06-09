@@ -23,6 +23,10 @@ const UNSAFE_AUTH_TOKEN = process.env.LEAF_UNSAFE_AUTH_TOKEN;
 let clientPromise: Promise<RoomyServiceClient> | null = null;
 const spaces = new Map<string, Promise<ConnectedSpace>>();
 
+/** Batch limit for Leaf subscription notifications. Large enough to fetch
+ * an entire stream in one page, avoiding Leaf pagination artefacts. */
+const BATCH_LIMIT = 10_000;
+
 export function getServiceClient(): Promise<RoomyServiceClient> {
   if (clientPromise) return clientPromise;
   if (!UNSAFE_AUTH_TOKEN) {
@@ -52,7 +56,7 @@ export function getConnectedSpace(
   if (cached) return cached;
   const promise = (async () => {
     const client = await getServiceClient();
-    return client.connectSpace(streamDid, modules.space);
+    return client.connectSpace(streamDid, modules.space, BATCH_LIMIT);
   })().catch((err) => {
     spaces.delete(streamDid);
     throw err;

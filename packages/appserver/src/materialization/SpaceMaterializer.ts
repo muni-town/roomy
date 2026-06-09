@@ -24,6 +24,11 @@ import type { InvalidationRouter } from "../invalidation/types.ts";
 import { applyBatch, type MaterializationStats } from "./applyBatch.ts";
 import { ensureProfilesForBatch, type GetProfilesFn } from "./profiles.ts";
 import { toAppliedEvent } from "./toAppliedEvent.ts";
+import {
+  isDebugEnabled,
+  recordBatchDelivery,
+  recordDeliveryGap,
+} from "../debug/eventStore.ts";
 
 export type ConnectedSpaceLike = Pick<
   ConnectedSpace,
@@ -94,6 +99,17 @@ export class SpaceMaterializer {
   /** If `backfillDone` rejected, the error. Null otherwise. */
   backfillError: unknown = null;
 
+  /**
+   * Tracks the highest `idx` seen so far across all batches for this stream.
+   * Used to detect delivery gaps that could indicate missing events from the
+   * subscription (e.g. due to un-ordered pagination in the module query).
+   */
+  #lastObservedIdx: StreamIndex = 0 as StreamIndex;
+  /** Count of detected idx gaps across all batches for this stream. */
+  gapCount = 0;
+  /** Total events delivered across all batches for this stream. */
+  totalEventsDelivered = 0;
+
   private readonly db: Database;
   private readonly space: ConnectedSpaceLike;
   private readonly getProfiles: GetProfilesFn | undefined;
@@ -123,8 +139,30 @@ export class SpaceMaterializer {
 
     // Track settlement so callers can check without awaiting.
     this.backfillDone = backfillDone.then(
-      (v) => { this.backfillSettled = true; return v; },
-      (e) => { this.backfillSettled = true; this.backfillError = e; throw e; },
+      (v) => {
+        this.backfillSettled = true;
+        return v;
+      },
+      (e) => {
+        this.backfillSettled = true;
+        this.backfillError = e;
+        throw e;
+      },
+    );
+
+    // Log a backfill-completion summary including any delivery gaps detected.
+    backfillDone.then(
+      () => {
+        console.info(
+          `[SpaceMaterializer] backfill complete for ${this.streamDid}: ` +
+            `total=${this.totalEventsDelivered} gaps=${this.gapCount} ` +
+            `applied=${this.stats.applied} matErrors=${this.stats.materializerErrors} ` +
+            `applyErrors=${this.stats.applyErrors}`,
+        );
+      },
+      () => {
+        /* already logged by start() */
+      },
     );
   }
 
@@ -206,6 +244,58 @@ export class SpaceMaterializer {
         `[SpaceMaterializer] ${this.streamDid} profile prefetch failed:`,
         err,
       );
+    }
+
+    // Detect delivery gaps: if events have a min idx higher than lastObservedIdx + 1,
+    // events between them were skipped by the subscription.
+    // The first batch for a fresh stream starts at idx 0, so the first batch
+    // naturally shows a gap from 0 — we only warn once we've seen at least one event.
+    const batchMinIdx = events.reduce<number>(
+      (min, e) => Math.min(min, e.idx),
+      Infinity,
+    );
+    const batchMaxIdx = events.reduce<number>(
+      (max, e) => Math.max(max, e.idx),
+      0,
+    );
+    this.totalEventsDelivered += events.length;
+
+    let gapDetected = false;
+    // Snapshot before gap check — used by recordDeliveryGap below.
+    const prevLastObservedIdx = this.#lastObservedIdx;
+    if (this.#lastObservedIdx > 0 && batchMinIdx > this.#lastObservedIdx + 1) {
+      const gapSize = batchMinIdx - this.#lastObservedIdx - 1;
+      this.gapCount += gapSize;
+      gapDetected = true;
+      console.warn(
+        `[SpaceMaterializer] ${this.streamDid} delivery gap detected: ` +
+          `expected idx ${this.#lastObservedIdx + 1} but batch starts at ${batchMinIdx} ` +
+          `(${gapSize} event(s) potentially missing) ` +
+          `isBackfill=${meta.isBackfill} totalDelivered=${this.totalEventsDelivered}`,
+      );
+    }
+    if (batchMaxIdx > this.#lastObservedIdx) {
+      this.#lastObservedIdx = batchMaxIdx as StreamIndex;
+    }
+
+    // Record batch delivery in debug event store, if enabled.
+    if (isDebugEnabled()) {
+      recordBatchDelivery({
+        streamDid: this.streamDid,
+        batchId: meta.batchId,
+        isBackfill: meta.isBackfill,
+        events,
+      });
+      if (gapDetected) {
+        recordDeliveryGap({
+          streamDid: this.streamDid,
+          gapStart: (prevLastObservedIdx + 1) as StreamIndex,
+          gapEnd: (batchMinIdx - 1) as StreamIndex,
+          gapSize: batchMinIdx - prevLastObservedIdx - 1,
+          isBackfill: meta.isBackfill,
+          batchMinIdx: batchMinIdx as StreamIndex,
+        });
+      }
     }
 
     const stats = applyBatch(this.db, this.streamDid, events, {

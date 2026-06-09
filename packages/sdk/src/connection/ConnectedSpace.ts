@@ -81,6 +81,7 @@ export class ConnectedSpace {
 
   #leaf: LeafClient;
   #config: ConnectedSpaceConfig;
+  #subscriptionBatchLimit: number;
 
   #eventSubscription: (() => Promise<void>) | null = null;
   #metadataSubscription: (() => Promise<void>) | null = null;
@@ -96,16 +97,24 @@ export class ConnectedSpace {
   #roomCursors: Map<string, StreamIndex> = new Map();
 
   /**
-   * Max events per subscription notification.
+   * Default max events per subscription notification.
    * Safari silently truncates binary WebSocket frames above ~30-50KB,
    * corrupting msgpack responses. With ~600 bytes/event, 30 events ≈ 18KB.
+   * Consumers may override via `ConnectedSpaceConfig.subscriptionBatchLimit`.
    */
-  static SUBSCRIPTION_BATCH_LIMIT = 10;
+  static DEFAULT_BATCH_LIMIT = 10;
+
+  /** Resolved batch limit for this instance (config value or default). */
+  get batchLimit(): number {
+    return this.#subscriptionBatchLimit;
+  }
 
   private constructor(config: ConnectedSpaceConfig) {
     this.streamDid = config.streamDid;
     this.#config = config;
     this.#leaf = config.client.leaf;
+    this.#subscriptionBatchLimit =
+      config.subscriptionBatchLimit ?? ConnectedSpace.DEFAULT_BATCH_LIMIT;
     this.connection = stateMachine<ConnectionState>({ state: "connected" });
 
     this.#leaf.on("connect", () => this.#onConnect());
@@ -233,7 +242,7 @@ export class ConnectedSpace {
         name: "events",
         params: {},
         start,
-        limit: ConnectedSpace.SUBSCRIPTION_BATCH_LIMIT,
+        limit: this.#subscriptionBatchLimit,
       },
       (result) => this.#handleEventResult(result),
     );
@@ -262,7 +271,7 @@ export class ConnectedSpace {
         name: "metadata",
         params: {},
         start,
-        limit: ConnectedSpace.SUBSCRIPTION_BATCH_LIMIT,
+        limit: this.#subscriptionBatchLimit,
       },
       (result) => this.#handleMetadataResult(result, doneBackfilling),
     );
@@ -687,7 +696,7 @@ export class ConnectedSpace {
           name: "events",
           params: {},
           start,
-          limit: ConnectedSpace.SUBSCRIPTION_BATCH_LIMIT,
+          limit: this.#subscriptionBatchLimit,
         },
         (result) => this.#handleEventResult(result),
       );
@@ -705,7 +714,7 @@ export class ConnectedSpace {
           name: "metadata",
           params: {},
           start,
-          limit: ConnectedSpace.SUBSCRIPTION_BATCH_LIMIT,
+          limit: this.#subscriptionBatchLimit,
         },
         (result) => this.#handleMetadataResult(result),
       );

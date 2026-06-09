@@ -20,6 +20,18 @@ export interface ConnectedSpaceConfig {
   streamDid: StreamDid;
   /** Module definition for the space */
   module: ModuleWithCid;
+  /**
+   * Max events per subscription notification batch.
+   *
+   * Safari silently truncates binary WebSocket frames above ~30-50KB, so the
+   * browser SDK default is 10 (~6KB at ~600 bytes per event). Node.js/Bun
+   * consumers (e.g. the appserver) can safely set this much higher to avoid
+   * Leaf subscription pagination artefacts, e.g. 5000 to fetch an entire
+   * stream in one page.
+   *
+   * @default 10
+   */
+  subscriptionBatchLimit?: number;
 }
 
 /**

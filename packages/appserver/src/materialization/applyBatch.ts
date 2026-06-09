@@ -22,6 +22,10 @@ import type {
 
 import { materialize } from "./materializer.ts";
 import { applyBundle } from "./applyBundle.ts";
+import {
+  isDebugEnabled,
+  recordMaterialization,
+} from "../debug/eventStore.ts";
 
 const MAX_TRACKED_FAILURES = 100;
 
@@ -79,12 +83,33 @@ export function applyBatch(
           reason: "materializer",
           message: bundle.message,
         });
+        if (isDebugEnabled()) {
+          recordMaterialization({
+            streamDid: streamId,
+            idx: e.idx,
+            eventType: e.event.$type,
+            eventId: bundle.eventId,
+            status: "materializer_error",
+            errorMessage: bundle.message,
+            bundle,
+          });
+        }
         continue;
       }
 
       try {
         applyBundle(db, bundle, { isBackfill: opts.isBackfill, streamId });
         stats.applied++;
+        if (isDebugEnabled()) {
+          recordMaterialization({
+            streamDid: streamId,
+            idx: e.idx,
+            eventType: e.event.$type,
+            eventId: e.event.id,
+            status: "applied",
+            bundle,
+          });
+        }
       } catch (err) {
         stats.applyErrors++;
         const message = err instanceof Error ? err.message : String(err);
@@ -97,6 +122,16 @@ export function applyBatch(
           reason: "apply",
           message,
         });
+        if (isDebugEnabled()) {
+          recordMaterialization({
+            streamDid: streamId,
+            idx: e.idx,
+            eventType: e.event.$type,
+            eventId: e.event.id,
+            status: "apply_error",
+            errorMessage: message,
+          });
+        }
       }
     }
 

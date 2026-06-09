@@ -199,8 +199,14 @@ export class RoomyServiceClient extends RoomyClientBase {
   async connectSpace(
     streamDid: StreamDid,
     module: ModuleWithCid,
+    subscriptionBatchLimit?: number,
   ): Promise<ConnectedSpace> {
-    return ConnectedSpace.connect({ client: this, streamDid, module });
+    return ConnectedSpace.connect({
+      client: this,
+      streamDid,
+      module,
+      subscriptionBatchLimit,
+    });
   }
 
   /**
