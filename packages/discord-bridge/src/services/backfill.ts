@@ -502,7 +502,11 @@ async function backfillChannel(
 
     if (messages.length === 0) break;
 
-    for (const message of messages) {
+    // Discord API returns newest-first regardless of pagination direction.
+    // Reverse so we process oldest-first, preserving chronological order.
+    const sortedMessages = [...messages].reverse();
+
+    for (const message of sortedMessages) {
       try {
         const result = await ingestDiscordMessage(
           message as MessageProperties,
@@ -514,6 +518,7 @@ async function backfillChannel(
             const name = resolveChannelName(bot, snowflake);
             return Promise.resolve(name);
           },
+          true, // backfill — skips per-message cursor writes
         );
         totalSynced += result.synced;
         totalSkipped += result.skipped;
@@ -525,8 +530,13 @@ async function backfillChannel(
       }
     }
 
-    const lastMessage = messages[messages.length - 1]!;
-    afterCursor = lastMessage.id.toString();
+    // Advance cursor at page boundary (not per-message) so a crash in
+    // the middle of a page doesn't lose the unprocessed messages in this
+    // batch. The idempotency check (getRoomyId) in ingestDiscordMessage
+    // prevents re-processing already-synced messages on the next run.
+    const oldestOnPage = sortedMessages[0]!;
+    afterCursor = oldestOnPage.id.toString();
+    repo.setChannelCursor(spaceDid, channelId, afterCursor);
 
     if (messages.length < 100) break;
   }

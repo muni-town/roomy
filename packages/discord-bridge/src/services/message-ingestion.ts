@@ -23,6 +23,7 @@ export async function ingestDiscordMessage(
   guildIdOverride?: string,
   spaceDidOverride?: string,
   resolveChannelName?: (snowflake: string) => Promise<string | undefined>,
+  backfill = false,
 ): Promise<{ synced: number; skipped: number }> {
   const channelId = message.channelId.toString();
   const messageId = message.id.toString();
@@ -179,9 +180,14 @@ export async function ingestDiscordMessage(
     try {
       await connected.sendEvent(event);
 
-      // Register mapping and advance cursor
+      // Register mapping
       repo.registerMapping(spaceDid, "message", messageId, eventUlid);
-      repo.setChannelCursor(spaceDid, channelId, messageId);
+
+      // Advance cursor only during live ingestion, not during backfill
+      // (backfill manages its own page-level cursor)
+      if (!backfill) {
+        repo.setChannelCursor(spaceDid, channelId, messageId);
+      }
 
       log.info(`Synced message ${messageId} → ${eventUlid} in ${spaceDid}`);
       synced++;
