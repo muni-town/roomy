@@ -92,9 +92,7 @@ export async function sendEventsToStream(
     binary,
   );
   const resp = decode(
-    respBytes instanceof Uint8Array
-      ? respBytes
-      : new Uint8Array(respBytes),
+    respBytes instanceof Uint8Array ? respBytes : new Uint8Array(respBytes),
   );
   if (
     resp &&

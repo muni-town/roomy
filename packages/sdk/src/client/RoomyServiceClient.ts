@@ -132,6 +132,7 @@ export class RoomyServiceClient extends RoomyClientBase {
     );
 
     const authenticated = new Deferred<string>();
+    let settled = false;
 
     leaf.on("connect", () => {
       console.info("Leaf: connected (service)");
@@ -141,6 +142,20 @@ export class RoomyServiceClient extends RoomyClientBase {
     leaf.on("disconnect", () => {
       console.info("Leaf: disconnected (service)");
       events?.onDisconnect?.();
+      if (!settled) {
+        settled = true;
+        authenticated.reject(
+          new Error("Leaf disconnected before authentication completed"),
+        );
+      }
+    });
+
+    leaf.on("error", (error) => {
+      console.error("Leaf: error", error);
+      if (!settled) {
+        settled = true;
+        authenticated.reject(new Error(`Leaf authentication error: ${error}`));
+      }
     });
 
     leaf.on("authenticated", (did) => {
@@ -148,18 +163,29 @@ export class RoomyServiceClient extends RoomyClientBase {
       // The Leaf server returns its own DID for unsafe-token auth. We assert
       // it's a string here — if the server omits it, treat as a hard error.
       if (typeof did !== "string") {
-        authenticated.reject(
-          new Error("Leaf server did not return a DID on authentication"),
-        );
+        if (!settled) {
+          settled = true;
+          authenticated.reject(
+            new Error("Leaf server did not return a DID on authentication"),
+          );
+        }
         return;
       }
-      authenticated.resolve(did);
+      if (!settled) {
+        settled = true;
+        authenticated.resolve(did);
+      }
     });
 
     const serviceDid = await withTimeoutWarning(
       authenticated.promise,
       "RoomyServiceClient.create: waiting for Leaf authentication",
-    );
+    ).catch((err) => {
+      // Clean up Leaf connection on failure so the caller can retry with
+      // a fresh client (e.g. serviceClient.ts resets clientPromise = null).
+      leaf.disconnect();
+      throw err;
+    });
 
     return new RoomyServiceClient(leaf, config, serviceDid);
   }
