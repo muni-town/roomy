@@ -22,6 +22,10 @@
       "required": [
         "did"
       ],
+      "nullable": [
+        "avatar",
+        "name"
+      ],
       "properties": {
         "did": {
           "type": "string"
@@ -38,6 +42,9 @@
       "type": "object",
       "required": [
         "latestMembers"
+      ],
+      "nullable": [
+        "latestTimestamp"
       ],
       "properties": {
         "latestMembers": {
@@ -60,6 +67,9 @@
         "canWrite",
         "id",
         "unreadCount"
+      ],
+      "nullable": [
+        "lastRead"
       ],
       "properties": {
         "activity": {
@@ -162,6 +172,10 @@
       "required": [
         "did"
       ],
+      "nullable": [
+        "avatar",
+        "name"
+      ],
       "properties": {
         "did": {
           "type": "string"
@@ -178,6 +192,9 @@
       "type": "object",
       "required": [
         "latestMembers"
+      ],
+      "nullable": [
+        "latestTimestamp"
       ],
       "properties": {
         "latestMembers": {
@@ -200,6 +217,9 @@
         "canWrite",
         "id",
         "unreadCount"
+      ],
+      "nullable": [
+        "lastRead"
       ],
       "properties": {
         "activity": {

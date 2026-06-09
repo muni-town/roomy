@@ -11,6 +11,9 @@
           "required": [
             "spaceId"
           ],
+          "nullable": [
+            "handle"
+          ],
           "properties": {
             "spaceId": {
               "type": "string"

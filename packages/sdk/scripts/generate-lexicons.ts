@@ -19,7 +19,10 @@
  *   - Body `schema` may be an inline object at the top level, OR a ref.
  *   - Object-typed properties and array items must use `{ type: "ref", ref: "#defName" }`.
  *   - Each named object def lives in the lexicon's `defs` alongside `main`.
- *   - Nullable fields (string | null) are expressed by omitting them from `required`.
+ *   - Nullable fields (string | null) are expressed by omitting them from `required`
+ *     and adding them to the parent object's `nullable` array.
+ *   - `params` does not support `nullable` — nullable params fields are simply
+ *     omitted from `required`.
  *
  * # Supported arktype subset
  *
@@ -70,6 +73,8 @@ type LexSlot =
 interface LexObjDef {
   type: "object";
   required?: string[];
+  /** Property names that may be present with a null value. */
+  nullable?: string[];
   properties: Record<string, LexSlot>;
 }
 
@@ -215,19 +220,21 @@ function convertObjectDef(
 
   const outProps: Record<string, LexSlot> = {};
   const outRequired: string[] = [];
+  const outNullable: string[] = [];
 
   for (const [k, v] of Object.entries(props)) {
     const slot = convertSlot(v, nsid, `${path}.${k}`, collector);
     outProps[k] = slot;
 
-    // Determine if this field is nullable (anyOf with null branch).
     const isNullable = isNullableSchema(v);
     if (required.includes(k) && !isNullable) outRequired.push(k);
+    if (isNullable) outNullable.push(k);
   }
 
   return {
     type: "object",
     ...(outRequired.length > 0 ? { required: outRequired } : {}),
+    ...(outNullable.length > 0 ? { nullable: outNullable } : {}),
     properties: outProps,
   };
 }
