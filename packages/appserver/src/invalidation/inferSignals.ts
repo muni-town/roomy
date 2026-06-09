@@ -197,11 +197,23 @@ function handleReactionChange(event: AppliedEvent): InvalidationEvent[] {
 
 function handleCreateRoom(event: AppliedEvent): InvalidationEvent[] {
   const spaceId = event.streamDid;
-  return [
+  const roomId = event.id; // For createRoom events, the event's id IS the room ID
+
+  const signals: InvalidationEvent[] = [
     ...invalidateSpace(spaceId),
     // New room means sidebar changed.
     invalidate("space.roomy.space.getMetadata", { spaceId }),
+    // Room-scoped queries need invalidation so the client can fetch
+    // metadata and messages for the newly created room. Without these,
+    // a client that navigated to the room before the materializer
+    // processed the event (or that re-subscribes to a room while the
+    // materializer is still catching up) gets stuck with stale/empty data.
+    invalidate("space.roomy.room.getMessages", { roomId }),
+    invalidate("space.roomy.room.getMetadata", { roomId }),
+    invalidate("space.roomy.room.getThreads", { roomId }),
   ];
+
+  return signals;
 }
 
 function handleUpdateRoom(event: AppliedEvent): InvalidationEvent[] {

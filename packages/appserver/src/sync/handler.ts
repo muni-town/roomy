@@ -133,6 +133,16 @@ export class SyncManager {
           this.#topicIndex.set(topic, subs);
         }
         subs.add(connId);
+
+        // When subscribing to a room topic, immediately invalidate
+        // room-scoped queries so the client re-fetches fresh data.
+        // Without this, a client that navigates away and back will
+        // serve stale TanStack cache (staleTime: Infinity) and miss
+        // any messages/invalidation frames that arrived while it was
+        // unsubscribed.
+        if (msg.topic === "room") {
+          this.#sendRoomInvalidation(state, msg.id);
+        }
       } else if (msg.type === "unsub") {
         const topic = topicKey(msg.topic, msg.id);
         state.topics.delete(topic);
@@ -321,6 +331,29 @@ export class SyncManager {
           );
         }
       }
+    }
+  }
+
+  /**
+   * Send #invalidate for all room-scoped queries to one connection.
+   * Called when a client subscribes to a room topic that it was
+   * previously unsubscribed from. This ensures the client re-fetches
+   * fresh data rather than serving stale TanStack cache entries that
+   * accumulated while it wasn't subscribed.
+   */
+  #sendRoomInvalidation(state: ConnectionState, roomId: string): void {
+    const roomNsids: Array<{ nsid: QueryNsid }> = [
+      { nsid: "space.roomy.room.getMessages" },
+      { nsid: "space.roomy.room.getMetadata" },
+      { nsid: "space.roomy.room.getThreads" },
+    ];
+    for (const { nsid } of roomNsids) {
+      state.send(
+        messageFrame("#invalidate", {
+          nsid,
+          params: { roomId },
+        }),
+      );
     }
   }
 }
