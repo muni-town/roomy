@@ -130,9 +130,31 @@ async function ensureRoomyRooms(
         .filter((ch) => CHANNEL_TYPES.has(ch.type))
         .map((ch) => ch.id.toString());
     } else {
-      channelIds = repo
-        .listAllowlistForBridge(spaceDid)
-        .map((e) => e.channelId);
+      // In subset mode the allowlist can contain both channel and thread
+      // snowflakes (threads are auto-added during thread creation).
+      // We must only create channel-kind rooms for true top-level channels.
+      // Thread snowflakes get resolved via their parent channel instead.
+      const guild = bot.cache.guilds.memory.get(BigInt(guildId));
+      const guildChannels = guild?.channels;
+      channelIds = [];
+      for (const entry of repo.listAllowlistForBridge(spaceDid)) {
+        const cachedCh = guildChannels?.get(BigInt(entry.channelId));
+        if (cachedCh) {
+          if (CHANNEL_TYPES.has(cachedCh.type)) {
+            channelIds.push(entry.channelId);
+          }
+          continue;
+        }
+        // Channel not in cache — resolve type via REST API
+        const chType = await resolveChannelType(bot, entry.channelId);
+        if (chType !== undefined && CHANNEL_TYPES.has(chType)) {
+          channelIds.push(entry.channelId);
+        } else {
+          log.debug(
+            `Skipping allowlist entry ${entry.channelId}: resolved type ${chType} is not a top-level channel`,
+          );
+        }
+      }
     }
 
     const connected = await spaceManager.getOrConnect(spaceDid);
@@ -298,6 +320,34 @@ async function ensureRoomyThreads(
   }
 }
 
+/**
+ * Resolve the Discord channel type (integer) for a snowflake.
+ * Checks the in-memory cache first (both top-level and guild-scoped),
+ * then falls back to a REST API call as a last resort.
+ * Returns `undefined` when the type cannot be resolved.
+ */
+async function resolveChannelType(
+  bot: BotWithCache,
+  channelId: string,
+): Promise<number | undefined> {
+  const id = BigInt(channelId);
+  // Check top-level channel cache
+  const direct = bot.cache.channels.memory.get(id);
+  if (direct) return direct.type;
+  // Check guild channel caches
+  for (const guild of bot.cache.guilds.memory.values()) {
+    const ch = guild.channels?.get(id);
+    if (ch) return ch.type;
+  }
+  // Fall back to REST API
+  try {
+    const channel = await bot.helpers.getChannel(id);
+    return (channel as { type: number }).type;
+  } catch {
+    return undefined;
+  }
+}
+
 function resolveGuildIdForChannel(
   bot: BotWithCache,
   channelId: string,
@@ -367,11 +417,23 @@ export async function backfillSingleChannel(
 
     // Type guard: skip threads — they have their own creation path
     // (ensureRoomyThreads or handleThreadCreate).
+    // Check cache first (fast path), then fall back to REST API to handle
+    // the case where the thread isn't cached yet (e.g. recently created).
     const cachedChannel = cached.cache.channels.memory.get(BigInt(channelId))
       ?? cached.cache.guilds.memory.get(BigInt(guildId))?.channels?.get(BigInt(channelId));
     if (cachedChannel && THREAD_TYPES.has(cachedChannel.type)) {
       log.debug(`backfillSingleChannel: channel ${channelId} is a thread (type ${cachedChannel.type}); skipping channel-kind creation`);
       return;
+    }
+    // Cache miss or unknown type — resolve via REST API
+    if (!cachedChannel) {
+      const chType = await resolveChannelType(cached, channelId);
+      if (chType !== undefined && !CHANNEL_TYPES.has(chType)) {
+        log.debug(
+          `backfillSingleChannel: channel ${channelId} resolved to type ${chType} (not a top-level channel); skipping channel-kind creation`,
+        );
+        return;
+      }
     }
 
     const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
