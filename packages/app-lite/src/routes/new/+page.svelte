@@ -164,7 +164,6 @@
       </form>
       
   </div>
-</div>
 
 {#snippet createSpaceNavbar()}
   <div class="flex w-full items-center gap-3">
