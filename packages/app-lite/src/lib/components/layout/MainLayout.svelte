@@ -61,7 +61,7 @@
   <!-- Main area: sidebar + content in a row -->
   <div class="flex flex-1 overflow-hidden relative">
     <!-- Desktop sidebar (normal flow) -->
-    <div class="hidden sm:block w-64 shrink-0">
+    <div class="hidden sm:flex sm:flex-col w-64 shrink-0">
       <BigSidebar>
         {#if sidebar}
           {@render sidebar()}

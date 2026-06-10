@@ -402,7 +402,7 @@ import { createSpacesQuery } from "$lib/queries/spaces";
   }
 </script>
 
-<div bind:this={sidebarElement}>
+<div bind:this={sidebarElement} class="h-full">
 <SidebarLayout loading={!!spaceId && metaQuery.isPending}>
   {#snippet header()}
     {#if spaceId}

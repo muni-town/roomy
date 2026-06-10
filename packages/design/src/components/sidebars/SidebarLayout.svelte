@@ -27,8 +27,8 @@
   } = $props();
 </script>
 
-<div class="flex flex-col h-full">
-<div class="w-64">
+<div class="flex flex-col flex-1 min-h-0 h-full">
+<div class="shrink-0 w-64">
 {@render header()}
 </div>
 
@@ -40,7 +40,7 @@
 {:else}
   {#if saveAction}{@render saveAction()}{/if}
 
-  <div class="w-full px-2 pt-3 mask-[linear-gradient(to_bottom,transparent_0%,black_5%,black_90%,transparent_100%)] flex-1 min-h-0 overflow-y-scroll">
+  <div class="w-full h-full px-2 pt-3 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)] flex-1 min-h-0 overflow-y-scroll">
     {#if prefix}{@render prefix()}{/if}
     {#if loneRoom}{@render loneRoom()}{/if}
     {#if body}{@render body()}{/if}
