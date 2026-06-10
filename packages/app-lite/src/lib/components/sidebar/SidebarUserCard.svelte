@@ -28,9 +28,9 @@
     {#snippet child({ props })}
       <button
         {...props}
-        class="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-base-200/60 dark:hover:bg-base-800/60 transition-colors cursor-pointer group"
+        class="flex items-center gap-2 pl-2 pr-1 py-0.5 rounded-md hover:bg-base-200/60 dark:hover:bg-base-800/60 transition-colors cursor-pointer group"
       >
-        <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-20 text-right hidden sm:block">
+        <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-32 text-right hidden sm:block">
           {lastLogin?.handle ?? "Log in"}
         </span>
         <div class="relative size-7 shrink-0">

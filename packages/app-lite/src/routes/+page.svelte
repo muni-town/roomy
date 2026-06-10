@@ -52,7 +52,7 @@
 </div>
 
 {#snippet homeNavbar()}
-  <div class="flex w-full items-center gap-3 px-2 justify-start">
+  <div class="flex w-full items-center gap-3 px-2 justify-end">
     <Button href="https://a.roomy.space" target="_blank">About Roomy</Button>
   </div>
 {/snippet}

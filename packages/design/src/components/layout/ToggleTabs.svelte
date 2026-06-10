@@ -26,7 +26,7 @@
               {...props}
               class="
               text-center
-              px-2 py-1.5 cursor-pointer w-full text-sm
+              px-2 py-1 cursor-pointer w-full text-sm
               bg-accent-200 dark:bg-base-950
               text-base-950 dark:text-base-50
               hover:bg-accent-50 hover:dark:bg-base-800

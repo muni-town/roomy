@@ -80,7 +80,7 @@
       <Button
         {...props}
         variant="ghost"
-        class="p-2"
+        class="p-1"
         aria-label="Space menu"
       >
         <IconEllipsisHorizontal class="size-4" />
@@ -129,7 +129,7 @@
   {#if isAdmin && onNew}
     <Button
       variant="secondary"
-      class="p-2"
+      class="p-1"
       onclick={onNew}
       aria-label="Create new room or category"
     >
