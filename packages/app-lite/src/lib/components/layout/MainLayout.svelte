@@ -39,7 +39,14 @@
     <div class="flex items-center gap-1 sm:gap-2">
       <RoomyHomeCard
         onClick={() => goto("/")}
-        onMobileClick={() => (isSidebarVisible.value = !isSidebarVisible.value)}
+        onMobileClick={() => {
+          if (isSidebarVisible.value) {
+            goto("/");
+            isSidebarVisible.value = false;
+          } else {
+            isSidebarVisible.value = true;
+          }
+        }}
         small={compact}
       />
     </div>
@@ -52,7 +59,7 @@
   </Navbar>
 
   <!-- Main area: sidebar + content in a row -->
-  <div class="flex flex-1 overflow-hidden">
+  <div class="flex flex-1 overflow-hidden relative">
     <!-- Desktop sidebar (normal flow) -->
     <div class="hidden sm:block w-64 shrink-0">
       <BigSidebar>
@@ -61,6 +68,28 @@
         {/if}
       </BigSidebar>
     </div>
+
+    <!-- Mobile backdrop (below navbar, overlays content only) -->
+    {#if isSidebarVisible.value}
+      <button
+        onclick={() => (isSidebarVisible.value = false)}
+        aria-label="toggle navigation"
+        class="absolute inset-0 z-30 cursor-pointer sm:hidden bg-base-100/50 dark:bg-base-950/50"
+      ></button>
+    {/if}
+
+    <!-- Mobile sidebar (below navbar, overlays content) -->
+    {#if isSidebarVisible.value}
+      <div class="absolute inset-y-0 left-0 z-40 sm:hidden bg-base-100/50 dark:bg-base-950 backdrop-blur-sm">
+        <div class="flex h-full w-fit">
+          <BigSidebar>
+            {#if sidebar}
+              {@render sidebar()}
+            {/if}
+          </BigSidebar>
+        </div>
+      </div>
+    {/if}
 
     <!-- Content area -->
     <div
@@ -74,25 +103,3 @@
     </div>
   </div>
 </div>
-
-<!-- Mobile overlay -->
-{#if isSidebarVisible.value}
-  <button
-    onclick={() => (isSidebarVisible.value = false)}
-    aria-label="toggle navigation"
-    class="fixed inset-0 z-30 cursor-pointer sm:hidden bg-base-100/50 dark:bg-base-950/50"
-  ></button>
-{/if}
-
-<!-- Mobile sidebar (fixed overlay) -->
-{#if isSidebarVisible.value}
-  <div class="isolate fixed top-0 bottom-0 left-0 z-40 bg-base-100/50 dark:bg-base-950 backdrop-blur-sm sm:hidden">
-    <div class="flex h-full w-fit">
-      <BigSidebar>
-        {#if sidebar}
-          {@render sidebar()}
-        {/if}
-      </BigSidebar>
-    </div>
-  </div>
-{/if}
