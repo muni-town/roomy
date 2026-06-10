@@ -9,6 +9,7 @@
   import { requireAuth } from "$lib/components/layout/auth-guard.svelte";
   import LoginModal from "$lib/components/auth/LoginModal.svelte";
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
+  import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { Tooltip } from "bits-ui";
 
   // Debug: log all public env vars
@@ -83,7 +84,9 @@
 
 <QueryClientProvider client={queryClient}>
   <Tooltip.Provider>
+  <MainLayout>
     {@render children()}
+  </MainLayout>
   </Tooltip.Provider>
 
   {#if auth.initError && requireAuth.value}

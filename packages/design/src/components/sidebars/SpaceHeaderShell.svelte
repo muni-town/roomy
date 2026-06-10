@@ -23,6 +23,7 @@
     settingsHref,
     onInvite,
     onLeave,
+    spacePickerActive = false,
   }: {
     spaceName?: string;
     /** Avatar rendered by caller (e.g. SpaceAvatar wrapper) */
@@ -40,6 +41,8 @@
     onInvite: () => void;
     /** Called when Leave Space is clicked. */
     onLeave: () => void;
+    /** Whether the space picker popover is currently open (shows active visual) */
+    spacePickerActive?: boolean;
   } = $props();
 
   let popoverOpen = $state(false);
@@ -51,7 +54,12 @@
   <!-- Clickable header area – opens space picker -->
   <button
     onclick={onSpacePicker}
-    class="flex items-center gap-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 flex-1 min-w-0 text-left transition-colors"
+    class={[
+      "flex items-center gap-2 cursor-pointer rounded-2xl p-2 flex-1 min-w-0 text-left transition-colors",
+      spacePickerActive
+        ? "bg-accent-200/70 dark:bg-accent-800/30 ring-1 ring-accent-500/30"
+        : "hover:bg-accent-200/70 dark:hover:bg-base-900/70",
+    ]}
   >
     {@render avatar()}
 

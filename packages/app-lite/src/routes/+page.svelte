@@ -3,9 +3,9 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import { IconPlus } from "@roomy/design/icons";
-  import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
+  import { setSidebarContent } from "$lib/components/layout/sidebar.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
   import { joinSpace } from "$lib/mutations/space";
   import { queryClient } from "$lib/client";
@@ -35,19 +35,24 @@
 
   onMount(() => {
     setNavbar(homeNavbar);
-    return () => setNavbar(undefined);
+    setSidebarContent(homeSidebar);
+    return () => {
+      setNavbar(undefined);
+      setSidebarContent(undefined);
+    };
   });
 </script>
 
-<MainLayout>
-  {#snippet sidebar()}
-    <SpaceSidebar />
-  {/snippet}
+{#snippet homeSidebar()}
+  <SpaceSidebar />
+{/snippet}
+
+<div class="h-full bg-base-50 dark:bg-base-950 text-base-800 dark:text-base-200">
   {@render homeContent()}
-</MainLayout>
+</div>
 
 {#snippet homeNavbar()}
-  <div class="flex w-full items-center gap-3 px-2 justify-end">
+  <div class="flex w-full items-center gap-3 px-2 justify-start">
     <Button href="https://a.roomy.space" target="_blank">About Roomy</Button>
   </div>
 {/snippet}

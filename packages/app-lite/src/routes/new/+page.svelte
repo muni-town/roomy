@@ -5,8 +5,8 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import Textarea from "@roomy/design/components/ui/input/Textarea.svelte";
-  import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
+  import { setSidebarContent } from "$lib/components/layout/sidebar.svelte";
   import { createSpace } from "$lib/mutations/space";
   import { uploadFile } from "$lib/mutations/upload";
   import { goto } from "$app/navigation";
@@ -59,12 +59,15 @@
 
   onMount(() => {
     setNavbar(createSpaceNavbar);
-    return () => setNavbar(undefined);
+    setSidebarContent(undefined);
+    return () => {
+      setNavbar(undefined);
+      setSidebarContent(undefined);
+    };
   });
 </script>
 
-<MainLayout>
-  <div class="h-full overflow-y-auto">
+<div class="h-full overflow-y-auto bg-base-50 dark:bg-base-950 text-base-800 dark:text-base-200">
     
     <form
       class="px-4 flex flex-col gap-8 py-8 max-w-3xl mx-auto w-full"
@@ -161,7 +164,7 @@
       </form>
       
   </div>
-</MainLayout>
+</div>
 
 {#snippet createSpaceNavbar()}
   <div class="flex w-full items-center gap-3">

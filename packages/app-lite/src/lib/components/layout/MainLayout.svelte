@@ -4,23 +4,29 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { onNavigate } from "$app/navigation";
+  import { page } from "$app/state";
+  import { goto, onNavigate } from "$app/navigation";
   import BigSidebar from "@roomy/design/components/layout/BigSidebar.svelte";
+  import RoomyHomeCard from "$lib/components/sidebar/RoomyHomeCard.svelte";
   import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
   import ToggleNavigation from "@roomy/design/components/helper/ToggleNavigation.svelte";
   import { navbar } from "./navbar.svelte";
+  import { sidebarOverride, sidebarContent } from "./sidebar.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
 
   let {
-    sidebar,
     children,
     chatArea = false,
   }: {
-    sidebar?: Snippet;
     children: Snippet;
     chatArea?: boolean;
   } = $props();
+
+  // Compact mode when on a space page or other inner route (not the root homepage)
+  const compact = $derived(page.route.id !== "/");
+
+  const sidebar = $derived(sidebarOverride.content ?? sidebarContent.content);
 
   onNavigate(() => {
     isSidebarVisible.value = false;
@@ -34,14 +40,22 @@
     chatArea ? "bg-white dark:bg-base-950" : "",
   ]}
 >
-  <Navbar>
-    <div class="flex gap-4 items-center ml-2 sm:hidden">
+  <Navbar {compact}>
+    <div class="flex gap-4 items-center mr-auto ml-2 sm:hidden">
       <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
     </div>
 
     {#if navbar.content}
       {@render navbar.content()}
     {/if}
+
+    <div class="ml-auto hidden sm:block">
+      <SidebarUserCard side="bottom" />
+    </div>
+
+    <div class="ml-auto sm:hidden">
+      <SidebarUserCard side="bottom" />
+    </div>
   </Navbar>
 
   <div class="flex flex-col h-full max-h-full overflow-y-hidden">
@@ -68,12 +82,13 @@
 >
   <div class="flex h-full w-fit">
     <BigSidebar>
+      <RoomyHomeCard
+        onClick={() => goto("/")}
+        small={compact}
+      />
       {#if sidebar}
         {@render sidebar()}
       {/if}
-      {#snippet footer()}
-        <SidebarUserCard />
-      {/snippet}
     </BigSidebar>
   </div>
 </div>

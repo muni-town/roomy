@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { useTopicSubscription } from "@roomy-space/sdk/svelte";
   import type { Topic } from "@roomy-space/sdk/svelte";
   import { sync_ } from "$lib/sync.svelte";
-  import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
-  import { sidebarOverride } from "$lib/components/layout/sidebar.svelte";
+  import { sidebarOverride, setSidebarContent } from "$lib/components/layout/sidebar.svelte";
   import JoinSpaceModal from "$lib/components/layout/JoinSpaceModal.svelte";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
 
@@ -63,20 +63,25 @@
     () => sync_.ctx?.topicManager ?? null,
     () => [{ kind: "space", id: spaceId } satisfies Topic],
   );
+
+  // Set sidebar content — clean up when leaving this layout
+  onMount(() => {
+    setSidebarContent(spaceSidebar);
+    return () => setSidebarContent(undefined);
+  });
 </script>
 
 <div class="h-full bg-base-50 dark:bg-base-950 text-base-800 dark:text-base-200">
-  <MainLayout>
-    {#snippet sidebar()}
-      {#if sidebarOverride.content}
-        {@render sidebarOverride.content()}
-      {:else}
-        <SpaceSidebar {spaceId} />
-      {/if}
-    {/snippet}
-    {@render children()}
-  </MainLayout>
+  {@render children()}
 </div>
+
+{#snippet spaceSidebar()}
+  {#if sidebarOverride.content}
+    {@render sidebarOverride.content()}
+  {:else}
+    <SpaceSidebar {spaceId} />
+  {/if}
+{/snippet}
 
 {#if showJoinModal}
   <JoinSpaceModal {spaceId} />

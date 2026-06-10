@@ -3,7 +3,6 @@
   import type { HTMLAttributes } from "svelte/elements";
   import type { Snippet } from "svelte";
   import { cn } from "../../utils/index.js";
-  import { ScrollArea } from "@foxui/core";
 
   let {
     class: className,
@@ -21,24 +20,23 @@
 
 <div
   class={cn(
-    "overflow-y-hidden flex flex-col justify-between h-full w-64 dark:border-r dark:border-base-300/10",
+    "overflow-y-hidden flex flex-col h-full w-64 dark:border-r dark:border-base-300/10",
     className,
   )}
   {...restProps}
 >
-  <ScrollArea
-    orientation="vertical"
-    class="h-full overflow-y-auto flex flex-col"
-  >
+  <div class="flex-1 flex flex-col min-h-0">
     {@render children?.()}
-  </ScrollArea>
+  </div>
 
   {#if footer}
-    {@render footer()}
+    <div class="shrink-0">
+      {@render footer()}
+    </div>
   {/if}
 
   {#if showBranding}
-    <div class="text-xs p-2">
+    <div class="text-xs p-2 shrink-0">
       <span class="text-base-500 dark:text-base-300">powered by</span>
       <a
         target="_blank"
