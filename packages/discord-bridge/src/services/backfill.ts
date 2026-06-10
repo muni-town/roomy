@@ -483,9 +483,10 @@ async function backfillChannel(
   }
 
   const cursor = repo.getChannelCursor(spaceDid, channelId);
-  // First-time backfill: start from snowflake 0 (before all valid IDs)
-  // Resume: start from last cursor
-  let afterCursor = cursor?.lastMessageId ?? "0";
+  // First-time backfill: start from the channel snowflake (which is older
+  // than any message in the channel). Resume: start from last cursor.
+  // This matches the legacy bridge's backfillToRoomy behavior.
+  let afterCursor = cursor?.lastMessageId ?? channelId;
 
   log.info(
     `Backfilling channel ${channelId} → ${spaceDid} (cursor: ${cursor?.lastMessageId ?? "none"})`,
@@ -534,8 +535,12 @@ async function backfillChannel(
     // the middle of a page doesn't lose the unprocessed messages in this
     // batch. The idempotency check (getRoomyId) in ingestDiscordMessage
     // prevents re-processing already-synced messages on the next run.
-    const oldestOnPage = sortedMessages[0]!;
-    afterCursor = oldestOnPage.id.toString();
+    //
+    // Set cursor to the OLDEST message in this batch (the last element
+    // after reversing to oldest-first). This matches the legacy bridge's
+    // backfillToRoomy: after = sortedMessages[sortedMessages.length - 1]!.id
+    const oldestInBatch = sortedMessages[sortedMessages.length - 1]!;
+    afterCursor = oldestInBatch.id.toString();
     repo.setChannelCursor(spaceDid, channelId, afterCursor);
 
     if (messages.length < 100) break;
