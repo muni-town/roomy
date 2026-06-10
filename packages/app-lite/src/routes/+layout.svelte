@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { onMount, untrack } from "svelte";
+  import { onNavigate } from "$app/navigation";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "$lib/client";
   import { auth, init } from "$lib/auth.svelte";
@@ -32,6 +33,14 @@
       PUBLIC_BRIDGE_DID: dynamicEnv.PUBLIC_BRIDGE_DID,
     });
     init();
+  });
+
+  // ── Centralized navigation guard ─────────────────────────────────────────
+  // Reset module-level state that lacks per-page cleanup on every SvelteKit
+  // navigation. Navbar/sidebar are handled by per-page onMount cleanups;
+  // messagingState is reset by the room page on room change.
+  onNavigate(() => {
+    requireAuth.value = true;
   });
 
   $effect(() => {

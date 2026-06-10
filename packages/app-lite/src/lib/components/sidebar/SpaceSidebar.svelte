@@ -96,6 +96,14 @@ import { createSpacesQuery } from "$lib/queries/spaces";
   let createModalOpen = $state(false);
 
   const meta = $derived(spaceId ? metaQuery.data : null);
+
+  // Derive the current space from the cached getSpaces query for instant header rendering.
+  // Falls back to getMetadata for future public spaces where this space isn't in the user's space list.
+  const currentSpace = $derived(
+    spaceId
+      ? (spacesQuery.data?.spaces ?? []).find((s) => s.id === spaceId)
+      : null,
+  );
   const showInviteButton = $derived(
     (meta?.joinPolicy.allowPublicJoin ?? false) ||
       (meta?.joinPolicy.allowMemberInvites ?? false) ||
@@ -392,8 +400,8 @@ import { createSpacesQuery } from "$lib/queries/spaces";
       {/if}
     {:else}
       <SpaceHeaderShell
-        spaceName={meta?.name ?? spaceId}
-        isAdmin={meta?.isAdmin ?? false}
+        spaceName={currentSpace?.name ?? meta?.name ?? spaceId}
+        isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
         {showInviteButton}
         bind:isEditing
         onSpacePicker={openSpacePicker}
@@ -403,7 +411,11 @@ import { createSpacesQuery } from "$lib/queries/spaces";
         {onLeave}
       >
         {#snippet avatar()}
-          <SpaceAvatar src={resolveBlobUrl(meta?.avatar)} id={spaceId!} name={meta?.name ?? undefined} />
+          <SpaceAvatar
+            src={resolveBlobUrl(currentSpace?.avatar ?? meta?.avatar)}
+            id={spaceId!}
+            name={currentSpace?.name ?? meta?.name ?? undefined}
+          />
         {/snippet}
       </SpaceHeaderShell>
     {/if}

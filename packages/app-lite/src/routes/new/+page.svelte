@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import Alert from "@roomy/design/components/ui/alert/Alert.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
@@ -56,7 +57,7 @@
     }
   }
 
-  $effect(() => {
+  onMount(() => {
     setNavbar(createSpaceNavbar);
     return () => setNavbar(undefined);
   });

@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onMount, untrack } from "svelte";
   import { page } from "$app/state";
   import { useTopicSubscription } from "@roomy-space/sdk/svelte";
   import type { Topic } from "@roomy-space/sdk/svelte";
   import { IconHashtag } from "@roomy/design/icons";
   import { sync_ } from "$lib/sync.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
+  import { messagingState } from "$lib/components/chat/messaging-state.svelte";
   import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
   import { updateSeen } from "$lib/mutations/update-seen";
@@ -21,14 +23,22 @@
   );
 
   $effect(() => {
-    sync_.setActiveRoom(roomId);
+    // Reset any lingering reply/thread context from a previous room.
+    // Writes to module-level $state are wrapped in untrack() to avoid
+    // reactive cascades (effect_update_depth_exceeded).
+    untrack(() => {
+      messagingState.setNormal();
+      sync_.setActiveRoom(roomId);
+    });
     updateSeen(roomId).catch(() => {});
     return () => {
-      if (sync_.activeRoomId === roomId) sync_.setActiveRoom(null);
+      untrack(() => {
+        if (sync_.activeRoomId === roomId) sync_.setActiveRoom(null);
+      });
     };
   });
 
-  $effect(() => {
+  onMount(() => {
     setNavbar(roomNavbar);
     return () => setNavbar(undefined);
   });

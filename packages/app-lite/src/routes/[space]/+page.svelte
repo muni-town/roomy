@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
 
   const spaceId = $derived(page.params.space!);
 
-  $effect(() => {
+  onMount(() => {
     setNavbar(spaceNavbar);
     return () => setNavbar(undefined);
   });
