@@ -1,4 +1,10 @@
 <script lang="ts">
+  import { fly } from "svelte/transition";
+  import { currentSpaceState } from "$lib/components/layout/current-space.svelte";
+  import { mobileSidebar } from "$lib/components/layout/mobile-sidebar.svelte";
+  import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
+
   let { onClick, onMobileClick, small = false }: { onClick: () => void, onMobileClick?: () => void, small: boolean } = $props();
 </script>
 
@@ -53,11 +59,27 @@
       <path d="M86.3071 90.826C89.3557 81.4371 80.5893 73.6875 73.5214 78.2469C61.2392 86.1699 82.0266 104.008 86.3071 90.826Z" fill="currentColor"/>
     </g>
   </svg>
-  <span
-    class="font-black text-base-700 tracking-[-0.015em] dark:text-base-300 truncate transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]"
-    class:text-lg={small}
-    class:text-2xl={!small}
-  >
-    Roomy
-  </span>
+  {#if small && currentSpaceState.value && !mobileSidebar.visible}
+    <!-- Mobile + active space: show avatar + name instead of "Roomy" text -->
+    <div in:fly={{ x: -20, duration: 200 }} class="flex items-center gap-1">
+      <SpaceAvatar
+        src={resolveBlobUrl(currentSpaceState.value.avatar)}
+        id={currentSpaceState.value.id}
+        name={currentSpaceState.value.name ?? undefined}
+        size={20}
+      />
+      <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-24">
+        {currentSpaceState.value.name || "Unnamed"}
+      </span>
+    </div>
+  {:else}
+    <span
+      class="font-black text-base-700 tracking-[-0.015em] dark:text-base-300 truncate transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]"
+      class:text-lg={small}
+      class:text-2xl={!small}
+      in:fly={{ x: -20, duration: 200 }}
+    >
+      Roomy
+    </span>
+  {/if}
 </button>

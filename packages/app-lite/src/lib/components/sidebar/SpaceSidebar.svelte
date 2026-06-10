@@ -457,12 +457,12 @@ import { createSpacesQuery } from "$lib/queries/spaces";
 
   {#snippet body()}
     {#if showSpacePicker}
-      <div transition:slide class="py-2 space-y-1 pb-12">
+      <div transition:slide class="py-0 space-y-0 pb-12">
         {#each joinedSpaces as space (space.id)}
           {#if space.id !== spaceId}
             <button
               onclick={() => navigateToSpace(space.id)}
-              class="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-white dark:hover:bg-base-800 transition-colors text-left w-full cursor-pointer"
+              class="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-white dark:hover:bg-base-800 transition-colors text-left w-full cursor-pointer"
             >
               <SpaceAvatar
                 src={resolveBlobUrl(space.avatar)}

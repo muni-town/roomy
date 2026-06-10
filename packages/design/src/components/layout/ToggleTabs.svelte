@@ -15,7 +15,7 @@
 <div class="hidden md:block shrink-0">
   <Tabs.Root bind:value={active}>
     <Tabs.List
-      class="rounded-lg text-accent-950 dark:text-base-50"
+      class="rounded-lg text-accent-950 dark:text-accent-100"
       style="display: inline-grid; grid-auto-flow: column; grid-auto-columns: 2fr;"
     >
       {#each items as { name, href }}
@@ -26,26 +26,27 @@
               {...props}
               class="
               text-center
-              px-2 py-1 cursor-pointer w-full text-sm
-              bg-accent-200 dark:bg-base-950
-              text-base-950 dark:text-base-50
-              hover:bg-accent-50 hover:dark:bg-base-800
+              px-2 py-1 cursor-pointer w-full text-xs
+              bg-accent-200 dark:bg-transparent
+              text-base-950 dark:text-accent-100
+              hover:bg-accent-50 hover:dark:bg-accent-950/40
 
-              border border-y first:border-l last:border-r border-accent-500
+              border border-y first:border-l last:border-r border-accent-500 dark:border-accent-800
               first:rounded-l-md last:rounded-r-md not-first:-ml-px
               
               transition-[box-shadow,translate] ease-in duration-75
                 
               -translate-y-[2px]
-              shadow-[0_2px_0_0] shadow-accent-500
+              shadow-[0_2px_0_0_var(--shadow-button-color,var(--color-accent-500))]
+              [--shadow-button-color:var(--color-accent-500)] dark:[--shadow-button-color:var(--color-accent-800)]
               
               active:translate-y-0
               active:shadow-none
               
               data-[state=active]:bg-base-50
-              data-[state=active]:dark:bg-accent-600
+              data-[state=active]:dark:bg-accent-950/40
               data-[state=active]:text-accent-950
-              data-[state=active]:dark:text-base-50
+              data-[state=active]:dark:text-accent-100
               data-[state=active]:translate-y-0
               data-[state=active]:shadow-none
               "
@@ -68,25 +69,25 @@
     type="single"
   >
     <Select.Trigger
-      class="rounded-[12px] flex items-center gap-1 bg-base-100 dark:bg-base-900 p-1 px-4 text-sm border border-base-800/10 dark:border-base-100/10"
+      class="rounded-[10px] flex items-center gap-1 bg-base-50 dark:bg-transparent px-2 py-0.5 text-xs border border-accent-500 dark:border-accent-800 text-accent-950 dark:text-accent-100 hover:bg-accent-50 hover:dark:bg-accent-950/40 hover:border-accent-600 hover:shadow-button transition-all duration-75 ease-out"
       aria-label="Select a tab"
     >
       {active}
     </Select.Trigger>
     <Select.Portal>
       <Select.Content
-        class="z-20 rounded-[12px] bg-base-100 dark:bg-base-900 text-sm border border-base-800/10 dark:border-base-100/10"
+        class="z-20 rounded-[10px] bg-base-50 dark:bg-transparent text-xs border border-accent-500 dark:border-accent-800 text-accent-950 dark:text-accent-100"
         sideOffset={10}
       >
         <Select.Viewport class="p-1">
           {#each items as { name, href }}
             <Select.Item
-              class="px-4 py-2 cursor-pointer w-full opacity-60 data-[state=active]:opacity-100 data-[state=active]:bg-accent-100 rounded-[10px] bg-transparent dark:data-[state=active]:bg-base-800 transition-colors duration-75 ease-out"
+              class="px-3 py-1.5 cursor-pointer w-full opacity-60 data-[state=active]:opacity-100 data-[state=active]:bg-accent-50 dark:data-[state=active]:bg-accent-950/40 rounded-[8px] bg-transparent text-accent-950 dark:text-accent-100 hover:bg-accent-50 hover:dark:bg-accent-950/40 transition-all duration-75 ease-out"
               value={name}
               label={name}
               data-state={active === name ? "active" : "inactive"}
             >
-              <a {href}>
+              <a {href} class="text-accent-950 dark:text-accent-100">
                 {name}
               </a>
             </Select.Item>

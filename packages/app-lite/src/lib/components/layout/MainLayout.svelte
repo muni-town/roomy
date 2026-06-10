@@ -1,7 +1,3 @@
-<script lang="ts" module>
-  export const isSidebarVisible = $state({ value: false });
-</script>
-
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { page } from "$app/state";
@@ -12,6 +8,7 @@
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
   import { navbar } from "./navbar.svelte";
   import { sidebarOverride, sidebarContent } from "./sidebar.svelte";
+  import { mobileSidebar } from "./mobile-sidebar.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
 
   let {
@@ -28,7 +25,7 @@
   const sidebar = $derived(sidebarOverride.content ?? sidebarContent.content);
 
   onNavigate(() => {
-    isSidebarVisible.value = false;
+    mobileSidebar.visible = false;
   });
 </script>
 
@@ -40,11 +37,11 @@
       <RoomyHomeCard
         onClick={() => goto("/")}
         onMobileClick={() => {
-          if (isSidebarVisible.value) {
+          if (mobileSidebar.visible) {
             goto("/");
-            isSidebarVisible.value = false;
+            mobileSidebar.visible = false;
           } else {
-            isSidebarVisible.value = true;
+            mobileSidebar.visible = true;
           }
         }}
         small={compact}
@@ -70,16 +67,16 @@
     </div>
 
     <!-- Mobile backdrop (below navbar, overlays content only) -->
-    {#if isSidebarVisible.value}
+    {#if mobileSidebar.visible}
       <button
-        onclick={() => (isSidebarVisible.value = false)}
+        onclick={() => (mobileSidebar.visible = false)}
         aria-label="toggle navigation"
         class="absolute inset-0 z-30 cursor-pointer sm:hidden bg-base-100/50 dark:bg-base-950/50"
       ></button>
     {/if}
 
     <!-- Mobile sidebar (below navbar, overlays content) -->
-    {#if isSidebarVisible.value}
+    {#if mobileSidebar.visible}
       <div class="absolute inset-y-0 left-0 z-40 sm:hidden bg-base-100/50 dark:bg-base-950 backdrop-blur-sm">
         <div class="flex h-full w-fit">
           <BigSidebar>

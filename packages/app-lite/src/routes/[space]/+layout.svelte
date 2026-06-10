@@ -6,6 +6,7 @@
   import { sync_ } from "$lib/sync.svelte";
   import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
   import { sidebarOverride, setSidebarContent } from "$lib/components/layout/sidebar.svelte";
+  import { setCurrentSpace } from "$lib/components/layout/current-space.svelte";
   import JoinSpaceModal from "$lib/components/layout/JoinSpaceModal.svelte";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
 
@@ -23,6 +24,16 @@
   import { resolveBlobUrl } from "$lib/utils";
 
   const defaultFavicon = `${base}/favicon.png`;
+
+  // Expose current space info for the mobile nav bar (RoomyHomeCard)
+  $effect(() => {
+    setCurrentSpace(
+      metaQuery.data
+        ? { id: spaceId, name: metaQuery.data.name, avatar: metaQuery.data.avatar }
+        : null,
+    );
+    return () => setCurrentSpace(null);
+  });
 
   // Dynamic title & favicon based on the currently active space.
   $effect(() => {
