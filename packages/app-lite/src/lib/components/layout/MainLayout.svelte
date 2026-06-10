@@ -10,7 +10,6 @@
   import RoomyHomeCard from "$lib/components/sidebar/RoomyHomeCard.svelte";
   import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
-  import ToggleNavigation from "@roomy/design/components/helper/ToggleNavigation.svelte";
   import { navbar } from "./navbar.svelte";
   import { sidebarOverride, sidebarContent } from "./sidebar.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
@@ -33,34 +32,46 @@
   });
 </script>
 
-<!-- Main panel: navbar + page content, offset to clear the fixed sidebar -->
-<div
-  class={[
-    "h-full flex flex-col overflow-hidden sm:ml-64",
-    chatArea ? "bg-white dark:bg-base-950" : "",
-  ]}
->
+<!-- Full-width wrapper fills the body -->
+<div class="h-full flex flex-col">
+  <!-- Full-width navbar at the top -->
   <Navbar {compact}>
-    <div class="flex gap-4 items-center mr-auto ml-2 sm:hidden">
-      <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
+    <div class="flex items-center gap-1 sm:gap-2">
+      <RoomyHomeCard
+        onClick={() => goto("/")}
+        onMobileClick={() => (isSidebarVisible.value = !isSidebarVisible.value)}
+        small={compact}
+      />
     </div>
 
     {#if navbar.content}
       {@render navbar.content()}
     {/if}
 
-    <div class="ml-auto hidden sm:block">
-      <SidebarUserCard side="bottom" />
-    </div>
-
-    <div class="ml-auto sm:hidden">
-      <SidebarUserCard side="bottom" />
-    </div>
+    <SidebarUserCard side="bottom" />
   </Navbar>
 
-  <div class="flex flex-col h-full max-h-full overflow-y-hidden">
-    <SyncStatusBanner />
-    {@render children()}
+  <!-- Main area: sidebar + content in a row -->
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Desktop sidebar (normal flow) -->
+    <div class="hidden sm:block w-64 shrink-0">
+      <BigSidebar>
+        {#if sidebar}
+          {@render sidebar()}
+        {/if}
+      </BigSidebar>
+    </div>
+
+    <!-- Content area -->
+    <div
+      class={[
+        "flex flex-col flex-1 overflow-hidden",
+        chatArea ? "bg-white dark:bg-base-950" : "",
+      ]}
+    >
+      <SyncStatusBanner />
+      {@render children()}
+    </div>
   </div>
 </div>
 
@@ -73,22 +84,15 @@
   ></button>
 {/if}
 
-<!-- Fixed sidebars -->
-<div
-  class={[
-    "isolate fixed top-0 bottom-0 left-0 z-40 bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
-    isSidebarVisible.value ? "block" : "hidden sm:block",
-  ]}
->
-  <div class="flex h-full w-fit">
-    <BigSidebar>
-      <RoomyHomeCard
-        onClick={() => goto("/")}
-        small={compact}
-      />
-      {#if sidebar}
-        {@render sidebar()}
-      {/if}
-    </BigSidebar>
+<!-- Mobile sidebar (fixed overlay) -->
+{#if isSidebarVisible.value}
+  <div class="isolate fixed top-0 bottom-0 left-0 z-40 bg-base-100/50 dark:bg-base-950 backdrop-blur-sm sm:hidden">
+    <div class="flex h-full w-fit">
+      <BigSidebar>
+        {#if sidebar}
+          {@render sidebar()}
+        {/if}
+      </BigSidebar>
+    </div>
   </div>
-</div>
+{/if}

@@ -17,7 +17,7 @@
 
 <div
   class={cn(
-    "w-full flex items-center justify-between p-2 shrink-0",
+    "w-full flex items-center justify-between px-1.5 py-1 shrink-0 border-b border-base-300/10",
     compact ? "h-10" : "h-16",
     className,
   )}

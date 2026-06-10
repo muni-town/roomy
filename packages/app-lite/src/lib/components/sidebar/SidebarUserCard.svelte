@@ -23,14 +23,14 @@
   });
 </script>
 
-<div class="shrink-0 px-2 pb-2 pt-1">
+<div class="shrink-0 px-1">
   <Popover {side} sideOffset={12} class="my-4 w-80">
     {#snippet child({ props })}
       <button
         {...props}
         class="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-base-200/60 dark:hover:bg-base-800/60 transition-colors cursor-pointer group"
       >
-        <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-28 text-right">
+        <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-20 text-right hidden sm:block">
           {lastLogin?.handle ?? "Log in"}
         </span>
         <div class="relative size-7 shrink-0">
