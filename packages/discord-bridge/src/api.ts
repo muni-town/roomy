@@ -9,7 +9,7 @@ export function startApi(
   getAppId: () => string | undefined,
 ) {
   const server = Bun.serve({
-    port: PORT,
+    port: PORT(),
     async fetch(req) {
       const url = new URL(req.url);
 
@@ -48,7 +48,7 @@ function route(
         return jsonResponse({ error: "Discord bot still starting" }, 500);
       return jsonResponse({
         discordAppId: appId,
-        bridgeDid: ATPROTO_BRIDGE_DID,
+        bridgeDid: ATPROTO_BRIDGE_DID(),
       });
     }
 

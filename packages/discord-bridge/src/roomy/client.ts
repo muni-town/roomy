@@ -31,7 +31,7 @@ function loadSessionFile() {
 
 function saveSessionFile(session: unknown) {
   try {
-    writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2), "utf-8");
+    writeFileSync(SESSION_FILE(), JSON.stringify(session, null, 2), "utf-8");
   } catch (err) {
     log.error("Failed to write session file", err);
   }
@@ -39,7 +39,7 @@ function saveSessionFile(session: unknown) {
 
 function deleteSessionFile() {
   try {
-    unlinkSync(SESSION_FILE);
+    unlinkSync(SESSION_FILE());
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       log.warn("Failed to delete session file", err);
@@ -49,7 +49,7 @@ function deleteSessionFile() {
 
 export async function initRoomyClient(): Promise<RoomyClient> {
   log.info("Initializing ATProto agent...");
-  log.info("Leaf config:", { LEAF_URL, LEAF_SERVER_DID, ATPROTO_BRIDGE_DID });
+  log.info("Leaf config:", { LEAF_URL: LEAF_URL(), LEAF_SERVER_DID: LEAF_SERVER_DID(), ATPROTO_BRIDGE_DID: ATPROTO_BRIDGE_DID() });
 
   const existingSession = loadSessionFile();
 
@@ -74,16 +74,16 @@ export async function initRoomyClient(): Promise<RoomyClient> {
       log.warn("Session restore failed, re-authenticating...", err);
       deleteSessionFile();
       await atpAgent.login({
-        identifier: ATPROTO_BRIDGE_DID,
-        password: ATPROTO_BRIDGE_APP_PASSWORD,
+        identifier: ATPROTO_BRIDGE_DID(),
+        password: ATPROTO_BRIDGE_APP_PASSWORD(),
       });
       log.info(`Authenticated as ${atpAgent.did}`);
     }
   } else {
     log.info("Authenticating with ATProto...");
     await atpAgent.login({
-      identifier: ATPROTO_BRIDGE_DID,
-      password: ATPROTO_BRIDGE_APP_PASSWORD,
+      identifier: ATPROTO_BRIDGE_DID(),
+      password: ATPROTO_BRIDGE_APP_PASSWORD(),
     });
     log.info(`Authenticated as ${atpAgent.did}`);
   }
@@ -96,10 +96,10 @@ export async function initRoomyClient(): Promise<RoomyClient> {
 
   const roomyClient = await RoomyClient.create({
     agent: atpAgent,
-    leafUrl: LEAF_URL,
-    leafDid: LEAF_SERVER_DID,
-    profileSpaceNsid: STREAM_HANDLE_NSID,
-    spaceNsid: STREAM_NSID,
+    leafUrl: LEAF_URL(),
+    leafDid: LEAF_SERVER_DID(),
+    profileSpaceNsid: STREAM_HANDLE_NSID(),
+    spaceNsid: STREAM_NSID(),
   });
 
   log.info("Roomy client initialized successfully");

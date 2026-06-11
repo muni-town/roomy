@@ -20,7 +20,7 @@ const log = createLogger("mention-resolver");
  * Minimal user mention data needed for display name resolution.
  */
 export interface UserMention {
-  id: bigint;
+  id: bigint | string;
   username: string;
   globalName?: string | null;
 }

@@ -8,8 +8,9 @@ const order: Record<Level, number> = {
   warn: 30,
   error: 40,
 };
+const level = LOG_LEVEL();
 const threshold =
-  order[(LOG_LEVEL as Level) in order ? (LOG_LEVEL as Level) : "info"];
+  order[(level as Level) in order ? (level as Level) : "info"];
 
 function emit(level: Level, scope: string, msg: string, extra?: unknown) {
   if (order[level] < threshold) return;

@@ -9,34 +9,24 @@ function optional(name: string, fallback: string): string {
   return value && value.length > 0 ? value : fallback;
 }
 
-export const DISCORD_TOKEN = required("DISCORD_TOKEN");
+/** Lazily-evaluated env vars. Only triggers "not provided" error when accessed. */
+export const DISCORD_TOKEN = () => required("DISCORD_TOKEN");
+export const ATPROTO_BRIDGE_DID = () => required("ATPROTO_BRIDGE_DID");
+export const ATPROTO_BRIDGE_APP_PASSWORD = () => required("ATPROTO_BRIDGE_APP_PASSWORD");
 
-export const ATPROTO_BRIDGE_DID = required("ATPROTO_BRIDGE_DID");
-export const ATPROTO_BRIDGE_APP_PASSWORD = required(
-  "ATPROTO_BRIDGE_APP_PASSWORD",
-);
+export const LEAF_URL = () => optional("LEAF_URL", "https://leaf-dev.muni.town");
+export const LEAF_SERVER_DID = () =>
+  optional("LEAF_SERVER_DID", `did:web:${new URL(LEAF_URL()).hostname}`);
 
-export const LEAF_URL = optional("LEAF_URL", "https://leaf-dev.muni.town");
-export const LEAF_SERVER_DID = optional(
-  "LEAF_SERVER_DID",
-  `did:web:${new URL(LEAF_URL).hostname}`,
-);
+export const STREAM_NSID = () =>
+  optional("STREAM_NSID", "space.roomy.space.personal.dev");
+export const STREAM_HANDLE_NSID = () =>
+  optional("STREAM_HANDLE_NSID", "space.roomy.space.handle.dev");
 
-export const STREAM_NSID = optional(
-  "STREAM_NSID",
-  "space.roomy.space.personal.dev",
-);
-export const STREAM_HANDLE_NSID = optional(
-  "STREAM_HANDLE_NSID",
-  "space.roomy.space.handle.dev",
-);
-
-export const BRIDGE_DATA_DIR = optional("BRIDGE_DATA_DIR", "./data");
-export const BRIDGE_DB_PATH = optional(
-  "BRIDGE_DB_PATH",
-  `${BRIDGE_DATA_DIR}/bridge.sqlite`,
-);
-export const PORT = parseInt(optional("PORT", "3301"), 10);
-export const LOG_LEVEL = optional("LOG_LEVEL", "info");
-export const ENABLE_GUILD_MEMBERS_INTENT =
+export const BRIDGE_DATA_DIR = () => optional("BRIDGE_DATA_DIR", "./data");
+export const BRIDGE_DB_PATH = () =>
+  optional("BRIDGE_DB_PATH", `${BRIDGE_DATA_DIR()}/bridge.sqlite`);
+export const PORT = () => parseInt(optional("PORT", "3301"), 10);
+export const LOG_LEVEL = () => optional("LOG_LEVEL", "info");
+export const ENABLE_GUILD_MEMBERS_INTENT = () =>
   process.env["ENABLE_GUILD_MEMBERS_INTENT"] !== "false";

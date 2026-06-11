@@ -1,26 +1,25 @@
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
 import type { BridgeRepository, MappingKind } from "../db/repository.ts";
-import type { SpaceManager } from "../roomy/space-manager.ts";
-import { CHANNEL_TYPES, THREAD_TYPES, PRIVATE_THREAD, isChannelPublic } from "../discord/types.ts";
-import type { ChannelProperties, DiscordBot } from "../discord/types.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
+import {
+  CHANNEL_TYPES,
+  THREAD_TYPES,
+  PRIVATE_THREAD,
+  isChannelPublic,
+  mappingKindForChannel,
+} from "../discord/data.ts";
+import type { DiscordChannelData } from "../discord/data.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("room");
 
-function mappingKindFor(channel: ChannelProperties): MappingKind {
-  return THREAD_TYPES.has(channel.type) ? "thread" : "channel";
-}
-
 /**
  * Ensure a Roomy room exists for a Discord channel in the given spaces.
  * Skips spaces that already have a mapping. Idempotent per space.
- *
- * @param defaultAccess Access level for the room — "read" for public channels,
- *                      "none" for private channels (no default visibility).
  */
 export async function ensureRoomyChannel(
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
   channelId: string,
   guildId: string,
   channelName: string,
@@ -49,8 +48,7 @@ export async function ensureRoomyChannel(
     } as Event;
 
     try {
-      const connected = await spaceManager.getOrConnect(spaceDid);
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
       log.info(
         `Created Roomy room ${roomUlid} for Discord channel ${channelId} in ${spaceDid}`,
@@ -68,20 +66,17 @@ export async function ensureRoomyChannel(
  * Handle Discord CHANNEL_CREATE: create a Roomy room for the new channel
  * in every space that bridges this guild in `full` mode. Subset bridges are
  * skipped — the channel must be added to their allowlist explicitly.
- * Threads are not handled here; see handleThreadCreate.
  */
 export async function handleChannelCreate(
-  channel: ChannelProperties,
+  channel: DiscordChannelData,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
-  const channelId = channel.id.toString();
-  const guildId = channel.guildId?.toString();
+  const channelId = channel.id;
+  const guildId = channel.guildId;
 
   if (!guildId) return;
-  // Defense-in-depth: also exclude thread types explicitly, in case Discord
-  // dispatches CHANNEL_CREATE for a thread-type channel (e.g. during
-  // gateway replay or a reconnect-resume edge case).
+  // Defense-in-depth: also exclude thread types explicitly.
   if (!CHANNEL_TYPES.has(channel.type) || THREAD_TYPES.has(channel.type)) return;
 
   let targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
@@ -101,7 +96,7 @@ export async function handleChannelCreate(
     return;
   }
 
-  await ensureRoomyChannel(repo, spaceManager, channelId, guildId, channelName, targetSpaces, defaultAccess);
+  await ensureRoomyChannel(repo, roomy, channelId, guildId, channelName, targetSpaces, defaultAccess);
 }
 
 /**
@@ -109,13 +104,13 @@ export async function handleChannelCreate(
  * channel's room. Idempotent — skips if the thread already has a mapping.
  */
 export async function handleThreadCreate(
-  channel: ChannelProperties,
+  channel: DiscordChannelData,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
-  const threadId = channel.id.toString();
-  const parentId = channel.parentId?.toString();
-  const guildId = channel.guildId?.toString();
+  const threadId = channel.id;
+  const parentId = channel.parentId;
+  const guildId = channel.guildId;
   const threadName = channel.name ?? "Thread";
 
   if (!parentId || !guildId) {
@@ -178,8 +173,7 @@ export async function handleThreadCreate(
     ];
 
     try {
-      const connected = await spaceManager.getOrConnect(spaceDid);
-      await connected.sendEvents(events);
+      await roomy.sendEvents(spaceDid, events);
 
       repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
 
@@ -203,22 +197,20 @@ export async function handleThreadCreate(
 
 /**
  * Handle Discord CHANNEL_UPDATE / THREAD_UPDATE: propagate name changes to
- * the corresponding Roomy room. Discord fires update for many things
- * (topic, perms, etc.); we always send updateRoom.v0 with the current name —
- * cheap and idempotent.
+ * the corresponding Roomy room.
  */
 export async function handleRoomUpdate(
-  channel: ChannelProperties,
+  channel: DiscordChannelData,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
-  const channelId = channel.id.toString();
-  const guildId = channel.guildId?.toString();
+  const channelId = channel.id;
+  const guildId = channel.guildId;
 
   if (!guildId) return;
   if (!channel.name) return;
 
-  const kind = mappingKindFor(channel);
+  const kind = mappingKindForChannel(channel);
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
   if (targetSpaces.length === 0) return;
@@ -238,8 +230,7 @@ export async function handleRoomUpdate(
     } as Event;
 
     try {
-      const connected = await spaceManager.getOrConnect(spaceDid);
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       log.info(
         `Updated Roomy ${kind} ${roomyId} name to "${channel.name}" in ${spaceDid}`,
       );
@@ -254,19 +245,18 @@ export async function handleRoomUpdate(
 
 /**
  * Handle Discord CHANNEL_DELETE / THREAD_DELETE: soft-delete the corresponding
- * Roomy room and drop the snowflake → ULID mapping so a future re-create
- * gets a fresh room.
+ * Roomy room and drop the snowflake → ULID mapping.
  */
 export async function handleRoomDelete(
-  channel: ChannelProperties,
+  channel: DiscordChannelData,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
-  const channelId = channel.id.toString();
-  const guildId = channel.guildId?.toString();
+  const channelId = channel.id;
+  const guildId = channel.guildId;
   if (!guildId) return;
 
-  const kind = mappingKindFor(channel);
+  const kind = mappingKindForChannel(channel);
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
   if (targetSpaces.length === 0) return;
@@ -282,8 +272,7 @@ export async function handleRoomDelete(
     } as Event;
 
     try {
-      const connected = await spaceManager.getOrConnect(spaceDid);
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       repo.unregisterMapping(spaceDid, kind, channelId);
       log.info(
         `Deleted Roomy ${kind} ${roomyId} for Discord channel ${channelId} in ${spaceDid}`,

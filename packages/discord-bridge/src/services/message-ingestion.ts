@@ -7,9 +7,9 @@ import {
   type Attachment,
 } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
-import type { SpaceManager } from "../roomy/space-manager.ts";
-import type { MessageProperties } from "../discord/types.ts";
-import { MsgType } from "../discord/types.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
+import type { DiscordMessageData, DiscordUserData } from "../discord/data.ts";
+import { MsgType } from "../discord/data.ts";
 import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
 import { resolveMentions, type MentionContext } from "./mention-resolver.ts";
@@ -17,19 +17,17 @@ import { resolveMentions, type MentionContext } from "./mention-resolver.ts";
 const log = createLogger("ingest");
 
 export async function ingestDiscordMessage(
-  message: MessageProperties,
+  message: DiscordMessageData,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
   guildIdOverride?: string,
   spaceDidOverride?: string,
   resolveChannelName?: (snowflake: string) => Promise<string | undefined>,
   backfill = false,
 ): Promise<{ synced: number; skipped: number }> {
-  const channelId = message.channelId.toString();
-  const messageId = message.id.toString();
-  // REST endpoint GET /channels/{id}/messages does not include guild_id, so
-  // backfill must pass it explicitly. Gateway events have it on the message.
-  const guildId = guildIdOverride ?? message.guildId?.toString();
+  const channelId = message.channelId;
+  const messageId = message.id;
+  const guildId = guildIdOverride ?? message.guildId;
 
   if (!guildId) {
     log.debug(`Skipping message ${messageId}: no guildId`);
@@ -37,8 +35,6 @@ export async function ingestDiscordMessage(
   }
 
   // Determine which spaces should receive this channel's events.
-  // Backfill restricts to a single space (spaceDidOverride); live ingestion
-  // fans out to every bridged space for the channel.
   let targetSpaces: string[];
   if (spaceDidOverride) {
     const allTargets = repo.getTargetSpacesForChannel(guildId, channelId);
@@ -57,7 +53,7 @@ export async function ingestDiscordMessage(
 
   // ThreadStarterMessage (type 21): forward original message into thread
   if (message.type === MsgType.ThreadStarterMessage) {
-    return handleThreadStarterMessage(message, repo, spaceManager);
+    return handleThreadStarterMessage(message, repo, roomy);
   }
 
   // Skip system messages
@@ -69,12 +65,10 @@ export async function ingestDiscordMessage(
   }
 
   // Pre-resolve channel names from mentionedChannelIds (before per-space loop).
-  // Resolves asynchronously so cache misses can fall back to the REST API.
   const channelNames = new Map<string, string>();
-  if (resolveChannelName && message.mentionedChannelIds) {
+  if (resolveChannelName && message.mentionChannelIds) {
     const results = await Promise.all(
-      message.mentionedChannelIds.map(async (id) => {
-        const idStr = id.toString();
+      message.mentionChannelIds.map(async (idStr) => {
         const name = await resolveChannelName(idStr);
         return { idStr, name } as const;
       }),
@@ -106,23 +100,15 @@ export async function ingestDiscordMessage(
     // Build attachments
     const attachments = buildAttachments(message, repo, spaceDid);
 
-    // Get connected space
-    const connected = await spaceManager.getOrConnect(spaceDid);
-
     // Sync author profile before sending the message.
-    // This runs even for content-less messages so that users whose only
-    // Discord activity is embeds, stickers, or reactions still get their
-    // profile synced to Roomy.
-    await syncUserProfile(message.author, [spaceDid], repo, spaceManager);
+    await syncUserProfile(message.author, [spaceDid], repo, roomy);
 
     // Skip messages with no content and no attachments
     if (!message.content && attachments.length === 0) {
       continue;
     }
 
-    // Resolve Discord mention syntax into clean Markdown (per-space, so
-    // channel mentions resolve to the correct Roomy room ULID).
-    // Resolve room IDs for all mentioned channels in this space.
+    // Resolve Discord mention syntax into clean Markdown (per-space).
     const roomyRoomIds = new Map<string, string>();
     for (const [snowflake] of channelNames) {
       const roomyId = repo.getRoomyRoomId(spaceDid, snowflake);
@@ -132,13 +118,16 @@ export async function ingestDiscordMessage(
       channelNames,
       roomyRoomIds,
     };
+    const userMentions = message.mentions.map((m) => ({
+      id: m.id,
+      username: m.name,
+      globalName: m.globalName,
+    }));
     const resolvedContent = resolveMentions(
       message.content || "",
-      message.mentions,
+      userMentions,
       mentionCtx,
     );
-
-    // Build and send the event
     const eventUlid = newUlid();
     const extensions: Record<string, unknown> = {
       "space.roomy.extension.discordMessageOrigin.v0": {
@@ -154,7 +143,7 @@ export async function ingestDiscordMessage(
       "space.roomy.extension.timestampOverride.v0": {
         $type: "space.roomy.extension.timestampOverride.v0",
         timestamp: message.timestamp
-          ? new Date(message.timestamp as unknown as string).getTime()
+          ? new Date(message.timestamp).getTime()
           : Date.now(),
       },
     };
@@ -178,13 +167,12 @@ export async function ingestDiscordMessage(
     };
 
     try {
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
 
       // Register mapping
       repo.registerMapping(spaceDid, "message", messageId, eventUlid);
 
       // Advance cursor only during live ingestion, not during backfill
-      // (backfill manages its own page-level cursor)
       if (!backfill) {
         repo.setChannelCursor(spaceDid, channelId, messageId);
       }
@@ -193,7 +181,6 @@ export async function ingestDiscordMessage(
       synced++;
     } catch (err) {
       log.error(`Failed to send message ${messageId} to ${spaceDid}`, err);
-      // Don't update cursor — event will retry on backfill
     }
   }
 
@@ -201,7 +188,7 @@ export async function ingestDiscordMessage(
 }
 
 function buildAttachments(
-  message: MessageProperties,
+  message: DiscordMessageData,
   repo: BridgeRepository,
   spaceDid: string,
 ): Attachment[] {
@@ -209,7 +196,7 @@ function buildAttachments(
 
   // Reply attachment
   if (message.messageReference?.messageId) {
-    const targetIdStr = message.messageReference.messageId.toString();
+    const targetIdStr = message.messageReference.messageId;
     const replyTargetId = repo.getRoomyId(spaceDid, "message", targetIdStr);
     if (replyTargetId) {
       attachments.push({
@@ -252,7 +239,7 @@ function buildAttachments(
 
   // Sticker attachments
   for (const sticker of message.stickerItems || []) {
-    const id = sticker.id.toString();
+    const id = sticker.id;
     if (sticker.formatType === 4) {
       attachments.push({
         $type: "space.roomy.attachment.image.v0",
@@ -273,16 +260,16 @@ function buildAttachments(
 
 /**
  * Handle Discord ThreadStarterMessage (type 21): forward the original message
- * into the thread's Roomy room. Skipped if the original message hasn't been synced yet.
+ * into the thread's Roomy room.
  */
 async function handleThreadStarterMessage(
-  message: MessageProperties,
+  message: DiscordMessageData,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<{ synced: number; skipped: number }> {
-  const threadId = message.channelId.toString();
-  const messageId = message.id.toString();
-  const guildId = message.guildId?.toString();
+  const threadId = message.channelId;
+  const messageId = message.id;
+  const guildId = message.guildId;
 
   if (
     !guildId ||
@@ -292,8 +279,8 @@ async function handleThreadStarterMessage(
     return { synced: 0, skipped: 1 };
   }
 
-  const originalMsgId = message.messageReference.messageId.toString();
-  const parentChannelId = message.messageReference.channelId.toString();
+  const originalMsgId = message.messageReference.messageId;
+  const parentChannelId = message.messageReference.channelId;
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, threadId);
   if (targetSpaces.length === 0) {
@@ -348,8 +335,7 @@ async function handleThreadStarterMessage(
     };
 
     try {
-      const connected = await spaceManager.getOrConnect(spaceDid);
-      await connected.sendEvent(forwardEvent);
+      await roomy.sendEvent(spaceDid, forwardEvent);
 
       repo.registerMapping(spaceDid, "message", messageId, forwardUlid);
 

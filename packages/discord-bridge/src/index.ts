@@ -11,10 +11,14 @@ import {
   type DiscordBot,
   type MessageProperties,
   type ChannelProperties,
+  type InteractionProperties,
 } from "./discord/types.ts";
 import { getProxyCacheBot } from "./discord/cache.ts";
+import { LiveDiscordDataSource } from "./discord/live-data-source.ts";
+import { LiveRoomyGateway } from "./roomy/live-gateway.ts";
+import { normalizeMessage, normalizeChannel, normalizeUser } from "./discord/normalizers.ts";
 import { ingestDiscordMessage } from "./services/message-ingestion.ts";
-import { runBackfill, type BotWithCache } from "./services/backfill.ts";
+import { runBackfill } from "./services/backfill.ts";
 import {
   syncUserProfile,
   retryStaleProfileSyncs,
@@ -37,7 +41,6 @@ import {
   registerSlashCommands,
   handleInteractionCreate,
 } from "./discord/slash-commands.ts";
-import type { InteractionProperties } from "./discord/types.ts";
 import { startApi } from "./api.ts";
 
 const log = createLogger("bridge");
@@ -45,12 +48,12 @@ let appId: string | undefined;
 
 async function main() {
   log.info("bridge starting");
-  await mkdir(BRIDGE_DATA_DIR, { recursive: true });
-  log.info(`data dir ready at ${BRIDGE_DATA_DIR}`);
+  await mkdir(BRIDGE_DATA_DIR(), { recursive: true });
+  log.info(`data dir ready at ${BRIDGE_DATA_DIR()}`);
 
-  await mkdir(dirname(BRIDGE_DB_PATH), { recursive: true });
-  const repo = BridgeRepository.open(BRIDGE_DB_PATH);
-  log.info(`sqlite store opened at ${BRIDGE_DB_PATH}`);
+  await mkdir(dirname(BRIDGE_DB_PATH()), { recursive: true });
+  const repo = BridgeRepository.open(BRIDGE_DB_PATH());
+  log.info(`sqlite store opened at ${BRIDGE_DB_PATH()}`);
 
   log.info("starting api...");
 
@@ -60,6 +63,7 @@ async function main() {
   // Initialize Roomy client
   const roomyClient = await initRoomyClient();
   const spaceManager = new SpaceManager(roomyClient);
+  const roomy = new LiveRoomyGateway(spaceManager);
 
   // Start Discord gateway
   // bot is assigned immediately after createBot; event handlers fire
@@ -68,13 +72,13 @@ async function main() {
 
   bot = getProxyCacheBot(
     createBot({
-      token: DISCORD_TOKEN,
+      token: DISCORD_TOKEN(),
       intents:
         Intents.MessageContent |
         Intents.Guilds |
         Intents.GuildMessages |
         Intents.GuildMessageReactions |
-        (ENABLE_GUILD_MEMBERS_INTENT ? Intents.GuildMembers : 0),
+        (ENABLE_GUILD_MEMBERS_INTENT() ? Intents.GuildMembers : 0),
       desiredProperties,
       events: {
         ready(data) {
@@ -85,7 +89,10 @@ async function main() {
           registerSlashCommands(bot).catch((err) =>
             log.error("Slash command registration failed", err),
           );
-          runBackfill(bot, repo, spaceManager).catch((err) =>
+
+          // Create adapters and run backfill
+          const discord = new LiveDiscordDataSource(bot);
+          runBackfill(discord, repo, roomy).catch((err) =>
             log.error("Backfill failed", err),
           );
 
@@ -93,7 +100,7 @@ async function main() {
           // stale profile sync queue with exponential backoff.
           setInterval(async () => {
             try {
-              await retryStaleProfileSyncs(repo, spaceManager);
+              await retryStaleProfileSyncs(repo, roomy);
             } catch (err) {
               log.error("Profile sync retry sweep failed", err);
             }
@@ -101,46 +108,24 @@ async function main() {
         },
 
         async messageCreate(message: MessageProperties) {
+          const discord = new LiveDiscordDataSource(bot);
           await ingestDiscordMessage(
-            message,
+            normalizeMessage(message),
             repo,
-            spaceManager,
+            roomy,
             undefined,
             undefined,
-            // channel name resolver: cache + REST fallback
-            async (snowflake) => {
-              const cached = (bot as unknown as BotWithCache).cache.channels.memory.get(
-                BigInt(snowflake),
-              )?.name;
-              if (cached) return cached;
-              try {
-                const channel = await bot.helpers.getChannel(BigInt(snowflake));
-                return (channel as { name?: string }).name;
-              } catch {
-                return undefined;
-              }
-            },
+            (snowflake) => discord.resolveChannelName(snowflake),
           );
         },
 
         async messageUpdate(message: MessageProperties) {
+          const discord = new LiveDiscordDataSource(bot);
           await handleMessageEdit(
-            message,
+            normalizeMessage(message),
             repo,
-            spaceManager,
-            // channel name resolver: cache + REST fallback
-            async (snowflake) => {
-              const cached = (bot as unknown as BotWithCache).cache.channels.memory.get(
-                BigInt(snowflake),
-              )?.name;
-              if (cached) return cached;
-              try {
-                const channel = await bot.helpers.getChannel(BigInt(snowflake));
-                return (channel as { name?: string }).name;
-              } catch {
-                return undefined;
-              }
-            },
+            roomy,
+            (snowflake) => discord.resolveChannelName(snowflake),
           );
         },
 
@@ -150,7 +135,7 @@ async function main() {
             data.channelId,
             data.guildId,
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
@@ -162,7 +147,7 @@ async function main() {
             data.emoji,
             data.guildId ?? 0n,
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
@@ -174,55 +159,55 @@ async function main() {
             data.emoji,
             data.guildId ?? 0n,
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
         async channelCreate(channel) {
           await handleChannelCreate(
-            channel as ChannelProperties,
+            normalizeChannel(channel as ChannelProperties),
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
         async channelUpdate(channel) {
           await handleRoomUpdate(
-            channel as ChannelProperties,
+            normalizeChannel(channel as ChannelProperties),
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
         async channelDelete(channel) {
           await handleRoomDelete(
-            channel as ChannelProperties,
+            normalizeChannel(channel as ChannelProperties),
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
         async threadCreate(channel) {
           await handleThreadCreate(
-            channel as ChannelProperties,
+            normalizeChannel(channel as ChannelProperties),
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
         async threadUpdate(channel) {
           await handleRoomUpdate(
-            channel as ChannelProperties,
+            normalizeChannel(channel as ChannelProperties),
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
         async threadDelete(channel) {
           await handleRoomDelete(
-            channel as ChannelProperties,
+            normalizeChannel(channel as ChannelProperties),
             repo,
-            spaceManager,
+            roomy,
           );
         },
 
@@ -231,7 +216,7 @@ async function main() {
         },
 
         async guildMemberAdd(member, user) {
-          if (!ENABLE_GUILD_MEMBERS_INTENT) return;
+          if (!ENABLE_GUILD_MEMBERS_INTENT()) return;
 
           const guildIdStr = member.guildId?.toString();
           if (!guildIdStr) return;
@@ -247,7 +232,8 @@ async function main() {
 
           if (targetSpaces.length === 0) return;
 
-          await syncUserProfile(user, targetSpaces, repo, spaceManager);
+          const userData = normalizeUser(user as Parameters<typeof normalizeUser>[0]);
+          await syncUserProfile(userData, targetSpaces, repo, roomy);
         },
       },
     }),
@@ -264,7 +250,7 @@ async function main() {
     log.info(`received ${signal}, shutting down`);
 
     try {
-      await spaceManager.disconnectAll();
+      await roomy.disconnectAll();
     } catch (err) {
       log.error("Error disconnecting spaces", err);
     }

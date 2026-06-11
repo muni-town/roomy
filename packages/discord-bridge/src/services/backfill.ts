@@ -1,13 +1,19 @@
-import type { Collection } from "@discordeno/bot";
 import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
-import { CHANNEL_TYPES, THREAD_TYPES, PRIVATE_THREAD, MESSAGE_CHANNEL_TYPES, isChannelPublic } from "../discord/types.ts";
-import type { DiscordBot, MessageProperties } from "../discord/types.ts";
+import {
+  CHANNEL_TYPES,
+  THREAD_TYPES,
+  PRIVATE_THREAD,
+  MESSAGE_CHANNEL_TYPES,
+  isChannelPublic,
+} from "../discord/data.ts";
+import type { DiscordChannelData, DiscordGuildData } from "../discord/data.ts";
+import type { DiscordDataSource } from "../discord/data-source.ts";
 import type {
   BridgeRepository,
   BridgeConfig,
   BridgeMode,
 } from "../db/repository.ts";
-import type { SpaceManager } from "../roomy/space-manager.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
 import { ensureRoomyChannel } from "./room-sync.ts";
 import { createLogger } from "../logger.ts";
@@ -21,40 +27,11 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// The proxy cache bot has .cache which DiscordBot doesn't encode in its type.
-// Narrow to what backfill actually needs.
-export interface CachedChannel {
-  id: bigint;
-  type: number;
-  name?: string;
-  parentId?: bigint;
-  permissionOverwrites?: Array<{ id: bigint; deny?: string[] }>;
-}
-
-export interface CachedGuild {
-  id: bigint;
-  channels?: Collection<bigint, CachedChannel>;
-}
-
-export interface BotWithCache extends DiscordBot {
-  cache: {
-    guilds: {
-      memory: Collection<bigint, CachedGuild>;
-      get(id: bigint): Promise<CachedGuild | undefined>;
-    };
-    channels: {
-      memory: Collection<bigint, CachedChannel>;
-      get(id: bigint): Promise<CachedChannel | undefined>;
-    };
-  };
-}
-
 export async function runBackfill(
-  bot: DiscordBot,
+  discord: DiscordDataSource,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
-  const cached = bot as unknown as BotWithCache;
   log.info("Starting history backfill...");
 
   const configs = repo.listAllBridgeConfigs();
@@ -64,14 +41,13 @@ export async function runBackfill(
   }
 
   // Ensure Roomy rooms exist for all bridged channels before backfilling.
-  // Channels first, then threads (threads need parent channel mappings).
   try {
-    await ensureRoomyRooms(cached, repo, spaceManager, configs);
+    await ensureRoomyRooms(discord, repo, roomy, configs);
   } catch (err) {
     log.error("ensureRoomyRooms failed", err);
   }
   try {
-    await ensureRoomyThreads(cached, repo, spaceManager, configs);
+    await ensureRoomyThreads(discord, repo, roomy, configs);
   } catch (err) {
     log.error("ensureRoomyThreads failed", err);
   }
@@ -79,7 +55,7 @@ export async function runBackfill(
   // Backfill is per (channel, space) — each pair has its own cursor.
   const tasks: Array<{ channelId: string; spaceDid: string }> = [];
   for (const config of configs) {
-    const channelIds = channelsForConfig(cached, repo, config);
+    const channelIds = await channelsForConfig(discord, repo, config);
     for (const channelId of channelIds) {
       tasks.push({ channelId, spaceDid: config.spaceDid });
     }
@@ -94,7 +70,7 @@ export async function runBackfill(
 
   const results = await Promise.allSettled(
     tasks.map((t) =>
-      backfillChannel(cached, repo, spaceManager, t.channelId, t.spaceDid),
+      backfillChannel(discord, repo, roomy, t.channelId, t.spaceDid),
     ),
   );
 
@@ -102,20 +78,18 @@ export async function runBackfill(
   const failed = results.filter((r) => r.status === "rejected").length;
   log.info(`Backfill complete: ${succeeded} succeeded, ${failed} failed`);
 
-  // Deprioritized: fetch public archived threads, create rooms, and backfill
-  // their messages with rate limiting. Archived threads aren't in the guild
-  // cache so they must be fetched via REST API per parent channel.
+  // Deprioritized: fetch public archived threads and backfill.
   try {
-    await ensureAndBackfillArchivedThreads(cached, repo, spaceManager, configs);
+    await ensureAndBackfillArchivedThreads(discord, repo, roomy, configs);
   } catch (err) {
     log.error("ensureAndBackfillArchivedThreads failed", err);
   }
 }
 
 async function ensureRoomyRooms(
-  bot: BotWithCache,
+  discord: DiscordDataSource,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
   configs: BridgeConfig[],
 ): Promise<void> {
   for (const config of configs) {
@@ -124,29 +98,25 @@ async function ensureRoomyRooms(
     let channelIds: string[];
 
     if (mode === "full") {
-      const guild = bot.cache.guilds.memory.get(BigInt(guildId));
+      const guild = await discord.getGuild(guildId);
       if (!guild?.channels) continue;
-      channelIds = [...guild.channels.values()]
+      channelIds = guild.channels
         .filter((ch) => CHANNEL_TYPES.has(ch.type))
-        .map((ch) => ch.id.toString());
+        .map((ch) => ch.id);
     } else {
-      // In subset mode the allowlist can contain both channel and thread
-      // snowflakes (threads are auto-added during thread creation).
-      // We must only create channel-kind rooms for true top-level channels.
-      // Thread snowflakes get resolved via their parent channel instead.
-      const guild = bot.cache.guilds.memory.get(BigInt(guildId));
-      const guildChannels = guild?.channels;
+      const guild = await discord.getGuild(guildId);
+      const guildChannels = guild?.channels ?? [];
       channelIds = [];
       for (const entry of repo.listAllowlistForBridge(spaceDid)) {
-        const cachedCh = guildChannels?.get(BigInt(entry.channelId));
+        const cachedCh = guildChannels.find((ch) => ch.id === entry.channelId);
         if (cachedCh) {
           if (CHANNEL_TYPES.has(cachedCh.type)) {
             channelIds.push(entry.channelId);
           }
           continue;
         }
-        // Channel not in cache — resolve type via REST API
-        const chType = await resolveChannelType(bot, entry.channelId);
+        // Channel not in guild — resolve type via data source
+        const chType = await discord.resolveChannelType(entry.channelId);
         if (chType !== undefined && CHANNEL_TYPES.has(chType)) {
           channelIds.push(entry.channelId);
         } else {
@@ -157,14 +127,13 @@ async function ensureRoomyRooms(
       }
     }
 
-    const connected = await spaceManager.getOrConnect(spaceDid);
     let created = 0;
 
     for (const channelId of channelIds) {
       try {
       if (repo.getRoomyId(spaceDid, "channel", channelId)) continue;
 
-      const channelName = resolveChannelName(bot, channelId);
+      const channelName = await discord.resolveChannelName(channelId);
       if (!channelName) {
         log.error(
           `Cannot resolve name for Discord channel ${channelId} in guild ${guildId}; skipping room creation`,
@@ -175,10 +144,9 @@ async function ensureRoomyRooms(
       const roomUlid = newUlid();
 
       // Determine default access: "none" for private channels, "read" for public.
-      const guildCache = bot.cache.guilds.memory.get(BigInt(guildId));
-      const cachedCh = guildCache?.channels?.get(BigInt(channelId));
+      const channel = await discord.getChannel(channelId);
       const defaultAccess: "read" | "none" =
-        cachedCh && !isChannelPublic(cachedCh, guildId) ? "none" : "read";
+        channel && !isChannelPublic(channel, guildId) ? "none" : "read";
 
       const event = {
         id: roomUlid,
@@ -194,7 +162,7 @@ async function ensureRoomyRooms(
         },
       } as Event;
 
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
       created++;
       } catch (err) {
@@ -214,49 +182,48 @@ async function ensureRoomyRooms(
 }
 
 async function ensureRoomyThreads(
-  bot: BotWithCache,
+  discord: DiscordDataSource,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
   configs: BridgeConfig[],
 ): Promise<void> {
   for (const config of configs) {
     try {
     const { guildId, spaceDid, mode } = config;
 
-    const guild = bot.cache.guilds.memory.get(BigInt(guildId));
+    const guild = await discord.getGuild(guildId);
     if (!guild?.channels) continue;
 
     // Discover threads that belong to bridged channels.
     const bridgedChannelIds: Set<string> =
       mode === "full"
         ? new Set(
-            [...guild.channels.values()]
+            guild.channels
               .filter((ch) => CHANNEL_TYPES.has(ch.type))
-              .map((ch) => ch.id.toString()),
+              .map((ch) => ch.id),
           )
         : new Set(
             repo.listAllowlistForBridge(spaceDid).map((e) => e.channelId),
           );
 
-    const threads = [...guild.channels.values()].filter(
+    const threads = guild.channels.filter(
       (ch) =>
         THREAD_TYPES.has(ch.type) &&
         ch.type !== PRIVATE_THREAD &&
         ch.parentId &&
-        bridgedChannelIds.has(ch.parentId.toString()),
+        bridgedChannelIds.has(ch.parentId),
     );
 
     if (threads.length === 0) continue;
 
-    const connected = await spaceManager.getOrConnect(spaceDid);
     let created = 0;
 
     for (const thread of threads) {
       try {
-      const threadId = thread.id.toString();
+      const threadId = thread.id;
       if (repo.getRoomyId(spaceDid, "thread", threadId)) continue;
 
-      const parentId = thread.parentId!.toString();
+      const parentId = thread.parentId!;
       const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
       if (!parentRoomyId) {
         log.warn(
@@ -298,7 +265,7 @@ async function ensureRoomyThreads(
         },
       ];
 
-      await connected.sendEvents(events);
+      await roomy.sendEvents(spaceDid, events);
       repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
 
       if (mode === "subset") {
@@ -307,7 +274,7 @@ async function ensureRoomyThreads(
 
       created++;
       } catch (err) {
-        log.error(`Failed to create Roomy thread for ${thread.id.toString()} in ${spaceDid}`, err);
+        log.error(`Failed to create Roomy thread for ${thread.id} in ${spaceDid}`, err);
       }
     }
 
@@ -320,78 +287,23 @@ async function ensureRoomyThreads(
   }
 }
 
-/**
- * Resolve the Discord channel type (integer) for a snowflake.
- * Checks the in-memory cache first (both top-level and guild-scoped),
- * then falls back to a REST API call as a last resort.
- * Returns `undefined` when the type cannot be resolved.
- */
-async function resolveChannelType(
-  bot: BotWithCache,
-  channelId: string,
-): Promise<number | undefined> {
-  const id = BigInt(channelId);
-  // Check top-level channel cache
-  const direct = bot.cache.channels.memory.get(id);
-  if (direct) return direct.type;
-  // Check guild channel caches
-  for (const guild of bot.cache.guilds.memory.values()) {
-    const ch = guild.channels?.get(id);
-    if (ch) return ch.type;
-  }
-  // Fall back to REST API
-  try {
-    const channel = await bot.helpers.getChannel(id);
-    return (channel as { type: number }).type;
-  } catch {
-    return undefined;
-  }
-}
-
-function resolveGuildIdForChannel(
-  bot: BotWithCache,
-  channelId: string,
-): string | undefined {
-  const id = BigInt(channelId);
-  for (const guild of bot.cache.guilds.memory.values()) {
-    if (guild.channels?.has(id)) return guild.id.toString();
-  }
-  return undefined;
-}
-
-function resolveChannelName(
-  bot: BotWithCache,
-  channelId: string,
-): string | undefined {
-  const id = BigInt(channelId);
-  const direct = bot.cache.channels.memory.get(id);
-  if (direct?.name) return direct.name;
-  // Guild text channels are typically only present in guild.channels, not the
-  // top-level channel cache. Scan guilds as a fallback.
-  for (const guild of bot.cache.guilds.memory.values()) {
-    const ch = guild.channels?.get(id);
-    if (ch?.name) return ch.name;
-  }
-  return undefined;
-}
-
-function channelsForConfig(
-  bot: BotWithCache,
+async function channelsForConfig(
+  discord: DiscordDataSource,
   repo: BridgeRepository,
   config: { guildId: string; spaceDid: string; mode: BridgeMode },
-): string[] {
+): Promise<string[]> {
   const channels: string[] = [];
 
   if (config.mode === "full") {
-    const guild = bot.cache.guilds.memory.get(BigInt(config.guildId));
+    const guild = await discord.getGuild(config.guildId);
     if (!guild) {
-      log.warn(`Guild ${config.guildId} not in cache, skipping`);
+      log.warn(`Guild ${config.guildId} not found, skipping`);
       return channels;
     }
     if (!guild.channels) return channels;
-    for (const [channelId, channel] of guild.channels) {
+    for (const channel of guild.channels) {
       if (MESSAGE_CHANNEL_TYPES.has(channel.type)) {
-        channels.push(channelId.toString());
+        channels.push(channel.id);
       }
     }
   } else {
@@ -405,29 +317,23 @@ function channelsForConfig(
 }
 
 export async function backfillSingleChannel(
-  bot: DiscordBot,
+  discord: DiscordDataSource,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
   channelId: string,
   guildId?: string,
 ): Promise<void> {
   // Ensure Roomy room exists for this channel in all relevant spaces
   if (guildId) {
-    const cached = bot as unknown as BotWithCache;
-
-    // Type guard: skip threads — they have their own creation path
-    // (ensureRoomyThreads or handleThreadCreate).
-    // Check cache first (fast path), then fall back to REST API to handle
-    // the case where the thread isn't cached yet (e.g. recently created).
-    const cachedChannel = cached.cache.channels.memory.get(BigInt(channelId))
-      ?? cached.cache.guilds.memory.get(BigInt(guildId))?.channels?.get(BigInt(channelId));
+    // Type guard: skip threads — they have their own creation path.
+    const cachedChannel = await discord.getChannel(channelId);
     if (cachedChannel && THREAD_TYPES.has(cachedChannel.type)) {
       log.debug(`backfillSingleChannel: channel ${channelId} is a thread (type ${cachedChannel.type}); skipping channel-kind creation`);
       return;
     }
-    // Cache miss or unknown type — resolve via REST API
+    // Cache miss or unknown type — resolve via data source
     if (!cachedChannel) {
-      const chType = await resolveChannelType(cached, channelId);
+      const chType = await discord.resolveChannelType(channelId);
       if (chType !== undefined && !CHANNEL_TYPES.has(chType)) {
         log.debug(
           `backfillSingleChannel: channel ${channelId} resolved to type ${chType} (not a top-level channel); skipping channel-kind creation`,
@@ -437,11 +343,11 @@ export async function backfillSingleChannel(
     }
 
     const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
-    const channelName = resolveChannelName(cached, channelId);
+    const channelName = await discord.resolveChannelName(channelId);
     if (channelName) {
       await ensureRoomyChannel(
         repo,
-        spaceManager,
+        roomy,
         channelId,
         guildId,
         channelName,
@@ -453,17 +359,16 @@ export async function backfillSingleChannel(
   // Backfill into each bridged space for this channel.
   if (guildId) {
     const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
-    const cached = bot as unknown as BotWithCache;
     for (const spaceDid of targetSpaces) {
-      await backfillChannel(cached, repo, spaceManager, channelId, spaceDid);
+      await backfillChannel(discord, repo, roomy, channelId, spaceDid);
     }
   }
 }
 
 async function backfillChannel(
-  bot: BotWithCache,
+  discord: DiscordDataSource,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
   channelId: string,
   spaceDid: string,
   guildIdOverride?: string,
@@ -476,7 +381,7 @@ async function backfillChannel(
   activeBackfills.add(key);
 
   try {
-  const guildId = guildIdOverride ?? resolveGuildIdForChannel(bot, channelId);
+  const guildId = guildIdOverride ?? await discord.resolveGuildIdForChannel(channelId);
   if (!guildId) {
     log.error(`Cannot resolve guildId for channel ${channelId}; skipping backfill`);
     return;
@@ -485,7 +390,6 @@ async function backfillChannel(
   const cursor = repo.getChannelCursor(spaceDid, channelId);
   // First-time backfill: start from the channel snowflake (which is older
   // than any message in the channel). Resume: start from last cursor.
-  // This matches the legacy bridge's backfillToRoomy behavior.
   let afterCursor = cursor?.lastMessageId ?? channelId;
 
   log.info(
@@ -496,8 +400,8 @@ async function backfillChannel(
   let totalSkipped = 0;
 
   while (true) {
-    const messages = await bot.helpers.getMessages(BigInt(channelId), {
-      after: BigInt(afterCursor),
+    const messages = await discord.getMessages(channelId, {
+      after: afterCursor,
       limit: 100,
     });
 
@@ -510,15 +414,12 @@ async function backfillChannel(
     for (const message of sortedMessages) {
       try {
         const result = await ingestDiscordMessage(
-          message as MessageProperties,
+          message,
           repo,
-          spaceManager,
+          roomy,
           guildId,
           spaceDid,
-          (snowflake) => {
-            const name = resolveChannelName(bot, snowflake);
-            return Promise.resolve(name);
-          },
+          (snowflake) => discord.resolveChannelName(snowflake),
           true, // backfill — skips per-message cursor writes
         );
         totalSynced += result.synced;
@@ -532,15 +433,9 @@ async function backfillChannel(
     }
 
     // Advance cursor at page boundary (not per-message) so a crash in
-    // the middle of a page doesn't lose the unprocessed messages in this
-    // batch. The idempotency check (getRoomyId) in ingestDiscordMessage
-    // prevents re-processing already-synced messages on the next run.
-    //
-    // Set cursor to the OLDEST message in this batch (the last element
-    // after reversing to oldest-first). This matches the legacy bridge's
-    // backfillToRoomy: after = sortedMessages[sortedMessages.length - 1]!.id
+    // the middle of a page doesn't lose the unprocessed messages.
     const oldestInBatch = sortedMessages[sortedMessages.length - 1]!;
-    afterCursor = oldestInBatch.id.toString();
+    afterCursor = oldestInBatch.id;
     repo.setChannelCursor(spaceDid, channelId, afterCursor);
 
     if (messages.length < 100) break;
@@ -557,50 +452,43 @@ async function backfillChannel(
 /**
  * Fetch public archived threads for all bridged parent channels, create Roomy
  * rooms for any that aren't yet mapped, and backfill their messages.
- *
- * Deprioritised — runs after active channels and threads are fully backfilled.
- * Adds a delay between each parent channel's archived fetch and between each
- * archived thread backfill to avoid hitting Discord rate limits.
  */
 async function ensureAndBackfillArchivedThreads(
-  bot: BotWithCache,
+  discord: DiscordDataSource,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
   configs: BridgeConfig[],
 ): Promise<void> {
   log.info("Starting archived thread backfill...");
 
-  const CHANNEL_DELAY_MS = 1_000; // between parent channel fetches
-  const BACKFILL_DELAY_MS = 500; // between individual archived thread backfills
+  const CHANNEL_DELAY_MS = 1_000;
+  const BACKFILL_DELAY_MS = 500;
   let totalThreads = 0;
 
   for (const config of configs) {
     try {
     const { guildId, spaceDid, mode } = config;
-    const guild = bot.cache.guilds.memory.get(BigInt(guildId));
+    const guild = await discord.getGuild(guildId);
     if (!guild?.channels) continue;
 
     // Determine bridged parent channels (same logic as ensureRoomyThreads).
     const bridgedParentChannels =
       mode === "full"
-        ? [...guild.channels.values()].filter((ch) =>
-            CHANNEL_TYPES.has(ch.type),
-          )
-        : [...guild.channels.values()].filter((ch) => {
+        ? guild.channels.filter((ch) => CHANNEL_TYPES.has(ch.type))
+        : guild.channels.filter((ch) => {
             if (!CHANNEL_TYPES.has(ch.type)) return false;
             return repo
               .listAllowlistForBridge(spaceDid)
-              .some((e) => e.channelId === ch.id.toString());
+              .some((e) => e.channelId === ch.id);
           });
 
     if (bridgedParentChannels.length === 0) continue;
 
-    const connected = await spaceManager.getOrConnect(spaceDid);
     let parentChannelsProcessed = 0;
 
     for (const parentChannel of bridgedParentChannels) {
       try {
-      const parentChannelId = parentChannel.id.toString();
+      const parentChannelId = parentChannel.id;
       const parentRoomyId = repo.getRoomyId(
         spaceDid,
         "channel",
@@ -612,20 +500,20 @@ async function ensureAndBackfillArchivedThreads(
       let hasMore = true;
 
       while (hasMore) {
-        const options: Record<string, unknown> = { limit: 100 };
+        const opts: { before?: string; limit: number } = { limit: 100 };
         if (cursor) {
-          options.before = cursor;
+          opts.before = cursor;
         }
 
-        const result = await (bot.helpers as any).getPublicArchivedThreads(
-          parentChannel.id,
-          options,
+        const result = await discord.getPublicArchivedThreads(
+          parentChannelId,
+          opts,
         );
 
         if (!result.threads?.length) break;
 
         for (const thread of result.threads) {
-          const threadId = String(thread.id);
+          const threadId = thread.id;
           if (repo.getRoomyId(spaceDid, "thread", threadId)) continue;
           if (!thread.name) continue;
 
@@ -656,7 +544,7 @@ async function ensureAndBackfillArchivedThreads(
             },
           ];
 
-          await connected.sendEvents(events);
+          await roomy.sendEvents(spaceDid, events);
           repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
 
           if (mode === "subset") {
@@ -665,24 +553,22 @@ async function ensureAndBackfillArchivedThreads(
 
           totalThreads++;
 
-          // Backfill this archived thread's messages (pass guildId explicitly
-          // since the thread isn't in the guild cache).
+          // Backfill this archived thread's messages
           await backfillChannel(
-            bot,
+            discord,
             repo,
-            spaceManager,
+            roomy,
             threadId,
             spaceDid,
             guildId,
           );
 
-          // Rate limiting delay between individual thread backfills
           await delay(BACKFILL_DELAY_MS);
         }
 
         hasMore = result.hasMore ?? false;
         if (result.threads.length > 0) {
-          cursor = String(result.threads[result.threads.length - 1].id);
+          cursor = result.threads[result.threads.length - 1]!.id;
         } else {
           break;
         }
@@ -691,11 +577,10 @@ async function ensureAndBackfillArchivedThreads(
       parentChannelsProcessed++;
 
       if (parentChannelsProcessed < bridgedParentChannels.length) {
-        // Rate limiting delay between parent channels
         await delay(CHANNEL_DELAY_MS);
       }
       } catch (err) {
-        log.error(`Failed to backfill archived threads for parent channel ${parentChannel.id.toString()} in ${spaceDid}`, err);
+        log.error(`Failed to backfill archived threads for parent channel ${parentChannel.id} in ${spaceDid}`, err);
       }
     }
 

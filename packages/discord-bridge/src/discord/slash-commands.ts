@@ -17,11 +17,20 @@ import { CHANNEL_TYPES, MESSAGE_CHANNEL_TYPES } from "./types.ts"
 import {
   backfillSingleChannel,
   runBackfill,
-  type BotWithCache,
 } from "../services/backfill.ts";
+import { LiveDiscordDataSource, type BotWithCache } from "../discord/live-data-source.ts";
+import { LiveRoomyGateway } from "../roomy/live-gateway.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("slash");
+
+/** Create adapters from live bot + space manager for service calls. */
+function createAdapters(bot: DiscordBot, spaceManager: SpaceManager) {
+  return {
+    discord: new LiveDiscordDataSource(bot),
+    roomy: new LiveRoomyGateway(spaceManager),
+  };
+}
 
 // ─── Channel selection pagination state ───────────────────────────────
 // Key: `${guildId}:${userId}:${spaceDid}`
@@ -573,7 +582,7 @@ async function handleBridgeModeButton(
       components: [],
     });
 
-    runBackfill(bot, repo, spaceManager).catch((err) => {
+    runBackfill(createAdapters(bot, spaceManager).discord, repo, createAdapters(bot, spaceManager).roomy).catch((err) => {
       log.error(`Initial backfill failed for space ${spaceDid}`, err);
     });
     return;
@@ -754,7 +763,7 @@ async function handleChannelNav(
       components: [],
     })
 
-    runBackfill(bot, repo, spaceManager).catch((err) => {
+    runBackfill(createAdapters(bot, spaceManager).discord, repo, createAdapters(bot, spaceManager).roomy).catch((err) => {
       log.error(`Initial backfill failed for space ${spaceDid}`, err)
     })
     return
@@ -809,7 +818,7 @@ async function handleChannelSelect(
     components: [],
   });
 
-  runBackfill(bot, repo, spaceManager).catch((err) => {
+  runBackfill(createAdapters(bot, spaceManager).discord, repo, createAdapters(bot, spaceManager).roomy).catch((err) => {
     log.error(`Initial backfill failed for space ${spaceDid}`, err);
   });
 }
@@ -1009,7 +1018,7 @@ async function handleChannelAdd(
 
   await interaction.edit({ content: message });
 
-  backfillSingleChannel(bot, repo, spaceManager, channelId, guildId).catch(
+  backfillSingleChannel(createAdapters(bot, spaceManager).discord, repo, createAdapters(bot, spaceManager).roomy, channelId, guildId).catch(
     (err) => {
       log.error(`Backfill failed for channel ${channelId}`, err);
     },
@@ -1125,7 +1134,7 @@ async function handleBackfill(
         content: `Re-backfilling <#${channelStr}> from the beginning. Already-synced messages will be skipped.`,
       });
 
-      backfillSingleChannel(bot, repo, spaceManager, channelStr, guildId).catch(
+      backfillSingleChannel(createAdapters(bot, spaceManager).discord, repo, createAdapters(bot, spaceManager).roomy, channelStr, guildId).catch(
         (err) => {
           log.error(`Re-backfill failed for channel ${channelStr}`, err);
         },
@@ -1151,7 +1160,7 @@ async function handleBackfill(
         content: `Re-backfilling ${channels.size} channel(s) from the beginning. Already-synced messages will be skipped.`,
       });
 
-      runBackfill(bot, repo, spaceManager).catch((err) => {
+      runBackfill(createAdapters(bot, spaceManager).discord, repo, createAdapters(bot, spaceManager).roomy).catch((err) => {
         log.error("Full re-backfill failed", err);
       });
     }

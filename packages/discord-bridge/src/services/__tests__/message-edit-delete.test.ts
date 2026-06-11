@@ -7,8 +7,8 @@
 
 import { describe, expect, test, beforeEach } from "bun:test";
 import { BridgeRepository } from "../../db/repository.ts";
+import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import { handleMessageEdit, handleMessageDelete } from "../message-edit-delete.ts";
-import { createMockSpaceManager } from "./helpers/mock-space-manager.ts";
 import {
   SPACE_A,
   SPACE_B,
@@ -16,35 +16,24 @@ import {
   CHANNEL,
   ROOMY_CHANNEL_ULID,
   ROOMY_MESSAGE_ULID,
-  SNOWFLAKE_CHANNEL,
-  SNOWFLAKE_USER,
+  makeUser,
   makeMessage,
 } from "./helpers/test-data.ts";
 
-/** Extract the editMessage event from a space (skip profile sync events). */
+/** Extract the editMessage event. */
 function editMessageEvent(
-  manager: ReturnType<typeof createMockSpaceManager>,
+  roomy: MockRoomyGateway,
   spaceDid: string,
 ): any {
-  const calls = manager.space(spaceDid).sendEvent.mock.calls;
-  for (const call of calls) {
-    const event = call[0];
-    if (event.$type === "space.roomy.message.editMessage.v0") return event;
-  }
-  return undefined;
+  return roomy.findEvent(spaceDid, "space.roomy.message.editMessage.v0");
 }
 
-/** Extract the deleteMessage event from a space. */
+/** Extract the deleteMessage event. */
 function deleteMessageEvent(
-  manager: ReturnType<typeof createMockSpaceManager>,
+  roomy: MockRoomyGateway,
   spaceDid: string,
 ): any {
-  const calls = manager.space(spaceDid).sendEvent.mock.calls;
-  for (const call of calls) {
-    const event = call[0];
-    if (event.$type === "space.roomy.message.deleteMessage.v0") return event;
-  }
-  return undefined;
+  return roomy.findEvent(spaceDid, "space.roomy.message.deleteMessage.v0");
 }
 
 function setupRepo(): BridgeRepository {
@@ -54,16 +43,15 @@ function setupRepo(): BridgeRepository {
   return repo;
 }
 
-const SNOWFLAKE_MSG = BigInt("987654321");
-const MSG_ID_STR = SNOWFLAKE_MSG.toString();
+const MSG_ID_STR = "987654321";
 
 describe("handleMessageEdit", () => {
   let repo: BridgeRepository;
-  let manager: ReturnType<typeof createMockSpaceManager>;
+  let roomy: MockRoomyGateway;
 
   beforeEach(() => {
     repo = setupRepo();
-    manager = createMockSpaceManager();
+    roomy = new MockRoomyGateway();
   });
 
   // ED01: Edit with existing mapping
@@ -71,20 +59,18 @@ describe("handleMessageEdit", () => {
     repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
 
     const msg = makeMessage({
-      id: SNOWFLAKE_MSG,
+      id: MSG_ID_STR,
       content: "Updated content",
-      editedTimestamp: Date.now(),
+      editedTimestamp: String(Date.now()),
     });
 
-    await handleMessageEdit(msg as any, repo, manager._manager);
+    await handleMessageEdit(msg, repo, roomy);
 
-    const event = editMessageEvent(manager, SPACE_A);
+    const event = editMessageEvent(roomy, SPACE_A);
     expect(event).toBeDefined();
     expect(event.$type).toBe("space.roomy.message.editMessage.v0");
     expect(event.messageId).toBe(ROOMY_MESSAGE_ULID);
-    // Decode body
-    const data = event.body.data;
-    const decoded = atob(data.$bytes);
+    const decoded = atob(event.body.data.$bytes);
     expect(decoded).toBe("Updated content");
   });
 
@@ -93,25 +79,25 @@ describe("handleMessageEdit", () => {
     repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
 
     const msg = makeMessage({
-      id: SNOWFLAKE_MSG,
+      id: MSG_ID_STR,
       content: "Updated",
       editedTimestamp: null,
     });
 
-    await handleMessageEdit(msg as any, repo, manager._manager);
-    expect(editMessageEvent(manager, SPACE_A)).toBeUndefined();
+    await handleMessageEdit(msg, repo, roomy);
+    expect(editMessageEvent(roomy, SPACE_A)).toBeUndefined();
   });
 
   // ED03: Edit without mapping skipped
   test("ED03: skips edit when no Roomy message mapping exists", async () => {
     const msg = makeMessage({
-      id: SNOWFLAKE_MSG,
+      id: MSG_ID_STR,
       content: "Updated",
-      editedTimestamp: Date.now(),
+      editedTimestamp: String(Date.now()),
     });
 
-    await handleMessageEdit(msg as any, repo, manager._manager);
-    expect(editMessageEvent(manager, SPACE_A)).toBeUndefined();
+    await handleMessageEdit(msg, repo, roomy);
+    expect(editMessageEvent(roomy, SPACE_A)).toBeUndefined();
   });
 
   // ED04: Edit to unsynced channel skipped
@@ -119,16 +105,14 @@ describe("handleMessageEdit", () => {
     repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
 
     const msg = makeMessage({
-      id: SNOWFLAKE_MSG,
-      channelId: BigInt("999999999999999999"), // no room mapping
+      id: MSG_ID_STR,
+      channelId: "999999999999999999",
       content: "Updated",
-      editedTimestamp: Date.now(),
+      editedTimestamp: String(Date.now()),
     });
 
-    await handleMessageEdit(msg as any, repo, manager._manager);
-
-    // No edit event due to missing room mapping
-    expect(editMessageEvent(manager, SPACE_A)).toBeUndefined();
+    await handleMessageEdit(msg, repo, roomy);
+    expect(editMessageEvent(roomy, SPACE_A)).toBeUndefined();
   });
 
   // ED05: Edit with mention resolution
@@ -136,38 +120,18 @@ describe("handleMessageEdit", () => {
     repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
 
     const msg = makeMessage({
-      id: SNOWFLAKE_MSG,
+      id: MSG_ID_STR,
       content: "Edited <@111111111111111111>!",
-      editedTimestamp: Date.now(),
-      mentions: [{
-        id: SNOWFLAKE_USER,
-        username: "testuser",
-        globalName: "Test User",
-        discriminator: "1234",
-      }],
+      editedTimestamp: String(Date.now()),
+      mentions: [makeUser({ id: "111111111111111111", name: "testuser", globalName: "Test User" })],
     });
 
-    await handleMessageEdit(msg as any, repo, manager._manager);
+    await handleMessageEdit(msg, repo, roomy);
 
-    const event = editMessageEvent(manager, SPACE_A);
+    const event = editMessageEvent(roomy, SPACE_A);
     expect(event).toBeDefined();
     const decoded = atob(event.body.data.$bytes);
     expect(decoded).toContain("[@Test User]()");
-  });
-
-  // ED06: Edit triggers profile sync
-  test("ED06: calls getOrConnect for profile sync alongside edit", async () => {
-    repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
-
-    const msg = makeMessage({
-      id: SNOWFLAKE_MSG,
-      content: "Edited",
-      editedTimestamp: Date.now(),
-    });
-
-    await handleMessageEdit(msg as any, repo, manager._manager);
-    // getOrConnect should have been called (for profile sync + send)
-    expect(manager._manager.getOrConnect).toHaveBeenCalled();
   });
 
   // ED10: Edit fan-out to multiple spaces
@@ -176,27 +140,28 @@ describe("handleMessageEdit", () => {
     repo.registerMapping(SPACE_B, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
     repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
     repo.registerMapping(SPACE_B, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
+    roomy = new MockRoomyGateway();
 
     const msg = makeMessage({
-      id: SNOWFLAKE_MSG,
+      id: MSG_ID_STR,
       content: "Fan-out edit",
-      editedTimestamp: Date.now(),
+      editedTimestamp: String(Date.now()),
     });
 
-    await handleMessageEdit(msg as any, repo, manager._manager);
+    await handleMessageEdit(msg, repo, roomy);
 
-    expect(editMessageEvent(manager, SPACE_A)).toBeDefined();
-    expect(editMessageEvent(manager, SPACE_B)).toBeDefined();
+    expect(editMessageEvent(roomy, SPACE_A)).toBeDefined();
+    expect(editMessageEvent(roomy, SPACE_B)).toBeDefined();
   });
 });
 
 describe("handleMessageDelete", () => {
   let repo: BridgeRepository;
-  let manager: ReturnType<typeof createMockSpaceManager>;
+  let roomy: MockRoomyGateway;
 
   beforeEach(() => {
     repo = setupRepo();
-    manager = createMockSpaceManager();
+    roomy = new MockRoomyGateway();
   });
 
   // ED07: Delete with mapping
@@ -204,14 +169,14 @@ describe("handleMessageDelete", () => {
     repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
 
     await handleMessageDelete(
-      SNOWFLAKE_MSG,
-      SNOWFLAKE_CHANNEL,
+      BigInt(MSG_ID_STR),
+      BigInt(CHANNEL),
       BigInt(GUILD),
       repo,
-      manager._manager,
+      roomy,
     );
 
-    const event = deleteMessageEvent(manager, SPACE_A);
+    const event = deleteMessageEvent(roomy, SPACE_A);
     expect(event).toBeDefined();
     expect(event.$type).toBe("space.roomy.message.deleteMessage.v0");
     expect(event.messageId).toBe(ROOMY_MESSAGE_ULID);
@@ -223,14 +188,14 @@ describe("handleMessageDelete", () => {
   // ED08: Delete without mapping skipped
   test("ED08: skips delete when no mapping exists", async () => {
     await handleMessageDelete(
-      SNOWFLAKE_MSG,
-      SNOWFLAKE_CHANNEL,
+      BigInt(MSG_ID_STR),
+      BigInt(CHANNEL),
       BigInt(GUILD),
       repo,
-      manager._manager,
+      roomy,
     );
 
-    expect(deleteMessageEvent(manager, SPACE_A)).toBeUndefined();
+    expect(deleteMessageEvent(roomy, SPACE_A)).toBeUndefined();
   });
 
   // ED09: Delete from unsynced channel skipped
@@ -238,15 +203,14 @@ describe("handleMessageDelete", () => {
     repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
 
     await handleMessageDelete(
-      SNOWFLAKE_MSG,
+      BigInt(MSG_ID_STR),
       BigInt("999999999999999999"),
       BigInt(GUILD),
       repo,
-      manager._manager,
+      roomy,
     );
 
-    // No delete event because room mapping is checked
-    expect(deleteMessageEvent(manager, SPACE_A)).toBeUndefined();
+    expect(deleteMessageEvent(roomy, SPACE_A)).toBeUndefined();
   });
 
   // ED10: Delete fan-out to multiple spaces
@@ -255,28 +219,29 @@ describe("handleMessageDelete", () => {
     repo.registerMapping(SPACE_B, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
     repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
     repo.registerMapping(SPACE_B, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
+    roomy = new MockRoomyGateway();
 
     await handleMessageDelete(
-      SNOWFLAKE_MSG,
-      SNOWFLAKE_CHANNEL,
+      BigInt(MSG_ID_STR),
+      BigInt(CHANNEL),
       BigInt(GUILD),
       repo,
-      manager._manager,
+      roomy,
     );
 
-    expect(deleteMessageEvent(manager, SPACE_A)).toBeDefined();
-    expect(deleteMessageEvent(manager, SPACE_B)).toBeDefined();
+    expect(deleteMessageEvent(roomy, SPACE_A)).toBeDefined();
+    expect(deleteMessageEvent(roomy, SPACE_B)).toBeDefined();
   });
 
   test("exits early when guildId is undefined", async () => {
     await handleMessageDelete(
-      SNOWFLAKE_MSG,
-      SNOWFLAKE_CHANNEL,
+      BigInt(MSG_ID_STR),
+      BigInt(CHANNEL),
       undefined,
       repo,
-      manager._manager,
+      roomy,
     );
 
-    expect(deleteMessageEvent(manager, SPACE_A)).toBeUndefined();
+    expect(deleteMessageEvent(roomy, SPACE_A)).toBeUndefined();
   });
 });

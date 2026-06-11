@@ -6,7 +6,7 @@ import {
   type Ulid,
 } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
-import type { SpaceManager } from "../roomy/space-manager.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
 import { emojiToString, reactionKey } from "../utils/emoji.ts";
 import { createLogger } from "../logger.ts";
 
@@ -19,7 +19,7 @@ export async function handleReactionAdd(
   emoji: { id?: bigint; name?: string },
   guildId: bigint,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
   const messageIdStr = messageId.toString();
   const channelIdStr = channelId.toString();
@@ -62,8 +62,6 @@ export async function handleReactionAdd(
       continue;
     }
 
-    const connected = await spaceManager.getOrConnect(spaceDid);
-
     const eventUlid = newUlid();
     const extensions: Record<string, unknown> = {
       "space.roomy.extension.discordReactionOrigin.v0": {
@@ -91,7 +89,7 @@ export async function handleReactionAdd(
     } as Event;
 
     try {
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       repo.registerMapping(spaceDid, "reaction", key, eventUlid);
       log.info(
         `Synced reaction ${reactionString} on ${messageIdStr} → ${eventUlid} in ${spaceDid}`,
@@ -112,7 +110,7 @@ export async function handleReactionRemove(
   emoji: { id?: bigint; name?: string },
   guildId: bigint,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
   const channelIdStr = channelId.toString();
   const guildIdStr = guildId.toString();
@@ -145,8 +143,6 @@ export async function handleReactionRemove(
       continue;
     }
 
-    const connected = await spaceManager.getOrConnect(spaceDid);
-
     const eventUlid = newUlid();
     const extensions: Record<string, unknown> = {
       "space.roomy.extension.discordReactionOrigin.v0": {
@@ -173,7 +169,7 @@ export async function handleReactionRemove(
     } as Event;
 
     try {
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       // Remove the reaction mapping so a re-add will sync fresh
       repo.unregisterMapping(spaceDid, "reaction", key);
       log.info(

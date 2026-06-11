@@ -6,8 +6,8 @@ import {
   type Ulid,
 } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
-import type { SpaceManager } from "../roomy/space-manager.ts";
-import type { MessageProperties } from "../discord/types.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
+import type { DiscordMessageData } from "../discord/data.ts";
 import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
 import { resolveMentions, type MentionContext } from "./mention-resolver.ts";
@@ -15,18 +15,18 @@ import { resolveMentions, type MentionContext } from "./mention-resolver.ts";
 const log = createLogger("edit-delete");
 
 export async function handleMessageEdit(
-  message: MessageProperties,
+  message: DiscordMessageData,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
   resolveChannelName?: (snowflake: string) => Promise<string | undefined>,
 ): Promise<void> {
-  const messageId = message.id.toString();
-  const channelId = message.channelId.toString();
+  const messageId = message.id;
+  const channelId = message.channelId;
 
   // Only process actual user edits (not embed updates)
   if (!message.editedTimestamp) return;
 
-  const guildId = message.guildId?.toString();
+  const guildId = message.guildId;
   if (!guildId) return;
 
   const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
@@ -34,10 +34,10 @@ export async function handleMessageEdit(
 
   // Pre-resolve channel names from mentionedChannelIds (with REST fallback)
   const channelNames = new Map<string, string>();
-  if (resolveChannelName && message.mentionedChannelIds) {
+  if (resolveChannelName && message.mentionChannelIds) {
     const results = await Promise.all(
-      message.mentionedChannelIds.map(async (id) => {
-        const idStr = id.toString();
+      message.mentionChannelIds.map(async (id) => {
+        const idStr = id;
         const name = await resolveChannelName(idStr);
         return { idStr, name } as const;
       }),
@@ -64,12 +64,8 @@ export async function handleMessageEdit(
       continue;
     }
 
-    const connected = await spaceManager.getOrConnect(spaceDid);
-
     // Sync author profile before edit
-    if (message.author) {
-      await syncUserProfile(message.author, [spaceDid], repo, spaceManager);
-    }
+    await syncUserProfile(message.author, [spaceDid], repo, roomy);
 
     const eventUlid = newUlid();
 
@@ -81,9 +77,14 @@ export async function handleMessageEdit(
       if (roomyId) roomyRoomIds.set(snowflake, roomyId);
     }
     const mentionCtx: MentionContext = { channelNames, roomyRoomIds };
+    const userMentions = message.mentions.map((m) => ({
+      id: m.id,
+      username: m.name,
+      globalName: m.globalName,
+    }));
     const resolvedContent = resolveMentions(
       message.content || "",
-      message.mentions,
+      userMentions,
       mentionCtx,
     );
 
@@ -113,7 +114,7 @@ export async function handleMessageEdit(
     };
 
     try {
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       log.info(
         `Synced edit for message ${messageId} → ${roomyMessageId} in ${spaceDid}`,
       );
@@ -131,7 +132,7 @@ export async function handleMessageDelete(
   channelId: bigint,
   guildId: bigint | undefined,
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
   const messageIdStr = messageId.toString();
   const channelIdStr = channelId.toString();
@@ -159,8 +160,6 @@ export async function handleMessageDelete(
       continue;
     }
 
-    const connected = await spaceManager.getOrConnect(spaceDid);
-
     const eventUlid = newUlid();
     const extensions: Record<string, unknown> = {
       "space.roomy.extension.discordMessageOrigin.v0": {
@@ -180,7 +179,7 @@ export async function handleMessageDelete(
     };
 
     try {
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       // Keep mapping row — delete is recorded; future edit attempts skip naturally
       log.info(
         `Synced delete for message ${messageIdStr} → ${roomyMessageId} in ${spaceDid}`,

@@ -1,34 +1,13 @@
 import { newUlid, type Did, type Event } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
-import type { SpaceManager } from "../roomy/space-manager.ts";
-import { computeProfileHash, iconBigintToHash } from "../utils/hash.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
+import type { DiscordUserData } from "../discord/data.ts";
+import { computeProfileHash } from "../utils/hash.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("profile");
 
-export interface DiscordUserProfile {
-  id: bigint;
-  username: string;
-  globalName?: string;
-  avatar?: bigint;
-  discriminator: string;
-}
-
 function discordAvatarUrl(
-  userId: bigint,
-  avatar: bigint | undefined,
-  discriminator: string,
-): string {
-  if (avatar) {
-    const hash = iconBigintToHash(avatar);
-    const ext = hash.startsWith("a_") ? "gif" : "webp";
-    return `https://cdn.discordapp.com/avatars/${userId}/${hash}.${ext}?size=256`;
-  }
-  const mod = discriminator !== "0" ? parseInt(discriminator) % 5 : 0;
-  return `https://cdn.discordapp.com/embed/avatars/${mod}.png`;
-}
-
-function discordAvatarUrlFromHash(
   userId: string,
   avatarHash: string | null,
   discriminator: string,
@@ -47,24 +26,24 @@ function discordAvatarUrlFromHash(
  * On failure, enqueues the sync for retry with exponential backoff.
  */
 export async function syncUserProfile(
-  user: DiscordUserProfile,
+  user: DiscordUserData,
   targetSpaces: string[],
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
-  const userIdStr = user.id.toString();
-  const avatarHash = user.avatar ? iconBigintToHash(user.avatar) : null;
+  const userIdStr = user.id;
+  const avatarHash = user.avatar ?? null;
   const hash = computeProfileHash(
-    user.username,
+    user.name,
     user.globalName ?? null,
     avatarHash,
   );
 
-  const avatar = discordAvatarUrl(user.id, user.avatar, user.discriminator);
+  const avatar = discordAvatarUrl(userIdStr, avatarHash, user.discriminator);
   const handle =
     user.discriminator !== "0"
-      ? `${user.username}#${user.discriminator}`
-      : user.username;
+      ? `${user.name}#${user.discriminator}`
+      : user.name;
 
   for (const spaceDid of targetSpaces) {
     const existingHash = repo.getProfileHash(spaceDid, userIdStr);
@@ -74,7 +53,7 @@ export async function syncUserProfile(
       id: newUlid(),
       $type: "space.roomy.user.updateProfile.v0",
       did: `did:discord:${userIdStr}` as Did,
-      name: user.globalName ?? user.username,
+      name: user.globalName ?? user.name,
       avatar,
       extensions: {
         "space.roomy.extension.discordUserOrigin.v0": {
@@ -87,8 +66,7 @@ export async function syncUserProfile(
     };
 
     try {
-      const connected = await spaceManager.getOrConnect(spaceDid);
-      await connected.sendEvent(event);
+      await roomy.sendEvent(spaceDid, event);
       repo.setProfileHash(spaceDid, userIdStr, hash);
       // Clear any stale retry entry on success
       repo.deleteProfileSyncEntry(spaceDid, userIdStr);
@@ -102,7 +80,7 @@ export async function syncUserProfile(
       repo.enqueueProfileSync(
         spaceDid,
         userIdStr,
-        user.username,
+        user.name,
         user.globalName ?? null,
         avatarHash,
         user.discriminator,
@@ -118,7 +96,7 @@ export async function syncUserProfile(
  */
 export async function retryStaleProfileSyncs(
   repo: BridgeRepository,
-  spaceManager: SpaceManager,
+  roomy: RoomyGateway,
 ): Promise<void> {
   const stale = repo.getStaleProfileSyncEntries();
   if (stale.length === 0) return;
@@ -141,7 +119,7 @@ export async function retryStaleProfileSyncs(
       continue;
     }
 
-    const avatar = discordAvatarUrlFromHash(
+    const avatar = discordAvatarUrl(
       entry.discordUserId,
       entry.avatarHash,
       entry.discriminator,
@@ -168,8 +146,7 @@ export async function retryStaleProfileSyncs(
     };
 
     try {
-      const connected = await spaceManager.getOrConnect(entry.spaceDid);
-      await connected.sendEvent(event);
+      await roomy.sendEvent(entry.spaceDid, event);
       repo.setProfileHash(entry.spaceDid, entry.discordUserId, hash);
       repo.deleteProfileSyncEntry(entry.spaceDid, entry.discordUserId);
       succeeded++;
