@@ -1,106 +1,106 @@
 import {
-  Bot,
-  Channel,
-  CompleteDesiredProperties,
-  Interaction,
-  Message,
-  RecursivePartial,
-  SetupDesiredProps,
-  TransformersDesiredProperties,
-  Emoji,
-  createDesiredPropertiesObject,
+	Bot,
+	Channel,
+	CompleteDesiredProperties,
+	Interaction,
+	Message,
+	RecursivePartial,
+	SetupDesiredProps,
+	TransformersDesiredProperties,
+	Emoji,
+	createDesiredPropertiesObject,
 } from "@discordeno/bot";
 
 export const desiredProperties = createDesiredPropertiesObject({
-  message: {
-    id: true,
-    guildId: true,
-    content: true,
-    channelId: true,
-    author: true,
-    webhookId: true,
-    editedTimestamp: true,
-    attachments: true,
-    messageReference: true,
-    type: true,
-    reactions: true,
-    stickerItems: true,
-    mentions: true,
-    mentionedChannelIds: true,
-    mentionedRoleIds: true,
-  },
-  guild: {
-    id: true,
-    channels: true,
-  },
-  channel: {
-    id: true,
-    lastMessageId: true,
-    name: true,
-    type: true,
-    guildId: true,
-    parentId: true,
-    permissionOverwrites: true,
-  },
-  user: {
-    username: true,
-    avatar: true,
-    id: true,
-    discriminator: true,
-    globalName: true,
-  },
-  interaction: {
-    id: true,
-    type: true,
-    data: true,
-    token: true,
-    guildId: true,
-    member: true,
-    user: true,
-    authorizingIntegrationOwners: true,
-  },
-  attachment: {
-    id: true,
-    filename: true,
-    contentType: true,
-    size: true,
-    url: true,
-    proxyUrl: true,
-    width: true,
-    height: true,
-  },
-  emoji: {
-    id: true,
-    name: true,
-  },
-  messageReference: {
-    messageId: true,
-    channelId: true,
-    guildId: true,
-  },
-  member: {
-    id: true,
-    guildId: true,
-  },
+	message: {
+		id: true,
+		guildId: true,
+		content: true,
+		channelId: true,
+		author: true,
+		webhookId: true,
+		editedTimestamp: true,
+		attachments: true,
+		messageReference: true,
+		type: true,
+		reactions: true,
+		stickerItems: true,
+		mentions: true,
+		mentionedChannelIds: true,
+		mentionedRoleIds: true,
+	},
+	guild: {
+		id: true,
+		channels: true,
+	},
+	channel: {
+		id: true,
+		lastMessageId: true,
+		name: true,
+		type: true,
+		guildId: true,
+		parentId: true,
+		permissionOverwrites: true,
+	},
+	user: {
+		username: true,
+		avatar: true,
+		id: true,
+		discriminator: true,
+		globalName: true,
+	},
+	interaction: {
+		id: true,
+		type: true,
+		data: true,
+		token: true,
+		guildId: true,
+		member: true,
+		user: true,
+		authorizingIntegrationOwners: true,
+	},
+	attachment: {
+		id: true,
+		filename: true,
+		contentType: true,
+		size: true,
+		url: true,
+		proxyUrl: true,
+		width: true,
+		height: true,
+	},
+	emoji: {
+		id: true,
+		name: true,
+	},
+	messageReference: {
+		messageId: true,
+		channelId: true,
+		guildId: true,
+	},
+	member: {
+		id: true,
+		guildId: true,
+	},
 } satisfies RecursivePartial<TransformersDesiredProperties>);
 
 export type MessageProperties = SetupDesiredProps<
-  Message,
-  CompleteDesiredProperties<typeof desiredProperties>
+	Message,
+	CompleteDesiredProperties<typeof desiredProperties>
 >;
 
 export type ChannelProperties = SetupDesiredProps<
-  Channel,
-  CompleteDesiredProperties<typeof desiredProperties>
+	Channel,
+	CompleteDesiredProperties<typeof desiredProperties>
 >;
 
 export type InteractionProperties = SetupDesiredProps<
-  Interaction,
-  CompleteDesiredProperties<typeof desiredProperties>
+	Interaction,
+	CompleteDesiredProperties<typeof desiredProperties>
 >;
 
 export type DiscordBot = Bot<
-  CompleteDesiredProperties<typeof desiredProperties>
+	CompleteDesiredProperties<typeof desiredProperties>
 >;
 
 /** Channel types that represent top-level text channels. */
@@ -114,8 +114,8 @@ export const PRIVATE_THREAD = 12;
 
 /** Any channel type that can carry messages. */
 export const MESSAGE_CHANNEL_TYPES = new Set([
-  ...CHANNEL_TYPES,
-  ...THREAD_TYPES,
+	...CHANNEL_TYPES,
+	...THREAD_TYPES,
 ]);
 
 /**
@@ -124,21 +124,21 @@ export const MESSAGE_CHANNEL_TYPES = new Set([
  * Channels without a matching deny overwrite are public by default.
  */
 export function isChannelPublic(
-  channel: { permissionOverwrites?: Array<{ id: bigint; deny?: string[] }> },
-  guildId: bigint | string,
+	channel: { permissionOverwrites?: Array<{ id: bigint; deny?: string[] }> },
+	guildId: bigint | string,
 ): boolean {
-  const overwrites = channel.permissionOverwrites;
-  if (!overwrites || overwrites.length === 0) return true;
-  const everyoneId = BigInt(guildId);
-  const everyoneOverwrite = overwrites.find((o) => o.id === everyoneId);
-  if (!everyoneOverwrite) return true;
-  return !everyoneOverwrite.deny?.includes("VIEW_CHANNEL");
+	const overwrites = channel.permissionOverwrites;
+	if (!overwrites || overwrites.length === 0) return true;
+	const everyoneId = BigInt(guildId);
+	const everyoneOverwrite = overwrites.find((o) => o.id === everyoneId);
+	if (!everyoneOverwrite) return true;
+	return !everyoneOverwrite.deny?.includes("VIEW_CHANNEL");
 }
 
 /** Discord message types the bridge cares about. */
 export const MsgType = {
-  Default: 0,
-  ChannelNameChange: 4,
-  ThreadCreated: 18,
-  ThreadStarterMessage: 21,
+	Default: 0,
+	ChannelNameChange: 4,
+	ThreadCreated: 18,
+	ThreadStarterMessage: 21,
 } as const;

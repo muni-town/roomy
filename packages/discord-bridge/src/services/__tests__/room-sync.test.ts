@@ -10,356 +10,359 @@ import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import type { DiscordChannelData } from "../../discord/data.ts";
 import {
-  handleChannelCreate,
-  handleThreadCreate,
-  handleRoomUpdate,
-  handleRoomDelete,
-  ensureRoomyChannel,
+	handleChannelCreate,
+	handleThreadCreate,
+	handleRoomUpdate,
+	handleRoomDelete,
+	ensureRoomyChannel,
 } from "../room-sync.ts";
 import {
-  SPACE_A,
-  SPACE_B,
-  GUILD,
-  CHANNEL,
-  THREAD,
-  ROOMY_CHANNEL_ULID,
-  makeChannel,
-  makeThread,
+	SPACE_A,
+	SPACE_B,
+	GUILD,
+	CHANNEL,
+	THREAD,
+	ROOMY_CHANNEL_ULID,
+	makeChannel,
+	makeThread,
 } from "./helpers/test-data.ts";
 
 /** Extract a createRoom event from a gateway. */
-function createRoomEvent(
-  gateway: MockRoomyGateway,
-  spaceDid: string,
-): any {
-  return gateway.findEvent(spaceDid, "space.roomy.room.createRoom.v0");
+function createRoomEvent(gateway: MockRoomyGateway, spaceDid: string): any {
+	return gateway.findEvent(spaceDid, "space.roomy.room.createRoom.v0");
 }
 
 /** Extract specific event types from sendEvents calls (used for threads). */
 function eventsFromGateway(
-  gateway: MockRoomyGateway,
-  spaceDid: string,
-  $type: string,
+	gateway: MockRoomyGateway,
+	spaceDid: string,
+	$type: string,
 ): any[] {
-  return gateway.eventsFor(spaceDid).filter((e) => e.$type === $type);
+	return gateway.eventsFor(spaceDid).filter((e) => e.$type === $type);
 }
 
 function setupRepo(mode: "full" | "subset" = "full"): BridgeRepository {
-  const repo = BridgeRepository.open(":memory:");
-  repo.upsertBridgeConfig(GUILD, SPACE_A, mode);
-  return repo;
+	const repo = BridgeRepository.open(":memory:");
+	repo.upsertBridgeConfig(GUILD, SPACE_A, mode);
+	return repo;
 }
 
 describe("handleChannelCreate", () => {
-  let repo: BridgeRepository;
-  let roomy: MockRoomyGateway;
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
 
-  beforeEach(() => {
-    repo = setupRepo();
-    roomy = new MockRoomyGateway();
-  });
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+	});
 
-  // RO01: Channel create (full mode)
-  test("RO01: creates room for new channel in full mode", async () => {
-    const channel = makeChannel();
+	// RO01: Channel create (full mode)
+	test("RO01: creates room for new channel in full mode", async () => {
+		const channel = makeChannel();
 
-    await handleChannelCreate(channel, repo, roomy);
+		await handleChannelCreate(channel, repo, roomy);
 
-    const event = createRoomEvent(roomy, SPACE_A);
-    expect(event).toBeDefined();
-    expect(event!.$type).toBe("space.roomy.room.createRoom.v0");
-    expect(event!.kind).toBe("space.roomy.channel");
-    expect(event!.name).toBe("general");
-    expect(event!.defaultAccess).toBe("read");
+		const event = createRoomEvent(roomy, SPACE_A);
+		expect(event).toBeDefined();
+		expect(event!.$type).toBe("space.roomy.room.createRoom.v0");
+		expect(event!.kind).toBe("space.roomy.channel");
+		expect(event!.name).toBe("general");
+		expect(event!.defaultAccess).toBe("read");
 
-    // Mapping registered
-    expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(event!.id);
+		// Mapping registered
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(event!.id);
 
-    // Discord origin extension
-    const origin = event!.extensions["space.roomy.extension.discordOrigin.v0"];
-    expect(origin.snowflake).toBe(CHANNEL);
-    expect(origin.guildId).toBe(GUILD);
-  });
+		// Discord origin extension
+		const origin = event!.extensions["space.roomy.extension.discordOrigin.v0"];
+		expect(origin.snowflake).toBe(CHANNEL);
+		expect(origin.guildId).toBe(GUILD);
+	});
 
-  // RO02: Channel create (subset mode, allowlisted)
-  test("RO02: creates room for allowlisted channel in subset mode", async () => {
-    repo = setupRepo("subset");
-    repo.addToAllowlist(SPACE_A, CHANNEL, GUILD);
-    roomy = new MockRoomyGateway();
+	// RO02: Channel create (subset mode, allowlisted)
+	test("RO02: creates room for allowlisted channel in subset mode", async () => {
+		repo = setupRepo("subset");
+		repo.addToAllowlist(SPACE_A, CHANNEL, GUILD);
+		roomy = new MockRoomyGateway();
 
-    const channel = makeChannel();
-    await handleChannelCreate(channel, repo, roomy);
+		const channel = makeChannel();
+		await handleChannelCreate(channel, repo, roomy);
 
-    const event = createRoomEvent(roomy, SPACE_A);
-    expect(event).toBeDefined();
-    expect(event!.name).toBe("general");
-  });
+		const event = createRoomEvent(roomy, SPACE_A);
+		expect(event).toBeDefined();
+		expect(event!.name).toBe("general");
+	});
 
-  // RO03: Channel create (subset mode, NOT allowlisted)
-  test("RO03: skips channel not in subset allowlist", async () => {
-    repo = setupRepo("subset");
-    roomy = new MockRoomyGateway();
+	// RO03: Channel create (subset mode, NOT allowlisted)
+	test("RO03: skips channel not in subset allowlist", async () => {
+		repo = setupRepo("subset");
+		roomy = new MockRoomyGateway();
 
-    const channel = makeChannel();
-    await handleChannelCreate(channel, repo, roomy);
+		const channel = makeChannel();
+		await handleChannelCreate(channel, repo, roomy);
 
-    expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
-  });
+		expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
+	});
 
-  // RO04: Private channel → defaultAccess = "none"
-  test("RO04: sets defaultAccess=none for private channel", async () => {
-    const channel = makeChannel({
-      permissionOverwrites: [
-        { id: GUILD, deny: ["VIEW_CHANNEL"] },
-      ],
-    });
+	// RO04: Private channel → defaultAccess = "none"
+	test("RO04: sets defaultAccess=none for private channel", async () => {
+		const channel = makeChannel({
+			permissionOverwrites: [{ id: GUILD, deny: ["VIEW_CHANNEL"] }],
+		});
 
-    await handleChannelCreate(channel, repo, roomy);
+		await handleChannelCreate(channel, repo, roomy);
 
-    const event = createRoomEvent(roomy, SPACE_A);
-    expect(event).toBeDefined();
-    expect(event!.defaultAccess).toBe("none");
-  });
+		const event = createRoomEvent(roomy, SPACE_A);
+		expect(event).toBeDefined();
+		expect(event!.defaultAccess).toBe("none");
+	});
 
-  // RO05: Public channel → defaultAccess = "read"
-  test("RO05: sets defaultAccess=read for public channel", async () => {
-    const channel = makeChannel({
-      permissionOverwrites: [
-        { id: GUILD, deny: [] },
-      ],
-    });
+	// RO05: Public channel → defaultAccess = "read"
+	test("RO05: sets defaultAccess=read for public channel", async () => {
+		const channel = makeChannel({
+			permissionOverwrites: [{ id: GUILD, deny: [] }],
+		});
 
-    await handleChannelCreate(channel, repo, roomy);
+		await handleChannelCreate(channel, repo, roomy);
 
-    const event = createRoomEvent(roomy, SPACE_A);
-    expect(event).toBeDefined();
-    expect(event!.defaultAccess).toBe("read");
-  });
+		const event = createRoomEvent(roomy, SPACE_A);
+		expect(event).toBeDefined();
+		expect(event!.defaultAccess).toBe("read");
+	});
 
-  // RO13: Channel create fan-out
-  test("RO13: fans out channel creation to multiple spaces", async () => {
-    repo.upsertBridgeConfig(GUILD, SPACE_B, "full");
-    roomy = new MockRoomyGateway();
+	// RO13: Channel create fan-out
+	test("RO13: fans out channel creation to multiple spaces", async () => {
+		repo.upsertBridgeConfig(GUILD, SPACE_B, "full");
+		roomy = new MockRoomyGateway();
 
-    const channel = makeChannel();
-    await handleChannelCreate(channel, repo, roomy);
+		const channel = makeChannel();
+		await handleChannelCreate(channel, repo, roomy);
 
-    expect(createRoomEvent(roomy, SPACE_A)).toBeDefined();
-    expect(createRoomEvent(roomy, SPACE_B)).toBeDefined();
-  });
+		expect(createRoomEvent(roomy, SPACE_A)).toBeDefined();
+		expect(createRoomEvent(roomy, SPACE_B)).toBeDefined();
+	});
 
-  test("skips when channel has no guildId", async () => {
-    const channel = makeChannel({ guildId: undefined });
-    await handleChannelCreate(channel, repo, roomy);
-    expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
-  });
+	test("skips when channel has no guildId", async () => {
+		const channel = makeChannel({ guildId: undefined });
+		await handleChannelCreate(channel, repo, roomy);
+		expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
+	});
 
-  test("skips thread types dispatched as CHANNEL_CREATE", async () => {
-    const channel = makeChannel({ type: 11 }); // PublicThread
-    await handleChannelCreate(channel, repo, roomy);
-    expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
-  });
+	test("skips thread types dispatched as CHANNEL_CREATE", async () => {
+		const channel = makeChannel({ type: 11 }); // PublicThread
+		await handleChannelCreate(channel, repo, roomy);
+		expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
+	});
 
-  test("skips when channel has no name", async () => {
-    const channel = makeChannel({ name: undefined });
-    await handleChannelCreate(channel, repo, roomy);
-    expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
-  });
+	test("skips when channel has no name", async () => {
+		const channel = makeChannel({ name: undefined });
+		await handleChannelCreate(channel, repo, roomy);
+		expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
+	});
 });
 
 describe("handleThreadCreate", () => {
-  let repo: BridgeRepository;
-  let roomy: MockRoomyGateway;
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
 
-  beforeEach(() => {
-    repo = setupRepo();
-    roomy = new MockRoomyGateway();
-    // Pre-map the parent channel
-    repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
-  });
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+		// Pre-map the parent channel
+		repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
+	});
 
-  // RO06: Thread create with parent bridged
-  test("RO06: creates room + room link for thread under bridged parent", async () => {
-    const thread = makeThread({ parentId: CHANNEL });
+	// RO06: Thread create with parent bridged
+	test("RO06: creates room + room link for thread under bridged parent", async () => {
+		const thread = makeThread({ parentId: CHANNEL });
 
-    await handleThreadCreate(thread, repo, roomy);
+		await handleThreadCreate(thread, repo, roomy);
 
-    const roomEvents = eventsFromGateway(roomy, SPACE_A, "space.roomy.room.createRoom.v0");
-    const linkEvents = eventsFromGateway(roomy, SPACE_A, "space.roomy.link.createRoomLink.v0");
+		const roomEvents = eventsFromGateway(
+			roomy,
+			SPACE_A,
+			"space.roomy.room.createRoom.v0",
+		);
+		const linkEvents = eventsFromGateway(
+			roomy,
+			SPACE_A,
+			"space.roomy.link.createRoomLink.v0",
+		);
 
-    expect(roomEvents).toHaveLength(1);
-    expect(roomEvents[0].kind).toBe("space.roomy.thread");
-    expect(roomEvents[0].name).toBe("my-thread");
+		expect(roomEvents).toHaveLength(1);
+		expect(roomEvents[0].kind).toBe("space.roomy.thread");
+		expect(roomEvents[0].name).toBe("my-thread");
 
-    expect(linkEvents).toHaveLength(1);
-    expect(linkEvents[0].linkToRoom).toBe(roomEvents[0].id);
-    expect(linkEvents[0].isCreationLink).toBe(true);
+		expect(linkEvents).toHaveLength(1);
+		expect(linkEvents[0].linkToRoom).toBe(roomEvents[0].id);
+		expect(linkEvents[0].isCreationLink).toBe(true);
 
-    // Mapping registered
-    expect(repo.getRoomyId(SPACE_A, "thread", THREAD)).toBe(roomEvents[0].id);
-  });
+		// Mapping registered
+		expect(repo.getRoomyId(SPACE_A, "thread", THREAD)).toBe(roomEvents[0].id);
+	});
 
-  // RO07: Thread create without parent bridged
-  test("RO07: skips thread when parent channel not bridged", async () => {
-    const thread = makeThread({
-      parentId: "999999999999999999", // not bridged
-    });
+	// RO07: Thread create without parent bridged
+	test("RO07: skips thread when parent channel not bridged", async () => {
+		const thread = makeThread({
+			parentId: "999999999999999999", // not bridged
+		});
 
-    await handleThreadCreate(thread, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+		await handleThreadCreate(thread, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 
-  // RO08: Private thread skipped
-  test("RO08: skips private threads", async () => {
-    const thread = makeThread({
-      type: 12, // PRIVATE_THREAD
-      parentId: CHANNEL,
-    });
+	// RO08: Private thread skipped
+	test("RO08: skips private threads", async () => {
+		const thread = makeThread({
+			type: 12, // PRIVATE_THREAD
+			parentId: CHANNEL,
+		});
 
-    await handleThreadCreate(thread, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+		await handleThreadCreate(thread, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 
-  // RO09: Thread create with existing mapping (idempotent)
-  test("RO09: skips thread creation when mapping already exists", async () => {
-    repo.registerMapping(SPACE_A, "thread", THREAD, "existing-ulid");
+	// RO09: Thread create with existing mapping (idempotent)
+	test("RO09: skips thread creation when mapping already exists", async () => {
+		repo.registerMapping(SPACE_A, "thread", THREAD, "existing-ulid");
 
-    const thread = makeThread({ parentId: CHANNEL });
-    await handleThreadCreate(thread, repo, roomy);
+		const thread = makeThread({ parentId: CHANNEL });
+		await handleThreadCreate(thread, repo, roomy);
 
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 
-  test("skips thread without parentId or guildId", async () => {
-    const noParent = makeThread({ parentId: undefined });
-    await handleThreadCreate(noParent, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
+	test("skips thread without parentId or guildId", async () => {
+		const noParent = makeThread({ parentId: undefined });
+		await handleThreadCreate(noParent, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
 
-    roomy.reset();
-    const noGuild = makeThread({ guildId: undefined });
-    await handleThreadCreate(noGuild, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+		roomy.reset();
+		const noGuild = makeThread({ guildId: undefined });
+		await handleThreadCreate(noGuild, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 });
 
 describe("handleRoomUpdate", () => {
-  let repo: BridgeRepository;
-  let roomy: MockRoomyGateway;
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
 
-  beforeEach(() => {
-    repo = setupRepo();
-    roomy = new MockRoomyGateway();
-    repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
-  });
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+		repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
+	});
 
-  // RO10: Channel/thread update (rename)
-  test("RO10: sends updateRoom for renamed channel", async () => {
-    const channel = makeChannel({ name: "new-name" });
+	// RO10: Channel/thread update (rename)
+	test("RO10: sends updateRoom for renamed channel", async () => {
+		const channel = makeChannel({ name: "new-name" });
 
-    await handleRoomUpdate(channel, repo, roomy);
+		await handleRoomUpdate(channel, repo, roomy);
 
-    const event = roomy.eventsFor(SPACE_A)[0] as any;
-    expect(event).toBeDefined();
-    expect(event.$type).toBe("space.roomy.room.updateRoom.v0");
-    expect(event.roomId).toBe(ROOMY_CHANNEL_ULID);
-    expect(event.name).toBe("new-name");
-  });
+		const event = roomy.eventsFor(SPACE_A)[0] as any;
+		expect(event).toBeDefined();
+		expect(event.$type).toBe("space.roomy.room.updateRoom.v0");
+		expect(event.roomId).toBe(ROOMY_CHANNEL_ULID);
+		expect(event.name).toBe("new-name");
+	});
 
-  test("skips update for unmapped channel", async () => {
-    const channel = makeChannel({ id: "999999999999999999" });
-    await handleRoomUpdate(channel, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+	test("skips update for unmapped channel", async () => {
+		const channel = makeChannel({ id: "999999999999999999" });
+		await handleRoomUpdate(channel, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 
-  test("skips update when channel has no name", async () => {
-    const channel = makeChannel({ name: undefined });
-    await handleRoomUpdate(channel, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+	test("skips update when channel has no name", async () => {
+		const channel = makeChannel({ name: undefined });
+		await handleRoomUpdate(channel, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 
-  test("skips update when guildId missing", async () => {
-    const channel = makeChannel({ guildId: undefined });
-    await handleRoomUpdate(channel, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+	test("skips update when guildId missing", async () => {
+		const channel = makeChannel({ guildId: undefined });
+		await handleRoomUpdate(channel, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 });
 
 describe("handleRoomDelete", () => {
-  let repo: BridgeRepository;
-  let roomy: MockRoomyGateway;
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
 
-  beforeEach(() => {
-    repo = setupRepo();
-    roomy = new MockRoomyGateway();
-    repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
-  });
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+		repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
+	});
 
-  // RO11: Channel/thread delete
-  test("RO11: sends deleteRoom and unregisters mapping", async () => {
-    const channel = makeChannel();
+	// RO11: Channel/thread delete
+	test("RO11: sends deleteRoom and unregisters mapping", async () => {
+		const channel = makeChannel();
 
-    await handleRoomDelete(channel, repo, roomy);
+		await handleRoomDelete(channel, repo, roomy);
 
-    const event = roomy.eventsFor(SPACE_A)[0] as any;
-    expect(event).toBeDefined();
-    expect(event.$type).toBe("space.roomy.room.deleteRoom.v0");
-    expect(event.roomId).toBe(ROOMY_CHANNEL_ULID);
+		const event = roomy.eventsFor(SPACE_A)[0] as any;
+		expect(event).toBeDefined();
+		expect(event.$type).toBe("space.roomy.room.deleteRoom.v0");
+		expect(event.roomId).toBe(ROOMY_CHANNEL_ULID);
 
-    // Mapping removed
-    expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBeUndefined();
-  });
+		// Mapping removed
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBeUndefined();
+	});
 
-  // RO12: Delete on unmapped room skipped
-  test("RO12: skips delete for unmapped channel", async () => {
-    const channel = makeChannel({ id: "999999999999999999" });
-    await handleRoomDelete(channel, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+	// RO12: Delete on unmapped room skipped
+	test("RO12: skips delete for unmapped channel", async () => {
+		const channel = makeChannel({ id: "999999999999999999" });
+		await handleRoomDelete(channel, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 
-  test("skips delete when no guildId", async () => {
-    const channel = makeChannel({ guildId: undefined });
-    await handleRoomDelete(channel, repo, roomy);
-    expect(roomy.eventCount(SPACE_A)).toBe(0);
-  });
+	test("skips delete when no guildId", async () => {
+		const channel = makeChannel({ guildId: undefined });
+		await handleRoomDelete(channel, repo, roomy);
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
 });
 
 describe("ensureRoomyChannel", () => {
-  let repo: BridgeRepository;
-  let roomy: MockRoomyGateway;
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
 
-  beforeEach(() => {
-    repo = setupRepo();
-    roomy = new MockRoomyGateway();
-  });
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+	});
 
-  test("creates room for a channel in target spaces", async () => {
-    await ensureRoomyChannel(
-      repo, roomy, CHANNEL, GUILD, "general", [SPACE_A],
-    );
+	test("creates room for a channel in target spaces", async () => {
+		await ensureRoomyChannel(repo, roomy, CHANNEL, GUILD, "general", [SPACE_A]);
 
-    const event = createRoomEvent(roomy, SPACE_A);
-    expect(event).toBeDefined();
-    expect(event!.name).toBe("general");
-    expect(event!.defaultAccess).toBe("read");
-    expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(event!.id);
-  });
+		const event = createRoomEvent(roomy, SPACE_A);
+		expect(event).toBeDefined();
+		expect(event!.name).toBe("general");
+		expect(event!.defaultAccess).toBe("read");
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(event!.id);
+	});
 
-  test("skips channel already synced to a space", async () => {
-    repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
+	test("skips channel already synced to a space", async () => {
+		repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
 
-    await ensureRoomyChannel(
-      repo, roomy, CHANNEL, GUILD, "general", [SPACE_A],
-    );
+		await ensureRoomyChannel(repo, roomy, CHANNEL, GUILD, "general", [SPACE_A]);
 
-    expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
-  });
+		expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
+	});
 
-  test("respects defaultAccess override", async () => {
-    await ensureRoomyChannel(
-      repo, roomy, CHANNEL, GUILD, "private-channel", [SPACE_A], "none",
-    );
+	test("respects defaultAccess override", async () => {
+		await ensureRoomyChannel(
+			repo,
+			roomy,
+			CHANNEL,
+			GUILD,
+			"private-channel",
+			[SPACE_A],
+			"none",
+		);
 
-    const event = createRoomEvent(roomy, SPACE_A);
-    expect(event!.defaultAccess).toBe("none");
-  });
+		const event = createRoomEvent(roomy, SPACE_A);
+		expect(event!.defaultAccess).toBe("none");
+	});
 });

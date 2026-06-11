@@ -3,6 +3,7 @@
 ## Problem
 
 Every service in the bridge depends on all three of:
+
 - **DiscordBot** (Discordeno) — the live Discord connection
 - **BridgeRepository** (SQLite) — persistence
 - **SpaceManager** (Roomy) — the destination
@@ -144,7 +145,10 @@ export interface ThreadPage {
 
 export interface DiscordDataSource {
   /** Fetch messages from a channel, newest-first (Discord API order). */
-  getMessages(channelId: string, opts: PaginationOpts): Promise<DiscordMessageData[]>;
+  getMessages(
+    channelId: string,
+    opts: PaginationOpts,
+  ): Promise<DiscordMessageData[]>;
 
   /** Get a single channel by ID. */
   getChannel(channelId: string): Promise<DiscordChannelData | undefined>;
@@ -156,7 +160,10 @@ export interface DiscordDataSource {
   getGuild(guildId: string): Promise<DiscordGuildData | undefined>;
 
   /** Fetch public archived threads for a channel. */
-  getPublicArchivedThreads(channelId: string, opts: PaginationOpts): Promise<ThreadPage>;
+  getPublicArchivedThreads(
+    channelId: string,
+    opts: PaginationOpts,
+  ): Promise<ThreadPage>;
 
   /** Resolve a channel's name (may require REST fallback). */
   resolveChannelName(channelId: string): Promise<string | undefined>;
@@ -176,7 +183,10 @@ Wraps `DiscordBot` (Discordeno). Converts Discordeno types → `DiscordMessageDa
 export class LiveDiscordDataSource implements DiscordDataSource {
   constructor(private bot: DiscordBot) {}
 
-  async getMessages(channelId: string, opts: PaginationOpts): Promise<DiscordMessageData[]> {
+  async getMessages(
+    channelId: string,
+    opts: PaginationOpts,
+  ): Promise<DiscordMessageData[]> {
     const raw = await this.bot.helpers.getMessages(BigInt(channelId), {
       after: opts.after ? BigInt(opts.after) : undefined,
       before: opts.before ? BigInt(opts.before) : undefined,
@@ -211,7 +221,10 @@ export class FileDiscordDataSource implements DiscordDataSource {
     // Load all JSON files, build index
   }
 
-  async getMessages(channelId: string, opts: PaginationOpts): Promise<DiscordMessageData[]> {
+  async getMessages(
+    channelId: string,
+    opts: PaginationOpts,
+  ): Promise<DiscordMessageData[]> {
     const msgs = this.messages.get(channelId) ?? [];
     // Filter by cursor, paginate, return newest-first
     return paginate(msgs, opts);
@@ -344,15 +357,15 @@ export async function runBackfill(
 
 ### Service migration table
 
-| Service | Current deps | New deps | Notes |
-|---------|-------------|----------|-------|
-| `backfill.ts` | `DiscordBot`, `Repo`, `SpaceMgr` | `DiscordDataSource`, `Repo`, `RoomyGateway` | Largest change — pagination loop uses `discord.getMessages()` |
-| `message-ingestion.ts` | `MessageProperties`, `Repo`, `SpaceMgr` | `DiscordMessageData`, `Repo`, `RoomyGateway` | Already mostly decoupled; swap type + gateway |
-| `room-sync.ts` | `DiscordBot`, `Repo`, `SpaceMgr` | `DiscordDataSource`, `Repo`, `RoomyGateway` | Channel discovery moves to data source |
-| `profile-sync.ts` | `Repo`, `SpaceMgr` | `Repo`, `RoomyGateway` | Already doesn't use DiscordBot directly |
-| `reaction-sync.ts` | `Repo`, `SpaceMgr` | `Repo`, `RoomyGateway` | Same — no DiscordBot dependency |
-| `message-edit-delete.ts` | `Repo`, `SpaceMgr` | `Repo`, `RoomyGateway` | Same |
-| `mention-resolver.ts` | `logger` | `logger` | Already isolated ✅ |
+| Service                  | Current deps                            | New deps                                     | Notes                                                         |
+| ------------------------ | --------------------------------------- | -------------------------------------------- | ------------------------------------------------------------- |
+| `backfill.ts`            | `DiscordBot`, `Repo`, `SpaceMgr`        | `DiscordDataSource`, `Repo`, `RoomyGateway`  | Largest change — pagination loop uses `discord.getMessages()` |
+| `message-ingestion.ts`   | `MessageProperties`, `Repo`, `SpaceMgr` | `DiscordMessageData`, `Repo`, `RoomyGateway` | Already mostly decoupled; swap type + gateway                 |
+| `room-sync.ts`           | `DiscordBot`, `Repo`, `SpaceMgr`        | `DiscordDataSource`, `Repo`, `RoomyGateway`  | Channel discovery moves to data source                        |
+| `profile-sync.ts`        | `Repo`, `SpaceMgr`                      | `Repo`, `RoomyGateway`                       | Already doesn't use DiscordBot directly                       |
+| `reaction-sync.ts`       | `Repo`, `SpaceMgr`                      | `Repo`, `RoomyGateway`                       | Same — no DiscordBot dependency                               |
+| `message-edit-delete.ts` | `Repo`, `SpaceMgr`                      | `Repo`, `RoomyGateway`                       | Same                                                          |
+| `mention-resolver.ts`    | `logger`                                | `logger`                                     | Already isolated ✅                                           |
 
 ---
 
@@ -389,18 +402,18 @@ expect(roomy.eventsFor(spaceDid)).toHaveLength(expectedCount);
 
 ## Migration Order
 
-| Step | What | Risk | Value |
-|------|------|------|-------|
-| 1 | Define `DiscordMessageData` + normalizers | Low — mechanical | High — unblocks everything |
-| 2 | Define `DiscordDataSource` interface | Low — new file | High — enables file-based testing |
-| 3 | Implement `LiveDiscordDataSource` | Medium — must handle all Discordeno edge cases | High — production adapter |
-| 4 | Implement `FileDiscordDataSource` | Medium — pagination logic, indexing | High — offline debugging |
-| 5 | Define `RoomyGateway` interface + `MockRoomyGateway` | Low — new file | High — clean test assertions |
-| 6 | Refactor `backfill.ts` | High — most complex service | High — biggest testing win |
-| 7 | Refactor `message-ingestion.ts` | Medium — swap types + gateway | High — core transform testable |
-| 8 | Refactor `room-sync.ts` | Medium — channel discovery moves | Medium |
-| 9 | Refactor remaining services | Low — mechanical | Medium |
-| 10 | Wire `index.ts` with adapters | Low — assembly | High — production ready |
+| Step | What                                                 | Risk                                           | Value                             |
+| ---- | ---------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
+| 1    | Define `DiscordMessageData` + normalizers            | Low — mechanical                               | High — unblocks everything        |
+| 2    | Define `DiscordDataSource` interface                 | Low — new file                                 | High — enables file-based testing |
+| 3    | Implement `LiveDiscordDataSource`                    | Medium — must handle all Discordeno edge cases | High — production adapter         |
+| 4    | Implement `FileDiscordDataSource`                    | Medium — pagination logic, indexing            | High — offline debugging          |
+| 5    | Define `RoomyGateway` interface + `MockRoomyGateway` | Low — new file                                 | High — clean test assertions      |
+| 6    | Refactor `backfill.ts`                               | High — most complex service                    | High — biggest testing win        |
+| 7    | Refactor `message-ingestion.ts`                      | Medium — swap types + gateway                  | High — core transform testable    |
+| 8    | Refactor `room-sync.ts`                              | Medium — channel discovery moves               | Medium                            |
+| 9    | Refactor remaining services                          | Low — mechanical                               | Medium                            |
+| 10   | Wire `index.ts` with adapters                        | Low — assembly                                 | High — production ready           |
 
 ---
 

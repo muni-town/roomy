@@ -1,12 +1,12 @@
-import { newUlid, type Event, type Ulid } from "@roomy-space/sdk";
+import { newUlid, Ulid, type Event } from "@roomy-space/sdk";
 import type { BridgeRepository, MappingKind } from "../db/repository.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import {
-  CHANNEL_TYPES,
-  THREAD_TYPES,
-  PRIVATE_THREAD,
-  isChannelPublic,
-  mappingKindForChannel,
+	CHANNEL_TYPES,
+	THREAD_TYPES,
+	PRIVATE_THREAD,
+	isChannelPublic,
+	mappingKindForChannel,
 } from "../discord/data.ts";
 import type { DiscordChannelData } from "../discord/data.ts";
 import { createLogger } from "../logger.ts";
@@ -18,48 +18,48 @@ const log = createLogger("room");
  * Skips spaces that already have a mapping. Idempotent per space.
  */
 export async function ensureRoomyChannel(
-  repo: BridgeRepository,
-  roomy: RoomyGateway,
-  channelId: string,
-  guildId: string,
-  channelName: string,
-  targetSpaces: string[],
-  defaultAccess: "read" | "none" = "read",
+	repo: BridgeRepository,
+	roomy: RoomyGateway,
+	channelId: string,
+	guildId: string,
+	channelName: string,
+	targetSpaces: string[],
+	defaultAccess: "read" | "none" = "read",
 ): Promise<void> {
-  for (const spaceDid of targetSpaces) {
-    if (repo.getRoomyId(spaceDid, "channel", channelId)) {
-      log.debug(`Channel ${channelId} already synced to ${spaceDid}`);
-      continue;
-    }
+	for (const spaceDid of targetSpaces) {
+		if (repo.getRoomyId(spaceDid, "channel", channelId)) {
+			log.debug(`Channel ${channelId} already synced to ${spaceDid}`);
+			continue;
+		}
 
-    const roomUlid = newUlid();
-    const event = {
-      id: roomUlid,
-      $type: "space.roomy.room.createRoom.v0",
-      kind: "space.roomy.channel",
-      name: channelName,
-      defaultAccess,
-      extensions: {
-        "space.roomy.extension.discordOrigin.v0": {
-          snowflake: channelId,
-          guildId,
-        },
-      },
-    } as Event;
+		const roomUlid = newUlid();
+		const event: Event = {
+			id: roomUlid,
+			$type: "space.roomy.room.createRoom.v0",
+			kind: "space.roomy.channel",
+			name: channelName,
+			defaultAccess,
+			extensions: {
+				"space.roomy.extension.discordOrigin.v0": {
+					snowflake: channelId,
+					guildId,
+				},
+			},
+		};
 
-    try {
-      await roomy.sendEvent(spaceDid, event);
-      repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
-      log.info(
-        `Created Roomy room ${roomUlid} for Discord channel ${channelId} in ${spaceDid}`,
-      );
-    } catch (err) {
-      log.error(
-        `Failed to create Roomy room for channel ${channelId} in ${spaceDid}`,
-        err,
-      );
-    }
-  }
+		try {
+			await roomy.sendEvent(spaceDid, event);
+			repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
+			log.info(
+				`Created Roomy room ${roomUlid} for Discord channel ${channelId} in ${spaceDid}`,
+			);
+		} catch (err) {
+			log.error(
+				`Failed to create Roomy room for channel ${channelId} in ${spaceDid}`,
+				err,
+			);
+		}
+	}
 }
 
 /**
@@ -68,35 +68,44 @@ export async function ensureRoomyChannel(
  * skipped — the channel must be added to their allowlist explicitly.
  */
 export async function handleChannelCreate(
-  channel: DiscordChannelData,
-  repo: BridgeRepository,
-  roomy: RoomyGateway,
+	channel: DiscordChannelData,
+	repo: BridgeRepository,
+	roomy: RoomyGateway,
 ): Promise<void> {
-  const channelId = channel.id;
-  const guildId = channel.guildId;
+	const channelId = channel.id;
+	const guildId = channel.guildId;
 
-  if (!guildId) return;
-  // Defense-in-depth: also exclude thread types explicitly.
-  if (!CHANNEL_TYPES.has(channel.type) || THREAD_TYPES.has(channel.type)) return;
+	if (!guildId) return;
+	// Defense-in-depth: also exclude thread types explicitly.
+	if (!CHANNEL_TYPES.has(channel.type) || THREAD_TYPES.has(channel.type))
+		return;
 
-  let targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
+	let targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
 
-  // Determine access level based on whether the channel is public or private.
-  const isPublic = isChannelPublic(channel, guildId);
-  const defaultAccess: "read" | "none" = isPublic ? "read" : "none";
+	// Determine access level based on whether the channel is public or private.
+	const isPublic = isChannelPublic(channel, guildId);
+	const defaultAccess: "read" | "none" = isPublic ? "read" : "none";
 
-  if (targetSpaces.length === 0) {
-    log.debug(`Skipping channel ${channelId}: no bridges target it`);
-    return;
-  }
+	if (targetSpaces.length === 0) {
+		log.debug(`Skipping channel ${channelId}: no bridges target it`);
+		return;
+	}
 
-  const channelName = channel.name;
-  if (!channelName) {
-    log.error(`Channel ${channelId} has no name; skipping create`);
-    return;
-  }
+	const channelName = channel.name;
+	if (!channelName) {
+		log.error(`Channel ${channelId} has no name; skipping create`);
+		return;
+	}
 
-  await ensureRoomyChannel(repo, roomy, channelId, guildId, channelName, targetSpaces, defaultAccess);
+	await ensureRoomyChannel(
+		repo,
+		roomy,
+		channelId,
+		guildId,
+		channelName,
+		targetSpaces,
+		defaultAccess,
+	);
 }
 
 /**
@@ -104,95 +113,97 @@ export async function handleChannelCreate(
  * channel's room. Idempotent — skips if the thread already has a mapping.
  */
 export async function handleThreadCreate(
-  channel: DiscordChannelData,
-  repo: BridgeRepository,
-  roomy: RoomyGateway,
+	channel: DiscordChannelData,
+	repo: BridgeRepository,
+	roomy: RoomyGateway,
 ): Promise<void> {
-  const threadId = channel.id;
-  const parentId = channel.parentId;
-  const guildId = channel.guildId;
-  const threadName = channel.name ?? "Thread";
+	const threadId = channel.id;
+	const parentId = channel.parentId;
+	const guildId = channel.guildId;
+	const threadName = channel.name ?? "Thread";
 
-  if (!parentId || !guildId) {
-    log.debug(`Skipping thread ${threadId}: no parentId or guildId`);
-    return;
-  }
+	if (!parentId || !guildId) {
+		log.debug(`Skipping thread ${threadId}: no parentId or guildId`);
+		return;
+	}
 
-  // Skip private threads — Roomy can't model thread-level access boundaries.
-  if (channel.type === PRIVATE_THREAD) {
-    log.debug(`Skipping private thread ${threadId}: not syncing thread-level access`);
-    return;
-  }
+	// Skip private threads — Roomy can't model thread-level access boundaries.
+	if (channel.type === PRIVATE_THREAD) {
+		log.debug(
+			`Skipping private thread ${threadId}: not syncing thread-level access`,
+		);
+		return;
+	}
 
-  const targetSpaces = repo.getTargetSpacesForChannel(guildId, parentId);
-  if (targetSpaces.length === 0) {
-    log.debug(
-      `Skipping thread ${threadId}: parent channel ${parentId} not bridged`,
-    );
-    return;
-  }
+	const targetSpaces = repo.getTargetSpacesForChannel(guildId, parentId);
+	if (targetSpaces.length === 0) {
+		log.debug(
+			`Skipping thread ${threadId}: parent channel ${parentId} not bridged`,
+		);
+		return;
+	}
 
-  for (const spaceDid of targetSpaces) {
-    if (repo.getRoomyId(spaceDid, "thread", threadId)) {
-      log.debug(`Thread ${threadId} already synced to ${spaceDid}`);
-      continue;
-    }
+	for (const spaceDid of targetSpaces) {
+		if (repo.getRoomyId(spaceDid, "thread", threadId)) {
+			log.debug(`Thread ${threadId} already synced to ${spaceDid}`);
+			continue;
+		}
 
-    const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
-    if (!parentRoomyId) {
-      log.warn(
-        `No Roomy room for parent channel ${parentId} in ${spaceDid}, skipping thread`,
-      );
-      continue;
-    }
+		const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
+		if (!parentRoomyId) {
+			log.warn(
+				`No Roomy room for parent channel ${parentId} in ${spaceDid}, skipping thread`,
+			);
+			continue;
+		}
 
-    const threadUlid = newUlid();
-    const linkUlid = newUlid();
+		const threadUlid = newUlid();
+		const linkUlid = newUlid();
 
-    const events: Event[] = [
-      {
-        id: threadUlid,
-        $type: "space.roomy.room.createRoom.v0",
-        kind: "space.roomy.thread",
-        name: threadName,
-        defaultAccess: "read",
-        extensions: {
-          "space.roomy.extension.discordOrigin.v0": {
-            snowflake: threadId,
-            guildId,
-          },
-        },
-      } as Event,
-      {
-        id: linkUlid,
-        room: parentRoomyId as Ulid,
-        $type: "space.roomy.link.createRoomLink.v0",
-        linkToRoom: threadUlid,
-        isCreationLink: true,
-      },
-    ];
+		const events: Event[] = [
+			{
+				id: threadUlid,
+				$type: "space.roomy.room.createRoom.v0",
+				kind: "space.roomy.thread",
+				name: threadName,
+				defaultAccess: "read",
+				extensions: {
+					"space.roomy.extension.discordOrigin.v0": {
+						snowflake: threadId,
+						guildId,
+					},
+				},
+			},
+			{
+				id: linkUlid,
+				room: Ulid.assert(parentRoomyId),
+				$type: "space.roomy.link.createRoomLink.v0",
+				linkToRoom: threadUlid,
+				isCreationLink: true,
+			},
+		];
 
-    try {
-      await roomy.sendEvents(spaceDid, events);
+		try {
+			await roomy.sendEvents(spaceDid, events);
 
-      repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
+			repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
 
-      // Auto-add thread to allowlist for subset mode bridges
-      const config = repo.getBridgeConfig(guildId, spaceDid);
-      if (config?.mode === "subset") {
-        repo.addToAllowlist(spaceDid, threadId, guildId);
-      }
+			// Auto-add thread to allowlist for subset mode bridges
+			const config = repo.getBridgeConfig(guildId, spaceDid);
+			if (config?.mode === "subset") {
+				repo.addToAllowlist(spaceDid, threadId, guildId);
+			}
 
-      log.info(
-        `Created Roomy thread ${threadUlid} for Discord thread ${threadId} in ${spaceDid}`,
-      );
-    } catch (err) {
-      log.error(
-        `Failed to create Roomy thread for ${threadId} in ${spaceDid}`,
-        err,
-      );
-    }
-  }
+			log.info(
+				`Created Roomy thread ${threadUlid} for Discord thread ${threadId} in ${spaceDid}`,
+			);
+		} catch (err) {
+			log.error(
+				`Failed to create Roomy thread for ${threadId} in ${spaceDid}`,
+				err,
+			);
+		}
+	}
 }
 
 /**
@@ -200,47 +211,47 @@ export async function handleThreadCreate(
  * the corresponding Roomy room.
  */
 export async function handleRoomUpdate(
-  channel: DiscordChannelData,
-  repo: BridgeRepository,
-  roomy: RoomyGateway,
+	channel: DiscordChannelData,
+	repo: BridgeRepository,
+	roomy: RoomyGateway,
 ): Promise<void> {
-  const channelId = channel.id;
-  const guildId = channel.guildId;
+	const channelId = channel.id;
+	const guildId = channel.guildId;
 
-  if (!guildId) return;
-  if (!channel.name) return;
+	if (!guildId) return;
+	if (!channel.name) return;
 
-  const kind = mappingKindForChannel(channel);
+	const kind = mappingKindForChannel(channel);
 
-  const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
-  if (targetSpaces.length === 0) return;
+	const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
+	if (targetSpaces.length === 0) return;
 
-  for (const spaceDid of targetSpaces) {
-    const roomyId = repo.getRoomyId(spaceDid, kind, channelId);
-    if (!roomyId) {
-      log.debug(`No Roomy room mapped for ${kind} ${channelId} in ${spaceDid}`);
-      continue;
-    }
+	for (const spaceDid of targetSpaces) {
+		const roomyId = repo.getRoomyId(spaceDid, kind, channelId);
+		if (!roomyId) {
+			log.debug(`No Roomy room mapped for ${kind} ${channelId} in ${spaceDid}`);
+			continue;
+		}
 
-    const event = {
-      id: newUlid(),
-      $type: "space.roomy.room.updateRoom.v0",
-      roomId: roomyId as Ulid,
-      name: channel.name,
-    } as Event;
+		const event: Event = {
+			id: newUlid(),
+			$type: "space.roomy.room.updateRoom.v0",
+			roomId: Ulid.assert(roomyId),
+			name: channel.name,
+		};
 
-    try {
-      await roomy.sendEvent(spaceDid, event);
-      log.info(
-        `Updated Roomy ${kind} ${roomyId} name to "${channel.name}" in ${spaceDid}`,
-      );
-    } catch (err) {
-      log.error(
-        `Failed to update Roomy ${kind} ${roomyId} in ${spaceDid}`,
-        err,
-      );
-    }
-  }
+		try {
+			await roomy.sendEvent(spaceDid, event);
+			log.info(
+				`Updated Roomy ${kind} ${roomyId} name to "${channel.name}" in ${spaceDid}`,
+			);
+		} catch (err) {
+			log.error(
+				`Failed to update Roomy ${kind} ${roomyId} in ${spaceDid}`,
+				err,
+			);
+		}
+	}
 }
 
 /**
@@ -248,40 +259,40 @@ export async function handleRoomUpdate(
  * Roomy room and drop the snowflake → ULID mapping.
  */
 export async function handleRoomDelete(
-  channel: DiscordChannelData,
-  repo: BridgeRepository,
-  roomy: RoomyGateway,
+	channel: DiscordChannelData,
+	repo: BridgeRepository,
+	roomy: RoomyGateway,
 ): Promise<void> {
-  const channelId = channel.id;
-  const guildId = channel.guildId;
-  if (!guildId) return;
+	const channelId = channel.id;
+	const guildId = channel.guildId;
+	if (!guildId) return;
 
-  const kind = mappingKindForChannel(channel);
+	const kind = mappingKindForChannel(channel);
 
-  const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
-  if (targetSpaces.length === 0) return;
+	const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
+	if (targetSpaces.length === 0) return;
 
-  for (const spaceDid of targetSpaces) {
-    const roomyId = repo.getRoomyId(spaceDid, kind, channelId);
-    if (!roomyId) continue;
+	for (const spaceDid of targetSpaces) {
+		const roomyId = repo.getRoomyId(spaceDid, kind, channelId);
+		if (!roomyId) continue;
 
-    const event = {
-      id: newUlid(),
-      $type: "space.roomy.room.deleteRoom.v0",
-      roomId: roomyId as Ulid,
-    } as Event;
+		const event: Event = {
+			id: newUlid(),
+			$type: "space.roomy.room.deleteRoom.v0",
+			roomId: Ulid.assert(roomyId),
+		};
 
-    try {
-      await roomy.sendEvent(spaceDid, event);
-      repo.unregisterMapping(spaceDid, kind, channelId);
-      log.info(
-        `Deleted Roomy ${kind} ${roomyId} for Discord channel ${channelId} in ${spaceDid}`,
-      );
-    } catch (err) {
-      log.error(
-        `Failed to delete Roomy ${kind} ${roomyId} in ${spaceDid}`,
-        err,
-      );
-    }
-  }
+		try {
+			await roomy.sendEvent(spaceDid, event);
+			repo.unregisterMapping(spaceDid, kind, channelId);
+			log.info(
+				`Deleted Roomy ${kind} ${roomyId} for Discord channel ${channelId} in ${spaceDid}`,
+			);
+		} catch (err) {
+			log.error(
+				`Failed to delete Roomy ${kind} ${roomyId} in ${spaceDid}`,
+				err,
+			);
+		}
+	}
 }

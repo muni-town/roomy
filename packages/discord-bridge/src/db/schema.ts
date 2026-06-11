@@ -1,17 +1,17 @@
 import type { Database } from "bun:sqlite";
 
 export type Migration = {
-  version: number;
-  name: string;
-  up: (db: Database) => void;
+	version: number;
+	name: string;
+	up: (db: Database) => void;
 };
 
 export const MIGRATIONS: Migration[] = [
-  {
-    version: 1,
-    name: "initial",
-    up(db) {
-      db.run(`
+	{
+		version: 1,
+		name: "initial",
+		up(db) {
+			db.run(`
         CREATE TABLE bridge_config (
           guild_id   TEXT NOT NULL,
           space_did  TEXT NOT NULL,
@@ -62,18 +62,18 @@ export const MIGRATIONS: Migration[] = [
           token      TEXT NOT NULL
         );
       `);
-    },
-  },
-  {
-    version: 2,
-    name: "channel_cursors_per_space",
-    up(db) {
-      // Cursors were keyed by channel_id alone, which meant connecting a
-      // channel to a second Roomy space inherited the first space's cursor
-      // and silently skipped backfill. Re-key by (space_did, channel_id).
-      // Existing cursor rows are dropped — they were never correct under
-      // multi-bridge conditions.
-      db.run(`
+		},
+	},
+	{
+		version: 2,
+		name: "channel_cursors_per_space",
+		up(db) {
+			// Cursors were keyed by channel_id alone, which meant connecting a
+			// channel to a second Roomy space inherited the first space's cursor
+			// and silently skipped backfill. Re-key by (space_did, channel_id).
+			// Existing cursor rows are dropped — they were never correct under
+			// multi-bridge conditions.
+			db.run(`
         DROP TABLE channel_cursors;
 
         CREATE TABLE channel_cursors (
@@ -84,13 +84,13 @@ export const MIGRATIONS: Migration[] = [
           PRIMARY KEY (space_did, channel_id)
         );
       `);
-    },
-  },
-  {
-    version: 3,
-    name: "profile_sync_queue",
-    up(db) {
-      db.run(`
+		},
+	},
+	{
+		version: 3,
+		name: "profile_sync_queue",
+		up(db) {
+			db.run(`
         CREATE TABLE profile_sync_queue (
           space_did        TEXT NOT NULL,
           discord_user_id  TEXT NOT NULL,
@@ -106,43 +106,41 @@ export const MIGRATIONS: Migration[] = [
           PRIMARY KEY (space_did, discord_user_id)
         );
       `);
-    },
-  },
+		},
+	},
 ];
 
 export function runMigrations(db: Database): {
-  applied: number[];
-  current: number;
+	applied: number[];
+	current: number;
 } {
-  db.run(
-    `CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)`,
-  );
-  const row = db
-    .query<
-      { v: number | null },
-      []
-    >("SELECT MAX(version) AS v FROM schema_version")
-    .get();
-  const current = row?.v ?? 0;
-  const applied: number[] = [];
-  const insertVersion = db.prepare(
-    "INSERT INTO schema_version (version) VALUES (?)",
-  );
+	db.run(
+		`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)`,
+	);
+	const row = db
+		.query<{ v: number | null }, []>(
+			"SELECT MAX(version) AS v FROM schema_version",
+		)
+		.get();
+	const current = row?.v ?? 0;
+	const applied: number[] = [];
+	const insertVersion = db.prepare(
+		"INSERT INTO schema_version (version) VALUES (?)",
+	);
 
-  for (const migration of MIGRATIONS) {
-    if (migration.version <= current) continue;
-    db.transaction(() => {
-      migration.up(db);
-      insertVersion.run(migration.version);
-    })();
-    applied.push(migration.version);
-  }
+	for (const migration of MIGRATIONS) {
+		if (migration.version <= current) continue;
+		db.transaction(() => {
+			migration.up(db);
+			insertVersion.run(migration.version);
+		})();
+		applied.push(migration.version);
+	}
 
-  const after = db
-    .query<
-      { v: number | null },
-      []
-    >("SELECT MAX(version) AS v FROM schema_version")
-    .get();
-  return { applied, current: after?.v ?? 0 };
+	const after = db
+		.query<{ v: number | null }, []>(
+			"SELECT MAX(version) AS v FROM schema_version",
+		)
+		.get();
+	return { applied, current: after?.v ?? 0 };
 }

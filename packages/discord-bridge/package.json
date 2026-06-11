@@ -1,33 +1,37 @@
 {
-  "name": "@roomy/discord-bridge",
-  "version": "0.0.0",
-  "private": true,
-  "license": "PolyForm-Noncommercial-1.0.0",
-  "description": "Unidirectional Discord-to-Roomy bridge (Bun runtime)",
-  "type": "module",
-  "engines": {
-    "bun": ">=1.1.0"
-  },
-  "scripts": {
-    "dev": "bun run --watch src/index.ts",
-    "start": "bun run src/index.ts",
-    "build": "bun build src/index.ts --target=bun --outdir=dist",
-    "typecheck": "tsc --noEmit",
-    "generate:fake-data": "bun run src/scripts/generate-fake-data.ts",
-    "generate:fake-data:quick": "bun run src/scripts/generate-fake-data.ts --quick",
-    "generate:fake-data:large": "bun run src/scripts/generate-fake-data.ts --channels 15 --threads 250"
-  },
-  "dependencies": {
-    "@atproto/api": "^0.14.22",
-    "@discordeno/bot": "^21.0.0",
-    "@muni-town/leaf-client": "link:../leaf/clients/typescript",
-    "@roomy-space/sdk": "workspace:*",
-    "dd-cache-proxy": "^2.7.0"
-  },
-  "devDependencies": {
-    "@faker-js/faker": "^10.4.0",
-    "@repo/tsconfig": "workspace:*",
-    "@types/bun": "latest",
-    "typescript": "^5.8.3"
-  }
+	"name": "@roomy/discord-bridge",
+	"version": "0.0.0",
+	"private": true,
+	"license": "PolyForm-Noncommercial-1.0.0",
+	"description": "Unidirectional Discord-to-Roomy bridge (Bun runtime)",
+	"type": "module",
+	"engines": {
+		"bun": ">=1.1.0"
+	},
+	"scripts": {
+		"dev": "bun run --watch src/index.ts",
+		"start": "bun run src/index.ts",
+		"build": "bun build src/index.ts --target=bun --outdir=dist",
+		"test": "bun test",
+		"format": "pnpx @biomejs/biome format --write",
+		"typecheck": "tsc --noEmit",
+		"generate:fake-data": "bun run src/scripts/generate-fake-data.ts",
+		"generate:fake-data:quick": "bun run src/scripts/generate-fake-data.ts --quick",
+		"generate:fake-data:large": "bun run src/scripts/generate-fake-data.ts --channels 15 --threads 250"
+	},
+	"dependencies": {
+		"@atproto/api": "^0.14.22",
+		"@discordeno/bot": "^21.0.0",
+		"@muni-town/leaf-client": "link:../leaf/clients/typescript",
+		"@roomy-space/sdk": "workspace:*",
+		"arktype": "^2.1.29",
+		"dd-cache-proxy": "^2.7.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.16",
+		"@faker-js/faker": "^10.4.0",
+		"@repo/tsconfig": "workspace:*",
+		"@types/bun": "latest",
+		"typescript": "^5.8.3"
+	}
 }

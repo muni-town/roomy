@@ -58,17 +58,18 @@ src/
 
 ### Synced event types
 
-| Discord event | Roomy event | Notes |
-|---|---|---|
-| MESSAGE_CREATE | `createMessage.v0` | Dedup by Discord message ID → Roomy ULID mapping |
-| MESSAGE_UPDATE | `editMessage.v0` | Skips if no prior mapping exists |
-| MESSAGE_DELETE | `deleteMessage.v0` | Skips if no prior mapping exists |
-| THREAD_CREATE | `createRoom` + `createRoomLink` | Thread auto-inherits parent channel's bridge |
-| MESSAGE_REACTION_ADD | `addBridgedReaction.v0` | |
-| MESSAGE_REACTION_REMOVE | `removeBridgedReaction.v0` | |
-| (per-message) | `updateProfile.v0` | Hash-based change detection on author profile |
+| Discord event           | Roomy event                     | Notes                                            |
+| ----------------------- | ------------------------------- | ------------------------------------------------ |
+| MESSAGE_CREATE          | `createMessage.v0`              | Dedup by Discord message ID → Roomy ULID mapping |
+| MESSAGE_UPDATE          | `editMessage.v0`                | Skips if no prior mapping exists                 |
+| MESSAGE_DELETE          | `deleteMessage.v0`              | Skips if no prior mapping exists                 |
+| THREAD_CREATE           | `createRoom` + `createRoomLink` | Thread auto-inherits parent channel's bridge     |
+| MESSAGE_REACTION_ADD    | `addBridgedReaction.v0`         |                                                  |
+| MESSAGE_REACTION_REMOVE | `removeBridgedReaction.v0`      |                                                  |
+| (per-message)           | `updateProfile.v0`              | Hash-based change detection on author profile    |
 
 Events carry two extensions:
+
 - `discordMessageOrigin.v0` — debug breadcrumb (snowflake, channelId, guildId). Never read for sync decisions.
 - `authorOverride.v0` — content-level puppetting so Roomy renders the Discord author's identity.
 
@@ -76,37 +77,37 @@ Events carry two extensions:
 
 ### Required
 
-| Variable | Description |
-|---|---|
-| `DISCORD_TOKEN` | Discord bot token |
-| `ATPROTO_BRIDGE_DID` | DID of the ATProto identity the bridge authenticates as |
-| `ATPROTO_BRIDGE_APP_PASSWORD` | App password for ATProto authentication |
+| Variable                      | Description                                             |
+| ----------------------------- | ------------------------------------------------------- |
+| `DISCORD_TOKEN`               | Discord bot token                                       |
+| `ATPROTO_BRIDGE_DID`          | DID of the ATProto identity the bridge authenticates as |
+| `ATPROTO_BRIDGE_APP_PASSWORD` | App password for ATProto authentication                 |
 
 ### Optional
 
-| Variable | Default | Description |
-|---|---|---|
-| `LEAF_URL` | `https://leaf-dev.muni.town` | Leaf server URL |
-| `LEAF_SERVER_DID` | `did:web:<LEAF_URL hostname>` | Leaf server DID |
-| `STREAM_NSID` | `space.roomy.space.personal.dev` | Stream NSID |
-| `STREAM_HANDLE_NSID` | `space.roomy.space.handle.dev` | Handle NSID |
-| `BRIDGE_DATA_DIR` | `./data` | Directory for SQLite database |
-| `BRIDGE_DB_PATH` | `${BRIDGE_DATA_DIR}/bridge.sqlite` | Path to SQLite database |
-| `PORT` | `3301` | HTTP port for bridge API (`/info`, `/get-guild-id`, `/get-space-id`, `/bridges`) |
-| `LOG_LEVEL` | `info` | Log level |
+| Variable             | Default                            | Description                                                                      |
+| -------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| `LEAF_URL`           | `https://leaf-dev.muni.town`       | Leaf server URL                                                                  |
+| `LEAF_SERVER_DID`    | `did:web:<LEAF_URL hostname>`      | Leaf server DID                                                                  |
+| `STREAM_NSID`        | `space.roomy.space.personal.dev`   | Stream NSID                                                                      |
+| `STREAM_HANDLE_NSID` | `space.roomy.space.handle.dev`     | Handle NSID                                                                      |
+| `BRIDGE_DATA_DIR`    | `./data`                           | Directory for SQLite database                                                    |
+| `BRIDGE_DB_PATH`     | `${BRIDGE_DATA_DIR}/bridge.sqlite` | Path to SQLite database                                                          |
+| `PORT`               | `3301`                             | HTTP port for bridge API (`/info`, `/get-guild-id`, `/get-space-id`, `/bridges`) |
+| `LOG_LEVEL`          | `info`                             | Log level                                                                        |
 
 ## Slash commands
 
 All commands require **Administrator** permissions and only work in guilds.
 
-| Command | Description |
-|---|---|
-| `/connect-roomy-space space-id:<did>` | Connect a Roomy space to this Discord guild (full mode) |
-| `/disconnect-roomy-space [space-id:<did>]` | Disconnect a bridged space. Omit space-id if only one bridge exists. |
-| `/roomy-status` | Show all connected bridges and their mode |
-| `/roomy-bridge-channel add channel:#channel [space-id:<did>]` | Add a channel to the allowlist (switches bridge to subset mode if currently full) |
-| `/roomy-bridge-channel remove channel:#channel [space-id:<did>]` | Remove a channel from the allowlist. Existing synced messages are preserved. |
-| `/roomy-bridge-channel list [space-id:<did>]` | List channels in the allowlist |
+| Command                                                          | Description                                                                       |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `/connect-roomy-space space-id:<did>`                            | Connect a Roomy space to this Discord guild (full mode)                           |
+| `/disconnect-roomy-space [space-id:<did>]`                       | Disconnect a bridged space. Omit space-id if only one bridge exists.              |
+| `/roomy-status`                                                  | Show all connected bridges and their mode                                         |
+| `/roomy-bridge-channel add channel:#channel [space-id:<did>]`    | Add a channel to the allowlist (switches bridge to subset mode if currently full) |
+| `/roomy-bridge-channel remove channel:#channel [space-id:<did>]` | Remove a channel from the allowlist. Existing synced messages are preserved.      |
+| `/roomy-bridge-channel list [space-id:<did>]`                    | List channels in the allowlist                                                    |
 
 ## Subset mode
 

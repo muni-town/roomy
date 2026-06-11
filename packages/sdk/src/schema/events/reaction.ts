@@ -62,6 +62,9 @@ const AddBridgedReactionSchema = type({
     "Unicode emoji or URI describing the reaction.",
   ),
   reactingUser: UserDid.describe("The external user ID doing the reacting"),
+  extensions: type({
+    "[string]": "unknown",
+  }),
 }).describe(
   "Add a reaction from another user. \
 This is used for bridging reactions from other platforms.",
@@ -94,6 +97,9 @@ const RemoveBridgedReactionSchema = type({
   $type: "'space.roomy.reaction.removeBridgedReaction.v0'",
   reactionId: Ulid.describe("The ID of the addBridgedReaction event to undo."),
   reactingUser: UserDid.describe("The external user ID doing the reacting"),
+  extensions: type({
+    "[string]": "unknown",
+  }),
 }).describe(
   "Remove a reaction from another user. \
 This is used for bridging reactions from other platforms.",

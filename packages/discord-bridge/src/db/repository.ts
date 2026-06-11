@@ -4,177 +4,177 @@ import { mkdirSync } from "node:fs";
 import { runMigrations } from "./schema.ts";
 
 export type MappingKind =
-  | "message"
-  | "channel"
-  | "thread"
-  | "user"
-  | "reaction";
+	| "message"
+	| "channel"
+	| "thread"
+	| "user"
+	| "reaction";
 
 export type BridgeMode = "full" | "subset";
 
 export type BridgeConfig = {
-  guildId: string;
-  spaceDid: string;
-  mode: BridgeMode;
-  createdAt: number;
-  updatedAt: number;
+	guildId: string;
+	spaceDid: string;
+	mode: BridgeMode;
+	createdAt: number;
+	updatedAt: number;
 };
 
 export type AllowlistEntry = {
-  spaceDid: string;
-  channelId: string;
-  guildId: string;
-  addedAt: number;
+	spaceDid: string;
+	channelId: string;
+	guildId: string;
+	addedAt: number;
 };
 
 export type ChannelCursor = {
-  spaceDid: string;
-  channelId: string;
-  lastMessageId: string | null;
-  updatedAt: number;
+	spaceDid: string;
+	channelId: string;
+	lastMessageId: string | null;
+	updatedAt: number;
 };
 
 export type WebhookToken = {
-  channelId: string;
-  webhookId: string;
-  token: string;
+	channelId: string;
+	webhookId: string;
+	token: string;
 };
 
 export class BridgeRepository {
-  private constructor(private readonly db: Database) {}
+	private constructor(private readonly db: Database) {}
 
-  static open(path: string): BridgeRepository {
-    if (path !== ":memory:") {
-      mkdirSync(dirname(path), { recursive: true });
-    }
-    const db = new Database(path);
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA foreign_keys = ON");
-    runMigrations(db);
-    return new BridgeRepository(db);
-  }
+	static open(path: string): BridgeRepository {
+		if (path !== ":memory:") {
+			mkdirSync(dirname(path), { recursive: true });
+		}
+		const db = new Database(path);
+		db.exec("PRAGMA journal_mode = WAL");
+		db.exec("PRAGMA foreign_keys = ON");
+		runMigrations(db);
+		return new BridgeRepository(db);
+	}
 
-  close(): void {
-    this.db.close();
-  }
+	close(): void {
+		this.db.close();
+	}
 
-  // === Bridge config ===
+	// === Bridge config ===
 
-  upsertBridgeConfig(
-    guildId: string,
-    spaceDid: string,
-    mode: BridgeMode,
-  ): void {
-    const now = Date.now();
-    this.db
-      .prepare(
-        `INSERT INTO bridge_config (guild_id, space_did, mode, created_at, updated_at)
+	upsertBridgeConfig(
+		guildId: string,
+		spaceDid: string,
+		mode: BridgeMode,
+	): void {
+		const now = Date.now();
+		this.db
+			.prepare(
+				`INSERT INTO bridge_config (guild_id, space_did, mode, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(guild_id, space_did) DO UPDATE SET
            mode = excluded.mode,
            updated_at = excluded.updated_at`,
-      )
-      .run(guildId, spaceDid, mode, now, now);
-  }
+			)
+			.run(guildId, spaceDid, mode, now, now);
+	}
 
-  removeBridgeConfig(guildId: string, spaceDid: string): void {
-    this.db.transaction(() => {
-      this.db
-        .prepare("DELETE FROM allowlist WHERE guild_id = ? AND space_did = ?")
-        .run(guildId, spaceDid);
-      this.db
-        .prepare(
-          "DELETE FROM bridge_config WHERE guild_id = ? AND space_did = ?",
-        )
-        .run(guildId, spaceDid);
-    })();
-  }
+	removeBridgeConfig(guildId: string, spaceDid: string): void {
+		this.db.transaction(() => {
+			this.db
+				.prepare("DELETE FROM allowlist WHERE guild_id = ? AND space_did = ?")
+				.run(guildId, spaceDid);
+			this.db
+				.prepare(
+					"DELETE FROM bridge_config WHERE guild_id = ? AND space_did = ?",
+				)
+				.run(guildId, spaceDid);
+		})();
+	}
 
-  getBridgeConfig(guildId: string, spaceDid: string): BridgeConfig | undefined {
-    const row = this.db
-      .query<
-        {
-          guild_id: string;
-          space_did: string;
-          mode: BridgeMode;
-          created_at: number;
-          updated_at: number;
-        },
-        [string, string]
-      >(
-        `SELECT guild_id, space_did, mode, created_at, updated_at
+	getBridgeConfig(guildId: string, spaceDid: string): BridgeConfig | undefined {
+		const row = this.db
+			.query<
+				{
+					guild_id: string;
+					space_did: string;
+					mode: BridgeMode;
+					created_at: number;
+					updated_at: number;
+				},
+				[string, string]
+			>(
+				`SELECT guild_id, space_did, mode, created_at, updated_at
          FROM bridge_config WHERE guild_id = ? AND space_did = ?`,
-      )
-      .get(guildId, spaceDid);
-    if (!row) return undefined;
-    return {
-      guildId: row.guild_id,
-      spaceDid: row.space_did,
-      mode: row.mode,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  }
+			)
+			.get(guildId, spaceDid);
+		if (!row) return undefined;
+		return {
+			guildId: row.guild_id,
+			spaceDid: row.space_did,
+			mode: row.mode,
+			createdAt: row.created_at,
+			updatedAt: row.updated_at,
+		};
+	}
 
-  listBridgeConfigsForGuild(guildId: string): BridgeConfig[] {
-    return this.db
-      .query<
-        {
-          guild_id: string;
-          space_did: string;
-          mode: BridgeMode;
-          created_at: number;
-          updated_at: number;
-        },
-        [string]
-      >(
-        `SELECT guild_id, space_did, mode, created_at, updated_at
+	listBridgeConfigsForGuild(guildId: string): BridgeConfig[] {
+		return this.db
+			.query<
+				{
+					guild_id: string;
+					space_did: string;
+					mode: BridgeMode;
+					created_at: number;
+					updated_at: number;
+				},
+				[string]
+			>(
+				`SELECT guild_id, space_did, mode, created_at, updated_at
          FROM bridge_config WHERE guild_id = ? ORDER BY created_at ASC`,
-      )
-      .all(guildId)
-      .map((row) => ({
-        guildId: row.guild_id,
-        spaceDid: row.space_did,
-        mode: row.mode,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-  }
+			)
+			.all(guildId)
+			.map((row) => ({
+				guildId: row.guild_id,
+				spaceDid: row.space_did,
+				mode: row.mode,
+				createdAt: row.created_at,
+				updatedAt: row.updated_at,
+			}));
+	}
 
-  listAllBridgeConfigs(): BridgeConfig[] {
-    return this.db
-      .query<
-        {
-          guild_id: string;
-          space_did: string;
-          mode: BridgeMode;
-          created_at: number;
-          updated_at: number;
-        },
-        []
-      >(
-        `SELECT guild_id, space_did, mode, created_at, updated_at
+	listAllBridgeConfigs(): BridgeConfig[] {
+		return this.db
+			.query<
+				{
+					guild_id: string;
+					space_did: string;
+					mode: BridgeMode;
+					created_at: number;
+					updated_at: number;
+				},
+				[]
+			>(
+				`SELECT guild_id, space_did, mode, created_at, updated_at
          FROM bridge_config ORDER BY guild_id, created_at ASC`,
-      )
-      .all()
-      .map((row) => ({
-        guildId: row.guild_id,
-        spaceDid: row.space_did,
-        mode: row.mode,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-  }
+			)
+			.all()
+			.map((row) => ({
+				guildId: row.guild_id,
+				spaceDid: row.space_did,
+				mode: row.mode,
+				createdAt: row.created_at,
+				updatedAt: row.updated_at,
+			}));
+	}
 
-  /**
-   * Returns every space DID that should receive events from `channelId` in `guildId`.
-   * Includes all `full` bridges for the guild plus all `subset` bridges where the
-   * channel appears in the allowlist. Empty array means the channel is not bridged.
-   */
-  getTargetSpacesForChannel(guildId: string, channelId: string): string[] {
-    const rows = this.db
-      .query<{ space_did: string }, [string, string, string]>(
-        `SELECT space_did FROM bridge_config
+	/**
+	 * Returns every space DID that should receive events from `channelId` in `guildId`.
+	 * Includes all `full` bridges for the guild plus all `subset` bridges where the
+	 * channel appears in the allowlist. Empty array means the channel is not bridged.
+	 */
+	getTargetSpacesForChannel(guildId: string, channelId: string): string[] {
+		const rows = this.db
+			.query<{ space_did: string }, [string, string, string]>(
+				`SELECT space_did FROM bridge_config
          WHERE guild_id = ? AND mode = 'full'
          UNION
          SELECT bc.space_did
@@ -182,338 +182,355 @@ export class BridgeRepository {
          JOIN allowlist a
            ON a.space_did = bc.space_did AND a.guild_id = bc.guild_id
          WHERE bc.guild_id = ? AND bc.mode = 'subset' AND a.channel_id = ?`,
-      )
-      .all(guildId, guildId, channelId);
-    return rows.map((r) => r.space_did);
-  }
+			)
+			.all(guildId, guildId, channelId);
+		return rows.map((r) => r.space_did);
+	}
 
-  // === ID mappings (per space) ===
+	// === ID mappings (per space) ===
 
-  registerMapping(
-    spaceDid: string,
-    kind: MappingKind,
-    discordId: string,
-    roomyId: string,
-  ): void {
-    this.db
-      .prepare(
-        `INSERT INTO id_mappings (space_did, kind, discord_id, roomy_id, created_at)
+	registerMapping(
+		spaceDid: string,
+		kind: MappingKind,
+		discordId: string,
+		roomyId: string,
+	): void {
+		this.db
+			.prepare(
+				`INSERT INTO id_mappings (space_did, kind, discord_id, roomy_id, created_at)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(space_did, kind, discord_id) DO UPDATE SET roomy_id = excluded.roomy_id`,
-      )
-      .run(spaceDid, kind, discordId, roomyId, Date.now());
-  }
+			)
+			.run(spaceDid, kind, discordId, roomyId, Date.now());
+	}
 
-  getRoomyId(
-    spaceDid: string,
-    kind: MappingKind,
-    discordId: string,
-  ): string | undefined {
-    const row = this.db
-      .query<
-        { roomy_id: string },
-        [string, string, string]
-      >("SELECT roomy_id FROM id_mappings WHERE space_did = ? AND kind = ? AND discord_id = ?")
-      .get(spaceDid, kind, discordId);
-    return row?.roomy_id;
-  }
+	getRoomyId(
+		spaceDid: string,
+		kind: MappingKind,
+		discordId: string,
+	): string | undefined {
+		const row = this.db
+			.query<{ roomy_id: string }, [string, string, string]>(
+				"SELECT roomy_id FROM id_mappings WHERE space_did = ? AND kind = ? AND discord_id = ?",
+			)
+			.get(spaceDid, kind, discordId);
+		return row?.roomy_id;
+	}
 
-  /** Resolve a channel or thread to its Roomy room ID. */
-  getRoomyRoomId(
-    spaceDid: string,
-    channelOrThreadId: string,
-  ): string | undefined {
-    return (
-      this.getRoomyId(spaceDid, "channel", channelOrThreadId) ??
-      this.getRoomyId(spaceDid, "thread", channelOrThreadId)
-    );
-  }
+	/** Resolve a channel or thread to its Roomy room ID. */
+	getRoomyRoomId(
+		spaceDid: string,
+		channelOrThreadId: string,
+	): string | undefined {
+		return (
+			this.getRoomyId(spaceDid, "channel", channelOrThreadId) ??
+			this.getRoomyId(spaceDid, "thread", channelOrThreadId)
+		);
+	}
 
-  getDiscordId(
-    spaceDid: string,
-    kind: MappingKind,
-    roomyId: string,
-  ): string | undefined {
-    const row = this.db
-      .query<
-        { discord_id: string },
-        [string, string, string]
-      >("SELECT discord_id FROM id_mappings WHERE space_did = ? AND kind = ? AND roomy_id = ?")
-      .get(spaceDid, kind, roomyId);
-    return row?.discord_id;
-  }
+	getDiscordId(
+		spaceDid: string,
+		kind: MappingKind,
+		roomyId: string,
+	): string | undefined {
+		const row = this.db
+			.query<{ discord_id: string }, [string, string, string]>(
+				"SELECT discord_id FROM id_mappings WHERE space_did = ? AND kind = ? AND roomy_id = ?",
+			)
+			.get(spaceDid, kind, roomyId);
+		return row?.discord_id;
+	}
 
-  unregisterMapping(
-    spaceDid: string,
-    kind: MappingKind,
-    discordId: string,
-  ): void {
-    this.db
-      .prepare(
-        "DELETE FROM id_mappings WHERE space_did = ? AND kind = ? AND discord_id = ?",
-      )
-      .run(spaceDid, kind, discordId);
-  }
+	unregisterMapping(
+		spaceDid: string,
+		kind: MappingKind,
+		discordId: string,
+	): void {
+		this.db
+			.prepare(
+				"DELETE FROM id_mappings WHERE space_did = ? AND kind = ? AND discord_id = ?",
+			)
+			.run(spaceDid, kind, discordId);
+	}
 
-  // === Channel cursors (per (space, channel)) ===
+	// === Channel cursors (per (space, channel)) ===
 
-  getChannelCursor(
-    spaceDid: string,
-    channelId: string,
-  ): ChannelCursor | undefined {
-    const row = this.db
-      .query<
-        {
-          space_did: string;
-          channel_id: string;
-          last_message_id: string | null;
-          updated_at: number;
-        },
-        [string, string]
-      >(
-        "SELECT space_did, channel_id, last_message_id, updated_at FROM channel_cursors WHERE space_did = ? AND channel_id = ?",
-      )
-      .get(spaceDid, channelId);
-    if (!row) return undefined;
-    return {
-      spaceDid: row.space_did,
-      channelId: row.channel_id,
-      lastMessageId: row.last_message_id,
-      updatedAt: row.updated_at,
-    };
-  }
+	getChannelCursor(
+		spaceDid: string,
+		channelId: string,
+	): ChannelCursor | undefined {
+		const row = this.db
+			.query<
+				{
+					space_did: string;
+					channel_id: string;
+					last_message_id: string | null;
+					updated_at: number;
+				},
+				[string, string]
+			>(
+				"SELECT space_did, channel_id, last_message_id, updated_at FROM channel_cursors WHERE space_did = ? AND channel_id = ?",
+			)
+			.get(spaceDid, channelId);
+		if (!row) return undefined;
+		return {
+			spaceDid: row.space_did,
+			channelId: row.channel_id,
+			lastMessageId: row.last_message_id,
+			updatedAt: row.updated_at,
+		};
+	}
 
-  setChannelCursor(
-    spaceDid: string,
-    channelId: string,
-    lastMessageId: string | null,
-  ): void {
-    this.db
-      .prepare(
-        `INSERT INTO channel_cursors (space_did, channel_id, last_message_id, updated_at)
+	setChannelCursor(
+		spaceDid: string,
+		channelId: string,
+		lastMessageId: string | null,
+	): void {
+		this.db
+			.prepare(
+				`INSERT INTO channel_cursors (space_did, channel_id, last_message_id, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(space_did, channel_id) DO UPDATE SET
            last_message_id = excluded.last_message_id,
            updated_at = excluded.updated_at`,
-      )
-      .run(spaceDid, channelId, lastMessageId, Date.now());
-  }
+			)
+			.run(spaceDid, channelId, lastMessageId, Date.now());
+	}
 
-  // Reset cursor for one (space, channel). Pass spaceDid=undefined to reset
-  // across all bridges for this channel.
-  resetChannelCursor(channelId: string, spaceDid?: string): void {
-    if (spaceDid) {
-      this.db
-        .prepare(
-          "DELETE FROM channel_cursors WHERE space_did = ? AND channel_id = ?",
-        )
-        .run(spaceDid, channelId);
-    } else {
-      this.db
-        .prepare("DELETE FROM channel_cursors WHERE channel_id = ?")
-        .run(channelId);
-    }
-  }
+	// Reset cursor for one (space, channel). Pass spaceDid=undefined to reset
+	// across all bridges for this channel.
+	resetChannelCursor(channelId: string, spaceDid?: string): void {
+		if (spaceDid) {
+			this.db
+				.prepare(
+					"DELETE FROM channel_cursors WHERE space_did = ? AND channel_id = ?",
+				)
+				.run(spaceDid, channelId);
+		} else {
+			this.db
+				.prepare("DELETE FROM channel_cursors WHERE channel_id = ?")
+				.run(channelId);
+		}
+	}
 
-  // === Allowlist (subset mode only) ===
+	// === Allowlist (subset mode only) ===
 
-  addToAllowlist(spaceDid: string, channelId: string, guildId: string): void {
-    this.db
-      .prepare(
-        `INSERT INTO allowlist (space_did, channel_id, guild_id, added_at)
+	addToAllowlist(spaceDid: string, channelId: string, guildId: string): void {
+		this.db
+			.prepare(
+				`INSERT INTO allowlist (space_did, channel_id, guild_id, added_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(space_did, channel_id) DO UPDATE SET guild_id = excluded.guild_id`,
-      )
-      .run(spaceDid, channelId, guildId, Date.now());
-  }
+			)
+			.run(spaceDid, channelId, guildId, Date.now());
+	}
 
-  removeFromAllowlist(spaceDid: string, channelId: string): void {
-    this.db
-      .prepare("DELETE FROM allowlist WHERE space_did = ? AND channel_id = ?")
-      .run(spaceDid, channelId);
-  }
+	removeFromAllowlist(spaceDid: string, channelId: string): void {
+		this.db
+			.prepare("DELETE FROM allowlist WHERE space_did = ? AND channel_id = ?")
+			.run(spaceDid, channelId);
+	}
 
-  isAllowlisted(spaceDid: string, channelId: string): boolean {
-    const row = this.db
-      .query<
-        { one: number },
-        [string, string]
-      >("SELECT 1 AS one FROM allowlist WHERE space_did = ? AND channel_id = ?")
-      .get(spaceDid, channelId);
-    return row !== null && row !== undefined;
-  }
+	isAllowlisted(spaceDid: string, channelId: string): boolean {
+		const row = this.db
+			.query<{ one: number }, [string, string]>(
+				"SELECT 1 AS one FROM allowlist WHERE space_did = ? AND channel_id = ?",
+			)
+			.get(spaceDid, channelId);
+		return row !== null && row !== undefined;
+	}
 
-  listAllowlistForBridge(spaceDid: string): AllowlistEntry[] {
-    return this.db
-      .query<
-        {
-          space_did: string;
-          channel_id: string;
-          guild_id: string;
-          added_at: number;
-        },
-        [string]
-      >(
-        `SELECT space_did, channel_id, guild_id, added_at
+	listAllowlistForBridge(spaceDid: string): AllowlistEntry[] {
+		return this.db
+			.query<
+				{
+					space_did: string;
+					channel_id: string;
+					guild_id: string;
+					added_at: number;
+				},
+				[string]
+			>(
+				`SELECT space_did, channel_id, guild_id, added_at
          FROM allowlist WHERE space_did = ? ORDER BY added_at ASC`,
-      )
-      .all(spaceDid)
-      .map((r) => ({
-        spaceDid: r.space_did,
-        channelId: r.channel_id,
-        guildId: r.guild_id,
-        addedAt: r.added_at,
-      }));
-  }
+			)
+			.all(spaceDid)
+			.map((r) => ({
+				spaceDid: r.space_did,
+				channelId: r.channel_id,
+				guildId: r.guild_id,
+				addedAt: r.added_at,
+			}));
+	}
 
-  // === Profile hashes (per space) ===
+	// === Profile hashes (per space) ===
 
-  getProfileHash(spaceDid: string, discordUserId: string): string | undefined {
-    const row = this.db
-      .query<
-        { hash: string },
-        [string, string]
-      >("SELECT hash FROM profile_hashes WHERE space_did = ? AND discord_user_id = ?")
-      .get(spaceDid, discordUserId);
-    return row?.hash;
-  }
+	getProfileHash(spaceDid: string, discordUserId: string): string | undefined {
+		const row = this.db
+			.query<{ hash: string }, [string, string]>(
+				"SELECT hash FROM profile_hashes WHERE space_did = ? AND discord_user_id = ?",
+			)
+			.get(spaceDid, discordUserId);
+		return row?.hash;
+	}
 
-  setProfileHash(spaceDid: string, discordUserId: string, hash: string): void {
-    this.db
-      .prepare(
-        `INSERT INTO profile_hashes (space_did, discord_user_id, hash, updated_at)
+	setProfileHash(spaceDid: string, discordUserId: string, hash: string): void {
+		this.db
+			.prepare(
+				`INSERT INTO profile_hashes (space_did, discord_user_id, hash, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(space_did, discord_user_id) DO UPDATE SET
            hash = excluded.hash,
            updated_at = excluded.updated_at`,
-      )
-      .run(spaceDid, discordUserId, hash, Date.now());
-  }
+			)
+			.run(spaceDid, discordUserId, hash, Date.now());
+	}
 
-  // === Webhook tokens (placeholder for future bidirectional) ===
+	// === Webhook tokens (placeholder for future bidirectional) ===
 
-  getWebhookToken(channelId: string): WebhookToken | undefined {
-    const row = this.db
-      .query<
-        { channel_id: string; webhook_id: string; token: string },
-        [string]
-      >("SELECT channel_id, webhook_id, token FROM webhook_tokens WHERE channel_id = ?")
-      .get(channelId);
-    if (!row) return undefined;
-    return {
-      channelId: row.channel_id,
-      webhookId: row.webhook_id,
-      token: row.token,
-    };
-  }
+	getWebhookToken(channelId: string): WebhookToken | undefined {
+		const row = this.db
+			.query<
+				{ channel_id: string; webhook_id: string; token: string },
+				[string]
+			>(
+				"SELECT channel_id, webhook_id, token FROM webhook_tokens WHERE channel_id = ?",
+			)
+			.get(channelId);
+		if (!row) return undefined;
+		return {
+			channelId: row.channel_id,
+			webhookId: row.webhook_id,
+			token: row.token,
+		};
+	}
 
-  setWebhookToken(channelId: string, webhookId: string, token: string): void {
-    this.db
-      .prepare(
-        `INSERT INTO webhook_tokens (channel_id, webhook_id, token)
+	setWebhookToken(channelId: string, webhookId: string, token: string): void {
+		this.db
+			.prepare(
+				`INSERT INTO webhook_tokens (channel_id, webhook_id, token)
          VALUES (?, ?, ?)
          ON CONFLICT(channel_id) DO UPDATE SET
            webhook_id = excluded.webhook_id,
            token = excluded.token`,
-      )
-      .run(channelId, webhookId, token);
-  }
+			)
+			.run(channelId, webhookId, token);
+	}
 
-  deleteWebhookToken(channelId: string): void {
-    this.db
-      .prepare("DELETE FROM webhook_tokens WHERE channel_id = ?")
-      .run(channelId);
-  }
+	deleteWebhookToken(channelId: string): void {
+		this.db
+			.prepare("DELETE FROM webhook_tokens WHERE channel_id = ?")
+			.run(channelId);
+	}
 
-  // === Profile sync queue (retry queue) ===
+	// === Profile sync queue (retry queue) ===
 
-  enqueueProfileSync(
-    spaceDid: string,
-    discordUserId: string,
-    username: string,
-    globalName: string | null,
-    avatarHash: string | null,
-    discriminator: string,
-  ): void {
-    const now = Date.now();
-    const existing = this.db
-      .query<{ retry_count: number }, [string, string]>(
-        "SELECT retry_count FROM profile_sync_queue WHERE space_did = ? AND discord_user_id = ?",
-      )
-      .get(spaceDid, discordUserId);
+	enqueueProfileSync(
+		spaceDid: string,
+		discordUserId: string,
+		username: string,
+		globalName: string | null,
+		avatarHash: string | null,
+		discriminator: string,
+	): void {
+		const now = Date.now();
+		const existing = this.db
+			.query<{ retry_count: number }, [string, string]>(
+				"SELECT retry_count FROM profile_sync_queue WHERE space_did = ? AND discord_user_id = ?",
+			)
+			.get(spaceDid, discordUserId);
 
-    if (existing) {
-      // Bump retry_count and reset the timer
-      const nextRetry = now + backoffMs(existing.retry_count + 1);
-      this.db
-        .prepare(
-          `UPDATE profile_sync_queue SET
+		if (existing) {
+			// Bump retry_count and reset the timer
+			const nextRetry = now + backoffMs(existing.retry_count + 1);
+			this.db
+				.prepare(
+					`UPDATE profile_sync_queue SET
              username = ?, global_name = ?, avatar_hash = ?, discriminator = ?,
              retry_count = retry_count + 1, next_retry_at = ?, updated_at = ?
            WHERE space_did = ? AND discord_user_id = ?`,
-        )
-        .run(username, globalName, avatarHash, discriminator, nextRetry, now, spaceDid, discordUserId);
-    } else {
-      const nextRetry = now + backoffMs(0);
-      this.db
-        .prepare(
-          `INSERT INTO profile_sync_queue (space_did, discord_user_id, username, global_name, avatar_hash, discriminator, retry_count, next_retry_at, created_at, updated_at)
+				)
+				.run(
+					username,
+					globalName,
+					avatarHash,
+					discriminator,
+					nextRetry,
+					now,
+					spaceDid,
+					discordUserId,
+				);
+		} else {
+			const nextRetry = now + backoffMs(0);
+			this.db
+				.prepare(
+					`INSERT INTO profile_sync_queue (space_did, discord_user_id, username, global_name, avatar_hash, discriminator, retry_count, next_retry_at, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-        )
-        .run(spaceDid, discordUserId, username, globalName, avatarHash, discriminator, nextRetry, now, now);
-    }
-  }
+				)
+				.run(
+					spaceDid,
+					discordUserId,
+					username,
+					globalName,
+					avatarHash,
+					discriminator,
+					nextRetry,
+					now,
+					now,
+				);
+		}
+	}
 
-  /** Get all stale queue entries whose next_retry_at is in the past. */
-  getStaleProfileSyncEntries(): Array<{
-    spaceDid: string;
-    discordUserId: string;
-    username: string;
-    globalName: string | null;
-    avatarHash: string | null;
-    discriminator: string;
-    retryCount: number;
-  }> {
-    return this.db
-      .query<
-        {
-          space_did: string;
-          discord_user_id: string;
-          username: string;
-          global_name: string | null;
-          avatar_hash: string | null;
-          discriminator: string;
-          retry_count: number;
-        },
-        [number]
-      >(
-        `SELECT space_did, discord_user_id, username, global_name, avatar_hash, discriminator, retry_count
+	/** Get all stale queue entries whose next_retry_at is in the past. */
+	getStaleProfileSyncEntries(): Array<{
+		spaceDid: string;
+		discordUserId: string;
+		username: string;
+		globalName: string | null;
+		avatarHash: string | null;
+		discriminator: string;
+		retryCount: number;
+	}> {
+		return this.db
+			.query<
+				{
+					space_did: string;
+					discord_user_id: string;
+					username: string;
+					global_name: string | null;
+					avatar_hash: string | null;
+					discriminator: string;
+					retry_count: number;
+				},
+				[number]
+			>(
+				`SELECT space_did, discord_user_id, username, global_name, avatar_hash, discriminator, retry_count
          FROM profile_sync_queue WHERE next_retry_at < ? ORDER BY next_retry_at ASC`,
-      )
-      .all(Date.now())
-      .map((r) => ({
-        spaceDid: r.space_did,
-        discordUserId: r.discord_user_id,
-        username: r.username,
-        globalName: r.global_name,
-        avatarHash: r.avatar_hash,
-        discriminator: r.discriminator,
-        retryCount: r.retry_count,
-      }));
-  }
+			)
+			.all(Date.now())
+			.map((r) => ({
+				spaceDid: r.space_did,
+				discordUserId: r.discord_user_id,
+				username: r.username,
+				globalName: r.global_name,
+				avatarHash: r.avatar_hash,
+				discriminator: r.discriminator,
+				retryCount: r.retry_count,
+			}));
+	}
 
-  /** Remove a queue entry after a successful retry. */
-  deleteProfileSyncEntry(spaceDid: string, discordUserId: string): void {
-    this.db
-      .prepare(
-        "DELETE FROM profile_sync_queue WHERE space_did = ? AND discord_user_id = ?",
-      )
-      .run(spaceDid, discordUserId);
-  }
+	/** Remove a queue entry after a successful retry. */
+	deleteProfileSyncEntry(spaceDid: string, discordUserId: string): void {
+		this.db
+			.prepare(
+				"DELETE FROM profile_sync_queue WHERE space_did = ? AND discord_user_id = ?",
+			)
+			.run(spaceDid, discordUserId);
+	}
 }
 
 /** Exponential backoff in milliseconds: ~2^attempts minutes (capped at ~4 hours). */
 function backoffMs(attempt: number): number {
-  const ms = Math.pow(2, attempt) * 60_000; // 2^attempt minutes
-  return Math.min(ms, 4 * 60 * 60 * 1000); // cap at ~4 hours
+	const ms = Math.pow(2, attempt) * 60_000; // 2^attempt minutes
+	return Math.min(ms, 4 * 60 * 60 * 1000); // cap at ~4 hours
 }

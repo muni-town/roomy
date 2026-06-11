@@ -5,12 +5,12 @@
  * DiscordUserData) matching what the refactored services expect.
  */
 
+import { newUlid } from "@roomy-space/sdk";
 import type {
-  DiscordMessageData,
-  DiscordChannelData,
-  DiscordUserData,
-  DiscordAttachmentData,
-  DiscordMessageReference,
+	DiscordMessageData,
+	DiscordChannelData,
+	DiscordUserData,
+	DiscordAttachmentData,
 } from "../../../discord/data.ts";
 
 // === Constants ===
@@ -24,10 +24,12 @@ export const CHANNEL_2 = "223456789012345678";
 export const CHANNEL_3 = "323456789012345678";
 export const THREAD = "423456789012345678";
 export const PARENT_CHANNEL = "523456789012345678";
-export const ROOMY_CHANNEL_ULID = "01JQ3YXK7X0A1B2C3D4E5F6G7H8";
-export const ROOMY_THREAD_ULID = "01JQ3YXK7X0A1B2C3D4E5F6G7H9";
-export const ROOMY_MESSAGE_ULID = "01JQ3YXK7X0A1B2C3D4E5F6G7IA";
-export const ROOMY_MESSAGE_ULID_2 = "01JQ3YXK7X0A1B2C3D4E5F6G7IB";
+
+// Generate valid ULID strings for test fixtures.
+export const ROOMY_CHANNEL_ULID = newUlid();
+export const ROOMY_THREAD_ULID = newUlid();
+export const ROOMY_MESSAGE_ULID = newUlid();
+export const ROOMY_MESSAGE_ULID_2 = newUlid();
 export const USER_ID = "111111111111111111";
 export const USER_ID_2 = "222222222222222222";
 
@@ -40,156 +42,173 @@ export const SNOWFLAKE_USER_2 = BigInt(USER_ID_2);
 // === Discord User Fixtures ===
 
 /** Build a DiscordUserData fixture. */
-export function makeUser(overrides: Partial<DiscordUserData> = {}): DiscordUserData {
-  return {
-    id: overrides.id ?? USER_ID,
-    name: overrides.name ?? "testuser",
-    discriminator: overrides.discriminator ?? "1234",
-    globalName: overrides.globalName ?? "Test User",
-    avatar: overrides.avatar ?? null,
-    isBot: overrides.isBot ?? false,
-  };
+export function makeUser(
+	overrides: Partial<DiscordUserData> = {},
+): DiscordUserData {
+	return {
+		id: overrides.id ?? USER_ID,
+		name: overrides.name ?? "testuser",
+		discriminator: overrides.discriminator ?? "1234",
+		globalName: overrides.globalName ?? "Test User",
+		avatar: overrides.avatar ?? null,
+		isBot: overrides.isBot ?? false,
+	};
 }
 
 // === Discord Message Fixtures ===
 
 /** Build a DiscordMessageData fixture. */
-export function makeMessage(overrides: Record<string, unknown> = {}): DiscordMessageData {
-  const author = (overrides.author as DiscordUserData) ?? makeUser();
-  return {
-    id: (overrides.id as string) ?? "987654321",
-    channelId: (overrides.channelId as string) ?? CHANNEL,
-    guildId: (overrides.guildId as string) ?? GUILD,
-    type: (overrides.type as number) ?? 0,
-    content: (overrides.content as string) ?? "Hello world",
-    timestamp: (overrides.timestamp as string) ?? String(Date.now()),
-    editedTimestamp: (overrides.editedTimestamp as string | null) ?? null,
-    author,
-    attachments: (overrides.attachments as DiscordAttachmentData[]) ?? [],
-    embeds: (overrides.embeds as any) ?? [],
-    reactions: (overrides.reactions as any) ?? [],
-    mentions: (overrides.mentions as DiscordUserData[]) ?? [],
-    mentionChannelIds: (overrides.mentionChannelIds as any) ?? [],
-    stickerItems: (overrides.stickerItems as any) ?? [],
-    messageReference: (overrides.messageReference as DiscordMessageReference | undefined) ?? undefined,
-  };
+export function makeMessage(
+	overrides: Partial<DiscordMessageData> = {},
+): DiscordMessageData {
+	const author = overrides.author ?? makeUser();
+	return {
+		id: overrides.id ?? "987654321",
+		channelId: overrides.channelId ?? CHANNEL,
+		guildId: overrides.guildId ?? GUILD,
+		type: overrides.type ?? 0,
+		content: overrides.content ?? "Hello world",
+		timestamp: overrides.timestamp ?? String(Date.now()),
+		editedTimestamp: overrides.editedTimestamp ?? null,
+		author,
+		attachments: overrides.attachments ?? [],
+		embeds: overrides.embeds ?? [],
+		reactions: overrides.reactions ?? [],
+		mentions: overrides.mentions ?? [],
+		mentionChannelIds: overrides.mentionChannelIds ?? [],
+		stickerItems: overrides.stickerItems ?? [],
+		messageReference: overrides.messageReference ?? undefined,
+	};
 }
 
 // === Discord Channel Fixtures ===
 
 /** Build a DiscordChannelData fixture. */
-export function makeChannel(overrides: Record<string, unknown> = {}): DiscordChannelData {
-  const hasGuildId = "guildId" in overrides;
-  const hasParentId = "parentId" in overrides;
-  const hasName = "name" in overrides;
-  return {
-    id: (overrides.id as string) ?? CHANNEL,
-    type: (overrides.type as number) ?? 0, // GuildText
-    name: hasName ? (overrides.name as string | undefined) : "general",
-    guildId: hasGuildId ? (overrides.guildId as string | undefined) : GUILD,
-    parentId: hasParentId ? (overrides.parentId as string | undefined) : undefined,
-    permissionOverwrites: (overrides.permissionOverwrites as Array<{ id: string; deny?: string[] }> | undefined) ?? undefined,
-    topic: (overrides.topic as string | null | undefined) ?? undefined,
-  };
+export function makeChannel(
+	overrides: Partial<DiscordChannelData> = {},
+): DiscordChannelData {
+	const hasGuildId = "guildId" in overrides;
+	const hasParentId = "parentId" in overrides;
+	const hasName = "name" in overrides;
+	return {
+		id: overrides.id ?? CHANNEL,
+		type: overrides.type ?? 0, // GuildText
+		name: hasName ? overrides.name : "general",
+		guildId: hasGuildId ? overrides.guildId : GUILD,
+		parentId: hasParentId ? overrides.parentId : undefined,
+		permissionOverwrites: overrides.permissionOverwrites ?? undefined,
+		topic: overrides.topic ?? undefined,
+	};
 }
 
 /** Build a thread DiscordChannelData fixture. */
-export function makeThread(overrides: Record<string, unknown> = {}): DiscordChannelData {
-  return makeChannel({
-    id: overrides.id ?? THREAD,
-    type: overrides.type ?? 11, // PublicThread
-    name: overrides.name ?? "my-thread",
-    parentId: overrides.parentId ?? CHANNEL,
-    guildId: overrides.guildId ?? GUILD,
-    ...overrides,
-  });
+export function makeThread(
+	overrides: Partial<DiscordChannelData> = {},
+): DiscordChannelData {
+	return makeChannel({
+		id: overrides.id ?? THREAD,
+		type: overrides.type ?? 11, // PublicThread
+		name: overrides.name ?? "my-thread",
+		parentId: overrides.parentId ?? CHANNEL,
+		guildId: overrides.guildId ?? GUILD,
+		...overrides,
+	});
 }
 
 // === Discord Attachment Fixtures ===
 
-export function makeAttachment(overrides: Record<string, unknown> = {}): DiscordAttachmentData {
-  return {
-    id: (overrides.id as string) ?? "1001",
-    url: (overrides.url as string) ?? "https://cdn.discordapp.com/attachments/1/2/image.png",
-    filename: (overrides.filename as string) ?? "image.png",
-    contentType: (overrides.contentType as string) ?? "image/png",
-    size: (overrides.size as number) ?? 1024,
-    width: (overrides.width as number | undefined) ?? 800,
-    height: (overrides.height as number | undefined) ?? 600,
-  };
+export function makeAttachment(
+	overrides: Partial<DiscordAttachmentData> = {},
+): DiscordAttachmentData {
+	return {
+		id: overrides.id ?? "1001",
+		url:
+			overrides.url ?? "https://cdn.discordapp.com/attachments/1/2/image.png",
+		filename: overrides.filename ?? "image.png",
+		contentType: overrides.contentType ?? "image/png",
+		size: overrides.size ?? 1024,
+		width: overrides.width ?? 800,
+		height: overrides.height ?? 600,
+	};
 }
 
 // === Pre-built fixtures ===
 
 /** Pre-built message with an image attachment. */
 export const MESSAGE_WITH_IMAGE = makeMessage({
-  id: "1111111111",
-  content: "Check this out",
-  attachments: [makeAttachment()],
+	id: "1111111111",
+	content: "Check this out",
+	attachments: [makeAttachment()],
 });
 
 /** Pre-built message with a video attachment. */
 export const MESSAGE_WITH_VIDEO = makeMessage({
-  id: "1111111112",
-  content: "Watch this",
-  attachments: [makeAttachment({
-    contentType: "video/mp4",
-    filename: "video.mp4",
-  } as Record<string, unknown>)],
+	id: "1111111112",
+	content: "Watch this",
+	attachments: [
+		makeAttachment({
+			contentType: "video/mp4",
+			filename: "video.mp4",
+		}),
+	],
 });
 
 /** Pre-built message with a file attachment (non-image, non-video). */
 export const MESSAGE_WITH_FILE = makeMessage({
-  id: "1111111113",
-  content: "Here's a file",
-  attachments: [makeAttachment({
-    contentType: "application/pdf",
-    filename: "doc.pdf",
-  } as Record<string, unknown>)],
+	id: "1111111113",
+	content: "Here's a file",
+	attachments: [
+		makeAttachment({
+			contentType: "application/pdf",
+			filename: "doc.pdf",
+		}),
+	],
 });
 
 /** Pre-built message referencing another message (reply). */
 export function makeReplyMessage(replyToSnowflake: string): DiscordMessageData {
-  return makeMessage({
-    id: "1111111114",
-    content: "This is a reply",
-    messageReference: {
-      messageId: replyToSnowflake,
-      channelId: CHANNEL,
-      guildId: GUILD,
-    },
-  });
+	return makeMessage({
+		id: "1111111114",
+		content: "This is a reply",
+		messageReference: {
+			messageId: replyToSnowflake,
+			channelId: CHANNEL,
+			guildId: GUILD,
+		},
+	});
 }
 
 /** Pre-built ThreadStarterMessage (type 21). */
 export function makeThreadStarterMessage(
-  originalMsgSnowflake: string,
-  threadSnowflake: string = THREAD,
-  parentChannelSnowflake: string = CHANNEL,
+	originalMsgSnowflake: string,
+	threadSnowflake: string = THREAD,
+	parentChannelSnowflake: string = CHANNEL,
 ): DiscordMessageData {
-  return makeMessage({
-    id: "1111111115",
-    channelId: threadSnowflake,
-    guildId: GUILD,
-    type: 21,
-    content: "",
-    messageReference: {
-      messageId: originalMsgSnowflake,
-      channelId: parentChannelSnowflake,
-      guildId: GUILD,
-    },
-  });
+	return makeMessage({
+		id: "1111111115",
+		channelId: threadSnowflake,
+		guildId: GUILD,
+		type: 21,
+		content: "",
+		messageReference: {
+			messageId: originalMsgSnowflake,
+			channelId: parentChannelSnowflake,
+			guildId: GUILD,
+		},
+	});
 }
 
 /** Message with user and channel mentions. */
 export const MESSAGE_WITH_MENTIONS = makeMessage({
-  id: "1111111116",
-  content: "Hey <@111111111111111111>, check <#123456789012345678>",
-  mentions: [{
-    id: USER_ID,
-    name: "testuser",
-    globalName: "Test User",
-    discriminator: "1234",
-  }],
-  mentionChannelIds: [CHANNEL],
+	id: "1111111116",
+	content: "Hey <@111111111111111111>, check <#123456789012345678>",
+	mentions: [
+		{
+			id: USER_ID,
+			name: "testuser",
+			globalName: "Test User",
+			discriminator: "1234",
+		},
+	],
+	mentionChannelIds: [CHANNEL],
 });
