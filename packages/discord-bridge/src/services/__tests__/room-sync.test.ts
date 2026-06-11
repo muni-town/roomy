@@ -5,30 +5,29 @@
  * full/subset mode, public/private, fan-out, idempotency.
  */
 
-import { describe, expect, test, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
-import type { DiscordChannelData } from "../../discord/data.ts";
 import {
-	handleChannelCreate,
-	handleThreadCreate,
-	handleRoomUpdate,
-	handleRoomDelete,
 	ensureRoomyChannel,
+	handleChannelCreate,
+	handleRoomDelete,
+	handleRoomUpdate,
+	handleThreadCreate,
 } from "../room-sync.ts";
 import {
-	SPACE_A,
-	SPACE_B,
-	GUILD,
 	CHANNEL,
-	THREAD,
-	ROOMY_CHANNEL_ULID,
+	GUILD,
 	makeChannel,
 	makeThread,
+	ROOMY_CHANNEL_ULID,
+	SPACE_A,
+	SPACE_B,
+	THREAD,
 } from "./helpers/test-data.ts";
+import { expectToBe } from "./utils.ts";
 
-/** Extract a createRoom event from a gateway. */
-function createRoomEvent(gateway: MockRoomyGateway, spaceDid: string): any {
+function createRoomEvent(gateway: MockRoomyGateway, spaceDid: string) {
 	return gateway.findEvent(spaceDid, "space.roomy.room.createRoom.v0");
 }
 
@@ -37,7 +36,7 @@ function eventsFromGateway(
 	gateway: MockRoomyGateway,
 	spaceDid: string,
 	$type: string,
-): any[] {
+) {
 	return gateway.eventsFor(spaceDid).filter((e) => e.$type === $type);
 }
 
@@ -64,18 +63,19 @@ describe("handleChannelCreate", () => {
 
 		const event = createRoomEvent(roomy, SPACE_A);
 		expect(event).toBeDefined();
-		expect(event!.$type).toBe("space.roomy.room.createRoom.v0");
-		expect(event!.kind).toBe("space.roomy.channel");
-		expect(event!.name).toBe("general");
-		expect(event!.defaultAccess).toBe("read");
+		expectToBe(event?.$type, "space.roomy.room.createRoom.v0");
+		expect(event?.kind).toBe("space.roomy.channel");
+		expect(event?.name).toBe("general");
+		expect(event?.defaultAccess).toBe("read");
 
 		// Mapping registered
-		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(event!.id);
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(event?.id);
 
 		// Discord origin extension
-		const origin = event!.extensions["space.roomy.extension.discordOrigin.v0"];
-		expect(origin.snowflake).toBe(CHANNEL);
-		expect(origin.guildId).toBe(GUILD);
+		const origin =
+			event?.extensions?.["space.roomy.extension.discordOrigin.v0"];
+		expect(origin?.snowflake).toBe(CHANNEL);
+		expect(origin?.guildId).toBe(GUILD);
 	});
 
 	// RO02: Channel create (subset mode, allowlisted)
@@ -88,8 +88,8 @@ describe("handleChannelCreate", () => {
 		await handleChannelCreate(channel, repo, roomy);
 
 		const event = createRoomEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
-		expect(event!.name).toBe("general");
+		expectToBe(event?.$type, "space.roomy.room.createRoom.v0");
+		expect(event?.name).toBe("general");
 	});
 
 	// RO03: Channel create (subset mode, NOT allowlisted)
@@ -112,8 +112,8 @@ describe("handleChannelCreate", () => {
 		await handleChannelCreate(channel, repo, roomy);
 
 		const event = createRoomEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
-		expect(event!.defaultAccess).toBe("none");
+		expectToBe(event?.$type, "space.roomy.room.createRoom.v0");
+		expect(event?.defaultAccess).toBe("none");
 	});
 
 	// RO05: Public channel → defaultAccess = "read"
@@ -125,8 +125,8 @@ describe("handleChannelCreate", () => {
 		await handleChannelCreate(channel, repo, roomy);
 
 		const event = createRoomEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
-		expect(event!.defaultAccess).toBe("read");
+		expectToBe(event?.$type, "space.roomy.room.createRoom.v0");
+		expect(event?.defaultAccess).toBe("read");
 	});
 
 	// RO13: Channel create fan-out
@@ -189,12 +189,14 @@ describe("handleThreadCreate", () => {
 		);
 
 		expect(roomEvents).toHaveLength(1);
-		expect(roomEvents[0].kind).toBe("space.roomy.thread");
-		expect(roomEvents[0].name).toBe("my-thread");
+		expectToBe(roomEvents[0]?.$type, "space.roomy.room.createRoom.v0");
+		expectToBe(roomEvents[0]?.kind, "space.roomy.thread");
+		expectToBe(roomEvents[0]?.name, "my-thread");
 
 		expect(linkEvents).toHaveLength(1);
-		expect(linkEvents[0].linkToRoom).toBe(roomEvents[0].id);
-		expect(linkEvents[0].isCreationLink).toBe(true);
+		expectToBe(linkEvents[0]?.$type, "space.roomy.link.createRoomLink.v0");
+		expect(linkEvents[0]?.linkToRoom).toBe(roomEvents[0].id);
+		expect(linkEvents[0]?.isCreationLink).toBe(true);
 
 		// Mapping registered
 		expect(repo.getRoomyId(SPACE_A, "thread", THREAD)).toBe(roomEvents[0].id);
@@ -259,9 +261,8 @@ describe("handleRoomUpdate", () => {
 
 		await handleRoomUpdate(channel, repo, roomy);
 
-		const event = roomy.eventsFor(SPACE_A)[0] as any;
-		expect(event).toBeDefined();
-		expect(event.$type).toBe("space.roomy.room.updateRoom.v0");
+		const event = roomy.eventsFor(SPACE_A)[0];
+		expectToBe(event?.$type, "space.roomy.room.updateRoom.v0");
 		expect(event.roomId).toBe(ROOMY_CHANNEL_ULID);
 		expect(event.name).toBe("new-name");
 	});
@@ -301,9 +302,8 @@ describe("handleRoomDelete", () => {
 
 		await handleRoomDelete(channel, repo, roomy);
 
-		const event = roomy.eventsFor(SPACE_A)[0] as any;
-		expect(event).toBeDefined();
-		expect(event.$type).toBe("space.roomy.room.deleteRoom.v0");
+		const event = roomy.eventsFor(SPACE_A)[0];
+		expectToBe(event?.$type, "space.roomy.room.deleteRoom.v0");
 		expect(event.roomId).toBe(ROOMY_CHANNEL_ULID);
 
 		// Mapping removed
@@ -337,10 +337,10 @@ describe("ensureRoomyChannel", () => {
 		await ensureRoomyChannel(repo, roomy, CHANNEL, GUILD, "general", [SPACE_A]);
 
 		const event = createRoomEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
-		expect(event!.name).toBe("general");
-		expect(event!.defaultAccess).toBe("read");
-		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(event!.id);
+		expectToBe(event?.$type, "space.roomy.room.createRoom.v0");
+		expect(event?.name).toBe("general");
+		expect(event?.defaultAccess).toBe("read");
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(event?.id);
 	});
 
 	test("skips channel already synced to a space", async () => {
@@ -363,6 +363,7 @@ describe("ensureRoomyChannel", () => {
 		);
 
 		const event = createRoomEvent(roomy, SPACE_A);
-		expect(event!.defaultAccess).toBe("none");
+		expectToBe(event?.$type, "space.roomy.room.createRoom.v0");
+		expect(event?.defaultAccess).toBe("none");
 	});
 });

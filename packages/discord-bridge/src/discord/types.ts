@@ -1,14 +1,13 @@
 import {
-	Bot,
-	Channel,
-	CompleteDesiredProperties,
-	Interaction,
-	Message,
-	RecursivePartial,
-	SetupDesiredProps,
-	TransformersDesiredProperties,
-	Emoji,
+	type Bot,
+	type Channel,
+	type CompleteDesiredProperties,
 	createDesiredPropertiesObject,
+	type Interaction,
+	type Message,
+	type RecursivePartial,
+	type SetupDesiredProps,
+	type TransformersDesiredProperties,
 } from "@discordeno/bot";
 
 export const desiredProperties = createDesiredPropertiesObject({

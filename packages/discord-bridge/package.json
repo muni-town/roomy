@@ -14,6 +14,8 @@
 		"build": "bun build src/index.ts --target=bun --outdir=dist",
 		"test": "bun test",
 		"format": "pnpx @biomejs/biome format --write",
+		"lint": "pnpx @biomejs/biome lint --diagnostic-level=hint",
+		"fix": "pnpx @biomejs/biome check --fix",
 		"typecheck": "tsc --noEmit",
 		"generate:fake-data": "bun run src/scripts/generate-fake-data.ts",
 		"generate:fake-data:quick": "bun run src/scripts/generate-fake-data.ts --quick",
@@ -32,6 +34,7 @@
 		"@faker-js/faker": "^10.4.0",
 		"@repo/tsconfig": "workspace:*",
 		"@types/bun": "latest",
+		"biome-plugin-no-type-assertion": "^1.1.1",
 		"typescript": "^5.8.3"
 	}
 }

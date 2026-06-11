@@ -1,15 +1,15 @@
-import { newUlid, Ulid, type Event } from "@roomy-space/sdk";
-import type { BridgeRepository, MappingKind } from "../db/repository.ts";
-import type { RoomyGateway } from "../roomy/gateway.ts";
+import { type Event, newUlid, Ulid } from "@roomy-space/sdk";
+import type { BridgeRepository } from "../db/repository.ts";
+import type { DiscordChannelData } from "../discord/data.ts";
 import {
 	CHANNEL_TYPES,
-	THREAD_TYPES,
-	PRIVATE_THREAD,
 	isChannelPublic,
 	mappingKindForChannel,
+	PRIVATE_THREAD,
+	THREAD_TYPES,
 } from "../discord/data.ts";
-import type { DiscordChannelData } from "../discord/data.ts";
 import { createLogger } from "../logger.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
 
 const log = createLogger("room");
 
@@ -80,7 +80,7 @@ export async function handleChannelCreate(
 	if (!CHANNEL_TYPES.has(channel.type) || THREAD_TYPES.has(channel.type))
 		return;
 
-	let targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
+	const targetSpaces = repo.getTargetSpacesForChannel(guildId, channelId);
 
 	// Determine access level based on whether the channel is public or private.
 	const isPublic = isChannelPublic(channel, guildId);

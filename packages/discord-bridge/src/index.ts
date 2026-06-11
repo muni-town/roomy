@@ -1,55 +1,55 @@
-import { createLogger } from "./logger.ts";
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+import { createBot, Intents } from "@discordeno/bot";
+import { startApi } from "./api.ts";
+import { BridgeRepository } from "./db/repository.ts";
+import { type DiscordBotWithCache, getProxyCacheBot } from "./discord/cache.ts";
+import { LiveDiscordDataSource } from "./discord/live-data-source.ts";
+import {
+	normalizeChannel,
+	normalizeMessage,
+	normalizeUser,
+} from "./discord/normalizers.ts";
+import {
+	handleInteractionCreate,
+	registerSlashCommands,
+} from "./discord/slash-commands.ts";
+import {
+	type ChannelProperties,
+	desiredProperties,
+	type InteractionProperties,
+	type MessageProperties,
+} from "./discord/types.ts";
 import {
 	BRIDGE_DATA_DIR,
 	BRIDGE_DB_PATH,
 	DISCORD_TOKEN,
 	ENABLE_GUILD_MEMBERS_INTENT,
 } from "./env.ts";
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
-import { BridgeRepository } from "./db/repository.ts";
+import { createLogger } from "./logger.ts";
 import { initRoomyClient } from "./roomy/client.ts";
-import { SpaceManager } from "./roomy/space-manager.ts";
-import { createBot, Intents } from "@discordeno/bot";
-import {
-	desiredProperties,
-	type MessageProperties,
-	type ChannelProperties,
-	type InteractionProperties,
-} from "./discord/types.ts";
-import { getProxyCacheBot, type DiscordBotWithCache } from "./discord/cache.ts";
-import { LiveDiscordDataSource } from "./discord/live-data-source.ts";
 import { LiveRoomyGateway } from "./roomy/live-gateway.ts";
-import {
-	normalizeMessage,
-	normalizeChannel,
-	normalizeUser,
-} from "./discord/normalizers.ts";
-import { ingestDiscordMessage } from "./services/message-ingestion.ts";
+import { SpaceManager } from "./roomy/space-manager.ts";
 import { runBackfill } from "./services/backfill.ts";
 import {
-	syncUserProfile,
-	retryStaleProfileSyncs,
-} from "./services/profile-sync.ts";
-import {
-	handleMessageEdit,
 	handleMessageDelete,
+	handleMessageEdit,
 } from "./services/message-edit-delete.ts";
+import { ingestDiscordMessage } from "./services/message-ingestion.ts";
+import {
+	retryStaleProfileSyncs,
+	syncUserProfile,
+} from "./services/profile-sync.ts";
 import {
 	handleReactionAdd,
 	handleReactionRemove,
 } from "./services/reaction-sync.ts";
 import {
 	handleChannelCreate,
-	handleThreadCreate,
-	handleRoomUpdate,
 	handleRoomDelete,
+	handleRoomUpdate,
+	handleThreadCreate,
 } from "./services/room-sync.ts";
-import {
-	registerSlashCommands,
-	handleInteractionCreate,
-} from "./discord/slash-commands.ts";
-import { startApi } from "./api.ts";
 
 const log = createLogger("bridge");
 let appId: string | undefined;

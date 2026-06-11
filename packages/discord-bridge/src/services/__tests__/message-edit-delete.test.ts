@@ -5,31 +5,32 @@
  * editedTimestamp gate, mention resolution, profile sync, fan-out.
  */
 
-import { describe, expect, test, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import {
-	handleMessageEdit,
 	handleMessageDelete,
+	handleMessageEdit,
 } from "../message-edit-delete.ts";
 import {
-	SPACE_A,
-	SPACE_B,
-	GUILD,
 	CHANNEL,
+	GUILD,
+	makeMessage,
+	makeUser,
 	ROOMY_CHANNEL_ULID,
 	ROOMY_MESSAGE_ULID,
-	makeUser,
-	makeMessage,
+	SPACE_A,
+	SPACE_B,
 } from "./helpers/test-data.ts";
+import { expectToBe, expectToBeDefined } from "./utils.ts";
 
 /** Extract the editMessage event. */
-function editMessageEvent(roomy: MockRoomyGateway, spaceDid: string): any {
+function editMessageEvent(roomy: MockRoomyGateway, spaceDid: string) {
 	return roomy.findEvent(spaceDid, "space.roomy.message.editMessage.v0");
 }
 
 /** Extract the deleteMessage event. */
-function deleteMessageEvent(roomy: MockRoomyGateway, spaceDid: string): any {
+function deleteMessageEvent(roomy: MockRoomyGateway, spaceDid: string) {
 	return roomy.findEvent(spaceDid, "space.roomy.message.deleteMessage.v0");
 }
 
@@ -64,9 +65,9 @@ describe("handleMessageEdit", () => {
 		await handleMessageEdit(msg, repo, roomy);
 
 		const event = editMessageEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
-		expect(event.$type).toBe("space.roomy.message.editMessage.v0");
-		expect(event.messageId).toBe(ROOMY_MESSAGE_ULID);
+		expectToBeDefined(event);
+		expectToBe(event.$type, "space.roomy.message.editMessage.v0");
+		expectToBe(event.messageId, ROOMY_MESSAGE_ULID);
 		const decoded = atob(event.body.data.$bytes);
 		expect(decoded).toBe("Updated content");
 	});
@@ -132,7 +133,7 @@ describe("handleMessageEdit", () => {
 		await handleMessageEdit(msg, repo, roomy);
 
 		const event = editMessageEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
+		expectToBe(event?.$type, "space.roomy.message.editMessage.v0");
 		const decoded = atob(event.body.data.$bytes);
 		expect(decoded).toContain("[@Test User]()");
 	});
@@ -180,9 +181,9 @@ describe("handleMessageDelete", () => {
 		);
 
 		const event = deleteMessageEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
-		expect(event.$type).toBe("space.roomy.message.deleteMessage.v0");
-		expect(event.messageId).toBe(ROOMY_MESSAGE_ULID);
+		expectToBeDefined(event);
+		expectToBe(event.$type, "space.roomy.message.deleteMessage.v0");
+		expectToBe(event.messageId, ROOMY_MESSAGE_ULID);
 
 		// Mapping preserved (not deleted)
 		expect(repo.getRoomyId(SPACE_A, "message", MSG_ID_STR)).toBe(

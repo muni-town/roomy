@@ -14,9 +14,9 @@
  * Output: One JSON file per generated channel/thread, in Discord Export v1 format.
  */
 
-import { faker } from "@faker-js/faker";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { faker } from "@faker-js/faker";
 
 // ─── Types matching the Discord export JSON schema ────────────────────────
 
@@ -603,9 +603,10 @@ function generateEditedTimestamp(): string | null {
 function generateEmoji(): DiscordReactionEmoji {
 	if (faker.helpers.maybe(() => true, { probability: 0.2 })) {
 		const name = generateCustomEmojiName();
-		const id = faker.number
-			.int({ min: 590685315161915000, max: 590685315161915999 })
-			.toString();
+		const id = `${faker.number.bigInt({
+			min: 590685315161915000n,
+			max: 590685315161915999n,
+		})}`;
 		const animated =
 			faker.helpers.maybe(() => true, { probability: 0.4 }) ?? false;
 		return {
@@ -1213,10 +1214,9 @@ Examples:
 
 	for (const exp of allExports) {
 		// Strip internal-only channelInfo before writing
-		const raw = exp as unknown as Record<string, unknown>;
 		const cleaned: Record<string, unknown> = {};
-		for (const key of Object.keys(raw)) {
-			if (key !== "channelInfo") cleaned[key] = raw[key]!;
+		for (const [key, value] of Object.entries(exp)) {
+			if (key !== "channelInfo") cleaned[key] = value;
 		}
 		const category = sanitizeFileName(exp.channel.category);
 		const channelName = sanitizeFileName(exp.channel.name);

@@ -4,17 +4,17 @@
  * Each normalizer extracts only the fields the bridge services actually use.
  */
 
-import type { MessageProperties } from "./types.ts";
 import { iconBigintToHash } from "../utils/hash.ts";
 import type {
-	DiscordMessageData,
-	DiscordUserData,
-	DiscordChannelData,
 	DiscordAttachmentData,
+	DiscordChannelData,
+	DiscordMessageData,
+	DiscordMessageReference,
 	DiscordReactionData,
 	DiscordStickerData,
-	DiscordMessageReference,
+	DiscordUserData,
 } from "./data.ts";
+import type { MessageProperties } from "./types.ts";
 
 // ─── Messages ──────────────────────────────────────────────────────────────
 

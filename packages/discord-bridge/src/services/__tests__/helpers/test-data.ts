@@ -7,10 +7,10 @@
 
 import { newUlid } from "@roomy-space/sdk";
 import type {
-	DiscordMessageData,
-	DiscordChannelData,
-	DiscordUserData,
 	DiscordAttachmentData,
+	DiscordChannelData,
+	DiscordMessageData,
+	DiscordUserData,
 } from "../../../discord/data.ts";
 
 // === Constants ===

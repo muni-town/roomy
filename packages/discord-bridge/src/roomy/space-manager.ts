@@ -1,5 +1,5 @@
-import { ConnectedSpace, StreamDid, modules } from "@roomy-space/sdk";
 import type { RoomyClient } from "@roomy-space/sdk";
+import { ConnectedSpace, modules, StreamDid } from "@roomy-space/sdk";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("spaces");

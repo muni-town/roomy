@@ -1,22 +1,21 @@
-import { newUlid, Ulid, type Event } from "@roomy-space/sdk";
-import {
-	CHANNEL_TYPES,
-	THREAD_TYPES,
-	PRIVATE_THREAD,
-	MESSAGE_CHANNEL_TYPES,
-	isChannelPublic,
-} from "../discord/data.ts";
-import type { DiscordChannelData, DiscordGuildData } from "../discord/data.ts";
-import type { DiscordDataSource } from "../discord/data-source.ts";
+import { type Event, newUlid, Ulid } from "@roomy-space/sdk";
 import type {
-	BridgeRepository,
 	BridgeConfig,
 	BridgeMode,
+	BridgeRepository,
 } from "../db/repository.ts";
+import {
+	CHANNEL_TYPES,
+	isChannelPublic,
+	MESSAGE_CHANNEL_TYPES,
+	PRIVATE_THREAD,
+	THREAD_TYPES,
+} from "../discord/data.ts";
+import type { DiscordDataSource } from "../discord/data-source.ts";
+import { createLogger } from "../logger.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
 import { ensureRoomyChannel } from "./room-sync.ts";
-import { createLogger } from "../logger.ts";
 
 const log = createLogger("backfill");
 
@@ -231,7 +230,8 @@ async function ensureRoomyThreads(
 					const threadId = thread.id;
 					if (repo.getRoomyId(spaceDid, "thread", threadId)) continue;
 
-					const parentId = thread.parentId!;
+					const parentId = thread.parentId;
+					if (!parentId) continue;
 					const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
 					if (!parentRoomyId) {
 						log.warn(
@@ -453,7 +453,9 @@ async function backfillChannel(
 
 			// Advance cursor at page boundary (not per-message) so a crash in
 			// the middle of a page doesn't lose the unprocessed messages.
-			const oldestInBatch = sortedMessages[sortedMessages.length - 1]!;
+			const lastMessage = sortedMessages.at(-1);
+			if (!lastMessage) break;
+			const oldestInBatch = lastMessage;
 			afterCursor = oldestInBatch.id;
 			repo.setChannelCursor(spaceDid, channelId, afterCursor);
 
@@ -587,7 +589,7 @@ async function ensureAndBackfillArchivedThreads(
 
 						hasMore = result.hasMore ?? false;
 						if (result.threads.length > 0) {
-							cursor = result.threads[result.threads.length - 1]!.id;
+							cursor = result.threads[result.threads.length - 1]?.id;
 						} else {
 							break;
 						}

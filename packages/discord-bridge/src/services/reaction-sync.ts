@@ -1,8 +1,8 @@
-import { newUlid, UserDid, Did, Ulid, type Event } from "@roomy-space/sdk";
+import { Did, type Event, newUlid, Ulid, UserDid } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
+import { createLogger } from "../logger.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import { emojiToString, reactionKey } from "../utils/emoji.ts";
-import { createLogger } from "../logger.ts";
 
 const log = createLogger("reactions");
 

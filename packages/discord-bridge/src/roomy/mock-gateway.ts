@@ -33,12 +33,17 @@ export class MockRoomyGateway implements RoomyGateway {
 	}
 
 	/** Find the first event of a given type for a space. */
-	findEvent(spaceDid: string, $type: string): Event | undefined {
-		return this.eventsFor(spaceDid).find((e) => e.$type === $type);
+	findEvent<T extends Event["$type"]>(
+		spaceDid: string,
+		$type: T,
+	): Extract<Event, { $type: T }> | undefined {
+		return this.eventsFor(spaceDid).find(
+			(e): e is Extract<Event, { $type: typeof $type }> => e.$type === $type,
+		);
 	}
 
 	/** Assert that a space received an event of a given type. */
-	expectEvent(spaceDid: string, $type: string): Event {
+	expectEvent<T extends Event["$type"]>(spaceDid: string, $type: T): Event {
 		const evt = this.findEvent(spaceDid, $type);
 		if (!evt) {
 			const types = this.eventsFor(spaceDid)

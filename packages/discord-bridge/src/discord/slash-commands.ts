@@ -1,24 +1,26 @@
 import {
 	ApplicationCommandOptionTypes,
 	ButtonStyles,
-	type CreateApplicationCommand,
 	ChannelTypes,
+	type CreateApplicationCommand,
 	DiscordApplicationIntegrationType,
 	DiscordInteractionContextType,
 	InteractionTypes,
+	type MessageComponent,
 	MessageComponentTypes,
 	MessageFlags,
 } from "@discordeno/bot";
+
 import { StreamDid } from "@roomy-space/sdk";
-import type { BridgeRepository, BridgeConfig } from "../db/repository.ts";
+import type { BridgeConfig, BridgeRepository } from "../db/repository.ts";
+import type { DiscordBotWithCache } from "../discord/cache.ts";
+import { LiveDiscordDataSource } from "../discord/live-data-source.ts";
+import { createLogger } from "../logger.ts";
+import { LiveRoomyGateway } from "../roomy/live-gateway.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
+import { backfillSingleChannel, runBackfill } from "../services/backfill.ts";
 import type { DiscordBot, InteractionProperties } from "./types.ts";
 import { CHANNEL_TYPES, MESSAGE_CHANNEL_TYPES } from "./types.ts";
-import { backfillSingleChannel, runBackfill } from "../services/backfill.ts";
-import { LiveDiscordDataSource } from "../discord/live-data-source.ts";
-import { type DiscordBotWithCache } from "../discord/cache.ts";
-import { LiveRoomyGateway } from "../roomy/live-gateway.ts";
-import { createLogger } from "../logger.ts";
 
 const log = createLogger("slash");
 
@@ -28,6 +30,13 @@ interface ComponentInteractionData {
 	customId: string;
 	values?: string[];
 	componentType?: number;
+}
+
+/** Access a split custom-id part that is guaranteed by construction. */
+function part(parts: string[], index: number): string {
+	const p = parts[index];
+	if (!p) throw new Error(`Invalid custom ID: missing part ${index}`);
+	return p;
 }
 
 /** Narrow interaction.data to a component interaction (has customId). */
@@ -131,7 +140,7 @@ function buildChannelPageComponents(
 		default: selections.get(page)?.has(ch.id) ?? false,
 	}));
 
-	const components: any[] = [];
+	const components: MessageComponent[] = [];
 
 	if (options.length > 0) {
 		components.push({
@@ -149,39 +158,36 @@ function buildChannelPageComponents(
 		});
 	}
 
-	const navButtons: any[] = [];
-	if (page > 0) {
-		navButtons.push({
-			type: MessageComponentTypes.Button,
-			style: ButtonStyles.Secondary,
-			label: "◀ Previous",
-			customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|prev`,
-		});
-	}
-	if (page < totalPages - 1) {
-		navButtons.push({
-			type: MessageComponentTypes.Button,
-			style: ButtonStyles.Secondary,
-			label: `Next ▶ (page ${page + 1}/${totalPages})`,
-			customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|next`,
-		});
-	}
-	navButtons.push({
-		type: MessageComponentTypes.Button,
-		style: ButtonStyles.Success,
-		label: "✅ Confirm Selection",
-		customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|confirm`,
-	});
-	navButtons.push({
-		type: MessageComponentTypes.Button,
-		style: ButtonStyles.Danger,
-		label: "Cancel",
-		customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|cancel`,
-	});
-
 	components.push({
 		type: MessageComponentTypes.ActionRow,
-		components: navButtons,
+		components: [
+			page > 0
+				? {
+						type: MessageComponentTypes.Button,
+						style: ButtonStyles.Secondary,
+						label: "◀ Previous",
+						customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|prev`,
+					}
+				: {
+						type: MessageComponentTypes.Button,
+						style: ButtonStyles.Secondary,
+						label: `Next ▶ (page ${page + 1}/${totalPages})`,
+						customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|next`,
+					},
+			{
+				type: MessageComponentTypes.Button,
+				style: ButtonStyles.Success,
+				label: "✅ Confirm Selection",
+				customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|confirm`,
+			},
+
+			{
+				type: MessageComponentTypes.Button,
+				style: ButtonStyles.Danger,
+				label: "Cancel",
+				customId: `roomy|channel-nav|${guildId}|${userId}|${spaceDid}|cancel`,
+			},
+		],
 	});
 
 	return components;
@@ -620,8 +626,8 @@ async function handleBridgeModeButton(
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
-	const mode = parts[4]!;
-	const spaceDid = parts[3]!;
+	const mode = part(parts, 4);
+	const spaceDid = part(parts, 3);
 
 	if (mode === "full") {
 		try {
@@ -695,17 +701,17 @@ async function handleBridgeModeButton(
 // customId: roomy|channel-page|<guildId>|<userId>|<spaceDid>|<pageNum>
 async function handleChannelPageSelect(
 	interaction: InteractionProperties,
-	repo: BridgeRepository,
-	spaceManager: SpaceManager,
-	bot: DiscordBotWithCache,
+	_repo: BridgeRepository,
+	_spaceManager: SpaceManager,
+	_bot: DiscordBotWithCache,
 	guildId: string,
 	parts: string[],
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
-	const userId = parts[3]!;
-	const spaceDid = parts[4]!;
-	const pageStr = parts[5]!;
+	const userId = part(parts, 3);
+	const spaceDid = part(parts, 4);
+	const pageStr = part(parts, 5);
 	const page = parseInt(pageStr, 10);
 
 	const key = `${guildId}:${userId}:${spaceDid}`;
@@ -748,9 +754,9 @@ async function handleChannelNav(
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
-	const userId = parts[3]!;
-	const spaceDid = parts[4]!;
-	const navAction = parts[5]!;
+	const userId = part(parts, 3);
+	const spaceDid = part(parts, 4);
+	const navAction = part(parts, 5);
 
 	const key = `${guildId}:${userId}:${spaceDid}`;
 	const state = pageStates.get(key);
@@ -871,7 +877,7 @@ async function handleChannelSelect(
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
-	const spaceDid = parts[3]!;
+	const spaceDid = part(parts, 3);
 	const selectedChannels: string[] = hasCustomId(interaction.data)
 		? (interaction.data.values ?? [])
 		: [];
@@ -923,7 +929,7 @@ async function handleChannelSelect(
 async function handleDisconnect(
 	interaction: InteractionProperties,
 	repo: BridgeRepository,
-	spaceManager: SpaceManager,
+	_spaceManager: SpaceManager,
 	guildId: string,
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
@@ -961,13 +967,20 @@ async function handleDisconnect(
 			return;
 		}
 
-		repo.removeBridgeConfig(guildId, targetConfig!.spaceDid);
+		if (!targetConfig) {
+			await interaction.edit({
+				content: "Internal error: no target config at disconnect.",
+			});
+			return;
+		}
+
+		repo.removeBridgeConfig(guildId, targetConfig.spaceDid);
 		log.info(
-			`Disconnected space ${targetConfig!.spaceDid} from guild ${guildId}`,
+			`Disconnected space ${targetConfig.spaceDid} from guild ${guildId}`,
 		);
 
 		await interaction.edit({
-			content: `Successfully disconnected space \`${targetConfig!.spaceDid}\`.`,
+			content: `Successfully disconnected space \`${targetConfig.spaceDid}\`.`,
 		});
 	} catch (e) {
 		log.error("Error handling disconnect-roomy-space", e);
@@ -1005,8 +1018,9 @@ function resolveBridgeConfig(
 		return { config };
 	}
 
-	if (configs.length === 1) {
-		return { config: configs[0]! };
+	const single = configs[0];
+	if (single) {
+		return { config: single };
 	}
 
 	const spaceList = configs.map((c) => `- \`${c.spaceDid}\``).join("\n");
@@ -1127,7 +1141,7 @@ async function handleChannelAdd(
 async function handleChannelRemove(
 	interaction: InteractionProperties,
 	repo: BridgeRepository,
-	guildId: string,
+	_guildId: string,
 	configs: BridgeConfig[],
 	getOption: (name: string) => string | undefined,
 ): Promise<void> {
@@ -1165,7 +1179,7 @@ async function handleChannelRemove(
 async function handleChannelList(
 	interaction: InteractionProperties,
 	repo: BridgeRepository,
-	guildId: string,
+	_guildId: string,
 	configs: BridgeConfig[],
 	getOption: (name: string) => string | undefined,
 ): Promise<void> {

@@ -1,4 +1,4 @@
-import { Level, LOG_LEVEL } from "./env.ts";
+import { type Level, LOG_LEVEL } from "./env.ts";
 
 const order: Record<Level, number> = {
 	debug: 10,

@@ -1,9 +1,9 @@
-import { newUlid, Did, type Event } from "@roomy-space/sdk";
+import { Did, type Event, newUlid } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
-import type { RoomyGateway } from "../roomy/gateway.ts";
 import type { DiscordUserData } from "../discord/data.ts";
-import { computeProfileHash } from "../utils/hash.ts";
 import { createLogger } from "../logger.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
+import { computeProfileHash } from "../utils/hash.ts";
 
 const log = createLogger("profile");
 
@@ -16,7 +16,7 @@ function discordAvatarUrl(
 		const ext = avatarHash.startsWith("a_") ? "gif" : "webp";
 		return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${ext}?size=256`;
 	}
-	const mod = discriminator !== "0" ? parseInt(discriminator) % 5 : 0;
+	const mod = discriminator !== "0" ? parseInt(discriminator, 10) % 5 : 0;
 	return `https://cdn.discordapp.com/embed/avatars/${mod}.png`;
 }
 

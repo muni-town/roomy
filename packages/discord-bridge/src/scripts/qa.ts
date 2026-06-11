@@ -8,8 +8,8 @@
  *   bun run src/scripts/qa.ts
  */
 
-import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import * as readline from "node:readline/promises";
 
 const rl = readline.createInterface({ input, output });
 

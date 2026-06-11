@@ -1,6 +1,6 @@
+import type { Bot, DesiredPropertiesBehavior } from "@discordeno/bot";
 import { createProxyCache } from "dd-cache-proxy";
-import { Bot, DesiredPropertiesBehavior } from "@discordeno/bot";
-import { desiredProperties } from "./types.ts";
+import type { desiredProperties } from "./types.ts";
 
 interface BotDesiredProperties extends Required<typeof desiredProperties> {}
 

@@ -5,15 +5,16 @@
  * avatar URLs, fan-out.
  */
 
-import { describe, expect, test, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { UserDid } from "@roomy-space/sdk";
 import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
-import { syncUserProfile, retryStaleProfileSyncs } from "../profile-sync.ts";
 import { computeProfileHash } from "../../utils/hash.ts";
-import { SPACE_A, SPACE_B, USER_ID, makeUser } from "./helpers/test-data.ts";
+import { retryStaleProfileSyncs, syncUserProfile } from "../profile-sync.ts";
+import { makeUser, SPACE_A, SPACE_B, USER_ID } from "./helpers/test-data.ts";
+import { expectToBe } from "./utils.ts";
 
-/** Extract a profile update event from a gateway. */
-function profileEvent(roomy: MockRoomyGateway, spaceDid: string): any {
+function profileEvent(roomy: MockRoomyGateway, spaceDid: string) {
 	return roomy.findEvent(spaceDid, "space.roomy.user.updateProfile.v0");
 }
 
@@ -38,8 +39,8 @@ describe("syncUserProfile", () => {
 
 		const event = profileEvent(roomy, SPACE_A);
 		expect(event).toBeDefined();
-		expect(event.$type).toBe("space.roomy.user.updateProfile.v0");
-		expect(event.did).toBe(`did:discord:${USER_ID}`);
+		expectToBe(event?.$type, "space.roomy.user.updateProfile.v0");
+		expect(event.did).toBe(UserDid.assert(`did:discord:${USER_ID}`));
 		expect(event.name).toBe(DEFAULT_USER.globalName);
 
 		// Hash stored
@@ -72,7 +73,7 @@ describe("syncUserProfile", () => {
 		await syncUserProfile(DEFAULT_USER, [SPACE_A], repo, roomy);
 
 		const event = profileEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
+		expectToBe(event?.$type, "space.roomy.user.updateProfile.v0");
 		expect(event.name).toBe(DEFAULT_USER.globalName);
 
 		// Hash updated
@@ -91,7 +92,7 @@ describe("syncUserProfile", () => {
 		await syncUserProfile(userNoAvatar, [SPACE_A], repo, roomy);
 
 		const event = profileEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
+		expectToBe(event?.$type, "space.roomy.user.updateProfile.v0");
 		expect(event.avatar).toContain("embed/avatars/");
 	});
 
@@ -123,11 +124,12 @@ describe("retryStaleProfileSyncs", () => {
 
 	// PS05: Successful retry clears queue entry
 	test("PS05: successful retry clears the queue entry", async () => {
-		const db = (repo as any).db;
-		db.prepare(
-			`INSERT INTO profile_sync_queue (space_did, discord_user_id, username, global_name, avatar_hash, discriminator, retry_count, next_retry_at, created_at, updated_at)
+		repo.__only_use_in_tests__db
+			.prepare(
+				`INSERT INTO profile_sync_queue (space_did, discord_user_id, username, global_name, avatar_hash, discriminator, retry_count, next_retry_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 0)`,
-		).run(SPACE_A, USER_ID, "testuser", "Test User", null, "1234");
+			)
+			.run(SPACE_A, USER_ID, "testuser", "Test User", null, "1234");
 
 		const stale = repo.getStaleProfileSyncEntries();
 		expect(stale.length).toBe(1);

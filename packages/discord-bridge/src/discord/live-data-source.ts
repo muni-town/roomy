@@ -8,11 +8,6 @@
  */
 
 import type {
-	DiscordBot,
-	ChannelProperties,
-	MessageProperties,
-} from "./types.ts";
-import type {
 	DiscordChannelData,
 	DiscordGuildData,
 	DiscordMessageData,
@@ -22,7 +17,8 @@ import type {
 	PaginationOpts,
 	ThreadPage,
 } from "./data-source.ts";
-import { normalizeMessage, normalizeChannel } from "./normalizers.ts";
+import { normalizeChannel, normalizeMessage } from "./normalizers.ts";
+import type { DiscordBot } from "./types.ts";
 
 export class LiveDiscordDataSource implements DiscordDataSource {
 	#bot: DiscordBot;

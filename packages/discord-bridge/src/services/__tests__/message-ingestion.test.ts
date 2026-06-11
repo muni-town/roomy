@@ -5,41 +5,42 @@
  * thread starters, mentions, attachments, backfill restriction, subset mode.
  */
 
-import { describe, expect, test, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { Did } from "@roomy-space/sdk";
 import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import { ingestDiscordMessage } from "../message-ingestion.ts";
 import {
-	SPACE_A,
-	SPACE_B,
-	GUILD,
 	CHANNEL,
+	GUILD,
+	MESSAGE_WITH_FILE,
+	MESSAGE_WITH_IMAGE,
+	MESSAGE_WITH_VIDEO,
+	makeMessage,
+	makeReplyMessage,
+	makeThreadStarterMessage,
+	makeUser,
 	ROOMY_CHANNEL_ULID,
 	ROOMY_MESSAGE_ULID,
 	ROOMY_MESSAGE_ULID_2,
+	SPACE_A,
+	SPACE_B,
 	USER_ID,
-	makeUser,
-	makeMessage,
-	makeAttachment,
-	makeReplyMessage,
-	makeThreadStarterMessage,
-	MESSAGE_WITH_IMAGE,
-	MESSAGE_WITH_VIDEO,
-	MESSAGE_WITH_FILE,
 } from "./helpers/test-data.ts";
+import { expectToBe, expectToBeDefined } from "./utils.ts";
 
 /** Extract the createMessage event from a gateway (skip profile sync events). */
-function createMessageEvent(roomy: MockRoomyGateway, spaceDid: string): any {
+function createMessageEvent(roomy: MockRoomyGateway, spaceDid: string) {
 	return roomy.findEvent(spaceDid, "space.roomy.message.createMessage.v0");
 }
 
 /** Extract the forwardMessages event. */
-function forwardMessageEvent(roomy: MockRoomyGateway, spaceDid: string): any {
+function forwardMessageEvent(roomy: MockRoomyGateway, spaceDid: string) {
 	return roomy.findEvent(spaceDid, "space.roomy.message.forwardMessages.v0");
 }
 
 /** Decode the body data from a createMessage event. */
-function decodeBody(event: any): string {
+function decodeBody(event: { body: { data: { $bytes: string } } }): string {
 	const bytes: { $bytes: string } = event.body.data;
 	return atob(bytes.$bytes);
 }
@@ -102,15 +103,16 @@ describe("ingestDiscordMessage — basic sync", () => {
 		expect(result).toEqual({ synced: 1, skipped: 0 });
 
 		const event = createMessageEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
-		expect(event.$type).toBe("space.roomy.message.createMessage.v0");
+		expectToBeDefined(event);
+		expectToBe(event.$type, "space.roomy.message.createMessage.v0");
 		expect(
-			event.extensions["space.roomy.extension.discordMessageOrigin.v0"]
-				.snowflake,
+			event.extensions?.["space.roomy.extension.discordMessageOrigin.v0"]
+				?.snowflake,
 		).toBe(MSG_ID);
-		expect(
-			event.extensions["space.roomy.extension.authorOverride.v0"].did,
-		).toBe(`did:discord:${USER_ID}`);
+		expectToBe(
+			event.extensions?.["space.roomy.extension.authorOverride.v0"]?.did,
+			Did.assert(`did:discord:${USER_ID}`),
+		);
 
 		// Mapping registered
 		expect(repo.getRoomyId(SPACE_A, "message", MSG_ID)).toBe(event.id);
@@ -216,11 +218,12 @@ describe("ingestDiscordMessage — attachments", () => {
 		await ingestDiscordMessage(msg, repo, roomy);
 
 		const event = createMessageEvent(roomy, SPACE_A);
-		const attExt = event.extensions["space.roomy.extension.attachments.v0"];
-		expect(attExt).toBeDefined();
+		expectToBe(event?.$type, "space.roomy.message.createMessage.v0");
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(attExt);
 		const attachments = attExt.attachments;
 		expect(attachments).toHaveLength(1);
-		expect(attachments[0].$type).toBe("space.roomy.attachment.image.v0");
+		expectToBe(attachments[0]?.$type, "space.roomy.attachment.image.v0");
 		expect(attachments[0].mimeType).toBe("image/png");
 	});
 
@@ -229,11 +232,12 @@ describe("ingestDiscordMessage — attachments", () => {
 		await ingestDiscordMessage(msg, repo, roomy);
 
 		const event = createMessageEvent(roomy, SPACE_A);
-		const attExt = event.extensions["space.roomy.extension.attachments.v0"];
-		expect(attExt).toBeDefined();
+		expectToBe(event?.$type, "space.roomy.message.createMessage.v0");
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(attExt);
 		const attachments = attExt.attachments;
 		expect(attachments).toHaveLength(1);
-		expect(attachments[0].$type).toBe("space.roomy.attachment.video.v0");
+		expectToBe(attachments[0]?.$type, "space.roomy.attachment.video.v0");
 	});
 
 	test("MI11c: syncs message with generic file attachment", async () => {
@@ -241,11 +245,12 @@ describe("ingestDiscordMessage — attachments", () => {
 		await ingestDiscordMessage(msg, repo, roomy);
 
 		const event = createMessageEvent(roomy, SPACE_A);
-		const attExt = event.extensions["space.roomy.extension.attachments.v0"];
-		expect(attExt).toBeDefined();
+		expectToBe(event?.$type, "space.roomy.message.createMessage.v0");
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(attExt);
 		const attachments = attExt.attachments;
 		expect(attachments).toHaveLength(1);
-		expect(attachments[0].$type).toBe("space.roomy.attachment.file.v0");
+		expectToBe(attachments[0]?.$type, "space.roomy.attachment.file.v0");
 		expect(attachments[0].name).toBe("doc.pdf");
 	});
 
@@ -257,11 +262,12 @@ describe("ingestDiscordMessage — attachments", () => {
 		await ingestDiscordMessage(msg, repo, roomy);
 
 		const event = createMessageEvent(roomy, SPACE_A);
-		const attExt = event.extensions["space.roomy.extension.attachments.v0"];
-		expect(attExt).toBeDefined();
+		expectToBe(event?.$type, "space.roomy.message.createMessage.v0");
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(attExt);
 		const attachments = attExt.attachments;
 		expect(attachments).toHaveLength(1);
-		expect(attachments[0].$type).toBe("space.roomy.attachment.reply.v0");
+		expectToBe(attachments[0]?.$type, "space.roomy.attachment.reply.v0");
 		expect(attachments[0].target).toBe(ROOMY_MESSAGE_ULID);
 	});
 
@@ -271,7 +277,9 @@ describe("ingestDiscordMessage — attachments", () => {
 		await ingestDiscordMessage(msg, repo, roomy);
 
 		const event = createMessageEvent(roomy, SPACE_A);
-		const attExt = event.extensions["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(event);
+		expectToBe(event.$type, "space.roomy.message.createMessage.v0");
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
 		expect(attExt).toBeUndefined();
 	});
 });
@@ -301,12 +309,15 @@ describe("ingestDiscordMessage — stickers", () => {
 		expect(result).toEqual({ synced: 1, skipped: 0 });
 
 		const event = createMessageEvent(roomy, SPACE_A);
-		const attExt = event.extensions["space.roomy.extension.attachments.v0"];
-		expect(attExt).toBeDefined();
+		expectToBe(event?.$type, "space.roomy.message.createMessage.v0");
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(attExt);
 		const attachments = attExt.attachments;
 		expect(attachments).toHaveLength(2);
-		expect(attachments[0].mimeType).toBe("image/png");
-		expect(attachments[1].mimeType).toBe("image/gif");
+		expectToBe(attachments[0]?.$type, "space.roomy.attachment.image.v0");
+		expectToBe(attachments[1]?.$type, "space.roomy.attachment.image.v0");
+		expectToBe(attachments[0]?.mimeType, "image/png");
+		expectToBe(attachments[1]?.mimeType, "image/gif");
 	});
 
 	// EC02: Empty content without attachments or stickers skipped
@@ -356,9 +367,10 @@ describe("ingestDiscordMessage — mention resolution", () => {
 		);
 
 		const event = createMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
 		const decoded = decodeBody(event);
 		expect(decoded).toContain("[@Test User]()");
-		expect(decoded).toContain("[#general](" + ROOMY_CHANNEL_ULID + ")");
+		expect(decoded).toContain(`[#general](${ROOMY_CHANNEL_ULID})`);
 	});
 
 	test("MI14b: strips custom emoji from content", async () => {
@@ -370,8 +382,9 @@ describe("ingestDiscordMessage — mention resolution", () => {
 		await ingestDiscordMessage(msg, repo, roomy);
 
 		const event = createMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
 		const decoded = decodeBody(event);
-		expect(decoded).toBe("This is  amazing!");
+		expectToBe(decoded, "This is  amazing!");
 	});
 });
 
@@ -400,8 +413,8 @@ describe("ingestDiscordMessage — threadStarterMessage", () => {
 		expect(result).toEqual({ synced: 1, skipped: 0 });
 
 		const event = forwardMessageEvent(roomy, SPACE_A);
-		expect(event).toBeDefined();
-		expect(event.$type).toBe("space.roomy.message.forwardMessages.v0");
+		expectToBeDefined(event);
+		expectToBe(event.$type, "space.roomy.message.forwardMessages.v0");
 		expect(event.room).toBe(ROOMY_MESSAGE_ULID_2);
 		expect(event.messageIds).toEqual([ROOMY_MESSAGE_ULID]);
 		expect(event.fromRoomId).toBe(ROOMY_CHANNEL_ULID);
@@ -507,7 +520,8 @@ describe("ingestDiscordMessage — backfill path & subset mode", () => {
 		await ingestDiscordMessage(msg, repo, roomy);
 
 		const event = createMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
 		const decoded = decodeBody(event);
-		expect(decoded).toBe(longContent);
+		expectToBe(decoded, longContent);
 	});
 });

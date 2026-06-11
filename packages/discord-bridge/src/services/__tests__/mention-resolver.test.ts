@@ -7,9 +7,9 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+	type MentionContext,
 	resolveMentions,
 	type UserMention,
-	type MentionContext,
 } from "../mention-resolver.ts";
 
 function ctx(overrides: Partial<MentionContext> = {}): MentionContext {
@@ -147,7 +147,7 @@ describe("resolveMentions", () => {
 		});
 
 		test("handles large content without crashing", () => {
-			const largeContent = "A".repeat(5000) + " <@12345> " + "B".repeat(5000);
+			const largeContent = `${"A".repeat(5000)} <@12345> ${"B".repeat(5000)}`;
 			const mentions: UserMention[] = [
 				{ id: BigInt("12345"), username: "big", globalName: "Big User" },
 			];

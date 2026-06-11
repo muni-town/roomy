@@ -6,9 +6,9 @@
  */
 
 import type {
-	DiscordMessageData,
 	DiscordChannelData,
 	DiscordGuildData,
+	DiscordMessageData,
 } from "./data.ts";
 
 export interface PaginationOpts {

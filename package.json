@@ -19,6 +19,7 @@
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
     "beachball": "^2.54.0",
+    "biome-plugin-no-type-assertion": "^1.1.1",
     "clsx": "^2.1.1",
     "flexsearch": "^0.8.205",
     "husky": "^9.1.7",

@@ -1,16 +1,16 @@
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { AtpAgent } from "@atproto/api";
-import { RoomyClient, StreamDid, modules } from "@roomy-space/sdk";
+import { RoomyClient } from "@roomy-space/sdk";
 import {
-	ATPROTO_BRIDGE_DID,
 	ATPROTO_BRIDGE_APP_PASSWORD,
-	LEAF_URL,
+	ATPROTO_BRIDGE_DID,
+	BRIDGE_DATA_DIR,
 	LEAF_SERVER_DID,
+	LEAF_URL,
 	STREAM_HANDLE_NSID,
 	STREAM_NSID,
 } from "../env.ts";
-import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { BRIDGE_DATA_DIR } from "../env.ts";
 import { createLogger } from "../logger.ts";
 
 const log = createLogger("roomy");

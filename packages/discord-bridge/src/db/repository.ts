@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { runMigrations } from "./schema.ts";
 
 export type MappingKind =
@@ -52,6 +52,10 @@ export class BridgeRepository {
 		db.exec("PRAGMA foreign_keys = ON");
 		runMigrations(db);
 		return new BridgeRepository(db);
+	}
+
+	get __only_use_in_tests__db(): Database {
+		return this.db;
 	}
 
 	close(): void {
@@ -531,6 +535,6 @@ export class BridgeRepository {
 
 /** Exponential backoff in milliseconds: ~2^attempts minutes (capped at ~4 hours). */
 function backoffMs(attempt: number): number {
-	const ms = Math.pow(2, attempt) * 60_000; // 2^attempt minutes
+	const ms = 2 ** attempt * 60_000; // 2^attempt minutes
 	return Math.min(ms, 4 * 60 * 60 * 1000); // cap at ~4 hours
 }

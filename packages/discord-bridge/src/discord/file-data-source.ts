@@ -15,12 +15,12 @@
  */
 
 import { existsSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
-	DiscordMessageData,
 	DiscordChannelData,
 	DiscordGuildData,
+	DiscordMessageData,
 } from "./data.ts";
 import type {
 	DiscordDataSource,
@@ -28,8 +28,8 @@ import type {
 	ThreadPage,
 } from "./data-source.ts";
 import {
-	parseDiscordGuildData,
 	parseDiscordChannelList,
+	parseDiscordGuildData,
 	parseDiscordMessageList,
 } from "./json-schemas.ts";
 
@@ -134,12 +134,13 @@ export class FileDiscordDataSource implements DiscordDataSource {
 
 		let filtered = sorted;
 
-		// Apply cursor filters
 		if (opts.after) {
-			filtered = filtered.filter((m) => BigInt(m.id) > BigInt(opts.after!));
+			const after = opts.after;
+			filtered = filtered.filter((m) => BigInt(m.id) > BigInt(after));
 		}
 		if (opts.before) {
-			filtered = filtered.filter((m) => BigInt(m.id) < BigInt(opts.before!));
+			const before = opts.before;
+			filtered = filtered.filter((m) => BigInt(m.id) < BigInt(before));
 		}
 
 		// Apply limit

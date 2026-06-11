@@ -7,8 +7,8 @@
 
 import { type } from "arktype";
 import {
-	DiscordGuildData,
 	DiscordChannelData,
+	DiscordGuildData,
 	DiscordMessageData,
 } from "./data.ts";
 

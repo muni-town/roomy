@@ -1,10 +1,10 @@
-import { newUlid, toBytes, Did, Ulid, type Event } from "@roomy-space/sdk";
+import { Did, type Event, newUlid, toBytes, Ulid } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
-import type { RoomyGateway } from "../roomy/gateway.ts";
 import type { DiscordMessageData } from "../discord/data.ts";
-import { syncUserProfile } from "./profile-sync.ts";
 import { createLogger } from "../logger.ts";
-import { resolveMentions, type MentionContext } from "./mention-resolver.ts";
+import type { RoomyGateway } from "../roomy/gateway.ts";
+import { type MentionContext, resolveMentions } from "./mention-resolver.ts";
+import { syncUserProfile } from "./profile-sync.ts";
 
 const log = createLogger("edit-delete");
 

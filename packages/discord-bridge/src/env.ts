@@ -32,13 +32,13 @@ export const BRIDGE_DB_PATH = () =>
 	optional("BRIDGE_DB_PATH", `${BRIDGE_DATA_DIR()}/bridge.sqlite`);
 export const PORT = () => parseInt(optional("PORT", "3301"), 10);
 export const ENABLE_GUILD_MEMBERS_INTENT = () =>
-	process.env["ENABLE_GUILD_MEMBERS_INTENT"] !== "false";
+	process.env.ENABLE_GUILD_MEMBERS_INTENT !== "false";
 
 export const Level = type(
 	'"debug" | "info" | "warn" | "error" | undefined',
 ).pipe((v) => v ?? "info");
 export type Level = typeof Level.infer;
 export const LOG_LEVEL = (): Level => {
-	const l = Level(process.env["LOG_LEVEL"]);
+	const l = Level(process.env.LOG_LEVEL);
 	return l instanceof type.errors ? "info" : l;
 };
