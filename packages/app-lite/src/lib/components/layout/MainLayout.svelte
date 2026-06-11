@@ -51,8 +51,6 @@
     {#if navbar.content}
       {@render navbar.content()}
     {/if}
-
-    <SidebarUserCard side="bottom" />
   </Navbar>
 
   <!-- Main area: sidebar + content in a row -->
@@ -63,6 +61,9 @@
         {#if sidebar}
           {@render sidebar()}
         {/if}
+        {#snippet footer()}
+          <SidebarUserCard />
+        {/snippet}
       </BigSidebar>
     </div>
 
@@ -83,6 +84,9 @@
             {#if sidebar}
               {@render sidebar()}
             {/if}
+            {#snippet footer()}
+              <SidebarUserCard />
+            {/snippet}
           </BigSidebar>
         </div>
       </div>

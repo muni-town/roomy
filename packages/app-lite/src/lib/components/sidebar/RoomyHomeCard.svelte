@@ -60,8 +60,8 @@
     </g>
   </svg>
   {#if small && currentSpaceState.value && !mobileSidebar.visible}
-    <!-- Mobile + active space: show avatar + name instead of "Roomy" text -->
-    <div in:fly={{ x: -20, duration: 200 }} class="flex items-center gap-1">
+    <!-- Mobile (sidebar closed, active space): show avatar + name -->
+    <div in:fly={{ x: -20, duration: 200 }} class="flex items-center gap-1 sm:hidden">
       <SpaceAvatar
         src={resolveBlobUrl(currentSpaceState.value.avatar)}
         id={currentSpaceState.value.id}
@@ -72,6 +72,14 @@
         {currentSpaceState.value.name || "Unnamed"}
       </span>
     </div>
+    <!-- Desktop: always show "Roomy" text -->
+    <span
+      class="hidden sm:inline font-black text-base-700 tracking-[-0.015em] dark:text-base-300 truncate"
+      class:text-lg={small}
+      class:text-2xl={!small}
+    >
+      Roomy
+    </span>
   {:else}
     <span
       class="font-black text-base-700 tracking-[-0.015em] dark:text-base-300 truncate transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]"

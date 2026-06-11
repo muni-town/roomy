@@ -3,6 +3,7 @@
   import Popover from "@roomy/design/components/ui/popover/Popover.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import ThemeSettings from "@roomy/design/components/user/ThemeSettings.svelte";
+  import { IconEllipsisHorizontal } from "@roomy/design/icons";
   import { logout } from "$lib/auth.svelte";
   import { sync_ } from "$lib/sync.svelte";
 
@@ -10,8 +11,6 @@
 
   type LastLogin = { handle: string; did: string; avatar: string };
   let lastLogin = $state<LastLogin | undefined>(undefined);
-
-  let { side = "right" }: { side?: "top" | "right" | "bottom" | "left" } = $props();
 
   const versionLabel = $derived(
     `Roomy ${__APP_VERSION__}${__BUILD_ID__ ? ` ( ${__BUILD_ID__} )` : ""}`,
@@ -23,17 +22,14 @@
   });
 </script>
 
-<div class="shrink-0 px-1">
-  <Popover {side} sideOffset={12} class="my-4 w-80">
+<div class="shrink-0 px-2 pb-2 pt-1">
+  <Popover side="right" sideOffset={12} class="my-4 w-80">
     {#snippet child({ props })}
       <button
         {...props}
-        class="flex items-center gap-2 pl-2 pr-1 py-0.5 rounded-md hover:bg-base-200/60 dark:hover:bg-base-800/60 transition-colors cursor-pointer group"
+        class="flex items-center gap-3 w-full rounded-lg px-3 py-2 bg-white dark:bg-base-950 border border-base-500/20 hover:border-accent-500/40 dark:hover:bg-base-900 transition-colors cursor-pointer group"
       >
-        <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-32 text-right hidden sm:block">
-          {lastLogin?.handle ?? "Log in"}
-        </span>
-        <div class="relative size-7 shrink-0">
+        <div class="relative size-10 shrink-0">
           <div class="size-full rounded-full overflow-hidden">
             <Avatar
               src={lastLogin?.avatar}
@@ -42,11 +38,15 @@
             />
           </div>
           <div
-            class="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white dark:border-base-950"
+            class="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-white dark:border-base-950"
             class:bg-green-500={connected}
             class:bg-red-500={!connected}
           ></div>
         </div>
+        <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate min-w-0 flex-1 text-left">
+          {lastLogin?.handle ?? "Log in"}
+        </span>
+        <IconEllipsisHorizontal class="size-5 text-base-400 shrink-0" />
       </button>
     {/snippet}
 
