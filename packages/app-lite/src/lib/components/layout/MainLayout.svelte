@@ -10,9 +10,7 @@
   import { navbar } from "./navbar.svelte";
   import { sidebarOverride, sidebarContent } from "./sidebar.svelte";
   import { mobileSidebar } from "./mobile-sidebar.svelte";
-  import { currentSpaceState } from "./current-space.svelte";
-  import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
-  import { resolveBlobUrl } from "$lib/utils";
+  import NavbarSpaceInfo from "./NavbarSpaceInfo.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
 
   let {
@@ -45,18 +43,8 @@
       <ToggleNavigation bind:isSidebarVisible={mobileSidebar.visible} />
     </div>
 
-    {#if compact && currentSpaceState.value}
-      <div class="flex items-center gap-2 ml-2 sm:ml-0">
-        <SpaceAvatar
-          src={resolveBlobUrl(currentSpaceState.value.avatar)}
-          id={currentSpaceState.value.id}
-          name={currentSpaceState.value.name ?? undefined}
-          size={24}
-        />
-        <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-40">
-          {currentSpaceState.value.name || "Unnamed"}
-        </span>
-      </div>
+    {#if compact}
+      <NavbarSpaceInfo />
     {/if}
 
     {#if navbar.content}

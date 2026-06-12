@@ -3,9 +3,9 @@
   import { page } from "$app/state";
   import { useTopicSubscription } from "@roomy-space/sdk/svelte";
   import type { Topic } from "@roomy-space/sdk/svelte";
-  import { IconHashtag, IconThread } from "@roomy/design/icons";
   import { sync_ } from "$lib/sync.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
+  import { setCurrentRoom } from "$lib/components/layout/current-room.svelte";
   import { messagingState } from "$lib/components/chat/messaging-state.svelte";
   import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
@@ -41,7 +41,10 @@
 
   onMount(() => {
     setNavbar(roomNavbar);
-    return () => setNavbar(undefined);
+    return () => {
+      setNavbar(undefined);
+      setCurrentRoom(null);
+    };
   });
 
   const roomQuery = createRoomMetadataQuery(() => roomId);
@@ -97,6 +100,19 @@
     sidebarRoomInfo?.canWrite ?? roomQuery.data?.canWrite,
   );
 
+  // Push room info to NavbarSpaceInfo — reactive so it updates when sidebar cache loads
+  $effect(() => {
+    const name = roomName;
+    const kind = roomKind;
+    untrack(() => {
+      setCurrentRoom({
+        id: roomId,
+        name,
+        kind: kind ?? "channel",
+      });
+    });
+  });
+
   // ── Tab state ─────────────────────────────────────────────────────────────
   const channelTabList = ["Chat", "Threads"] as const;
   let channelActiveTab = $state<(typeof channelTabList)[number]>("Chat");
@@ -114,14 +130,6 @@
 
 {#snippet roomNavbar()}
   <div class="flex items-center gap-2 px-2 min-w-0 grow">
-    {#if roomKind === "thread"}
-      <IconThread class="size-5 shrink-0 text-base-500" />
-    {:else}
-      <IconHashtag class="size-5 shrink-0 text-base-500" />
-    {/if}
-    <h2 class="font-semibold truncate text-base-900 dark:text-base-100">
-      {roomName}
-    </h2>
     {#if roomUnreadCount > 0}
       <span class="text-xs bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400 px-2 py-0.5 rounded-full">
         {roomUnreadCount} unread
