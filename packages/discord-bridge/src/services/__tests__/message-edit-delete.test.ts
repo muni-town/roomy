@@ -59,7 +59,7 @@ describe("handleMessageEdit", () => {
 		const msg = makeMessage({
 			id: MSG_ID_STR,
 			content: "Updated content",
-			editedTimestamp: String(Date.now()),
+			editedTimestamp: Date.now(),
 		});
 
 		await handleMessageEdit(msg, repo, roomy);
@@ -79,7 +79,6 @@ describe("handleMessageEdit", () => {
 		const msg = makeMessage({
 			id: MSG_ID_STR,
 			content: "Updated",
-			editedTimestamp: null,
 		});
 
 		await handleMessageEdit(msg, repo, roomy);
@@ -91,7 +90,7 @@ describe("handleMessageEdit", () => {
 		const msg = makeMessage({
 			id: MSG_ID_STR,
 			content: "Updated",
-			editedTimestamp: String(Date.now()),
+			editedTimestamp: Date.now(),
 		});
 
 		await handleMessageEdit(msg, repo, roomy);
@@ -106,7 +105,7 @@ describe("handleMessageEdit", () => {
 			id: MSG_ID_STR,
 			channelId: "999999999999999999",
 			content: "Updated",
-			editedTimestamp: String(Date.now()),
+			editedTimestamp: Date.now(),
 		});
 
 		await handleMessageEdit(msg, repo, roomy);
@@ -120,7 +119,7 @@ describe("handleMessageEdit", () => {
 		const msg = makeMessage({
 			id: MSG_ID_STR,
 			content: "Edited <@111111111111111111>!",
-			editedTimestamp: String(Date.now()),
+			editedTimestamp: Date.now(),
 			mentions: [
 				makeUser({
 					id: "111111111111111111",
@@ -149,7 +148,7 @@ describe("handleMessageEdit", () => {
 		const msg = makeMessage({
 			id: MSG_ID_STR,
 			content: "Fan-out edit",
-			editedTimestamp: String(Date.now()),
+			editedTimestamp: Date.now(),
 		});
 
 		await handleMessageEdit(msg, repo, roomy);

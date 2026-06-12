@@ -1,3 +1,4 @@
+import { appendFile } from "node:fs/promises";
 import {
 	type Attachment,
 	Did,
@@ -16,6 +17,32 @@ import { syncUserProfile } from "./profile-sync.ts";
 
 const log = createLogger("ingest");
 
+// ── Skipped-message log (JSONL) ─────────────────────────────────────
+
+const SKIP_LOG_PATH = process.env.ROOMY_SKIP_LOG;
+
+/** Append one JSON line recording a skipped message. No-op if ROOMY_SKIP_LOG is unset. */
+function writeSkipRecord(
+	reason: string,
+	message: DiscordMessageData,
+	detail?: string,
+): void {
+	if (!SKIP_LOG_PATH) return;
+	const record = {
+		timestamp: Date.now(),
+		reason,
+		messageId: message.id,
+		channelId: message.channelId,
+		guildId: message.guildId,
+		type: message.type,
+		content: message.content?.slice(0, 200),
+		authorId: message.author.id,
+		detail,
+	};
+	// Fire-and-forget — never throw from ingest.
+	appendFile(SKIP_LOG_PATH, `${JSON.stringify(record)}\n`).catch(() => {});
+}
+
 export async function ingestDiscordMessage(
 	message: DiscordMessageData,
 	repo: BridgeRepository,
@@ -31,6 +58,7 @@ export async function ingestDiscordMessage(
 
 	if (!guildId) {
 		log.debug(`Skipping message ${messageId}: no guildId`);
+		writeSkipRecord("no_guild_id", message);
 		return { synced: 0, skipped: 1 };
 	}
 
@@ -48,11 +76,13 @@ export async function ingestDiscordMessage(
 		log.debug(
 			`Skipping message ${messageId}: channel ${channelId} not bridged`,
 		);
+		writeSkipRecord("channel_not_bridged", message, `channel ${channelId}`);
 		return { synced: 0, skipped: 1 };
 	}
 
 	// ThreadStarterMessage (type 21): forward original message into thread
 	if (message.type === MsgType.ThreadStarterMessage) {
+		writeSkipRecord("thread_starter", message);
 		return handleThreadStarterMessage(message, repo, roomy);
 	}
 
@@ -61,6 +91,10 @@ export async function ingestDiscordMessage(
 		message.type === MsgType.ThreadCreated ||
 		message.type === MsgType.ChannelNameChange
 	) {
+		log.info(
+			`Skipping message ${messageId}: system message (type ${message.type})`,
+		);
+		writeSkipRecord("system_message", message, `type ${message.type}`);
 		return { synced: 0, skipped: 1 };
 	}
 
@@ -85,6 +119,7 @@ export async function ingestDiscordMessage(
 		const existing = repo.getRoomyId(spaceDid, "message", messageId);
 		if (existing) {
 			log.debug(`Skipping message ${messageId}: already synced to ${spaceDid}`);
+			writeSkipRecord("already_synced", message, spaceDid);
 			continue;
 		}
 
@@ -93,6 +128,11 @@ export async function ingestDiscordMessage(
 		if (!roomyRoomId) {
 			log.warn(
 				`No Roomy room mapping for channel ${channelId} in ${spaceDid}, skipping message`,
+			);
+			writeSkipRecord(
+				"no_room_mapping",
+				message,
+				`channel ${channelId} in ${spaceDid}`,
 			);
 			continue;
 		}
@@ -105,6 +145,10 @@ export async function ingestDiscordMessage(
 
 		// Skip messages with no content and no attachments
 		if (!message.content && attachments.length === 0) {
+			log.warn(
+				`Skipping message ${messageId} in ${spaceDid}: no content and no attachments`,
+			);
+			writeSkipRecord("empty_message", message, spaceDid);
 			continue;
 		}
 
@@ -177,10 +221,11 @@ export async function ingestDiscordMessage(
 				repo.setChannelCursor(spaceDid, channelId, messageId);
 			}
 
-			log.info(`Synced message ${messageId} → ${eventUlid} in ${spaceDid}`);
+			// log.info(`Synced message ${messageId} → ${eventUlid} in ${spaceDid}`);
 			synced++;
 		} catch (err) {
 			log.error(`Failed to send message ${messageId} to ${spaceDid}`, err);
+			writeSkipRecord("send_failed", message, spaceDid);
 		}
 	}
 
@@ -276,6 +321,7 @@ async function handleThreadStarterMessage(
 		!message.messageReference?.messageId ||
 		!message.messageReference?.channelId
 	) {
+		writeSkipRecord("thread_starter_missing_ref", message);
 		return { synced: 0, skipped: 1 };
 	}
 
@@ -286,6 +332,11 @@ async function handleThreadStarterMessage(
 	if (targetSpaces.length === 0) {
 		log.debug(
 			`Skipping thread starter ${messageId}: thread ${threadId} not bridged`,
+		);
+		writeSkipRecord(
+			"thread_starter_not_bridged",
+			message,
+			`thread ${threadId}`,
 		);
 		return { synced: 0, skipped: 1 };
 	}
@@ -298,6 +349,7 @@ async function handleThreadStarterMessage(
 			log.debug(
 				`Skipping thread starter ${messageId}: already synced to ${spaceDid}`,
 			);
+			writeSkipRecord("thread_starter_already_synced", message, spaceDid);
 			continue;
 		}
 
@@ -305,6 +357,11 @@ async function handleThreadStarterMessage(
 		if (!threadRoomyId) {
 			log.debug(
 				`No Roomy room for thread ${threadId} in ${spaceDid}, skipping forward`,
+			);
+			writeSkipRecord(
+				"thread_starter_no_thread_room",
+				message,
+				`thread ${threadId} in ${spaceDid}`,
 			);
 			continue;
 		}
@@ -314,6 +371,11 @@ async function handleThreadStarterMessage(
 			log.debug(
 				`Original message ${originalMsgId} not synced to ${spaceDid}, skipping forward`,
 			);
+			writeSkipRecord(
+				"thread_starter_no_original",
+				message,
+				`original ${originalMsgId} in ${spaceDid}`,
+			);
 			continue;
 		}
 
@@ -321,6 +383,11 @@ async function handleThreadStarterMessage(
 		if (!fromRoomId) {
 			log.debug(
 				`No Roomy room for parent channel ${parentChannelId} in ${spaceDid}, skipping forward`,
+			);
+			writeSkipRecord(
+				"thread_starter_no_parent",
+				message,
+				`parent ${parentChannelId} in ${spaceDid}`,
 			);
 			continue;
 		}
@@ -348,6 +415,7 @@ async function handleThreadStarterMessage(
 				`Failed to forward message to thread ${threadId} in ${spaceDid}`,
 				err,
 			);
+			writeSkipRecord("thread_starter_send_failed", message, spaceDid);
 		}
 	}
 

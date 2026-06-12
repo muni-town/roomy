@@ -7,6 +7,7 @@
  * layer above this, so the caching logic can be tested independently.
  */
 
+import { createLogger } from "../logger.ts";
 import type {
 	DiscordChannelData,
 	DiscordGuildData,
@@ -20,6 +21,8 @@ import type {
 import { normalizeChannel, normalizeMessage } from "./normalizers.ts";
 import type { DiscordBot } from "./types.ts";
 
+const log = createLogger("live-discord");
+
 export class LiveDiscordDataSource implements DiscordDataSource {
 	#bot: DiscordBot;
 
@@ -31,19 +34,28 @@ export class LiveDiscordDataSource implements DiscordDataSource {
 		channelId: string,
 		opts: PaginationOpts,
 	): Promise<DiscordMessageData[]> {
-		const raw = await this.#bot.helpers.getMessages(BigInt(channelId), {
-			after: opts.after ? BigInt(opts.after) : undefined,
-			before: opts.before ? BigInt(opts.before) : undefined,
-			limit: opts.limit ?? 100,
-		});
-		return raw.map(normalizeMessage);
+		try {
+			const raw = await this.#bot.helpers.getMessages(BigInt(channelId), {
+				after: opts.after ? BigInt(opts.after) : undefined,
+				before: opts.before ? BigInt(opts.before) : undefined,
+				limit: opts.limit ?? 100,
+			});
+			return raw.map(normalizeMessage);
+		} catch (err) {
+			log.error(
+				`getMessages failed for channel ${channelId} (after=${opts.after ?? "-"}, before=${opts.before ?? "-"}, limit=${opts.limit ?? 100})`,
+				err,
+			);
+			throw err;
+		}
 	}
 
 	async getChannel(channelId: string): Promise<DiscordChannelData | undefined> {
 		try {
 			const raw = await this.#bot.helpers.getChannel(BigInt(channelId));
 			return normalizeChannel(raw);
-		} catch {
+		} catch (err) {
+			log.warn(`getChannel failed for channel ${channelId}`, err);
 			return undefined;
 		}
 	}
@@ -52,7 +64,8 @@ export class LiveDiscordDataSource implements DiscordDataSource {
 		try {
 			const raw = await this.#bot.helpers.getChannels(BigInt(guildId));
 			return raw.map((ch) => normalizeChannel(ch));
-		} catch {
+		} catch (err) {
+			log.warn(`getChannels failed for guild ${guildId}`, err);
 			return [];
 		}
 	}
@@ -65,7 +78,8 @@ export class LiveDiscordDataSource implements DiscordDataSource {
 				id: guild.id.toString(),
 				channels,
 			};
-		} catch {
+		} catch (err) {
+			log.warn(`getGuild failed for guild ${guildId}`, err);
 			return undefined;
 		}
 	}
@@ -74,29 +88,37 @@ export class LiveDiscordDataSource implements DiscordDataSource {
 		channelId: string,
 		opts: PaginationOpts,
 	): Promise<ThreadPage> {
-		// Discordeno types ListArchivedThreads.before as number (timestamp), but
-		// the Discord API accepts a snowflake or ISO8601 timestamp. Pass our
-		// snowflake as-is — the API handles both.
-		const params: { limit: number; before?: number } = {
-			limit: opts.limit ?? 100,
-		};
-		if (opts.before) {
-			// Discordeno's type says `before: number`, but the API accept/s snowflake strings
-			params.before = Number(opts.before);
+		try {
+			// Discordeno types ListArchivedThreads.before as number (timestamp), but
+			// the Discord API accepts a snowflake or ISO8601 timestamp. Pass our
+			// snowflake as-is — the API handles both.
+			const params: { limit: number; before?: number } = {
+				limit: opts.limit ?? 100,
+			};
+			if (opts.before) {
+				// Discordeno's type says `before: number`, but the API accept/s snowflake strings
+				params.before = Number(opts.before);
+			}
+			const result = await this.#bot.helpers.getPublicArchivedThreads(
+				BigInt(channelId),
+				params,
+			);
+
+			const threads: DiscordChannelData[] = result.threads.map((t) =>
+				normalizeChannel(t),
+			);
+
+			return {
+				threads,
+				hasMore: result.hasMore,
+			};
+		} catch (err) {
+			log.error(
+				`getPublicArchivedThreads failed for channel ${channelId} (before=${opts.before ?? "-"}, limit=${opts.limit ?? 100})`,
+				err,
+			);
+			throw err;
 		}
-		const result = await this.#bot.helpers.getPublicArchivedThreads(
-			BigInt(channelId),
-			params,
-		);
-
-		const threads: DiscordChannelData[] = result.threads.map((t) =>
-			normalizeChannel(t),
-		);
-
-		return {
-			threads,
-			hasMore: result.hasMore,
-		};
 	}
 
 	async resolveChannelName(channelId: string): Promise<string | undefined> {

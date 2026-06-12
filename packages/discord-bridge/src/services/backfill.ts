@@ -381,7 +381,7 @@ export async function backfillSingleChannel(
 	}
 }
 
-async function backfillChannel(
+export async function backfillChannel(
 	discord: DiscordDataSource,
 	repo: BridgeRepository,
 	roomy: RoomyGateway,

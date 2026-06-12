@@ -70,7 +70,7 @@ export async function syncUserProfile(
 			repo.setProfileHash(spaceDid, userIdStr, hash);
 			// Clear any stale retry entry on success
 			repo.deleteProfileSyncEntry(spaceDid, userIdStr);
-			log.info(`Synced profile for Discord user ${userIdStr} to ${spaceDid}`);
+			// log.info(`Synced profile for Discord user ${userIdStr} to ${spaceDid}`);
 		} catch (err) {
 			log.error(
 				`Failed to sync profile for Discord user ${userIdStr} to ${spaceDid}`,

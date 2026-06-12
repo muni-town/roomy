@@ -127,25 +127,31 @@ export class FileDiscordDataSource implements DiscordDataSource {
 		opts: PaginationOpts,
 	): Promise<DiscordMessageData[]> {
 		const all = this.#messages.get(channelId) ?? [];
-		// Sort newest-first (Discord API convention)
-		const sorted = [...all].sort((a, b) =>
-			BigInt(b.id) - BigInt(a.id) > 0n ? 1 : -1,
-		);
+		type Msg = (typeof all)[number];
+		const oldestFirst = (a: Msg, b: Msg) => Number(BigInt(a.id) - BigInt(b.id));
+		const newestFirst = (a: Msg, b: Msg) => Number(BigInt(b.id) - BigInt(a.id));
 
-		let filtered = sorted;
+		let filtered = [...all];
 
 		if (opts.after) {
 			const after = opts.after;
+			filtered.sort(oldestFirst);
 			filtered = filtered.filter((m) => BigInt(m.id) > BigInt(after));
 		}
 		if (opts.before) {
 			const before = opts.before;
+			filtered.sort(newestFirst);
 			filtered = filtered.filter((m) => BigInt(m.id) < BigInt(before));
 		}
 
 		// Apply limit
 		const limit = opts.limit ?? 100;
-		return filtered.slice(0, limit);
+		return (
+			filtered
+				.slice(0, limit)
+				// Discord sorts the newest first after pagination
+				.sort(newestFirst)
+		);
 	}
 
 	async getChannel(channelId: string): Promise<DiscordChannelData | undefined> {
