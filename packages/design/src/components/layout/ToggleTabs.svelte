@@ -1,7 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { Tabs } from "bits-ui";
-  import { Select } from "bits-ui";
 
   let {
     items,
@@ -10,6 +9,8 @@
     items: { name: string; href: string }[];
     active: string;
   } = $props();
+
+
 </script>
 
 <div class="hidden md:block shrink-0">
@@ -60,40 +61,18 @@
   </Tabs.Root>
 </div>
 <div class="block md:hidden shrink-0">
-  <Select.Root
-    bind:value={active}
-    onValueChange={(name) => {
-      const selected = items.find((item) => item.name === name);
-      if (selected) goto(selected.href);
+  <button
+    onclick={() => {
+      const i = items.findIndex((item) => item.name === active);
+      const next = items[(i + 1) % items.length];
+      if (next) {
+        active = next.name;
+        goto(next.href);
+      }
     }}
-    type="single"
+    class="rounded-[10px] flex items-center gap-1 bg-base-50 dark:bg-transparent px-2 py-0.5 text-xs border border-accent-500 dark:border-accent-800 text-accent-950 dark:text-accent-100 hover:bg-accent-50 hover:dark:bg-accent-950/40 hover:border-accent-600 hover:shadow-button transition-all duration-75 ease-out"
+    aria-label="Switch to next tab"
   >
-    <Select.Trigger
-      class="rounded-[10px] flex items-center gap-1 bg-base-50 dark:bg-transparent px-2 py-0.5 text-xs border border-accent-500 dark:border-accent-800 text-accent-950 dark:text-accent-100 hover:bg-accent-50 hover:dark:bg-accent-950/40 hover:border-accent-600 hover:shadow-button transition-all duration-75 ease-out"
-      aria-label="Select a tab"
-    >
-      {active}
-    </Select.Trigger>
-    <Select.Portal>
-      <Select.Content
-        class="z-20 rounded-[10px] bg-base-50 dark:bg-transparent text-xs border border-accent-500 dark:border-accent-800 text-accent-950 dark:text-accent-100"
-        sideOffset={10}
-      >
-        <Select.Viewport class="p-1">
-          {#each items as { name, href }}
-            <Select.Item
-              class="px-3 py-1.5 cursor-pointer w-full opacity-60 data-[state=active]:opacity-100 data-[state=active]:bg-accent-50 dark:data-[state=active]:bg-accent-950/40 rounded-[8px] bg-transparent text-accent-950 dark:text-accent-100 hover:bg-accent-50 hover:dark:bg-accent-950/40 transition-all duration-75 ease-out"
-              value={name}
-              label={name}
-              data-state={active === name ? "active" : "inactive"}
-            >
-              <a {href} class="text-accent-950 dark:text-accent-100">
-                {name}
-              </a>
-            </Select.Item>
-          {/each}
-        </Select.Viewport>
-      </Select.Content>
-    </Select.Portal>
-  </Select.Root>
+    {active}
+  </button>
 </div>
