@@ -39,7 +39,7 @@ SOFTWARE.
       "text-sm font-medium",
       "outline-offset-2 focus-visible:outline-2",
       "duration-50 active:duration-100",
-      "disabled:pointer-events-none disabled:opacity-60 disabled:translate-0.5",
+      "disabled:pointer-events-none disabled:opacity-60",
       "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
     ],
     variants: {
@@ -65,12 +65,12 @@ SOFTWARE.
         ],
         secondary: [
           "bg-base-50 dark:bg-transparent",
-          "text-accent-950 dark:text-accent-100 [&_svg]:dark:text-accent-100",
-          "border border-px border-accent-500 dark:border-accent-800",
-          "hover:bg-accent-50 hover:dark:bg-accent-950/40 hover:border-accent-600 hover:shadow-button",
-          "[--shadow-button-color:var(--color-accent-500)] dark:[--shadow-button-color:var(--color-accent-800)]",
-          "focus-visible:outline-accent-950 dark:focus-visible:outline-accent-300",
-          "active:translate-[2px] active:shadow-none",
+          "text-base-800 dark:text-base-200 [&_svg]:dark:text-base-200",
+          "border border-px border-base-200 dark:border-base-800",
+          "hover:bg-base-100 dark:hover:bg-base-800/40 hover:border-base-300",
+          "hover:shadow-[2px_2px_0_0_var(--color-base-300)] dark:hover:shadow-[2px_2px_0_0_var(--color-base-600)]",
+          "focus-visible:outline-base-900 dark:focus-visible:outline-base-50",
+          "active:translate-[2px] active:shadow-none dark:active:shadow-none",
         ],
         link: [
           "text-base-800 dark:text-base-200",
@@ -81,12 +81,14 @@ SOFTWARE.
         ],
         ghost: [
           "text-base-700 dark:text-base-200",
-          "hover:bg-base-200 dark:hover:bg-base-900",
-          "active:bg-accent-300/60 dark:active:bg-accent-500/15",
+          "hover:bg-base-200/50 dark:hover:bg-base-900/30",
+          "border border-transparent hover:border-base-200 dark:hover:border-base-900",
+          "active:bg-accent-300/30 dark:active:bg-accent-500/15",
           "font-semibold",
           "focus-visible:outline-base-900 dark:focus-visible:outline-base-50",
-          "data-[current=true]:bg-accent-300/90 dark:data-[current=true]:bg-accent-500/20",
+          "data-[current=true]:bg-accent-300/50 dark:data-[current=true]:bg-accent-500/10",
           "data-[current=true]:text-accent-950 dark:data-[current=true]:text-accent-50",
+          "data-[current=true]:border-accent-300/60 dark:data-[current=true]:border-accent-500/15"
         ],
         red: [
           "bg-red-200 dark:bg-red-700",
