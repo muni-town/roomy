@@ -1,8 +1,7 @@
 import { createQuery } from "@tanstack/svelte-query";
-import { transport, cache, schemas } from "@roomy-space/sdk";
+import { cache, schemas } from "@roomy-space/sdk";
 import { px } from "$lib/auth.svelte";
 
-const { agentQuery } = transport;
 const { queryKey } = cache;
 
 export type Message = typeof schemas.queries.getMessages.Message.infer;
@@ -17,7 +16,7 @@ export function createMessagesQuery(roomId: () => string, limit = 50) {
   return createQuery<Message[]>(() => ({
     queryKey: queryKey("space.roomy.room.getMessages", { roomId: roomId() }),
     queryFn: async () => {
-      const res = await agentQuery(px(), "space.roomy.room.getMessages", {
+      const res = await px().query("space.roomy.room.getMessages", {
         roomId: roomId(),
         limit: String(limit),
       });

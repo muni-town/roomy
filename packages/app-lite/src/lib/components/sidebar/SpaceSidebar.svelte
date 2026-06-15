@@ -30,7 +30,7 @@
   import { leaveSpace } from "$lib/mutations/space";
   import { createRoom, updateSidebar } from "$lib/mutations/room";
   import { createQuery } from "@tanstack/svelte-query";
-  import { transport, cache, newUlid } from "@roomy-space/sdk";
+  import { cache, newUlid } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
@@ -43,7 +43,6 @@ import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.sve
 import { createSpacesQuery } from "$lib/queries/spaces";
 import { toast } from "@foxui/core";
 
-  const { agentQuery } = transport;
   const { queryKey } = cache;
 
   type RoomMetadata = typeof schemas.queries.getRoomMetadata.Response.infer;
@@ -122,7 +121,7 @@ import { toast } from "@foxui/core";
       roomId: page.params.room ?? "",
     }),
     queryFn: () =>
-      agentQuery(px(), "space.roomy.room.getMetadata", {
+      px().query("space.roomy.room.getMetadata", {
         roomId: page.params.room!,
       }),
     enabled: !!page.params.room,

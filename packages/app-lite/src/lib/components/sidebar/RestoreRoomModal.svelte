@@ -4,10 +4,9 @@
   } from "@roomy/design/components/modals/RestoreDialog.svelte";
   import { restoreRoom } from "$lib/mutations/room";
   import { createQuery } from "@tanstack/svelte-query";
-  import { transport, cache } from "@roomy-space/sdk";
+  import { cache } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
 
-  const { agentQuery } = transport;
   const { queryKey } = cache;
 
   let {
@@ -24,7 +23,7 @@
       includeDeleted: "true",
     }),
     queryFn: () =>
-      agentQuery(px(), "space.roomy.space.getMetadata", {
+      px().query("space.roomy.space.getMetadata", {
         spaceId,
         includeDeleted: "true",
       }),

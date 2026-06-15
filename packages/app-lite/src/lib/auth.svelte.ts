@@ -3,17 +3,24 @@ import {
   initSession,
   login as sdkLogin,
   logout as sdkLogout,
-  makeProxiedAgent,
   saveAppserverDid,
   type OAuthSession,
 } from "@roomy-space/sdk/browser";
+import { transport } from "@roomy-space/sdk";
 import { CONFIG, OAUTH_SCOPE } from "./config";
+
+const { ServiceAuthClient, DirectXrpcClient, resolveAppserverHttpOrigin } = transport;
 
 let agent = $state<Agent | null>(null);
 let session = $state<OAuthSession | null>(null);
 let authenticated = $state(false);
 let initializing = $state(true);
 let initError = $state<string | null>(null);
+
+// Direct XRPC client (replaces the proxied agent pattern).
+// Created lazily once the agent is available.
+let serviceAuth: ServiceAuthClient | null = null;
+let directXrpc: DirectXrpcClient | null = null;
 
 export const auth = {
   get agent() {
@@ -45,6 +52,16 @@ export async function init() {
     if (result) {
       session = result.session;
       agent = result.agent;
+
+      // Set up direct XRPC transport with service auth
+      serviceAuth = new ServiceAuthClient(result.agent);
+      const appserverUrl = await resolveAppserverHttpOrigin(CONFIG.appserverDid);
+      directXrpc = new DirectXrpcClient(
+        appserverUrl,
+        CONFIG.appserverDid,
+        serviceAuth,
+      );
+
       authenticated = true;
     }
   } catch (err) {
@@ -65,14 +82,25 @@ export async function login(handle: string) {
 
 export async function logout() {
   if (session) await sdkLogout(session);
+  serviceAuth?.clear();
+  serviceAuth = null;
+  directXrpc = null;
   authenticated = false;
   agent = null;
   session = null;
   location.reload();
 }
 
-/** Proxied agent for XRPC calls via PDS → appserver. */
-export function px(): Agent {
-  if (!agent) throw new Error("Not authenticated");
-  return makeProxiedAgent(agent, CONFIG.appserverDid);
+/**
+ * Get the XRPC client for making typed calls to the appserver.
+ *
+ * Makes direct HTTP requests to the appserver using short-lived service
+ * auth tokens obtained from `com.atproto.server.getServiceAuth`. Token
+ * caching and auto-refresh are handled transparently.
+ *
+ * Throws if the user is not authenticated.
+ */
+export function px(): DirectXrpcClient {
+  if (!directXrpc) throw new Error("Not authenticated");
+  return directXrpc;
 }

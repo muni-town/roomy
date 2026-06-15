@@ -6,13 +6,12 @@
     type Permission,
   } from "$lib/mutations/room";
   import { createQuery } from "@tanstack/svelte-query";
-  import { transport, cache, newUlid } from "@roomy-space/sdk";
+  import { cache, newUlid } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
   import ChannelPermissions from "$lib/components/ui/ChannelPermissions.svelte";
   import { createRolesQuery } from "$lib/queries/roles";
   import { sendEvents } from "$lib/mutations/send-events";
 
-  const { agentQuery } = transport;
   const { queryKey } = cache;
 
   let {
@@ -36,7 +35,7 @@
     }),
     queryFn: () =>
       roomId
-        ? agentQuery(px(), "space.roomy.room.getMetadata", { roomId })
+        ? px().query("space.roomy.room.getMetadata", { roomId })
         : null,
     enabled: !!roomId,
   }));

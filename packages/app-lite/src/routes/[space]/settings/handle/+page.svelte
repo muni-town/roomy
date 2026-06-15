@@ -6,9 +6,6 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { sendEvents } from "$lib/mutations/send-events";
   import { createProfileSpaceRecord, removeProfileSpaceRecord, newUlid } from "@roomy-space/sdk";
-  import { transport } from "@roomy-space/sdk";
-
-  const { agentProcedure } = transport;
   import Alert from "@roomy/design/components/ui/alert/Alert.svelte";
   import Badge from "@roomy/design/components/ui/badge/Badge.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
@@ -159,7 +156,7 @@
     isSaving = true;
     error = null;
     try {
-      await agentProcedure(px(), "space.roomy.space.setHandle", {
+      await px().procedure("space.roomy.space.setHandle", {
         spaceId,
         handle: dnsHandle,
       });

@@ -48,5 +48,8 @@ export const OAUTH_SCOPE = [
   "repo:space.roomy.upload.v0", // Grant all actions (create, update, delete)
   `repo:${CONFIG.profileSpaceNsid}`,
   `repo:${CONFIG.personalStreamNsid}`,
+  // Allow calling getServiceAuth on the appserver's PDS to obtain
+  // service auth tokens for direct (non-proxied) XRPC calls.
+  `rpc:com.atproto.server.getServiceAuth?aud=${CONFIG.appserverDid}`,
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
 ].join(" ");

@@ -16,7 +16,7 @@ import { CONFIG } from "./config";
 import type { ConnectionStatus } from "@roomy-space/sdk/sync";
 
 const { SyncConnection, SyncRouter, TopicManager } = sync;
-const { agentProcedure, resolveAppserverWsOrigin } = transport;
+const { resolveAppserverWsOrigin } = transport;
 
 /** Simplified sync status for UI consumption. */
 export type SyncStatus =
@@ -71,8 +71,7 @@ export function createSyncContext(deps: {
   async function fetchTicket(): Promise<string> {
     log("Fetching WS connection ticket…");
     try {
-      const res = await agentProcedure(
-        px(),
+      const res = await px().procedure(
         "space.roomy.auth.getConnectionTicket",
         {},
       );

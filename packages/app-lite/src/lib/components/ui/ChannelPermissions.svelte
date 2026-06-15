@@ -3,11 +3,10 @@
     type PermissionRole,
   } from "@roomy/design/components/ui/PermissionEditor.svelte";
   import { createQuery } from "@tanstack/svelte-query";
-  import { transport, cache } from "@roomy-space/sdk";
+  import { cache } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
   import { createRolesQuery, type Role as SdkRole } from "$lib/queries/roles";
 
-  const { agentQuery } = transport;
   const { queryKey } = cache;
 
   type Role = PermissionRole & {
@@ -36,7 +35,7 @@
     queryKey: queryKey("space.roomy.room.getMetadata", { roomId }),
     queryFn: () =>
       roomId
-        ? agentQuery(px(), "space.roomy.room.getMetadata", { roomId })
+        ? px().query("space.roomy.room.getMetadata", { roomId })
         : null,
     enabled: !!roomId,
   }));

@@ -1,9 +1,8 @@
 import { createQuery } from "@tanstack/svelte-query";
-import { transport, cache, schemas } from "@roomy-space/sdk";
+import { cache, schemas } from "@roomy-space/sdk";
 import { px } from "$lib/auth.svelte";
 import { queryClient } from "$lib/client";
 
-const { agentQuery } = transport;
 const { queryKey } = cache;
 
 export type Message = typeof schemas.queries.getMessage.Response.infer;
@@ -23,7 +22,7 @@ export function createMessageQuery(
       messageId: messageId(),
     }),
     queryFn: () =>
-      agentQuery(px(), "space.roomy.message.getMessage", {
+      px().query("space.roomy.message.getMessage", {
         messageId: messageId(),
       }),
     initialData: () => {

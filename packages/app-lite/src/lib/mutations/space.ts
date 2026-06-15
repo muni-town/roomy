@@ -1,9 +1,7 @@
-import { newUlid, transport } from "@roomy-space/sdk";
+import { newUlid } from "@roomy-space/sdk";
 import { auth, px } from "$lib/auth.svelte";
 import { CONFIG } from "$lib/config";
 import { sendEvents } from "./send-events";
-
-const { agentProcedure } = transport;
 
 /**
  * If the appserver tells us a personal stream was created but the PDS record
@@ -43,7 +41,7 @@ export async function joinSpace(
 ): Promise<void> {
   // Invalidation is handled by the appserver's sync signal
   // (personal.joinSpace → getSpaces invalidation via WebSocket).
-  const result = await agentProcedure(px(), "space.roomy.space.joinSpace", {
+  const result = await px().procedure("space.roomy.space.joinSpace", {
     spaceId,
     ...(inviteToken ? { inviteToken } : {}),
   });
@@ -54,7 +52,7 @@ export async function joinSpace(
 export async function leaveSpace(spaceId: string): Promise<void> {
   // Invalidation is handled by the appserver's sync signal
   // (personal.leaveSpace → getSpaces invalidation via WebSocket).
-  await agentProcedure(px(), "space.roomy.space.leaveSpace", {
+  await px().procedure("space.roomy.space.leaveSpace", {
     spaceId,
   });
 }
@@ -66,7 +64,7 @@ export async function createSpace(opts: {
 }): Promise<{ spaceId: string }> {
   // Invalidation is handled by the appserver's sync signal
   // (personal.joinSpace → getSpaces invalidation via WebSocket).
-  const result = await agentProcedure(px(), "space.roomy.space.createSpace", {
+  const result = await px().procedure("space.roomy.space.createSpace", {
     name: opts.name,
     ...(opts.description ? { description: opts.description } : {}),
     ...(opts.avatar ? { avatar: opts.avatar } : {}),

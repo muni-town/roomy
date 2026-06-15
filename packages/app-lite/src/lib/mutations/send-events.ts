@@ -1,7 +1,4 @@
-import { transport } from "@roomy-space/sdk";
 import { px } from "$lib/auth.svelte";
-
-const { agentProcedure } = transport;
 
 /**
  * Send a batch of Roomy events to a space via the appserver.
@@ -11,7 +8,7 @@ export async function sendEvents(
   spaceId: string,
   events: Array<Record<string, unknown>>,
 ): Promise<void> {
-  await agentProcedure(px(), "space.roomy.space.sendEvents", {
+  await px().procedure("space.roomy.space.sendEvents", {
     spaceId,
     events,
   });

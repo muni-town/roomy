@@ -6,12 +6,11 @@
     JoinResolveState,
     JoinState,
   } from "@roomy/design/components/modals/JoinDialog.svelte";
-  import { transport, cache } from "@roomy-space/sdk";
+  import { cache } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
   import { queryClient } from "$lib/client";
   import { joinSpace } from "$lib/mutations/space";
 
-  const { agentQuery } = transport;
   const { queryKey } = cache;
 
   const spaceId = $derived(page.url.searchParams.get("space") ?? "");
@@ -29,7 +28,7 @@
     queryClient
       .fetchQuery({
         queryKey: queryKey("space.roomy.space.getMetadata", { spaceId }),
-        queryFn: () => agentQuery(px(), "space.roomy.space.getMetadata", { spaceId }),
+        queryFn: () => px().query("space.roomy.space.getMetadata", { spaceId }),
       })
       .then((meta) => {
         if (meta.isMember) {

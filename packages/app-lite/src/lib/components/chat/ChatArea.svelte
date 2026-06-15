@@ -9,11 +9,10 @@
   import ChatMessageSkeleton from "@roomy/design/components/content/thread/message/ChatMessageSkeleton.svelte";
   import { createMessagesQuery, type Message } from "$lib/queries/messages";
   import { auth } from "$lib/auth.svelte";
-  import { transport, cache } from "@roomy-space/sdk";
+  import { cache } from "@roomy-space/sdk";
   import { queryClient } from "$lib/client";
   import { px } from "$lib/auth.svelte";
 
-  const { agentQuery } = transport;
   const { queryKey } = cache;
 
   type Props = {
@@ -98,8 +97,7 @@
     try {
       // Cache is oldest-first, so the oldest message is at index 0.
       const oldestId = data[0]?.id;
-      const res = await agentQuery(
-        px(),
+      const res = await px().query(
         "space.roomy.room.getMessages",
         {
           roomId,
