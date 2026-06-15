@@ -10,6 +10,7 @@
   import LoginModal from "$lib/components/auth/LoginModal.svelte";
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
+  import { Toaster as FxUIToaster } from "@foxui/core";
   import { Tooltip } from "bits-ui";
 
   // Debug: log all public env vars
@@ -88,6 +89,8 @@
     {@render children()}
   </MainLayout>
   </Tooltip.Provider>
+
+  <FxUIToaster />
 
   {#if auth.initError && requireAuth.value}
     <!-- init failed — show error behind modal -->

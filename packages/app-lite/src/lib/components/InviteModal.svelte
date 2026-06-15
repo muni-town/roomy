@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { InviteRow } from "@roomy/design/components/modals/InviteManager.svelte";
   import InviteManager from "@roomy/design/components/modals/InviteManager.svelte";
+  import { toast } from "@foxui/core";
   import { createInvitesQuery } from "$lib/queries/invites";
   import { createInvite, revokeInvite } from "$lib/mutations/invite";
 
@@ -44,6 +45,7 @@
   async function onCopy(token: string) {
     try {
       await navigator.clipboard.writeText(urlFor(token));
+      toast.success("Invite link copied to clipboard");
     } catch {
       // Clipboard may not be available in all contexts.
     }

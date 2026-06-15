@@ -1,10 +1,33 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { toast } from "@foxui/core";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconBell, IconSettings, IconUserPlus } from "@roomy/design/icons";
   import Tooltip from "@roomy/design/components/helper/Tooltip.svelte";
 
-  const currentSpaceId = $derived(page.params.space);
+  let {
+    spaceId = $bindable(),
+    allowPublicJoin = false,
+    onInvite,
+  }: {
+    spaceId?: string;
+    allowPublicJoin?: boolean;
+    onInvite?: () => void;
+  } = $props();
+
+  const currentSpaceId = $derived(spaceId ?? page.params.space);
+
+  function handleInvite() {
+    if (onInvite) {
+      onInvite();
+    } else if (allowPublicJoin && currentSpaceId) {
+      const url = new URL(page.url.href);
+      url.pathname = `/${currentSpaceId}`;
+      navigator.clipboard.writeText(url.href).then(() => {
+        toast.success("Invite link copied to clipboard");
+      }).catch(() => {});
+    }
+  }
 </script>
 
 <div
@@ -34,6 +57,7 @@
     class="flex-1 justify-center"
     aria-label="Invite"
     title="Invite"
+    onclick={handleInvite}
   >
     <IconUserPlus />
   </Button>

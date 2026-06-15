@@ -9,6 +9,7 @@
   import { IconArrowLeft } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { leaveSpace } from "$lib/mutations/space";
+import { toast } from "@foxui/core";
 
   let { spaceId }: { spaceId: string } = $props();
 
@@ -43,7 +44,9 @@
     if (meta?.joinPolicy.allowPublicJoin) {
       const url = new URL(page.url.href);
       url.pathname = `/${spaceId}`;
-      navigator.clipboard.writeText(url.href);
+      navigator.clipboard.writeText(url.href).then(() => {
+        toast.success("Invite link copied to clipboard");
+      });
     } else {
       goto(`/${spaceId}/settings/invites`);
     }

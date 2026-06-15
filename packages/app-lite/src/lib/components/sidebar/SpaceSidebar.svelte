@@ -41,6 +41,7 @@
   import InviteModal from "$lib/components/InviteModal.svelte";
 import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
 import { createSpacesQuery } from "$lib/queries/spaces";
+import { toast } from "@foxui/core";
 
   const { agentQuery } = transport;
   const { queryKey } = cache;
@@ -98,7 +99,9 @@ import { createSpacesQuery } from "$lib/queries/spaces";
     if (meta?.joinPolicy.allowPublicJoin) {
       const url = new URL(page.url.href);
       url.pathname = `/${spaceId}`;
-      navigator.clipboard.writeText(url.href);
+      navigator.clipboard.writeText(url.href).then(() => {
+        toast.success("Invite link copied to clipboard");
+      });
     } else {
       openInviteModal = true;
     }
@@ -390,7 +393,11 @@ import { createSpacesQuery } from "$lib/queries/spaces";
   {/snippet}
 
   {#snippet actions()}
-    <SidebarBottomTabs />
+    <SidebarBottomTabs
+      {spaceId}
+      allowPublicJoin={meta?.joinPolicy.allowPublicJoin ?? false}
+      onInvite={onInvite}
+    />
   {/snippet}
 
   {#snippet saveAction()}
