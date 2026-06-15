@@ -7,6 +7,7 @@ export { default as IconCornerDownRight } from "~icons/ph/arrow-bend-down-right-
 export { default as IconHome } from "~icons/ph/house-bold";
 
 // Actions
+export { default as IconBell } from "~icons/ph/bell-bold";
 export { default as IconCheck } from "~icons/ph/check-bold";
 export { default as IconEdit } from "~icons/ph/pencil-simple-bold";
 export { default as IconEllipsisHorizontal } from "~icons/ph/dots-three-bold";
@@ -20,6 +21,7 @@ export { default as IconSettings } from "~icons/ph/gear-bold";
 export { default as IconShare } from "~icons/ph/share-fat-bold";
 export { default as IconSmilePlus } from "~icons/ph/smiley-bold";
 export { default as IconTrash } from "~icons/ph/trash-bold";
+export { default as IconUserPlus } from "~icons/ph/user-plus-bold";
 export { default as IconArrowUturnLeft } from "~icons/ph/arrow-u-up-left-bold";
 export { default as IconCopy } from "~icons/ph/clipboard-bold";
 
