@@ -82,27 +82,53 @@
             <span class="ml-auto shrink-0">{timeAgo(item.lastActivityAt)}</span>
           </div>
 
-          <!-- Recent messages -->
-          <div class="flex flex-col gap-1.5 pl-1 mt-1">
-            {#each item.messages as msg (msg.id)}
-              <div class="flex items-start gap-2 text-sm">
-                <div class="mt-0.75"><SpaceAvatar
-                  src={resolveBlobUrl(msg.author.avatar)}
-                  id={msg.author.did}
-                  name={msg.author.name ?? undefined}
-                  size={18}
-                /></div>
-                <div class="min-w-0">
-                  <span class="font-medium text-base-700 dark:text-base-300">
-                    {msg.author.name ?? msg.author.did.slice(0, 8)}
-                  </span>
-                  <span class="text-base-600 dark:text-base-400 [&_p]:inline [&_p]:m-0">
-                    {@html renderMarkdownSanitized(msg.content)}
-                  </span>
-                </div>
+          {#if item.messages.length > 0}
+            {@const reversed = [...item.messages].reverse()}
+            {@const preceding = reversed.slice(0, -1)}
+            {@const last = reversed.at(-1)}
+
+            <!-- Preceding context messages (capped height, oldest cut off at top) -->
+            {#if preceding.length > 0}
+              <div class="flex flex-col justify-end gap-1.5 pl-1 mt-1 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent_0%,black_10%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_10%)]">
+                {#each preceding as msg (msg.id)}
+                  <div class="flex items-start gap-2 text-sm opacity-80">
+                    <div class="mt-0.75"><SpaceAvatar
+                      src={resolveBlobUrl(msg.author.avatar)}
+                      id={msg.author.did}
+                      name={msg.author.name ?? undefined}
+                      size={18}
+                    /></div>
+                    <div class="min-w-0">
+                      <span class="font-medium text-base-700 dark:text-base-300">
+                        {msg.author.name ?? msg.author.did.slice(0, 8)}
+                      </span>
+                      <span class="text-base-600 dark:text-base-400 [&_p]:inline [&_p]:m-0">
+                        {@html renderMarkdownSanitized(msg.content)}
+                      </span>
+                    </div>
+                  </div>
+                {/each}
               </div>
-            {/each}
-          </div>
+            {/if}
+
+            <!-- Most recent message (full height) -->
+            <div class="flex items-start gap-2 text-sm pl-1">
+              <div class="mt-0.75"><SpaceAvatar
+                src={resolveBlobUrl(last.author.avatar)}
+                id={last.author.did}
+                name={last.author.name ?? undefined}
+                size={18}
+              /></div>
+              <div class="min-w-0">
+                <span class="font-medium text-base-700 dark:text-base-300">
+                  {last.author.name ?? last.author.did.slice(0, 8)}
+                </span>
+                <span class="text-base-600 dark:text-base-400 [&_p]:inline [&_p]:m-0">
+                  {@html renderMarkdownSanitized(last.content)}
+                </span>
+              </div>
+            </div>
+          {/if}
         </a>
       {/each}
     </div>
