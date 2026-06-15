@@ -133,22 +133,25 @@ function stmts(db: Database): AuthStmts {
 
 // ── Membership / admin / ban ──────────────────────────────────────────────
 
-export function isMember(db: Database, spaceId: string, did: string): boolean {
+export function isMember(db: Database, spaceId: string, did: string | null): boolean {
+  if (did === null) return false;
   return stmts(db).isMember.get(spaceId, did) !== null;
 }
 
-export function isAdmin(db: Database, spaceId: string, did: string): boolean {
+export function isAdmin(db: Database, spaceId: string, did: string | null): boolean {
+  if (did === null) return false;
   return stmts(db).isAdmin.get(spaceId, did) !== null;
 }
 
-export function isBanned(db: Database, spaceId: string, did: string): boolean {
+export function isBanned(db: Database, spaceId: string, did: string | null): boolean {
+  if (did === null) return false;
   return stmts(db).isBanned.get(spaceId, did) !== null;
 }
 
 export function spaceAccess(
   db: Database,
   spaceId: string,
-  did: string,
+  did: string | null,
 ): SpaceAccess {
   return {
     isMember: isMember(db, spaceId, did),
@@ -161,7 +164,7 @@ export function spaceAccess(
  * Whether the space allows public (no-invite) joining. NULL in the DB means
  * unset; per schema docs that defaults to "open" (true).
  */
-function allowsPublicJoin(db: Database, spaceId: string): boolean {
+export function allowsPublicJoin(db: Database, spaceId: string): boolean {
   const row = stmts(db).allowsPublicJoin.get(spaceId);
   return row === null ? true : row.v === 1;
 }
@@ -233,8 +236,9 @@ function roleGrant(
   db: Database,
   spaceId: string,
   roomId: string,
-  did: string,
+  did: string | null,
 ): { canRead: boolean; canWrite: boolean } {
+  if (did === null) return { canRead: false, canWrite: false };
   const row = stmts(db).roleGrant.get(did, roomId, spaceId);
 
   return {
@@ -246,7 +250,7 @@ function roleGrant(
 export function roomAccess(
   db: Database,
   roomId: string,
-  did: string,
+  did: string | null,
 ): RoomAccess {
   const { row, parentChannelId } = resolveRoom(db, roomId);
 

@@ -70,7 +70,9 @@ const OWN_DID = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
 export const prodAuthVerifier: AuthVerifier = async (req) => {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    throw new XrpcError(401, "AuthRequired", "Missing Bearer token");
+    // No token — treat as anonymous. Handlers decide what anonymous callers
+    // are allowed to do based on the null DID.
+    return { did: null };
   }
   const jwt = authHeader.slice(7);
 

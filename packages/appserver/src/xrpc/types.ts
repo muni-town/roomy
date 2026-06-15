@@ -1,7 +1,7 @@
 import type { Type } from "arktype";
 
 export interface AuthCtx {
-  did: string;
+  did: string | null;
 }
 
 export interface Frame {

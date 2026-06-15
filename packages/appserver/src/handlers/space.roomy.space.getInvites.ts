@@ -7,10 +7,9 @@
  * explicit denial makes intent clear per spec).
  */
 
-import { type, UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
-import { requireSpaceAccess } from "../xrpc/authGuards.ts";
+import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
@@ -29,13 +28,9 @@ export const getInvitesHandler: QueryHandler<
   QueryParams,
   GetInvitesResult
 > = async (params: QueryParams, auth: AuthCtx) => {
-  const userDid = UserDid(auth.did);
-  if (userDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`,
-    );
+  const userDid = parseUserDid(auth);
+  if (userDid === null) {
+    throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
   const spaceId = requireString(params, "spaceId");
 

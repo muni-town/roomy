@@ -12,7 +12,7 @@
 
 import { openDb } from "../db/db.ts";
 import { getServiceClient } from "../serviceClient.ts";
-import { requireSpaceAccess } from "../xrpc/authGuards.ts";
+import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
@@ -44,7 +44,10 @@ export const setHandleHandler: ProcedureHandler<SetHandleBody, void> = async (
 
   const spaceId = body.spaceId;
   const handle = body.handle !== undefined ? (body.handle as string | null) : null;
-  const callerDid = auth.did;
+  const callerDid = parseUserDid(auth);
+  if (callerDid === null) {
+    throw new XrpcError(401, "AuthRequired", "Authentication required");
+  }
   const db = openDb();
 
   // ── Require admin access ─────────────────────────────────────────────

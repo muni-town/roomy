@@ -14,8 +14,6 @@ import {
   newUlid,
   createDefaultSpaceEvents,
   StreamDid,
-  UserDid,
-  type,
 } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { getServiceClient, getConnectedSpace } from "../serviceClient.ts";
@@ -26,6 +24,7 @@ import {
   resolvePersonalStreamDid,
 } from "../hydration/resolvePersonalStream.ts";
 import { recordPersonalSpaceMembership } from "../queries/joinedSpaces.ts";
+import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { Router as InvalidationRouter } from "../invalidation/index.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
@@ -75,13 +74,9 @@ export const createSpaceHandler: ProcedureHandler<
     );
   }
 
-  const callerDid = UserDid(auth.did);
-  if (callerDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${callerDid.summary}`,
-    );
+  const callerDid = parseUserDid(auth);
+  if (callerDid === null) {
+    throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
 
   // ── 1. Create Leaf stream + add admin ────────────────────────────────

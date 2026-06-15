@@ -5,11 +5,10 @@
  * access on that room is enforced before assembling the message.
  */
 
-import { type, UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
-import { requireRoomRead } from "../xrpc/authGuards.ts";
+import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
@@ -18,17 +17,12 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
   params: QueryParams,
   auth: AuthCtx,
 ) => {
-  const userDid = UserDid(auth.did);
-  if (userDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`,
-    );
-  }
+  const userDid = parseUserDid(auth);
   const messageId = requireString(params, "messageId");
 
-  await hydrateUserMembership(userDid);
+  if (userDid !== null) {
+    await hydrateUserMembership(userDid);
+  }
 
   const db = openDb();
   const row = db
@@ -51,7 +45,7 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
 
   requireRoomRead(db, row.room, userDid);
 
-  const { messages } = selectMessages(db, { kind: "ids", ids: [messageId] }, userDid);
+  const { messages } = selectMessages(db, { kind: "ids", ids: [messageId] }, userDid ?? undefined);
   const message = messages[0];
   if (!message) {
     throw new XrpcError(404, "NotFound", `Message not found: ${messageId}`);

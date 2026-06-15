@@ -6,10 +6,9 @@
  * event `space.roomy.state.markRead.v0`.
  */
 
-import { type, UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
-import { requireRoomRead } from "../xrpc/authGuards.ts";
+import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 import { Router } from "../invalidation/router.ts";
@@ -25,13 +24,9 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   auth: AuthCtx,
   body: UpdateSeenBody,
 ) => {
-  const userDid = UserDid(auth.did);
-  if (userDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`,
-    );
+  const userDid = parseUserDid(auth);
+  if (userDid === null) {
+    throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
 
   // Body params (not URL query params — this is a POST procedure).

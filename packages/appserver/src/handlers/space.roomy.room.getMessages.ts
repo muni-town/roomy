@@ -5,12 +5,10 @@
  * older than the cursor are returned.
  */
 
-import { type, UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
-import { requireRoomRead } from "../xrpc/authGuards.ts";
-import { XrpcError } from "../xrpc/errors.ts";
+import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
 import { optionalInt, optionalString, requireString } from "../xrpc/params.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
@@ -24,23 +22,18 @@ export const getMessagesHandler: QueryHandler<
   QueryParams,
   GetMessagesResult
 > = async (params: QueryParams, auth: AuthCtx) => {
-  const userDid = UserDid(auth.did);
-  if (userDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`,
-    );
-  }
+  const userDid = parseUserDid(auth);
   const roomId = requireString(params, "roomId");
   const limit = optionalInt(params, "limit", {
     min: 1,
     max: 100,
     default: 50,
-  })!;
+  });
   const cursor = optionalString(params, "cursor") ?? null;
 
-  await hydrateUserMembership(userDid);
+  if (userDid !== null) {
+    await hydrateUserMembership(userDid);
+  }
 
   const db = openDb();
   requireRoomRead(db, roomId, userDid);
@@ -50,7 +43,7 @@ export const getMessagesHandler: QueryHandler<
     roomId,
     limit,
     cursor,
-  }, userDid);
+  }, userDid ?? "");
 
   return stripNulls({ messages, cursor: nextCursor }) as GetMessagesResult;
 };

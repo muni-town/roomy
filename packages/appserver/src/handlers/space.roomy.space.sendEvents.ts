@@ -12,7 +12,7 @@ import { parseEvent, type Event } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { sendEventsToStream } from "../serviceClient.ts";
 import { checkWriteAuth } from "../auth/writeAuth.ts";
-import { requireSpaceAccess } from "../xrpc/authGuards.ts";
+import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
@@ -52,7 +52,10 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
   }
 
   const spaceId = body.spaceId;
-  const callerDid = auth.did;
+  const callerDid = parseUserDid(auth);
+  if (callerDid === null) {
+    throw new XrpcError(401, "AuthRequired", "Authentication required");
+  }
   const db = openDb();
 
   // 2. Verify space exists and caller has access

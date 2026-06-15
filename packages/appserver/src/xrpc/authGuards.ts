@@ -8,13 +8,34 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { type, UserDid, type UserDid as UserDidT } from "@roomy-space/sdk";
 import {
   type RoomAccess,
   type SpaceAccess,
+  allowsPublicJoin,
   roomAccess,
   spaceAccess,
 } from "../auth/access.ts";
 import { XrpcError } from "./errors.ts";
+import type { AuthCtx } from "./types.ts";
+
+/**
+ * Parse the caller's DID from auth context into a UserDid, or return null
+ * for anonymous callers. Handlers that support anonymous access should use
+ * this instead of calling `UserDid(auth.did)` directly.
+ */
+export function parseUserDid(auth: AuthCtx): UserDidT | null {
+  if (auth.did === null) return null;
+  const parsed = UserDid(auth.did);
+  if (parsed instanceof type.errors) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      `Caller DID is not a valid UserDid: ${parsed.summary}`,
+    );
+  }
+  return parsed;
+}
 
 /**
  * Caller must be a member or admin of the space, and not banned. Returns the
@@ -23,8 +44,11 @@ import { XrpcError } from "./errors.ts";
 export function requireSpaceAccess(
   db: Database,
   spaceId: string,
-  did: string,
+  did: string | null,
 ): SpaceAccess {
+  if (did === null) {
+    throw new XrpcError(401, "AuthRequired", "Authentication required");
+  }
   const access = spaceAccess(db, spaceId, did);
   if (access.isBanned) {
     throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
@@ -40,13 +64,40 @@ export function requireSpaceAccess(
 }
 
 /**
+ * Caller must have read access to the space (member, admin, OR public space
+ * with allowPublicJoin). Unlike requireSpaceAccess, this allows anonymous
+ * access to public spaces. Returns the full access decision.
+ */
+export function requireSpaceRead(
+  db: Database,
+  spaceId: string,
+  did: string | null,
+): SpaceAccess {
+  const access = spaceAccess(db, spaceId, did);
+  if (access.isBanned) {
+    throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
+  }
+  if (!access.isMember && !access.isAdmin) {
+    // Allow anonymous/member access if the space allows public join.
+    if (!allowsPublicJoin(db, spaceId)) {
+      throw new XrpcError(
+        403,
+        "Forbidden",
+        "Caller is neither a member nor an admin of this space",
+      );
+    }
+  }
+  return access;
+}
+
+/**
  * Caller must have read access to the room. 404 if the room doesn't exist,
  * 403 otherwise. Returns the full access decision.
  */
 export function requireRoomRead(
   db: Database,
   roomId: string,
-  did: string,
+  did: string | null,
 ): RoomAccess {
   const access = roomAccess(db, roomId, did);
   if (!access.exists) {
@@ -69,7 +120,7 @@ export function requireRoomRead(
 export function requireRoomWrite(
   db: Database,
   roomId: string,
-  did: string,
+  did: string | null,
 ): RoomAccess {
   const access = roomAccess(db, roomId, did);
   if (!access.exists) {

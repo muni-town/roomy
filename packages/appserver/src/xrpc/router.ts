@@ -298,6 +298,11 @@ export class XrpcRouter {
               return ws.readyState === WebSocket.OPEN;
             },
             get did() {
+              if (auth.did === null) {
+                throw new Error(
+                  "WebSocket did must be set — server bug: unauthenticated sync connection",
+                );
+              }
               return auth.did;
             },
           };

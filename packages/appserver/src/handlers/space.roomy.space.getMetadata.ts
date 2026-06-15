@@ -6,12 +6,12 @@
  * (and from `orphans`). Stage-1: unreadCount/lastRead are 0/null.
  */
 
-import { type, UserDid } from "@roomy-space/sdk";
-import { roomAccess, spaceAccess } from "../auth/access.ts";
+import { roomAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { getReadPositions } from "../queries/readPositions.ts";
 import { queryActiveThreads, resolveThreadsByIds } from "../queries/userActiveThreads.ts";
+import { parseUserDid, requireSpaceRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
@@ -77,28 +77,15 @@ export const getMetadataHandler: QueryHandler<
   QueryParams,
   GetMetadataResult
 > = async (params: QueryParams, auth: AuthCtx) => {
-  const userDid = UserDid(auth.did);
-  if (userDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`,
-    );
-  }
+  const userDid = parseUserDid(auth);
   const spaceId = requireString(params, "spaceId");
 
-  await hydrateUserMembership(userDid);
-
-  const db = openDb();
-  const access = spaceAccess(db, spaceId, userDid);
-
-  if (access.isBanned) {
-    throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
+  if (userDid !== null) {
+    await hydrateUserMembership(userDid);
   }
 
-  // Non-members get public info only (name, avatar, joinPolicy) — no sidebar.
-  // This allows the join-space modal to show in the UI.
-  const isMemberOrAdmin = access.isMember || access.isAdmin;
+  const db = openDb();
+  const access = requireSpaceRead(db, spaceId, userDid);
 
   const spaceRow = db
     .query<
@@ -146,7 +133,9 @@ export const getMetadataHandler: QueryHandler<
   let categories: SidebarCategory[] = [];
   let orphans: SidebarChannel[] = [];
 
-  if (isMemberOrAdmin) {
+  // Sidebar requires a logged-in user — anonymous callers can't get member
+  // or admin status, so isMember/isAdmin is always false for them.
+  if (userDid !== null && (access.isMember || access.isAdmin)) {
     const allChannelRows = db
       .query<
         {

@@ -9,7 +9,6 @@
  * and joined with full message data at query time.
  */
 
-import { type, UserDid } from "@roomy-space/sdk";
 import { roomAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
@@ -17,7 +16,7 @@ import {
   selectActivityFeed,
   type ActivityFeedItem,
 } from "../queries/activityFeed.ts";
-import { requireSpaceAccess } from "../xrpc/authGuards.ts";
+import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { optionalInt, optionalString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
@@ -31,13 +30,9 @@ export const getActivityFeedHandler: QueryHandler<
   QueryParams,
   GetActivityFeedResult
 > = async (params: QueryParams, auth: AuthCtx) => {
-  const userDid = UserDid(auth.did);
-  if (userDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`,
-    );
+  const userDid = parseUserDid(auth);
+  if (userDid === null) {
+    throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
 
   const spaceId = optionalString(params, "spaceId");
@@ -77,7 +72,6 @@ export const getActivityFeedHandler: QueryHandler<
   );
 
   // Filter by room-level read access: silently skip rooms the user can't read.
-  // This mirrors the pattern in getSpaceThreads / getRoomThreads.
   const accessible = feed.filter((item) => {
     const acc = roomAccess(db, item.threadId, userDid);
     return acc.canRead;

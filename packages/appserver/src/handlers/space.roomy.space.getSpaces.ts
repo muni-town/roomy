@@ -9,11 +9,10 @@
  * (with `isMember=false`).
  */
 
-import { type, UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { selectJoinedSpaces, type SpaceRow } from "../queries/joinedSpaces.ts";
-import { XrpcError } from "../xrpc/errors.ts";
+import { parseUserDid } from "../xrpc/authGuards.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface GetSpacesParams {
@@ -28,13 +27,10 @@ export const getSpacesHandler: QueryHandler<
   QueryParams,
   GetSpacesResult
 > = async (rawParams: QueryParams, auth: AuthCtx) => {
-  const userDid = UserDid(auth.did);
-  if (userDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`,
-    );
+  const userDid = parseUserDid(auth);
+  if (userDid === null) {
+    // Anonymous users get an empty list for now.
+    return { spaces: [] };
   }
 
   const { personalStreamDid } = await hydrateUserMembership(userDid);

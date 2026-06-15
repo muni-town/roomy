@@ -5,13 +5,11 @@
  * caller's read access.
  */
 
-import { type, UserDid } from "@roomy-space/sdk";
 import { roomAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { listThreadActivity } from "../queries/threadActivity.ts";
-import { requireRoomRead } from "../xrpc/authGuards.ts";
-import { XrpcError } from "../xrpc/errors.ts";
+import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
 import { requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
@@ -37,17 +35,12 @@ export const getRoomThreadsHandler: QueryHandler<
   QueryParams,
   GetRoomThreadsResult
 > = async (params: QueryParams, auth: AuthCtx) => {
-  const userDid = UserDid(auth.did);
-  if (userDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${userDid.summary}`,
-    );
-  }
+  const userDid = parseUserDid(auth);
   const roomId = requireString(params, "roomId");
 
-  await hydrateUserMembership(userDid);
+  if (userDid !== null) {
+    await hydrateUserMembership(userDid);
+  }
 
   const db = openDb();
   requireRoomRead(db, roomId, userDid);

@@ -8,12 +8,13 @@
  * @see packages/appserver/docs/plans/procedure-backlog.md
  */
 
-import { newUlid, UserDid, type, type StreamDid } from "@roomy-space/sdk";
+import { newUlid, type StreamDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import { getConnectedSpace } from "../serviceClient.ts";
 import { isMember, isAdmin } from "../auth/access.ts";
 import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
 import { recordLeftSpaceEdge } from "../queries/joinedSpaces.ts";
+import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { Router as InvalidationRouter } from "../invalidation/index.ts";
 import { getOrCreateMaterializer } from "../materialization/registry.ts";
@@ -38,13 +39,9 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
   }
 
   const spaceId = body.spaceId;
-  const callerDid = UserDid(auth.did);
-  if (callerDid instanceof type.errors) {
-    throw new XrpcError(
-      400,
-      "InvalidRequest",
-      `Caller DID is not a valid UserDid: ${callerDid.summary}`,
-    );
+  const callerDid = parseUserDid(auth);
+  if (callerDid === null) {
+    throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
 
   const db = openDb();

@@ -37,7 +37,7 @@ if (ADMIN_DIDS.size === 0) {
  * the caller's JWT and produced the AuthCtx.
  */
 export function requireAdmin(auth: AuthCtx): void {
-  if (!ADMIN_DIDS.has(auth.did)) {
+  if (auth.did === null || !ADMIN_DIDS.has(auth.did)) {
     throw new XrpcError(
       403,
       "Forbidden",
