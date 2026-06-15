@@ -109,7 +109,8 @@
   isAdmin={app.isSpaceAdmin}
   {showInviteButton}
   bind:isEditing
-  onNew={() => (createModalOpen = true)}
+  onCreateChannel={() => (createModalOpen = true)}
+  onCreateCategory={() => (createModalOpen = true)}
   settingsHref={`/${page.params.space}/settings`}
   {onInvite}
   {onLeave}

@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import Button from "../ui/button/Button.svelte";
-  import Popover from "../ui/popover/Popover.svelte";
+  import { buttonVariants } from "../ui/button/Button.svelte";
+  import {
+    ContextMenu,
+    ContextMenuItem,
+    ContextMenuSeparator,
+  } from "../ui/context-menu/index.js";
 
   import {
     IconEllipsisHorizontal,
@@ -18,7 +22,8 @@
     isAdmin,
     showInviteButton,
     isEditing = $bindable(false),
-    onNew,
+    onCreateChannel,
+    onCreateCategory,
     settingsHref,
     onInvite,
     onLeave,
@@ -35,8 +40,10 @@
     isAdmin: boolean;
     showInviteButton: boolean;
     isEditing?: boolean;
-    /** Called when the "+" button is clicked to create a room or category. Only shown when isAdmin. */
-    onNew?: () => void;
+    /** Called when "Create Channel" is clicked in the menu. Only shown when isAdmin. */
+    onCreateChannel?: () => void;
+    /** Called when "Create Category" is clicked in the menu. Only shown when isAdmin. */
+    onCreateCategory?: () => void;
     /** Href for the "Space settings" admin action */
     settingsHref?: string;
     /** Called when Invite button is clicked. Wrapper decides between copy-link vs open modal. */
@@ -51,7 +58,7 @@
     collapseSidebar?: Snippet;
   } = $props();
 
-  let popoverOpen = $state(false);
+  let menuOpen = $state(false);
 </script>
 
 <div
@@ -72,73 +79,66 @@
     </h1>
   </div>
 
-  <Popover
-    side="bottom"   
-    align="start"
-    bind:open={popoverOpen}
-    sideOffset={5}
+  <ContextMenu
+    bind:open={menuOpen}
+    side="bottom"
+    align="center"
+    sideOffset={10}
   >
-    {#snippet child({ props })}
-      <Button
-        {...props}
-        variant="ghost"
-        size="iconSm"
+    {#snippet trigger({ props: { action, ...attrs } })}
+      <button
+        use:action
+        {...attrs}
+        class={buttonVariants({ variant: "ghost", size: "iconSm" })}
         aria-label="Space menu"
       >
         <IconEllipsisHorizontal class="size-4" />
-      </Button>
+      </button>
     {/snippet}
-    <div class="flex flex-col items-start justify-stretch gap-2 w-[204px]">
+
+    {#if showInviteButton}
+      <ContextMenuItem onSelect={() => { onInvite(); }}>
+        <IconShare class="size-4" />
+        Invite
+      </ContextMenuItem>
+    {/if}
+
+    {#if isAdmin}
       {#if showInviteButton}
-        <Button
-          onclick={() => {
-            onInvite();
-            popoverOpen = false;
-          }}
-          variant="secondary"
-          size="sm"
-          class="w-full"
-        >
-          <IconShare /> 
-          Invite
-        </Button>
+        <ContextMenuSeparator />
       {/if}
 
-      {#if isAdmin}
-        <Button
-          variant="secondary"
-          size="sm"
-          class="w-full"
-          onclick={() => {
-            isEditing = !isEditing;
-            popoverOpen = false;
-          }}
-        >
-          <IconPencil/>
-          {isEditing ? "Finish editing" : "Edit Sidebar"}
-        </Button>
+      <ContextMenuItem onSelect={() => { isEditing = !isEditing; }}>
+        <IconPencil class="size-4" />
+        {isEditing ? "Finish editing" : "Edit Sidebar"}
+      </ContextMenuItem>
 
-        {#if settingsHref}
-          <Button variant="secondary" size="sm" class="w-full" href={settingsHref}>
-            <IconSettings/> Space settings
-          </Button>
-        {/if}
+      <ContextMenuSeparator />
+
+      <ContextMenuItem onSelect={() => { onCreateChannel?.(); }}>
+        <IconPlus class="size-4" />
+        Create Channel
+      </ContextMenuItem>
+
+      <ContextMenuItem onSelect={() => { onCreateCategory?.(); }}>
+        <IconPlus class="size-4" />
+        Create Category
+      </ContextMenuItem>
+
+      {#if settingsHref}
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => { window.location.href = settingsHref; }}>
+          <IconSettings class="size-4" />
+          Space settings
+        </ContextMenuItem>
       {/if}
+    {/if}
 
-      <Button variant="red" size="sm" class="w-full" onclick={onLeave}>
-        <IconLogOut /> Leave Space
-      </Button>
-    </div>
-  </Popover>
+    <ContextMenuSeparator />
 
-  {#if isAdmin && onNew}
-    <Button
-      variant="secondary"
-      size="iconSm"
-      onclick={onNew}
-      aria-label="Create new room or category"
-    >
-      <IconPlus />
-    </Button>
-  {/if}
+    <ContextMenuItem variant="danger" onSelect={() => { onLeave(); }}>
+      <IconLogOut class="size-4" />
+      Leave Space
+    </ContextMenuItem>
+  </ContextMenu>
 </div>

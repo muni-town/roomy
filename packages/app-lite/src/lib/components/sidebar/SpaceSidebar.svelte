@@ -76,7 +76,8 @@ import { createSpacesQuery } from "$lib/queries/spaces";
   let createRolePermissions = $state<Record<string, Permission>>({});
   let createDefaultAccess = $state<Permission>("readwrite");
 
-  let createModalOpen = $state(false);
+  let createChannelOpen = $state(false);
+  let createCategoryOpen = $state(false);
 
   const meta = $derived(spaceId ? metaQuery.data : null);
 
@@ -365,7 +366,8 @@ import { createSpacesQuery } from "$lib/queries/spaces";
           isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
           {showInviteButton}
           bind:isEditing
-          onNew={() => (createModalOpen = true)}
+          onCreateChannel={() => (createChannelOpen = true)}
+          onCreateCategory={() => (createCategoryOpen = true)}
           settingsHref={`/${spaceId}/settings`}
           {onInvite}
           {onLeave}
@@ -521,8 +523,9 @@ import { createSpacesQuery } from "$lib/queries/spaces";
   <RestoreRoomModal bind:open={openRestoreRoomModal} {spaceId} />
 
   <CreateRoomModal
-    bind:open={createModalOpen}
+    bind:open={createChannelOpen}
     {spaceId}
+    defaultType="Channel"
     onCreate={handleCreate}
   >
     {#snippet permissions({ type })}
@@ -536,6 +539,13 @@ import { createSpacesQuery } from "$lib/queries/spaces";
       {/if}
     {/snippet}
   </CreateRoomModal>
+
+  <CreateRoomModal
+    bind:open={createCategoryOpen}
+    {spaceId}
+    defaultType="Category"
+    onCreate={handleCreate}
+  />
 {/if}
 
 {#snippet channelItem(channel: SidebarChannel)}
