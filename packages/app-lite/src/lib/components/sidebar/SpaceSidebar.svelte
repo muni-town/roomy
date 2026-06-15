@@ -3,7 +3,6 @@
   import { goto } from "$app/navigation";
   import { schemas } from "@roomy-space/sdk";
   import { untrack } from "svelte";
-  import { slide } from "svelte/transition";
   import ChannelPermissions from "$lib/components/ui/ChannelPermissions.svelte";
   import {
     type Permission,
@@ -18,14 +17,13 @@
   import SpaceHeaderShell from "@roomy/design/components/sidebars/SpaceHeaderShell.svelte";
   import SidebarCategoryShell from "@roomy/design/components/sidebars/SidebarCategoryShell.svelte";
   import SidebarItemShell from "@roomy/design/components/sidebars/SidebarItemShell.svelte";
-  import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import { resolveBlobUrl } from "$lib/utils";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import {
     IconCheck,
+    IconCollapseSidebar,
     IconGripVertical,
     IconHome,
-    IconPlus,
     IconTrash,
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
@@ -34,7 +32,9 @@
   import { createQuery } from "@tanstack/svelte-query";
   import { transport, cache, newUlid } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
+  import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
+  import SidebarBottomTabs from "./SidebarBottomTabs.svelte";
   import EditRoomModal from "./EditRoomModal.svelte";
   import RestoreRoomModal from "./RestoreRoomModal.svelte";
   import EditableChannelItem from "./EditableChannelItem.svelte";
@@ -59,59 +59,12 @@ import { createSpacesQuery } from "$lib/queries/spaces";
     { enabled: !!spaceId },
   );
 
-  // --- Space picker mode — shows all joined spaces, current one highlighted ---
   const spacesQuery = createSpacesQuery({ includeLeft: true });
-  // On the homepage (no spaceId), always show the space picker
-  let showSpacePicker = $state(!spaceId);
 
-  const joinedSpaces = $derived((spacesQuery.data?.spaces ?? []).filter((s) => s.isMember));
-
-  function openSpacePicker() {
-    if (!spaceId) return; // already in picker mode on homepage
-    showSpacePicker = !showSpacePicker;
-  }
-
-  function navigateToSpace(targetSpaceId: string) {
-    if (!spaceId) {
-      goto(`/${targetSpaceId}`);
-      return;
-    }
-    showSpacePicker = false;
-    goto(`/${targetSpaceId}`);
-  }
-
+  // --- Server bar toggle — the collapse-sidebar button in the header toggles it. ---
   let sidebarElement = $state<HTMLElement | null>(null);
 
   let isEditing = $state(false);
-
-  $effect(() => {
-    if (!showSpacePicker || !sidebarElement || !spaceId) return;
-
-    function onPointerDown(e: PointerEvent) {
-      // Ignore clicks on the space header toggle button
-      if (sidebarElement && !sidebarElement.contains(e.target as Node)) {
-        showSpacePicker = false;
-      }
-    }
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        showSpacePicker = false;
-      }
-    }
-
-    // Use a microtask so the click that opened the picker doesn't immediately close it
-    const handle = setTimeout(() => {
-      document.addEventListener("pointerdown", onPointerDown);
-      document.addEventListener("keydown", onKeyDown);
-    }, 0);
-
-    return () => {
-      clearTimeout(handle);
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  });
   let editingId = $state<
     { room: string } | { categoryId: string; categoryName: string } | null
   >(null);
@@ -412,28 +365,35 @@ import { createSpacesQuery } from "$lib/queries/spaces";
           isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
           {showInviteButton}
           bind:isEditing
-          onSpacePicker={openSpacePicker}
-          spacePickerActive={showSpacePicker}
           onNew={() => (createModalOpen = true)}
           settingsHref={`/${spaceId}/settings`}
           {onInvite}
           {onLeave}
         >
-          {#snippet avatar()}
-            <SpaceAvatar
-              src={resolveBlobUrl(currentSpace?.avatar ?? meta?.avatar)}
-              id={spaceId!}
-              name={currentSpace?.name ?? meta?.name ?? undefined}
-            />
+          {#snippet collapseSidebar()}
+            <button
+              onclick={toggleServerBar}
+              class="flex items-center justify-center size-8 rounded-lg hover:bg-base-300/50 dark:hover:bg-base-800/50 text-base-500 hover:text-base-700 dark:text-base-400 dark:hover:text-base-200 transition-colors cursor-pointer"
+              aria-label="Toggle server bar"
+              title={serverBar.expanded ? "Collapse server bar" : "Expand server bar"}
+            >
+              <IconCollapseSidebar
+                class={["size-4 transition-transform duration-200", !serverBar.expanded && "rotate-180"]}
+              />
+            </button>
           {/snippet}
         </SpaceHeaderShell>
       </div>
     {/if}
   {/snippet}
 
+  {#snippet actions()}
+    <SidebarBottomTabs />
+  {/snippet}
+
   {#snippet saveAction()}
-    {#if spaceId && !showSpacePicker && isEditing}
-      <Button class="justify-start mb-4 mx-2 self-stretch" onclick={saveChanges}>
+    {#if spaceId && isEditing}
+      <Button class="justify-start mb-4 mx-2 self-stretch" variant="secondary" size="sm" onclick={saveChanges}>
         <IconCheck class="size-4" />
         Finish editing
       </Button>
@@ -441,135 +401,104 @@ import { createSpacesQuery } from "$lib/queries/spaces";
   {/snippet}
 
   {#snippet prefix()}
-    {#if spaceId && !showSpacePicker}
+    {#if spaceId}
       <Button
-        class="w-full justify-start mb-2"
+        class="w-full justify-start min-w-0 py-1"
         variant="ghost"
         href={`/${spaceId}`}
         data-current={page.url.pathname === `/${spaceId}`}
       >
         <IconHome class="shrink-0" />
-        Index
+        <span class="truncate min-w-0 whitespace-nowrap overflow-hidden font-semibold">Index</span>
       </Button>
       <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
     {/if}
   {/snippet}
 
   {#snippet body()}
-    {#if showSpacePicker}
-      <div transition:slide class="py-0 space-y-0 pb-12">
-        {#each joinedSpaces as space (space.id)}
-          {#if space.id !== spaceId}
-            <button
-              onclick={() => navigateToSpace(space.id)}
-              class="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-white dark:hover:bg-base-800 transition-colors text-left w-full cursor-pointer"
-            >
-              <SpaceAvatar
-                src={resolveBlobUrl(space.avatar)}
-                id={space.id}
-                name={space.name ?? undefined}
-                size={36}
-              />
-              <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate flex-1">
-                {space.name || "Unnamed Space"}
-              </span>
-            </button>
-          {/if}
-        {/each}
-        
-        <Button class="gap-3 mx-2" variant="ghost" href="/new">
-          <IconPlus />
-          Create Space
-        </Button>
-      </div>
-    {/if}
-
-    {#if !showSpacePicker}
-      <div transition:slide>
-        {#if metaQuery.isError}
-          <p class="text-sm text-red-600">{metaQuery.error.message}</p>
-        {:else if meta}
-          {#if isEditing}
-            <div
-              class="flex flex-col w-full min-h-4"
-              use:dragHandleZone={{
-                items: displayCategories,
-                type: "category",
-                dropTargetClasses: ["min-h-10", "bg-accent-500/10", "rounded"],
-                dropTargetStyle: {
-                  outline: "2px solid var(--color-accent-500/30)",
-                },
-              }}
-              onconsider={(e: any) => {
-                draftOrder = e.detail.items.map((c: any) => ({
-                  id: c.id ?? c.name,
-                  childIds: (c.channels ?? []).map((ch: any) => ch.id),
-                  [SHADOW_ITEM_MARKER_PROPERTY_NAME]:
-                    c[SHADOW_ITEM_MARKER_PROPERTY_NAME],
-                }));
-              }}
-              onfinalize={(e: any) => handleCategoryReorder(e.detail.items)}
-            >
-              {#each displayCategories as category (category[SHADOW_ITEM_MARKER_PROPERTY_NAME] ? `shadow-${category.id ?? category.name}` : category.id ?? category.name)}
-                <div class="flex items-start w-full" id={category.id ?? category.name}>
-                  <div
-                    use:dragHandle
-                    aria-label="drag-handle for {category.name}"
-                    class="ml-2 mt-2.5 z-10"
-                  >
-                    <IconGripVertical class="size-3" />
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <SidebarCategoryShell
-                      name={category.name}
-                      items={category.channels}
+    {#if metaQuery.isError}
+      <p class="text-sm text-red-600">{metaQuery.error.message}</p>
+    {:else if meta}
+      {#if isEditing}
+        <div
+          class="flex flex-col w-full min-h-4"
+          use:dragHandleZone={{
+            items: displayCategories,
+            type: "category",
+            dropTargetClasses: ["min-h-10", "bg-accent-500/10", "rounded"],
+            dropTargetStyle: {
+              outline: "2px solid var(--color-accent-500/30)",
+            },
+          }}
+          onconsider={(e: any) => {
+            draftOrder = e.detail.items.map((c: any) => ({
+              id: c.id ?? c.name,
+              childIds: (c.channels ?? []).map((ch: any) => ch.id),
+              [SHADOW_ITEM_MARKER_PROPERTY_NAME]:
+                c[SHADOW_ITEM_MARKER_PROPERTY_NAME],
+            }));
+          }}
+          onfinalize={(e: any) => handleCategoryReorder(e.detail.items)}
+        >
+          {#each displayCategories as category (category[SHADOW_ITEM_MARKER_PROPERTY_NAME] ? `shadow-${category.id ?? category.name}` : category.id ?? category.name)}
+            <div class="flex items-start w-full" id={category.id ?? category.name}>
+              <div
+                use:dragHandle
+                aria-label="drag-handle for {category.name}"
+                class="ml-2 mt-2.5 z-10"
+              >
+                <IconGripVertical class="size-3" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <SidebarCategoryShell
+                  name={category.name}
+                  items={category.channels}
+                  {isEditing}
+                  onEditCategory={() =>
+                    editSidebarItem({
+                      categoryId: category.id ?? category.name,
+                      categoryName: category.name,
+                    })}
+                  onItemsReorder={(newChildren) =>
+                    handleRoomMove(category.id ?? category.name, newChildren)}
+                >
+                  {#snippet item(channel, _index)}
+                    <EditableChannelItem
+                      {channel}
+                      {spaceId}
                       {isEditing}
-                      onEditCategory={() =>
-                        editSidebarItem({
-                          categoryId: category.id ?? category.name,
-                          categoryName: category.name,
-                        })}
-                      onItemsReorder={(newChildren) =>
-                        handleRoomMove(category.id ?? category.name, newChildren)}
-                    >
-                      {#snippet item(channel, _index)}
-                        <EditableChannelItem
-                          {channel}
-                          {spaceId}
-                          {isEditing}
-                          active={activeChannelId === channel.id}
-                          onedit={(roomId) => editSidebarItem({ room: roomId })}
-                        />
-                      {/snippet}
-                    </SidebarCategoryShell>
-                  </div>
-                </div>
-              {/each}
+                      active={activeChannelId === channel.id}
+                      onedit={(roomId) => editSidebarItem({ room: roomId })}
+                    />
+                  {/snippet}
+                </SidebarCategoryShell>
+              </div>
             </div>
-          {:else}
-            <div class="flex flex-col w-full min-h-4">
-              {#each displayCategories as category (category.id ?? category.name)}
-                {#if category.name}
-                  <div class="px-2 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-base-400 dark:text-base-500">
-                    {category.name}
-                  </div>
-                {/if}
-                {#each category.channels as channel (channel.id)}
-                  {@render channelItem(channel)}
-                {/each}
-              {/each}
-            </div>
-          {/if}
-        {/if}
-      </div>
+          {/each}
+        </div>
+      {:else}
+        <div class="flex flex-col w-full min-h-4">
+          {#each displayCategories as category (category.id ?? category.name)}
+            {#if category.name}
+              <div class="px-2 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-base-400 dark:text-base-500">
+                {category.name}
+              </div>
+            {/if}
+            {#each category.channels as channel (channel.id)}
+              {@render channelItem(channel)}
+            {/each}
+          {/each}
+        </div>
+      {/if}
     {/if}
   {/snippet}
 
   {#snippet footer()}
-    {#if spaceId && !showSpacePicker && isEditing}
+    {#if spaceId && isEditing}
       <Button
         class="mt-auto justify-start mb-4 mx-2 self-stretch"
-        variant="ghost"
+        variant="secondary"
+        size="sm"
         onclick={() => (openRestoreRoomModal = true)}
       >
         <IconTrash class="size-4" />

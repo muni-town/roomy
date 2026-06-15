@@ -16,14 +16,18 @@
 
 {#if currentSpace}
   <div class="flex items-center gap-2 ml-2 sm:ml-0 min-w-0">
-    <SpaceAvatar
-      src={resolveBlobUrl(currentSpace.avatar)}
-      id={currentSpace.id}
-      name={currentSpace.name ?? undefined}
-      size={24}
-    />
+    <!-- Space context (avatar + name): mobile-only. On desktop the sidebar
+         already shows the space header, so it's redundant here. -->
+    <span class="sm:hidden shrink-0">
+      <SpaceAvatar
+        src={resolveBlobUrl(currentSpace.avatar)}
+        id={currentSpace.id}
+        name={currentSpace.name ?? undefined}
+        size={24}
+      />
+    </span>
     {#if currentRoom}
-      <span class="text-base-300 dark:text-base-700 shrink-0">/</span>
+      <span class="text-base-300 dark:text-base-700 shrink-0 sm:hidden">/</span>
       {#if currentRoom.kind === "thread"}
         <IconThread class="size-4 shrink-0 text-base-500" />
       {:else}
@@ -36,7 +40,7 @@
       </span>
     {:else}
       <span
-        class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-40"
+        class="text-sm font-medium text-base-700 dark:text-base-300 truncate max-w-40 sm:hidden"
       >
         {currentSpace.name || "Unnamed"}
       </span>

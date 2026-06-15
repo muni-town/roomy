@@ -1,17 +1,18 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { page } from "$app/state";
-  import { goto, onNavigate } from "$app/navigation";
+  import { onNavigate } from "$app/navigation";
   import BigSidebar from "@roomy/design/components/layout/BigSidebar.svelte";
-  import RoomyHomeCard from "$lib/components/sidebar/RoomyHomeCard.svelte";
-  import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
+  import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
   import ToggleNavigation from "@roomy/design/components/helper/ToggleNavigation.svelte";
   import { navbar } from "./navbar.svelte";
   import { sidebarOverride, sidebarContent } from "./sidebar.svelte";
   import { mobileSidebar } from "./mobile-sidebar.svelte";
+  import { serverBar } from "./server-bar.svelte";
   import NavbarSpaceInfo from "./NavbarSpaceInfo.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
+  import ServerBar from "$lib/components/sidebar/ServerBar.svelte";
 
   let {
     children,
@@ -24,7 +25,18 @@
   // Compact mode when on a space page or other inner route (not the root homepage)
   const compact = $derived(page.route.id !== "/");
 
+  const sidebarWidth = $derived(
+    onHomepage
+      ? "sm:ml-64"
+      : serverBar.expanded
+        ? "sm:ml-[20rem]"
+        : "sm:ml-64",
+  );
+
   const sidebar = $derived(sidebarOverride.content ?? sidebarContent.content);
+
+  // On the homepage, show a wide server bar that fills the sidebar area with space names
+  const onHomepage = $derived(page.route.id === "/");
 
   onNavigate(() => {
     mobileSidebar.visible = false;
@@ -34,11 +46,12 @@
 <!-- Main panel: navbar + page content, offset to clear the fixed sidebar -->
 <div
   class={[
-    "h-full flex flex-col overflow-hidden sm:ml-64",
+    "h-full flex flex-col overflow-hidden",
+    sidebarWidth,
     chatArea ? "bg-white dark:bg-base-950" : "",
   ]}
 >
-  <Navbar {compact}>
+  <Navbar {compact} class={compact ? "h-11" : undefined}>
     <div class="flex gap-4 items-center mr-auto ml-2 sm:hidden">
       <ToggleNavigation bind:isSidebarVisible={mobileSidebar.visible} />
     </div>
@@ -74,18 +87,24 @@
     mobileSidebar.visible ? "block" : "hidden sm:block",
   ]}
 >
-  <div class="flex h-full w-fit">
-    <BigSidebar>
-      <RoomyHomeCard
-        onClick={() => goto("/")}
-        small={compact}
-      />
-      {#if sidebar}
-        {@render sidebar()}
+  <div class="relative flex h-full w-fit">
+    {#if onHomepage}
+      <!-- Homepage: wide server bar fills the sidebar area -->
+      <ServerBar wide />
+    {:else}
+      <!-- Space page: compact server bar + BigSidebar -->
+      {#if serverBar.expanded}
+        <ServerBar />
       {/if}
-      {#snippet footer()}
-        <SidebarUserCard />
-      {/snippet}
-    </BigSidebar>
+      <BigSidebar>
+        {#if sidebar}
+          {@render sidebar()}
+        {/if}
+      </BigSidebar>
+    {/if}
+    <!-- Full-width user card overlay spanning both server bar and main sidebar -->
+    <div class="absolute bottom-0 left-0 w-full z-50">
+      <SidebarUserCard />
+    </div>
   </div>
 </div>

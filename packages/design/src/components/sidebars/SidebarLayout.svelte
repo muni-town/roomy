@@ -4,6 +4,7 @@
   let {
     loading = false,
     header,
+    actions,
     saveAction,
     prefix,
     loneRoom,
@@ -14,6 +15,8 @@
     loading?: boolean;
     /** Top-of-sidebar content (typically the SpaceHeaderShell). Always rendered. */
     header: Snippet;
+    /** Optional toolbar/actions row rendered right below the header (e.g. space switcher, home, settings). */
+    actions?: Snippet;
     /** Optional "Finish editing" save button rendered above the prefix when editing. */
     saveAction?: Snippet;
     /** Top buttons row (Home, Index, Events, separator). */
@@ -38,6 +41,12 @@
     <div class="h-3 bg-base-200 rounded animate-pulse w-1/2"></div>
   </div>
 {:else}
+  {#if actions}
+    <div class="shrink-0">
+      {@render actions()}
+    </div>
+  {/if}
+
   {#if saveAction}{@render saveAction()}{/if}
 
   <div class="w-full h-full px-2 pt-3 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)] flex-1 min-h-0 overflow-y-scroll">

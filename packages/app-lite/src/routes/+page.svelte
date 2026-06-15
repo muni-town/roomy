@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import { IconPlus } from "@roomy/design/icons";
   import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
+  import RoomyHomeCard from "$lib/components/sidebar/RoomyHomeCard.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { setSidebarContent } from "$lib/components/layout/sidebar.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
@@ -52,7 +54,8 @@
 </div>
 
 {#snippet homeNavbar()}
-  <div class="flex w-full items-center gap-3 px-2 justify-end">
+  <div class="flex w-full items-center justify-between gap-3 px-2">
+    <RoomyHomeCard onClick={() => goto("/")} small={false} />
     <Button href="https://a.roomy.space" target="_blank">About Roomy</Button>
   </div>
 {/snippet}

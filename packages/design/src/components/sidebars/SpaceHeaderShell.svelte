@@ -17,21 +17,23 @@
     avatar,
     isAdmin,
     showInviteButton,
-    onSpacePicker,
     isEditing = $bindable(false),
     onNew,
     settingsHref,
     onInvite,
     onLeave,
-    spacePickerActive = false,
+    /**
+     * Optional collapse-sidebar button rendered to the left of the space name.
+     * When provided, it replaces the avatar as the clickable element next to
+     * the space name.
+     */
+    collapseSidebar,
   }: {
     spaceName?: string;
     /** Avatar rendered by caller (e.g. SpaceAvatar wrapper) */
     avatar: Snippet;
     isAdmin: boolean;
     showInviteButton: boolean;
-    /** Called when clicking the space name/avatar to open the space picker. */
-    onSpacePicker?: () => void;
     isEditing?: boolean;
     /** Called when the "+" button is clicked to create a room or category. Only shown when isAdmin. */
     onNew?: () => void;
@@ -41,8 +43,12 @@
     onInvite: () => void;
     /** Called when Leave Space is clicked. */
     onLeave: () => void;
-    /** Whether the space picker popover is currently open (shows active visual) */
-    spacePickerActive?: boolean;
+    /**
+     * Optional collapse-sidebar button rendered to the left of the space name.
+     * When provided, it replaces the avatar as the clickable element next to
+     * the space name.
+     */
+    collapseSidebar?: Snippet;
   } = $props();
 
   let popoverOpen = $state(false);
@@ -51,24 +57,20 @@
 <div
   class="w-full py-2 px-1.5 h-fit flex justify-between items-center gap-1"
 >
-  <!-- Clickable header area – opens space picker -->
-  <button
-    onclick={onSpacePicker}
-    class={[
-      "flex items-center gap-2 cursor-pointer rounded-2xl p-2 flex-1 min-w-0 text-left transition-colors",
-      spacePickerActive
-        ? "bg-accent-200/70 dark:bg-accent-800/30 ring-1 ring-accent-500/30"
-        : "hover:bg-accent-200/70 dark:hover:bg-base-900/70",
-    ]}
-  >
-    {@render avatar()}
+  <!-- Header row: collapse/avatar + name + actions -->
+  <div class="flex items-center gap-2 flex-1 min-w-0">
+    {#if collapseSidebar}
+      {@render collapseSidebar()}
+    {:else}
+      {@render avatar()}
+    {/if}
 
     <h1
       class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
     >
       {spaceName ?? ""}
     </h1>
-  </button>
+  </div>
 
   <Popover
     side="bottom"   
@@ -80,7 +82,7 @@
       <Button
         {...props}
         variant="ghost"
-        class="p-1"
+        size="iconSm"
         aria-label="Space menu"
       >
         <IconEllipsisHorizontal class="size-4" />
@@ -93,6 +95,8 @@
             onInvite();
             popoverOpen = false;
           }}
+          variant="secondary"
+          size="sm"
           class="w-full"
         >
           <IconShare /> 
@@ -103,6 +107,7 @@
       {#if isAdmin}
         <Button
           variant="secondary"
+          size="sm"
           class="w-full"
           onclick={() => {
             isEditing = !isEditing;
@@ -114,13 +119,13 @@
         </Button>
 
         {#if settingsHref}
-          <Button variant="secondary" class="w-full" href={settingsHref}>
+          <Button variant="secondary" size="sm" class="w-full" href={settingsHref}>
             <IconSettings/> Space settings
           </Button>
         {/if}
       {/if}
 
-      <Button variant="red" class="w-full" onclick={onLeave}>
+      <Button variant="red" size="sm" class="w-full" onclick={onLeave}>
         <IconLogOut /> Leave Space
       </Button>
     </div>
@@ -129,7 +134,7 @@
   {#if isAdmin && onNew}
     <Button
       variant="secondary"
-      class="p-1"
+      size="iconSm"
       onclick={onNew}
       aria-label="Create new room or category"
     >

@@ -46,12 +46,14 @@ div {
   --color-accent-950: var(--accent-950);
 
   --shadow-button: 2px 2px 0 0
-    var(--shadow-button-color, var(--color-accent-700));
+    var(--shadow-button-color);
   --shadow-input: 2px 2px 0 0 var(--accent-700);
 }
 
 @layer base {
   :root {
+    --shadow-button-color: var(--base-400);
+
     --accent-50: var(--color-pink-50);
     --accent-100: var(--color-pink-100);
     --accent-200: var(--color-pink-200);

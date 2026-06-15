@@ -86,7 +86,7 @@
     <Button
       {href}
       variant="ghost"
-      class={["w-full justify-start min-w-0 font-semibold"]}
+      class={["w-full justify-start min-w-0 font-semibold py-1"]}
       data-current={active}
     >
       {#if icon}
