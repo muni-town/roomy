@@ -52,6 +52,8 @@ export { default as IconLoading } from "~icons/ph/spinner-bold";
 // Layout
 export { default as IconBars } from "~icons/ph/list-bold";
 export { default as IconSquaresPlus } from "~icons/ph/squares-four";
+export { default as IconCollapseSidebar } from "~icons/custom/collapse-sidebar";
+export { default as IconMasonryGrid } from "~icons/custom/masonry-grid";
 
 // Special
 export { default as IconDatabase } from "~icons/ph/database-light";
