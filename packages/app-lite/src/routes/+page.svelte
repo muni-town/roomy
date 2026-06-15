@@ -61,7 +61,7 @@
 {/snippet}
 
 {#snippet homeContent()}
-  <main class="h-full overflow-y-auto px-4 text-base-950 dark:text-base-50">
+  <main class="h-full overflow-y-auto text-base-950 dark:text-base-50">
     <div class="flex flex-col items-center justify-start py-8">
       <div class="flex flex-col gap-8 items-center w-full">
         <!-- <h1 class="text-5xl font-bold text-center">
@@ -119,8 +119,8 @@
           {/if}
 
           {#if joined.length > 0}
-            <section class="w-full max-w-2xl">
-              <h2 class="text-2xl font-bold text-base-900 dark:text-base-100 mb-4">
+            <section class="w-full">
+              <h2 class="text-2xl font-bold px-4 text-base-900 dark:text-base-100 mb-4">
                 Recent Activity
               </h2>
               <ActivityFeed limit={20} />

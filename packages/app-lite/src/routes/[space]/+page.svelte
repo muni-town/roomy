@@ -14,12 +14,10 @@
 
 {#snippet spaceNavbar()}
   <div class="flex-1 text-center font-bold text-lg text-base-900 dark:text-base-100">
-    Activity
+    Recent Activity
   </div>
 {/snippet}
 
-<main class="h-full overflow-y-auto px-4 py-6">
-  <div class="mx-auto max-w-2xl">
+<main class="h-full overflow-y-auto">
     <ActivityFeed {spaceId} limit={50} showSpaceInfo={false} />
-  </div>
 </main>

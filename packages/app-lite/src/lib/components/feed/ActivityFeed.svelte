@@ -3,6 +3,7 @@
   import { resolveBlobUrl } from "$lib/utils";
   import { renderMarkdownSanitized } from "@roomy/design/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
+  import { slide } from "svelte/transition";
 
   let { spaceId, showSpaceInfo = true, limit = 20 }: { spaceId?: string; showSpaceInfo?: boolean; limit?: number } = $props();
 
@@ -45,14 +46,14 @@
       <p class="text-sm text-base-400">No recent activity.</p>
     </div>
   {:else}
-    <div class="flex flex-col gap-3 w-full">
-      {#each feed as item (item.threadId)}
+    <div class="flex flex-col w-full">
+      {#each feed as item, i (item.threadId)}
         <a
           href={roomHref(item)}
-          class="flex flex-col gap-2 rounded-lg border border-base-200 dark:border-base-800 bg-white dark:bg-base-900 p-4 hover:border-base-300 dark:hover:border-base-700 transition-colors no-underline"
+          class="flex flex-col gap-2 p-4 transition-colors group no-underline hover:bg-base-100 dark:hover:bg-base-800/40 hover:shadow-[2px_2px_0_0_var(--color-base-300)] dark:hover:shadow-[2px_2px_0_0_var(--color-base-800)]"
         >
           <!-- Header: space avatar + space/channel context -->
-          <div class="flex items-center gap-2 text-xs text-base-500">
+          <div class="flex items-center gap-2 text-xs">
             {#if showSpaceInfo}
               {#if item.spaceAvatar || item.spaceName}
                 <SpaceAvatar
@@ -62,24 +63,25 @@
                   size={30}
                 />
               {/if}
-              {#if item.spaceName}
-                <span class="font-medium">{item.spaceName}</span>
-              {/if}
+              <!-- {#if item.spaceName}
+                <span class="font-medium hidden group-hover:block text-lg">{item.spaceName}</span>
+              {/if} -->
             {/if}
-            {#if item.threadName}
-              <span class="truncate">{item.threadName}</span>
+            {#if item.channelName || item.threadName}
+              <span class={["truncate text-lg font-bold", item.channelName ? "opacity-70" : ""]}>#{item.channelName || item.threadName}</span>
             {/if}
-            {#if item.channelName}
-              <span>#{item.channelName}</span>
+            {#if item.threadName && item.channelName}
+              <span class="truncate text-lg font-bold pl-1 -ml-1">/ {item.threadName}</span>
             {/if}
+
             {#if item.unreadCount > 0}
               <span
-                class="inline-flex items-center rounded-full bg-accent-400 dark:bg-accent-600 px-2 py-0.5 text-xs font-semibold text-white"
+                class="inline-flex items-center rounded-full bg-accent-200 dark:bg-accent-600 px-2 py-0.5 text-xs font-semibold text-black/50 dark:text-white"
               >
                 {item.unreadCount} unread
               </span>
             {/if}
-            <span class="ml-auto shrink-0">{timeAgo(item.lastActivityAt)}</span>
+            <span class="ml-auto shrink-0 opacity-70">{timeAgo(item.lastActivityAt)}</span>
           </div>
 
           {#if item.messages.length > 0}
@@ -89,7 +91,7 @@
 
             <!-- Preceding context messages (capped height, oldest cut off at top) -->
             {#if preceding.length > 0}
-              <div class="flex flex-col justify-end gap-1.5 pl-1 mt-1 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent_0%,black_10%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_10%)]">
+              <div class="flex flex-col justify-end gap-1.5 pl-1 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent_0%,black_20%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_20%)]">
                 {#each preceding as msg (msg.id)}
                   <div class="flex items-start gap-2 text-sm opacity-80">
                     <div class="mt-0.75"><SpaceAvatar
@@ -130,6 +132,9 @@
             </div>
           {/if}
         </a>
+        {#if i < feed.length - 1}
+          <hr class="border-base-200 dark:border-base-800" />
+        {/if}
       {/each}
     </div>
   {/if}
