@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { page } from "$app/state";
   import { onNavigate } from "$app/navigation";
   import BigSidebar from "@roomy/design/components/layout/BigSidebar.svelte";
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
@@ -10,6 +9,7 @@
   import { sidebarOverride, sidebarContent } from "./sidebar.svelte";
   import { mobileSidebar } from "./mobile-sidebar.svelte";
   import { serverBar } from "./server-bar.svelte";
+  import { wideSidebar } from "./wide-sidebar.svelte";
   import NavbarSpaceInfo from "./NavbarSpaceInfo.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
   import ServerBar from "$lib/components/sidebar/ServerBar.svelte";
@@ -22,8 +22,11 @@
     chatArea?: boolean;
   } = $props();
 
-  // Compact mode when on a space page or other inner route (not the root homepage)
-  const compact = $derived(page.route.id !== "/");
+  // Compact mode when on a space page or other inner route (not a wide-sidebar page)
+  const compact = $derived(!wideSidebar.active);
+
+  // Wide sidebar mode: homepage-style layout (wide server bar, no BigSidebar)
+  const onHomepage = $derived(wideSidebar.active);
 
   const sidebarWidth = $derived(
     onHomepage
@@ -34,9 +37,6 @@
   );
 
   const sidebar = $derived(sidebarOverride.content ?? sidebarContent.content);
-
-  // On the homepage, show a wide server bar that fills the sidebar area with space names
-  const onHomepage = $derived(page.route.id === "/");
 
   onNavigate(() => {
     mobileSidebar.visible = false;

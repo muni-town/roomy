@@ -29,14 +29,15 @@
     class="flex flex-col items-start justify-between w-full min-w-0 group pl-3"
   >
     {#each rooms as room}
+      {@const isActive = room.id === currentRoomId}
       {@const hasUnread =
         room.lastRead > 0 &&
         room.unreadCount > 0 &&
-        room.id !== currentRoomId}
+        !isActive}
       <div class="inline-flex w-full items-start justify-between min-w-0">
         <div class="max-h-4 overflow-visible">
           <IconThread
-            class={`shrink-0 stroke-[0.6] h-[1.85rem] -mt-2 ml-0.5 -mr-0.5 ${hasUnread ? "stroke-base-500" : "stroke-base-400 dark:stroke-base-500"}`}
+            class={`shrink-0 stroke-[0.6] h-[1.85rem] -mt-2 ml-0.5 -mr-0.5 ${hasUnread || isActive ? "stroke-base-500" : "stroke-base-400 dark:stroke-base-500"}`}
           />
         </div>
         <Button
@@ -46,7 +47,7 @@
           data-current={room.id === currentRoomId}
         >
           <span
-            class={`truncate whitespace-nowrap overflow-hidden min-w-0 ${hasUnread ? "font-semibold" : "font-normal text-base-500 dark:text-base-500"}`}
+            class={`truncate whitespace-nowrap overflow-hidden min-w-0 ${hasUnread || isActive ? "font-semibold" : "font-normal"} ${!hasUnread && !isActive ? "text-base-500 dark:text-base-500" : ""}`}
             >{room.name}</span
           >
         </Button>

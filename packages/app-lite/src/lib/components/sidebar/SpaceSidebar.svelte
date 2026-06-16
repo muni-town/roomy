@@ -27,11 +27,10 @@
     IconTrash,
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
+  import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
   import { leaveSpace } from "$lib/mutations/space";
   import { createRoom, updateSidebar } from "$lib/mutations/room";
-  import { createQuery } from "@tanstack/svelte-query";
-  import { cache, newUlid } from "@roomy-space/sdk";
-  import { px } from "$lib/auth.svelte";
+  import { newUlid } from "@roomy-space/sdk";
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
   import SidebarBottomTabs from "./SidebarBottomTabs.svelte";
@@ -42,8 +41,6 @@
 import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
 import { createSpacesQuery } from "$lib/queries/spaces";
 import { toast } from "@foxui/core";
-
-  const { queryKey } = cache;
 
   type RoomMetadata = typeof schemas.queries.getRoomMetadata.Response.infer;
 
@@ -57,6 +54,13 @@ import { toast } from "@foxui/core";
   const metaQuery = createSpaceMetadataQuery(
     () => spaceId ?? "",
     { enabled: !!spaceId },
+  );
+
+  // Fetch metadata for the current room so we can inject the current thread
+  // into the sidebar even when it's not among the recent 8 active threads.
+  const roomMetaQuery = createRoomMetadataQuery(
+    () => page.params.room ?? "",
+    { enabled: !!page.params.room },
   );
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
@@ -114,29 +118,18 @@ import { toast } from "@foxui/core";
     }
   }
 
-  // --- Room metadata for thread-aware sidebar ---
-
-  const roomMetaQuery = createQuery(() => ({
-    queryKey: queryKey("space.roomy.room.getMetadata", {
-      roomId: page.params.room ?? "",
-    }),
-    queryFn: () =>
-      px().query("space.roomy.room.getMetadata", {
-        roomId: page.params.room!,
-      }),
-    enabled: !!page.params.room,
-  }));
-
   /**
    * The channel ID that should appear "active" in the sidebar.
-   * - Direct match: user is on a channel (`page.params.room`)
-   * - Parent match: user is on a thread, parent channel comes from server
+   * Only channels (not threads) get the active highlight — threads are
+   * highlighted separately via LinkedRoomList's data-current attribute.
    */
   const activeChannelId = $derived.by(() => {
     const room = page.params.room;
     if (!room) return null;
     if (channelMap.has(room)) return room;
-    return roomMetaQuery.data?.parentChannelId ?? null;
+    // Thread: don't mark the parent channel as active; the thread itself
+    // is highlighted by LinkedRoomList via currentRoomId.
+    return null;
   });
 
   function editSidebarItem(
@@ -175,6 +168,78 @@ import { toast } from "@foxui/core";
     for (const ch of meta?.sidebar.orphans ?? []) {
       map.set(ch.id, ch);
     }
+    return map;
+  });
+
+  /**
+   * Threads to show under each channel in the sidebar.
+   * Merges the server's activeThreads (up to 8 recent) with the current
+   * thread if it's a thread that belongs to this channel and isn't already
+   * in the list. This ensures the currently-viewed thread always appears
+   * in the sidebar even when it's not among the recent 8.
+   */
+  const threadsByChannel = $derived.by(() => {
+    const map = new Map<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        unreadCount: number;
+        lastRead: number;
+      }>
+    >();
+
+    // Start with server-side active threads
+    for (const cat of meta?.sidebar.categories ?? []) {
+      for (const ch of cat.channels) {
+        if (ch.activeThreads?.length) {
+          map.set(
+            ch.id,
+            ch.activeThreads.map((t) => ({
+              id: t.id,
+              name: t.name ?? t.id,
+              unreadCount: t.unreadCount,
+              lastRead: t.lastRead ? new Date(t.lastRead).getTime() : -1,
+            })),
+          );
+        }
+      }
+    }
+    for (const ch of meta?.sidebar.orphans ?? []) {
+      if (ch.activeThreads?.length) {
+        map.set(
+          ch.id,
+          ch.activeThreads.map((t) => ({
+            id: t.id,
+            name: t.name ?? t.id,
+            unreadCount: t.unreadCount,
+            lastRead: t.lastRead ? new Date(t.lastRead).getTime() : -1,
+          })),
+        );
+      }
+    }
+
+    // If the current room is a thread, inject it into its parent channel
+    const currentRoom = page.params.room;
+    const roomMeta = roomMetaQuery.data;
+    if (currentRoom && roomMeta?.kind === "thread" && roomMeta.parentChannelId) {
+      const parentId = roomMeta.parentChannelId;
+      const existing = map.get(parentId) ?? [];
+      if (!existing.some((t) => t.id === currentRoom)) {
+        map.set(parentId, [
+          ...existing,
+          {
+            id: currentRoom,
+            name: roomMeta.name ?? currentRoom,
+            unreadCount: roomMeta.unreadCount ?? 0,
+            lastRead: roomMeta.lastRead
+              ? new Date(roomMeta.lastRead).getTime()
+              : -1,
+          },
+        ]);
+      }
+    }
+
     return map;
   });
 
@@ -556,6 +621,7 @@ import { toast } from "@foxui/core";
 
 {#snippet channelItem(channel: SidebarChannel)}
   {@const isActive = activeChannelId === channel.id}
+  {@const channelThreads = threadsByChannel.get(channel.id)}
   <div class={!channel.canRead ? "opacity-50 pointer-events-none" : ""}>
     <SidebarItemShell
       variant="channel"
@@ -565,14 +631,9 @@ import { toast } from "@foxui/core";
       hasUnreadDot={channel.unreadCount > 0}
       hasUnread={channel.unreadCount > 0}
     />
-    {#if !isEditing && channel.activeThreads?.length}
+    {#if !isEditing && channelThreads?.length}
       <LinkedRoomList
-        rooms={channel.activeThreads.map((t) => ({
-          id: t.id,
-          name: t.name ?? t.id,
-          unreadCount: t.unreadCount,
-          lastRead: t.lastRead ? new Date(t.lastRead).getTime() : -1,
-        }))}
+        rooms={channelThreads}
         currentRoomId={page.params.room}
         hrefFor={(threadId: string) => `/${spaceId}/${threadId}`}
       />

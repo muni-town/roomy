@@ -47,7 +47,7 @@
         {#if icon}
           {@render icon()}
         {:else}
-          <IconHashtag class={["shrink-0", hasUnread ? "" : "text-base-500 dark:text-base-500"]} />
+          <IconHashtag class={["shrink-0", !hasUnread && !active && "text-base-500 dark:text-base-500"]} />
         {/if}
         {#if hasUnreadDot}
           <div
@@ -58,7 +58,8 @@
         <span
           class={[
             "truncate whitespace-nowrap overflow-hidden min-w-0",
-            hasUnread ? "font-semibold" : "font-normal text-base-500 dark:text-base-500",
+            hasUnread || active ? "font-semibold" : "font-normal",
+            !hasUnread && !active && "text-base-500 dark:text-base-500",
           ]}>{name}</span
         >
       </Button>
