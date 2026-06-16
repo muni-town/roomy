@@ -14,14 +14,11 @@
   let {
     rooms,
     currentRoomId,
-    showUnreadCount = true,
     hrefFor,
   }: {
     rooms: LinkedRoom[];
     /** The ID of the currently-active room (drives data-current). */
     currentRoomId?: string;
-    /** Whether to surface unread badges. */
-    showUnreadCount?: boolean;
     /** Build the link href for a given room id. */
     hrefFor: (roomId: string) => string;
   } = $props();
@@ -32,15 +29,14 @@
     class="flex flex-col items-start justify-between w-full min-w-0 group pl-3"
   >
     {#each rooms as room}
-      {@const hasUnreads =
-        showUnreadCount &&
+      {@const hasUnread =
         room.lastRead > 0 &&
         room.unreadCount > 0 &&
         room.id !== currentRoomId}
       <div class="inline-flex w-full items-start justify-between min-w-0">
         <div class="max-h-4 overflow-visible">
           <IconThread
-            class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2 ml-0.5 -mr-0.5"
+            class={`shrink-0 stroke-[0.6] h-[1.85rem] -mt-2 ml-0.5 -mr-0.5 ${hasUnread ? "stroke-base-500" : "stroke-base-400 dark:stroke-base-500"}`}
           />
         </div>
         <Button
@@ -50,16 +46,9 @@
           data-current={room.id === currentRoomId}
         >
           <span
-            class={`truncate whitespace-nowrap overflow-hidden min-w-0 ${hasUnreads ? "font-semibold" : "font-normal"}`}
+            class={`truncate whitespace-nowrap overflow-hidden min-w-0 ${hasUnread ? "font-semibold" : "font-normal text-base-500 dark:text-base-500"}`}
             >{room.name}</span
           >
-          {#if hasUnreads}
-            <span
-              aria-label="Unread message count"
-              class="font-light opacity-60 ml-auto text-xs pr-2"
-              >{room.unreadCount}</span
-            >
-          {/if}
         </Button>
       </div>
     {/each}

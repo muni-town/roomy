@@ -563,8 +563,7 @@ import { toast } from "@foxui/core";
       href={`/${spaceId}/${channel.id}`}
       active={isActive}
       hasUnreadDot={channel.unreadCount > 0}
-      unreadCount={channel.unreadCount}
-      showUnreadCount={channel.unreadCount > 0}
+      hasUnread={channel.unreadCount > 0}
     />
     {#if !isEditing && channel.activeThreads?.length}
       <LinkedRoomList
@@ -575,7 +574,6 @@ import { toast } from "@foxui/core";
           lastRead: t.lastRead ? new Date(t.lastRead).getTime() : -1,
         }))}
         currentRoomId={page.params.room}
-        showUnreadCount={true}
         hrefFor={(threadId: string) => `/${spaceId}/${threadId}`}
       />
     {/if}

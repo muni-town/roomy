@@ -11,8 +11,7 @@
     href,
     active = false,
     hasUnreadDot = false,
-    unreadCount,
-    showUnreadCount = false,
+    hasUnread = false,
     icon,
     trailing,
     children,
@@ -23,10 +22,8 @@
     active?: boolean;
     /** Show the small accent dot indicating unread messages */
     hasUnreadDot?: boolean;
-    /** Numeric unread count to display at the trailing edge */
-    unreadCount?: number;
-    /** Whether to render the unread count number */
-    showUnreadCount?: boolean;
+    /** Whether the channel/thread has unread messages (controls text contrast) */
+    hasUnread?: boolean;
     /** Optional override for the leading icon */
     icon?: Snippet;
     /** Optional trailing content (e.g., an edit button) */
@@ -50,7 +47,7 @@
         {#if icon}
           {@render icon()}
         {:else}
-          <IconHashtag class="shrink-0" />
+          <IconHashtag class={["shrink-0", hasUnread ? "" : "text-base-500 dark:text-base-500"]} />
         {/if}
         {#if hasUnreadDot}
           <div
@@ -60,15 +57,10 @@
         {/if}
         <span
           class={[
-            "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
+            "truncate whitespace-nowrap overflow-hidden min-w-0",
+            hasUnread ? "font-semibold" : "font-normal text-base-500 dark:text-base-500",
           ]}>{name}</span
         >
-        {#if showUnreadCount && unreadCount !== undefined && unreadCount > 0}
-          <span
-            aria-label="Unread message count"
-            class="font-light opacity-60 ml-auto text-xs">{unreadCount}</span
-          >
-        {/if}
       </Button>
       {#if trailing}{@render trailing()}{/if}
     </div>

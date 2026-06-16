@@ -66,6 +66,5 @@
 <LinkedRoomList
   rooms={linkedRooms}
   currentRoomId={page.params.object}
-  showUnreadCount={flags.unreadNotifications}
   {hrefFor}
 />

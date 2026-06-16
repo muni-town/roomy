@@ -30,8 +30,7 @@
       href={`/${spaceId}/${channel.id}`}
       active={active && !isEditing}
       hasUnreadDot={channel.unreadCount > 0 && !isEditing}
-      unreadCount={channel.unreadCount}
-      showUnreadCount={channel.unreadCount > 0 && !isEditing}
+      hasUnread={channel.unreadCount > 0 && !isEditing}
     />
   </div>
   {#if isEditing}

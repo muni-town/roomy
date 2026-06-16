@@ -60,10 +60,7 @@
     {href}
     active={item.id === page.params.object && !isEditing}
     hasUnreadDot={hasUnread && !isEditing && item.id !== page.params.object}
-    unreadCount={item.unreadCount}
-    showUnreadCount={!!flags.unreadNotifications &&
-      item.lastRead > 0 &&
-      !itemActive}
+    hasUnread={hasUnread && !isEditing && item.id !== page.params.object}
     trailing={editButton}
   >
     {#if itemActive && !isEditing}
