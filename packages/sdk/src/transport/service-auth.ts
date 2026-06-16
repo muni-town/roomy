@@ -31,6 +31,13 @@ export interface CachedToken {
  */
 const EXPIRY_MARGIN_SEC = 30;
 
+/**
+ * Requested token lifetime in seconds. Passed as the `exp` parameter to
+ * `com.atproto.server.getServiceAuth`. The PDS may enforce its own maximum,
+ * but 300 seconds (5 minutes) is well within typical bounds.
+ */
+const REQUESTED_TOKEN_LIFETIME_SEC = 300;
+
 export class ServiceAuthClient {
   readonly #agent: Agent;
   readonly #cache = new Map<string, CachedToken>();
@@ -57,8 +64,10 @@ export class ServiceAuthClient {
       return cached.token;
     }
 
+    const exp = Math.floor(Date.now() / 1000) + REQUESTED_TOKEN_LIFETIME_SEC;
     const resp = await this.#agent.com.atproto.server.getServiceAuth({
       aud,
+      exp,
       ...(lxm !== undefined ? { lxm } : {}),
     });
 
