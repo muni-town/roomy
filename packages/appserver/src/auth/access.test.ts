@@ -74,6 +74,33 @@ function seedThread(
   );
 }
 
+/**
+ * Seed a thread with an explicit (non-null) default_access, simulating the
+ * scenario where a thread was created or updated with its own access level.
+ * The auth layer should still clamp it against the parent channel.
+ */
+function seedThreadWithAccess(
+  db: Database,
+  threadId: string,
+  channelId: string,
+  spaceId: string,
+  defaultAccess: "readwrite" | "read" | "none",
+): void {
+  db.run("insert into entities (id, stream_id) values (?, ?)", [
+    threadId,
+    spaceId,
+  ]);
+  db.run(
+    "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.thread', ?)",
+    [threadId, defaultAccess],
+  );
+  db.run(
+    `insert into edges (head, tail, label, payload)
+       values (?, ?, 'link', json_object('canonical_parent', 1))`,
+    [channelId, threadId],
+  );
+}
+
 function addEdge(
   db: Database,
   head: string,
@@ -325,6 +352,91 @@ describe("auth/access — room access", () => {
     expect(result.defaultAccess).toBe("readwrite");
     expect(result.canRead).toBe(true);
     expect(result.canWrite).toBe(true);
+  });
+
+  test("thread with explicit defaultAccess='read' is clamped to parent's 'none'", () => {
+    const db = freshDb();
+    seedSpace(db);
+    seedChannel(db, CHANNEL, SPACE, "none");
+    seedThreadWithAccess(db, THREAD, CHANNEL, SPACE, "read");
+    seedUser(db, USER);
+
+    const result = roomAccess(db, THREAD, USER);
+    expect(result.defaultAccess).toBe("none");
+    expect(result.canRead).toBe(false);
+    expect(result.canWrite).toBe(false);
+  });
+
+  test("thread with explicit defaultAccess='readwrite' is clamped to parent's 'none'", () => {
+    const db = freshDb();
+    seedSpace(db);
+    seedChannel(db, CHANNEL, SPACE, "none");
+    seedThreadWithAccess(db, THREAD, CHANNEL, SPACE, "readwrite");
+    seedUser(db, USER);
+
+    const result = roomAccess(db, THREAD, USER);
+    expect(result.defaultAccess).toBe("none");
+    expect(result.canRead).toBe(false);
+  });
+
+  test("thread with explicit defaultAccess='readwrite' is clamped to parent's 'read'", () => {
+    const db = freshDb();
+    seedSpace(db);
+    seedChannel(db, CHANNEL, SPACE, "read");
+    seedThreadWithAccess(db, THREAD, CHANNEL, SPACE, "readwrite");
+    seedUser(db, USER);
+
+    const result = roomAccess(db, THREAD, USER);
+    expect(result.defaultAccess).toBe("read");
+    expect(result.canRead).toBe(true);
+    expect(result.canWrite).toBe(false);
+  });
+
+  test("thread can be more restrictive than parent channel", () => {
+    const db = freshDb();
+    seedSpace(db);
+    seedChannel(db, CHANNEL, SPACE, "readwrite");
+    seedThreadWithAccess(db, THREAD, CHANNEL, SPACE, "read");
+    seedUser(db, USER);
+    addEdge(db, SPACE, USER, "member");
+
+    const result = roomAccess(db, THREAD, USER);
+    // Thread's own 'read' is more restrictive than parent's 'readwrite',
+    // so it should be honored (no clamping needed).
+    expect(result.defaultAccess).toBe("read");
+    expect(result.canRead).toBe(true);
+    expect(result.canWrite).toBe(false);
+  });
+
+  test("role grant still works on thread clamped to parent's 'none'", () => {
+    const db = freshDb();
+    seedSpace(db);
+    seedChannel(db, CHANNEL, SPACE, "none");
+    seedThreadWithAccess(db, THREAD, CHANNEL, SPACE, "read");
+    seedUser(db, USER);
+    addEdge(db, SPACE, USER, "member");
+    addRole(db, ROLE, SPACE, USER, CHANNEL, "read");
+
+    const result = roomAccess(db, THREAD, USER);
+    expect(result.defaultAccess).toBe("none");
+    // Role grant on parent channel should still provide access.
+    expect(result.canRead).toBe(true);
+  });
+
+  test("ban overrides thread clamping", () => {
+    const db = freshDb();
+    seedSpace(db);
+    seedChannel(db, CHANNEL, SPACE, "read");
+    seedThreadWithAccess(db, THREAD, CHANNEL, SPACE, "read");
+    seedUser(db, USER);
+    db.run("insert into comp_bans (entity, user_did) values (?, ?)", [
+      SPACE,
+      USER,
+    ]);
+
+    const result = roomAccess(db, THREAD, USER);
+    expect(result.canRead).toBe(false);
+    expect(result.isBanned).toBe(true);
   });
 
   test("ban overrides everything — even admin", () => {

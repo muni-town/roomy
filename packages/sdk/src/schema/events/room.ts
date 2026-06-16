@@ -56,7 +56,10 @@ const CreateRoomSchema = type({
 export const CreateRoom = defineEvent(
   CreateRoomSchema,
   ({ streamId, event }) => {
-    const access = event.defaultAccess ?? "readwrite";
+    const access =
+      event.kind === "space.roomy.thread"
+        ? null
+        : (event.defaultAccess ?? "readwrite");
     const statements = [
       ensureEntity(streamId, event.id),
       sql`

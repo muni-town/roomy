@@ -199,13 +199,18 @@ function resolveRoom(
 
   const parentChannelId = parent?.head ?? null;
 
-  // If this room has no default_access of its own, inherit from canonical parent.
-  if (row.default_access === null && parentChannelId !== null) {
+  // When a canonical parent channel exists, the thread's effective
+  // default_access is the more restrictive of the parent's and the
+  // thread's own (if set). A thread cannot grant more access than its
+  // parent channel allows.
+  if (parentChannelId !== null) {
     const parentRow = s.parentDefaultAccess.get(parentChannelId);
+    const parentAccess = normalizeDefaultAccess(parentRow?.default_access);
+    const ownAccess = normalizeDefaultAccess(row.default_access);
     return {
       row: {
         spaceId: row.space_id,
-        defaultAccess: normalizeDefaultAccess(parentRow?.default_access),
+        defaultAccess: minAccess(parentAccess, ownAccess),
       },
       parentChannelId,
     };
@@ -218,6 +223,19 @@ function resolveRoom(
     },
     parentChannelId,
   };
+}
+
+/**
+ * Return the more restrictive of two DefaultAccess values.
+ * Ordering: none (most restrictive) < read < readwrite (least restrictive).
+ */
+function minAccess(a: DefaultAccess, b: DefaultAccess): DefaultAccess {
+  const level: Record<DefaultAccess, number> = {
+    none: 0,
+    read: 1,
+    readwrite: 2,
+  };
+  return level[a] <= level[b] ? a : b;
 }
 
 function normalizeDefaultAccess(raw: string | null | undefined): DefaultAccess {
