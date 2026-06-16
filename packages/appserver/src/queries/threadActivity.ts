@@ -91,29 +91,30 @@ export function listThreadActivity(
 
   if (threads.length === 0) return [];
 
-  // Step 2: for each thread, fetch latest timestamp + up to 3 recent participants.
-  // Doing this per-thread keeps the SQL legible and avoids the partition-by-alias
-  // pitfall noted above. Most rooms have few threads; if hot, batch this later.
-  const latestStmt = db.query<{ ts: number | null }, [string]>(
-    `select max(cc.timestamp) as ts
-       from entities e
-       join comp_content cc on cc.entity = e.id
-      where e.room = ?`,
-  );
+  const threadIds = threads.map((t) => t.id);
+  const ph = threadIds.map(() => "?").join(",");
 
-  const recentParticipantsStmt = db.query<
-    {
-      did: string;
-      name: string | null;
-      avatar: string | null;
-    },
-    [string]
-  >(
-    // Latest distinct authors. We pick the most recent N=3 by joining
-    // comp_content for timestamp; window function via group_concat is
-    // overkill — a small correlated subquery + DISTINCT is fine.
-    `select did, name, avatar from (
-       select author_e.tail as did,
+  // Step 2: batch-fetch latest timestamps for all threads at once.
+  const latestRows = db
+    .query<{ room: string; ts: number | null }, string[]>(
+      `select e.room as room, max(cc.timestamp) as ts
+         from entities e
+         join comp_content cc on cc.entity = e.id
+        where e.room in (${ph})
+        group by e.room`,
+    )
+    .all(...threadIds);
+  const latestMap = new Map(latestRows.map((r) => [r.room, r.ts]));
+
+  // Step 3: batch-fetch recent participants (up to 3 per thread).
+  // We fetch all and group in JS.
+  const participantRows = db
+    .query<
+      { room: string; did: string; name: string | null; avatar: string | null; ts: number | null },
+      string[]
+    >(
+      `select msg.room as room,
+              author_e.tail as did,
               ci.name as name,
               ci.avatar as avatar,
               max(cc.timestamp) as ts
@@ -121,21 +122,73 @@ export function listThreadActivity(
          join comp_content cc on cc.entity = msg.id
          join edges author_e on author_e.head = msg.id and author_e.label = 'author'
          left join comp_info ci on ci.entity = author_e.tail
-        where msg.room = ?
-        group by author_e.tail
-     )
-     order by ts desc
-     limit 3`,
-  );
+        where msg.room in (${ph})
+        group by msg.room, author_e.tail
+        order by msg.room, ts desc`,
+    )
+    .all(...threadIds);
 
-  const parentStmt = db.query<{ head: string }, [string]>(
-    `select head from edges
-      where tail = ? and label = 'link'
-        and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1
-      limit 1`,
-  );
+  // Group participants by room, take top 3 per room.
+  const participantsMap = new Map<string, ThreadMember[]>();
+  for (const r of participantRows) {
+    let arr = participantsMap.get(r.room);
+    if (!arr) {
+      arr = [];
+      participantsMap.set(r.room, arr);
+    }
+    if (arr.length < 3) {
+      arr.push({ did: r.did, name: r.name, avatar: r.avatar });
+    }
+  }
 
-  const latestMessageStmt = db.query<
+  // Step 4: batch-fetch canonical parent for all threads.
+  const parentRows = db
+    .query<{ tail: string; head: string }, string[]>(
+      `select tail, head from edges
+        where tail in (${ph})
+          and label = 'link'
+          and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1`,
+    )
+    .all(...threadIds);
+  const parentMap = new Map(parentRows.map((r) => [r.tail, r.head]));
+
+  // Step 5: batch-fetch latest message for all threads.
+  // SQLite doesn't support LIMIT per group, so we fetch all messages
+  // and pick the latest per thread in JS.
+  const latestMsgRows = db
+    .query<
+      {
+        room: string;
+        id: string;
+        mime_type: string | null;
+        data: Buffer | Uint8Array | null;
+        author_did: string | null;
+        author_name: string | null;
+        author_avatar: string | null;
+        timestamp: number | null;
+      },
+      string[]
+    >(
+      `select e.room as room,
+              e.id as id,
+              cc.mime_type as mime_type,
+              cc.data as data,
+              coalesce(author_e.tail, '') as author_did,
+              author_info.name as author_name,
+              author_info.avatar as author_avatar,
+              cc.timestamp as timestamp
+         from entities e
+         join comp_content cc on cc.entity = e.id
+         left join edges author_e
+           on author_e.head = e.id and author_e.label = 'author'
+         left join comp_info author_info on author_info.entity = author_e.tail
+        where e.room in (${ph})`,
+    )
+    .all(...threadIds);
+
+  // Pick the latest message per thread (highest timestamp).
+  const latestMsgMap = new Map<
+    string,
     {
       id: string;
       mime_type: string | null;
@@ -144,32 +197,20 @@ export function listThreadActivity(
       author_name: string | null;
       author_avatar: string | null;
       timestamp: number | null;
-    },
-    [string]
-  >(
-    `select
-       e.id as id,
-       cc.mime_type as mime_type,
-       cc.data as data,
-       coalesce(author_e.tail, '') as author_did,
-       author_info.name as author_name,
-       author_info.avatar as author_avatar,
-       cc.timestamp as timestamp
-     from entities e
-     join comp_content cc on cc.entity = e.id
-     left join edges author_e
-       on author_e.head = e.id and author_e.label = 'author'
-     left join comp_info author_info on author_info.entity = author_e.tail
-     where e.room = ?
-     order by cc.timestamp desc
-     limit 1`,
-  );
+    }
+  >();
+  for (const r of latestMsgRows) {
+    const existing = latestMsgMap.get(r.room);
+    if (!existing || (r.timestamp ?? 0) > (existing.timestamp ?? 0)) {
+      latestMsgMap.set(r.room, r);
+    }
+  }
 
   const results: ThreadActivity[] = threads.map((t) => {
-    const latest = latestStmt.get(t.id);
-    const members = recentParticipantsStmt.all(t.id);
-    const parent = parentStmt.get(t.id);
-    const latestMsgRow = latestMessageStmt.get(t.id);
+    const latest = latestMap.get(t.id);
+    const members = participantsMap.get(t.id) ?? [];
+    const parent = parentMap.get(t.id);
+    const latestMsgRow = latestMsgMap.get(t.id);
 
     let latestMessage: ThreadMessage | null = null;
     if (latestMsgRow && latestMsgRow.author_did) {
@@ -191,14 +232,10 @@ export function listThreadActivity(
     return {
       id: t.id,
       name: t.name,
-      canonicalParent: parent?.head ?? null,
+      canonicalParent: parent ?? null,
       latestTimestamp:
-        latest?.ts != null ? new Date(latest.ts).toISOString() : null,
-      latestMembers: members.map((m) => ({
-        did: m.did,
-        name: m.name,
-        avatar: m.avatar,
-      })),
+        latest != null ? new Date(latest).toISOString() : null,
+      latestMembers: members,
       latestMessage,
     };
   });
