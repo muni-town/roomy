@@ -2,7 +2,7 @@
 
 Guidance for AI coding agents working with this monorepo.
 
-**Updated:** 2026-04-13
+**Updated:** 2026-06-16
 
 ## Architecture Direction
 
@@ -17,15 +17,26 @@ See `packages/appserver/docs/plans/appserver-architecture.md` for full design, m
 
 **Current phase:** Phase 0 — scaffolding, lexicon design, research.
 
+## Primary Focus: app-lite
+
+**`packages/app-lite` is now the primary client application.** It is a thin SvelteKit client that communicates with the appserver via XRPC (Tanstack Query for HTTP queries, WebSocket for subscriptions). It has no SQLite WASM, no worker architecture, and no client-side materialisation — all state is managed server-side.
+
+`packages/app` (the legacy SvelteKit application) is **maintained but superseded** by app-lite. Cosmetic/design changes may still be applied to app, but all new feature development, architecture work, and refactoring should target app-lite. The app package will be deprecated and removed once app-lite reaches feature parity.
+
 ## Monorepo Structure
 
 ```
 roomy/
 ├── packages/
-│   ├── app/              # SvelteKit web application (being simplified)
-│   ├── appserver/        # XRPC appserver — NEW (Bun + TypeScript)
+│   ├── app/              # SvelteKit web application — SUPERSEDED (maintained, no new features)
+│   ├── app-lite/         # SvelteKit thin client — PRIMARY (Svelte 5, Tanstack Query, XRPC)
+│   ├── appserver/        # XRPC appserver (Bun + TypeScript)
+│   ├── design/           # @roomy/design — Shared design system, components, and icons
 │   ├── sdk/              # @roomy-space/sdk - Core SDK for Roomy clients
 │   ├── discord-bridge/   # Discord↔Roomy bridge service
+│   ├── discord-bridge-legacy/  # Legacy Discord bridge (archived)
+│   ├── playground/       # Experimental playground
+│   ├── roomy-cli/        # CLI tool (placeholder)
 │   └── tsconfig/         # Shared TypeScript configuration
 ├── compose.yaml          # Development services (Leaf, Grafana stack)
 ├── turbo.json            # Build orchestration
@@ -37,7 +48,8 @@ roomy/
 ### Development
 
 ```bash
-pnpm dev                    # Start web app on 127.0.0.1:5173
+pnpm dev                    # Start legacy web app on 127.0.0.1:5173
+pnpm dev:lite               # Start app-lite on 127.0.0.1:5180
 pnpm dev:bridge             # Start Discord bridge service
 pnpm dev:all                # Start all services + monitoring
 ```
@@ -46,19 +58,21 @@ pnpm dev:all                # Start all services + monitoring
 
 ```bash
 pnpm build                  # Build all packages via turbo
-pnpm build-web-app          # Build web app via Vite
+pnpm build-web-app          # Build legacy web app via Vite
 pnpm build-web-app-prod     # Production build with OAuth manifest
+pnpm build:lite             # Build app-lite via Vite
 pnpm build:t                # Build Tauri desktop app
 pnpm publish-packages       # Version & publish SDK to npm
 ```
 
-### Testing (packages/app)
+### Testing
 
 ```bash
-pnpm test                   # Unit tests (Vitest)
-pnpm test:e2e               # E2E tests (Playwright)
-pnpm test:robot             # Integration tests (Robot Framework)
-pnpm check                  # TypeScript type checking (svelte-check)
+pnpm test                   # Unit tests (Vitest) — currently targets packages/app
+pnpm test:e2e               # E2E tests (Playwright) — currently targets packages/app
+pnpm test:robot             # Integration tests (Robot Framework) — currently targets packages/app
+pnpm check                  # TypeScript type checking (svelte-check) — targets packages/app
+pnpm check:lite             # TypeScript type checking for app-lite
 ```
 
 ### Running a Single Test
@@ -69,11 +83,47 @@ pnpm test:e2e tests/e2e/app.spec.ts
 pnpm test src/lib/workers/encoding.test.ts
 ```
 
-## Package: app (Web Application)
+## Package: app-lite (Primary Client — SvelteKit Thin Client)
 
-The main SvelteKit application. **Under active refactor** — the three-tier worker architecture is being replaced by a thin client that delegates to `packages/appserver` via XRPC.
+The primary SvelteKit application. A thin client that communicates with `packages/appserver` via XRPC — Tanstack Query for HTTP queries, WebSocket for subscriptions. No SQLite WASM, no workers, no client-side materialisation.
 
-**Current (legacy) architecture:**
+**Architecture:**
+```
+UI Thread (Svelte 5 Components)
+    Tanstack Query (in-memory cache, reactive)
+        ↓ XRPC fetch (HTTP) / WebSocket (subscriptions)
+    Appserver (packages/appserver)
+```
+
+Server pushes row-level diffs → Tanstack Query cache updates → Svelte 5 runes observe query results.
+
+### Key Directories
+
+- `src/lib/components/` - UI components (chat, layout, sidebar, thread, auth)
+- `src/lib/queries/` - Tanstack Query wrappers for XRPC calls
+- `src/lib/mutations/` - XRPC mutation wrappers
+- `src/lib/sync.svelte.ts` - WebSocket sync connection
+- `src/lib/client.ts` - Tanstack Query client configuration
+- `src/lib/config.ts` - App configuration (appserver DID, OAuth scope, feature flags)
+- `src/routes/` - SvelteKit routes
+
+### Key Differences from app
+
+| Aspect | app (legacy) | app-lite (primary) |
+|--------|-------------|-------------------|
+| State management | SQLite WASM + workers | Tanstack Query (server-driven) |
+| Data fetching | LiveQuery (client-side materialisation) | XRPC via appserver |
+| Real-time | WebSocket via Leaf | WebSocket via appserver |
+| Port | 5173 | 5180 |
+| Adapter | Netlify + Static + Tauri | Static (adapter-static) |
+| CSS | Tailwind CSS 4.x | Tailwind CSS 4.x via Vite plugin |
+| Design system | Inline components | `@roomy/design` package |
+
+## Package: app (Legacy — Superseded)
+
+The original SvelteKit application. **Maintained for now but superseded by app-lite.** Cosmetic/design changes are acceptable, but no new feature development or architecture work should target this package.
+
+**Architecture (legacy):**
 ```
 UI Thread (Svelte Components)
     ↓
@@ -86,16 +136,6 @@ Dedicated Worker (SQLite Worker)   ← being removed
     - Event materialization
     - Live queries
 ```
-
-**Target architecture:**
-```
-UI Thread (Svelte Components)
-    Tanstack DB (in-memory IVM, reactive)
-        ↓ XRPC fetch / WebSocket
-    Appserver (packages/appserver)
-```
-
-Server pushes row-level diffs → Tanstack DB mutates in-memory tables → Svelte 5 runes observe query results.
 
 ### Key Directories
 
@@ -125,6 +165,29 @@ window.debugWorkers.testSqliteConnection();
 window.debugWorkers.logWorkerStatus();
 window.debugWorkers.diagnoseRoom(roomId);
 ```
+
+## Package: design (@roomy/design)
+
+Shared design system used by both `app` and `app-lite`. Contains reusable Svelte 5 components, icons, and utility functions.
+
+**Key Exports:**
+
+- `@roomy/design` — Main entry point (component index)
+- `@roomy/design/icons` — Icon index
+- `@roomy/design/utils` — Utility functions (cn, markdown)
+- `@roomy/design/components/*` — Individual component imports
+
+**Component Categories:**
+
+- `content/thread/` — Thread content components (shared between app and app-lite)
+- `helper/` — Utility components (Drawer, LoadingSpinner, Tooltip, etc.)
+- `layout/` — Layout components (Navbar, Sidebar, ScrollArea)
+- `modals/` — Modal dialogs (CreateRoom, InviteManager, RoleEdit, etc.)
+- `richtext/` — Rich text editor (TipTap-based)
+- `sidebars/` — Sidebar layout components
+- `spaces/` — Space avatar and card components
+- `ui/` — Low-level UI primitives (buttons, inputs, popovers, context menus)
+- `user/` — User-facing components (LoginScreen, UserMenu, ThemeSettings)
 
 ## Package: sdk (@roomy-space/sdk)
 
@@ -204,7 +267,19 @@ docker compose up -d        # Start all services
 
 ## Key Libraries
 
-**UI (app):**
+**UI (app-lite — primary):**
+
+- Svelte 5 with runes API
+- SvelteKit 2.x
+- Tailwind CSS 4.x (via `@tailwindcss/vite`)
+- `@tanstack/svelte-query` — Server state management (HTTP queries + cache)
+- `@foxui/core` + `@foxui/social` — UI framework
+- `bits-ui` — Headless UI primitives
+- `virtua` — Virtual scrolling
+- TipTap rich text editor (`@tiptap/core`, `@tiptap/pm`, `tiptap-markdown`)
+- `@roomy/design` — Shared design system (workspace dependency)
+
+**UI (app — legacy):**
 
 - Svelte 5 with runes API
 - SvelteKit 2.x
@@ -219,7 +294,7 @@ docker compose up -d        # Start all services
 
 **Database:**
 
-- `@sqlite.org/sqlite-wasm` - SQLite in WebAssembly
+- `@sqlite.org/sqlite-wasm` - SQLite in WebAssembly (app legacy only)
 
 ## Development Practices
 
@@ -233,7 +308,9 @@ Strict settings across all packages:
 - `noImplicitAny: true`
 - `noUncheckedIndexedAccess: true`
 
-### Authentication Modes (app)
+### Authentication Modes
+
+Both app and app-lite use the same AT Protocol OAuth flow:
 
 1. **OAuth (Production):** Standard AT Protocol OAuth
 2. **App Password (Testing):** Via environment variables
@@ -243,7 +320,7 @@ PUBLIC_TEST_IDENTIFIER=your-handle.bsky.social
 PUBLIC_TEST_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 ```
 
-### Required HTTP Headers (app)
+### Required HTTP Headers (app — legacy only)
 
 For SharedArrayBuffer/OPFS support:
 
@@ -252,8 +329,12 @@ Cross-Origin-Embedder-Policy: credentialless
 Cross-Origin-Opener-Policy: same-origin
 ```
 
-### Deployment Targets (app)
+### Deployment Targets
 
+**app-lite (primary):**
+1. **Static** - `@sveltejs/adapter-static`
+
+**app (legacy):**
 1. **Netlify** - `@sveltejs/adapter-netlify`
 2. **Static** - `@sveltejs/adapter-static`
 3. **Tauri** - Desktop builds
