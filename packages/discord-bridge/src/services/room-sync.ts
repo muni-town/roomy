@@ -166,7 +166,8 @@ export async function handleThreadCreate(
 				$type: "space.roomy.room.createRoom.v0",
 				kind: "space.roomy.thread",
 				name: threadName,
-				defaultAccess: "read",
+				// Threads inherit default_access from their parent channel via the
+				// canonical link edge — no need to set it here.
 				extensions: {
 					"space.roomy.extension.discordOrigin.v0": {
 						snowflake: threadId,
