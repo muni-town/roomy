@@ -82,13 +82,13 @@ SOFTWARE.
         ghost: [
           "text-base-700 dark:text-base-200",
           "hover:bg-base-200/50 dark:hover:bg-base-900/30",
-          "border border-transparent hover:border-base-200 dark:hover:border-base-900",
+          "border border-transparent hover:border-base-200 dark:hover:border-transparent",
           "active:bg-accent-300/30 dark:active:bg-accent-500/15",
           "font-semibold",
           "focus-visible:outline-base-900 dark:focus-visible:outline-base-50",
           "data-[current=true]:bg-accent-300/50 dark:data-[current=true]:bg-accent-500/10",
           "data-[current=true]:text-accent-950 dark:data-[current=true]:text-accent-50",
-          "data-[current=true]:border-accent-300/60 dark:data-[current=true]:border-accent-500/15"
+          "data-[current=true]:border-accent-300/60 dark:data-[current=true]:border-transparent"
         ],
         red: [
           "bg-red-200 dark:bg-red-700",

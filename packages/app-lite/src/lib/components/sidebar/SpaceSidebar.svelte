@@ -33,7 +33,7 @@
   import { newUlid } from "@roomy-space/sdk";
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
-  import SidebarBottomTabs from "./SidebarBottomTabs.svelte";
+  import SpaceSidebarButtons from "./SpaceSidebarButtons.svelte";
   import EditRoomModal from "./EditRoomModal.svelte";
   import RestoreRoomModal from "./RestoreRoomModal.svelte";
   import EditableChannelItem from "./EditableChannelItem.svelte";
@@ -457,7 +457,7 @@ import { toast } from "@foxui/core";
   {/snippet}
 
   {#snippet actions()}
-    <SidebarBottomTabs
+    <SpaceSidebarButtons
       {spaceId}
       allowPublicJoin={meta?.joinPolicy.allowPublicJoin ?? false}
       onInvite={onInvite}

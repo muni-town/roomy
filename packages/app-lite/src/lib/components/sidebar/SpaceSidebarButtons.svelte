@@ -38,7 +38,7 @@
     {#snippet trigger({ props })}
       <span {...props} class="flex-1">
         <Button
-          variant="secondary"
+          variant="ghost"
           size="default"
           class="w-full justify-center"
           aria-label="Notifications"
@@ -52,7 +52,7 @@
 
   <!-- Invite -->
   <Button
-    variant="secondary"
+    variant="ghost"
     size="default"
     class="flex-1 justify-center"
     aria-label="Invite"
@@ -64,7 +64,7 @@
 
   <!-- Settings -->
   <Button
-    variant="secondary"
+    variant="ghost"
     size="default"
     class="flex-1 justify-center"
     aria-label="Settings"
