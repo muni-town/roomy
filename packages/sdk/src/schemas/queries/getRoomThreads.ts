@@ -31,6 +31,7 @@ export const RoomThread = type({
   id: "string",
   "name?": "string",
   "canonicalParent?": "string",
+  "unreadCount?": "number",
   activity: ThreadActivity,
 });
 

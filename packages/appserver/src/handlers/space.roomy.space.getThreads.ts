@@ -10,6 +10,7 @@ import { roomAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { listThreadActivity } from "../queries/threadActivity.ts";
+import { getReadPositions } from "../queries/readPositions.ts";
 import { parseUserDid, requireSpaceRead } from "../xrpc/authGuards.ts";
 import { requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
@@ -18,6 +19,7 @@ interface ThreadRow {
   id: string;
   name?: string;
   channel?: string;
+  unreadCount: number;
   activity: {
     latestTimestamp?: string;
     latestMembers: Array<{
@@ -58,6 +60,10 @@ export const getSpaceThreadsHandler: QueryHandler<
 
   const all = listThreadActivity(db, { kind: "space", spaceId });
 
+  // Collect all thread IDs for batch unread lookup
+  const threadIds = all.map((t) => t.id);
+  const readPositions = auth.did ? getReadPositions(db, auth.did, threadIds) : new Map();
+
   const threads: ThreadRow[] = [];
   for (const t of all) {
     // Thread visibility hangs off the canonical parent channel — re-use
@@ -87,7 +93,7 @@ export const getSpaceThreadsHandler: QueryHandler<
       timestamp: t.latestMessage.timestamp,
     };
 
-    const thread: ThreadRow = { id: t.id, activity };
+    const thread: ThreadRow = { id: t.id, activity, unreadCount: readPositions.get(t.id)?.unreadCount ?? 0 };
     if (t.name != null) thread.name = t.name;
     if (t.canonicalParent != null) thread.channel = t.canonicalParent;
     threads.push(thread);

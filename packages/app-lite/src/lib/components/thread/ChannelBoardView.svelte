@@ -17,6 +17,7 @@
     id: string;
     name?: string;
     canonicalParent?: string;
+    unreadCount?: number;
     activity: {
       latestTimestamp?: string;
       latestMembers: Array<{ did: string; name?: string; avatar?: string }>;
@@ -40,6 +41,7 @@
       name: t.name ?? "Unnamed Thread",
       kind: "space.roomy.thread",
       canonicalParent: t.canonicalParent,
+      unreadCount: t.unreadCount ?? 0,
       activity: {
         members: t.activity.latestMembers.map((m) => ({
           id: m.did,

@@ -103,6 +103,9 @@
         },
         "name": {
           "type": "string"
+        },
+        "unreadCount": {
+          "type": "integer"
         }
       }
     },

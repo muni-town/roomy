@@ -32,6 +32,7 @@ export const Thread = type({
   "name?": "string",
   "channel?": "string",
   "channelName?": "string",
+  "unreadCount?": "number",
   activity: ThreadActivity,
 });
 
