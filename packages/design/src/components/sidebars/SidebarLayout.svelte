@@ -49,7 +49,7 @@
 
   {#if saveAction}{@render saveAction()}{/if}
 
-  <div class="w-full h-full px-2 pt-3 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)] flex-1 min-h-0 overflow-y-scroll">
+  <div class="w-full h-full px-2 pt-3 pb-20 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)] flex-1 min-h-0 overflow-y-scroll">
     {#if prefix}{@render prefix()}{/if}
     {#if loneRoom}{@render loneRoom()}{/if}
     {#if body}{@render body()}{/if}
