@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
@@ -106,7 +107,7 @@
         <div class="text-sm text-red-600 p-2">{threadsQuery.error.message}</div>
       </div>
     {:else}
-      <BoardViewShell {threads} emptyMessage="No threads yet" {hrefFor} />
+      <BoardViewShell {threads} emptyMessage="No threads yet" {hrefFor} onAvatarClick={(did) => goto(`/user/${did}`)} />
     {/if}
   {/if}
 </main>

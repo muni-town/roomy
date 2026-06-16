@@ -6,7 +6,8 @@
   let {
     thread,
     href,
-  }: { thread: ThreadInfo; href: string } = $props();
+    onAvatarClick,
+  }: { thread: ThreadInfo; href: string; onAvatarClick?: (did: string) => void } = $props();
 
   let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
 
@@ -56,14 +57,21 @@
   {#if thread.activity.latestMessage}
     {@const msg = thread.activity.latestMessage}
     <div class="flex items-start gap-2 text-sm pl-1">
-      <div class="mt-0.75">
+      <button
+        onclick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onAvatarClick?.(msg.author.did);
+        }}
+        class="mt-0.75 rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer shrink-0"
+      >
         <SpaceAvatar
           src={msg.author.avatar}
           id={msg.author.did}
           name={msg.author.name ?? undefined}
           size={18}
         />
-      </div>
+      </button>
       <div class="min-w-0">
         <span class="font-medium text-base-700 dark:text-base-300">
           {msg.author.name ?? msg.author.did.slice(0, 8)}

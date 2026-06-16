@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import { createMembersQuery } from "$lib/queries/members";
 
   const spaceId = $derived(page.params.space!);
@@ -19,12 +20,15 @@
     <ul class="space-y-1 mb-6">
       {#each members as m (m.did)}
         <li class="flex items-center gap-3 p-2 rounded-xl bg-white dark:bg-base-900 border border-base-200 dark:border-base-800">
-          <div class="w-8 h-8 rounded-full bg-base-200 dark:bg-base-700 flex items-center justify-center text-xs font-bold text-base-500">
+          <button
+            onclick={() => goto(`/user/${m.did}`)}
+            class="w-8 h-8 rounded-full bg-base-200 dark:bg-base-700 flex items-center justify-center text-xs font-bold text-base-500 hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer shrink-0"
+          >
             {(m.name ?? "?")[0]?.toUpperCase() ?? "?"}
-          </div>
+          </button>
           <div class="min-w-0 flex-1">
-            <div class="text-sm font-medium truncate">{m.name ?? m.did}</div>
-            <div class="text-xs text-base-400 truncate">{m.handle ?? m.did}</div>
+            <a href={`/user/${m.did}`} class="text-sm font-medium truncate hover:underline">{m.name ?? m.did}</a>
+            <a href={`/user/${m.did}`} class="text-xs text-base-400 truncate block hover:underline">{m.handle ?? m.did}</a>
           </div>
           {#if m.isAdmin}
             <span class="text-[10px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">admin</span>

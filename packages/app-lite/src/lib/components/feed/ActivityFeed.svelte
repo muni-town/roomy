@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { createActivityFeedQuery, type ActivityItem } from "$lib/queries/activity-feed";
   import { resolveBlobUrl } from "$lib/utils";
   import { renderMarkdownSanitized } from "@roomy/design/utils";
@@ -94,16 +95,26 @@
               <div class="flex flex-col justify-end gap-1.5 pl-1 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent_0%,black_20%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_20%)]">
                 {#each preceding as msg (msg.id)}
                   <div class="flex items-start gap-2 text-sm opacity-80">
-                    <div class="mt-0.75"><SpaceAvatar
+                    <button
+                      onclick={() => goto(`/user/${msg.author.did}`)}
+                      class="mt-0.75 rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer shrink-0"
+                    ><SpaceAvatar
                       src={resolveBlobUrl(msg.author.avatar)}
                       id={msg.author.did}
                       name={msg.author.name ?? undefined}
                       size={18}
-                    /></div>
+                    /></button>
                     <div class="min-w-0">
-                      <span class="font-medium text-base-700 dark:text-base-300">
+                      <button
+                        onclick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          goto(`/user/${msg.author.did}`);
+                        }}
+                        class="font-medium text-base-700 dark:text-base-300 hover:underline cursor-pointer bg-transparent border-none p-0 inline"
+                      >
                         {msg.author.name ?? msg.author.did.slice(0, 8)}
-                      </span>
+                      </button>
                       <span class="text-base-600 dark:text-base-400 break-words [&_p]:inline [&_p]:m-0">
                         {@html renderMarkdownSanitized(msg.content)}
                       </span>
@@ -115,16 +126,26 @@
 
             <!-- Most recent message (full height) -->
             <div class="flex items-start gap-2 text-sm pl-1">
-              <div class="mt-0.75"><SpaceAvatar
+              <button
+                onclick={() => goto(`/user/${last.author.did}`)}
+                class="mt-0.75 rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer shrink-0"
+              ><SpaceAvatar
                 src={resolveBlobUrl(last.author.avatar)}
                 id={last.author.did}
                 name={last.author.name ?? undefined}
                 size={18}
-              /></div>
+              /></button>
               <div class="min-w-0">
-                <span class="font-medium text-base-700 dark:text-base-300">
+                <button
+                  onclick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    goto(`/user/${last.author.did}`);
+                  }}
+                  class="font-medium text-base-700 dark:text-base-300 hover:underline cursor-pointer bg-transparent border-none p-0 inline"
+                >
                   {last.author.name ?? last.author.did.slice(0, 8)}
-                </span>
+                </button>
                 <span class="text-base-600 dark:text-base-400 break-words [&_p]:inline [&_p]:m-0">
                   {@html renderMarkdownSanitized(last.content)}
                 </span>

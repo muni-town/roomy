@@ -8,6 +8,7 @@
   import RoomyHomeCard from "$lib/components/sidebar/RoomyHomeCard.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { setSidebarContent } from "$lib/components/layout/sidebar.svelte";
+  import { setWideSidebar } from "$lib/components/layout/wide-sidebar.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
   import { joinSpace } from "$lib/mutations/space";
   import { queryClient } from "$lib/client";
@@ -40,9 +41,11 @@
   onMount(() => {
     setNavbar(homeNavbar);
     setSidebarContent(homeSidebar);
+    setWideSidebar(true);
     return () => {
       setNavbar(undefined);
       setSidebarContent(undefined);
+      setWideSidebar(false);
     };
   });
 </script>

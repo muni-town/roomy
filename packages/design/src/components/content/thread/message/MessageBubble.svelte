@@ -126,12 +126,28 @@
       {#if !mergeWithPrevious}
         <div class="text-sm w-full text-start">
           <span class="gap-2">
-            <span class="font-medium text-accent-700 dark:text-accent-400"
-              >{authorName}</span
-            >
-            {#if authorHandle}<span class="opacity-75 font-normal"
-                >@{authorHandle}</span
-              >{/if}
+            {#if profileUrl}
+              <a
+                href={profileUrl}
+                class="font-medium text-accent-700 dark:text-accent-400 hover:underline"
+                >{authorName}</a
+              >
+            {:else}
+              <span class="font-medium text-accent-700 dark:text-accent-400"
+                >{authorName}</span
+              >
+            {/if}
+            {#if authorHandle}
+              {#if profileUrl}
+                <a
+                  href={profileUrl}
+                  class="opacity-75 font-normal hover:underline"
+                  >@{authorHandle}</a
+                >
+              {:else}
+                <span class="opacity-75 font-normal">@{authorHandle}</span>
+              {/if}
+            {/if}
             {#if isBridged}
               <Badge
                 variant="secondary"

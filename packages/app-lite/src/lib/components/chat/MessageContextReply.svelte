@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { IconReplyLine } from "@roomy/design/icons";
@@ -23,16 +24,24 @@
       class="relative -bottom-1 ml-2 mr-1 left-0.75 stroke-black/25 dark:stroke-white/50 dark:stroke-1"
     />
     {#if target.data.authorAvatar || target.data.authorDid}
-      <Avatar.Root class="w-4 h-4">
-        <Avatar.Image src={target.data.authorAvatar} class="rounded-full" />
-        <Avatar.Fallback>
-          <AvatarBeam size={16} name={target.data.authorDid || ""} />
-        </Avatar.Fallback>
-      </Avatar.Root>
+      <button
+        onclick={() => goto(`/user/${target.data.authorDid}`)}
+        class="w-4 h-4 rounded-full shrink-0 hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
+      >
+        <Avatar.Root class="w-4 h-4">
+          <Avatar.Image src={target.data.authorAvatar} class="rounded-full" />
+          <Avatar.Fallback>
+            <AvatarBeam size={16} name={target.data.authorDid || ""} />
+          </Avatar.Fallback>
+        </Avatar.Root>
+      </button>
     {/if}
-    <span class="font-medium text-accent-700 dark:text-accent-300">
+    <a
+      href={`/user/${target.data.authorDid}`}
+      class="font-medium text-accent-700 dark:text-accent-300 hover:underline"
+    >
       {target.data.authorName || target.data.authorDid.slice(0, 12)}
-    </span>
+    </a>
   </div>
   <div class="line-clamp-1 overflow-hidden italic">
     {@html renderMarkdownPlaintext(target.data.content ?? "")}
