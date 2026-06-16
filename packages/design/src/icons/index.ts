@@ -44,8 +44,8 @@ export { default as IconChatBubbleText } from "~icons/ph/chat-centered-text-bold
 export { default as IconMessageCircle } from "~icons/ph/chat-circle-bold";
 export { default as IconMessageCircleOff } from "~icons/ph/chat-circle-slash-bold";
 export { default as IconMessageCirclePlus } from "~icons/ph/chat-circle-dots-bold";
-export { default as IconNeedleThread } from "~icons/ph/campfire-bold";
-export { default as IconReply } from "~icons/ph/arrow-bend-up-left";
+export { default as IconNeedleThread } from "~icons/tabler/needle-thread";
+export { default as IconReply } from "~icons/ph/arrow-bend-up-left-bold";
 
 // Status
 export { default as IconAlertCircle } from "~icons/ph/warning-circle-bold";

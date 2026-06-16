@@ -8,7 +8,6 @@
   import Input from "../../ui/input/Input.svelte";
   import Popover from "../../ui/popover/Popover.svelte";
   import {
-    IconCloseCircle,
     IconNeedleThread,
     IconX,
     IconSend,
@@ -111,7 +110,7 @@
           onclick={onClearContext}
           class="flex-shrink-0"
         >
-          <IconCloseCircle />
+          <IconX class="size-4" />
         </Button>
       {:else if mode === "threading"}
         <div
@@ -143,7 +142,7 @@
           onclick={onClearContext}
           class="flex-shrink-0"
         >
-          <IconCloseCircle />
+          <IconX class="size-4" />
         </Button>
       {:else if mode === "commenting"}
         <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
@@ -154,7 +153,7 @@
           onclick={onClearContext}
           class="flex-shrink-0"
         >
-          <IconCloseCircle />
+          <IconX class="size-4" />
         </Button>
       {/if}
     </div>
