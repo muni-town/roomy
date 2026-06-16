@@ -76,7 +76,7 @@
 
             {#if item.unreadCount > 0}
               <span
-                class="inline-flex items-center rounded-full bg-accent-200 dark:bg-accent-600 px-2 py-0.5 text-xs font-semibold text-black/50 dark:text-white"
+                class="inline-flex items-center rounded-full bg-accent-200 dark:bg-accent-600 px-2 py-0.5 text-xs font-semibold text-black/50 dark:text-white whitespace-nowrap"
               >
                 {item.unreadCount} unread
               </span>
@@ -104,7 +104,7 @@
                       <span class="font-medium text-base-700 dark:text-base-300">
                         {msg.author.name ?? msg.author.did.slice(0, 8)}
                       </span>
-                      <span class="text-base-600 dark:text-base-400 [&_p]:inline [&_p]:m-0">
+                      <span class="text-base-600 dark:text-base-400 break-words [&_p]:inline [&_p]:m-0">
                         {@html renderMarkdownSanitized(msg.content)}
                       </span>
                     </div>
@@ -125,7 +125,7 @@
                 <span class="font-medium text-base-700 dark:text-base-300">
                   {last.author.name ?? last.author.did.slice(0, 8)}
                 </span>
-                <span class="text-base-600 dark:text-base-400 [&_p]:inline [&_p]:m-0">
+                <span class="text-base-600 dark:text-base-400 break-words [&_p]:inline [&_p]:m-0">
                   {@html renderMarkdownSanitized(last.content)}
                 </span>
               </div>

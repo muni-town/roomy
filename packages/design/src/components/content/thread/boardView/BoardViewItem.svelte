@@ -1,10 +1,7 @@
 <script lang="ts">
-  import { Box } from "@foxui/core";
-  import Badge from "../../../ui/badge/Badge.svelte";
-  import { formatDistanceToNowStrict, type Locale } from "date-fns";
+  import SpaceAvatar from "../../../spaces/SpaceAvatar.svelte";
+  import { renderMarkdownSanitized } from "../../../../utils/index.js";
   import type { ThreadInfo } from "./types";
-  import { IconDocument, IconHashtag } from "../../../../icons/index";
-  import AvatarGroup from "../../../user/AvatarGroup.svelte";
 
   let {
     thread,
@@ -13,81 +10,63 @@
 
   let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
 
-  const formatDistanceLocale: Pick<Locale, "formatDistance"> = {
-    formatDistance: (token, count) => {
-      let name = "min";
-      switch (token) {
-        case "xMinutes":
-          name = "mins";
-          break;
-        case "xHours":
-          name = "hrs";
-          break;
-        case "xDays":
-          name = "days";
-          break;
-        case "xMonths":
-          name = "months";
-          break;
-        case "xYears":
-          name = "yrs";
-          break;
-        default:
-          name = token;
-      }
-
-      return `${count} ${name}`;
-    },
-  };
+  function timeAgo(ts: number): string {
+    const ms = Date.now() - ts;
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(ts).toLocaleDateString();
+  }
 </script>
 
-<a {href}>
-  <Box class="flex items-baseline gap-1 p-3 bg-white dark:bg-base-900">
-    <!-- <div
-      class="flex items-center relative -bottom-1 justify-between gap-2 mr-2"
-    >
-      {#if thread.kind == "space.roomy.page"}
-        <IconDocument class="shrink-0" />
-      {:else if thread.kind == "space.roomy.thread"}{/if}
-    </div> -->
-    <div class="text-ellipsis min-w-0 shrink text-xl font-light">
-      {#if thread.kind == "space.roomy.channel"}
-        #&nbsp;
-      {/if}
+<a
+  {href}
+  class="flex flex-col gap-2 p-4 transition-colors group no-underline hover:bg-base-100 dark:hover:bg-base-800/40 hover:shadow-[2px_2px_0_0_var(--color-base-300)] dark:hover:shadow-[2px_2px_0_0_var(--color-base-800)]"
+>
+  <!-- Header: thread name + timestamp -->
+  <div class="flex items-center gap-2 text-xs">
+    <span class="truncate text-lg font-bold">
+      {#if thread.kind === "space.roomy.channel"}#&nbsp;{/if}
       {thread.name}
-    </div>
-    <span class="text-base-500 text-xs"
-      >{#if lastMessageTimestamp}
-        {#if Date.now() - lastMessageTimestamp < 60 * 1000}
-          Just Now
-        {:else}
-          {formatDistanceToNowStrict(lastMessageTimestamp, {
-            locale: formatDistanceLocale,
-          })}
-        {/if}
-      {/if}</span
-    >
+    </span>
+    {#if thread.channelName}
+      <span class="truncate text-lg font-bold opacity-70">/ {thread.channelName}</span>
+    {/if}
+    <span class="ml-auto shrink-0 opacity-70">
+      {#if lastMessageTimestamp}
+        {timeAgo(lastMessageTimestamp)}
+      {/if}
+    </span>
+  </div>
 
-    <div class="ml-auto flex self-center items-center shrink-0">
-      <AvatarGroup
-        avatarClass="size-8"
-        users={thread.activity.members
-          .filter((x) => !!x.avatar)
-          .map((m) => ({
-            src: m.avatar!,
-            id: m.id,
-            alt: "User Avatar for " + (m.name || "Unknown User"),
-          }))}
-      />
-      <div class="flex justify-between text-end">
-        {#if thread.channelName}
-          <Badge class="mx-2" size="sm" variant="secondary"
-            ><IconHashtag
-              class="shrink-0 size-3 -mr-1"
-            />{thread.channelName}</Badge
-          >
-        {/if}
+  <!-- Latest message -->
+  {#if thread.activity.latestMessage}
+    {@const msg = thread.activity.latestMessage}
+    <div class="flex items-start gap-2 text-sm pl-1">
+      <div class="mt-0.75">
+        <SpaceAvatar
+          src={msg.author.avatar}
+          id={msg.author.did}
+          name={msg.author.name ?? undefined}
+          size={18}
+        />
+      </div>
+      <div class="min-w-0">
+        <span class="font-medium text-base-700 dark:text-base-300">
+          {msg.author.name ?? msg.author.did.slice(0, 8)}
+        </span>
+        <span class="text-base-600 dark:text-base-400 break-words [&_p]:inline [&_p]:m-0">
+          {@html renderMarkdownSanitized(msg.content)}
+        </span>
       </div>
     </div>
-  </Box>
+  {:else if thread.activity.members.length > 0}
+    <div class="flex items-start gap-2 text-sm pl-1 opacity-60">
+      <span class="text-base-500 italic">No messages yet</span>
+    </div>
+  {/if}
 </a>

@@ -24,6 +24,16 @@ interface ThreadRow {
       name?: string;
       avatar?: string;
     }>;
+    latestMessage?: {
+      id: string;
+      content: string;
+      author: {
+        did: string;
+        name: string | null;
+        avatar: string | null;
+      };
+      timestamp: string | null;
+    };
   };
 }
 
@@ -57,10 +67,20 @@ export const getRoomThreadsHandler: QueryHandler<
       if (m.avatar != null) out.avatar = m.avatar;
       return out;
     });
-    const activity: { latestTimestamp?: string; latestMembers: typeof members } = {
+    const activity: ThreadRow["activity"] = {
       latestMembers: members,
     };
     if (t.latestTimestamp != null) activity.latestTimestamp = t.latestTimestamp;
+    if (t.latestMessage != null) activity.latestMessage = {
+      id: t.latestMessage.id,
+      content: t.latestMessage.content,
+      author: {
+        did: t.latestMessage.author.did,
+        name: t.latestMessage.author.name,
+        avatar: t.latestMessage.author.avatar,
+      },
+      timestamp: t.latestMessage.timestamp,
+    };
 
     const thread: ThreadRow = { id: t.id, activity };
     if (t.name != null) thread.name = t.name;

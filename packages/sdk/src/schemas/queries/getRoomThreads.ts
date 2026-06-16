@@ -14,9 +14,17 @@ export const ThreadMember = type({
   "avatar?": "string",
 });
 
+export const ThreadMessage = type({
+  id: "string",
+  content: "string",
+  author: ThreadMember,
+  "timestamp?": "string",
+});
+
 export const ThreadActivity = type({
   "latestTimestamp?": "string",
   latestMembers: ThreadMember.array(),
+  "latestMessage?": ThreadMessage,
 });
 
 export const RoomThread = type({

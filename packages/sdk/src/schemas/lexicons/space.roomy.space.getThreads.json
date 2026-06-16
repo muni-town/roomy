@@ -19,6 +19,46 @@
         }
       }
     },
+    "author": {
+      "type": "object",
+      "required": [
+        "did"
+      ],
+      "properties": {
+        "did": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "latestMessage": {
+      "type": "object",
+      "required": [
+        "author",
+        "content",
+        "id"
+      ],
+      "properties": {
+        "author": {
+          "type": "ref",
+          "ref": "#author"
+        },
+        "content": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      }
+    },
     "activity": {
       "type": "object",
       "required": [
@@ -31,6 +71,10 @@
             "type": "ref",
             "ref": "#latestMembers"
           }
+        },
+        "latestMessage": {
+          "type": "ref",
+          "ref": "#latestMessage"
         },
         "latestTimestamp": {
           "type": "string"

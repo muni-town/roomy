@@ -20,6 +20,12 @@
     activity: {
       latestTimestamp?: string;
       latestMembers: Array<{ did: string; name?: string; avatar?: string }>;
+      latestMessage?: {
+        id: string;
+        content: string;
+        author: { did: string; name?: string; avatar?: string };
+        timestamp?: string;
+      };
     };
   };
 
@@ -43,6 +49,18 @@
         latestTimestamp: t.activity.latestTimestamp
           ? new Date(t.activity.latestTimestamp).getTime()
           : 0,
+        latestMessage: t.activity.latestMessage
+          ? {
+              id: t.activity.latestMessage.id,
+              content: t.activity.latestMessage.content,
+              author: {
+                did: t.activity.latestMessage.author.did,
+                name: t.activity.latestMessage.author.name,
+                avatar: t.activity.latestMessage.author.avatar,
+              },
+              timestamp: t.activity.latestMessage.timestamp,
+            }
+          : null,
       },
     };
   }

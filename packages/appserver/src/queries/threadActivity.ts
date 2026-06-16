@@ -13,11 +13,19 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { decodeContent } from "../db/content.ts";
 
 export interface ThreadMember {
   did: string;
   name: string | null;
   avatar: string | null;
+}
+
+export interface ThreadMessage {
+  id: string;
+  content: string;
+  author: ThreadMember;
+  timestamp: string | null;
 }
 
 export interface ThreadActivity {
@@ -28,6 +36,8 @@ export interface ThreadActivity {
   /** Latest message timestamp in this thread (ISO string), null if no messages. */
   latestTimestamp: string | null;
   latestMembers: ThreadMember[];
+  /** The most recent message in this thread, null if no messages. */
+  latestMessage: ThreadMessage | null;
 }
 
 export type ThreadScope =
@@ -125,10 +135,58 @@ export function listThreadActivity(
       limit 1`,
   );
 
+  const latestMessageStmt = db.query<
+    {
+      id: string;
+      mime_type: string | null;
+      data: Buffer | Uint8Array | null;
+      author_did: string | null;
+      author_name: string | null;
+      author_avatar: string | null;
+      timestamp: number | null;
+    },
+    [string]
+  >(
+    `select
+       e.id as id,
+       cc.mime_type as mime_type,
+       cc.data as data,
+       coalesce(author_e.tail, '') as author_did,
+       author_info.name as author_name,
+       author_info.avatar as author_avatar,
+       cc.timestamp as timestamp
+     from entities e
+     join comp_content cc on cc.entity = e.id
+     left join edges author_e
+       on author_e.head = e.id and author_e.label = 'author'
+     left join comp_info author_info on author_info.entity = author_e.tail
+     where e.room = ?
+     order by cc.timestamp desc
+     limit 1`,
+  );
+
   const results: ThreadActivity[] = threads.map((t) => {
     const latest = latestStmt.get(t.id);
     const members = recentParticipantsStmt.all(t.id);
     const parent = parentStmt.get(t.id);
+    const latestMsgRow = latestMessageStmt.get(t.id);
+
+    let latestMessage: ThreadMessage | null = null;
+    if (latestMsgRow && latestMsgRow.author_did) {
+      latestMessage = {
+        id: latestMsgRow.id,
+        content: decodeContent(latestMsgRow.mime_type, latestMsgRow.data),
+        author: {
+          did: latestMsgRow.author_did,
+          name: latestMsgRow.author_name,
+          avatar: latestMsgRow.author_avatar,
+        },
+        timestamp:
+          latestMsgRow.timestamp != null
+            ? new Date(latestMsgRow.timestamp).toISOString()
+            : null,
+      };
+    }
 
     return {
       id: t.id,
@@ -141,6 +199,7 @@ export function listThreadActivity(
         name: m.name,
         avatar: m.avatar,
       })),
+      latestMessage,
     };
   });
 

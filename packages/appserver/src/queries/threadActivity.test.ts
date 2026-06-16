@@ -71,6 +71,7 @@ function postMessage(
   threadId: string,
   authorDid: string,
   ts: number,
+  content?: string,
 ) {
   const msgId = `01MSG${String(messageCounter++).padStart(20, "0")}`;
   db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
@@ -80,7 +81,7 @@ function postMessage(
   ]);
   db.run(
     "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/plain', ?, ?, ?)",
-    [msgId, Buffer.from(""), msgId, ts],
+    [msgId, Buffer.from(content ?? ""), msgId, ts],
   );
   db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
     msgId,
@@ -156,5 +157,45 @@ describe("threadActivity", () => {
     const c = result.find((t) => t.id === THREAD_C)!;
     expect(a.canonicalParent).toBe(CHANNEL);
     expect(c.canonicalParent).toBe(OTHER_CHANNEL);
+  });
+
+  test("latestMessage returns the most recent message with author and content", () => {
+    const db = freshDb();
+    seed(db);
+
+    postMessage(db, THREAD_A, ALICE, 1000, "Hello from Alice");
+    postMessage(db, THREAD_A, BOB, 2000, "Reply from Bob");
+
+    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const threadA = result.find((t) => t.id === THREAD_A)!;
+
+    expect(threadA.latestMessage).not.toBeNull();
+    expect(threadA.latestMessage!.content).toBe("Reply from Bob");
+    expect(threadA.latestMessage!.author.did).toBe(BOB);
+    expect(threadA.latestMessage!.author.name).toBe("bob");
+    expect(threadA.latestMessage!.timestamp).toBe(new Date(2000).toISOString());
+  });
+
+  test("latestMessage is null for threads with no messages", () => {
+    const db = freshDb();
+    seed(db);
+
+    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const threadA = result.find((t) => t.id === THREAD_A)!;
+
+    expect(threadA.latestMessage).toBeNull();
+  });
+
+  test("latestMessage content decodes text content correctly", () => {
+    const db = freshDb();
+    seed(db);
+
+    postMessage(db, THREAD_A, ALICE, 1000, "**bold** and _italic_");
+
+    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const threadA = result.find((t) => t.id === THREAD_A)!;
+
+    expect(threadA.latestMessage).not.toBeNull();
+    expect(threadA.latestMessage!.content).toBe("**bold** and _italic_");
   });
 });
