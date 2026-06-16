@@ -123,10 +123,11 @@ export class DirectXrpcClient {
 
     // Void short-circuit: no outputSchema means void return.
     // The appserver returns 200 with no body for void procedures.
-    const data =
-      resp.status === 200 && resp.headers.get("content-length") === null
-        ? {}
-        : await resp.json();
+    // Read as text first so we can reliably detect an empty body
+    // regardless of Content-Length / Transfer-Encoding headers (which
+    // may be stripped by reverse proxies in production).
+    const bodyText = await resp.text();
+    const data = bodyText.length === 0 ? {} : JSON.parse(bodyText);
 
     const parsed = entry.output(data);
     if (parsed instanceof type.errors) {
