@@ -25,7 +25,7 @@ const spaces = new Map<string, Promise<ConnectedSpace>>();
 
 /** Batch limit for Leaf subscription notifications. Large enough to fetch
  * an entire stream in one page, avoiding Leaf pagination artefacts. */
-const BATCH_LIMIT = 10_000;
+const BATCH_LIMIT = 750;
 
 export function getServiceClient(): Promise<RoomyServiceClient> {
   if (clientPromise) return clientPromise;
