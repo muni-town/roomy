@@ -13,12 +13,14 @@
   import { queryClient } from "$lib/client";
   import { schemas, cache } from "@roomy-space/sdk";
   import { resolveBlobUrl } from "$lib/utils";
+  import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
 
   type Space = typeof schemas.queries.getSpaces.Space.infer;
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
+  let activeTab = $state("Feed");
   let rejoining = $state<string | null>(null);
 
   async function rejoin(spaceId: string) {
@@ -56,6 +58,13 @@
 {#snippet homeNavbar()}
   <div class="flex w-full items-center justify-between gap-3 px-2">
     <RoomyHomeCard onClick={() => goto("/")} small={false} />
+    <ToggleTabs
+      items={[
+        { name: "Feed", href: "#feed" },
+        { name: "Threads", href: "#threads" },
+      ]}
+      bind:active={activeTab}
+    />
     <Button href="https://a.roomy.space" target="_blank">About Roomy</Button>
   </div>
 {/snippet}
@@ -120,10 +129,17 @@
 
           {#if joined.length > 0}
             <section class="w-full">
-              <h2 class="text-2xl font-bold px-4 text-base-900 dark:text-base-100 mb-4">
-                Recent Activity
-              </h2>
-              <ActivityFeed limit={20} />
+              {#if activeTab === "Feed"}
+                <h2 class="text-2xl font-bold px-4 text-base-900 dark:text-base-100 mb-4">
+                  Recent Activity
+                </h2>
+                <ActivityFeed limit={20} />
+              {:else}
+                <h2 class="text-2xl font-bold px-4 text-base-900 dark:text-base-100 mb-4">
+                  Threads
+                </h2>
+                <p class="text-sm text-base-400 px-4">Threads view coming soon.</p>
+              {/if}
             </section>
           {/if}
         {/if}
