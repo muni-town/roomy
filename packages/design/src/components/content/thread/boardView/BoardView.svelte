@@ -18,7 +18,7 @@
 </script>
 
 {#if threads.length}
-  <ScrollArea class="h-full pb-4 lg:max-w-[80%] w-full self-center">
+  <ScrollArea class="h-full pb-4 w-full">
     {#each threads as thread, i}
       <div class="mt-4">
         <BoardViewItem {thread} href={hrefFor(thread)} {onAvatarClick} />
