@@ -4,6 +4,7 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { createInvitesQuery } from "$lib/queries/invites";
   import { createInvite, revokeInvite } from "$lib/mutations/invite";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
 
   const spaceId = $derived(page.params.space!);
   const invitesQuery = createInvitesQuery(() => spaceId);
@@ -42,7 +43,7 @@
   {#if invitesQuery.isPending}
     <p class="text-sm text-base-400">Loading…</p>
   {:else if invitesQuery.isError}
-    <p class="text-sm text-red-600">{invitesQuery.error.message}</p>
+    <ErrorMessage message={invitesQuery.error.message} class="py-8" />
   {:else if invitesQuery.data}
     {@const invites = invitesQuery.data.invites}
     {#if invites.length === 0}

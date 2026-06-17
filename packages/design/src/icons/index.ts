@@ -20,6 +20,7 @@ export { default as IconSend } from "~icons/ph/paper-plane-right-bold";
 export { default as IconSettings } from "~icons/ph/gear-bold";
 export { default as IconShare } from "~icons/ph/share-fat-bold";
 export { default as IconSmilePlus } from "~icons/ph/smiley-bold";
+export { default as IconSmileyXEyes } from "~icons/ph/smiley-x-eyes-bold";
 export { default as IconTrash } from "~icons/ph/trash-bold";
 export { default as IconUserPlus } from "~icons/ph/user-plus-bold";
 export { default as IconArrowUturnLeft } from "~icons/ph/arrow-u-up-left-bold";

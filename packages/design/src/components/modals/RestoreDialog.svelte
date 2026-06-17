@@ -11,6 +11,7 @@
   import { Modal } from "@foxui/core";
   import Button from "../ui/button/Button.svelte";
   import { IconArrowUturnLeft } from "../../icons/index";
+  import ErrorMessage from "../helper/ErrorMessage.svelte";
 
   let {
     open = $bindable(false),
@@ -40,9 +41,7 @@
           {/each}
         </div>
       {:else if fetchState.status === "error"}
-        <p class="text-sm text-red-500 py-4 text-center">
-          {fetchState.message}
-        </p>
+        <ErrorMessage message={fetchState.message} class="py-4 justify-center text-center" />
       {:else if fetchState.status === "success" && fetchState.data.length === 0}
         <p class="text-sm text-base-400 dark:text-base-500 py-4 text-center">
           No deleted channels to restore.

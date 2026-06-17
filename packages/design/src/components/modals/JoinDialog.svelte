@@ -18,6 +18,7 @@
   import type { Snippet } from "svelte";
   import { Box } from "@foxui/core";
   import Button from "../ui/button/Button.svelte";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import ErrorModal from "./Error.svelte";
 
   let {
@@ -61,13 +62,9 @@
             {inviteToken ? "Accept Invite" : "Join Space"}
           </Button>
           {#if joinState.status === "error"}
-            <p class="text-sm text-center text-red-600 dark:text-red-400 mt-2">
-              {joinState.message}
-            </p>
+            <ErrorMessage message={joinState.message} class="mt-2 justify-center" iconSize="size-4" />
           {:else if urlError}
-            <p class="text-sm text-center text-red-600 dark:text-red-400 mt-2">
-              {urlError}
-            </p>
+            <ErrorMessage message={urlError} class="mt-2 justify-center" iconSize="size-4" />
           {/if}
         {:else}
           <p class="text-sm text-center text-base-500 dark:text-base-400">

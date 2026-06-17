@@ -6,6 +6,7 @@
   import { setContext } from "svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import ChatMessageSkeleton from "@roomy/design/components/content/thread/message/ChatMessageSkeleton.svelte";
   import { createMessagesQuery, type Message } from "$lib/queries/messages";
   import { auth } from "$lib/auth.svelte";
@@ -232,9 +233,7 @@
             <ChatMessageSkeleton mergeWithPrevious />
           </div>
         {:else if messagesQuery.isError}
-          <div class="flex justify-center items-center p-8 text-sm text-red-600">
-            Failed to load messages: {messagesQuery.error.message}
-          </div>
+          <ErrorMessage message="Failed to load messages: {messagesQuery.error.message}" class="p-8 justify-center" />
         {:else if timeline}
           <ol class="flex flex-col justify-end gap-2 max-w-full h-full">
             {#if isLoadingOlder}

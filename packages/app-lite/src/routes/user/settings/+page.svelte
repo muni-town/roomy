@@ -13,6 +13,7 @@
   import { queryClient } from "$lib/client";
   import { cache } from "@roomy-space/sdk";
   import { resolveBlobUrl } from "$lib/utils";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
@@ -98,7 +99,7 @@
       {#if spacesQuery.isPending}
         <p class="text-sm text-base-400">Loading spaces…</p>
       {:else if spacesQuery.isError}
-        <p class="text-sm text-red-600">Error: {spacesQuery.error.message}</p>
+        <ErrorMessage message="Error: {spacesQuery.error.message}" class="py-8" />
       {:else if spacesQuery.data}
         {@const left = spacesQuery.data.spaces.filter((s: { isMember: boolean }) => !s.isMember)}
 

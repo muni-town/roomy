@@ -10,6 +10,7 @@
   import { setWideSidebar } from "$lib/components/layout/wide-sidebar.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
   import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
@@ -56,7 +57,7 @@
         {#if spacesQuery.isPending}
           <p class="text-sm text-base-400">Loading spaces…</p>
         {:else if spacesQuery.isError}
-          <p class="text-sm text-red-600">Error: {spacesQuery.error.message}</p>
+          <ErrorMessage message="Error: {spacesQuery.error.message}" class="py-8 justify-center" />
         {:else if spacesQuery.data}
           {@const joined = spacesQuery.data.spaces.filter((s) => s.isMember)}
 

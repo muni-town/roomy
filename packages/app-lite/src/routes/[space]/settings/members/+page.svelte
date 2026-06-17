@@ -2,6 +2,7 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { createMembersQuery } from "$lib/queries/members";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
 
   const spaceId = $derived(page.params.space!);
   const membersQuery = createMembersQuery(() => spaceId);
@@ -13,7 +14,7 @@
   {#if membersQuery.isPending}
     <p class="text-sm text-base-400">Loading…</p>
   {:else if membersQuery.isError}
-    <p class="text-sm text-red-600">{membersQuery.error.message}</p>
+    <ErrorMessage message={membersQuery.error.message} class="py-8" />
   {:else if membersQuery.data}
     {@const { members, externalAdmins } = membersQuery.data}
 

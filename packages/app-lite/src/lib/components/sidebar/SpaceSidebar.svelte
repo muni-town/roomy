@@ -34,6 +34,7 @@
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
   import SpaceSidebarButtons from "./SpaceSidebarButtons.svelte";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import EditRoomModal from "./EditRoomModal.svelte";
   import RestoreRoomModal from "./RestoreRoomModal.svelte";
   import EditableChannelItem from "./EditableChannelItem.svelte";
@@ -490,7 +491,7 @@ import { toast } from "@foxui/core";
 
   {#snippet body()}
     {#if metaQuery.isError}
-      <p class="text-sm text-red-600">{metaQuery.error.message}</p>
+      <ErrorMessage message={metaQuery.error.message} class="px-4 py-3" />
     {:else if meta}
       {#if isEditing}
         <div

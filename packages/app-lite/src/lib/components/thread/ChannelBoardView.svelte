@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { createRoomThreadsQuery } from "$lib/queries/threads";
   import BoardViewShell from "@roomy/design/components/content/thread/boardView/BoardView.svelte";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
 
   let {
@@ -81,9 +82,7 @@
     <div class="text-sm text-base-400 p-2">Loading threads…</div>
   </div>
 {:else if threadsQuery.isError}
-  <div class="h-full w-full flex items-center justify-center">
-    <div class="text-sm text-red-600 p-2">{threadsQuery.error.message}</div>
-  </div>
+  <ErrorMessage message={threadsQuery.error.message} class="h-full w-full justify-center" />
 {:else}
   <BoardViewShell {threads} {emptyMessage} {hrefFor} onAvatarClick={(did) => goto(`/user/${did}`)} />
 {/if}

@@ -11,6 +11,8 @@
     inputVariants,
   } from "@roomy/design/components/ui/input/Input.svelte";
   import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
+  import { IconEdit } from "@roomy/design/icons";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
 
   const spaceId = $derived(page.params.space!);
   const metaQuery = createSpaceMetadataQuery(() => spaceId);
@@ -121,7 +123,7 @@
   {#if metaQuery.isPending}
     <p class="text-sm text-base-400">Loading…</p>
   {:else if metaQuery.isError}
-    <p class="text-sm text-red-600">{metaQuery.error.message}</p>
+    <ErrorMessage message={metaQuery.error.message} class="py-8" />
   {:else if meta}
     <form
       class="flex flex-col gap-6"
@@ -137,12 +139,23 @@
           Avatar
         </span>
         <div class="flex items-center gap-3">
-          <SpaceAvatar
-            src={avatarSrc}
-            id={spaceId}
-            name={meta.name ?? undefined}
-            size={64}
-          />
+          <button
+            type="button"
+            class="group relative cursor-pointer"
+            onclick={() => fileInput?.click()}
+          >
+            <SpaceAvatar
+              src={avatarSrc}
+              id={spaceId}
+              name={meta.name ?? undefined}
+              size={64}
+            />
+            <div
+              class="absolute bottom-0 right-0 flex items-center justify-center size-5 rounded-full bg-base-900/70 text-white shadow-sm transition-opacity group-hover:bg-base-900/90"
+            >
+              <IconEdit class="size-3" />
+            </div>
+          </button>
           <input
             type="file"
             accept="image/*"
@@ -150,13 +163,6 @@
             bind:this={fileInput}
             onchange={handleAvatarSelect}
           />
-          <Button
-            type="button"
-            variant="secondary"
-            onclick={() => fileInput?.click()}
-          >
-            Change
-          </Button>
         </div>
       </div>
 
