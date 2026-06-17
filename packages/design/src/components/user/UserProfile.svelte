@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Avatar } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import UserAvatar from "./UserAvatar.svelte";
 
   // Props
   let {
@@ -47,12 +46,11 @@
       "flex max-w-full items-end space-x-5 px-4 sm:-mt-16 sm:px-6 lg:px-8",
     ]}
   >
-    <Avatar.Root class="size-24 sm:size-32">
-      <Avatar.Image src={profile?.avatar} class="rounded-full" />
-      <Avatar.Fallback>
-        <AvatarBeam name={profile?.did || profile?.handle || "unknown"} />
-      </Avatar.Fallback>
-    </Avatar.Root>
+    <UserAvatar
+      src={profile?.avatar}
+      name={profile?.did || profile?.handle || "unknown"}
+      class="size-24 sm:size-32"
+    />
 
     <div
       class="flex min-w-0 flex-1 flex-row sm:flex-row sm:items-center sm:justify-end sm:space-x-6 sm:pb-1"

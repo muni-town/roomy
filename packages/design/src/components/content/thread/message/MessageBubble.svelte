@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Avatar } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import UserAvatar from "../../../user/UserAvatar.svelte";
   import { format, isToday, isTomorrow, isYesterday } from "date-fns";
   import Badge from "../../../ui/badge/Badge.svelte";
 
@@ -106,15 +105,11 @@
           }}
           class="rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
         >
-          <Avatar.Root class="size-8 sm:size-10">
-            <Avatar.Image
-              src={avatarSrc ?? authorAvatarUrl}
-              class="rounded-full"
-            />
-            <Avatar.Fallback>
-              <AvatarBeam name={authorDid || "system"} />
-            </Avatar.Fallback>
-          </Avatar.Root>
+          <UserAvatar
+            src={avatarSrc ?? authorAvatarUrl}
+            name={authorDid || "system"}
+            class="size-8 sm:size-10"
+          />
         </button>
       </div>
     {:else}

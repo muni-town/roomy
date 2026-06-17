@@ -4,10 +4,10 @@
    * https://github.com/flo-bit/ui-kit/blob/main/packages/core/src/lib/components/avatar/AvatarGroup.svelte
    */
 
-  import { Avatar, type WithElementRef } from "bits-ui";
-  import type { HTMLAttributes } from "svelte/elements";
   import { cn } from "@foxui/core";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import { type WithElementRef } from "bits-ui";
+  import type { HTMLAttributes } from "svelte/elements";
+  import UserAvatar from "./UserAvatar.svelte";
 
   let {
     users,
@@ -40,14 +40,12 @@
   {...restProps}
 >
   {#each users as user}
-    <Avatar.Root
-      class={[cn("size-8 border-base-50 border rounded-full", avatarClass)]}
-    >
-      <Avatar.Image src={user.src} class="rounded-full" />
-      <Avatar.Fallback>
-        <AvatarBeam name={user.id} size={30} />
-      </Avatar.Fallback>
-    </Avatar.Root>
+    <UserAvatar
+      src={user.src}
+      name={user.id ?? ""}
+      size={30}
+      class={cn("size-8 border-base-50 border rounded-full", avatarClass)}
+    />
     <!-- <Avatar
       src={user.src}
       alt={user.alt}

@@ -6,7 +6,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { env } from "$env/dynamic/public";
-  import { Subheading, Label, Avatar, Box, Tabs } from "@foxui/core";
+  import { Subheading, Label, Box, Tabs } from "@foxui/core";
+  import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import HandleTypeahead from "./HandleTypeahead.svelte";
@@ -155,7 +156,12 @@
             onclick={onLastLoginClick}
             disabled={loading}
           >
-            <Avatar src={lastLogin.avatar} class="size-6" />
+            <UserAvatar
+              src={lastLogin.avatar}
+              name={lastLogin.handle ?? lastLogin.did ?? "user"}
+              size={24}
+              class="size-6"
+            />
             {loading ? "Loading..." : lastLogin.handle}
           </Button>
         {/if}

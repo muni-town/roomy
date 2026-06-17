@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Avatar } from "@foxui/core";
+  import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import Popover from "@roomy/design/components/ui/popover/Popover.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import ThemeSettings from "@roomy/design/components/user/ThemeSettings.svelte";
-  import { IconEllipsisHorizontal } from "@roomy/design/icons";
+  import { IconEllipsisHorizontal, IconSettings } from "@roomy/design/icons";
   import { logout } from "$lib/auth.svelte";
   import { sync_ } from "$lib/sync.svelte";
 
@@ -31,9 +31,10 @@
       >
         <div class="relative size-10 shrink-0">
           <div class="size-full rounded-full overflow-hidden">
-            <Avatar
+            <UserAvatar
               src={lastLogin?.avatar}
-              fallback={lastLogin?.handle}
+              name={lastLogin?.did ?? lastLogin?.handle ?? "user"}
+              size={40}
               class="size-full"
             />
           </div>
@@ -53,15 +54,24 @@
     <div class="flex flex-col">
       {#if connected}
         <div class="border-b border-base-300 dark:border-base-700 pb-4 mb-2 flex items-center gap-2">
-          <Avatar
+          <UserAvatar
             src={lastLogin?.avatar}
-            fallback={lastLogin?.handle}
+            name={lastLogin?.did ?? lastLogin?.handle ?? "user"}
+            size={32}
             class="size-8 rounded-full"
           />
           <span class="mr-auto font-medium truncate">@{lastLogin?.handle}</span>
           <Button variant="ghost" onclick={logout}>Log Out</Button>
         </div>
       {/if}
+
+      <a
+        href="/user/settings"
+        class="flex items-center gap-2 px-1 py-2 text-sm font-medium text-base-700 dark:text-base-300 hover:text-base-900 dark:hover:text-base-100 transition-colors rounded-md hover:bg-base-300/30 dark:hover:bg-base-800/30"
+      >
+        <IconSettings class="size-4" />
+        Settings
+      </a>
 
       <ThemeSettings />
 

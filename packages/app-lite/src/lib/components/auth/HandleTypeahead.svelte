@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Avatar } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
 
   type ActorSuggestion = {
     did: string;
@@ -198,14 +197,12 @@
             onmouseover={() => (activeIndex = i)}
             onfocus={() => (activeIndex = i)}
           >
-            <Avatar.Root class="size-6 shrink-0 rounded-full">
-              {#if suggestion.avatar}
-                <Avatar.Image src={suggestion.avatar} class="rounded-full" />
-              {/if}
-              <Avatar.Fallback>
-                <AvatarBeam name={suggestion.did} size={24} />
-              </Avatar.Fallback>
-            </Avatar.Root>
+            <UserAvatar
+              src={suggestion.avatar}
+              name={suggestion.did}
+              size={24}
+              class="size-6 shrink-0 rounded-full"
+            />
             <span
               class="text-sm font-medium text-base-900 dark:text-base-100 truncate"
             >

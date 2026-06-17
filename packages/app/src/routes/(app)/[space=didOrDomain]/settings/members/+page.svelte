@@ -3,8 +3,7 @@
   const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
-  import { Avatar } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import { newUlid, UserDid } from "@roomy-space/sdk";
 
   import { IconLoading } from "@roomy/design/icons";
@@ -51,12 +50,11 @@
         {#each members || [] as member}
           <li class="flex items-center gap-4">
             <a class="flex row gap-3 items-center" href={`/user/${member.did}`}>
-              <Avatar.Root class="size-8 sm:size-10">
-                <Avatar.Image src={member.avatar} class="rounded-full" />
-                <Avatar.Fallback>
-                  <AvatarBeam name={member.did} />
-                </Avatar.Fallback>
-              </Avatar.Root>
+              <UserAvatar
+                src={member.avatar}
+                name={member.did}
+                class="size-8 sm:size-10"
+              />
               {member.name}
               {member.handle ? "@" + member.handle : ""}</a
             >

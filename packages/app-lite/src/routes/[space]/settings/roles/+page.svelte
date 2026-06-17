@@ -10,8 +10,7 @@
   import { createMembersQuery } from "$lib/queries/members";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createRole, updateRole, deleteRole, addMemberRole, removeMemberRole } from "$lib/mutations/role";
-  import { Avatar } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import {
     IconLoading,
     IconTrash,
@@ -201,12 +200,12 @@
                 <li
                   class="flex items-center gap-3 rounded-2xl px-3 py-2 hover:bg-base-50 dark:hover:bg-base-800/60 group"
                 >
-                  <Avatar.Root class="size-7 shrink-0 rounded-full">
-                    <Avatar.Image src={member.avatar} class="rounded-full" />
-                    <Avatar.Fallback>
-                      <AvatarBeam name={member.did} size={28} />
-                    </Avatar.Fallback>
-                  </Avatar.Root>
+                  <UserAvatar
+                    src={member.avatar}
+                    name={member.did}
+                    size={28}
+                    class="size-7 shrink-0 rounded-full"
+                  />
                   <span class="text-sm font-medium text-base-900 dark:text-base-100 truncate">
                     {displayName(member)}
                   </span>

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Avatar } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import { IconReplyLine } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
@@ -55,12 +54,12 @@
       class="relative -bottom-1 ml-2 mr-1 left-0.75 stroke-black/25 dark:stroke-white/50 dark:stroke-1"
     />
     {#if contextMessage.authorAvatar || contextMessage.authorDid}
-      <Avatar.Root class="w-4 h-4">
-        <Avatar.Image src={contextMessage?.authorAvatar} class="rounded-full" />
-        <Avatar.Fallback>
-          <AvatarBeam size={16} name={contextMessage?.authorDid || ""} />
-        </Avatar.Fallback>
-      </Avatar.Root>
+      <UserAvatar
+        src={contextMessage?.authorAvatar}
+        name={contextMessage?.authorDid || ""}
+        size={16}
+        class="w-4 h-4"
+      />
     {/if}
     {#if contextMessage.authorName}
       <span

@@ -24,23 +24,33 @@
     ringVar?: string;
   } = $props();
 
+  // Track whether the image has failed to load
+  let imgError = $state(false);
+
   // Unique clipPath ID derived from the space id
   const clipPathId = $derived(
     id ? `sq-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}` : undefined,
   );
 
   const ringColor = $derived(ringVar ? `var(${ringVar}, transparent)` : "transparent");
+
+  // Reset error state when src changes
+  $effect(() => {
+    src;
+    imgError = false;
+  });
 </script>
 
 <div
   class={`relative bg-base-200 dark:bg-base-900 shrink-0 overflow-hidden ${loading ? "opacity-70" : ""}`}
   style={`width: ${size}px; height: ${size}px;${shape === "squircle" && clipPathId ? ` clip-path: url(#${clipPathId});` : shape === "circle" ? " border-radius: 9999px;" : ""}`}
 >
-  {#if src}
+  {#if src && !imgError}
     <img
       {src}
       alt={name}
       class="object-cover object-center h-full w-full"
+      onerror={() => (imgError = true)}
     />
   {:else if id}
     {#key id}

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Avatar } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import UserAvatar from "../user/UserAvatar.svelte";
 
   export type TypeaheadUser = {
     did: string;
@@ -108,12 +107,12 @@
             onmouseover={() => (activeIndex = i)}
             onfocus={() => (activeIndex = i)}
           >
-            <Avatar.Root class="size-6 shrink-0 rounded-full">
-              <Avatar.Image src={user.avatar} class="rounded-full" />
-              <Avatar.Fallback>
-                <AvatarBeam name={user.did} size={24} />
-              </Avatar.Fallback>
-            </Avatar.Root>
+            <UserAvatar
+              src={user.avatar}
+              name={user.did}
+              size={24}
+              class="size-6 shrink-0 rounded-full"
+            />
             <span
               class="text-sm font-medium text-base-900 dark:text-base-100 truncate"
             >

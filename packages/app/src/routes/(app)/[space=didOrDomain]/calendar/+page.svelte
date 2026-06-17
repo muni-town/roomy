@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import {
     calendarLinkQuery,
     calendarEventsQuery,
@@ -276,9 +277,12 @@
             </span>
           {:else if profile}
             <span class="flex items-center gap-1">
-              {#if profile.avatar}
-                <img src={profile.avatar} alt="" class="w-5 h-5 rounded-full" />
-              {/if}
+              <UserAvatar
+                src={profile.avatar}
+                name={profile.did ?? profile.handle ?? "user"}
+                size={20}
+                class="w-5 h-5"
+              />
               {profile.displayName || profile.handle} ·
               <button class="ec-footer-link" onclick={disconnect}
                 >Disconnect</button
