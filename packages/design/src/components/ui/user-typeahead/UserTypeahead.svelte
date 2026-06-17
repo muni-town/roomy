@@ -1,5 +1,5 @@
 <script lang="ts">
-  import UserAvatar from "../user/UserAvatar.svelte";
+  import UserAvatar from "../../user/UserAvatar.svelte";
 
   export type TypeaheadUser = {
     did: string;
