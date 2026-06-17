@@ -32,24 +32,39 @@
     goto(`/${spaceId}`);
   }
 
-  // Animate collapse when expanded state changes
-  // The server bar stays at w-16 conceptually; width animates to 0
-  // to reclaim layout space for the BigSidebar
+  // Animate width based on layout mode and expanded state
+  // wide (homepage): w-64, compact visible: w-16, compact hidden: w-0
   $effect(() => {
-    if (!el || wide) return;
-    animate(el, {
-      width: expanded ? 64 : 0,
-      opacity: expanded ? 1 : 0.4,
-      duration: 250,
-      ease: expanded ? "easeOutCubic" : "easeInCubic",
-    });
+    if (!el) return;
+    if (wide) {
+      animate(el, {
+        width: 256,
+        opacity: 1,
+        duration: 400,
+        ease: "easeOutCubic",
+      });
+    } else if (expanded) {
+      animate(el, {
+        width: 64,
+        opacity: 1,
+        duration: 400,
+        ease: "easeOutCubic",
+      });
+    } else {
+      animate(el, {
+        width: 0,
+        opacity: 0.4,
+        duration: 400,
+        ease: "easeInCubic",
+      });
+    }
   });
 </script>
 
 <div
   bind:this={el}
   class={[
-    "flex flex-col py-1 bg-base-100/50 dark:bg-base-950 min-h-0 gap-2 overflow-hidden",
+    "flex flex-col py-1 bg-base-100/50 dark:bg-base-950 min-h-0 gap-2 overflow-hidden relative z-10",
     wide
       ? "w-64 border-r border-base-950/5 dark:border-base-300/10"
       : "w-16 items-center",

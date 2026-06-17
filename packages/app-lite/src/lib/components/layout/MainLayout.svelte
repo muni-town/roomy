@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { onNavigate } from "$app/navigation";
+  import { browser } from "$app/environment";
   import BigSidebar from "@roomy/design/components/layout/BigSidebar.svelte";
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
   import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
@@ -39,17 +40,66 @@
 
   const sidebar = $derived(sidebarOverride.content ?? sidebarContent.content);
 
-  // Animate the main panel margin when server bar toggles
+  // Animate the main panel margin when sidebar layout changes
+  // Only applies at sm: breakpoint and above — mobile uses slide-over sidebar
   let mainPanel = $state<HTMLElement | null>(null);
+  let isWideScreen = $state(false);
+  let bigSidebarWrapper = $state<HTMLElement | null>(null);
 
   $effect(() => {
-    if (!mainPanel || onHomepage) return;
-    const targetWidth = serverBar.expanded ? 320 : 256;
+    if (!browser) return;
+    const mq = window.matchMedia("(min-width: 640px)");
+    isWideScreen = mq.matches;
+    const handler = () => (isWideScreen = mq.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  });
+
+  $effect(() => {
+    if (!mainPanel || !isWideScreen) return;
+    let targetWidth: number;
+    if (onHomepage) {
+      targetWidth = 256;
+    } else {
+      targetWidth = serverBar.expanded ? 320 : 256;
+    }
     animate(mainPanel, {
       marginLeft: targetWidth,
-      duration: 250,
+      duration: 400,
       ease: "easeOutCubic",
     });
+  });
+
+  // Animate BigSidebar wrapper width: shrinks to 0 on homepage, expands to 256 on space page
+  // Also fade the BigSidebar content to transparent as it shrinks
+  $effect(() => {
+    if (!bigSidebarWrapper) return;
+    const bigSidebar = bigSidebarWrapper.firstElementChild as HTMLElement | null;
+    if (!bigSidebar) return;
+
+    if (onHomepage) {
+      animate(bigSidebarWrapper, {
+        width: 0,
+        duration: 400,
+        ease: "easeOutCubic",
+      });
+      animate(bigSidebar, {
+        opacity: 0,
+        duration: 400,
+        ease: "easeOutCubic",
+      });
+    } else {
+      animate(bigSidebarWrapper, {
+        width: 256,
+        duration: 400,
+        ease: "easeOutCubic",
+      });
+      animate(bigSidebar, {
+        opacity: 1,
+        duration: 400,
+        ease: "easeOutCubic",
+      });
+    }
   });
 
   onNavigate(() => {
@@ -98,23 +148,21 @@
 <!-- Fixed sidebar (full height, left) -->
 <div
   class={[
-    "isolate fixed top-0 bottom-0 left-0 z-40 bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
+    "isolate fixed top-0 bottom-0 left-0 z-40 overflow-hidden bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
     mobileSidebar.visible ? "block" : "hidden sm:block",
   ]}
 >
   <div class="relative flex h-full w-fit">
-    {#if onHomepage}
-      <!-- Homepage: wide server bar fills the sidebar area -->
-      <ServerBar wide />
-    {:else}
-      <!-- Space page: compact server bar + BigSidebar -->
-      <ServerBar expanded={serverBar.expanded} />
-      <BigSidebar>
-        {#if sidebar}
-          {@render sidebar()}
-        {/if}
-      </BigSidebar>
-    {/if}
+      <!-- Server bar + BigSidebar: on homepage the server bar expands to w-64
+      and the BigSidebar slides right out of view -->
+      <ServerBar wide={onHomepage} expanded={serverBar.expanded} />
+      <div bind:this={bigSidebarWrapper} class="overflow-hidden w-64 shrink-0">
+        <BigSidebar>
+          {#if sidebar}
+            {@render sidebar()}
+          {/if}
+        </BigSidebar>
+      </div>
     <!-- Full-width user card overlay spanning both server bar and main sidebar -->
     <div class="absolute bottom-0 left-0 w-full z-50">
       <SidebarUserCard />
