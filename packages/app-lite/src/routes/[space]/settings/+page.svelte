@@ -1,8 +1,9 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
-  import { updateSpaceInfo } from "$lib/mutations/space";
+  import { updateSpaceInfo, leaveSpace } from "$lib/mutations/space";
   import { uploadFile } from "$lib/mutations/upload";
   import { resolveBlobUrl } from "$lib/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
@@ -17,6 +18,7 @@
   const spaceId = $derived(page.params.space!);
   const metaQuery = createSpaceMetadataQuery(() => spaceId);
   const meta = $derived(metaQuery.data);
+  const isAdmin = $derived(metaQuery.data?.isAdmin ?? false);
 
   // Editable form state, (re)initialised from server metadata.
   let name = $state("");
@@ -29,6 +31,7 @@
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
   let fileInput = $state<HTMLInputElement | null>(null);
+  let isLeaving = $state(false);
 
   function clearAvatarSelection() {
     avatarFile = null;
@@ -115,135 +118,159 @@
       isSaving = false;
     }
   }
+
+  async function onLeave() {
+    try {
+      isLeaving = true;
+      await leaveSpace(spaceId);
+    } finally {
+      goto("/");
+    }
+  }
 </script>
 
 <div class="max-w-2xl">
-  <h2 class="text-base font-semibold mb-4">General</h2>
+  {#if isAdmin}
+    <h2 class="text-base font-semibold mb-4">General</h2>
 
-  {#if metaQuery.isPending}
-    <p class="text-sm text-base-400">Loading…</p>
-  {:else if metaQuery.isError}
-    <ErrorMessage message={metaQuery.error.message} class="py-8" />
-  {:else if meta}
-    <form
-      class="flex flex-col gap-6"
-      onsubmit={(e) => {
-        e.preventDefault();
-        save();
-      }}
-    >
-      <div>
-        <span
-          class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
-        >
-          Avatar
-        </span>
-        <div class="flex items-center gap-3">
-          <button
-            type="button"
-            class="group relative cursor-pointer"
-            onclick={() => fileInput?.click()}
-          >
-            <SpaceAvatar
-              src={avatarSrc}
-              id={spaceId}
-              name={meta.name ?? undefined}
-              size={64}
-            />
-            <div
-              class="absolute bottom-0 right-0 flex items-center justify-center size-5 rounded-full bg-base-900/70 text-white shadow-sm transition-opacity group-hover:bg-base-900/90"
-            >
-              <IconEdit class="size-3" />
-            </div>
-          </button>
-          <input
-            type="file"
-            accept="image/*"
-            class="hidden"
-            bind:this={fileInput}
-            onchange={handleAvatarSelect}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label
-          for="space-name"
-          class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
-        >
-          Space name
-        </label>
-        <Input id="space-name" bind:value={name} class="w-full" />
-      </div>
-
-      <div>
-        <label
-          for="space-description"
-          class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
-        >
-          Description
-        </label>
-        <textarea
-          id="space-description"
-          bind:value={description}
-          rows={4}
-          class={`${inputVariants({ variant: "secondary" })} w-full resize-y`}
-        ></textarea>
-      </div>
-
-      <div class="flex flex-col gap-4">
+    {#if metaQuery.isPending}
+      <p class="text-sm text-base-400">Loading…</p>
+    {:else if metaQuery.isError}
+      <ErrorMessage message={metaQuery.error.message} class="py-8" />
+    {:else if meta}
+      <form
+        class="flex flex-col gap-6"
+        onsubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
         <div>
-          <p
+          <span
             class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
           >
-            Who can join this space?
-          </p>
-          <ToggleGroup
-            name="allowPublicJoin"
-            bind:value={allowPublicJoin}
-            options={[
-              { label: "Anyone", value: "yes" },
-              { label: "Invite only", value: "no" },
-            ]}
-          />
+            Avatar
+          </span>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              class="group relative cursor-pointer"
+              onclick={() => fileInput?.click()}
+            >
+              <SpaceAvatar
+                src={avatarSrc}
+                id={spaceId}
+                name={meta.name ?? undefined}
+                size={64}
+              />
+              <div
+                class="absolute bottom-0 right-0 flex items-center justify-center size-5 rounded-full bg-base-900/70 text-white shadow-sm transition-opacity group-hover:bg-base-900/90"
+              >
+                <IconEdit class="size-3" />
+              </div>
+            </button>
+            <input
+              type="file"
+              accept="image/*"
+              class="hidden"
+              bind:this={fileInput}
+              onchange={handleAvatarSelect}
+            />
+          </div>
         </div>
 
-        {#if allowPublicJoin === "no"}
+        <div>
+          <label
+            for="space-name"
+            class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
+          >
+            Space name
+          </label>
+          <Input id="space-name" bind:value={name} class="w-full" />
+        </div>
+
+        <div>
+          <label
+            for="space-description"
+            class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
+          >
+            Description
+          </label>
+          <textarea
+            id="space-description"
+            bind:value={description}
+            rows={4}
+            class={`${inputVariants({ variant: "secondary" })} w-full resize-y`}
+          ></textarea>
+        </div>
+
+        <div class="flex flex-col gap-4">
           <div>
             <p
               class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
             >
-              Who can create invite links?
+              Who can join this space?
             </p>
             <ToggleGroup
-              name="allowMemberInvites"
-              bind:value={allowMemberInvites}
+              name="allowPublicJoin"
+              bind:value={allowPublicJoin}
               options={[
-                { label: "Any member", value: "yes" },
-                { label: "Admins only", value: "no" },
+                { label: "Anyone", value: "yes" },
+                { label: "Invite only", value: "no" },
               ]}
             />
           </div>
+
+          {#if allowPublicJoin === "no"}
+            <div>
+              <p
+                class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
+              >
+                Who can create invite links?
+              </p>
+              <ToggleGroup
+                name="allowMemberInvites"
+                bind:value={allowMemberInvites}
+                options={[
+                  { label: "Any member", value: "yes" },
+                  { label: "Admins only", value: "no" },
+                ]}
+              />
+            </div>
+          {/if}
+        </div>
+
+        {#if saveError}
+          <p class="text-sm text-red-600">{saveError}</p>
         {/if}
-      </div>
 
-      {#if saveError}
-        <p class="text-sm text-red-600">{saveError}</p>
-      {/if}
-
-      <div class="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={!hasChanged || isSaving}
-          onclick={reset}
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={!hasChanged || isSaving}>
-          {isSaving ? "Saving…" : "Save"}
-        </Button>
-      </div>
-    </form>
+        <div class="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={!hasChanged || isSaving}
+            onclick={reset}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!hasChanged || isSaving}>
+            {isSaving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    {/if}
+  {:else}
+    <div class="flex flex-col items-center gap-4 py-12">
+      <p class="text-sm text-base-500 dark:text-base-400">
+        You don't have permission to edit this space's settings.
+      </p>
+      <Button
+        variant="red"
+        onclick={onLeave}
+        disabled={isLeaving}
+      >
+        {isLeaving ? "Leaving…" : "Leave Space"}
+      </Button>
+    </div>
   {/if}
 </div>
