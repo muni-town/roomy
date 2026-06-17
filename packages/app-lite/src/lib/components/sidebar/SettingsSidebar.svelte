@@ -26,7 +26,6 @@ import { toast } from "@foxui/core";
 
   const tabs = [
     { slug: "", label: "General" },
-    { slug: "handle", label: "Handle" },
     { slug: "roles", label: "Roles" },
     { slug: "members", label: "Members" },
     { slug: "invites", label: "Invites" },

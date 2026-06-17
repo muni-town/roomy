@@ -18,10 +18,6 @@
       slug: "members",
     },
     {
-      label: "Handle",
-      slug: "handle",
-    },
-    {
       label: "Bans",
       slug: "bans",
     },
