@@ -35,18 +35,18 @@
 {@render header()}
 </div>
 
+{#if actions}
+  <div class="shrink-0">
+    {@render actions()}
+  </div>
+{/if}
+
 {#if loading}
-  <div class="px-4 mt-14">
+  <div class="px-4">
     <div class="h-4 bg-base-200 rounded animate-pulse w-3/4 mb-2"></div>
     <div class="h-3 bg-base-200 rounded animate-pulse w-1/2"></div>
   </div>
 {:else}
-  {#if actions}
-    <div class="shrink-0">
-      {@render actions()}
-    </div>
-  {/if}
-
   {#if saveAction}{@render saveAction()}{/if}
 
   <div class="w-full h-full px-2 pt-3 pb-20 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)] flex-1 min-h-0 overflow-y-scroll">
