@@ -186,6 +186,17 @@ create table if not exists comp_embed_link (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 
+-- Cached enriched embed data fetched from the external embed service.
+-- Populated asynchronously after materialization by the embed enricher.
+-- NULL when enrichment hasn't completed yet (or the service had no data).
+create table if not exists comp_embed_link_data (
+  entity text primary key references entities(id) on delete cascade, -- URI
+  embed_json text, -- JSON-serialized EmbedV1 from the embed service; null when no data
+  fetched_at integer not null default (unixepoch() * 1000),
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
 create table if not exists comp_last_read (
   entity text primary key references entities(id) on delete cascade,
   last_read integer not null,

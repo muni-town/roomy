@@ -27,8 +27,11 @@ import { fileURLToPath } from "node:url";
  * `.10`: fixed missing ORDER BY in module "events" and "metadata" subscription
  * queries — without it, backfill pagination skips events. The old DB has
  * holes; a wipe forces clean re-materialisation with the fixed module.
+ *
+ * `.11`: added `comp_embed_link_data` table for caching enriched embed
+ * metadata from the external embed service.
  */
-export const SCHEMA_VERSION = "10-appserver.0";
+export const SCHEMA_VERSION = "10-appserver.1";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 

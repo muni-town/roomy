@@ -2,12 +2,13 @@
  * Message selection helper used by `room.getMessages` and `message.getMessage`.
  *
  * Returns fully denormalised message objects with all joins resolved
- * server-side: author, content, replyTo, forwardedFrom, reactions, media.
+ * server-side: author, content, replyTo, forwardedFrom, reactions, media,
+ * linkEmbeds.
  *
  * Strategy: 1 query for the message rows + singleton-edge joins (author,
- * reply, forward), then 2 small batch queries (reactions, image+video+
- * file+link embeds) keyed on the page's IDs. Constant query count, regardless
- * of page size.
+ * reply, forward), then 3 small batch queries (reactions, image+video+
+ * file+link embeds, link embed data) keyed on the page's IDs. Constant query
+ * count, regardless of page size.
  *
  * The caller is responsible for authorisation — this helper does not check
  * read access.
@@ -24,6 +25,12 @@ export interface ReactionDto {
   myReactionId?: string;
 }
 
+export interface LinkEmbedDto {
+  url: string;
+  /** Enriched embed data (EmbedV1 JSON), absent when enrichment hasn't completed or had no data. */
+  embed?: Record<string, unknown>;
+}
+
 export interface MessageDto {
   id: string;
   /** Sort index for timeline ordering. ULID based on canonical timestamp. */
@@ -38,6 +45,8 @@ export interface MessageDto {
   forwardedFrom?: { name: string; roomId: string };
   reactions: Array<ReactionDto>;
   media: Array<{ url: string; type: string; alt?: string }>;
+  /** Link embeds with enriched metadata from the embed service. */
+  linkEmbeds: Array<LinkEmbedDto>;
 }
 
 export type SelectScope =
@@ -221,7 +230,7 @@ export function selectMessages(
     }
   }
 
-  // ── Step 3: batch-fetch reactions / embeds keyed by id ─────────
+  // ── Step 3: batch-fetch reactions / embeds / link embed data keyed by id ──
   const idPh = ids.map(() => "?").join(",");
 
   const reactionRows = db
@@ -316,6 +325,54 @@ export function selectMessages(
     arr.push({ url: e.url, type: e.mime_type, alt: e.alt });
   }
 
+  // ── Step 3b: batch-fetch enriched link embed data ────────────────────
+  // Fetch cached embed data for all link URLs found in this page.
+  // We need to collect the link URLs first, then query comp_embed_link_data.
+  const linkUrls = new Set<string>();
+  for (const e of embedRows) {
+    if (e.mime_type === "text/uri-list") {
+      linkUrls.add(e.url);
+    }
+  }
+
+  const linkEmbedDataMap = new Map<string, Record<string, unknown> | null>();
+  if (linkUrls.size > 0) {
+    const urlList = [...linkUrls];
+    const ph = urlList.map(() => "?").join(",");
+    const linkDataRows = db
+      .query<
+        { entity: string; embed_json: string | null },
+        string[]
+      >(
+        `select entity, embed_json from comp_embed_link_data
+          where entity in (${ph})`,
+      )
+      .all(...urlList);
+    for (const row of linkDataRows) {
+      linkEmbedDataMap.set(
+        row.entity,
+        row.embed_json ? (JSON.parse(row.embed_json) as Record<string, unknown>) : null,
+      );
+    }
+  }
+
+  // Build linkEmbeds map: messageId → LinkEmbedDto[]
+  const linkEmbedsMap = new Map<string, Array<LinkEmbedDto>>();
+  for (const e of embedRows) {
+    if (e.mime_type === "text/uri-list") {
+      let arr = linkEmbedsMap.get(e.message_id);
+      if (!arr) {
+        arr = [];
+        linkEmbedsMap.set(e.message_id, arr);
+      }
+      const embedData = linkEmbedDataMap.get(e.url);
+      arr.push({
+        url: e.url,
+        ...(embedData != null ? { embed: embedData } : {}),
+      });
+    }
+  }
+
   const messages: MessageDto[] = baseRows.map((r) => {
     // If this row is a forward reference (no own content, has forward_target),
     // substitute the original's content/author.
@@ -356,6 +413,7 @@ export function selectMessages(
     }
 
     const mediaForMsg = (mediaMap.get(r.id) ?? []).map((m) => stripNulls(m) as { url: string; type: string; alt?: string });
+    const linkEmbedsForMsg = linkEmbedsMap.get(r.id) ?? [];
 
     return stripNulls({
       id: r.id,
@@ -376,6 +434,7 @@ export function selectMessages(
           : null,
       reactions,
       media: mediaForMsg,
+      linkEmbeds: linkEmbedsForMsg,
     }) as MessageDto;
   });
 

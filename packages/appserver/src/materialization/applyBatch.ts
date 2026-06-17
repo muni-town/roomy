@@ -26,6 +26,8 @@ import {
   isDebugEnabled,
   recordMaterialization,
 } from "../debug/eventStore.ts";
+import { detectAndStoreLinks } from "../embed/enricher.ts";
+import { decodeContent } from "../db/content.ts";
 
 const MAX_TRACKED_FAILURES = 100;
 
@@ -100,6 +102,24 @@ export function applyBatch(
       try {
         applyBundle(db, bundle, { isBackfill: opts.isBackfill, streamId });
         stats.applied++;
+
+        // Detect URLs in message content and store as link embeds.
+        // This runs inside the transaction so link detection is atomic
+        // with the message insert. Enrichment (fetching OpenGraph data)
+        // happens asynchronously after the transaction commits.
+        if (
+          e.event.$type === "space.roomy.message.createMessage.v0" &&
+          e.event.room
+        ) {
+          const body = (e.event as Record<string, unknown>).body as
+            | { mimeType?: string; data?: { buf: Uint8Array } }
+            | undefined;
+          if (body?.data?.buf) {
+            const mime = body.mimeType ?? "text/markdown";
+            const content = decodeContent(mime, Buffer.from(body.data.buf));
+            detectAndStoreLinks(db, e.event.id, content);
+          }
+        }
         if (isDebugEnabled()) {
           recordMaterialization({
             streamDid: streamId,

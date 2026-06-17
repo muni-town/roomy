@@ -5,10 +5,12 @@
  * Returns a single MessageDto at the top level (not wrapped).
  */
 import { type } from "arktype";
-import { Message } from "./_message";
+import { Message, LinkEmbedData } from "./_message";
 
 export const NSID = "space.roomy.message.getMessage" as const;
 
 export const Params = type({ messageId: "string" });
 
 export const Response = Message;
+
+export { LinkEmbedData };

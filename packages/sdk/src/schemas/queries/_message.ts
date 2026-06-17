@@ -23,6 +23,62 @@ export const ForwardedFrom = type({
   roomId: "string",
 });
 
+/**
+ * A link embed with optional enriched metadata from the embed service.
+ * The `embed` field contains the EmbedV1 JSON object when enrichment has
+ * completed; it's absent/null when still pending or when the service had
+ * no data for the URL.
+ *
+ * The embed data follows the Lantern-chat embed-service protocol:
+ * https://github.com/Lantern-chat/embed-service
+ */
+
+/** Minimal media reference within an embed (image, video, thumbnail). */
+const EmbedMedia = type({
+  u: "string",
+  "d?": "string",
+  "w?": "number",
+  "h?": "number",
+  "m?": "string",
+});
+
+/** Provider info from oEmbed. */
+const EmbedProvider = type({
+  "n?": "string",
+  "u?": "string",
+});
+
+/** Author info from OpenGraph. */
+const EmbedAuthor = type({
+  "n?": "string",
+  "u?": "string",
+});
+
+/** Footer text. */
+const EmbedFooter = type({
+  "t?": "string",
+});
+
+/**
+ * Enriched embed metadata (EmbedV1 from the embed service).
+ * All fields are optional since enrichment may be partial or pending.
+ */
+export const LinkEmbedData = type({
+  "t?": "string",
+  "d?": "string",
+  "p?": EmbedProvider,
+  "au?": EmbedAuthor,
+  "footer?": EmbedFooter,
+  "imgs?": EmbedMedia.array(),
+  "vid?": EmbedMedia,
+  "thumb?": EmbedMedia,
+});
+
+export const LinkEmbed = type({
+  url: "string",
+  "embed?": LinkEmbedData,
+});
+
 export const Message = type({
   id: "string",
   /** Sort index for timeline ordering. ULID based on canonical timestamp. */
@@ -37,4 +93,6 @@ export const Message = type({
   "forwardedFrom?": ForwardedFrom,
   reactions: Reaction.array(),
   media: Media.array(),
+  /** Link embeds with enriched metadata from the embed service. */
+  linkEmbeds: LinkEmbed.array(),
 });

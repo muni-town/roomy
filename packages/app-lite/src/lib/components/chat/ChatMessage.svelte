@@ -8,6 +8,7 @@
   import MessageReactions from "./MessageReactions.svelte";
   import MessageToolbar from "./MessageToolbar.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
+  import LinkCard from "./embeds/LinkCard.svelte";
   import ChatInput from "./ChatInput.svelte";
   import { editMessage } from "$lib/mutations/message";
   import type { Message } from "$lib/queries/messages";
@@ -110,9 +111,22 @@
         {/if}
       {/snippet}
 
+      {#snippet linkEmbeds()}
+        {#if message.linkEmbeds && message.linkEmbeds.length > 0}
+          <div class="flex flex-col gap-2 mt-1">
+            {#each message.linkEmbeds as link (link.url)}
+              <LinkCard url={link.url} embed={link.embed} />
+            {/each}
+          </div>
+        {/if}
+      {/snippet}
+
       {#snippet media()}
         {#if message.media && message.media.length > 0}
-          <MediaEmbed media={message.media.map((m) => ({ ...m, alt: m.alt ?? undefined }))} />
+          {@const nonLinkMedia = message.media.filter((m) => !m.type.startsWith("text/"))}
+          {#if nonLinkMedia.length > 0}
+            <MediaEmbed media={nonLinkMedia.map((m) => ({ ...m, alt: m.alt ?? undefined }))} />
+          {/if}
         {/if}
       {/snippet}
 
