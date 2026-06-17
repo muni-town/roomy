@@ -4,6 +4,7 @@
   import { resolveBlobUrl } from "$lib/utils";
   import { renderMarkdownSanitized } from "@roomy/design/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
+  import ActivityFeedSkeleton from "./ActivityFeedSkeleton.svelte";
   import { slide } from "svelte/transition";
 
   let { spaceId, showSpaceInfo = true, limit = 20 }: { spaceId?: string; showSpaceInfo?: boolean; limit?: number } = $props();
@@ -32,9 +33,7 @@
 </script>
 
 {#if feedQuery.isPending}
-  <div class="flex justify-center py-8">
-    <p class="text-sm text-base-400">Loading activity feed…</p>
-  </div>
+  <ActivityFeedSkeleton count={limit > 10 ? 5 : 3} />
 {:else if feedQuery.isError}
   <div class="flex justify-center py-8">
     <p class="text-sm text-red-600">Error: {feedQuery.error.message}</p>
