@@ -104,7 +104,12 @@ export const prodAuthVerifier: AuthVerifier = async (req) => {
     },
   );
 
-  return { did: payload.iss };
+  // Service auth tokens (from DirectXrpcClient) have `iss` = PDS DID and
+  // `sub` = user DID. Atproto-proxy auth tokens have `iss` = user DID and
+  // no `sub`. Use `sub` when present (service auth), fall back to `iss`
+  // (atproto-proxy auth).
+  const userDid = (payload as Record<string, unknown>).sub ?? payload.iss;
+  return { did: userDid as string };
 };
 
 // ── Ticket store for WebSocket pre-auth ─────────────────────────────────
