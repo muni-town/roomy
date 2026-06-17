@@ -155,6 +155,11 @@
           <hr class="border-base-200 dark:border-base-800" />
         {/if}
       {/each}
+
+      <!-- End of feed notice -->
+      <div class="flex justify-center py-6">
+        <p class="text-sm text-base-400 italic">That's all we got.</p>
+      </div>
     </div>
   {/if}
 {/if}
