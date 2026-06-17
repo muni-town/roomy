@@ -13,6 +13,7 @@
   import NavbarSpaceInfo from "./NavbarSpaceInfo.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
   import ServerBar from "$lib/components/sidebar/ServerBar.svelte";
+  import { animate } from "$lib/animations";
 
   let {
     children,
@@ -38,6 +39,19 @@
 
   const sidebar = $derived(sidebarOverride.content ?? sidebarContent.content);
 
+  // Animate the main panel margin when server bar toggles
+  let mainPanel = $state<HTMLElement | null>(null);
+
+  $effect(() => {
+    if (!mainPanel || onHomepage) return;
+    const targetWidth = serverBar.expanded ? 320 : 256;
+    animate(mainPanel, {
+      marginLeft: targetWidth,
+      duration: 250,
+      ease: "easeOutCubic",
+    });
+  });
+
   onNavigate(() => {
     mobileSidebar.visible = false;
   });
@@ -45,9 +59,10 @@
 
 <!-- Main panel: navbar + page content, offset to clear the fixed sidebar -->
 <div
+  bind:this={mainPanel}
   class={[
     "h-full flex flex-col overflow-hidden",
-    sidebarWidth,
+    onHomepage ? "sm:ml-64" : serverBar.expanded ? "sm:ml-[20rem]" : "sm:ml-64",
     chatArea ? "bg-white dark:bg-base-950" : "",
   ]}
 >
@@ -93,9 +108,7 @@
       <ServerBar wide />
     {:else}
       <!-- Space page: compact server bar + BigSidebar -->
-      {#if serverBar.expanded}
-        <ServerBar />
-      {/if}
+      <ServerBar expanded={serverBar.expanded} />
       <BigSidebar>
         {#if sidebar}
           {@render sidebar()}

@@ -24,6 +24,7 @@
     "@tiptap/pm": "^2.26.1",
     "@tiptap/starter-kit": "^2.26.1",
     "@tiptap/suggestion": "^2.26.1",
+    "animejs": "^4.4.1",
     "bits-ui": "^1.8.0",
     "svelte-boring-avatars": "^1.2.6",
     "svelte-dnd-action": "^0.9.65",

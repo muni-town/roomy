@@ -43,7 +43,7 @@ export const getRolesHandler: QueryHandler<
 	}
 
 	const db = openDb();
-	requireSpaceAccess(db, spaceId, userDid);
+	const access = requireSpaceAccess(db, spaceId, userDid);
 
 	const roleRows = db
 		.query<
@@ -75,20 +75,24 @@ export const getRolesHandler: QueryHandler<
         where role_id = ? and stream_id = ?`,
 	);
 
-	const roles: RoleRow[] = roleRows.map(
-		(r) =>
-			stripNulls({
-				id: r.id,
-				name: r.name,
-				avatar: r.avatar,
-				description: r.description,
-				rooms: roomsStmt.all(r.id, spaceId).map((row) => ({
-					roomId: row.room_id,
-					permission: row.permission,
-				})),
-				memberDids: membersStmt.all(r.id, spaceId).map((row) => row.user_id),
-			}) as RoleRow,
-	);
+	const roles: RoleRow[] = roleRows
+		.map(
+			(r) =>
+				stripNulls({
+					id: r.id,
+					name: r.name,
+					avatar: r.avatar,
+					description: r.description,
+					rooms: roomsStmt.all(r.id, spaceId).map((row) => ({
+						roomId: row.room_id,
+						permission: row.permission,
+					})),
+					memberDids: membersStmt.all(r.id, spaceId).map((row) => row.user_id),
+				}) as RoleRow,
+		)
+		.filter(
+			(r) => access.isAdmin || (userDid !== null && r.memberDids.includes(userDid)),
+		);
 
 	return { roles };
 };

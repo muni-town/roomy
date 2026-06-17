@@ -1,6 +1,5 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { goto } from "$app/navigation";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import RoleCreateForm from "@roomy/design/components/modals/RoleCreateForm.svelte";
   import RoleEditForm from "@roomy/design/components/modals/RoleEditForm.svelte";
@@ -24,13 +23,8 @@
 
   const spaceId = $derived(page.params.space!);
 
-  // Admin guard
   const metaQuery = createSpaceMetadataQuery(() => spaceId);
-  $effect(() => {
-    if (metaQuery.data && !metaQuery.data.isAdmin) {
-      goto(`/${spaceId}`);
-    }
-  });
+  const isAdmin = $derived(metaQuery.data?.isAdmin ?? false);
 
   const rolesQuery = createRolesQuery(() => spaceId);
   const membersQuery = createMembersQuery(() => spaceId);
@@ -158,33 +152,35 @@
               </p>
             {/if}
           </div>
-          <Popover bind:open={menuOpen} side="bottom" sideOffset={6} align="end" class="p-1 w-40">
-            {#snippet child({ props })}
-              <Button variant="ghost" size="icon" {...props}>
-                <IconEllipsisHorizontal class="size-4" />
-                <span class="sr-only">Role actions</span>
-              </Button>
-            {/snippet}
-            <button
-              class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-base-800 dark:text-base-200 hover:bg-base-100 dark:hover:bg-base-800 transition-colors text-left"
-              onclick={() => { menuOpen = false; editOpen = true; }}
-            >
-              <IconPencil class="size-4 shrink-0 text-base-500" />
-              Edit
-            </button>
-            <button
-              class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-left"
-              onclick={() => { menuOpen = false; onDelete(); }}
-              disabled={isDeleting}
-            >
-              {#if isDeleting}
-                <IconLoading class="size-4 shrink-0 animate-spin" />
-              {:else}
-                <IconTrash class="size-4 shrink-0" />
-              {/if}
-              Delete
-            </button>
-          </Popover>
+          {#if isAdmin}
+            <Popover bind:open={menuOpen} side="bottom" sideOffset={6} align="end" class="p-1 w-40">
+              {#snippet child({ props })}
+                <Button variant="ghost" size="icon" {...props}>
+                  <IconEllipsisHorizontal class="size-4" />
+                  <span class="sr-only">Role actions</span>
+                </Button>
+              {/snippet}
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-base-800 dark:text-base-200 hover:bg-base-100 dark:hover:bg-base-800 transition-colors text-left"
+                onclick={() => { menuOpen = false; editOpen = true; }}
+              >
+                <IconPencil class="size-4 shrink-0 text-base-500" />
+                Edit
+              </button>
+              <button
+                class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-left"
+                onclick={() => { menuOpen = false; onDelete(); }}
+                disabled={isDeleting}
+              >
+                {#if isDeleting}
+                  <IconLoading class="size-4 shrink-0 animate-spin" />
+                {:else}
+                  <IconTrash class="size-4 shrink-0" />
+                {/if}
+                Delete
+              </button>
+            </Popover>
+          {/if}
         </div>
 
         <!-- Members -->
@@ -213,13 +209,15 @@
                     <span class="text-xs text-base-400 truncate">@{member.handle}</span>
                   {/if}
                   <span class="flex-1" />
-                  <button
-                    class="text-xs text-base-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded-xl"
-                    onclick={() => removeMember(did)}
-                    aria-label="Remove {displayName(member)} from this role"
-                  >
-                    Remove
-                  </button>
+                  {#if isAdmin}
+                    <button
+                      class="text-xs text-base-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded-xl"
+                      onclick={() => removeMember(did)}
+                      aria-label="Remove {displayName(member)} from this role"
+                    >
+                      Remove
+                    </button>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -229,12 +227,14 @@
             </p>
           {/if}
 
-          <UserTypeahead
-            users={spaceMembers}
-            excluded={selectedRole.memberDids}
-            onSelect={addMember}
-            placeholder="Add member..."
-          />
+          {#if isAdmin}
+            <UserTypeahead
+              users={spaceMembers}
+              excluded={selectedRole.memberDids}
+              onSelect={addMember}
+              placeholder="Add member..."
+            />
+          {/if}
         </div>
 
         <!-- Channel permissions -->
@@ -276,13 +276,15 @@
             Roles
           </h2>
           <p class="text-sm text-base-500 dark:text-base-400 mt-1">
-            Create and manage roles to control access to channels in your space.
+            Roles control access to channels in your space.
           </p>
         </div>
-        <Button variant="secondary" size="icon" onclick={() => (createOpen = true)}>
-          <IconPlus class="size-4" />
-          <span class="sr-only">Create role</span>
-        </Button>
+        {#if isAdmin}
+          <Button variant="secondary" size="icon" onclick={() => (createOpen = true)}>
+            <IconPlus class="size-4" />
+            <span class="sr-only">Create role</span>
+          </Button>
+        {/if}
       </div>
 
       {#if rolesQuery.isPending && roles.length === 0}
@@ -309,7 +311,7 @@
         </ul>
       {:else if !rolesQuery.isPending}
         <p class="text-sm text-base-400 py-2">
-          No roles yet. Use the + button to create one.
+          You are not a member of any roles.
         </p>
       {/if}
     </div>

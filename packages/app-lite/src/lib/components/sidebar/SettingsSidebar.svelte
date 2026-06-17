@@ -24,13 +24,25 @@ import { toast } from "@foxui/core";
       (meta?.isAdmin ?? false),
   );
 
-  const tabs = [
-    { slug: "", label: "General" },
-    { slug: "roles", label: "Roles" },
-    { slug: "members", label: "Members" },
-    { slug: "invites", label: "Invites" },
-    { slug: "discord-bridge", label: "Discord Bridge" },
-  ];
+  const showInvitesTab = $derived(
+    !(meta?.joinPolicy.allowPublicJoin ?? true) &&
+      ((meta?.isAdmin ?? false) ||
+        (meta?.joinPolicy.allowMemberInvites ?? false)),
+  );
+
+  const showDiscordBridgeTab = $derived(meta?.isAdmin ?? false);
+
+  const tabs = $derived(
+    [
+      { slug: "", label: "General" },
+      { slug: "roles", label: "Roles" },
+      { slug: "members", label: "Members" },
+      ...(showInvitesTab ? [{ slug: "invites", label: "Invites" }] : []),
+      ...(showDiscordBridgeTab
+        ? [{ slug: "discord-bridge", label: "Discord Bridge" }]
+        : []),
+    ],
+  );
 
   function isActive(slug: string) {
     const base = `/${spaceId}/settings`;
