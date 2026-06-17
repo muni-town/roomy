@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { goto } from "$app/navigation";
   import { buttonVariants } from "../ui/button/Button.svelte";
   import {
     ContextMenu,
@@ -127,7 +128,7 @@
 
       {#if settingsHref}
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => { window.location.href = settingsHref; }}>
+        <ContextMenuItem onSelect={() => { goto(settingsHref!); }}>
           <IconSettings class="size-4" />
           Space settings
         </ContextMenuItem>
