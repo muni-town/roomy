@@ -36,7 +36,7 @@
   ].join(" ")}
 >
   <!-- Home button -->
-  <div class={wide ? "mx-1.75" : "flex justify-center"}>
+  <div class={wide ? "mx-2" : "flex justify-center"}>
     <Button
       href="/"
       variant="ghost"
@@ -49,7 +49,7 @@
     >
       <IconMasonryGrid />
       {#if wide}
-        <span class="text-sm font-medium truncate">Home</span>
+        <span class="text-md font-semibold truncate text-base-700 dark:text-base-300 hover:text-black dark:hover:text-white">Home</span>
       {/if}
     </Button>
   </div>
@@ -75,7 +75,7 @@
         class={[
           "transition-all cursor-pointer opacity-90 hover:opacity-100 my-0.5",
           wide
-            ? "flex items-center gap-3 h-12 px-1.5 rounded-lg text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
+            ? "flex items-center gap-3 h-12 pl-2 pr-1.5 rounded-lg text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
             : "relative flex items-center justify-center size-12",
           space.id === currentSpaceId ? "active" : "",
         ].join(" ")}
@@ -90,13 +90,27 @@
           shape="squircle"
           ringVar="--avatar-ring"
         />
+        {#if space.unreadCount > 0}
+          <div
+            class="absolute bottom-0.5 left-0.5 size-1.5 rounded-full bg-accent-500 ring-1 ring-base-100 dark:ring-base-950"
+          ></div>
+        {/if}
         </div>
         {#if wide}
-          <span
-            class="text-sm font-medium truncate text-base-700 dark:text-base-300"
-          >
-            {space.name ?? "Unnamed Space"}
-          </span>
+          <div class="flex flex-col min-w-0">
+            <span
+              class="text-md font-semibold truncate text-base-700 dark:text-base-300 hover:text-black dark:hover:text-white"
+            >
+              {space.name ?? "Unnamed Space"}
+            </span>
+            {#if space.unreadCount > 0}
+              <span
+                class="text-xs text-base-500 dark:text-base-400 truncate"
+              >
+                {space.unreadCount} unread
+              </span>
+            {/if}
+          </div>
         {/if}
       </button>
     {/each}
