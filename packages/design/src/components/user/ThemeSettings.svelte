@@ -83,7 +83,7 @@
 
 <div class="flex flex-col w-full">
   <div class="flex items-center justify-between py-2 pr-0.5">
-    <span class="text-sm font-medium">
+    <span class="text-sm font-medium text-base-700 dark:text-base-300">
       <span class="dark:hidden">Light Mode</span>
       <span class="hidden dark:inline">Dark Mode</span>
     </span>
