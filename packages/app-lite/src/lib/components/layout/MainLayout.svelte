@@ -91,7 +91,7 @@ let {
       <!-- BigSidebar wrapper: slides left via translateX + overflow:hidden
            instead of animating width, keeping animation on the compositor -->
       <div
-        class="overflow-hidden shrink-0 w-64 h-full flex flex-col big-sidebar-wrapper"
+        class="overflow-hidden shrink-0 w-64 h-full flex flex-col border-r border-base-950/5 dark:border-base-300/10 big-sidebar-wrapper"
         class:big-sidebar-hidden={onHomepage}
         class:big-sidebar-visible={!onHomepage}
       >
@@ -112,7 +112,7 @@ let {
     <!-- On the homepage it only covers the server bar (w-64).
          On space pages it covers server bar + BigSidebar. -->
     <div
-      class="shrink-0 sidebar-user-card-wrapper"
+      class="shrink-0 border-r border-base-950/5 dark:border-base-300/10 sidebar-user-card-wrapper"
       class:on-homepage={onHomepage}
       class:not-homepage={!onHomepage}
       class:server-collapsed={!serverBar.expanded}
@@ -183,13 +183,16 @@ let {
   /* ── User card width: matches the visible sidebar width ────────── */
   .sidebar-user-card-wrapper {
     z-index: 50;
-    transition: width 400ms cubic-bezier(0.33, 1, 0.68, 1);
+    transition:
+      width 400ms cubic-bezier(0.33, 1, 0.68, 1),
+      border-right-width 400ms cubic-bezier(0.33, 1, 0.68, 1);
     will-change: width;
     contain: layout style;
   }
   /* Homepage: wide server bar only (w-64 = 256px), BigSidebar hidden */
   .sidebar-user-card-wrapper.on-homepage {
     width: 256px;
+    border-right: none;
   }
   /* Space page, server bar expanded: server bar (64px) + BigSidebar (256px) = 320px */
   .sidebar-user-card-wrapper.not-homepage:not(.server-collapsed) {

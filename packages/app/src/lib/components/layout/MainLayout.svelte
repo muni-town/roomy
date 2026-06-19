@@ -64,9 +64,11 @@
       </SmallSidebar>
     {/if}
     {#if sidebar}
-      <BigSidebar>
-        {@render sidebar?.()}
-      </BigSidebar>
+      <div class="h-full border-r border-base-950/5 dark:border-base-300/10">
+        <BigSidebar>
+          {@render sidebar?.()}
+        </BigSidebar>
+      </div>
     {/if}
   </div>
 </div>

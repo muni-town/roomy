@@ -20,7 +20,7 @@
 
 <div
   class={cn(
-    "overflow-y-hidden flex flex-col flex-1 min-h-0 w-64 border-r border-base-950/5 dark:border-base-300/10",
+    "overflow-y-hidden flex flex-col flex-1 min-h-0 w-64",
     className,
   )}
   {...restProps}
