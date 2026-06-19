@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
-  import { IconMasonryGrid } from "@roomy/design/icons";
+  import { IconMasonryGrid, IconPlus } from "@roomy/design/icons";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { resolveBlobUrl } from "$lib/utils";
   import { createSpacesQuery } from "$lib/queries/spaces";
@@ -141,6 +141,32 @@
         {/if}
       </button>
     {/each}
+
+    <!-- New Space button -->
+    <button
+      onclick={() => goto("/new")}
+      class={[
+        "transition-[opacity,background-color] cursor-pointer opacity-70 hover:opacity-100 my-0.5",
+        wide
+          ? "flex items-center gap-3 h-12 pl-2 pr-1.5 rounded-lg text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
+          : "relative flex items-center justify-center size-12",
+      ].join(" ")}
+      title="New Space"
+    >
+      <div
+        class={[
+          "flex items-center justify-center size-12 rounded-xl border-2 border-dashed border-base-300 dark:border-base-600 text-base-400 dark:text-base-500 hover:text-accent-500 hover:border-accent-500 transition-colors",
+          wide ? "shrink-0" : "",
+        ].join(" ")}
+      >
+        <IconPlus class="size-5" />
+      </div>
+      {#if wide}
+        <span class="text-md font-semibold truncate text-base-500 dark:text-base-400">
+          New Space
+        </span>
+      {/if}
+    </button>
   </div>
 </div>
 
