@@ -6,7 +6,6 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { resolveBlobUrl } from "$lib/utils";
   import { createSpacesQuery } from "$lib/queries/spaces";
-  import { animate } from "$lib/animations";
 
   let {
     wide = false,
@@ -18,6 +17,9 @@
     expanded?: boolean;
   } = $props();
 
+  // We use CSS transitions on transform + opacity instead of animating `width`
+  // (which triggers layout). The wrapper clips with overflow-hidden so a
+  // translateX animation stays entirely on the compositor thread.
   let el = $state<HTMLElement | null>(null);
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
@@ -32,42 +34,26 @@
     goto(`/${spaceId}`);
   }
 
-  // Animate width based on layout mode and expanded state
-  // wide (homepage): w-64, compact visible: w-16, compact hidden: w-0
-  $effect(() => {
-    if (!el) return;
-    if (wide) {
-      animate(el, {
-        width: 256,
-        opacity: 1,
-        duration: 400,
-        ease: "easeOutCubic",
-      });
-    } else if (expanded) {
-      animate(el, {
-        width: 64,
-        opacity: 1,
-        duration: 400,
-        ease: "easeOutCubic",
-      });
-    } else {
-      animate(el, {
-        width: 0,
-        opacity: 0.4,
-        duration: 400,
-        ease: "easeInCubic",
-      });
-    }
-  });
+  // CSS-based animation: translateX stays on the compositor thread.
+  // The parent container clips with overflow-hidden so translating beyond
+  // its bounds is visually identical to resizing width.
+  const animClass = $derived(
+    wide
+      ? "server-bar-wide"
+      : expanded
+        ? "server-bar-expanded"
+        : "server-bar-collapsed",
+  );
 </script>
 
 <div
   bind:this={el}
   class={[
-    "flex flex-col py-1 bg-base-100/50 dark:bg-base-950 min-h-0 gap-2 overflow-hidden relative z-10",
+    "flex flex-col py-1 bg-base-100/50 dark:bg-base-950 min-h-0 gap-2 overflow-hidden relative z-10 sidebar-server-bar",
     wide
       ? "w-64 border-r border-base-950/5 dark:border-base-300/10"
       : "w-16 items-center",
+    animClass,
   ].join(" ")}
 >
   <!-- Home button -->
@@ -108,7 +94,7 @@
       <button
         onclick={() => navigateToSpace(space.id)}
         class={[
-          "transition-all cursor-pointer opacity-90 hover:opacity-100 my-0.5",
+          "transition-[opacity,background-color] cursor-pointer opacity-90 hover:opacity-100 my-0.5",
           wide
             ? "flex items-center gap-3 h-12 pl-2 pr-1.5 rounded-lg text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
             : "relative flex items-center justify-center size-12",
@@ -153,6 +139,33 @@
 </div>
 
 <style>
+  .sidebar-server-bar {
+    /* contain + will-change = compositor-only */
+    contain: layout style;
+    will-change: transform, max-width;
+    transition:
+      max-width 400ms cubic-bezier(0.33, 1, 0.68, 1),
+      transform 400ms cubic-bezier(0.33, 1, 0.68, 1),
+      opacity 400ms ease;
+  }
+  /* Default: expanded (w-16) — no translate needed */
+  .sidebar-server-bar.server-bar-expanded {
+    transform: translateX(0);
+    max-width: 64px;
+    opacity: 1;
+  }
+  /* Wide (homepage): sits at position 0, full width */
+  .sidebar-server-bar.server-bar-wide {
+    transform: translateX(0);
+    max-width: 256px;
+    opacity: 1;
+  }
+  /* Collapsed: translate left by its own width (w-16 = 64px) so it slides behind the BigSidebar */
+  .sidebar-server-bar.server-bar-collapsed {
+    transform: translateX(-64px);
+    max-width: 0;
+    opacity: 0.4;
+  }
   button.active {
     --avatar-ring: var(--color-accent-500);
   }

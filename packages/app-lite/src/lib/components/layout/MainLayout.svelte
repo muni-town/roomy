@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { onNavigate } from "$app/navigation";
-  import { browser } from "$app/environment";
   import BigSidebar from "@roomy/design/components/layout/BigSidebar.svelte";
   import Navbar from "@roomy/design/components/layout/Navbar.svelte";
   import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
@@ -14,9 +13,8 @@
   import NavbarSpaceInfo from "./NavbarSpaceInfo.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
   import ServerBar from "$lib/components/sidebar/ServerBar.svelte";
-  import { animate } from "$lib/animations";
 
-  let {
+let {
     children,
     chatArea = false,
   }: {
@@ -30,77 +28,7 @@
   // Wide sidebar mode: homepage-style layout (wide server bar, no BigSidebar)
   const onHomepage = $derived(wideSidebar.active);
 
-  const sidebarWidth = $derived(
-    onHomepage
-      ? "sm:ml-64"
-      : serverBar.expanded
-        ? "sm:ml-[20rem]"
-        : "sm:ml-64",
-  );
-
   const sidebar = $derived(sidebarOverride.content ?? sidebarContent.content);
-
-  // Animate the main panel margin when sidebar layout changes
-  // Only applies at sm: breakpoint and above — mobile uses slide-over sidebar
-  let mainPanel = $state<HTMLElement | null>(null);
-  let isWideScreen = $state(false);
-  let bigSidebarWrapper = $state<HTMLElement | null>(null);
-
-  $effect(() => {
-    if (!browser) return;
-    const mq = window.matchMedia("(min-width: 640px)");
-    isWideScreen = mq.matches;
-    const handler = () => (isWideScreen = mq.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  });
-
-  $effect(() => {
-    if (!mainPanel || !isWideScreen) return;
-    let targetWidth: number;
-    if (onHomepage) {
-      targetWidth = 256;
-    } else {
-      targetWidth = serverBar.expanded ? 320 : 256;
-    }
-    animate(mainPanel, {
-      marginLeft: targetWidth,
-      duration: 400,
-      ease: "easeOutCubic",
-    });
-  });
-
-  // Animate BigSidebar wrapper width: shrinks to 0 on homepage, expands to 256 on space page
-  // Also fade the BigSidebar content to transparent as it shrinks
-  $effect(() => {
-    if (!bigSidebarWrapper) return;
-    const bigSidebar = bigSidebarWrapper.firstElementChild as HTMLElement | null;
-    if (!bigSidebar) return;
-
-    if (onHomepage) {
-      animate(bigSidebarWrapper, {
-        width: 0,
-        duration: 400,
-        ease: "easeOutCubic",
-      });
-      animate(bigSidebar, {
-        opacity: 0,
-        duration: 400,
-        ease: "easeOutCubic",
-      });
-    } else {
-      animate(bigSidebarWrapper, {
-        width: 256,
-        duration: 400,
-        ease: "easeOutCubic",
-      });
-      animate(bigSidebar, {
-        opacity: 1,
-        duration: 400,
-        ease: "easeOutCubic",
-      });
-    }
-  });
 
   onNavigate(() => {
     mobileSidebar.visible = false;
@@ -109,11 +37,14 @@
 
 <!-- Main panel: navbar + page content, offset to clear the fixed sidebar -->
 <div
-  bind:this={mainPanel}
   class={[
-    "h-full flex flex-col overflow-hidden",
-    onHomepage ? "sm:ml-64" : serverBar.expanded ? "sm:ml-[20rem]" : "sm:ml-64",
+    "h-full flex flex-col overflow-hidden main-panel",
     chatArea ? "bg-white dark:bg-base-950" : "",
+    onHomepage
+      ? "sm:ml-64"
+      : serverBar.expanded
+        ? "sm:ml-[20rem]"
+        : "sm:ml-64",
   ]}
 >
   <Navbar {compact} class={compact ? "h-11" : undefined}>
@@ -136,36 +67,141 @@
   </div>
 </div>
 
-<!-- Mobile backdrop -->
-{#if mobileSidebar.visible}
-  <button
-    onclick={() => (mobileSidebar.visible = false)}
-    aria-label="toggle navigation"
-    class="fixed inset-0 z-30 cursor-pointer sm:hidden bg-base-100/50 dark:bg-base-950/50"
-  ></button>
-{/if}
+<!-- Mobile backdrop: always in DOM, opacity transition avoids layout thrash from #if -->
+<button
+  onclick={() => (mobileSidebar.visible = false)}
+  aria-label="toggle navigation"
+  class="fixed inset-0 z-30 sm:hidden cursor-pointer mobile-backdrop"
+  class:mobile-backdrop-visible={mobileSidebar.visible}
+  class:mobile-backdrop-hidden={!mobileSidebar.visible}
+></button>
 
 <!-- Fixed sidebar (full height, left) -->
 <div
   class={[
-    "isolate fixed top-0 bottom-0 left-0 z-40 overflow-hidden bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
+    "isolate fixed top-0 bottom-0 left-0 z-40 overflow-hidden bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none sidebar-fixed",
     mobileSidebar.visible ? "block" : "hidden sm:block",
   ]}
 >
-  <div class="relative flex h-full">
+  <div class="flex flex-col h-full">
+    <div class="relative flex flex-1 min-h-0">
       <!-- Server bar + BigSidebar: on homepage the server bar expands to w-64
       and the BigSidebar slides right out of view -->
       <ServerBar wide={onHomepage} expanded={serverBar.expanded} />
-      <div bind:this={bigSidebarWrapper} class="overflow-hidden w-64 shrink-0 h-full flex flex-col">
-        <BigSidebar>
-          {#if sidebar}
-            {@render sidebar()}
-          {/if}
-        </BigSidebar>
+      <!-- BigSidebar wrapper: slides left via translateX + overflow:hidden
+           instead of animating width, keeping animation on the compositor -->
+      <div
+        class="overflow-hidden shrink-0 w-64 h-full flex flex-col big-sidebar-wrapper"
+        class:big-sidebar-hidden={onHomepage}
+        class:big-sidebar-visible={!onHomepage}
+      >
+        <div
+          class="big-sidebar-content big-sidebar-content-spacer"
+          class:big-sidebar-content-hidden={onHomepage}
+          class:big-sidebar-content-visible={!onHomepage}
+        >
+          <BigSidebar>
+            {#if sidebar}
+              {@render sidebar()}
+            {/if}
+          </BigSidebar>
+        </div>
       </div>
-    <!-- Full-width user card overlay spanning both server bar and main sidebar -->
-    <div class="absolute bottom-0 left-0 w-full z-50">
+    </div>
+    <!-- User card sits below the sidebar row, constrained to the visible width. -->
+    <!-- On the homepage it only covers the server bar (w-64).
+         On space pages it covers server bar + BigSidebar. -->
+    <div
+      class="shrink-0 sidebar-user-card-wrapper"
+      class:on-homepage={onHomepage}
+      class:not-homepage={!onHomepage}
+      class:server-collapsed={!serverBar.expanded}
+    >
       <SidebarUserCard />
     </div>
   </div>
 </div>
+
+<style>
+  /* ── Main panel margin transition ────────────────────────────── */
+  .main-panel {
+    transition: margin-left 400ms cubic-bezier(0.33, 1, 0.68, 1);
+    will-change: margin-left;
+  }
+
+  /* ── BigSidebar wrapper: translateX on compositor thread ────── */
+  .big-sidebar-wrapper {
+    contain: layout style paint;
+    transition:
+      max-width 400ms cubic-bezier(0.33, 1, 0.68, 1),
+      transform 400ms cubic-bezier(0.33, 1, 0.68, 1);
+    will-change: transform, max-width;
+  }
+  .big-sidebar-wrapper.big-sidebar-visible {
+    transform: translateX(0);
+    max-width: 256px;
+  }
+  .big-sidebar-wrapper.big-sidebar-hidden {
+    /* Slide 256px to the right (out of view behind the overflowing server bar area),
+       plus an extra 20px for a nice parallax feel */
+    transform: translateX(276px);
+    max-width: 0;
+  }
+
+  /* ── BigSidebar content fade ────────────────────────────────── */
+  .big-sidebar-content {
+    transition: opacity 350ms ease;
+    will-change: opacity;
+  }
+  .big-sidebar-content.big-sidebar-content-visible {
+    opacity: 1;
+  }
+  .big-sidebar-content.big-sidebar-content-hidden {
+    opacity: 0;
+  }
+
+  /* ── Sidebar fixed container: compositor isolation ──────────── */
+  .sidebar-fixed {
+    contain: layout style;
+  }
+
+  /* ── Mobile backdrop: opacity animation to avoid DOM insert/remove ── */
+  .mobile-backdrop {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 250ms ease;
+    background-color: color-mix(in srgb, var(--color-base-100) 50%, transparent);
+  }
+  :global(.dark) .mobile-backdrop {
+    background-color: color-mix(in srgb, var(--color-base-950) 50%, transparent);
+  }
+  .mobile-backdrop.mobile-backdrop-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ── User card width: matches the visible sidebar width ────────── */
+  .sidebar-user-card-wrapper {
+    z-index: 50;
+    transition: width 400ms cubic-bezier(0.33, 1, 0.68, 1);
+    will-change: width;
+    contain: layout style;
+  }
+  /* Homepage: wide server bar only (w-64 = 256px), BigSidebar hidden */
+  .sidebar-user-card-wrapper.on-homepage {
+    width: 256px;
+  }
+  /* Space page, server bar expanded: server bar (64px) + BigSidebar (256px) = 320px */
+  .sidebar-user-card-wrapper.not-homepage:not(.server-collapsed) {
+    width: 320px;
+  }
+  /* Space page, server bar collapsed: just BigSidebar (256px) */
+  .sidebar-user-card-wrapper.not-homepage.server-collapsed {
+    width: 256px;
+  }
+
+  /* ── BigSidebar spacer to prevent content hiding behind user card ── */
+  .big-sidebar-content-spacer {
+    padding-bottom: 80px;
+  }
+</style>

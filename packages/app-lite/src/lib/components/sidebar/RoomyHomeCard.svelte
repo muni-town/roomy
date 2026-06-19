@@ -16,7 +16,7 @@
       onClick();
     }
   }}
-  class="flex items-center rounded-lg px-2 py-1.5 group transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] cursor-pointer"
+  class="flex items-center rounded-lg px-2 py-1.5 group transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] cursor-pointer"
   class:gap-1={small}
   class:gap-3={!small}
 >
@@ -25,7 +25,7 @@
     viewBox="0 0 219 204"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    class="shrink-0 text-base-700 transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] dark:hidden"
+    class="shrink-0 text-base-700 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] dark:hidden"
     class:size-5={small}
     class:size-9={!small}
   >
@@ -50,7 +50,7 @@
     viewBox="0 0 219 204"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    class="shrink-0 text-base-300 transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] hidden dark:block"
+    class="shrink-0 text-base-300 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] hidden dark:block"
     class:size-5={small}
     class:size-9={!small}
   >
@@ -82,7 +82,7 @@
     </span>
   {:else}
     <span
-      class="font-black text-base-700 tracking-[-0.015em] dark:text-base-300 truncate transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]"
+      class="font-black text-base-700 tracking-[-0.015em] dark:text-base-300 truncate transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]"
       class:text-lg={small}
       class:text-2xl={!small}
       in:fly={{ x: -20, duration: 200 }}
