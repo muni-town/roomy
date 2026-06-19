@@ -77,16 +77,19 @@ export const getRoomThreadsHandler: QueryHandler<
       latestMembers: members,
     };
     if (t.latestTimestamp != null) activity.latestTimestamp = t.latestTimestamp;
-    if (t.latestMessage != null) activity.latestMessage = {
-      id: t.latestMessage.id,
-      content: t.latestMessage.content,
-      author: {
+    if (t.latestMessage != null) {
+      const author: { did: string; name?: string; avatar?: string } = {
         did: t.latestMessage.author.did,
-        name: t.latestMessage.author.name,
-        avatar: t.latestMessage.author.avatar,
-      },
-      timestamp: t.latestMessage.timestamp,
-    };
+      };
+      if (t.latestMessage.author.name != null) author.name = t.latestMessage.author.name;
+      if (t.latestMessage.author.avatar != null) author.avatar = t.latestMessage.author.avatar;
+      activity.latestMessage = {
+        id: t.latestMessage.id,
+        content: t.latestMessage.content,
+        author,
+        timestamp: t.latestMessage.timestamp,
+      };
+    }
 
     const thread: ThreadRow = { id: t.id, activity, unreadCount: readPositions.get(t.id)?.unreadCount ?? 0 };
     if (t.name != null) thread.name = t.name;
