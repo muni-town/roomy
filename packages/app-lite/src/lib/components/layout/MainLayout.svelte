@@ -152,11 +152,11 @@
     mobileSidebar.visible ? "block" : "hidden sm:block",
   ]}
 >
-  <div class="relative flex h-full w-fit">
+  <div class="relative flex h-full">
       <!-- Server bar + BigSidebar: on homepage the server bar expands to w-64
       and the BigSidebar slides right out of view -->
       <ServerBar wide={onHomepage} expanded={serverBar.expanded} />
-      <div bind:this={bigSidebarWrapper} class="overflow-hidden w-64 shrink-0">
+      <div bind:this={bigSidebarWrapper} class="overflow-hidden w-64 shrink-0 h-full flex flex-col">
         <BigSidebar>
           {#if sidebar}
             {@render sidebar()}
