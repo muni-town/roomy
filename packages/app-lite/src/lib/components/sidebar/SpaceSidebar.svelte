@@ -519,7 +519,7 @@ import { toast } from "@foxui/core";
               <div
                 use:dragHandle
                 aria-label="drag-handle for {category.name}"
-                class="ml-2 mt-2.5 z-10"
+                class="ml-2 mt-2.5 z-10 text-base-400 dark:text-base-500"
               >
                 <IconGripVertical class="size-3" />
               </div>

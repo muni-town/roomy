@@ -94,7 +94,7 @@
       {#each displayChildren as child, index (child.id)}
         <div id={child.id} class="flex items-start w-full relative">
           <div
-            class="mt-2.5"
+            class="mt-2.5 text-base-400 dark:text-base-500"
             use:dragHandle
             aria-label="drag handle for {child.name}"
           >
