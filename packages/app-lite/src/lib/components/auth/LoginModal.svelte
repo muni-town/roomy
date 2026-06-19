@@ -42,10 +42,8 @@
     loading = true;
     error = null;
     try {
-      localStorage.setItem("just-logged-in", "1");
       await login(h);
     } catch (err) {
-      localStorage.removeItem("just-logged-in");
       error = friendlyAuthError(err);
     } finally {
       loading = false;
@@ -123,10 +121,8 @@
     loading = true;
     error = null;
     try {
-      localStorage.setItem("just-logged-in", "1");
       await login(selected);
     } catch (err) {
-      localStorage.removeItem("just-logged-in");
       error = friendlyAuthError(err);
     } finally {
       loading = false;

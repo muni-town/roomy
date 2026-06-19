@@ -17,6 +17,9 @@ let authenticated = $state(false);
 let initializing = $state(true);
 let initError = $state<string | null>(null);
 
+/** Cached profile for the current session, set reactively after login. */
+let profile = $state<{ handle: string; did: string; avatar: string } | null>(null);
+
 // Direct XRPC client (replaces the proxied agent pattern).
 // Created lazily once the agent is available.
 let serviceAuth: ServiceAuthClient | null = null;
@@ -38,6 +41,10 @@ export const auth = {
   },
   get initError() {
     return initError;
+  },
+  /** Reactive profile for the current session (handle + DID + avatar). */
+  get profile() {
+    return profile;
   },
 };
 
@@ -80,6 +87,26 @@ export async function login(handle: string) {
   });
 }
 
+/**
+ * Fetch the user's AT Protocol profile and update the reactive `auth.profile`
+ * state + localStorage cache. Call this immediately on login/init.
+ */
+export async function updateProfile() {
+  if (!agent || !session) return;
+  try {
+    const res = await agent.app.bsky.actor.getProfile({ actor: session.did });
+    const p = {
+      handle: res.data.handle,
+      did: session.did,
+      avatar: res.data.avatar ?? "",
+    };
+    profile = p;
+    localStorage.setItem("last-login", JSON.stringify(p));
+  } catch (e) {
+    console.warn("Failed to fetch profile:", e);
+  }
+}
+
 export async function logout() {
   if (session) await sdkLogout(session);
   serviceAuth?.clear();
@@ -88,6 +115,7 @@ export async function logout() {
   authenticated = false;
   agent = null;
   session = null;
+  profile = null;
   location.reload();
 }
 

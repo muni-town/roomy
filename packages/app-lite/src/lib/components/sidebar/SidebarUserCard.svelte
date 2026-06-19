@@ -7,21 +7,25 @@
   } from "@roomy/design/components/ui/context-menu/index.js";
   import { buttonVariants } from "@roomy/design/components/ui/button/Button.svelte";
   import { IconEllipsisHorizontal, IconSettings, IconLogOut } from "@roomy/design/icons";
-  import { logout } from "$lib/auth.svelte";
+  import { logout, auth } from "$lib/auth.svelte";
   import { sync_ } from "$lib/sync.svelte";
   import { goto } from "$app/navigation";
 
   const connected = $derived(!!sync_.ctx);
 
-  type LastLogin = { handle: string; did: string; avatar: string };
-  let lastLogin = $state<LastLogin | undefined>(undefined);
+  // Reactive profile from auth module — updates immediately on login/init.
+  // Falls back to localStorage for the initial render before the profile
+  // fetch completes.
+  let displayedProfile = $derived(
+    auth.profile ?? (() => {
+      const raw = localStorage.getItem("last-login");
+      return raw ? JSON.parse(raw) : undefined;
+    })(),
+  );
 
   let isDark = $state(false);
 
   $effect(() => {
-    const raw = localStorage.getItem("last-login");
-    lastLogin = raw ? JSON.parse(raw) : undefined;
-
     const stored = localStorage.getItem("darkMode");
     if (stored !== null) {
       isDark = JSON.parse(stored);
@@ -55,8 +59,8 @@
     <div class="relative size-10 shrink-0">
       <div class="size-full rounded-full overflow-hidden">
         <UserAvatar
-          src={lastLogin?.avatar}
-          name={lastLogin?.did ?? lastLogin?.handle ?? "user"}
+          src={displayedProfile?.avatar}
+          name={displayedProfile?.did ?? displayedProfile?.handle ?? "user"}
           size={40}
           class="size-full"
         />
@@ -68,7 +72,7 @@
       ></div>
     </div>
     <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate min-w-0 flex-1 text-left">
-      {lastLogin?.handle ?? "Log in"}
+      {displayedProfile?.handle ?? "Log in"}
     </span>
     <ContextMenu side="top" sideOffset={8} align="center">
       {#snippet trigger({ props: { action, ...attrs } })}
