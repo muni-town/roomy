@@ -6,6 +6,7 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { resolveBlobUrl } from "$lib/utils";
   import { createSpacesQuery } from "$lib/queries/spaces";
+  import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
 
   let {
     wide = false,
@@ -31,7 +32,12 @@
   const currentSpaceId = $derived(page.params.space);
 
   function navigateToSpace(spaceId: string) {
-    goto(`/${spaceId}`);
+    const state = spaceNavigation.get(spaceId);
+    if (state?.destination.kind === "room") {
+      goto(`/${spaceId}/${state.destination.id}`);
+    } else {
+      goto(`/${spaceId}`);
+    }
   }
 
   // CSS-based animation: translateX stays on the compositor thread.

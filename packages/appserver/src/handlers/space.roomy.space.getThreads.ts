@@ -19,6 +19,7 @@ interface ThreadRow {
   id: string;
   name?: string;
   channel?: string;
+  channelName?: string;
   unreadCount: number;
   activity: {
     latestTimestamp?: string;
@@ -64,6 +65,24 @@ export const getSpaceThreadsHandler: QueryHandler<
   const threadIds = all.map((t) => t.id);
   const readPositions = auth.did ? getReadPositions(db, auth.did, threadIds) : new Map();
 
+  // Batch-fetch channel names for all canonical parents
+  const parentIds = [...new Set(all.map((t) => t.canonicalParent).filter(Boolean))] as string[];
+  const channelNames = new Map<string, string>();
+  if (parentIds.length > 0) {
+    const ph = parentIds.map(() => "?").join(",");
+    const rows = db
+      .query<{ id: string; name: string | null }, string[]>(
+        `select e.id as id, ci.name as name
+           from entities e
+           left join comp_info ci on ci.entity = e.id
+          where e.id in (${ph})`,
+      )
+      .all(...parentIds);
+    for (const r of rows) {
+      if (r.name != null) channelNames.set(r.id, r.name);
+    }
+  }
+
   const threads: ThreadRow[] = [];
   for (const t of all) {
     // Thread visibility hangs off the canonical parent channel — re-use
@@ -95,7 +114,11 @@ export const getSpaceThreadsHandler: QueryHandler<
 
     const thread: ThreadRow = { id: t.id, activity, unreadCount: readPositions.get(t.id)?.unreadCount ?? 0 };
     if (t.name != null) thread.name = t.name;
-    if (t.canonicalParent != null) thread.channel = t.canonicalParent;
+    if (t.canonicalParent != null) {
+      thread.channel = t.canonicalParent;
+      const cn = channelNames.get(t.canonicalParent);
+      if (cn != null) thread.channelName = cn;
+    }
     threads.push(thread);
   }
 

@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
+  import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
   import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
   import { createSpaceThreadsQuery } from "$lib/queries/threads";
@@ -12,13 +13,48 @@
 
   const spaceId = $derived(page.params.space!);
 
-  let activeTab = $state("Feed");
+  let activeTab = $state(
+    spaceNavigation.get(spaceId)?.viewMode === "threads" ? "Threads" : "Feed",
+  );
+
+  // Re-sync from stored state when spaceId changes (component reuse across
+  // spaces — SvelteKit reuses the same page component for the same route
+  // pattern, so $state() only initializes once).
+  $effect(() => {
+    const sid = spaceId;
+    untrack(() => {
+      const stored = spaceNavigation.get(sid)?.viewMode;
+      activeTab = stored === "threads" ? "Threads" : "Feed";
+    });
+  });
+
+  // Sync tab state from URL hash — clicking a toggle tab navigates to the hash,
+  // which gives the user working browser back/forward between views.
+  // Only reacts when a hash is present; on initial load with no hash the
+  // stored state (or default "Feed") is preserved.
+  $effect(() => {
+    if (page.url.hash === "#feed") {
+      activeTab = "Feed";
+    } else if (page.url.hash === "#threads") {
+      activeTab = "Threads";
+    }
+  });
+
+  // Persist the active tab and destination together so the server bar and
+  // channel page can restore both when switching spaces.
+  $effect(() => {
+    spaceNavigation.set(spaceId, {
+      destination: { kind: "index" },
+      viewMode: activeTab === "Threads" ? "threads" : "chat",
+    });
+  });
 
   const threadsQuery = createSpaceThreadsQuery(() => spaceId);
 
   type RawThread = {
     id: string;
     name?: string;
+    channelName?: string;
     canonicalParent?: string;
     unreadCount?: number;
     activity: {
@@ -42,6 +78,7 @@
       id: t.id,
       name: t.name ?? "Unnamed Thread",
       kind: "space.roomy.thread",
+      channelName: t.channelName,
       canonicalParent: t.canonicalParent,
       unreadCount: t.unreadCount ?? 0,
       activity: {
@@ -90,7 +127,7 @@
         { name: "Feed", href: "#feed" },
         { name: "Threads", href: "#threads" },
       ]}
-      bind:active={activeTab}
+      active={activeTab}
     />
   </div>
 {/snippet}
@@ -106,7 +143,7 @@
     {:else if threadsQuery.isError}
       <ErrorMessage message={threadsQuery.error.message} class="h-full w-full justify-center" />
     {:else}
-      <BoardViewShell {threads} emptyMessage="No threads yet" {hrefFor} onAvatarClick={(did) => goto(`/user/${did}`)} />
+      <BoardViewShell {threads} emptyMessage="No threads yet" compact={true} {hrefFor} onAvatarClick={(did) => goto(`/user/${did}`)} />
     {/if}
   {/if}
 </main>

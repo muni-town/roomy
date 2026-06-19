@@ -8,20 +8,22 @@
     emptyMessage = "No items",
     hrefFor,
     onAvatarClick,
+    compact = false,
   }: {
     threads: ThreadInfo[];
     emptyMessage?: string;
     /** Build the href for a given thread row. */
     hrefFor: (thread: ThreadInfo) => string;
     onAvatarClick?: (did: string) => void;
+    compact?: boolean;
   } = $props();
 </script>
 
 {#if threads.length}
   <ScrollArea class="h-full pb-4 w-full">
     {#each threads as thread, i}
-      <div class="mt-4">
-        <BoardViewItem {thread} href={hrefFor(thread)} {onAvatarClick} />
+      <div class={compact ? '' : 'mt-4'}>
+        <BoardViewItem {thread} href={hrefFor(thread)} {onAvatarClick} {compact} />
       </div>
       {#if i < threads.length - 1}
         <hr class="border-base-200 dark:border-base-800" />
