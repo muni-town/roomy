@@ -84,5 +84,5 @@
 {:else if threadsQuery.isError}
   <ErrorMessage message={threadsQuery.error.message} class="h-full w-full justify-center" />
 {:else}
-  <BoardViewShell {threads} {emptyMessage} {hrefFor} onAvatarClick={(did) => goto(`/user/${did}`)} />
+  <BoardViewShell {threads} {emptyMessage} compact={true} {hrefFor} onAvatarClick={(did) => goto(`/user/${did}`)} />
 {/if}
