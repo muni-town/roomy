@@ -4,4 +4,4 @@
   const { size = 40 }: { size?: number } = $props();
 </script>
 
-<IconLoading class="animate-spin" font-size={size} />
+<IconLoading class="animate-spin text-base-800 dark:text-base-200" font-size={size} />
