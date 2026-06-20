@@ -25,7 +25,9 @@ import { joinSpaceHandler } from "./handlers/space.roomy.space.joinSpace.ts";
 import { leaveSpaceHandler } from "./handlers/space.roomy.space.leaveSpace.ts";
 import { setHandleHandler } from "./handlers/space.roomy.space.setHandle.ts";
 import { getActivityFeedHandler } from "./handlers/space.roomy.space.getActivityFeed.ts";
-import { schemas } from "@roomy-space/sdk";
+import { RoomyServiceClient, schemas, StreamDid } from "@roomy-space/sdk";
+import { getServiceClient } from "./serviceClient.ts";
+import { getOrCreateMaterializer } from "./materialization/registry.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const OWN_DID = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
@@ -225,3 +227,70 @@ Bun.serve({
 });
 
 console.log(`Appserver listening on port ${PORT} (DID: ${OWN_DID})`);
+
+// ─── Startup backfill ──────────────────────────────────────────────────
+// After the server is listening, eagerly discover all Leaf streams and
+// start materialising them. This replaces the previous lazy-backfill-on-
+// first-request pattern — the appserver now backfills everything on boot
+// so that all spaces are ready when users connect.
+//
+// This is intentionally fire-and-forget: the server is already accepting
+// requests, and materializers will catch up asynchronously. If Leaf is
+// unreachable at startup, the service client will be lazily retried on
+// the first admin/materializeSpace call.
+startupBackfill().catch((err) => {
+  console.error("[startup] backfill failed:", err);
+});
+
+async function startupBackfill(): Promise<void> {
+  let client: RoomyServiceClient;
+  try {
+    client = await getServiceClient();
+  } catch {
+    console.warn(
+      "[startup] Leaf not reachable yet; skipping startup backfill. " +
+        "Spaces will be materialised lazily on first request.",
+    );
+    return;
+  }
+
+  const streams = await client.listStreams();
+  const total = streams.length;
+  console.log(`[startup] discovered ${total} Leaf stream(s)`);
+
+  if (total === 0) return;
+
+  // Materialise streams sequentially, logging progress as we go.
+  // Sequential backfill avoids overwhelming Leaf with concurrent
+  // subscription requests and gives clearer progress visibility.
+  let completed = 0;
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const s of streams) {
+    const remaining = total - completed;
+    const pct = ((completed / total) * 100).toFixed(1);
+    console.log(
+      `[startup] backfilling ${s.did} (${completed + 1}/${total}, ${pct}% done, ${remaining} remaining)`,
+    );
+
+    try {
+      const mat = await getOrCreateMaterializer(StreamDid.assert(s.did));
+      await mat.backfillDone;
+      succeeded++;
+      console.log(
+        `[startup] backfill complete for ${s.did}: ` +
+          `applied=${mat.stats.applied} errors=${mat.stats.materializerErrors + mat.stats.applyErrors}`,
+      );
+    } catch (err) {
+      failed++;
+      console.error(`[startup] backfill failed for ${s.did}:`, err);
+    }
+
+    completed++;
+  }
+
+  console.log(
+    `[startup] backfill complete: ${succeeded} succeeded, ${failed} failed out of ${total} total`,
+  );
+}

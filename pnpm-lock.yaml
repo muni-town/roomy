@@ -500,8 +500,8 @@ importers:
         specifier: ^0.10.19
         version: 0.10.21
       '@muni-town/leaf-client':
-        specifier: 0.1.0-alpha.17
-        version: 0.1.0-alpha.17
+        specifier: 0.1.0-alpha.20
+        version: 0.1.0-alpha.20
       '@roomy-space/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -825,8 +825,8 @@ importers:
         specifier: ^0.3.39
         version: 0.3.39
       '@muni-town/leaf-client':
-        specifier: 0.1.0-alpha.17
-        version: 0.1.0-alpha.17
+        specifier: 0.1.0-alpha.20
+        version: 0.1.0-alpha.20
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -1827,6 +1827,10 @@ packages:
 
   '@muni-town/leaf-client@0.1.0-alpha.17':
     resolution: {integrity: sha512-FDKUT4DIpZblpGwIbQj+UuTWEy4Ud2BSoLDUJ+Axz4/AnveOh0RX/a7cu/L3P+uqphg4wVH1TsQqe2rS8UoELg==}
+    hasBin: true
+
+  '@muni-town/leaf-client@0.1.0-alpha.20':
+    resolution: {integrity: sha512-tYZaQHFuef7qSODQPjNuX8RvQXz7UmDx7ZnN9Ui1gGzJPzxfaV6TvIPxmHpUmp6VjHprY2Aaw5SbKR+My4kOdQ==}
     hasBin: true
 
   '@noble/ciphers@1.3.0':
@@ -7282,6 +7286,17 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@muni-town/leaf-client@0.1.0-alpha.20':
+    dependencies:
+      '@atcute/cbor': 2.2.8
+      '@atcute/cid': 2.2.6
+      socket.io-client: 4.8.1
+      socket.io-msgpack-parser: 3.0.2
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
   '@noble/ciphers@1.3.0': {}
 
   '@noble/curves@1.9.2':
@@ -8770,7 +8785,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@25.9.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -8861,7 +8876,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@25.9.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
   '@vitest/utils@2.1.9':
     dependencies:

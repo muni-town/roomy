@@ -12,7 +12,7 @@
  * Leaf-side surface inherited from `RoomyClientBase`.
  */
 
-import type { LeafClient } from "@muni-town/leaf-client";
+import type { AdminListStreamsItem, LeafClient } from "@muni-town/leaf-client";
 import { AtpAgent } from "@atproto/api";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import { Deferred } from "../utils/Deferred";
@@ -218,5 +218,17 @@ export class RoomyServiceClient extends RoomyClientBase {
     adminDid: UserDid,
   ): Promise<ConnectedSpace> {
     return ConnectedSpace.create({ client: this, module }, adminDid);
+  }
+
+  /**
+   * List all streams on the Leaf server.
+   *
+   * Requires admin-level access on the Leaf server (the connection must be
+   * authenticated with a token that has admin privileges, e.g.
+   * `UNSAFE_AUTH_TOKEN` with the server's own DID listed in
+   * `MODULE_ADMINS`).
+   */
+  async listStreams(): Promise<AdminListStreamsItem[]> {
+    return this.leaf.listStreams();
   }
 }
