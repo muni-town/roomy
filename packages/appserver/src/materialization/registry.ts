@@ -92,6 +92,13 @@ export function getOrCreateMaterializer(
   return promise;
 }
 
+/** Remove a materializer from the cache. Used after startup backfill
+ * completes to release the Leaf subscription. The materializer can be
+ * re-created later on demand via getOrCreateMaterializer. */
+export function removeMaterializer(streamDid: StreamDid): void {
+  materializers.delete(streamDid);
+}
+
 /** Clear cached materializers and the global router. Tests only. */
 export function _resetMaterializerRegistry(): void {
   materializers.clear();

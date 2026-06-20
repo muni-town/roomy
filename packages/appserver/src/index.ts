@@ -27,7 +27,7 @@ import { setHandleHandler } from "./handlers/space.roomy.space.setHandle.ts";
 import { getActivityFeedHandler } from "./handlers/space.roomy.space.getActivityFeed.ts";
 import { RoomyServiceClient, schemas, StreamDid } from "@roomy-space/sdk";
 import { getServiceClient } from "./serviceClient.ts";
-import { getOrCreateMaterializer } from "./materialization/registry.ts";
+import { getOrCreateMaterializer, removeMaterializer } from "./materialization/registry.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const OWN_DID = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
@@ -277,6 +277,8 @@ async function startupBackfill(): Promise<void> {
     try {
       const mat = await getOrCreateMaterializer(StreamDid.assert(s.did));
       await mat.backfillDone;
+      await mat.close();
+      removeMaterializer(StreamDid.assert(s.did));
       succeeded++;
       console.log(
         `[startup] backfill complete for ${s.did}: ` +

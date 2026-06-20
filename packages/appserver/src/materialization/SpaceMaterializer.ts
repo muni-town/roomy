@@ -34,7 +34,7 @@ import { selectMessages } from "../queries/selectMessages.ts";
 
 export type ConnectedSpaceLike = Pick<
   ConnectedSpace,
-  "subscribe" | "streamDid"
+  "subscribe" | "unsubscribe" | "streamDid"
 >;
 
 export interface SpaceMaterializerStartOpts {
@@ -402,6 +402,16 @@ export class SpaceMaterializer {
   /** Aggregate per-batch stats for ops/inspection. */
   getStats(): Readonly<AggregateStats> {
     return { ...this.stats };
+  }
+
+  /**
+   * Close the materializer: drain any in-flight batches, unsubscribe from
+   * the Leaf stream subscription, and release resources. After calling this
+   * the materializer is no longer usable.
+   */
+  async close(): Promise<void> {
+    await this.drain();
+    await this.space.unsubscribe();
   }
 
   /**
