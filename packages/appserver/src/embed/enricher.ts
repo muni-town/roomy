@@ -159,6 +159,7 @@ export async function enrichPendingLinks(
   limit = 10,
   signal?: AbortSignal,
 ): Promise<string[]> {
+  return []
   const pending = findPendingLinks(db, limit);
   if (pending.length === 0) return [];
 

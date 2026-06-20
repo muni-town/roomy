@@ -162,24 +162,24 @@ export class SpaceMaterializer {
             `applyErrors=${this.stats.applyErrors}`,
         );
 
-        // After backfill, run a one-time enrichment pass for all pending
-        // link embeds that were detected during backfill but skipped.
-        // This is fire-and-forget — enrichment is best-effort.
-        enrichPendingLinks(this.db, 200).then(
-          (enrichedUrls) => {
-            if (enrichedUrls.length > 0) {
-              console.info(
-                `[SpaceMaterializer] ${this.streamDid} post-backfill enriched ${enrichedUrls.length} link embeds`,
-              );
-              this.#emitLinkEnrichmentInvalidation(enrichedUrls);
-            }
-          },
-          (err) => {
-            console.warn(
-              `[SpaceMaterializer] ${this.streamDid} post-backfill embed enrichment error: ${err}`,
-            );
-          },
-        );
+        // // After backfill, run a one-time enrichment pass for all pending
+        // // link embeds that were detected during backfill but skipped.
+        // // This is fire-and-forget — enrichment is best-effort.
+        // enrichPendingLinks(this.db, 200).then(
+        //   (enrichedUrls) => {
+        //     if (enrichedUrls.length > 0) {
+        //       console.info(
+        //         `[SpaceMaterializer] ${this.streamDid} post-backfill enriched ${enrichedUrls.length} link embeds`,
+        //       );
+        //       this.#emitLinkEnrichmentInvalidation(enrichedUrls);
+        //     }
+        //   },
+        //   (err) => {
+        //     console.warn(
+        //       `[SpaceMaterializer] ${this.streamDid} post-backfill embed enrichment error: ${err}`,
+        //     );
+        //   },
+        // );
       },
       () => {
         /* already logged by start() */
@@ -237,30 +237,30 @@ export class SpaceMaterializer {
       opts.invalidationRouter,
     );
 
-    // On startup, enrich any pending link embeds from previous sessions.
-    // Also emit invalidation for rooms with already-enriched links so
-    // clients that missed previous invalidation signals get fresh data.
-    // Fire-and-forget — best-effort, non-blocking.
-    // Runs after inst is created so it can emit invalidation signals.
-    enrichPendingLinks(opts.db, 200).then(
-      (enrichedUrls) => {
-        if (enrichedUrls.length > 0) {
-          console.info(
-            `[SpaceMaterializer] ${opts.streamDid} startup enriched ${enrichedUrls.length} link embeds`,
-          );
-          inst.#emitLinkEnrichmentInvalidation(enrichedUrls);
-        }
-      },
-      (err) => {
-        console.warn(
-          `[SpaceMaterializer] ${opts.streamDid} startup embed enrichment error: ${err}`,
-        );
-      },
-    );
+    // // On startup, enrich any pending link embeds from previous sessions.
+    // // Also emit invalidation for rooms with already-enriched links so
+    // // clients that missed previous invalidation signals get fresh data.
+    // // Fire-and-forget — best-effort, non-blocking.
+    // // Runs after inst is created so it can emit invalidation signals.
+    // enrichPendingLinks(opts.db, 200).then(
+    //   (enrichedUrls) => {
+    //     if (enrichedUrls.length > 0) {
+    //       console.info(
+    //         `[SpaceMaterializer] ${opts.streamDid} startup enriched ${enrichedUrls.length} link embeds`,
+    //       );
+    //       inst.#emitLinkEnrichmentInvalidation(enrichedUrls);
+    //     }
+    //   },
+    //   (err) => {
+    //     console.warn(
+    //       `[SpaceMaterializer] ${opts.streamDid} startup embed enrichment error: ${err}`,
+    //     );
+    //   },
+    // );
 
-    // Also invalidate rooms with already-enriched links so clients that
-    // connected after enrichment get fresh data.
-    inst.#emitLinkEnrichmentInvalidationForAllRooms();
+    // // Also invalidate rooms with already-enriched links so clients that
+    // // connected after enrichment get fresh data.
+    // inst.#emitLinkEnrichmentInvalidationForAllRooms();
 
     return inst;
   }
@@ -359,28 +359,28 @@ export class SpaceMaterializer {
       );
     }
 
-    // Kick off embed enrichment for newly detected links.
-    // Fire-and-forget — enrichment is best-effort and non-blocking.
-    // During backfill we skip enrichment to avoid flooding the embed service.
-    if (!meta.isBackfill) {
-      enrichPendingLinks(this.db, 20).then(
-        (enrichedUrls) => {
-          if (enrichedUrls.length > 0) {
-            console.log(
-              `[SpaceMaterializer] ${this.streamDid} enriched ${enrichedUrls.length} link embeds`,
-            );
-            // Emit invalidation signals so connected clients re-fetch
-            // messages with newly enriched link data.
-            this.#emitLinkEnrichmentInvalidation(enrichedUrls);
-          }
-        },
-        (err) => {
-          console.warn(
-            `[SpaceMaterializer] ${this.streamDid} embed enrichment error: ${err}`,
-          );
-        },
-      );
-    }
+    // // Kick off embed enrichment for newly detected links.
+    // // Fire-and-forget — enrichment is best-effort and non-blocking.
+    // // During backfill we skip enrichment to avoid flooding the embed service.
+    // if (!meta.isBackfill) {
+    //   enrichPendingLinks(this.db, 20).then(
+    //     (enrichedUrls) => {
+    //       if (enrichedUrls.length > 0) {
+    //         console.log(
+    //           `[SpaceMaterializer] ${this.streamDid} enriched ${enrichedUrls.length} link embeds`,
+    //         );
+    //         // Emit invalidation signals so connected clients re-fetch
+    //         // messages with newly enriched link data.
+    //         this.#emitLinkEnrichmentInvalidation(enrichedUrls);
+    //       }
+    //     },
+    //     (err) => {
+    //       console.warn(
+    //         `[SpaceMaterializer] ${this.streamDid} embed enrichment error: ${err}`,
+    //       );
+    //     },
+    //   );
+    // }
 
     // Notify invalidation router (only for live events).
     if (this.invalidationRouter && !meta.isBackfill) {
