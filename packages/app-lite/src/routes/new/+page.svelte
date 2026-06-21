@@ -75,15 +75,13 @@
     >
         
         <div class="text-base-900 dark:text-base-100">
-          <h2 class="text-xl font-semibold text-base-900 dark:text-base-100 mb-4">
-            Create Your space
+          <h2 class="text-2xl font-bold text-base-900 dark:text-base-100 mb-2">
+            Create Your Space
           </h2>
-    
-          <p>Spaces are made of related rooms, pages, and members.</p>
-    
-          
-          <p><i>Currently, We only support public spaces.</i></p>
-          
+          <div class="font-light">
+          <p>Every space is composed of channels, pages and members.</p>
+          <p>Spaces build communities that thrive in the digital age.</p>
+          </div>
         </div>
     
         <div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-6">
@@ -96,7 +94,7 @@
             <div class="mt-2">
               <Input
                 id="name"
-                placeholder="Foolish Mortals"
+                placeholder="Name this space however you'd like."
                 bind:value={form.spaceName}
                 class="w-full"
                 autofocus
@@ -107,10 +105,13 @@
           <div class="col-span-full">
             <label
               for="photo"
-              class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-              >Avatar (optional)</label
-            >
-            <div class="mt-2 flex items-center gap-x-3">
+              class="block text-sm/6 font-medium text-base-900 dark:text-base-100">
+              <div class="flex flex-row items-baseline gap-1">
+                Icon
+                <p class="text-base-900 dark:text-base-500 font-normal text-xs"><i>(optional)</i></p>
+              </div>
+            </label>
+            <div class="mt-2 flex items-center gap-x-4">
               <SpaceAvatar imageUrl={avatarUrl} size={64} />
     
               <input
@@ -130,14 +131,18 @@
           <div class="sm:col-span-full">
             <label
               for="username"
-              class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-              >Description (optional)</label
-            >
+              class="block text-sm/6 font-medium text-base-900 dark:text-base-100">
+              <div class="flex flex-row items-baseline gap-1">
+                Description
+                <p class="text-base-900 dark:text-base-500 font-normal text-xs"><i>(optional)</i></p>
+              </div>
+            </label>
             <div class="mt-2">
               <Textarea
+                placeholder="Descriptions are optional. There's no pressure, if you can't think of anything to write."
                 bind:value={form.spaceDescription}
                 class="w-full"
-                rows={4}
+                rows={5}
               />
             </div>
           </div>
@@ -149,7 +154,8 @@
         </Alert>
       {/if}
 
-      <div class="mt-6 flex items-center justify-end gap-x-6">
+      <div class="mt-6 flex items-center justify-end gap-x-6 flex-col items-end">
+        <p class="text-base-900 dark:text-base-500 mb-2"><b>NOTE:</b> All spaces are public. You are warned.</p>
         <Button
           type="submit"
           disabled={!form.spaceName || creating}
@@ -157,7 +163,7 @@
           {#if creating}
             Creating...
           {:else}
-            Create Space
+          Create
           {/if}
         </Button>
       </div>
