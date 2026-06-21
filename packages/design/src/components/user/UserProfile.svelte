@@ -32,7 +32,7 @@
   <div>
     {#if profile?.banner}
       <img
-        class="aspect-[3/1] w-full border border-base-200 dark:border-base-800 object-cover sm:rounded-xl sm:border"
+        class="aspect-[3/1] w-full border border-base-300 dark:border-base-800 object-cover sm:rounded-xl sm:border"
         src={profile.banner}
         alt=""
       />
@@ -42,7 +42,7 @@
   </div>
   <div
     class={[
-      profile?.banner ? "-mt-11" : "-mt-8",
+      profile?.banner ? "-mt-8" : "-mt-8",
       "flex max-w-full items-end space-x-4 px-4 sm:-mt-6 sm:px-6 lg:px-4",
     ]}
   >
