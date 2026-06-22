@@ -16,8 +16,16 @@ export const CreateRoomLink = defineEvent(
   CreateRoomLinkSchema,
   ({ streamId, event, user }) => {
     return [
+      // Idempotent: the canonical_parent payload ("first link wins") is
+      // computed from the current edge count, so re-applying the same
+      // createRoomLink would otherwise flip 1 → 0 and corrupt the thread's
+      // parent channel. `on conflict do nothing` makes re-materialisation
+      // safe — the first write establishes the payload and later writes
+      // (re-backfill, replay) leave it untouched. (The legacy `insert or
+      // replace` form re-evaluated the subquery each time, so its 2nd pass
+      // saw the row from the 1st and set canonical_parent to 0.)
       sql`
-          insert or replace into edges (head, tail, label, payload)
+          insert into edges (head, tail, label, payload)
           values (
             ${event.room},
             ${event.linkToRoom},
@@ -30,6 +38,7 @@ export const CreateRoomLink = defineEvent(
                 AND label = 'link'
             ))
           )
+          on conflict (head, tail, label) do nothing
         `,
       // create system message announcing the link
       sql`
@@ -41,7 +50,7 @@ export const CreateRoomLink = defineEvent(
         ) on conflict do nothing
       `,
       sql`
-          insert or replace into edges (head, tail, label)
+          insert or ignore into edges (head, tail, label)
           select
             ${event.id},
             ${streamId},

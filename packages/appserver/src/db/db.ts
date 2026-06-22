@@ -30,8 +30,14 @@ import { fileURLToPath } from "node:url";
  *
  * `.11`: added `comp_embed_link_data` table for caching enriched embed
  * metadata from the external embed service.
+ *
+ * `.10-appserver.2`: SDK `createRoomLink` materialiser made idempotent
+ * (`on conflict do nothing`) — re-applying the same link event no longer
+ * flips `canonical_parent` 1 → 0, which corrupted parent-channel links for
+ * threads on streams that got re-backfilled. Wipe re-derives correct
+ * canonical_parent values from the event log.
  */
-export const SCHEMA_VERSION = "10-appserver.1";
+export const SCHEMA_VERSION = "10-appserver.2";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 

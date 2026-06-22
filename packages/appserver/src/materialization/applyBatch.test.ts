@@ -43,6 +43,42 @@ function createRoomEvent(name: string): Event {
   } as unknown as Event;
 }
 
+/** Seed a channel + thread pair so a createRoomLink can reference both. */
+function seedChannelAndThread(
+  db: Database,
+  channelId: string,
+  threadId: string,
+): void {
+  for (const id of [channelId, threadId]) {
+    db.run("insert into entities (id, stream_id) values (?, ?)", [
+      id,
+      STREAM,
+    ]);
+  }
+  db.run(
+    "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.channel', 'readwrite')",
+    [channelId],
+  );
+  db.run(
+    "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.thread', null)",
+    [threadId],
+  );
+}
+
+/**
+ * Build a createRoomLink event linking `threadId` into `channelId`.
+ * Mirrors what the SDK's createThread / createRoomLink operations emit.
+ */
+function createRoomLinkEvent(channelId: string, threadId: string): Event {
+  return {
+    $type: "space.roomy.link.createRoomLink.v0",
+    id: newUlid(),
+    room: channelId,
+    linkToRoom: threadId,
+    isCreationLink: true,
+  } as unknown as Event;
+}
+
 describe("applyBatch", () => {
   test("applies a single event and advances backfilled_to", () => {
     const db = freshDb();
@@ -222,5 +258,50 @@ describe("applyBatch", () => {
         >("select count(*) as count from entities where id = ?")
         .get(broken.id)?.count,
     ).toBe(0);
+  });
+
+  // Regression: the createRoomLink materialiser computes canonical_parent
+  // ("first link wins") from the current edge count. With `insert or replace`
+  // it was non-idempotent — re-applying the same event flipped
+  // canonical_parent 1 → 0, corrupting the parent-channel link for any
+  // thread whose stream got re-backfilled. This re-ran on production data
+  // and left ~8% of threads orphaned from their channel.
+  test("createRoomLink is idempotent under re-application (canonical_parent stays 1)", () => {
+    const db = freshDb();
+    seedSpace(db, STREAM);
+    const channelId = newUlid();
+    const threadId = newUlid();
+    seedChannelAndThread(db, channelId, threadId);
+
+    const link = createRoomLinkEvent(channelId, threadId);
+
+    // First application establishes the link with canonical_parent = 1.
+    applyBatch(db, STREAM, [decoded(link, 1)], { isBackfill: true });
+    const first = db
+      .query<{ payload: string }, []>(
+        "select payload from edges where label = 'link'",
+      )
+      .get();
+    expect(first?.payload).toBe('{"canonical_parent":1}');
+
+    // Simulate a re-backfill: the same event is delivered and applied again.
+    // The materialiser must NOT overwrite the established canonical_parent.
+    applyBatch(db, STREAM, [decoded(link, 2)], { isBackfill: true });
+    applyBatch(db, STREAM, [decoded(link, 3)], { isBackfill: true });
+
+    const after = db
+      .query<{ payload: string }, []>(
+        "select payload from edges where label = 'link'",
+      )
+      .get();
+    expect(after?.payload).toBe('{"canonical_parent":1}');
+
+    // And there is still exactly one link edge (no duplicates).
+    const count = db
+      .query<{ n: number }, []>(
+        "select count(*) as n from edges where label = 'link'",
+      )
+      .get()?.n;
+    expect(count).toBe(1);
   });
 });
