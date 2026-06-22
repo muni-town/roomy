@@ -55,7 +55,7 @@
         <div class="mb-5 flex justify-center items-center gap-3">
           {@render avatar()}
 
-          <h1 class="font-bold text-xl">{resolveState.data.name}</h1>
+          <h1 class="font-bold text-xl min-w-0 truncate" title={resolveState.data.name}>{resolveState.data.name}</h1>
         </div>
         {#if canJoin}
           <Button size="lg" asyncState={joinState} onclick={onJoin}>
