@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { page } from "$app/state";
-  import { goto } from "$app/navigation";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
   import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
@@ -56,16 +55,9 @@
     name?: string;
     channelName?: string;
     canonicalParent?: string;
-    unreadCount?: number;
     activity: {
       latestTimestamp?: string;
       latestMembers: Array<{ did: string; name?: string; avatar?: string }>;
-      latestMessage?: {
-        id: string;
-        content: string;
-        author: { did: string; name?: string; avatar?: string };
-        timestamp?: string;
-      };
     };
   };
 
@@ -80,7 +72,6 @@
       kind: "space.roomy.thread",
       channelName: t.channelName,
       canonicalParent: t.canonicalParent,
-      unreadCount: t.unreadCount ?? 0,
       activity: {
         members: t.activity.latestMembers.map((m) => ({
           id: m.did,
@@ -90,18 +81,6 @@
         latestTimestamp: t.activity.latestTimestamp
           ? new Date(t.activity.latestTimestamp).getTime()
           : 0,
-        latestMessage: t.activity.latestMessage
-          ? {
-              id: t.activity.latestMessage.id,
-              content: t.activity.latestMessage.content,
-              author: {
-                did: t.activity.latestMessage.author.did,
-                name: t.activity.latestMessage.author.name,
-                avatar: t.activity.latestMessage.author.avatar,
-              },
-              timestamp: t.activity.latestMessage.timestamp,
-            }
-          : null,
       },
     };
   }
@@ -143,7 +122,7 @@
     {:else if threadsQuery.isError}
       <ErrorMessage message={threadsQuery.error.message} class="h-full w-full justify-center" />
     {:else}
-      <BoardViewShell {threads} emptyMessage="No threads yet" compact={true} {hrefFor} onAvatarClick={(did) => goto(`/user/${did}`)} />
+      <BoardViewShell {threads} emptyMessage="No threads yet" {hrefFor} />
     {/if}
   {/if}
 </main>

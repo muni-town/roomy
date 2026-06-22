@@ -1,9 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { goto } from "$app/navigation";
   import { createRoomThreadsQuery } from "$lib/queries/threads";
   import BoardViewShell from "@roomy/design/components/content/thread/boardView/BoardView.svelte";
-  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
 
   let {
@@ -19,16 +17,9 @@
     id: string;
     name?: string;
     canonicalParent?: string;
-    unreadCount?: number;
     activity: {
       latestTimestamp?: string;
       latestMembers: Array<{ did: string; name?: string; avatar?: string }>;
-      latestMessage?: {
-        id: string;
-        content: string;
-        author: { did: string; name?: string; avatar?: string };
-        timestamp?: string;
-      };
     };
   };
 
@@ -43,7 +34,6 @@
       name: t.name ?? "Unnamed Thread",
       kind: "space.roomy.thread",
       canonicalParent: t.canonicalParent,
-      unreadCount: t.unreadCount ?? 0,
       activity: {
         members: t.activity.latestMembers.map((m) => ({
           id: m.did,
@@ -53,18 +43,6 @@
         latestTimestamp: t.activity.latestTimestamp
           ? new Date(t.activity.latestTimestamp).getTime()
           : 0,
-        latestMessage: t.activity.latestMessage
-          ? {
-              id: t.activity.latestMessage.id,
-              content: t.activity.latestMessage.content,
-              author: {
-                did: t.activity.latestMessage.author.did,
-                name: t.activity.latestMessage.author.name,
-                avatar: t.activity.latestMessage.author.avatar,
-              },
-              timestamp: t.activity.latestMessage.timestamp,
-            }
-          : null,
       },
     };
   }
@@ -82,7 +60,9 @@
     <div class="text-sm text-base-400 p-2">Loading threads…</div>
   </div>
 {:else if threadsQuery.isError}
-  <ErrorMessage message={threadsQuery.error.message} class="h-full w-full justify-center" />
+  <div class="h-full w-full flex items-center justify-center">
+    <div class="text-sm text-red-600 p-2">{threadsQuery.error.message}</div>
+  </div>
 {:else}
-  <BoardViewShell {threads} {emptyMessage} compact={true} {hrefFor} onAvatarClick={(did) => goto(`/user/${did}`)} />
+  <BoardViewShell {threads} {emptyMessage} {hrefFor} hideChannel />
 {/if}
