@@ -161,12 +161,21 @@ function emitEnrichmentInvalidation(
   const placeholders = enrichedUrls.map(() => "?").join(",");
   let roomRows: { room: string }[] = [];
   try {
+    // Two-hop resolution: link entity → its `room` (message id) →
+    // message entity → its `room` (the real room id).
+    //
+    // Media/link entities store `room = messageId` (see ensureEntity calls
+    // in the SDK message materializer and detectAndStoreLinks), NOT the
+    // room id. A single-hop lookup (as the original code did) yields the
+    // message id and emits getMessages?roomId=<messageId> — which never
+    // matches any client subscription, so clients never re-fetch.
     roomRows = db
       .query<{ room: string }, string[]>(
-        `select distinct e.room as room
-         from entities e
-         where e.id in (${placeholders})
-           and e.room is not null`,
+        `select distinct msg.room as room
+           from entities link
+           join entities msg on msg.id = link.room
+          where link.id in (${placeholders})
+            and msg.room is not null`,
       )
       .all(...enrichedUrls);
   } catch (err) {
