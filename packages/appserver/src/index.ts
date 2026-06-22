@@ -1,6 +1,7 @@
 import { XrpcRouter, prodAuthVerifier } from "./xrpc/index.ts";
 import { Router as InvalidationRouter } from "./invalidation/index.ts";
 import { setInvalidationRouter } from "./materialization/registry.ts";
+import { startEmbedSweeper } from "./embed/sweeper.ts";
 import { openDb } from "./db/db.ts";
 import { attachReadState, openReadStateDb } from "./db/readStateDb.ts";
 import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
@@ -71,6 +72,11 @@ setInterval(() => {
 const invalidationRouter = new InvalidationRouter();
 InvalidationRouter.setInstance(invalidationRouter);
 setInvalidationRouter(invalidationRouter);
+
+// Start the centralized embed enrichment sweeper. One process-wide loop
+// drains all pending link embeds (deduplicated + timeout-bounded) instead
+// of each SpaceMaterializer fetching independently. See embed/sweeper.ts.
+startEmbedSweeper({ db: mainDb, invalidationRouter });
 
 const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter);
 
