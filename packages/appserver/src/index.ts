@@ -35,6 +35,11 @@ const OWN_DID = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
 const SERVICE_ENDPOINT =
   process.env.APPSERVER_ORIGIN ?? "https://api.roomy.space";
 
+// When to backfill Leaf streams into SQLite. `eager` (default) discovers and
+// materialises every network stream at boot; `lazy` defers until first request
+// via the materializer registry / user hydration path. See `startupBackfill()`.
+const BACKFILL_MODE = process.env.APPSERVER_BACKFILL_MODE ?? "eager";
+
 const DID_DOCUMENT = {
   "@context": ["https://www.w3.org/ns/did/v1"],
   id: OWN_DID,
@@ -235,18 +240,32 @@ Bun.serve({
 console.log(`Appserver listening on port ${PORT} (DID: ${OWN_DID})`);
 
 // ─── Startup backfill ──────────────────────────────────────────────────
-// After the server is listening, eagerly discover all Leaf streams and
-// start materialising them. This replaces the previous lazy-backfill-on-
-// first-request pattern — the appserver now backfills everything on boot
-// so that all spaces are ready when users connect.
+// After the server is listening, backfill Leaf streams into SQLite. In the
+// default `eager` mode we discover every network stream and materialise it
+// up front so all spaces are ready when users connect; in `lazy` mode we
+// skip startup entirely and let the materializer registry materialise each
+// space on first request (the original pattern).
 //
-// This is intentionally fire-and-forget: the server is already accepting
-// requests, and materializers will catch up asynchronously. If Leaf is
-// unreachable at startup, the service client will be lazily retried on
-// the first admin/materializeSpace call.
-startupBackfill().catch((err) => {
-  console.error("[startup] backfill failed:", err);
-});
+// Eager backfill is intentionally fire-and-forget: the server is already
+// accepting requests, and materializers will catch up asynchronously. If
+// Leaf is unreachable at startup, the service client will be lazily retried
+// on the first admin/materializeSpace call (or on first request in lazy
+// mode) — spaces are never unavailable, just possibly stale until backfill
+// completes, after which invalidation signals fill in the rest.
+if (BACKFILL_MODE === "lazy") {
+  console.log(
+    "[startup] lazy backfill mode — spaces will materialise on first request",
+  );
+} else {
+  if (BACKFILL_MODE !== "eager") {
+    console.warn(
+      `[startup] unknown APPSERVER_BACKFILL_MODE "${BACKFILL_MODE}", defaulting to eager`,
+    );
+  }
+  startupBackfill().catch((err) => {
+    console.error("[startup] backfill failed:", err);
+  });
+}
 
 async function startupBackfill(): Promise<void> {
   let client: RoomyServiceClient;
