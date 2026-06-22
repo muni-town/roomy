@@ -28,41 +28,41 @@
   }
 </script>
 
-<div class="mx-auto w-full max-w-full sm:max-w-4xl sm:py-6">
+<div class="mx-auto w-full max-w-full sm:max-w-2xl sm:py-6">
   <div>
     {#if profile?.banner}
       <img
-        class="aspect-[3/1] w-full border-b border-base-300 dark:border-base-700 object-cover sm:rounded-xl sm:border"
+        class="aspect-[3/1] w-full border border-base-300 dark:border-base-800 object-cover sm:rounded-xl sm:border"
         src={profile.banner}
         alt=""
       />
     {:else}
-      <div class="aspect-[8/1] w-full"></div>
+      <div class="aspect-[3/1] w-full bg-accent-100 dark:bg-base-900 border border-base-300 dark:border-base-800 object-cover sm:rounded-xl sm:border"></div>
     {/if}
   </div>
   <div
     class={[
-      profile?.banner ? "-mt-11" : "-mt-8",
-      "flex max-w-full items-end space-x-5 px-4 sm:-mt-16 sm:px-6 lg:px-8",
+      profile?.banner ? "-mt-8" : "-mt-8",
+      "flex max-w-full items-end space-x-4 px-4 sm:-mt-6 sm:px-6 lg:px-4",
     ]}
   >
     <UserAvatar
       src={profile?.avatar}
       name={profile?.did || profile?.handle || "unknown"}
-      class="size-24 sm:size-32"
+      class="size-22 sm:size-20 outline rounded-full outline-base-100 dark:outline-base-950"
     />
 
     <div
-      class="flex min-w-0 flex-1 flex-row sm:flex-row sm:items-center sm:justify-end sm:space-x-6 sm:pb-1"
+      class="flex min-w-0 flex-1 flex-row sm:flex-row sm:items-center sm:justify-end sm:space-x-6"
     >
       <div
         class={[
-          profile?.banner ? "mt-4 sm:mt-0" : "-mt-[4.5rem] sm:-mt-[6.5rem]",
+          profile?.banner,
           "flex min-w-0 max-w-full flex-1 flex-col items-baseline",
         ]}
       >
         <h1
-          class="max-w-full truncate text-lg font-bold text-base-900 dark:text-base-100 sm:text-xl"
+          class="max-w-full truncate text-xl font-bold text-base-900 dark:text-base-100 sm:text-xl"
         >
           {profile?.displayName || profile?.handle}
         </h1>
@@ -82,7 +82,7 @@
 
   {#if profile?.description}
     <div
-      class="px-4 sm:px-6 lg:px-8 py-4 text-xs sm:text-sm text-base-900 dark:text-base-100 prose prose-sm dark:prose-invert prose-a:no-underline prose-a:text-accent-600 dark:prose-a:text-accent-400"
+      class="px-6 sm:px-4 lg:px-6 py-4 text-sm sm:text-sm text-base-900 dark:text-base-100 prose prose-sm dark:prose-invert prose-a:no-underline prose-a:text-accent-600 dark:prose-a:text-accent-400"
     >
       {@html linkifyText(profile.description)}
     </div>
