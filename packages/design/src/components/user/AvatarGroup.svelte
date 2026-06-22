@@ -44,7 +44,7 @@
       src={user.src}
       name={user.id ?? ""}
       size={30}
-      class={cn("size-8 border-base-50 border rounded-full", avatarClass)}
+      class={cn("size-8 border-base-50 dark:border-base-900 border rounded-full", avatarClass)}
     />
     <!-- <Avatar
       src={user.src}
