@@ -42,32 +42,55 @@
 </script>
 
 <a {href}>
-  <Box class="flex items-center gap-3 py-4 px-3 bg-white dark:bg-base-900">
-    <!-- Column 1: Title (grows) -->
-    <div class="flex-1 min-w-0 text-ellipsis overflow-hidden whitespace-nowrap text-sm font-light dark:text-base-300">
-      {#if thread.kind == "space.roomy.channel"}
-        #&nbsp;
+  <Box class="flex flex-col sm:flex-row sm:items-center gap-0 sm:gap-3 py-4 px-3 bg-white dark:bg-base-900">
+    <!-- Top row: title + avatar -->
+    <div class="flex items-center gap-3 w-full sm:w-auto sm:flex-1 sm:min-w-0">
+      <div class="flex-1 min-w-0 text-ellipsis overflow-hidden whitespace-nowrap text-sm font-light dark:text-base-300">
+        {#if thread.kind == "space.roomy.channel"}
+          #&nbsp;
+        {/if}
+        {thread.name}
+      </div>
+
+      <div class="w-28 shrink-0 flex items-center justify-end">
+        <AvatarGroup
+          avatarClass="size-8"
+          users={thread.activity.members
+            .filter((x) => !!x.avatar)
+            .map((m) => ({
+              src: m.avatar!,
+              id: m.id,
+              alt: "User Avatar for " + (m.name || "Unknown User"),
+            }))}
+        />
+      </div>
+    </div>
+
+    <!-- Mobile sub-row: channel + date (smaller, lower contrast) -->
+    <div class="flex sm:hidden items-center gap-2 text-xs text-base-400 dark:text-base-500 ml-0.5">
+      {#if !hideChannel && thread.channelName}
+        <span class="flex items-center gap-1">
+          <IconHashtag class="shrink-0 size-3" />
+          {thread.channelName}
+        </span>
+        <span class="text-base-300 dark:text-base-600">·</span>
       {/if}
-      {thread.name}
+      <span>
+        {#if lastMessageTimestamp}
+          {#if Date.now() - lastMessageTimestamp < 60 * 1000}
+            Just Now
+          {:else}
+            {formatDistanceToNowStrict(lastMessageTimestamp, {
+              locale: formatDistanceLocale,
+            })}
+          {/if}
+        {/if}
+      </span>
     </div>
 
-    <!-- Column 2: Avatar stack -->
-    <div class="w-28 shrink-0 flex items-center justify-end">
-      <AvatarGroup
-        avatarClass="size-8"
-        users={thread.activity.members
-          .filter((x) => !!x.avatar)
-          .map((m) => ({
-            src: m.avatar!,
-            id: m.id,
-            alt: "User Avatar for " + (m.name || "Unknown User"),
-          }))}
-      />
-    </div>
-
-    <!-- Column 3: Parent channel -->
+    <!-- Desktop columns (hidden on mobile) -->
     {#if !hideChannel}
-      <div class="w-32 shrink-0 text-sm text-base-500 dark:text-base-300/80 truncate flex items-center gap-1">
+      <div class="hidden sm:block w-32 shrink-0 text-sm text-base-500 dark:text-base-300/80 truncate flex items-center gap-1">
         {#if thread.channelName}
           <IconHashtag class="shrink-0 size-3" />
           {thread.channelName}
@@ -75,8 +98,7 @@
       </div>
     {/if}
 
-    <!-- Column 4: Date last active -->
-    <div class="w-24 shrink-0 text-right text-xs text-base-500 dark:text-base-300/80">
+    <div class="hidden sm:block w-24 shrink-0 text-right text-xs text-base-500 dark:text-base-300/80">
       {#if lastMessageTimestamp}
         {#if Date.now() - lastMessageTimestamp < 60 * 1000}
           Just Now
