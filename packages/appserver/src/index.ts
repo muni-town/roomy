@@ -40,6 +40,21 @@ const SERVICE_ENDPOINT =
 // via the materializer registry / user hydration path. See `startupBackfill()`.
 const BACKFILL_MODE = process.env.APPSERVER_BACKFILL_MODE ?? "eager";
 
+// Max spaces materialised concurrently during eager startup backfill (default
+// 8). Spaces' Leaf subscriptions and profile fetches overlap; SQLite writes
+// still serialize on the single WAL writer, so this mostly overlaps network
+// I/O. Lower it if Leaf or the appview struggles under load.
+const BACKFILL_CONCURRENCY = (() => {
+  const raw = process.env.APPSERVER_BACKFILL_CONCURRENCY;
+  if (raw === undefined) return 8;
+  const n = Number(raw);
+  if (Number.isInteger(n) && n >= 1) return n;
+  console.warn(
+    `[startup] invalid APPSERVER_BACKFILL_CONCURRENCY "${raw}", using 8`,
+  );
+  return 8;
+})();
+
 const DID_DOCUMENT = {
   "@context": ["https://www.w3.org/ns/did/v1"],
   id: OWN_DID,
@@ -285,37 +300,53 @@ async function startupBackfill(): Promise<void> {
 
   if (total === 0) return;
 
-  // Materialise streams sequentially, logging progress as we go.
-  // Sequential backfill avoids overwhelming Leaf with concurrent
-  // subscription requests and gives clearer progress visibility.
+  // Materialise streams with bounded concurrency. Each worker pulls the next
+  // stream off a shared index, so up to BACKFILL_CONCURRENCY spaces backfill at
+  // once. This overlaps the per-stream Leaf subscription + profile fetches
+  // (the dominant cost); SQLite writes still serialize on the single WAL
+  // writer, so correctness is unaffected. The cap protects Leaf from a flood
+  // of concurrent subscription requests.
+  let started = 0;
   let completed = 0;
   let succeeded = 0;
   let failed = 0;
 
-  for (const s of streams) {
-    const remaining = total - completed;
-    const pct = ((completed / total) * 100).toFixed(1);
-    console.log(
-      `[startup] backfilling ${s.did} (${completed + 1}/${total}, ${pct}% done, ${remaining} remaining)`,
-    );
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const i = started++;
+      if (i >= total) return;
+      const s = streams[i]!; // i < total, guaranteed by the guard above
 
-    try {
-      const mat = await getOrCreateMaterializer(StreamDid.assert(s.did));
-      await mat.backfillDone;
-      await mat.close();
-      removeMaterializer(StreamDid.assert(s.did));
-      succeeded++;
       console.log(
-        `[startup] backfill complete for ${s.did}: ` +
-          `applied=${mat.stats.applied} errors=${mat.stats.materializerErrors + mat.stats.applyErrors}`,
+        `[startup] backfilling ${s.did} (started ${i + 1}/${total})`,
       );
-    } catch (err) {
-      failed++;
-      console.error(`[startup] backfill failed for ${s.did}:`, err);
-    }
 
-    completed++;
-  }
+      try {
+        const mat = await getOrCreateMaterializer(StreamDid.assert(s.did));
+        await mat.backfillDone;
+        await mat.close();
+        removeMaterializer(StreamDid.assert(s.did));
+        succeeded++;
+        console.log(
+          `[startup] backfill complete for ${s.did}: ` +
+            `applied=${mat.stats.applied} errors=${mat.stats.materializerErrors + mat.stats.applyErrors}`,
+        );
+      } catch (err) {
+        failed++;
+        console.error(`[startup] backfill failed for ${s.did}:`, err);
+      }
+
+      completed++;
+      const remaining = total - completed;
+      const pct = ((completed / total) * 100).toFixed(1);
+      console.log(
+        `[startup] progress ${completed}/${total} (${pct}% done, ${remaining} remaining)`,
+      );
+    }
+  };
+
+  const workerCount = Math.min(BACKFILL_CONCURRENCY, total);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   console.log(
     `[startup] backfill complete: ${succeeded} succeeded, ${failed} failed out of ${total} total`,
