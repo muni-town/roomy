@@ -17,6 +17,26 @@ import type { Embed, EmbedServiceResponse } from "./types.ts";
 const EMBED_SERVICE_URL =
   process.env.EMBED_SERVICE_URL ?? "https://embed.internal.weird.one";
 
+/**
+ * Hard timeout for a single embed-service request. The original
+ * implementation threaded `signal` through but no caller ever constructed
+ * one, so a slow or hung embed service left every link "pending" for the
+ * full default-fetch window — long enough for every SpaceMaterializer to
+ * re-fetch it on every batch. Tunable via env for ops.
+ */
+const FETCH_TIMEOUT_MS = Number(process.env.EMBED_FETCH_TIMEOUT_MS ?? 10_000);
+
+/**
+ * In-flight dedup: maps a URL to the enrichment promise currently fetching
+ * it. Concurrent `enrichLink(url)` calls share a single network request and
+ * a single DB write. The entry is cleared once the promise settles.
+ *
+ * This is the core fix for the over-fetching bug: previously each
+ * SpaceMaterializer independently re-fetched the same global pending list
+ * on every event batch, so one URL produced many concurrent fetches.
+ */
+const inFlightLinks = new Map<string, Promise<void>>();
+
 // ─── URL detection ───────────────────────────────────────────────────────
 
 /**
@@ -58,6 +78,10 @@ export function extractUrls(text: string): string[] {
 /**
  * Fetch embed data for a single URL from the embed service.
  * Returns null if the service has no data or if the request fails.
+ *
+ * Always enforces a `FETCH_TIMEOUT_MS` hard timeout, combined with any
+ * caller-provided `signal`. Without this, a hung embed service keeps the
+ * URL "pending" indefinitely and amplifies re-fetches.
  */
 export async function fetchEmbedData(
   url: string,
@@ -68,12 +92,19 @@ export async function fetchEmbedData(
       ? navigator.languages?.[0] || navigator.language || "en"
       : "en";
 
+  // Timeout-scoped controller. We abort on either our own timeout or the
+  // caller's signal (whichever fires first).
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const onCallerAbort = () => controller.abort();
+  signal?.addEventListener("abort", onCallerAbort, { once: true });
+
   try {
     const res = await fetch(`${EMBED_SERVICE_URL}?lang=${locale}`, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
       body: url,
-      signal,
+      signal: controller.signal,
     });
 
     if (!res.ok) {
@@ -88,12 +119,23 @@ export async function fetchEmbedData(
     const data = (await res.json()) as EmbedServiceResponse;
     return data[1];
   } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      return null;
-    }
+    // Timeouts and caller aborts are expected when the service is slow/down;
+    // treat them as "no data" rather than spamming warnings.
+    if (isAbortError(err)) return null;
     console.warn(`[embed] fetch failed for ${url}:`, err);
     return null;
+  } finally {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", onCallerAbort);
   }
+}
+
+/** True for any AbortError (DOMException in browsers, native Error in Bun/Node). */
+function isAbortError(err: unknown): boolean {
+  if (err && typeof err === "object" && "name" in err) {
+    return (err as { name: unknown }).name === "AbortError";
+  }
+  return false;
 }
 
 // ─── Database helpers ────────────────────────────────────────────────────
@@ -104,7 +146,7 @@ export async function fetchEmbedData(
  */
 export function findPendingLinks(db: Database, limit = 50): string[] {
   const rows = db
-    .query<{ entity: string }, []>(
+    .query<{ entity: string }, [number]>(
       `select el.entity
        from comp_embed_link el
        left join comp_embed_link_data eld on eld.entity = el.entity
@@ -134,44 +176,39 @@ export function storeEmbedData(
 
 /**
  * Enrich a single URL: fetch embed data and store in the database.
- * Best-effort — failures are logged and silently ignored.
+ *
+ * Deduplicated via `inFlightLinks` — concurrent calls for the same URL
+ * share one fetch + one write. Best-effort: failures are logged and
+ * swallowed (a null row is still written so the URL leaves the pending
+ * set rather than being retried on every sweep).
  */
 export async function enrichLink(
   db: Database,
   url: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  try {
-    const embed = await fetchEmbedData(url, signal);
-    storeEmbedData(db, url, embed);
-  } catch (err) {
-    console.warn(`[embed] enrichment failed for ${url}:`, err);
-  }
+  const existing = inFlightLinks.get(url);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const embed = await fetchEmbedData(url, signal);
+      storeEmbedData(db, url, embed);
+    } catch (err) {
+      console.warn(`[embed] enrichment failed for ${url}:`, err);
+    } finally {
+      inFlightLinks.delete(url);
+    }
+  })();
+
+  inFlightLinks.set(url, promise);
+  return promise;
 }
 
-/**
- * Enrich all pending links in the database.
- * Processes up to `limit` links per call, best-effort.
- * Returns the list of URLs that were successfully enriched.
- */
-export async function enrichPendingLinks(
-  db: Database,
-  limit = 10,
-  signal?: AbortSignal,
-): Promise<string[]> {
-  return []
-  const pending = findPendingLinks(db, limit);
-  if (pending.length === 0) return [];
-
-  const enriched: string[] = [];
-  for (const url of pending) {
-    if (signal?.aborted) break;
-    await enrichLink(db, url, signal);
-    enriched.push(url);
-  }
-  return enriched;
-}
-
+// Bulk pending-link enrichment is owned by the centralized sweeper
+// (see `embed/sweeper.ts`). There is intentionally no per-call
+// `enrichPendingLinks` here — it was the root cause of the over-fetching bug
+// (every SpaceMaterializer called it independently on every batch).
 /**
  * Scan message content for URLs and insert any new ones into `comp_embed_link`.
  * Called during materialization (inside the transaction) so link detection is
