@@ -1,7 +1,9 @@
 import { XrpcRouter, prodAuthVerifier } from "./xrpc/index.ts";
 import { Router as InvalidationRouter } from "./invalidation/index.ts";
 import { setInvalidationRouter } from "./materialization/registry.ts";
-import { startEmbedSweeper } from "./embed/sweeper.ts";
+import { startEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
+import { countPendingLinks } from "./embed/enricher.ts";
+import { log } from "./log.ts";
 import { openDb } from "./db/db.ts";
 import { attachReadState, openReadStateDb } from "./db/readStateDb.ts";
 import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
@@ -54,6 +56,35 @@ const BACKFILL_CONCURRENCY = (() => {
   );
   return 8;
 })();
+
+/**
+ * Emit `[startup] progress …` every N completed spaces (default 50), plus on
+ * the final completion. With thousands of streams a per-DID progress line
+ * floods logs and trips platform rate limits (e.g. Railway's 500 logs/sec);
+ * this turns ~N lines into ~N/50. Set to 1 to restore per-DID progress.
+ */
+const BACKFILL_PROGRESS_EVERY = (() => {
+  const raw = process.env.APPSERVER_BACKFILL_PROGRESS_EVERY;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : 50;
+})();
+
+/**
+ * Live startup-backfill status, exposed at `GET /health/backfill` so operators
+ * can watch progress without scraping (rate-limited) logs. Mutated by
+ * `startupBackfill()`; `done` flips true when the run finishes (success or
+ * failure). In `lazy` mode `discovered` stays 0 and `done` is false — spaces
+ * materialise on first request instead.
+ */
+const backfillStatus = {
+  mode: BACKFILL_MODE,
+  discovered: 0,
+  started: 0,
+  completed: 0,
+  succeeded: 0,
+  failed: 0,
+  done: false,
+};
 
 const DID_DOCUMENT = {
   "@context": ["https://www.w3.org/ns/did/v1"],
@@ -236,6 +267,41 @@ Bun.serve({
       });
     }
 
+    // ─── Health endpoints ──────────────────────────────────────────────
+    // Unauthenticated (liveness/readiness must not require auth) and cheap,
+    // so operators can monitor the appserver without scraping rate-limited
+    // stdout. Each returns JSON with CORS so a browser dashboard can poll.
+    if (url.pathname === "/health") {
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          uptime: process.uptime(),
+          did: OWN_DID,
+          port: PORT,
+          backfillDone: backfillStatus.done,
+        }),
+        { headers: { "content-type": "application/json", ...corsHeaders } },
+      );
+    }
+    if (url.pathname === "/health/backfill") {
+      return new Response(JSON.stringify(backfillStatus), {
+        headers: { "content-type": "application/json", ...corsHeaders },
+      });
+    }
+    if (url.pathname === "/health/embed") {
+      const stats = embedSweeperStats();
+      let pending: number;
+      try {
+        pending = countPendingLinks(mainDb);
+      } catch {
+        pending = -1; // DB read failed — surface the error state, don't 500
+      }
+      return new Response(
+        JSON.stringify({ ...stats, pending }),
+        { headers: { "content-type": "application/json", ...corsHeaders } },
+      );
+    }
+
     const res = await router.fetch(req, server);
     if (res === undefined) {
       // Successful WebSocket upgrade — no HTTP response to send.
@@ -268,6 +334,7 @@ console.log(`Appserver listening on port ${PORT} (DID: ${OWN_DID})`);
 // mode) — spaces are never unavailable, just possibly stale until backfill
 // completes, after which invalidation signals fill in the rest.
 if (BACKFILL_MODE === "lazy") {
+  backfillStatus.done = true; // no startup backfill to wait on
   console.log(
     "[startup] lazy backfill mode — spaces will materialise on first request",
   );
@@ -296,9 +363,13 @@ async function startupBackfill(): Promise<void> {
 
   const streams = await client.listStreams();
   const total = streams.length;
+  backfillStatus.discovered = total;
   console.log(`[startup] discovered ${total} Leaf stream(s)`);
 
-  if (total === 0) return;
+  if (total === 0) {
+    backfillStatus.done = true;
+    return;
+  }
 
   // Materialise streams with bounded concurrency. Each worker pulls the next
   // stream off a shared index, so up to BACKFILL_CONCURRENCY spaces backfill at
@@ -306,49 +377,55 @@ async function startupBackfill(): Promise<void> {
   // (the dominant cost); SQLite writes still serialize on the single WAL
   // writer, so correctness is unaffected. The cap protects Leaf from a flood
   // of concurrent subscription requests.
-  let started = 0;
-  let completed = 0;
-  let succeeded = 0;
-  let failed = 0;
-
+  //
+  // Per-DID start/complete logs are emitted at debug: with thousands of
+  // streams they produce ~3N lines and were the primary trigger for platform
+  // log-rate limits (Railway dropped ~16k messages in the incident that
+  // motivated this). A batched progress summary at info (every
+  // BACKFILL_PROGRESS_EVERY completions + the final line) preserves
+  // observability. Set LOG_LEVEL=debug to see per-DID detail.
   const worker = async (): Promise<void> => {
     while (true) {
-      const i = started++;
+      const i = backfillStatus.started++;
       if (i >= total) return;
       const s = streams[i]!; // i < total, guaranteed by the guard above
 
-      console.log(
-        `[startup] backfilling ${s.did} (started ${i + 1}/${total})`,
-      );
+      log.debug(`[startup] backfilling ${s.did} (started ${i + 1}/${total})`);
 
       try {
         const mat = await getOrCreateMaterializer(StreamDid.assert(s.did));
         await mat.backfillDone;
         await mat.close();
         removeMaterializer(StreamDid.assert(s.did));
-        succeeded++;
-        console.log(
+        backfillStatus.succeeded++;
+        log.debug(
           `[startup] backfill complete for ${s.did}: ` +
             `applied=${mat.stats.applied} errors=${mat.stats.materializerErrors + mat.stats.applyErrors}`,
         );
       } catch (err) {
-        failed++;
-        console.error(`[startup] backfill failed for ${s.did}:`, err);
+        backfillStatus.failed++;
+        log.error(`[startup] backfill failed for ${s.did}:`, err);
       }
 
-      completed++;
-      const remaining = total - completed;
-      const pct = ((completed / total) * 100).toFixed(1);
-      console.log(
-        `[startup] progress ${completed}/${total} (${pct}% done, ${remaining} remaining)`,
-      );
+      backfillStatus.completed++;
+      const completed = backfillStatus.completed;
+      // Batched progress: every N completions, plus the final one. Avoids the
+      // per-DID progress line that flooded logs at scale.
+      if (completed === total || completed % BACKFILL_PROGRESS_EVERY === 0) {
+        const remaining = total - completed;
+        const pct = ((completed / total) * 100).toFixed(1);
+        console.log(
+          `[startup] progress ${completed}/${total} (${pct}% done, ${remaining} remaining)`,
+        );
+      }
     }
   };
 
   const workerCount = Math.min(BACKFILL_CONCURRENCY, total);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
+  backfillStatus.done = true;
   console.log(
-    `[startup] backfill complete: ${succeeded} succeeded, ${failed} failed out of ${total} total`,
+    `[startup] backfill complete: ${backfillStatus.succeeded} succeeded, ${backfillStatus.failed} failed out of ${total} total`,
   );
 }

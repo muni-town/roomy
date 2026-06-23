@@ -11,6 +11,7 @@
 
 import { Database } from "bun:sqlite";
 import type { Embed, EmbedServiceResponse } from "./types.ts";
+import { log } from "../log.ts";
 
 // ─── Configuration ──────────────────────────────────────────────────────
 
@@ -78,10 +79,13 @@ export function extractUrls(text: string): string[] {
 /**
  * Outcome of an embed-service request for a single URL.
  * - `ok`: the service returned embed metadata.
- * - `definitive`: the URL has no embed data (404/410, or 200 with an empty
- *   payload) — not worth retrying.
+ * - `definitive`: the URL has no embed data, or the service deterministically
+ *   refused it (400/401/403/404/410, or 200 with an empty payload) — not
+ *   worth retrying. Client-error statuses are stable: bsky.app will always
+ *   400 a scraper, eprint.iacr.org will always 403. Retrying them forever
+ *   (the old behaviour) left a permanent backlog and a permanent log flood.
  * - `transient`: the request failed in a way that may succeed later
- *   (timeout, 5xx, network error) — the caller should schedule a retry.
+ *   (timeout, 5xx, 429, network error) — the caller should schedule a retry.
  */
 export type FetchResult =
   | { status: "ok"; embed: Embed }
@@ -123,13 +127,26 @@ export async function fetchEmbedData(
       signal: controller.signal,
     });
 
-    // 404/410: the URL genuinely has no embed data — don't retry.
-    if (res.status === 404 || res.status === 410)
+    // Deterministic client errors: the URL has no embed data, or the
+    // service/upstream refused it in a way that won't change on retry.
+    // 400/401/403 are stable rejections (e.g. bsky.app 400s scrapers,
+    // eprint.iacr.org 403s); 404/410 are genuine no-data. Settle them so the
+    // pending set drains instead of retrying forever (capped at 6h backoff).
+    if (
+      res.status === 400 ||
+      res.status === 401 ||
+      res.status === 403 ||
+      res.status === 404 ||
+      res.status === 410
+    )
       return { status: "definitive" };
 
     // Other non-OK (5xx, 429, …): the service erred transiently — retry later.
+    // Logged at debug (not warn) because a slow/blocking upstream can produce
+    // thousands of these across a backfill, which floods logs and trips
+    // platform rate limits. Set LOG_LEVEL=debug to investigate a specific URL.
     if (!res.ok) {
-      console.warn(
+      log.debug(
         `[embed] ${res.status} fetching data for ${url}: ${res.statusText}`,
       );
       return { status: "transient" };
@@ -143,7 +160,8 @@ export async function fetchEmbedData(
   } catch (err) {
     // Timeouts and network errors are transient — retry later.
     if (isAbortError(err)) return { status: "transient" };
-    console.warn(`[embed] fetch failed for ${url}:`, err);
+    // debug, not warn: see the non-OK branch above for the volume rationale.
+    log.debug(`[embed] fetch failed for ${url}:`, err);
     return { status: "transient" };
   } finally {
     clearTimeout(timeoutId);
@@ -323,6 +341,36 @@ export async function enrichLink(
 // (see `embed/sweeper.ts`). There is intentionally no per-call
 // `enrichPendingLinks` here — it was the root cause of the over-fetching bug
 // (every SpaceMaterializer called it independently on every batch).
+
+/**
+ * Number of enrichments currently in flight (one shared fetch per URL via
+ * {@link enrichLink}'s dedup). Exposed for the `/health/embed` endpoint so
+ * operators can see sweep pressure without scraping logs.
+ */
+export function inFlightCount(): number {
+  return inFlightLinks.size;
+}
+
+/**
+ * Total `comp_embed_link` rows still awaiting enrichment — never attempted,
+ * or a transient failure whose backoff has elapsed. Mirrors the
+ * {@link findPendingLinks} predicate but unbounded, for the `/health/embed`
+ * endpoint so operators can watch the backlog drain.
+ */
+export function countPendingLinks(db: Database): number {
+  const now = Date.now();
+  const row = db
+    .query<{ n: number }, [number]>(
+      `select count(*) as n
+         from comp_embed_link el
+         left join comp_embed_link_data eld on eld.entity = el.entity
+        where eld.entity is null
+           or (eld.retry_after is not null and eld.retry_after <= ?)`,
+    )
+    .get(now);
+  return row?.n ?? 0;
+}
+
 /**
  * Scan message content for URLs and insert any new ones into `comp_embed_link`.
  * Called during materialization (inside the transaction) so link detection is

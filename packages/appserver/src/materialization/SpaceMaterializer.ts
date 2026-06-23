@@ -30,6 +30,7 @@ import {
   recordDeliveryGap,
 } from "../debug/eventStore.ts";
 import { pokeEmbedSweeper } from "../embed/sweeper.ts";
+import { log } from "../log.ts";
 
 export type ConnectedSpaceLike = Pick<
   ConnectedSpace,
@@ -152,9 +153,13 @@ export class SpaceMaterializer {
     );
 
     // Log a backfill-completion summary including any delivery gaps detected.
+    // Debug, not info: with thousands of spaces this fires once per space at
+    // startup (~N lines), which alone can trip platform log-rate limits. The
+    // startup backfill driver in index.ts emits a batched progress summary;
+    // set LOG_LEVEL=debug to see per-space completion.
     backfillDone.then(
       () => {
-        console.info(
+        log.debug(
           `[SpaceMaterializer] backfill complete for ${this.streamDid}: ` +
             `total=${this.totalEventsDelivered} gaps=${this.gapCount} ` +
             `applied=${this.stats.applied} matErrors=${this.stats.materializerErrors} ` +
@@ -207,7 +212,7 @@ export class SpaceMaterializer {
     // Surface unhandled errors so a failed backfill doesn't disappear into a
     // silently-rejected promise.
     backfillDone.catch((err) => {
-      console.error(
+      log.error(
         `[SpaceMaterializer] backfill failed for ${opts.streamDid}:`,
         err,
       );
@@ -246,7 +251,7 @@ export class SpaceMaterializer {
       // Profile prefetch is best-effort — a transient appview outage
       // shouldn't block materialisation. Materialisers' own ensureEntity
       // calls will still create rows for referenced DIDs without profile data.
-      console.warn(
+      log.warn(
         `[SpaceMaterializer] ${this.streamDid} profile prefetch failed:`,
         err,
       );
@@ -273,7 +278,7 @@ export class SpaceMaterializer {
       const gapSize = batchMinIdx - this.#lastObservedIdx - 1;
       this.gapCount += gapSize;
       gapDetected = true;
-      console.warn(
+      log.warn(
         `[SpaceMaterializer] ${this.streamDid} delivery gap detected: ` +
           `expected idx ${this.#lastObservedIdx + 1} but batch starts at ${batchMinIdx} ` +
           `(${gapSize} event(s) potentially missing) ` +
@@ -313,7 +318,7 @@ export class SpaceMaterializer {
     this.stats.batches += 1;
 
     if (stats.materializerErrors || stats.applyErrors) {
-      console.warn(
+      log.warn(
         `[SpaceMaterializer] ${this.streamDid} batch: applied=${stats.applied} matErrors=${stats.materializerErrors} applyErrors=${stats.applyErrors} (isBackfill=${meta.isBackfill})`,
       );
     }

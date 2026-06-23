@@ -27,9 +27,15 @@
 
 import { Database } from "bun:sqlite";
 import type { Ulid } from "@roomy-space/sdk";
-import { enrichLink, findPendingLinks, filterPendingUrls } from "./enricher.ts";
+import {
+  enrichLink,
+  findPendingLinks,
+  filterPendingUrls,
+  inFlightCount,
+} from "./enricher.ts";
 import type { Embed } from "./types.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
+import { log } from "../log.ts";
 import type {
   InvalidationEvent,
   InvalidationRouter,
@@ -55,6 +61,13 @@ const CONCURRENCY = Number(process.env.EMBED_SWEEPER_CONCURRENCY ?? 8);
 let sweeperDb: Database | undefined;
 let sweeperRouter: InvalidationRouter | undefined;
 let started = false;
+
+// ─── Stats (for /health/embed) ─────────────────────────────────────────
+// Lifetime counters incremented in the drain loop. Non-null enrichLink →
+// success; null → a definitive or transient FetchResult (failure/settled).
+// Reset by _resetEmbedSweeper (tests only). Exposed via embedSweeperStats().
+let statsEnrichedOk = 0;
+let statsEnrichedNull = 0;
 /**
  * Resolved by {@link pokeEmbedSweeper} to wake an idle loop immediately.
  * Null when the loop is busy draining (so extra pokes are cheap no-ops).
@@ -98,8 +111,32 @@ export function startEmbedSweeper(opts: EmbedSweeperOpts): void {
   // Detached background loop — must never reject the process. Any throw is
   // logged and the loop continues (see inner try/catch per sweep).
   void runSweeperLoop().catch((err) => {
-    console.error("[embed-sweeper] loop crashed:", err);
+    log.error("[embed-sweeper] loop crashed:", err);
   });
+}
+
+/**
+ * Snapshot of sweeper state for the `/health/embed` endpoint. Lets operators
+ * watch the backlog drain and see sweep pressure / DB backoff without scraping
+ * (potentially rate-limited) logs. `pending` is queried separately in the
+ * health handler (it needs the DB) and merged in there.
+ */
+export function embedSweeperStats(): {
+  priorityQueue: number;
+  inFlight: number;
+  enrichedOk: number;
+  enrichedNull: number;
+  dbErrorCount: number;
+  dbBackoffActive: boolean;
+} {
+  return {
+    priorityQueue: priorityLinks.size,
+    inFlight: inFlightCount(),
+    enrichedOk: statsEnrichedOk,
+    enrichedNull: statsEnrichedNull,
+    dbErrorCount,
+    dbBackoffActive: Date.now() < dbBackoffUntil,
+  };
 }
 
 /**
@@ -250,11 +287,17 @@ async function runSweeperLoop(): Promise<void> {
           // enrichLink only throws for DB (storeEmbedData) errors — fetch
           // errors are handled inside fetchEmbedData (returns a
           // FetchResult). Capture once per cycle to drive backoff (don't
-          // escalate per-link).
+          // escalate per-link). Logged at debug: a failing DB under I/O
+          // pressure can throw per-link per-cycle, which floods logs.
           if (cycleDbError === null) cycleDbError = err;
-          console.warn(`[embed-sweeper] enrichLink threw for ${url}:`, err);
+          log.debug(`[embed-sweeper] enrichLink threw for ${url}:`, err);
         }
-        if (embed) emitEnrichmentInvalidation(db, [url]);
+        if (embed) {
+          statsEnrichedOk++;
+          emitEnrichmentInvalidation(db, [url]);
+        } else {
+          statsEnrichedNull++;
+        }
       });
       if (cycleDbError !== null) markDbError(cycleDbError);
       else markDbOk(); // a successful write cycle → DB is healthy again
@@ -422,4 +465,6 @@ export function _resetEmbedSweeper(): void {
   priorityLinks.clear();
   dbErrorCount = 0;
   dbBackoffUntil = 0;
+  statsEnrichedOk = 0;
+  statsEnrichedNull = 0;
 }
