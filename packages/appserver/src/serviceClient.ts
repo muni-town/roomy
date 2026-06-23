@@ -14,11 +14,27 @@ import {
   Event,
 } from "@roomy-space/sdk";
 import { encode, decode, BytesWrapper } from "@atcute/cbor";
+import { withTimeout } from "./timeout.ts";
 
 const LEAF_URL = process.env.LEAF_URL ?? "https://leaf-dev.muni.town";
 const LEAF_DID =
   process.env.LEAF_SERVER_DID ?? `did:web:${new URL(LEAF_URL).hostname}`;
 const UNSAFE_AUTH_TOKEN = process.env.LEAF_UNSAFE_AUTH_TOKEN;
+
+/**
+ * Connect deadline. `RoomyServiceClient.connectSpace` →
+ * `ConnectedSpace.connect()` runs `streamInfo` + module CID/upload/update,
+ * NONE of which are bounded by the SDK. A Leaf socket that dies mid-connect
+ * leaves the in-flight socket.io ack RPCs hanging forever (socket.io does not
+ * re-issue in-flight ack calls on reconnect), which would strand every caller
+ * sharing this cached promise — including all 8 backfill workers at once
+ * (they share one Leaf client) and any XRPC request handler that touches the
+ * stream. Race the connect so a dead connect rejects, the cache evicts, and
+ * the next caller retries against a (hopefully) reconnected Leaf.
+ */
+const CONNECT_TIMEOUT_MS = Number(
+  process.env.APPSERVER_CONNECT_TIMEOUT_MS ?? 30_000,
+);
 
 let clientPromise: Promise<RoomyServiceClient> | null = null;
 const spaces = new Map<string, Promise<ConnectedSpace>>();
@@ -56,7 +72,11 @@ export function getConnectedSpace(
   if (cached) return cached;
   const promise = (async () => {
     const client = await getServiceClient();
-    return client.connectSpace(streamDid, modules.space, BATCH_LIMIT);
+    return await withTimeout(
+      client.connectSpace(streamDid, modules.space, BATCH_LIMIT),
+      CONNECT_TIMEOUT_MS,
+      `connect ${streamDid}`,
+    );
   })().catch((err) => {
     spaces.delete(streamDid);
     throw err;

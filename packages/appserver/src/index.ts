@@ -4,6 +4,7 @@ import { setInvalidationRouter } from "./materialization/registry.ts";
 import { startEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
 import { countPendingLinks } from "./embed/enricher.ts";
 import { log } from "./log.ts";
+import { withTimeout } from "./timeout.ts";
 import { openDb } from "./db/db.ts";
 import { attachReadState, openReadStateDb } from "./db/readStateDb.ts";
 import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
@@ -365,23 +366,6 @@ if (BACKFILL_MODE === "lazy") {
  * so a timed-out op may still settle in the background — but the caller is
  * unblocked. Used to guard `mat.close()` so a dead Leaf can't strand a worker.
  */
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`timeout after ${ms}ms waiting on ${label}`));
-    }, ms);
-    promise.then(
-      (v) => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
-}
 
 async function startupBackfill(): Promise<void> {
   let client: RoomyServiceClient;

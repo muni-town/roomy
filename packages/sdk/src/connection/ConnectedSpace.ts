@@ -111,7 +111,7 @@ export class ConnectedSpace {
   /**
    * Inactivity timer for {@link #doneBackfilling}. Armed when backfill starts
    * and reset on every event-result; fires {@link #doneBackfilling}.reject if
-   * no results arrive for {@link BACKFILL_INACTIVITY_TIMEOUT_MS}. Cleared on
+   * no results arrive for {@link backfillInactivityTimeoutMs}. Cleared on
    * finish, error, or unsubscribe. See the constant's doc for rationale.
    */
   #backfillInactivityTimer: ReturnType<typeof setTimeout> | null = null;
