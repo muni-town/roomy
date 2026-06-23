@@ -37,3 +37,20 @@ export const log = {
   warn: (...args: unknown[]): void => emit("warn", console.warn, args),
   error: (...args: unknown[]): void => emit("error", console.error, args),
 };
+
+/**
+ * Gate `console.debug` process-wide so the SDK's (and any dependency's)
+ * `console.debug(...)` calls respect `LOG_LEVEL`. The SDK emits a
+ * `console.debug("Got stream info", { moduleCid })` on EVERY space connect —
+ * during a full backfill of thousands of streams that is ~2 lines × N streams
+ * (observed: 256 lines for ~128 connects in a partial run; ~7000 projected for
+ * a full run), which alone breaches platform stdout rate limits (Railway's
+ * 500 logs/sec cap) and gets real signal dropped. The appserver's own
+ * `log.debug` routes through `console.log` (not `console.debug`), so it is
+ * unaffected; only raw `console.debug` callers (the SDK) are silenced unless
+ * `LOG_LEVEL=debug`.
+ */
+const originalConsoleDebug = console.debug.bind(console);
+console.debug = (...args: unknown[]): void => {
+  if (LEVELS.debug >= threshold) originalConsoleDebug(...args);
+};

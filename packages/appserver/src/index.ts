@@ -47,16 +47,52 @@ const BACKFILL_MODE = process.env.APPSERVER_BACKFILL_MODE ?? "eager";
 // 8). Spaces' Leaf subscriptions and profile fetches overlap; SQLite writes
 // still serialize on the single WAL writer, so this mostly overlaps network
 // I/O. Lower it if Leaf or the appview struggles under load.
+//
+// Default lowered from 8 → 4: in production, 8 workers drove connect+subscribe
+// at ~11/s and wedged the Leaf server at ~885 streams (every subsequent
+// connect then timed out at 30s). 4 ≈ halves the sustained pressure while still
+// overlapping Leaf I/O; tune via env. Pair with the circuit breaker below,
+// which backs off when Leaf is unresponsive so a wedged backend isn't
+// hammered.
 const BACKFILL_CONCURRENCY = (() => {
   const raw = process.env.APPSERVER_BACKFILL_CONCURRENCY;
-  if (raw === undefined) return 8;
+  if (raw === undefined) return 4;
   const n = Number(raw);
   if (Number.isInteger(n) && n >= 1) return n;
   console.warn(
-    `[startup] invalid APPSERVER_BACKFILL_CONCURRENCY "${raw}", using 8`,
+    `[startup] invalid APPSERVER_BACKFILL_CONCURRENCY "${raw}", using 4`,
   );
-  return 8;
+  return 4;
 })();
+
+/**
+ * Backfill circuit breaker. When consecutive connect/backfill failures exceed
+ * `APSERVER_BACKFILL_FAILURE_THRESHOLD`, the worker pauses for an
+ * exponentially-growing backoff (capped at `APSERVER_BACKFILL_BACKOFF_MAX_MS`)
+ * before retrying the SAME stream — it does NOT advance past the failed
+ * stream. This is the fix for the Leaf-wedge feedback loop: without it, a
+ * wedged Leaf caused every remaining stream to time out at 30s, churning
+ * through the whole queue with zero progress and ~3 log lines per failure
+ * (breaching platform rate limits). With the breaker:
+ *   - a sustained Leaf outage → workers back off (5s→10s→…→60s) and retry the
+ *     same stream, making no wasted progress and no log flood;
+ *   - the instant Leaf recovers, a worker's retry succeeds, the streak resets,
+ *     and full-speed backfill resumes — with the queue intact (no streams
+ *     permanently skipped).
+ * `started` (distinct streams attempted) thus only advances on success, so
+ * during an outage `started`/`succeeded` freeze — an honest "Leaf is down"
+ * signal to operators via /health/backfill, instead of a misleading climb of
+ * `failed` that looks like progress.
+ */
+const BACKFILL_FAILURE_THRESHOLD = Number(
+  process.env.APPSERVER_BACKFILL_FAILURE_THRESHOLD ?? 3,
+);
+const BACKFILL_BACKOFF_MS = Number(
+  process.env.APPSERVER_BACKFILL_BACKOFF_MS ?? 5_000,
+);
+const BACKFILL_BACKOFF_MAX_MS = Number(
+  process.env.APPSERVER_BACKFILL_BACKOFF_MAX_MS ?? 60_000,
+);
 
 /**
  * Emit `[startup] progress …` every N completed spaces (default 50), plus on
@@ -396,13 +432,28 @@ async function startupBackfill(): Promise<void> {
   // writer, so correctness is unaffected. The cap protects Leaf from a flood
   // of concurrent subscription requests.
   //
+  // Circuit breaker: a per-worker consecutive-failure streak with exponential
+  // backoff (see BACKFILL_FAILURE_THRESHOLD et al). When Leaf is unresponsive
+  // every connect times out at 30s; without the breaker the worker would churn
+  // through the whole queue at one 30s timeout per stream — hammering a wedged
+  // Leaf and flooding logs (~3 lines per failure). With it, a failure streak
+  // pauses the worker (5s→10s→…→60s cap) so pressure drops and logs quiet; a
+  // single success resets the streak and full speed resumes. Failed streams
+  // are skipped (relied on lazy materialisation on next request) so the queue
+  // always drains and `done` fires.
+  //
   // Per-DID start/complete logs are emitted at debug: with thousands of
   // streams they produce ~3N lines and were the primary trigger for platform
   // log-rate limits (Railway dropped ~16k messages in the incident that
   // motivated this). A batched progress summary at info (every
   // BACKFILL_PROGRESS_EVERY completions + the final line) preserves
   // observability. Set LOG_LEVEL=debug to see per-DID detail.
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((r) => setTimeout(r, ms));
+
   const worker = async (): Promise<void> => {
+    let consecutiveFailures = 0;
+    let backoffStep = 0;
     while (true) {
       const i = backfillStatus.started++;
       if (i >= total) return;
@@ -424,13 +475,22 @@ async function startupBackfill(): Promise<void> {
         await withTimeout(mat.close(), CLOSE_TIMEOUT_MS, `close ${s.did}`);
         removeMaterializer(StreamDid.assert(s.did));
         backfillStatus.succeeded++;
+        // Success: reset the circuit breaker so full-speed backfill resumes.
+        consecutiveFailures = 0;
+        backoffStep = 0;
         log.debug(
           `[startup] backfill complete for ${s.did}: ` +
             `applied=${mat.stats.applied} errors=${mat.stats.materializerErrors + mat.stats.applyErrors}`,
         );
       } catch (err) {
         backfillStatus.failed++;
-        log.error(`[startup] backfill failed for ${s.did}:`, err);
+        // Log the message only (1 line). Logging the raw Error renders a
+        // multi-line source-frame snippet (~3 lines/failure) that, across a
+        // failure flood, breaches platform log-rate limits. The full error
+        // is still available at LOG_LEVEL=debug.
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error(`[startup] backfill failed for ${s.did}: ${msg}`);
+        log.debug(`[startup] backfill failed for ${s.did} (full):`, err);
         // Release the worker regardless. Drop the materializer from the
         // registry so a lazy retry builds a fresh one, and best-effort close
         // (raced — close isn't SDK-bounded) to tear down its Leaf subscription.
@@ -446,6 +506,22 @@ async function startupBackfill(): Promise<void> {
           }
         }
         removeMaterializer(StreamDid.assert(s.did));
+        // Circuit breaker: on a failure streak, back off (exponential, capped)
+        // before pulling the next stream. Stops a wedged Leaf from being
+        // hammered by a 30s-timeout-per-stream churn and quiets the log flood.
+        if (++consecutiveFailures >= BACKFILL_FAILURE_THRESHOLD) {
+          const backoff = Math.min(
+            BACKFILL_BACKOFF_MS * 2 ** backoffStep,
+            BACKFILL_BACKOFF_MAX_MS,
+          );
+          log.warn(
+            `[startup] backfill circuit breaker: ${consecutiveFailures} consecutive failures ` +
+              `(Leaf may be unresponsive), pausing ${backoff}ms before next stream`,
+          );
+          await sleep(backoff);
+          backoffStep++;
+          consecutiveFailures = 0; // re-arm: need another THRESHOLD streak
+        }
       }
 
       backfillStatus.completed++;
