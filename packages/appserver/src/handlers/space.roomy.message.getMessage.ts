@@ -6,6 +6,7 @@
  */
 
 import { openDb } from "../db/db.ts";
+import { prioritiseLinksForRead } from "../embed/sweeper.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
@@ -50,5 +51,10 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
   if (!message) {
     throw new XrpcError(404, "NotFound", `Message not found: ${messageId}`);
   }
+
+  // Read-driven embed prioritisation (see getMessages): jump this message's
+  // never-attempted links ahead of the backfill backlog for the viewer.
+  prioritiseLinksForRead(db, [message]);
+
   return message;
 };

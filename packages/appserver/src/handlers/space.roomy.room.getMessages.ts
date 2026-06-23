@@ -6,6 +6,7 @@
  */
 
 import { openDb } from "../db/db.ts";
+import { prioritiseLinksForRead } from "../embed/sweeper.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
@@ -44,6 +45,13 @@ export const getMessagesHandler: QueryHandler<
     limit,
     cursor,
   }, userDid ?? "");
+
+  // Read-driven embed prioritisation: a user viewing this room is actively
+  // waiting on these link cards, so jump any never-attempted links ahead of
+  // the oldest-first backfill backlog (which can take hours when dominated
+  // by erroring/timing-out links). Already-enriched links are a no-op and
+  // transient-failed links keep their backoff (see prioritiseLinksForRead).
+  prioritiseLinksForRead(db, messages);
 
   return stripNulls({ messages, cursor: nextCursor }) as GetMessagesResult;
 };

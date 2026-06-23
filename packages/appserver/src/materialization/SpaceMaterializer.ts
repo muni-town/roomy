@@ -320,16 +320,19 @@ export class SpaceMaterializer {
 
     // Poke the centralized embed sweeper when live batches add messages —
     // that's when detectAndStoreLinks (called inside applyBatch) creates new
-    // pending link rows. Backfill is skipped here; it pokes once on
-    // completion. pokeEmbedSweeper() is a no-op if a sweep is already
-    // draining, so calling it on every relevant batch is cheap.
+    // pending link rows. We pass the freshly-detected URLs so the sweeper
+    // prioritises them over the backfill backlog — a newly posted link gets
+    // enriched within seconds instead of waiting behind thousands of
+    // historical pending links. Backfill is skipped here; it pokes once on
+    // completion (no priority URLs). pokeEmbedSweeper() is a no-op if a sweep
+    // is already draining, so calling it on every relevant batch is cheap.
     if (
       !meta.isBackfill &&
       events.some(
         (e) => e.event.$type === "space.roomy.message.createMessage.v0",
       )
     ) {
-      pokeEmbedSweeper();
+      pokeEmbedSweeper(stats.detectedLinks);
     }
 
     // Notify invalidation router (only for live events).

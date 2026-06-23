@@ -1,16 +1,48 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, afterAll, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 
 import { openDb } from "../db/db.ts";
 import {
   startEmbedSweeper,
+  prioritiseLinksForRead,
   _resetEmbedSweeper,
   type EmbedSweeperOpts,
 } from "./sweeper.ts";
+import type { Embed } from "./types.ts";
 import type {
   InvalidationEvent,
   InvalidationRouter,
 } from "../invalidation/types.ts";
+
+// Deterministic fake embed so the sweeper test doesn't depend on the
+// network or a live embed service. The sweeper only emits a #messageDiff
+// when enrichment SUCCEEDS (non-null embed), so the mock must return data.
+const FAKE_EMBED: Embed = {
+  v: "1",
+  ts: "2026-06-23T00:00:00Z",
+  ty: "link",
+  u: "https://example.com/article",
+  t: "Example Article",
+  d: "A test embed.",
+};
+const FAKE_RESPONSE = JSON.stringify(["2026-06-23T00:00:00Z", FAKE_EMBED]);
+const realFetch = globalThis.fetch;
+
+beforeAll(() => {
+  globalThis.fetch = ((
+    _input: RequestInfo | URL,
+    _init?: RequestInit,
+  ): Promise<Response> =>
+    Promise.resolve(
+      new Response(FAKE_RESPONSE, {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )) as typeof globalThis.fetch;
+});
+afterAll(() => {
+  globalThis.fetch = realFetch;
+});
 
 /**
  * Captures every invalidation signal emitted by the sweeper so tests can
@@ -74,7 +106,7 @@ async function flushSweeper(opts: EmbedSweeperOpts): Promise<void> {
 }
 
 describe("embed sweeper invalidation room resolution", () => {
-  test("emits getMessages with the real room id, not the message id", async () => {
+  test("emits a #messageDiff update with the real room id, not the message id", async () => {
     const db = freshDb();
     const { router, signals } = captureRouter();
     const ids = {
@@ -100,20 +132,33 @@ describe("embed sweeper invalidation room resolution", () => {
 
     expect(signals.length).toBeGreaterThan(0);
 
-    // Every emitted signal must target getMessages with roomId = the ROOM id.
+    // Every emitted signal must be a #messageDiff update targeting the real
+    // ROOM id (not the message id) with an update op keyed on the message id.
     for (const sig of signals) {
-      expect(sig.kind).toBe("queryInvalidation");
-      if (sig.kind === "queryInvalidation") {
-        expect(sig.signal.nsid).toBe("space.roomy.room.getMessages");
-        expect(sig.signal.params.roomId).toBe(ids.room);
+      expect(sig.kind).toBe("messageDiff");
+      if (sig.kind === "messageDiff") {
+        expect(sig.signal.roomId as string).toBe(ids.room);
+        expect(sig.signal.ops.length).toBeGreaterThan(0);
+        for (const op of sig.signal.ops) {
+          expect(op.op).toBe("update");
+          expect(op.key as string).toBe(ids.message);
+          // The update op must carry the enriched embed data so the client can
+          // render the card without a re-fetch (this is the streaming payoff).
+          if (op.op === "update") {
+            const link = op.message.linkEmbeds[0];
+            expect(link).toBeDefined();
+            expect(link?.embed?.["t"]).toBe("Example Article");
+          }
+        }
       }
     }
 
-    // Explicitly assert the bug is fixed: the message id must NOT appear.
-    const paramRoomIds = signals
-      .filter((s) => s.kind === "queryInvalidation")
-      .map((s) => (s.kind === "queryInvalidation" ? s.signal.params.roomId : null));
-    expect(paramRoomIds).not.toContain(ids.message);
+    // Explicitly assert the bug is fixed: the message id must NOT appear as
+    // the diff's roomId.
+    const diffRoomIds = signals
+      .filter((s) => s.kind === "messageDiff")
+      .map((s) => (s.kind === "messageDiff" ? (s.signal.roomId as string) : null));
+    expect(diffRoomIds).not.toContain(ids.message);
   });
 
   test("does not emit when no pending links exist", async () => {
@@ -127,5 +172,44 @@ describe("embed sweeper invalidation room resolution", () => {
     _resetEmbedSweeper();
 
     expect(signals.length).toBe(0);
+  });
+
+  test("read-driven prioritisation enriches a viewed message's pending link", async () => {
+    // Regression: links in messages a user is READING (detected during
+    // backfill, never write-poked) used to sit behind the entire backlog.
+    // The read handler now calls prioritiseLinksForRead so they jump the queue.
+    const db = freshDb();
+    const { router, signals } = captureRouter();
+    const ids = {
+      room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
+      message: "01KVMMMMMMMMMMMMMMMMMMMMMM",
+      url: "https://example.com/read-viewed",
+    };
+    seedLinkMessageRoom(db, ids);
+
+    // Simulate the getMessages handler: prioritise the viewed message's links.
+    // Called BEFORE the sweeper is started (as it would be on a cold read).
+    prioritiseLinksForRead(db, [{ linkEmbeds: [{ url: ids.url }] }]);
+
+    await flushSweeper({ db, invalidationRouter: router });
+
+    const deadline = Date.now() + 15_000;
+    while (signals.length === 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    _resetEmbedSweeper();
+
+    // The read-viewed link was enriched and streamed as a #messageDiff.
+    expect(signals.length).toBeGreaterThan(0);
+    const sig = signals.find((s) => s.kind === "messageDiff");
+    expect(sig?.kind).toBe("messageDiff");
+    if (sig?.kind === "messageDiff") {
+      expect(sig.signal.roomId as string).toBe(ids.room);
+      const op = sig.signal.ops[0];
+      expect(op?.op).toBe("update");
+      expect(op?.key as string).toBe(ids.message);
+      const link = op?.op === "update" ? op.message.linkEmbeds[0] : undefined;
+      expect(link?.embed?.["t"]).toBe("Example Article");
+    }
   });
 });

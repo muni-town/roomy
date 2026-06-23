@@ -31,13 +31,22 @@ import { fileURLToPath } from "node:url";
  * `.11`: added `comp_embed_link_data` table for caching enriched embed
  * metadata from the external embed service.
  *
+ * `.10-appserver.3`: embed retry-with-backoff. `comp_embed_link_data`
+ * gains `attempts` (consecutive transient-failure count) and `retry_after`
+ * (epoch ms; transient failures re-queue after this backoff). The pending
+ * query now also returns retry-eligible rows, so links stuck on a null row
+ * from a transient failure (service down / timeout / 5xx) get re-tried
+ * with exponential backoff instead of being permanently abandoned.
+ * Definitive failures (404 / no-data) settle with no retry. Wipe re-derives
+ * embed data from scratch.
+ *
  * `.10-appserver.2`: SDK `createRoomLink` materialiser made idempotent
  * (`on conflict do nothing`) — re-applying the same link event no longer
  * flips `canonical_parent` 1 → 0, which corrupted parent-channel links for
  * threads on streams that got re-backfilled. Wipe re-derives correct
  * canonical_parent values from the event log.
  */
-export const SCHEMA_VERSION = "10-appserver.2";
+export const SCHEMA_VERSION = "10-appserver.3";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 

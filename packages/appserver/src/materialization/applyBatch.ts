@@ -49,6 +49,14 @@ export interface MaterializationStats {
     reason: "materializer" | "apply";
     message: string;
   }>;
+  /**
+   * Link URLs newly detected in this batch's createMessage events (inserted
+   * into `comp_embed_link` by `detectAndStoreLinks`). The SpaceMaterializer
+   * passes these to `pokeEmbedSweeper` so freshly-posted links are enriched
+   * with priority over the backfill backlog. Empty for batches without
+   * new link-bearing messages.
+   */
+  detectedLinks: string[];
 }
 
 export function applyBatch(
@@ -62,6 +70,7 @@ export function applyBatch(
     materializerErrors: 0,
     applyErrors: 0,
     failed: [],
+    detectedLinks: [],
   };
 
   if (events.length === 0) return stats;
@@ -117,7 +126,8 @@ export function applyBatch(
           if (body?.data?.buf) {
             const mime = body.mimeType ?? "text/markdown";
             const content = decodeContent(mime, Buffer.from(body.data.buf));
-            detectAndStoreLinks(db, e.event.id, content);
+            const detected = detectAndStoreLinks(db, e.event.id, content);
+            if (detected.length > 0) stats.detectedLinks.push(...detected);
           }
         }
         if (isDebugEnabled()) {
