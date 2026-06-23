@@ -70,6 +70,15 @@ const BACKFILL_PROGRESS_EVERY = (() => {
 })();
 
 /**
+ * Timeout for `mat.close()` during startup backfill (drain + Leaf
+ * unsubscribe). `close()` isn't bounded by the SDK, so a Leaf that dies right
+ * after backfill finished would otherwise hang the worker in unsubscribe and
+ * re-stall the bounded pipeline. On timeout the worker abandons cleanup and
+ * moves on (the materializer is removed from the registry either way).
+ */
+const CLOSE_TIMEOUT_MS = Number(process.env.APPSERVER_BACKFILL_CLOSE_TIMEOUT_MS ?? 15_000);
+
+/**
  * Live startup-backfill status, exposed at `GET /health/backfill` so operators
  * can watch progress without scraping (rate-limited) logs. Mutated by
  * `startupBackfill()`; `done` flips true when the run finishes (success or
@@ -349,6 +358,31 @@ if (BACKFILL_MODE === "lazy") {
   });
 }
 
+/**
+ * Race `promise` against a timeout. Resolves/rejects with the promise's
+ * outcome if it settles first; rejects with a labelled timeout error after
+ * `ms`. The underlying promise is NOT cancelled (the SDK has no cancellation),
+ * so a timed-out op may still settle in the background — but the caller is
+ * unblocked. Used to guard `mat.close()` so a dead Leaf can't strand a worker.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`timeout after ${ms}ms waiting on ${label}`));
+    }, ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 async function startupBackfill(): Promise<void> {
   let client: RoomyServiceClient;
   try {
@@ -392,10 +426,18 @@ async function startupBackfill(): Promise<void> {
 
       log.debug(`[startup] backfilling ${s.did} (started ${i + 1}/${total})`);
 
+      let mat: Awaited<ReturnType<typeof getOrCreateMaterializer>> | null = null;
       try {
-        const mat = await getOrCreateMaterializer(StreamDid.assert(s.did));
+        mat = await getOrCreateMaterializer(StreamDid.assert(s.did));
+        // backfillDone is bounded by the SDK's backfill inactivity timeout
+        // (LEAF_BACKFILL_INACTIVITY_TIMEOUT_MS, default 60s): a hung Leaf
+        // subscription rejects instead of pending forever, so a worker can't
+        // be stranded by one bad stream. See ConnectedSpace.doneBackfilling.
         await mat.backfillDone;
-        await mat.close();
+        // close() (drain + Leaf unsubscribe) is NOT bounded by the SDK, so race
+        // it — a Leaf that dies right after backfill finished would otherwise
+        // hang the worker in unsubscribe and stall the pipeline again.
+        await withTimeout(mat.close(), CLOSE_TIMEOUT_MS, `close ${s.did}`);
         removeMaterializer(StreamDid.assert(s.did));
         backfillStatus.succeeded++;
         log.debug(
@@ -405,6 +447,21 @@ async function startupBackfill(): Promise<void> {
       } catch (err) {
         backfillStatus.failed++;
         log.error(`[startup] backfill failed for ${s.did}:`, err);
+        // Release the worker regardless. Drop the materializer from the
+        // registry so a lazy retry builds a fresh one, and best-effort close
+        // (raced — close isn't SDK-bounded) to tear down its Leaf subscription.
+        // Without close, the abandoned subscription would keep applying live
+        // events AND a lazy retry would open a second subscription for the
+        // same stream (double materialisation). On timeout we give up on
+        // cleanup and move on; the worker is unblocked either way.
+        if (mat) {
+          try {
+            await withTimeout(mat.close(), CLOSE_TIMEOUT_MS, `close ${s.did}`);
+          } catch {
+            /* best-effort: a hung close must not re-stall the worker */
+          }
+        }
+        removeMaterializer(StreamDid.assert(s.did));
       }
 
       backfillStatus.completed++;

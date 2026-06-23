@@ -43,6 +43,25 @@ import {
 } from "../schema/events/synthetic";
 import { unwrapSqlRows } from "./sqlParsing";
 
+/**
+ * Backfill inactivity timeout: if no event results arrive from Leaf for this
+ * many milliseconds while backfill is in progress, {@link doneBackfilling} is
+ * rejected. This is the safety net that keeps backfill from hanging forever
+ * when Leaf disconnects and never reconnects, or returns an error, or stops
+ * sending pages — the original implementation left `doneBackfilling` pending
+ * in all those cases, which permanently stalled bounded backfill worker pools
+ * (one hung stream occupied a worker indefinitely). Tunable via env.
+ *
+ * The timer is armed when backfill starts and reset on every event-result; a
+ * transient Leaf blip that reconnects within the window resumes without a
+ * false reject (events arrive and reset the timer). Only a sustained stall
+ * trips it. Read lazily so tests (and ops hot-config) can change it without a
+ * restart.
+ */
+function backfillInactivityTimeoutMs(): number {
+  return Number(process.env.LEAF_BACKFILL_INACTIVITY_TIMEOUT_MS ?? 60_000);
+}
+
 export type ConnectionState =
   | { state: "connected" }
   | { state: "disconnected" };
@@ -89,6 +108,13 @@ export class ConnectedSpace {
   #callback: EventCallback | null = null;
   #metadataCallback: EventCallback | null = null;
   #doneBackfilling = new Deferred<Ulid>();
+  /**
+   * Inactivity timer for {@link #doneBackfilling}. Armed when backfill starts
+   * and reset on every event-result; fires {@link #doneBackfilling}.reject if
+   * no results arrive for {@link BACKFILL_INACTIVITY_TIMEOUT_MS}. Cleared on
+   * finish, error, or unsubscribe. See the constant's doc for rationale.
+   */
+  #backfillInactivityTimer: ReturnType<typeof setTimeout> | null = null;
 
   #lastEventIdx: StreamIndex | null = null;
   #lastMetadataIdx: StreamIndex | null = null;
@@ -248,6 +274,9 @@ export class ConnectedSpace {
     );
 
     this.#backfillStatus = { status: "started" };
+    // Arm the inactivity safety net: if Leaf never delivers (or stops
+    // delivering) backfill pages, reject instead of hanging the caller.
+    this.#armBackfillInactivityTimer();
     return withTimeoutWarning(
       this.#doneBackfilling.promise,
       "Still waiting for events to backfill...",
@@ -290,6 +319,8 @@ export class ConnectedSpace {
     this.#metadataCallback = null;
     this.#lastEventIdx = null;
     this.#lastMetadataIdx = null;
+    // Stop the inactivity timer so a clean teardown doesn't trip a late reject.
+    this.#clearBackfillInactivityTimer();
 
     if (this.#eventSubscription) {
       await this.#eventSubscription();
@@ -601,6 +632,37 @@ export class ConnectedSpace {
     return this.#doneBackfilling.promise;
   }
 
+  /**
+   * (Re)arm the backfill inactivity timer. Called when backfill starts and on
+   * every event-result, so a sustained stall (Leaf disconnect-without-reconnect,
+   * stopped pages) trips {@link #onBackfillInactivity} and rejects
+   * {@link #doneBackfilling} rather than hanging the caller forever.
+   */
+  #armBackfillInactivityTimer(): void {
+    if (this.#backfillInactivityTimer) {
+      clearTimeout(this.#backfillInactivityTimer);
+    }
+    const ms = backfillInactivityTimeoutMs();
+    this.#backfillInactivityTimer = setTimeout(() => {
+      this.#backfillInactivityTimer = null;
+      // A resolved/rejected promise ignores a second settle, but guard so a
+      // late timer after finish doesn't overwrite a healthy status.
+      if (this.#backfillStatus.status !== "started") return;
+      const err = new Error(
+        `backfill inactivity timeout: no events from Leaf for ${ms}ms on stream ${this.streamDid}`,
+      );
+      this.#backfillStatus = { status: "errored", error: err.message };
+      this.#doneBackfilling.reject(err);
+    }, ms);
+  }
+
+  #clearBackfillInactivityTimer(): void {
+    if (this.#backfillInactivityTimer) {
+      clearTimeout(this.#backfillInactivityTimer);
+      this.#backfillInactivityTimer = null;
+    }
+  }
+
   #handleEventResult(result: Result<SubscribeEventsResp>): void {
     if ("Ok" in result) {
       const events = this.#decodeAndParseEvents(parseRows(result.Ok.rows));
@@ -623,13 +685,27 @@ export class ConnectedSpace {
         }
       }
 
+      // Progress: any result from Leaf resets the inactivity timer. Without
+      // this, a slow-but-progressing backfill would false-trip the timeout.
+      if (this.#backfillStatus.status === "started") {
+        this.#armBackfillInactivityTimer();
+      }
+
       if (!result.Ok.has_more) {
+        this.#clearBackfillInactivityTimer();
         this.#backfillStatus = { status: "finished" };
         this.#doneBackfilling.resolve(batchId);
       }
     } else {
       console.error("Subscribe query error:", result.Err);
+      // Reject (don't just log) so the caller's `await doneBackfilling` stops
+      // hanging — the original code left the promise pending forever here,
+      // which stranded bounded backfill workers.
+      this.#clearBackfillInactivityTimer();
       this.#backfillStatus = { status: "errored", error: result.Err };
+      this.#doneBackfilling.reject(
+        new Error(`Subscribe query error: ${result.Err}`),
+      );
     }
   }
 
