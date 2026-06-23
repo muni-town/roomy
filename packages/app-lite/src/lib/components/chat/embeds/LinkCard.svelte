@@ -33,15 +33,7 @@
   const subtitle = $derived(
     [providerName, authorName].filter(Boolean).join(" — "),
   );
-
-  // Debug: log embed data to console for inspection
-  $effect(() => {
-    if (embed) {
-      console.log(`[LinkCard] embed data for ${url}:`, embed);
-    } else {
-      console.log(`[LinkCard] no embed data yet for ${url}`);
-    }
-  });</script>
+</script>
 
 <a
   href={url}

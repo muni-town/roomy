@@ -113,11 +113,14 @@
 
       {#snippet linkEmbeds()}
         {#if message.linkEmbeds && message.linkEmbeds.length > 0}
-          <div class="flex flex-col gap-2 mt-1">
-            {#each message.linkEmbeds as link (link.url)}
-              <LinkCard url={link.url} embed={link.embed} />
-            {/each}
-          </div>
+          {@const withEmbed = message.linkEmbeds.filter((l) => l.embed)}
+          {#if withEmbed.length > 0}
+            <div class="flex flex-col gap-2 mt-1">
+              {#each withEmbed as link (link.url)}
+                <LinkCard url={link.url} embed={link.embed} />
+              {/each}
+            </div>
+          {/if}
         {/if}
       {/snippet}
 
