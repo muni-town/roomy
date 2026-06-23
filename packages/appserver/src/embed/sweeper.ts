@@ -61,6 +61,15 @@ let started = false;
  */
 let wake: (() => void) | null = null;
 /**
+ * Consecutive DB errors seen by the sweeper. Used to escalate a backoff so a
+ * dead/unreachable DB (e.g. macOS `SQLITE_IOERR_VNODE` under I/O pressure)
+ * doesn't cause a tight fetch-then-fail loop that wastes embed-service calls
+ * and spams logs. Reset to 0 on a successful DB cycle.
+ */
+let dbErrorCount = 0;
+/** Timestamp (ms) until which the sweeper should skip fetching and just idle. */
+let dbBackoffUntil = 0;
+/**
  * Priority queue of freshly-detected live link URLs. Drained before the
  * oldest-first backlog so a newly posted link is enriched within seconds
  * instead of waiting behind thousands of historical (backfilled) pending
@@ -135,8 +144,38 @@ export function prioritiseLinksForRead(
 ): void {
   const linkUrls = messages.flatMap((m) => m.linkEmbeds.map((l) => l.url));
   if (linkUrls.length === 0) return;
-  const pending = filterPendingUrls(db, linkUrls);
-  if (pending.length > 0) pokeEmbedSweeper(pending);
+  try {
+    const pending = filterPendingUrls(db, linkUrls);
+    if (pending.length > 0) pokeEmbedSweeper(pending);
+  } catch (err) {
+    // Embed prioritisation is best-effort: a transient DB error (e.g. a macOS
+    // SQLITE_IOERR_VNODE from I/O pressure) must NEVER turn a successful
+    // getMessages/getMessage into a 500. Messages are the product; embed cards
+    // are a secondary enhancement. The sweeper's idle poll picks these links
+    // up regardless, so skipping the poke on a DB hiccup is harmless.
+    console.warn("[embed] prioritiseLinksForRead failed:", err);
+  }
+}
+
+/**
+ * Record a DB error and escalate a backoff so the loop pauses fetching rather
+ * than fetch 8 links per cycle only to fail every write. Capped; reset by
+ * {@link markDbOk} on a successful DB cycle.
+ */
+function markDbError(err: unknown): void {
+  dbErrorCount = Math.min(dbErrorCount + 1, 8);
+  const backoffMs = Math.min(60_000 * 2 ** (dbErrorCount - 1), 30 * 60_000);
+  dbBackoffUntil = Date.now() + backoffMs;
+  console.warn(
+    `[embed-sweeper] DB error (#${dbErrorCount}); backing off ${Math.round(backoffMs / 1000)}s:`,
+    err,
+  );
+}
+
+/** Mark the DB as healthy again (a successful DB cycle resets the backoff). */
+function markDbOk(): void {
+  if (dbErrorCount !== 0) dbErrorCount = 0;
+  if (dbBackoffUntil !== 0) dbBackoffUntil = 0;
 }
 
 // ─── Loop ───────────────────────────────────────────────────────────────
@@ -146,6 +185,16 @@ async function runSweeperLoop(): Promise<void> {
   if (!db) return;
 
   for (;;) {
+    // If the DB has been erroring, wait out the backoff before touching it
+    // again — don't fetch links only to fail every write (wastes embed-service
+    // calls and spams logs). A poke can still wake us early, but we re-check
+    // the backoff at the top of the next iteration.
+    const now = Date.now();
+    if (now < dbBackoffUntil) {
+      await waitForWake(dbBackoffUntil - now);
+      continue;
+    }
+
     let pending: string[] = [];
 
     // 1. Priority: freshly-detected live links first, so a newly posted
@@ -158,6 +207,7 @@ async function runSweeperLoop(): Promise<void> {
         pending = filterPendingUrls(db, priority);
       } catch (err) {
         console.warn("[embed-sweeper] filterPendingUrls failed:", err);
+        markDbError(err);
         pending = [];
       }
     }
@@ -170,8 +220,10 @@ async function runSweeperLoop(): Promise<void> {
         // (rare — priority URLs are newest, backlog is oldest-first).
         pending = [...new Set([...pending, ...backlog])];
       } catch (err) {
-        // A transient DB error shouldn't kill the loop.
+        // A transient DB error shouldn't kill the loop. Back off so a
+        // dead DB doesn't cause a tight fetch-and-fail cycle.
         console.warn("[embed-sweeper] findPendingLinks failed:", err);
+        markDbError(err);
       }
     }
 
@@ -189,15 +241,23 @@ async function runSweeperLoop(): Promise<void> {
       // the no-op diff and avoid spamming clients / the router while the
       // backfill backlog drains. Per-URL error isolation keeps one throwing
       // enrichLink from killing the whole loop.
+      let cycleDbError: unknown = null;
       await mapWithConcurrency(pending, CONCURRENCY, async (url) => {
         let embed: Embed | null = null;
         try {
           embed = await enrichLink(db, url);
         } catch (err) {
+          // enrichLink only throws for DB (storeEmbedData) errors — fetch
+          // errors are handled inside fetchEmbedData (returns a
+          // FetchResult). Capture once per cycle to drive backoff (don't
+          // escalate per-link).
+          if (cycleDbError === null) cycleDbError = err;
           console.warn(`[embed-sweeper] enrichLink threw for ${url}:`, err);
         }
         if (embed) emitEnrichmentInvalidation(db, [url]);
       });
+      if (cycleDbError !== null) markDbError(cycleDbError);
+      else markDbOk(); // a successful write cycle → DB is healthy again
     }
 
     // A full batch means there may be more pending — loop without waiting.
@@ -360,4 +420,6 @@ export function _resetEmbedSweeper(): void {
   sweeperRouter = undefined;
   wake = null;
   priorityLinks.clear();
+  dbErrorCount = 0;
+  dbBackoffUntil = 0;
 }

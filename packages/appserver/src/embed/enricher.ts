@@ -276,16 +276,19 @@ export function storeEmbedData(
  * Enrich a single URL: fetch embed data and store in the database.
  *
  * Deduplicated via `inFlightLinks` — concurrent calls for the same URL
- * share one fetch + one write. Best-effort: failures are logged and
- * swallowed. Transient failures (timeout / 5xx / network) schedule a retry
- * with exponential backoff via `retry_after`; definitive failures (404 /
- * no-data) and successes are settled (no retry).
+ * share one fetch + one write.
  *
- * Returns the embed that was stored — non-null on success, `null` on
- * failure (transient or definitive). Callers can use the return to decide
- * whether to push an invalidation: only successes carry new data worth
- * streaming to clients, so skipping failed (null) results avoids spamming
- * no-op diffs while the backfill backlog drains.
+ * Returns the embed that was stored — non-null on success, `null` on a
+ * non-DB failure (the fetch returned a definitive/transient `FetchResult`;
+ * fetch-layer network errors are handled inside `fetchEmbedData` and never
+ * reach here). A DB write failure (e.g. `storeEmbedData` throwing
+ * `SQLITE_IOERR_VNODE`) is RE-THROWN so the sweeper can detect a failing DB
+ * and back off rather than fetch a batch of links only to fail every write.
+ * The sweeper is the sole caller and catches this; any other caller must
+ * catch too. Callers can use the non-null return to decide whether to push an
+ * invalidation: only successes carry new data worth streaming to clients,
+ * so skipping failed (null) results avoids spamming no-op diffs while the
+ * backfill backlog drains.
  */
 export async function enrichLink(
   db: Database,
@@ -301,8 +304,12 @@ export async function enrichLink(
       storeEmbedData(db, url, result);
       return result.status === "ok" ? result.embed : null;
     } catch (err) {
-      console.warn(`[embed] enrichment failed for ${url}:`, err);
-      return null;
+      // fetchEmbedData handles its own network errors (returns a
+      // FetchResult), so a throw here is a DB write failure (e.g.
+      // SQLITE_IOERR_VNODE under I/O pressure). Rethrow so the sweeper can
+      // back off a failing DB rather than hammer it. The `finally` clears the
+      // in-flight entry so a later retry actually re-fetches.
+      throw err;
     } finally {
       inFlightLinks.delete(url);
     }

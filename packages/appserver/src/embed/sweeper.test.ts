@@ -212,4 +212,39 @@ describe("embed sweeper invalidation room resolution", () => {
       expect(link?.embed?.["t"]).toBe("Example Article");
     }
   });
+
+  test("prioritiseLinksForRead never throws on a DB error (read path stays healthy)", () => {
+    // Regression guard: a DB error (e.g. SQLITE_IOERR_VNODE under I/O
+    // pressure) inside filterPendingUrls must be swallowed so getMessages /
+    // getMessage never 500 due to embed prioritisation. Embeds are best-effort;
+    // messages are the product. A closed DB makes the query throw reliably.
+    const db = freshDb();
+    db.close();
+    expect(() =>
+      prioritiseLinksForRead(db, [
+        { linkEmbeds: [{ url: "https://example.com/x" }] },
+      ]),
+    ).not.toThrow();
+  });
+
+  test("sweeper doesn't crash or stream anything when the DB errors mid-drain", async () => {
+    // Simulates a failing DB (IOERR_VNODE): seed a pending link, then close
+    // the DB so every read/write throws. The loop must back off rather than
+    // tight-loop fetch-and-fail, and must emit nothing (no enrichments landed).
+    const db = freshDb();
+    const { router, signals } = captureRouter();
+    seedLinkMessageRoom(db, {
+      room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
+      message: "01KVMMMMMMMMMMMMMMMMMMMMMM",
+      url: "https://example.com/broken-db",
+    });
+    db.close();
+
+    await flushSweeper({ db, invalidationRouter: router });
+    // Let the loop attempt a cycle and back off.
+    await new Promise((r) => setTimeout(r, 300));
+    _resetEmbedSweeper();
+
+    expect(signals.find((s) => s.kind === "messageDiff")).toBeUndefined();
+  });
 });
