@@ -14,6 +14,12 @@
   import { sendEvents } from "$lib/mutations/send-events";
   import { createThread } from "$lib/mutations/thread";
   import MessageContext from "./MessageContext.svelte";
+  import { px, auth } from "$lib/auth.svelte";
+  import { queryClient } from "$lib/client";
+  import { cache } from "@roomy-space/sdk";
+  import type { Message } from "$lib/queries/messages";
+  import type { Member, ExternalAdmin } from "$lib/queries/members";
+  import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
 
   type Props = {
     spaceId: string;
@@ -22,6 +28,63 @@
   };
 
   let { spaceId, roomId, canWrite }: Props = $props();
+
+  // Most-recently-active members in this room, derived from the cached
+  // `getMessages` result (no extra fetch). Used to preseed the `@mention`
+  // popup before the user types anything. Self is excluded; ordered by last
+  // activity with the most recent at the bottom of the popup.
+  function recentActiveMembers(): TypeaheadUser[] {
+    const msgs = queryClient.getQueryData<Message[]>(
+      cache.queryKey("space.roomy.room.getMessages", { roomId }),
+    );
+    if (!msgs || msgs.length === 0) return [];
+    const selfDid = auth.session?.did;
+    // Track each author's most recent message; `sort_idx` (ULID) is the
+    // canonical timeline order, falling back to the ISO `timestamp`.
+    const lastByDid = new Map<string, { user: TypeaheadUser; last: string }>();
+    for (const m of msgs) {
+      if (m.authorDid === selfDid) continue;
+      const ord = m.sort_idx ?? m.timestamp;
+      const existing = lastByDid.get(m.authorDid);
+      if (!existing || ord > existing.last) {
+        lastByDid.set(m.authorDid, {
+          user: {
+            did: m.authorDid,
+            name: m.authorName,
+            handle: m.authorHandle,
+            avatar: m.authorAvatar,
+          },
+          last: ord,
+        });
+      }
+    }
+    return [...lastByDid.values()]
+      .sort((a, b) => (a.last < b.last ? -1 : a.last > b.last ? 1 : 0))
+      .map((v) => v.user)
+      .slice(-8); // cap to the 8 most-recently-active; most recent stays last
+  }
+
+  // Server-side member search for `@mention` in the chat input. Empty query →
+  // recent-active preseed (above). Non-empty → `getMembers?search=` on the
+  // appserver, including both members and external admins so space admins
+  // without membership are mentionable too. (Self-exclusion applies only to
+  // the preseed, not to search results.)
+  async function mentionSearch(q: string): Promise<TypeaheadUser[]> {
+    const query = q.trim();
+    if (query === "") {
+      return recentActiveMembers();
+    }
+    const res = (await px().query("space.roomy.space.getMembers", {
+      spaceId,
+      search: query,
+    })) as { members: Member[]; externalAdmins: ExternalAdmin[] };
+    return [...res.members, ...res.externalAdmins].map((m) => ({
+      did: m.did,
+      handle: m.handle,
+      name: m.name,
+      avatar: m.avatar,
+    }));
+  }
 
   let isSendingMessage = $state(false);
   let previewImages: string[] = $state([]);
@@ -259,6 +322,7 @@
         onEnter={handleSend}
         disabled={isSendingMessage}
         {processImageFile}
+        mentionSearch={mentionSearch}
       />
     {/if}
   {/snippet}

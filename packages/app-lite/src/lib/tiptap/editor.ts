@@ -3,6 +3,8 @@ import { keymap } from "@tiptap/pm/keymap";
 import { PluginKey } from "@tiptap/pm/state";
 import Mention from "@tiptap/extension-mention";
 import SuggestionSelect from "@roomy/design/components/helper/SuggestionSelect.svelte";
+import UserMentionList from "./UserMentionList.svelte";
+import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
 import { Extension, mergeAttributes } from "@tiptap/core";
 import type {
   SuggestionKeyDownProps,
@@ -108,12 +110,11 @@ function suggestion({
   };
 }
 
-type UserMentionProps = { users: Item[] };
+type UserMentionProps = { search: (query: string) => Promise<TypeaheadUser[]> };
 const UserMentionExtension = Mention.extend({
   name: "userMention",
   // Used by `generateHTML`
   renderHTML({ HTMLAttributes, node }) {
-    console.log("attrs", node.attrs);
     return [
       "a",
       mergeAttributes(
@@ -127,14 +128,103 @@ const UserMentionExtension = Mention.extend({
     ];
   },
 });
-export const initUserMention = ({ users }: UserMentionProps) =>
+
+/**
+ * Suggestion config for `@user` mentions. Unlike the generic `suggestion()`
+ * helper (which filters a static list), this drives a **server-side** search
+ * from the render lifecycle: the editor owns the query text, and we debounce
+ * `search(query)` ourselves with a monotonic request id so stale responses are
+ * discarded — the same pattern `UserTypeahead` uses. Results render in a
+ * floating box above the input via `UserMentionList`, which reuses the shared
+ * `UserTypeaheadList` rows.
+ */
+function userSuggestion({
+  search,
+  pluginKey,
+}: {
+  search: (query: string) => Promise<TypeaheadUser[]>;
+  pluginKey: string;
+}) {
+  return {
+    char: "@",
+    pluginKey: new PluginKey(pluginKey),
+    // Results are driven from `render`; TipTap only needs an items source to
+    // decide when to open the popup, so return an empty array.
+    items: () => [],
+    render: () => {
+      let wrapper: HTMLDivElement;
+      let component: ReturnType<typeof UserMentionList>;
+      let reqId = 0;
+      let timer: ReturnType<typeof setTimeout>;
+
+      const displayName = (u: TypeaheadUser) => u.name || u.handle || u.did;
+
+      const run = (query: string) => {
+        clearTimeout(timer);
+        const myReq = ++reqId;
+        const q = query.trim();
+        const isEmpty = q === "";
+        // Empty query → the fetcher returns most-recently-active members from
+        // the cached `getMessages` result (no debounce, no spinner). Non-empty
+        // → debounced server search.
+        component.setEmptyMessage(
+          isEmpty ? "No recent members in this room" : "No matching members",
+        );
+        if (!isEmpty) component.setLoading(true);
+        timer = setTimeout(
+          async () => {
+            try {
+              const res = await search(q);
+              if (myReq !== reqId) return; // a newer keystroke superseded this one
+              component.setItems(res);
+            } catch {
+              if (myReq === reqId) component.setItems([]);
+            } finally {
+              if (myReq === reqId) component.setLoading(false);
+            }
+          },
+          isEmpty ? 0 : 200,
+        );
+      };
+
+      return {
+        onStart: (props: SuggestionProps) => {
+          wrapper = document.createElement("div");
+          // Float above the input. The editor's parent (`#chat-input`) is
+          // `position: relative`, so `bottom-full` anchors us just above it.
+          wrapper.className =
+            "absolute bottom-full mb-1 left-0 right-0 z-30 text-base-900 dark:text-base-100";
+          props.editor.view.dom.parentNode?.appendChild(wrapper);
+          component = mount(UserMentionList, {
+            target: wrapper,
+            props: {
+              callback: (user: TypeaheadUser) =>
+                props.command({ id: user.did, label: displayName(user) }),
+            },
+          });
+          run(props.query);
+        },
+        onUpdate: (props: SuggestionProps) => {
+          run(props.query);
+        },
+        onKeyDown: (props: SuggestionKeyDownProps) => {
+          return component.onKeyDown(props.event);
+        },
+        onExit: () => {
+          clearTimeout(timer);
+          reqId++;
+          unmount(component);
+          wrapper.remove();
+        },
+      };
+    },
+  };
+}
+
+export const initUserMention = ({ search }: UserMentionProps) =>
   UserMentionExtension.configure({
     HTMLAttributes: { class: "mention" },
-    suggestion: suggestion({
-      items: users,
-      char: "@",
-      pluginKey: "userMention",
-    }),
+    suggestion: userSuggestion({ search, pluginKey: "userMention" }),
   });
 
 // 'Space Context': channels, threads

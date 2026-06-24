@@ -17,14 +17,15 @@
   import Placeholder from "@tiptap/extension-placeholder";
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
+  import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
   import { RichTextLink } from "$lib/tiptap/RichTextLink";
   import { cn } from "@roomy/design/utils";
   import { Markdown } from "tiptap-markdown";
 
   type Props = {
     content: string;
-    /** Users who can be mentioned with @mention */
-    users?: Item[];
+    /** Server-search fetcher for `@user` mentions (hits `getMembers?search=`). */
+    mentionSearch?: (query: string) => Promise<TypeaheadUser[]>;
     /** Rooms in space that can be mentioned with #room */
     context?: Item[];
     onEnter: (content: string) => Promise<void>;
@@ -36,7 +37,7 @@
 
   let {
     content = $bindable(""),
-    users,
+    mentionSearch,
     context,
     onEnter,
     placeholder = "Write something ...",
@@ -70,8 +71,8 @@
       Markdown,
     ];
 
-    if (users) {
-      extensions.push(initUserMention({ users }) as Extension);
+    if (mentionSearch) {
+      extensions.push(initUserMention({ search: mentionSearch }) as Extension);
     }
     if (context) {
       extensions.push(initSpaceContextMention({ context }) as Extension);

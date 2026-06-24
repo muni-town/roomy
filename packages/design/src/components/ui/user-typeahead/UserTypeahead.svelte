@@ -1,13 +1,14 @@
-<script lang="ts">
-  import UserAvatar from "../../user/UserAvatar.svelte";
-  import { IconLoading } from "@roomy/design/icons";
+<script module lang="ts">
+  // Re-export so existing importers (`import type { TypeaheadUser } from
+  // ".../UserTypeahead.svelte"`) keep working now that the type lives in
+  // ./types.
+  export type { TypeaheadUser } from "./types";
+</script>
 
-  export type TypeaheadUser = {
-    did: string;
-    handle?: string;
-    name?: string;
-    avatar?: string;
-  };
+<script lang="ts">
+  import { IconLoading } from "@roomy/design/icons";
+  import UserTypeaheadList from "./UserTypeaheadList.svelte";
+  import type { TypeaheadUser } from "./types";
 
   let {
     /**
@@ -144,10 +145,6 @@
       open = false;
     }
   }
-
-  function displayName(user: TypeaheadUser) {
-    return user.name || user.handle || user.did;
-  }
 </script>
 
 <div class="relative" onfocusin={() => (open = true)} onfocusout={onFocusOut}>
@@ -168,40 +165,14 @@
   </div>
 
   {#if open && filteredUsers.length > 0}
-    <ul
-      class="absolute z-20 top-full mt-1 left-0 right-0 rounded-2xl border border-base-200 dark:border-base-800 bg-base-100/90 dark:bg-base-900/90 backdrop-blur-xl shadow-lg overflow-hidden py-1"
-    >
-      {#each filteredUsers as user, i}
-        <li class="mx-1">
-          <button
-            class={[
-              "w-full flex items-center gap-2.5 px-3 py-1.5 text-left rounded-xl",
-              i === activeIndex
-                ? "bg-accent-500/10 dark:bg-accent-500/15"
-                : "hover:bg-base-100 dark:hover:bg-base-800",
-            ]}
-            onmousedown={() => select(user)}
-            onmouseover={() => (activeIndex = i)}
-            onfocus={() => (activeIndex = i)}
-          >
-            <UserAvatar
-              src={user.avatar}
-              name={user.did}
-              size={24}
-              class="size-6 shrink-0 rounded-full"
-            />
-            <span
-              class="text-sm font-medium text-base-900 dark:text-base-100 truncate"
-            >
-              {displayName(user)}
-            </span>
-            {#if user.handle && user.name}
-              <span class="text-xs text-base-400 truncate">@{user.handle}</span>
-            {/if}
-          </button>
-        </li>
-      {/each}
-    </ul>
+    <div class="absolute z-20 top-full mt-1 left-0 right-0">
+      <UserTypeaheadList
+        users={filteredUsers}
+        {activeIndex}
+        onSelect={select}
+        onHover={(i) => (activeIndex = i)}
+      />
+    </div>
   {:else if open && showNoMatches}
     <div
       class="absolute z-20 top-full mt-1 left-0 right-0 rounded-2xl border border-base-200 dark:border-base-800 bg-base-100/90 dark:bg-base-900/90 backdrop-blur-xl shadow-lg overflow-hidden py-1.5 px-3 text-sm text-base-400"
