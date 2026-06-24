@@ -390,3 +390,30 @@
     --base-950: var(--color-slate-950);
   }
 }
+
+/*
+ * Mention chip in rendered message bodies.
+ *
+ * Mirrors the composer chip (`.tiptap .mention`, styled in
+ * ChatInput.svelte): a translucent accent rounded background with accent text
+ * that reads correctly in both themes. Rendered mentions are anchors that
+ * link to the user's profile, so they keep a pointer cursor (unlike the
+ * composer chip, which is non-interactive while editing and uses the default
+ * cursor).
+ *
+ * Kept outside `@layer` so it reliably overrides @tailwindcss/typography's
+ * `.prose a` link color/underline utilities (which are layered and use
+ * `:where(a)`, so their specificity is lower than `.prose .mention`).
+ */
+.prose .mention {
+  background-color: color-mix(in oklab, var(--color-accent-500) 14%, transparent);
+  color: var(--color-accent-700);
+  border-radius: 0.375rem;
+  padding: 0.05rem 0.3rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+.dark .prose .mention {
+  color: var(--color-accent-300);
+}
