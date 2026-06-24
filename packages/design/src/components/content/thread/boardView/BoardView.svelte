@@ -19,7 +19,7 @@
 </script>
 
 {#if threads.length}
-  <ScrollArea class="h-full pb-4 w-full">
+  <ScrollArea class="h-full pb-4 w-full @container">
     {#each threads as thread}
       <BoardViewItem {thread} href={hrefFor(thread)} {hideChannel} />
     {/each}
