@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Box } from "@foxui/core";
   import { formatDistanceToNowStrict, type Locale } from "date-fns";
   import type { ThreadInfo } from "./types";
   import { IconHashtag } from "../../../../icons/index";
@@ -42,7 +41,10 @@
   };
 </script>
 
-<a {href}>
+<a
+  {href}
+  class="flex flex-row items-stretch border-b border-base-200/70 dark:border-base-800/70 transition-colors hover:bg-base-50 dark:hover:bg-base-800/30"
+>
   {#snippet avatarGroup()}
     <AvatarGroup
       avatarClass="size-8"
@@ -55,7 +57,14 @@
         }))}
     />
   {/snippet}
-  <Box class="flex flex-col sm:flex-row sm:items-center gap-0 sm:gap-3 py-4 px-3 rounded-lg transition-colors bg-transparent dark:bg-transparent border-base-200 dark:border-base-800 hover:bg-base-50 dark:hover:bg-base-800/50">
+  <!-- Unread marker column -->
+  <div class="w-6 shrink-0 flex items-center justify-start pl-2">
+    {#if thread.unread}
+      <span class="size-2 rounded-full bg-accent-500" aria-label="Unread"></span>
+    {/if}
+  </div>
+
+  <div class="flex flex-col sm:flex-row sm:items-center gap-0 sm:gap-3 py-3 pl-1 pr-3 flex-1 min-w-0">
     <!-- Top row: title + avatar -->
     <div class="flex items-center gap-3 w-full sm:w-auto sm:flex-1 sm:min-w-0">
       <div class={"flex-1 min-w-0 flex items-center gap-2 text-base font-light " + (read ? "text-base-500 dark:text-base-400" : "text-base-900 dark:text-base-100")}>
@@ -65,9 +74,6 @@
           {/if}
           {thread.name}
         </span>
-        {#if thread.unread}
-          <span class="shrink-0 size-2 rounded-full bg-accent-500" aria-label="Unread"></span>
-        {/if}
       </div>
 
       <div class="w-28 shrink-0 flex items-center justify-end sm:hidden">
@@ -122,5 +128,5 @@
     <div class="hidden sm:flex w-16 shrink-0 items-center justify-start">
       {@render avatarGroup()}
     </div>
-  </Box>
+  </div>
 </a>
