@@ -81,6 +81,10 @@ export const desiredProperties = createDesiredPropertiesObject({
 		id: true,
 		guildId: true,
 	},
+	webhook: {
+		id: true,
+		token: true,
+	},
 } satisfies RecursivePartial<TransformersDesiredProperties>);
 
 export type MessageProperties = SetupDesiredProps<

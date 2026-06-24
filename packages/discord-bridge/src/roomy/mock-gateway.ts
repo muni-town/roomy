@@ -3,13 +3,17 @@
  *
  * Records all events in a per-space map. No vi.fn() needed —
  * pure in-memory, easy to assert against.
+ *
+ * Also supports subscribe/unsubscribe for testing the Roomy→Discord
+ * direction. Use fireEvent() to simulate incoming events.
  */
 
 import type { Event } from "@roomy-space/sdk";
-import type { RoomyGateway } from "./gateway.ts";
+import type { RoomyEventCallback, RoomyGateway } from "./gateway.ts";
 
 export class MockRoomyGateway implements RoomyGateway {
 	#events = new Map<string, Event[]>();
+	#subscriptions = new Map<string, RoomyEventCallback>();
 
 	async sendEvent(spaceDid: string, event: Event): Promise<void> {
 		const list = this.#events.get(spaceDid) ?? [];
@@ -23,8 +27,36 @@ export class MockRoomyGateway implements RoomyGateway {
 		this.#events.set(spaceDid, list);
 	}
 
+	async subscribe(
+		spaceDid: string,
+		callback: RoomyEventCallback,
+	): Promise<void> {
+		if (this.#subscriptions.has(spaceDid)) {
+			throw new Error(`Already subscribed to ${spaceDid}`);
+		}
+		this.#subscriptions.set(spaceDid, callback);
+	}
+
+	async unsubscribe(spaceDid: string): Promise<void> {
+		this.#subscriptions.delete(spaceDid);
+	}
+
 	async disconnectAll(): Promise<void> {
 		this.#events.clear();
+		this.#subscriptions.clear();
+	}
+
+	/** Simulate an incoming event from a Roomy space. */
+	async fireEvent(
+		spaceDid: string,
+		event: Event,
+		isBackfill = false,
+		userDid = "did:plc:test-user",
+	): Promise<void> {
+		const callback = this.#subscriptions.get(spaceDid);
+		if (callback) {
+			await callback(event, { spaceDid, isBackfill, userDid });
+		}
 	}
 
 	/** Get all events sent to a given space. */

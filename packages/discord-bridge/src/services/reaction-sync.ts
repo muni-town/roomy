@@ -14,11 +14,21 @@ export async function handleReactionAdd(
 	guildId: bigint,
 	repo: BridgeRepository,
 	roomy: RoomyGateway,
+	botUserId?: bigint,
 ): Promise<void> {
 	const messageIdStr = messageId.toString();
 	const channelIdStr = channelId.toString();
 	const guildIdStr = guildId.toString();
 	const reactionString = emojiToString(emoji);
+
+	// Skip reactions from the bridge bot itself — these are reactions that
+	// the RoomyEventRouter added to Discord on behalf of Roomy users.
+	// Without this check, the bot would see its own reaction via the gateway
+	// and create a duplicate addBridgedReaction in Roomy.
+	if (botUserId !== undefined && userId === botUserId) {
+		log.debug(`Skipping reaction from bot user ${userId}`);
+		return;
+	}
 
 	const targetSpaces = repo.getTargetSpacesForChannel(guildIdStr, channelIdStr);
 	if (targetSpaces.length === 0) {
@@ -97,6 +107,9 @@ export async function handleReactionAdd(
 	}
 }
 
+// TODO: When the router's #handleRemoveReaction is implemented, this function
+// will need a botUserId parameter (like handleReactionAdd) to prevent the bot
+// from re-bridging its own reaction removals back to Roomy.
 export async function handleReactionRemove(
 	messageId: bigint,
 	channelId: bigint,

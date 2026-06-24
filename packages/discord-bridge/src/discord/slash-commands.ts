@@ -19,6 +19,7 @@ import { createLogger } from "../logger.ts";
 import { LiveRoomyGateway } from "../roomy/live-gateway.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import { backfillSingleChannel, runBackfill } from "../services/backfill.ts";
+import type { RoomyEventRouter } from "../services/roomy-event-router.ts";
 import type { DiscordBot, InteractionProperties } from "./types.ts";
 import { CHANNEL_TYPES, MESSAGE_CHANNEL_TYPES } from "./types.ts";
 
@@ -67,10 +68,14 @@ function getStringOption(options: unknown, name: string): string | undefined {
 }
 
 /** Create adapters from live bot + space manager for service calls. */
-function createAdapters(bot: DiscordBot, spaceManager: SpaceManager) {
+function createAdapters(
+	bot: DiscordBot,
+	spaceManager: SpaceManager,
+	repo: BridgeRepository,
+) {
 	return {
 		discord: new LiveDiscordDataSource(bot),
-		roomy: new LiveRoomyGateway(spaceManager),
+		roomy: new LiveRoomyGateway(spaceManager, repo),
 	};
 }
 
@@ -411,6 +416,7 @@ export async function handleInteractionCreate(
 	repo: BridgeRepository,
 	spaceManager: SpaceManager,
 	bot: DiscordBotWithCache,
+	roomyRouter: RoomyEventRouter,
 ): Promise<void> {
 	if (!interaction.guildId) return;
 	const guildId = interaction.guildId.toString();
@@ -438,6 +444,7 @@ export async function handleInteractionCreate(
 			spaceManager,
 			bot,
 			guildId,
+			roomyRouter,
 		);
 		return;
 	}
@@ -449,6 +456,7 @@ async function handleComponentInteraction(
 	spaceManager: SpaceManager,
 	bot: DiscordBotWithCache,
 	guildId: string,
+	roomyRouter: RoomyEventRouter,
 ): Promise<void> {
 	const data = interaction.data;
 	if (!hasCustomId(data)) return;
@@ -467,6 +475,7 @@ async function handleComponentInteraction(
 				bot,
 				guildId,
 				parts,
+				roomyRouter,
 			);
 		} else if (action === "channel-select") {
 			await handleChannelSelect(
@@ -476,6 +485,7 @@ async function handleComponentInteraction(
 				bot,
 				guildId,
 				parts,
+				roomyRouter,
 			);
 		} else if (action === "channel-page") {
 			await handleChannelPageSelect(
@@ -494,6 +504,7 @@ async function handleComponentInteraction(
 				bot,
 				guildId,
 				parts,
+				roomyRouter,
 			);
 		}
 	} catch (e) {
@@ -623,6 +634,7 @@ async function handleBridgeModeButton(
 	bot: DiscordBotWithCache,
 	guildId: string,
 	parts: string[],
+	roomyRouter: RoomyEventRouter,
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
@@ -651,11 +663,20 @@ async function handleBridgeModeButton(
 		});
 
 		runBackfill(
-			createAdapters(bot, spaceManager).discord,
+			createAdapters(bot, spaceManager, repo).discord,
 			repo,
-			createAdapters(bot, spaceManager).roomy,
+			createAdapters(bot, spaceManager, repo).roomy,
 		).catch((err) => {
 			log.error(`Initial backfill failed for space ${spaceDid}`, err);
+		});
+
+		// Subscribe to the new space for Roomy→Discord routing.
+		// NOTE: subscribeToSpace is called after runBackfill. There is a
+		// small window where Roomy events could arrive before the subscription
+		// is active. In practice this is harmless because the space was just
+		// created/bridged and has no Roomy-native messages yet.
+		roomyRouter.subscribeToSpace(spaceDid).catch((err) => {
+			log.error(`Failed to subscribe to new space ${spaceDid}`, err);
 		});
 		return;
 	}
@@ -751,6 +772,7 @@ async function handleChannelNav(
 	bot: DiscordBotWithCache,
 	guildId: string,
 	parts: string[],
+	roomyRouter: RoomyEventRouter,
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
@@ -856,11 +878,20 @@ async function handleChannelNav(
 		});
 
 		runBackfill(
-			createAdapters(bot, spaceManager).discord,
+			createAdapters(bot, spaceManager, repo).discord,
 			repo,
-			createAdapters(bot, spaceManager).roomy,
+			createAdapters(bot, spaceManager, repo).roomy,
 		).catch((err) => {
 			log.error(`Initial backfill failed for space ${spaceDid}`, err);
+		});
+
+		// Subscribe to the new space for Roomy→Discord routing.
+		// NOTE: subscribeToSpace is called after runBackfill. There is a
+		// small window where Roomy events could arrive before the subscription
+		// is active. In practice this is harmless because the space was just
+		// created/bridged and has no Roomy-native messages yet.
+		roomyRouter.subscribeToSpace(spaceDid).catch((err) => {
+			log.error(`Failed to subscribe to new space ${spaceDid}`, err);
 		});
 		return;
 	}
@@ -874,6 +905,7 @@ async function handleChannelSelect(
 	bot: DiscordBotWithCache,
 	guildId: string,
 	parts: string[],
+	roomyRouter: RoomyEventRouter,
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
@@ -916,11 +948,20 @@ async function handleChannelSelect(
 	});
 
 	runBackfill(
-		createAdapters(bot, spaceManager).discord,
+		createAdapters(bot, spaceManager, repo).discord,
 		repo,
-		createAdapters(bot, spaceManager).roomy,
+		createAdapters(bot, spaceManager, repo).roomy,
 	).catch((err) => {
 		log.error(`Initial backfill failed for space ${spaceDid}`, err);
+	});
+
+	// Subscribe to the new space for Roomy→Discord routing.
+	// NOTE: subscribeToSpace is called after runBackfill. There is a
+	// small window where Roomy events could arrive before the subscription
+	// is active. In practice this is harmless because the space was just
+	// created/bridged and has no Roomy-native messages yet.
+	roomyRouter.subscribeToSpace(spaceDid).catch((err) => {
+		log.error(`Failed to subscribe to new space ${spaceDid}`, err);
 	});
 }
 
@@ -1128,9 +1169,9 @@ async function handleChannelAdd(
 	await interaction.edit({ content: message });
 
 	backfillSingleChannel(
-		createAdapters(bot, spaceManager).discord,
+		createAdapters(bot, spaceManager, repo).discord,
 		repo,
-		createAdapters(bot, spaceManager).roomy,
+		createAdapters(bot, spaceManager, repo).roomy,
 		channelId,
 		guildId,
 	).catch((err) => {
@@ -1245,9 +1286,9 @@ async function handleBackfill(
 			});
 
 			backfillSingleChannel(
-				createAdapters(bot, spaceManager).discord,
+				createAdapters(bot, spaceManager, repo).discord,
 				repo,
-				createAdapters(bot, spaceManager).roomy,
+				createAdapters(bot, spaceManager, repo).roomy,
 				channelStr,
 				guildId,
 			).catch((err) => {
@@ -1274,9 +1315,9 @@ async function handleBackfill(
 			});
 
 			runBackfill(
-				createAdapters(bot, spaceManager).discord,
+				createAdapters(bot, spaceManager, repo).discord,
 				repo,
-				createAdapters(bot, spaceManager).roomy,
+				createAdapters(bot, spaceManager, repo).roomy,
 			).catch((err) => {
 				log.error("Full re-backfill failed", err);
 			});

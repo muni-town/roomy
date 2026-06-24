@@ -140,9 +140,7 @@ export class LiveDiscordDataSource implements DiscordDataSource {
 
 	async getActiveThreads(guildId: string): Promise<DiscordChannelData[]> {
 		try {
-			const result = await this.#bot.helpers.getActiveThreads(
-				BigInt(guildId),
-			);
+			const result = await this.#bot.helpers.getActiveThreads(BigInt(guildId));
 			return result.threads.map((t) => normalizeChannel(t));
 		} catch (err) {
 			log.warn(`getActiveThreads failed for guild ${guildId}`, err);

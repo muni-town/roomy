@@ -199,9 +199,7 @@ export class FileDiscordDataSource implements DiscordDataSource {
 		return undefined;
 	}
 
-	async getActiveThreads(
-		_guildId: string,
-	): Promise<DiscordChannelData[]> {
+	async getActiveThreads(_guildId: string): Promise<DiscordChannelData[]> {
 		return this.#activeThreads;
 	}
 }

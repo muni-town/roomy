@@ -390,7 +390,32 @@ export class BridgeRepository {
 			.run(spaceDid, discordUserId, hash, Date.now());
 	}
 
-	// === Webhook tokens (placeholder for future bidirectional) ===
+	// === Space subscription cursors (Roomy→Discord) ===
+
+	/** Get the last-seen stream index for a space, or undefined if no cursor. */
+	getSpaceCursor(spaceDid: string): number | undefined {
+		const row = this.db
+			.query<{ last_idx: number }, [string]>(
+				"SELECT last_idx FROM space_cursors WHERE space_did = ?",
+			)
+			.get(spaceDid);
+		return row?.last_idx;
+	}
+
+	/** Persist the last-seen stream index for a space. */
+	setSpaceCursor(spaceDid: string, lastIdx: number): void {
+		this.db
+			.prepare(
+				`INSERT INTO space_cursors (space_did, last_idx, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(space_did) DO UPDATE SET
+           last_idx = excluded.last_idx,
+           updated_at = excluded.updated_at`,
+			)
+			.run(spaceDid, lastIdx, Date.now());
+	}
+
+	// === Webhook tokens ===
 
 	getWebhookToken(channelId: string): WebhookToken | undefined {
 		const row = this.db
@@ -425,6 +450,16 @@ export class BridgeRepository {
 		this.db
 			.prepare("DELETE FROM webhook_tokens WHERE channel_id = ?")
 			.run(channelId);
+	}
+
+	/** Check whether a webhook ID belongs to this bridge (i.e. is in our webhook_tokens table). */
+	isOurWebhook(webhookId: string): boolean {
+		const row = this.db
+			.query<{ 1: number }, [string]>(
+				"SELECT 1 FROM webhook_tokens WHERE webhook_id = ?",
+			)
+			.get(webhookId);
+		return row !== undefined;
 	}
 
 	// === Profile sync queue (retry queue) ===

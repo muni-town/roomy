@@ -216,9 +216,7 @@ export async function ensureRoomyThreads(
 			// Fetch active threads from the guild-level endpoint.
 			const activeThreads = await discord.getActiveThreads(guildId);
 			const threads = activeThreads.filter(
-				(ch) =>
-					ch.parentId &&
-					bridgedChannelIds.has(ch.parentId),
+				(ch) => ch.parentId && bridgedChannelIds.has(ch.parentId),
 			);
 
 			if (threads.length === 0) continue;
@@ -232,11 +230,7 @@ export async function ensureRoomyThreads(
 
 					const parentId = thread.parentId;
 					if (!parentId) continue;
-					const parentRoomyId = repo.getRoomyId(
-						spaceDid,
-						"channel",
-						parentId,
-					);
+					const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
 					if (!parentRoomyId) {
 						log.warn(
 							`Parent channel ${parentId} not bridged in ${spaceDid}; skipping thread ${threadId}`,
@@ -260,8 +254,7 @@ export async function ensureRoomyThreads(
 							$type: "space.roomy.room.createRoom.v0",
 							kind: "space.roomy.thread",
 							name: thread.name,
-							defaultAccess:
-								thread.type === PRIVATE_THREAD ? "none" : "read",
+							defaultAccess: thread.type === PRIVATE_THREAD ? "none" : undefined,
 							extensions: {
 								"space.roomy.extension.discordOrigin.v0": {
 									snowflake: threadId,

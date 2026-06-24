@@ -28,6 +28,7 @@ export function normalizeMessage(msg: MessageProperties): DiscordMessageData {
 		timestamp: msg.timestamp ?? Date.now(),
 		editedTimestamp:
 			msg.editedTimestamp != null ? msg.editedTimestamp : undefined,
+		webhookId: msg.webhookId?.toString(),
 		author: normalizeUser(msg.author),
 		attachments: (msg.attachments ?? []).map(normalizeAttachment),
 		embeds: [], // services don't use embed content today

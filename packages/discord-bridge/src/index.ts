@@ -5,6 +5,8 @@ import { startApi } from "./api.ts";
 import { BridgeRepository } from "./db/repository.ts";
 import { type DiscordBotWithCache, getProxyCacheBot } from "./discord/cache.ts";
 import { LiveDiscordDataSource } from "./discord/live-data-source.ts";
+import { LiveDiscordSender } from "./discord/live-sender.ts";
+import { LiveWebhookManager } from "./discord/live-webhook-manager.ts";
 import {
 	normalizeChannel,
 	normalizeMessage,
@@ -29,6 +31,7 @@ import {
 import { createLogger } from "./logger.ts";
 import { initRoomyClient } from "./roomy/client.ts";
 import { LiveRoomyGateway } from "./roomy/live-gateway.ts";
+import { LiveProfileResolver } from "./roomy/live-profile-resolver.ts";
 import { SpaceManager } from "./roomy/space-manager.ts";
 import { runBackfill } from "./services/backfill.ts";
 import {
@@ -50,9 +53,18 @@ import {
 	handleRoomUpdate,
 	handleThreadCreate,
 } from "./services/room-sync.ts";
+import { RoomyEventRouter } from "./services/roomy-event-router.ts";
 
 const log = createLogger("bridge");
 let appId: string | undefined;
+/** Deferred router — resolved when the `ready` handler fires. All event
+ *  handlers `await routerReady` before using the router. Since Discord
+ *  guarantees `ready` fires before any other gateway event, the promise
+ *  is always already resolved by the time it's awaited. */
+let routerResolve!: (router: RoomyEventRouter) => void;
+const routerReady = new Promise<RoomyEventRouter>((resolve) => {
+	routerResolve = resolve;
+});
 
 async function main() {
 	log.info("bridge starting");
@@ -71,7 +83,7 @@ async function main() {
 	// Initialize Roomy client
 	const roomyClient = await initRoomyClient();
 	const spaceManager = new SpaceManager(roomyClient);
-	const roomy = new LiveRoomyGateway(spaceManager);
+	const roomy = new LiveRoomyGateway(spaceManager, repo);
 
 	// Start Discord gateway
 	// bot is assigned immediately after createBot; event handlers fire
@@ -103,6 +115,24 @@ async function main() {
 					runBackfill(discord, repo, roomy).catch((err) =>
 						log.error("Backfill failed", err),
 					);
+
+					// Start Roomy→Discord event router
+					const discordSender = new LiveDiscordSender(bot);
+					const webhookManager = new LiveWebhookManager(bot, repo);
+					const profileResolver = new LiveProfileResolver(roomyClient);
+					const router = new RoomyEventRouter(
+						roomy,
+						discordSender,
+						webhookManager,
+						profileResolver,
+						repo,
+					);
+					router
+						.start()
+						.catch((err) =>
+							log.error("Roomy event router failed to start", err),
+						);
+					routerResolve(router);
 
 					// Periodic profile sync retry: every 5 minutes, drain the
 					// stale profile sync queue with exponential backoff.
@@ -159,6 +189,7 @@ async function main() {
 						data.guildId ?? 0n,
 						repo,
 						roomy,
+						bot.id,
 					);
 				},
 
@@ -199,7 +230,16 @@ async function main() {
 				},
 
 				async interactionCreate(interaction: InteractionProperties) {
-					await handleInteractionCreate(interaction, repo, spaceManager, bot);
+					log.debug("Waiting for RoomyEventRouter to be ready (routerReady promise)...");
+					const router = await routerReady;
+					log.debug("RoomyEventRouter ready, handling interaction");
+					await handleInteractionCreate(
+						interaction,
+						repo,
+						spaceManager,
+						bot,
+						router,
+					);
 				},
 
 				async guildMemberAdd(

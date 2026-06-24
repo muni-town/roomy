@@ -108,6 +108,19 @@ export const MIGRATIONS: Migration[] = [
       `);
 		},
 	},
+	{
+		version: 4,
+		name: "space_cursors",
+		up(db) {
+			db.run(`
+        CREATE TABLE space_cursors (
+          space_did      TEXT PRIMARY KEY,
+          last_idx       INTEGER NOT NULL,
+          updated_at     INTEGER NOT NULL
+        );
+      `);
+		},
+	},
 ];
 
 export function runMigrations(db: Database): {

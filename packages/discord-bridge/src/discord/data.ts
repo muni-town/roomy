@@ -101,6 +101,7 @@ export const DiscordMessageData = type({
 	content: "string",
 	timestamp: "number",
 	"editedTimestamp?": "number",
+	"webhookId?": "string",
 	author: DiscordUserData,
 	attachments: DiscordAttachmentData.array(),
 	"embeds?": DiscordEmbedData.array().or("undefined"),

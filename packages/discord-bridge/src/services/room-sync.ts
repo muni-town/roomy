@@ -128,8 +128,8 @@ export async function handleThreadCreate(
 	}
 
 	// Private threads are synced with defaultAccess=none so only admins can see them.
-	const defaultAccess: "read" | "none" =
-		channel.type === PRIVATE_THREAD ? "none" : "read";
+	const defaultAccess: "read" | "none" | undefined =
+		channel.type === PRIVATE_THREAD ? "none" : undefined;
 
 	const targetSpaces = repo.getTargetSpacesForChannel(guildId, parentId);
 	if (targetSpaces.length === 0) {

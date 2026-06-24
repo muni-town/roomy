@@ -62,6 +62,18 @@ export async function ingestDiscordMessage(
 		return { synced: 0, skipped: 1 };
 	}
 
+	// Skip webhook messages sent by this bridge (echo prevention).
+	// The webhook response and the gateway event are independent async
+	// paths, so the registerMapping call in the router may not have
+	// completed before the gateway event arrives. Checking against our
+	// stored webhook IDs is deterministic and doesn't depend on timing.
+	// Other integrations' webhooks are not skipped.
+	if (message.webhookId && repo.isOurWebhook(message.webhookId)) {
+		log.debug(`Skipping own webhook message ${messageId}`);
+		writeSkipRecord("own_webhook_message", message);
+		return { synced: 0, skipped: 1 };
+	}
+
 	// Determine which spaces should receive this channel's events.
 	let targetSpaces: string[];
 	if (spaceDidOverride) {

@@ -614,7 +614,13 @@ describe("ensureRoomyThreads with active threads", () => {
 		const roomy = new MockRoomyGateway();
 
 		await ensureRoomyThreads(discord, repo, roomy, [
-			{ guildId: GUILD, spaceDid: SPACE, mode: "full", createdAt: 0, updatedAt: 0 },
+			{
+				guildId: GUILD,
+				spaceDid: SPACE,
+				mode: "full",
+				createdAt: 0,
+				updatedAt: 0,
+			},
 		]);
 
 		// Should have created a room for the active thread
@@ -633,9 +639,9 @@ describe("ensureRoomyThreads with active threads", () => {
 		expect(linkEvents[0]?.linkToRoom).toBe(roomEvents[0]?.id);
 
 		// Thread mapping should be registered
-		expect(
-			repo.getRoomyId(SPACE, "thread", activeThread.id),
-		).toBe(roomEvents[0]?.id);
+		expect(repo.getRoomyId(SPACE, "thread", activeThread.id)).toBe(
+			roomEvents[0]?.id,
+		);
 
 		// Should have backfilled the thread's messages
 		const messageEvents = roomy
@@ -676,7 +682,13 @@ describe("ensureRoomyThreads with active threads", () => {
 		const roomy = new MockRoomyGateway();
 
 		await ensureRoomyThreads(discord, repo, roomy, [
-			{ guildId: GUILD, spaceDid: SPACE, mode: "full", createdAt: 0, updatedAt: 0 },
+			{
+				guildId: GUILD,
+				spaceDid: SPACE,
+				mode: "full",
+				createdAt: 0,
+				updatedAt: 0,
+			},
 		]);
 
 		expect(roomy.eventCount(SPACE)).toBe(0);
@@ -714,7 +726,13 @@ describe("ensureRoomyThreads with active threads", () => {
 		const roomy = new MockRoomyGateway();
 
 		await ensureRoomyThreads(discord, repo, roomy, [
-			{ guildId: GUILD, spaceDid: SPACE, mode: "full", createdAt: 0, updatedAt: 0 },
+			{
+				guildId: GUILD,
+				spaceDid: SPACE,
+				mode: "full",
+				createdAt: 0,
+				updatedAt: 0,
+			},
 		]);
 
 		const roomEvents = roomy
@@ -726,9 +744,9 @@ describe("ensureRoomyThreads with active threads", () => {
 		expect(roomEvents[0]?.name).toBe("private-thread");
 
 		// Mapping should be registered
-		expect(
-			repo.getRoomyId(SPACE, "thread", privateThread.id),
-		).toBe(roomEvents[0]?.id);
+		expect(repo.getRoomyId(SPACE, "thread", privateThread.id)).toBe(
+			roomEvents[0]?.id,
+		);
 	});
 
 	/**
@@ -764,7 +782,13 @@ describe("ensureRoomyThreads with active threads", () => {
 		const roomy = new MockRoomyGateway();
 
 		await ensureRoomyThreads(discord, repo, roomy, [
-			{ guildId: GUILD, spaceDid: SPACE, mode: "full", createdAt: 0, updatedAt: 0 },
+			{
+				guildId: GUILD,
+				spaceDid: SPACE,
+				mode: "full",
+				createdAt: 0,
+				updatedAt: 0,
+			},
 		]);
 
 		expect(roomy.eventCount(SPACE)).toBe(0);
@@ -803,7 +827,13 @@ describe("ensureRoomyThreads with active threads", () => {
 		const roomy = new MockRoomyGateway();
 
 		await ensureRoomyThreads(discord, repo, roomy, [
-			{ guildId: GUILD, spaceDid: SPACE, mode: "subset", createdAt: 0, updatedAt: 0 },
+			{
+				guildId: GUILD,
+				spaceDid: SPACE,
+				mode: "subset",
+				createdAt: 0,
+				updatedAt: 0,
+			},
 		]);
 
 		// Thread should be created
