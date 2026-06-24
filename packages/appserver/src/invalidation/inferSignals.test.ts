@@ -167,9 +167,18 @@ describe("inferSignals: message events", () => {
     expect(signals).toHaveLength(0);
   });
 
-  it("editMessage produces a messageDiff update + room invalidation", () => {
+  it("editMessage produces a messageDiff update keyed by messageId, not the edit event id", () => {
+    // The edit event's own ULID (`EDIT_EVENT_ID`) is distinct from the
+    // message being edited (`MESSAGE_ID`). The original bug looked up and
+    // keyed the diff by `event.id`, which (combined with the edit
+    // materialiser creating a ghost entity for `event.id`) shipped an
+    // empty message keyed by the wrong id — the client appended it as a
+    // new empty message and left the original untouched.
+    const MESSAGE_ID = "01HXSXKBQ4TESTMSG00000000A" as Ulid;
+    const EDIT_EVENT_ID = "01HXSXKBQ4TESTEDIT0000000B" as Ulid;
+
     seedMessageDb({
-      id: EVENT_ID,
+      id: MESSAGE_ID,
       roomId: ROOM_ID,
       authorDid: USER_DID,
       authorName: "Alice",
@@ -179,8 +188,10 @@ describe("inferSignals: message events", () => {
     const signals = inferSignals(
       makeEvent({
         type: "space.roomy.message.editMessage.v0",
+        id: EDIT_EVENT_ID,
         roomId: ROOM_ID,
         details: {
+          messageId: MESSAGE_ID,
           content: "edited",
           authorDid: USER_DID,
           authorName: "Alice",
@@ -194,7 +205,12 @@ describe("inferSignals: message events", () => {
     if (diff!.kind === "messageDiff") {
       const op = diff!.signal.ops[0]!;
       expect(op.op).toBe("update");
+      // The diff MUST be keyed by the message id, not the edit event id.
+      expect(op.key).toBe(MESSAGE_ID);
+      expect(op.key).not.toBe(EDIT_EVENT_ID);
       if (op.op === "update") {
+        expect(op.message.id).toBe(MESSAGE_ID);
+        expect(op.message.content).toBe("edited");
         const validated = schemas.queries.getMessages.Message(op.message);
         expect(validated instanceof type.errors).toBe(false);
       }
@@ -206,18 +222,26 @@ describe("inferSignals: message events", () => {
     expect(nsids).not.toContain("space.roomy.space.getMetadata");
   });
 
-  it("deleteMessage produces a remove diff + room/space invalidation", () => {
+  it("deleteMessage produces a remove diff keyed by messageId + room/space invalidation", () => {
+    const MESSAGE_ID = "01HXSXKBQ4TESTMSG00000000A" as Ulid;
+    const DELETE_EVENT_ID = "01HXSXKBQ4TESTDEL000000000B" as Ulid;
+
     const signals = inferSignals(
       makeEvent({
         type: "space.roomy.message.deleteMessage.v0",
+        id: DELETE_EVENT_ID,
         roomId: ROOM_ID,
+        details: { messageId: MESSAGE_ID },
       }),
     );
 
     const diff = findMessageDiff(signals);
     expect(diff).toBeDefined();
     if (diff!.kind === "messageDiff") {
-      expect(diff!.signal.ops[0]).toEqual({ op: "remove", key: EVENT_ID });
+      // The remove op MUST be keyed by the message id, not the delete event
+      // id, so the client can match and drop the right cache entry.
+      expect(diff!.signal.ops[0]).toEqual({ op: "remove", key: MESSAGE_ID });
+      expect(diff!.signal.ops[0]!.key).not.toBe(DELETE_EVENT_ID);
     }
 
     const nsids = invalidatedNsids(signals);

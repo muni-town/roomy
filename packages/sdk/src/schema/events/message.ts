@@ -186,7 +186,16 @@ export const EditMessage = defineEvent(
 
     const editBodyData = (event.body.data as { buf: Uint8Array }).buf;
     const statements = [
-      ensureEntity(streamId, event.id, event.room),
+      // NOTE: we intentionally do NOT `ensureEntity(event.id)` here. The edit
+      // event's own ULID is not a message entity — the message being edited
+      // already exists (created by the original createMessage event, id =
+      // `event.messageId`). Creating an entity for `event.id` produced a
+      // ghost row with no comp_content / author edge, which the invalidation
+      // handler then read back as an empty message and shipped to clients as
+      // an "update" keyed by the wrong id (appearing as a new empty message).
+      // `last_edit = event.id` below still records which edit touched the
+      // content; that column has no FK to `entities`, so no entity row is
+      // needed for it.
       event.body.mimeType == "text/x-dmp-patch"
         ? sql`
           update comp_content

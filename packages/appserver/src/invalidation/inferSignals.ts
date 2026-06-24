@@ -116,12 +116,18 @@ function handleEditMessage(event: AppliedEvent): InvalidationEvent[] {
   if (!roomId) return [];
 
   const details = event.details ?? {};
+  // editMessage's `event.id` is the edit event's own ULID, NOT the message
+  // id. The message being edited is `details.messageId` (surfaced by
+  // `toAppliedEvent`). Key the diff by the message id so the client can
+  // match it to the existing cache entry; fall back to `event.id` only for
+  // events that pre-date this field.
+  const messageId = (details.messageId as Ulid | undefined) ?? event.id;
 
   // Re-read the full message row post-materialization so the diff carries
   // the complete, schema-valid shape (see `handleCreateMessage`).
   const { messages } = selectMessages(openDb(), {
     kind: "ids",
-    ids: [event.id],
+    ids: [messageId],
   });
   const message = messages[0];
 
@@ -132,7 +138,7 @@ function handleEditMessage(event: AppliedEvent): InvalidationEvent[] {
       signal: {
         roomId,
         seq: (details.seq as number) ?? 0,
-        ops: [{ op: "update", key: event.id, message }],
+        ops: [{ op: "update", key: messageId, message }],
       },
     });
   }
@@ -148,6 +154,10 @@ function handleDeleteMessage(event: AppliedEvent): InvalidationEvent[] {
   if (!roomId) return [];
 
   const details = event.details ?? {};
+  // deleteMessage's `event.id` is the delete event's own ULID; the message
+  // being removed is `details.messageId`. Key the `remove` op by the
+  // message id so the client can match and drop the right cache entry.
+  const messageId = (details.messageId as Ulid | undefined) ?? event.id;
 
   return [
     {
@@ -155,7 +165,7 @@ function handleDeleteMessage(event: AppliedEvent): InvalidationEvent[] {
       signal: {
         roomId,
         seq: (details.seq as number) ?? 0,
-        ops: [{ op: "remove", key: event.id }],
+        ops: [{ op: "remove", key: messageId }],
       },
     },
     ...invalidateRoom(roomId, event.streamDid),

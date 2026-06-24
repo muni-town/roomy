@@ -49,7 +49,7 @@ function extractDetails(
         "space.roomy.extension.timestampOverride.v0"
       ] as { timestamp?: number } | undefined;
 
-      return {
+      const base = {
         authorDid: authorOverride?.did,
         timestamp:
           timestampOverride?.timestamp != null
@@ -57,10 +57,25 @@ function extractDetails(
             : undefined,
         replyTo: undefined, // resolved from edges after materialization
       };
+
+      // createMessage's entity id IS the event id, so the invalidation
+      // handler can key the #messageDiff by `event.id`. editMessage is
+      // different: `event.id` is the edit event's own ULID, while the
+      // message being edited is `event.messageId`. We MUST surface
+      // messageId here so the handler keys the diff by the original
+      // message — otherwise the client can't match it to its cache entry
+      // and the diff is silently applied as a brand-new (empty) message.
+      if (type === "space.roomy.message.editMessage.v0") {
+        return { ...base, messageId: event["messageId"] };
+      }
+      return base;
     }
 
+    // deleteMessage targets an existing message by id; surface it so the
+    // handler emits a `remove` op keyed by the message, not the delete
+    // event's own ULID.
     case "space.roomy.message.deleteMessage.v0":
-      return undefined;
+      return { messageId: event["messageId"] };
 
     case "space.roomy.message.forwardMessages.v0":
       return undefined;
