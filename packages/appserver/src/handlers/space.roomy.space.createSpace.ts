@@ -33,6 +33,8 @@ interface CreateSpaceBody {
   name?: unknown;
   description?: unknown;
   avatar?: unknown;
+  allowPublicJoin?: unknown;
+  allowMemberInvites?: unknown;
 }
 
 interface CreateSpaceResult {
@@ -73,6 +75,26 @@ export const createSpaceHandler: ProcedureHandler<
       "Field 'avatar' must be a string if provided",
     );
   }
+  if (
+    body.allowPublicJoin !== undefined &&
+    typeof body.allowPublicJoin !== "boolean"
+  ) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      "Field 'allowPublicJoin' must be a boolean if provided",
+    );
+  }
+  if (
+    body.allowMemberInvites !== undefined &&
+    typeof body.allowMemberInvites !== "boolean"
+  ) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      "Field 'allowMemberInvites' must be a boolean if provided",
+    );
+  }
 
   const callerDid = parseUserDid(auth);
   if (callerDid === null) {
@@ -90,6 +112,14 @@ export const createSpaceHandler: ProcedureHandler<
     description:
       body.description !== undefined ? body.description : undefined,
     avatar: body.avatar !== undefined ? body.avatar : undefined,
+    allowPublicJoin:
+      body.allowPublicJoin !== undefined
+        ? body.allowPublicJoin
+        : undefined,
+    allowMemberInvites:
+      body.allowMemberInvites !== undefined
+        ? body.allowMemberInvites
+        : undefined,
   });
   await space.sendEvents(seedEvents);
 

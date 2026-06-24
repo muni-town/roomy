@@ -63,6 +63,15 @@ SOFTWARE.
           "backdrop-blur-md",
           "active:translate-[2px] active:shadow-none",
         ],
+        toggle: [
+          "bg-accent-200/60 dark:bg-accent-700/50",
+          "text-accent-950 dark:text-accent-50",
+          "border border-px border-accent-400 dark:border-accent-600",
+          "hover:bg-accent-200/80 dark:hover:bg-accent-700/70",
+          "focus-visible:outline-accent-950 dark:focus-visible:outline-accent-300",
+          "backdrop-blur-md",
+          "active:translate-[2px]",
+        ],
         secondary: [
           "bg-base-50 dark:bg-transparent",
           "text-base-800 dark:text-base-200 [&_svg]:dark:text-base-200",

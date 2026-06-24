@@ -61,6 +61,8 @@ export async function createSpace(opts: {
   name: string;
   description?: string;
   avatar?: string;
+  allowPublicJoin?: boolean;
+  allowMemberInvites?: boolean;
 }): Promise<{ spaceId: string }> {
   // Invalidation is handled by the appserver's sync signal
   // (personal.joinSpace → getSpaces invalidation via WebSocket).
@@ -68,6 +70,12 @@ export async function createSpace(opts: {
     name: opts.name,
     ...(opts.description ? { description: opts.description } : {}),
     ...(opts.avatar ? { avatar: opts.avatar } : {}),
+    ...(opts.allowPublicJoin !== undefined
+      ? { allowPublicJoin: opts.allowPublicJoin }
+      : {}),
+    ...(opts.allowMemberInvites !== undefined
+      ? { allowMemberInvites: opts.allowMemberInvites }
+      : {}),
   });
 
   await maybeSavePersonalStreamRecord(result);

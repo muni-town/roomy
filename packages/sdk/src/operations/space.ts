@@ -192,6 +192,12 @@ export function updateSpaceInfoEvents(
       description: options.description,
     }),
     ...(options.avatar !== undefined && { avatar: options.avatar }),
+    ...(options.allowPublicJoin !== undefined && {
+      allowPublicJoin: options.allowPublicJoin,
+    }),
+    ...(options.allowMemberInvites !== undefined && {
+      allowMemberInvites: options.allowMemberInvites,
+    }),
   };
 }
 

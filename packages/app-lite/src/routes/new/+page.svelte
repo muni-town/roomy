@@ -5,6 +5,7 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import Textarea from "@roomy/design/components/ui/input/Textarea.svelte";
+  import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { setSidebarContent } from "$lib/components/layout/sidebar.svelte";
   import { createSpace } from "$lib/mutations/space";
@@ -15,7 +16,8 @@
     spaceName: "",
     spaceDescription: "",
     avatarFile: null as File | null,
-    dismissAlert: false,
+    allowPublicJoin: "yes" as string,
+    allowMemberInvites: "no" as string,
   });
 
   let avatarUrl = $derived(
@@ -48,6 +50,11 @@
         name: form.spaceName,
         description: form.spaceDescription || undefined,
         avatar,
+        allowPublicJoin: form.allowPublicJoin === "yes",
+        allowMemberInvites:
+          form.allowPublicJoin === "no"
+            ? form.allowMemberInvites === "yes"
+            : undefined,
       });
       goto(`/${spaceId}`);
     } catch (e) {
@@ -75,13 +82,12 @@
     >
         
         <div class="text-base-900 dark:text-base-100">
-          <h2 class="text-2xl font-bold text-base-900 dark:text-base-100 mb-2">
-            Create Your Space
+          <h2 class="text-3xl font-bold text-base-900 dark:text-base-100 mb-2">
+            Create your space
           </h2>
-          <div class="font-light">
-          <p>Every space is composed of channels, pages and members.</p>
-          <p>Spaces build communities that thrive in the digital age.</p>
-          </div>
+          <p class="text-base-500 dark:text-base-400 font-light">
+            Every space is composed of channels, pages and members.
+          </p>
         </div>
     
         <div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-6">
@@ -94,7 +100,7 @@
             <div class="mt-2">
               <Input
                 id="name"
-                placeholder="Name this space however you'd like."
+                placeholder="Poetry Club"
                 bind:value={form.spaceName}
                 class="w-full"
                 autofocus
@@ -107,12 +113,12 @@
               for="photo"
               class="block text-sm/6 font-medium text-base-900 dark:text-base-100">
               <div class="flex flex-row items-baseline gap-1">
-                Icon
-                <p class="text-base-900 dark:text-base-500 font-normal text-xs"><i>(optional)</i></p>
+                Avatar
+                <span class="text-base-400 dark:text-base-500 font-light text-xs italic">(optional)</span>
               </div>
             </label>
             <div class="mt-2 flex items-center gap-x-4">
-              <SpaceAvatar imageUrl={avatarUrl} size={64} />
+              <SpaceAvatar src={avatarUrl} size={64} />
     
               <input
                 type="file"
@@ -134,17 +140,53 @@
               class="block text-sm/6 font-medium text-base-900 dark:text-base-100">
               <div class="flex flex-row items-baseline gap-1">
                 Description
-                <p class="text-base-900 dark:text-base-500 font-normal text-xs"><i>(optional)</i></p>
+                <span class="text-base-400 dark:text-base-500 font-light text-xs italic">(optional)</span>
               </div>
             </label>
             <div class="mt-2">
               <Textarea
-                placeholder="Descriptions are optional. There's no pressure, if you can't think of anything to write."
+                placeholder="A short description helps people know what your space is about."
                 bind:value={form.spaceDescription}
                 class="w-full"
                 rows={5}
               />
             </div>
+          </div>
+
+          <div class="col-span-full flex flex-col gap-6">
+            <div>
+              <p
+                class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1"
+              >
+                Who can join this space?
+              </p>
+              <ToggleGroup
+                name="allowPublicJoin"
+                bind:value={form.allowPublicJoin}
+                options={[
+                  { label: "Anyone", value: "yes" },
+                  { label: "Invite only", value: "no" },
+                ]}
+              />
+            </div>
+
+            {#if form.allowPublicJoin === "no"}
+              <div>
+                <p
+                  class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1"
+                >
+                  Who can create invite links?
+                </p>
+                <ToggleGroup
+                  name="allowMemberInvites"
+                  bind:value={form.allowMemberInvites}
+                  options={[
+                    { label: "Any member", value: "yes" },
+                    { label: "Admins only", value: "no" },
+                  ]}
+                />
+              </div>
+            {/if}
           </div>
         </div>
 
@@ -154,16 +196,15 @@
         </Alert>
       {/if}
 
-      <div class="mt-6 flex items-center justify-end gap-x-6 flex-col items-end">
-        <p class="text-base-900 dark:text-base-500 mb-2"><b>NOTE:</b> All spaces are public. You are warned.</p>
+      <div class="mt-6 flex items-center justify-end gap-x-6">
         <Button
           type="submit"
           disabled={!form.spaceName || creating}
         >
           {#if creating}
-            Creating...
+            Creating…
           {:else}
-          Create
+            Create Space
           {/if}
         </Button>
       </div>

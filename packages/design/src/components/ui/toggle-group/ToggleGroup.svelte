@@ -18,7 +18,7 @@
     <label
       class={cn(
         buttonVariants({
-          variant: value === option.value ? "primary" : "ghost",
+          variant: value === option.value ? "toggle" : "ghost",
         }),
         "cursor-pointer",
       )}
