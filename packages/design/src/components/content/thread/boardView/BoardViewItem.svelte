@@ -43,6 +43,18 @@
 </script>
 
 <a {href}>
+  {#snippet avatarGroup()}
+    <AvatarGroup
+      avatarClass="size-8"
+      users={thread.activity.members
+        .filter((x) => !!x.avatar)
+        .map((m) => ({
+          src: m.avatar!,
+          id: m.id,
+          alt: "User Avatar for " + (m.name || "Unknown User"),
+        }))}
+    />
+  {/snippet}
   <Box class="flex flex-col sm:flex-row sm:items-center gap-0 sm:gap-3 py-4 px-3 rounded-lg transition-colors bg-transparent dark:bg-transparent border-base-200 dark:border-base-800 hover:bg-base-50 dark:hover:bg-base-800/50">
     <!-- Top row: title + avatar -->
     <div class="flex items-center gap-3 w-full sm:w-auto sm:flex-1 sm:min-w-0">
@@ -58,17 +70,8 @@
         {/if}
       </div>
 
-      <div class="w-28 shrink-0 flex items-center justify-end">
-        <AvatarGroup
-          avatarClass="size-8"
-          users={thread.activity.members
-            .filter((x) => !!x.avatar)
-            .map((m) => ({
-              src: m.avatar!,
-              id: m.id,
-              alt: "User Avatar for " + (m.name || "Unknown User"),
-            }))}
-        />
+      <div class="w-28 shrink-0 flex items-center justify-end sm:hidden">
+        {@render avatarGroup()}
       </div>
     </div>
 
@@ -95,16 +98,7 @@
     </div>
 
     <!-- Desktop columns (hidden on mobile) -->
-    {#if !hideChannel}
-      <div class={"hidden sm:flex w-[5.5rem] shrink-0 text-sm items-center gap-1 overflow-hidden " + (read ? "text-base-400 dark:text-base-500" : "text-base-500 dark:text-base-300/80")}>
-        {#if thread.channelName}
-          <IconHashtag class="shrink-0 size-3" />
-          <span class="min-w-0 truncate whitespace-nowrap">{thread.channelName}</span>
-        {/if}
-      </div>
-    {/if}
-
-    <div class={"hidden sm:block w-[4.5rem] shrink-0 text-right text-xs " + (read ? "text-base-400 dark:text-base-500" : "text-base-500 dark:text-base-300/80")}>
+    <div class={"hidden sm:block w-[4.5rem] shrink-0 text-left text-xs " + (read ? "text-base-400 dark:text-base-500" : "text-base-500 dark:text-base-300/80")}>
       {#if lastMessageTimestamp}
         {#if Date.now() - lastMessageTimestamp < 60 * 1000}
           Just Now
@@ -114,6 +108,19 @@
           })}
         {/if}
       {/if}
+    </div>
+
+    {#if !hideChannel}
+      <div class={"hidden sm:flex w-[5.5rem] shrink-0 text-sm items-center gap-1 overflow-hidden " + (read ? "text-base-400 dark:text-base-500" : "text-base-500 dark:text-base-300/80")}>
+        {#if thread.channelName}
+          <IconHashtag class="shrink-0 size-3" />
+          <span class="min-w-0 truncate whitespace-nowrap">{thread.channelName}</span>
+        {/if}
+      </div>
+    {/if}
+
+    <div class="hidden sm:flex w-16 shrink-0 items-center justify-start">
+      {@render avatarGroup()}
     </div>
   </Box>
 </a>
