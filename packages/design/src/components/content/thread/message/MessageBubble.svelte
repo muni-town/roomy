@@ -172,7 +172,7 @@
 
       <!-- Message text -->
       <div
-        class="text-sm font-normal prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full overflow-auto hide-scrollbar"
+        class="prose dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400 prose-a:no-underline text-sm font-normal text-left max-w-full overflow-auto hide-scrollbar"
       >
         {#if content}
           {@render content()}
@@ -213,5 +213,9 @@
   .hide-scrollbar {
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
+  }
+
+  .prose a:hover {
+    text-decoration: underline;
   }
 </style>

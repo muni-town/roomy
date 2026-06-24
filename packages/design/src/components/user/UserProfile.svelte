@@ -82,7 +82,7 @@
 
   {#if profile?.description}
     <div
-      class="px-6 sm:px-4 lg:px-6 py-4 text-sm sm:text-sm text-base-900 dark:text-base-100 prose prose-sm dark:prose-invert prose-a:no-underline prose-a:text-accent-600 dark:prose-a:text-accent-400"
+      class="px-6 sm:px-4 lg:px-6 py-4 text-sm sm:text-sm text-base-900 dark:text-base-100 prose prose-sm dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400"
     >
       {@html linkifyText(profile.description)}
     </div>
