@@ -98,11 +98,7 @@
     editor = tiptap;
     if (setFocus) {
       // focus at the end of the content
-      tiptap?.commands.focus();
-      tiptap?.commands.setTextSelection({
-        from: content.length,
-        to: content.length,
-      });
+      tiptap?.commands.focus("end");
     }
   });
 

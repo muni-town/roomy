@@ -27,6 +27,7 @@
     isBridged = false,
     mergeWithPrevious = false,
     isSelected = false,
+    isEditing = false,
     // Visual / interaction state
     showToolbar = false,
     // Avatar fallback handling: wrappers may want a CDN-resolved URL
@@ -40,6 +41,7 @@
     linkEmbeds,
     toolbar,
     reactions,
+    actions,
   }: {
     authorDid: string | null;
     authorName?: string;
@@ -50,6 +52,7 @@
     isBridged?: boolean;
     mergeWithPrevious?: boolean;
     isSelected?: boolean;
+    isEditing?: boolean;
     showToolbar?: boolean;
     /** Pre-resolved avatar URL (e.g. after CDN rewriting). Falls back to authorAvatarUrl. */
     avatarSrc?: string;
@@ -61,6 +64,10 @@
     linkEmbeds?: Snippet;
     toolbar?: Snippet;
     reactions?: Snippet;
+    /** Action buttons rendered at the end of the message row, vertically
+        centered across the whole message (avatar + header + body) — e.g. the
+        save/cancel controls shown while editing. Only rendered while editing. */
+    actions?: Snippet;
   } = $props();
 </script>
 
@@ -84,7 +91,7 @@
 
 <div
   class={[
-    `no-mobile-select relative group w-full flex flex-col px-2 rounded ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
+    `no-mobile-select relative group w-full flex flex-col px-2 rounded border ${isEditing ? "border-accent-400/60 dark:border-accent-800 bg-accent-100/50 dark:bg-accent-900/50" : isSelected ? "border-transparent bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : "border-transparent hover:bg-base-100/50 dark:hover:bg-base-400/5"}`,
     mergeWithPrevious ? "mt-1" : "mt-5 pt-1",
   ]}
 >
@@ -116,7 +123,7 @@
       <div class="w-8 shrink-0 sm:w-10"></div>
     {/if}
 
-    <div class="flex flex-col w-full min-w-0">
+    <div class="flex flex-col flex-1 min-w-0">
       <!-- Username, timestamp -->
       {#if !mergeWithPrevious}
         <div class="text-sm w-full text-start">
@@ -187,6 +194,12 @@
         {@render media()}
       {/if}
     </div>
+
+    {#if isEditing && actions}
+      <div class="flex shrink-0 items-center self-center gap-1 not-prose">
+        {@render actions()}
+      </div>
+    {/if}
   </div>
 
   {#if showToolbar && toolbar}

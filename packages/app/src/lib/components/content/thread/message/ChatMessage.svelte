@@ -21,6 +21,8 @@
   import { cdnImageUrl } from "$lib/utils.svelte";
   import { getLinkEmbedData } from "$lib/utils/getLinkEmbedData";
   import IconLucideX from "~icons/lucide/x";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import { IconCheck, IconX } from "@roomy/design/icons";
   import LinkCard from "./LinkCard.svelte";
 
   let {
@@ -85,6 +87,22 @@
   );
 
   let isEditing = $derived(editingMessageId === message.id);
+
+  // Local buffer for the in-place editor. Bound to ChatInput so the save
+  // button can submit the current text. Re-seeded from the latest message
+  // content when editing *begins*: a pre-effect runs before the DOM update,
+  // so the fresh value is in place before ChatInput mounts and reads it.
+  // Rising-edge only, so in-progress edits aren't clobbered if the server
+  // pushes an updated message while editing.
+  let editContent = $state("");
+  let prevEditing = false;
+  $effect.pre(() => {
+    const editing = isEditing;
+    if (editing && !prevEditing) {
+      editContent = message.content;
+    }
+    prevEditing = editing;
+  });
 
   let isFromDiscord = $derived(message.isBridged);
 
@@ -187,30 +205,49 @@
   {#if isEditing}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
+      class="editing-message"
       onkeydown={(e) => {
         if (e.key === "Escape") {
+          e.preventDefault();
           cancelEditing();
         }
       }}
     >
       <ChatInput
-        content={message.content}
+        bind:content={editContent}
         onEnter={saveEditedMessage}
         setFocus={true}
       />
-
-      <div class="text-xs text-base-content mt-1">
-        Press <kbd class="text-accent-600 dark:text-accent-400">Enter</kbd>
-        to save,
-        <kbd class="text-accent-600 dark:text-accent-400 font-medium"
-          >Escape</kbd
-        > to cancel
-      </div>
     </div>
   {:else}
     {@html renderMarkdownSanitized(
       message.content,
     )}
+  {/if}
+{/snippet}
+
+{#snippet actionsSnippet()}
+  {#if isEditing}
+    <Button
+      variant="secondary"
+      size="icon"
+      class="shrink-0 rounded-full"
+      aria-label="Cancel editing"
+      title="Cancel (Esc)"
+      onclick={cancelEditing}
+    >
+      <IconX />
+    </Button>
+    <Button
+      variant="primary"
+      size="icon"
+      class="shrink-0 rounded-full"
+      aria-label="Save changes"
+      title="Save (Enter)"
+      onclick={() => saveEditedMessage(editContent)}
+    >
+      <IconCheck />
+    </Button>
   {/if}
 {/snippet}
 
@@ -284,6 +321,7 @@
         isBridged={!!isFromDiscord}
         mergeWithPrevious={!!message.mergeWithPrevious}
         {isSelected}
+        {isEditing}
         {showToolbar}
         onAvatarClick={handleAvatarClick}
         replyContext={replyContextSnippet}
@@ -292,6 +330,7 @@
         media={mediaSnippet}
         toolbar={toolbarSnippet}
         reactions={reactionsSnippet}
+        actions={actionsSnippet}
       />
     </ContextMenu.Trigger>
   </ContextMenu.Root>
@@ -327,3 +366,23 @@
     {@render messageBox()}
   </div>
 {/if}
+
+<style>
+  /*
+    The rendered message sits directly under the `.prose` wrapper, so Tailwind
+    Typography's `.prose > :first-child { margin-top: 0 }` / `> :last-child
+    { margin-bottom: 0 }` resets make its first/last paragraphs flush with the
+    bubble. The tiptap editor renders paragraphs nested under `.tiptap`
+    (inside `#chat-input`), so those resets never reach it and the editor picks
+    up an extra ~1.25em margin above its first paragraph and below its last —
+    making the edited content look inset vs. the rendered message. Mirror the
+    resets here, scoped to the editing editor so the composer (which is not
+    inside `.prose`) is unaffected.
+  */
+  :global(.editing-message .tiptap > :first-child) {
+    margin-top: 0;
+  }
+  :global(.editing-message .tiptap > :last-child) {
+    margin-bottom: 0;
+  }
+</style>
