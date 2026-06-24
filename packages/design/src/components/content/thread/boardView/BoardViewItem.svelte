@@ -69,11 +69,11 @@
     <!-- Mobile sub-row: channel + date (smaller, lower contrast) -->
     <div class="flex sm:hidden items-center gap-2 text-xs text-base-400 dark:text-base-500 ml-0.5">
       {#if !hideChannel && thread.channelName}
-        <span class="flex items-center gap-1">
+        <span class="flex items-center gap-1 min-w-0 truncate whitespace-nowrap">
           <IconHashtag class="shrink-0 size-3" />
-          {thread.channelName}
+          <span class="truncate">{thread.channelName}</span>
         </span>
-        <span class="text-base-300 dark:text-base-600">·</span>
+        <span class="text-base-300 dark:text-base-600 shrink-0">·</span>
       {/if}
       <span>
         {#if lastMessageTimestamp}
@@ -90,10 +90,10 @@
 
     <!-- Desktop columns (hidden on mobile) -->
     {#if !hideChannel}
-      <div class="hidden sm:block w-32 shrink-0 text-sm text-base-500 dark:text-base-300/80 truncate flex items-center gap-1">
+      <div class="hidden sm:flex w-32 shrink-0 text-sm text-base-500 dark:text-base-300/80 items-center gap-1 overflow-hidden">
         {#if thread.channelName}
           <IconHashtag class="shrink-0 size-3" />
-          {thread.channelName}
+          <span class="min-w-0 truncate whitespace-nowrap">{thread.channelName}</span>
         {/if}
       </div>
     {/if}
