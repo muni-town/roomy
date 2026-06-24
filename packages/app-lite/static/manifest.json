@@ -1,0 +1,25 @@
+{
+  "icons": [
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "orientation": "any",
+  "display": "standalone",
+  "dir": "auto",
+  "lang": "en-US",
+  "name": "Roomy",
+  "short_name": "Roomy",
+  "start_url": "https://roomy.space/home",
+  "description": "A shared web space for digital gardening.",
+  "id": "roomy.space"
+}

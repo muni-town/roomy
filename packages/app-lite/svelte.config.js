@@ -8,6 +8,9 @@ const config = {
     inspector: true
   },
   kit: {
+    serviceWorker: {
+      register: true,
+    },
     adapter: adapter({
       fallback: "index.html",
     }),
