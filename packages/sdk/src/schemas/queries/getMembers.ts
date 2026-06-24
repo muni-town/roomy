@@ -6,7 +6,11 @@ import { type } from "arktype";
 
 export const NSID = "space.roomy.space.getMembers" as const;
 
-export const Params = type({ spaceId: "string" });
+export const Params = type({
+  spaceId: "string",
+  /** Optional case-insensitive substring filter on handle / name / DID. */
+  "search?": "string",
+});
 
 export const Member = type({
   did: "string",
