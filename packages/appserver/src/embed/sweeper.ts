@@ -217,99 +217,125 @@ function markDbOk(): void {
 
 // ─── Loop ───────────────────────────────────────────────────────────────
 
+/**
+ * Run one sweep cycle: pull a priority + backlog batch, drain it with
+ * bounded concurrency, and emit per-URL invalidations for successes. Returns
+ * true when the batch was full (more pending likely remain → loop without
+ * waiting); false when the loop should wait for a poke / idle poll.
+ *
+ * Expected DB/fetch failures are caught inline (and drive the DB backoff via
+ * `markDbError`). Any *unexpected* throw bubbles to {@link runSweeperLoop}'s
+ * outer guard so the loop self-heals instead of dying.
+ */
+async function sweepCycle(db: Database): Promise<boolean> {
+  // If the DB has been erroring, wait out the backoff before touching it
+  // again — don't fetch links only to fail every write (wastes embed-service
+  // calls and spams logs). A poke can still wake us early, but we re-check
+  // the backoff at the top of the next cycle.
+  const now = Date.now();
+  if (now < dbBackoffUntil) {
+    await waitForWake(dbBackoffUntil - now);
+    return false;
+  }
+
+  let pending: string[] = [];
+
+  // 1. Priority: freshly-detected live links first, so a newly posted
+  //    link is enriched within seconds instead of waiting behind the
+  //    entire backfill backlog. filterPendingUrls skips any that are
+  //    already enriched (e.g. a popular URL reposted) or no longer present.
+  const priority = drainPriorityLinks(SWEEP_BATCH);
+  if (priority.length > 0) {
+    try {
+      pending = filterPendingUrls(db, priority);
+    } catch (err) {
+      console.warn("[embed-sweeper] filterPendingUrls failed:", err);
+      markDbError(err);
+      pending = [];
+    }
+  }
+
+  // 2. Backlog: fill the rest of the batch with the oldest pending links.
+  if (pending.length < SWEEP_BATCH) {
+    try {
+      const backlog = findPendingLinks(db, SWEEP_BATCH - pending.length);
+      // Dedupe in case a priority URL is also among the oldest pending
+      // (rare — priority URLs are newest, backlog is oldest-first).
+      pending = [...new Set([...pending, ...backlog])];
+    } catch (err) {
+      // A transient DB error shouldn't kill the loop. Back off so a
+      // dead DB doesn't cause a tight fetch-and-fail cycle.
+      console.warn("[embed-sweeper] findPendingLinks failed:", err);
+      markDbError(err);
+    }
+  }
+
+  if (pending.length > 0) {
+    // Drain the batch with bounded concurrency so N links complete in
+    // ~ceil(N/CONCURRENCY) fetch round-trips rather than N. Each
+    // enrichLink is deduplicated (inFlightLinks) + timeout-bounded, and
+    // resolves to the stored embed (null on failure).
+    //
+    // We stream invalidations per-URL as they SUCCEED (non-null embed): a
+    // freshly-posted live link's card appears the moment ITS fetch
+    // resolves — never waiting behind a slow/hung backlog URL in the same
+    // batch (which can take up to FETCH_TIMEOUT_MS). Failed (null)
+    // enrichments emit nothing: there is no new data to show, so we skip
+    // the no-op diff and avoid spamming clients / the router while the
+    // backfill backlog drains. Per-URL error isolation keeps one throwing
+    // enrichLink from killing the whole loop.
+    let cycleDbError: unknown = null;
+    await mapWithConcurrency(pending, CONCURRENCY, async (url) => {
+      let embed: Embed | null = null;
+      try {
+        embed = await enrichLink(db, url);
+      } catch (err) {
+        // enrichLink only throws for DB (storeEmbedData) errors — fetch
+        // errors are handled inside fetchEmbedData (returns a
+        // FetchResult). Capture once per cycle to drive backoff (don't
+        // escalate per-link). Logged at debug: a failing DB under I/O
+        // pressure can throw per-link per-cycle, which floods logs.
+        if (cycleDbError === null) cycleDbError = err;
+        log.debug(`[embed-sweeper] enrichLink threw for ${url}:`, err);
+      }
+      if (embed) {
+        statsEnrichedOk++;
+        emitEnrichmentInvalidation(db, [url]);
+      } else {
+        statsEnrichedNull++;
+      }
+    });
+    if (cycleDbError !== null) markDbError(cycleDbError);
+    else markDbOk(); // a successful write cycle → DB is healthy again
+  }
+
+  // A full batch means there may be more pending — signal the loop to run
+  // again without waiting.
+  return pending.length >= SWEEP_BATCH;
+}
+
 async function runSweeperLoop(): Promise<void> {
   const db = sweeperDb;
   if (!db) return;
 
   for (;;) {
-    // If the DB has been erroring, wait out the backoff before touching it
-    // again — don't fetch links only to fail every write (wastes embed-service
-    // calls and spams logs). A poke can still wake us early, but we re-check
-    // the backoff at the top of the next iteration.
-    const now = Date.now();
-    if (now < dbBackoffUntil) {
-      await waitForWake(dbBackoffUntil - now);
-      continue;
+    try {
+      const full = await sweepCycle(db);
+      if (full) continue;
+      // Wait for a poke (new links) or the idle poll, whichever comes first.
+      // This bounds latency for newly posted links while also self-healing
+      // anything we missed (backfill, prior sessions).
+      await waitForWake(IDLE_POLL_MS);
+    } catch (err) {
+      // Outer resilience: the inner try/catches handle expected DB/fetch
+      // failures, but any *unexpected* throw (a future code path not yet
+      // guarded) must NOT permanently kill the process-wide loop — without
+      // this, a single unhandled rejection would stop all embed enrichment
+      // until restart. Log, pause briefly to avoid a tight crash loop, and
+      // continue.
+      log.error("[embed-sweeper] sweep cycle threw (continuing):", err);
+      await waitForWake(IDLE_POLL_MS);
     }
-
-    let pending: string[] = [];
-
-    // 1. Priority: freshly-detected live links first, so a newly posted
-    //    link is enriched within seconds instead of waiting behind the
-    //    entire backfill backlog. filterPendingUrls skips any that are
-    //    already enriched (e.g. a popular URL reposted) or no longer present.
-    const priority = drainPriorityLinks(SWEEP_BATCH);
-    if (priority.length > 0) {
-      try {
-        pending = filterPendingUrls(db, priority);
-      } catch (err) {
-        console.warn("[embed-sweeper] filterPendingUrls failed:", err);
-        markDbError(err);
-        pending = [];
-      }
-    }
-
-    // 2. Backlog: fill the rest of the batch with the oldest pending links.
-    if (pending.length < SWEEP_BATCH) {
-      try {
-        const backlog = findPendingLinks(db, SWEEP_BATCH - pending.length);
-        // Dedupe in case a priority URL is also among the oldest pending
-        // (rare — priority URLs are newest, backlog is oldest-first).
-        pending = [...new Set([...pending, ...backlog])];
-      } catch (err) {
-        // A transient DB error shouldn't kill the loop. Back off so a
-        // dead DB doesn't cause a tight fetch-and-fail cycle.
-        console.warn("[embed-sweeper] findPendingLinks failed:", err);
-        markDbError(err);
-      }
-    }
-
-    if (pending.length > 0) {
-      // Drain the batch with bounded concurrency so N links complete in
-      // ~ceil(N/CONCURRENCY) fetch round-trips rather than N. Each
-      // enrichLink is deduplicated (inFlightLinks) + timeout-bounded, and
-      // resolves to the stored embed (null on failure).
-      //
-      // We stream invalidations per-URL as they SUCCEED (non-null embed): a
-      // freshly-posted live link's card appears the moment ITS fetch
-      // resolves — never waiting behind a slow/hung backlog URL in the same
-      // batch (which can take up to FETCH_TIMEOUT_MS). Failed (null)
-      // enrichments emit nothing: there is no new data to show, so we skip
-      // the no-op diff and avoid spamming clients / the router while the
-      // backfill backlog drains. Per-URL error isolation keeps one throwing
-      // enrichLink from killing the whole loop.
-      let cycleDbError: unknown = null;
-      await mapWithConcurrency(pending, CONCURRENCY, async (url) => {
-        let embed: Embed | null = null;
-        try {
-          embed = await enrichLink(db, url);
-        } catch (err) {
-          // enrichLink only throws for DB (storeEmbedData) errors — fetch
-          // errors are handled inside fetchEmbedData (returns a
-          // FetchResult). Capture once per cycle to drive backoff (don't
-          // escalate per-link). Logged at debug: a failing DB under I/O
-          // pressure can throw per-link per-cycle, which floods logs.
-          if (cycleDbError === null) cycleDbError = err;
-          log.debug(`[embed-sweeper] enrichLink threw for ${url}:`, err);
-        }
-        if (embed) {
-          statsEnrichedOk++;
-          emitEnrichmentInvalidation(db, [url]);
-        } else {
-          statsEnrichedNull++;
-        }
-      });
-      if (cycleDbError !== null) markDbError(cycleDbError);
-      else markDbOk(); // a successful write cycle → DB is healthy again
-    }
-
-    // A full batch means there may be more pending — loop without waiting.
-    if (pending.length >= SWEEP_BATCH) continue;
-
-    // Otherwise wait for a poke (new links) or the idle poll, whichever
-    // comes first. This bounds latency for newly posted links while also
-    // self-healing anything we missed (backfill, prior sessions).
-    await waitForWake(IDLE_POLL_MS);
   }
 }
 

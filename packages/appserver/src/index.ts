@@ -43,8 +43,24 @@ const SERVICE_ENDPOINT =
 // via the materializer registry / user hydration path. See `startupBackfill()`.
 const BACKFILL_MODE = process.env.APPSERVER_BACKFILL_MODE ?? "eager";
 
+/**
+ * Parse a positive-integer env var, falling back to `def` (and warning on
+ * invalid input). Centralises the validating pattern used by the backfill knobs
+ * below so garbage env values fail closed to the default instead of silently
+ * coercing to NaN (which would otherwise break the breaker math and backoff
+ * schedule). `min` defaults to 1; pass 0 to allow disabling a knob.
+ */
+function envInt(name: string, def: number, min = 1): number {
+  const raw = process.env[name];
+  if (raw === undefined) return def;
+  const n = Number(raw);
+  if (Number.isInteger(n) && n >= min) return n;
+  console.warn(`[startup] invalid ${name} "${raw}", using ${def}`);
+  return def;
+}
+
 // Max spaces materialised concurrently during eager startup backfill (default
-// 8). Spaces' Leaf subscriptions and profile fetches overlap; SQLite writes
+// 4). Spaces' Leaf subscriptions and profile fetches overlap; SQLite writes
 // still serialize on the single WAL writer, so this mostly overlaps network
 // I/O. Lower it if Leaf or the appview struggles under load.
 //
@@ -54,45 +70,43 @@ const BACKFILL_MODE = process.env.APPSERVER_BACKFILL_MODE ?? "eager";
 // overlapping Leaf I/O; tune via env. Pair with the circuit breaker below,
 // which backs off when Leaf is unresponsive so a wedged backend isn't
 // hammered.
-const BACKFILL_CONCURRENCY = (() => {
-  const raw = process.env.APPSERVER_BACKFILL_CONCURRENCY;
-  if (raw === undefined) return 4;
-  const n = Number(raw);
-  if (Number.isInteger(n) && n >= 1) return n;
-  console.warn(
-    `[startup] invalid APPSERVER_BACKFILL_CONCURRENCY "${raw}", using 4`,
-  );
-  return 4;
-})();
+const BACKFILL_CONCURRENCY = envInt("APPSERVER_BACKFILL_CONCURRENCY", 4);
 
 /**
- * Backfill circuit breaker. When consecutive connect/backfill failures exceed
- * `APSERVER_BACKFILL_FAILURE_THRESHOLD`, the worker pauses for an
- * exponentially-growing backoff (capped at `APSERVER_BACKFILL_BACKOFF_MAX_MS`)
- * before retrying the SAME stream — it does NOT advance past the failed
- * stream. This is the fix for the Leaf-wedge feedback loop: without it, a
+ * Backfill circuit breaker. When a worker's consecutive failures exceed
+ * `APPSERVER_BACKFILL_FAILURE_THRESHOLD`, it pauses for an exponentially-growing
+ * backoff (capped at `APPSERVER_BACKFILL_BACKOFF_MAX_MS`) before pulling the
+ * NEXT stream. This is the fix for the Leaf-wedge feedback loop: without it, a
  * wedged Leaf caused every remaining stream to time out at 30s, churning
  * through the whole queue with zero progress and ~3 log lines per failure
  * (breaching platform rate limits). With the breaker:
- *   - a sustained Leaf outage → workers back off (5s→10s→…→60s) and retry the
- *     same stream, making no wasted progress and no log flood;
- *   - the instant Leaf recovers, a worker's retry succeeds, the streak resets,
- *     and full-speed backfill resumes — with the queue intact (no streams
- *     permanently skipped).
- * `started` (distinct streams attempted) thus only advances on success, so
- * during an outage `started`/`succeeded` freeze — an honest "Leaf is down"
- * signal to operators via /health/backfill, instead of a misleading climb of
- * `failed` that looks like progress.
+ *   - a sustained Leaf outage → workers back off (5s→10s→…→60s) between
+ *     attempts, dropping pressure on Leaf and quieting the log flood;
+ *   - the instant Leaf recovers, a worker's next attempt succeeds, the streak
+ *     resets, and full-speed backfill resumes.
+ *
+ * Failed streams are SKIPPED, not retried in-place: the worker advances past
+ * them and they leave the startup queue. They are NOT lost — the catch path
+ * calls `removeMaterializer`, so the next user query for that space hits
+ * `getOrCreateMaterializer` with an empty cache and builds a fresh materializer
+ * on demand (the same lazy path `lazy` mode uses). Startup backfill is
+ * best-effort bulk warm-up; correctness is ensured by on-demand
+ * re-materialisation.
+ *
+ * `backfillStatus.started` is a loop cursor: it's incremented once per
+ * iteration at the top of the loop (before the try/catch), so it reaches
+ * `total` once every stream has been *attempted*, not only the successful
+ * ones. During an outage it does NOT freeze — each failed streak still
+ * advances it. `succeeded`/`failed` are the honest signals; read
+ * `/health/backfill` as: `succeeded` climbing = real progress; `failed`
+ * climbing while `succeeded` stalls = Leaf is down.
  */
-const BACKFILL_FAILURE_THRESHOLD = Number(
-  process.env.APPSERVER_BACKFILL_FAILURE_THRESHOLD ?? 3,
+const BACKFILL_FAILURE_THRESHOLD = envInt(
+  "APPSERVER_BACKFILL_FAILURE_THRESHOLD",
+  3,
 );
-const BACKFILL_BACKOFF_MS = Number(
-  process.env.APPSERVER_BACKFILL_BACKOFF_MS ?? 5_000,
-);
-const BACKFILL_BACKOFF_MAX_MS = Number(
-  process.env.APPSERVER_BACKFILL_BACKOFF_MAX_MS ?? 60_000,
-);
+const BACKFILL_BACKOFF_MS = envInt("APPSERVER_BACKFILL_BACKOFF_MS", 5_000);
+const BACKFILL_BACKOFF_MAX_MS = envInt("APPSERVER_BACKFILL_BACKOFF_MAX_MS", 60_000);
 
 /**
  * Emit `[startup] progress …` every N completed spaces (default 50), plus on
@@ -100,11 +114,7 @@ const BACKFILL_BACKOFF_MAX_MS = Number(
  * floods logs and trips platform rate limits (e.g. Railway's 500 logs/sec);
  * this turns ~N lines into ~N/50. Set to 1 to restore per-DID progress.
  */
-const BACKFILL_PROGRESS_EVERY = (() => {
-  const raw = process.env.APPSERVER_BACKFILL_PROGRESS_EVERY;
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 1 ? n : 50;
-})();
+const BACKFILL_PROGRESS_EVERY = envInt("APPSERVER_BACKFILL_PROGRESS_EVERY", 50);
 
 /**
  * Timeout for `mat.close()` during startup backfill (drain + Leaf
@@ -112,8 +122,16 @@ const BACKFILL_PROGRESS_EVERY = (() => {
  * after backfill finished would otherwise hang the worker in unsubscribe and
  * re-stall the bounded pipeline. On timeout the worker abandons cleanup and
  * moves on (the materializer is removed from the registry either way).
+ *
+ * Caveat: `withTimeout` does NOT cancel the underlying `close()` (Promises
+ * aren't cancellable), so a timed-out close() keeps running in the background
+ * with its Leaf subscription still open. During a sustained Leaf outage these
+ * abandoned subscriptions can accumulate until Leaf recovers and the pending
+ * unsubscribes finally settle. Correctness is unaffected (the materializer is
+ * evicted from the registry), but operators should be aware subscriptions may
+ * leak transiently under outage + timeout.
  */
-const CLOSE_TIMEOUT_MS = Number(process.env.APPSERVER_BACKFILL_CLOSE_TIMEOUT_MS ?? 15_000);
+const CLOSE_TIMEOUT_MS = envInt("APPSERVER_BACKFILL_CLOSE_TIMEOUT_MS", 15_000);
 
 /**
  * Live startup-backfill status, exposed at `GET /health/backfill` so operators
@@ -299,7 +317,9 @@ Bun.serve({
   // materializeSpace handler with wait=backfill may legitimately take
   // a long time. Set a generous idle timeout so those requests don't
   // get killed mid-flight.
-  idleTimeout: 255, // seconds (max allowed by Bun)
+  // 255s is Bun's hard maximum idleTimeout — set to that ceiling so a long
+  // admin materializeSpace (wait=backfill on a huge space) isn't killed.
+  idleTimeout: 255, // seconds — Bun's hard max
   fetch: async (req, server) => {
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
@@ -394,14 +414,6 @@ if (BACKFILL_MODE === "lazy") {
     console.error("[startup] backfill failed:", err);
   });
 }
-
-/**
- * Race `promise` against a timeout. Resolves/rejects with the promise's
- * outcome if it settles first; rejects with a labelled timeout error after
- * `ms`. The underlying promise is NOT cancelled (the SDK has no cancellation),
- * so a timed-out op may still settle in the background — but the caller is
- * unblocked. Used to guard `mat.close()` so a dead Leaf can't strand a worker.
- */
 
 async function startupBackfill(): Promise<void> {
   let client: RoomyServiceClient;
@@ -520,7 +532,12 @@ async function startupBackfill(): Promise<void> {
           );
           await sleep(backoff);
           backoffStep++;
-          consecutiveFailures = 0; // re-arm: need another THRESHOLD streak
+          consecutiveFailures = 0; // re-arm: need another THRESHOLD-failure streak.
+          // NOTE: `backoffStep` is NOT reset here — it persists across re-armed
+          // streaks, so a *prolonged* outage escalates the pause (5s→10s→20s→…)
+          // even though each individual streak is only THRESHOLD failures. It
+          // only resets on a successful backfill. Intentional: a long outage
+          // should back off harder over time, not restart at 5s every 3 failures.
         }
       }
 
