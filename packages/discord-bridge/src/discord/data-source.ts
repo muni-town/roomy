@@ -58,4 +58,7 @@ export interface DiscordDataSource {
 
 	/** Resolve the guild ID that a channel belongs to. */
 	resolveGuildIdForChannel(channelId: string): Promise<string | undefined>;
+
+	/** Fetch all active (non-archived) threads in a guild. */
+	getActiveThreads(guildId: string): Promise<DiscordChannelData[]>;
 }

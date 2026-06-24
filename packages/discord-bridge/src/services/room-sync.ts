@@ -127,13 +127,9 @@ export async function handleThreadCreate(
 		return;
 	}
 
-	// Skip private threads — Roomy can't model thread-level access boundaries.
-	if (channel.type === PRIVATE_THREAD) {
-		log.debug(
-			`Skipping private thread ${threadId}: not syncing thread-level access`,
-		);
-		return;
-	}
+	// Private threads are synced with defaultAccess=none so only admins can see them.
+	const defaultAccess: "read" | "none" =
+		channel.type === PRIVATE_THREAD ? "none" : "read";
 
 	const targetSpaces = repo.getTargetSpacesForChannel(guildId, parentId);
 	if (targetSpaces.length === 0) {
@@ -166,8 +162,7 @@ export async function handleThreadCreate(
 				$type: "space.roomy.room.createRoom.v0",
 				kind: "space.roomy.thread",
 				name: threadName,
-				// Threads inherit default_access from their parent channel via the
-				// canonical link edge — no need to set it here.
+				defaultAccess,
 				extensions: {
 					"space.roomy.extension.discordOrigin.v0": {
 						snowflake: threadId,

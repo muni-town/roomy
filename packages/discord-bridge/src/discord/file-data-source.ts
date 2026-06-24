@@ -37,6 +37,7 @@ export class FileDiscordDataSource implements DiscordDataSource {
 	#guild?: DiscordGuildData;
 	#channels = new Map<string, DiscordChannelData>();
 	#messages = new Map<string, DiscordMessageData[]>();
+	#activeThreads: DiscordChannelData[] = [];
 
 	private constructor() {}
 
@@ -56,6 +57,7 @@ export class FileDiscordDataSource implements DiscordDataSource {
 		guild?: DiscordGuildData;
 		channels?: DiscordChannelData[];
 		messages?: Record<string, DiscordMessageData[]>;
+		activeThreads?: DiscordChannelData[];
 	}): FileDiscordDataSource {
 		const ds = new FileDiscordDataSource();
 		ds.#guild = data.guild;
@@ -68,6 +70,9 @@ export class FileDiscordDataSource implements DiscordDataSource {
 			for (const [channelId, msgs] of Object.entries(data.messages)) {
 				ds.#messages.set(channelId, msgs);
 			}
+		}
+		if (data.activeThreads) {
+			ds.#activeThreads = data.activeThreads;
 		}
 		return ds;
 	}
@@ -192,5 +197,11 @@ export class FileDiscordDataSource implements DiscordDataSource {
 			if (ch) return this.#guild.id;
 		}
 		return undefined;
+	}
+
+	async getActiveThreads(
+		_guildId: string,
+	): Promise<DiscordChannelData[]> {
+		return this.#activeThreads;
 	}
 }

@@ -212,15 +212,22 @@ describe("handleThreadCreate", () => {
 		expect(roomy.eventCount(SPACE_A)).toBe(0);
 	});
 
-	// RO08: Private thread skipped
-	test("RO08: skips private threads", async () => {
+	// RO08: Private thread synced with defaultAccess=none
+	test("RO08: syncs private threads with defaultAccess=none", async () => {
 		const thread = makeThread({
 			type: 12, // PRIVATE_THREAD
 			parentId: CHANNEL,
 		});
 
 		await handleThreadCreate(thread, repo, roomy);
-		expect(roomy.eventCount(SPACE_A)).toBe(0);
+
+		const roomEvent = createRoomEvent(roomy, SPACE_A);
+		expect(roomEvent).toBeDefined();
+		expect(roomEvent?.defaultAccess).toBe("none");
+		expect(roomEvent?.kind).toBe("space.roomy.thread");
+
+		// Mapping should be registered
+		expect(repo.getRoomyId(SPACE_A, "thread", THREAD)).toBe(roomEvent?.id);
 	});
 
 	// RO09: Thread create with existing mapping (idempotent)

@@ -188,7 +188,7 @@ async function ensureRoomyRooms(
 	}
 }
 
-async function ensureRoomyThreads(
+export async function ensureRoomyThreads(
 	discord: DiscordDataSource,
 	repo: BridgeRepository,
 	roomy: RoomyGateway,
@@ -201,7 +201,7 @@ async function ensureRoomyThreads(
 			const guild = await discord.getGuild(guildId);
 			if (!guild?.channels) continue;
 
-			// Discover threads that belong to bridged channels.
+			// Discover which parent channels are bridged.
 			const bridgedChannelIds: Set<string> =
 				mode === "full"
 					? new Set(
@@ -213,10 +213,10 @@ async function ensureRoomyThreads(
 							repo.listAllowlistForBridge(spaceDid).map((e) => e.channelId),
 						);
 
-			const threads = guild.channels.filter(
+			// Fetch active threads from the guild-level endpoint.
+			const activeThreads = await discord.getActiveThreads(guildId);
+			const threads = activeThreads.filter(
 				(ch) =>
-					THREAD_TYPES.has(ch.type) &&
-					ch.type !== PRIVATE_THREAD &&
 					ch.parentId &&
 					bridgedChannelIds.has(ch.parentId),
 			);
@@ -232,7 +232,11 @@ async function ensureRoomyThreads(
 
 					const parentId = thread.parentId;
 					if (!parentId) continue;
-					const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
+					const parentRoomyId = repo.getRoomyId(
+						spaceDid,
+						"channel",
+						parentId,
+					);
 					if (!parentRoomyId) {
 						log.warn(
 							`Parent channel ${parentId} not bridged in ${spaceDid}; skipping thread ${threadId}`,
@@ -256,7 +260,8 @@ async function ensureRoomyThreads(
 							$type: "space.roomy.room.createRoom.v0",
 							kind: "space.roomy.thread",
 							name: thread.name,
-							defaultAccess: "read",
+							defaultAccess:
+								thread.type === PRIVATE_THREAD ? "none" : "read",
 							extensions: {
 								"space.roomy.extension.discordOrigin.v0": {
 									snowflake: threadId,
@@ -281,6 +286,16 @@ async function ensureRoomyThreads(
 					}
 
 					created++;
+
+					// Backfill this active thread's messages
+					await backfillChannel(
+						discord,
+						repo,
+						roomy,
+						threadId,
+						spaceDid,
+						guildId,
+					);
 				} catch (err) {
 					log.error(
 						`Failed to create Roomy thread for ${thread.id} in ${spaceDid}`,
@@ -290,7 +305,9 @@ async function ensureRoomyThreads(
 			}
 
 			if (created > 0) {
-				log.info(`Created ${created} Roomy threads in ${spaceDid}`);
+				log.info(
+					`Created ${created} Roomy threads in ${spaceDid} and backfilled their messages`,
+				);
 			}
 		} catch (err) {
 			log.error(

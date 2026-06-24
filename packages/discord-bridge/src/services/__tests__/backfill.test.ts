@@ -27,7 +27,7 @@ import type {
 import type { DiscordDataSource } from "../../discord/data-source.ts";
 import { FileDiscordDataSource } from "../../discord/file-data-source.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
-import { backfillChannel } from "../backfill.ts";
+import { backfillChannel, ensureRoomyThreads } from "../backfill.ts";
 import { expectToBeDefined } from "./utils.ts";
 
 // ─── Test constants ─────────────────────────────────────────────────────
@@ -544,5 +544,275 @@ describe("backfillChannel with faker-generated guild", () => {
 
 		// Cursor hasn't changed, so second run should add nothing
 		expect(secondRunCount).toBe(firstRunCount);
+	});
+});
+
+describe("ensureRoomyThreads with active threads", () => {
+	beforeEach(() => {
+		faker.seed(42);
+	});
+
+	/**
+	 * RT01: Active threads under bridged parent channels are discovered
+	 * and have Roomy rooms created + backfilled.
+	 */
+	test("RT01: creates rooms and backfills messages for active threads under bridged parents", async () => {
+		const parentChannel: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0, // GuildText
+			name: "general",
+			guildId: GUILD,
+		};
+
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11, // PublicThread
+			name: "my-active-thread",
+			parentId: parentChannel.id,
+			guildId: GUILD,
+		};
+
+		const threadMessages: DiscordMessageData[] = Array.from(
+			{ length: 5 },
+			(_, i) => ({
+				id: `40000000000000000${i + 1}`,
+				channelId: activeThread.id,
+				guildId: GUILD,
+				type: 0,
+				content: `Thread message ${i + 1}`,
+				timestamp: Date.now() - (5 - i) * 60000,
+				editedTimestamp: undefined,
+				author: {
+					id: "500000000000000001",
+					name: "testuser",
+					discriminator: "0000",
+					globalName: "Test User",
+					avatar: null,
+				},
+				attachments: [],
+				embeds: [],
+				reactions: [],
+				mentions: [],
+				mentionChannelIds: [],
+				stickerItems: [],
+			}),
+		);
+
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [parentChannel] },
+			channels: [parentChannel, activeThread],
+			messages: { [activeThread.id]: threadMessages },
+			activeThreads: [activeThread],
+		});
+
+		const repo = BridgeRepository.open(":memory:");
+		repo.upsertBridgeConfig(GUILD, SPACE, "full");
+		// Pre-map the parent channel so the thread can link to it
+		const parentRoomyId = newUlid();
+		repo.registerMapping(SPACE, "channel", parentChannel.id, parentRoomyId);
+
+		const roomy = new MockRoomyGateway();
+
+		await ensureRoomyThreads(discord, repo, roomy, [
+			{ guildId: GUILD, spaceDid: SPACE, mode: "full", createdAt: 0, updatedAt: 0 },
+		]);
+
+		// Should have created a room for the active thread
+		const roomEvents = roomy
+			.eventsFor(SPACE)
+			.filter((e) => e.$type === "space.roomy.room.createRoom.v0");
+		expect(roomEvents).toHaveLength(1);
+		expect(roomEvents[0]?.kind).toBe("space.roomy.thread");
+		expect(roomEvents[0]?.name).toBe("my-active-thread");
+
+		// Should have created a room link to the parent
+		const linkEvents = roomy
+			.eventsFor(SPACE)
+			.filter((e) => e.$type === "space.roomy.link.createRoomLink.v0");
+		expect(linkEvents).toHaveLength(1);
+		expect(linkEvents[0]?.linkToRoom).toBe(roomEvents[0]?.id);
+
+		// Thread mapping should be registered
+		expect(
+			repo.getRoomyId(SPACE, "thread", activeThread.id),
+		).toBe(roomEvents[0]?.id);
+
+		// Should have backfilled the thread's messages
+		const messageEvents = roomy
+			.eventsFor(SPACE)
+			.filter((e) => e.$type === "space.roomy.message.createMessage.v0");
+		expect(messageEvents).toHaveLength(5);
+	});
+
+	/**
+	 * RT02: Active threads under non-bridged parent channels are skipped.
+	 */
+	test("RT02: skips active threads whose parent channel is not bridged", async () => {
+		const parentChannel: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "orphan-thread",
+			parentId: "999999999999999999", // not bridged
+			guildId: GUILD,
+		};
+
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [parentChannel] },
+			channels: [parentChannel, activeThread],
+			activeThreads: [activeThread],
+		});
+
+		const repo = BridgeRepository.open(":memory:");
+		repo.upsertBridgeConfig(GUILD, SPACE, "full");
+		repo.registerMapping(SPACE, "channel", parentChannel.id, newUlid());
+
+		const roomy = new MockRoomyGateway();
+
+		await ensureRoomyThreads(discord, repo, roomy, [
+			{ guildId: GUILD, spaceDid: SPACE, mode: "full", createdAt: 0, updatedAt: 0 },
+		]);
+
+		expect(roomy.eventCount(SPACE)).toBe(0);
+	});
+
+	/**
+	 * RT03: Private active threads are synced with defaultAccess=none.
+	 */
+	test("RT03: syncs private active threads with defaultAccess=none", async () => {
+		const parentChannel: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+
+		const privateThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 12, // PRIVATE_THREAD
+			name: "private-thread",
+			parentId: parentChannel.id,
+			guildId: GUILD,
+		};
+
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [parentChannel] },
+			channels: [parentChannel, privateThread],
+			activeThreads: [privateThread],
+		});
+
+		const repo = BridgeRepository.open(":memory:");
+		repo.upsertBridgeConfig(GUILD, SPACE, "full");
+		repo.registerMapping(SPACE, "channel", parentChannel.id, newUlid());
+
+		const roomy = new MockRoomyGateway();
+
+		await ensureRoomyThreads(discord, repo, roomy, [
+			{ guildId: GUILD, spaceDid: SPACE, mode: "full", createdAt: 0, updatedAt: 0 },
+		]);
+
+		const roomEvents = roomy
+			.eventsFor(SPACE)
+			.filter((e) => e.$type === "space.roomy.room.createRoom.v0");
+		expect(roomEvents).toHaveLength(1);
+		expect(roomEvents[0]?.defaultAccess).toBe("none");
+		expect(roomEvents[0]?.kind).toBe("space.roomy.thread");
+		expect(roomEvents[0]?.name).toBe("private-thread");
+
+		// Mapping should be registered
+		expect(
+			repo.getRoomyId(SPACE, "thread", privateThread.id),
+		).toBe(roomEvents[0]?.id);
+	});
+
+	/**
+	 * RT04: Already-mapped active threads are skipped (idempotent).
+	 */
+	test("RT04: skips active threads that already have a mapping", async () => {
+		const parentChannel: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "already-mapped-thread",
+			parentId: parentChannel.id,
+			guildId: GUILD,
+		};
+
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [parentChannel] },
+			channels: [parentChannel, activeThread],
+			activeThreads: [activeThread],
+		});
+
+		const repo = BridgeRepository.open(":memory:");
+		repo.upsertBridgeConfig(GUILD, SPACE, "full");
+		repo.registerMapping(SPACE, "channel", parentChannel.id, newUlid());
+		repo.registerMapping(SPACE, "thread", activeThread.id, "existing-ulid");
+
+		const roomy = new MockRoomyGateway();
+
+		await ensureRoomyThreads(discord, repo, roomy, [
+			{ guildId: GUILD, spaceDid: SPACE, mode: "full", createdAt: 0, updatedAt: 0 },
+		]);
+
+		expect(roomy.eventCount(SPACE)).toBe(0);
+	});
+
+	/**
+	 * RT05: Active threads in subset mode are added to the allowlist.
+	 */
+	test("RT05: adds active thread to allowlist in subset mode", async () => {
+		const parentChannel: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "subset-thread",
+			parentId: parentChannel.id,
+			guildId: GUILD,
+		};
+
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [parentChannel] },
+			channels: [parentChannel, activeThread],
+			activeThreads: [activeThread],
+		});
+
+		const repo = BridgeRepository.open(":memory:");
+		repo.upsertBridgeConfig(GUILD, SPACE, "subset");
+		repo.addToAllowlist(SPACE, parentChannel.id, GUILD);
+		repo.registerMapping(SPACE, "channel", parentChannel.id, newUlid());
+
+		const roomy = new MockRoomyGateway();
+
+		await ensureRoomyThreads(discord, repo, roomy, [
+			{ guildId: GUILD, spaceDid: SPACE, mode: "subset", createdAt: 0, updatedAt: 0 },
+		]);
+
+		// Thread should be created
+		const roomEvents = roomy
+			.eventsFor(SPACE)
+			.filter((e) => e.$type === "space.roomy.room.createRoom.v0");
+		expect(roomEvents).toHaveLength(1);
+
+		// Thread should be in the allowlist
+		expect(repo.isAllowlisted(SPACE, activeThread.id)).toBe(true);
 	});
 });
