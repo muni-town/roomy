@@ -151,4 +151,24 @@
     height: 0;
     pointer-events: none;
   }
+
+  /* Mention chip rendered inline in the composer. Subtle accent rounded
+     background + accent text; works in both themes because the bg is a
+     translucent accent mix. Dark mode uses a lighter accent text color. */
+  :global(.tiptap .mention) {
+    background-color: color-mix(
+      in oklab,
+      var(--color-accent-500) 14%,
+      transparent
+    );
+    color: var(--color-accent-700);
+    border-radius: 0.375rem;
+    padding: 0.05rem 0.3rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: default;
+  }
+  :global(.dark .tiptap .mention) {
+    color: var(--color-accent-300);
+  }
 </style>

@@ -39,7 +39,13 @@
             ? "bg-accent-500/10 dark:bg-accent-500/15"
             : "hover:bg-base-100 dark:hover:bg-base-800",
         ]}
-        onmousedown={() => onSelect(user)}
+        onmousedown={(e) => {
+          // Prevent the button from stealing focus so the editor (TipTap) /
+          // input keeps focus after a click-selection — the selection handler
+          // and the Mention command's `.focus()` then remain in effect.
+          e.preventDefault();
+          onSelect(user);
+        }}
         onmouseover={() => onHover?.(i)}
         onfocus={() => onHover?.(i)}
       >

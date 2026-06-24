@@ -156,6 +156,17 @@ function userSuggestion({
       let component: ReturnType<typeof UserMentionList>;
       let reqId = 0;
       let timer: ReturnType<typeof setTimeout>;
+      /**
+       * The suggestion `command` is bound to a specific range (the `@query`
+       * span) at the moment the Suggestion plugin builds the props. Each
+       * `onUpdate` delivers a fresh `command` bound to the latest range, so we
+       * keep the newest one here and invoke it from the list's `callback` —
+       * otherwise selecting a mention would use the stale `onStart` range
+       * (just `@`) and leave the typed query (e.g. "erl") behind in the editor.
+       */
+      let latestCommand:
+        | ((p: { id: string; label: string }) => void)
+        | undefined;
 
       const displayName = (u: TypeaheadUser) => u.name || u.handle || u.did;
 
@@ -189,6 +200,7 @@ function userSuggestion({
 
       return {
         onStart: (props: SuggestionProps) => {
+          latestCommand = props.command;
           wrapper = document.createElement("div");
           // Float above the input. The editor's parent (`#chat-input`) is
           // `position: relative`, so `bottom-full` anchors us just above it.
@@ -199,12 +211,13 @@ function userSuggestion({
             target: wrapper,
             props: {
               callback: (user: TypeaheadUser) =>
-                props.command({ id: user.did, label: displayName(user) }),
+                latestCommand?.({ id: user.did, label: displayName(user) }),
             },
           });
           run(props.query);
         },
         onUpdate: (props: SuggestionProps) => {
+          latestCommand = props.command;
           run(props.query);
         },
         onKeyDown: (props: SuggestionKeyDownProps) => {
