@@ -6,7 +6,8 @@
   import UserTypeahead from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
   import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
   import { createRolesQuery, type Role } from "$lib/queries/roles";
-  import { createMembersQuery } from "$lib/queries/members";
+  import { createMembersQuery, type Member } from "$lib/queries/members";
+  import { px } from "$lib/auth.svelte";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createRole, updateRole, deleteRole, addMemberRole, removeMemberRole } from "$lib/mutations/role";
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
@@ -87,6 +88,22 @@
     } finally {
       isDeleting = false;
     }
+  }
+
+  // Server-side member search for the typeahead, hitting the appserver's
+  // `getMembers?search=` param. Returns members only (parity with
+  // `spaceMembers`, which the empty-query state reuses).
+  async function searchMembers(q: string): Promise<TypeaheadUser[]> {
+    const res = await px().query("space.roomy.space.getMembers", {
+      spaceId: spaceId,
+      search: q,
+    });
+    return res.members.map((m: Member) => ({
+      did: m.did,
+      handle: m.handle,
+      name: m.name,
+      avatar: m.avatar,
+    }));
   }
 
   async function addMember(user: TypeaheadUser) {
@@ -230,6 +247,7 @@
           {#if isAdmin}
             <UserTypeahead
               users={spaceMembers}
+              search={searchMembers}
               excluded={selectedRole.memberDids}
               onSelect={addMember}
               placeholder="Add member..."
