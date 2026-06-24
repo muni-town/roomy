@@ -128,6 +128,7 @@ function messageDiff(roomId: Ulid, seq: number): InvalidationEvent {
             timestamp: new Date().toISOString(),
             reactions: [],
             media: [],
+            linkEmbeds: [],
           },
         },
       ],
@@ -152,8 +153,11 @@ describe("SyncManager", () => {
       socket as unknown as import("../xrpc/types.ts").SyncSocket,
     );
 
-    // Subscribe to room topic.
+    // Subscribe to room topic. (Room sub also eagerly invalidates room-scoped
+    // queries — 3 #invalidate frames — see SyncManager.#sendRoomInvalidation.
+    // Clear them so this test asserts only the signal-routing below.)
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    socket.sentFrames.length = 0;
 
     // Emit a message diff for that room.
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
@@ -179,8 +183,11 @@ describe("SyncManager", () => {
       socket as unknown as import("../xrpc/types.ts").SyncSocket,
     );
 
-    // Subscribe to a different room.
+    // Subscribe to a different room. (Room sub eagerly invalidates its room
+    // queries — clear those frames so the assertion captures only the signal
+    // routing below.)
     socket.receive({ type: "sub", topic: "room", id: "other-room" as Ulid });
+    socket.sentFrames.length = 0;
 
     // Emit a message diff for ROOM_ID.
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
@@ -277,6 +284,9 @@ describe("SyncManager", () => {
 
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
     socket.receive({ type: "unsub", topic: "room", id: ROOM_ID });
+    // Room sub eagerly invalidated room queries (3 frames); clear so the
+    // assertion captures only the post-unsub emit below.
+    socket.sentFrames.length = 0;
 
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
 
@@ -296,6 +306,9 @@ describe("SyncManager", () => {
 
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
     socket.close();
+    // Room sub eagerly invalidated room queries (3 frames); clear so the
+    // assertion captures only the post-close emit below.
+    socket.sentFrames.length = 0;
 
     // Emit after close — should not error.
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
@@ -321,6 +334,11 @@ describe("SyncManager", () => {
     // A subscribed to a space, B subscribed only to a room.
     socketA.receive({ type: "sub", topic: "space", id: SPACE_ID });
     socketB.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    // Room sub eagerly invalidates room-scoped queries (3 #invalidate frames
+    // for socketB); clear so the assertions below capture only the getSpaces
+    // broadcast.
+    socketA.sentFrames.length = 0;
+    socketB.sentFrames.length = 0;
 
     router.emitSignals([queryInvalidation("space.roomy.space.getSpaces", {})]);
 
@@ -396,6 +414,9 @@ describe("SyncManager", () => {
     );
 
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    // Room sub eagerly invalidated room queries (incl. getMessages — 3 frames);
+    // clear so the assertion captures only the routed signal below.
+    socket.sentFrames.length = 0;
 
     router.emitSignals([
       queryInvalidation("space.roomy.room.getMessages", { roomId: ROOM_ID }),
@@ -409,6 +430,35 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
+  test("subscribing to a room eagerly invalidates that room's queries", () => {
+    const router = new MockRouter();
+    const manager = new SyncManager(router as unknown as InvalidationRouter);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(
+      socket as unknown as import("../xrpc/types.ts").SyncSocket,
+    );
+
+    // Subscribing to a room immediately emits #invalidate for the room-scoped
+    // queries so a client re-fetches fresh data instead of serving stale
+    // TanStack cache (see SyncManager.#sendRoomInvalidation).
+    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+
+    const nsids = socket.sentFrames.map(
+      (f) => decodeFrameBody(f).nsid as string,
+    );
+    expect(nsids).toContain("space.roomy.room.getMessages");
+    expect(nsids).toContain("space.roomy.room.getMetadata");
+    expect(nsids).toContain("space.roomy.room.getThreads");
+    expect(socket.sentFrames.length).toBe(3);
+    for (const f of socket.sentFrames) {
+      expect(f.header.t).toBe("#invalidate");
+      expect(decodeFrameBody(f).params).toEqual({ roomId: ROOM_ID });
+    }
+
+    manager.destroy();
+  });
+
   test("destroy unsubscribes from router", () => {
     const router = new MockRouter();
     const manager = new SyncManager(router as unknown as InvalidationRouter);
@@ -418,6 +468,9 @@ describe("SyncManager", () => {
       socket as unknown as import("../xrpc/types.ts").SyncSocket,
     );
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    // Room sub eagerly invalidated room queries (3 frames); clear so the
+    // assertion captures only the post-destroy emit below.
+    socket.sentFrames.length = 0;
 
     manager.destroy();
 
@@ -436,6 +489,9 @@ describe("SyncManager", () => {
     );
 
     socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    // Room sub eagerly invalidated room queries (incl. getMetadata — 3 frames);
+    // clear so the assertion captures only the two routed signals below.
+    socket.sentFrames.length = 0;
 
     router.emitSignals([
       messageDiff(ROOM_ID, 1),

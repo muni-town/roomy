@@ -152,6 +152,19 @@ export class SpaceMaterializer {
       },
     );
 
+    // The wrapper above re-throws on rejection so awaiters of `backfillDone`
+    // (eager backfill, admin materializeSpace, createSpace) see the failure.
+    // But the lazy path (userHydration) deliberately does NOT await it — it
+    // inspects `backfillSettled`/`backfillError` instead — and
+    // `materializeSpace` attaches a `.then` with no rejection handler. An
+    // un-awaited rejected promise becomes an unhandled rejection, which Bun
+    // surfaces as an error (and fails tests). Attach a no-op rejection
+    // handler so the promise is always "observed"; awaiters still receive the
+    // rejection independently (each consumer gets its own rejection
+    // delivery), and `backfillError` remains the source of truth for the
+    // lazy path.
+    this.backfillDone.catch(() => {});
+
     // Log a backfill-completion summary including any delivery gaps detected.
     // Debug, not info: with thousands of spaces this fires once per space at
     // startup (~N lines), which alone can trip platform log-rate limits. The

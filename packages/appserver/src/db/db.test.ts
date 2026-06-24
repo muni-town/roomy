@@ -41,7 +41,8 @@ describe("appserver schema", () => {
       "comp_info",
       "comp_reaction",
       "comp_last_read",
-      "read_positions",
+      // read_positions lives in the separate read-state DB (see readStateDb.ts
+      // + readStateDb.test.ts), ATTACHed as `readstate.read_positions`.
       "roles",
       "member_roles",
       "role_rooms",
