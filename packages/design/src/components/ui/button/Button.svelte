@@ -35,8 +35,8 @@ SOFTWARE.
     base: [
       "touch-manipulation hover:cursor-pointer",
       "inline-flex items-center justify-center gap-2",
-      "whitespace-nowrap rounded-[10px]",
-      "text-sm font-medium",
+      "whitespace-nowrap rounded-[8px]",
+      "text-sm font-normal",
       "outline-offset-2 focus-visible:outline-2",
       "duration-50 active:duration-100",
       "disabled:pointer-events-none disabled:opacity-60",
@@ -62,6 +62,15 @@ SOFTWARE.
           "focus-visible:outline-accent-950 dark:focus-visible:outline-accent-300",
           "backdrop-blur-md",
           "active:translate-[2px] active:shadow-none",
+        ],
+        toggle: [
+          "bg-accent-200/60 dark:bg-accent-700/50",
+          "text-accent-950 dark:text-accent-50",
+          "border border-px border-accent-400 dark:border-accent-600",
+          "hover:bg-accent-200/80 dark:hover:bg-accent-700/70",
+          "focus-visible:outline-accent-950 dark:focus-visible:outline-accent-300",
+          "backdrop-blur-md",
+          "active:translate-[2px]",
         ],
         secondary: [
           "bg-base-50 dark:bg-transparent",
@@ -229,7 +238,7 @@ SOFTWARE.
         ],
       },
       size: {
-        default: "px-2.5 py-1.5",
+        default: "px-4 py-1.5",
         sm: "px-2 py-1 gap-1.5 text-xs font-base [&_svg]:size-3",
         lg: "px-4 py-2 gap-2.5 text-lg font-semibold [&_svg]:size-5",
         icon: "p-2",

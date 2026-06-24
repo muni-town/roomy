@@ -29,7 +29,7 @@ SOFTWARE.
 	import type { HTMLInputAttributes, HTMLInputTypeAttribute } from 'svelte/elements';
 
 	export const inputVariants = tv({
-    base: "rounded-md text-sm border-1 font-medium focus-visible:outline-0 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed",
+    base: "rounded-md text-sm border-1 font-light focus-visible:outline-0 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed",
     variants: {
       variant: {
         primary:
