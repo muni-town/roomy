@@ -7,6 +7,8 @@ export type ThreadInfo = {
   channel?: string;
   canonicalParent?: Ulid;
   channelName?: string;
+  /** Whether the thread has unread messages. */
+  unread?: boolean;
   activity: {
     members: { avatar: string | null; name: string | null; id: string }[];
     latestTimestamp: number;

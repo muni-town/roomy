@@ -55,6 +55,7 @@
     name?: string;
     channelName?: string;
     canonicalParent?: string;
+    unreadCount?: number;
     activity: {
       latestTimestamp?: string;
       latestMembers: Array<{ did: string; name?: string; avatar?: string }>;
@@ -72,6 +73,7 @@
       kind: "space.roomy.thread",
       channelName: t.channelName,
       canonicalParent: t.canonicalParent,
+      unread: (t.unreadCount ?? 0) > 0,
       activity: {
         members: t.activity.latestMembers.map((m) => ({
           id: m.did,

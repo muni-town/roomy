@@ -47,7 +47,7 @@ let {
         : "sm:ml-64",
   ]}
 >
-  <Navbar {compact} class={compact ? "h-11" : undefined}>
+  <Navbar {compact} class={compact ? "h-11 dark:bg-base-900/20" : "dark:bg-base-900/20"}>
     <div class="flex gap-4 items-center mr-auto ml-2 sm:hidden">
       <ToggleNavigation bind:isSidebarVisible={mobileSidebar.visible} />
     </div>
@@ -91,7 +91,7 @@ let {
       <!-- BigSidebar wrapper: slides left via translateX + overflow:hidden
            instead of animating width, keeping animation on the compositor -->
       <div
-        class="overflow-hidden shrink-0 w-64 h-full flex flex-col border-r border-base-950/5 dark:border-base-300/10 big-sidebar-wrapper"
+        class="overflow-hidden shrink-0 w-64 h-full flex flex-col border-r border-base-950/5 dark:border-transparent big-sidebar-wrapper"
         class:big-sidebar-hidden={onHomepage}
         class:big-sidebar-visible={!onHomepage}
       >
@@ -112,7 +112,7 @@ let {
     <!-- On the homepage it only covers the server bar (w-64).
          On space pages it covers server bar + BigSidebar. -->
     <div
-      class="shrink-0 border-r border-base-950/5 dark:border-base-300/10 sidebar-user-card-wrapper"
+      class="shrink-0 border-r border-base-950/5 dark:border-transparent sidebar-user-card-wrapper"
       class:on-homepage={onHomepage}
       class:not-homepage={!onHomepage}
       class:server-collapsed={!serverBar.expanded}
