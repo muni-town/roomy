@@ -228,21 +228,28 @@ let {
     z-index: 50;
     transition:
       width 400ms cubic-bezier(0.33, 1, 0.68, 1),
-      border-right-width 400ms cubic-bezier(0.33, 1, 0.68, 1);
+      border-right-width 400ms cubic-bezier(0.33, 1, 0.68, 1),
+      padding-left 400ms cubic-bezier(0.33, 1, 0.68, 1);
     will-change: width;
     contain: layout style;
   }
-  /* Homepage: wide server bar only (w-64 = 256px), BigSidebar hidden */
+  /* Homepage: wide server bar only (w-64 = 256px), BigSidebar hidden.
+     No header offset (the homepage header is empty anyway). */
   .sidebar-header-wrapper.on-homepage {
     width: 256px;
     border-right: none;
+    padding-left: 0;
   }
-  /* Space page, server bar expanded: server bar (64px) + BigSidebar (256px) = 320px */
+  /* Space page, server bar expanded: server bar (64px) + BigSidebar (256px) = 320px.
+     Offset the header content left by the server bar width (64px) so the
+     avatar/name track the BigSidebar's left edge as the selector expands. */
   .sidebar-header-wrapper.not-homepage:not(.server-collapsed) {
     width: 320px;
+    padding-left: 64px;
   }
-  /* Space page, server bar collapsed: just BigSidebar (256px) */
+  /* Space page, server bar collapsed: just BigSidebar (256px), no offset */
   .sidebar-header-wrapper.not-homepage.server-collapsed {
     width: 256px;
+    padding-left: 0;
   }
 </style>
