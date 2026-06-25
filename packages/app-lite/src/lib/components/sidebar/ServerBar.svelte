@@ -7,6 +7,7 @@
   import { resolveBlobUrl } from "$lib/utils";
   import { createSpacesQuery } from "$lib/queries/spaces";
   import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
+  import { serverBar } from "$lib/components/layout/server-bar.svelte";
 
   let {
     wide = false,
@@ -38,6 +39,9 @@
     } else {
       goto(`/${spaceId}`);
     }
+    // Close the space selector overlay once a space has been chosen so the
+    // newly selected space's channels (BigSidebar) are revealed underneath.
+    serverBar.expanded = false;
   }
 
   // CSS-based animation: translateX stays on the compositor thread.
@@ -57,7 +61,7 @@
   class={[
     "flex flex-col py-1 bg-base-100/50 dark:bg-base-950 min-h-0 gap-2 overflow-hidden relative z-10 sidebar-server-bar",
     wide
-      ? "w-64 border-r border-base-950/5 dark:border-base-300/10"
+      ? "w-64"
       : "w-16 items-center",
     animClass,
   ].join(" ")}

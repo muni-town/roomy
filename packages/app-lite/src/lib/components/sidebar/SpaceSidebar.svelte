@@ -43,6 +43,7 @@
 import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
 import { createSpacesQuery } from "$lib/queries/spaces";
 import { toast } from "@foxui/core";
+import RoomyMark from "$lib/components/RoomyMark.svelte";
 
   type RoomMetadata = typeof schemas.queries.getRoomMetadata.Response.infer;
 
@@ -458,6 +459,23 @@ import { toast } from "@foxui/core";
           />
         {/snippet}
       </SpaceHeaderShell>
+    </div>
+  {:else}
+    <!-- Homepage (no space selected): Roomy logo + wordmark, laid out to
+         match the space header (px-5 py-3, 32px mark, text-md font-semibold)
+         so it aligns with space-page headers and the sidebar row below stays
+         put. Non-interactive; the server bar already provides a Home link. -->
+    <div class="w-full h-fit flex justify-between items-center gap-1">
+      <div class="flex items-center gap-2 flex-1 min-w-0">
+        <div class="flex items-center gap-4 -mx-1 px-5 py-3">
+          <RoomyMark sizeClass="size-8" />
+          <h1
+            class="text-lg font-black opacity-90 text-base-700 dark:text-base-200 truncate max-w-full grow min-w-0"
+          >
+            Roomy
+          </h1>
+        </div>
+      </div>
     </div>
   {/if}
 {/snippet}

@@ -1,11 +1,13 @@
 /**
- * Reactive state for the server bar (thin space-switcher bar) visibility.
+ * Reactive state for the space selector overlay visibility.
  *
- * The server bar is a Discord-style thin column to the left of the channel
- * sidebar showing space avatars for quick switching. It can be collapsed
- * and expanded via the space header (clicking the avatar/header area).
+ * On space pages, the space selector is a wide (homepage-style) panel that
+ * overlays the BigSidebar when expanded, and is hidden when collapsed. It is
+ * toggled via the space header (clicking the avatar/header area) and auto-
+ * closes after picking a space. On the homepage the wide server bar is always
+ * shown inline, so this state is irrelevant there.
  */
-let expanded = $state(true);
+let expanded = $state(false);
 
 export const serverBar = {
   get expanded() {
