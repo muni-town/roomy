@@ -8,6 +8,7 @@ import {
 } from "@roomy-space/sdk/browser";
 import { transport } from "@roomy-space/sdk";
 import { CONFIG, OAUTH_SCOPE } from "./config";
+import { scheduleAutoReload } from "./error-recovery";
 
 const { ServiceAuthClient, DirectXrpcClient, resolveAppserverHttpOrigin } = transport;
 
@@ -73,6 +74,12 @@ export async function init() {
     }
   } catch (err) {
     initError = String(err);
+    // If session restoration failed due to a recoverable ATProto auth error
+    // (expired/revoked token, failed refresh), auto-reload to retry init —
+    // this is the primary recovery path in the PWA where manual reload is
+    // impossible. scheduleAutoReload no-ops for non-recoverable errors, so
+    // genuine config/DNS failures simply surface as initError instead.
+    scheduleAutoReload(err);
   } finally {
     initializing = false;
   }

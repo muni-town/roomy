@@ -6,6 +6,10 @@
   import { queryClient } from "$lib/client";
   import { auth, init, updateProfile } from "$lib/auth.svelte";
   import { startSync, stopSync } from "$lib/sync.svelte";
+  import {
+    installGlobalErrorRecovery,
+    resetReloadBudget,
+  } from "$lib/error-recovery";
   import { requireAuth } from "$lib/components/layout/auth-guard.svelte";
   import LoginModal from "$lib/components/auth/LoginModal.svelte";
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
@@ -27,6 +31,10 @@
   let { children } = $props();
 
   onMount(() => {
+    // Catch unhandled ATProto rejections (e.g. background token refresh
+    // failures) that would otherwise leave the app unusable. In the PWA the
+    // page cannot be manually refreshed, so this is the safety net.
+    installGlobalErrorRecovery();
     console.log("[app-lite env debug] $env/dynamic/public:", {
       PUBLIC_PDS: dynamicEnv.PUBLIC_PDS,
       PUBLIC_PDS_HANDLE_SUFFIX: dynamicEnv.PUBLIC_PDS_HANDLE_SUFFIX,
@@ -72,13 +80,29 @@
   <FxUIToaster />
 
   {#if auth.initError && requireAuth.value}
-    <!-- init failed — show error behind modal -->
+    <!-- init failed — show error with a manual reload affordance. This is
+         the PWA recovery fallback when auto-reload has given up (loop
+         protection) or the error is not auto-recoverable. -->
     <div
       class="fixed inset-0 z-50 flex items-center justify-center bg-base-50/90 dark:bg-base-950/90 backdrop-blur-sm"
     >
-      <pre
-        class="m-4 p-3 rounded-2xl text-sm whitespace-pre-wrap bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 max-w-md"
-      >{auth.initError}</pre>
+      <div
+        class="m-4 p-4 rounded-2xl text-sm bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 max-w-md flex flex-col gap-3"
+      >
+        <div class="font-semibold">Something went wrong</div>
+        <pre class="whitespace-pre-wrap break-words text-xs opacity-80">{auth.initError}</pre>
+        <button
+          type="button"
+          class="self-start rounded-lg px-3 py-1.5 text-sm font-medium bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors"
+          onclick={() => {
+            // Give the user a fresh auto-reload budget, then reload.
+            resetReloadBudget();
+            location.reload();
+          }}
+        >
+          Reload
+        </button>
+      </div>
     </div>
   {:else if auth.initializing && !auth.authenticated && requireAuth.value}
     <!-- OAuth callback / session restoration in progress — skeleton -->
