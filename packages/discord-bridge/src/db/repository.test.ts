@@ -15,8 +15,8 @@ describe("migrations", () => {
 	test("apply cleanly on a fresh database", () => {
 		const db = new Database(":memory:");
 		const result = runMigrations(db);
-		expect(result.applied).toEqual([1, 2, 3, 4]);
-		expect(result.current).toBe(4);
+		expect(result.applied).toEqual([1, 2, 3, 4, 5]);
+		expect(result.current).toBe(5);
 	});
 
 	test("are idempotent across re-runs", () => {
@@ -24,7 +24,7 @@ describe("migrations", () => {
 		runMigrations(db);
 		const second = runMigrations(db);
 		expect(second.applied).toEqual([]);
-		expect(second.current).toBe(4);
+		expect(second.current).toBe(5);
 	});
 });
 
@@ -230,5 +230,86 @@ describe("webhook_tokens", () => {
 		expect(t?.token).toBe("wh-token");
 		r.deleteWebhookToken("c1");
 		expect(r.getWebhookToken("c1")).toBeUndefined();
+	});
+});
+
+describe("pending_room_creations", () => {
+	test("stores and retrieves a pending room creation", () => {
+		const r = repo();
+		r.storePendingRoomCreation(
+			SPACE_A,
+			"roomy-thread-1",
+			"space.roomy.thread",
+			"Test Thread",
+			"none",
+		);
+		const pending = r.getPendingRoomCreation(SPACE_A, "roomy-thread-1");
+		expect(pending).toEqual({
+			spaceDid: SPACE_A,
+			roomyId: "roomy-thread-1",
+			kind: "space.roomy.thread",
+			name: "Test Thread",
+			defaultAccess: "none",
+		});
+	});
+
+	test("upserts on duplicate roomy id", () => {
+		const r = repo();
+		r.storePendingRoomCreation(
+			SPACE_A,
+			"roomy-thread-1",
+			"space.roomy.thread",
+			"Old Name",
+			"readwrite",
+		);
+		r.storePendingRoomCreation(
+			SPACE_A,
+			"roomy-thread-1",
+			"space.roomy.thread",
+			"New Name",
+			"none",
+		);
+		const pending = r.getPendingRoomCreation(SPACE_A, "roomy-thread-1");
+		expect(pending?.name).toBe("New Name");
+		expect(pending?.defaultAccess).toBe("none");
+	});
+
+	test("returns undefined for missing entry", () => {
+		const r = repo();
+		expect(r.getPendingRoomCreation(SPACE_A, "missing")).toBeUndefined();
+	});
+
+	test("delete removes only the targeted entry", () => {
+		const r = repo();
+		r.storePendingRoomCreation(
+			SPACE_A,
+			"roomy-thread-1",
+			"space.roomy.thread",
+			"A",
+			undefined,
+		);
+		r.storePendingRoomCreation(
+			SPACE_B,
+			"roomy-thread-1",
+			"space.roomy.thread",
+			"B",
+			undefined,
+		);
+		r.deletePendingRoomCreation(SPACE_A, "roomy-thread-1");
+		expect(r.getPendingRoomCreation(SPACE_A, "roomy-thread-1")).toBeUndefined();
+		expect(r.getPendingRoomCreation(SPACE_B, "roomy-thread-1")).toBeDefined();
+	});
+
+	test("handles undefined defaultAccess", () => {
+		const r = repo();
+		r.storePendingRoomCreation(
+			SPACE_A,
+			"roomy-thread-1",
+			"space.roomy.thread",
+			"Thread",
+			undefined,
+		);
+		const pending = r.getPendingRoomCreation(SPACE_A, "roomy-thread-1");
+		expect(pending?.defaultAccess).toBeUndefined();
 	});
 });

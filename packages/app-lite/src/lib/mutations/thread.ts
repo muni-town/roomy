@@ -39,8 +39,10 @@ export async function createThread({
     isCreationLink: true,
   });
 
-  // Move each selected message into the thread
-  for (const msgId of messageIds) {
+  // Move each selected message into the thread.
+  // Sort by ULID (lexicographic = chronological) so the bridge forwards
+  // messages in the same order they appeared in the source room.
+  for (const msgId of [...messageIds].sort()) {
     events.push({
       id: newUlid(),
       room: parentRoomId,

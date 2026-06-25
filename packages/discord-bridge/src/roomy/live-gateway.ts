@@ -100,7 +100,11 @@ export class LiveRoomyGateway implements RoomyGateway {
 			// one and any processed after it). Dedup handles the redundancy.
 			for (const { event, user } of decodedEvents) {
 				try {
-					await callback(event, { spaceDid, isBackfill: meta.isBackfill, userDid: user });
+					await callback(event, {
+						spaceDid,
+						isBackfill: meta.isBackfill,
+						userDid: user,
+					});
 				} catch (err) {
 					log.error(
 						`Error in event callback for ${spaceDid} (${event.$type})`,
@@ -115,7 +119,11 @@ export class LiveRoomyGateway implements RoomyGateway {
 		let hadFailure = false;
 		for (const { event, idx, user } of decodedEvents) {
 			try {
-				await callback(event, { spaceDid, isBackfill: meta.isBackfill, userDid: user });
+				await callback(event, {
+					spaceDid,
+					isBackfill: meta.isBackfill,
+					userDid: user,
+				});
 				if (!hadFailure) lastSuccessIdx = idx;
 			} catch (err) {
 				log.error(

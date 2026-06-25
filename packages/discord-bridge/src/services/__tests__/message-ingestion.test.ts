@@ -418,6 +418,12 @@ describe("ingestDiscordMessage — threadStarterMessage", () => {
 		expect(event.room).toBe(ROOMY_MESSAGE_ULID_2);
 		expect(event.messageIds).toEqual([ROOMY_MESSAGE_ULID]);
 		expect(event.fromRoomId).toBe(ROOMY_CHANNEL_ULID);
+
+		// Mapping is stored on the thread starter message snowflake with a
+		// composite key so the Roomy→Discord router can dedupe the echo when
+		// the forward event is delivered back to us.
+		const mappedRoomyId = repo.getRoomyId(SPACE_A, "message", msg.id);
+		expect(mappedRoomyId).toBe(`${event.id}:${ROOMY_MESSAGE_ULID}`);
 	});
 
 	// MI13: ThreadStarterMessage skips if original not synced

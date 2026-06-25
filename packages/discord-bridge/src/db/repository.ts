@@ -257,6 +257,72 @@ export class BridgeRepository {
 			.run(spaceDid, kind, discordId);
 	}
 
+	// === Pending room creations (for Roomy→Discord thread sync) ===
+
+	storePendingRoomCreation(
+		spaceDid: string,
+		roomyId: string,
+		kind: string,
+		name: string,
+		defaultAccess: string | undefined,
+	): void {
+		this.db
+			.prepare(
+				`INSERT INTO pending_room_creations (space_did, roomy_id, kind, name, default_access, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(space_did, roomy_id) DO UPDATE SET
+           kind = excluded.kind,
+           name = excluded.name,
+           default_access = excluded.default_access,
+           created_at = excluded.created_at`,
+			)
+			.run(spaceDid, roomyId, kind, name, defaultAccess ?? null, Date.now());
+	}
+
+	getPendingRoomCreation(
+		spaceDid: string,
+		roomyId: string,
+	):
+		| {
+				spaceDid: string;
+				roomyId: string;
+				kind: string;
+				name: string;
+				defaultAccess: string | undefined;
+		  }
+		| undefined {
+		const row = this.db
+			.query<
+				{
+					space_did: string;
+					roomy_id: string;
+					kind: string;
+					name: string;
+					default_access: string | null;
+				},
+				[string, string]
+			>(
+				"SELECT space_did, roomy_id, kind, name, default_access FROM pending_room_creations WHERE space_did = ? AND roomy_id = ?",
+			)
+			.get(spaceDid, roomyId);
+		if (!row) return undefined;
+		return {
+			spaceDid: row.space_did,
+			roomyId: row.roomy_id,
+			kind: row.kind,
+			name: row.name,
+			defaultAccess: row.default_access ?? undefined,
+		};
+	}
+
+	deletePendingRoomCreation(spaceDid: string, roomyId: string): void {
+		this.db
+			.prepare(
+				"DELETE FROM pending_room_creations WHERE space_did = ? AND roomy_id = ?",
+			)
+			.run(spaceDid, roomyId);
+	}
+
 	// === Channel cursors (per (space, channel)) ===
 
 	getChannelCursor(

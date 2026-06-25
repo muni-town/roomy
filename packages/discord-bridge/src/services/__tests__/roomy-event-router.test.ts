@@ -3,6 +3,9 @@
  *
  * Covers: RER01–RER09 — message create/edit/delete/reaction, echo prevention,
  * unbridged-room skipping, profile attribution, and x-dmp-patch edit skipping.
+ * Covers: Roomy thread creation → Discord thread creation, echo prevention
+ * for Discord-originated threads, message forwarding, and restart-resilient
+ * pending thread metadata.
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -64,6 +67,82 @@ function makeCreateMessageEvent(options: {
 		$type: "space.roomy.message.createMessage.v0",
 		body: makeTextBody(options.content ?? "Hello from Roomy"),
 		extensions,
+	} satisfies Event;
+}
+
+function makeCreateThreadEvent(options: {
+	id?: string;
+	name?: string;
+	defaultAccess?: "read" | "readwrite" | "none";
+	origin?: { snowflake: string; channelId: string; guildId: string };
+}): Event {
+	const id = options.id ? Ulid.assert(options.id) : newUlid();
+	const extensions: Record<string, unknown> = {};
+	if (options.origin) {
+		extensions["space.roomy.extension.discordOrigin.v0"] = {
+			$type: "space.roomy.extension.discordOrigin.v0",
+			...options.origin,
+		};
+	}
+	return {
+		id,
+		$type: "space.roomy.room.createRoom.v0",
+		kind: "space.roomy.thread",
+		name: options.name ?? "Test Thread",
+		defaultAccess: options.defaultAccess ?? "readwrite",
+		extensions,
+	} satisfies Event;
+}
+
+function makeCreateRoomLinkEvent(options: {
+	id?: string;
+	room?: string;
+	linkToRoom: string;
+	isCreationLink?: boolean;
+}): Event {
+	const id = options.id ? Ulid.assert(options.id) : newUlid();
+	return {
+		id,
+		room: options.room ? Ulid.assert(options.room) : ROOMY_CHANNEL_ULID,
+		$type: "space.roomy.link.createRoomLink.v0",
+		linkToRoom: Ulid.assert(options.linkToRoom),
+		isCreationLink: options.isCreationLink ?? false,
+	} satisfies Event;
+}
+
+function makeForwardMessagesEvent(options: {
+	id?: string;
+	room?: string;
+	fromRoomId?: string;
+	messageIds?: string[];
+}): Event {
+	const id = options.id ? Ulid.assert(options.id) : newUlid();
+	return {
+		id,
+		room: options.room ? Ulid.assert(options.room) : ROOMY_CHANNEL_ULID,
+		$type: "space.roomy.message.forwardMessages.v0",
+		fromRoomId: Ulid.assert(options.fromRoomId ?? ROOMY_CHANNEL_ULID),
+		messageIds: options.messageIds?.map((m) => Ulid.assert(m)) ?? [
+			ROOMY_MESSAGE_ULID,
+		],
+	} satisfies Event;
+}
+
+function makeMoveMessagesEvent(options: {
+	id?: string;
+	room?: string;
+	toRoomId?: string;
+	messageIds?: string[];
+}): Event {
+	const id = options.id ? Ulid.assert(options.id) : newUlid();
+	return {
+		id,
+		room: options.room ? Ulid.assert(options.room) : ROOMY_CHANNEL_ULID,
+		$type: "space.roomy.message.moveMessages.v0",
+		toRoomId: Ulid.assert(options.toRoomId ?? newUlid()),
+		messageIds: options.messageIds?.map((m) => Ulid.assert(m)) ?? [
+			ROOMY_MESSAGE_ULID,
+		],
 	} satisfies Event;
 }
 
@@ -363,5 +442,486 @@ describe("RoomyEventRouter", () => {
 
 		expect(discord.sent).toHaveLength(1);
 		expect(discord.sent[0]?.content).toBe("space B message");
+	});
+
+	/**
+	 * RER11: A Roomy thread created via createRoom + isCreationLink is mirrored
+	 * to Discord as a thread in the parent channel.
+	 */
+	test("RER11: creates Discord thread for Roomy thread creation", async () => {
+		const { roomy, discord, router, repo } = setup();
+		await router.subscribeToSpace(SPACE_A);
+
+		const threadId = newUlid();
+		await roomy.fireEvent(SPACE_A, makeCreateThreadEvent({ id: threadId }));
+
+		// createRoom alone does not create a Discord thread.
+		expect(discord.threads).toHaveLength(0);
+
+		await roomy.fireEvent(
+			SPACE_A,
+			makeCreateRoomLinkEvent({
+				room: ROOMY_CHANNEL_ULID,
+				linkToRoom: threadId,
+				isCreationLink: true,
+			}),
+		);
+
+		expect(discord.threads).toHaveLength(1);
+		const thread = discord.threads[0];
+		expect(thread?.channelId).toBe(DISCORD_CHANNEL_ID);
+		expect(thread?.name).toBe("Test Thread");
+		expect(thread?.isPrivate).toBe(false);
+
+		// Mapping registered so messages in this thread get bridged
+		const mappedDiscordThreadId = repo.getDiscordId(
+			SPACE_A,
+			"thread",
+			threadId,
+		);
+		expect(mappedDiscordThreadId).toBe(thread?.id);
+	});
+
+	/**
+	 * RER12: Threads that originated from Discord are not mirrored back.
+	 */
+	test("RER12: skips Discord-originated threads", async () => {
+		const { roomy, discord, router } = setup();
+		await router.subscribeToSpace(SPACE_A);
+
+		const threadId = newUlid();
+		await roomy.fireEvent(
+			SPACE_A,
+			makeCreateThreadEvent({
+				id: threadId,
+				origin: {
+					snowflake: "999999999999999999",
+					channelId: DISCORD_CHANNEL_ID,
+					guildId: GUILD,
+				},
+			}),
+		);
+		await roomy.fireEvent(
+			SPACE_A,
+			makeCreateRoomLinkEvent({
+				room: ROOMY_CHANNEL_ULID,
+				linkToRoom: threadId,
+				isCreationLink: true,
+			}),
+		);
+
+		expect(discord.threads).toHaveLength(0);
+	});
+
+	/**
+	 * RER13: A non-creation createRoomLink does not create a Discord thread.
+	 */
+	test("RER13: ignores non-creation room links", async () => {
+		const { roomy, discord, router } = setup();
+		await router.subscribeToSpace(SPACE_A);
+
+		const threadId = newUlid();
+		await roomy.fireEvent(SPACE_A, makeCreateThreadEvent({ id: threadId }));
+		await roomy.fireEvent(
+			SPACE_A,
+			makeCreateRoomLinkEvent({
+				room: ROOMY_CHANNEL_ULID,
+				linkToRoom: threadId,
+				isCreationLink: false,
+			}),
+		);
+
+		expect(discord.threads).toHaveLength(0);
+	});
+
+	/**
+	 * RER14: forwardMessages forwards a mapped message to a bridged Discord
+	 * channel/thread.
+	 */
+	test("RER14: bridges forwardMessages to Discord", async () => {
+		const { roomy, discord, router, repo } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		const forwardEvent = makeForwardMessagesEvent({});
+		await roomy.fireEvent(SPACE_A, forwardEvent);
+
+		expect(discord.forwarded).toHaveLength(1);
+		expect(discord.forwarded[0]).toEqual({
+			targetChannelId: DISCORD_CHANNEL_ID,
+			messageId: DISCORD_MESSAGE_ID,
+			sourceChannelId: DISCORD_CHANNEL_ID,
+			newMessageId: "1",
+		});
+
+		// Mapping registered so Discord→Roomy dedup catches the echo
+		const mappedDiscordId = repo.getDiscordId(
+			SPACE_A,
+			"message",
+			`${forwardEvent.id}:${ROOMY_MESSAGE_ULID}`,
+		);
+		expect(mappedDiscordId).toBe(discord.forwarded[0]?.newMessageId);
+	});
+
+	/**
+	 * RER15: forwardMessages is skipped when the destination room is not bridged.
+	 */
+	test("RER15: skips forwardMessages for unbridged destination", async () => {
+		const { roomy, discord, router, repo } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		await roomy.fireEvent(
+			SPACE_A,
+			makeForwardMessagesEvent({ room: newUlid() }),
+		);
+
+		expect(discord.forwarded).toHaveLength(0);
+	});
+
+	/**
+	 * RER16: forwardMessages is skipped when the source room is not bridged.
+	 */
+	test("RER16: skips forwardMessages for unbridged source", async () => {
+		const { roomy, discord, router, repo } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		await roomy.fireEvent(
+			SPACE_A,
+			makeForwardMessagesEvent({ fromRoomId: newUlid() }),
+		);
+
+		expect(discord.forwarded).toHaveLength(0);
+	});
+
+	/**
+	 * RER17: Already-bridged forward events are skipped to prevent duplicates.
+	 */
+	test("RER17: skips already-mapped forwardMessages", async () => {
+		const { roomy, discord, router, repo } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		const forwardId = newUlid();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			"already-forwarded",
+			`${forwardId}:${ROOMY_MESSAGE_ULID}`,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		await roomy.fireEvent(SPACE_A, makeForwardMessagesEvent({ id: forwardId }));
+
+		expect(discord.forwarded).toHaveLength(0);
+	});
+
+	/**
+	 * RER18: forwardMessages can forward to a Roomy thread that is mapped to
+	 * a Discord thread.
+	 */
+	test("RER18: forwards messages to a mapped Discord thread", async () => {
+		const { roomy, discord, router, repo } = setup();
+		const roomyThreadId = newUlid();
+		const discordThreadId = "900000000000000001";
+		repo.registerMapping(SPACE_A, "thread", discordThreadId, roomyThreadId);
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		await roomy.fireEvent(
+			SPACE_A,
+			makeForwardMessagesEvent({ room: roomyThreadId }),
+		);
+
+		expect(discord.forwarded).toHaveLength(1);
+		expect(discord.forwarded[0]?.targetChannelId).toBe(discordThreadId);
+	});
+
+	/**
+	 * RER19: A forward event that originated from Discord (ingestion stores a
+	 * composite mapping) is not re-bridged back to Discord.
+	 */
+	test("RER19: dedupes Discord-originated forwardMessages", async () => {
+		const { roomy, discord, router, repo } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		const forwardEvent = makeForwardMessagesEvent({});
+		// Simulate the mapping created by Discord→Roomy ingestion, which uses
+		// a composite roomy id of `${forwardEvent.id}:${originalMessageId}`.
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			"discord-forwarded-msg",
+			`${forwardEvent.id}:${ROOMY_MESSAGE_ULID}`,
+		);
+
+		await roomy.fireEvent(SPACE_A, forwardEvent);
+
+		expect(discord.forwarded).toHaveLength(0);
+	});
+
+	/**
+	 * RER20: A pending thread creation survives a process restart: a new router
+	 * instance backed by the same repository can still create the Discord thread
+	 * when the creation link arrives.
+	 */
+	test("RER20: pending thread creation survives restart", async () => {
+		const { roomy, discord, router, repo } = setup();
+		await router.subscribeToSpace(SPACE_A);
+
+		const threadId = newUlid();
+		await roomy.fireEvent(SPACE_A, makeCreateThreadEvent({ id: threadId }));
+
+		// Simulate restart by constructing a new router backed by the same repo.
+		await roomy.unsubscribe(SPACE_A);
+		const freshRouter = new RoomyEventRouter(
+			roomy,
+			discord,
+			new FileWebhookManager(),
+			new FileProfileResolver(),
+			repo,
+		);
+		await freshRouter.subscribeToSpace(SPACE_A);
+
+		await roomy.fireEvent(
+			SPACE_A,
+			makeCreateRoomLinkEvent({
+				room: ROOMY_CHANNEL_ULID,
+				linkToRoom: threadId,
+				isCreationLink: true,
+			}),
+		);
+
+		expect(discord.threads).toHaveLength(1);
+	});
+
+	/**
+	 * RER21: moveMessages forwards a mapped message to a bridged Discord
+	 * channel/thread, without deleting the original.
+	 */
+	test("RER21: bridges moveMessages to Discord without deleting original", async () => {
+		const { roomy, discord, router, repo } = setup();
+		const destRoomId = newUlid();
+		const destChannelId = "910000000000000001";
+		repo.registerMapping(SPACE_A, "channel", destChannelId, destRoomId);
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		const moveEvent = makeMoveMessagesEvent({ toRoomId: destRoomId });
+		await roomy.fireEvent(SPACE_A, moveEvent);
+
+		expect(discord.forwarded).toHaveLength(1);
+		expect(discord.forwarded[0]).toEqual({
+			targetChannelId: destChannelId,
+			messageId: DISCORD_MESSAGE_ID,
+			sourceChannelId: DISCORD_CHANNEL_ID,
+			newMessageId: "1",
+		});
+
+		// Original Discord message is NOT deleted
+		expect(discord.deleted).toHaveLength(0);
+
+		// Mapping registered so Discord→Roomy dedup catches the echo
+		const mappedDiscordId = repo.getDiscordId(
+			SPACE_A,
+			"message",
+			`${moveEvent.id}:${ROOMY_MESSAGE_ULID}`,
+		);
+		expect(mappedDiscordId).toBe(discord.forwarded[0]?.newMessageId);
+	});
+
+	/**
+	 * RER22: moveMessages is skipped when the source room is not bridged.
+	 */
+	test("RER22: skips moveMessages for unbridged source room", async () => {
+		const { roomy, discord, router, repo } = setup();
+		const destRoomId = newUlid();
+		const destChannelId = "910000000000000001";
+		repo.registerMapping(SPACE_A, "channel", destChannelId, destRoomId);
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		// Source room (event.room) is not bridged
+		await roomy.fireEvent(
+			SPACE_A,
+			makeMoveMessagesEvent({ room: newUlid(), toRoomId: destRoomId }),
+		);
+
+		expect(discord.forwarded).toHaveLength(0);
+		expect(discord.deleted).toHaveLength(0);
+	});
+
+	/**
+	 * RER23: moveMessages is skipped when the destination room is not bridged.
+	 */
+	test("RER23: skips moveMessages for unbridged destination room", async () => {
+		const { roomy, discord, router, repo } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		// Destination room (toRoomId) is not bridged
+		await roomy.fireEvent(
+			SPACE_A,
+			makeMoveMessagesEvent({ toRoomId: newUlid() }),
+		);
+
+		expect(discord.forwarded).toHaveLength(0);
+		expect(discord.deleted).toHaveLength(0);
+	});
+
+	/**
+	 * RER24: Already-bridged move events are skipped to prevent duplicates.
+	 */
+	test("RER24: skips already-mapped moveMessages", async () => {
+		const { roomy, discord, router, repo } = setup();
+		const destRoomId = newUlid();
+		const destChannelId = "910000000000000001";
+		repo.registerMapping(SPACE_A, "channel", destChannelId, destRoomId);
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		const moveId = newUlid();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			"already-moved",
+			`${moveId}:${ROOMY_MESSAGE_ULID}`,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		await roomy.fireEvent(
+			SPACE_A,
+			makeMoveMessagesEvent({ id: moveId, toRoomId: destRoomId }),
+		);
+
+		expect(discord.forwarded).toHaveLength(0);
+		expect(discord.deleted).toHaveLength(0);
+	});
+
+	/**
+	 * RER25: moveMessages can move to a Roomy thread that is mapped to
+	 * a Discord thread.
+	 */
+	test("RER25: moves messages to a mapped Discord thread", async () => {
+		const { roomy, discord, router, repo } = setup();
+		const destRoomId = newUlid();
+		const destThreadId = "920000000000000001";
+		repo.registerMapping(SPACE_A, "thread", destThreadId, destRoomId);
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		await roomy.fireEvent(
+			SPACE_A,
+			makeMoveMessagesEvent({ toRoomId: destRoomId }),
+		);
+
+		expect(discord.forwarded).toHaveLength(1);
+		expect(discord.forwarded[0]?.targetChannelId).toBe(destThreadId);
+		expect(discord.deleted).toHaveLength(0);
+	});
+
+	/**
+	 * RER26: A move event that originated from Discord (ingestion stores a
+	 * composite mapping) is not re-bridged back to Discord.
+	 */
+	test("RER26: dedupes Discord-originated moveMessages", async () => {
+		const { roomy, discord, router, repo } = setup();
+		const destRoomId = newUlid();
+		const destChannelId = "910000000000000001";
+		repo.registerMapping(SPACE_A, "channel", destChannelId, destRoomId);
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		const moveEvent = makeMoveMessagesEvent({ toRoomId: destRoomId });
+		// Simulate the mapping created by Discord→Roomy ingestion
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			"discord-moved-msg",
+			`${moveEvent.id}:${ROOMY_MESSAGE_ULID}`,
+		);
+
+		await roomy.fireEvent(SPACE_A, moveEvent);
+
+		expect(discord.forwarded).toHaveLength(0);
+		expect(discord.deleted).toHaveLength(0);
+	});
+
+	/**
+	 * RER27: moveMessages skips messages that are not bridged to Discord.
+	 */
+	test("RER27: skips moveMessages for unbridged messages", async () => {
+		const { roomy, discord, router, repo } = setup();
+		const destRoomId = newUlid();
+		const destChannelId = "910000000000000001";
+		repo.registerMapping(SPACE_A, "channel", destChannelId, destRoomId);
+		await router.subscribeToSpace(SPACE_A);
+
+		// ROOMY_MESSAGE_ULID is not registered as a bridged message
+		await roomy.fireEvent(
+			SPACE_A,
+			makeMoveMessagesEvent({ toRoomId: destRoomId }),
+		);
+
+		expect(discord.forwarded).toHaveLength(0);
+		expect(discord.deleted).toHaveLength(0);
 	});
 });

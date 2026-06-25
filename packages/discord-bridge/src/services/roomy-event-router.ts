@@ -8,6 +8,11 @@
  * - deleteMessage  → delete from Discord
  * - addReaction    → add reaction in Discord
  * - removeReaction → remove reaction from Discord
+ * - createRoom     → persist room metadata until its creation link arrives
+ * - createRoomLink → create a Discord thread for a Roomy thread
+ * - forwardMessages → forward mapped messages to Discord
+ * - moveMessages   → forward mapped messages to Discord (like forwardMessages,
+ *                    but does NOT delete the original Discord message)
  *
  * Echo prevention:
  * - Messages with discordMessageOrigin extension are skipped
@@ -140,6 +145,18 @@ export class RoomyEventRouter {
 				break;
 			case "space.roomy.reaction.removeReaction.v0":
 				await this.#handleRemoveReaction(spaceDid, event);
+				break;
+			case "space.roomy.room.createRoom.v0":
+				await this.#handleCreateRoom(spaceDid, event);
+				break;
+			case "space.roomy.link.createRoomLink.v0":
+				await this.#handleCreateRoomLink(spaceDid, event);
+				break;
+			case "space.roomy.message.forwardMessages.v0":
+				await this.#handleForwardMessages(spaceDid, event);
+				break;
+			case "space.roomy.message.moveMessages.v0":
+				await this.#handleMoveMessages(spaceDid, event);
 				break;
 			// Ignore other event types (room lifecycle, space events, etc.)
 		}
@@ -306,9 +323,7 @@ export class RoomyEventRouter {
 			this.#repo.getDiscordId(spaceDid, "thread", event.room) !== undefined;
 		let webhookChannelId = discordChannelId;
 		if (isThread) {
-			const parentId = await this.#discord.getParentChannelId(
-				discordChannelId,
-			);
+			const parentId = await this.#discord.getParentChannelId(discordChannelId);
 			if (!parentId) {
 				log.warn(
 					`Could not find parent channel for thread ${discordChannelId}; skipping edit`,
@@ -416,5 +431,243 @@ export class RoomyEventRouter {
 		//   2. Query the Leaf server for the original addReaction event
 		// For now, skip — the reaction is removed from Roomy but not from Discord.
 		// This is a minor gap; reactions are ephemeral and rarely removed.
+	}
+
+	async #handleCreateRoom(
+		spaceDid: string,
+		event: Event & { $type: "space.roomy.room.createRoom.v0" },
+	): Promise<void> {
+		// Echo prevention: skip rooms that originated from Discord
+		if (event.extensions?.["space.roomy.extension.discordOrigin.v0"]) {
+			return;
+		}
+
+		// Already mapped? Skip (prevents duplicates on restart/re-backfill)
+		if (this.#repo.getDiscordId(spaceDid, "thread", event.id)) {
+			return;
+		}
+
+		// Only Roomy threads are turned into Discord threads. Persist the
+		// room metadata so the matching createRoomLink (isCreationLink) can
+		// create the Discord thread, even after a process restart.
+		if (event.kind !== "space.roomy.thread") return;
+
+		this.#repo.storePendingRoomCreation(
+			spaceDid,
+			event.id,
+			event.kind,
+			event.name ?? "Thread",
+			event.defaultAccess,
+		);
+	}
+
+	async #handleCreateRoomLink(
+		spaceDid: string,
+		event: Event & { $type: "space.roomy.link.createRoomLink.v0" },
+	): Promise<void> {
+		// We only create Discord threads for links emitted as part of thread
+		// creation. Other room links are ignored.
+		if (!event.isCreationLink) return;
+
+		const pending = this.#repo.getPendingRoomCreation(
+			spaceDid,
+			event.linkToRoom,
+		);
+		if (!pending) {
+			log.debug(
+				`No pending createRoom for isCreationLink ${event.id}; skipping`,
+			);
+			return;
+		}
+
+		// The creation link has been observed, so the pending metadata is no
+		// longer needed.
+		this.#repo.deletePendingRoomCreation(spaceDid, event.linkToRoom);
+
+		if (!event.room) {
+			log.debug("createRoomLink isCreationLink has no room; skipping");
+			return;
+		}
+
+		// Check if the parent room maps to a Discord channel
+		const discordChannelId = this.#repo.getDiscordId(
+			spaceDid,
+			"channel",
+			event.room,
+		);
+		if (!discordChannelId) {
+			// Parent room is not bridged to Discord — skip
+			return;
+		}
+
+		// Already mapped? Skip (prevents duplicates on restart/re-backfill)
+		if (this.#repo.getDiscordId(spaceDid, "thread", event.linkToRoom)) {
+			return;
+		}
+
+		const discordThreadId = await this.#discord.createThread(
+			discordChannelId,
+			pending.name,
+			pending.defaultAccess === "none",
+		);
+
+		// Register mapping so messages in this thread get bridged
+		this.#repo.registerMapping(
+			spaceDid,
+			"thread",
+			discordThreadId,
+			event.linkToRoom,
+		);
+
+		log.info(
+			`Created Discord thread ${discordThreadId} for Roomy thread ${event.linkToRoom} in channel ${discordChannelId}`,
+		);
+	}
+
+	async #handleForwardMessages(
+		spaceDid: string,
+		event: Event & { $type: "space.roomy.message.forwardMessages.v0" },
+	): Promise<void> {
+		if (!event.room) {
+			log.debug("forwardMessages event has no room; skipping");
+			return;
+		}
+
+		// Resolve the source room's Discord channel/thread. This is used both
+		// as an early-return guard (skip the entire event when the source room
+		// isn't bridged) and passed to forwardMessage so Discord can resolve
+		// the source message reference faster and more reliably.
+		const sourceChannelId =
+			this.#repo.getDiscordId(spaceDid, "channel", event.fromRoomId) ??
+			this.#repo.getDiscordId(spaceDid, "thread", event.fromRoomId);
+
+		await this.#forwardMessageBatch(
+			spaceDid,
+			event,
+			event.fromRoomId,
+			event.room,
+			sourceChannelId,
+			"forward",
+		);
+	}
+
+	async #handleMoveMessages(
+		spaceDid: string,
+		event: Event & { $type: "space.roomy.message.moveMessages.v0" },
+	): Promise<void> {
+		if (!event.room) {
+			log.debug("moveMessages event has no room; skipping");
+			return;
+		}
+
+		// event.room is the source room (where the message currently is).
+		// event.toRoomId is the destination room.
+		const sourceRoomId = event.room;
+		const destRoomId = event.toRoomId;
+
+		// Find the Discord channel for the source room
+		const sourceChannelId =
+			this.#repo.getDiscordId(spaceDid, "channel", sourceRoomId) ??
+			this.#repo.getDiscordId(spaceDid, "thread", sourceRoomId);
+
+		await this.#forwardMessageBatch(
+			spaceDid,
+			event,
+			sourceRoomId,
+			destRoomId,
+			sourceChannelId,
+			"move",
+		);
+	}
+
+	/**
+	 * Shared implementation for forwardMessages and moveMessages. Both events
+	 * result in a Discord message being forwarded/cross-posted from a source
+	 * channel/thread to a destination channel/thread. The original Discord
+	 * message is always preserved because Discord has no native move operation.
+	 */
+	async #forwardMessageBatch(
+		spaceDid: string,
+		event:
+			| (Event & { $type: "space.roomy.message.forwardMessages.v0" })
+			| (Event & { $type: "space.roomy.message.moveMessages.v0" }),
+		sourceRoomId: string,
+		destRoomId: string,
+		sourceChannelId: string | undefined,
+		action: "forward" | "move",
+	): Promise<void> {
+		if (!sourceChannelId) {
+			log.debug(
+				`Skipping ${action}Messages: source room ${sourceRoomId} not bridged to Discord`,
+			);
+			return;
+		}
+
+		// Find the Discord channel for the destination room
+		const targetChannelId =
+			this.#repo.getDiscordId(spaceDid, "channel", destRoomId) ??
+			this.#repo.getDiscordId(spaceDid, "thread", destRoomId);
+		if (!targetChannelId) {
+			log.debug(
+				`Skipping ${action}Messages: destination room ${destRoomId} not bridged to Discord`,
+			);
+			return;
+		}
+
+		let count = 0;
+		for (const messageId of event.messageIds) {
+			// Per-message dedup: use a composite key (event ID + message ID) so
+			// that each forwarded/moved message is tracked independently. This
+			// allows partial retries — if some messages failed on a previous
+			// attempt, only the un-processed ones will be retried.
+			const compositeKey = `${event.id}:${messageId}`;
+			if (this.#repo.getDiscordId(spaceDid, "message", compositeKey)) {
+				continue;
+			}
+
+			const discordMessageId = this.#repo.getDiscordId(
+				spaceDid,
+				"message",
+				messageId,
+			);
+			if (!discordMessageId) {
+				log.debug(
+					`Skipping ${action} of message ${messageId}: not bridged to Discord`,
+				);
+				continue;
+			}
+
+			try {
+				const newDiscordMessageId = await this.#discord.forwardMessage(
+					targetChannelId,
+					discordMessageId,
+					sourceChannelId,
+				);
+
+				// Register a mapping so the Discord→Roomy ingestion dedup
+				// skips this forwarded message when the gateway event arrives.
+				this.#repo.registerMapping(
+					spaceDid,
+					"message",
+					newDiscordMessageId,
+					compositeKey,
+				);
+
+				count++;
+			} catch (err) {
+				log.error(
+					`Failed to ${action} Discord message ${discordMessageId} to channel ${targetChannelId}`,
+					err,
+				);
+				throw err;
+			}
+		}
+
+		if (count > 0) {
+			const actionLabel = action === "forward" ? "Forwarded" : "Moved";
+			log.info(
+				`${actionLabel} ${count} message(s) to Discord channel ${targetChannelId} for Roomy room ${destRoomId}`,
+			);
+		}
 	}
 }

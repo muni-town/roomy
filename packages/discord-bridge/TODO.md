@@ -13,6 +13,10 @@ Remaining items from the code review of the Roomy→Discord direction.
 - [x] **Fix `removeWebhook` error handling** — `LiveWebhookManager.removeWebhook` now keeps the repo token row if webhook deletion fails, making removal retryable.
 - [x] **Include Discord error body in webhook failures** — `executeWebhook` failures now propagate Discord's response context through Discordeno's error path.
 
+## Roomy→Discord thread sync
+
+- [ ] **Nested Roomy threads are not supported** — `#handleCreateRoomLink` only resolves the parent room as a Discord `channel`. If Roomy ever allows a thread inside another thread, the parent thread mapping would be ignored and no Discord thread would be created.
+
 ## Functional gaps
 
 - [ ] **Forward attachments from Roomy to Discord** — The router only decodes the text body (`decodeBody`). Roomy messages with image/video/file attachments (`space.roomy.extension.attachments.v0`) are silently dropped. Media-only messages send an empty Discord message. The Discord webhook API supports `attachments` and `embeds` fields that could be used.

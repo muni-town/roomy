@@ -149,6 +149,14 @@ async function main() {
 				},
 
 				async messageCreate(message: MessageProperties) {
+					// Skip messages authored by our own bot (e.g. forwarded
+					// messages created by forwardMessage). These are not webhook
+					// messages so the isOurWebhook check won't catch them, and
+					// the dedup mapping may not be registered yet due to the
+					// REST/gateway race.
+					if (appId && message.author.id === BigInt(appId)) {
+						return;
+					}
 					const discord = new LiveDiscordDataSource(bot);
 					await ingestDiscordMessage(
 						normalizeMessage(message),
@@ -230,7 +238,9 @@ async function main() {
 				},
 
 				async interactionCreate(interaction: InteractionProperties) {
-					log.debug("Waiting for RoomyEventRouter to be ready (routerReady promise)...");
+					log.debug(
+						"Waiting for RoomyEventRouter to be ready (routerReady promise)...",
+					);
 					const router = await routerReady;
 					log.debug("RoomyEventRouter ready, handling interaction");
 					await handleInteractionCreate(

@@ -61,4 +61,27 @@ export interface DiscordSender {
 	 * is not a thread or the parent is unknown.
 	 */
 	getParentChannelId(channelId: string): Promise<string | undefined>;
+
+	/**
+	 * Create a thread in a Discord channel.
+	 * Returns the Discord thread snowflake.
+	 */
+	createThread(
+		channelId: string,
+		name: string,
+		isPrivate: boolean,
+	): Promise<string>;
+
+	/**
+	 * Forward a message from one channel/thread to another using Discord's
+	 * forward feature. The message must be in the same guild as the target.
+	 * If `sourceChannelId` is provided it is included in the message reference
+	 * so Discord can resolve the source message faster and more reliably.
+	 * Returns the new Discord message snowflake.
+	 */
+	forwardMessage(
+		targetChannelId: string,
+		messageId: string,
+		sourceChannelId?: string,
+	): Promise<string>;
 }

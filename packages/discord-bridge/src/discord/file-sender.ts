@@ -37,6 +37,20 @@ export interface RemovedReaction {
 	emoji: string;
 }
 
+export interface CreatedThread {
+	channelId: string;
+	name: string;
+	isPrivate: boolean;
+	id: string;
+}
+
+export interface ForwardedMessage {
+	targetChannelId: string;
+	messageId: string;
+	sourceChannelId: string | undefined;
+	newMessageId: string;
+}
+
 export class FileDiscordSender implements DiscordSender {
 	#nextId = 1;
 	#sent: SentMessage[] = [];
@@ -45,6 +59,8 @@ export class FileDiscordSender implements DiscordSender {
 	#reactionsAdded: AddedReaction[] = [];
 	#reactionsRemoved: RemovedReaction[] = [];
 	#parents = new Map<string, string>();
+	#threads: CreatedThread[] = [];
+	#forwarded: ForwardedMessage[] = [];
 
 	async sendMessage(
 		channelId: string,
@@ -89,6 +105,31 @@ export class FileDiscordSender implements DiscordSender {
 		return this.#parents.get(channelId);
 	}
 
+	async createThread(
+		channelId: string,
+		name: string,
+		isPrivate: boolean,
+	): Promise<string> {
+		const id = String(this.#nextId++);
+		this.#threads.push({ channelId, name, isPrivate, id });
+		return id;
+	}
+
+	async forwardMessage(
+		targetChannelId: string,
+		messageId: string,
+		sourceChannelId?: string,
+	): Promise<string> {
+		const newMessageId = String(this.#nextId++);
+		this.#forwarded.push({
+			targetChannelId,
+			messageId,
+			sourceChannelId,
+			newMessageId,
+		});
+		return newMessageId;
+	}
+
 	/** Register a parent channel ID for a thread (for tests). */
 	setParentChannelId(threadId: string, parentId: string): void {
 		this.#parents.set(threadId, parentId);
@@ -116,6 +157,14 @@ export class FileDiscordSender implements DiscordSender {
 		return this.#reactionsRemoved;
 	}
 
+	get threads(): readonly CreatedThread[] {
+		return this.#threads;
+	}
+
+	get forwarded(): readonly ForwardedMessage[] {
+		return this.#forwarded;
+	}
+
 	reset(): void {
 		this.#nextId = 1;
 		this.#sent = [];
@@ -123,5 +172,7 @@ export class FileDiscordSender implements DiscordSender {
 		this.#deleted = [];
 		this.#reactionsAdded = [];
 		this.#reactionsRemoved = [];
+		this.#threads = [];
+		this.#forwarded = [];
 	}
 }

@@ -121,6 +121,23 @@ export const MIGRATIONS: Migration[] = [
       `);
 		},
 	},
+	{
+		version: 5,
+		name: "pending_room_creations",
+		up(db) {
+			db.run(`
+        CREATE TABLE pending_room_creations (
+          space_did      TEXT NOT NULL,
+          roomy_id       TEXT NOT NULL,
+          kind           TEXT NOT NULL,
+          name           TEXT NOT NULL,
+          default_access TEXT,
+          created_at     INTEGER NOT NULL,
+          PRIMARY KEY (space_did, roomy_id)
+        );
+      `);
+		},
+	},
 ];
 
 export function runMigrations(db: Database): {

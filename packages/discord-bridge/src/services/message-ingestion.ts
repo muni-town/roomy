@@ -416,7 +416,14 @@ async function handleThreadStarterMessage(
 		try {
 			await roomy.sendEvent(spaceDid, forwardEvent);
 
-			repo.registerMapping(spaceDid, "message", messageId, forwardUlid);
+			// Store with a composite key so the Roomy→Discord router can dedupe
+			// this forward event against its per-message forward key.
+			repo.registerMapping(
+				spaceDid,
+				"message",
+				messageId,
+				`${forwardUlid}:${originalRoomyId}`,
+			);
 
 			log.info(
 				`Forwarded original message ${originalMsgId} to thread ${threadId} in ${spaceDid}`,

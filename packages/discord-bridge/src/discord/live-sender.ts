@@ -6,6 +6,7 @@
  * and bot helpers for edits, deletes, and reactions.
  */
 
+import { ChannelTypes, DiscordMessageReferenceType } from "@discordeno/bot";
 import type { DiscordSender, SendMessageOptions } from "./sender.ts";
 import type { DiscordBot } from "./types.ts";
 
@@ -143,5 +144,44 @@ export class LiveDiscordSender implements DiscordSender {
 	async getParentChannelId(channelId: string): Promise<string | undefined> {
 		const channel = await this.#bot.helpers.getChannel(BigInt(channelId));
 		return channel?.parentId?.toString();
+	}
+
+	async createThread(
+		channelId: string,
+		name: string,
+		isPrivate: boolean,
+	): Promise<string> {
+		const result = await this.#bot.helpers.startThreadWithoutMessage(
+			BigInt(channelId),
+			{
+				name,
+				autoArchiveDuration: 10080, // 1 week
+				type: isPrivate
+					? ChannelTypes.PrivateThread
+					: ChannelTypes.PublicThread,
+			},
+		);
+		return result.id.toString();
+	}
+
+	async forwardMessage(
+		targetChannelId: string,
+		messageId: string,
+		sourceChannelId?: string,
+	): Promise<string> {
+		// Discord forwards are created by sending a message with a Forward
+		// message reference. Both messages must be in the same guild.
+		const result = await this.#bot.helpers.sendMessage(
+			BigInt(targetChannelId),
+			{
+				messageReference: {
+					type: DiscordMessageReferenceType.Forward,
+					messageId: BigInt(messageId),
+					...(sourceChannelId ? { channelId: BigInt(sourceChannelId) } : {}),
+					failIfNotExists: false,
+				},
+			},
+		);
+		return result.id.toString();
 	}
 }

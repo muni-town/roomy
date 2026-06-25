@@ -254,7 +254,8 @@ export async function ensureRoomyThreads(
 							$type: "space.roomy.room.createRoom.v0",
 							kind: "space.roomy.thread",
 							name: thread.name,
-							defaultAccess: thread.type === PRIVATE_THREAD ? "none" : undefined,
+							defaultAccess:
+								thread.type === PRIVATE_THREAD ? "none" : undefined,
 							extensions: {
 								"space.roomy.extension.discordOrigin.v0": {
 									snowflake: threadId,
