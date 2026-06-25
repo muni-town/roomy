@@ -29,11 +29,15 @@
     onInvite,
     onLeave,
     /**
-     * Optional collapse-sidebar button rendered to the left of the space name.
-     * When provided, it replaces the avatar as the clickable element next to
-     * the space name.
+     * Whether the space selector (server bar) is currently open. Used for the
+     * aria-expanded state and tooltip of the header toggle button.
      */
-    collapseSidebar,
+    spaceSelectorOpen = false,
+    /**
+     * When provided, the space header (avatar + name) becomes a button that
+     * opens/closes the space selector. When omitted, the header is static.
+     */
+    onToggleSpaceSelector,
   }: {
     spaceName?: string;
     /** Avatar rendered by caller (e.g. SpaceAvatar wrapper) */
@@ -52,34 +56,52 @@
     /** Called when Leave Space is clicked. */
     onLeave: () => void;
     /**
-     * Optional collapse-sidebar button rendered to the left of the space name.
-     * When provided, it replaces the avatar as the clickable element next to
-     * the space name.
+     * Whether the space selector (server bar) is currently open. Used for the
+     * aria-expanded state and tooltip of the header toggle button.
      */
-    collapseSidebar?: Snippet;
+    spaceSelectorOpen?: boolean;
+    /**
+     * When provided, the space header (avatar + name) becomes a button that
+     * opens/closes the space selector. When omitted, the header is static.
+     */
+    onToggleSpaceSelector?: () => void;
   } = $props();
 
   let menuOpen = $state(false);
 </script>
 
 <div
-  class="w-full py-2 px-1.5 h-fit flex justify-between items-center gap-1"
+  class="w-full h-fit flex justify-between items-center gap-1"
 >
-  <!-- Header row: collapse/avatar + name + actions -->
+  <!-- Header row: avatar + name (clickable to toggle the space selector) + actions -->
   <div class="flex items-center gap-2 flex-1 min-w-0">
-    {#if collapseSidebar}
-      {@render collapseSidebar()}
+    {#if onToggleSpaceSelector}
+      <button
+        type="button"
+        onclick={onToggleSpaceSelector}
+        class="flex items-center gap-2 flex-1 min-w-0 -mx-1 px-5 py-3 hover:bg-base-200/20 dark:hover:bg-base-900/30 transition-colors cursor-pointer text-left"
+        aria-label="Toggle space selector"
+        aria-expanded={spaceSelectorOpen}
+        title={spaceSelectorOpen ? "Hide space selector" : "Show space selector"}
+      >
+        {@render avatar()}
+        <h1
+          class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
+        >
+          {spaceName ?? ""}
+        </h1>
+      </button>
     {:else}
       {@render avatar()}
+      <h1
+        class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
+      >
+        {spaceName ?? ""}
+      </h1>
     {/if}
-
-    <h1
-      class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
-    >
-      {spaceName ?? ""}
-    </h1>
   </div>
 
+  {#if false /* Temporarily disabled to preview the header without the ellipsis menu */}
   <ContextMenu
     bind:open={menuOpen}
     side="bottom"
@@ -142,4 +164,5 @@
       Leave Space
     </ContextMenuItem>
   </ContextMenu>
+  {/if}
 </div>

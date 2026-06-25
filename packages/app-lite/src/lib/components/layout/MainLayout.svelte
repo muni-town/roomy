@@ -6,7 +6,7 @@
   import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
   import ToggleNavigation from "@roomy/design/components/helper/ToggleNavigation.svelte";
   import { navbar } from "./navbar.svelte";
-  import { sidebarOverride, sidebarContent } from "./sidebar.svelte";
+  import { sidebarOverride, sidebarContent, sidebarHeader } from "./sidebar.svelte";
   import { mobileSidebar } from "./mobile-sidebar.svelte";
   import { serverBar } from "./server-bar.svelte";
   import { wideSidebar } from "./wide-sidebar.svelte";
@@ -84,6 +84,19 @@ let {
   ]}
 >
   <div class="flex flex-col h-full">
+    <!-- Space header: sits above the server bar / BigSidebar row and spans the
+         full sidebar width (server bar + BigSidebar), mirroring the user card.
+         The space selector (server bar) pops out underneath it. -->
+    <div
+      class="shrink-0 sidebar-header-wrapper"
+      class:on-homepage={onHomepage}
+      class:not-homepage={!onHomepage}
+      class:server-collapsed={!serverBar.expanded}
+    >
+      {#if sidebarHeader.content}
+        {@render sidebarHeader.content()}
+      {/if}
+    </div>
     <div class="relative flex flex-1 min-h-0">
       <!-- Server bar + BigSidebar: on homepage the server bar expands to w-64
       and the BigSidebar slides right out of view -->
@@ -91,7 +104,7 @@ let {
       <!-- BigSidebar wrapper: slides left via translateX + overflow:hidden
            instead of animating width, keeping animation on the compositor -->
       <div
-        class="overflow-hidden shrink-0 w-64 h-full flex flex-col border-r border-base-950/5 dark:border-transparent big-sidebar-wrapper"
+        class="overflow-hidden shrink-0 w-64 h-full flex flex-col big-sidebar-wrapper"
         class:big-sidebar-hidden={onHomepage}
         class:big-sidebar-visible={!onHomepage}
       >
@@ -112,7 +125,7 @@ let {
     <!-- On the homepage it only covers the server bar (w-64).
          On space pages it covers server bar + BigSidebar. -->
     <div
-      class="shrink-0 border-r border-base-950/5 dark:border-transparent sidebar-user-card-wrapper"
+      class="shrink-0 sidebar-user-card-wrapper"
       class:on-homepage={onHomepage}
       class:not-homepage={!onHomepage}
       class:server-collapsed={!serverBar.expanded}
@@ -206,5 +219,30 @@ let {
   /* ── BigSidebar spacer to prevent content hiding behind user card ── */
   .big-sidebar-content-spacer {
     padding-bottom: 80px;
+  }
+
+  /* ── Space header wrapper: full-width bar above the server bar / BigSidebar,
+     mirroring the user card width behaviour so the space selector pops out
+     underneath the header. ── */
+  .sidebar-header-wrapper {
+    z-index: 50;
+    transition:
+      width 400ms cubic-bezier(0.33, 1, 0.68, 1),
+      border-right-width 400ms cubic-bezier(0.33, 1, 0.68, 1);
+    will-change: width;
+    contain: layout style;
+  }
+  /* Homepage: wide server bar only (w-64 = 256px), BigSidebar hidden */
+  .sidebar-header-wrapper.on-homepage {
+    width: 256px;
+    border-right: none;
+  }
+  /* Space page, server bar expanded: server bar (64px) + BigSidebar (256px) = 320px */
+  .sidebar-header-wrapper.not-homepage:not(.server-collapsed) {
+    width: 320px;
+  }
+  /* Space page, server bar collapsed: just BigSidebar (256px) */
+  .sidebar-header-wrapper.not-homepage.server-collapsed {
+    width: 256px;
   }
 </style>

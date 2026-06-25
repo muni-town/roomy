@@ -3,7 +3,7 @@
  *
  * The server bar is a Discord-style thin column to the left of the channel
  * sidebar showing space avatars for quick switching. It can be collapsed
- * and expanded via the collapse-sidebar button in the space header.
+ * and expanded via the space header (clicking the avatar/header area).
  */
 let expanded = $state(true);
 

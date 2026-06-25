@@ -9,6 +9,8 @@
   import { IconArrowLeft } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { leaveSpace } from "$lib/mutations/space";
+  import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
+  import { setSidebarHeader } from "$lib/components/layout/sidebar.svelte";
 import { toast } from "@foxui/core";
 
   let { spaceId }: { spaceId: string } = $props();
@@ -17,6 +19,13 @@ import { toast } from "@foxui/core";
   const meta = $derived(metaQuery.data);
 
   let isEditing = $state(false);
+
+  // Register the space header so MainLayout can render it as a full-width bar
+  // above the server bar / BigSidebar row (matching the user card behaviour).
+  $effect(() => {
+    setSidebarHeader(settingsHeader);
+    return () => setSidebarHeader(undefined);
+  });
 
   const showInviteButton = $derived(
     (meta?.joinPolicy.allowPublicJoin ?? false) ||
@@ -72,23 +81,27 @@ import { toast } from "@foxui/core";
   }
 </script>
 
-<SidebarLayout>
-  {#snippet header()}
+{#snippet settingsHeader()}
+  <div class="pt-1">
     <SpaceHeaderShell
       spaceName={meta?.name ?? spaceId}
       isAdmin={meta?.isAdmin ?? false}
       {showInviteButton}
+      spaceSelectorOpen={serverBar.expanded}
+      onToggleSpaceSelector={toggleServerBar}
       bind:isEditing
       settingsHref={`/${spaceId}/settings`}
       {onInvite}
       {onLeave}
     >
       {#snippet avatar()}
-        <SpaceAvatar src={resolveBlobUrl(meta?.avatar)} id={spaceId} name={meta?.name ?? undefined} />
+        <SpaceAvatar src={resolveBlobUrl(meta?.avatar)} id={spaceId} name={meta?.name ?? undefined} shape="squircle" />
       {/snippet}
     </SpaceHeaderShell>
-  {/snippet}
+  </div>
+{/snippet}
 
+<SidebarLayout>
   {#snippet prefix()}
     <Button class="w-full justify-start mb-4" href={`/${spaceId}`}>
       <IconArrowLeft class="size-4" />

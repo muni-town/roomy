@@ -15,13 +15,13 @@
   } from "svelte-dnd-action";
   import SidebarLayout from "@roomy/design/components/sidebars/SidebarLayout.svelte";
   import SpaceHeaderShell from "@roomy/design/components/sidebars/SpaceHeaderShell.svelte";
+  import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import SidebarCategoryShell from "@roomy/design/components/sidebars/SidebarCategoryShell.svelte";
   import SidebarItemShell from "@roomy/design/components/sidebars/SidebarItemShell.svelte";
   import { resolveBlobUrl } from "$lib/utils";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import {
     IconCheck,
-    IconCollapseSidebar,
     IconGripVertical,
     IconHome,
     IconTrash,
@@ -32,6 +32,7 @@
   import { createRoom, updateSidebar } from "$lib/mutations/room";
   import { newUlid } from "@roomy-space/sdk";
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
+  import { setSidebarHeader } from "$lib/components/layout/sidebar.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
   import SpaceSidebarButtons from "./SpaceSidebarButtons.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
@@ -66,7 +67,7 @@ import { toast } from "@foxui/core";
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
-  // --- Server bar toggle — the collapse-sidebar button in the header toggles it. ---
+  // --- Server bar toggle — the space header (avatar) toggles it. ---
   let sidebarElement = $state<HTMLElement | null>(null);
 
   let isEditing = $state(false);
@@ -85,6 +86,14 @@ import { toast } from "@foxui/core";
   let createCategoryOpen = $state(false);
 
   const meta = $derived(spaceId ? metaQuery.data : null);
+
+  // Register the space header so MainLayout can render it as a full-width bar
+  // above the server bar / BigSidebar row (matching the user card behaviour).
+  // The snippet is defined below in the template and closes over this scope.
+  $effect(() => {
+    setSidebarHeader(spaceHeader);
+    return () => setSidebarHeader(undefined);
+  });
 
   // Derive the current space from the cached getSpaces query for instant header rendering.
   // Falls back to getMetadata for future public spaces where this space isn't in the user's space list.
@@ -424,39 +433,37 @@ import { toast } from "@foxui/core";
   }
 </script>
 
+{#snippet spaceHeader()}
+  {#if spaceId}
+    <div class="border-b border-transparent hover:border-base-200/60 dark:hover:border-base-900/60">
+      <SpaceHeaderShell
+        spaceName={currentSpace?.name ?? meta?.name ?? spaceId}
+        isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
+        {showInviteButton}
+        spaceSelectorOpen={serverBar.expanded}
+        onToggleSpaceSelector={toggleServerBar}
+        bind:isEditing
+        onCreateChannel={() => (createChannelOpen = true)}
+        onCreateCategory={() => (createCategoryOpen = true)}
+        settingsHref={`/${spaceId}/settings`}
+        {onInvite}
+        {onLeave}
+      >
+        {#snippet avatar()}
+          <SpaceAvatar
+            src={resolveBlobUrl(meta?.avatar)}
+            id={spaceId}
+            name={meta?.name ?? undefined}
+            shape="squircle"
+          />
+        {/snippet}
+      </SpaceHeaderShell>
+    </div>
+  {/if}
+{/snippet}
+
 <div bind:this={sidebarElement} class="h-full">
 <SidebarLayout loading={!!spaceId && metaQuery.isPending}>
-  {#snippet header()}
-    {#if spaceId}
-      <div class="pt-1">
-        <SpaceHeaderShell
-          spaceName={currentSpace?.name ?? meta?.name ?? spaceId}
-          isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
-          {showInviteButton}
-          bind:isEditing
-          onCreateChannel={() => (createChannelOpen = true)}
-          onCreateCategory={() => (createCategoryOpen = true)}
-          settingsHref={`/${spaceId}/settings`}
-          {onInvite}
-          {onLeave}
-        >
-          {#snippet collapseSidebar()}
-            <button
-              onclick={toggleServerBar}
-              class="flex items-center justify-center size-8 rounded-lg hover:bg-base-300/50 dark:hover:bg-base-800/50 text-base-500 hover:text-base-700 dark:text-base-400 dark:hover:text-base-200 transition-colors cursor-pointer"
-              aria-label="Toggle server bar"
-              title={serverBar.expanded ? "Collapse server bar" : "Expand server bar"}
-            >
-              <IconCollapseSidebar
-                class={["size-4 transition-transform duration-200", !serverBar.expanded && "rotate-180"]}
-              />
-            </button>
-          {/snippet}
-        </SpaceHeaderShell>
-      </div>
-    {/if}
-  {/snippet}
-
   {#snippet actions()}
     <SpaceSidebarButtons
       {spaceId}

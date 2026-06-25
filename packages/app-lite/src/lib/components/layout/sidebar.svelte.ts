@@ -2,6 +2,7 @@ import type { Snippet } from "svelte";
 
 let content = $state<Snippet | undefined>(undefined);
 let overrideContent = $state<Snippet | undefined>(undefined);
+let headerContent = $state<Snippet | undefined>(undefined);
 
 export const sidebarOverride = {
   get content() {
@@ -12,6 +13,12 @@ export const sidebarOverride = {
 export const sidebarContent = {
   get content() {
     return content;
+  },
+};
+
+export const sidebarHeader = {
+  get content() {
+    return headerContent;
   },
 };
 
@@ -40,4 +47,19 @@ export function setSidebarContent(snippet: Snippet | undefined) {
  */
 export function setSidebar(snippet: Snippet | undefined) {
   overrideContent = snippet;
+}
+
+/**
+ * Set the full-width sidebar header (typically the SpaceHeaderShell). Rendered
+ * by MainLayout above the server bar / BigSidebar row so it can span the whole
+ * sidebar width, matching the user card. Pages/components should call this
+ * inside an `$effect` and clear it on cleanup:
+ *
+ *   $effect(() => {
+ *     setSidebarHeader(myHeader);
+ *     return () => setSidebarHeader(undefined);
+ *   });
+ */
+export function setSidebarHeader(snippet: Snippet | undefined) {
+  headerContent = snippet;
 }

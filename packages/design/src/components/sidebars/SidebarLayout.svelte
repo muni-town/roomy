@@ -13,8 +13,8 @@
   }: {
     /** When true, render a skeleton in place of the body. */
     loading?: boolean;
-    /** Top-of-sidebar content (typically the SpaceHeaderShell). Always rendered. */
-    header: Snippet;
+    /** Top-of-sidebar content (typically the SpaceHeaderShell). Optional — when omitted, the header is rendered externally (e.g. by MainLayout as a full-width bar). */
+    header?: Snippet;
     /** Optional toolbar/actions row rendered right below the header (e.g. space switcher, home, settings). */
     actions?: Snippet;
     /** Optional "Finish editing" save button rendered above the prefix when editing. */
@@ -31,9 +31,11 @@
 </script>
 
 <div class="flex flex-col flex-1 min-h-0 h-full">
+{#if header}
 <div class="shrink-0 w-64">
 {@render header()}
 </div>
+{/if}
 
 {#if actions}
   <div class="shrink-0">
