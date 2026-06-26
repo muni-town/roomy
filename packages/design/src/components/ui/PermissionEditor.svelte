@@ -24,9 +24,9 @@
   } = $props();
 </script>
 
-<div class="flex flex-col gap-4">
-  <div class="flex items-center justify-between gap-4">
-    <span class="text-sm font-medium text-base-900 dark:text-base-100 shrink-0">
+<div class="flex flex-col gap-5">
+  <div class="flex items-center justify-between">
+    <span class="text-md font-regular text-base-900 dark:text-base-100 shrink-0">
       Members
     </span>
     <ToggleGroup
@@ -41,22 +41,21 @@
   </div>
 
   {#if defaultAccess === "readwrite"}
-    <p class="text-sm text-base-400 italic">
-      Channel permissions can be set for specific roles when they are limited
-      for general members.
+    <p class="text-sm text-base-400">
+      You can't manage this channel's role permissions without revoking Read & Write access to Members.
     </p>
   {:else if rolesLoading}
     <IconLoading class="animate-spin" font-size={20} />
   {:else if roles !== null && roles.length === 0}
-    <p class="text-sm text-base-400 italic">
-      No roles configured. Create roles in Space Settings → Roles.
+    <p class="text-sm text-base-400">
+      No roles configured. Create roles in <b>Space Settings -> Roles</b>.
     </p>
   {:else if roles !== null}
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col">
       {#each roles as role}
         <div class="flex items-center justify-between gap-4">
           <span
-            class="text-sm font-medium text-base-900 dark:text-base-100 shrink-0"
+            class="text-md font-regular text-base-900 dark:text-base-100 shrink-0"
           >
             {role.name ?? "Unnamed role"}
           </span>
