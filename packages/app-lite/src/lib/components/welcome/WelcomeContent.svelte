@@ -1,21 +1,29 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
-  import Button from "@roomy/design/components/ui/button/Button.svelte";
-  import Input from "@roomy/design/components/ui/input/Input.svelte";
-  import { IconPlus, IconMessageCircle, IconShare, IconHashtag } from "@roomy/design/icons";
+  import FeatureDemoCards from "./FeatureDemoCards.svelte";
+  import SpaceCards from "./SpaceCards.svelte";
+  import WelcomeActions from "./WelcomeActions.svelte";
+  import { auth } from "$lib/auth.svelte";
 
-  let joinSpaceId = $state("");
+  let {
+    spaces = [],
+    returning = false,
+  }: {
+    /** Spaces the user has joined. When non-empty, space cards are shown
+     *  instead of the feature demo cards. */
+    spaces?: { id: string; name?: string; avatar?: string }[];
+    /** Whether the user is in any spaces (a returning user). */
+    returning?: boolean;
+  } = $props();
 
-  function handleJoinSpace() {
-    const id = joinSpaceId.trim();
-    if (id) {
-      goto(`/join?space=${encodeURIComponent(id)}`);
-    }
-  }
+  // AT Protocol profile display name, if available.
+  const displayName = $derived(auth.profile?.displayName);
+  const heading = $derived(
+    returning && displayName ? `Hey ${displayName}` : "Welcome to Roomy",
+  );
 </script>
 
-<div class="flex flex-col items-center gap-6 px-4 py-12 max-w-2xl mx-auto">
-  <div class="flex items-start gap-6">
+<div class="flex flex-col items-center gap-6 py-12 w-full">
+  <div class="flex items-start gap-6 px-4 max-w-2xl mx-auto w-full">
     <!-- Light mode: original blob logo with dark base outline and light inner gradient -->
     <svg
       viewBox="0 0 219 204"
@@ -59,71 +67,30 @@
 
     <div class="text-left">
       <h1 class="text-4xl font-black tracking-tight text-base-900 dark:text-base-50 mt-4">
-        Welcome to Roomy
+        {heading}
       </h1>
       <p class="text-lg text-base-600 dark:text-base-400 max-w-xs leading-relaxed mt-2">
-        A digital gardening platform for communities. Create Spaces to
-        curate knowledge, share conversations, and grow together.
+        {#if returning}
+          Welcome back ☺️
+        {:else}
+          A digital gardening platform for communities. Create Spaces to
+          curate knowledge, share conversations, and grow together.
+        {/if}
       </p>
     </div>
   </div>
 
-  <!-- Feature highlights -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
-    <div class="flex flex-col items-center gap-3 p-5 rounded-2xl bg-base-100 dark:bg-base-800/40 border border-base-200 dark:border-base-700/50 text-center">
-      <div class="size-10 rounded-xl bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center text-accent-600 dark:text-accent-400">
-        <IconHashtag class="size-5" />
-      </div>
-      <h3 class="font-semibold text-sm text-base-900 dark:text-base-100">Channels &amp; Threads</h3>
-      <p class="text-xs text-base-500 dark:text-base-400 leading-relaxed">
-        Organize conversations into channels and dive deep with threaded discussions.
-      </p>
+  {#if spaces.length > 0}
+    <SpaceCards {spaces} />
+  {:else}
+    <div class="px-4 max-w-2xl mx-auto w-full">
+      <FeatureDemoCards />
     </div>
+  {/if}
 
-    <div class="flex flex-col items-center gap-3 p-5 rounded-2xl bg-base-100 dark:bg-base-800/40 border border-base-200 dark:border-base-700/50 text-center">
-      <div class="size-10 rounded-xl bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center text-accent-600 dark:text-accent-400">
-        <IconMessageCircle class="size-5" />
-      </div>
-      <h3 class="font-semibold text-sm text-base-900 dark:text-base-100">Communities</h3>
-      <p class="text-xs text-base-500 dark:text-base-400 leading-relaxed">
-        Invite members, set roles, and build a space that feels like home.
-      </p>
-    </div>
-
-    <div class="flex flex-col items-center gap-3 p-5 rounded-2xl bg-base-100 dark:bg-base-800/40 border border-base-200 dark:border-base-700/50 text-center">
-      <div class="size-10 rounded-xl bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center text-accent-600 dark:text-accent-400">
-        <IconShare class="size-5" />
-      </div>
-      <h3 class="font-semibold text-sm text-base-900 dark:text-base-100">AT Protocol</h3>
-      <p class="text-xs text-base-500 dark:text-base-400 leading-relaxed">
-        Built on the AT Protocol — open, portable, and interoperable by design.
-      </p>
-    </div>
+  <div class="px-4 max-w-2xl mx-auto w-full">
+    <WelcomeActions />
   </div>
-
-  <!-- CTA buttons -->
-  <div class="flex flex-col sm:flex-row items-center gap-4">
-    <Button variant="cta" size="lg" href="/new">
-      <IconPlus class="size-5" />
-      Create a Space
-    </Button>
-    <div class="flex items-center gap-2">
-      <span class="text-sm text-base-400">or</span>
-      <Input
-        placeholder="Paste a space ID or invite link"
-        bind:value={joinSpaceId}
-        class="w-64"
-        onkeydown={(e) => { if (e.key === "Enter") handleJoinSpace(); }}
-      />
-      <Button variant="secondary" onclick={handleJoinSpace} disabled={!joinSpaceId.trim()}>
-        Join
-      </Button>
-    </div>
-  </div>
-
-  <p class="text-xs text-base-400 text-center">
-    New to Roomy? Check out the <a href="https://a.roomy.space" target="_blank" class="text-accent-500 hover:underline">about page</a> to learn more.
-  </p>
 </div>
 
 <style>

@@ -79,7 +79,7 @@
       <button
         type="button"
         onclick={onToggleSpaceSelector}
-        class="flex items-center gap-2 flex-1 min-w-0 -mx-1 px-5 py-3 hover:bg-base-200/20 dark:hover:bg-base-900/30 transition-colors cursor-pointer text-left"
+        class="flex items-center gap-2.75 flex-1 min-w-0 -mx-1 px-3.5 py-3 hover:bg-base-200/20 dark:hover:bg-base-900/30 transition-colors cursor-pointer text-left"
         aria-label="Toggle space selector"
         aria-expanded={spaceSelectorOpen}
         title={spaceSelectorOpen ? "Hide space selector" : "Show space selector"}

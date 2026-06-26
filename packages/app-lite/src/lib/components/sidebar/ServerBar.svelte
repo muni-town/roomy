@@ -59,7 +59,7 @@
 <div
   bind:this={el}
   class={[
-    "flex flex-col py-1 bg-base-100/50 dark:bg-base-950 min-h-0 gap-2 overflow-hidden relative z-10 sidebar-server-bar",
+    "flex flex-col py-1 bg-base-50/50 dark:bg-base-950 min-h-0 gap-2 overflow-hidden relative z-10 sidebar-server-bar",
     wide
       ? "w-64"
       : "w-16 items-center",
@@ -67,20 +67,23 @@
   ].join(" ")}
 >
   <!-- Home button -->
-  <div class={wide ? "mx-2" : "flex justify-center"}>
+  <div class={wide ? "mx-1" : "flex justify-center"}>
     <Button
       href="/"
       variant="ghost"
+      data-current={!currentSpaceId}
       class={[
-        "size-12 p-0 rounded-xl [&_svg]:size-6",
-        wide ? "flex items-center gap-5 px-3 w-full justify-start" : "",
+        "p-0 rounded-xl",
+        wide
+          ? "flex items-center gap-4.5 h-9 pl-2.5 pr-1.5 w-full justify-start [&_svg]:size-5"
+          : "size-12 [&_svg]:size-6",
       ].join(" ")}
-      aria-label="Home"
-      title="Home"
+      aria-label="Directory"
+      title="Directory"
     >
       <IconMasonryGrid />
       {#if wide}
-        <span class="text-md font-semibold truncate text-base-700 dark:text-base-300 hover:text-black dark:hover:text-white">Home</span>
+        <span class="text-sm font-normal truncate">Directory</span>
       {/if}
     </Button>
   </div>
@@ -96,7 +99,7 @@
   <!-- Space list -->
   <div
     class={[
-      "flex flex-col overflow-y-auto flex-1 gap-1 w-full",
+      "flex flex-col overflow-y-auto flex-1 gap-0 w-full",
       wide ? "" : "items-center",
     ].join(" ")}
   >
@@ -104,9 +107,9 @@
       <button
         onclick={() => navigateToSpace(space.id)}
         class={[
-          "transition-[opacity,background-color] cursor-pointer opacity-90 hover:opacity-100 my-0.5",
+          "transition-[opacity,background-color] cursor-pointer opacity-90 hover:opacity-100 my-0",
           wide
-            ? "flex items-center gap-3 h-12 pl-2 pr-1.5 rounded-lg text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
+            ? "flex items-center gap-3 h-10 w-full px-2.25 text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
             : "relative flex items-center justify-center size-12",
           space.id === currentSpaceId ? "active" : "",
         ].join(" ")}
@@ -117,7 +120,7 @@
           src={resolveBlobUrl(space.avatar)}
           id={space.id}
           name={space.name ?? undefined}
-          size={48}
+          size={wide ? 32 : 48}
           shape="squircle"
           ringVar="--avatar-ring"
         />
@@ -130,17 +133,17 @@
         {#if wide}
           <div class="flex flex-col min-w-0">
             <span
-              class="text-md font-semibold truncate text-base-700 dark:text-base-300 hover:text-black dark:hover:text-white"
+              class="text-sm font-normal truncate text-base-700 dark:text-base-300 hover:text-black dark:hover:text-white"
             >
               {space.name ?? "Unnamed Space"}
             </span>
-            {#if space.unreadCount > 0}
+            <!-- {#if space.unreadCount > 0}
               <span
                 class="text-xs text-base-500 dark:text-base-400 truncate"
               >
                 {space.unreadCount} unread
               </span>
-            {/if}
+            {/if} -->
           </div>
         {/if}
       </button>
@@ -150,23 +153,23 @@
     <button
       onclick={() => goto("/new")}
       class={[
-        "transition-[opacity,background-color] cursor-pointer opacity-70 hover:opacity-100 my-0.5",
+        "transition-[opacity,background-color] cursor-pointer opacity-70 hover:opacity-100 my-0",
         wide
-          ? "flex items-center gap-3 h-12 pl-2 pr-1.5 rounded-lg text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
+          ? "flex items-center gap-3 h-10 w-full px-2.25 text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
           : "relative flex items-center justify-center size-12",
       ].join(" ")}
       title="New Space"
     >
       <div
         class={[
-          "flex items-center justify-center size-12 rounded-xl border-2 border-dashed border-base-300 dark:border-base-600 text-base-400 dark:text-base-500 hover:text-accent-500 hover:border-accent-500 transition-colors",
-          wide ? "shrink-0" : "",
+          "flex items-center justify-center rounded-xl border-2 border-dashed border-base-300 dark:border-base-600 text-base-400 dark:text-base-500 hover:text-accent-500 hover:border-accent-500 transition-colors",
+          wide ? "shrink-0 size-8" : "size-12",
         ].join(" ")}
       >
         <IconPlus class="size-5" />
       </div>
       {#if wide}
-        <span class="text-md font-semibold truncate text-base-500 dark:text-base-400">
+        <span class="text-sm font-normal truncate text-base-500 dark:text-base-400">
           New Space
         </span>
       {/if}

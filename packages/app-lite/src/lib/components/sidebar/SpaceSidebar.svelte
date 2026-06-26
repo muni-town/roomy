@@ -462,12 +462,12 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     </div>
   {:else}
     <!-- Homepage (no space selected): Roomy logo + wordmark, laid out to
-         match the space header (px-5 py-3, 32px mark, text-md font-semibold)
+         match the space header (-mx-1 px-3.5 py-3, 32px mark, text-md font-semibold)
          so it aligns with space-page headers and the sidebar row below stays
          put. Non-interactive; the server bar already provides a Home link. -->
     <div class="w-full h-fit flex justify-between items-center gap-1">
       <div class="flex items-center gap-2 flex-1 min-w-0">
-        <div class="flex items-center gap-4 -mx-1 px-5 py-3">
+        <div class="flex items-center gap-2.75 -mx-1 px-3.5 py-3">
           <RoomyMark sizeClass="size-8" />
           <h1
             class="text-lg font-black opacity-90 text-base-700 dark:text-base-200 truncate max-w-full grow min-w-0"

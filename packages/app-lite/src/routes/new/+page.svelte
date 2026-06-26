@@ -74,7 +74,7 @@
   });
 </script>
 
-<div class="h-full overflow-y-auto bg-base-50 dark:bg-base-950 text-base-800 dark:text-base-200">
+<div class="h-full overflow-y-auto dark:bg-base-950 text-base-800 dark:text-base-200">
     
     <form
       class="px-4 flex flex-col gap-8 py-8 max-w-3xl mx-auto w-full"

@@ -29,7 +29,7 @@
   <SpaceSidebar />
 {/snippet}
 
-<div class="h-full bg-base-50 dark:bg-base-950 text-base-800 dark:text-base-200">
+<div class="h-full dark:bg-base-900/20 text-base-800 dark:text-base-200">
   {@render homeContent()}
 </div>
 
@@ -52,6 +52,8 @@
         {:else if spacesQuery.data}
           {@const joined = spacesQuery.data.spaces.filter((s) => s.isMember)}
 
+          <WelcomeContent spaces={joined} returning={joined.length > 0} />
+
           {#if joined.length > 0}
             <section class="w-full">
               <h2 class="text-2xl font-bold px-4 text-base-900 dark:text-base-100 mb-4">
@@ -59,8 +61,6 @@
               </h2>
               <ActivityFeed limit={20} />
             </section>
-          {:else}
-            <WelcomeContent />
           {/if}
         {/if}
       </div>
