@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDistanceToNowStrict, type Locale } from "date-fns";
+  import { formatRelativeTime } from "../../../utils/date.js";
   import type { ThreadInfo } from "./types";
   import { IconHashtag } from "../../../../icons/index";
   import AvatarGroup from "../../../user/AvatarGroup.svelte";
@@ -12,33 +12,6 @@
 
   let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
   let read = $derived(!thread.unread);
-
-  const formatDistanceLocale: Pick<Locale, "formatDistance"> = {
-    formatDistance: (token, count) => {
-      let name = "min";
-      switch (token) {
-        case "xMinutes":
-          name = "mins";
-          break;
-        case "xHours":
-          name = "hrs";
-          break;
-        case "xDays":
-          name = "days";
-          break;
-        case "xMonths":
-          name = "months";
-          break;
-        case "xYears":
-          name = "yrs";
-          break;
-        default:
-          name = token;
-      }
-
-      return `${count} ${name}`;
-    },
-  };
 </script>
 
 <a
@@ -87,13 +60,7 @@
         {/if}
         <span>
           {#if lastMessageTimestamp}
-            {#if Date.now() - lastMessageTimestamp < 60 * 1000}
-              Just Now
-            {:else}
-              {formatDistanceToNowStrict(lastMessageTimestamp, {
-                locale: formatDistanceLocale,
-              })}
-            {/if}
+            {formatRelativeTime(new Date(lastMessageTimestamp))}
           {/if}
         </span>
       </div>
@@ -120,13 +87,7 @@
 
     <div class={"hidden @[40rem]:block w-[4.5rem] shrink-0 text-left text-xs " + (read ? "text-base-500 dark:text-base-500" : "text-base-600 dark:text-base-300/80")}>
       {#if lastMessageTimestamp}
-        {#if Date.now() - lastMessageTimestamp < 60 * 1000}
-          Just Now
-        {:else}
-          {formatDistanceToNowStrict(lastMessageTimestamp, {
-            locale: formatDistanceLocale,
-          })}
-        {/if}
+        {formatRelativeTime(new Date(lastMessageTimestamp))}
       {/if}
     </div>
   </div>

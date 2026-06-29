@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import { createActivityFeedQuery, type ActivityItem } from "$lib/queries/activity-feed";
   import { resolveBlobUrl } from "$lib/utils";
-  import { renderMarkdownSanitized } from "@roomy/design/utils";
+  import { renderMarkdownSanitized, formatRelativeTime } from "@roomy/design/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import ActivityFeedSkeleton from "./ActivityFeedSkeleton.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
@@ -13,15 +13,7 @@
   const feedQuery = createActivityFeedQuery(() => ({ spaceId, limit }));
 
   function timeAgo(iso: string): string {
-    const ms = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(ms / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return new Date(iso).toLocaleDateString();
+    return formatRelativeTime(new Date(iso));
   }
 
   function roomHref(item: ActivityItem): string {

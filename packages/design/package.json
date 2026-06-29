@@ -44,5 +44,11 @@
     "svelte": ">=5",
     "tailwind-variants": "^3.2.2"
   },
-  "svelte": "./src/index.ts"
+  "svelte": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
 }
