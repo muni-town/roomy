@@ -162,14 +162,18 @@
     {/if}
 
     {#if roomKind === "channel"}
-      <span class="grow"></span>
-      <ToggleTabs
-        items={channelTabList.map((x) => ({
-          name: x,
-          href: `#${x.toLowerCase()}`,
-        }))}
-        active={channelActiveTab}
-      />
+      <span class="grow sm:hidden"></span>
+      <div
+        class="sm:absolute sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2"
+      >
+        <ToggleTabs
+          items={channelTabList.map((x) => ({
+            name: x,
+            href: `#${x.toLowerCase()}`,
+          }))}
+          active={channelActiveTab}
+        />
+      </div>
     {/if}
   </div>
 {/snippet}
