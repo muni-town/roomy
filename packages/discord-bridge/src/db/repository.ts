@@ -50,6 +50,7 @@ export class BridgeRepository {
 		const db = new Database(path);
 		db.exec("PRAGMA journal_mode = WAL");
 		db.exec("PRAGMA foreign_keys = ON");
+		db.exec("PRAGMA busy_timeout = 3000");
 		runMigrations(db);
 		return new BridgeRepository(db);
 	}
