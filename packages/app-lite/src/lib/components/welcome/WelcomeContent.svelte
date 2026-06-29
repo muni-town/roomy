@@ -22,7 +22,7 @@
   );
 </script>
 
-<div class="flex flex-col items-center gap-6 py-12 w-full">
+<div class="flex flex-col items-center gap-6 pt-4 pb-12 w-full">
   <div class="flex items-start gap-6 px-4 max-w-2xl mx-auto w-full">
     <!-- Light mode: original blob logo with dark base outline and light inner gradient -->
     <svg
@@ -81,9 +81,11 @@
   </div>
 
   {#if spaces.length > 0}
-    <SpaceCards {spaces} />
+    <div class="mt-10 w-full">
+      <SpaceCards {spaces} />
+    </div>
   {:else}
-    <div class="px-4 max-w-2xl mx-auto w-full">
+    <div class="mt-10 px-4 max-w-2xl mx-auto w-full">
       <FeatureDemoCards />
     </div>
   {/if}
