@@ -47,14 +47,14 @@ let {
 
     {#if compact}
       {#if navbar.spaceInfo}
-        {@render navbar.spaceInfo()}
+        {@render navbar.spaceInfo?.()}
       {:else}
         <NavbarSpaceInfo />
       {/if}
     {/if}
 
     {#if navbar.content}
-      {@render navbar.content()}
+      {@render navbar.content?.()}
     {/if}
   </Navbar>
 
@@ -88,7 +88,7 @@ let {
       class:on-homepage={onHomepage}
     >
       {#if sidebarHeader.content}
-        {@render sidebarHeader.content()}
+        {@render sidebarHeader.content?.()}
       {/if}
     </div>
     <div class="relative flex flex-1 min-h-0 w-64 overflow-hidden sidebar-row">
@@ -111,7 +111,7 @@ let {
         <div class="big-sidebar-content-spacer h-full">
           <BigSidebar>
             {#if sidebar}
-              {@render sidebar()}
+              {@render sidebar?.()}
             {/if}
           </BigSidebar>
         </div>

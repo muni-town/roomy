@@ -88,7 +88,7 @@
 
 {#snippet spaceSidebar()}
   {#if sidebarOverride.content}
-    {@render sidebarOverride.content()}
+    {@render sidebarOverride.content?.()}
   {:else}
     <SpaceSidebar {spaceId} />
   {/if}

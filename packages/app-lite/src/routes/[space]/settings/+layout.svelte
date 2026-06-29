@@ -74,7 +74,7 @@
     </span>
     {#if navbar.spaceInfoExtra}
       <span class="flex items-center gap-1.5 shrink-0">
-        {@render navbar.spaceInfoExtra()}
+        {@render navbar.spaceInfoExtra?.()}
       </span>
     {/if}
   </div>

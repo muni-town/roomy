@@ -84,7 +84,7 @@
         aria-expanded={spaceSelectorOpen}
         title={spaceSelectorOpen ? "Hide space selector" : "Show space selector"}
       >
-        {@render avatar()}
+        {@render avatar?.()}
         <h1
           class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
         >
@@ -92,7 +92,7 @@
         </h1>
       </button>
     {:else}
-      {@render avatar()}
+      {@render avatar?.()}
       <h1
         class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
       >
