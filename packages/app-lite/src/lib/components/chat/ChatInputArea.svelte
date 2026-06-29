@@ -25,9 +25,13 @@
     spaceId: string;
     roomId: string;
     canWrite: boolean | undefined;
+    /** Whether to auto-focus the input on mount/tab switch. Default: true */
+    autoFocus?: boolean;
   };
 
-  let { spaceId, roomId, canWrite }: Props = $props();
+  let { spaceId, roomId, canWrite, autoFocus = true }: Props = $props();
+
+  let shouldFocus = $derived(autoFocus && !isSendingMessage && previewImages.length === 0);
 
   // Most-recently-active members in this room, derived from the cached
   // `getMessages` result (no extra fetch). Used to preseed the `@mention`
@@ -321,6 +325,7 @@
         }
         onEnter={handleSend}
         disabled={isSendingMessage}
+        setFocus={shouldFocus}
         {processImageFile}
         mentionSearch={mentionSearch}
       />

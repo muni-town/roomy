@@ -198,7 +198,6 @@
             atBottom,
             timestamp: Date.now(),
           });
-          console.debug('[ChatArea] Saving scroll position on unmount for', roomId, ':', currentScrollOffset);
         }
       }
     };
@@ -234,8 +233,6 @@
         }
 
         if (savedPosition && !savedPosition.atBottom) {
-          console.debug('[ChatArea] Restoring scroll position for room', currentRoomId, 'offset:', savedPosition.offset);
-
           // Restore to saved scroll position
           viewport?.scrollTo({
             top: savedPosition.offset,
@@ -246,7 +243,6 @@
           isAtBottom = false;
         } else {
           // No saved position or was at bottom, scroll to bottom
-          console.debug('[ChatArea] Scrolling to bottom for room', currentRoomId, 'savedPosition:', savedPosition?.atBottom);
           scrollToBottom();
           isAtBottom = true;
         }
@@ -317,7 +313,6 @@
           atBottom: isAtBottom,
           timestamp: Date.now(),
         });
-        console.debug('[ChatArea] Virtualizer scroll saved for', roomId, 'offset:', offset, 'isAtBottom:', isAtBottom);
       }
     }
 

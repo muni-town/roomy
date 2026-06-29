@@ -151,6 +151,24 @@
       viewMode: channelActiveTab === "Threads" ? "threads" : "chat",
     });
   });
+
+  // Track when we're actively switching tabs to avoid auto-focusing input
+  let isSwitchingTab = $state(false);
+  let prevActiveTab = $state(channelActiveTab);
+
+  $effect(() => {
+    if (prevActiveTab !== channelActiveTab) {
+      isSwitchingTab = true;
+      // Reset the switching flag after a short delay
+      setTimeout(() => {
+        isSwitchingTab = false;
+      }, 100);
+      prevActiveTab = channelActiveTab;
+    }
+  });
+
+  // Only show chat input area in chat view and when not a thread
+  let showChatInput = $derived(roomKind === "channel" && channelActiveTab === "Chat");
 </script>
 
 {#snippet roomNavbar()}
@@ -179,10 +197,27 @@
 {/snippet}
 
 <div class="h-full flex flex-col bg-white dark:bg-base-950">
-  {#if channelActiveTab === "Chat" || roomKind !== "channel"}
+  {#if roomKind === "channel"}
+    <!-- Both ChatArea and ChannelBoardView stay mounted for smooth tab switching -->
+    <div class="relative flex-1 min-h-0">
+      <!-- Chat view - always rendered but visibility toggled -->
+      <div class="absolute inset-0 flex flex-col" class:hidden={channelActiveTab !== "Chat"}>
+        <ChatArea {spaceId} {roomId} />
+      </div>
+
+      <!-- Threads view - always rendered but visibility toggled -->
+      <div class="absolute inset-0" class:hidden={channelActiveTab !== "Threads"}>
+        <ChannelBoardView />
+      </div>
+    </div>
+
+    <!-- Chat input area - only shown in chat view -->
+    {#if showChatInput}
+      <ChatInputArea {spaceId} {roomId} canWrite={roomCanWrite} autoFocus={!isSwitchingTab} />
+    {/if}
+  {:else}
+    <!-- Thread rooms only have chat view -->
     <ChatArea {spaceId} {roomId} />
     <ChatInputArea {spaceId} {roomId} canWrite={roomCanWrite} />
-  {:else}
-    <ChannelBoardView />
   {/if}
 </div>
