@@ -23,13 +23,23 @@
     query,
   );
 
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   // Highlight the search term in the message content
   function highlightSearchTerm(content: string, searchTerm: string): string {
-    if (!searchTerm) return content;
+    if (!searchTerm) return escapeHtml(content);
 
-    return content.replaceAll(
-      searchTerm,
-      `<mark class="bg-primary/30 text-base-content">${searchTerm}</mark>`,
+    const escapedSearchTerm = escapeHtml(searchTerm);
+    return escapeHtml(content).replaceAll(
+      escapedSearchTerm,
+      `<mark class="bg-primary/30 text-base-content">${escapedSearchTerm}</mark>`,
     );
   }
 

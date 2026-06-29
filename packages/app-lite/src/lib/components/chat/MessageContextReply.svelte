@@ -43,7 +43,7 @@
     </a>
   </div>
   <div class="line-clamp-1 overflow-hidden italic">
-    {@html renderMarkdownPlaintext(target.data.content ?? "")}
+    {@html renderMarkdownPlaintext(target.data.content ?? "", { sanitize: true })}
   </div>
 {:else if target.isPending}
   <div class="h-5"></div>
