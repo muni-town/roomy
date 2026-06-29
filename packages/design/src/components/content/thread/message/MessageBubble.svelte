@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import UserAvatar from "../../../user/UserAvatar.svelte";
-  import { formatMessageTimestamp } from "../../../utils/date.js";
+  import { formatMessageTimestamp } from "../../../../utils/date.js";
   import Badge from "../../../ui/badge/Badge.svelte";
 
   /**

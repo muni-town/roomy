@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { formatRelativeTime } from "../../../utils/date.js";
-  import type { ThreadInfo } from "./types";
-  import { IconHashtag } from "../../../../icons/index";
-  import AvatarGroup from "../../../user/AvatarGroup.svelte";
+import { formatRelativeTime } from "../../../../utils/date.js";
+import type { ThreadInfo } from "./types";
+import { IconHashtag } from "../../../../icons/index";
+import AvatarGroup from "../../../user/AvatarGroup.svelte";
 
-  let {
-    thread,
-    href,
-    hideChannel = false,
-  }: { thread: ThreadInfo; href: string; hideChannel?: boolean } = $props();
+let {
+	thread,
+	href,
+	hideChannel = false,
+}: { thread: ThreadInfo; href: string; hideChannel?: boolean } = $props();
 
-  let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
-  let read = $derived(!thread.unread);
+let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
+let read = $derived(!thread.unread);
 </script>
 
 <a
