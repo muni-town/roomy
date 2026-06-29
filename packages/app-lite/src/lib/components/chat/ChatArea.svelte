@@ -3,7 +3,7 @@
   import ChatMessage from "./ChatMessage.svelte";
   import MobileMessageDrawer from "./MobileMessageDrawer.svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
-  import { setContext } from "svelte";
+  import { setContext, onMount } from "svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
@@ -13,6 +13,7 @@
   import { cache } from "@roomy-space/sdk";
   import { queryClient } from "$lib/client";
   import { px } from "$lib/auth.svelte";
+  import { scrollPositionState } from "./scroll-position.svelte";
 
   const { queryKey } = cache;
 
@@ -35,6 +36,10 @@
   let isShifting = $state(false);
   let olderCursor = $state<string | null>(null);
   let hasMore = $state(true);
+  let currentScrollOffset = $state(0);
+  let hasRestoredScroll = $state(false);
+  let lastRestoredRoomId = $state<string | null>(null);
+  let isRestoring = $state(false); // Track when we're actively restoring scroll position
 
   // Lifted state for editing messages
   let editingMessageId = $state<string | undefined>(undefined);
@@ -147,12 +152,29 @@
     if (!virtualizer || timeline.length === 0) return;
     virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
     isAtBottom = true;
+    // Clear saved position when explicitly scrolling to bottom
+    scrollPositionState.clear(roomId);
   }
 
   function handleScroll() {
-    if (!viewport) return;
+    if (!viewport || isRestoring) return;
     const { scrollTop, scrollHeight, clientHeight } = viewport;
     isAtBottom = scrollHeight - (scrollTop + clientHeight) < 500;
+    currentScrollOffset = scrollTop;
+
+    // Update scroll position state when user scrolls
+    if (timeline.length > 0) {
+      if (isAtBottom) {
+        // Clear saved position when user scrolls to bottom
+        scrollPositionState.clear(roomId);
+      } else {
+        scrollPositionState.set(roomId, {
+          offset: scrollTop,
+          atBottom: isAtBottom,
+          timestamp: Date.now(),
+        });
+      }
+    }
   }
 
   function scrollToMessage(id: string) {
@@ -162,23 +184,83 @@
 
   setContext("scrollToMessage", scrollToMessage);
 
-  // Initial scroll to bottom when messages first load
+  // Save scroll position before component unmounts (e.g., when switching views)
+  onMount(() => {
+    return () => {
+      // Cleanup: save final scroll position before unmounting
+      if (viewport && timeline.length > 0 && currentScrollOffset > 0) {
+        const { scrollHeight, clientHeight, scrollTop } = viewport;
+        const atBottom = scrollHeight - (scrollTop + clientHeight) < 500;
+
+        if (!atBottom) {
+          scrollPositionState.set(roomId, {
+            offset: currentScrollOffset,
+            atBottom,
+            timestamp: Date.now(),
+          });
+          console.debug('[ChatArea] Saving scroll position on unmount for', roomId, ':', currentScrollOffset);
+        }
+      }
+    };
+  });
+
+  // Restore scroll position or scroll to bottom when messages first load for each room
   $effect(() => {
+    // Track roomId directly - effect runs when roomId changes
+    const currentRoomId = roomId;
+    const data = messagesQuery.data;
+
+    // Only restore if we haven't restored for this specific roomId yet
     if (
-      !hasInitiallyScrolled &&
-      messagesQuery.data &&
-      messagesQuery.data.length > 0 &&
-      virtualizer
+      data &&
+      data.length > 0 &&
+      virtualizer &&
+      lastRestoredRoomId !== currentRoomId
     ) {
+      const savedPosition = scrollPositionState.get(currentRoomId);
+
+      // Mark that we're attempting to restore for this roomId BEFORE the timeout
+      lastRestoredRoomId = currentRoomId;
+      hasRestoredScroll = true;
+      hasInitiallyScrolled = false; // Reset for new room
+      isRestoring = true; // Block auto-scroll during restoration
+
       setTimeout(() => {
-        scrollToBottom();
+        // Double-check that we're still on the same room before restoring
+        if (lastRestoredRoomId !== currentRoomId) {
+          // Room changed during the timeout, don't restore
+          isRestoring = false;
+          return;
+        }
+
+        if (savedPosition && !savedPosition.atBottom) {
+          console.debug('[ChatArea] Restoring scroll position for room', currentRoomId, 'offset:', savedPosition.offset);
+
+          // Restore to saved scroll position
+          viewport?.scrollTo({
+            top: savedPosition.offset,
+            behavior: 'instant',
+          });
+
+          // Update isAtBottom to match the restored position
+          isAtBottom = false;
+        } else {
+          // No saved position or was at bottom, scroll to bottom
+          console.debug('[ChatArea] Scrolling to bottom for room', currentRoomId, 'savedPosition:', savedPosition?.atBottom);
+          scrollToBottom();
+          isAtBottom = true;
+        }
         hasInitiallyScrolled = true;
+        isRestoring = false; // Re-enable auto-scroll after restoration
       }, 200);
     }
   });
 
   // Auto-scroll when new messages arrive and already at bottom
+  // Skip during initial restoration to prevent jumping back to bottom
   $effect(() => {
+    if (isRestoring) return; // Don't auto-scroll during restoration
+
     const len = timeline.length;
     if (len > prevMessageCount && prevMessageCount > 0 && isAtBottom) {
       scrollToBottom();
@@ -189,15 +271,57 @@
   // Reset state on room change
   $effect(() => {
     // Read roomId to make this reactive to room changes
-    void roomId;
-    hasInitiallyScrolled = false;
-    prevMessageCount = 0;
-    olderCursor = null;
-    hasMore = true;
-    isShifting = false;
+    const prevRoomId = roomId;
+    // We use prevMessageCount as a way to track room changes indirectly
+    // The actual room change handling is done via the component lifecycle
+    return () => {
+      // Cleanup when room changes - we save scroll position in handleScroll already
+    };
+  });
+
+  // Reset scroll restoration when roomId changes
+  $effect(() => {
+    // Track roomId directly - effect runs when roomId changes
+    const currentRoomId = roomId;
+    return () => {
+      // When roomId changes, reset state for the next room
+      // Note: lastRestoredRoomId is NOT reset here - it's set by the restoration effect
+      hasInitiallyScrolled = false;
+      hasRestoredScroll = false;
+      prevMessageCount = 0;
+      olderCursor = null;
+      hasMore = true;
+      isShifting = false;
+      currentScrollOffset = 0;
+      isRestoring = false;
+    };
   });
 
   function handleVirtualizerScroll(offset: number) {
+    // Track scroll position from virtualizer events (more reliable than viewport scroll)
+    if (!isRestoring && timeline.length > 0) {
+      currentScrollOffset = offset;
+
+      // Check if we're at the bottom
+      const { scrollHeight, clientHeight } = viewport ?? {};
+      if (scrollHeight && clientHeight) {
+        isAtBottom = scrollHeight - (offset + clientHeight) < 500;
+      }
+
+      // Save scroll position proactively
+      if (isAtBottom) {
+        scrollPositionState.clear(roomId);
+      } else {
+        scrollPositionState.set(roomId, {
+          offset,
+          atBottom: isAtBottom,
+          timestamp: Date.now(),
+        });
+        console.debug('[ChatArea] Virtualizer scroll saved for', roomId, 'offset:', offset, 'isAtBottom:', isAtBottom);
+      }
+    }
+
+    // Load older messages when near the top
     if (offset < 100 && timeline.length > 0 && hasMore && !isLoadingOlder) {
       loadOlderMessages();
     }

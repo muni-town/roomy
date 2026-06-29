@@ -6,6 +6,7 @@
   import { queryClient } from "$lib/client";
   import { auth, init, updateProfile } from "$lib/auth.svelte";
   import { startSync, stopSync } from "$lib/sync.svelte";
+  import { restoreScrollPositionsFromStorage, saveScrollPositionsToStorage } from "$lib/components/chat/scroll-position.svelte";
   import {
     installGlobalErrorRecovery,
     resetReloadBudget,
@@ -45,6 +46,24 @@
       PUBLIC_BRIDGE_DID: dynamicEnv.PUBLIC_BRIDGE_DID,
     });
     init();
+    restoreScrollPositionsFromStorage();
+
+    // Save scroll positions before page unload
+    const handleBeforeUnload = () => {
+      saveScrollPositionsToStorage();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Also save periodically (every 30 seconds) in case of crashes
+    const saveInterval = setInterval(() => {
+      saveScrollPositionsToStorage();
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      clearInterval(saveInterval);
+      saveScrollPositionsToStorage();
+    };
   });
 
   // ── Centralized navigation guard ─────────────────────────────────────────
