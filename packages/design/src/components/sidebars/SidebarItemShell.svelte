@@ -41,7 +41,7 @@
       <Button
         {href}
         variant="ghost"
-        class="w-full justify-start min-w-0 px-2.5"
+        class="relative w-full justify-start min-w-0 px-2.5"
         data-current={active}
       >
         {#if icon}
