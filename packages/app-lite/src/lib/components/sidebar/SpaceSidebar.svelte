@@ -19,18 +19,20 @@
   import SidebarCategoryShell from "@roomy/design/components/sidebars/SidebarCategoryShell.svelte";
   import SidebarItemShell from "@roomy/design/components/sidebars/SidebarItemShell.svelte";
   import { resolveBlobUrl } from "$lib/utils";
-  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Button, { buttonVariants } from "@roomy/design/components/ui/button/Button.svelte";
+  import { cn } from "@roomy/design/utils";
   import {
     IconCheck,
     IconGripVertical,
     IconHome,
+    IconPencil,
+    IconPlus,
     IconTrash,
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
-  import { leaveSpace } from "$lib/mutations/space";
   import { createRoom, updateSidebar } from "$lib/mutations/room";
-  import { newUlid } from "@roomy-space/sdk";
+  import { newUlid, Ulid } from "@roomy-space/sdk";
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
   import { settingsBar } from "$lib/components/layout/settings-bar.svelte";
   import { setSidebarHeader } from "$lib/components/layout/sidebar.svelte";
@@ -85,7 +87,6 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
   let createDefaultAccess = $state<Permission>("readwrite");
 
   let createChannelOpen = $state(false);
-  let createCategoryOpen = $state(false);
 
   const meta = $derived(spaceId ? metaQuery.data : null);
 
@@ -104,12 +105,6 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       ? (spacesQuery.data?.spaces ?? []).find((s) => s.id === spaceId)
       : null,
   );
-  const showInviteButton = $derived(
-    (meta?.joinPolicy.allowPublicJoin ?? false) ||
-      (meta?.joinPolicy.allowMemberInvites ?? false) ||
-      (meta?.isAdmin ?? false),
-  );
-
   // --- Settings panel (slides in from the right within the unified sidebar,
   //     mirroring the space selector / directory which slides in from the
   //     left, but in the opposite direction). The space header and space
@@ -153,14 +148,6 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       });
     } else {
       openInviteModal = true;
-    }
-  }
-
-  async function onLeave() {
-    try {
-      await leaveSpace(spaceId!);
-    } finally {
-      goto("/");
     }
   }
 
@@ -410,11 +397,16 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       const newSidebar = draftOrder
         .filter((c) => c.id !== "__orphans__")
         .map((c) => ({
-          id: c.id,
+          id: Ulid.allows(c.id) ? c.id : newUlid(),
           name: categoryMap.get(c.id)?.name ?? "",
           children: c.childIds,
         }));
-      await updateSidebar(spaceId!, newSidebar);
+      try {
+        await updateSidebar(spaceId!, newSidebar);
+      } catch {
+        toast.error("Failed to save sidebar changes");
+        return;
+      }
     }
     draftOrder = null;
     isEditing = false;
@@ -475,15 +467,9 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       <SpaceHeaderShell
         spaceName={currentSpace?.name ?? meta?.name ?? spaceId}
         isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
-        {showInviteButton}
         spaceSelectorOpen={serverBar.expanded}
         onToggleSpaceSelector={toggleServerBar}
         bind:isEditing
-        onCreateChannel={() => (createChannelOpen = true)}
-        onCreateCategory={() => (createCategoryOpen = true)}
-        settingsHref={`/${spaceId}/settings`}
-        {onInvite}
-        {onLeave}
       >
         {#snippet avatar()}
           <SpaceAvatar
@@ -557,7 +543,40 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     {#if metaQuery.isError}
       <ErrorMessage message={metaQuery.error.message} class="px-4 py-3" />
     {:else if meta}
-      {#if isEditing}
+      <div class="relative">
+        {#if meta?.isAdmin}
+          <div class="absolute top-1 right-1 z-10 flex items-center gap-0.5">
+            <button
+              type="button"
+              onclick={() => (createChannelOpen = true)}
+              class={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "rounded-full text-base-400 dark:text-base-500 hover:text-base-700 dark:hover:text-base-200",
+              )}
+              aria-label="Create channel"
+              title="Create channel"
+            >
+              <IconPlus />
+            </button>
+
+            <button
+              type="button"
+              onclick={() => (isEditing = !isEditing)}
+              class={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "rounded-full text-base-400 dark:text-base-500 hover:text-base-700 dark:hover:text-base-200",
+                isEditing &&
+                  "bg-accent-300/50 dark:bg-accent-500/15 text-accent-950 dark:text-accent-50",
+              )}
+              aria-label={isEditing ? "Cancel editing" : "Edit sidebar"}
+              title={isEditing ? "Cancel editing" : "Edit sidebar"}
+              aria-pressed={isEditing}
+            >
+              <IconPencil />
+            </button>
+          </div>
+        {/if}
+        {#if isEditing}
         <div
           class="flex flex-col w-full min-h-4"
           use:dragHandleZone={{
@@ -628,6 +647,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
           {/each}
         </div>
       {/if}
+      </div>
     {/if}
   {/snippet}
 
@@ -649,6 +669,10 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     <div
       class="flex flex-col h-full w-full px-2 pt-3 pb-20 overflow-y-auto bg-base-50 dark:bg-base-950 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)]"
     >
+      <!-- Settings pages -->
+      <div class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-base-400 dark:text-base-500">
+        Settings
+      </div>
       <div class="flex flex-col w-full gap-1">
         {#each settingsTabs as tab (tab.slug)}
           <Button
@@ -694,13 +718,6 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       {/if}
     {/snippet}
   </CreateRoomModal>
-
-  <CreateRoomModal
-    bind:open={createCategoryOpen}
-    {spaceId}
-    defaultType="Category"
-    onCreate={handleCreate}
-  />
 {/if}
 
 {#snippet channelItem(channel: SidebarChannel)}

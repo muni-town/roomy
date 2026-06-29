@@ -1,21 +1,5 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { goto } from "$app/navigation";
-  import { buttonVariants } from "../ui/button/Button.svelte";
-  import {
-    ContextMenu,
-    ContextMenuItem,
-    ContextMenuSeparator,
-  } from "../ui/context-menu/index.js";
-
-  import {
-    IconEllipsisHorizontal,
-    IconShare,
-    IconPlus,
-    IconPencil,
-    IconSettings,
-    IconLogOut,
-  } from "../../icons/index";
 
   let {
     spaceName,
@@ -43,7 +27,7 @@
     /** Avatar rendered by caller (e.g. SpaceAvatar wrapper) */
     avatar: Snippet;
     isAdmin: boolean;
-    showInviteButton: boolean;
+    showInviteButton?: boolean;
     isEditing?: boolean;
     /** Called when "Create Channel" is clicked in the menu. Only shown when isAdmin. */
     onCreateChannel?: () => void;
@@ -52,9 +36,9 @@
     /** Href for the "Space settings" admin action */
     settingsHref?: string;
     /** Called when Invite button is clicked. Wrapper decides between copy-link vs open modal. */
-    onInvite: () => void;
+    onInvite?: () => void;
     /** Called when Leave Space is clicked. */
-    onLeave: () => void;
+    onLeave?: () => void;
     /**
      * Whether the space selector (server bar) is currently open. Used for the
      * aria-expanded state and tooltip of the header toggle button.
@@ -66,14 +50,12 @@
      */
     onToggleSpaceSelector?: () => void;
   } = $props();
-
-  let menuOpen = $state(false);
 </script>
 
 <div
   class="w-full h-fit flex justify-between items-center gap-1"
 >
-  <!-- Header row: avatar + name (clickable to toggle the space selector) + actions -->
+  <!-- Header row: avatar + name (clickable to toggle the space selector) -->
   <div class="flex items-center gap-2 flex-1 min-w-0">
     {#if onToggleSpaceSelector}
       <button
@@ -100,69 +82,4 @@
       </h1>
     {/if}
   </div>
-
-  {#if false /* Temporarily disabled to preview the header without the ellipsis menu */}
-  <ContextMenu
-    bind:open={menuOpen}
-    side="bottom"
-    align="center"
-    sideOffset={10}
-  >
-    {#snippet trigger({ props: { action, ...attrs } })}
-      <button
-        use:action
-        {...attrs}
-        class={buttonVariants({ variant: "ghost", size: "iconSm" })}
-        aria-label="Space menu"
-      >
-        <IconEllipsisHorizontal class="size-4" />
-      </button>
-    {/snippet}
-
-    {#if showInviteButton}
-      <ContextMenuItem onSelect={() => { onInvite(); }}>
-        <IconShare class="size-4" />
-        Invite
-      </ContextMenuItem>
-    {/if}
-
-    {#if isAdmin}
-      {#if showInviteButton}
-        <ContextMenuSeparator />
-      {/if}
-
-      <ContextMenuItem onSelect={() => { isEditing = !isEditing; }}>
-        <IconPencil class="size-4" />
-        {isEditing ? "Finish editing" : "Edit Sidebar"}
-      </ContextMenuItem>
-
-      <ContextMenuSeparator />
-
-      <ContextMenuItem onSelect={() => { onCreateChannel?.(); }}>
-        <IconPlus class="size-4" />
-        Create Channel
-      </ContextMenuItem>
-
-      <ContextMenuItem onSelect={() => { onCreateCategory?.(); }}>
-        <IconPlus class="size-4" />
-        Create Category
-      </ContextMenuItem>
-
-      {#if settingsHref}
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => { goto(settingsHref!); }}>
-          <IconSettings class="size-4" />
-          Space settings
-        </ContextMenuItem>
-      {/if}
-    {/if}
-
-    <ContextMenuSeparator />
-
-    <ContextMenuItem variant="danger" onSelect={() => { onLeave(); }}>
-      <IconLogOut class="size-4" />
-      Leave Space
-    </ContextMenuItem>
-  </ContextMenu>
-  {/if}
 </div>
