@@ -15,6 +15,7 @@ import { Database } from "bun:sqlite";
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
 import type { SqlStatement, StatementBundleSuccess } from "./types.ts";
 import {
+  setMessageSortIdxByForward,
   setMessageSortIdxByReorder,
   setMessageSortIdxByTimestamp,
 } from "./sortIdx.ts";
@@ -45,6 +46,7 @@ export function applyBundle(
 
     setMessageSortIdxByTimestamp(db, bundle.event);
     setMessageSortIdxByReorder(db, opts.streamId, bundle.event);
+    setMessageSortIdxByForward(db, bundle.event);
 
     // Activity feed: upsert the activity item for every createMessage event
     // (including backfill, so existing rooms get populated).

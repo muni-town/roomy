@@ -47,6 +47,46 @@ export function setMessageSortIdxByTimestamp(db: Database, event: Event): void {
 }
 
 /**
+ * Set `entities.sort_idx` for a forward-reference entity created by a
+ * `forwardMessages` event, by copying the original message's sort_idx.
+ *
+ * Without this the forward-reference entity has sort_idx = NULL and
+ * selectMessages falls back to ordering by the forward event's own ULID. A
+ * thread-creation batch forwards several messages within the same
+ * millisecond, so those ULIDs differ only in their random suffixes and the
+ * original chronological order of the forwarded messages is scrambled (older
+ * forwarded messages can end up displayed after newer ones).
+ *
+ * Copying the original's sort_idx places the forwarded copy at the same
+ * chronological position as the original, which is also consistent with the
+ * displayed timestamp (selectMessages substitutes the original's timestamp
+ * and content for the forwarded copy). No-op if the original isn't
+ * materialised yet (the forward edge was skipped — see the guarded insert in
+ * the SDK materialiser) or has no sort_idx. forwardMessages is currently
+ * capped at one message per event.
+ */
+export function setMessageSortIdxByForward(db: Database, event: Event): void {
+  if (event.$type !== "space.roomy.message.forwardMessages.v0") return;
+  if (!("messageIds" in event) || !Array.isArray(event.messageIds)) return;
+
+  const originalId = event.messageIds[0] as Ulid | undefined;
+  if (!originalId) return;
+
+  const orig = db
+    .query<{ sort_idx: string | null }, [string]>(
+      "select sort_idx from entities where id = ?",
+    )
+    .get(originalId);
+
+  if (!orig || !orig.sort_idx) return;
+
+  db.prepare("update entities set sort_idx = ? where id = ?").run(
+    orig.sort_idx,
+    event.id,
+  );
+}
+
+/**
  * Set `entities.sort_idx` for a message moved by a `reorderMessage` event,
  * placing it lexicographically between the entity referenced by `after` and
  * whichever entity currently sorts immediately after that one.

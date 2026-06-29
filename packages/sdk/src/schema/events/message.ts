@@ -351,7 +351,23 @@ export const DeleteMessage = defineEvent(
       console.warn("Missing target for message meta override.");
       return [];
     }
-    return [sql`delete from entities where id = ${event.messageId}`];
+    return [
+      // Remove any forward-reference entities that point at this message BEFORE
+      // deleting the original. `edges.tail` is ON DELETE CASCADE, so deleting
+      // the original would otherwise remove the 'forward' edges on its own and
+      // leave the forward-reference entities behind as invisible orphan rows
+      // (no content, no edge → dropped by selectMessages, but still cluttering
+      // the table). Doing this first — while the edges still exist — lets us
+      // resolve the referencing heads; deleting each reference entity then
+      // cascades its own edges.
+      sql`
+        delete from entities where id in (
+          select head from edges
+          where tail = ${event.messageId} and label = 'forward'
+        )
+      `,
+      sql`delete from entities where id = ${event.messageId}`,
+    ];
   },
   (x) => [x.messageId],
 );
@@ -421,18 +437,30 @@ export const ForwardMessages = defineEvent(
     return event.messageIds.flatMap((msgId) => [
       // Ensure the forwarded reference entity exists in the target (destination) room
       ensureEntity(streamId, event.id, event.room),
-      // Create forward edge: head = forward reference (event.id), tail = original message
+      // Create forward edge: head = forward reference (event.id), tail = original
+      // message. Guard with `where exists` so a missing original (deleted before
+      // the forward, not-yet-materialised, or cross-space) does not trip the
+      // `edges.tail` foreign key and fail the entire event — the forward event
+      // is still recorded, just without the edge. In the normal case the
+      // original is already materialised and the edge is created as expected.
       sql`
         insert or ignore into edges (head, tail, label)
-        values (
+        select
           ${event.id},
           ${msgId},
           'forward'
-        )
+        where exists (select 1 from entities where id = ${msgId})
       `,
     ]);
   },
-  (x) => [x.id, ...x.messageIds],
+  // Depend on the original message(s) only — NOT our own id. Listing `x.id`
+  // here made every forwardMessages event depend on itself, which the legacy
+  // worker's stash gate can never satisfy (an event's own id is never in the
+  // already-applied set when it's first considered), so forward events were
+  // permanently stashed and never materialised. The original message must
+  // exist first because the forward edge references it, so we depend on
+  // exactly those ids — matching MoveMessages.
+  (x) => [...x.messageIds],
 );
 
 // All message events

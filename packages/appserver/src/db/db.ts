@@ -45,8 +45,24 @@ import { fileURLToPath } from "node:url";
  * flips `canonical_parent` 1 → 0, which corrupted parent-channel links for
  * threads on streams that got re-backfilled. Wipe re-derives correct
  * canonical_parent values from the event log.
+ *
+ * `.10-appserver.4`: forwardMessages materialiser fix. (1) `dependsOn` no
+ * longer lists the event's own id — that made every forwardMessages event
+ * depend on itself, so the legacy worker stashed it permanently and never
+ * materialised it. (2) The forward edge insert is now guarded with
+ * `where exists (select 1 from entities where id = <original>)` so a
+ * missing original (deleted before the forward, not-yet-materialised, or
+ * cross-space) no longer trips the `edges.tail` FK and fail the whole event.
+ * (3) deleteMessage now removes forward-reference entities that point at
+ * the deleted message before deleting it, so forwarded copies don't leave
+ * invisible orphan entity rows. (4) forwardMessages now sets sort_idx on the
+ * forward-reference entity by copying the original message's sort_idx, so
+ * forwarded copies sort at the original's chronological position instead of
+ * by the forward event's ULID (which scrambled same-millisecond forwards in
+ * a thread-creation batch). Wipe re-derives forward edges and sort_idx and
+ * cleans up existing orphans from the event log.
  */
-export const SCHEMA_VERSION = "10-appserver.3";
+export const SCHEMA_VERSION = "10-appserver.4";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 

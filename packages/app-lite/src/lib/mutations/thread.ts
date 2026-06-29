@@ -6,7 +6,7 @@ import { createRoom } from "./room";
  * Create a thread from selected messages.
  * 1. Creates a new "space.roomy.thread" room
  * 2. Links it to the parent room
- * 3. Moves each selected message into the thread
+ * 3. Forwards each selected message into the thread (originals stay in place)
  *
  * All events are batched into a single sendEvents call.
  */
@@ -39,16 +39,15 @@ export async function createThread({
     isCreationLink: true,
   });
 
-  // Move each selected message into the thread.
-  // Sort by ULID (lexicographic = chronological) so the bridge forwards
-  // messages in the same order they appeared in the source room.
-  for (const msgId of [...messageIds].sort()) {
+  // Forward each selected message into the thread. The original message stays
+  // in the parent room; a forward reference is created in the thread.
+  for (const msgId of messageIds) {
     events.push({
       id: newUlid(),
-      room: parentRoomId,
-      $type: "space.roomy.message.moveMessages.v0",
+      room: threadId,
+      $type: "space.roomy.message.forwardMessages.v0",
       messageIds: [msgId],
-      toRoomId: threadId,
+      fromRoomId: parentRoomId,
     });
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { ulid } from "ulidx";
 import {
   StreamDid,
   StreamIndex,
@@ -11,6 +12,7 @@ import {
 
 import { openDb } from "../db/db.ts";
 import { applyBatch } from "./applyBatch.ts";
+import { selectMessages } from "../queries/selectMessages.ts";
 
 const STREAM = StreamDid.assert("did:web:test-stream.example");
 const USER = UserDid.assert("did:plc:test-user");
@@ -303,5 +305,98 @@ describe("applyBatch", () => {
       )
       .get()?.n;
     expect(count).toBe(1);
+  });
+});
+
+/** Build a createMessage event with a text body in the decoded `{ buf }` form. */
+function createMessageEvent(roomId: string, id: string, text: string): Event {
+  return {
+    $type: "space.roomy.message.createMessage.v0",
+    id,
+    room: roomId,
+    body: {
+      mimeType: "text/markdown",
+      data: { buf: new TextEncoder().encode(text) },
+    },
+    extensions: {},
+  } as unknown as Event;
+}
+
+/** Build a forwardMessages event forwarding one original into `threadId`. */
+function forwardMessageEvent(
+  threadId: string,
+  channelId: string,
+  id: string,
+  originalId: string,
+): Event {
+  return {
+    $type: "space.roomy.message.forwardMessages.v0",
+    id,
+    room: threadId,
+    messageIds: [originalId],
+    fromRoomId: channelId,
+  } as unknown as Event;
+}
+
+describe("forwardMessages sort order", () => {
+  // Regression: forward-reference entities got no sort_idx, so selectMessages
+  // fell back to ordering by the forward event's own ULID. A thread-creation
+  // batch forwards several messages within the same millisecond, so those
+  // ULIDs differ only in their random suffixes and the original chronological
+  // order of the forwarded messages was scrambled (older forwarded messages
+  // could appear after newer ones). The fix copies the original message's
+  // sort_idx onto the forward-reference entity.
+  test("forwarded messages sort by the original's timestamp, not the forward event's", () => {
+    const db = freshDb();
+    seedSpace(db, STREAM);
+
+    const channelId = newUlid();
+    const threadId = newUlid();
+
+    // Two originals in the channel: an OLDER one and a NEWER one (2 min apart).
+    const T_old = 1_700_000_000_000;
+    const T_new = T_old + 120_000;
+    const msgOldId = ulid(T_old);
+    const msgNewId = ulid(T_new);
+    const msgOld = createMessageEvent(channelId, msgOldId, "old msg");
+    const msgNew = createMessageEvent(channelId, msgNewId, "new msg");
+
+    // Forward both into the thread. To reproduce the pre-fix scramble
+    // deterministically, give the NEWER original's forward an EARLIER forward
+    // event id than the OLDER original's forward. Before the fix the forward
+    // references sorted by event id, so the newer-original forward would come
+    // first (older-after-newer). After the fix they sort by the originals'
+    // sort_idx, restoring chronological order.
+    const T_fwd = T_new + 120_000;
+    const fwdNewId = ulid(T_fwd); // newer original, earlier forward id
+    const fwdOldId = ulid(T_fwd + 5_000); // older original, later forward id
+    const fwdNew = forwardMessageEvent(threadId, channelId, fwdNewId, msgNewId);
+    const fwdOld = forwardMessageEvent(threadId, channelId, fwdOldId, msgOldId);
+
+    applyBatch(
+      db,
+      STREAM,
+      [
+        decoded(msgOld, 1),
+        decoded(msgNew, 2),
+        decoded(fwdNew, 3),
+        decoded(fwdOld, 4),
+      ],
+      { isBackfill: true },
+    );
+
+    const { messages } = selectMessages(db, {
+      kind: "room",
+      roomId: threadId,
+      limit: 100,
+      cursor: null,
+    });
+
+    // Ascending: the older original's forward first, then the newer's.
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.id).toBe(fwdOldId);
+    expect(messages[0]?.content).toBe("old msg");
+    expect(messages[1]?.id).toBe(fwdNewId);
+    expect(messages[1]?.content).toBe("new msg");
   });
 });
