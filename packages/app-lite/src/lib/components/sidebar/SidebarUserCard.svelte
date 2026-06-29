@@ -71,9 +71,16 @@
         class:bg-red-500={!connected}
       ></div>
     </div>
-    <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate min-w-0 flex-1 text-left">
-      {displayedProfile?.handle ?? "Log in"}
-    </span>
+    <div class="flex flex-col min-w-0 flex-1 text-left leading-none">
+      <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate">
+        {displayedProfile?.displayName ?? displayedProfile?.handle ?? "Log in"}
+      </span>
+      {#if displayedProfile?.displayName && displayedProfile?.handle}
+        <span class="text-xs font-light text-base-400 dark:text-base-500 truncate -mt-1">
+          @{displayedProfile.handle}
+        </span>
+      {/if}
+    </div>
     <ContextMenu side="top" sideOffset={8} align="center">
       {#snippet trigger({ props: { action, ...attrs } })}
         <button

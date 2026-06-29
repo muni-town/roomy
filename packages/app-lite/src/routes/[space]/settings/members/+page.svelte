@@ -59,8 +59,6 @@
 </script>
 
 <div class="max-w-2xl">
-  <h2 class="text-base font-semibold mb-3">Members</h2>
-
   {#if membersQuery.isPending}
     <p class="text-sm text-base-400">Loading…</p>
   {:else if membersQuery.isError}

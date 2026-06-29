@@ -7,7 +7,6 @@
   import { sendEvents } from "$lib/mutations/send-events";
   import { createProfileSpaceRecord, removeProfileSpaceRecord, newUlid } from "@roomy-space/sdk";
   import Alert from "@roomy/design/components/ui/alert/Alert.svelte";
-  import Badge from "@roomy/design/components/ui/badge/Badge.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
@@ -175,15 +174,6 @@
 </script>
 
 <div class="max-w-2xl">
-  <h2 class="text-base font-semibold mb-4 flex items-center gap-3">
-    Space Handle
-    {#if currentSpaceHandle}
-      <Badge variant="secondary">{currentSpaceHandle}</Badge>
-    {:else}
-      <Badge variant="red">Not Set</Badge>
-    {/if}
-  </h2>
-
   <p class="mb-3 text-sm text-base-700 dark:text-base-300">
     Setting a space handle allows your space to be accessed with a nicer URL
     such as:

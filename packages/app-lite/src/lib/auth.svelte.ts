@@ -19,7 +19,7 @@ let initializing = $state(true);
 let initError = $state<string | null>(null);
 
 /** Cached profile for the current session, set reactively after login. */
-let profile = $state<{ handle: string; did: string; avatar: string } | null>(null);
+let profile = $state<{ handle: string; did: string; avatar: string; displayName?: string } | null>(null);
 
 // Direct XRPC client (replaces the proxied agent pattern).
 // Created lazily once the agent is available.
@@ -106,6 +106,7 @@ export async function updateProfile() {
       handle: res.data.handle,
       did: session.did,
       avatar: res.data.avatar ?? "",
+      displayName: res.data.displayName || undefined,
     };
     profile = p;
     localStorage.setItem("last-login", JSON.stringify(p));

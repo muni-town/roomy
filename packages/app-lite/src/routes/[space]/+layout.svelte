@@ -82,13 +82,13 @@
   });
 </script>
 
-<div class="h-full bg-base-50 dark:bg-base-900/20 text-base-800 dark:text-base-200">
+<div class="h-full dark:bg-base-900/20 text-base-800 dark:text-base-200">
   {@render children()}
 </div>
 
 {#snippet spaceSidebar()}
   {#if sidebarOverride.content}
-    {@render sidebarOverride.content()}
+    {@render sidebarOverride.content?.()}
   {:else}
     <SpaceSidebar {spaceId} />
   {/if}

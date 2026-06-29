@@ -6,7 +6,7 @@
   import SidebarUserCard from "$lib/components/sidebar/SidebarUserCard.svelte";
   import ToggleNavigation from "@roomy/design/components/helper/ToggleNavigation.svelte";
   import { navbar } from "./navbar.svelte";
-  import { sidebarOverride, sidebarContent } from "./sidebar.svelte";
+  import { sidebarOverride, sidebarContent, sidebarHeader } from "./sidebar.svelte";
   import { mobileSidebar } from "./mobile-sidebar.svelte";
   import { serverBar } from "./server-bar.svelte";
   import { wideSidebar } from "./wide-sidebar.svelte";
@@ -16,10 +16,8 @@
 
 let {
     children,
-    chatArea = false,
   }: {
     children: Snippet;
-    chatArea?: boolean;
   } = $props();
 
   // Compact mode when on a space page or other inner route (not a wide-sidebar page)
@@ -38,13 +36,8 @@ let {
 <!-- Main panel: navbar + page content, offset to clear the fixed sidebar -->
 <div
   class={[
-    "h-full flex flex-col overflow-hidden main-panel",
-    chatArea ? "bg-white dark:bg-base-950" : "",
-    onHomepage
-      ? "sm:ml-64"
-      : serverBar.expanded
-        ? "sm:ml-[20rem]"
-        : "sm:ml-64",
+    "h-full flex flex-col overflow-hidden main-panel bg-white dark:bg-base-950",
+    "sm:ml-64",
   ]}
 >
   <Navbar {compact} class={compact ? "h-11 dark:bg-base-900/20" : "dark:bg-base-900/20"}>
@@ -53,11 +46,15 @@ let {
     </div>
 
     {#if compact}
-      <NavbarSpaceInfo />
+      {#if navbar.spaceInfo}
+        {@render navbar.spaceInfo?.()}
+      {:else}
+        <NavbarSpaceInfo />
+      {/if}
     {/if}
 
     {#if navbar.content}
-      {@render navbar.content()}
+      {@render navbar.content?.()}
     {/if}
   </Navbar>
 
@@ -79,43 +76,68 @@ let {
 <!-- Fixed sidebar (full height, left) -->
 <div
   class={[
-    "isolate fixed top-0 bottom-0 left-0 z-40 overflow-hidden bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none sidebar-fixed",
+    "isolate fixed top-0 bottom-0 left-0 z-40 overflow-hidden bg-base-50/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none sidebar-fixed",
     mobileSidebar.visible ? "block" : "hidden sm:block",
   ]}
 >
   <div class="flex flex-col h-full">
-    <div class="relative flex flex-1 min-h-0">
-      <!-- Server bar + BigSidebar: on homepage the server bar expands to w-64
-      and the BigSidebar slides right out of view -->
-      <ServerBar wide={onHomepage} expanded={serverBar.expanded} />
-      <!-- BigSidebar wrapper: slides left via translateX + overflow:hidden
-           instead of animating width, keeping animation on the compositor -->
+    <!-- Space header: sits above the sidebar row, spanning the BigSidebar
+         width (256px). The space selector overlays the row below. -->
+    <div
+      class="shrink-0 sidebar-header-wrapper"
+      class:on-homepage={onHomepage}
+    >
+      {#if sidebarHeader.content}
+        {@render sidebarHeader.content?.()}
+      {/if}
+    </div>
+    <div class="relative flex flex-1 min-h-0 w-64 overflow-hidden sidebar-row">
+      <!-- BigSidebar: slides in from the right on space pages, out to the
+           right on the homepage OR when the space selector is opened on a
+           space page. Driving both states from the same condition keeps the
+           main sidebar and the space selector on one pannable plane: opening
+           the selector pushes the main sidebar out to the right (mirroring
+           the directory → space transition) instead of overlaying it.
+           Absolute positioning keeps the row at a constant 256px (no layout
+           jump / overlap), and the row's overflow-hidden clips the slide.
+           Animating transform only — no max-width curtain — avoids the
+           content being clipped mid-slide, which previously caused the
+           sidebar to flash in partway through. -->
       <div
-        class="overflow-hidden shrink-0 w-64 h-full flex flex-col border-r border-base-950/5 dark:border-transparent big-sidebar-wrapper"
-        class:big-sidebar-hidden={onHomepage}
-        class:big-sidebar-visible={!onHomepage}
+        class="absolute inset-y-0 left-0 w-64 h-full flex flex-col big-sidebar-wrapper"
+        class:big-sidebar-hidden={onHomepage || serverBar.expanded}
+        class:big-sidebar-visible={!onHomepage && !serverBar.expanded}
       >
-        <div
-          class="big-sidebar-content big-sidebar-content-spacer"
-          class:big-sidebar-content-hidden={onHomepage}
-          class:big-sidebar-content-visible={!onHomepage}
-        >
+        <div class="big-sidebar-content-spacer h-full">
           <BigSidebar>
             {#if sidebar}
-              {@render sidebar()}
+              {@render sidebar?.()}
             {/if}
           </BigSidebar>
         </div>
       </div>
+      <!-- Space selector (wide server bar): a SINGLE element, shown on the
+           homepage (always) and on space pages when toggled. Because it is
+           one element, navigating between states where it stays visible —
+           e.g. the selector open on a space, then going to the homepage —
+           does not unmount/remount it, so it stays put instead of
+           disappearing and sliding back in. It only animates when its
+           visibility actually changes. When it opens on a space page the
+           BigSidebar pans out to the right in lockstep (see
+           big-sidebar-wrapper above), so the two read as one pannable plane;
+           z-20 only matters at rest to keep the selector above the
+           BigSidebar's residual space. -->
+      <div
+        class="space-selector-overlay bg-base-50 dark:bg-base-950"
+        class:open={onHomepage || serverBar.expanded}
+      >
+        <ServerBar wide={true} />
+      </div>
     </div>
-    <!-- User card sits below the sidebar row, constrained to the visible width. -->
-    <!-- On the homepage it only covers the server bar (w-64).
-         On space pages it covers server bar + BigSidebar. -->
+    <!-- User card sits below the sidebar row, spanning the sidebar width. -->
     <div
-      class="shrink-0 border-r border-base-950/5 dark:border-transparent sidebar-user-card-wrapper"
+      class="shrink-0 sidebar-user-card-wrapper"
       class:on-homepage={onHomepage}
-      class:not-homepage={!onHomepage}
-      class:server-collapsed={!serverBar.expanded}
     >
       <SidebarUserCard />
     </div>
@@ -129,35 +151,21 @@ let {
     will-change: margin-left;
   }
 
-  /* ── BigSidebar wrapper: translateX on compositor thread ────── */
+  /* ── BigSidebar wrapper: pure translateX slide on the compositor.
+     The row clips at 256px so the slide never overflows the main panel.
+     No max-width animation: animating both max-width and translateX with
+     overflow:hidden previously clipped the content partway through the
+     slide, making the sidebar flash in mid-transition. ── */
   .big-sidebar-wrapper {
     contain: layout style paint;
-    transition:
-      max-width 400ms cubic-bezier(0.33, 1, 0.68, 1),
-      transform 400ms cubic-bezier(0.33, 1, 0.68, 1);
-    will-change: transform, max-width;
+    transition: transform 400ms cubic-bezier(0.33, 1, 0.68, 1);
+    will-change: transform;
   }
   .big-sidebar-wrapper.big-sidebar-visible {
     transform: translateX(0);
-    max-width: 256px;
   }
   .big-sidebar-wrapper.big-sidebar-hidden {
-    /* Slide 256px to the right (out of view behind the overflowing server bar area),
-       plus an extra 20px for a nice parallax feel */
-    transform: translateX(276px);
-    max-width: 0;
-  }
-
-  /* ── BigSidebar content fade ────────────────────────────────── */
-  .big-sidebar-content {
-    transition: opacity 350ms ease;
-    will-change: opacity;
-  }
-  .big-sidebar-content.big-sidebar-content-visible {
-    opacity: 1;
-  }
-  .big-sidebar-content.big-sidebar-content-hidden {
-    opacity: 0;
+    transform: translateX(100%);
   }
 
   /* ── Sidebar fixed container: compositor isolation ──────────── */
@@ -183,28 +191,70 @@ let {
   /* ── User card width: matches the visible sidebar width ────────── */
   .sidebar-user-card-wrapper {
     z-index: 50;
-    transition:
-      width 400ms cubic-bezier(0.33, 1, 0.68, 1),
-      border-right-width 400ms cubic-bezier(0.33, 1, 0.68, 1);
-    will-change: width;
+    width: 256px;
     contain: layout style;
   }
-  /* Homepage: wide server bar only (w-64 = 256px), BigSidebar hidden */
   .sidebar-user-card-wrapper.on-homepage {
-    width: 256px;
     border-right: none;
-  }
-  /* Space page, server bar expanded: server bar (64px) + BigSidebar (256px) = 320px */
-  .sidebar-user-card-wrapper.not-homepage:not(.server-collapsed) {
-    width: 320px;
-  }
-  /* Space page, server bar collapsed: just BigSidebar (256px) */
-  .sidebar-user-card-wrapper.not-homepage.server-collapsed {
-    width: 256px;
   }
 
   /* ── BigSidebar spacer to prevent content hiding behind user card ── */
   .big-sidebar-content-spacer {
     padding-bottom: 80px;
+  }
+
+  /* ── Space header wrapper: constant 256px bar above the sidebar row.
+     The space selector overlays the row below instead of pushing the
+     sidebar wider, so this no longer animates. ── */
+  .sidebar-header-wrapper {
+    z-index: 50;
+    width: 256px;
+    /* Reserve the space header height (32px avatar + 24px toggle py-3 + 1px
+       bottom border = 57px) even when empty (homepage), so the sidebar row
+       below doesn't shift vertically between the homepage and space pages. */
+    min-height: 57px;
+    contain: layout style;
+  }
+  .sidebar-header-wrapper.on-homepage {
+    border-right: none;
+    /* Match the sidebar row below (the ServerBar / space-selector overlay
+       uses bg-base-50 dark:bg-base-950) so the header doesn't read as a
+       lighter strip in light mode. */
+    background-color: var(--color-base-50);
+  }
+  :global(.dark) .sidebar-header-wrapper.on-homepage {
+    background-color: var(--color-base-950);
+  }
+
+  /* ── Space selector (wide server bar): shown on the homepage (always)
+     and on space pages when toggled. Slides in from the left on the
+     compositor thread. A single shared element for both contexts so it
+     doesn't unmount/remount across a navigation that leaves it visible. ── */
+  .space-selector-overlay {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 256px;
+    z-index: 20;
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 400ms cubic-bezier(0.33, 1, 0.68, 1),
+      opacity 300ms ease;
+    will-change: transform;
+    contain: layout style;
+  }
+  .space-selector-overlay.open {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  /* The selector sits on top of the BigSidebar, which has no right border;
+     drop the wide server bar's right border so opening the selector doesn't
+     draw a separator line that isn't there when it's closed. */
+  .space-selector-overlay :global(.sidebar-server-bar) {
+    border-right: none;
   }
 </style>

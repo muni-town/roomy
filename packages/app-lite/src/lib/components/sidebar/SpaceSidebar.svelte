@@ -15,23 +15,27 @@
   } from "svelte-dnd-action";
   import SidebarLayout from "@roomy/design/components/sidebars/SidebarLayout.svelte";
   import SpaceHeaderShell from "@roomy/design/components/sidebars/SpaceHeaderShell.svelte";
+  import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import SidebarCategoryShell from "@roomy/design/components/sidebars/SidebarCategoryShell.svelte";
   import SidebarItemShell from "@roomy/design/components/sidebars/SidebarItemShell.svelte";
   import { resolveBlobUrl } from "$lib/utils";
-  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import Button, { buttonVariants } from "@roomy/design/components/ui/button/Button.svelte";
+  import { cn } from "@roomy/design/utils";
   import {
     IconCheck,
-    IconCollapseSidebar,
     IconGripVertical,
     IconHome,
+    IconPencil,
+    IconPlus,
     IconTrash,
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
-  import { leaveSpace } from "$lib/mutations/space";
   import { createRoom, updateSidebar } from "$lib/mutations/room";
-  import { newUlid } from "@roomy-space/sdk";
+  import { newUlid, Ulid } from "@roomy-space/sdk";
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
+  import { settingsBar } from "$lib/components/layout/settings-bar.svelte";
+  import { setSidebarHeader } from "$lib/components/layout/sidebar.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
   import SpaceSidebarButtons from "./SpaceSidebarButtons.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
@@ -42,6 +46,7 @@
 import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
 import { createSpacesQuery } from "$lib/queries/spaces";
 import { toast } from "@foxui/core";
+import RoomyMark from "$lib/components/RoomyMark.svelte";
 
   type RoomMetadata = typeof schemas.queries.getRoomMetadata.Response.infer;
 
@@ -66,7 +71,7 @@ import { toast } from "@foxui/core";
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
-  // --- Server bar toggle — the collapse-sidebar button in the header toggles it. ---
+  // --- Server bar toggle — the space header (avatar) toggles it. ---
   let sidebarElement = $state<HTMLElement | null>(null);
 
   let isEditing = $state(false);
@@ -82,9 +87,16 @@ import { toast } from "@foxui/core";
   let createDefaultAccess = $state<Permission>("readwrite");
 
   let createChannelOpen = $state(false);
-  let createCategoryOpen = $state(false);
 
   const meta = $derived(spaceId ? metaQuery.data : null);
+
+  // Register the space header so MainLayout can render it as a full-width bar
+  // above the server bar / BigSidebar row (matching the user card behaviour).
+  // The snippet is defined below in the template and closes over this scope.
+  $effect(() => {
+    setSidebarHeader(spaceHeader);
+    return () => setSidebarHeader(undefined);
+  });
 
   // Derive the current space from the cached getSpaces query for instant header rendering.
   // Falls back to getMetadata for future public spaces where this space isn't in the user's space list.
@@ -93,11 +105,39 @@ import { toast } from "@foxui/core";
       ? (spacesQuery.data?.spaces ?? []).find((s) => s.id === spaceId)
       : null,
   );
-  const showInviteButton = $derived(
-    (meta?.joinPolicy.allowPublicJoin ?? false) ||
-      (meta?.joinPolicy.allowMemberInvites ?? false) ||
-      (meta?.isAdmin ?? false),
+  // --- Settings panel (slides in from the right within the unified sidebar,
+  //     mirroring the space selector / directory which slides in from the
+  //     left, but in the opposite direction). The space header and space
+  //     action buttons stay intact; only the channels body slides out. ---
+  const showInvitesTab = $derived(
+    !(meta?.joinPolicy.allowPublicJoin ?? true) &&
+      ((meta?.isAdmin ?? false) ||
+        (meta?.joinPolicy.allowMemberInvites ?? false)),
   );
+  const showDiscordBridgeTab = $derived(meta?.isAdmin ?? false);
+  const settingsTabs = $derived(
+    [
+      { slug: "", label: "General" },
+      { slug: "roles", label: "Roles" },
+      { slug: "members", label: "Members" },
+      ...(showInvitesTab ? [{ slug: "invites", label: "Invites" }] : []),
+      ...(showDiscordBridgeTab
+        ? [{ slug: "discord-bridge", label: "Discord Bridge" }]
+        : []),
+    ],
+  );
+  function isSettingsTabActive(slug: string) {
+    if (!spaceId) return false;
+    const base = `/${spaceId}/settings`;
+    return slug === ""
+      ? page.url.pathname === base
+      : page.url.pathname === `${base}/${slug}`;
+  }
+
+  // The settings panel is open while a settings route is mounted, unless the
+  // space selector (directory) is also open — in that case the whole
+  // BigSidebar pans right and the settings overlay rides along off-screen.
+  const settingsOpen = $derived(settingsBar.expanded && !serverBar.expanded);
 
   function onInvite() {
     if (meta?.joinPolicy.allowPublicJoin) {
@@ -108,14 +148,6 @@ import { toast } from "@foxui/core";
       });
     } else {
       openInviteModal = true;
-    }
-  }
-
-  async function onLeave() {
-    try {
-      await leaveSpace(spaceId!);
-    } finally {
-      goto("/");
     }
   }
 
@@ -365,11 +397,16 @@ import { toast } from "@foxui/core";
       const newSidebar = draftOrder
         .filter((c) => c.id !== "__orphans__")
         .map((c) => ({
-          id: c.id,
+          id: Ulid.allows(c.id) ? c.id : newUlid(),
           name: categoryMap.get(c.id)?.name ?? "",
           children: c.childIds,
         }));
-      await updateSidebar(spaceId!, newSidebar);
+      try {
+        await updateSidebar(spaceId!, newSidebar);
+      } catch {
+        toast.error("Failed to save sidebar changes");
+        return;
+      }
     }
     draftOrder = null;
     isEditing = false;
@@ -424,39 +461,52 @@ import { toast } from "@foxui/core";
   }
 </script>
 
-<div bind:this={sidebarElement} class="h-full">
-<SidebarLayout loading={!!spaceId && metaQuery.isPending}>
-  {#snippet header()}
-    {#if spaceId}
-      <div class="pt-1">
-        <SpaceHeaderShell
-          spaceName={currentSpace?.name ?? meta?.name ?? spaceId}
-          isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
-          {showInviteButton}
-          bind:isEditing
-          onCreateChannel={() => (createChannelOpen = true)}
-          onCreateCategory={() => (createCategoryOpen = true)}
-          settingsHref={`/${spaceId}/settings`}
-          {onInvite}
-          {onLeave}
-        >
-          {#snippet collapseSidebar()}
-            <button
-              onclick={toggleServerBar}
-              class="flex items-center justify-center size-8 rounded-lg hover:bg-base-300/50 dark:hover:bg-base-800/50 text-base-500 hover:text-base-700 dark:text-base-400 dark:hover:text-base-200 transition-colors cursor-pointer"
-              aria-label="Toggle server bar"
-              title={serverBar.expanded ? "Collapse server bar" : "Expand server bar"}
-            >
-              <IconCollapseSidebar
-                class={["size-4 transition-transform duration-200", !serverBar.expanded && "rotate-180"]}
-              />
-            </button>
-          {/snippet}
-        </SpaceHeaderShell>
+{#snippet spaceHeader()}
+  {#if spaceId}
+    <div class="border-b border-transparent hover:border-base-200/60 dark:hover:border-base-900/60">
+      <SpaceHeaderShell
+        spaceName={currentSpace?.name ?? meta?.name ?? spaceId}
+        isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
+        spaceSelectorOpen={serverBar.expanded}
+        onToggleSpaceSelector={toggleServerBar}
+        bind:isEditing
+      >
+        {#snippet avatar()}
+          <SpaceAvatar
+            src={resolveBlobUrl(meta?.avatar)}
+            id={spaceId}
+            name={meta?.name ?? undefined}
+            shape="squircle"
+          />
+        {/snippet}
+      </SpaceHeaderShell>
+    </div>
+  {:else}
+    <!-- Homepage (no space selected): Roomy logo + wordmark, laid out to
+         match the space header (-mx-1 px-5.5 py-3, 32px mark, text-md font-semibold)
+         so it aligns with space-page headers and the sidebar row below stays
+         put. Non-interactive; the server bar already provides a Home link. -->
+    <div class="w-full h-fit flex justify-between items-center gap-1">
+      <div class="flex items-center gap-2 flex-1 min-w-0">
+        <div class="flex items-center gap-2.75 -mx-1 px-5.5 py-3">
+          <RoomyMark sizeClass="size-8" />
+          <h1
+            class="text-lg font-black opacity-90 text-base-700 dark:text-base-200 truncate max-w-full grow min-w-0"
+          >
+            Roomy
+          </h1>
+        </div>
       </div>
-    {/if}
-  {/snippet}
+    </div>
+  {/if}
+{/snippet}
 
+<div bind:this={sidebarElement} class="h-full">
+<SidebarLayout
+  loading={!!spaceId && metaQuery.isPending}
+  bodySlideOut={settingsOpen}
+  overlayOpen={settingsOpen}
+>
   {#snippet actions()}
     <SpaceSidebarButtons
       {spaceId}
@@ -477,7 +527,7 @@ import { toast } from "@foxui/core";
   {#snippet prefix()}
     {#if spaceId}
       <Button
-        class="w-full justify-start min-w-0 py-1"
+        class="w-full justify-start min-w-0 py-1 px-2.5"
         variant="ghost"
         href={`/${spaceId}`}
         data-current={page.url.pathname === `/${spaceId}`}
@@ -493,7 +543,40 @@ import { toast } from "@foxui/core";
     {#if metaQuery.isError}
       <ErrorMessage message={metaQuery.error.message} class="px-4 py-3" />
     {:else if meta}
-      {#if isEditing}
+      <div class="relative">
+        {#if meta?.isAdmin}
+          <div class="absolute top-1 right-1 z-10 flex items-center gap-0.5">
+            <button
+              type="button"
+              onclick={() => (createChannelOpen = true)}
+              class={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "rounded-full text-base-400 dark:text-base-500 hover:text-base-700 dark:hover:text-base-200",
+              )}
+              aria-label="Create channel"
+              title="Create channel"
+            >
+              <IconPlus />
+            </button>
+
+            <button
+              type="button"
+              onclick={() => (isEditing = !isEditing)}
+              class={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "rounded-full text-base-400 dark:text-base-500 hover:text-base-700 dark:hover:text-base-200",
+                isEditing &&
+                  "bg-accent-300/50 dark:bg-accent-500/15 text-accent-950 dark:text-accent-50",
+              )}
+              aria-label={isEditing ? "Cancel editing" : "Edit sidebar"}
+              title={isEditing ? "Cancel editing" : "Edit sidebar"}
+              aria-pressed={isEditing}
+            >
+              <IconPencil />
+            </button>
+          </div>
+        {/if}
+        {#if isEditing}
         <div
           class="flex flex-col w-full min-h-4"
           use:dragHandleZone={{
@@ -564,6 +647,7 @@ import { toast } from "@foxui/core";
           {/each}
         </div>
       {/if}
+      </div>
     {/if}
   {/snippet}
 
@@ -579,6 +663,29 @@ import { toast } from "@foxui/core";
         Archive
       </Button>
     {/if}
+  {/snippet}
+
+  {#snippet overlayBody()}
+    <div
+      class="flex flex-col h-full w-full px-2 pt-3 pb-20 overflow-y-auto bg-base-50 dark:bg-base-950 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)]"
+    >
+      <!-- Settings pages -->
+      <div class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-base-400 dark:text-base-500">
+        Settings
+      </div>
+      <div class="flex flex-col w-full gap-1">
+        {#each settingsTabs as tab (tab.slug)}
+          <Button
+            variant="ghost"
+            class="w-full justify-start"
+            href={spaceId ? `/${spaceId}/settings${tab.slug ? `/${tab.slug}` : ""}` : undefined}
+            data-current={isSettingsTabActive(tab.slug)}
+          >
+            {tab.label}
+          </Button>
+        {/each}
+      </div>
+    </div>
   {/snippet}
 </SidebarLayout>
 </div>
@@ -611,13 +718,6 @@ import { toast } from "@foxui/core";
       {/if}
     {/snippet}
   </CreateRoomModal>
-
-  <CreateRoomModal
-    bind:open={createCategoryOpen}
-    {spaceId}
-    defaultType="Category"
-    onCreate={handleCreate}
-  />
 {/if}
 
 {#snippet channelItem(channel: SidebarChannel)}

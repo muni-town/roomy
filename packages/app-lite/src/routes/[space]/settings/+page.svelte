@@ -131,8 +131,6 @@
 
 <div class="max-w-2xl">
   {#if isAdmin}
-    <h2 class="text-base font-semibold mb-4">General</h2>
-
     {#if metaQuery.isPending}
       <p class="text-sm text-base-400">Loading…</p>
     {:else if metaQuery.isError}
@@ -264,13 +262,13 @@
       <p class="text-sm text-base-500 dark:text-base-400">
         You don't have permission to edit this space's settings.
       </p>
-      <Button
-        variant="red"
-        onclick={onLeave}
-        disabled={isLeaving}
-      >
-        {isLeaving ? "Leaving…" : "Leave Space"}
-      </Button>
     </div>
   {/if}
+
+  <!-- Danger zone: available to all members. -->
+  <div class="mt-8 pt-6 border-t border-base-200 dark:border-base-800">
+    <Button variant="red" onclick={onLeave} disabled={isLeaving}>
+      {isLeaving ? "Leaving…" : "Leave Space"}
+    </Button>
+  </div>
 </div>

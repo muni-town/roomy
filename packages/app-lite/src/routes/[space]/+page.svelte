@@ -102,14 +102,18 @@
 
 {#snippet spaceNavbar()}
   <div class="flex items-center gap-2 px-2 min-w-0 grow">
-    <span class="grow"></span>
-    <ToggleTabs
-      items={[
-        { name: "Feed", href: "#feed" },
-        { name: "Threads", href: "#threads" },
-      ]}
-      active={activeTab}
-    />
+    <span class="grow sm:hidden"></span>
+    <div
+      class="sm:absolute sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2"
+    >
+      <ToggleTabs
+        items={[
+          { name: "Feed", href: "#feed" },
+          { name: "Threads", href: "#threads" },
+        ]}
+        active={activeTab}
+      />
+    </div>
   </div>
 {/snippet}
 

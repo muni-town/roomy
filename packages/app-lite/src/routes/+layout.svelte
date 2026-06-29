@@ -10,6 +10,8 @@
     installGlobalErrorRecovery,
     resetReloadBudget,
   } from "$lib/error-recovery";
+  import { serverBar } from "$lib/components/layout/server-bar.svelte";
+  import { settingsBar } from "$lib/components/layout/settings-bar.svelte";
   import { requireAuth } from "$lib/components/layout/auth-guard.svelte";
   import LoginModal from "$lib/components/auth/LoginModal.svelte";
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
@@ -49,8 +51,28 @@
   // Reset module-level state that lacks per-page cleanup on every SvelteKit
   // navigation. Navbar/sidebar are handled by per-page onMount cleanups;
   // messagingState is reset by the room page on room change.
-  onNavigate(() => {
+  //
+  // serverBar.expanded (the space selector overlay) is transient per-view
+  // state: on the homepage the overlay is shown via the wideSidebar flag
+  // regardless of `expanded`, but on space pages it is gated by `expanded`.
+  // Without resetting it here, `expanded` leaks across navigations — e.g.
+  // open the selector on a space, go home, then click a space card / recent
+  // activity item — and the selector re-opens on the destination space.
+  // ServerBar.navigateToSpace already resets it, but plain-link paths
+  // (SpaceCards, ActivityFeed) don't, so reset centrally here to cover all
+  // directory→space (and any other) navigation paths.
+  // `settingsBar.expanded` is transient per-view state. The settings panel
+  // is toggled by the settings button and auto-opened by the settings route
+  // layout's `onMount` (so deep links to `/.../settings/...` open it). To
+  // keep it open across in-settings tab clicks we only reset it when the
+  // destination is NOT a settings route — every other navigation (to a room,
+  // the homepage, or a different space) closes the panel so it can't leak.
+  onNavigate((navigation) => {
     requireAuth.value = true;
+    serverBar.expanded = false;
+    if (!navigation.to?.url.pathname.includes("/settings")) {
+      settingsBar.expanded = false;
+    }
   });
 
   // Fetch ATProto profile as soon as we're authenticated.

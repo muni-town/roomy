@@ -1,21 +1,5 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { goto } from "$app/navigation";
-  import { buttonVariants } from "../ui/button/Button.svelte";
-  import {
-    ContextMenu,
-    ContextMenuItem,
-    ContextMenuSeparator,
-  } from "../ui/context-menu/index.js";
-
-  import {
-    IconEllipsisHorizontal,
-    IconShare,
-    IconPlus,
-    IconPencil,
-    IconSettings,
-    IconLogOut,
-  } from "../../icons/index";
 
   let {
     spaceName,
@@ -29,17 +13,21 @@
     onInvite,
     onLeave,
     /**
-     * Optional collapse-sidebar button rendered to the left of the space name.
-     * When provided, it replaces the avatar as the clickable element next to
-     * the space name.
+     * Whether the space selector (server bar) is currently open. Used for the
+     * aria-expanded state and tooltip of the header toggle button.
      */
-    collapseSidebar,
+    spaceSelectorOpen = false,
+    /**
+     * When provided, the space header (avatar + name) becomes a button that
+     * opens/closes the space selector. When omitted, the header is static.
+     */
+    onToggleSpaceSelector,
   }: {
     spaceName?: string;
     /** Avatar rendered by caller (e.g. SpaceAvatar wrapper) */
     avatar: Snippet;
     isAdmin: boolean;
-    showInviteButton: boolean;
+    showInviteButton?: boolean;
     isEditing?: boolean;
     /** Called when "Create Channel" is clicked in the menu. Only shown when isAdmin. */
     onCreateChannel?: () => void;
@@ -48,98 +36,50 @@
     /** Href for the "Space settings" admin action */
     settingsHref?: string;
     /** Called when Invite button is clicked. Wrapper decides between copy-link vs open modal. */
-    onInvite: () => void;
+    onInvite?: () => void;
     /** Called when Leave Space is clicked. */
-    onLeave: () => void;
+    onLeave?: () => void;
     /**
-     * Optional collapse-sidebar button rendered to the left of the space name.
-     * When provided, it replaces the avatar as the clickable element next to
-     * the space name.
+     * Whether the space selector (server bar) is currently open. Used for the
+     * aria-expanded state and tooltip of the header toggle button.
      */
-    collapseSidebar?: Snippet;
+    spaceSelectorOpen?: boolean;
+    /**
+     * When provided, the space header (avatar + name) becomes a button that
+     * opens/closes the space selector. When omitted, the header is static.
+     */
+    onToggleSpaceSelector?: () => void;
   } = $props();
-
-  let menuOpen = $state(false);
 </script>
 
 <div
-  class="w-full py-2 px-1.5 h-fit flex justify-between items-center gap-1"
+  class="w-full h-fit flex justify-between items-center gap-1"
 >
-  <!-- Header row: collapse/avatar + name + actions -->
+  <!-- Header row: avatar + name (clickable to toggle the space selector) -->
   <div class="flex items-center gap-2 flex-1 min-w-0">
-    {#if collapseSidebar}
-      {@render collapseSidebar()}
-    {:else}
-      {@render avatar()}
-    {/if}
-
-    <h1
-      class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
-    >
-      {spaceName ?? ""}
-    </h1>
-  </div>
-
-  <ContextMenu
-    bind:open={menuOpen}
-    side="bottom"
-    align="center"
-    sideOffset={10}
-  >
-    {#snippet trigger({ props: { action, ...attrs } })}
+    {#if onToggleSpaceSelector}
       <button
-        use:action
-        {...attrs}
-        class={buttonVariants({ variant: "ghost", size: "iconSm" })}
-        aria-label="Space menu"
+        type="button"
+        onclick={onToggleSpaceSelector}
+        class="flex items-center gap-2.75 flex-1 min-w-0 -mx-1 px-5.5 py-3 hover:bg-base-200/20 dark:hover:bg-base-900/30 transition-colors cursor-pointer text-left"
+        aria-label="Toggle space selector"
+        aria-expanded={spaceSelectorOpen}
+        title={spaceSelectorOpen ? "Hide space selector" : "Show space selector"}
       >
-        <IconEllipsisHorizontal class="size-4" />
+        {@render avatar?.()}
+        <h1
+          class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
+        >
+          {spaceName ?? ""}
+        </h1>
       </button>
-    {/snippet}
-
-    {#if showInviteButton}
-      <ContextMenuItem onSelect={() => { onInvite(); }}>
-        <IconShare class="size-4" />
-        Invite
-      </ContextMenuItem>
+    {:else}
+      {@render avatar?.()}
+      <h1
+        class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow min-w-0"
+      >
+        {spaceName ?? ""}
+      </h1>
     {/if}
-
-    {#if isAdmin}
-      {#if showInviteButton}
-        <ContextMenuSeparator />
-      {/if}
-
-      <ContextMenuItem onSelect={() => { isEditing = !isEditing; }}>
-        <IconPencil class="size-4" />
-        {isEditing ? "Finish editing" : "Edit Sidebar"}
-      </ContextMenuItem>
-
-      <ContextMenuSeparator />
-
-      <ContextMenuItem onSelect={() => { onCreateChannel?.(); }}>
-        <IconPlus class="size-4" />
-        Create Channel
-      </ContextMenuItem>
-
-      <ContextMenuItem onSelect={() => { onCreateCategory?.(); }}>
-        <IconPlus class="size-4" />
-        Create Category
-      </ContextMenuItem>
-
-      {#if settingsHref}
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => { goto(settingsHref!); }}>
-          <IconSettings class="size-4" />
-          Space settings
-        </ContextMenuItem>
-      {/if}
-    {/if}
-
-    <ContextMenuSeparator />
-
-    <ContextMenuItem variant="danger" onSelect={() => { onLeave(); }}>
-      <IconLogOut class="size-4" />
-      Leave Space
-    </ContextMenuItem>
-  </ContextMenu>
+  </div>
 </div>

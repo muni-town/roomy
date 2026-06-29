@@ -35,8 +35,7 @@
 </script>
 
 <div class="max-w-2xl">
-  <div class="flex items-center justify-between mb-3">
-    <h2 class="text-base font-semibold">Invites</h2>
+  <div class="flex justify-end mb-3">
     <Button onclick={() => (open = true)}>Manage invites</Button>
   </div>
 
