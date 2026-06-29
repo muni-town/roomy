@@ -2,6 +2,7 @@
   import FeatureDemoCards from "./FeatureDemoCards.svelte";
   import SpaceCards from "./SpaceCards.svelte";
   import WelcomeActions from "./WelcomeActions.svelte";
+  import DiscoverSpacesSection from "./DiscoverSpacesSection.svelte";
   import { auth } from "$lib/auth.svelte";
 
   let {
@@ -23,7 +24,7 @@
 </script>
 
 <div class="flex flex-col items-center gap-6 pt-4 pb-12 w-full">
-  <div class="flex items-start gap-6 px-4 max-w-2xl mx-auto w-full">
+  <div class="flex items-start gap-6 px-4 max-w-2xl mx-auto w-full welcome-header">
     <!-- Light mode: original blob logo with dark base outline and light inner gradient -->
     <svg
       viewBox="0 0 219 204"
@@ -81,16 +82,18 @@
   </div>
 
   {#if spaces.length > 0}
-    <div class="mt-10 w-full">
+    <div class="mt-10 flex flex-col items-center w-full">
       <SpaceCards {spaces} />
     </div>
   {:else}
-    <div class="mt-10 px-4 max-w-2xl mx-auto w-full">
+    <div class="mt-10 flex flex-col items-center w-full">
       <FeatureDemoCards />
     </div>
   {/if}
 
-  <div class="px-4 max-w-2xl mx-auto w-full">
+  <DiscoverSpacesSection />
+
+  <div class="px-4 max-w-2xl mx-auto w-full welcome-actions">
     <WelcomeActions />
   </div>
 </div>
@@ -104,6 +107,23 @@
     50% {
       opacity: 0.8;
       transform: scale(1.08);
+    }
+  }
+
+  @media (min-width: 930px) {
+    .welcome-header,
+    .welcome-actions {
+      max-width: none;
+      display: flex;
+      justify-content: center;
+    }
+
+    .welcome-header {
+      align-items: flex-start;
+    }
+
+    .welcome-actions > * {
+      width: auto;
     }
   }
 </style>

@@ -12,7 +12,7 @@
 <!-- Wrapper insets the whole row from the page edges (replaces the
      overflowing mx-2 attempt) so the scroller is slightly narrower
      than full width without exceeding its parent. -->
-<div class="w-full px-2">
+<div class="max-w-full px-2">
   <div
     class="space-cards-scroll flex gap-4 overflow-x-auto snap-x snap-mandatory w-full pb-4 px-8"
   >
