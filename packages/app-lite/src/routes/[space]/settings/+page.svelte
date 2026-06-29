@@ -131,8 +131,6 @@
 
 <div class="max-w-2xl">
   {#if isAdmin}
-    <h2 class="text-base font-semibold mb-4">General</h2>
-
     {#if metaQuery.isPending}
       <p class="text-sm text-base-400">Loading…</p>
     {:else if metaQuery.isError}

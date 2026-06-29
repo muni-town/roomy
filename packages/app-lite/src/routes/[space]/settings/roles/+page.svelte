@@ -289,14 +289,9 @@
   {:else}
     <div class="space-y-6">
       <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="text-xl/7 font-bold text-base-900 dark:text-base-100">
-            Roles
-          </h2>
-          <p class="text-sm text-base-500 dark:text-base-400 mt-1">
-            Roles control access to channels in your space.
-          </p>
-        </div>
+        <p class="text-sm text-base-500 dark:text-base-400">
+          Roles control access to channels in your space.
+        </p>
         {#if isAdmin}
           <Button variant="secondary" size="icon" onclick={() => (createOpen = true)}>
             <IconPlus class="size-4" />

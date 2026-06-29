@@ -67,7 +67,7 @@
   ].join(" ")}
 >
   <!-- Home button -->
-  <div class={wide ? "mx-1" : "flex justify-center"}>
+  <div class={wide ? "mx-2.5" : "flex justify-center"}>
     <Button
       href="/"
       variant="ghost"
@@ -75,7 +75,7 @@
       class={[
         "p-0 rounded-xl",
         wide
-          ? "flex items-center gap-4.5 h-9 pl-2.5 pr-1.5 w-full justify-start [&_svg]:size-5"
+          ? "flex items-center gap-4.5 h-9 pl-3.5 pr-2 w-full justify-start [&_svg]:size-5"
           : "size-12 [&_svg]:size-6",
       ].join(" ")}
       aria-label="Directory"
@@ -109,7 +109,7 @@
         class={[
           "transition-[opacity,background-color] cursor-pointer opacity-90 hover:opacity-100 my-0",
           wide
-            ? "flex items-center gap-3 h-10 w-full px-2.25 text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
+            ? "flex items-center gap-3 h-10 w-full px-4.5 text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
             : "relative flex items-center justify-center size-12",
           space.id === currentSpaceId ? "active" : "",
         ].join(" ")}
@@ -155,7 +155,7 @@
       class={[
         "transition-[opacity,background-color] cursor-pointer opacity-70 hover:opacity-100 my-0",
         wide
-          ? "flex items-center gap-3 h-10 w-full px-2.25 text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
+          ? "flex items-center gap-3 h-10 w-full px-4.5 text-left hover:bg-base-300/30 dark:hover:bg-base-800/30"
           : "relative flex items-center justify-center size-12",
       ].join(" ")}
       title="New Space"

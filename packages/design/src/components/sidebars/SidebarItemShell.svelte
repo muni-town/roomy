@@ -41,7 +41,7 @@
       <Button
         {href}
         variant="ghost"
-        class="w-full justify-start min-w-0"
+        class="w-full justify-start min-w-0 px-2.5"
         data-current={active}
       >
         {#if icon}
@@ -79,7 +79,7 @@
     <Button
       {href}
       variant="ghost"
-      class={["w-full justify-start min-w-0 font-semibold py-1"]}
+      class={["w-full justify-start min-w-0 font-semibold py-1 px-2.5"]}
       data-current={active}
     >
       {#if icon}

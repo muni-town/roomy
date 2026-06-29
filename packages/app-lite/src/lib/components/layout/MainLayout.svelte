@@ -46,7 +46,11 @@ let {
     </div>
 
     {#if compact}
-      <NavbarSpaceInfo />
+      {#if navbar.spaceInfo}
+        {@render navbar.spaceInfo()}
+      {:else}
+        <NavbarSpaceInfo />
+      {/if}
     {/if}
 
     {#if navbar.content}

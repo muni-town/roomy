@@ -32,6 +32,7 @@
   import { createRoom, updateSidebar } from "$lib/mutations/room";
   import { newUlid } from "@roomy-space/sdk";
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
+  import { settingsBar } from "$lib/components/layout/settings-bar.svelte";
   import { setSidebarHeader } from "$lib/components/layout/sidebar.svelte";
   import LinkedRoomList from "@roomy/design/components/sidebars/LinkedRoomList.svelte";
   import SpaceSidebarButtons from "./SpaceSidebarButtons.svelte";
@@ -108,6 +109,40 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       (meta?.joinPolicy.allowMemberInvites ?? false) ||
       (meta?.isAdmin ?? false),
   );
+
+  // --- Settings panel (slides in from the right within the unified sidebar,
+  //     mirroring the space selector / directory which slides in from the
+  //     left, but in the opposite direction). The space header and space
+  //     action buttons stay intact; only the channels body slides out. ---
+  const showInvitesTab = $derived(
+    !(meta?.joinPolicy.allowPublicJoin ?? true) &&
+      ((meta?.isAdmin ?? false) ||
+        (meta?.joinPolicy.allowMemberInvites ?? false)),
+  );
+  const showDiscordBridgeTab = $derived(meta?.isAdmin ?? false);
+  const settingsTabs = $derived(
+    [
+      { slug: "", label: "General" },
+      { slug: "roles", label: "Roles" },
+      { slug: "members", label: "Members" },
+      ...(showInvitesTab ? [{ slug: "invites", label: "Invites" }] : []),
+      ...(showDiscordBridgeTab
+        ? [{ slug: "discord-bridge", label: "Discord Bridge" }]
+        : []),
+    ],
+  );
+  function isSettingsTabActive(slug: string) {
+    if (!spaceId) return false;
+    const base = `/${spaceId}/settings`;
+    return slug === ""
+      ? page.url.pathname === base
+      : page.url.pathname === `${base}/${slug}`;
+  }
+
+  // The settings panel is open while a settings route is mounted, unless the
+  // space selector (directory) is also open — in that case the whole
+  // BigSidebar pans right and the settings overlay rides along off-screen.
+  const settingsOpen = $derived(settingsBar.expanded && !serverBar.expanded);
 
   function onInvite() {
     if (meta?.joinPolicy.allowPublicJoin) {
@@ -462,12 +497,12 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     </div>
   {:else}
     <!-- Homepage (no space selected): Roomy logo + wordmark, laid out to
-         match the space header (-mx-1 px-3.5 py-3, 32px mark, text-md font-semibold)
+         match the space header (-mx-1 px-5.5 py-3, 32px mark, text-md font-semibold)
          so it aligns with space-page headers and the sidebar row below stays
          put. Non-interactive; the server bar already provides a Home link. -->
     <div class="w-full h-fit flex justify-between items-center gap-1">
       <div class="flex items-center gap-2 flex-1 min-w-0">
-        <div class="flex items-center gap-2.75 -mx-1 px-3.5 py-3">
+        <div class="flex items-center gap-2.75 -mx-1 px-5.5 py-3">
           <RoomyMark sizeClass="size-8" />
           <h1
             class="text-lg font-black opacity-90 text-base-700 dark:text-base-200 truncate max-w-full grow min-w-0"
@@ -481,7 +516,11 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
 {/snippet}
 
 <div bind:this={sidebarElement} class="h-full">
-<SidebarLayout loading={!!spaceId && metaQuery.isPending}>
+<SidebarLayout
+  loading={!!spaceId && metaQuery.isPending}
+  bodySlideOut={settingsOpen}
+  overlayOpen={settingsOpen}
+>
   {#snippet actions()}
     <SpaceSidebarButtons
       {spaceId}
@@ -502,7 +541,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
   {#snippet prefix()}
     {#if spaceId}
       <Button
-        class="w-full justify-start min-w-0 py-1"
+        class="w-full justify-start min-w-0 py-1 px-2.5"
         variant="ghost"
         href={`/${spaceId}`}
         data-current={page.url.pathname === `/${spaceId}`}
@@ -604,6 +643,25 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
         Archive
       </Button>
     {/if}
+  {/snippet}
+
+  {#snippet overlayBody()}
+    <div
+      class="flex flex-col h-full w-full px-2 pt-3 pb-20 overflow-y-auto bg-base-50 dark:bg-base-950 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)]"
+    >
+      <div class="flex flex-col w-full gap-1">
+        {#each settingsTabs as tab (tab.slug)}
+          <Button
+            variant="ghost"
+            class="w-full justify-start"
+            href={spaceId ? `/${spaceId}/settings${tab.slug ? `/${tab.slug}` : ""}` : undefined}
+            data-current={isSettingsTabActive(tab.slug)}
+          >
+            {tab.label}
+          </Button>
+        {/each}
+      </div>
+    </div>
   {/snippet}
 </SidebarLayout>
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { env } from "$env/dynamic/public";
   import { page } from "$app/state";
   import { toast } from "@foxui/core";
@@ -9,6 +10,7 @@
   import { createMembersQuery } from "$lib/queries/members";
   import { sendEvents } from "$lib/mutations/send-events";
   import { newUlid, type UserDid, type Event } from "@roomy-space/sdk";
+  import { setSpaceInfoExtra } from "$lib/components/layout/navbar.svelte";
 
   const spaceId = $derived(page.params.space!);
 
@@ -159,6 +161,13 @@
       clearInterval(interval);
     };
   });
+
+  onMount(() => {
+    // Surface the live bridge connection status badge in the navbar, next to
+    // the "Discord Bridge" settings title.
+    setSpaceInfoExtra(bridgeStatusBadge);
+    return () => setSpaceInfoExtra(undefined);
+  });
 </script>
 
 {#snippet bridgeStatusBadge()}
@@ -178,13 +187,6 @@
 {#if bridgeStatus.type === "loaded" && bridgeStatus.guildId}
   <form class="pt-4">
     <div class="space-y-12">
-      <h2
-        class="text-xl/7 font-bold text-base-900 dark:text-base-100 flex items-center gap-2"
-      >
-        Discord Bridge
-        {@render bridgeStatusBadge()}
-      </h2>
-
       <p class="text-base/8">
         The Discord bridge is connected! This Roomy Space is bridged to your
         <a
@@ -203,13 +205,6 @@
 {:else}
   <form class="pt-4">
     <div class="space-y-12">
-      <h2
-        class="text-base/7 font-semibold text-base-900 dark:text-base-100 flex items-center gap-2"
-      >
-        Discord Bridge
-        {@render bridgeStatusBadge()}
-      </h2>
-
       <div class="flex flex-col justify-center gap-8">
         <div class="sm:col-span-4">
           <label
