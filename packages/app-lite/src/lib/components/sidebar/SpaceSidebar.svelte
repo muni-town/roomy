@@ -75,6 +75,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
   let sidebarElement = $state<HTMLElement | null>(null);
 
   let isEditing = $state(false);
+  let isSaving = $state(false);
   let editingId = $state<
     { room: string } | { categoryId: string; categoryName: string } | null
   >(null);
@@ -420,11 +421,14 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
           name: categoryMap.get(c.id)?.name ?? "",
           children: c.childIds,
         }));
+      isSaving = true;
       try {
         await updateSidebar(spaceId!, newSidebar);
       } catch {
         toast.error("Failed to save sidebar changes");
         return;
+      } finally {
+        isSaving = false;
       }
     }
     draftOrder = null;
@@ -677,9 +681,15 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
         variant="primary"
         size="sm"
         onclick={saveChanges}
+        disabled={isSaving}
       >
-        <IconCheck class="size-4" />
-        Done
+        {#if isSaving}
+          <IconCheck class="size-4" />
+          Saving…
+        {:else}
+          <IconCheck class="size-4" />
+          Done
+        {/if}
       </Button>
     {/if}
   {/snippet}
