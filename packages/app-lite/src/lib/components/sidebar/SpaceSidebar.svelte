@@ -345,6 +345,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     if (!currentDraft) return;
 
     const draftRoomIds = new Set(currentDraft.flatMap((c) => c.childIds));
+    const draftCatIds = new Set(currentDraft.map((c) => c.id));
 
     // Check for new rooms in categories that aren't in draft
     const newCategoryRooms = currentCats
@@ -357,13 +358,31 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
 
     const allNewRooms = [...newCategoryRooms, ...newOrphanRooms];
 
-    if (allNewRooms.length === 0) return;
+    // Check for new categories that aren't in the draft yet — e.g. a category
+    // created via the CreateRoom modal while editing. Without this, the draft
+    // would not track the new category, and saving would overwrite the
+    // sidebar with the draft and silently drop it.
+    const newCategories = currentCats.filter(
+      (c) => !draftCatIds.has(c.id ?? c.name),
+    );
 
-    draftOrder = currentDraft.map((cat, i) =>
+    if (allNewRooms.length === 0 && newCategories.length === 0) return;
+
+    let nextDraft = currentDraft.map((cat, i) =>
       i === 0
         ? { ...cat, childIds: [...cat.childIds, ...allNewRooms.map((r) => r.id)] }
         : cat,
     );
+    for (const cat of newCategories) {
+      nextDraft = [
+        ...nextDraft,
+        {
+          id: cat.id ?? cat.name,
+          childIds: cat.channels.map((ch) => ch.id),
+        },
+      ];
+    }
+    draftOrder = nextDraft;
   });
 
   function handleCategoryReorder(newCategories: SidebarCategory[]) {
@@ -515,15 +534,6 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     />
   {/snippet}
 
-  {#snippet saveAction()}
-    {#if spaceId && isEditing}
-      <Button class="justify-start mb-4 mx-2 self-stretch" variant="secondary" size="sm" onclick={saveChanges}>
-        <IconCheck class="size-4" />
-        Finish editing
-      </Button>
-    {/if}
-  {/snippet}
-
   {#snippet prefix()}
     {#if spaceId}
       <Button
@@ -544,7 +554,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       <ErrorMessage message={metaQuery.error.message} class="px-4 py-3" />
     {:else if meta}
       <div class="relative">
-        {#if meta?.isAdmin}
+        {#if meta?.isAdmin && !isEditing}
           <div class="absolute top-1 right-1 z-10 flex items-center gap-0.5">
             <button
               type="button"
@@ -598,15 +608,15 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
           onfinalize={(e: any) => handleCategoryReorder(e.detail.items)}
         >
           {#each displayCategories as category (category[SHADOW_ITEM_MARKER_PROPERTY_NAME] ? `shadow-${category.id ?? category.name}` : category.id ?? category.name)}
-            <div class="flex items-start w-full" id={category.id ?? category.name}>
+            <div class="relative w-full" id={category.id ?? category.name}>
               <div
                 use:dragHandle
                 aria-label="drag-handle for {category.name}"
-                class="ml-2 mt-2.5 z-10 text-base-400 dark:text-base-500"
+                class="absolute -left-1 top-3 z-10 text-base-400 dark:text-base-500 cursor-grab"
               >
                 <IconGripVertical class="size-3" />
               </div>
-              <div class="flex-1 min-w-0">
+              <div class="w-full min-w-0">
                 <SidebarCategoryShell
                   name={category.name}
                   items={category.channels}
@@ -654,13 +664,22 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
   {#snippet footer()}
     {#if spaceId && isEditing}
       <Button
-        class="mt-auto justify-start mb-4 mx-2 self-stretch"
+        class="mt-auto justify-start mb-2 mx-2 self-stretch"
         variant="secondary"
         size="sm"
         onclick={() => (openRestoreRoomModal = true)}
       >
         <IconTrash class="size-4" />
         Archive
+      </Button>
+      <Button
+        class="justify-start mb-4 mx-2 self-stretch"
+        variant="primary"
+        size="sm"
+        onclick={saveChanges}
+      >
+        <IconCheck class="size-4" />
+        Done
       </Button>
     {/if}
   {/snippet}
