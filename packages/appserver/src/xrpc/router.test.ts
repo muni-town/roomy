@@ -18,7 +18,9 @@ async function call(
   url: string,
   init?: RequestInit,
 ): Promise<Response> {
-  const fakeServer = {} as Parameters<typeof router.fetch>[1];
+  const fakeServer = {
+    requestIP: () => ({ address: "127.0.0.1", family: "IPv4", port: 12345 }),
+  } as unknown as Parameters<typeof router.fetch>[1];
   const res = await router.fetch(new Request(url, init), fakeServer);
   if (!res) throw new Error("router returned no Response");
   return res;

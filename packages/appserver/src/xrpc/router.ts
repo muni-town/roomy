@@ -11,6 +11,10 @@ import { consumeTicket } from "./auth.ts";
 import { encodeFrame, errorFrame } from "./frame.ts";
 import { XrpcError, toErrorResponse } from "./errors.ts";
 import { type } from "arktype";
+import {
+  checkRateLimit,
+  rateLimitResponse,
+} from "./rateLimit.ts";
 
 function validateOrReject(
   schema: import("arktype").Type<any>,
@@ -99,6 +103,12 @@ export class XrpcRouter {
   ) => Promise<Response | undefined> {
     return async (req, server) => {
       const url = new URL(req.url);
+
+      // ── Rate limit check (before auth, IP-based) ───────────────────
+      const directIp = server.requestIP(req)?.address ?? "unknown";
+      const rl = await checkRateLimit(req, directIp);
+      if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+
       const match = url.pathname.match(/^\/xrpc\/(.+)$/);
       if (!match?.[1]) return new Response("Not found", { status: 404 });
       const nsid = match[1];
