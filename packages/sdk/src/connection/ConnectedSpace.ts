@@ -158,7 +158,6 @@ export class ConnectedSpace {
         config.streamDid,
       );
       previousModuleCid = cid;
-      console.debug("Got stream info", { moduleCid: previousModuleCid });
     } catch (e) {
       console.warn(
         "Stream info error ( will try to reset module if possible ):",
