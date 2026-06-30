@@ -4,6 +4,12 @@ import { px } from "$lib/auth.svelte";
 
 const { queryKey } = cache;
 
+/** Options for {@link createSpacesQuery}. */
+export interface SpacesQueryOptions {
+  /** When true, include spaces the user has previously left (`isMember = false`). */
+  includeLeft?: boolean;
+}
+
 /**
  * Query for the user's spaces.
  *

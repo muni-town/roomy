@@ -9,7 +9,7 @@
 </script>
 
 <button
-  onclick={(e) => {
+  onclick={() => {
     if (onMobileClick && window.innerWidth < 640) {
       onMobileClick();
     } else {

@@ -22,7 +22,6 @@
   // We use CSS transitions on transform + opacity instead of animating `width`
   // (which triggers layout). The wrapper clips with overflow-hidden so a
   // translateX animation stays entirely on the compositor thread.
-  let el = $state<HTMLElement | null>(null);
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
@@ -57,7 +56,6 @@
 </script>
 
 <div
-  bind:this={el}
   class={[
     "flex flex-col py-1 bg-base-50/50 dark:bg-base-950 min-h-0 gap-2 overflow-hidden relative z-10 sidebar-server-bar",
     wide

@@ -6,11 +6,13 @@
     align?: DropdownMenu.ContentProps["align"];
     sideOffset?: number;
     alignOffset?: number;
+    class?: string;
   };
 </script>
 
 <script lang="ts">
   import { cn } from "../../../utils/index.js";
+  import type { Snippet } from "svelte";
 
   let {
     open = $bindable(false),

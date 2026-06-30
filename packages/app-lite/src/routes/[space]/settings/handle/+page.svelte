@@ -5,7 +5,7 @@
   import { CONFIG } from "$lib/config";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { sendEvents } from "$lib/mutations/send-events";
-  import { createProfileSpaceRecord, removeProfileSpaceRecord, newUlid } from "@roomy-space/sdk";
+  import { createProfileSpaceRecord, removeProfileSpaceRecord, newUlid, type StreamDid } from "@roomy-space/sdk";
   import Alert from "@roomy/design/components/ui/alert/Alert.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
@@ -97,7 +97,7 @@
     error = null;
     try {
       // Write PDS record linking user's profile to this space
-      await createProfileSpaceRecord(agent, spaceId, {
+      await createProfileSpaceRecord(agent, spaceId as StreamDid, {
         collection: CONFIG.profileSpaceNsid,
       });
 
@@ -167,10 +167,6 @@
       isSaving = false;
     }
   }
-
-  const isCurrentUserSpace = $derived(
-    meta?.isAdmin ?? false,
-  );
 </script>
 
 <div class="max-w-2xl">

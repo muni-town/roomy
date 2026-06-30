@@ -11,8 +11,8 @@
     open: boolean;
     role: {
       id: string;
-      name: string | null;
-      description: string | null;
+      name?: string;
+      description?: string;
     } | null;
     saving?: boolean;
     onSave: (name: string, description: string) => void;

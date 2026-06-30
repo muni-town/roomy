@@ -84,6 +84,10 @@ export const PROCEDURE_SCHEMAS = {
     input: procedures.leaveSpace.Input,
     output: procedures.leaveSpace.Output,
   },
+  "space.roomy.space.setHandle": {
+    input: procedures.setHandle.Input,
+    output: procedures.setHandle.Output,
+  },
 } as const;
 
 export type QueryNsid = keyof typeof QUERY_SCHEMAS;

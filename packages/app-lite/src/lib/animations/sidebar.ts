@@ -125,7 +125,7 @@ export function animateCategoriesIn(
     translateY: opts?.from === "bottom" ? [12, 0] : [-12, 0],
     opacity: [0, 1],
     duration: opts?.duration ?? DURATIONS.expressive,
-    delay: stagger(opts?.stagger ?? 40, { from: opts?.from ?? "first" }),
+    delay: stagger(opts?.stagger ?? 40),
     ease: EASINGS.enter,
     onComplete: opts?.onComplete,
   } satisfies AnimationParams);

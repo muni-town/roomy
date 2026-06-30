@@ -59,9 +59,10 @@
     prevEditing = editing;
   });
   let isThreading = $derived(messagingState.current.kind === "threading");
-  let isSelected = $derived(
-    isThreading && messagingState.current.selectedMessages.some((m) => m.id === message.id),
-  );
+  let isSelected = $derived.by(() => {
+    const cur = messagingState.current;
+    return cur.kind === "threading" && cur.selectedMessages.some((m) => m.id === message.id);
+  });
   let showToolbar = $derived(
     (!isEditing && hovered && !isThreading) || keepToolbarOpen,
   );

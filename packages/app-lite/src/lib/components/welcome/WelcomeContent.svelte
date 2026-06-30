@@ -121,9 +121,5 @@
     .welcome-header {
       align-items: flex-start;
     }
-
-    .welcome-actions > * {
-      width: auto;
-    }
   }
 </style>

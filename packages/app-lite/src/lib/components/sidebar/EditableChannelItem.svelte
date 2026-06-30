@@ -14,7 +14,7 @@
     onedit,
   }: {
     channel: SidebarChannel;
-    spaceId: string;
+    spaceId: string | undefined;
     isEditing: boolean;
     active: boolean;
     onedit: (roomId: string) => void;

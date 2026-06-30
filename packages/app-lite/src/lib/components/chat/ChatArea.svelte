@@ -30,14 +30,12 @@
   let virtualizer: VirtualizerHandle = $state(null!);
   let viewport: HTMLDivElement = $state(null!);
   let isAtBottom = $state(true);
-  let hasInitiallyScrolled = $state(false);
   let prevMessageCount = $state(0);
   let isLoadingOlder = $state(false);
   let isShifting = $state(false);
   let olderCursor = $state<string | null>(null);
   let hasMore = $state(true);
   let currentScrollOffset = $state(0);
-  let hasRestoredScroll = $state(false);
   let lastRestoredRoomId = $state<string | null>(null);
   let isRestoring = $state(false); // Track when we're actively restoring scroll position
 
@@ -220,8 +218,6 @@
 
       // Mark that we're attempting to restore for this roomId BEFORE the timeout
       lastRestoredRoomId = currentRoomId;
-      hasRestoredScroll = true;
-      hasInitiallyScrolled = false; // Reset for new room
       isRestoring = true; // Block auto-scroll during restoration
 
       setTimeout(() => {
@@ -246,7 +242,6 @@
           scrollToBottom();
           isAtBottom = true;
         }
-        hasInitiallyScrolled = true;
         isRestoring = false; // Re-enable auto-scroll after restoration
       }, 200);
     }
@@ -264,26 +259,13 @@
     prevMessageCount = len;
   });
 
-  // Reset state on room change
+  // Reset scroll restoration state when roomId changes.
+  // Reading roomId here makes the effect (and its cleanup) re-run on change.
   $effect(() => {
-    // Read roomId to make this reactive to room changes
-    const prevRoomId = roomId;
-    // We use prevMessageCount as a way to track room changes indirectly
-    // The actual room change handling is done via the component lifecycle
-    return () => {
-      // Cleanup when room changes - we save scroll position in handleScroll already
-    };
-  });
-
-  // Reset scroll restoration when roomId changes
-  $effect(() => {
-    // Track roomId directly - effect runs when roomId changes
-    const currentRoomId = roomId;
+    roomId;
     return () => {
       // When roomId changes, reset state for the next room
       // Note: lastRestoredRoomId is NOT reset here - it's set by the restoration effect
-      hasInitiallyScrolled = false;
-      hasRestoredScroll = false;
       prevMessageCount = 0;
       olderCursor = null;
       hasMore = true;

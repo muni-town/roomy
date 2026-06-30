@@ -6,7 +6,6 @@
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import ActivityFeedSkeleton from "./ActivityFeedSkeleton.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
-  import { slide } from "svelte/transition";
 
   let { spaceId, showSpaceInfo = true, limit = 20 }: { spaceId?: string; showSpaceInfo?: boolean; limit?: number } = $props();
 
@@ -18,10 +17,6 @@
 
   function roomHref(item: ActivityItem): string {
     return `/${item.spaceId}/${item.threadId}`;
-  }
-
-  function avatarUrl(item: ActivityItem): string | undefined {
-    return resolveBlobUrl(item.spaceAvatar);
   }
 </script>
 
@@ -114,6 +109,7 @@
               </div>
             {/if}
 
+            {#if last}
             <!-- Most recent message (full height) -->
             <div class="flex items-start gap-2 text-sm pl-1">
               <button
@@ -141,6 +137,7 @@
                 </span>
               </div>
             </div>
+            {/if}
           {/if}
         </a>
         {#if i < feed.length - 1}

@@ -13,7 +13,6 @@ import type { QueryClient } from "@tanstack/svelte-query";
 import { queryClient } from "./client";
 import { px } from "./auth.svelte";
 import { CONFIG } from "./config";
-import type { ConnectionStatus } from "@roomy-space/sdk/sync";
 
 const { SyncConnection, SyncRouter, TopicManager } = sync;
 const { resolveAppserverWsOrigin } = transport;
@@ -34,7 +33,7 @@ export interface SyncContext {
   readonly status: SyncStatus;
 }
 
-function mapStatus(s: ConnectionStatus): SyncStatus {
+function mapStatus(s: sync.ConnectionStatus): SyncStatus {
   switch (s.state) {
     case "idle":
       return { state: "idle" };

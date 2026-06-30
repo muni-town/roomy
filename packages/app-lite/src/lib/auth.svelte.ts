@@ -23,8 +23,8 @@ let profile = $state<{ handle: string; did: string; avatar: string; displayName?
 
 // Direct XRPC client (replaces the proxied agent pattern).
 // Created lazily once the agent is available.
-let serviceAuth: ServiceAuthClient | null = null;
-let directXrpc: DirectXrpcClient | null = null;
+let serviceAuth: InstanceType<typeof ServiceAuthClient> | null = null;
+let directXrpc: InstanceType<typeof DirectXrpcClient> | null = null;
 
 export const auth = {
   get agent() {
@@ -136,7 +136,7 @@ export async function logout() {
  *
  * Throws if the user is not authenticated.
  */
-export function px(): DirectXrpcClient {
+export function px(): InstanceType<typeof DirectXrpcClient> {
   if (!directXrpc) throw new Error("Not authenticated");
   return directXrpc;
 }

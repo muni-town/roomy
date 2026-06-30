@@ -5,18 +5,20 @@
   type Props = Tooltip.RootProps & {
     tip: string | Snippet;
     children?: Snippet;
-    trigger?: Snippet<[Record<string, unknown>]>;
+    trigger?: Snippet<[{ props: Record<string, unknown> }]>;
     contentProps?: Tooltip.ContentProps;
+    side?: Tooltip.ContentProps["side"];
+    sideOffset?: number;
   };
 
-  let { tip, children, trigger, contentProps = {}, ...restProps }: Props = $props();
+  let { tip, children, trigger, contentProps = {}, side, sideOffset, ...restProps }: Props = $props();
 </script>
 
 <Tooltip.Root delayDuration={200} {...restProps}>
   <Tooltip.Trigger>
     {#snippet child({ props })}
       {#if trigger}
-        {@render trigger(props)}
+        {@render trigger({ props })}
       {:else}
         {@render children?.()}
       {/if}
@@ -25,8 +27,8 @@
 
   <Tooltip.Portal>
     <Tooltip.Content
-      sideOffset={contentProps.sideOffset ?? 6}
-      side={contentProps.side ?? "top"}
+      sideOffset={sideOffset ?? contentProps.sideOffset ?? 6}
+      side={side ?? contentProps.side ?? "top"}
       class="z-50 {contentProps.class ?? ''}"
     >
       <span

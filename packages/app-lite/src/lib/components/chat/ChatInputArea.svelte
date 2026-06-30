@@ -31,6 +31,9 @@
 
   let { spaceId, roomId, canWrite, autoFocus = true }: Props = $props();
 
+  let isSendingMessage = $state(false);
+  let previewImages: string[] = $state([]);
+
   let shouldFocus = $derived(autoFocus && !isSendingMessage && previewImages.length === 0);
 
   // Most-recently-active members in this room, derived from the cached
@@ -90,8 +93,6 @@
     }));
   }
 
-  let isSendingMessage = $state(false);
-  let previewImages: string[] = $state([]);
   let fileInput: HTMLInputElement | undefined = $state();
   let actionMenuOpen = $state(false);
 

@@ -5,7 +5,7 @@
   import RoleEditForm from "@roomy/design/components/modals/RoleEditForm.svelte";
   import UserTypeahead from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
   import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
-  import { createRolesQuery, type Role } from "$lib/queries/roles";
+  import { createRolesQuery } from "$lib/queries/roles";
   import { createMembersQuery, type Member } from "$lib/queries/members";
   import { px } from "$lib/auth.svelte";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
@@ -225,7 +225,7 @@
                   {#if member.handle && member.name}
                     <span class="text-xs text-base-400 truncate">@{member.handle}</span>
                   {/if}
-                  <span class="flex-1" />
+                  <span class="flex-1"></span>
                   {#if isAdmin}
                     <button
                       class="text-xs text-base-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded-xl"

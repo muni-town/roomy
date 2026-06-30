@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";

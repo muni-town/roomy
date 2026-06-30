@@ -54,7 +54,7 @@
     {:else if metaQuery.data}
       <SpaceAvatar
         src={resolveBlobUrl(metaQuery.data.avatar)}
-        {spaceId}
+        id={spaceId}
         name={metaQuery.data.name ?? undefined}
         size={88}
         shape="circle"

@@ -1,4 +1,4 @@
-<script lang="ts" generics="T extends { id: string; name: string }">
+<script lang="ts" generics="T extends { id: string; name?: string }">
   import type { Snippet } from "svelte";
   import Button from "../ui/button/Button.svelte";
   import { dragHandleZone, dragHandle } from "svelte-dnd-action";
@@ -105,7 +105,7 @@
           <div
             class="absolute -left-1 top-2.5 z-10 text-base-400 dark:text-base-500 cursor-grab"
             use:dragHandle
-            aria-label="drag handle for {child.name}"
+            aria-label="drag handle for {child.name ?? child.id}"
           >
             <IconGripVertical class="size-3" />
           </div>

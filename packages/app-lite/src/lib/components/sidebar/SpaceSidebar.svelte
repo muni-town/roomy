@@ -48,12 +48,10 @@ import { createSpacesQuery } from "$lib/queries/spaces";
 import { toast } from "@foxui/core";
 import RoomyMark from "$lib/components/RoomyMark.svelte";
 
-  type RoomMetadata = typeof schemas.queries.getRoomMetadata.Response.infer;
-
   type SidebarChannel =
     typeof schemas.queries.getSpaceMetadata.SidebarChannel.infer;
   type SidebarCategory =
-    typeof schemas.queries.getSpaceMetadata.categories.infer;
+    typeof schemas.queries.getSpaceMetadata.SidebarCategory.infer;
 
   let { spaceId }: { spaceId?: string } = $props();
 
@@ -72,8 +70,6 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
   // --- Server bar toggle — the space header (avatar) toggles it. ---
-  let sidebarElement = $state<HTMLElement | null>(null);
-
   let isEditing = $state(false);
   let isSaving = $state(false);
   let editingId = $state<
@@ -524,7 +520,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
   {/if}
 {/snippet}
 
-<div bind:this={sidebarElement} class="h-full">
+<div class="h-full">
 <SidebarLayout
   loading={!!spaceId && metaQuery.isPending}
   bodySlideOut={settingsOpen}

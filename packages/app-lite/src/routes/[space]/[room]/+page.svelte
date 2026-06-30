@@ -109,7 +109,7 @@
       setCurrentRoom({
         id: roomId,
         name,
-        kind: kind ?? "channel",
+        kind: kind === "thread" ? "thread" : "channel",
       });
     });
   });

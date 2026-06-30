@@ -82,10 +82,9 @@
       {/if}
     </div>
     <ContextMenu side="top" sideOffset={8} align="center">
-      {#snippet trigger({ props: { action, ...attrs } })}
+      {#snippet trigger({ props })}
         <button
-          use:action
-          {...attrs}
+          {...props}
           class={buttonVariants({ variant: "ghost", size: "iconSm" })}
           aria-label="User menu"
         >

@@ -16,3 +16,6 @@ export const Input = type({
   spaceId: "string",
   "handle?": "string | null",
 });
+
+/** Void procedure — the appserver responds 200 with an empty body. */
+export const Output = type({});

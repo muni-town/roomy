@@ -39,7 +39,7 @@
  * <div bind:this={element}>Content</div>
  * ```
  */
-import { animate, stagger } from "animejs";
+import { animate } from "animejs";
 import type { AnimationParams, JSAnimation } from "animejs";
 import type { TransitionConfig } from "svelte/transition";
 
