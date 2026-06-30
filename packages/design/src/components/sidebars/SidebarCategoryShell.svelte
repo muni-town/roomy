@@ -3,7 +3,7 @@
   import Button from "../ui/button/Button.svelte";
   import { dragHandleZone, dragHandle } from "svelte-dnd-action";
   import {
-    IconPencil,
+    IconSettings,
     IconChevronDown,
     IconChevronUp,
     IconGripVertical,
@@ -23,7 +23,7 @@
     isEditing: boolean;
     /** Whether the category itself is the active route target. */
     active?: boolean;
-    /** Called when the edit (pencil) button is clicked. */
+    /** Called when the edit (gear) button is clicked. */
     onEditCategory?: () => void;
     /** Called when the user finalizes a drag-reorder. */
     onItemsReorder?: (newItems: T[]) => void;
@@ -37,20 +37,29 @@
   let showGroupChildren = $state(true);
 </script>
 
-<div class="inline-flex min-w-0 flex-col w-full max-w-full shrink pb-4">
+<div class="inline-flex min-w-0 flex-col w-full max-w-full shrink">
   <div
-    class="inline-flex items-start justify-between gap-2 w-full shrink group"
+    class="inline-flex items-center justify-between gap-2 w-full shrink group mt-2"
   >
     <Button
       variant="ghost"
-      class="w-full shrink min-w-0 justify-start hover:cursor-default text-base-600 dark:text-base-400 "
+      class={[
+        "w-full shrink min-w-0 justify-start px-2 pt-1 pb-1 text-base-400 dark:text-base-500",
+        isEditing
+          ? "hover:cursor-pointer hover:bg-transparent dark:hover:bg-transparent hover:border-transparent"
+          : "hover:cursor-default",
+      ]}
       data-current={active && !isEditing}
       onclick={() => {
-        showGroupChildren = !showGroupChildren;
+        if (isEditing) {
+          onEditCategory?.();
+        } else {
+          showGroupChildren = !showGroupChildren;
+        }
       }}
     >
       <span
-        class="truncate font-regular text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
+        class="truncate font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap overflow-hidden min-w-0"
         >{name}</span
       >
       {#if !isEditing}
@@ -62,20 +71,20 @@
       {/if}
     </Button>
     {#if isEditing && onEditCategory}
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
+        type="button"
         onclick={onEditCategory}
-        class="group-hover:opacity-100 opacity-20"
+        aria-label="Edit category"
+        class="shrink-0 p-1 text-base-400 dark:text-base-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-hover:text-base-600 sm:group-hover:dark:text-base-300 cursor-pointer"
       >
-        <IconPencil class="size-4" />
-      </Button>
+        <IconSettings class="size-4" />
+      </button>
     {/if}
   </div>
 
   {#if isEditing}
     <div
-      class="w-full max-w-full shrink min-w-0 min-h-4 p-1"
+      class="w-full max-w-full shrink min-w-0 min-h-4"
       use:dragHandleZone={{
         items: displayChildren,
         type: "room",
@@ -94,7 +103,7 @@
       {#each displayChildren as child, index (child.id)}
         <div id={child.id} class="flex items-start w-full relative">
           <div
-            class="mt-2.5 text-base-400 dark:text-base-500"
+            class="absolute -left-1 top-2.5 z-10 text-base-400 dark:text-base-500 cursor-grab"
             use:dragHandle
             aria-label="drag handle for {child.name}"
           >

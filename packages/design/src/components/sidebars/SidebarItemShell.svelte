@@ -15,6 +15,8 @@
     icon,
     trailing,
     children,
+    onclick,
+    plain = false,
   }: {
     variant: Variant;
     name: string;
@@ -30,6 +32,10 @@
     trailing?: Snippet;
     /** Optional children to render below the row (e.g., linked rooms) */
     children?: Snippet;
+    /** Optional click handler. When omitted and `href` is set, the row is a link. */
+    onclick?: (e: MouseEvent) => void;
+    /** When true, suppress the ghost button's hover bg/border (edit mode). */
+    plain?: boolean;
   } = $props();
 </script>
 
@@ -41,8 +47,12 @@
       <Button
         {href}
         variant="ghost"
-        class="relative w-full justify-start min-w-0 px-2.5"
+        class={[
+          "relative w-full justify-start min-w-0 px-2.5",
+          plain && "hover:bg-transparent dark:hover:bg-transparent hover:border-transparent",
+        ]}
         data-current={active}
+        {onclick}
       >
         {#if icon}
           {@render icon()}
