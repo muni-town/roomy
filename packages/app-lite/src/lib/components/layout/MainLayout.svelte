@@ -108,13 +108,11 @@ let {
         class:big-sidebar-hidden={onHomepage || serverBar.expanded}
         class:big-sidebar-visible={!onHomepage && !serverBar.expanded}
       >
-        <div class="big-sidebar-content-spacer h-full">
-          <BigSidebar>
-            {#if sidebar}
-              {@render sidebar?.()}
-            {/if}
-          </BigSidebar>
-        </div>
+        <BigSidebar>
+          {#if sidebar}
+            {@render sidebar?.()}
+          {/if}
+        </BigSidebar>
       </div>
       <!-- Space selector (wide server bar): a SINGLE element, shown on the
            homepage (always) and on space pages when toggled. Because it is
@@ -196,11 +194,6 @@ let {
   }
   .sidebar-user-card-wrapper.on-homepage {
     border-right: none;
-  }
-
-  /* ── BigSidebar spacer to prevent content hiding behind user card ── */
-  .big-sidebar-content-spacer {
-    padding-bottom: 80px;
   }
 
   /* ── Space header wrapper: constant 256px bar above the sidebar row.
