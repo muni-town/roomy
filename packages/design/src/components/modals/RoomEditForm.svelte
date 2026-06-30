@@ -80,9 +80,7 @@
                 Archiving {kind}
               </h1>
               <p class="text-base-800 dark:text-base-300 text-sm">
-                Are you sure you want to archive <b>{name}</b>? Archived channels aren't visible to non-admins. If you want to permanently delete channels, you'll need to archive them first.
-                <br/><br/>
-                You can always retrieve archived channels in <b>… -> Edit Sidebar</b>.
+                Are you sure you want to archive <b>{name}</b>? Archived channels aren't visible to non-admins. You can find and restore archived channels when editing the sidebar.
               </p>
             </div>
             <div class="flex flex-row w-full justify-between">
