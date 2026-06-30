@@ -3,7 +3,7 @@
   import { Modal } from "@foxui/core";
   import Input from "../ui/input/Input.svelte";
   import Button from "../ui/button/Button.svelte";
-  import { IconSave, IconTrash, IconArchive } from "../../icons/index";
+  import { IconSave, IconArchive } from "../../icons/index";
 
   let {
     open = $bindable(false),
@@ -41,16 +41,16 @@
         id="dialog-title"
         class="text-base font-bold text-xl text-base-900 dark:text-base-100"
       >
-        {kind} Overview
+        Edit {kind}
       </h1>
       <div class="flex flex-col gap-1">
-      <label
-        for="create-room-name"
-        class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1"
-      >
-        Channel Name
-      </label>
-      <Input bind:value={name} placeholder="Name" type="text" required />
+        <label
+          for="create-room-name"
+          class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1"
+        >
+          {kind} Name
+        </label>
+        <Input bind:value={name} placeholder="Name" type="text" required />
       </div>
       {#if permissions}
         <div class="border-t border-base-200 dark:border-base-700 pt-6">
@@ -64,44 +64,50 @@
             class="justify-start"
             variant="red"
           >
-          <IconArchive class="size-4" />
+            <IconArchive class="size-4" />
             Archive Channel
           </Button>
-          <Button type="submit" disabled={!name} class="justify-start">
-            <IconSave class="size-4" />
-            Save
-          </Button>
-          <Modal bind:open={confirmArchive} closeButton={true} class="gap-6">
-            <div class="flex flex-col gap-2">
-              <h1
-                id="dialog-title"
-                class="text-base font-bold text-xl text-base-900 dark:text-base-100"
-              >
-                Archiving {kind}
-              </h1>
-              <p class="text-base-800 dark:text-base-300 text-sm">
-                Are you sure you want to archive <b>{name}</b>? Archived channels aren't visible to non-admins. You can find and restore archived channels when editing the sidebar.
-              </p>
-            </div>
-            <div class="flex flex-row w-full justify-between">
-              <Button
-                onclick={() => void onDelete() + (confirmArchive = false)}
-                class="justify-start"
-                variant="red"
-              >
-              <IconArchive class="size-4" />
-              Yes, Archive
-            </Button>
-            <Button
-              onclick={() => (confirmArchive = false)}
-              class="justify-start"
-              variant="primary"
-            >
-              Cancel
-            </Button>
-          </Modal>
-    {/if}
+        {/if}
+        <Button type="submit" disabled={!name} class="justify-start ml-auto">
+          <IconSave class="size-4" />
+          Save
+        </Button>
       </div>
     </form>
   </div>
 </Modal>
+
+{#if canDelete && onDelete}
+  <Modal bind:open={confirmArchive} closeButton={true} class="gap-6">
+    <div class="flex flex-col gap-2">
+      <h1
+        id="dialog-title"
+        class="text-base font-bold text-xl text-base-900 dark:text-base-100"
+      >
+        Archiving {kind}
+      </h1>
+      <p class="text-base-800 dark:text-base-300 text-sm">
+        Are you sure you want to archive <b>{name}</b>? Archived channels aren't
+        visible to non-admins. You can find and restore archived channels when
+        editing the sidebar.
+      </p>
+    </div>
+    <div class="flex flex-row w-full justify-between">
+      <Button
+        onclick={() => void onDelete() + (confirmArchive = false)}
+        class="justify-start"
+        variant="red"
+      >
+        <IconArchive class="size-4" />
+        Yes, Archive
+      </Button>
+      <Button
+        onclick={() => (confirmArchive = false)}
+        class="justify-start"
+        variant="primary"
+      >
+        Cancel
+      </Button>
+    </div>
+  </Modal>
+{/if}
