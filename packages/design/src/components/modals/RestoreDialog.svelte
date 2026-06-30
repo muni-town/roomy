@@ -28,10 +28,10 @@
   <div class="max-h-[80vh] overflow-y-auto">
     <div class="flex flex-col gap-4">
       <h3 class="text-base font-semibold text-base-900 dark:text-base-100">
-        Restore deleted channels
+        Restore archived channels
       </h3>
       <p class="text-sm text-base-500 dark:text-base-400">
-        Restore previously deleted channels to make them visible again.
+        Restore previously archived channels to make them visible again.
       </p>
 
       {#if fetchState.status === "loading"}
@@ -44,13 +44,14 @@
         <ErrorMessage message={fetchState.message} class="py-4 justify-center text-center" />
       {:else if fetchState.status === "success" && fetchState.data.length === 0}
         <p class="text-sm text-base-400 dark:text-base-500 py-4 text-center">
-          No deleted channels to restore.
+          No archived channels to restore.
         </p>
       {:else if fetchState.status === "success"}
         <ul class="flex flex-col gap-2">
           {#each fetchState.data as room (room.id)}
             <li class="flex items-center justify-between gap-2 py-1">
-              <span class="text-sm truncate"
+              <span
+                class="text-sm truncate text-base-800 dark:text-base-200"
                 >{room.name ?? "Unnamed channel"}</span
               >
               <Button
@@ -68,7 +69,7 @@
       {/if}
 
       <div class="flex justify-end">
-        <Button variant="ghost" onclick={() => (open = false)}>Close</Button>
+        <Button variant="primary" onclick={() => (open = false)}>Done</Button>
       </div>
     </div>
   </div>
