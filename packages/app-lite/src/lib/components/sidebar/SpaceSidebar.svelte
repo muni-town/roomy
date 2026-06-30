@@ -667,7 +667,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
 
   {#snippet overlayBody()}
     <div
-      class="flex flex-col h-full w-full px-2 pt-3 pb-20 overflow-y-auto bg-base-50 dark:bg-base-950 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)]"
+      class="flex flex-col h-full w-full px-2 pt-3 pb-4 overflow-y-auto bg-base-50 dark:bg-base-950 mask-[linear-gradient(to_bottom,transparent_0%,black_2%,black_95%,transparent_100%)]"
     >
       <!-- Settings pages -->
       <div class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-base-400 dark:text-base-500">
