@@ -1,0 +1,23 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.push.getVapidPublicKey",
+  "defs": {
+    "main": {
+      "type": "query",
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "publicKey"
+          ],
+          "properties": {
+            "publicKey": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -29,6 +29,12 @@ import { joinSpaceHandler } from "./handlers/space.roomy.space.joinSpace.ts";
 import { leaveSpaceHandler } from "./handlers/space.roomy.space.leaveSpace.ts";
 import { setHandleHandler } from "./handlers/space.roomy.space.setHandle.ts";
 import { getActivityFeedHandler } from "./handlers/space.roomy.space.getActivityFeed.ts";
+import { getVapidPublicKeyHandler } from "./handlers/space.roomy.push.getVapidPublicKey.ts";
+import { getPreferencesHandler } from "./handlers/space.roomy.push.getPreferences.ts";
+import { registerSubscriptionHandler } from "./handlers/space.roomy.push.registerSubscription.ts";
+import { unregisterSubscriptionHandler } from "./handlers/space.roomy.push.unregisterSubscription.ts";
+import { setPreferencesHandler } from "./handlers/space.roomy.push.setPreferences.ts";
+import { startPushDispatcher, pushDispatcherStats } from "./push/dispatcher.ts";
 import { RoomyServiceClient, schemas, StreamDid } from "@roomy-space/sdk";
 import { getServiceClient } from "./serviceClient.ts";
 import { getOrCreateMaterializer, removeMaterializer } from "./materialization/registry.ts";
@@ -194,6 +200,11 @@ setInvalidationRouter(invalidationRouter);
 // of each SpaceMaterializer fetching independently. See embed/sweeper.ts.
 startEmbedSweeper({ db: mainDb, invalidationRouter });
 
+// Start the centralized push dispatcher. One process-wide loop owns all
+// push delivery (recipient resolution + outbound push-service calls),
+// poked by SpaceMaterializer on live createMessage. See push/dispatcher.ts.
+startPushDispatcher({ db: mainDb });
+
 const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter);
 
 // ─── XRPC routes ────────────────────────────────────────────────────────
@@ -233,6 +244,32 @@ const router = new XrpcRouter(prodAuthVerifier)
     handler: setHandleHandler,
     inputSchema: schemas.procedures.setHandle.Input,
     // No outputSchema: void return; short-circuits to 200 with empty body.
+  })
+  // ── Web push (Phase 1 plumbing) ──────────────────────────────────────
+  .query("space.roomy.push.getVapidPublicKey", {
+    handler: getVapidPublicKeyHandler,
+    paramsSchema: schemas.queries.getVapidPublicKey.Params,
+    outputSchema: schemas.queries.getVapidPublicKey.Response,
+  })
+  .query("space.roomy.push.getPushPreferences", {
+    handler: getPreferencesHandler,
+    paramsSchema: schemas.queries.getPushPreferences.Params,
+    outputSchema: schemas.queries.getPushPreferences.Response,
+  })
+  .procedure("space.roomy.push.registerSubscription", {
+    handler: registerSubscriptionHandler,
+    inputSchema: schemas.procedures.registerPushSubscription.Input,
+    // No outputSchema: void return.
+  })
+  .procedure("space.roomy.push.unregisterSubscription", {
+    handler: unregisterSubscriptionHandler,
+    inputSchema: schemas.procedures.unregisterPushSubscription.Input,
+    // No outputSchema: void return.
+  })
+  .procedure("space.roomy.push.setPushPreferences", {
+    handler: setPreferencesHandler,
+    inputSchema: schemas.procedures.setPushPreferences.Input,
+    // No outputSchema: void return.
   })
   // Admin routes (connectSpace, materializeSpace) intentionally have no
   // arktype schemas — they're internal/admin endpoints not part of the
@@ -367,6 +404,11 @@ Bun.serve({
         JSON.stringify({ ...stats, pending }),
         { headers: { "content-type": "application/json", ...corsHeaders } },
       );
+    }
+    if (url.pathname === "/health/push") {
+      return new Response(JSON.stringify(pushDispatcherStats()), {
+        headers: { "content-type": "application/json", ...corsHeaders },
+      });
     }
 
     // ─── Blob proxy ────────────────────────────────────────────────────

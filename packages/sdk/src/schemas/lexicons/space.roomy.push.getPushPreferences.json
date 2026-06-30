@@ -1,0 +1,58 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.push.getPushPreferences",
+  "defs": {
+    "perSpace": {
+      "type": "object",
+      "required": [
+        "level",
+        "spaceId"
+      ],
+      "properties": {
+        "level": {
+          "type": "string",
+          "knownValues": [
+            "busy",
+            "engaged",
+            "quiet",
+            "silent"
+          ]
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "default",
+            "perSpace"
+          ],
+          "properties": {
+            "default": {
+              "type": "string",
+              "knownValues": [
+                "busy",
+                "engaged",
+                "quiet",
+                "silent"
+              ]
+            },
+            "perSpace": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#perSpace"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

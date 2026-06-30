@@ -418,6 +418,35 @@ No change to the lazy `ensureReadPositions` strategy is required for push.
 - End-to-end: a manual `setPreferences` + a test message produces a real browser
   notification (Busy level, no digest yet).
 
+> **Phase 1 implementation status (2026-06-24).** All plumbing above is landed.
+> The minimal Busy immediate-push slice the Phase 1 E2E test needs is included
+> even though the full dispatcher/digest loop is nominally Phase 2:
+> `src/push/{types,level,webpush,evaluate,dispatcher}.ts` +
+> `src/queries/{pushPreferences,pushSubscriptions}.ts`, the `SpaceMaterializer`
+> live-createMessage poke, and the 5 handlers + `index.ts` route registration
+> + `/health/push`. `evaluate` is Busy-only (digest/participation/mentions
+> deferred). Covered by `src/push/evaluate.test.ts` (Busy delivery, author
+> exclusion, engaged-no-immediate, banned-access filter, no-subscription
+> skip, per-space silent override) — run with `bun test src/push/evaluate.test.ts`.
+>
+> **Manual E2E (Busy notification) — requires a browser + push service:**
+> 1. Generate a VAPID keypair: `bun run packages/appserver/scripts/generate-vapid.ts`.
+> 2. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` in the
+>    appserver env (see `.env.example`).
+> 3. Start the appserver (`pnpm dev` / `bun run packages/appserver/src/index.ts`)
+>    and `pnpm dev:lite`.
+> 4. In a browser, log in to app-lite — the service worker registers and
+>    `ensurePushSubscription()` asks for notification permission and registers
+>    the subscription (verify `GET /xrpc/space.roomy.push.getVapidPublicKey`
+>    returns the key, and a `push_subscriptions` row exists).
+> 5. As the same user, `setPushPreferences` to `{ default: "busy" }` (or per-space).
+> 6. From a second account in the same space, post a message in a room the
+>    busy user is a member of. A real notification appears (title
+>    "<author> in <room>", no body content). `GET /health/push` shows
+>    `deliveredOk` increment.
+> 7. Sign the busy user out — `clearPushSubscription()` unregisters the
+>    endpoint; no further pushes arrive on that device.
+
 **Phase 2 — Engaged digest (the primary deliverable)**
 - `PushDispatcher` + `evaluate.ts` background loop; materializer poke on live
   `createMessage`.

@@ -11,6 +11,7 @@ import { goto } from "$app/navigation";
 import { CONFIG, OAUTH_SCOPE } from "./config";
 import { scheduleAutoReload } from "./error-recovery";
 import { setAppserverOrigin } from "./appserver-origin";
+import { ensurePushSubscription, clearPushSubscription } from "./push.svelte";
 
 const { ServiceAuthClient, DirectXrpcClient, resolveAppserverHttpOrigin } = transport;
 
@@ -108,6 +109,10 @@ export async function init() {
       if (returnUrl && returnUrl !== currentReturnUrl()) {
         goto(returnUrl, { replaceState: true });
       }
+      // Subscribe this device for web push (progressive enhancement — no-op
+      // if unsupported/denied/unconfigured). Fire-and-forget: it must never
+      // block session restoration.
+      void ensurePushSubscription();
     }
   } catch (err) {
     initError = String(err);
@@ -157,6 +162,11 @@ export async function updateProfile() {
 }
 
 export async function logout() {
+  // Stop delivering push to this device while signed out. Best-effort: a
+  // failure here must not block logout.
+  await clearPushSubscription().catch((e) =>
+    console.warn("[push] clear on logout failed:", e),
+  );
   if (session) await sdkLogout(session);
   serviceAuth?.clear();
   serviceAuth = null;

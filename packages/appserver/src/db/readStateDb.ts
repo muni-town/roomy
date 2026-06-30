@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
  * Bump whenever readStateSchema.sql changes.
  * Uses a separate versioning namespace from the materialisation DB.
  */
-export const READSTATE_SCHEMA_VERSION = "2";
+export const READSTATE_SCHEMA_VERSION = "3";
 
 const DEFAULT_DB_PATH =
   process.env.READSTATE_DB_PATH ?? "data/roomy-readstate.sqlite";
@@ -105,6 +105,69 @@ const MIGRATIONS: Migration[] = [
 
         create index if not exists idx_user_thread_activity_user
           on user_thread_activity(user_did, last_active_at desc);
+      `);
+    },
+  },
+  {
+    version: 3,
+    name: "web_push",
+    up: (db) => {
+      // Web push plumbing: subscriptions, preferences, and the digest
+      // state tables. The schema.sql already creates these (idempotent), so
+      // a fresh DB needs no migration work; this entry exists so existing
+      // v2 databases migrate cleanly and record v3. All DDL uses IF NOT
+      // EXISTS, making it safe to re-apply.
+      db.exec(`
+        create table if not exists push_subscriptions (
+          user_did        text not null,
+          endpoint        text not null,
+          p256dh          text not null,
+          auth            text not null,
+          expiration_time integer,
+          created_at      integer not null default (unixepoch() * 1000),
+          updated_at      integer not null default (unixepoch() * 1000),
+          primary key (user_did, endpoint)
+        ) strict;
+        create index if not exists idx_push_subs_user
+          on push_subscriptions(user_did);
+
+        create table if not exists push_user_default (
+          user_did text primary key,
+          level    text not null check(level in ('silent','quiet','engaged','busy')) default 'engaged',
+          updated_at integer not null default (unixepoch() * 1000)
+        ) strict;
+
+        create table if not exists push_preferences (
+          user_did  text not null,
+          space_id  text not null,
+          level     text not null check(level in ('silent','quiet','engaged','busy')),
+          updated_at integer not null default (unixepoch() * 1000),
+          primary key (user_did, space_id)
+        ) strict;
+
+        create table if not exists user_room_participation (
+          user_did         text not null,
+          room_id          text not null,
+          last_message_at  integer not null,
+          updated_at       integer not null default (unixepoch() * 1000),
+          primary key (user_did, room_id)
+        ) strict;
+        create index if not exists idx_user_room_participation_user
+          on user_room_participation(user_did, last_message_at desc);
+
+        create table if not exists notification_state (
+          user_did            text not null,
+          room_id             text not null,
+          first_unseen_at     integer,
+          first_unseen_msg_id text,
+          unseen_count        integer not null default 0,
+          notified            integer not null default 0 check(notified in (0,1)),
+          pushed_at           integer,
+          updated_at          integer not null default (unixepoch() * 1000),
+          primary key (user_did, room_id)
+        ) strict;
+        create index if not exists idx_notification_state_due
+          on notification_state(notified, first_unseen_at);
       `);
     },
   },

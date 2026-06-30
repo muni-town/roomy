@@ -18,6 +18,8 @@ import {
   type StreamDid,
   type StreamIndex,
   type Ulid,
+  type UserDid,
+  decodeTime,
 } from "@roomy-space/sdk";
 
 import type { InvalidationRouter } from "../invalidation/types.ts";
@@ -30,6 +32,7 @@ import {
   recordDeliveryGap,
 } from "../debug/eventStore.ts";
 import { pokeEmbedSweeper } from "../embed/sweeper.ts";
+import { pokePushDispatcher } from "../push/dispatcher.ts";
 import { log } from "../log.ts";
 
 export type ConnectedSpaceLike = Pick<
@@ -336,6 +339,14 @@ export class SpaceMaterializer {
       );
     }
 
+    // For live batches, materialise the applied-event view once and reuse it
+    // for both the embed-sweeper poke and the push dispatcher poke (below).
+    // Backfill is skipped for both — same gate as the unread-counter increment.
+    const isLive = !meta.isBackfill;
+    const applied = isLive
+      ? events.map((e) => toAppliedEvent(e, this.streamDid))
+      : [];
+
     // Poke the centralized embed sweeper when live batches add messages —
     // that's when detectAndStoreLinks (called inside applyBatch) creates new
     // pending link rows. We pass the freshly-detected URLs so the sweeper
@@ -345,7 +356,7 @@ export class SpaceMaterializer {
     // completion (no priority URLs). pokeEmbedSweeper() is a no-op if a sweep
     // is already draining, so calling it on every relevant batch is cheap.
     if (
-      !meta.isBackfill &&
+      isLive &&
       events.some(
         (e) => e.event.$type === "space.roomy.message.createMessage.v0",
       )
@@ -353,9 +364,33 @@ export class SpaceMaterializer {
       pokeEmbedSweeper(stats.detectedLinks);
     }
 
+    // Poke the centralized push dispatcher for live createMessage events.
+    // The dispatcher runs all recipient resolution + network delivery in the
+    // background so push never blocks materialisation (same pattern as the
+    // embed sweeper). pokePushDispatcher() is a no-op if the loop is busy
+    // draining, so calling it on every relevant batch is cheap. (Phase 1:
+    // Busy immediate pushes; the Engaged digest is added in Phase 2.)
+    if (
+      isLive &&
+      events.some(
+        (e) => e.event.$type === "space.roomy.message.createMessage.v0",
+      )
+    ) {
+      const pushJobs = applied
+        .filter((e) => e.type === "space.roomy.message.createMessage.v0")
+        .filter((e) => e.roomId !== undefined)
+        .map((e) => ({
+          spaceId: this.streamDid,
+          roomId: e.roomId!,
+          messageId: e.id,
+          authorDid: (e.details?.authorDid ?? e.user) as UserDid,
+          timestamp: decodeTime(e.id),
+        }));
+      if (pushJobs.length > 0) pokePushDispatcher(pushJobs);
+    }
+
     // Notify invalidation router (only for live events).
-    if (this.invalidationRouter && !meta.isBackfill) {
-      const applied = events.map((e) => toAppliedEvent(e, this.streamDid));
+    if (this.invalidationRouter && isLive) {
       this.invalidationRouter.onEventsApplied(this.streamDid, applied, {
         isBackfill: meta.isBackfill,
       });

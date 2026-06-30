@@ -15,3 +15,5 @@ export * as getRoomMetadata from "./getRoomMetadata";
 export * as getRoomThreads from "./getRoomThreads";
 export * as getMessages from "./getMessages";
 export * as getMessage from "./getMessage";
+export * as getVapidPublicKey from "./getVapidPublicKey";
+export * as getPushPreferences from "./getPushPreferences";
