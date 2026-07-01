@@ -27,9 +27,10 @@
   let loading = $state(false);
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // Sync query from parent value changes (e.g. last-login click)
+  // Sync query from parent value changes (e.g. last-login click).
+  // Compare against query so our own keystroke writes (value = query) don't loop.
   $effect(() => {
-    if (value && !query) {
+    if (value && value !== query) {
       query = value;
     }
   });
@@ -77,11 +78,23 @@
   function onInput(e: Event) {
     const target = e.target as HTMLInputElement;
     query = target.value;
+    // Keep the bound parent value in sync so the Login button (which reads the
+    // bound value, not this input) works when typing without picking a result.
+    value = query;
 
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       searchActors(query);
     }, 200);
+  }
+
+  function onChange(e: Event) {
+    // Browser autofill/autocomplete may populate the field without firing an
+    // `input` event; `change` fires on blur (e.g. when clicking Login), so sync
+    // here too to ensure the bound value matches what's shown.
+    const target = e.target as HTMLInputElement;
+    query = target.value;
+    value = query;
   }
 
   function selectSuggestion(suggestion: ActorSuggestion) {
@@ -148,6 +161,7 @@
     {disabled}
     value={query}
     oninput={onInput}
+    onchange={onChange}
     onkeydown={onKeyDown}
     class="w-full text-sm py-2 px-3 rounded-lg ring-1 ring-inset ring-base-300 dark:ring-base-700 focus:ring-2 focus:ring-accent-500 bg-base-100 dark:bg-base-800/50 focus:bg-accent-400/5 dark:focus:bg-accent-600/5 text-base-900 dark:text-base-100 placeholder:text-base-400 dark:placeholder:text-base-500 outline-none border-0 transition-colors"
   />
