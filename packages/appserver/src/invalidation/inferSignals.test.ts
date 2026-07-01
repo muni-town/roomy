@@ -265,6 +265,22 @@ describe("inferSignals: reaction events", () => {
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMessages");
     expect(nsids).toContain("space.roomy.message.getMessage");
+    // A reaction on a room's latest message must refresh the activity feed
+    // (the feed renders reactions on the latest message). Emitted with no
+    // params so the client prefix-matches every activity-feed query key.
+    expect(nsids).toContain("space.roomy.space.getActivityFeed");
+    const feedSignal = signals.find(
+      (s) =>
+        s.kind === "queryInvalidation" &&
+        s.signal.nsid === "space.roomy.space.getActivityFeed",
+    );
+    expect(feedSignal).toBeDefined();
+    expect(
+      feedSignal &&
+        Object.keys(
+          (feedSignal as { signal: { params: Record<string, string> } }).signal.params,
+        ).length,
+    ).toBe(0);
   });
 
   it("removeReaction does the same", () => {
@@ -278,6 +294,7 @@ describe("inferSignals: reaction events", () => {
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMessages");
+    expect(nsids).toContain("space.roomy.space.getActivityFeed");
   });
 });
 

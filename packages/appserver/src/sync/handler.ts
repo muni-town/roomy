@@ -51,6 +51,7 @@ function topicsForSignal(signal: InvalidationEvent["signal"]): Topic[] {
       case "space.roomy.space.getRoles":
       case "space.roomy.space.getMembers":
       case "space.roomy.space.getInvites":
+      case "space.roomy.space.getActivityFeed":
         return qi.params["spaceId"]
           ? [topicKey("space", qi.params["spaceId"])]
           : [];
@@ -231,7 +232,12 @@ export class SyncManager {
     // the connection is currently subscribed to (e.g. the user may be
     // on /new or / with no space topic, but still needs their space
     // list to update when a space is created or joined).
-    if (signal.nsid === "space.roomy.space.getSpaces") {
+    // getActivityFeed is likewise a global per-user query — a reaction
+    // on any room's latest message must refresh every viewer's feed.
+    if (
+      signal.nsid === "space.roomy.space.getSpaces" ||
+      signal.nsid === "space.roomy.space.getActivityFeed"
+    ) {
       const frame = messageFrame("#invalidate", {
         nsid: signal.nsid,
         params: signal.params,
@@ -298,6 +304,15 @@ export class SyncManager {
     state.send(
       messageFrame("#invalidate", {
         nsid: "space.roomy.space.getSpaces",
+        params: {},
+      }),
+    );
+
+    // Invalidate the global activity feed (prefix-matches any
+    // spaceId/limit variant the client has cached).
+    state.send(
+      messageFrame("#invalidate", {
+        nsid: "space.roomy.space.getActivityFeed",
         params: {},
       }),
     );

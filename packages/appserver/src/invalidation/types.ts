@@ -25,6 +25,7 @@ export type QueryNsid =
   | "space.roomy.space.getRoles"
   | "space.roomy.space.getMembers"
   | "space.roomy.space.getInvites"
+  | "space.roomy.space.getActivityFeed"
   | "space.roomy.room.getMetadata"
   | "space.roomy.room.getMessages"
   | "space.roomy.room.getThreads"
