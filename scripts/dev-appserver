@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# dev-appserver — Run the appserver dev server inside Docker, with no host
+# node_modules.
+#
+# Why this exists: the appserver runs on Bun (bun:sqlite + Bun.serve). When the
+# repo is bind-mounted between a Linux dev container and a macOS host, running
+# `pnpm install` in the container writes Linux-native binaries (esbuild, etc.)
+# into the host's node_modules, which then breaks `bun dev` on the host. This
+# script keeps the ENTIRE install inside a Docker named volume, so the host
+# never needs — and is never modified by — an install.
+#
+# How it keeps the host clean:
+#   - `/app/node_modules` is a Docker named volume, so the pnpm store (where
+#     platform-specific native binaries like esbuild live) is never written to
+#     the host. The host never gets Linux binaries that would break macOS runs.
+#   - `/app/packages/appserver/node_modules` is ALSO a volume, masking the
+#     stale host dir so the container always gets fresh, correct symlinks.
+#   - Other packages' per-package node_modules get gitignored symlinks written
+#     to the host (same as `wt-setup`); these are symlinks only, not native
+#     binaries, so they can't break host runs and are gitignored.
+#   - Uses pnpm's default isolated linker (what Dockerfile.appserver uses) —
+#     no fighting the linker with hoisted mode.
+#
+# Usage:
+#   ./scripts/dev-appserver                 # run on :8080
+#   ./scripts/dev-appserver --port 8081     # run on a custom port
+#   ./scripts/dev-appserver --reset         # wipe the persisted volume + reinstall
+#   ./scripts/dev-appserver --rebuild-sdk   # force a rebuild of packages/sdk/dist
+#
+# Run from the repo root or a worktree root.
+#
+# Requirements:
+#   - Docker
+#   - packages/appserver/.env  (copy from .env.example)
+#   - For a LOCAL leaf-server: `docker compose up -d leaf-server` first, then set
+#     LEAF_URL=http://leaf-server:5530 in packages/appserver/.env. This script
+#     auto-joins the `roomy-dev` network when it exists so the container can reach
+#     `leaf-server` by name.
+#
+# Notes:
+#   - The SDK (packages/sdk/dist) is gitignored and built on demand inside the
+#     container. Edit SDK source → rebuild with --rebuild-sdk (Bun --watch does
+#     not rebuild the SDK bundle).
+#   - The SQLite DB lives at packages/appserver/data/ (bind mount) so it
+#     persists across restarts and you can inspect it from the host.
+#   - Restarting reuses the persisted install volume and skips setup unless
+#     pnpm-lock.yaml changed (auto-detected) or you pass --reset / --rebuild-sdk.
+
+set -euo pipefail
+
+REPO_PATH="$(pwd)"
+PORT=8080
+RESET=false
+REBUILD_SDK=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port) PORT="$2"; shift 2 ;;
+    --reset) RESET=true; shift ;;
+    --rebuild-sdk) REBUILD_SDK=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+if [[ ! -f packages/appserver/package.json ]]; then
+  echo "✗ Run this from the repo root (or a worktree root) — packages/appserver not found."
+  exit 1
+fi
+if [[ ! -f packages/appserver/.env ]]; then
+  echo "✗ packages/appserver/.env not found. Copy .env.example to .env and fill it in."
+  exit 1
+fi
+
+SAFE_NAME="$(basename "$REPO_PATH")"
+DEV_NAME="appserver-dev-${SAFE_NAME//\//-}"
+# Two volumes: the root pnpm store (native binaries) and the appserver's own
+# node_modules (masks the stale host dir so the container gets clean symlinks).
+# Named per-worktree so different worktrees don't share install state.
+VOL_NM="roomy-${SAFE_NAME//\//-}-appserver-node-modules"
+VOL_APPSERVER_NM="roomy-${SAFE_NAME//\//-}-appserver-pkg-nm"
+
+if $RESET; then
+  echo "Resetting install volumes …"
+  docker volume rm "$VOL_NM" "$VOL_APPSERVER_NM" 2>/dev/null || true
+fi
+
+docker rm -f "$DEV_NAME" 2>/dev/null || true
+
+# Join the local leaf network if it exists; otherwise use the default bridge
+# (for a remote LEAF_URL).
+NET_ARGS=()
+if docker network inspect roomy-dev >/dev/null 2>&1; then
+  NET_ARGS=(--network roomy-dev)
+fi
+
+echo "Starting appserver dev container: $DEV_NAME on port $PORT"
+echo "  install volume: $VOL_NM (host node_modules untouched)"
+
+docker run -d \
+  --name "$DEV_NAME" \
+  -v "$REPO_PATH:/app" \
+  -v "$VOL_NM:/app/node_modules" \
+  -v "$VOL_APPSERVER_NM:/app/packages/appserver/node_modules" \
+  -p "$PORT:$PORT" \
+  -e "PORT=$PORT" \
+  -e "REBUILD_SDK=$REBUILD_SDK" \
+  "${NET_ARGS[@]}" \
+  -w /app \
+  node:22 \
+  bash -c '
+    set -e
+    # --- toolchain: pnpm (pinned) + bun (official) ---
+    npm i -g pnpm@10.16.1 >/dev/null
+    export PNPM_HOME="$HOME/.local/share/pnpm"
+    export PATH="$PNPM_HOME:$HOME/.bun/bin:$PATH"
+    if ! command -v bun >/dev/null 2>&1; then
+      echo "[dev-appserver] installing bun …"
+      curl -fsSL https://bun.sh/install | bash >/dev/null
+    fi
+
+    MARKER="/app/node_modules/.roomy-dev-ready"
+    # Sentinel: a package symlink that only exists once the appserver volume has
+    # been populated by an install. If the volume is empty (e.g. first run after
+    # adding the volume, or a partial reset), force setup even if the marker says
+    # ready — self-heals the appserver node_modules without --reset.
+    SENTINEL="/app/packages/appserver/node_modules/@atcute/cbor"
+    LOCK_HASH="$(sha256sum pnpm-lock.yaml | cut -d" " -f1)"
+    SKIP_SETUP=0
+    if [ -f "$MARKER" ] && [ "$(cat "$MARKER" 2>/dev/null)" = "$LOCK_HASH" ] && [ -e "$SENTINEL" ] && [ "$REBUILD_SDK" = "false" ]; then
+      SKIP_SETUP=1
+      echo "[dev-appserver] install volume up to date (lockfile unchanged) — skipping setup"
+    fi
+
+    if [ "$SKIP_SETUP" = "0" ]; then
+      echo "[dev-appserver] pnpm install (isolated linker, store in volume) …"
+      pnpm install --frozen-lockfile --ignore-scripts
+      if [ ! -f packages/sdk/dist/index.js ] || [ "$REBUILD_SDK" = "true" ]; then
+        echo "[dev-appserver] building SDK (packages/sdk) …"
+        pnpm --filter @roomy-space/sdk build
+      fi
+      echo "$LOCK_HASH" > "$MARKER"
+    fi
+
+    echo "[dev-appserver] starting bun --watch (port $PORT) …"
+    cd packages/appserver
+    exec bun run --watch src/index.ts
+  '
+
+echo ""
+echo "✔ appserver dev started → http://localhost:$PORT"
+echo "  Logs:      docker logs -f $DEV_NAME"
+echo "  Stop:       docker rm -f $DEV_NAME"
+echo "  Reinstall:  ./scripts/dev-appserver --reset"
+echo "  Rebuild SDK: ./scripts/dev-appserver --rebuild-sdk"
