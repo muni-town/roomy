@@ -48,10 +48,31 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
     );
   }
 
-  await hydrateUserMembership(userDid);
+  // Warm this user's space materializers in the background. We deliberately do
+  // NOT await: recording a read position only needs the on-disk materialisation
+  // (which persists across restarts), so blocking here on a cold Leaf
+  // re-subscribe is what made the first `updateSeen` for a space slow. The reads
+  // below run against whatever is already materialised; a mid-backfill space
+  // just yields a slightly stale watermark that self-corrects as live messages
+  // arrive.
+  void hydrateUserMembership(userDid).catch(() => {});
 
   const db = openDb();
-  const access = requireRoomRead(db, roomId, userDid);
+  let access: ReturnType<typeof requireRoomRead>;
+  try {
+    access = requireRoomRead(db, roomId, userDid);
+  } catch (err) {
+    // The room may not be materialised yet on a cold (lazy) space if no read
+    // handler ran first. Fall back to awaiting hydration once, then retry —
+    // hydrateUserMembership dedups in-flight, so this shares the background
+    // call kicked off above rather than doing the work twice.
+    if (err instanceof XrpcError && err.status === 404) {
+      await hydrateUserMembership(userDid);
+      access = requireRoomRead(db, roomId, userDid);
+    } else {
+      throw err;
+    }
+  }
 
   let seenUpTo: string;
   let unreadCount: number;

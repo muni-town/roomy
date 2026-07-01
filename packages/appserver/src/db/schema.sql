@@ -34,6 +34,14 @@ create index if not exists idx_entities_sort_idx on entities(sort_idx);
 -- with a reverse sort order to get only the latest entities.
 create index if not exists idx_entities_room on entities (room, id desc);
 
+-- Room-scoped sort_idx lookups: `max(sort_idx) where room = ?` (updateSeen
+-- watermark) and `count(*) where room = ? and sort_idx > ?` (unread count).
+-- Without this, idx_entities_room orders by id (not sort_idx), so those
+-- aggregates scan every entity in the room. Purely additive/idempotent —
+-- created on existing DBs at next boot, so it does NOT need a SCHEMA_VERSION
+-- bump (a bump would force a full re-materialisation of every space).
+create index if not exists idx_entities_room_sort on entities (room, sort_idx);
+
 create table if not exists edges (
     head text not null, -- did or ulid
     tail text not null, -- did or ulid
