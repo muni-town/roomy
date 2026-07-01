@@ -196,7 +196,7 @@
   </div>
 {/snippet}
 
-<div class="h-full flex flex-col bg-white dark:bg-base-950">
+<div class="h-full flex flex-col bg-white dark:bg-base-900/20">
   {#if roomKind === "channel"}
     <!-- Both ChatArea and ChannelBoardView stay mounted for smooth tab switching -->
     <div class="relative flex-1 min-h-0">
