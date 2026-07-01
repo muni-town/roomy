@@ -208,23 +208,36 @@ export interface InitSessionOptions {
   port?: number;
   scope?: string;
   usePublicClient?: boolean;
+  /**
+   * Opaque string carried through the OAuth round-trip via the `state`
+   * parameter. Returned verbatim by `initSession()` once the callback is
+   * processed. Apps use this to remember the URL the user was on before
+   * signing in and redirect back to it after the PDS callback.
+   */
+  state?: string;
 }
 
 /**
  * Try to restore an existing OAuth session (e.g. after a page reload or
- * redirect back from the PDS). Returns `{ session, agent }` if a session
- * was found, or `null` if the user is not authenticated.
+ * redirect back from the PDS). Returns `{ session, agent, state }` if a
+ * session was found, or `null` if the user is not authenticated. `state`
+ * is the OAuth `state` value round-tripped through the PDS (present only
+ * when this call processed an OAuth callback, not a plain session restore).
  */
 export async function initSession(
   appserverDid: string,
   opts: InitSessionOptions = {},
-): Promise<{ session: OAuthSession; agent: Agent } | null> {
+): Promise<{ session: OAuthSession; agent: Agent; state?: string | null } | null> {
   const client = await createOAuthClient(appserverDid, opts);
   const result = await client.init();
   if (result?.session) {
     return {
       session: result.session,
       agent: new Agent(result.session as any),
+      // `state` is only present when `init()` processed an OAuth callback
+      // (URL contained callback params). On a plain session restore it is
+      // `undefined`, so callers can distinguish the two cases.
+      state: result.state,
     };
   }
   return null;
@@ -241,7 +254,9 @@ export async function login(
   opts: InitSessionOptions = {},
 ): Promise<void> {
   const client = await createOAuthClient(appserverDid, opts);
-  await client.signIn(handle);
+  // Forward `state` so the app can round-trip a return URL through the PDS.
+  // The value comes back unchanged via `initSession()`'s `state` field.
+  await client.signIn(handle, opts.state ? { state: opts.state } : undefined);
 }
 
 /**
