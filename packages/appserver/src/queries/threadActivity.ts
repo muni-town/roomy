@@ -5,6 +5,13 @@
  * of `room.getMetadata`. Returns each thread with its latest message timestamp
  * and up to 3 unique recent participants.
  *
+ * Forwarded messages are forward-reference entities with no own content/author
+ * — their timestamp and author live on the original message reached via the
+ * `forward` edge. We follow that edge (coalescing the message's own content
+ * with the forwarded original's) so a thread created by forwarding messages
+ * still reports a latest timestamp, recent participants (the original authors),
+ * and a latest message — matching what `selectMessages` displays.
+ *
  * Implementation note: the equivalent frontend LiveQuery used a window function
  * with `partition by author` over a SELECT alias and silently returned 0–1
  * members because window functions evaluate before aliases (memory:
@@ -95,12 +102,22 @@ export function listThreadActivity(
   const ph = threadIds.map(() => "?").join(",");
 
   // Step 2: batch-fetch latest timestamps for all threads at once.
+  //
+  // Forwarded messages are forward-reference entities with no comp_content of
+  // their own — their content/timestamp lives on the original message reached
+  // via the `forward` edge. We follow that edge so a thread created by
+  // forwarding messages still surfaces a latest timestamp (the original's).
   const latestRows = db
     .query<{ room: string; ts: number | null }, string[]>(
-      `select e.room as room, max(cc.timestamp) as ts
+      `select e.room as room,
+              max(coalesce(cc.timestamp, fwd_cc.timestamp)) as ts
          from entities e
-         join comp_content cc on cc.entity = e.id
+         left join comp_content cc on cc.entity = e.id
+         left join edges forward_e
+           on forward_e.head = e.id and forward_e.label = 'forward'
+         left join comp_content fwd_cc on fwd_cc.entity = forward_e.tail
         where e.room in (${ph})
+          and (cc.entity is not null or forward_e.tail is not null)
         group by e.room`,
     )
     .all(...threadIds);
@@ -108,22 +125,36 @@ export function listThreadActivity(
 
   // Step 3: batch-fetch recent participants (up to 3 per thread).
   // We fetch all and group in JS.
+  //
+  // For forwarded messages the author edge lives on the original (reached via
+  // the `forward` edge), so we coalesce the message's own author with the
+  // forwarded original's author. The original's author then counts as a
+  // recent participant of the thread it was forwarded into.
   const participantRows = db
     .query<
       { room: string; did: string; name: string | null; avatar: string | null; ts: number | null },
       string[]
     >(
       `select msg.room as room,
-              author_e.tail as did,
+              coalesce(author_e.tail, fwd_author_e.tail) as did,
               ci.name as name,
               ci.avatar as avatar,
-              max(cc.timestamp) as ts
+              max(coalesce(cc.timestamp, fwd_cc.timestamp)) as ts
          from entities msg
-         join comp_content cc on cc.entity = msg.id
-         join edges author_e on author_e.head = msg.id and author_e.label = 'author'
-         left join comp_info ci on ci.entity = author_e.tail
+         left join comp_content cc on cc.entity = msg.id
+         left join edges author_e
+           on author_e.head = msg.id and author_e.label = 'author'
+         left join edges forward_e
+           on forward_e.head = msg.id and forward_e.label = 'forward'
+         left join comp_content fwd_cc on fwd_cc.entity = forward_e.tail
+         left join edges fwd_author_e
+           on fwd_author_e.head = forward_e.tail and fwd_author_e.label = 'author'
+         left join comp_info ci
+           on ci.entity = coalesce(author_e.tail, fwd_author_e.tail)
         where msg.room in (${ph})
-        group by msg.room, author_e.tail
+          and (cc.entity is not null or forward_e.tail is not null)
+          and coalesce(author_e.tail, fwd_author_e.tail) is not null
+        group by msg.room, coalesce(author_e.tail, fwd_author_e.tail)
         order by msg.room, ts desc`,
     )
     .all(...threadIds);
@@ -155,6 +186,10 @@ export function listThreadActivity(
   // Step 5: batch-fetch latest message for all threads.
   // SQLite doesn't support LIMIT per group, so we fetch all messages
   // and pick the latest per thread in JS.
+  //
+  // Forwarded messages have no own content/author — follow the `forward` edge
+  // to the original and coalesce so a thread created solely by forwarding
+  // still reports a latest message (the original's content/author/timestamp).
   const latestMsgRows = db
     .query<
       {
@@ -171,18 +206,25 @@ export function listThreadActivity(
     >(
       `select e.room as room,
               e.id as id,
-              cc.mime_type as mime_type,
-              cc.data as data,
-              coalesce(author_e.tail, '') as author_did,
+              coalesce(cc.mime_type, fwd_cc.mime_type) as mime_type,
+              coalesce(cc.data, fwd_cc.data) as data,
+              coalesce(author_e.tail, fwd_author_e.tail) as author_did,
               author_info.name as author_name,
               author_info.avatar as author_avatar,
-              cc.timestamp as timestamp
+              coalesce(cc.timestamp, fwd_cc.timestamp) as timestamp
          from entities e
-         join comp_content cc on cc.entity = e.id
+         left join comp_content cc on cc.entity = e.id
          left join edges author_e
            on author_e.head = e.id and author_e.label = 'author'
-         left join comp_info author_info on author_info.entity = author_e.tail
-        where e.room in (${ph})`,
+         left join edges forward_e
+           on forward_e.head = e.id and forward_e.label = 'forward'
+         left join comp_content fwd_cc on fwd_cc.entity = forward_e.tail
+         left join edges fwd_author_e
+           on fwd_author_e.head = forward_e.tail and fwd_author_e.label = 'author'
+         left join comp_info author_info
+           on author_info.entity = coalesce(author_e.tail, fwd_author_e.tail)
+        where e.room in (${ph})
+          and (cc.entity is not null or forward_e.tail is not null)`,
     )
     .all(...threadIds);
 

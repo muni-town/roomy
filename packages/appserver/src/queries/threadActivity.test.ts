@@ -72,7 +72,7 @@ function postMessage(
   authorDid: string,
   ts: number,
   content?: string,
-) {
+): string {
   const msgId = `01MSG${String(messageCounter++).padStart(20, "0")}`;
   db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
     msgId,
@@ -87,6 +87,30 @@ function postMessage(
     msgId,
     authorDid,
   ]);
+  return msgId;
+}
+
+let forwardCounter = 0;
+/**
+ * Forward an existing message (by id) into `threadId`. Mirrors the
+ * `space.roomy.msg.forwardMessages.v0` materialiser: creates a
+ * forward-reference entity (id = the forward event's ULID) in the target
+ * thread with NO comp_content/author of its own, plus a `forward` edge back
+ * to the original.
+ */
+function forwardMessage(db: Database, threadId: string, origMsgId: string) {
+  const fwdId = `01FWD${String(forwardCounter++).padStart(20, "0")}`;
+  // Forward-reference entity in the target thread.
+  db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+    fwdId,
+    SPACE,
+    threadId,
+  ]);
+  // forward edge: head = forward reference, tail = original message.
+  db.run(
+    "insert into edges (head, tail, label) values (?, ?, 'forward')",
+    [fwdId, origMsgId],
+  );
 }
 
 describe("threadActivity", () => {
@@ -197,5 +221,87 @@ describe("threadActivity", () => {
 
     expect(threadA.latestMessage).not.toBeNull();
     expect(threadA.latestMessage!.content).toBe("**bold** and _italic_");
+  });
+
+  // ── Forwarded messages ─────────────────────────────────────────────────────
+  //
+  // A thread created by forwarding messages contains only forward-reference
+  // entities (no own comp_content / author edge); their content/timestamp/author
+  // live on the original message reached via the `forward` edge. These tests
+  // guard that listThreadActivity follows that edge so a forward-created
+  // thread shows a latest timestamp, recent participants, and a latest message.
+
+  test("forwarded message contributes the original's timestamp to latestTimestamp", () => {
+    const db = freshDb();
+    seed(db);
+
+    // Alice posts a message in THREAD_A, then it's forwarded into THREAD_B.
+    const origId = postMessage(db, THREAD_A, ALICE, 9000, "forwarded hello");
+    forwardMessage(db, THREAD_B, origId);
+
+    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const threadB = result.find((t) => t.id === THREAD_B)!;
+    // THREAD_B has no direct messages — only a forwarded one. The forwarded
+    // message's original timestamp (9000) must surface as the thread's latest.
+    expect(threadB.latestTimestamp).toBe(new Date(9000).toISOString());
+    // THREAD_B (9000) should sort ahead of THREAD_A which has only the same msg
+    // at 9000 — tiebroken alphabetically. Ensure THREAD_B isn't buried at the
+    // bottom (i.e. it isn't treated as having null activity).
+    expect(result.map((t) => t.id)).toContain(THREAD_B);
+    const aIdx = result.findIndex((t) => t.id === THREAD_A);
+    const bIdx = result.findIndex((t) => t.id === THREAD_B);
+    // Same latestTimestamp (9000) → alphabetic tiebreak: "Thread A" < "Thread B".
+    expect(bIdx).toBeGreaterThan(aIdx);
+  });
+
+  test("forwarded message's original author appears in latestMembers", () => {
+    const db = freshDb();
+    seed(db);
+
+    // Thread created solely by forwarding Bob's message into it.
+    const origId = postMessage(db, THREAD_A, BOB, 5000, "hi from bob");
+    forwardMessage(db, THREAD_B, origId);
+
+    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const threadB = result.find((t) => t.id === THREAD_B)!;
+    expect(threadB.latestMembers.map((m) => m.did)).toContain(BOB);
+    expect(threadB.latestMembers.map((m) => m.name)).toContain("bob");
+  });
+
+  test("forwarded message is returned as the thread's latestMessage with original content/author", () => {
+    const db = freshDb();
+    seed(db);
+
+    const origId = postMessage(db, THREAD_A, CAROL, 7000, "forwarded body");
+    forwardMessage(db, THREAD_B, origId);
+
+    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const threadB = result.find((t) => t.id === THREAD_B)!;
+    expect(threadB.latestMessage).not.toBeNull();
+    expect(threadB.latestMessage!.content).toBe("forwarded body");
+    expect(threadB.latestMessage!.author.did).toBe(CAROL);
+    expect(threadB.latestMessage!.author.name).toBe("carol");
+    expect(threadB.latestMessage!.timestamp).toBe(new Date(7000).toISOString());
+  });
+
+  test("a forwarded message newer than a direct message wins latestTimestamp/latestMessage", () => {
+    const db = freshDb();
+    seed(db);
+
+    // Direct message from Alice at 1000, then a forwarded message (orig at
+    // 2000) into the same thread.
+    postMessage(db, THREAD_A, ALICE, 1000, "direct");
+    const origId = postMessage(db, THREAD_B, DAVE, 2000, "forwarded later");
+    forwardMessage(db, THREAD_A, origId);
+
+    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const threadA = result.find((t) => t.id === THREAD_A)!;
+    expect(threadA.latestTimestamp).toBe(new Date(2000).toISOString());
+    expect(threadA.latestMessage!.content).toBe("forwarded later");
+    expect(threadA.latestMessage!.author.did).toBe(DAVE);
+    // Alice (direct) and Dave (forwarded) both participate.
+    expect(threadA.latestMembers.map((m) => m.did).sort()).toEqual(
+      [ALICE, DAVE].sort(),
+    );
   });
 });
