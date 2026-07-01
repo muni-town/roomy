@@ -18,6 +18,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { log } from "../log.ts";
 import { evaluatePush } from "./evaluate.ts";
 import { sendPush } from "./webpush.ts";
@@ -26,6 +27,17 @@ import {
   selectSubscriptions,
 } from "../queries/pushSubscriptions.ts";
 import type { PushDelivery, PushJob } from "./types.ts";
+
+/**
+ * Build a Web Push `Topic` header value for a room. The spec requires ≤32
+ * base64url chars (`[A-Za-z0-9_-]`); a literal `room:<roomId>` contains `:`/`/`
+ * (Roomy room ids are lexicon URIs) which the push service rejects. Derive a
+ * deterministic 32-char base64url token from a sha256 of the roomId so a
+ * room's notifications still coalesce across deliveries.
+ */
+function roomTopic(roomId: string): string {
+  return createHash("sha256").update(roomId).digest().toString("base64url").slice(0, 32);
+}
 
 /** How often to wake the loop while idle (no pokes). */
 const IDLE_POLL_MS = 60_000;
@@ -142,14 +154,17 @@ async function processBatch(db: Database, batch: PushJob[]): Promise<void> {
   if (deliveries.length === 0) return;
 
   // Deliver each recipient's payload to all their subscription endpoints.
-  // `topic: room:<roomId>` makes a room's notifications replace each other
-  // (coalescing for Busy). Bounded concurrency so we never flood a push
-  // service; failures are logged, never thrown to the caller.
+  // `topic` makes a room's notifications replace each other (coalescing for
+  // Busy). The Web Push `Topic` header must be ≤32 base64url chars
+  // ([A-Za-z0-9_-]) — a raw `room:<roomId>` contains `:`/`/` and is rejected
+  // by the push service ("Unsupported characters set…"). Hash the roomId to a
+  // short, deterministic base64url token instead. Bounded concurrency so we
+  // never flood a push service; failures are logged, never thrown to caller.
   await mapWithConcurrency(deliveries, CONCURRENCY, async (delivery) => {
     const subs = selectSubscriptions(db, delivery.userDid);
     if (subs.length === 0) return;
     const payload = JSON.stringify(delivery.payload);
-    const topic = `room:${delivery.payload.roomId}`;
+    const topic = roomTopic(delivery.payload.roomId);
     await Promise.all(
       subs.map(async (sub) => {
         try {
