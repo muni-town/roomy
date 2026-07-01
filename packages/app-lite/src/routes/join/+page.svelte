@@ -56,6 +56,31 @@
     joinState = { status: "loading" };
     try {
       await joinSpace(spaceId, inviteToken);
+      // Invalidate cached queries for this space so stale pre-join responses
+      // (e.g. getMetadata with isMember=false, room metadata canWrite=false)
+      // are cleared before we navigate into the space. The appserver also
+      // emits invalidation signals over WebSocket, but those race with the
+      // immediate navigation below; doing it eagerly avoids a flash of the
+      // "you need an invite" modal for a user who just accepted an invite.
+      await queryClient.invalidateQueries({
+        predicate: (query) => {
+          const nsid = query.queryKey[0];
+          if (typeof nsid !== "string") return false;
+          const params = query.queryKey[1];
+          if (
+            params != null &&
+            typeof params === "object" &&
+            !Array.isArray(params) &&
+            (params as Record<string, unknown>).spaceId === spaceId
+          ) {
+            return true;
+          }
+          // Room-scoped queries key on roomId, not spaceId — match by NSID
+          // prefix so stale canWrite=false / no-read-access errors clear.
+          if (nsid.startsWith("space.roomy.room.")) return true;
+          return false;
+        },
+      });
       joinState = { status: "success" };
       goto(`/${spaceId}`);
     } catch (err) {

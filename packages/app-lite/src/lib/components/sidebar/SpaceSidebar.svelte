@@ -102,6 +102,40 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       ? (spacesQuery.data?.spaces ?? []).find((s) => s.id === spaceId)
       : null,
   );
+
+  // An invite link in the URL means the caller is in the accept-invite flow —
+  // in that case keep the space header / sidebar so they can see what space
+  // they are joining. Only the no-invite, non-member case is "inaccessible".
+  const inviteToken = $derived(
+    page.url.searchParams.get("invite") ?? undefined,
+  );
+  // True once we know the caller is not a member and has no invite link.
+  // Uses the cached getSpaces `isMember` as an early signal (so a non-member
+  // never sees the raw space DID in the header while metadata loads) and the
+  // authoritative `meta.isMember` once getMetadata resolves. A member with a
+  // cached spaces list sees the space header immediately; only a hard refresh
+  // of a member's space shows a brief Roomy logo flash.
+  const inaccessible = $derived(
+    !!spaceId &&
+      !inviteToken &&
+      !((metaQuery.isSuccess && (meta?.isMember ?? false)) ||
+        (currentSpace?.isMember ?? false)),
+  );
+
+  // When the space is inaccessible, open the space selector so the caller can
+  // navigate elsewhere — mirroring the homepage where the directory is always
+  // shown. Track `spaceId` directly so navigating between two inaccessible
+  // spaces re-opens the selector even though `inaccessible` stays true; the
+  // cleanup closes it again once we land on an accessible space.
+  $effect(() => {
+    void spaceId;
+    if (inaccessible) {
+      serverBar.expanded = true;
+      return () => {
+        serverBar.expanded = false;
+      };
+    }
+  });
   // --- Settings panel (slides in from the right within the unified sidebar,
   //     mirroring the space selector / directory which slides in from the
   //     left, but in the opposite direction). The space header and space
@@ -481,7 +515,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
 </script>
 
 {#snippet spaceHeader()}
-  {#if spaceId}
+  {#if spaceId && !inaccessible}
     <div class="border-b border-transparent hover:border-base-200/60 dark:hover:border-base-900/60">
       <SpaceHeaderShell
         spaceName={currentSpace?.name ?? meta?.name ?? spaceId}
@@ -527,15 +561,17 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
   overlayOpen={settingsOpen}
 >
   {#snippet actions()}
-    <SpaceSidebarButtons
-      {spaceId}
-      allowPublicJoin={meta?.joinPolicy.allowPublicJoin ?? false}
-      onInvite={onInvite}
-    />
+    {#if !inaccessible}
+      <SpaceSidebarButtons
+        {spaceId}
+        allowPublicJoin={meta?.joinPolicy.allowPublicJoin ?? false}
+        onInvite={onInvite}
+      />
+    {/if}
   {/snippet}
 
   {#snippet prefix()}
-    {#if spaceId}
+    {#if spaceId && !inaccessible}
       <Button
         class="w-full justify-start min-w-0 py-1 px-2.5"
         variant="ghost"
