@@ -19,6 +19,197 @@
         }
       }
     },
+    "au": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "type": "string"
+        },
+        "u": {
+          "type": "string"
+        }
+      }
+    },
+    "footer": {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string"
+        }
+      }
+    },
+    "imgs": {
+      "type": "object",
+      "required": [
+        "u"
+      ],
+      "properties": {
+        "u": {
+          "type": "string"
+        },
+        "d": {
+          "type": "string"
+        },
+        "h": {
+          "type": "integer"
+        },
+        "m": {
+          "type": "string"
+        },
+        "w": {
+          "type": "integer"
+        }
+      }
+    },
+    "p": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "type": "string"
+        },
+        "u": {
+          "type": "string"
+        }
+      }
+    },
+    "thumb": {
+      "type": "object",
+      "required": [
+        "u"
+      ],
+      "properties": {
+        "u": {
+          "type": "string"
+        },
+        "d": {
+          "type": "string"
+        },
+        "h": {
+          "type": "integer"
+        },
+        "m": {
+          "type": "string"
+        },
+        "w": {
+          "type": "integer"
+        }
+      }
+    },
+    "vid": {
+      "type": "object",
+      "required": [
+        "u"
+      ],
+      "properties": {
+        "u": {
+          "type": "string"
+        },
+        "d": {
+          "type": "string"
+        },
+        "h": {
+          "type": "integer"
+        },
+        "m": {
+          "type": "string"
+        },
+        "w": {
+          "type": "integer"
+        }
+      }
+    },
+    "embed": {
+      "type": "object",
+      "properties": {
+        "au": {
+          "type": "ref",
+          "ref": "#au"
+        },
+        "d": {
+          "type": "string"
+        },
+        "footer": {
+          "type": "ref",
+          "ref": "#footer"
+        },
+        "imgs": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#imgs"
+          }
+        },
+        "p": {
+          "type": "ref",
+          "ref": "#p"
+        },
+        "t": {
+          "type": "string"
+        },
+        "thumb": {
+          "type": "ref",
+          "ref": "#thumb"
+        },
+        "vid": {
+          "type": "ref",
+          "ref": "#vid"
+        }
+      }
+    },
+    "linkEmbeds": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "embed": {
+          "type": "ref",
+          "ref": "#embed"
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "required": [
+        "type",
+        "url"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "alt": {
+          "type": "string"
+        }
+      }
+    },
+    "reactions": {
+      "type": "object",
+      "required": [
+        "dids",
+        "emoji"
+      ],
+      "properties": {
+        "dids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "emoji": {
+          "type": "string"
+        },
+        "myReactionId": {
+          "type": "string"
+        }
+      }
+    },
     "messages": {
       "type": "object",
       "required": [
@@ -36,6 +227,27 @@
         },
         "id": {
           "type": "string"
+        },
+        "linkEmbeds": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#linkEmbeds"
+          }
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#media"
+          }
+        },
+        "reactions": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#reactions"
+          }
         },
         "timestamp": {
           "type": "string"
