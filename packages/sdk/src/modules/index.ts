@@ -264,6 +264,7 @@ const spaceModuleDef: BasicModule = {
     select unauthorized('this space requires an invite to join')
     where (select event_type from event_info) = 'space.roomy.space.joinSpace.v0'
       and (select allow_public_join from space_info) = 0
+      and not exists (select 1 from admins where user_id = (select user from event))
       and not exists (
         select 1 from invites
         where token = (select drisl_extract(payload, '.inviteToken') from event)
