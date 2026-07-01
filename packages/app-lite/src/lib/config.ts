@@ -31,6 +31,17 @@ export const CONFIG = {
    * Useful for local development: VITE_APPSERVER_WS_ORIGIN=ws://127.0.0.1:8080
    */
   appserverWsOrigin: import.meta.env.VITE_APPSERVER_WS_ORIGIN || null,
+  /**
+   * HTTP origin for direct XRPC calls (getMessages, updateSeen, …). In local
+   * dev we derive it from the WS-origin override so a single
+   * VITE_APPSERVER_WS_ORIGIN points BOTH the sync WebSocket and the XRPC HTTP
+   * client at the local appserver. When unset, the HTTP origin is resolved
+   * from the appserver DID (i.e. production).
+   */
+  appserverHttpOrigin:
+    (import.meta.env.VITE_APPSERVER_WS_ORIGIN || "")
+      .replace(/^ws(s?):\/\//, "http$1://")
+      .replace(/\/+$/, "") || null,
   port: Number(import.meta.env.VITE_PORT) || 5180,
   usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
   profileSpaceNsid:
