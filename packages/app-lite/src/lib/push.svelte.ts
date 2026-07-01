@@ -25,6 +25,44 @@ import { registerPushSubscription, unregisterPushSubscription } from "$lib/mutat
 /** localStorage key for the last endpoint we registered (idempotency hint). */
 const LAST_ENDPOINT_KEY = "roomy.push.lastEndpoint";
 
+/**
+ * Outcome of a subscribe/unsubscribe attempt. Callers (the settings page) use
+ * this to surface the right toast; the silent login-time caller ignores it.
+ *  - `ok`        — subscription registered (or cleared) successfully.
+ *  - `unsupported` — browser lacks Push API / service workers / Notifications.
+ *  - `denied`    — the user declined (or previously blocked) the permission prompt.
+ *  - `no-key`    — the appserver has no VAPID key configured (push unavailable).
+ *  - `timeout`   — `pushManager.subscribe()` didn't resolve in 20s (e.g. a
+ *                  Chromium build without Google FCM keys, or the GCM channel
+ *                  on port 5228 is blocked).
+ *  - `failed`    — any other error (network, XRPC 4xx/5xx); `message` has detail.
+ */
+export type PushOutcome =
+  | { status: "ok" }
+  | { status: "unsupported" }
+  | { status: "denied" }
+  | { status: "no-key" }
+  | { status: "timeout" }
+  | { status: "failed"; message: string };
+
+/** Human-friendly message for each non-ok outcome (for toasts). */
+export function pushOutcomeMessage(o: PushOutcome): string {
+  switch (o.status) {
+    case "ok":
+      return "Notifications enabled.";
+    case "unsupported":
+      return "This browser doesn't support web push notifications.";
+    case "denied":
+      return "Notifications are blocked. Re-enable them in your browser's site permissions, then try again.";
+    case "no-key":
+      return "Push isn't configured on this server yet.";
+    case "timeout":
+      return "Couldn't contact the push service (timed out). Some browsers — like vanilla Chromium without Google keys — can't use web push; try Firefox, Chrome, Edge, Brave, or Safari.";
+    case "failed":
+      return `Couldn't enable notifications: ${o.message}`;
+  }
+}
+
 function supportsPush(): boolean {
   return (
     typeof navigator !== "undefined" &&
@@ -45,13 +83,53 @@ export function base64UrlToUint8Array(base64Url: string): Uint8Array {
 }
 
 /**
- * Subscribe (or re-confirm) this device for push after login. Safe to call on
- * every init — re-subscribing an existing endpoint is a no-op on the browser
- * side and an idempotent upsert on the appserver side.
+ * Subscribe (or re-confirm) this device for push, prompted by an explicit user
+ * gesture (the "Enable notifications" button in settings). Safari only allows
+ * `Notification.requestPermission()` from within a user gesture, so the
+ * permission request MUST be the first async step here — before any network
+ * `await`, which would end the gesture's task. Safe to call repeatedly:
+ * re-running with permission already granted re-registers the subscription.
+ * Returns a {@link PushOutcome} so the caller can toast appropriately.
  */
-export async function ensurePushSubscription(): Promise<void> {
-  if (!supportsPush()) return;
+export async function ensurePushSubscription(): Promise<PushOutcome> {
+  if (!supportsPush()) return { status: "unsupported" };
 
+  // Request permission FIRST, synchronously within the gesture (no prior
+  // await). If we awaited the VAPID key fetch first, Safari would reject the
+  // prompt ("Notification prompting can only be done from a user gesture").
+  let permission: NotificationPermission;
+  try {
+    permission = await Notification.requestPermission();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn("[push] Notification.requestPermission threw:", e);
+    return { status: "failed", message };
+  }
+  if (permission !== "granted") return { status: "denied" };
+
+  return subscribeAndRegister();
+}
+
+/**
+ * Re-subscribe on login ONLY if the user has already granted notification
+ * permission. Never prompts — there's no user gesture at login time, and
+ * prompting unprompted on page load is poor UX (and blocked on Safari). The
+ * settings page's "Enable notifications" button is the one place we prompt.
+ * Outcome is logged but not surfaced (no toast at login).
+ */
+export async function subscribeIfAlreadyPermitted(): Promise<void> {
+  if (!supportsPush()) return;
+  if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+    return;
+  }
+  const outcome = await subscribeAndRegister();
+  if (outcome.status !== "ok") {
+    console.warn("[push] background re-subscribe failed:", outcome.status, "message" in outcome ? outcome.message : "");
+  }
+}
+
+/** Shared: fetch VAPID key → subscribe the SW push manager → register with appserver. */
+async function subscribeAndRegister(): Promise<PushOutcome> {
   // Fetch the VAPID public key. Empty string = appserver has no VAPID config
   // (dev/test) — skip subscription entirely.
   let vapidKey: string;
@@ -59,59 +137,63 @@ export async function ensurePushSubscription(): Promise<void> {
     const res = await px().query("space.roomy.push.getVapidPublicKey", {});
     vapidKey = res.publicKey;
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
     console.warn("[push] could not fetch VAPID public key:", e);
-    return;
+    return { status: "failed", message };
   }
-  if (!vapidKey) return;
-
-  // Ask the user for permission. If denied, we skip — no silent background
-  // subscription. We intentionally ask here (on first login) rather than on
-  // a cold page load, so the prompt is tied to a user action.
-  let permission: NotificationPermission;
-  try {
-    permission = await Notification.requestPermission();
-  } catch (e) {
-    console.warn("[push] Notification.requestPermission threw:", e);
-    return;
-  }
-  if (permission !== "granted") return;
+  if (!vapidKey) return { status: "no-key" };
 
   try {
     const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
     console.debug("[push] serviceWorker.ready; existing subscription:", existing?.endpoint ?? "none");
+    // Wrap subscribe in a timeout. Some Chromium builds (e.g. ungoogled forks
+    // without Google FCM keys, or networks blocking the GCM channel on port
+    // 5228) never resolve or reject `pushManager.subscribe()` — it just hangs.
+    // Race against a 20s deadline so we fail gracefully with a clear status
+    // instead of leaving the user with an infinite spinner.
+    const subscribeP = reg.pushManager.subscribe({
+      userVisibleOnly: true, // required by all browsers; we always show a notification
+      applicationServerKey: base64UrlToUint8Array(vapidKey) as BufferSource,
+    });
     const subscription =
       existing ??
-      (await reg.pushManager.subscribe({
-        userVisibleOnly: true, // required by all browsers; we always show a notification
-        applicationServerKey: base64UrlToUint8Array(vapidKey) as BufferSource,
-      }));
+      (await Promise.race([
+        subscribeP,
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("pushManager.subscribe timed out after 20s")),
+            20_000,
+          ),
+        ),
+      ]));
     console.debug("[push] pushManager.subscribe ok; endpoint:", subscription.endpoint);
 
     await registerPushSubscription(subscription);
     console.info("[push] registered subscription with appserver:", subscription.endpoint);
     localStorage.setItem(LAST_ENDPOINT_KEY, subscription.endpoint);
+    return { status: "ok" };
   } catch (e) {
     // Stage-tag the error so the browser console pinpoints which step failed
     // (SW ready / subscribe / XRPC register). The message includes the error
     // name + message + any XRPC payload so a 401/400 is visible at a glance.
     const err = e as { name?: string; message?: string; statusCode?: number; payload?: unknown };
-    console.error(
-      "[push] subscription failed at subscribe/register:" +
-        ` ${err?.name ?? "Error"}${err?.statusCode ? ` (${err.statusCode})` : ""}:` +
-        ` ${err?.message ?? e}`,
-      err?.payload ?? "",
-    );
+    const detail = `${err?.name ?? "Error"}${err?.statusCode ? ` (${err.statusCode})` : ""}: ${err?.message ?? String(e)}`;
+    console.error("[push] subscription failed at subscribe/register:", detail, err?.payload ?? "");
+    // Distinguish a timeout (from the race above) for a tailored toast.
+    if (err?.message?.includes("timed out")) return { status: "timeout" };
+    return { status: "failed", message: detail };
   }
 }
 
 /**
- * Unsubscribe this device on logout so the appserver stops delivering to it
- * while the user is signed out. Best-effort: a network failure here must not
- * block logout.
+ * Unsubscribe this device on logout / "Disable on this device" so the
+ * appserver stops delivering to it. Best-effort: a network failure here must
+ * not block logout. Returns a {@link PushOutcome} so the settings page can
+ * toast on the Disable button.
  */
-export async function clearPushSubscription(): Promise<void> {
-  if (!supportsPush()) return;
+export async function clearPushSubscription(): Promise<PushOutcome> {
+  if (!supportsPush()) return { status: "unsupported" };
   try {
     const reg = await navigator.serviceWorker.ready;
     const subscription = await reg.pushManager.getSubscription();
@@ -126,7 +208,10 @@ export async function clearPushSubscription(): Promise<void> {
       await subscription.unsubscribe();
     }
     localStorage.removeItem(LAST_ENDPOINT_KEY);
+    return { status: "ok" };
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
     console.warn("[push] clearPushSubscription failed:", e);
+    return { status: "failed", message };
   }
 }

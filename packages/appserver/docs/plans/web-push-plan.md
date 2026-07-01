@@ -435,17 +435,41 @@ No change to the lazy `ensureReadPositions` strategy is required for push.
 >    appserver env (see `.env.example`).
 > 3. Start the appserver (`pnpm dev` / `bun run packages/appserver/src/index.ts`)
 >    and `pnpm dev:lite`.
-> 4. In a browser, log in to app-lite — the service worker registers and
->    `ensurePushSubscription()` asks for notification permission and registers
->    the subscription (verify `GET /xrpc/space.roomy.push.getVapidPublicKey`
->    returns the key, and a `push_subscriptions` row exists).
-> 5. As the same user, `setPushPreferences` to `{ default: "busy" }` (or per-space).
+> 4. In a browser, log in to app-lite and open **Settings → Notifications**
+>    (`/user/settings/notifications`). Click **Enable notifications** — this
+>    requests permission from a user gesture (Safari requires this) and
+>    registers the subscription. Verify `GET /xrpc/space.roomy.push.getVapidPublicKey`
+>    returns the key and a `push_subscriptions` row exists.
+> 5. On the same page, set the **Default level** to **Busy** (or set a
+>    per-space override).
 > 6. From a second account in the same space, post a message in a room the
 >    busy user is a member of. A real notification appears (title
 >    "<author> in <room>", no body content). `GET /health/push` shows
 >    `deliveredOk` increment.
-> 7. Sign the busy user out — `clearPushSubscription()` unregisters the
->    endpoint; no further pushes arrive on that device.
+> 7. Click **Disable on this device** (or sign out) — `clearPushSubscription()`
+>    unregisters the endpoint; no further pushes arrive on that device.
+>
+> **Verified browsers:** Firefox / Firefox forks (Zen) work end-to-end
+> (Mozilla push service, pure HTTPS). Google Chrome / Edge / Brave / Vivaldi
+> work (FCM with bundled Google API keys). Safari 16.1+ works once the user
+> clicks Enable (the permission prompt requires a user gesture). Vanilla
+> `chromium` / ungoogled-Chromium forks without Google FCM keys cannot do web
+> push — `pushManager.subscribe()` times out; this is a browser limitation, not
+> fixable in app code. A 20s timeout on `subscribe()` fails gracefully with a
+> clear console message instead of hanging forever.
+>
+> **Bugs found and fixed during E2E testing:**
+> - `registerSubscription` rejected Firefox's `expirationTime: null`
+>   (arktype `expirationTime?: number` didn't accept null) → schema now
+>   `number | null`; the handler/DB already handled null.
+> - web-push `topic: \`room:<roomId>\`` failed validation ("Unsupported
+>   characters set") because the Web Push `Topic` header must be ≤32 base64url
+>   chars and `room:` contains `:` → now a sha256→base64url→slice(32) of the
+>   roomId, preserving per-room coalescing.
+> - `Notification.requestPermission()` at login is blocked on Safari (no user
+>   gesture) → login now only re-subscribes if permission is already granted
+>   (`subscribeIfAlreadyPermitted`); the settings page's Enable button is the
+>   one prompt trigger.
 
 **Phase 2 — Engaged digest (the primary deliverable)**
 - `PushDispatcher` + `evaluate.ts` background loop; materializer poke on live
@@ -453,8 +477,9 @@ No change to the lazy `ensureReadPositions` strategy is required for push.
 - `user_room_participation` upsert in `applyBundle` + lazy backfill.
 - `notification_state` upsert + 5-message threshold (on-event) + 1h sweep.
 - `updateSeen` reset hook.
-- `app-lite` `UpdateRhythmChooser` in join flow + settings; `/user/settings/notifications`
-  page live.
+- `app-lite` `UpdateRhythmChooser` in join flow; ~~`/user/settings/notifications`
+  page live~~ (DONE in Phase 1 — status + Enable button (Safari-gesture-safe),
+  default level selector, per-space overrides).
 
 **Phase 3 — Mentions (unblocks Quiet + Engaged immediate)**
 - `space.roomy.extension.mentions.v0` in SDK; `app-lite` editor populates it.

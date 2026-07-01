@@ -58,10 +58,23 @@ export function installPushDebug(): void {
       }
       const applicationServerKey = base64UrlToUint8Array(key);
       console.info("[push.testSubscribe] calling pushManager.subscribe…");
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: applicationServerKey as BufferSource,
-      });
+      const sub = await Promise.race([
+        reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: applicationServerKey as BufferSource,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "pushManager.subscribe timed out after 20s — browser can't reach its push service (Chromium build without Google FCM keys, or GCM channel on port 5228 blocked)",
+                ),
+              ),
+            20_000,
+          ),
+        ),
+      ]);
       console.info("[push.testSubscribe] subscribe OK:", sub.endpoint);
       return sub;
     },
