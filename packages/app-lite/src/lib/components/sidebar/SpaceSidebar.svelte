@@ -111,7 +111,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       ((meta?.isAdmin ?? false) ||
         (meta?.joinPolicy.allowMemberInvites ?? false)),
   );
-  const showDiscordBridgeTab = $derived(meta?.isAdmin ?? false);
+  const showDiscordBridgeTab = false; //$derived(meta?.isAdmin ?? false);
   const settingsTabs = $derived(
     [
       { slug: "", label: "General" },
