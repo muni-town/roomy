@@ -244,13 +244,15 @@
       width?: number;
       size: number;
       blurhash?: string;
+      name?: string;
     }[] = [];
     for (const media of filesToUpload) {
       console.debug("uploading", media);
       const { cleanedFile, ...dimensions } = await getImagePreloadData(media);
-      if (!cleanedFile)
-        throw new Error("Could not strip EXIF metadata for " + media.name);
-      const { uri } = await peer.uploadToPds(await cleanedFile.arrayBuffer(), {
+      // For images, cleanedFile has EXIF stripped + orientation applied.
+      // For non-images (video, files), use the original file as-is.
+      const fileToUpload = cleanedFile ?? media;
+      const { uri } = await peer.uploadToPds(await fileToUpload.arrayBuffer(), {
         mimetype: media.type,
       });
 
@@ -258,6 +260,7 @@
         uri,
         mimeType: media.type,
         size: media.size,
+        name: media.name,
         ...dimensions,
       });
     }
@@ -266,16 +269,41 @@
     try {
       const messageId = newUlid();
 
-      const attachments: Attachment[] = uploadedFiles.map((data) => ({
-        $type: "space.roomy.attachment.file.v0",
-        uri: data.uri,
-        mimeType: data.mimeType,
-        alt: data.alt,
-        width: data.width,
-        height: data.height,
-        size: data.size,
-        blurhash: data.blurhash,
-      }));
+      const attachments: Attachment[] = uploadedFiles.map((data) => {
+        // Use image/video attachment types for media so the materializer
+        // stores them in comp_embed_image/_video with full metadata
+        // (width/height/blurhash). Files use the generic file attachment.
+        if (data.mimeType.startsWith("image/")) {
+          return {
+            $type: "space.roomy.attachment.image.v0",
+            uri: data.uri,
+            mimeType: data.mimeType,
+            alt: data.alt,
+            width: data.width,
+            height: data.height,
+            size: data.size,
+            blurhash: data.blurhash,
+          };
+        } else if (data.mimeType.startsWith("video/")) {
+          return {
+            $type: "space.roomy.attachment.video.v0",
+            uri: data.uri,
+            mimeType: data.mimeType,
+            alt: data.alt,
+            width: data.width,
+            height: data.height,
+            size: data.size,
+            blurhash: data.blurhash,
+          };
+        }
+        return {
+          $type: "space.roomy.attachment.file.v0",
+          uri: data.uri,
+          mimeType: data.mimeType,
+          name: data.name,
+          size: data.size,
+        };
+      });
 
       if (state.kind === "replying") {
         attachments.push({

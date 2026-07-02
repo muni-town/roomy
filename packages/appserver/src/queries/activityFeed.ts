@@ -24,10 +24,7 @@ export interface ActivityMessage {
   content: string;
   author: ActivityAuthor;
   timestamp?: string;
-  /** Media attachments (images/video/files). Only hydrated on the latest message. */
-  media?: Array<{ url: string; type: string; alt?: string }>;
-  /** Link embeds with enriched metadata. Only hydrated on the latest message. */
-  linkEmbeds?: Array<{ url: string; embed?: Record<string, unknown> | null }>;
+  media?: Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>;
   /** Reactions on the message. Only hydrated on the latest message. */
   reactions?: Array<{ emoji: string; dids: string[]; myReactionId?: string }>;
 }
@@ -309,6 +306,12 @@ interface EmbedRow {
   url: string;
   mime_type: string;
   alt: string | null;
+  width: number | null;
+  height: number | null;
+  blurhash: string | null;
+  size: number | null;
+  length: number | null;
+  name: string | null;
 }
 
 /**
@@ -323,10 +326,10 @@ function batchFetchEmbeds(
   db: Database,
   messageIds: string[],
 ): {
-  mediaByMsg: Map<string, Array<{ url: string; type: string; alt?: string }>>;
+  mediaByMsg: Map<string, Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>>;
   linkEmbedsByMsg: Map<string, Array<{ url: string; embed?: Record<string, unknown> | null }>>;
 } {
-  const mediaByMsg = new Map<string, Array<{ url: string; type: string; alt?: string }>>();
+  const mediaByMsg = new Map<string, Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>>();
   const linkEmbedsByMsg = new Map<string, Array<{ url: string; embed?: Record<string, unknown> | null }>>();
   if (messageIds.length === 0) return { mediaByMsg, linkEmbedsByMsg };
 
@@ -334,25 +337,37 @@ function batchFetchEmbeds(
   const embedRows = db
     .query<EmbedRow, string[]>(
       `select e.room as message_id, ei.entity as url,
-              ei.mime_type as mime_type, ei.alt as alt
+              ei.mime_type as mime_type, ei.alt as alt,
+              ei.width as width, ei.height as height,
+              ei.blurhash as blurhash, ei.size as size,
+              null as length, null as name
          from comp_embed_image ei
          join entities e on e.id = ei.entity
         where e.room in (${idPh})
        union all
        select e.room as message_id, ev.entity as url,
-              ev.mime_type as mime_type, ev.alt as alt
+              ev.mime_type as mime_type, ev.alt as alt,
+              ev.width as width, ev.height as height,
+              ev.blurhash as blurhash, ev.size as size,
+              ev.length as length, null as name
          from comp_embed_video ev
          join entities e on e.id = ev.entity
         where e.room in (${idPh})
        union all
        select e.room as message_id, ef.entity as url,
-              ef.mime_type as mime_type, null as alt
+              ef.mime_type as mime_type, null as alt,
+              null as width, null as height,
+              null as blurhash, ef.size as size,
+              null as length, ef.name as name
          from comp_embed_file ef
          join entities e on e.id = ef.entity
         where e.room in (${idPh})
        union all
        select e.room as message_id, el.entity as url,
-              'text/uri-list' as mime_type, null as alt
+              'text/uri-list' as mime_type, null as alt,
+              null as width, null as height,
+              null as blurhash, null as size,
+              null as length, null as name
          from comp_embed_link el
          join entities e on e.id = el.entity
         where e.room in (${idPh})`,
@@ -404,7 +419,15 @@ function batchFetchEmbeds(
         mediaByMsg.set(e.message_id, arr);
       }
       arr.push({
-        url: e.url, type: e.mime_type, ...(e.alt != null ? { alt: e.alt } : {}) });
+        url: e.url, type: e.mime_type,
+        ...(e.alt != null ? { alt: e.alt } : {}),
+        ...(e.width != null ? { width: e.width } : {}),
+        ...(e.height != null ? { height: e.height } : {}),
+        ...(e.blurhash != null ? { blurhash: e.blurhash } : {}),
+        ...(e.size != null ? { size: e.size } : {}),
+        ...(e.length != null ? { length: e.length } : {}),
+        ...(e.name != null ? { name: e.name } : {}),
+      });
     }
   }
 

@@ -18,8 +18,27 @@
     };
   } = $props();
 
-  const aspectRatio = (image.width || 1) / (image.height || 1);
-  const imageUrl = cdnImageUrl(image.uri);
+  // Max display width for inline images. The virtualizer needs a stable
+  // height to avoid recalculating row positions when images load.
+  const MAX_DISPLAY_WIDTH = 240;
+
+  // Compute aspect ratio from known dimensions. We always derive a
+  // ratio so the container reserves vertical space before the image
+  // loads, preventing layout shifts in the virtualizer.
+  const hasDimensions = $derived(!!(image.width && image.height));
+  const aspectRatio = $derived(
+    hasDimensions ? image.width! / image.height! : 16 / 9,
+  );
+
+  // Reserved container size: cap width at MAX_DISPLAY_WIDTH and derive
+  // height from the aspect ratio. This gives the virtualizer a stable
+  // row height regardless of load state.
+  const containerWidth = $derived(
+    hasDimensions ? Math.min(image.width!, MAX_DISPLAY_WIDTH) : MAX_DISPLAY_WIDTH,
+  );
+  const containerHeight = $derived(Math.round(containerWidth / aspectRatio));
+
+  const imageUrl = $derived(cdnImageUrl(image.uri));
 
   let hasError = $state(false);
   let isLoaded = $state(false);
@@ -56,68 +75,55 @@
   }
 </script>
 
-{#if hasError && !blurhashDataUrl}
-  <!-- Error Loading (no blurhash available) -->
-  <div
-    class="w-40 h-28 flex items-center justify-center bg-base-200 dark:bg-base-800 rounded"
-    aria-label={"Image failed to load: " +
-      (image.alt || "No alt text available")}
-  >
-    <IconImageOff class="shrink-0" />
-  </div>
-{:else}
-  <a
-    href={hasError ? undefined : `#${encodeURIComponent(image.uri)}`}
-    aria-label={hasError ? undefined : "Open image fullscreen"}
-    class="relative block"
-    class:cursor-pointer={!hasError}
-    class:pointer-events-none={hasError}
-  >
-    <!-- Blurhash placeholder -->
+<!-- Container always reserves space (width × height) so the virtualizer
+     measures a stable row height. The inner content (blurhash, image,
+     or error state) fills this container. -->
+<div
+  class="relative rounded overflow-hidden shrink-0 max-w-full bg-base-200 dark:bg-base-800"
+  style={`width: ${containerWidth}px; height: ${containerHeight}px`}
+>
+  {#if hasError}
+    <!-- Broken image: show blurhash if available, else plain error state.
+         Container keeps its reserved size so no layout shift. -->
+    {#if blurhashDataUrl}
+      <img
+        src={blurhashDataUrl}
+        alt={image.alt}
+        class="absolute inset-0 w-full h-full object-cover blur-sm"
+        aria-hidden="true"
+      />
+    {/if}
+    <div class="absolute inset-0 flex items-center justify-center">
+      <IconImageOff class="shrink-0 relative z-10" />
+    </div>
+  {:else}
+    <!-- Blurhash placeholder fills the container until the real image loads -->
     {#if blurhashDataUrl && !isLoaded}
       <img
         src={blurhashDataUrl}
         alt={image.alt}
-        class="absolute inset-0 w-full h-full object-cover rounded blur-sm"
+        class="absolute inset-0 w-full h-full object-cover blur-sm"
         aria-hidden="true"
       />
     {/if}
 
-    <!-- Actual image or blurhash with error -->
-    {#if hasError}
-      <!-- Show blurhash with error icon overlay -->
-      <div class="relative">
-        <img
-          src={blurhashDataUrl}
-          alt={image.alt}
-          class="rounded blur-sm"
-          style={image.width && image.height
-            ? `width: ${Math.min(image.width, 240)}px; aspect-ratio: ${aspectRatio}`
-            : "width: 240px"}
-          aria-hidden="true"
-        />
-        <div class="absolute inset-0 flex items-center justify-center">
-          <IconImageOff class="shrink-0 relative z-10" />
-        </div>
-      </div>
-    {:else}
-      <!-- Normal image loading -->
+    <!-- Actual image -->
+    <a
+      href={`#${encodeURIComponent(image.uri)}`}
+      aria-label="Open image fullscreen"
+      class="absolute inset-0 block cursor-pointer"
+    >
       <img
         src={imageUrl}
         alt={image.alt}
-        class="max-w-[15em] rounded relative z-10"
+        class="w-full h-full object-cover relative z-10"
         class:opacity-0={!isLoaded}
         class:opacity-100={isLoaded}
-        style={image.width && image.height
-          ? `aspect-ratio: ${aspectRatio}`
-          : ""}
         onerror={handleError}
         onload={handleLoad}
       />
-    {/if}
-  </a>
+    </a>
 
-  {#if !hasError}
     <FullscreenImageOverlay uri={image.uri} alt={image.alt} />
   {/if}
-{/if}
+</div>

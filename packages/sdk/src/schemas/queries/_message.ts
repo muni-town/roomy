@@ -16,6 +16,12 @@ export const Media = type({
   url: "string",
   type: "string",
   "alt?": "string",
+  "width?": "number",
+  "height?": "number",
+  "blurhash?": "string",
+  "size?": "number",
+  "length?": "number",
+  "name?": "string",
 });
 
 export const ForwardedFrom = type({
