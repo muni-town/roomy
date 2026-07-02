@@ -19,6 +19,12 @@
   type Props = {
     /** Whether the current user can post in this room. `undefined` while loading. */
     canWrite: boolean | undefined;
+    /**
+     * Disable media uploads (image/video). Used for private (invite-only)
+     * spaces where private media isn't supported yet. Disables the upload
+     * button (with a tooltip explaining why) and hides the file input.
+     */
+    disableUploads?: boolean;
     /** Whether a message is currently being sent. */
     isSendingMessage: boolean;
     /** Local object-URLs for image / video previews. */
@@ -67,6 +73,7 @@
 
   let {
     canWrite,
+    disableUploads = false,
     isSendingMessage,
     previewImages,
     mode,
@@ -254,14 +261,30 @@
                   </Button>
                 {/snippet}
                 <div class="flex flex-col items-start justify-stretch gap-1">
-                  <Button
-                    variant="ghost"
-                    class="w-full justify-start gap-2"
-                    onclick={onUploadMedia}
-                  >
-                    <IconImage class="size-4" />
-                    Upload Media
-                  </Button>
+                  {#if disableUploads}
+                    <span
+                      title="Media uploads aren't available in private spaces yet."
+                      class="w-full"
+                    >
+                      <Button
+                        variant="ghost"
+                        class="w-full justify-start gap-2 opacity-50"
+                        disabled
+                      >
+                        <IconImage class="size-4" />
+                        Upload Media
+                      </Button>
+                    </span>
+                  {:else}
+                    <Button
+                      variant="ghost"
+                      class="w-full justify-start gap-2"
+                      onclick={onUploadMedia}
+                    >
+                      <IconImage class="size-4" />
+                      Upload Media
+                    </Button>
+                  {/if}
                   <Button
                     variant="ghost"
                     class="w-full justify-start gap-2"
@@ -273,14 +296,16 @@
                 </div>
               </Popover>
 
-              <input
-                type="file"
-                multiple
-                accept="image/*,video/mp4"
-                onchange={onFileInput}
-                class="hidden"
-                bind:this={fileInput}
-              />
+              {#if !disableUploads}
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,video/mp4"
+                  onchange={onFileInput}
+                  class="hidden"
+                  bind:this={fileInput}
+                />
+              {/if}
             {/if}
 
             {@render input()}

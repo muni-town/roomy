@@ -25,11 +25,17 @@
     spaceId: string;
     roomId: string;
     canWrite: boolean | undefined;
+    /**
+     * Disable media uploads (image/video). Used for private (invite-only)
+     * spaces where private media isn't supported yet. Gates the file
+     * picker, paste, and drag-drop entry points.
+     */
+    disableUploads?: boolean;
     /** Whether to auto-focus the input on mount/tab switch. Default: true */
     autoFocus?: boolean;
   };
 
-  let { spaceId, roomId, canWrite, autoFocus = true }: Props = $props();
+  let { spaceId, roomId, canWrite, disableUploads = false, autoFocus = true }: Props = $props();
 
   let isSendingMessage = $state(false);
   let previewImages: string[] = $state([]);
@@ -150,6 +156,7 @@
   }
 
   function processImageFile(file: File) {
+    if (disableUploads) return;
     if (messagingState.current.kind === "threading") return;
     messagingState.addFile(file);
 
@@ -181,6 +188,7 @@
   }
 
   function handleUploadMedia() {
+    if (disableUploads) return;
     fileInput?.click();
   }
 
@@ -294,6 +302,7 @@
   {previewImages}
   mode={shellMode}
   {actionMenuOpen}
+  {disableUploads}
   onActionMenuOpenChange={(o) => (actionMenuOpen = o)}
   {threadName}
   {threadSelectedCount}
@@ -331,12 +340,14 @@
         onEnter={handleSend}
         disabled={isSendingMessage}
         setFocus={shouldFocus}
-        {processImageFile}
+        processImageFile={disableUploads ? undefined : processImageFile}
         mentionSearch={mentionSearch}
       />
     {/if}
   {/snippet}
   {#snippet fullscreenDropper()}
-    <FullscreenImageDropper {processImageFile} />
+    {#if !disableUploads}
+      <FullscreenImageDropper {processImageFile} />
+    {/if}
   {/snippet}
 </ChatInputShell>
