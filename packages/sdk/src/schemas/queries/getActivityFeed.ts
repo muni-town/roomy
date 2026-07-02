@@ -3,6 +3,7 @@
  * Source of truth: packages/appserver/src/handlers/space.roomy.space.getActivityFeed.ts
  */
 import { type } from "arktype";
+import { Media, LinkEmbed, Reaction } from "./_message";
 
 export const NSID = "space.roomy.space.getActivityFeed" as const;
 
@@ -23,6 +24,12 @@ export const ActivityMessage = type({
   content: "string",
   author: ActivityAuthor,
   "timestamp?": "string",
+  /** Media attachments (images/video/files). Only hydrated on the latest message of each feed item. */
+  "media?": Media.array(),
+  /** Link embeds with enriched metadata. Only hydrated on the latest message of each feed item. */
+  "linkEmbeds?": LinkEmbed.array(),
+  /** Reactions on the message. Only hydrated on the latest message of each feed item. */
+  "reactions?": Reaction.array(),
 });
 
 export const ActivityItem = type({

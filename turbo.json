@@ -4,9 +4,7 @@
     "http_proxy",
     "https_proxy",
     "no_proxy",
-    "NODE_EXTRA_CA_CERTS",
-    "NETLIFY",
-    "BUILD_ID"
+    "NODE_EXTRA_CA_CERTS"
   ],
   "tasks": {
     "build-api-docs": {
@@ -24,15 +22,6 @@
     "build-lib": {
       "dependsOn": ["^build-lib"],
       "outputs": ["./dist/**"]
-    },
-    "build-web-app": {
-      "dependsOn": ["^build-web-app", "build-lib"],
-      "outputs": ["./dist/**", "./build"]
-    },
-    "build-web-app-prod": {
-      "env": ["OAUTH_HOST"],
-      "dependsOn": ["^build-web-app-prod", "build-lib"],
-      "outputs": ["./dist/**", "./build"]
     },
     "dev": {
       "dependsOn": ["build-lib"],

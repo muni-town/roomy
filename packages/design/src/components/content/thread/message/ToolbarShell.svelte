@@ -70,6 +70,8 @@
       <PopoverEmojiPicker
         bind:open={isEmojiToolbarPickerOpen}
         onpicked={(emoji) => handlePick(emoji.unicode)}
+        search
+        favorites
       >
         {#snippet child({ props })}
           <Button

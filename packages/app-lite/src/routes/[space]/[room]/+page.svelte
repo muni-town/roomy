@@ -101,6 +101,12 @@
     sidebarRoomInfo?.canWrite ?? roomQuery.data?.canWrite,
   );
 
+  // Private (invite-only) spaces don't yet support private media uploads —
+  // gate the composer's upload UI until PDS-side access control lands.
+  const disableUploads = $derived(
+    spaceMetaQuery.data?.joinPolicy.allowPublicJoin === false,
+  );
+
   // Push room info to NavbarSpaceInfo — reactive so it updates when sidebar cache loads
   $effect(() => {
     const name = roomName;
@@ -196,7 +202,7 @@
   </div>
 {/snippet}
 
-<div class="h-full flex flex-col bg-white dark:bg-base-950">
+<div class="h-full flex flex-col bg-white dark:bg-base-900/20">
   {#if roomKind === "channel"}
     <!-- Both ChatArea and ChannelBoardView stay mounted for smooth tab switching -->
     <div class="relative flex-1 min-h-0">
@@ -213,11 +219,11 @@
 
     <!-- Chat input area - only shown in chat view -->
     {#if showChatInput}
-      <ChatInputArea {spaceId} {roomId} canWrite={roomCanWrite} autoFocus={!isSwitchingTab} />
+      <ChatInputArea {spaceId} {roomId} canWrite={roomCanWrite} {disableUploads} autoFocus={!isSwitchingTab} />
     {/if}
   {:else}
     <!-- Thread rooms only have chat view -->
     <ChatArea {spaceId} {roomId} />
-    <ChatInputArea {spaceId} {roomId} canWrite={roomCanWrite} />
+    <ChatInputArea {spaceId} {roomId} canWrite={roomCanWrite} {disableUploads} />
   {/if}
 </div>

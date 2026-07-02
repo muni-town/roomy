@@ -2,33 +2,23 @@
 
 Guidance for AI coding agents working with this monorepo.
 
-**Updated:** 2026-06-16
+**Updated:** 2026-07-02
 
-## Architecture Direction
+## Architecture
 
-Roomy is migrating from a local-first architecture to a **thin-client / appserver model**:
+Roomy uses a **thin-client / appserver model**:
 
-- **Removing** SQLite WASM in the browser, the three-tier worker architecture, and client-side materialisation
-- **Adding** `packages/appserver` — a Bun/TypeScript service exposing an XRPC interface (HTTP queries + WebSocket subscriptions)
-- **Replacing** `LiveQuery` calls in the client with WebSocket XRPC subscriptions
-- **Adapter pattern** — the appserver wraps the existing Leaf event-stream backend; it is intentionally temporary and will be replaced by a Rust service
+- **`packages/app-lite`** — SvelteKit thin client (Svelte 5, Tanstack Query). No SQLite WASM, no workers, no client-side materialisation.
+- **`packages/appserver`** — Bun/TypeScript service exposing an XRPC interface (HTTP queries + WebSocket subscriptions). Wraps the Leaf event-stream backend; intentionally temporary, will be replaced by a Rust service.
+- Client communicates with the appserver via XRPC — Tanstack Query for HTTP queries, WebSocket for subscriptions.
 
-See `packages/appserver/docs/plans/appserver-architecture.md` for full design, migration phases, and research requirements.
-
-**Current phase:** Phase 0 — scaffolding, lexicon design, research.
-
-## Primary Focus: app-lite
-
-**`packages/app-lite` is now the primary client application.** It is a thin SvelteKit client that communicates with the appserver via XRPC (Tanstack Query for HTTP queries, WebSocket for subscriptions). It has no SQLite WASM, no worker architecture, and no client-side materialisation — all state is managed server-side.
-
-`packages/app` (the legacy SvelteKit application) is **maintained but superseded** by app-lite. Cosmetic/design changes may still be applied to app, but all new feature development, architecture work, and refactoring should target app-lite. The app package will be deprecated and removed once app-lite reaches feature parity.
+See `packages/appserver/docs/plans/appserver-architecture.md` for full design.
 
 ## Monorepo Structure
 
 ```
 roomy/
 ├── packages/
-│   ├── app/              # SvelteKit web application — SUPERSEDED (maintained, no new features)
 │   ├── app-lite/         # SvelteKit thin client — PRIMARY (Svelte 5, Tanstack Query, XRPC)
 │   ├── appserver/        # XRPC appserver (Bun + TypeScript)
 │   ├── design/           # @roomy/design — Shared design system, components, and icons
@@ -48,8 +38,7 @@ roomy/
 ### Development
 
 ```bash
-pnpm dev                    # Start legacy web app on 127.0.0.1:5173
-pnpm dev:lite               # Start app-lite on 127.0.0.1:5180
+pnpm dev                    # Start app-lite on 127.0.0.1:5180
 pnpm dev:bridge             # Start Discord bridge service
 pnpm dev:all                # Start all services + monitoring
 ```
@@ -58,34 +47,22 @@ pnpm dev:all                # Start all services + monitoring
 
 ```bash
 pnpm build                  # Build all packages via turbo
-pnpm build-web-app          # Build legacy web app via Vite
-pnpm build-web-app-prod     # Production build with OAuth manifest
-pnpm build:lite             # Build app-lite via Vite
-pnpm build:t                # Build Tauri desktop app
 pnpm publish-packages       # Version & publish SDK to npm
 ```
 
-### Testing
+### Type Checking & Tests
 
 ```bash
-pnpm test                   # Unit tests (Vitest) — currently targets packages/app
-pnpm test:e2e               # E2E tests (Playwright) — currently targets packages/app
-pnpm test:robot             # Integration tests (Robot Framework) — currently targets packages/app
-pnpm check                  # TypeScript type checking (svelte-check) — targets packages/app
-pnpm check:lite             # TypeScript type checking for app-lite
+pnpm --filter app-lite check              # TypeScript check (svelte-check) for app-lite
+pnpm --filter @roomy-space/sdk test       # Unit tests (Vitest) for the SDK
+pnpm --filter @roomy/design test          # Unit tests (Vitest) for the design system
 ```
 
-### Running a Single Test
-
-```bash
-uv run robot --outputdir tests/robot/results tests/robot/smoke.robot
-pnpm test:e2e tests/e2e/app.spec.ts
-pnpm test src/lib/workers/encoding.test.ts
-```
+> Note: app-lite does not yet have its own test suite. The legacy `packages/app` test infrastructure (Vitest, Playwright, Robot Framework) was removed with the package — see the "Removed with app" section below.
 
 ## Package: app-lite (Primary Client — SvelteKit Thin Client)
 
-The primary SvelteKit application. A thin client that communicates with `packages/appserver` via XRPC — Tanstack Query for HTTP queries, WebSocket for subscriptions. No SQLite WASM, no workers, no client-side materialisation.
+The SvelteKit client application. A thin client that communicates with `packages/appserver` via XRPC — Tanstack Query for HTTP queries, WebSocket for subscriptions. No SQLite WASM, no workers, no client-side materialisation.
 
 **Architecture:**
 ```
@@ -106,69 +83,15 @@ Server pushes row-level diffs → Tanstack Query cache updates → Svelte 5 rune
 - `src/lib/client.ts` - Tanstack Query client configuration
 - `src/lib/config.ts` - App configuration (appserver DID, OAuth scope, feature flags)
 - `src/routes/` - SvelteKit routes
+- `scripts/build-prod.sh` - Production build with OAuth client metadata generation
 
-### Key Differences from app
+### Production Build
 
-| Aspect | app (legacy) | app-lite (primary) |
-|--------|-------------|-------------------|
-| State management | SQLite WASM + workers | Tanstack Query (server-driven) |
-| Data fetching | LiveQuery (client-side materialisation) | XRPC via appserver |
-| Real-time | WebSocket via Leaf | WebSocket via appserver |
-| Port | 5173 | 5180 |
-| Adapter | Netlify + Static + Tauri | Static (adapter-static) |
-| CSS | Tailwind CSS 4.x | Tailwind CSS 4.x via Vite plugin |
-| Design system | Inline components | `@roomy/design` package |
-
-## Package: app (Legacy — Superseded)
-
-The original SvelteKit application. **Maintained for now but superseded by app-lite.** Cosmetic/design changes are acceptable, but no new feature development or architecture work should target this package.
-
-**Architecture (legacy):**
-```
-UI Thread (Svelte Components)
-    ↓
-Shared Worker (Peer Worker)        ← being removed
-    - Authentication & OAuth
-    - Stream subscriptions
-    ↓
-Dedicated Worker (SQLite Worker)   ← being removed
-    - SQLite WASM database
-    - Event materialization
-    - Live queries
-```
-
-### Key Directories
-
-- `src/lib/workers/` - Worker architecture (being removed)
-- `src/lib/components/` - UI components
-- `src/lib/queries/` - Live query system (being replaced by XRPC client wrappers)
-- `src/lib/mutations/` - State mutations
-- `src/routes/` - SvelteKit routes
-
-### Feature Flags
-
-Configured in `src/lib/config.ts`:
-
-- `sharedWorker` - Enable shared worker architecture
-- `discordBridge` - Discord integration features
-- `discordImport` - Discord import functionality
-- `threadsList` - Threads list view
-
-### Debug Helpers
-
-Available in browser console:
-
-```javascript
-window.debugWorkers.enableLogForwarding();
-window.debugWorkers.pingPeer();
-window.debugWorkers.testSqliteConnection();
-window.debugWorkers.logWorkerStatus();
-window.debugWorkers.diagnoseRoom(roomId);
-```
+The production build (`scripts/build-prod.sh`) runs `vite build` then generates `build/oauth-client-metadata.json` with the OAuth scope string, verifying at build time that every scope in `src/lib/config.ts` (`APPSERVER_RPCS` + `OAUTH_SCOPE`) is present in the generated metadata.
 
 ## Package: design (@roomy/design)
 
-Shared design system used by both `app` and `app-lite`. Contains reusable Svelte 5 components, icons, and utility functions.
+Shared design system used by app-lite. Contains reusable Svelte 5 components, icons, and utility functions.
 
 **Key Exports:**
 
@@ -179,7 +102,7 @@ Shared design system used by both `app` and `app-lite`. Contains reusable Svelte
 
 **Component Categories:**
 
-- `content/thread/` — Thread content components (shared between app and app-lite)
+- `content/thread/` — Thread content components
 - `helper/` — Utility components (Drawer, LoadingSpinner, Tooltip, etc.)
 - `layout/` — Layout components (Navbar, Sidebar, ScrollArea)
 - `modals/` — Modal dialogs (CreateRoom, InviteManager, RoleEdit, etc.)
@@ -197,7 +120,7 @@ Core SDK for building Roomy clients. Published to npm.
 
 - `RoomyClient` - Main client for connecting to spaces
 - `ConnectedSpace` - Individual space connection management
-- `AsyncChannel` - Event streaming between workers
+- `AsyncChannel` - Event streaming
 - AT Protocol utilities and schema definitions
 
 **Source Structure:**
@@ -207,11 +130,11 @@ Core SDK for building Roomy clients. Published to npm.
 - `src/connection/` - Stream connection logic
 - `src/leaf/` - Leaf server integration
 
-## Package: appserver (NEW — Phase 0)
+## Package: appserver
 
-Bun/TypeScript service providing the XRPC interface between the thin client and the Leaf event-stream backend. **No running code yet — scaffolding and research phase.**
+Bun/TypeScript service providing the XRPC interface between the thin client and the Leaf event-stream backend.
 
-**Planned structure:**
+**Structure:**
 - `src/index.ts` - Bun server entry point
 - `src/auth.ts` - ATProto JWT validation middleware
 - `src/routes/` - XRPC handler registry
@@ -267,7 +190,7 @@ docker compose up -d        # Start all services
 
 ## Key Libraries
 
-**UI (app-lite — primary):**
+**UI (app-lite):**
 
 - Svelte 5 with runes API
 - SvelteKit 2.x
@@ -279,22 +202,11 @@ docker compose up -d        # Start all services
 - TipTap rich text editor (`@tiptap/core`, `@tiptap/pm`, `tiptap-markdown`)
 - `@roomy/design` — Shared design system (workspace dependency)
 
-**UI (app — legacy):**
-
-- Svelte 5 with runes API
-- SvelteKit 2.x
-- Tailwind CSS 4.x
-- TipTap rich text editor
-
 **AT Protocol:**
 
 - `@atproto/api` - AT Protocol client
 - `@atproto/oauth-client` - OAuth
 - `@muni-town/leaf-client` - Leaf server client
-
-**Database:**
-
-- `@sqlite.org/sqlite-wasm` - SQLite in WebAssembly (app legacy only)
 
 ## Development Practices
 
@@ -310,7 +222,7 @@ Strict settings across all packages:
 
 ### Authentication Modes
 
-Both app and app-lite use the same AT Protocol OAuth flow:
+app-lite uses the AT Protocol OAuth flow:
 
 1. **OAuth (Production):** Standard AT Protocol OAuth
 2. **App Password (Testing):** Via environment variables
@@ -320,24 +232,25 @@ PUBLIC_TEST_IDENTIFIER=your-handle.bsky.social
 PUBLIC_TEST_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 ```
 
-### Required HTTP Headers (app — legacy only)
-
-For SharedArrayBuffer/OPFS support:
-
-```
-Cross-Origin-Embedder-Policy: credentialless
-Cross-Origin-Opener-Policy: same-origin
-```
-
 ### Deployment Targets
 
-**app-lite (primary):**
-1. **Static** - `@sveltejs/adapter-static`
+**app-lite:**
+1. **Static** - `@sveltejs/adapter-static` (see `Dockerfile.app-lite` + `Caddyfile`)
 
-**app (legacy):**
-1. **Netlify** - `@sveltejs/adapter-netlify`
-2. **Static** - `@sveltejs/adapter-static`
-3. **Tauri** - Desktop builds
+## Removed with app
+
+The legacy `packages/app` (SQLite WASM + worker architecture + LiveQuery) has been deleted. The following were removed alongside it and have **not** been replaced:
+
+- **Root Dockerfile** — built the legacy app via `turbo build-web-app-prod`; use `Dockerfile.app-lite` instead.
+- **`scripts/netlify_build.sh`** — Netlify deploy script for the legacy app.
+- **`scripts/setup-tauri.sh`** — Tauri setup for the legacy app's desktop builds.
+- **`tsconfig.tests.json`** — root test tsconfig targeting the app's `tests/` and `scripts/`.
+- **`.github/workflows/playwright.yml.skip`** — Playwright E2E for the legacy app (was already `.skip`).
+- **`.github/workflows/release-tauri.yml`** — Tauri desktop/Android release pipeline for the legacy app.
+- **`pnpm build-web-app`, `pnpm build-web-app-prod`, `pnpm build:t`** — legacy build scripts (removed from root `package.json` and `turbo.json`).
+- **`pnpm test`, `pnpm test:e2e`, `pnpm test:robot`, `pnpm check`** — legacy test/check scripts that targeted `packages/app`.
+
+Historical plan documents under `docs/plans/` still reference `packages/app` as a port source; those are historical records and not actionable.
 
 ## Reference Files
 

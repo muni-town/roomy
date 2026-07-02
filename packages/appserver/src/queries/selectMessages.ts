@@ -31,6 +31,18 @@ export interface LinkEmbedDto {
   embed?: Record<string, unknown>;
 }
 
+export interface MediaDto {
+  url: string;
+  type: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+  blurhash?: string;
+  size?: number;
+  length?: number;
+  name?: string;
+}
+
 export interface MessageDto {
   id: string;
   /** Sort index for timeline ordering. ULID based on canonical timestamp. */
@@ -44,7 +56,7 @@ export interface MessageDto {
   replyTo?: string;
   forwardedFrom?: { name: string; roomId: string };
   reactions: Array<ReactionDto>;
-  media: Array<{ url: string; type: string; alt?: string }>;
+  media: Array<MediaDto>;
   /** Link embeds with enriched metadata from the embed service. */
   linkEmbeds: Array<LinkEmbedDto>;
 }
@@ -250,32 +262,51 @@ export function selectMessages(
         url: string;
         mime_type: string;
         alt: string | null;
+        width: number | null;
+        height: number | null;
+        blurhash: string | null;
+        size: number | null;
+        length: number | null;
+        name: string | null;
       },
       string[]
     >(
       // entities.room = messageId for embed entities; UNION across the four
-      // embed component tables. comp_embed_link has no mime_type/alt — fall
-      // back to "text/uri-list".
+      // embed component tables. comp_embed_link has no media metadata — fall
+      // back to nulls and "text/uri-list" mime type. Image/video share
+      // width/height/blurhash/size; video adds length; file adds name.
       `select e.room as message_id, ei.entity as url,
-              ei.mime_type as mime_type, ei.alt as alt
+              ei.mime_type as mime_type, ei.alt as alt,
+              ei.width as width, ei.height as height,
+              ei.blurhash as blurhash, ei.size as size,
+              null as length, null as name
          from comp_embed_image ei
          join entities e on e.id = ei.entity
         where e.room in (${idPh})
        union all
        select e.room as message_id, ev.entity as url,
-              ev.mime_type as mime_type, ev.alt as alt
+              ev.mime_type as mime_type, ev.alt as alt,
+              ev.width as width, ev.height as height,
+              ev.blurhash as blurhash, ev.size as size,
+              ev.length as length, null as name
          from comp_embed_video ev
          join entities e on e.id = ev.entity
         where e.room in (${idPh})
        union all
        select e.room as message_id, ef.entity as url,
-              ef.mime_type as mime_type, null as alt
+              ef.mime_type as mime_type, null as alt,
+              null as width, null as height,
+              null as blurhash, ef.size as size,
+              null as length, ef.name as name
          from comp_embed_file ef
          join entities e on e.id = ef.entity
         where e.room in (${idPh})
        union all
        select e.room as message_id, el.entity as url,
-              'text/uri-list' as mime_type, null as alt
+              'text/uri-list' as mime_type, null as alt,
+              null as width, null as height,
+              null as blurhash, null as size,
+              null as length, null as name
          from comp_embed_link el
          join entities e on e.id = el.entity
         where e.room in (${idPh})`,
@@ -314,7 +345,7 @@ export function selectMessages(
 
   const mediaMap = new Map<
     string,
-    Array<{ url: string; type: string; alt: string | null }>
+    Array<MediaDto>
   >();
   for (const e of embedRows) {
     let arr = mediaMap.get(e.message_id);
@@ -322,7 +353,17 @@ export function selectMessages(
       arr = [];
       mediaMap.set(e.message_id, arr);
     }
-    arr.push({ url: e.url, type: e.mime_type, alt: e.alt });
+    arr.push(stripNulls({
+      url: e.url,
+      type: e.mime_type,
+      alt: e.alt ?? undefined,
+      width: e.width ?? undefined,
+      height: e.height ?? undefined,
+      blurhash: e.blurhash ?? undefined,
+      size: e.size ?? undefined,
+      length: e.length ?? undefined,
+      name: e.name ?? undefined,
+    }) as MediaDto);
   }
 
   // ── Step 3b: batch-fetch enriched link embed data ────────────────────
@@ -412,7 +453,7 @@ export function selectMessages(
       }
     }
 
-    const mediaForMsg = (mediaMap.get(r.id) ?? []).map((m) => stripNulls(m) as { url: string; type: string; alt?: string });
+    const mediaForMsg = mediaMap.get(r.id) ?? [];
     const linkEmbedsForMsg = linkEmbedsMap.get(r.id) ?? [];
 
     return stripNulls({

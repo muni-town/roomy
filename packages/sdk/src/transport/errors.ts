@@ -51,7 +51,15 @@ export function isRateLimitError(err: unknown): err is RateLimitError & { status
 
 /**
  * Extract a Retry-After value (ms) from an error, if available.
- * Returns `null` if no Retry-After information is found.
+ * Returns `null` if no Retry-After information is found and the error is
+ * not a rate-limit error; returns `defaultMs` when the error *is* a
+ * rate-limit error but carries no explicit Retry-After.
+ *
+ * Handles two header shapes:
+ *  - `Headers` (WHATWG) — from `DirectXrpcClient`'s `RateLimitError` and
+ *    raw `fetch` responses; accessed via `.get("retry-after")`.
+ *  - `Record<string, string|undefined>` (`HeadersMap`) — from
+ *    `@atproto/xrpc`'s `XRPCError.headers`; accessed by key lookup.
  */
 export function getRetryAfterMs(err: unknown, defaultMs = 5000): number | null {
   if (err instanceof RateLimitError && err.retryAfterSec != null) {
@@ -60,12 +68,35 @@ export function getRetryAfterMs(err: unknown, defaultMs = 5000): number | null {
   if (err && typeof err === "object") {
     const headers = (err as Record<string, unknown>).headers;
     if (headers && typeof headers === "object") {
-      const ra = (headers as Headers).get("retry-after");
-      if (typeof ra === "string") {
-        const sec = Number(ra);
-        if (Number.isFinite(sec) && sec > 0) return sec * 1000;
-      }
+      const ra = readRetryAfter(headers);
+      if (ra !== null) return ra;
     }
   }
   return isRateLimitError(err) ? defaultMs : null;
+}
+
+/**
+ * Read a positive Retry-After value (in ms) from a headers object, which
+ * may be either a WHATWG `Headers` (has a `.get()` method) or a plain
+ * `Record<string, string|undefined>` (the `HeadersMap` used by
+ * `@atproto/xrpc`). Returns `null` if absent or unparseable.
+ */
+function readRetryAfter(headers: object): number | null {
+  // WHATWG Headers — duck-typed via the get method.
+  if ("get" in headers && typeof headers.get === "function") {
+    const ra = headers.get("retry-after");
+    return parseRetryAfter(ra);
+  }
+  // Plain HeadersMap record — narrow with `in` before indexing.
+  if ("retry-after" in headers) {
+    const ra = headers["retry-after"];
+    if (typeof ra === "string") return parseRetryAfter(ra);
+  }
+  return null;
+}
+
+function parseRetryAfter(ra: string | null): number | null {
+  if (typeof ra !== "string") return null;
+  const sec = Number(ra);
+  return Number.isFinite(sec) && sec > 0 ? sec * 1000 : null;
 }

@@ -3,7 +3,7 @@
  * with app-lite's QueryClient cache adapter + ticket fetch.
  */
 
-import { sync, transport } from "@roomy-space/sdk";
+import { cache, sync, transport } from "@roomy-space/sdk";
 import type {
   SyncConnectionLike,
   TopicManagerLike,
@@ -133,9 +133,12 @@ export function createSyncContext(deps: {
     connection.onError((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       log(`[error] ${msg}`);
-      // Detect rate-limit (429) errors from ticket fetches or PDS proxy
+      // 429s from the ticket fetch (an XRPC procedure) are already retried
+      // with Retry-After backoff inside DirectXrpcClient.procedure before
+      // they reach here. If we still see a RateLimitError, the retry budget
+      // is exhausted — SyncConnection's own reconnect backoff takes over.
       if (msg.includes("429") || msg.includes("RateLimit")) {
-        log(`[error] Rate limited by server — backing off`);
+        log(`[error] Rate limited by server — retry budget exhausted, deferring to WS reconnect backoff`);
       }
     });
 
@@ -184,6 +187,56 @@ export function createSyncContext(deps: {
 let ctx = $state<SyncContext | null>(null);
 let activeRoomId = $state<string | null>(null);
 
+const { queryKey } = cache;
+const GET_MESSAGES_NSID = "space.roomy.room.getMessages" as const;
+
+/**
+ * Highest `#messageDiff` seq observed on this connection. The appserver
+ * stamps every diff with a single global, monotonically increasing seq
+ * (InvalidationRouter.#seq), so this is one number across all rooms.
+ */
+let lastSeq: number | null = null;
+/** Timestamp the tab was last hidden, or null while visible. */
+let hiddenSince: number | null = null;
+
+/**
+ * Invalidate the active room's `getMessages` query so it refetches.
+ * Called when we detect a missed diff (seq gap / server seq reset) or
+ * when the tab returns from a long backgrounding — both cases where the
+ * WS-authoritative cache (`staleTime: Infinity`) can't otherwise know
+ * it's stale. Only the active (visible) room needs this; other rooms
+ * refetch on navigation via the appserver's `sub` → `#sendRoomInvalidation`.
+ */
+function invalidateActiveRoomMessages() {
+  const room = activeRoomId;
+  if (!room) return;
+  void queryClient.invalidateQueries({
+    queryKey: queryKey(GET_MESSAGES_NSID, { roomId: room }),
+  });
+}
+
+/**
+ * On returning to the tab: nudge a stalled reconnect (the backoff timer
+ * is suspended while backgrounded, so kick it immediately), and resync the
+ * active room if we were hidden long enough that frames were likely
+ * throttled or dropped. This covers the case where the socket stayed
+ * nominally "open" so no re-sub invalidation fired, but frames were lost.
+ */
+function onVisibilityChange() {
+  if (document.visibilityState === "visible") {
+    const st = ctx?.status.state;
+    if (ctx && st && st !== "connected" && st !== "connecting") {
+      ctx.connect().catch(() => {});
+    }
+    if (hiddenSince && Date.now() - hiddenSince > 30_000) {
+      invalidateActiveRoomMessages();
+    }
+    hiddenSince = null;
+  } else {
+    hiddenSince = Date.now();
+  }
+}
+
 export const sync_ = {
   get ctx() {
     return ctx;
@@ -202,7 +255,16 @@ export function startSync(opts: { onLog?: (msg: string) => void } = {}) {
     queryClient,
     appserverDid: CONFIG.appserverDid,
     onLog: opts.onLog,
-    onMessageDiff: (roomId) => {
+    onMessageDiff: (roomId, seq) => {
+      // A seq discontinuity means we missed frames — almost always because
+      // the tab was backgrounded and the WS was throttled, or the socket
+      // dropped and reconnected with a gap the re-sub invalidation didn't
+      // cover. `seq < lastSeq` implies the appserver's seq counter reset
+      // (restart). Either way, resync the visible room.
+      if (lastSeq != null && (seq > lastSeq + 1 || seq < lastSeq)) {
+        invalidateActiveRoomMessages();
+      }
+      lastSeq = lastSeq == null ? seq : Math.max(lastSeq, seq);
       if (roomId === activeRoomId) {
         import("./mutations/update-seen").then(({ updateSeen }) => {
           updateSeen(roomId).catch(() => {});
@@ -215,10 +277,14 @@ export function startSync(opts: { onLog?: (msg: string) => void } = {}) {
     console.error(`[sync] ${msg}`);
     opts.onLog?.(msg);
   });
+  document.addEventListener("visibilitychange", onVisibilityChange);
   return ctx;
 }
 
 export function stopSync() {
+  document.removeEventListener("visibilitychange", onVisibilityChange);
   ctx?.disconnect();
   ctx = null;
+  lastSeq = null;
+  hiddenSince = null;
 }

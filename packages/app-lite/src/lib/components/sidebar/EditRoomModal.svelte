@@ -19,11 +19,13 @@
     spaceId,
     id,
     renameCategory,
+    deleteCategory,
   }: {
     open: boolean;
     spaceId: string;
     id: { room: string } | { categoryId: string; categoryName: string } | null;
     renameCategory: (id: string, newName: string) => void;
+    deleteCategory: (id: string) => void;
   } = $props();
 
   const isRoom = $derived(id !== null && "room" in id);
@@ -150,12 +152,17 @@
   }
 
   async function onDelete() {
-    if (!id || !("room" in id)) return;
-    await deleteRoom(spaceId, id.room);
+    if (!id) return;
+    if ("room" in id) {
+      await deleteRoom(spaceId, id.room);
+    } else if ("categoryId" in id) {
+      deleteCategory(id.categoryId);
+    }
     open = false;
   }
 
-  let canDelete = $derived(!!id && "room" in id);
+  let canDelete = $derived(!!id);
+  let isCategory = $derived(!!id && "categoryId" in id);
 </script>
 
 {#if id}
@@ -166,7 +173,21 @@
     {canDelete}
     {onSave}
     {onDelete}
+    deleteLabel={isCategory ? "Delete Category" : "Archive Channel"}
+    deleteIcon={isCategory ? "trash" : "archive"}
+    deleteConfirmTitle={isCategory ? "Deleting Category" : undefined}
+    deleteConfirmButton={isCategory ? "Yes, Delete" : undefined}
   >
+    {#snippet deleteConfirmText()}
+      {#if isCategory}
+        Are you sure you want to delete the category <b>{name}</b>? Channels
+        in this category will move to the uncategorized section.
+      {:else}
+        Are you sure you want to archive <b>{name}</b>? Archived channels
+        aren't visible to non-admins. You can find and restore archived
+        channels when editing the sidebar.
+      {/if}
+    {/snippet}
     {#snippet permissions()}
       {#if kind === "Channel"}
         <ChannelPermissions

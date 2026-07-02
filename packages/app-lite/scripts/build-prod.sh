@@ -19,8 +19,8 @@ echo "OAuth Host URL: $target_url"
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 SCOPE="atproto"
-SCOPE+=" rpc:app.bsky.actor.getProfiles?aud=did:web:api.bsky.app%23bsky_appview"
-SCOPE+=" rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview"
+SCOPE+=" rpc:app.bsky.actor.getProfiles?aud=*"
+SCOPE+=" rpc:app.bsky.actor.getProfile?aud=*"
 SCOPE+=" blob:*/*"
 
 # ── Repo Scopes (blob uploads + handle writes) ───────────────────────────

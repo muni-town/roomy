@@ -183,6 +183,13 @@ function handleReactionChange(event: AppliedEvent): InvalidationEvent[] {
 
   const signals: InvalidationEvent[] = [
     invalidate("space.roomy.room.getMessages", { roomId }),
+    // A reaction on (or removing one from) a room's latest message changes
+    // that feed item's rendered reactions. The activity feed is a global
+    // per-user query (like getSpaces), so invalidate with no params — the
+    // client prefix-matches every activity-feed query key (any space/limit).
+    // Per the "over-invalidate" principle this broadcasts to all users;
+    // a reaction on a non-latest message triggers a harmless no-op refetch.
+    invalidate("space.roomy.space.getActivityFeed", {}),
     ...(details.messageId
       ? [
           invalidate("space.roomy.message.getMessage", {

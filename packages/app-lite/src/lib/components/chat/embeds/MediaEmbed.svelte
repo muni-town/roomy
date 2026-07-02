@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { resolveBlobUrl } from "$lib/utils";
+
   type MediaItem = { url: string; type: string; alt?: string };
 
   type Props = {
@@ -9,26 +11,27 @@
 </script>
 
 {#if media.length > 0}
-  <div class="flex flex-col gap-2 mt-1">
+  <div class="flex flex-wrap gap-2 mt-1">
     {#each media as item (item.url)}
+      {@const src = resolveBlobUrl(item.url, item.type) ?? item.url}
       {#if item.type.startsWith("image/")}
         <img
-          src={item.url}
+          src={src}
           alt={item.alt ?? ""}
-          class="max-w-sm max-h-80 rounded-lg object-contain"
+          class="max-w-sm max-h-80 rounded-lg object-contain shrink-0"
           loading="lazy"
         />
       {:else if item.type.startsWith("video/")}
         <video
           controls
           preload="metadata"
-          class="max-w-sm max-h-80 rounded-lg"
+          class="max-w-sm max-h-80 rounded-lg shrink-0"
         >
-          <source src={item.url} type={item.type} />
+          <source src={src} type={item.type} />
         </video>
       {:else}
         <a
-          href={item.url}
+          href={src}
           download
           class="text-xs text-primary underline break-all"
         >

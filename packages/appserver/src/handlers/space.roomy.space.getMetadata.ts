@@ -6,12 +6,12 @@
  * (and from `orphans`). Stage-1: unreadCount/lastRead are 0/null.
  */
 
-import { roomAccess } from "../auth/access.ts";
+import { roomAccess, spaceAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { getReadPositions } from "../queries/readPositions.ts";
 import { queryActiveThreads, resolveThreadsByIds } from "../queries/userActiveThreads.ts";
-import { parseUserDid, requireSpaceRead } from "../xrpc/authGuards.ts";
+import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
@@ -85,7 +85,16 @@ export const getMetadataHandler: QueryHandler<
   }
 
   const db = openDb();
-  const access = requireSpaceRead(db, spaceId, userDid);
+  // Metadata (name, avatar, joinPolicy, isMember) is required to render the
+  // join / accept-invite UI for spaces the caller is not yet a member of —
+  // including invite-only spaces. We therefore don't require read membership
+  // here: compute the access decision directly and only block banned callers.
+  // The channel/thread sidebar below is still gated on membership, so
+  // non-members receive an empty sidebar.
+  const access = spaceAccess(db, spaceId, userDid);
+  if (access.isBanned) {
+    throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
+  }
 
   const spaceRow = db
     .query<

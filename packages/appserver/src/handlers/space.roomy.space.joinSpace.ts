@@ -163,6 +163,16 @@ export const joinSpaceHandler: ProcedureHandler<
     callerDid,
   );
 
+  // ── 2.5. Drain the space materialiser so the membership edge is ──────
+  //        materialised before we return. Without this, the client's
+  //        first getMetadata after navigating into the space still sees
+  //        isMember=false (the space-side joinSpace event is otherwise
+  //        only materialised by the background Leaf subscription), which
+  //        re-shows the "you need an invite" modal to someone who just
+  //        accepted an invite.
+  const spaceMat = await getOrCreateMaterializer(spaceId as any /* StreamDid */);
+  await spaceMat.drain();
+
   // ── 3. Drain personal stream materialiser so the joinSpace event is
   //        visible to subsequent getSpaces HTTP queries ────────────────
   const personalMat = await getOrCreateMaterializer(personalStreamDid);

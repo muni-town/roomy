@@ -1,5 +1,4 @@
 packages:
-  - packages/app
   - packages/app-lite
   - packages/appserver
   - packages/playground
@@ -19,5 +18,4 @@ onlyBuiltDependencies:
 
 patchedDependencies:
   '@discordeno/gateway': patches/@discordeno__gateway.patch
-  '@grafana/faro-core': patches/@grafana__faro-core.patch
-  '@grafana/faro-web-sdk': patches/@grafana__faro-web-sdk.patch
+

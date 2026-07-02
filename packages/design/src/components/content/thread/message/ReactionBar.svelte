@@ -68,6 +68,8 @@
     <PopoverEmojiPicker
       bind:open={isEmojiRowPickerOpen}
       onpicked={(emoji) => handlePick(emoji.unicode)}
+      search
+      favorites
     >
       {#snippet child({ props })}
         <Button size="icon" variant="ghost" {...props} class="p-1.5">
