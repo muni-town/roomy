@@ -26,7 +26,6 @@ export const initKeyboardShortcutHandler = ({
         keymap({
           Enter: () => {
             onEnter();
-            this.editor.commands.clearContent();
             return true;
           },
         }),
