@@ -26,7 +26,7 @@ export interface ActivityMessage {
   timestamp?: string;
   media?: Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>;
   /** Reactions on the message. Only hydrated on the latest message. */
-  reactions?: Array<{ emoji: string; dids: string[]; myReactionId?: string }>;
+  reactions?: Array<{ emoji: string; count: number; myReactionId?: string }>;
 }
 
 export interface ActivityFeedItem {
@@ -451,8 +451,8 @@ function batchFetchReactions(
   db: Database,
   messageIds: string[],
   viewerDid?: string,
-): Map<string, Array<{ emoji: string; dids: string[]; myReactionId?: string }>> {
-  const result = new Map<string, Array<{ emoji: string; dids: string[]; myReactionId?: string }>>();
+): Map<string, Array<{ emoji: string; count: number; myReactionId?: string }>> {
+  const result = new Map<string, Array<{ emoji: string; count: number; myReactionId?: string }>>();
   if (messageIds.length === 0) return result;
 
   const placeholders = messageIds.map(() => "?").join(",");
@@ -493,12 +493,12 @@ function batchFetchReactions(
 
   for (const [entity, perMsg] of reactionMap.entries()) {
     const perMsgViewer = viewerReactionId.get(entity);
-    const arr: Array<{ emoji: string; dids: string[]; myReactionId?: string }> = [];
+    const arr: Array<{ emoji: string; count: number; myReactionId?: string }> = [];
     for (const [emoji, dids] of perMsg.entries()) {
       const myReactionId = perMsgViewer?.get(emoji);
       arr.push({
         emoji,
-        dids: [...dids].sort(),
+        count: dids.size,
         ...(myReactionId != null ? { myReactionId } : {}),
       });
     }

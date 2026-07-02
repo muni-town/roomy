@@ -22,6 +22,7 @@ import { getRoomMetadataHandler } from "./handlers/space.roomy.room.getMetadata.
 import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts";
 import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
 import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
+import { getReactionsHandler } from "./handlers/space.roomy.message.getReactions.ts";
 import { updateSeenHandler } from "./handlers/space.roomy.room.updateSeen.ts";
 import { sendEventsHandler } from "./handlers/space.roomy.space.sendEvents.ts";
 import { createSpaceHandler } from "./handlers/space.roomy.space.createSpace.ts";
@@ -297,6 +298,9 @@ const router = new XrpcRouter(prodAuthVerifier)
     handler: getMessageHandler,
     paramsSchema: schemas.queries.getMessage.Params,
     outputSchema: schemas.queries.getMessage.Response,
+  })
+  .query("space.roomy.message.getReactions", {
+    handler: getReactionsHandler,
   })
   .sync("space.roomy.sync.subscribe", {
     handler: syncSubscribeHandler,

@@ -76,40 +76,47 @@ export const prodAuthVerifier: AuthVerifier = async (req) => {
   }
   const jwt = authHeader.slice(7);
 
-  const payload = await verifyJwt(
-    jwt,
-    OWN_DID,
-    null,
-    async (iss: string, forceRefresh: boolean) => {
-      const did = iss.split("#")[0]!;
-      const didDoc = await idResolver.did.resolve(did, forceRefresh);
-      if (!didDoc) {
-        throw new XrpcError(
-          401,
-          "InvalidToken",
-          `Could not resolve DID: ${did}`,
-        );
-      }
+  try {
+    const payload = await verifyJwt(
+      jwt,
+      OWN_DID,
+      null,
+      async (iss: string, forceRefresh: boolean) => {
+        const did = iss.split("#")[0]!;
+        const didDoc = await idResolver.did.resolve(did, forceRefresh);
+        if (!didDoc) {
+          throw new XrpcError(
+            401,
+            "InvalidToken",
+            `Could not resolve DID: ${did}`,
+          );
+        }
 
-      const didKey = getKey(didDoc);
-      if (!didKey) {
-        throw new XrpcError(
-          401,
-          "InvalidToken",
-          "No ATProto signing key in DID document",
-        );
-      }
+        const didKey = getKey(didDoc);
+        if (!didKey) {
+          throw new XrpcError(
+            401,
+            "InvalidToken",
+            "No ATProto signing key in DID document",
+          );
+        }
 
-      return didKey;
-    },
-  );
+        return didKey;
+      },
+    );
 
-  // Service auth tokens (from DirectXrpcClient) have `iss` = PDS DID and
-  // `sub` = user DID. Atproto-proxy auth tokens have `iss` = user DID and
-  // no `sub`. Use `sub` when present (service auth), fall back to `iss`
-  // (atproto-proxy auth).
-  const userDid = (payload as Record<string, unknown>).sub ?? payload.iss;
-  return { did: userDid as string };
+    // Service auth tokens (from DirectXrpcClient) have `iss` = PDS DID and
+    // `sub` = user DID. Atproto-proxy auth tokens have `iss` = user DID and
+    // no `sub`. Use `sub` when present (service auth), fall back to `iss`
+    // (atproto-proxy auth).
+    const userDid = (payload as Record<string, unknown>).sub ?? payload.iss;
+    return { did: userDid as string };
+  } catch {
+    // JWT verification failed (e.g. audience mismatch, expired, unknown issuer).
+    // Fall back to anonymous — handlers enforce access control via
+    // requireRoomRead / requireSpaceAccess.
+    return { did: null };
+  }
 };
 
 // ── Ticket store for WebSocket pre-auth ─────────────────────────────────

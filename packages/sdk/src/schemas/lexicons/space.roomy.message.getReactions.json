@@ -1,0 +1,78 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.message.getReactions",
+  "defs": {
+    "reactors": {
+      "type": "object",
+      "required": [
+        "did",
+        "name"
+      ],
+      "properties": {
+        "did": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "handle": {
+          "type": "string"
+        }
+      }
+    },
+    "reactions": {
+      "type": "object",
+      "required": [
+        "emoji",
+        "reactors"
+      ],
+      "properties": {
+        "emoji": {
+          "type": "string"
+        },
+        "reactors": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#reactors"
+          }
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "messageId"
+        ],
+        "properties": {
+          "messageId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "reactions"
+          ],
+          "properties": {
+            "reactions": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#reactions"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

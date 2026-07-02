@@ -193,15 +193,12 @@
     "reactions": {
       "type": "object",
       "required": [
-        "dids",
+        "count",
         "emoji"
       ],
       "properties": {
-        "dids": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "count": {
+          "type": "integer"
         },
         "emoji": {
           "type": "string"

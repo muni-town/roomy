@@ -1,8 +1,11 @@
 <script lang="ts">
   import ReactionBar, {
-    type ReactionInfo,
+    type ReactionGroup,
+    type ReactorInfo,
   } from "@roomy/design/components/content/thread/message/ReactionBar.svelte";
-  import { addReaction } from "$lib/mutations/reaction";
+  import { addReaction, removeReaction } from "$lib/mutations/reaction";
+  import { px } from "$lib/auth.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
   import type { Message } from "$lib/queries/messages";
 
   type Props = {
@@ -16,47 +19,64 @@
   let { spaceId, roomId, messageId, reactions, currentUserDid }: Props =
     $props();
 
-  /** Flatten the DTO's `{emoji, dids[]}` into the `ReactionInfo[]` shape ReactionBar expects. */
-  let reactionInfos = $derived<ReactionInfo[]>(
-    reactions.flatMap(({ emoji, dids }) =>
-      dids.map(
-        (did) =>
-          ({
-            reaction: emoji,
-            userId: did,
-            userName: did,
-            reactionId: "",
-          }) satisfies ReactionInfo,
-      ),
-    ),
+  /** Map the DTO's `{emoji, count, myReactionId?}` into the `ReactionGroup[]` shape ReactionBar expects. */
+  let reactionGroups = $derived<ReactionGroup[]>(
+    reactions.map((r) => ({
+      emoji: r.emoji,
+      count: r.count,
+      pressed: currentUserDid !== undefined && r.myReactionId !== undefined,
+    })),
   );
 
   function onToggleReaction(emoji: string) {
     if (!currentUserDid) return;
 
-    // Find the DTO reaction group for this emoji
     const group = reactions.find((r) => r.emoji === emoji);
     if (!group) {
-      // New reaction — add it
       addReaction(spaceId, roomId, messageId, emoji);
       return;
     }
 
-    const alreadyReacted = group.dids.includes(currentUserDid);
-
-    if (!alreadyReacted) {
-      // User hasn't reacted — add
+    if (!group.myReactionId) {
       addReaction(spaceId, roomId, messageId, emoji);
     } else {
-      // Removal needs a reactionId the DTO does not yet carry.
-      // Task 8 will fill this branch once the appserver surfaces myReactionId.
-      return;
+      removeReaction(spaceId, roomId, group.myReactionId);
+    }
+  }
+
+  /** Per-emoji tooltip open state, controlled after fetch completes. */
+  let tooltipOpenByEmoji = $state<Record<string, boolean>>({});
+  /** Per-emoji reactor data for tooltip rendering. */
+  let tooltipReactorsByEmoji = $state<Record<string, ReactorInfo[]>>({});
+  /** Track which emoji we've already fetched to avoid redundant calls. */
+  let fetchedEmojis = $state<Set<string>>(new Set());
+
+  async function onHover(emoji: string) {
+    if (fetchedEmojis.has(emoji)) return;
+    fetchedEmojis.add(emoji);
+    // Open tooltip immediately with loading state.
+    tooltipOpenByEmoji[emoji] = true;
+    tooltipReactorsByEmoji[emoji] = [];
+    try {
+      const res = await px().query("space.roomy.message.getReactions", {
+        messageId,
+      });
+      for (const group of res.reactions) {
+        tooltipReactorsByEmoji[group.emoji] = group.reactors.map((r) => ({
+          ...r,
+          avatar: r.avatar ? resolveBlobUrl(r.avatar) : undefined,
+        }));
+      }
+    } catch {
+      tooltipReactorsByEmoji[emoji] = [];
     }
   }
 </script>
 
 <ReactionBar
-  reactions={reactionInfos}
-  {currentUserDid}
+  reactions={reactionGroups}
   {onToggleReaction}
+  {onHover}
+  {tooltipOpenByEmoji}
+  {tooltipReactorsByEmoji}
 />

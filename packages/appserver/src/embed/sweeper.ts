@@ -397,11 +397,10 @@ function waitForWake(ms: number): Promise<void> {
  * (which now carries the enriched `linkEmbeds` data) via `selectMessages`.
  *
  * The `update` op carries a complete `MessageDto` because the client
- * validates `#messageDiff` frames against the `Message` schema and drops
  * any frame missing a required field. Reactions are re-read from
  * `comp_reaction` (unchanged by enrichment); `myReactionId` is intentionally
  * omitted (broadcast diffs can't be per-user) — the client derives
- * "did I react?" from `reaction.dids`, so this doesn't affect rendering.
+ * "did I react?" from `reaction.myReactionId`, so this doesn't affect rendering.
  */
 function emitEnrichmentInvalidation(
   db: Database,

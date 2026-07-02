@@ -7,7 +7,7 @@ import { type } from "arktype";
 
 export const Reaction = type({
   emoji: "string",
-  dids: "string[]",
+  count: "number",
   /** reaction_id of the viewer's own reaction for this emoji; absent when not reacted. */
   "myReactionId?": "string",
 });

@@ -443,7 +443,7 @@
 			<div class="flex gap-1 mt-1">
 				{#each message.reactions as reaction}
 					<span class="text-xs bg-base-100 dark:bg-base-800 px-1.5 py-0.5 rounded-full">
-						{reaction.emoji} {reaction.dids.length}
+						{reaction.emoji} {reaction.count}
 					</span>
 				{/each}
 			</div>

@@ -20,7 +20,7 @@ import { stripNulls } from "../xrpc/strip-nulls.ts";
 
 export interface ReactionDto {
   emoji: string;
-  dids: string[];
+  count: number;
   /** reaction_id of the viewer's own reaction for this emoji; absent when not reacted. */
   myReactionId?: string;
 }
@@ -447,7 +447,7 @@ export function selectMessages(
       for (const [emoji, dids] of perMsg.entries()) {
         reactions.push(stripNulls({
           emoji,
-          dids: [...dids].sort(),
+          count: dids.size,
           myReactionId: perMsgViewer?.get(emoji) ?? null,
         }) as ReactionDto);
       }

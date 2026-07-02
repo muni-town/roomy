@@ -9,6 +9,7 @@ const APPSERVER_RPCS = [
   "space.roomy.room.getMessages",
   "space.roomy.room.getThreads",
   "space.roomy.message.getMessage",
+  "space.roomy.message.getReactions",
   "space.roomy.auth.getConnectionTicket",
   "space.roomy.room.updateSeen",
   "space.roomy.space.sendEvents",
