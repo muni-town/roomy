@@ -166,9 +166,11 @@ let {
     transform: translateX(100%);
   }
 
-  /* ── Sidebar fixed container: compositor isolation ──────────── */
   .sidebar-fixed {
     contain: layout style;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
   }
 
   /* ── Mobile backdrop: opacity animation to avoid DOM insert/remove ── */
