@@ -10,7 +10,10 @@ export function resolveBlobUrl(
 ): string | undefined {
   if (!uri) return undefined;
   if (uri.startsWith("atblob://")) {
-    const rest = uri.slice("atblob://".length);
+    // The materializer appends "?message=<ulid>" to embed entity ids, and
+    // selectMessages returns that full string as the media url. Strip any
+    // query/fragment before splitting did/cid.
+    const rest = uri.slice("atblob://".length).split(/[?#]/)[0]!;
     const slash = rest.indexOf("/");
     if (slash === -1) return undefined;
     const did = rest.slice(0, slash);

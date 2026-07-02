@@ -207,15 +207,19 @@
     try {
       const attachments: Record<string, unknown>[] = [];
 
-      // Upload media files
+      // Upload media files. Tag by MIME kind so the materializer routes
+      // images → comp_embed_image and videos → comp_embed_video (a file.v0
+      // tag would land them in comp_embed_file with no image metadata).
       for (const file of filesToUpload) {
         const uploaded = await uploadFile(file);
-        attachments.push({
-          $type: "space.roomy.attachment.file.v0",
-          uri: uploaded.uri,
-          mimeType: uploaded.mimeType,
-          size: uploaded.size,
-        });
+        const base = { uri: uploaded.uri, mimeType: uploaded.mimeType, size: uploaded.size };
+        if (file.type.startsWith("image/")) {
+          attachments.push({ $type: "space.roomy.attachment.image.v0", ...base });
+        } else if (file.type.startsWith("video/")) {
+          attachments.push({ $type: "space.roomy.attachment.video.v0", ...base });
+        } else {
+          attachments.push({ $type: "space.roomy.attachment.file.v0", ...base, name: file.name });
+        }
       }
 
       // Reply attachment
