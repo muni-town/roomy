@@ -12,9 +12,13 @@
  * with bounded concurrency and a self-healing backoff on 429/5xx. Subscriptions
  * that return 404/410 (the browser unsubscribed / expired) are pruned.
  *
- * Phase 1: immediate Busy pushes only. The idle poll exists but does no
- * digest work yet — Phase 2 extends the loop with the Engaged digest sweep
- * (`notification_state` rows whose 1h timer elapsed).
+ * Phase 2: the loop now serves two push kinds:
+ *  - **Busy** immediate `message` pushes, emitted by `evaluatePush` and
+ *    delivered in `processBatch`.
+ *  - **Engaged digest** pushes — the on-event 5-message threshold is emitted by
+ *    `evaluatePush` (a `digest` delivery) and delivered in `processBatch`; the
+ *    1-hour time threshold is caught by the periodic {@link runDigestSweep},
+ *    which runs on every idle wake alongside the 60s poll.
  */
 
 import type { Database } from "bun:sqlite";
@@ -26,7 +30,12 @@ import {
   pruneSubscriptionByEndpoint,
   selectSubscriptions,
 } from "../queries/pushSubscriptions.ts";
-import type { PushDelivery, PushJob } from "./types.ts";
+import {
+  markNotified,
+  selectDueDigests,
+} from "../queries/notificationState.ts";
+import { resolveEntityAvatar, resolveLatestRoomAuthor } from "./avatars.ts";
+import type { PushDelivery, PushJob, PushPayload } from "./types.ts";
 
 /**
  * Build a Web Push `Topic` header value for a room. The spec requires ≤32
@@ -45,6 +54,9 @@ const IDLE_POLL_MS = 60_000;
 /** Max concurrent outbound push-service calls. */
 const CONCURRENCY = Number(process.env.PUSH_CONCURRENCY ?? 8);
 
+/** Max due digests to fire per sweep cycle (gradual drain, no push-service flood). */
+const SWEEP_BATCH_LIMIT = 64;
+
 let dispatcherDb: Database | undefined;
 let started = false;
 
@@ -53,11 +65,12 @@ let statsDispatched = 0;
 let statsDeliveredOk = 0;
 let statsGone = 0;
 let statsFailed = 0;
+let statsDigestsFired = 0;
 
 /** Pending live createMessage jobs, drained FIFO. */
 const queue: PushJob[] = [];
 
-/** Resolved by {@link pokePushDispatcher} to wake an idle loop immediately. */
+/** Resolved by {@link pokePushDispatcher} to wake an idle loop. */
 let wake: (() => void) | null = null;
 
 export interface PushDispatcherOpts {
@@ -81,6 +94,7 @@ export function pushDispatcherStats(): {
   deliveredOk: number;
   gone: number;
   failed: number;
+  digestsFired: number;
 } {
   return {
     queueDepth: queue.length,
@@ -88,6 +102,7 @@ export function pushDispatcherStats(): {
     deliveredOk: statsDeliveredOk,
     gone: statsGone,
     failed: statsFailed,
+    digestsFired: statsDigestsFired,
   };
 }
 
@@ -115,8 +130,9 @@ async function runDispatcherLoop(): Promise<void> {
         await processBatch(db, batch);
         continue; // keep draining if more arrived
       }
-      // Idle: wait for a poke or the periodic poll. (Phase 2 will run the
-      // digest sweep here on each idle wake.)
+      // Idle: run the Engaged digest sweep (catches 1h-elapsed batches even
+      // with no new pokes), then wait for a poke or the periodic poll.
+      await runDigestSweep(db);
       await waitForWake(IDLE_POLL_MS);
     } catch (err) {
       // Outer resilience: an unexpected throw must not permanently kill the
@@ -154,49 +170,119 @@ async function processBatch(db: Database, batch: PushJob[]): Promise<void> {
   if (deliveries.length === 0) return;
 
   // Deliver each recipient's payload to all their subscription endpoints.
-  // `topic` makes a room's notifications replace each other (coalescing for
-  // Busy). The Web Push `Topic` header must be ≤32 base64url chars
-  // ([A-Za-z0-9_-]) — a raw `room:<roomId>` contains `:`/`/` and is rejected
-  // by the push service ("Unsupported characters set…"). Hash the roomId to a
-  // short, deterministic base64url token instead. Bounded concurrency so we
-  // never flood a push service; failures are logged, never thrown to caller.
-  await mapWithConcurrency(deliveries, CONCURRENCY, async (delivery) => {
-    const subs = selectSubscriptions(db, delivery.userDid);
-    if (subs.length === 0) return;
-    const payload = JSON.stringify(delivery.payload);
-    const topic = roomTopic(delivery.payload.roomId);
-    await Promise.all(
-      subs.map(async (sub) => {
-        try {
-          const res = await sendPush(
-            {
-              endpoint: sub.endpoint,
-              keys: { p256dh: sub.p256dh, auth: sub.auth },
-              expirationTime: sub.expirationTime,
-            },
-            payload,
-            { topic, urgency: "normal" },
-          );
-          if (res.gone) {
-            // Browser unsubscribed / expired — prune so we never retry it.
-            pruneSubscriptionByEndpoint(db, sub.endpoint);
-            statsGone++;
-            log.debug(`[push-dispatcher] pruned gone subscription ${sub.endpoint.slice(0, 40)}…`);
-          } else if (res.status !== null) {
-            statsDeliveredOk++;
-          }
-        } catch (err) {
-          statsFailed++;
-          const status = (err as { statusCode?: number })?.statusCode;
-          log.warn(
-            `[push-dispatcher] send failed (status=${status ?? "?"}) for ${sub.endpoint.slice(0, 40)}…:`,
-            err instanceof Error ? err.message : err,
-          );
-          // Phase 1: log + move on. Phase 4 will add retry/backoff.
-        }
-      }),
-    );
+  await mapWithConcurrency(deliveries, CONCURRENCY, (delivery) =>
+    deliverPayload(db, delivery.userDid, delivery.payload),
+  );
+}
+
+/**
+ * Fire time-based Engaged digests: select `notification_state` rows whose 1h
+ * timer elapsed (and haven't fired), deliver a digest push to each, and mark
+ * them notified. Bounded by {@link SWEEP_BATCH_LIMIT} per cycle so a large
+ * backlog drains gradually. Runs on every idle wake.
+ *
+ * The sweep row carries `(userDid, roomId, unseenCount)` but not the spaceId
+ * or any author; we resolve the owning space from the room entity
+ * (`entities.stream_id`) and the most-recent sender via {@link resolveLatestRoomAuthor}
+ * so the payload can carry `spaceId` + an avatar icon.
+ */
+async function runDigestSweep(db: Database): Promise<void> {
+  const due = selectDueDigests(db, Date.now(), SWEEP_BATCH_LIMIT);
+  if (due.length === 0) return;
+
+  // Resolve room name + owning space (entities.stream_id) once for the batch
+  // (cheap lookups), so each payload carries roomName + spaceId.
+  const roomMeta = new Map<
+    string,
+    { name: string | null; spaceId: string | null }
+  >();
+  for (const row of due) {
+    if (roomMeta.has(row.roomId)) continue;
+    const r = db
+      .query<{ name: string | null; space_id: string | null }, [string]>(
+        `select ci.name as name, e.stream_id as space_id
+           from entities e
+           left join comp_info ci on ci.entity = e.id
+          where e.id = ?`,
+      )
+      .get(row.roomId);
+    roomMeta.set(row.roomId, {
+      name: r?.name ?? null,
+      spaceId: r?.space_id ?? null,
+    });
+  }
+
+  await mapWithConcurrency(due, CONCURRENCY, async (row) => {
+    const meta = roomMeta.get(row.roomId);
+    const spaceId = meta?.spaceId ?? "";
+    const payload: PushPayload = {
+      type: "digest",
+      spaceId,
+      roomId: row.roomId,
+      count: row.unseenCount,
+      ...(meta?.name != null ? { roomName: meta.name } : {}),
+    };
+    // Icon: most-recent sender avatar → space avatar (same "user avatars, or
+    // failing that, space avatars" rule as message pushes). Sender avatars are
+    // the reliable source; space `atblob://` avatars often 404.
+    const latestAuthor = resolveLatestRoomAuthor(db, row.roomId);
+    const icon =
+      (latestAuthor ? resolveEntityAvatar(db, latestAuthor) : undefined) ??
+      resolveEntityAvatar(db, spaceId);
+    if (icon) payload.icon = icon;
+    // Mark notified regardless of delivery success so a transient push-service
+    // outage doesn't re-fire the same batch every 60s (Phase 4 adds retry).
+    await deliverPayload(db, row.userDid, payload);
+    markNotified(db, row.userDid, row.roomId);
+    statsDigestsFired++;
   });
+}
+
+/**
+ * Deliver one payload to all of a user's subscription endpoints, with
+ * per-room `topic` coalescing. Shared by the on-event path (`processBatch`)
+ * and the time-based sweep. Failures are logged, never thrown to the caller.
+ */
+async function deliverPayload(
+  db: Database,
+  userDid: string,
+  payload: PushPayload,
+): Promise<void> {
+  const subs = selectSubscriptions(db, userDid);
+  if (subs.length === 0) return;
+  const body = JSON.stringify(payload);
+  const topic = roomTopic(payload.roomId);
+  await Promise.all(
+    subs.map(async (sub) => {
+      try {
+        const res = await sendPush(
+          {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth },
+            expirationTime: sub.expirationTime,
+          },
+          body,
+          { topic, urgency: "normal" },
+        );
+        if (res.gone) {
+          // Browser unsubscribed / expired — prune so we never retry it.
+          pruneSubscriptionByEndpoint(db, sub.endpoint);
+          statsGone++;
+          log.debug(`[push-dispatcher] pruned gone subscription ${sub.endpoint.slice(0, 40)}…`);
+        } else if (res.status !== null) {
+          statsDeliveredOk++;
+        }
+      } catch (err) {
+        statsFailed++;
+        const status = (err as { statusCode?: number })?.statusCode;
+        log.warn(
+          `[push-dispatcher] send failed (status=${status ?? "?"}) for ${sub.endpoint.slice(0, 40)}…:`,
+          err instanceof Error ? err.message : err,
+        );
+        // Phase 2: log + move on. Phase 4 will add retry/backoff.
+      }
+    }),
+  );
 }
 
 /** Run `fn` over `items` with at most `limit` concurrent invocations. */
@@ -243,4 +329,5 @@ export function _resetPushDispatcher(): void {
   statsDeliveredOk = 0;
   statsGone = 0;
   statsFailed = 0;
+  statsDigestsFired = 0;
 }

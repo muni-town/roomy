@@ -97,6 +97,8 @@ interface PushPayload {
   count?: number;
   roomName?: string;
   authorName?: string;
+  /** Browser-fetchable avatar URL (sender for messages, room/space for digests). */
+  icon?: string;
 }
 
 self.addEventListener("push", (event: PushEvent) => {
@@ -143,7 +145,11 @@ async function handlePush(event: PushEvent): Promise<void> {
     body,
     tag,
     data,
-    // Phase 1: no icon yet. Phase polish can add badge/icon from config.
+    // Sender avatar (message) or room/space avatar (digest), resolved to a
+    // public CDN URL by the appserver. The OS fetches the image itself; if the
+    // URL is unreachable the notification simply shows without an icon.
+    ...(payload?.icon ? { icon: payload.icon } : {}),
+    // Phase 1: no badge yet. Phase polish can add a monochrome maskable badge.
   });
 }
 

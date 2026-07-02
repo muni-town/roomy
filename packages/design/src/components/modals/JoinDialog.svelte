@@ -20,6 +20,10 @@
   import Button from "../ui/button/Button.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import ErrorModal from "./Error.svelte";
+  import UpdateRhythmChooser, {
+    type RhythmLevel,
+    DEFAULT_RHYTHM,
+  } from "../user/UpdateRhythmChooser.svelte";
 
   let {
     resolveState,
@@ -37,8 +41,17 @@
     urlError?: string;
     /** Avatar rendered by caller (e.g. SpaceAvatar wrapper). */
     avatar: Snippet;
-    onJoin: () => void;
+    /**
+     * Called with the chosen notification rhythm when the user clicks Join.
+     * The caller is responsible for `joinSpace` + persisting the level via
+     * `setPushPreferences({ spaceId, level })`.
+     */
+    onJoin: (level: RhythmLevel) => void;
   } = $props();
+
+  // The chosen notification rhythm, defaulted to the appserver's default
+  // ("engaged"). Lives in the dialog so the chooser stays controlled here.
+  let rhythm = $state<RhythmLevel>(DEFAULT_RHYTHM);
 </script>
 
 <div class="flex items-center justify-center h-full">
@@ -58,7 +71,14 @@
           <h1 class="font-bold text-xl min-w-0 truncate" title={resolveState.data.name}>{resolveState.data.name}</h1>
         </div>
         {#if canJoin}
-          <Button size="lg" asyncState={joinState} onclick={onJoin}>
+          <div class="mb-5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-base-400 dark:text-base-500 mb-2 px-1">
+              Choose your update rhythm
+            </p>
+            <UpdateRhythmChooser bind:value={rhythm} />
+          </div>
+
+          <Button size="lg" asyncState={joinState} onclick={() => onJoin(rhythm)}>
             {inviteToken ? "Accept Invite" : "Join Space"}
           </Button>
           {#if joinState.status === "error"}

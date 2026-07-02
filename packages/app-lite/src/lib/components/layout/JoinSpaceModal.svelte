@@ -5,9 +5,11 @@
     JoinResolveState,
     JoinState,
   } from "@roomy/design/components/modals/JoinDialog.svelte";
+  import type { RhythmLevel } from "@roomy/design/components/user/UpdateRhythmChooser.svelte";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { joinSpace } from "$lib/mutations/space";
+  import { setSpacePushLevel } from "$lib/mutations/push-preferences";
   import { queryClient } from "$lib/client";
   import { resolveBlobUrl } from "$lib/utils";
 
@@ -46,10 +48,20 @@
     return { status: "loading" };
   });
 
-  async function onJoin() {
+  async function onJoin(level: RhythmLevel) {
     joinState = { status: "loading" };
     try {
       await joinSpace(spaceId, inviteToken);
+      // Persist the chosen notification rhythm for this space. Best-effort:
+      // a failure must not block the join.
+      try {
+        await setSpacePushLevel(spaceId, level);
+        await queryClient.invalidateQueries({
+          queryKey: ["space.roomy.push.getPushPreferences"],
+        });
+      } catch (err) {
+        console.warn("[join] could not save notification rhythm:", err);
+      }
       // Invalidate ALL cached queries for this space so stale error
       // responses (e.g. getThreads "you need to be a member", room
       // metadata canWrite=false) are cleared after joining.

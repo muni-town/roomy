@@ -45,6 +45,14 @@ export interface PushPayload {
   roomName?: string;
   /** Resolved author display name for `message` pushes, when available. */
   authorName?: string;
+  /**
+   * Browser-fetchable avatar URL to show as the notification icon. The
+   * appserver resolves this from `comp_info.avatar` (sender avatar for
+   * `message` pushes, room/space avatar for `digest`), falling back through
+   * "user avatar → space avatar". Not carried as content — it's metadata the
+   * recipient can already see in-app — and the OS fetches the image itself.
+   */
+  icon?: string;
 }
 
 /** A recipient + the payload to deliver to all their subscriptions. */
