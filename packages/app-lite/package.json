@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@atproto/api": "^0.14.22",
-    "@foxui/core": "^0.6.2",
-    "@foxui/social": "^0.6.3",
+    "@foxui/core": "^0.9.1",
+    "@foxui/social": "^0.8.10",
     "@iconify-json/ph": "^1.2.2",
     "@roomy-space/sdk": "workspace:*",
     "@roomy/design": "workspace:*",

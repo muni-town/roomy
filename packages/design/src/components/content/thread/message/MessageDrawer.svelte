@@ -73,6 +73,8 @@
         bind:open={isEmojiPickerOpen}
         onpicked={(emoji) => handlePick(emoji.unicode)}
         interactOutsideBehavior="close"
+        search
+        favorites
       >
         {#snippet child({ props })}
           <Button size="icon" variant="ghost" {...props}>

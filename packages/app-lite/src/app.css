@@ -36,6 +36,10 @@
     var(--shadow-button-color, var(--color-accent-700));
   --shadow-input: 2px 2px 0 0 var(--accent-700);
 
+  --radius-ui: var(--ui-radius);
+  --radius-ui-lg: var(--ui-radius-lg);
+  --radius-ui-sm: var(--ui-radius-sm);
+
   --font-display: var(--font-sans);
 }
 
@@ -64,6 +68,10 @@
     --base-800: var(--color-stone-800);
     --base-900: var(--color-stone-900);
     --base-950: var(--color-stone-950);
+
+    --ui-radius: 1rem;
+    --ui-radius-lg: 1.25rem;
+    --ui-radius-sm: 0.75rem;
   }
 
   html {
