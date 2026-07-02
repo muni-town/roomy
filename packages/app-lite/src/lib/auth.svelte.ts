@@ -90,7 +90,13 @@ export async function init() {
 
       // Set up direct XRPC transport with service auth
       serviceAuth = new ServiceAuthClient(result.agent);
-      const appserverUrl = await resolveAppserverHttpOrigin(CONFIG.appserverDid);
+      // Local dev: when an HTTP origin override is set (derived from
+      // VITE_APPSERVER_WS_ORIGIN), send XRPC to the local appserver instead of
+      // resolving the DID to production. Keeps queries/procedures and the sync
+      // WS pointed at the same local server.
+      const appserverUrl =
+        CONFIG.appserverHttpOrigin ??
+        (await resolveAppserverHttpOrigin(CONFIG.appserverDid));
       setAppserverOrigin(appserverUrl);
       directXrpc = new DirectXrpcClient(
         appserverUrl,
