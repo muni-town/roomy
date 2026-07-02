@@ -42,8 +42,12 @@ export const CONFIG = {
 
 export const OAUTH_SCOPE = [
   "atproto",
-  "rpc:app.bsky.actor.getProfiles?aud=did:web:api.bsky.app%23bsky_appview",
-  "rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview",
+  // Profile reads are public data; allow any appview (Bluesky, Blacksky,
+  // Eurosky, etc.) so users whose PDS routes to a non-Bluesky appview can
+  // still fetch profiles. lxm is pinned to the specific NSID, so this only
+  // grants read access to these two endpoints — not a blanket appview grant.
+  "rpc:app.bsky.actor.getProfiles?aud=*",
+  "rpc:app.bsky.actor.getProfile?aud=*",
   "blob:*/*",
   "repo:space.roomy.upload.v0", // Grant all actions (create, update, delete)
   `repo:${CONFIG.profileSpaceNsid}`,
