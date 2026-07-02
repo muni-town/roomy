@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { resolveBlobUrl } from "$lib/utils";
+  import { resolveBlobUrl, normalizeMimeType } from "$lib/utils";
 
   type MediaItem = { url: string; type: string; alt?: string };
 
@@ -27,7 +27,7 @@
           preload="metadata"
           class="max-w-sm max-h-80 rounded-lg shrink-0"
         >
-          <source src={src} type={item.type} />
+          <source src={src} type={normalizeMimeType(item.type)} />
         </video>
       {:else}
         <a
