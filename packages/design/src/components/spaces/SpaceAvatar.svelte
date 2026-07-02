@@ -43,7 +43,7 @@
 
 <div
   class={`relative bg-base-200 dark:bg-base-900 shrink-0 overflow-hidden ${loading ? "opacity-70" : ""}`}
-  style={`width: ${size}px; height: ${size}px;${shape === "squircle" && clipPathId ? ` clip-path: url(#${clipPathId});` : shape === "circle" ? " border-radius: 9999px;" : ""}`}
+  style={`width: ${size}px; height: ${size}px;${shape === "squircle" && clipPathId ? ` clip-path: url(#${clipPathId}); -webkit-clip-path: url(#${clipPathId});` : shape === "circle" ? " border-radius: 9999px;" : ""}`}
 >
   {#if src && !imgError}
     <img
@@ -73,9 +73,9 @@
 
 {#if shape === "squircle" && clipPathId}
   <svg
-    width="0"
-    height="0"
-    style="position: absolute; pointer-events: none;"
+    width="1"
+    height="1"
+    style="position: absolute; overflow: hidden; pointer-events: none;"
     aria-hidden="true"
   >
     <defs>
