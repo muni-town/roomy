@@ -442,6 +442,14 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     categoryMap = new Map(categoryMap);
   }
 
+  function deleteCategory(id: string) {
+    categoryMap.delete(id);
+    categoryMap = new Map(categoryMap);
+    if (draftOrder) {
+      draftOrder = draftOrder.filter((c) => c.id !== id);
+    }
+  }
+
   async function saveChanges() {
     if (draftOrder) {
       const newSidebar = draftOrder
@@ -759,6 +767,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     {spaceId}
     id={editingId}
     {renameCategory}
+    {deleteCategory}
   />
   <RestoreRoomModal bind:open={openRestoreRoomModal} {spaceId} />
 
