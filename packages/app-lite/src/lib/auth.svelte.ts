@@ -11,6 +11,7 @@ import { goto } from "$app/navigation";
 import { CONFIG, OAUTH_SCOPE } from "./config";
 import { scheduleAutoReload } from "./error-recovery";
 import { setAppserverOrigin } from "./appserver-origin";
+import { subscribeIfAlreadyPermitted, clearPushSubscription } from "./push.svelte";
 
 const { ServiceAuthClient, DirectXrpcClient, resolveAppserverHttpOrigin } = transport;
 
@@ -108,6 +109,12 @@ export async function init() {
       if (returnUrl && returnUrl !== currentReturnUrl()) {
         goto(returnUrl, { replaceState: true });
       }
+      // Re-subscribe this device for web push, but only if the user has
+      // already granted notification permission — never prompt at login
+      // (no user gesture here, and Safari blocks non-gesture prompts). The
+      // settings page's "Enable notifications" button is the prompt trigger.
+      // Fire-and-forget: it must never block session restoration.
+      void subscribeIfAlreadyPermitted();
     }
   } catch (err) {
     initError = String(err);
@@ -157,6 +164,13 @@ export async function updateProfile() {
 }
 
 export async function logout() {
+  // Stop delivering push to this device while signed out. Best-effort: a
+  // failure here must not block logout. clearPushSubscription returns an
+  // outcome (never throws) — just log on non-ok.
+  const outcome = await clearPushSubscription();
+  if (outcome.status !== "ok" && outcome.status !== "unsupported") {
+    console.warn("[push] clear on logout failed:", outcome.status);
+  }
   if (session) await sdkLogout(session);
   serviceAuth?.clear();
   serviceAuth = null;

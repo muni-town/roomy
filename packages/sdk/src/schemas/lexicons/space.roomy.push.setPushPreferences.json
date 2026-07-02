@@ -1,0 +1,38 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.push.setPushPreferences",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "string",
+              "knownValues": [
+                "busy",
+                "engaged",
+                "quiet",
+                "silent"
+              ]
+            },
+            "level": {
+              "type": "string",
+              "knownValues": [
+                "busy",
+                "engaged",
+                "quiet",
+                "silent"
+              ]
+            },
+            "spaceId": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

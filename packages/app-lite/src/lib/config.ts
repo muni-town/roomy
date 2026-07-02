@@ -19,6 +19,12 @@ const APPSERVER_RPCS = [
   "space.roomy.space.getCalendarLink",
   "space.roomy.space.getCalendarEvents",
   "space.roomy.space.getActivityFeed",
+  // Web push (Phase 1 plumbing).
+  "space.roomy.push.getVapidPublicKey",
+  "space.roomy.push.getPushPreferences",
+  "space.roomy.push.registerSubscription",
+  "space.roomy.push.unregisterSubscription",
+  "space.roomy.push.setPushPreferences",
 ];
 
 export const CONFIG = {

@@ -1,0 +1,49 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.push.registerSubscription",
+  "defs": {
+    "keys": {
+      "type": "object",
+      "required": [
+        "auth",
+        "p256dh"
+      ],
+      "properties": {
+        "auth": {
+          "type": "string"
+        },
+        "p256dh": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "procedure",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "endpoint",
+            "keys"
+          ],
+          "nullable": [
+            "expirationTime"
+          ],
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "keys": {
+              "type": "ref",
+              "ref": "#keys"
+            },
+            "expirationTime": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -17,7 +17,8 @@
     "@roomy-space/sdk": "workspace:*",
     "arktype": "^2.1.29",
     "rate-limiter-flexible": "^11.2.0",
-    "ulidx": "^2.4.1"
+    "ulidx": "^2.4.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",

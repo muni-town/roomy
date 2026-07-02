@@ -11,6 +11,7 @@ import {
 } from "@roomy-space/sdk";
 
 import { openDb } from "../db/db.ts";
+import { attachInMemoryReadState } from "../db/readStateDb.ts";
 import { applyBatch } from "./applyBatch.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
 
@@ -398,5 +399,91 @@ describe("forwardMessages sort order", () => {
     expect(messages[0]?.content).toBe("old msg");
     expect(messages[1]?.id).toBe(fwdNewId);
     expect(messages[1]?.content).toBe("new msg");
+  });
+});
+
+describe("user_room_participation tracking (Phase 2)", () => {
+  test("live createMessage upserts the author's participation; backfill does not", () => {
+    const db = freshDb();
+    attachInMemoryReadState(db);
+    seedSpace(db, STREAM);
+    const channelId = newUlid();
+
+    const T = 1_700_000_000_000;
+    const msgId = ulid(T);
+    const msg = createMessageEvent(channelId, msgId, "hello");
+
+    // Live: should upsert participation for (USER, channelId) at the message
+    // timestamp (decoded from the ULID).
+    const stats = applyBatch(db, STREAM, [decoded(msg, 1)], {
+      isBackfill: false,
+    });
+    expect(stats.applyErrors).toBe(0);
+    expect(stats.applied).toBe(1);
+
+    const row = db
+      .query<{ last_message_at: number }, [string, string]>(
+        "select last_message_at from readstate.user_room_participation where user_did = ? and room_id = ?",
+      )
+      .get(USER, channelId);
+    expect(row?.last_message_at).toBe(T);
+
+    // Backfill message by a different user must NOT create a participation
+    // row (the gate is `!isBackfill`, matching the unread-counter increment).
+    const otherUser = UserDid.assert("did:plc:other-user");
+    const T2 = T + 60_000;
+    const backfillMsg = createMessageEvent(channelId, ulid(T2), "backfilled");
+    const bfStats = applyBatch(
+      db,
+      STREAM,
+      [{ event: backfillMsg, idx: 2 as StreamIndex, user: otherUser }],
+      { isBackfill: true },
+    );
+    expect(bfStats.applyErrors).toBe(0);
+    const otherRow = db
+      .query<{ n: number }, [string, string]>(
+        "select 1 as n from readstate.user_room_participation where user_did = ? and room_id = ?",
+      )
+      .get(otherUser, channelId);
+    expect(otherRow).toBeNull();
+  });
+
+  test("authorOverride extension routes participation to the override author", () => {
+    const db = freshDb();
+    attachInMemoryReadState(db);
+    seedSpace(db, STREAM);
+    const channelId = newUlid();
+    const overrideDid = "did:plc:bridged-author";
+
+    const T = 1_700_000_000_000;
+    const msg = {
+      $type: "space.roomy.message.createMessage.v0",
+      id: ulid(T),
+      room: channelId,
+      body: {
+        mimeType: "text/markdown",
+        data: { buf: new TextEncoder().encode("bridged") },
+      },
+      extensions: {
+        "space.roomy.extension.authorOverride.v0": { did: overrideDid },
+      },
+    } as unknown as Event;
+
+    // The stream `user` is USER, but the override author should get the row.
+    applyBatch(db, STREAM, [decoded(msg, 1)], { isBackfill: false });
+
+    const streamUserRow = db
+      .query<{ n: number }, [string, string]>(
+        "select 1 as n from readstate.user_room_participation where user_did = ? and room_id = ?",
+      )
+      .get(USER, channelId);
+    expect(streamUserRow).toBeNull();
+
+    const overrideRow = db
+      .query<{ last_message_at: number }, [string, string]>(
+        "select last_message_at from readstate.user_room_participation where user_did = ? and room_id = ?",
+      )
+      .get(overrideDid, channelId);
+    expect(overrideRow?.last_message_at).toBe(T);
   });
 });

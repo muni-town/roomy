@@ -20,10 +20,27 @@ import {
   setMessageSortIdxByTimestamp,
 } from "./sortIdx.ts";
 import { isThread, upsertUserThreadActivity } from "../queries/userActiveThreads.ts";
+import { upsertUserRoomParticipation } from "../queries/userRoomParticipation.ts";
 import { upsertActivityItem } from "./activityItem.ts";
 import { decodeTime } from "ulidx";
 
 const decodeTimeFromId = (id: string): number => decodeTime(id);
+
+/**
+ * Resolve the effective author DID for a message: the authorOverride
+ * extension's `did` if present (bridged messages), else the authenticated
+ * stream `user`. Matches the `author` edge logic and `toAppliedEvent`'s
+ * `details.authorDid`. Only meaningful for `createMessage` events (the sole
+ * caller guards on that), so we narrow the union to access `extensions`.
+ */
+function effectiveAuthorDid(bundle: StatementBundleSuccess): string {
+  if (bundle.event.$type !== "space.roomy.message.createMessage.v0") {
+    return bundle.user;
+  }
+  const ext = bundle.event.extensions?.["space.roomy.extension.authorOverride.v0"];
+  const overrideDid = (ext as { did?: string } | undefined)?.did;
+  return overrideDid ?? bundle.user;
+}
 
 export interface ApplyBundleOpts {
   /** True for backfill events — skips the unread-counter increment. */
@@ -75,10 +92,17 @@ export function applyBundle(
           where room_id = ?`,
       ).run(bundle.event.room);
 
+      // Track the author's participation in this room (all room types —
+      // channels included). The Engaged digest gate uses this to restrict
+      // prompts to rooms you've spoken in. Uses the effective author
+      // (override-author for bridged messages) to match the `author` edge.
+      const authorDid = effectiveAuthorDid(bundle);
+      const timestamp = decodeTimeFromId(bundle.event.id);
+      upsertUserRoomParticipation(db, authorDid, bundle.event.room, timestamp);
+
       // Track thread activity: if the message is in a thread, upsert the
       // author's interaction so the thread appears in their sidebar.
       if (isThread(db, bundle.event.room)) {
-        const timestamp = decodeTimeFromId(bundle.event.id);
         upsertUserThreadActivity(db, bundle.user, bundle.event.room, timestamp);
       }
     }

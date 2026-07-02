@@ -5,6 +5,7 @@
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "$lib/client";
   import { auth, init, updateProfile } from "$lib/auth.svelte";
+  import { installPushDebug } from "$lib/push-debug";
   import { startSync, stopSync } from "$lib/sync.svelte";
   import { restoreScrollPositionsFromStorage, saveScrollPositionsToStorage } from "$lib/components/chat/scroll-position.svelte";
   import {
@@ -46,6 +47,7 @@
       PUBLIC_BRIDGE_DID: dynamicEnv.PUBLIC_BRIDGE_DID,
     });
     init();
+    installPushDebug();
     restoreScrollPositionsFromStorage();
 
     // Save scroll positions before page unload
