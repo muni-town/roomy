@@ -133,9 +133,12 @@ export function createSyncContext(deps: {
     connection.onError((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       log(`[error] ${msg}`);
-      // Detect rate-limit (429) errors from ticket fetches or PDS proxy
+      // 429s from the ticket fetch (an XRPC procedure) are already retried
+      // with Retry-After backoff inside DirectXrpcClient.procedure before
+      // they reach here. If we still see a RateLimitError, the retry budget
+      // is exhausted — SyncConnection's own reconnect backoff takes over.
       if (msg.includes("429") || msg.includes("RateLimit")) {
-        log(`[error] Rate limited by server — backing off`);
+        log(`[error] Rate limited by server — retry budget exhausted, deferring to WS reconnect backoff`);
       }
     });
 

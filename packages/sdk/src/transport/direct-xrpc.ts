@@ -31,13 +31,19 @@ import {
   type ProcedureInput,
   type ProcedureOutput,
 } from "./registry";
-import { XrpcResponseValidationError } from "./errors";
+import { XrpcResponseValidationError, RateLimitError } from "./errors";
+import { withRateLimitRetry, type RateLimitRetryOptions } from "./retry";
 import { ServiceAuthClient } from "./service-auth";
 
 export class DirectXrpcClient {
   readonly #appserverUrl: string;
   readonly #appserverDid: string;
   readonly #serviceAuth: ServiceAuthClient;
+  /**
+   * Retry/backoff policy applied on HTTP 429. Overridable per-instance so
+   * tests can inject a synchronous sleep and callers can tune limits.
+   */
+  #retryOpts: RateLimitRetryOptions = {};
 
   constructor(
     appserverUrl: string,
@@ -48,6 +54,15 @@ export class DirectXrpcClient {
     this.#appserverUrl = appserverUrl.replace(/\/+$/, "");
     this.#appserverDid = appserverDid;
     this.#serviceAuth = serviceAuth;
+  }
+
+  /**
+   * Override the rate-limit retry/backoff policy for this client.
+   * Pass `{}` to use defaults (max 4 retries, 1s→30s jittered backoff).
+   */
+  setRateLimitRetry(opts: RateLimitRetryOptions): this {
+    this.#retryOpts = opts;
+    return this;
   }
 
   /**
@@ -63,30 +78,32 @@ export class DirectXrpcClient {
     const entry = QUERY_SCHEMAS[nsid];
     const stringParams = stringifyParams(params as Record<string, unknown>);
 
-    const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
+    return withRateLimitRetry(async () => {
+      const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
 
-    const url = new URL(`${this.#appserverUrl}/xrpc/${nsid}`);
-    for (const [k, v] of Object.entries(stringParams)) {
-      url.searchParams.set(k, v);
-    }
+      const url = new URL(`${this.#appserverUrl}/xrpc/${nsid}`);
+      for (const [k, v] of Object.entries(stringParams)) {
+        url.searchParams.set(k, v);
+      }
 
-    const resp = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-    });
+      const resp = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
 
-    if (!resp.ok) {
-      throw await toXrpcError(resp, nsid);
-    }
+      if (!resp.ok) {
+        throw await toXrpcError(resp, nsid);
+      }
 
-    const data = await resp.json();
-    const parsed = entry.response(data);
-    if (parsed instanceof type.errors) {
-      throw new XrpcResponseValidationError(nsid, parsed);
-    }
-    return parsed as QueryResponse<N>;
+      const data = await resp.json();
+      const parsed = entry.response(data);
+      if (parsed instanceof type.errors) {
+        throw new XrpcResponseValidationError(nsid, parsed);
+      }
+      return parsed as QueryResponse<N>;
+    }, this.#retryOpts);
   }
 
   /**
@@ -104,36 +121,38 @@ export class DirectXrpcClient {
   ): Promise<ProcedureOutput<N>> {
     const entry = PROCEDURE_SCHEMAS[nsid];
 
-    const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
+    return withRateLimitRetry(async () => {
+      const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
 
-    const url = `${this.#appserverUrl}/xrpc/${nsid}`;
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(input),
-    });
+      const url = `${this.#appserverUrl}/xrpc/${nsid}`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(input),
+      });
 
-    if (!resp.ok) {
-      throw await toXrpcError(resp, nsid);
-    }
+      if (!resp.ok) {
+        throw await toXrpcError(resp, nsid);
+      }
 
-    // Void short-circuit: no outputSchema means void return.
-    // The appserver returns 200 with no body for void procedures.
-    // Read as text first so we can reliably detect an empty body
-    // regardless of Content-Length / Transfer-Encoding headers (which
-    // may be stripped by reverse proxies in production).
-    const bodyText = await resp.text();
-    const data = bodyText.length === 0 ? {} : JSON.parse(bodyText);
+      // Void short-circuit: no outputSchema means void return.
+      // The appserver returns 200 with no body for void procedures.
+      // Read as text first so we can reliably detect an empty body
+      // regardless of Content-Length / Transfer-Encoding headers (which
+      // may be stripped by reverse proxies in production).
+      const bodyText = await resp.text();
+      const data = bodyText.length === 0 ? {} : JSON.parse(bodyText);
 
-    const parsed = entry.output(data);
-    if (parsed instanceof type.errors) {
-      throw new XrpcResponseValidationError(nsid, parsed);
-    }
-    return parsed as ProcedureOutput<N>;
+      const parsed = entry.output(data);
+      if (parsed instanceof type.errors) {
+        throw new XrpcResponseValidationError(nsid, parsed);
+      }
+      return parsed as ProcedureOutput<N>;
+    }, this.#retryOpts);
   }
 
   /** The appserver DID this client is configured to talk to. */
@@ -161,6 +180,21 @@ function stringifyParams(
 }
 
 async function toXrpcError(resp: Response, nsid: string): Promise<Error> {
+  // 429: surface as a RateLimitError so the transport's retry wrapper can
+  // read the Retry-After header and back off. The appserver's rate limiter
+  // (and any reverse proxy) sets Retry-After in seconds; absent it, the
+  // wrapper falls back to exponential jitter.
+  if (resp.status === 429) {
+    const retryAfterHdr = resp.headers.get("retry-after");
+    const retryAfterSec =
+      retryAfterHdr != null && /^\d+$/.test(retryAfterHdr)
+        ? Number(retryAfterHdr)
+        : null;
+    const err = new RateLimitError(retryAfterSec);
+    Object.assign(err, { nsid, errorType: "RateLimitExceeded" });
+    return err;
+  }
+
   let body: string;
   try {
     body = await resp.text();

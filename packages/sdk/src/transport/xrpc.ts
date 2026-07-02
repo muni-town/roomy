@@ -27,7 +27,7 @@ import {
   type ProcedureOutput,
 } from "./registry";
 import { XrpcResponseValidationError } from "./errors";
-
+import { withRateLimitRetry } from "./retry";
 
 
 export async function agentQuery<N extends QueryNsid>(
@@ -39,8 +39,7 @@ export async function agentQuery<N extends QueryNsid>(
   // params validation is informational here; the appserver re-validates.
   // Stringify all values for XRPC query string semantics.
   const stringParams = stringifyParams(params as Record<string, unknown>);
-  let response;
-  response = await agent.call(nsid, stringParams);
+  const response = await withRateLimitRetry(() => agent.call(nsid, stringParams));
   const parsed = entry.response(response.data);
   if (parsed instanceof type.errors) {
     throw new XrpcResponseValidationError(nsid, parsed);
@@ -54,8 +53,9 @@ export async function agentProcedure<N extends ProcedureNsid>(
   input: ProcedureInput<N>,
 ): Promise<ProcedureOutput<N>> {
   const entry = PROCEDURE_SCHEMAS[nsid];
-  let response;
-  response = await agent.call(nsid, {}, input as Record<string, unknown>);
+  const response = await withRateLimitRetry(() =>
+    agent.call(nsid, {}, input as Record<string, unknown>),
+  );
   // Void outputs: appserver short-circuits to empty body. Treat `undefined`
   // or `null` as `{}` so the empty-object schema parses cleanly.
   const data =

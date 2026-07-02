@@ -11,6 +11,7 @@
 export { agentQuery, agentProcedure } from "./xrpc";
 export { resolveAppserverWsOrigin, resolveAppserverHttpOrigin } from "./did-resolve";
 export { XrpcResponseValidationError, RateLimitError, isRateLimitError, getRetryAfterMs } from "./errors";
+export { withRateLimitRetry, type RateLimitRetryOptions } from "./retry";
 export {
   QUERY_SCHEMAS,
   PROCEDURE_SCHEMAS,
