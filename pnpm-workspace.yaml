@@ -18,4 +18,4 @@ onlyBuiltDependencies:
 
 patchedDependencies:
   '@discordeno/gateway': patches/@discordeno__gateway.patch
-storeDir: /workspace/.pnpm-store
+
