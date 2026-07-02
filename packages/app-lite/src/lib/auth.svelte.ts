@@ -10,6 +10,7 @@ import { transport } from "@roomy-space/sdk";
 import { goto } from "$app/navigation";
 import { CONFIG, OAUTH_SCOPE } from "./config";
 import { scheduleAutoReload } from "./error-recovery";
+import { setAppserverOrigin } from "./appserver-origin";
 
 const { ServiceAuthClient, DirectXrpcClient, resolveAppserverHttpOrigin } = transport;
 
@@ -90,6 +91,7 @@ export async function init() {
       // Set up direct XRPC transport with service auth
       serviceAuth = new ServiceAuthClient(result.agent);
       const appserverUrl = await resolveAppserverHttpOrigin(CONFIG.appserverDid);
+      setAppserverOrigin(appserverUrl);
       directXrpc = new DirectXrpcClient(
         appserverUrl,
         CONFIG.appserverDid,

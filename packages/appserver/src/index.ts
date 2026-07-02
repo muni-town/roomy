@@ -32,6 +32,7 @@ import { getActivityFeedHandler } from "./handlers/space.roomy.space.getActivity
 import { RoomyServiceClient, schemas, StreamDid } from "@roomy-space/sdk";
 import { getServiceClient } from "./serviceClient.ts";
 import { getOrCreateMaterializer, removeMaterializer } from "./materialization/registry.ts";
+import { proxyBlob } from "./blob.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const OWN_DID = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
@@ -366,6 +367,23 @@ Bun.serve({
         JSON.stringify({ ...stats, pending }),
         { headers: { "content-type": "application/json", ...corsHeaders } },
       );
+    }
+
+    // ─── Blob proxy ────────────────────────────────────────────────────
+    // `atblob://<did>/<cid>` → raw bytes from the blob owner's PDS.
+    // Public (no auth): blobs referenced in public records are public and
+    // content-addressed by CID. Needed for non-image media (video, files)
+    // because cdn.bsky.app only serves images.
+    const blobMatch = url.pathname.match(/^\/blob\/(.+?)\/(.+)$/);
+    if (blobMatch && req.method === "GET") {
+      const did = decodeURIComponent(blobMatch[1]!);
+      const cid = decodeURIComponent(blobMatch[2]!);
+      const res = await proxyBlob(did, cid, req);
+      console.log(`${req.method} ${url.pathname} → ${res.status}`);
+      for (const [k, v] of Object.entries(corsHeaders)) {
+        res.headers.set(k, v);
+      }
+      return res;
     }
 
     const res = await router.fetch(req, server);

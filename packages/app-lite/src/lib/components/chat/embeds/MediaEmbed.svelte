@@ -13,7 +13,7 @@
 {#if media.length > 0}
   <div class="flex flex-wrap gap-2 mt-1">
     {#each media as item (item.url)}
-      {@const src = resolveBlobUrl(item.url) ?? item.url}
+      {@const src = resolveBlobUrl(item.url, item.type) ?? item.url}
       {#if item.type.startsWith("image/")}
         <img
           src={src}
