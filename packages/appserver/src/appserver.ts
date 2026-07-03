@@ -220,6 +220,21 @@ export function buildRouter(
     });
 }
 
+/**
+ * Return the list of registered XRPC NSIDs with their route kind.
+ * Auto-discovers endpoints from buildRouter — new endpoints are measured
+ * automatically by the perf harness.
+ */
+export function getRegisteredNsids(): { nsid: string; kind: string }[] {
+  const router = buildRouter(
+    // Dummy auth verifier — we only need the route registry, not actual auth.
+    () => Promise.resolve({ did: null }),
+    // Dummy sync handler — not used for NSID discovery.
+    () => {},
+  );
+  return router.getRegisteredNsids();
+}
+
 // ─── Factory ──────────────────────────────────────────────────────────────
 
 export function createAppserver(

@@ -97,6 +97,18 @@ export class XrpcRouter {
     return this;
   }
 
+  /**
+   * Return the list of registered NSIDs with their route kind.
+   * Used by the perf harness to auto-discover endpoints.
+   */
+  getRegisteredNsids(): { nsid: string; kind: string }[] {
+    const result: { nsid: string; kind: string }[] = [];
+    for (const [nsid, def] of this.#routes) {
+      result.push({ nsid, kind: def.kind });
+    }
+    return result;
+  }
+
   get fetch(): (
     req: Request,
     server: Server<WsData>,
