@@ -170,13 +170,30 @@ export const joinSpaceHandler: ProcedureHandler<
   //        only materialised by the background Leaf subscription), which
   //        re-shows the "you need an invite" modal to someone who just
   //        accepted an invite.
+  //
+  //        We do NOT block on backfillSettled — if the materializer is
+  //        still backfilling (Leaf slow/unreachable), the connect alone
+  //        can take 30s and occupy a Bun thread, starving other handlers.
+  //        Instead we drain only if backfill already completed, and let
+  //        invalidation signals catch the client up otherwise. Same
+  //        pattern as userHydration.ts.
   const spaceMat = await getOrCreateMaterializer(spaceId as any /* StreamDid */);
-  await spaceMat.drain();
+  if (spaceMat.backfillSettled) {
+    if (spaceMat.backfillError) {
+      throw new XrpcError(500, "InternalServerError", "Space materialization failed");
+    }
+    await spaceMat.drain();
+  }
 
   // ── 3. Drain personal stream materialiser so the joinSpace event is
   //        visible to subsequent getSpaces HTTP queries ────────────────
   const personalMat = await getOrCreateMaterializer(personalStreamDid);
-  await personalMat.drain();
+  if (personalMat.backfillSettled) {
+    if (personalMat.backfillError) {
+      throw new XrpcError(500, "InternalServerError", "Personal stream materialization failed");
+    }
+    await personalMat.drain();
+  }
 
   // ── 3.5. Remove any leftSpace edge since the user is now rejoined ────
   removeLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
