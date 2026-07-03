@@ -7,6 +7,10 @@
       "required": [
         "did"
       ],
+      "nullable": [
+        "avatar",
+        "name"
+      ],
       "properties": {
         "did": {
           "type": "string"
@@ -23,6 +27,10 @@
       "type": "object",
       "required": [
         "did"
+      ],
+      "nullable": [
+        "avatar",
+        "name"
       ],
       "properties": {
         "did": {

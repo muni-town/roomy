@@ -25,8 +25,8 @@ interface ThreadRow {
     latestTimestamp?: string;
     latestMembers: Array<{
       did: string;
-      name?: string;
-      avatar?: string;
+      name: string | null;
+      avatar: string | null;
     }>;
     latestMessage?: {
       id: string;
@@ -93,8 +93,8 @@ export const getSpaceThreadsHandler: QueryHandler<
     if (!acc.canRead) continue;
     const members = t.latestMembers.map((m) => ({
       did: m.did,
-      name: m.name ?? undefined,
-      avatar: m.avatar ?? undefined,
+      name: m.name,
+      avatar: m.avatar,
     }));
     const activity: ThreadRow["activity"] = {
       latestMembers: members,

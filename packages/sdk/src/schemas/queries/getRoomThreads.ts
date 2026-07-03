@@ -10,9 +10,10 @@ export const Params = type({ roomId: "string" });
 
 export const ThreadMember = type({
   did: "string",
-  "name?": "string",
-  "avatar?": "string",
+  "name?": "string | null",
+  "avatar?": "string | null",
 });
+
 
 export const ThreadMessage = type({
   id: "string",
