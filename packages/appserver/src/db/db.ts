@@ -115,10 +115,11 @@ export function getDb(): AsyncDatabase {
 
 /**
  * Close the process-wide database singleton. Used by tests to reset state.
+ * Terminates the worker immediately so in-flight requests fail fast.
  */
 export function closeDb(): void {
   if (dbInstance) {
-    dbInstance.close();
+    dbInstance.terminate();
     dbInstance = null;
   }
 }
