@@ -12,6 +12,7 @@
     "publish-packages": "turbo build && beachball publish -m 'chore: publish packages.'",
     "prepare": "[ -f .husky/install.mjs ] && node ./.husky/install.mjs || true",
     "dev": "turbo run dev --filter=app-lite",
+    "dev:local": "./scripts/dev-local",
     "dev:bridge": "turbo run dev --filter=@roomy/discord-bridge-legacy",
     "dev:all": "turbo dev"
   },

@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+#
+# dev-local — Start the full local Roomy stack for development.
+#
+# Boots three layers, all on localhost, no tunnel or production services needed:
+#
+#   1. Leaf server + PLC directory + PLC DB  (docker compose, ports 5530/3001)
+#   2. Appserver                             (host Bun process, port 8080)
+#   3. app-lite (SvelteKit dev server)       (host Vite process, port 5180)
+#
+# The appserver talks to the local leaf; app-lite talks to the local appserver
+# via VITE_APPSERVER_WS_ORIGIN (which drives both the sync WebSocket and the
+# XRPC HTTP client — see commit 47d283e4).
+#
+# Nothing needs to be publicly exposed: app-lite calls the appserver directly,
+# the appserver calls leaf directly, and the PDS callback redirects to
+# localhost (VITE_OAUTH_PUBLIC_CLIENT=true bypasses the loopback redirect
+# metadata so OAuth init works on 127.0.0.1).
+#
+# Usage:
+#   ./scripts/dev-local                # start everything (foreground, Ctrl-C stops all)
+#   ./scripts/dev-local --no-leaf      # skip docker compose (use a remote LEAF_URL from .env)
+#   ./scripts/dev-local --port 8080    # custom appserver port
+#   ./scripts/dev-local --reset-leaf   # wipe the leaf-data volume before starting
+#
+# Run from the repo root.
+#
+# Requirements:
+#   - Docker with the compose plugin
+#   - bun and pnpm on PATH (or install via .local)
+#   - Dependencies installed: `pnpm install` at repo root
+#
+# Notes:
+#   - The first `docker compose up` pull is slow (amd64 images via QEMU on
+#     arm64 hosts). Subsequent starts reuse cached images.
+#   - The appserver SQLite DB lives at packages/appserver/data/ and persists
+#     across restarts. Wipe it (rm packages/appserver/data/*.sqlite) for a
+#     clean slate.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+# ── Defaults ──────────────────────────────────────────────────────────────
+APPSERVER_PORT=8080
+APP_LITE_PORT=5180
+START_LEAF=true
+RESET_LEAF=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port) APPSERVER_PORT="$2"; shift 2 ;;
+    --app-port) APP_LITE_PORT="$2"; shift 2 ;;
+    --no-leaf) START_LEAF=false; shift ;;
+    --reset-leaf) RESET_LEAF=true; shift ;;
+    -h|--help)
+      sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+# ── Preflight ────────────────────────────────────────────────────────────
+if ! command -v docker >/dev/null 2>&1; then
+  echo "✗ docker not found on PATH."
+  exit 1
+fi
+if ! command -v bun >/dev/null 2>&1; then
+  echo "✗ bun not found on PATH."
+  exit 1
+fi
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "✗ pnpm not found on PATH."
+  exit 1
+fi
+
+if [[ ! -d packages/appserver ]] || [[ ! -d packages/app-lite ]]; then
+  echo "✗ Run from the repo root — packages/appserver and packages/app-lite not found."
+  exit 1
+fi
+
+if [[ ! -d node_modules ]]; then
+  echo "✗ node_modules missing. Run 'pnpm install' first."
+  exit 1
+fi
+
+# ── Track child PIDs for cleanup ────────────────────────────────────────
+PIDS=()
+cleanup() {
+  echo ""
+  echo "Stopping dev-local …"
+  for pid in "${PIDS[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+  # Give them a moment, then force-kill
+  sleep 1
+  for pid in "${PIDS[@]}"; do
+    kill -9 "$pid" 2>/dev/null || true
+  done
+}
+trap cleanup EXIT INT TERM
+
+# ── 1. Leaf + PLC (docker compose) ───────────────────────────────────────
+if $START_LEAF; then
+  echo "▸ Starting local leaf + PLC stack (docker compose) …"
+
+  # The compose file declares the network as external — create it if missing.
+  if ! docker network inspect roomy-dev >/dev/null 2>&1; then
+    echo "  creating network roomy-dev …"
+    docker network create roomy-dev >/dev/null
+  fi
+
+  if $RESET_LEAF; then
+    echo "  wiping leaf-data volume …"
+    docker compose down -v leaf-server plc-db >/dev/null 2>&1 || true
+  fi
+
+  docker compose up leaf-server plc-directory plc-db -d
+  echo "  waiting for leaf to be ready …"
+  for i in $(seq 1 15); do
+    if curl -sf -o /dev/null http://127.0.0.1:5530/ 2>/dev/null; then
+      echo "  ✔ leaf-server ready (port 5530)"
+      break
+    fi
+    sleep 1
+    [[ $i -eq 15 ]] && { echo "✗ leaf-server did not start in 15s"; exit 1; }
+  done
+
+  LEAF_URL_VAL="http://localhost:5530"
+  PLC_URL_VAL="http://localhost:3001"
+  LEAF_TOKEN_VAL="token123"
+else
+  echo "▸ --no-leaf: using LEAF_URL from packages/appserver/.env"
+  LEAF_URL_VAL=""
+  PLC_URL_VAL=""
+  LEAF_TOKEN_VAL=""
+fi
+
+# ── 2. Appserver (host Bun process) ──────────────────────────────────────
+echo "▸ Starting appserver on port $APPSERVER_PORT …"
+
+# Build the env for the appserver. Start from the package .env (which may
+# contain real credentials for remote leaf), then override with local values
+# when running a local leaf stack.
+APPSERVER_ENV=(
+  "PORT=$APPSERVER_PORT"
+  "APPSERVER_DID=did:web:localhost"
+  "APPSERVER_ORIGIN=http://localhost:$APPSERVER_PORT"
+  "APPSERVER_BACKFILL_MODE=lazy"
+  "CORS_ORIGIN=*"
+)
+
+if $START_LEAF; then
+  APPSERVER_ENV+=(
+    "LEAF_URL=$LEAF_URL_VAL"
+    "LEAF_UNSAFE_AUTH_TOKEN=$LEAF_TOKEN_VAL"
+    "PLC_DIRECTORY_URL=$PLC_URL_VAL"
+  )
+fi
+
+# Export and run
+env "${APPSERVER_ENV[@]}" \
+  bun run --watch packages/appserver/src/index.ts &
+APPSERVER_PID=$!
+PIDS+=("$APPSERVER_PID")
+
+echo "  waiting for appserver to be ready …"
+for i in $(seq 1 15); do
+  if curl -sf -o /dev/null "http://127.0.0.1:$APPSERVER_PORT/xrpc/space.roomy.space.getSpaces" 2>/dev/null; then
+    echo "  ✔ appserver ready (port $APPSERVER_PORT)"
+    break
+  fi
+  sleep 1
+  [[ $i -eq 15 ]] && { echo "✗ appserver did not start in 15s"; exit 1; }
+done
+
+# ── 3. app-lite (host Vite process) ──────────────────────────────────────
+echo "▸ Starting app-lite on port $APP_LITE_PORT …"
+
+VITE_APPSERVER_DID=did:web:localhost \
+VITE_APPSERVER_WS_ORIGIN=ws://127.0.0.1:$APPSERVER_PORT \
+VITE_OAUTH_PUBLIC_CLIENT=true \
+VITE_PORT=$APP_LITE_PORT \
+  pnpm --filter app-lite exec vite dev --host 127.0.0.1 --port "$APP_LITE_PORT" &
+APP_LITE_PID=$!
+PIDS+=("$APP_LITE_PID")
+
+echo "  waiting for app-lite to be ready …"
+for i in $(seq 1 20); do
+  if curl -sf -o /dev/null "http://127.0.0.1:$APP_LITE_PORT/" 2>/dev/null; then
+    echo "  ✔ app-lite ready (port $APP_LITE_PORT)"
+    break
+  fi
+  sleep 1
+  [[ $i -eq 20 ]] && { echo "✗ app-lite did not start in 20s"; exit 1; }
+done
+
+# ── Done ─────────────────────────────────────────────────────────────────
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  Roomy local dev stack is running."
+echo ""
+echo "  app-lite:    http://127.0.0.1:$APP_LITE_PORT/"
+echo "  appserver:   http://127.0.0.1:$APPSERVER_PORT/"
+echo "  leaf-server: http://127.0.0.1:5530/   $(if $START_LEAF; then echo '(local)'; else echo '(from .env)'; fi)"
+echo "  plc-dir:     http://127.0.0.1:3001/   $(if $START_LEAF; then echo '(local)'; else echo '(from .env)'; fi)"
+echo ""
+echo "  Press Ctrl-C to stop everything."
+echo "════════════════════════════════════════════════════════════════"
+
+# Wait for either process to exit (or Ctrl-C)
+wait
