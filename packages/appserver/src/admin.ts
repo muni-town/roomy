@@ -45,3 +45,14 @@ export function requireAdmin(auth: AuthCtx): void {
     );
   }
 }
+
+/**
+ * Override the admin DIDs set for testing. Tests only — resets the set
+ * so admin endpoints work with test auth.
+ */
+export function _setAdminDids(dids: string[]): void {
+  (ADMIN_DIDS as Set<string>).clear();
+  for (const did of dids) {
+    (ADMIN_DIDS as Set<string>).add(did);
+  }
+}
