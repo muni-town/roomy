@@ -18,10 +18,6 @@ import {
 
 import { closeDb, openDb } from "../db/db.ts";
 import {
-  attachInMemoryReadState,
-  closeReadStateDb,
-} from "../db/readStateDb.ts";
-import {
   _resetMaterializerRegistry,
   getOrCreateMaterializer,
 } from "../materialization/registry.ts";
@@ -48,7 +44,7 @@ interface ReadPositionRow {
   unread_count: number;
 }
 
-function readPosition(roomId: string): ReadPositionRow | null {
+async function readPosition(roomId: string): Promise<ReadPositionRow | null> {
   return openDb()
     .query<
       ReadPositionRow,
@@ -65,26 +61,24 @@ let msgB: string;
 
 beforeEach(async () => {
   closeDb();
-  closeReadStateDb();
   _resetMaterializerRegistry();
   _resetHydrationInflight();
 
   // In-memory singleton so the handler's internal openDb() sees this DB.
   const db = openDb({ path: ":memory:" });
-  attachInMemoryReadState(db);
 
   roomId = newUlid();
   msgA = newUlid();
   msgB = newUlid();
 
   // Room lives in SPACE; two messages with sort_idx "a" < "b".
-  db.run("insert into entities (id, stream_id) values (?, ?)", [SPACE, SPACE]);
-  db.run("insert into entities (id, stream_id) values (?, ?)", [roomId, SPACE]);
-  db.run(
+  await db.run("insert into entities (id, stream_id) values (?, ?)", [SPACE, SPACE]);
+  await db.run("insert into entities (id, stream_id) values (?, ?)", [roomId, SPACE]);
+  await db.run(
     "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
     [msgA, SPACE, roomId, "a"],
   );
-  db.run(
+  await db.run(
     "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
     [msgB, SPACE, roomId, "b"],
   );
@@ -92,7 +86,7 @@ beforeEach(async () => {
   // Make the background hydration hermetic: seed the personal-stream cache and
   // pre-warm ONLY the personal materializer with an instant fake. The room's
   // space (SPACE) intentionally has NO materializer registered.
-  db.run(
+  await db.run(
     "insert into comp_user_personal_stream (user_did, personal_stream_did, resolved_at) values (?, ?, ?)",
     [USER, PERSONAL, 0],
   );
@@ -104,7 +98,6 @@ beforeEach(async () => {
 
 afterEach(() => {
   closeDb();
-  closeReadStateDb();
   _resetMaterializerRegistry();
   _resetHydrationInflight();
 });
@@ -113,7 +106,7 @@ describe("updateSeen", () => {
   test("no seenUpTo → marks read up to latest message, unread 0 (no space materializer)", async () => {
     await updateSeenHandler({}, { did: USER }, { roomId });
 
-    const row = readPosition(roomId);
+    const row = await readPosition(roomId);
     expect(row).not.toBeNull();
     expect(row?.seen_up_to).toBe("b"); // max(sort_idx)
     expect(row?.unread_count).toBe(0);
@@ -122,7 +115,7 @@ describe("updateSeen", () => {
   test("explicit seenUpTo → watermark at that message, unread counts the rest", async () => {
     await updateSeenHandler({}, { did: USER }, { roomId, seenUpTo: msgA });
 
-    const row = readPosition(roomId);
+    const row = await readPosition(roomId);
     expect(row?.seen_up_to).toBe("a"); // msgA's sort_idx
     expect(row?.unread_count).toBe(1); // msgB is after the watermark
   });

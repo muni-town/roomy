@@ -26,7 +26,6 @@ import { afterEach, beforeEach } from "bun:test";
 import { createAppserver, type AppserverHandle } from "../appserver.ts";
 import { testAuthVerifier } from "../xrpc/auth.ts";
 import { closeDb, openDb } from "../db/db.ts";
-import { closeReadStateDb } from "../db/readStateDb.ts";
 import { _resetMaterializerRegistry, getOrCreateMaterializer } from "../materialization/registry.ts";
 import { _resetHydrationInflight } from "../hydration/userHydration.ts";
 import { _resetEmbedSweeper } from "../embed/sweeper.ts";
@@ -62,7 +61,6 @@ export interface E2eContext {
 export function startAppserver(): E2eContext {
   // Reset all process-wide singletons so each test gets a clean appserver.
   closeDb();
-  closeReadStateDb();
   _resetMaterializerRegistry();
   _resetHydrationInflight();
   _resetEmbedSweeper();
@@ -106,7 +104,6 @@ export function startAppserver(): E2eContext {
   afterEach(() => {
     handle.close();
     closeDb();
-    closeReadStateDb();
     _resetMaterializerRegistry();
     _resetHydrationInflight();
     _resetEmbedSweeper();

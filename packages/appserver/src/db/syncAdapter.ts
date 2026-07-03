@@ -66,7 +66,7 @@ export function toAsyncDb(db: Database): DbLike {
       sql: string,
       ...params: unknown[]
     ): Promise<{ changes: number; lastInsertRowid?: number }> {
-      const result = db.run(sql, toBindings(...params));
+      const result = db.run(sql, ...toBindings(...params));
       return Promise.resolve({
         changes: result.changes,
         lastInsertRowid: normaliseRowid(result.lastInsertRowid),
@@ -89,7 +89,7 @@ export function toAsyncDb(db: Database): DbLike {
               );
               break;
             case "run":
-              lastResult = db.run(step.sql, toBindings(...(step.params ?? [])));
+              lastResult = db.run(step.sql, ...toBindings(...(step.params ?? [])));
               break;
             case "exec":
               db.exec(step.sql);

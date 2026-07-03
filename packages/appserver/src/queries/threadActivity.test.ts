@@ -250,15 +250,15 @@ describe("threadActivity", () => {
   // guard that listThreadActivity follows that edge so a forward-created
   // thread shows a latest timestamp, recent participants, and a latest message.
 
-  test("forwarded message contributes the original's timestamp to latestTimestamp", () => {
-    const db = freshDb();
+  test("forwarded message contributes the original's timestamp to latestTimestamp", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     // Alice posts a message in THREAD_A, then it's forwarded into THREAD_B.
     const origId = postMessage(db, THREAD_A, ALICE, 9000, "forwarded hello");
     forwardMessage(db, THREAD_B, origId);
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadB = result.find((t) => t.id === THREAD_B)!;
     // THREAD_B has no direct messages — only a forwarded one. The forwarded
     // message's original timestamp (9000) must surface as the thread's latest.
@@ -273,28 +273,28 @@ describe("threadActivity", () => {
     expect(bIdx).toBeGreaterThan(aIdx);
   });
 
-  test("forwarded message's original author appears in latestMembers", () => {
-    const db = freshDb();
+  test("forwarded message's original author appears in latestMembers", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     // Thread created solely by forwarding Bob's message into it.
     const origId = postMessage(db, THREAD_A, BOB, 5000, "hi from bob");
     forwardMessage(db, THREAD_B, origId);
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadB = result.find((t) => t.id === THREAD_B)!;
     expect(threadB.latestMembers.map((m) => m.did)).toContain(BOB);
     expect(threadB.latestMembers.map((m) => m.name)).toContain("bob");
   });
 
-  test("forwarded message is returned as the thread's latestMessage with original content/author", () => {
-    const db = freshDb();
+  test("forwarded message is returned as the thread's latestMessage with original content/author", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     const origId = postMessage(db, THREAD_A, CAROL, 7000, "forwarded body");
     forwardMessage(db, THREAD_B, origId);
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadB = result.find((t) => t.id === THREAD_B)!;
     expect(threadB.latestMessage).not.toBeNull();
     expect(threadB.latestMessage!.content).toBe("forwarded body");
@@ -303,8 +303,8 @@ describe("threadActivity", () => {
     expect(threadB.latestMessage!.timestamp).toBe(new Date(7000).toISOString());
   });
 
-  test("a forwarded message newer than a direct message wins latestTimestamp/latestMessage", () => {
-    const db = freshDb();
+  test("a forwarded message newer than a direct message wins latestTimestamp/latestMessage", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     // Direct message from Alice at 1000, then a forwarded message (orig at
@@ -313,7 +313,7 @@ describe("threadActivity", () => {
     const origId = postMessage(db, THREAD_B, DAVE, 2000, "forwarded later");
     forwardMessage(db, THREAD_A, origId);
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadA = result.find((t) => t.id === THREAD_A)!;
     expect(threadA.latestTimestamp).toBe(new Date(2000).toISOString());
     expect(threadA.latestMessage!.content).toBe("forwarded later");
