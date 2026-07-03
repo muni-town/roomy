@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createAppserver, type AppserverHandle } from "./appserver.ts";
 import { testAuthVerifier } from "./xrpc/auth.ts";
 import { closeDb } from "./db/db.ts";
-import { closeReadStateDb } from "./db/readStateDb.ts";
 import { _resetMaterializerRegistry } from "./materialization/registry.ts";
 import { _resetHydrationInflight } from "./hydration/userHydration.ts";
 import { _resetEmbedSweeper } from "./embed/sweeper.ts";
@@ -18,7 +17,6 @@ let handle: AppserverHandle | null = null;
 beforeEach(() => {
   // Reset all process-wide singletons so each test gets a clean appserver.
   closeDb();
-  closeReadStateDb();
   _resetMaterializerRegistry();
   _resetHydrationInflight();
   _resetEmbedSweeper();

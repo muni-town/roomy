@@ -311,7 +311,7 @@ function handleRun(req: WorkerRequest): {
   changes: number;
   lastInsertRowid?: number;
 } {
-  const result = mainDb!.run(req.sql!, toBindings(req.params));
+  const result = mainDb!.run(req.sql!, ...toBindings(req.params));
   return {
     changes: result.changes,
     lastInsertRowid: normaliseRowid(result.lastInsertRowid),
@@ -375,7 +375,7 @@ function handleTransaction(req: WorkerRequest): unknown {
           );
           break;
         case "run":
-          lastResult = mainDb!.run(step.sql, toBindings(step.params));
+          lastResult = mainDb!.run(step.sql, ...toBindings(step.params));
           break;
         case "exec":
           mainDb!.exec(step.sql);

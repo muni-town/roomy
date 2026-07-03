@@ -64,6 +64,18 @@ function collectCandidateDids(events: DecodedStreamEvent[]): Set<UserDid> {
     if (user && typeof user === "string") {
       candidates.add(user as UserDid);
     }
+    // Also collect authorOverride DIDs from createMessage extensions
+    if (e.event.$type === "space.roomy.message.createMessage.v0") {
+      const ext = (e.event as Record<string, unknown>).extensions as
+        | Record<string, unknown>
+        | undefined;
+      const override = ext?.["space.roomy.extension.authorOverride.v0"] as
+        | { did?: string }
+        | undefined;
+      if (override?.did && typeof override.did === "string") {
+        candidates.add(override.did as UserDid);
+      }
+    }
   }
   return candidates;
 }

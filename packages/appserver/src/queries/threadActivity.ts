@@ -278,5 +278,13 @@ export async function listThreadActivity(
     };
   });
 
+  // Sort by latestTimestamp descending (nulls last), then alphabetically by name for tiebreaking.
+  results.sort((a, b) => {
+    const aTs = a.latestTimestamp ? new Date(a.latestTimestamp).getTime() : -Infinity;
+    const bTs = b.latestTimestamp ? new Date(b.latestTimestamp).getTime() : -Infinity;
+    if (bTs !== aTs) return bTs - aTs;
+    return (a.name ?? "").localeCompare(b.name ?? "");
+  });
+
   return results;
 }
