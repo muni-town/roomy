@@ -51,7 +51,7 @@
       cache.queryKey("space.roomy.room.getMessages", { roomId }),
     );
     if (!msgs || msgs.length === 0) return [];
-    const selfDid = auth.session?.did;
+    const selfDid = auth.userDid;
     // Track each author's most recent message; `sort_idx` (ULID) is the
     // canonical timeline order, falling back to the ISO `timestamp`.
     const lastByDid = new Map<string, { user: TypeaheadUser; last: string }>();

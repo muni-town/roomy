@@ -2,7 +2,7 @@
 
 Guidance for AI coding agents working with this monorepo.
 
-**Updated:** 2026-07-02
+**Updated:** 2026-07-03
 
 ## Architecture
 
@@ -39,6 +39,7 @@ roomy/
 
 ```bash
 pnpm dev                    # Start app-lite on 127.0.0.1:5180
+pnpm dev:local              # Start full local stack (leaf + appserver + app-lite)
 pnpm dev:bridge             # Start Discord bridge service
 pnpm dev:all                # Start all services + monitoring
 ```
@@ -52,8 +53,9 @@ pnpm publish-packages       # Version & publish SDK to npm
 
 ### Type Checking & Tests
 
-```bash
 pnpm --filter app-lite check              # TypeScript check (svelte-check) for app-lite
+pnpm --filter @roomy/appserver typecheck  # TypeScript check (tsc --noEmit) for appserver
+bun test --cwd packages/appserver          # Unit tests (Bun test) for the appserver
 pnpm --filter @roomy-space/sdk test       # Unit tests (Vitest) for the SDK
 pnpm --filter @roomy/design test          # Unit tests (Vitest) for the design system
 ```
@@ -222,15 +224,78 @@ Strict settings across all packages:
 
 ### Authentication Modes
 
-app-lite uses the AT Protocol OAuth flow:
+app-lite supports two authentication paths, both producing an `Agent` that backs the `DirectXrpcClient`:
 
-1. **OAuth (Production):** Standard AT Protocol OAuth
-2. **App Password (Testing):** Via environment variables
+1. **OAuth (Production):** Standard AT Protocol OAuth via `@atproto/oauth-client-browser`. Requires a publicly-reachable redirect URI (loopback in dev, deployed origin in prod). The `init()` function in `src/lib/auth.svelte.ts` calls `initSession()` → `BrowserOAuthClient.init()` to restore/create the session.
+
+2. **App Password (Testing / E2E):** When `PUBLIC_TEST_IDENTIFIER` + `PUBLIC_TEST_APP_PASSWORD` are set in `packages/app-lite/.env`, `init()` auto-logs in via `AtpAgent.login()` instead of attempting OAuth. This bypasses the OAuth round-trip entirely, enabling headless browser-based E2E testing against a local appserver with no public exposure.
 
 ```env
-PUBLIC_TEST_IDENTIFIER=your-handle.bsky.social
+# packages/app-lite/.env
+PUBLIC_TEST_IDENTIFIER=did:plc:your-test-did
 PUBLIC_TEST_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 ```
+
+> **Env var prefix matters:** `PUBLIC_*` vars are read via SvelteKit's `$env/dynamic/public` module, not `import.meta.env` (which only inlines `VITE_*` vars). See `src/lib/config.ts` — `testIdentifier`/`testAppPassword` use `dynamicEnv.PUBLIC_TEST_*`.
+
+Both paths set `auth.authenticated = true` and populate `auth.agent`. Use `auth.userDid` (not `auth.session?.did`) to get the current user's DID — it works for both auth modes (OAuth exposes `session.did`; app-password only has `agent.did`).
+
+## Testing & E2E Verification
+
+### Local Dev Stack (`pnpm dev:local`)
+
+`scripts/dev-local` starts the full local stack — no tunnel or production services needed:
+
+```bash
+pnpm dev:local                          # leaf + appserver + app-lite (defaults: 8080, 5180)
+./scripts/dev-local --port 8090         # custom appserver port
+./scripts/dev-local --app-port 5200     # custom app-lite port
+./scripts/dev-local --no-leaf           # skip docker, use LEAF_URL from appserver/.env
+./scripts/dev-local --reset-leaf        # wipe leaf-data volume before starting
+```
+
+**What it starts (all on localhost):**
+
+| Layer | Process | Port | Connects to |
+|-------|---------|------|-------------|
+| Leaf + PLC + PLC DB | docker compose | 5530, 3001 | — |
+| Appserver | host Bun (`bun run --watch`) | 8080 | local leaf (5530), **real** PLC (`https://plc.directory`) |
+| app-lite | host Vite | 5180 | local appserver via `VITE_APPSERVER_WS_ORIGIN` |
+
+The script auto-creates the `roomy-dev` docker network if missing, waits for each layer's health check before starting the next, and cleans up all processes on Ctrl-C.
+
+**Key wiring details:**
+
+- A single env var, `VITE_APPSERVER_WS_ORIGIN=ws://127.0.0.1:8080`, points both the sync WebSocket **and** the XRPC HTTP client at the local appserver. `config.ts` derives `appserverHttpOrigin` from the WS origin (ws→http transform). When unset, both fall back to DID resolution (production). See commit `47d283e4`.
+- The appserver uses the **real** PLC directory (`https://plc.directory`) for JWT verification, not the local one — the local PLC only has test DIDs, but resolving the PDS's signing key (e.g. `bsky.social`'s DID) requires the real PLC.
+- No public exposure needed: app-lite calls the local appserver directly, the appserver calls local leaf directly, and auth tokens come from the real PDS (`bsky.social`).
+
+### E2E Browser Testing
+
+With `PUBLIC_TEST_IDENTIFIER` + `PUBLIC_TEST_APP_PASSWORD` set in `packages/app-lite/.env`, the app auto-authenticates on page load (app-password login, no OAuth round-trip). This enables full browser-based E2E testing of the XRPC + sync stack.
+
+**Verified E2E chain:**
+
+```
+Browser (headless Chromium)
+  → app-lite (Vite, :5180)
+    → POST bsky.social/com.atproto.server.createSession   [app-password login]
+    → GET  127.0.0.1:8080/xrpc/space.roomy.space.getSpaces [200]
+    → POST 127.0.0.1:8080/xrpc/space.roomy.auth.getConnectionTicket [200]
+    → WS   127.0.0.1:8080/xrpc/space.roomy.sync.subscribe   [connected]
+      → local appserver (Bun, :8080)
+        → local leaf (Docker, :5530)
+```
+
+All XRPC queries, procedures, and the WebSocket sync connection go to the local appserver. The app UI loads fully (spaces, navigation, user menu) without any production dependency.
+
+### Pre-existing Type Errors
+
+Both `svelte-check` (app-lite) and `tsc --noEmit` (appserver) report pre-existing errors on `main` that are **not** introduced by your changes. When verifying, diff the error count against a clean checkout rather than treating any error as new. Current baseline: app-lite has 3 errors (SDK `RateLimitRetryOptions` export, tiptap `LinkOptions`, `Storage.markdown`); appserver has 36 errors (test files with brand types).
+
+### Appserver Unit Tests
+
+The appserver has 25 test files (~240 tests) runnable via `bun test`. Tests use mocked DBs and mocked Leaf connections — they exercise materialization, auth, invalidation, and XRPC handler logic at the unit level. There are no integration tests that boot the HTTP server and exercise XRPC endpoints end-to-end yet.
 
 ### Deployment Targets
 

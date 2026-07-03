@@ -25,7 +25,7 @@
   let { spaceId, roomId }: Props = $props();
 
   const messagesQuery = createMessagesQuery(() => roomId);
-  const currentUserDid = $derived(auth.session?.did);
+  const currentUserDid = $derived(auth.userDid);
 
   let virtualizer: VirtualizerHandle = $state(null!);
   let viewport: HTMLDivElement = $state(null!);

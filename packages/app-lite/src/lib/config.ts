@@ -1,3 +1,5 @@
+import { env as dynamicEnv } from "$env/dynamic/public";
+
 const APPSERVER_RPCS = [
   "space.roomy.space.getSpaces",
   "space.roomy.space.getMetadata",
@@ -50,6 +52,9 @@ export const CONFIG = {
     import.meta.env.VITE_PERSONAL_STREAM_NSID || "space.roomy.space.personal.dev",
   personalStreamSchemaVersion:
     import.meta.env.VITE_PERSONAL_STREAM_SCHEMA_VERSION || "4",
+  /** Test-mode app-password credentials (bake into env for headless E2E). */
+  testIdentifier: dynamicEnv.PUBLIC_TEST_IDENTIFIER || null,
+  testAppPassword: dynamicEnv.PUBLIC_TEST_APP_PASSWORD || null,
 };
 
 export const OAUTH_SCOPE = [

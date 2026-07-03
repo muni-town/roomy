@@ -1,4 +1,4 @@
-import { Agent } from "@atproto/api";
+import { Agent, AtpAgent } from "@atproto/api";
 import {
   initSession,
   login as sdkLogin,
@@ -16,6 +16,8 @@ const { ServiceAuthClient, DirectXrpcClient, resolveAppserverHttpOrigin } = tran
 
 let agent = $state<Agent | null>(null);
 let session = $state<OAuthSession | null>(null);
+/** When set, `agent` is an AtpAgent logged in via app password (test mode). */
+let appPasswordAgent = $state<AtpAgent | null>(null);
 let authenticated = $state(false);
 let initializing = $state(true);
 let initError = $state<string | null>(null);
@@ -34,6 +36,13 @@ export const auth = {
   },
   get session() {
     return session;
+  },
+  /**
+   * The authenticated user's DID. Works for both OAuth and app-password auth
+   * (OAuth exposes `session.did`; app-password only has `agent.did`).
+   */
+  get userDid() {
+    return session?.did ?? agent?.did ?? undefined;
   },
   get authenticated() {
     return authenticated;
@@ -76,9 +85,54 @@ function safeReturnUrl(state: unknown): string | null {
   return state;
 }
 
+/**
+ * Wire up the ServiceAuthClient + DirectXrpcClient for an authenticated agent.
+ * Shared by the OAuth path (init) and the app-password path (loginWithAppPassword).
+ */
+async function setupDirectXrpc(authAgent: Agent) {
+  serviceAuth = new ServiceAuthClient(authAgent);
+  // Local dev: when an HTTP origin override is set (derived from
+  // VITE_APPSERVER_WS_ORIGIN), send XRPC to the local appserver instead of
+  // resolving the DID to production. Keeps queries/procedures and the sync
+  // WS pointed at the same local server.
+  const appserverUrl =
+    CONFIG.appserverHttpOrigin ??
+    (await resolveAppserverHttpOrigin(CONFIG.appserverDid));
+  setAppserverOrigin(appserverUrl);
+  directXrpc = new DirectXrpcClient(appserverUrl, CONFIG.appserverDid, serviceAuth);
+}
+
+/**
+ * Authenticate via ATProto app password (test mode). Creates an AtpAgent,
+ * logs in, and wires up the same ServiceAuthClient + DirectXrpcClient as the
+ * OAuth path. Used when PUBLIC_TEST_IDENTIFIER + PUBLIC_TEST_APP_PASSWORD are
+ * set in the build env, enabling headless E2E testing without the OAuth
+ * round-trip (which requires a publicly-exposed redirect URI).
+ */
+async function loginWithAppPassword(identifier: string, password: string) {
+  const atpAgent = new AtpAgent({ service: "https://bsky.social" });
+  await atpAgent.login({ identifier, password });
+  if (!atpAgent.did) throw new Error("App password login failed — no DID");
+
+  appPasswordAgent = atpAgent;
+  agent = atpAgent;
+  await setupDirectXrpc(atpAgent);
+  authenticated = true;
+}
+
 export async function init() {
   try {
     saveAppserverDid(CONFIG.appserverDid);
+
+    // Test mode: if app-password credentials are baked into the build env,
+    // auto-login via app password instead of attempting OAuth session restore.
+    // This bypasses the OAuth round-trip entirely, enabling headless E2E
+    // testing against a local appserver without a publicly-exposed redirect.
+    if (CONFIG.testIdentifier && CONFIG.testAppPassword) {
+      await loginWithAppPassword(CONFIG.testIdentifier, CONFIG.testAppPassword);
+      return;
+    }
+
     const result = await initSession(CONFIG.appserverDid, {
       port: CONFIG.port,
       scope: OAUTH_SCOPE,
@@ -87,23 +141,7 @@ export async function init() {
     if (result) {
       session = result.session;
       agent = result.agent;
-
-      // Set up direct XRPC transport with service auth
-      serviceAuth = new ServiceAuthClient(result.agent);
-      // Local dev: when an HTTP origin override is set (derived from
-      // VITE_APPSERVER_WS_ORIGIN), send XRPC to the local appserver instead of
-      // resolving the DID to production. Keeps queries/procedures and the sync
-      // WS pointed at the same local server.
-      const appserverUrl =
-        CONFIG.appserverHttpOrigin ??
-        (await resolveAppserverHttpOrigin(CONFIG.appserverDid));
-      setAppserverOrigin(appserverUrl);
-      directXrpc = new DirectXrpcClient(
-        appserverUrl,
-        CONFIG.appserverDid,
-        serviceAuth,
-      );
-
+      await setupDirectXrpc(result.agent);
       authenticated = true;
 
       // After an OAuth callback the browser lands on the fixed redirect URI
@@ -146,12 +184,14 @@ export async function login(handle: string) {
  * state + localStorage cache. Call this immediately on login/init.
  */
 export async function updateProfile() {
-  if (!agent || !session) return;
+  if (!agent) return;
+  const did = session?.did ?? agent.did;
+  if (!did) return;
   try {
-    const res = await agent.app.bsky.actor.getProfile({ actor: session.did });
+    const res = await agent.app.bsky.actor.getProfile({ actor: did });
     const p = {
       handle: res.data.handle,
-      did: session.did,
+      did,
       avatar: res.data.avatar ?? "",
       displayName: res.data.displayName || undefined,
     };
@@ -163,13 +203,18 @@ export async function updateProfile() {
 }
 
 export async function logout() {
-  if (session) await sdkLogout(session);
+  if (appPasswordAgent) {
+    await appPasswordAgent.logout();
+  } else if (session) {
+    await sdkLogout(session);
+  }
   serviceAuth?.clear();
   serviceAuth = null;
   directXrpc = null;
   authenticated = false;
   agent = null;
   session = null;
+  appPasswordAgent = null;
   profile = null;
   location.reload();
 }

@@ -130,7 +130,10 @@ if $START_LEAF; then
   done
 
   LEAF_URL_VAL="http://localhost:5530"
-  PLC_URL_VAL="http://localhost:3001"
+  # Use the REAL PLC directory for DID resolution — the local PLC only has
+  # test DIDs, but JWT verification needs to resolve the PDS's signing key
+  # (e.g. bsky.social's DID) which lives in the real PLC directory.
+  PLC_URL_VAL="https://plc.directory"
   LEAF_TOKEN_VAL="token123"
 else
   echo "▸ --no-leaf: using LEAF_URL from packages/appserver/.env"
@@ -177,9 +180,19 @@ for i in $(seq 1 15); do
   [[ $i -eq 15 ]] && { echo "✗ appserver did not start in 15s"; exit 1; }
 done
 
-# ── 3. app-lite (host Vite process) ──────────────────────────────────────
-echo "▸ Starting app-lite on port $APP_LITE_PORT …"
+# Pass through PUBLIC_TEST_* vars from packages/app-lite/.env if present,
+# enabling headless E2E testing via app-password auto-login.
+TEST_ENV=()
+if [[ -f packages/app-lite/.env ]]; then
+  while IFS= read -r line; do
+    case "$line" in
+      PUBLIC_TEST_IDENTIFIER=*) TEST_ENV+=("$line") ;;
+      PUBLIC_TEST_APP_PASSWORD=*) TEST_ENV+=("$line") ;;
+    esac
+  done < packages/app-lite/.env
+fi
 
+env "${TEST_ENV[@]}" \
 VITE_APPSERVER_DID=did:web:localhost \
 VITE_APPSERVER_WS_ORIGIN=ws://127.0.0.1:$APPSERVER_PORT \
 VITE_OAUTH_PUBLIC_CLIENT=true \

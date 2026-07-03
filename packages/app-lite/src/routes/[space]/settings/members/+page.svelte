@@ -15,7 +15,7 @@
   const spaceId = $derived(page.params.space!);
   const membersQuery = createMembersQuery(() => spaceId);
 
-  const currentUserDid = $derived(auth.session?.did);
+  const currentUserDid = $derived(auth.userDid);
 
   const currentUserIsAdmin = $derived(
     membersQuery.data?.members.some(

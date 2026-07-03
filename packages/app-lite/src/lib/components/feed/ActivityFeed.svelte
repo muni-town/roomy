@@ -16,7 +16,7 @@
 
   const feedQuery = createActivityFeedQuery(() => ({ spaceId, limit }));
 
-  const currentUserDid = $derived(auth.session?.did);
+  const currentUserDid = $derived(auth.userDid);
 
   function timeAgo(iso: string): string {
     return formatRelativeTime(new Date(iso));
