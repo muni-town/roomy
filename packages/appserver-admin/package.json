@@ -1,9 +1,9 @@
 {
-  "name": "playground",
+  "name": "appserver-admin",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev --host 127.0.0.1 --port 5199",
+    "dev": "vite dev --host 127.0.0.1 --port 5200",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
@@ -11,15 +11,13 @@
   "dependencies": {
     "@atcute/cbor": "^2.2.8",
     "@atproto/api": "^0.14.22",
+    "@iconify-json/ph": "^1.2.2",
+    "@iconify-json/tabler": "^1.2.23",
     "@roomy-space/sdk": "workspace:*",
     "@roomy/design": "workspace:*",
     "@tanstack/svelte-query": "^6.1.29"
   },
   "devDependencies": {
-    "@iconify-json/heroicons": "^1.2.3",
-    "@iconify-json/lucide": "^1.2.68",
-    "@iconify-json/mdi": "^1.2.3",
-    "@iconify-json/tabler": "^1.2.23",
     "@sveltejs/adapter-static": "^3.0.0",
     "@sveltejs/kit": "^2.49.3",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

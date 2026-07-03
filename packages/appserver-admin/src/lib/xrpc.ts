@@ -1,9 +1,9 @@
 /**
- * Playground debug helpers.
+ * Appserver admin XRPC debug helpers.
  *
- * This file exists solely for the debug route (`/`) which makes ad-hoc
- * XRPC calls with manual form inputs. The real TanStack app (`/tanstack`)
- * imports the SDK transport layer directly.
+ * Typed call wrappers for the admin dashboard's XRPC debug tools.
+ * Each function takes an Agent and appserver DID (from the auth module)
+ * and returns the raw response data.
  *
  * OAuth lifecycle (initSession, login, logout) lives in
  * `@roomy-space/sdk/browser`.

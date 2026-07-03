@@ -3,7 +3,7 @@
 **Date:** 2026-05-18
 **Status:** Approved (Phase 0 only) — Phases 1–6 remain draft
 **Related:** `appserver-architecture.md`, `xrpc-interface-spec.md`, `livequery-inventory.md`
-**Reference implementation:** `packages/playground`
+**Reference implementation:** `packages/playground` (now `packages/appserver-admin`)
 
 ---
 
@@ -11,7 +11,7 @@
 
 Rather than migrating the existing `packages/app` (which is tightly coupled to the LiveQuery/SQLite WASM/peer worker architecture), we create a new `packages/app-lite` — a greenfield SvelteKit frontend built from the appserver XRPC interface from day one. This avoids path dependence in the frontend architecture and eliminates migration complexity.
 
-The existing `packages/playground` already proves the full auth → XRPC query → WS sync → reactive render lifecycle. `app-lite` is that pattern, productionised.
+The existing `packages/playground` (now `packages/appserver-admin`) already proves the full auth → XRPC query → WS sync → reactive render lifecycle. `app-lite` is that pattern, productionised.
 
 The `@roomy/design` package provides 26 shared UI components. Before building `app-lite`, we do a refactoring pass on `packages/app` to extract more presentational components into `@roomy/design`, so `app-lite` can consume them directly.
 
@@ -753,7 +753,7 @@ Feature-specific wiring (query integration, mutation handlers) lives in `app-lit
 | Package | Relationship to app-lite |
 |---------|------------------------|
 | `packages/app` | Legacy — continues to run on the main domain. `app-lite` deploys to a separate subdomain. Eventually replaces it. |
-| `packages/playground` | Reference implementation. `app-lite` productionises the same patterns. Playground remains for debugging. |
+| `packages/playground` (now `packages/appserver-admin`) | Reference implementation. `app-lite` productionises the same patterns. Playground remains for debugging. |
 | `packages/design` | Shared UI components. `app-lite` imports from `@roomy/design`. Phase 0 enriches it. |
 | `packages/sdk` | Transport, schemas, sync primitives, cache adapters, Svelte runes. `app-lite` is a thin consumer. |
 | `packages/appserver` | Backend. `app-lite` is its primary client. `sendEvents` procedure is the write path. |
