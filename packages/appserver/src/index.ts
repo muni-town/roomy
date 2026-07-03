@@ -187,7 +187,11 @@ async function startupBackfill(app: AppserverHandle): Promise<void> {
             backoff = Math.min(backoff * 2, BACKFILL_BACKOFF_MAX_MS);
             consecutiveFailures = 0;
           }
-
+        } finally {
+          // Remove from cache so the next getOrCreateMaterializer creates a
+          // fresh materializer with a live Leaf subscription. Without this,
+          // the cached (closed) materializer is returned — its subscription
+          // is dead, so events sent via sendEvents are never received back.
           removeMaterializer(streamDid);
         }
       }
