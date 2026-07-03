@@ -7,7 +7,7 @@
  * caller can retry.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import { type StreamDid, type UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import type { InvalidationRouter } from "../invalidation/types.ts";
@@ -41,7 +41,7 @@ export function setInvalidationRouter(router: InvalidationRouter): void {
 
 export interface GetOrCreateOpts {
   /** Override the DB handle (tests). Defaults to the process-wide singleton. */
-  db?: Database;
+  db?: DbLike;
   /** Override the space resolver (tests). Defaults to the live service client. */
   getConnectedSpace?: (streamDid: StreamDid) => Promise<ConnectedSpaceLike>;
   /** Override the profile fetcher (tests). Defaults to the service client's `getProfiles`. */

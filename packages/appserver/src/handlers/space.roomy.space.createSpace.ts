@@ -166,7 +166,7 @@ export const createSpaceHandler: ProcedureHandler<
   // the personal.joinSpace event above writes that edge too, but may not
   // have landed by the time this HTTP response returns — so write it
   // directly. Idempotent w.r.t. the later live materialisation.
-  recordPersonalSpaceMembership(db, spaceId, personalStreamDid);
+  await recordPersonalSpaceMembership(db, spaceId, personalStreamDid);
 
   // ── 5. Start materialiser for the new space ──────────────────────────
   const mat = await getOrCreateMaterializer(spaceId);

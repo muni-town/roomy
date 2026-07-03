@@ -37,9 +37,9 @@ export const getMessagesHandler: QueryHandler<
   }
 
   const db = openDb();
-  requireRoomRead(db, roomId, userDid);
+  await requireRoomRead(db, roomId, userDid);
 
-  const { messages, nextCursor } = selectMessages(db, {
+  const { messages, nextCursor } = await selectMessages(db, {
     kind: "room",
     roomId,
     limit,
@@ -51,7 +51,7 @@ export const getMessagesHandler: QueryHandler<
   // the oldest-first backfill backlog (which can take hours when dominated
   // by erroring/timing-out links). Already-enriched links are a no-op and
   // transient-failed links keep their backoff (see prioritiseLinksForRead).
-  prioritiseLinksForRead(db, messages);
+  await prioritiseLinksForRead(db, messages);
 
   return stripNulls({ messages, cursor: nextCursor }) as GetMessagesResult;
 };

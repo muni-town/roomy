@@ -11,7 +11,7 @@
  * patch only fires for live createMessage events.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import {
   type ConnectedSpace,
   type EventCallback,
@@ -39,7 +39,7 @@ export type ConnectedSpaceLike = Pick<
 
 export interface SpaceMaterializerStartOpts {
   streamDid: StreamDid;
-  db: Database;
+  db: DbLike;
   /**
    * Resolve the `ConnectedSpace` for this stream. Defaulting is the
    * registry's job — keeping the dependency explicit here makes the class
@@ -73,14 +73,11 @@ export interface AggregateStats {
  * joinSpace materialiser, after which subsequent backfilled_to writes target
  * an existing row.
  */
-export function readBackfilledTo(db: Database, streamDid: StreamDid): number {
-  const row = db
-    .query<
-      { backfilled_to: number | null },
-      [string]
-    >("select backfilled_to from comp_space where entity = ?")
-    .get(streamDid);
-  return row?.backfilled_to ?? 0;
+export async function readBackfilledTo(db: DbLike, streamDid: StreamDid): Promise<number> {
+  const row = await db
+    .query("select backfilled_to from comp_space where entity = ?")
+    .get<{ backfilled_to: number | null }>(streamDid);
+  return (row?.backfilled_to ?? 0) as number;
 }
 
 export class SpaceMaterializer {
@@ -112,7 +109,7 @@ export class SpaceMaterializer {
   /** Total events delivered across all batches for this stream. */
   totalEventsDelivered = 0;
 
-  private readonly db: Database;
+  private readonly db: DbLike;
   private readonly space: ConnectedSpaceLike;
   private readonly getProfiles: GetProfilesFn | undefined;
   private readonly invalidationRouter: InvalidationRouter | undefined;
@@ -127,7 +124,7 @@ export class SpaceMaterializer {
   private chain: Promise<void> = Promise.resolve();
 
   private constructor(
-    db: Database,
+    db: DbLike,
     space: ConnectedSpaceLike,
     backfillDone: Promise<Ulid>,
     getProfiles: GetProfilesFn | undefined,
@@ -197,7 +194,7 @@ export class SpaceMaterializer {
   static async start(
     opts: SpaceMaterializerStartOpts,
   ): Promise<SpaceMaterializer> {
-    const cursor = readBackfilledTo(opts.db, opts.streamDid);
+    const cursor = await readBackfilledTo(opts.db, opts.streamDid);
 
     // The very first space-stream events (addAdmin, updateSpaceInfo) write
     // rows whose FKs reference an entity row for the space itself
@@ -205,7 +202,7 @@ export class SpaceMaterializer {
     // hits this because PersonalJoinSpace seeds the row from the user's
     // personal stream — but on the appserver we only see the space stream,
     // so we have to seed it ourselves before any events apply.
-    opts.db.run(
+    await opts.db.run(
       "insert into entities (id, stream_id, created_at) values (?, ?, ?) on conflict(id) do nothing",
       [opts.streamDid, opts.streamDid, Date.now()],
     );
@@ -322,7 +319,7 @@ export class SpaceMaterializer {
       }
     }
 
-    const stats = applyBatch(this.db, this.streamDid, events, {
+    const stats = await applyBatch(this.db, this.streamDid, events, {
       isBackfill: meta.isBackfill,
     });
     this.stats.applied += stats.applied;

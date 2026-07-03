@@ -8,18 +8,33 @@
 
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { openDb } from "../db/db.ts";
-import { attachInMemoryReadState } from "../db/readStateDb.ts";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { toAsyncDb } from "../db/syncAdapter.ts";
+import type { DbLike } from "../db/types.ts";
 import { selectMembers } from "./members.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
 
 const SPACE = "did:web:space-stream.example";
 
-function freshDb(): Database {
-  const db = openDb({ path: ":memory:", isolated: true });
-  attachInMemoryReadState(db);
-  return db;
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
+    SCHEMA_VERSION,
+  ]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
-
 function seedEntity(
   db: Database,
   id: string,
@@ -103,8 +118,8 @@ function seedSpaceWithUsers(db: Database, users: SeedOpts[]): void {
 }
 
 describe("selectMembers", () => {
-  test("returns members with profile, admin flag, and roles", () => {
-    const db = freshDb();
+  test("returns members with profile, admin flag, and roles", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [
       {
         did: "did:plc:alice",
@@ -122,7 +137,7 @@ describe("selectMembers", () => {
       },
     ]);
 
-    const { members, externalAdmins } = selectMembers(db, SPACE);
+    const { members, externalAdmins } = await selectMembers(asyncDb, SPACE);
 
     expect(members).toHaveLength(2);
     const alice = members.find((m) => m.did === "did:plc:alice")!;
@@ -136,14 +151,14 @@ describe("selectMembers", () => {
     expect(externalAdmins).toEqual([]);
   });
 
-  test("external admins (admin edge, no member edge) are separated out", () => {
-    const db = freshDb();
+  test("external admins (admin edge, no member edge) are separated out", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [
       { did: "did:plc:alice", handle: "alice.bsky.social", member: true },
       { did: "did:plc:admin", handle: "admin.bsky.social", admin: true },
     ]);
 
-    const { members, externalAdmins } = selectMembers(db, SPACE);
+    const { members, externalAdmins } = await selectMembers(asyncDb, SPACE);
 
     expect(members.map((m) => m.did)).toEqual(["did:plc:alice"]);
     expect(externalAdmins.map((a) => a.did)).toEqual(["did:plc:admin"]);
@@ -152,14 +167,14 @@ describe("selectMembers", () => {
     expect("isAdmin" in externalAdmins[0]!).toBe(false);
   });
 
-  test("null profile fields are stripped (not present on the wire)", () => {
-    const db = freshDb();
+  test("null profile fields are stripped (not present on the wire)", async () => {
+    const { db, asyncDb } = freshDb();
     // Unhydrated member: no comp_user handle, no comp_info name/avatar.
     seedSpaceWithUsers(db, [
       { did: "did:plc:ghost", member: true },
     ]);
 
-    const { members } = selectMembers(db, SPACE);
+    const { members } = await selectMembers(asyncDb, SPACE);
     expect(members).toHaveLength(1);
     expect(members[0]!.did).toBe("did:plc:ghost");
     expect("handle" in members[0]!).toBe(false);
@@ -167,72 +182,72 @@ describe("selectMembers", () => {
     expect("avatar" in members[0]!).toBe(false);
   });
 
-  test("search filters members by handle (case-insensitive substring)", () => {
-    const db = freshDb();
+  test("search filters members by handle (case-insensitive substring)", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [
       { did: "did:plc:alice", handle: "alice.bsky.social", name: "Ms A", member: true },
       { did: "did:plc:bob", handle: "bob.bsky.social", name: "Mr B", member: true },
       { did: "did:plc:carol", handle: "carol.bsky.social", name: "Ms C", member: true },
     ]);
 
-    const { members } = selectMembers(db, SPACE, "ALIC");
+    const { members } = await selectMembers(asyncDb, SPACE, "ALIC");
     expect(members.map((m) => m.did)).toEqual(["did:plc:alice"]);
   });
 
-  test("search filters members by name", () => {
-    const db = freshDb();
+  test("search filters members by name", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [
       { did: "did:plc:alice", handle: "alice.bsky.social", name: "Alice In Wonderland", member: true },
       { did: "did:plc:zoe", handle: "z.bsky.social", name: "Zoe", member: true },
     ]);
 
-    expect(selectMembers(db, SPACE, "wonderland").members.map((m) => m.did)).toEqual([
+    expect((await selectMembers(asyncDb, SPACE, "wonderland")).members.map((m) => m.did)).toEqual([
       "did:plc:alice",
     ]);
   });
 
-  test("search filters members by DID", () => {
-    const db = freshDb();
+  test("search filters members by DID", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [
       { did: "did:plc:zzz000wonderland", handle: "z.bsky.social", name: "Zoe", member: true },
       { did: "did:plc:alice", handle: "alice.bsky.social", name: "Alice", member: true },
     ]);
 
     expect(
-      selectMembers(db, SPACE, "zzz000wonderland").members.map((m) => m.did),
+      (await selectMembers(asyncDb, SPACE, "zzz000wonderland")).members.map((m) => m.did),
     ).toEqual(["did:plc:zzz000wonderland"]);
   });
 
-  test("search also filters external admins", () => {
-    const db = freshDb();
+  test("search also filters external admins", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [
       { did: "did:plc:alice", handle: "alice.bsky.social", name: "Alice", member: true },
       { did: "did:plc:rootadmin", handle: "root.bsky.social", name: "Root", admin: true },
     ]);
 
-    const { members, externalAdmins } = selectMembers(db, SPACE, "root");
+    const { members, externalAdmins } = await selectMembers(asyncDb, SPACE, "root");
     expect(members).toEqual([]);
     expect(externalAdmins.map((a) => a.did)).toEqual(["did:plc:rootadmin"]);
   });
 
-  test("empty/whitespace search returns everyone (no filter)", () => {
-    const db = freshDb();
+  test("empty/whitespace search returns everyone (no filter)", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [
       { did: "did:plc:alice", handle: "alice.bsky.social", member: true },
       { did: "did:plc:bob", handle: "bob.bsky.social", member: true },
     ]);
 
-    expect(selectMembers(db, SPACE, "").members).toHaveLength(2);
-    expect(selectMembers(db, SPACE, "   ").members).toHaveLength(2);
+    expect((await selectMembers(asyncDb, SPACE, "")).members).toHaveLength(2);
+    expect((await selectMembers(asyncDb, SPACE, "   ")).members).toHaveLength(2);
   });
 
-  test("search with no matches returns empty arrays", () => {
-    const db = freshDb();
+  test("search with no matches returns empty arrays", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [
       { did: "did:plc:alice", handle: "alice.bsky.social", member: true },
     ]);
 
-    const { members, externalAdmins } = selectMembers(db, SPACE, "nobody");
+    const { members, externalAdmins } = await selectMembers(asyncDb, SPACE, "nobody");
     expect(members).toEqual([]);
     expect(externalAdmins).toEqual([]);
   });

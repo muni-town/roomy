@@ -75,18 +75,15 @@ export const materializeSpaceHandler: QueryHandler<
   await mat.drain();
 
   const db = openDb();
-  const cursor = readBackfilledTo(db, parsed);
+  const cursor = await readBackfilledTo(db, parsed);
   const stats = mat.getStats();
 
   // Per-room event count diagnostic: compare appserver entity count vs
   // room_events count (which tracks every createMessage/room-event forwarded
   // to the Leaf module's materializer). A large discrepancy indicates missing
   // events due to subscription pagination issues.
-  const rooms = db
-    .query<
-      { room_id: string; entity_count: number },
-      [string]
-    >(
+  const rooms = await db
+    .query(
       `select
          e.room as room_id,
          count(*) as entity_count
@@ -98,7 +95,7 @@ export const materializeSpaceHandler: QueryHandler<
        order by entity_count desc
        limit 200`,
     )
-    .all(parsed);
+    .all<{ room_id: string; entity_count: number }>(parsed);
 
   return {
     streamDid: parsed,
@@ -112,7 +109,7 @@ export const materializeSpaceHandler: QueryHandler<
       totalEventsDelivered: mat.totalEventsDelivered,
     },
     backfillSettled,
-    rooms: rooms.map((r) => ({
+    rooms: rooms.map((r): RoomEventCount => ({
       roomId: r.room_id,
       entityCount: r.entity_count,
     })),

@@ -47,11 +47,11 @@ export const getActivityFeedHandler: QueryHandler<
   const db = openDb();
 
   // Resolve the caller's personal stream DID for joined-spaces filtering.
-  const personalStreamRow = db
-    .query<{ personal_stream_did: string }, [string]>(
+  const personalStreamRow = await db
+    .query(
       "select personal_stream_did from comp_user_personal_stream where user_did = ?",
     )
-    .get(userDid);
+    .get<{ personal_stream_did: string }>(userDid);
 
   if (!personalStreamRow) {
     // No personal stream resolved — user isn't a member of any space yet.
@@ -61,21 +61,21 @@ export const getActivityFeedHandler: QueryHandler<
 
   // If a specific space is requested, verify access.
   if (spaceId) {
-    requireSpaceAccess(db, spaceId, userDid);
+    await requireSpaceAccess(db, spaceId, userDid);
   }
 
-  const { feed, cursor: nextCursor } = selectActivityFeed(
+  const { feed, cursor: nextCursor } = await selectActivityFeed(
     db,
     userDid,
-    personalStreamRow.personal_stream_did,
+    personalStreamRow.personal_stream_did as string,
     { spaceId, limit, cursor },
   );
 
   // Filter by room-level read access: silently skip rooms the user can't read.
-  const accessible = feed.filter((item) => {
-    const acc = roomAccess(db, item.threadId, userDid);
-    return acc.canRead;
-  });
+  const accessResults = await Promise.all(
+    feed.map((item) => roomAccess(db, item.threadId, userDid)),
+  );
+  const accessible = feed.filter((_, i) => accessResults[i]?.canRead ?? false);
 
   const result: GetActivityFeedResult = { feed: accessible };
   if (nextCursor) result.cursor = nextCursor;

@@ -1,7 +1,11 @@
 import { beforeAll, afterAll, describe, expect, test } from "bun:test";
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { openDb } from "../db/db.ts";
+import { toAsyncDb } from "../db/syncAdapter.ts";
+import type { DbLike } from "../db/types.ts";
 import {
   startEmbedSweeper,
   prioritiseLinksForRead,
@@ -13,6 +17,11 @@ import type {
   InvalidationEvent,
   InvalidationRouter,
 } from "../invalidation/types.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
 
 // Deterministic fake embed so the sweeper test doesn't depend on the
 // network or a live embed service. The sweeper only emits a #messageDiff
@@ -61,8 +70,15 @@ function captureRouter(): {
   return { router, signals };
 }
 
-function freshDb(): Database {
-  return openDb({ path: ":memory:", isolated: true });
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 /** Seed the minimum entity rows for a link-in-a-message-in-a-room scenario. */
@@ -107,7 +123,7 @@ async function flushSweeper(opts: EmbedSweeperOpts): Promise<void> {
 
 describe("embed sweeper invalidation room resolution", () => {
   test("emits a #messageDiff update with the real room id, not the message id", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const { router, signals } = captureRouter();
     const ids = {
       room: "01KVQQQQQQQQQQQQQQQQQQQQQQ",
@@ -116,7 +132,7 @@ describe("embed sweeper invalidation room resolution", () => {
     };
     seedLinkMessageRoom(db, ids);
 
-    await flushSweeper({ db, invalidationRouter: router });
+    await flushSweeper({ db: asyncDb, invalidationRouter: router });
 
     // The sweeper loop is async and waits on fetchEmbedData (network). Give
     // it a moment to process the pending link, then assert. We use a generous
@@ -162,10 +178,10 @@ describe("embed sweeper invalidation room resolution", () => {
   });
 
   test("does not emit when no pending links exist", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const { router, signals } = captureRouter();
 
-    await flushSweeper({ db, invalidationRouter: router });
+    await flushSweeper({ db: asyncDb, invalidationRouter: router });
 
     // Let the loop idle once.
     await new Promise((r) => setTimeout(r, 100));
@@ -178,7 +194,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // Regression: links in messages a user is READING (detected during
     // backfill, never write-poked) used to sit behind the entire backlog.
     // The read handler now calls prioritiseLinksForRead so they jump the queue.
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const { router, signals } = captureRouter();
     const ids = {
       room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
@@ -189,9 +205,9 @@ describe("embed sweeper invalidation room resolution", () => {
 
     // Simulate the getMessages handler: prioritise the viewed message's links.
     // Called BEFORE the sweeper is started (as it would be on a cold read).
-    prioritiseLinksForRead(db, [{ linkEmbeds: [{ url: ids.url }] }]);
+    await prioritiseLinksForRead(asyncDb, [{ linkEmbeds: [{ url: ids.url }] }]);
 
-    await flushSweeper({ db, invalidationRouter: router });
+    await flushSweeper({ db: asyncDb, invalidationRouter: router });
 
     const deadline = Date.now() + 15_000;
     while (signals.length === 0 && Date.now() < deadline) {
@@ -213,34 +229,32 @@ describe("embed sweeper invalidation room resolution", () => {
     }
   });
 
-  test("prioritiseLinksForRead never throws on a DB error (read path stays healthy)", () => {
+  test("prioritiseLinksForRead never throws on a DB error (read path stays healthy)", async () => {
     // Regression guard: a DB error (e.g. SQLITE_IOERR_VNODE under I/O
     // pressure) inside filterPendingUrls must be swallowed so getMessages /
     // getMessage never 500 due to embed prioritisation. Embeds are best-effort;
     // messages are the product. A closed DB makes the query throw reliably.
-    const db = freshDb();
-    db.close();
-    expect(() =>
-      prioritiseLinksForRead(db, [
-        { linkEmbeds: [{ url: "https://example.com/x" }] },
-      ]),
-    ).not.toThrow();
+    const { asyncDb } = freshDb();
+    await asyncDb.close();
+    await prioritiseLinksForRead(asyncDb, [
+      { linkEmbeds: [{ url: "https://example.com/x" }] },
+    ]);
   });
 
   test("sweeper doesn't crash or stream anything when the DB errors mid-drain", async () => {
     // Simulates a failing DB (IOERR_VNODE): seed a pending link, then close
     // the DB so every read/write throws. The loop must back off rather than
     // tight-loop fetch-and-fail, and must emit nothing (no enrichments landed).
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const { router, signals } = captureRouter();
     seedLinkMessageRoom(db, {
       room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
       message: "01KVMMMMMMMMMMMMMMMMMMMMMM",
       url: "https://example.com/broken-db",
     });
-    db.close();
+    await asyncDb.close();
 
-    await flushSweeper({ db, invalidationRouter: router });
+    await flushSweeper({ db: asyncDb, invalidationRouter: router });
     // Let the loop attempt a cycle and back off.
     await new Promise((r) => setTimeout(r, 300));
     _resetEmbedSweeper();

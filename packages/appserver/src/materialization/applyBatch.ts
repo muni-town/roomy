@@ -12,7 +12,7 @@
  * could depend on is already applied.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import type {
   DecodedStreamEvent,
   StreamDid,
@@ -59,12 +59,12 @@ export interface MaterializationStats {
   detectedLinks: string[];
 }
 
-export function applyBatch(
-  db: Database,
+export async function applyBatch(
+  db: DbLike,
   streamId: StreamDid,
   events: DecodedStreamEvent[],
   opts: ApplyBatchOpts,
-): MaterializationStats {
+): Promise<MaterializationStats> {
   const stats: MaterializationStats = {
     applied: 0,
     materializerErrors: 0,
@@ -80,105 +80,113 @@ export function applyBatch(
     if (e.idx > latestIdx) latestIdx = e.idx;
   }
 
-  // bun:sqlite's Database.transaction(fn) returns a function; calling it
-  // wraps `fn` in BEGIN/COMMIT (with rollback on throw).
-  const run = db.transaction(() => {
-    for (const e of events) {
-      const bundle = materialize(e.event, { streamId, user: e.user }, e.idx);
+  // Build transaction steps: bundle statements + cursor advance.
+  // Side-effects (sortIdx, activityItem, link detection) run outside the
+  // transaction since they're idempotent and don't need atomicity with the
+  // main bundle application.
+  const steps: Array<{ type: "query" | "run" | "exec"; sql: string; params?: unknown[] }> = [];
 
-      if (bundle.status === "error") {
-        stats.materializerErrors++;
-        recordFailure(stats, {
+  for (const e of events) {
+    const bundle = materialize(e.event, { streamId, user: e.user }, e.idx);
+
+    if (bundle.status === "error") {
+      stats.materializerErrors++;
+      recordFailure(stats, {
+        eventId: bundle.eventId,
+        type: e.event.$type,
+        reason: "materializer",
+        message: bundle.message,
+      });
+      if (isDebugEnabled()) {
+        recordMaterialization({
+          streamDid: streamId,
+          idx: e.idx,
+          eventType: e.event.$type,
           eventId: bundle.eventId,
-          type: e.event.$type,
-          reason: "materializer",
-          message: bundle.message,
+          status: "materializer_error",
+          errorMessage: bundle.message,
+          bundle,
         });
-        if (isDebugEnabled()) {
-          recordMaterialization({
-            streamDid: streamId,
-            idx: e.idx,
-            eventType: e.event.$type,
-            eventId: bundle.eventId,
-            status: "materializer_error",
-            errorMessage: bundle.message,
-            bundle,
-          });
-        }
-        continue;
       }
-
-      try {
-        applyBundle(db, bundle, { isBackfill: opts.isBackfill, streamId });
-        stats.applied++;
-
-        // Detect URLs in message content and store as link embeds.
-        // This runs inside the transaction so link detection is atomic
-        // with the message insert. Enrichment (fetching OpenGraph data)
-        // happens asynchronously after the transaction commits.
-        if (
-          e.event.$type === "space.roomy.message.createMessage.v0" &&
-          e.event.room
-        ) {
-          const body = (e.event as Record<string, unknown>).body as
-            | { mimeType?: string; data?: { buf: Uint8Array } }
-            | undefined;
-          if (body?.data?.buf) {
-            const mime = body.mimeType ?? "text/markdown";
-            const content = decodeContent(mime, Buffer.from(body.data.buf));
-            const detected = detectAndStoreLinks(db, e.event.id, content);
-            if (detected.length > 0) stats.detectedLinks.push(...detected);
-          }
-        }
-        if (isDebugEnabled()) {
-          recordMaterialization({
-            streamDid: streamId,
-            idx: e.idx,
-            eventType: e.event.$type,
-            eventId: e.event.id,
-            status: "applied",
-            bundle,
-          });
-        }
-      } catch (err) {
-        stats.applyErrors++;
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[materialize] apply failed for ${e.event.$type} ${e.event.id} (idx ${e.idx}) on stream ${streamId}: ${message}`,
-        );
-        recordFailure(stats, {
-          eventId: e.event.id,
-          type: e.event.$type,
-          reason: "apply",
-          message,
-        });
-        if (isDebugEnabled()) {
-          recordMaterialization({
-            streamDid: streamId,
-            idx: e.idx,
-            eventType: e.event.$type,
-            eventId: e.event.id,
-            status: "apply_error",
-            errorMessage: message,
-          });
-        }
-      }
+      continue;
     }
 
-    // Advance the cursor only on existing comp_space rows. The space row
-    // itself is created by the addAdmin / first space event materialiser, so
-    // we don't insert here (its `entity` FK to entities would also fail).
-    // Match the frontend's monotonic guard so reorderings can't move it back.
-    db.prepare(
-      `update comp_space
-       set backfilled_to = ?,
-           updated_at = (unixepoch() * 1000)
-       where entity = ?
-         and (backfilled_to is null or backfilled_to < ?)`,
-    ).run(latestIdx, streamId, latestIdx);
+    try {
+      // Apply bundle statements via the async applyBundle (which handles
+      // savepoints, sortIdx, activityItem, unread counters, thread activity).
+      await applyBundle(db, bundle, { isBackfill: opts.isBackfill, streamId });
+      stats.applied++;
+
+      // Detect URLs in message content and store as link embeds.
+      // This runs outside the transaction but is idempotent — enrichment
+      // (fetching OpenGraph data) happens asynchronously anyway.
+      if (
+        e.event.$type === "space.roomy.message.createMessage.v0" &&
+        e.event.room
+      ) {
+        const body = (e.event as Record<string, unknown>).body as
+          | { mimeType?: string; data?: { buf: Uint8Array } }
+          | undefined;
+        if (body?.data?.buf) {
+          const mime = body.mimeType ?? "text/markdown";
+          const content = decodeContent(mime, Buffer.from(body.data.buf));
+          const detected = await detectAndStoreLinks(db, e.event.id, content);
+          if (detected.length > 0) stats.detectedLinks.push(...detected);
+        }
+      }
+
+      if (isDebugEnabled()) {
+        recordMaterialization({
+          streamDid: streamId,
+          idx: e.idx,
+          eventType: e.event.$type,
+          eventId: e.event.id,
+          status: "applied",
+          bundle,
+        });
+      }
+    } catch (err) {
+      stats.applyErrors++;
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[materialize] apply failed for ${e.event.$type} ${e.event.id} (idx ${e.idx}) on stream ${streamId}: ${message}`,
+      );
+      recordFailure(stats, {
+        eventId: e.event.id,
+        type: e.event.$type,
+        reason: "apply",
+        message,
+      });
+      if (isDebugEnabled()) {
+        recordMaterialization({
+          streamDid: streamId,
+          idx: e.idx,
+          eventType: e.event.$type,
+          eventId: e.event.id,
+          status: "apply_error",
+          errorMessage: message,
+        });
+      }
+    }
+  }
+
+  // Advance the cursor in a transaction. The cursor update is the only
+  // operation that needs atomicity — it must not advance past events that
+  // failed to apply.
+  steps.push({
+    type: "run",
+    sql: `update comp_space
+           set backfilled_to = ?,
+               updated_at = (unixepoch() * 1000)
+           where entity = ?
+             and (backfilled_to is null or backfilled_to < ?)`,
+    params: [latestIdx, streamId, latestIdx],
   });
 
-  run();
+  if (steps.length > 0) {
+    await db.transaction(steps);
+  }
+
   return stats;
 }
 

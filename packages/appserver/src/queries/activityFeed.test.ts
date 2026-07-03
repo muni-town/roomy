@@ -11,17 +11,52 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import type { Database } from "bun:sqlite";
-import { openDb } from "../db/db.ts";
-import { attachInMemoryReadState } from "../db/readStateDb.ts";
+import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { toAsyncDb } from "../db/syncAdapter.ts";
+import type { DbLike } from "../db/types.ts";
 import { selectActivityFeed, type ActivityFeedScope } from "./activityFeed.ts";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const READSTATE_SCHEMA_PATH = join(__dirname, "..", "db", "readStateSchema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
+const READSTATE_SCHEMA_VERSION = "2";
+
 /** Create a fresh db pair (main + attached readstate) for testing. */
-function freshDb(): { db: Database; readStateDb: Database } {
-  const db = openDb({ path: ":memory:", isolated: true });
-  const readStateDb = attachInMemoryReadState(db);
-  return { db, readStateDb };
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  // Apply main schema
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
+    SCHEMA_VERSION,
+  ]);
+  // Attach and apply readstate schema (separate exec calls to avoid bun:sqlite multi-stmt issue)
+  db.exec("attach database ':memory:' as readstate");
+  db.exec(
+    "create table if not exists readstate_schema_version (id integer primary key check (id = 1), version text not null) strict",
+  );
+  db.exec(
+    "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
+  );
+  db.exec(
+    "create table if not exists readstate.user_thread_activity (user_did text not null, thread_id text not null, last_active_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, thread_id)) strict",
+  );
+  db.run(
+    "insert or replace into readstate_schema_version (id, version) values (1, ?)",
+    [READSTATE_SCHEMA_VERSION],
+  );
+  return { db, asyncDb: toAsyncDb(db) };
 }
+
 
 const SPACE = "did:web:space.example";
 const OTHER_SPACE = "did:web:other-space.example";
@@ -183,8 +218,8 @@ function seedUnreadCount(
 
 describe("selectActivityFeed", () => {
   describe("basic feed assembly", () => {
-    test("returns feed items with messages and authors", () => {
-      const { db } = freshDb();
+    test("returns feed items with messages and authors", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -195,7 +230,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, CHANNEL, SPACE, 0, ts, [msgId], "general", "Test Space");
       seedUnreadCount(db, USER, CHANNEL, 3);
 
-      const { feed, cursor } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed, cursor } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -214,8 +249,8 @@ describe("selectActivityFeed", () => {
       expect(cursor).toBeNull();
     });
 
-    test("includes parent channel info for thread items", () => {
-      const { db } = freshDb();
+    test("includes parent channel info for thread items", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -229,7 +264,7 @@ describe("selectActivityFeed", () => {
         "My Thread", "Test Space", null, CHANNEL, "general",
       );
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -239,13 +274,13 @@ describe("selectActivityFeed", () => {
       expect(feed[0]!.channelName).toBe("general");
     });
 
-    test("returns empty feed when no activity exists", () => {
-      const { db } = freshDb();
+    test("returns empty feed when no activity exists", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
 
-      const { feed, cursor } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed, cursor } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -256,8 +291,8 @@ describe("selectActivityFeed", () => {
   });
 
   describe("cursor pagination", () => {
-    test("returns cursor when more pages exist", () => {
-      const { db } = freshDb();
+    test("returns cursor when more pages exist", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -275,7 +310,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, THREAD_A, SPACE, 1, ts2, [msg2], "Thread A", "Test Space");
 
       // Limit 1 → should return 1 item + cursor.
-      const { feed, cursor } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed, cursor } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 1,
         cursor: null,
       });
@@ -286,8 +321,8 @@ describe("selectActivityFeed", () => {
       expect(cursor).toBe(`${ts2}::${THREAD_A}`);
     });
 
-    test("cursor pagination returns the next page", () => {
-      const { db } = freshDb();
+    test("cursor pagination returns the next page", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -304,7 +339,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, THREAD_A, SPACE, 1, ts2, [msg2], "Thread A", "Test Space");
 
       // Page 1: limit 1.
-      const page1 = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const page1 = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 1,
         cursor: null,
       });
@@ -313,7 +348,7 @@ describe("selectActivityFeed", () => {
       expect(page1.cursor).not.toBeNull();
 
       // Page 2: use cursor from page 1.
-      const page2 = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const page2 = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 1,
         cursor: page1.cursor,
       });
@@ -322,8 +357,8 @@ describe("selectActivityFeed", () => {
       expect(page2.cursor).toBeNull();
     });
 
-    test("handles ties (same last_activity_at) correctly", () => {
-      const { db } = freshDb();
+    test("handles ties (same last_activity_at) correctly", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -339,7 +374,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, THREAD_A, SPACE, 1, ts, [msg2], "Thread A", "Test Space");
 
       // Limit 1 → should return one item with a cursor.
-      const page1 = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const page1 = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 1,
         cursor: null,
       });
@@ -347,7 +382,7 @@ describe("selectActivityFeed", () => {
       expect(page1.cursor).not.toBeNull();
 
       // Page 2 should return the other room.
-      const page2 = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const page2 = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 1,
         cursor: page1.cursor,
       });
@@ -358,8 +393,8 @@ describe("selectActivityFeed", () => {
   });
 
   describe("space filter", () => {
-    test("filters to a single space when spaceId is provided", () => {
-      const { db } = freshDb();
+    test("filters to a single space when spaceId is provided", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedSpace(db, OTHER_SPACE);
       seedUser(db, USER);
@@ -377,7 +412,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, THREAD_A, OTHER_SPACE, 1, ts, [msg2], "Other Thread", "Other Space");
 
       // Filter to SPACE only.
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
         spaceId: SPACE,
@@ -387,8 +422,8 @@ describe("selectActivityFeed", () => {
       expect(feed[0]!.spaceId).toBe(SPACE);
     });
 
-    test("aggregates across all joined spaces when no spaceId", () => {
-      const { db } = freshDb();
+    test("aggregates across all joined spaces when no spaceId", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedSpace(db, OTHER_SPACE);
       seedUser(db, USER);
@@ -405,7 +440,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, CHANNEL, SPACE, 0, ts, [msg1], "general", "Test Space");
       seedActivityItem(db, THREAD_A, OTHER_SPACE, 1, ts, [msg2], "Other Thread", "Other Space");
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -413,8 +448,8 @@ describe("selectActivityFeed", () => {
       expect(feed).toHaveLength(2);
     });
 
-    test("excludes spaces the user has not joined", () => {
-      const { db } = freshDb();
+    test("excludes spaces the user has not joined", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedSpace(db, OTHER_SPACE);
       seedUser(db, USER);
@@ -431,7 +466,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, CHANNEL, SPACE, 0, ts, [msg1], "general", "Test Space");
       seedActivityItem(db, THREAD_A, OTHER_SPACE, 1, ts, [msg2], "Other Thread", "Other Space");
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -442,8 +477,8 @@ describe("selectActivityFeed", () => {
   });
 
   describe("deleted room exclusion", () => {
-    test("excludes rooms marked as deleted", () => {
-      const { db } = freshDb();
+    test("excludes rooms marked as deleted", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -459,7 +494,7 @@ describe("selectActivityFeed", () => {
       const msgId = postMessage(db, CHANNEL, SPACE, USER, ts);
       seedActivityItem(db, CHANNEL, SPACE, 0, ts, [msgId], "deleted-room", "Test Space");
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -467,8 +502,8 @@ describe("selectActivityFeed", () => {
       expect(feed).toHaveLength(0);
     });
 
-    test("includes rooms with deleted=0 or null", () => {
-      const { db } = freshDb();
+    test("includes rooms with deleted=0 or null", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -484,7 +519,7 @@ describe("selectActivityFeed", () => {
       const msgId = postMessage(db, CHANNEL, SPACE, USER, ts);
       seedActivityItem(db, CHANNEL, SPACE, 0, ts, [msgId], "active-room", "Test Space");
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -494,8 +529,8 @@ describe("selectActivityFeed", () => {
   });
 
   describe("message handling", () => {
-    test("skips message IDs that no longer exist (deleted messages)", () => {
-      const { db } = freshDb();
+    test("skips message IDs that no longer exist (deleted messages)", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -508,7 +543,7 @@ describe("selectActivityFeed", () => {
       const ghostId = "01GHOST00000000000000000000";
       seedActivityItem(db, CHANNEL, SPACE, 0, ts, [msgId, ghostId], "general", "Test Space");
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -518,8 +553,8 @@ describe("selectActivityFeed", () => {
       expect(feed[0]!.messages[0]!.id).toBe(msgId);
     });
 
-    test("returns empty messages array when all message IDs are gone", () => {
-      const { db } = freshDb();
+    test("returns empty messages array when all message IDs are gone", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -529,7 +564,7 @@ describe("selectActivityFeed", () => {
       const ghostId = "01GHOST00000000000000000000";
       seedActivityItem(db, CHANNEL, SPACE, 0, ts, [ghostId], "general", "Test Space");
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -540,8 +575,8 @@ describe("selectActivityFeed", () => {
   });
 
   describe("unread counts", () => {
-    test("returns 0 for rooms with no readstate row", () => {
-      const { db } = freshDb();
+    test("returns 0 for rooms with no readstate row", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -552,7 +587,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, CHANNEL, SPACE, 0, ts, [msgId], "general", "Test Space");
       // No readstate row for this room.
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -560,8 +595,8 @@ describe("selectActivityFeed", () => {
       expect(feed[0]!.unreadCount).toBe(0);
     });
 
-    test("returns correct unread counts per room", () => {
-      const { db } = freshDb();
+    test("returns correct unread counts per room", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -577,7 +612,7 @@ describe("selectActivityFeed", () => {
       seedUnreadCount(db, USER, CHANNEL, 5);
       seedUnreadCount(db, USER, THREAD_A, 2);
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });
@@ -590,8 +625,8 @@ describe("selectActivityFeed", () => {
   });
 
   describe("ordering", () => {
-    test("returns items newest-first by last_activity_at", () => {
-      const { db } = freshDb();
+    test("returns items newest-first by last_activity_at", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db, SPACE);
       seedUser(db, USER);
       seedJoinedSpace(db, PERSONAL_STREAM, SPACE);
@@ -611,7 +646,7 @@ describe("selectActivityFeed", () => {
       seedActivityItem(db, CHANNEL, SPACE, 0, ts2, [msg2], "New", "Test Space");
       seedActivityItem(db, THREAD_B, SPACE, 1, ts3, [msg3], "Middle", "Test Space");
 
-      const { feed } = selectActivityFeed(db, USER, PERSONAL_STREAM, {
+      const { feed } = await selectActivityFeed(asyncDb, USER, PERSONAL_STREAM, {
         limit: 50,
         cursor: null,
       });

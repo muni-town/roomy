@@ -25,7 +25,7 @@
  *     carried over from a previous session.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import type { Ulid } from "@roomy-space/sdk";
 import {
   enrichLink,
@@ -35,6 +35,7 @@ import {
 } from "./enricher.ts";
 import type { Embed } from "./types.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
+import type { MessageDto } from "../queries/selectMessages.ts";
 import { log } from "../log.ts";
 import type {
   InvalidationEvent,
@@ -58,7 +59,7 @@ const CONCURRENCY = Number(process.env.EMBED_SWEEPER_CONCURRENCY ?? 8);
 
 // ─── Singleton state ────────────────────────────────────────────────────
 
-let sweeperDb: Database | undefined;
+let sweeperDb: DbLike | undefined;
 let sweeperRouter: InvalidationRouter | undefined;
 let started = false;
 
@@ -94,7 +95,7 @@ const priorityLinks = new Set<string>();
 
 export interface EmbedSweeperOpts {
   /** Process-wide materialisation DB. Pending links live here. */
-  db: Database;
+  db: DbLike;
   /** Optional invalidation router — used to push re-fetch signals to clients. */
   invalidationRouter?: InvalidationRouter;
 }
@@ -173,16 +174,16 @@ export function pokeEmbedSweeper(urls?: string[]): void {
  * backoff (we don't hammer a down service on every refetch). Cheap: a single
  * LEFT JOIN, skipped entirely when the page has no links.
  */
-export function prioritiseLinksForRead(
-  db: Database,
+export async function prioritiseLinksForRead(
+  db: DbLike,
   messages: ReadonlyArray<
     Readonly<{ linkEmbeds: ReadonlyArray<{ url: string }> }>
   >,
-): void {
+): Promise<void> {
   const linkUrls = messages.flatMap((m) => m.linkEmbeds.map((l) => l.url));
   if (linkUrls.length === 0) return;
   try {
-    const pending = filterPendingUrls(db, linkUrls);
+    const pending = await filterPendingUrls(db, linkUrls);
     if (pending.length > 0) pokeEmbedSweeper(pending);
   } catch (err) {
     // Embed prioritisation is best-effort: a transient DB error (e.g. a macOS
@@ -227,7 +228,7 @@ function markDbOk(): void {
  * `markDbError`). Any *unexpected* throw bubbles to {@link runSweeperLoop}'s
  * outer guard so the loop self-heals instead of dying.
  */
-async function sweepCycle(db: Database): Promise<boolean> {
+async function sweepCycle(db: DbLike): Promise<boolean> {
   // If the DB has been erroring, wait out the backoff before touching it
   // again — don't fetch links only to fail every write (wastes embed-service
   // calls and spams logs). A poke can still wake us early, but we re-check
@@ -247,7 +248,7 @@ async function sweepCycle(db: Database): Promise<boolean> {
   const priority = drainPriorityLinks(SWEEP_BATCH);
   if (priority.length > 0) {
     try {
-      pending = filterPendingUrls(db, priority);
+      pending = await filterPendingUrls(db, priority);
     } catch (err) {
       console.warn("[embed-sweeper] filterPendingUrls failed:", err);
       markDbError(err);
@@ -258,7 +259,7 @@ async function sweepCycle(db: Database): Promise<boolean> {
   // 2. Backlog: fill the rest of the batch with the oldest pending links.
   if (pending.length < SWEEP_BATCH) {
     try {
-      const backlog = findPendingLinks(db, SWEEP_BATCH - pending.length);
+      const backlog = await findPendingLinks(db, SWEEP_BATCH - pending.length);
       // Dedupe in case a priority URL is also among the oldest pending
       // (rare — priority URLs are newest, backlog is oldest-first).
       pending = [...new Set([...pending, ...backlog])];
@@ -300,7 +301,7 @@ async function sweepCycle(db: Database): Promise<boolean> {
       }
       if (embed) {
         statsEnrichedOk++;
-        emitEnrichmentInvalidation(db, [url]);
+        await emitEnrichmentInvalidation(db, [url]);
       } else {
         statsEnrichedNull++;
       }
@@ -402,10 +403,10 @@ function waitForWake(ms: number): Promise<void> {
  * omitted (broadcast diffs can't be per-user) — the client derives
  * "did I react?" from `reaction.myReactionId`, so this doesn't affect rendering.
  */
-function emitEnrichmentInvalidation(
-  db: Database,
+async function emitEnrichmentInvalidation(
+  db: DbLike,
   enrichedUrls: string[],
-): void {
+): Promise<void> {
   if (!sweeperRouter || enrichedUrls.length === 0) return;
 
   const placeholders = enrichedUrls.map(() => "?").join(",");
@@ -418,33 +419,31 @@ function emitEnrichmentInvalidation(
     // in the SDK message materializer and detectAndStoreLinks), NOT the
     // room id. A single-hop lookup yields the message id and emits a diff
     // for room:<messageId> — which never matches any client subscription.
-    rows = db
-      .query<{ messageId: string; roomId: string }, string[]>(
+    rows = await db
+      .query(
         `select link.room as messageId, msg.room as roomId
            from entities link
            join entities msg on msg.id = link.room
           where link.id in (${placeholders})
             and msg.room is not null`,
       )
-      .all(...enrichedUrls);
+      .all<{ messageId: string; roomId: string }>([...enrichedUrls]);
   } catch (err) {
     console.warn("[embed-sweeper] room lookup failed:", err);
     return;
   }
 
   if (rows.length === 0) return;
+  const messageIdToRoom = new Map(rows.map((r) => [r.messageId, r.roomId]));
 
   // Map each message id → its real room id (a URL may appear in multiple
   // messages; a message may contain multiple enriched URLs).
-  const messageIdToRoom = new Map<string, string>();
-  for (const r of rows) messageIdToRoom.set(r.messageId, r.roomId);
-
-  let messages: ReturnType<typeof selectMessages>["messages"] = [];
+  let messages: MessageDto[] = [];
   try {
-    messages = selectMessages(db, {
+    messages = (await selectMessages(db, {
       kind: "ids",
       ids: [...messageIdToRoom.keys()],
-    }).messages;
+    })).messages;
   } catch (err) {
     console.warn("[embed-sweeper] selectMessages failed:", err);
     return;

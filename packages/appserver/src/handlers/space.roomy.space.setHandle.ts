@@ -51,7 +51,7 @@ export const setHandleHandler: ProcedureHandler<SetHandleBody, void> = async (
   const db = openDb();
 
   // ── Require admin access ─────────────────────────────────────────────
-  const access = requireSpaceAccess(db, spaceId, callerDid);
+  const access = await requireSpaceAccess(db, spaceId, callerDid);
   if (!access.isAdmin) {
     throw new XrpcError(
       403,
@@ -71,12 +71,12 @@ export const setHandleHandler: ProcedureHandler<SetHandleBody, void> = async (
 
   // ── Persist handle in local DB for fast query access ────────────
   if (handle !== null) {
-    db.run(
+    await db.run(
       `update comp_space set handle = ?, updated_at = unixepoch() * 1000 where entity = ?`,
       [handle, spaceId],
     );
   } else {
-    db.run(
+    await db.run(
       `update comp_space set handle = null, updated_at = unixepoch() * 1000 where entity = ?`,
       [spaceId],
     );

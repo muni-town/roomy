@@ -77,17 +77,17 @@ export const joinSpaceHandler: ProcedureHandler<
   // a personal stream and the space itself materialise it, the first writer
   // wins and the value depends on event ordering. The entity row's mere
   // presence is enough here; Leaf is the source of truth on the join path.
-  const spaceRow = db
-    .query<{ n: number }, [string]>(
+  const spaceRow = await db
+    .query(
       "SELECT 1 AS n FROM entities WHERE id = ? LIMIT 1",
     )
-    .get(spaceId);
+    .get<{ n: number }>(spaceId);
   if (!spaceRow) {
     throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`);
   }
 
   // ── Ban check ────────────────────────────────────────────────────────
-  if (isBanned(db, spaceId, callerDid)) {
+  if (await isBanned(db, spaceId, callerDid)) {
     throw new XrpcError(
       403,
       "Forbidden",
@@ -96,11 +96,11 @@ export const joinSpaceHandler: ProcedureHandler<
   }
 
   // ── Invite token validation for private spaces ───────────────────────
-  const publicJoinRow = db
-    .query<{ v: number }, [string]>(
+  const publicJoinRow = await db
+    .query(
       "SELECT coalesce(allow_public_join, 1) AS v FROM comp_space WHERE entity = ?",
     )
-    .get(spaceId);
+    .get<{ v: number }>(spaceId);
 
   const isPrivate = publicJoinRow != null && publicJoinRow.v === 0;
 
@@ -112,11 +112,11 @@ export const joinSpaceHandler: ProcedureHandler<
         "This space requires an invite token to join",
       );
     }
-    const tokenRow = db
-      .query<{ n: number }, [string, string]>(
-        "SELECT 1 AS n FROM comp_invite WHERE entity = ? AND token = ?",
-      )
-      .get(spaceId, body.inviteToken);
+    const tokenRow = await db
+    .query(
+      "SELECT 1 AS n FROM comp_invite WHERE entity = ? AND token = ?",
+    )
+    .get<{ n: number }>(spaceId, body.inviteToken);
     if (!tokenRow) {
       throw new XrpcError(403, "Forbidden", "Invalid invite token");
     }
@@ -196,7 +196,7 @@ export const joinSpaceHandler: ProcedureHandler<
   }
 
   // ── 3.5. Remove any leftSpace edge since the user is now rejoined ────
-  removeLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
+  await removeLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
 
   // ── 4. Emit direct getSpaces invalidation signal ──────────────────────
   const router = InvalidationRouter.getInstance();

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { ulid } from "ulidx";
@@ -9,16 +12,29 @@ import {
   type DecodedStreamEvent,
   type Event,
 } from "@roomy-space/sdk";
+import type { DbLike } from "../db/types.ts";
 
-import { openDb } from "../db/db.ts";
+import { toAsyncDb } from "../db/syncAdapter.ts";
 import { applyBatch } from "./applyBatch.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
 
 const STREAM = StreamDid.assert("did:web:test-stream.example");
 const USER = UserDid.assert("did:plc:test-user");
 
-function freshDb(): Database {
-  return openDb({ path: ":memory:", isolated: true });
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 function seedSpace(db: Database, streamDid: StreamDid): void {
@@ -82,12 +98,12 @@ function createRoomLinkEvent(channelId: string, threadId: string): Event {
 }
 
 describe("applyBatch", () => {
-  test("applies a single event and advances backfilled_to", () => {
-    const db = freshDb();
+  test("applies a single event and advances backfilled_to", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const event = createRoomEvent("general");
-    const stats = applyBatch(db, STREAM, [decoded(event, 5)], {
+    const stats = await applyBatch(asyncDb, STREAM, [decoded(event, 5)], {
       isBackfill: true,
     });
 
@@ -95,25 +111,19 @@ describe("applyBatch", () => {
     expect(stats.materializerErrors).toBe(0);
     expect(stats.applyErrors).toBe(0);
 
-    const room = db
-      .query<
-        { entity: string; label: string },
-        [string]
-      >("select entity, label from comp_room where entity = ?")
-      .get(event.id);
+    const room = await asyncDb
+      .query("select entity, label from comp_room where entity = ?")
+      .get<{ entity: string; label: string }>(event.id);
     expect(room?.label).toBe("space.roomy.channel");
 
-    const cursor = db
-      .query<
-        { backfilled_to: number },
-        [string]
-      >("select backfilled_to from comp_space where entity = ?")
-      .get(STREAM);
+    const cursor = await asyncDb
+      .query("select backfilled_to from comp_space where entity = ?")
+      .get<{ backfilled_to: number }>(STREAM);
     expect(cursor?.backfilled_to).toBe(5);
-  });
+  })
 
-  test("counts materialiser errors without aborting the batch", () => {
-    const db = freshDb();
+  test("counts materialiser errors without aborting the batch", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const ok = createRoomEvent("ok");
@@ -123,8 +133,8 @@ describe("applyBatch", () => {
     } as unknown as Event;
     const ok2 = createRoomEvent("ok2");
 
-    const stats = applyBatch(
-      db,
+    const stats = await applyBatch(
+      asyncDb,
       STREAM,
       [decoded(ok, 1), decoded(bad, 2), decoded(ok2, 3)],
       { isBackfill: true },
@@ -137,69 +147,60 @@ describe("applyBatch", () => {
     expect(stats.failed[0]?.reason).toBe("materializer");
 
     expect(
-      db
-        .query<{ count: number }, []>("select count(*) as count from comp_room")
-        .get()?.count,
+      (await asyncDb
+        .query("select count(*) as count from comp_room")
+        .get<{ count: number }>())?.count,
     ).toBe(2);
 
     // Cursor advances to the highest idx in the batch even though one event
     // failed — the failure is tracked, but we have no reason to stay stuck
     // on a permanently-broken event.
     expect(
-      db
-        .query<
-          { backfilled_to: number },
-          [string]
-        >("select backfilled_to from comp_space where entity = ?")
-        .get(STREAM)?.backfilled_to,
+      (await asyncDb
+        .query("select backfilled_to from comp_space where entity = ?")
+        .get<{ backfilled_to: number }>(STREAM))?.backfilled_to,
     ).toBe(3);
-  });
+  })
 
-  test("backfilled_to never moves backwards", () => {
-    const db = freshDb();
+  test("backfilled_to never moves backwards", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
-    applyBatch(db, STREAM, [decoded(createRoomEvent("a"), 10)], {
+    await applyBatch(asyncDb, STREAM, [decoded(createRoomEvent("a"), 10)], {
       isBackfill: true,
     });
-    applyBatch(db, STREAM, [decoded(createRoomEvent("b"), 3)], {
+    await applyBatch(asyncDb, STREAM, [decoded(createRoomEvent("b"), 3)], {
       isBackfill: true,
     });
 
-    const cursor = db
-      .query<
-        { backfilled_to: number },
-        [string]
-      >("select backfilled_to from comp_space where entity = ?")
-      .get(STREAM);
+    const cursor = await asyncDb
+      .query("select backfilled_to from comp_space where entity = ?")
+      .get<{ backfilled_to: number }>(STREAM);
     expect(cursor?.backfilled_to).toBe(10);
-  });
+  })
 
-  test("empty batch returns zero stats and does not touch cursor", () => {
-    const db = freshDb();
+  test("empty batch returns zero stats and does not touch cursor", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
     db.run("update comp_space set backfilled_to = 7 where entity = ?", [
       STREAM,
     ]);
 
-    const stats = applyBatch(db, STREAM, [], { isBackfill: false });
+    const stats = await applyBatch(asyncDb, STREAM, [], { isBackfill: false });
 
     expect(stats.applied).toBe(0);
     expect(stats.materializerErrors).toBe(0);
     expect(stats.applyErrors).toBe(0);
 
     expect(
-      db
-        .query<
-          { backfilled_to: number },
-          [string]
-        >("select backfilled_to from comp_space where entity = ?")
-        .get(STREAM)?.backfilled_to,
+      (await asyncDb
+        .query("select backfilled_to from comp_space where entity = ?")
+        .get<{ backfilled_to: number }>(STREAM))?.backfilled_to,
     ).toBe(7);
-  });
+  })
 
-  test("a single bad SQL error rolls back only that event's savepoint", () => {
-    const db = freshDb();
+  test("a single bad SQL error rolls back only that event's savepoint", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const goodA = createRoomEvent("a");
@@ -209,7 +210,7 @@ describe("applyBatch", () => {
     // breaking the schema so the second one's INSERT into comp_room fails.
     // We do this via two batches: first batch applies normally, then we
     // break a constraint and fire a second batch.
-    applyBatch(db, STREAM, [decoded(goodA, 1)], { isBackfill: true });
+    await applyBatch(asyncDb, STREAM, [decoded(goodA, 1)], { isBackfill: true });
 
     // Force a NOT NULL violation by removing comp_room's `entity` column path —
     // simplest deterministic break is a duplicate-pkey: we re-use goodA's id.
@@ -230,8 +231,8 @@ describe("applyBatch", () => {
       name: "broken",
     } as unknown as Event;
 
-    const stats = applyBatch(
-      db,
+    const stats = await applyBatch(
+      asyncDb,
       STREAM,
       [decoded(dup, 2), decoded(broken, 3), decoded(goodB, 4)],
       { isBackfill: true },
@@ -242,25 +243,19 @@ describe("applyBatch", () => {
     expect(stats.applyErrors).toBeGreaterThanOrEqual(1);
     expect(stats.applied).toBeGreaterThanOrEqual(1);
     expect(
-      db
-        .query<
-          { name: string | null },
-          [string]
-        >("select name from comp_info where entity = ?")
-        .get(goodB.id)?.name,
+      (await asyncDb
+        .query("select name from comp_info where entity = ?")
+        .get<{ name: string | null }>(goodB.id))?.name,
     ).toBe("b");
 
     // The "broken" event must NOT have left an entities row behind — its
     // savepoint should have rolled back.
     expect(
-      db
-        .query<
-          { count: number },
-          [string]
-        >("select count(*) as count from entities where id = ?")
-        .get(broken.id)?.count,
+      (await asyncDb
+        .query("select count(*) as count from entities where id = ?")
+        .get<{ count: number }>(broken.id))?.count,
     ).toBe(0);
-  });
+  })
 
   // Regression: the createRoomLink materialiser computes canonical_parent
   // ("first link wins") from the current edge count. With `insert or replace`
@@ -268,8 +263,8 @@ describe("applyBatch", () => {
   // canonical_parent 1 → 0, corrupting the parent-channel link for any
   // thread whose stream got re-backfilled. This re-ran on production data
   // and left ~8% of threads orphaned from their channel.
-  test("createRoomLink is idempotent under re-application (canonical_parent stays 1)", () => {
-    const db = freshDb();
+  test("createRoomLink is idempotent under re-application (canonical_parent stays 1)", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
     const channelId = newUlid();
     const threadId = newUlid();
@@ -278,34 +273,28 @@ describe("applyBatch", () => {
     const link = createRoomLinkEvent(channelId, threadId);
 
     // First application establishes the link with canonical_parent = 1.
-    applyBatch(db, STREAM, [decoded(link, 1)], { isBackfill: true });
-    const first = db
-      .query<{ payload: string }, []>(
-        "select payload from edges where label = 'link'",
-      )
-      .get();
+    await applyBatch(asyncDb, STREAM, [decoded(link, 1)], { isBackfill: true });
+    const first = await asyncDb
+      .query("select payload from edges where label = 'link'")
+      .get<{ payload: string }>();
     expect(first?.payload).toBe('{"canonical_parent":1}');
 
     // Simulate a re-backfill: the same event is delivered and applied again.
     // The materialiser must NOT overwrite the established canonical_parent.
-    applyBatch(db, STREAM, [decoded(link, 2)], { isBackfill: true });
-    applyBatch(db, STREAM, [decoded(link, 3)], { isBackfill: true });
+    await applyBatch(asyncDb, STREAM, [decoded(link, 2)], { isBackfill: true });
+    await applyBatch(asyncDb, STREAM, [decoded(link, 3)], { isBackfill: true });
 
-    const after = db
-      .query<{ payload: string }, []>(
-        "select payload from edges where label = 'link'",
-      )
-      .get();
+    const after = await asyncDb
+      .query("select payload from edges where label = 'link'")
+      .get<{ payload: string }>();
     expect(after?.payload).toBe('{"canonical_parent":1}');
 
     // And there is still exactly one link edge (no duplicates).
-    const count = db
-      .query<{ n: number }, []>(
-        "select count(*) as n from edges where label = 'link'",
-      )
-      .get()?.n;
+    const count = (await asyncDb
+      .query("select count(*) as n from edges where label = 'link'")
+      .get<{ n: number }>())?.n;
     expect(count).toBe(1);
-  });
+  })
 });
 
 /** Build a createMessage event with a text body in the decoded `{ buf }` form. */
@@ -346,8 +335,8 @@ describe("forwardMessages sort order", () => {
   // order of the forwarded messages was scrambled (older forwarded messages
   // could appear after newer ones). The fix copies the original message's
   // sort_idx onto the forward-reference entity.
-  test("forwarded messages sort by the original's timestamp, not the forward event's", () => {
-    const db = freshDb();
+  test("forwarded messages sort by the original's timestamp, not the forward event's", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const channelId = newUlid();
@@ -373,8 +362,8 @@ describe("forwardMessages sort order", () => {
     const fwdNew = forwardMessageEvent(threadId, channelId, fwdNewId, msgNewId);
     const fwdOld = forwardMessageEvent(threadId, channelId, fwdOldId, msgOldId);
 
-    applyBatch(
-      db,
+    await applyBatch(
+      asyncDb,
       STREAM,
       [
         decoded(msgOld, 1),
@@ -385,7 +374,7 @@ describe("forwardMessages sort order", () => {
       { isBackfill: true },
     );
 
-    const { messages } = selectMessages(db, {
+    const { messages } = await selectMessages(asyncDb, {
       kind: "room",
       roomId: threadId,
       limit: 100,
@@ -399,4 +388,4 @@ describe("forwardMessages sort order", () => {
     expect(messages[1]?.id).toBe(fwdNewId);
     expect(messages[1]?.content).toBe("new msg");
   });
-});
+})

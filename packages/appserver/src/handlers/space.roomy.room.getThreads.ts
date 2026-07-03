@@ -55,34 +55,33 @@ export const getRoomThreadsHandler: QueryHandler<
   }
 
   const db = openDb();
-  requireRoomRead(db, roomId, userDid);
+  await requireRoomRead(db, roomId, userDid);
 
-  const all = listThreadActivity(db, { kind: "channel", channelId: roomId });
+  const all = await listThreadActivity(db, { kind: "channel", channelId: roomId });
 
   // Collect all thread IDs for batch unread lookup
   const threadIds = all.map((t) => t.id);
-  const readPositions = auth.did ? getReadPositions(db, auth.did, threadIds) : new Map();
+  const readPositions = auth.did ? await getReadPositions(db, auth.did, threadIds) : new Map();
 
   const threads: ThreadRow[] = [];
   for (const t of all) {
-    const acc = roomAccess(db, t.id, userDid);
+    const acc = await roomAccess(db, t.id, userDid);
     if (!acc.canRead) continue;
-    const members = t.latestMembers.map((m) => {
-      const out: { did: string; name?: string; avatar?: string } = { did: m.did };
-      if (m.name != null) out.name = m.name;
-      if (m.avatar != null) out.avatar = m.avatar;
-      return out;
-    });
+    const members = t.latestMembers.map((m) => ({
+      did: m.did,
+      name: m.name ?? undefined,
+      avatar: m.avatar ?? undefined,
+    }));
     const activity: ThreadRow["activity"] = {
       latestMembers: members,
     };
     if (t.latestTimestamp != null) activity.latestTimestamp = t.latestTimestamp;
     if (t.latestMessage != null) {
-      const author: { did: string; name?: string; avatar?: string } = {
+      const author: { did: string; name: string | null; avatar: string | null } = {
         did: t.latestMessage.author.did,
+        name: t.latestMessage.author.name ?? null,
+        avatar: t.latestMessage.author.avatar ?? null,
       };
-      if (t.latestMessage.author.name != null) author.name = t.latestMessage.author.name;
-      if (t.latestMessage.author.avatar != null) author.avatar = t.latestMessage.author.avatar;
       activity.latestMessage = {
         id: t.latestMessage.id,
         content: t.latestMessage.content,

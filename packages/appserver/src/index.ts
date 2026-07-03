@@ -114,7 +114,7 @@ const app: AppserverHandle = createAppserver({
   backfillMode: BACKFILL_MODE as "eager" | "lazy" | "disabled",
 });
 
-// ─── Startup backfill ──────────────────────────────────────────────────────
+// ─── Startup backfill ──────────────────────────────────────────────────
 // After the server is listening, backfill Leaf streams into SQLite. In the
 // default `eager` mode we discover every network stream and materialise it
 // up front so all spaces are ready when users connect; in `lazy` mode we
@@ -128,173 +128,89 @@ const app: AppserverHandle = createAppserver({
 // mode) — spaces are never unavailable, just possibly stale until backfill
 // completes, after which invalidation signals fill in the rest.
 if (BACKFILL_MODE === "lazy") {
-  app.backfillStatus.done = true; // no startup backfill to wait on
-  console.log(
-    "[startup] lazy backfill mode — spaces will materialise on first request",
-  );
-} else if (BACKFILL_MODE === "disabled") {
-  app.backfillStatus.done = true;
-  console.log("[startup] backfill disabled — test/test mode");
+  log.info("startup", "lazy mode — skipping eager backfill");
 } else {
-  if (BACKFILL_MODE !== "eager") {
-    console.warn(
-      `[startup] unknown APPSERVER_BACKFILL_MODE "${BACKFILL_MODE}", defaulting to eager`,
-    );
-  }
   startupBackfill(app).catch((err) => {
     console.error("[startup] backfill failed:", err);
   });
 }
 
-async function startupBackfill(handle: AppserverHandle): Promise<void> {
-  const backfillStatus = handle.backfillStatus;
-  let client: RoomyServiceClient;
-  try {
-    client = await getServiceClient();
-  } catch {
-    console.warn(
-      "[startup] Leaf not reachable yet; skipping startup backfill. " +
-        "Spaces will be materialised lazily on first request.",
-    );
-    return;
+async function startupBackfill(app: AppserverHandle): Promise<void> {
+  const serviceClient = await getServiceClient();
+
+  const allStreams: StreamDid[] = [];
+  const items = await serviceClient.listStreams();
+  for (const s of items) {
+    allStreams.push(StreamDid.assert(s.did));
   }
 
-  const streams = await client.listStreams();
-  const total = streams.length;
-  backfillStatus.discovered = total;
-  console.log(`[startup] discovered ${total} Leaf stream(s)`);
+  const total = allStreams.length;
+  app.backfillStatus.discovered = total;
+  log.info("startup", `discovered ${total} streams`);
 
   if (total === 0) {
-    backfillStatus.done = true;
+    app.backfillStatus.done = true;
     return;
   }
 
-  // Materialise streams with bounded concurrency. Each worker pulls the next
-  // stream off a shared index, so up to BACKFILL_CONCURRENCY spaces backfill at
-  // once. This overlaps the per-stream Leaf subscription + profile fetches
-  // (the dominant cost); SQLite writes still serialize on the single WAL
-  // writer, so correctness is unaffected. The cap protects Leaf from a flood
-  // of concurrent subscription requests.
-  //
-  // Circuit breaker: a per-worker consecutive-failure streak with exponential
-  // backoff (see BACKFILL_FAILURE_THRESHOLD et al). When Leaf is unresponsive
-  // every connect times out at 30s; without the breaker the worker would churn
-  // through the whole queue at one 30s timeout per stream — hammering a wedged
-  // Leaf and flooding logs (~3 lines per failure). With it, a failure streak
-  // pauses the worker (5s→10s→…→60s cap) so pressure drops and logs quiet; a
-  // single success resets the streak and full speed resumes. Failed streams
-  // are skipped (relied on lazy materialisation on next request) so the queue
-  // always drains and `done` fires.
-  //
-  // Per-DID start/complete logs are emitted at debug: with thousands of
-  // streams they produce ~3N lines and were the primary trigger for platform
-  // log-rate limits (Railway dropped ~16k messages in the incident that
-  // motivated this). A batched progress summary at info (every
-  // BACKFILL_PROGRESS_EVERY completions + the final line) preserves
-  // observability. Set LOG_LEVEL=debug to see per-DID detail.
-  const sleep = (ms: number): Promise<void> => {
-    const { promise, resolve } = Promise.withResolvers<void>();
-    setTimeout(resolve, ms);
-    return promise;
-  };
+  // Bounded concurrency: process streams in a fixed-size worker pool.
+  let idx = 0;
+  const errors: Array<{ stream: StreamDid; error: unknown }> = [];
 
-  const worker = async (): Promise<void> => {
-    let consecutiveFailures = 0;
-    let backoffStep = 0;
-    while (true) {
-      const i = backfillStatus.started++;
-      if (i >= total) return;
-      const s = streams[i]!; // i < total, guaranteed by the guard above
+  async function worker(): Promise<void> {
+    while (idx < total) {
+      const i = idx++;
+      const streamDid = allStreams[i]!;
+      app.backfillStatus.started++;
 
-      log.debug(`[startup] backfilling ${s.did} (started ${i + 1}/${total})`);
+      let consecutiveFailures = 0;
+      let backoff = BACKFILL_BACKOFF_MS;
 
-      let mat: Awaited<ReturnType<typeof getOrCreateMaterializer>> | null = null;
-      try {
-        mat = await getOrCreateMaterializer(StreamDid.assert(s.did));
-        // backfillDone is bounded by the SDK's backfill inactivity timeout
-        // (LEAF_BACKFILL_INACTIVITY_TIMEOUT_MS, default 60s): a hung Leaf
-        // subscription rejects instead of pending forever, so a worker can't
-        // be stranded by one bad stream. See ConnectedSpace.doneBackfilling.
-        await mat.backfillDone;
-        // close() (drain + Leaf unsubscribe) is NOT bounded by the SDK, so race
-        // it — a Leaf that dies right after backfill finished would otherwise
-        // hang the worker in unsubscribe and stall the pipeline again.
-        await withTimeout(mat.close(), CLOSE_TIMEOUT_MS, `close ${s.did}`);
-        removeMaterializer(StreamDid.assert(s.did));
-        backfillStatus.succeeded++;
-        // Success: reset the circuit breaker so full-speed backfill resumes.
-        consecutiveFailures = 0;
-        backoffStep = 0;
-        log.debug(
-          `[startup] backfill complete for ${s.did}: ` +
-            `applied=${mat.stats.applied} errors=${mat.stats.materializerErrors + mat.stats.applyErrors}`,
-        );
-      } catch (err) {
-        backfillStatus.failed++;
-        // Log the message only (1 line). Logging the raw Error renders a
-        // multi-line source-frame snippet (~3 lines/failure) that, across a
-        // failure flood, breaches platform log-rate limits. The full error
-        // is still available at LOG_LEVEL=debug.
-        const msg = err instanceof Error ? err.message : String(err);
-        log.error(`[startup] backfill failed for ${s.did}: ${msg}`);
-        log.debug(`[startup] backfill failed for ${s.did} (full):`, err);
-        // Release the worker regardless. Drop the materializer from the
-        // registry so a lazy retry builds a fresh one, and best-effort close
-        // (raced — close isn't SDK-bounded) to tear down its Leaf subscription.
-        // Without close, the abandoned subscription would keep applying live
-        // events AND a lazy retry would open a second subscription for the
-        // same stream (double materialisation). On timeout we give up on
-        // cleanup and move on; the worker is unblocked either way.
-        if (mat) {
-          try {
-            await withTimeout(mat.close(), CLOSE_TIMEOUT_MS, `close ${s.did}`);
-          } catch {
-            /* best-effort: a hung close must not re-stall the worker */
+      while (true) {
+        try {
+          const mat = await getOrCreateMaterializer(streamDid);
+          await mat.close();
+          app.backfillStatus.succeeded++;
+          consecutiveFailures = 0;
+          break;
+        } catch (err) {
+          consecutiveFailures++;
+          errors.push({ stream: streamDid, error: err });
+          app.backfillStatus.failed++;
+
+          if (consecutiveFailures >= BACKFILL_FAILURE_THRESHOLD) {
+            log.info(
+              "startup",
+              `breaker opened for ${streamDid} after ${consecutiveFailures} failures, backing off ${backoff}ms`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, backoff));
+            backoff = Math.min(backoff * 2, BACKFILL_BACKOFF_MAX_MS);
+            consecutiveFailures = 0;
           }
-        }
-        removeMaterializer(StreamDid.assert(s.did));
-        // Circuit breaker: on a failure streak, back off (exponential, capped)
-        // before pulling the next stream. Stops a wedged Leaf from being
-        // hammered by a 30s-timeout-per-stream churn and quiets the log flood.
-        if (++consecutiveFailures >= BACKFILL_FAILURE_THRESHOLD) {
-          const backoff = Math.min(
-            BACKFILL_BACKOFF_MS * 2 ** backoffStep,
-            BACKFILL_BACKOFF_MAX_MS,
-          );
-          log.warn(
-            `[startup] backfill circuit breaker: ${consecutiveFailures} consecutive failures ` +
-              `(Leaf may be unresponsive), pausing ${backoff}ms before next stream`,
-          );
-          await sleep(backoff);
-          backoffStep++;
-          consecutiveFailures = 0; // re-arm: need another THRESHOLD-failure streak.
-          // NOTE: `backoffStep` is NOT reset here — it persists across re-armed
-          // streaks, so a *prolonged* outage escalates the pause (5s→10s→20s→…)
-          // even though each individual streak is only THRESHOLD failures. It
-          // only resets on a successful backfill. Intentional: a long outage
-          // should back off harder over time, not restart at 5s every 3 failures.
+
+          removeMaterializer(streamDid);
         }
       }
 
-      backfillStatus.completed++;
-      const completed = backfillStatus.completed;
-      // Batched progress: every N completions, plus the final one. Avoids the
-      // per-DID progress line that flooded logs at scale.
-      if (completed === total || completed % BACKFILL_PROGRESS_EVERY === 0) {
-        const remaining = total - completed;
-        const pct = ((completed / total) * 100).toFixed(1);
-        console.log(
-          `[startup] progress ${completed}/${total} (${pct}% done, ${remaining} remaining)`,
+      app.backfillStatus.completed++;
+      if (
+        app.backfillStatus.completed % BACKFILL_PROGRESS_EVERY === 0 ||
+        app.backfillStatus.completed === total
+      ) {
+        log.info(
+          "startup",
+          `progress ${app.backfillStatus.completed}/${total} (${app.backfillStatus.succeeded} ok, ${app.backfillStatus.failed} failed)`,
         );
       }
     }
-  };
+  }
 
-  const workerCount = Math.min(BACKFILL_CONCURRENCY, total);
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  const workers = Array.from({ length: BACKFILL_CONCURRENCY }, () => worker());
+  await Promise.all(workers);
 
-  backfillStatus.done = true;
-  console.log(
-    `[startup] backfill complete: ${backfillStatus.succeeded} succeeded, ${backfillStatus.failed} failed out of ${total} total`,
+  app.backfillStatus.done = true;
+  log.info(
+    "startup",
+    `backfill complete: ${app.backfillStatus.succeeded} succeeded, ${app.backfillStatus.failed} failed`,
   );
 }

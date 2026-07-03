@@ -9,7 +9,7 @@
  * extension-aware ordering logic.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import { decodeTime, ulid } from "ulidx";
 import type { Event, StreamDid, Ulid } from "@roomy-space/sdk";
 
@@ -21,7 +21,7 @@ import type { Event, StreamDid, Ulid } from "@roomy-space/sdk";
  * No-op if the entity row is missing (materialiser failed earlier in the
  * batch) or if a sort_idx is already set.
  */
-export function setMessageSortIdxByTimestamp(db: Database, event: Event): void {
+export async function setMessageSortIdxByTimestamp(db: DbLike, event: Event): Promise<void> {
   if (event.$type !== "space.roomy.message.createMessage.v0") return;
 
   const overrideExt =
@@ -30,17 +30,14 @@ export function setMessageSortIdxByTimestamp(db: Database, event: Event): void {
     ? Number(overrideExt.timestamp)
     : decodeTime(event.id);
 
-  const existing = db
-    .query<
-      { sort_idx: string | null },
-      [string]
-    >("select sort_idx from entities where id = ?")
-    .get(event.id);
+  const existing = await db
+    .query("select sort_idx from entities where id = ?")
+    .get<{ sort_idx: string | null }>(event.id);
 
   if (!existing || existing.sort_idx) return;
 
   const sortIdx = ulid(timestamp);
-  db.prepare("update entities set sort_idx = ? where id = ?").run(
+  await (await db.prepare("update entities set sort_idx = ? where id = ?")).run(
     sortIdx,
     event.id,
   );
@@ -65,22 +62,20 @@ export function setMessageSortIdxByTimestamp(db: Database, event: Event): void {
  * the SDK materialiser) or has no sort_idx. forwardMessages is currently
  * capped at one message per event.
  */
-export function setMessageSortIdxByForward(db: Database, event: Event): void {
+export async function setMessageSortIdxByForward(db: DbLike, event: Event): Promise<void> {
   if (event.$type !== "space.roomy.message.forwardMessages.v0") return;
   if (!("messageIds" in event) || !Array.isArray(event.messageIds)) return;
 
   const originalId = event.messageIds[0] as Ulid | undefined;
   if (!originalId) return;
 
-  const orig = db
-    .query<{ sort_idx: string | null }, [string]>(
-      "select sort_idx from entities where id = ?",
-    )
-    .get(originalId);
+  const orig = await db
+    .query("select sort_idx from entities where id = ?")
+    .get<{ sort_idx: string | null }>(originalId);
 
   if (!orig || !orig.sort_idx) return;
 
-  db.prepare("update entities set sort_idx = ? where id = ?").run(
+  await (await db.prepare("update entities set sort_idx = ? where id = ?")).run(
     orig.sort_idx,
     event.id,
   );
@@ -94,37 +89,33 @@ export function setMessageSortIdxByForward(db: Database, event: Event): void {
  * Only invoked for `space.roomy.message.reorderMessage.v0` events that carry
  * an `after` field.
  */
-export function setMessageSortIdxByReorder(
-  db: Database,
+export async function setMessageSortIdxByReorder(
+  db: DbLike,
   streamId: StreamDid,
   event: Event,
-): void {
+): Promise<void> {
   if (event.$type !== "space.roomy.message.reorderMessage.v0") return;
   if (!event.after) return;
 
   const messageId = event.messageId as Ulid;
   const after = event.after as Ulid;
 
-  const existing = db
-    .query<
-      { sort_idx: string | null },
-      [string]
-    >("select sort_idx from entities where id = ?")
-    .get(messageId);
+  const existing = await db
+    .query("select sort_idx from entities where id = ?")
+    .get<{ sort_idx: string | null }>(messageId);
   if (!existing) return; // materialiser failed earlier
 
   // Reorder always overwrites sort_idx — fall through even if one already
   // exists. This matches the frontend's `update: true` semantics.
 
-  const before = db
-    .query<{ sort_idx: string }, [string, string]>(
+  const before = await db
+    .query(
       `select coalesce(sort_idx, id) as sort_idx
        from entities
        where stream_id = ? and id = ?
        limit 1`,
     )
-    .get(streamId, after);
-
+    .get<{ sort_idx: string }>(streamId, after);
   if (!before) {
     console.warn(
       `[materialize] reorderMessage: 'after' entity ${after} not found for stream ${streamId}`,
@@ -132,8 +123,8 @@ export function setMessageSortIdxByReorder(
     return;
   }
 
-  const next = db
-    .query<{ sort_idx: string }, [string, string, string]>(
+  const next = await db
+    .query(
       `select sort_idx
        from entities
        where stream_id = ?
@@ -142,7 +133,7 @@ export function setMessageSortIdxByReorder(
        order by sort_idx
        limit 1`,
     )
-    .get(streamId, before.sort_idx, messageId);
+    .get<{ sort_idx: string }>(streamId, before.sort_idx, messageId);
 
   let sortIdx: string;
   try {
@@ -158,7 +149,7 @@ export function setMessageSortIdxByReorder(
     return;
   }
 
-  db.prepare("update entities set sort_idx = ? where id = ?").run(
+  await (await db.prepare("update entities set sort_idx = ? where id = ?")).run(
     sortIdx,
     messageId,
   );
@@ -170,8 +161,17 @@ export function setMessageSortIdxByReorder(
  * helper in `worker.ts`.
  */
 function midpointUlid(earlier: Ulid, later?: Ulid): string {
-  const earlierTime = decodeTime(earlier);
-  const laterTime = later ? decodeTime(later) : earlierTime + 10;
-  const midTime = earlierTime + (laterTime - earlierTime) / 2;
-  return ulid(midTime);
+  if (!later) {
+    return ulid(decodeTime(earlier) + 10);
+  }
+  const e = decodeTime(earlier);
+  const l = decodeTime(later);
+  if (e === l) {
+    // Same millisecond — use the midpoint of the random suffixes.
+    const eStr = earlier as string;
+    const lStr = later as string;
+    const mid = eStr.slice(0, 10) + (BigInt("0x" + eStr.slice(10)) + BigInt("0x" + lStr.slice(10))) / 2n;
+    return mid as Ulid;
+  }
+  return ulid(Math.floor((e + l) / 2));
 }

@@ -9,7 +9,7 @@
  * The handler layer translates denials into XrpcErrors.
  */
 
-import type { Database, Statement } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import {
   spaceAccess,
   roomAccess,
@@ -177,24 +177,24 @@ function denied(
 
 // ── Auth check helpers ───────────────────────────────────────────────────
 
-function requireSpaceAdminCheck(
-  db: Database,
+async function requireSpaceAdminCheck(
+  db: DbLike,
   spaceId: string,
   did: string,
-): WriteAuthResult {
-  const admin = isAdmin(db, spaceId, did);
+): Promise<WriteAuthResult> {
+  const admin = await isAdmin(db, spaceId, did);
   if (!admin) {
     return denied(403, "Forbidden", "Caller is not a space admin");
   }
   return undefined;
 }
 
-function requireMembershipCheck(
-  db: Database,
+async function requireMembershipCheck(
+  db: DbLike,
   spaceId: string,
   did: string,
-): WriteAuthResult {
-  const access = spaceAccess(db, spaceId, did);
+): Promise<WriteAuthResult> {
+  const access = await spaceAccess(db, spaceId, did);
   if (access.isBanned) {
     return denied(403, "Forbidden", "Caller is banned from this space");
   }
@@ -208,24 +208,24 @@ function requireMembershipCheck(
   return undefined;
 }
 
-function requireNotBannedCheck(
-  db: Database,
+async function requireNotBannedCheck(
+  db: DbLike,
   spaceId: string,
   did: string,
-): WriteAuthResult {
-  const banned = isBanned(db, spaceId, did);
+): Promise<WriteAuthResult> {
+  const banned = await isBanned(db, spaceId, did);
   if (banned) {
     return denied(403, "Forbidden", "Caller is banned from this space");
   }
   return undefined;
 }
 
-function requireRoomWriteCheck(
-  db: Database,
+async function requireRoomWriteCheck(
+  db: DbLike,
   roomId: string,
   did: string,
-): WriteAuthResult {
-  const access = roomAccess(db, roomId, did);
+): Promise<WriteAuthResult> {
+  const access = await roomAccess(db, roomId, did);
   if (!access.exists) {
     return denied(404, "NotFound", `Room not found: ${roomId}`);
   }
@@ -246,30 +246,17 @@ function requireRoomWriteCheck(
  * For editMessage/deleteMessage: the caller must be the original author
  * OR a space admin.
  */
-// Prepared statement cache for writeAuth queries.
-const msgAuthorStmt = new WeakMap<Database, Statement<{ tail: string }, [string]>>();
 
-function getMsgAuthorStmt(db: Database): Statement<{ tail: string }, [string]> {
-  let stmt = msgAuthorStmt.get(db);
-  if (!stmt) {
-    stmt = db.prepare<{ tail: string }, [string]>(
-      "SELECT tail FROM edges WHERE head = ? AND label = 'author' LIMIT 1",
-    );
-    msgAuthorStmt.set(db, stmt);
-  }
-  return stmt;
-}
-
-function checkMessageAuthorOrAdmin(
-  db: Database,
+async function checkMessageAuthorOrAdmin(
+  db: DbLike,
   messageId: string,
   callerDid: string,
   spaceId: string,
-): WriteAuthResult {
-  const admin = isAdmin(db, spaceId, callerDid);
+): Promise<WriteAuthResult> {
+  const admin = await isAdmin(db, spaceId, callerDid);
   if (admin) return undefined;
 
-  const row = getMsgAuthorStmt(db).get(messageId);
+  const row = await db.query("SELECT tail FROM edges WHERE head = ? AND label = 'author' LIMIT 1").get<{ tail: string }>([messageId]);
   if (!row || row.tail !== callerDid) {
     return denied(
       403,
@@ -287,12 +274,12 @@ function checkMessageAuthorOrAdmin(
  *
  * @returns `undefined` if allowed, or a denial object.
  */
-export function checkWriteAuth(
-  db: Database,
+export async function checkWriteAuth(
+  db: DbLike,
   spaceId: string,
   callerDid: string,
   event: { $type: string; [k: string]: unknown },
-): WriteAuthResult {
+): Promise<WriteAuthResult> {
   const { $type } = event;
 
   // Reject banned types
@@ -319,7 +306,7 @@ export function checkWriteAuth(
     if (typeof roomId !== "string") {
       return denied(400, "InvalidRequest", `Event is missing required 'room' field`);
     }
-    return requireRoomWriteCheck(db, roomId, callerDid);
+    return await requireRoomWriteCheck(db, roomId, callerDid);
   }
 
   // ── Room write + author check (edit/delete) ──
@@ -328,7 +315,7 @@ export function checkWriteAuth(
     if (typeof roomId !== "string") {
       return denied(400, "InvalidRequest", `Event is missing required 'room' field`);
     }
-    const roomResult = requireRoomWriteCheck(db, roomId, callerDid);
+    const roomResult = await requireRoomWriteCheck(db, roomId, callerDid);
     if (roomResult) return roomResult;
 
     // Additional author-or-admin check
@@ -336,31 +323,31 @@ export function checkWriteAuth(
     if (typeof messageId !== "string") {
       return denied(400, "InvalidRequest", `Event is missing required 'messageId' field`);
     }
-    return checkMessageAuthorOrAdmin(db, messageId, callerDid, spaceId);
+    return await checkMessageAuthorOrAdmin(db, messageId, callerDid, spaceId);
   }
 
   // ── Room manage ──
   if (ROOM_MANAGE_TYPES.has($type)) {
-    return requireSpaceAdminCheck(db, spaceId, callerDid);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid);
   }
 
   // ── Space manage ──
   if (SPACE_MANAGE_TYPES.has($type)) {
-    return requireSpaceAdminCheck(db, spaceId, callerDid);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid);
   }
 
   // ── Space member ──
   if (SPACE_MEMBER_TYPES.has($type)) {
     // joinSpace only requires "not banned"
     if ($type === "space.roomy.space.joinSpace.v0") {
-      return requireNotBannedCheck(db, spaceId, callerDid);
+      return await requireNotBannedCheck(db, spaceId, callerDid);
     }
-    return requireMembershipCheck(db, spaceId, callerDid);
+    return await requireMembershipCheck(db, spaceId, callerDid);
   }
 
   // ── Bridged ──
   if (BRIDGED_TYPES.has($type)) {
-    return requireSpaceAdminCheck(db, spaceId, callerDid);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid);
   }
 
   // Should be unreachable if ALLOWED_TYPES and the dispatch tables agree

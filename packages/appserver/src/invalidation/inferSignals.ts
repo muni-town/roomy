@@ -15,6 +15,7 @@
 
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
 import type { AppliedEvent, InvalidationEvent, QueryNsid } from "./types.ts";
+import type { DbLike } from "../db/types.ts";
 import { openDb } from "../db/db.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
 
@@ -24,15 +25,21 @@ import { selectMessages } from "../queries/selectMessages.ts";
  * Infer invalidation signals for a single applied event.
  * Returns an array (can be empty for events that don't affect query results,
  * e.g. synthetic backfill events).
+ *
+ * @param event - The applied event to infer signals for.
+ * @param db - Optional database instance. Defaults to `openDb()`.
  */
-export function inferSignals(event: AppliedEvent): InvalidationEvent[] {
+export async function inferSignals(
+  event: AppliedEvent,
+  db?: DbLike,
+): Promise<InvalidationEvent[]> {
   // Suppress signals for synthetic query events — they're bulk hydration,
   // not incremental changes.
   if (event.type.startsWith("space.roomy.query.")) return [];
 
   const handler = HANDLERS[event.type as keyof typeof HANDLERS];
   if (!handler) return [];
-  return handler(event);
+  return await handler(event, db);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -69,7 +76,7 @@ function invalidateRoom(roomId: Ulid, spaceId: StreamDid): InvalidationEvent[] {
 
 // ─── Message events ─────────────────────────────────────────────────────
 
-function handleCreateMessage(event: AppliedEvent): InvalidationEvent[] {
+async function handleCreateMessage(event: AppliedEvent, db?: DbLike): Promise<InvalidationEvent[]> {
   const roomId = event.roomId;
   if (!roomId) return [];
 
@@ -80,7 +87,7 @@ function handleCreateMessage(event: AppliedEvent): InvalidationEvent[] {
   // event has been applied to SQLite, so `selectMessages` resolves the exact
   // shape `room.getMessages` returns. The client validates the #messageDiff
   // frame against that schema and silently drops it if any field is missing.
-  const { messages } = selectMessages(openDb(), {
+  const { messages } = await selectMessages(db ?? openDb(), {
     kind: "ids",
     ids: [event.id],
   });
@@ -111,7 +118,7 @@ function handleCreateMessage(event: AppliedEvent): InvalidationEvent[] {
   return signals;
 }
 
-function handleEditMessage(event: AppliedEvent): InvalidationEvent[] {
+async function handleEditMessage(event: AppliedEvent, db?: DbLike): Promise<InvalidationEvent[]> {
   const roomId = event.roomId;
   if (!roomId) return [];
 
@@ -125,7 +132,7 @@ function handleEditMessage(event: AppliedEvent): InvalidationEvent[] {
 
   // Re-read the full message row post-materialization so the diff carries
   // the complete, schema-valid shape (see `handleCreateMessage`).
-  const { messages } = selectMessages(openDb(), {
+  const { messages } = await selectMessages(db ?? openDb(), {
     kind: "ids",
     ids: [messageId],
   });
@@ -490,7 +497,7 @@ function handleMarkRead(event: AppliedEvent): InvalidationEvent[] {
 
 // ─── Dispatch table ─────────────────────────────────────────────────────
 
-const HANDLERS: Record<string, (event: AppliedEvent) => InvalidationEvent[]> = {
+const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike) => InvalidationEvent[] | Promise<InvalidationEvent[]>> = {
   // Messages
   "space.roomy.message.createMessage.v0": handleCreateMessage,
   "space.roomy.message.editMessage.v0": handleEditMessage,

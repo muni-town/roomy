@@ -53,8 +53,8 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
   // `entities WHERE id = ? AND stream_id = ?` existence check was unreliable
   // because stream_id depends on which materialiser wrote the entity row
   // first — see queries/joinedSpaces.ts.)
-  const member = isMember(db, spaceId, callerDid);
-  const admin = isAdmin(db, spaceId, callerDid);
+  const member = await isMember(db, spaceId, callerDid);
+  const admin = await isAdmin(db, spaceId, callerDid);
   if (!member && !admin) {
     throw new XrpcError(
       403,
@@ -105,7 +105,7 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
 
   // ── 4. Write leftSpace edge so the space appears with includeLeft ─────
   if (personalStreamDid) {
-    recordLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
+    await recordLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
   }
 
   // ── 5. Emit direct getSpaces invalidation signal ─────────────────────

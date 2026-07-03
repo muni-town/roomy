@@ -9,7 +9,7 @@
  * which is appserver-owned and cannot be reconstructed from the Leaf event log.
  */
 
-import type { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
 
 /** How far back (in ms) to consider threads active. Default: 72 hours. */
@@ -25,19 +25,19 @@ const MAX_ACTIVE_THREADS = 8;
  * This is a no-op if `threadId` is not actually a thread — the caller
  * is responsible for checking.
  */
-export function upsertUserThreadActivity(
-  db: Database,
+export async function upsertUserThreadActivity(
+  db: DbLike,
   userDid: string,
   threadId: string,
   timestamp: number,
-): void {
-  db.prepare(
+): Promise<void> {
+  await (await db.prepare(
     `insert into readstate.user_thread_activity (user_did, thread_id, last_active_at, updated_at)
      values (?, ?, ?, ?)
      on conflict(user_did, thread_id) do update set
        last_active_at = excluded.last_active_at,
        updated_at = excluded.updated_at`,
-  ).run(userDid, threadId, timestamp, Date.now());
+  )).run([userDid, threadId, timestamp, Date.now()]);
 }
 
 /**
@@ -65,15 +65,15 @@ export interface ActiveThreadEntry {
  * Reuses the same prepared statements as `listThreadActivity` in
  * `threadActivity.ts`. The caller is responsible for filtering by access.
  */
-export function resolveThreadsByIds(
-  db: Database,
+export async function resolveThreadsByIds(
+  db: DbLike,
   threadIds: string[],
-): Map<string, {
+): Promise<Map<string, {
   name: string | null;
   latestTimestamp: string | null;
   latestMembers: Array<{ did: string; name: string | null; avatar: string | null }>;
   canonicalParent: string | null;
-}> {
+}>> {
   const result = new Map<string, {
     name: string | null;
     latestTimestamp: string | null;
@@ -84,12 +84,12 @@ export function resolveThreadsByIds(
   if (threadIds.length === 0) return result;
 
   // Batch query thread names
-  const nameStmt = db.query<{ name: string | null }, [string]>(
+  const nameStmt = await db.query(
     `select ci.name from comp_info ci where ci.entity = ?`,
   );
 
   // Latest timestamp per thread
-  const latestStmt = db.query<{ ts: number | null }, [string]>(
+  const latestStmt = await db.query(
     `select max(cc.timestamp) as ts
        from entities e
        join comp_content cc on cc.entity = e.id
@@ -97,10 +97,7 @@ export function resolveThreadsByIds(
   );
 
   // Recent participants (up to 3)
-  const participantsStmt = db.query<
-    { did: string; name: string | null; avatar: string | null },
-    [string]
-  >(
+  const participantsStmt = await db.query(
     `select did, name, avatar from (
        select author_e.tail as did,
               ci.name as name,
@@ -118,7 +115,7 @@ export function resolveThreadsByIds(
   );
 
   // Canonical parent (the link edge with canonical_parent=1)
-  const parentStmt = db.query<{ head: string }, [string]>(
+  const parentStmt = await db.query(
     `select head from edges
       where tail = ? and label = 'link'
         and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1
@@ -126,10 +123,10 @@ export function resolveThreadsByIds(
   );
 
   for (const tid of threadIds) {
-    const nameRow = nameStmt.get(tid);
-    const latest = latestStmt.get(tid);
-    const members = participantsStmt.all(tid);
-    const parent = parentStmt.get(tid);
+    const nameRow = await nameStmt.get<{ name: string | null }>([tid]);
+    const latest = await latestStmt.get<{ ts: number | null }>([tid]);
+    const members = await participantsStmt.all<{ did: string; name: string | null; avatar: string | null }>([tid]);
+    const parent = await parentStmt.get<{ head: string }>([tid]);
 
     result.set(tid, {
       name: nameRow?.name ?? null,
@@ -159,38 +156,35 @@ export function resolveThreadsByIds(
  * If the user has no rows for this space, runs a lazy backfill from messages
  * the user authored in threads within the 72h window.
  */
-export function queryActiveThreads(
-  db: Database,
+export async function queryActiveThreads(
+  db: DbLike,
   userDid: string,
   spaceId: string,
-): Array<{
+): Promise<Array<{
   id: string;
   last_active_at: number;
-}> {
+}>> {
   const now = Date.now();
   const windowStart = now - ACTIVE_WINDOW_MS;
 
   // Lazy backfill: if no rows exist for this user+space, seed from authored messages
-  const existingCount = db
-    .query<{ count: number }, [string, string]>(
+  const existingCount = await db
+    .query(
       `select count(*) as count
          from readstate.user_thread_activity uta
          join entities e on e.id = uta.thread_id
         where uta.user_did = ?
           and e.stream_id = ?`,
     )
-    .get(userDid, spaceId);
+    .get<{ count: number }>([userDid, spaceId]);
 
   if (!existingCount || existingCount.count === 0) {
-    backfillUserThreadActivity(db, userDid, spaceId, windowStart);
+    await backfillUserThreadActivity(db, userDid, spaceId, windowStart);
   }
 
   // Query active threads within the 72h window
-  const rows = db
-    .query<
-      { thread_id: string; last_active_at: number },
-      [string, number, string, number]
-    >(
+  const rows = await db
+    .query(
       `select uta.thread_id, uta.last_active_at
          from readstate.user_thread_activity uta
          join entities e on e.id = uta.thread_id
@@ -203,7 +197,7 @@ export function queryActiveThreads(
         order by uta.last_active_at desc
         limit ?`,
     )
-    .all(userDid, windowStart, spaceId, MAX_ACTIVE_THREADS);
+    .all<{ thread_id: string; last_active_at: number }>([userDid, windowStart, spaceId, MAX_ACTIVE_THREADS]);
 
   return rows.map((r) => ({
     id: r.thread_id,
@@ -216,13 +210,13 @@ export function queryActiveThreads(
  * within the given window. This gives the user an immediate populated sidebar
  * without needing to write a new message first.
  */
-function backfillUserThreadActivity(
-  db: Database,
+async function backfillUserThreadActivity(
+  db: DbLike,
   userDid: string,
   spaceId: string,
   windowStart: number,
-): void {
-  db.prepare(
+): Promise<void> {
+  await (await db.prepare(
     `insert or ignore into readstate.user_thread_activity (user_did, thread_id, last_active_at, updated_at)
      select distinct author_e.tail, e.room, max(cc.timestamp), unixepoch() * 1000
        from entities e
@@ -233,18 +227,18 @@ function backfillUserThreadActivity(
         and e.stream_id = ?
         and cc.timestamp > ?
       group by author_e.tail, e.room`,
-  ).run(userDid, spaceId, windowStart);
+  )).run([userDid, spaceId, windowStart]);
 }
 
 /**
  * Check if a room is a thread (has comp_room.label = 'space.roomy.thread').
  */
-export function isThread(db: Database, roomId: string): boolean {
-  const row = db
-    .query<{ label: string }, [string]>(
+export async function isThread(db: DbLike, roomId: string): Promise<boolean> {
+  const row = await db
+    .query(
       `select cr.label from comp_room cr where cr.entity = ?`,
     )
-    .get(roomId);
+    .get<{ label: string }>([roomId]);
   return row?.label === "space.roomy.thread";
 }
 
@@ -252,15 +246,13 @@ export function isThread(db: Database, roomId: string): boolean {
  * Purge stale user_thread_activity rows older than the given timestamp.
  * Should be called periodically (e.g. once per hour) from a background timer.
  */
-export function purgeStaleThreadActivity(
-  db: Database,
+export async function purgeStaleThreadActivity(
+  db: DbLike,
   olderThan: number,
-): number {
-  const result = db
-    .prepare(
-      `delete from readstate.user_thread_activity
-       where last_active_at < ?`,
-    )
-    .run(olderThan);
+): Promise<number> {
+  const result = await (await db.prepare(
+    `delete from readstate.user_thread_activity
+     where last_active_at < ?`,
+  )).run([olderThan]);
   return result.changes;
 }

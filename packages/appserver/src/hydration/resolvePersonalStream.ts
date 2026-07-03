@@ -9,7 +9,7 @@
  * record is meant to be stable per user, so no TTL.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import { AtpAgent } from "@atproto/api";
 import { IdResolver } from "@atproto/identity";
 import { modules, StreamDid, type, type UserDid } from "@roomy-space/sdk";
@@ -45,16 +45,13 @@ export interface ResolveOpts {
 /**
  * Cache lookup → returns the cached personal stream DID if we have one.
  */
-export function readCachedPersonalStreamDid(
-  db: Database,
+export async function readCachedPersonalStreamDid(
+  db: DbLike,
   userDid: UserDid,
-): StreamDid | undefined {
-  const row = db
-    .query<
-      { personal_stream_did: string },
-      [string]
-    >("select personal_stream_did from comp_user_personal_stream where user_did = ?")
-    .get(userDid);
+): Promise<StreamDid | undefined> {
+  const row = await db
+    .query("select personal_stream_did from comp_user_personal_stream where user_did = ?")
+    .get<{ personal_stream_did: string }>(userDid);
   if (!row) return undefined;
   const parsed = StreamDid(row.personal_stream_did);
   if (parsed instanceof type.errors) return undefined;
@@ -62,12 +59,12 @@ export function readCachedPersonalStreamDid(
 }
 
 /** Persist a resolved mapping. Idempotent; later writes overwrite. */
-function writeCachedPersonalStreamDid(
-  db: Database,
+async function writeCachedPersonalStreamDid(
+  db: DbLike,
   userDid: UserDid,
-  streamDid: StreamDid,
-): void {
-  db.run(
+  streamDid: string,
+): Promise<void> {
+  await db.run(
     "insert into comp_user_personal_stream (user_did, personal_stream_did, resolved_at) " +
       "values (?, ?, ?) on conflict(user_did) do update set " +
       "personal_stream_did = excluded.personal_stream_did, " +
@@ -85,14 +82,14 @@ function writeCachedPersonalStreamDid(
  * should return the new DID to the client so it can save the record.
  */
 export async function createAndCachePersonalStream(
-  db: Database,
+  db: DbLike,
   userDid: UserDid,
 ): Promise<StreamDid> {
   const client = await getServiceClient();
   const space = await client.createSpace(modules.personal, userDid);
   const streamDid = space.streamDid;
 
-  writeCachedPersonalStreamDid(db, userDid, streamDid);
+  await writeCachedPersonalStreamDid(db, userDid, streamDid);
   return streamDid;
 }
 
@@ -104,11 +101,11 @@ export async function createAndCachePersonalStream(
  * record on their PDS (e.g. they've never logged into Roomy).
  */
 export async function resolvePersonalStreamDid(
-  db: Database,
+  db: DbLike,
   userDid: UserDid,
   opts: ResolveOpts = {},
 ): Promise<StreamDid> {
-  const cached = readCachedPersonalStreamDid(db, userDid);
+  const cached = await readCachedPersonalStreamDid(db, userDid);
   if (cached) return cached;
 
   const pdsEndpoint = await (opts.resolveDid ?? defaultResolveDid)(
@@ -131,7 +128,7 @@ export async function resolvePersonalStreamDid(
     );
   }
 
-  writeCachedPersonalStreamDid(db, userDid, parsed);
+  await writeCachedPersonalStreamDid(db, userDid, parsed);
   return parsed;
 }
 

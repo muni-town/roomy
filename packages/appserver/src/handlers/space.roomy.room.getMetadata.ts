@@ -48,39 +48,42 @@ export const getRoomMetadataHandler: QueryHandler<
   }
 
   const db = openDb();
-  const access = requireRoomRead(db, roomId, userDid);
+  const access = await requireRoomRead(db, roomId, userDid);
 
-  const row = db
-    .query<{ name: string | null; label: string | null }, [string]>(
+  const row = await db
+    .query(
       `select ci.name as name, cr.label as label
          from comp_room cr
          left join comp_info ci on ci.entity = cr.entity
         where cr.entity = ?`,
     )
-    .get(roomId);
+    .get<{ name: string | null; label: string | null }>(roomId);
 
   // Recent threads: scope is this channel for channels, the parent channel
   // for threads (so we get sibling threads). Falls back to the room itself
   // when there's no parent (which yields an empty list).
   const channelForThreads = access.parentChannelId ?? roomId;
-  const threadActivity = listThreadActivity(
+  const threadActivity = (await listThreadActivity(
     db,
     { kind: "channel", channelId: channelForThreads },
     20,
-  );
+  )) ?? [];
 
   const recentThreads: RecentThread[] = [];
   if (userDid !== null) {
     const threadRoomIds = threadActivity
-      .filter((t) => t.id !== roomId)
-      .filter((t) => roomAccess(db, t.id, userDid).canRead);
-    const threadPositions = getReadPositions(
+      .filter((t) => t.id !== roomId);
+    const threadAccessResults = await Promise.all(
+      threadRoomIds.map((t) => roomAccess(db, t.id, userDid)),
+    );
+    const accessibleThreadRoomIds = threadRoomIds.filter((_, i) => threadAccessResults[i]?.canRead ?? false);
+    const threadPositions = await getReadPositions(
       db,
       userDid,
-      threadRoomIds.map((t) => t.id),
+      accessibleThreadRoomIds.map((t) => t.id),
     );
-    for (const t of threadRoomIds) {
-      const acc = roomAccess(db, t.id, userDid);
+    for (const t of accessibleThreadRoomIds) {
+      const acc = await roomAccess(db, t.id, userDid);
       const pos = threadPositions.get(t.id);
       recentThreads.push(stripNulls({
         id: t.id,
@@ -88,14 +91,14 @@ export const getRoomMetadataHandler: QueryHandler<
         canRead: acc.canRead,
         canWrite: acc.canWrite,
         unreadCount: pos?.unreadCount ?? 0,
-        lastRead: pos?.lastRead ?? null,
+        lastRead: (pos?.lastRead as string | null) ?? null,
       }) as RecentThread);
     }
   }
 
   let pos: ReadPosition;
   if (userDid !== null) {
-    pos = getReadPosition(db, userDid, roomId);
+    pos = await getReadPosition(db, userDid, roomId);
   } else {
     pos = { unreadCount: 0, lastRead: null };
   }
@@ -107,7 +110,7 @@ export const getRoomMetadataHandler: QueryHandler<
     defaultAccess: access.defaultAccess,
     canRead: access.canRead,
     canWrite: access.canWrite,
-    lastRead: pos.lastRead,
+    lastRead: (pos.lastRead as string | null) ?? null,
     unreadCount: pos.unreadCount,
     recentThreads,
   }) as GetRoomMetadataResult;

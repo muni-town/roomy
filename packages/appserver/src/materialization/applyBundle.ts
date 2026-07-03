@@ -11,7 +11,7 @@
  * backfill awareness.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
 import type { SqlStatement, StatementBundleSuccess } from "./types.ts";
 import {
@@ -31,22 +31,22 @@ export interface ApplyBundleOpts {
   streamId: StreamDid;
 }
 
-export function applyBundle(
-  db: Database,
+export async function applyBundle(
+  db: DbLike,
   bundle: StatementBundleSuccess,
   opts: ApplyBundleOpts,
-): void {
+): Promise<void> {
   const savepoint = `evt_${bundle.event.id.replace(/[^a-zA-Z0-9]/g, "")}`;
-  db.exec(`savepoint ${savepoint}`);
+  await db.exec(`savepoint ${savepoint}`);
 
   try {
     for (const statement of bundle.statements) {
-      runStatement(db, statement);
+      await runStatement(db, statement);
     }
 
-    setMessageSortIdxByTimestamp(db, bundle.event);
-    setMessageSortIdxByReorder(db, opts.streamId, bundle.event);
-    setMessageSortIdxByForward(db, bundle.event);
+    await setMessageSortIdxByTimestamp(db, bundle.event);
+    await setMessageSortIdxByReorder(db, opts.streamId, bundle.event);
+    await setMessageSortIdxByForward(db, bundle.event);
 
     // Activity feed: upsert the activity item for every createMessage event
     // (including backfill, so existing rooms get populated).
@@ -54,7 +54,7 @@ export function applyBundle(
       bundle.event.$type === "space.roomy.message.createMessage.v0" &&
       bundle.event.room
     ) {
-      upsertActivityItem(db, {
+      await upsertActivityItem(db, {
         roomId: bundle.event.room,
         spaceId: opts.streamId,
         messageId: bundle.event.id,
@@ -68,18 +68,18 @@ export function applyBundle(
     ) {
       // Increment unread for all users tracking this room. Replaces the old
       // per-room comp_last_read counter with per-user read_positions rows.
-      db.prepare(
+      await (await db.prepare(
         `update readstate.read_positions
             set unread_count = unread_count + 1,
                 updated_at = (unixepoch() * 1000)
           where room_id = ?`,
-      ).run(bundle.event.room);
+      )).run(bundle.event.room);
 
       // Track thread activity: if the message is in a thread, upsert the
       // author's interaction so the thread appears in their sidebar.
-      if (isThread(db, bundle.event.room)) {
+      if (await isThread(db, bundle.event.room)) {
         const timestamp = decodeTimeFromId(bundle.event.id);
-        upsertUserThreadActivity(db, bundle.user, bundle.event.room, timestamp);
+        await upsertUserThreadActivity(db, bundle.user, bundle.event.room, timestamp);
       }
     }
 
@@ -93,7 +93,7 @@ export function applyBundle(
       bundle.event.kind === "space.roomy.thread"
     ) {
       const timestamp = decodeTimeFromId(bundle.event.id);
-      upsertUserThreadActivity(db, bundle.user, bundle.event.id, timestamp);
+      await upsertUserThreadActivity(db, bundle.user, bundle.event.id, timestamp);
     }
 
     // Track reaction activity in threads (non-backfill only).
@@ -105,7 +105,7 @@ export function applyBundle(
        bundle.event.$type === "space.roomy.reaction.removeBridgedReaction.v0") &&
       bundle.event.room
     ) {
-      if (isThread(db, bundle.event.room)) {
+      if (await isThread(db, bundle.event.room)) {
         const timestamp = decodeTimeFromId(bundle.event.id);
         // For bridged reactions, use the reactingUser field instead of the
         // authenticated event sender.
@@ -113,26 +113,26 @@ export function applyBundle(
           "reactingUser" in bundle.event && typeof bundle.event.reactingUser === "string"
             ? bundle.event.reactingUser
             : bundle.user;
-        upsertUserThreadActivity(db, reactingUser, bundle.event.room, timestamp);
+        await upsertUserThreadActivity(db, reactingUser, bundle.event.room, timestamp);
       }
     }
 
-    db.exec(`release ${savepoint}`);
+    await db.exec(`release ${savepoint}`);
   } catch (e) {
-    db.exec(`rollback to ${savepoint}`);
-    db.exec(`release ${savepoint}`);
+    await db.exec(`rollback to ${savepoint}`);
+    await db.exec(`release ${savepoint}`);
     throw e;
   }
 }
 
-function runStatement(db: Database, statement: SqlStatement): void {
-  const stmt = db.prepare(statement.sql);
+async function runStatement(db: DbLike, statement: SqlStatement): Promise<void> {
+  const stmt = await db.prepare(statement.sql);
   const params = statement.params;
   if (params === undefined) {
-    stmt.run();
+    await stmt.run();
   } else if (Array.isArray(params)) {
-    stmt.run(...(params as unknown[] as never[]));
+    await stmt.run(...(params as unknown[] as never[]));
   } else {
-    stmt.run(params as never);
+    await stmt.run(params as never);
   }
 }

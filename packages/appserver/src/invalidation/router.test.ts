@@ -15,30 +15,26 @@ const USER_DID = "did:plc:alice" as UserDid;
 // materialized DB via `selectMessages`. Materialize the row into a fresh
 // in-memory DB (installed as the process-wide singleton) so the Router's
 // message-event paths produce diffs as they do in production.
-function seedMessageDb(messageId: string): void {
+async function seedMessageDb(messageId: string): Promise<void> {
   closeDb();
   const db = openDb({ path: ":memory:" });
-  db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
-    USER_DID,
-    USER_DID,
-  ]);
-  db.run(
+  await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", USER_DID, USER_DID);
+  await db.run(
     "insert or ignore into comp_info (entity, name, avatar) values (?, ?, ?)",
-    [USER_DID, "Alice", null],
+    USER_DID, "Alice", null,
   );
-  db.run(
+  await db.run(
     "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
-    [messageId, STREAM_DID, "01ROOM1AAAAAAAAAAAAAA000", messageId],
+    messageId, STREAM_DID, "01ROOM1AAAAAAAAAAAAAA000", messageId,
   );
-  db.run(
+  await db.run(
     "insert into comp_content (entity, mime_type, data, last_edit, timestamp) " +
       "values (?, 'text/plain', ?, ?, ?)",
-    [messageId, Buffer.from("hello"), messageId, Date.now()],
+    messageId, Buffer.from("hello"), messageId, Date.now(),
   );
-  db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
-    messageId,
-    USER_DID,
-  ]);
+  await db.run("insert into edges (head, tail, label) values (?, ?, 'author')",
+    messageId, USER_DID,
+  );
 }
 
 afterAll(() => closeDb());
@@ -69,12 +65,12 @@ function collect(): {
 }
 
 describe("Router", () => {
-  it("delivers signals to subscribers", () => {
+  it("delivers signals to subscribers", async () => {
     const router = new Router();
     const { events, listener } = collect();
     router.subscribe(listener);
 
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [makeEvent("space.roomy.space.updateSidebar.v1")],
       { isBackfill: false },
@@ -85,12 +81,12 @@ describe("Router", () => {
     expect(events[0]![0]!.kind).toBe("queryInvalidation");
   });
 
-  it("suppresses signals during backfill", () => {
+  it("suppresses signals during backfill", async () => {
     const router = new Router();
     const { events, listener } = collect();
     router.subscribe(listener);
 
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [makeEvent("space.roomy.space.updateSidebar.v1")],
       { isBackfill: true },
@@ -99,20 +95,20 @@ describe("Router", () => {
     expect(events).toHaveLength(0);
   });
 
-  it("does not call listeners when there are no subscribers", () => {
+  it("does not call listeners when there are no subscribers", async () => {
     const router = new Router();
     // Should not throw.
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [makeEvent("space.roomy.space.updateSidebar.v1")],
       { isBackfill: false },
     );
   });
 
-  it("assigns monotonically increasing seq to message diffs", () => {
+  it("assigns monotonically increasing seq to message diffs", async () => {
     // Both createMessage events share the same event id (see `makeEvent`),
     // so one materialized message row covers both.
-    seedMessageDb("01EVENT123");
+    await seedMessageDb("01EVENT123");
 
     const router = new Router();
     const seqs: number[] = [];
@@ -125,7 +121,7 @@ describe("Router", () => {
       }
     });
 
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [
         makeEvent("space.roomy.message.createMessage.v0", {
@@ -135,7 +131,7 @@ describe("Router", () => {
       { isBackfill: false },
     );
 
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [
         makeEvent("space.roomy.message.createMessage.v0", {
@@ -149,13 +145,13 @@ describe("Router", () => {
     expect(seqs[1]!).toBeGreaterThan(seqs[0]!);
   });
 
-  it("unsubscribe stops delivery", () => {
+  it("unsubscribe stops delivery", async () => {
     const router = new Router();
     let count = 0;
 
     const unsub = router.subscribe(() => count++);
 
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [makeEvent("space.roomy.space.updateSidebar.v1")],
       { isBackfill: false },
@@ -164,7 +160,7 @@ describe("Router", () => {
 
     unsub();
 
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [makeEvent("space.roomy.space.updateSidebar.v1")],
       { isBackfill: false },
@@ -172,7 +168,7 @@ describe("Router", () => {
     expect(count).toBe(1); // No increase.
   });
 
-  it("continues delivering to other listeners when one throws", () => {
+  it("continues delivering to other listeners when one throws", async () => {
     const router = new Router();
     let secondReceived = 0;
 
@@ -182,7 +178,7 @@ describe("Router", () => {
     router.subscribe(() => secondReceived++);
 
     // Should not throw, and second listener should still be called.
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [makeEvent("space.roomy.space.updateSidebar.v1")],
       { isBackfill: false },
@@ -191,12 +187,12 @@ describe("Router", () => {
     expect(secondReceived).toBe(1);
   });
 
-  it("batches signals from multiple events in one callback", () => {
+  it("batches signals from multiple events in one callback", async () => {
     const router = new Router();
     const { events, listener } = collect();
     router.subscribe(listener);
 
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [
         makeEvent("space.roomy.space.updateSidebar.v1"),
@@ -210,13 +206,13 @@ describe("Router", () => {
     expect(events[0]!.length).toBeGreaterThan(1);
   });
 
-  it("skips dispatch when all events produce no signals", () => {
+  it("skips dispatch when all events produce no signals", async () => {
     const router = new Router();
     const { events, listener } = collect();
     router.subscribe(listener);
 
     // page edit is out of scope → no signals.
-    router.onEventsApplied(
+    await router.onEventsApplied(
       STREAM_DID,
       [makeEvent("space.roomy.page.editPage.v0")],
       { isBackfill: false },

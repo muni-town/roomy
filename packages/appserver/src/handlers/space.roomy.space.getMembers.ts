@@ -40,7 +40,7 @@ export const getMembersHandler: QueryHandler<
   await hydrateUserMembership(userDid);
 
   const db = openDb();
-  requireSpaceAccess(db, spaceId, userDid);
+  await requireSpaceAccess(db, spaceId, userDid);
 
-  return selectMembers(db, spaceId, search);
+  return await selectMembers(db, spaceId, search);
 };

@@ -43,6 +43,6 @@ export const getSpacesHandler: QueryHandler<
 
   const db = openDb();
   return {
-    spaces: selectJoinedSpaces(db, userDid, personalStreamDid, { includeLeft }),
+    spaces: await selectJoinedSpaces(db, userDid, personalStreamDid, { includeLeft }),
   };
 };
