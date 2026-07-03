@@ -3,10 +3,6 @@
 
 services:
   leaf-server:
-    # NOTE: sha-2bb1f30 (built 2026-05-05) predates Leaf `userOverride` support
-    # (merged 2026-05-19), so appserver writes (sendEvents/createSpace seeding)
-    # fail with "No signing key found for DID". Use a build from on/after that
-    # date. sha-7983522 is `main` @ 2026-06-23, which includes it.
     image: ghcr.io/muni-town/leaf:sha-7983522
     platform: linux/amd64 # no arm64 build available
     # Uncomment if you are also dev-ing the leaf server

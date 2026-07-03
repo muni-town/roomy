@@ -16,6 +16,7 @@ import { checkWriteAuth } from "../auth/writeAuth.ts";
 import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
+import { getOrCreateMaterializer } from "../materialization/registry.ts";
 
 const MAX_BATCH_SIZE = 50;
 
@@ -92,5 +93,14 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
 
   log.info("sendEvents", "sending to Leaf", { spaceId, count: parsedEvents.length });
   await sendEventsToStream(spaceId as any /* StreamDid */, parsedEvents, callerDid);
+
+  // Ensure a materializer subscription exists for this space so the events
+  // are materialized and invalidation signals are emitted. getOrCreateMaterializer
+  // is idempotent — returns the cached materializer if one already exists.
+  // Fire-and-forget: the materializer processes events asynchronously via its
+  // Leaf subscription; we don't block the HTTP response on backfill.
+  getOrCreateMaterializer(spaceId as any /* StreamDid */).catch((err) => {
+    log.error("sendEvents", "failed to ensure materializer", { spaceId, error: err });
+  });
   log.info("sendEvents", "done", { spaceId, count: parsedEvents.length });
 };
