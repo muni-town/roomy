@@ -56,6 +56,7 @@ pnpm publish-packages       # Version & publish SDK to npm
 pnpm --filter app-lite check              # TypeScript check (svelte-check) for app-lite
 pnpm --filter @roomy/appserver typecheck  # TypeScript check (tsc --noEmit) for appserver
 bun test --cwd packages/appserver          # Unit tests (Bun test) for the appserver
+bun test --cwd packages/appserver src/appserver.test.ts  # E2E factory smoke tests (HTTP-level, test-mode auth, no Leaf)
 pnpm --filter @roomy-space/sdk test       # Unit tests (Vitest) for the SDK
 pnpm --filter @roomy/design test          # Unit tests (Vitest) for the design system
 ```
@@ -137,17 +138,21 @@ Core SDK for building Roomy clients. Published to npm.
 Bun/TypeScript service providing the XRPC interface between the thin client and the Leaf event-stream backend.
 
 **Structure:**
-- `src/index.ts` - Bun server entry point
-- `src/auth.ts` - ATProto JWT validation middleware
-- `src/routes/` - XRPC handler registry
-- `src/materializers/` - Event materialisation (ported from `packages/sdk/src/schema/events/`)
-- `src/db/` - SQLite/LibSQL schema + query helpers (server-side persistence)
+- `src/index.ts` - Bun server entry point (boot + startup backfill)
+- `src/appserver.ts` - Server factory (`createAppserver`), decoupled from env; used by boot path and tests
+- `src/xrpc/` - XRPC router, auth verifiers, rate limiting, types
+- `src/handlers/` - XRPC handler implementations (one file per NSID)
+- `src/materialization/` - Event materialisation (ported from `packages/sdk/src/schema/events/`)
+- `src/db/` - SQLite schema + query helpers (server-side persistence)
+- `src/embed/` - Link-card embed enrichment sweeper
+- `src/sync/` - WebSocket sync manager
+- `src/invalidation/` - Invalidation signal router
 - `lexicons/` - ATProto JSON lexicon definitions
 
 **Key design constraints:**
 - Server-side persistence: SQLite (`bun:sqlite`) or LibSQL — materialised views survive restarts
 - Client-side IVM: Tanstack DB in the browser (reactive in-memory, no persistence needed)
-- Auth required: ATProto session JWT validation, per-space access control
+- Auth required: ATProto session JWT validation, per-space access control. Test mode (`APPSERVER_TEST_MODE=true`) uses a header-based bypass (`X-Test-Did`) for E2E tests — no PDS or PLC needed
 - Dockerised for deployment
 - Interface is the contract: lexicons defined here become the real on-protocol interface
 

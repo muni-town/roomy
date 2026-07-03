@@ -119,6 +119,37 @@ export const prodAuthVerifier: AuthVerifier = async (req) => {
   }
 };
 
+// ── Test auth verifier ───────────────────────────────────────────────────
+
+/**
+ * Auth verifier for E2E / integration testing. Bypasses JWT verification and
+ * PLC DID resolution entirely — the caller's DID is read from a header,
+ * `X-Test-Did`, so tests can impersonate any user without a real PDS or
+ * network. Never enable in production: it accepts any DID without proof.
+ *
+ * Behaviour:
+ * - `X-Test-Did: <did>`  → authenticated as that DID (no verification).
+ * - No header, or empty  → anonymous (`{ did: null }`), same as prod.
+ *
+ * Guarded by an env flag so importing this module in a non-test process
+ * is a no-op. The factory (`createAppserver`) selects this verifier when
+ * `APPSERVER_TEST_MODE=true`.
+ */
+export const testAuthVerifier: AuthVerifier = async (req) => {
+  const did = req.headers.get("x-test-did");
+  if (!did) return { did: null };
+  return { did };
+};
+
+/**
+ * Select the appropriate auth verifier based on env. Test mode takes
+ * precedence so a test harness never accidentally hits the network.
+ */
+export function selectAuthVerifier(): AuthVerifier {
+  if (process.env.APPSERVER_TEST_MODE === "true") return testAuthVerifier;
+  return prodAuthVerifier;
+}
+
 // ── Ticket store for WebSocket pre-auth ─────────────────────────────────
 
 const tickets = new Map<string, { did: string; expiresAt: number }>();

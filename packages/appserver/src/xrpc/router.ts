@@ -52,7 +52,7 @@ function validateOutputOrThrow(
   return result;
 }
 
-interface WsData {
+export interface WsData {
   nsid?: string;
   params?: QueryParams;
   auth: AuthCtx;

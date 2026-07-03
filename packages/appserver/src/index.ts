@@ -1,48 +1,21 @@
-import { XrpcRouter, prodAuthVerifier } from "./xrpc/index.ts";
-import { Router as InvalidationRouter } from "./invalidation/index.ts";
-import { setInvalidationRouter } from "./materialization/registry.ts";
-import { startEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
-import { countPendingLinks } from "./embed/enricher.ts";
-import { log } from "./log.ts";
-import { withTimeout } from "./timeout.ts";
-import { openDb } from "./db/db.ts";
-import { attachReadState, openReadStateDb } from "./db/readStateDb.ts";
-import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
-import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
-import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
-import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
-import { materializeSpaceHandler } from "./handlers/space.roomy.admin.materializeSpace.ts";
-import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
-import { getMembersHandler } from "./handlers/space.roomy.space.getMembers.ts";
-import { getMetadataHandler } from "./handlers/space.roomy.space.getMetadata.ts";
-import { getSpaceThreadsHandler } from "./handlers/space.roomy.space.getThreads.ts";
-import { getRolesHandler } from "./handlers/space.roomy.space.getRoles.ts";
-import { getInvitesHandler } from "./handlers/space.roomy.space.getInvites.ts";
-import { getRoomMetadataHandler } from "./handlers/space.roomy.room.getMetadata.ts";
-import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts";
-import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
-import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
-import { getReactionsHandler } from "./handlers/space.roomy.message.getReactions.ts";
-import { updateSeenHandler } from "./handlers/space.roomy.room.updateSeen.ts";
-import { sendEventsHandler } from "./handlers/space.roomy.space.sendEvents.ts";
-import { createSpaceHandler } from "./handlers/space.roomy.space.createSpace.ts";
-import { joinSpaceHandler } from "./handlers/space.roomy.space.joinSpace.ts";
-import { leaveSpaceHandler } from "./handlers/space.roomy.space.leaveSpace.ts";
-import { setHandleHandler } from "./handlers/space.roomy.space.setHandle.ts";
-import { getActivityFeedHandler } from "./handlers/space.roomy.space.getActivityFeed.ts";
-import { RoomyServiceClient, schemas, StreamDid } from "@roomy-space/sdk";
+/**
+ * Appserver boot entry point.
+ *
+ * Constructs the server via `createAppserver` (see `./appserver.ts`) with
+ * env-derived options, then starts Leaf backfill. The factory handles all
+ * server construction — DBs, routes, CORS, health endpoints, WebSocket —
+ * so this file is only the process entry point and the backfill driver.
+ */
+
+import { createAppserver, type AppserverHandle } from "./appserver.ts";
+import { RoomyServiceClient, StreamDid } from "@roomy-space/sdk";
 import { getServiceClient } from "./serviceClient.ts";
 import { getOrCreateMaterializer, removeMaterializer } from "./materialization/registry.ts";
-import { proxyBlob } from "./blob.ts";
+import { log } from "./log.ts";
+import { withTimeout } from "./timeout.ts";
 
-const PORT = Number(process.env.PORT ?? 8080);
-const OWN_DID = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
-const SERVICE_ENDPOINT =
-  process.env.APPSERVER_ORIGIN ?? "https://api.roomy.space";
+// ─── Config (env) ──────────────────────────────────────────────────────────
 
-// When to backfill Leaf streams into SQLite. `eager` (default) discovers and
-// materialises every network stream at boot; `lazy` defers until first request
-// via the materializer registry / user hydration path. See `startupBackfill()`.
 const BACKFILL_MODE = process.env.APPSERVER_BACKFILL_MODE ?? "eager";
 
 /**
@@ -135,280 +108,13 @@ const BACKFILL_PROGRESS_EVERY = envInt("APPSERVER_BACKFILL_PROGRESS_EVERY", 50);
  */
 const CLOSE_TIMEOUT_MS = envInt("APPSERVER_BACKFILL_CLOSE_TIMEOUT_MS", 15_000);
 
-/**
- * Live startup-backfill status, exposed at `GET /health/backfill` so operators
- * can watch progress without scraping (rate-limited) logs. Mutated by
- * `startupBackfill()`; `done` flips true when the run finishes (success or
- * failure). In `lazy` mode `discovered` stays 0 and `done` is false — spaces
- * materialise on first request instead.
- */
-const backfillStatus = {
-  mode: BACKFILL_MODE,
-  discovered: 0,
-  started: 0,
-  completed: 0,
-  succeeded: 0,
-  failed: 0,
-  done: false,
-};
+// ─── Server construction ───────────────────────────────────────────────────
 
-const DID_DOCUMENT = {
-  "@context": ["https://www.w3.org/ns/did/v1"],
-  id: OWN_DID,
-  service: [
-    {
-      id: "#space_roomy_appserver",
-      type: "RoomyAppserver",
-      serviceEndpoint: SERVICE_ENDPOINT,
-    },
-  ],
-};
-
-// ─── Databases ──────────────────────────────────────────────────────────
-// Materialisation DB (derived from Leaf, can be wiped + re-backfilled).
-const mainDb = openDb();
-// Read-state DB (appserver-owned, survives materialisation resets).
-const readStateDb = openReadStateDb();
-// ATTACH read-state to main DB so SQL can reference readstate.read_positions.
-attachReadState(mainDb, readStateDb);
-
-// ─── Periodic maintenance ──────────────────────────────────────────────
-// Purge stale user_thread_activity rows older than 72 hours once per hour.
-setInterval(() => {
-  const cutoff = Date.now() - 72 * 60 * 60 * 1000;
-  const purged = purgeStaleThreadActivity(mainDb, cutoff);
-  if (purged > 0) {
-    console.log(`[maintenance] purged ${purged} stale user_thread_activity rows`);
-  }
-}, 60 * 60 * 1000); // 1 hour
-
-// ─── Invalidation + Sync ────────────────────────────────────────────────
-// Singleton router — live events flow through every SpaceMaterializer
-// created by the registry into this router, then out to the SyncManager
-// which routes frames to WS connections.
-const invalidationRouter = new InvalidationRouter();
-InvalidationRouter.setInstance(invalidationRouter);
-setInvalidationRouter(invalidationRouter);
-
-// Start the centralized embed enrichment sweeper. One process-wide loop
-// drains all pending link embeds (deduplicated + timeout-bounded) instead
-// of each SpaceMaterializer fetching independently. See embed/sweeper.ts.
-startEmbedSweeper({ db: mainDb, invalidationRouter });
-
-const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter);
-
-// ─── XRPC routes ────────────────────────────────────────────────────────
-
-const router = new XrpcRouter(prodAuthVerifier)
-  .procedure("space.roomy.auth.getConnectionTicket", {
-    handler: getConnectionTicketHandler,
-    inputSchema: schemas.procedures.getConnectionTicket.Input,
-    outputSchema: schemas.procedures.getConnectionTicket.Output,
-  })
-  .procedure("space.roomy.room.updateSeen", {
-    handler: updateSeenHandler,
-    inputSchema: schemas.procedures.updateSeen.Input,
-    // No outputSchema: void return; short-circuits to 200 with empty body.
-  })
-  .procedure("space.roomy.space.sendEvents", {
-    handler: sendEventsHandler,
-    inputSchema: schemas.procedures.sendEvents.Input,
-    // No outputSchema: void return; short-circuits to 200 with empty body.
-  })
-  .procedure("space.roomy.space.createSpace", {
-    handler: createSpaceHandler,
-    inputSchema: schemas.procedures.createSpace.Input,
-    outputSchema: schemas.procedures.createSpace.Output,
-  })
-  .procedure("space.roomy.space.joinSpace", {
-    handler: joinSpaceHandler,
-    inputSchema: schemas.procedures.joinSpace.Input,
-    outputSchema: schemas.procedures.joinSpace.Output,
-  })
-  .procedure("space.roomy.space.leaveSpace", {
-    handler: leaveSpaceHandler,
-    inputSchema: schemas.procedures.leaveSpace.Input,
-    // No outputSchema: void return; short-circuits to 200 with empty body.
-  })
-  .procedure("space.roomy.space.setHandle", {
-    handler: setHandleHandler,
-    inputSchema: schemas.procedures.setHandle.Input,
-    // No outputSchema: void return; short-circuits to 200 with empty body.
-  })
-  // Admin routes (connectSpace, materializeSpace) intentionally have no
-  // arktype schemas — they're internal/admin endpoints not part of the
-  // public XRPC interface spec.
-  .query("space.roomy.admin.connectSpace", {
-    handler: connectSpaceHandler,
-  })
-  .query("space.roomy.admin.materializeSpace", {
-    handler: materializeSpaceHandler,
-  })
-  .query("space.roomy.space.getSpaces", {
-    handler: getSpacesHandler,
-    paramsSchema: schemas.queries.getSpaces.Params,
-    outputSchema: schemas.queries.getSpaces.Response,
-  })
-  .query("space.roomy.space.getActivityFeed", {
-    handler: getActivityFeedHandler,
-    paramsSchema: schemas.queries.getActivityFeed.Params,
-    outputSchema: schemas.queries.getActivityFeed.Response,
-  })
-  .query("space.roomy.space.getMembers", {
-    handler: getMembersHandler,
-    paramsSchema: schemas.queries.getMembers.Params,
-    outputSchema: schemas.queries.getMembers.Response,
-  })
-  .query("space.roomy.space.getMetadata", {
-    handler: getMetadataHandler,
-    paramsSchema: schemas.queries.getSpaceMetadata.Params,
-    outputSchema: schemas.queries.getSpaceMetadata.Response,
-  })
-  .query("space.roomy.space.getThreads", {
-    handler: getSpaceThreadsHandler,
-    paramsSchema: schemas.queries.getSpaceThreads.Params,
-    outputSchema: schemas.queries.getSpaceThreads.Response,
-  })
-  .query("space.roomy.space.getRoles", {
-    handler: getRolesHandler,
-    paramsSchema: schemas.queries.getRoles.Params,
-    outputSchema: schemas.queries.getRoles.Response,
-  })
-  .query("space.roomy.space.getInvites", {
-    handler: getInvitesHandler,
-    paramsSchema: schemas.queries.getInvites.Params,
-    outputSchema: schemas.queries.getInvites.Response,
-  })
-  .query("space.roomy.room.getMetadata", {
-    handler: getRoomMetadataHandler,
-    paramsSchema: schemas.queries.getRoomMetadata.Params,
-    outputSchema: schemas.queries.getRoomMetadata.Response,
-  })
-  .query("space.roomy.room.getThreads", {
-    handler: getRoomThreadsHandler,
-    paramsSchema: schemas.queries.getRoomThreads.Params,
-    outputSchema: schemas.queries.getRoomThreads.Response,
-  })
-  .query("space.roomy.room.getMessages", {
-    handler: getMessagesHandler,
-    paramsSchema: schemas.queries.getMessages.Params,
-    outputSchema: schemas.queries.getMessages.Response,
-  })
-  .query("space.roomy.message.getMessage", {
-    handler: getMessageHandler,
-    paramsSchema: schemas.queries.getMessage.Params,
-    outputSchema: schemas.queries.getMessage.Response,
-  })
-  .query("space.roomy.message.getReactions", {
-    handler: getReactionsHandler,
-  })
-  .sync("space.roomy.sync.subscribe", {
-    handler: syncSubscribeHandler,
-  });
-
-// ─── Server ─────────────────────────────────────────────────────────────
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": process.env.CORS_ORIGIN ?? "*",
-  "Access-Control-Allow-Headers": "Authorization, Content-Type, Atproto-Proxy",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
-
-Bun.serve({
-  port: PORT,
-  // Backfill of large spaces (tens of thousands of events) can take
-  // significantly longer than Bun's default 10s. Hydration no longer
-  // blocks on backfill completion (see userHydration.ts), but the admin
-  // materializeSpace handler with wait=backfill may legitimately take
-  // a long time. Set a generous idle timeout so those requests don't
-  // get killed mid-flight.
-  // 255s is Bun's hard maximum idleTimeout — set to that ceiling so a long
-  // admin materializeSpace (wait=backfill on a huge space) isn't killed.
-  idleTimeout: 255, // seconds — Bun's hard max
-  fetch: async (req, server) => {
-    if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders });
-    }
-
-    const url = new URL(req.url);
-
-    if (url.pathname === "/.well-known/did.json") {
-      return new Response(JSON.stringify(DID_DOCUMENT), {
-        headers: { "content-type": "application/json", ...corsHeaders },
-      });
-    }
-
-    // ─── Health endpoints ──────────────────────────────────────────────
-    // Unauthenticated (liveness/readiness must not require auth) and cheap,
-    // so operators can monitor the appserver without scraping rate-limited
-    // stdout. Each returns JSON with CORS so a browser dashboard can poll.
-    if (url.pathname === "/health") {
-      return new Response(
-        JSON.stringify({
-          status: "ok",
-          uptime: process.uptime(),
-          did: OWN_DID,
-          port: PORT,
-          backfillDone: backfillStatus.done,
-        }),
-        { headers: { "content-type": "application/json", ...corsHeaders } },
-      );
-    }
-    if (url.pathname === "/health/backfill") {
-      return new Response(JSON.stringify(backfillStatus), {
-        headers: { "content-type": "application/json", ...corsHeaders },
-      });
-    }
-    if (url.pathname === "/health/embed") {
-      const stats = embedSweeperStats();
-      let pending: number;
-      try {
-        pending = countPendingLinks(mainDb);
-      } catch {
-        pending = -1; // DB read failed — surface the error state, don't 500
-      }
-      return new Response(
-        JSON.stringify({ ...stats, pending }),
-        { headers: { "content-type": "application/json", ...corsHeaders } },
-      );
-    }
-
-    // ─── Blob proxy ────────────────────────────────────────────────────
-    // `atblob://<did>/<cid>` → raw bytes from the blob owner's PDS.
-    // Public (no auth): blobs referenced in public records are public and
-    // content-addressed by CID. Needed for non-image media (video, files)
-    // because cdn.bsky.app only serves images.
-    const blobMatch = url.pathname.match(/^\/blob\/(.+?)\/(.+)$/);
-    if (blobMatch && req.method === "GET") {
-      const did = decodeURIComponent(blobMatch[1]!);
-      const cid = decodeURIComponent(blobMatch[2]!);
-      const res = await proxyBlob(did, cid, req);
-      console.log(`${req.method} ${url.pathname} → ${res.status}`);
-      for (const [k, v] of Object.entries(corsHeaders)) {
-        res.headers.set(k, v);
-      }
-      return res;
-    }
-
-    const res = await router.fetch(req, server);
-    if (res === undefined) {
-      // Successful WebSocket upgrade — no HTTP response to send.
-      console.log(`${req.method} ${url.pathname} → [ws upgrade]`);
-      return undefined;
-    }
-    const status = res.status;
-    console.log(`${req.method} ${url.pathname} → ${status}`);
-    for (const [k, v] of Object.entries(corsHeaders)) {
-      res.headers.set(k, v);
-    }
-    return res;
-  },
-  websocket: router.websocket,
+const app: AppserverHandle = createAppserver({
+  backfillMode: BACKFILL_MODE as "eager" | "lazy" | "disabled",
 });
 
-console.log(`Appserver listening on port ${PORT} (DID: ${OWN_DID})`);
-
-// ─── Startup backfill ──────────────────────────────────────────────────
+// ─── Startup backfill ──────────────────────────────────────────────────────
 // After the server is listening, backfill Leaf streams into SQLite. In the
 // default `eager` mode we discover every network stream and materialise it
 // up front so all spaces are ready when users connect; in `lazy` mode we
@@ -422,22 +128,26 @@ console.log(`Appserver listening on port ${PORT} (DID: ${OWN_DID})`);
 // mode) — spaces are never unavailable, just possibly stale until backfill
 // completes, after which invalidation signals fill in the rest.
 if (BACKFILL_MODE === "lazy") {
-  backfillStatus.done = true; // no startup backfill to wait on
+  app.backfillStatus.done = true; // no startup backfill to wait on
   console.log(
     "[startup] lazy backfill mode — spaces will materialise on first request",
   );
+} else if (BACKFILL_MODE === "disabled") {
+  app.backfillStatus.done = true;
+  console.log("[startup] backfill disabled — test/test mode");
 } else {
   if (BACKFILL_MODE !== "eager") {
     console.warn(
       `[startup] unknown APPSERVER_BACKFILL_MODE "${BACKFILL_MODE}", defaulting to eager`,
     );
   }
-  startupBackfill().catch((err) => {
+  startupBackfill(app).catch((err) => {
     console.error("[startup] backfill failed:", err);
   });
 }
 
-async function startupBackfill(): Promise<void> {
+async function startupBackfill(handle: AppserverHandle): Promise<void> {
+  const backfillStatus = handle.backfillStatus;
   let client: RoomyServiceClient;
   try {
     client = await getServiceClient();
@@ -482,8 +192,11 @@ async function startupBackfill(): Promise<void> {
   // motivated this). A batched progress summary at info (every
   // BACKFILL_PROGRESS_EVERY completions + the final line) preserves
   // observability. Set LOG_LEVEL=debug to see per-DID detail.
-  const sleep = (ms: number): Promise<void> =>
-    new Promise((r) => setTimeout(r, ms));
+  const sleep = (ms: number): Promise<void> => {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    setTimeout(resolve, ms);
+    return promise;
+  };
 
   const worker = async (): Promise<void> => {
     let consecutiveFailures = 0;
