@@ -14,6 +14,7 @@
 
 import type { EventType, StreamDid, UserDid, Ulid } from "@roomy-space/sdk";
 import type { MessageDto } from "../queries/selectMessages.ts";
+import type { DbLike } from "../db/types.ts";
 
 // ─── NSIDs for XRPC query endpoints ─────────────────────────────────────
 
@@ -103,6 +104,7 @@ export interface InvalidationRouter {
     streamDid: StreamDid,
     events: readonly AppliedEvent[],
     meta: { isBackfill: boolean },
+    db?: DbLike,
   ): void | Promise<void>;
 
   /**

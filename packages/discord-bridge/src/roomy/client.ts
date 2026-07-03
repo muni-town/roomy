@@ -6,8 +6,6 @@ import {
 	ATPROTO_BRIDGE_APP_PASSWORD,
 	ATPROTO_BRIDGE_DID,
 	BRIDGE_DATA_DIR,
-	LEAF_SERVER_DID,
-	LEAF_URL,
 	STREAM_HANDLE_NSID,
 	STREAM_NSID,
 } from "../env.ts";
@@ -59,11 +57,6 @@ function deleteSessionFile() {
 
 export async function initRoomyClient(): Promise<RoomyClient> {
 	log.info("Initializing ATProto agent...");
-	log.info("Leaf config:", {
-		LEAF_URL: LEAF_URL(),
-		LEAF_SERVER_DID: LEAF_SERVER_DID(),
-		ATPROTO_BRIDGE_DID: ATPROTO_BRIDGE_DID(),
-	});
 
 	const existingSession = loadSessionFile();
 
@@ -106,12 +99,10 @@ export async function initRoomyClient(): Promise<RoomyClient> {
 		throw new Error("Failed to authenticate with app password - no DID");
 	}
 
-	log.info("Connecting to Leaf server...");
+	log.info("Creating Roomy client...");
 
-	const roomyClient = await RoomyClient.create({
+	const roomyClient = new RoomyClient({
 		agent: atpAgent,
-		leafUrl: LEAF_URL(),
-		leafDid: LEAF_SERVER_DID(),
 		profileSpaceNsid: STREAM_HANDLE_NSID(),
 		spaceNsid: STREAM_NSID(),
 	});

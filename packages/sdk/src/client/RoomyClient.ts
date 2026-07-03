@@ -1,37 +1,25 @@
 /**
  * RoomyClient - High-level client for interacting with Roomy infrastructure.
  *
- * Wraps ATProto Agent and LeafClient, providing:
+ * Wraps ATProto Agent, providing:
  * - Cached profile lookups
  * - Cached handle resolution
  * - Cached stream handle record lookups
  * - Space resolution from handles or DIDs
  * - PDS operations (blob uploads, records)
- *
- * Use the static `create()` method to instantiate - it waits for Leaf
- * authentication before returning, so all methods are ready to use.
  */
 
 import type { Agent } from "@atproto/api";
-import type { LeafClient } from "@muni-town/leaf-client";
-import { Did, Handle, UserDid, StreamDid, type, newUlid } from "../schema";
-import { Deferred } from "../utils/Deferred";
-import { createLeafClient, type LeafConfig } from "../leaf";
+import { Did, Handle, UserDid, StreamDid, type } from "../schema";
 import {
   getProfile,
   type Profile,
   uploadBlob,
   createProfileSpaceRecord,
   removeProfileSpaceRecord,
-  getPersonalStreamId,
-  savePersonalStreamId,
 } from "../atproto";
-import { ConnectedSpace } from "../connection/ConnectedSpace";
-import { modules, type ModuleWithCid } from "../modules";
-import { withTimeoutWarning } from "../utils/timeout";
-import { RoomyClientBase } from "./RoomyClientBase";
 
-export interface RoomyClientConfig extends LeafConfig {
+export interface RoomyClientConfig {
   agent: Agent;
   /** Collection for personal space record, e.g., "space.roomy.space.personal.dev" */
   spaceNsid: string;
@@ -41,12 +29,7 @@ export interface RoomyClientConfig extends LeafConfig {
   plcDirectory?: string;
 }
 
-export interface RoomyClientEvents {
-  /** Called when Leaf connection is established */
-  onConnect?: () => void;
-  /** Called when Leaf connection is lost */
-  onDisconnect?: () => void;
-}
+export interface RoomyClientEvents {}
 
 interface ProfileResponse {
   success: boolean;
@@ -54,13 +37,13 @@ interface ProfileResponse {
     did: string;
     handle: string;
     displayName?: string;
-    description?: string;
     avatar?: string;
-    banner?: string;
+    description?: string;
   };
 }
 
-export class RoomyClient extends RoomyClientBase {
+
+export class RoomyClient {
   readonly agent: Agent;
   readonly #config: RoomyClientConfig;
 
@@ -68,65 +51,9 @@ export class RoomyClient extends RoomyClientBase {
   readonly #profileCache = new Map<string, ProfileResponse>();
   readonly #profileSpaceCache = new Map<string, StreamDid | undefined>();
 
-  // Personal stream
-  #personalStream: ConnectedSpace | null = null;
-
-  /**
-   * Get the connected personal stream, if any.
-   */
-  get personalStream(): ConnectedSpace | null {
-    return this.#personalStream;
-  }
-
-  private constructor(config: RoomyClientConfig, leaf: LeafClient) {
-    super({ leaf, plcDirectory: config.plcDirectory });
+  constructor(config: RoomyClientConfig) {
     this.agent = config.agent;
     this.#config = config;
-  }
-
-  /**
-   * Create a RoomyClient and wait for Leaf authentication.
-   * Returns only when the client is fully ready to use.
-   *
-   * @param config - Client configuration
-   * @param events - Optional event handlers for connection status
-   */
-  static async create(
-    config: RoomyClientConfig,
-    events?: RoomyClientEvents,
-  ): Promise<RoomyClient> {
-    const leaf = createLeafClient(
-      { type: "atproto", agent: config.agent },
-      {
-        leafUrl: config.leafUrl,
-        leafDid: config.leafDid,
-      },
-    );
-
-    const authenticated = new Deferred<void>();
-
-    leaf.on("connect", () => {
-      console.info("Leaf: connected");
-      events?.onConnect?.();
-    });
-
-    leaf.on("disconnect", () => {
-      console.info("Leaf: disconnected");
-      events?.onDisconnect?.();
-    });
-
-    leaf.on("authenticated", (did) => {
-      console.info("Leaf: authenticated as", { did });
-      authenticated.resolve();
-    });
-
-    // Wait for authentication before returning
-    await withTimeoutWarning(
-      authenticated.promise,
-      "RoomyClient.create: waiting for Leaf authentication",
-    );
-
-    return new RoomyClient(config, leaf);
   }
 
   /**
@@ -220,7 +147,7 @@ export class RoomyClient extends RoomyClientBase {
 
       this.#profileSpaceCache.set(userDid, spaceId);
       return spaceId;
-    } catch (_e) {
+    } catch {
       // If we can't fetch the record, then there's no space to resolve to.
       return undefined;
     }
@@ -257,99 +184,27 @@ export class RoomyClient extends RoomyClientBase {
     spaceDid: StreamDid;
     handle?: Handle;
   }> {
-    const idType = this.parseIdType(spaceIdOrHandle);
+    const didParsed = Did(spaceIdOrHandle);
+    if (!(didParsed instanceof type.errors)) {
+      return { spaceDid: spaceIdOrHandle as StreamDid };
+    }
 
-    if ("handle" in idType) {
-      // There are two ways to resolve the handle to the space:
-      // 1. By using the `_leaf.example.handle` TXT record
-      // 2. By using the `space.roomy.profileSpace` `self` record on the PDS associated to the
-      //    handle.
-
-      // Resolve using the leaf txt record and the profile space at the same time
-      const leafResolve = resolveLeafDidFromHandle(spaceIdOrHandle).catch(
-        (_e) => undefined,
-      );
-      const profileSpaceResolve = this.resolveProfileSpaceFromUserHandle(
+    const handleParsed = Handle(spaceIdOrHandle);
+    if (!(handleParsed instanceof type.errors)) {
+      // Resolve using the profile space record on the PDS associated to the handle
+      const spaceDid = await this.resolveProfileSpaceFromUserHandle(
         spaceIdOrHandle,
-      ).catch((_e) => undefined);
-      const [leafResult, profileResult] = await Promise.all([
-        leafResolve,
-        profileSpaceResolve,
-      ]);
-
-      // Make sure one of the resolvers succeeded
-      const spaceDid = leafResult || profileResult;
+      );
       if (!spaceDid) {
         throw new Error(
           `Could not resolve space ID from handle: ${spaceIdOrHandle}`,
         );
       }
 
-      return { spaceDid, handle: idType.handle };
+      return { spaceDid, handle: handleParsed };
     }
 
-    return { spaceDid: spaceIdOrHandle as StreamDid };
-  }
-
-  /**
-   * Resolve a handle for a space, verifying that the handle also points to this space.
-   *
-   * @param verify If this is set to false it will just do the handle lookup without checking that
-   * the handle also resolves to the space's DID.
-   */
-  async resolveHandleFromSpaceId(
-    spaceDid: StreamDid,
-    verify = true,
-  ): Promise<Handle | undefined> {
-    try {
-      // There are two ways that we can resolve the handle from the space ID:
-      // 1. By looking at the DID document's alsoKnownAs fields and looking for a leaf:// link.
-      // 2. By running a `stream_info` query against the Roomy space's stream and getting it's
-      //    `handleProvider`.
-
-      // Try both methods for resolving the handle
-      let resolveLeaf = this.resolveHandleFromLeafDid(spaceDid);
-      let resolveSpace = this.resolveHandleFromSpaceHandleProvider(spaceDid);
-      const [resultLeaf, resultSpace] = await Promise.all([
-        resolveLeaf,
-        resolveSpace,
-      ]);
-      const handle = resultLeaf || resultSpace;
-
-      if (verify && handle) {
-        const { spaceDid: resolvedSpaceDid } =
-          await this.resolveSpaceIdFromDidOrHandle(handle);
-
-        if (spaceDid == resolvedSpaceDid) {
-          return handle;
-        } else {
-          console.warn(
-            `Space with DID ${spaceDid} resolved to handle\
-            ${handle}, but handle resolved to different DID: ${resolvedSpaceDid}`,
-          );
-          return undefined;
-        }
-      } else {
-        return handle;
-      }
-    } catch (_e) {
-      // Errors are fine, the handle just might not exist, so ignore them.
-    }
-    return undefined;
-  }
-
-  async resolveHandleFromSpaceHandleProvider(
-    spaceDid: StreamDid,
-  ): Promise<Handle | undefined> {
-    const spaceInfo = await this.getSpaceInfo(spaceDid);
-    if (!spaceInfo) return undefined;
-    const { handleProvider } = spaceInfo;
-    if (!handleProvider) return undefined;
-
-    const profile = await this.getProfile(handleProvider);
-    if (!profile) return undefined;
-
-    return profile.handle as Handle;
+    throw new Error(`Invalid identifier: ${spaceIdOrHandle}`);
   }
 
   /**
@@ -361,178 +216,4 @@ export class RoomyClient extends RoomyClientBase {
   ) {
     return uploadBlob(this.agent, bytes, opts);
   }
-
-  /**
-   * Connect to or create the user's personal stream.
-   * Returns existing stream if already connected.
-   *
-   * @param module - Module definition for personal streams
-   */
-  async connectPersonalSpace(schemaVersion: string): Promise<ConnectedSpace> {
-    // Return existing if already connected
-    if (this.#personalStream) {
-      return this.#personalStream;
-    }
-
-    const recordConfig = {
-      collection: this.#config.spaceNsid,
-      schemaVersion,
-    };
-
-    let attempts = 0;
-    let errors: any[] = [];
-    let space: ConnectedSpace | null = null;
-
-    while (!space) {
-      if (attempts > 2) throw errors;
-      attempts++;
-      try {
-        const existingStreamDid = await getPersonalStreamId(
-          this.agent,
-          recordConfig,
-        );
-        if (!existingStreamDid) {
-          throw { error: "RecordNotFound" };
-        }
-        console.debug("Got streamId, connecting...", {
-          streamId: existingStreamDid,
-        });
-        space = await ConnectedSpace.connect({
-          client: this,
-          streamDid: existingStreamDid,
-          module: modules.personal,
-        });
-        console.debug("Connected to personal stream");
-      } catch (e) {
-        if ((e as any).error === "RecordNotFound") {
-          console.info(
-            "Could not find existing stream ID on PDS. Creating new stream!",
-          );
-
-          // create a new stream on leaf server (this also subscribes)
-          space = await ConnectedSpace.create(
-            {
-              client: this,
-              module: modules.personal,
-            },
-            UserDid.assert(this.agent.assertDid),
-          );
-
-          console.debug("Putting record to PDS");
-
-          // put the stream ID in a record
-          try {
-            await savePersonalStreamId(
-              this.agent,
-              space.streamDid,
-              recordConfig,
-            );
-            console.debug(
-              "Saved stream record to PDS with NSID:",
-              recordConfig.collection,
-            );
-          } catch (saveError) {
-            // I'm not sure if this should throw. I was having an issue where it was failing silently...
-            throw new Error("Could not create PDS record for personal stream");
-            // errors.push(
-            //   new Error("Could not create PDS record for personal stream", {
-            //     cause: saveError,
-            //   }),
-            // );
-          }
-        } else if ((e as Error).message?.includes("Stream does not exist")) {
-          // Stream record exists on PDS but stream doesn't exist on Leaf server.
-          // This can happen if the stream was deleted or the Leaf server was reset.
-          // Don't auto-recreate to avoid data loss. User should manually verify and delete the record if needed.
-          console.error(
-            "Stream record exists on PDS but stream doesn't exist on Leaf server. " +
-              "This may indicate data inconsistency. Manual recovery may be needed. " +
-              "To fix, you may need to delete the stale PDS record and let it recreate.",
-            { error: (e as Error).message },
-          );
-          errors.push(e);
-          // Don't retry - this won't fix itself
-          break;
-        } else {
-          if (e instanceof Error) console.error(e);
-          console.error("Error while fetching personal stream record:", e);
-          errors.push(e);
-        }
-      }
-    }
-
-    if (!space) {
-      throw new Error(
-        `Failed to connect to personal stream after ${attempts} attempts`,
-        { cause: errors },
-      );
-    }
-
-    this.#personalStream = space;
-
-    return space;
-  }
-
-  /**
-   * Join a space by sending events to both personal stream and the target space.
-   *
-   * @param spaceId - The stream DID of the space to join
-   * @param spaceModule - Module definition for the space
-   * @returns The connected space
-   * @throws If personal stream is not connected
-   */
-  async joinSpace(
-    spaceId: StreamDid,
-    spaceModule: ModuleWithCid,
-  ): Promise<ConnectedSpace> {
-    if (!this.#personalStream) {
-      throw new Error(
-        "Personal stream not connected. Call connectPersonalStream() first.",
-      );
-    }
-
-    // Send PersonalJoinSpace event to personal stream
-    await this.#personalStream.sendEvent({
-      id: newUlid(),
-      $type: "space.roomy.space.personal.joinSpace.v0",
-      spaceDid: spaceId,
-    });
-
-    // Connect to the target space
-    const space = await ConnectedSpace.connect({
-      client: this,
-      streamDid: spaceId,
-      module: spaceModule,
-    });
-
-    // Send JoinSpace event to the target space
-    await space.sendEvent({
-      id: newUlid(),
-      $type: "space.roomy.space.joinSpace.v0",
-    });
-
-    return space;
-  }
-}
-
-/**
- * Resolves the Leaf stream DID for a handle using DNS TXT records.
- */
-export async function resolveLeafDidFromHandle(
-  handle: Handle,
-): Promise<StreamDid | undefined> {
-  const resp = await fetch(
-    `https://resolver.roomy.chat/xrpc/town.muni.leaf.resolveHandle?handle=${encodeURIComponent(handle)}`,
-    {
-      headers: [["accept", "application/json"]],
-    },
-  );
-  if (!resp.ok) {
-    throw new Error(
-      `Error resolving leaf handle to DID (${resp.status}: ${resp.statusText}): ${await resp.text()}`,
-    );
-  }
-  const json = await resp.json();
-  const did = json.did;
-  return StreamDid.assert(did);
 }

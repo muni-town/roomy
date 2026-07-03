@@ -28,6 +28,30 @@ const NEW_USER_SIGNALS: EventType[] = [
 ];
 
 export type GetProfilesFn = (dids: UserDid[]) => Promise<ProfileViewDetailed[]>;
+/**
+ * Default profile fetcher that calls the bsky appview directly.
+ * Used when no custom `GetProfilesFn` is provided.
+ */
+export const defaultGetProfiles: GetProfilesFn = async (dids: UserDid[]) => {
+  try {
+    const url = `https://api.bsky.app/app/bsky.actor/getProfiles?actors=${dids.join(",")}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.warn(
+        `[materialize] defaultGetProfiles: bsky appview returned ${resp.status} for ${dids.length} DIDs`,
+      );
+      return [];
+    }
+    const data = await resp.json();
+    return data.profiles;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[materialize] defaultGetProfiles: failed to fetch profiles for ${dids.length} DIDs: ${message}`,
+    );
+    return [];
+  }
+};
 
 /**
  * Ensure entities + comp_user + comp_info rows exist for every user DID

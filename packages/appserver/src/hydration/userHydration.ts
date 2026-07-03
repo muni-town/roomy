@@ -2,12 +2,12 @@
  * Per-request membership hydration.
  *
  * Before a caller-scoped read can be answered, we need:
- *   1. The caller's personal stream materialised + caught up to backfill.
- *   2. Each non-left space referenced in that personal stream materialised
- *      + caught up.
+ *   1. The caller's personal stream resolved (cached or created).
+ *   2. Each non-left space referenced in that personal stream identified.
  *
- * Once subscribed, materialisers stay live; the second call for the same
- * caller short-circuits on cached materializer + cached personal stream DID.
+ * Materialization is handled inline by StreamManager when events are written,
+ * so hydration only needs to resolve the personal stream and read the
+ * intended spaces from the materialized DB.
  *
  * Per-user dedup: concurrent calls for the same userDid share an in-flight
  * promise to avoid N parallel personal-stream reads.
@@ -16,10 +16,6 @@
 import type { DbLike } from "../db/types.ts";
 import { type StreamDid, type UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
-import {
-  getOrCreateMaterializer,
-  type GetOrCreateOpts,
-} from "../materialization/registry.ts";
 import { JOINED_SPACE_LABEL } from "../queries/joinedSpaces.ts";
 import {
   PersonalStreamRecordNotFound,
@@ -43,8 +39,6 @@ export interface UserHydrationResult {
 
 export interface HydrateOpts extends ResolveOpts {
   db?: DbLike;
-  /** Override registry options (tests). Forwarded to every getOrCreateMaterializer call. */
-  materializerOpts?: GetOrCreateOpts;
 }
 
 const inflight = new Map<UserDid, Promise<UserHydrationResult>>();
@@ -86,61 +80,15 @@ async function run(
     throw err;
   }
 
-  // Stage 1: start materialising the personal stream. We intentionally
-  // do NOT await backfillDone here — doing so blocks the request handler
-  // until every historical event is applied, which can exceed Bun's
-  // idleTimeout on large spaces. Instead we read whatever state is currently
-  // materialised and return it. If backfill is still in progress the
-  // returned membership may be partial; the client will see a complete
-  // view once the materializer finishes and invalidation signals arrive.
-  const personalMat = await getOrCreateMaterializer(
-    personalStreamDid,
-    opts.materializerOpts,
-  );
-  // If the materializer already completed backfill, drain to ensure writes
-  // are visible. If not, we serve whatever is on disk — worst case the user
-  // sees an empty list that fills in over the next few seconds.
-  if (personalMat.backfillSettled) {
-    if (personalMat.backfillError) {
-      throw new Error(
-        `Personal stream backfill failed for ${personalStreamDid}`,
-      );
-    }
-    await personalMat.drain();
-  }
-
+  // Materialization is handled by the subscription system. We read whatever
+  // state is currently materialised and return it. If backfill is still in
+  // progress the returned membership may be partial; the client will see a
+  // complete view once the materializer finishes and invalidation signals
+  // arrive.
   const intendedSpaceDids = await readIntendedSpaceDids(db, personalStreamDid);
 
-  // Stage 2: each intended space, in parallel. Failures recorded, not thrown.
   const hydrationFailures: HydrationFailure[] = [];
-  await Promise.all(
-    intendedSpaceDids.map(async (spaceDid) => {
-      try {
-        const mat = await getOrCreateMaterializer(
-          spaceDid,
-          opts.materializerOpts,
-        );
-        // Same non-blocking strategy as Stage 1: if backfill is already
-        // done, drain so reads see the latest writes. Otherwise proceed
-        // with whatever is on disk.
-        if (mat.backfillSettled) {
-          if (mat.backfillError) {
-            throw new Error(`Space backfill failed for ${spaceDid}`);
-          }
-          await mat.drain();
-        }
-      } catch (err) {
-        hydrationFailures.push({
-          streamDid: spaceDid,
-          reason: err instanceof Error ? err.message : String(err),
-        });
-        console.warn(
-          `[hydration] ${userDid} failed to hydrate space ${spaceDid}:`,
-          err,
-        );
-      }
-    }),
-  );
+
 
   return { personalStreamDid, intendedSpaceDids, hydrationFailures };
 }

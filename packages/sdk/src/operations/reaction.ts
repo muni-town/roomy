@@ -5,7 +5,6 @@
 
 import { newUlid, type Ulid } from "../schema";
 import type { Event } from "../schema";
-import type { ConnectedSpace } from "../connection";
 
 /**
  * Options for adding a reaction.
@@ -44,8 +43,8 @@ export interface AddReactionResult {
  * ```
  */
 export async function addReaction(
-  space: ConnectedSpace,
   options: AddReactionOptions,
+  sendEvent: (event: Event) => Promise<void>,
 ): Promise<AddReactionResult> {
   const reactionId = newUlid();
 
@@ -57,7 +56,7 @@ export async function addReaction(
     reaction: options.reaction,
   };
 
-  await space.sendEvent(event);
+  await sendEvent(event);
 
   return { id: reactionId };
 }
@@ -96,8 +95,8 @@ export interface RemoveReactionResult {
  * ```
  */
 export async function removeReaction(
-  space: ConnectedSpace,
   options: RemoveReactionOptions,
+  sendEvent: (event: Event) => Promise<void>,
 ): Promise<RemoveReactionResult> {
   const removeId = newUlid();
 
@@ -108,7 +107,7 @@ export async function removeReaction(
     reactionId: options.reactionId,
   };
 
-  await space.sendEvent(event);
+  await sendEvent(event);
 
   return { id: removeId };
 }

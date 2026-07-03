@@ -63,6 +63,7 @@ export interface WorkerRequest {
   initOpts?: {
     mainDbPath?: string;
     readStateDbPath?: string;
+    eventsDbPath?: string;
     schemaVersion?: string;
     readStateSchemaVersion?: string;
   };

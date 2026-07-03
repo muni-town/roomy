@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createAppserver, type AppserverHandle } from "./appserver.ts";
 import { testAuthVerifier } from "./xrpc/auth.ts";
 import { closeDb } from "./db/db.ts";
-import { _resetMaterializerRegistry } from "./materialization/registry.ts";
 import { _resetHydrationInflight } from "./hydration/userHydration.ts";
 import { _resetEmbedSweeper } from "./embed/sweeper.ts";
 
@@ -17,7 +16,6 @@ let handle: AppserverHandle | null = null;
 beforeEach(() => {
   // Reset all process-wide singletons so each test gets a clean appserver.
   closeDb();
-  _resetMaterializerRegistry();
   _resetHydrationInflight();
   _resetEmbedSweeper();
 });
@@ -31,12 +29,11 @@ afterEach(async () => {
 
 describe("createAppserver factory", () => {
   test("starts, serves health + did.json, and stops cleanly", async () => {
-    handle = createAppserver({
+    handle = await createAppserver({
       port: ephemeralPort(),
       authVerifier: testAuthVerifier,
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
-      backfillMode: "disabled",
       quiet: true,
       ownDid: "did:web:test.example",
       serviceEndpoint: "http://test.example",
@@ -50,7 +47,6 @@ describe("createAppserver factory", () => {
     const healthBody = await health.json();
     expect(healthBody.status).toBe("ok");
     expect(healthBody.did).toBe("did:web:test.example");
-    expect(healthBody.backfillDone).toBe(true); // disabled mode
 
     // /.well-known/did.json returns the DID document
     const didDoc = await fetch(`${base}/.well-known/did.json`);
@@ -59,22 +55,16 @@ describe("createAppserver factory", () => {
     expect(didBody.id).toBe("did:web:test.example");
     expect(didBody.service[0].serviceEndpoint).toBe("http://test.example");
 
-    // /health/backfill returns the backfill status
-    const backfill = await fetch(`${base}/health/backfill`);
-    expect(backfill.status).toBe(200);
-    const backfillBody = await backfill.json();
-    expect(backfillBody.mode).toBe("disabled");
-    expect(backfillBody.done).toBe(true);
   });
 
   test("getConnectionTicket works with test auth header", async () => {
-    handle = createAppserver({
+    handle = await createAppserver({
       port: ephemeralPort(),
       authVerifier: testAuthVerifier,
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
-      backfillMode: "disabled",
       quiet: true,
+      disableEmbedSweeper: true,
     });
 
     const base = `http://localhost:${handle.port}`;
@@ -102,13 +92,13 @@ describe("createAppserver factory", () => {
   });
 
   test("getSpaces returns empty list for anonymous caller (no hydration)", async () => {
-    handle = createAppserver({
+    handle = await createAppserver({
       port: ephemeralPort(),
       authVerifier: testAuthVerifier,
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
-      backfillMode: "disabled",
       quiet: true,
+      disableEmbedSweeper: true,
     });
 
     const base = `http://localhost:${handle.port}`;
@@ -126,13 +116,13 @@ describe("createAppserver factory", () => {
   });
 
   test("CORS headers are present on responses", async () => {
-    handle = createAppserver({
+    handle = await createAppserver({
       port: ephemeralPort(),
       authVerifier: testAuthVerifier,
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
-      backfillMode: "disabled",
       quiet: true,
+      disableEmbedSweeper: true,
       corsOrigin: "https://app.test",
     });
 
@@ -153,13 +143,13 @@ describe("createAppserver factory", () => {
   });
 
   test("unknown NSID returns 404 MethodNotFound", async () => {
-    handle = createAppserver({
+    handle = await createAppserver({
       port: ephemeralPort(),
       authVerifier: testAuthVerifier,
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
-      backfillMode: "disabled",
       quiet: true,
+      disableEmbedSweeper: true,
     });
 
     const base = `http://localhost:${handle.port}`;

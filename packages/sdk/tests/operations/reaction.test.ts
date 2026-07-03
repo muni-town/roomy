@@ -3,14 +3,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { addReaction, removeReaction, type ConnectedSpace } from "../../src";
+import { addReaction, removeReaction } from "../../src";
 
-// Mock ConnectedSpace
 const mockSendEvent = vi.fn();
-const mockSpace = {
-  sendEvent: mockSendEvent,
-  streamDid: "did:web:test.example",
-} as unknown as ConnectedSpace;
 
 beforeEach(() => {
   mockSendEvent.mockClear();
@@ -18,11 +13,11 @@ beforeEach(() => {
 
 describe("addReaction", () => {
   it("creates an add reaction event with emoji", async () => {
-    const result = await addReaction(mockSpace, {
-      roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-      messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
+    const result = await addReaction({
+      roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
       reaction: "👍",
-    });
+    }, mockSendEvent);
 
     expect(result.id).toMatch(/^[\w-]{26}$/); // ULID format
     expect(mockSendEvent).toHaveBeenCalledTimes(1);
@@ -37,22 +32,22 @@ describe("addReaction", () => {
   });
 
   it("creates an add reaction event with custom emoji", async () => {
-    await addReaction(mockSpace, {
-      roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-      messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
+    await addReaction({
+      roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
       reaction: "custom_emoji_name",
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.reaction).toBe("custom_emoji_name");
   });
 
   it("creates an add reaction event with text reaction", async () => {
-    await addReaction(mockSpace, {
-      roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-      messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
+    await addReaction({
+      roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
       reaction: "+1",
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.reaction).toBe("+1");
@@ -61,10 +56,10 @@ describe("addReaction", () => {
 
 describe("removeReaction", () => {
   it("creates a remove reaction event", async () => {
-    const result = await removeReaction(mockSpace, {
-      roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-      reactionId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-    });
+    const result = await removeReaction({
+      roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      reactionId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    }, mockSendEvent);
 
     expect(result.id).toMatch(/^[\w-]{26}$/); // ULID format
     expect(mockSendEvent).toHaveBeenCalledTimes(1);

@@ -8,9 +8,9 @@
  * @see packages/appserver/docs/plans/procedure-backlog.md
  */
 
-import { newUlid, StreamDid } from "@roomy-space/sdk";
+import { newUlid, StreamDid, parseEvent } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
-import { getConnectedSpace } from "../serviceClient.ts";
+import { getStreamManager } from "../streams/StreamManager.ts";
 import { isBanned } from "../auth/access.ts";
 import {
   PersonalStreamRecordNotFound,
@@ -21,7 +21,6 @@ import { removeLeftSpaceEdge } from "../queries/joinedSpaces.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { Router as InvalidationRouter } from "../invalidation/index.ts";
-import { getOrCreateMaterializer } from "../materialization/registry.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
 interface JoinSpaceBody {
@@ -34,7 +33,7 @@ interface JoinSpaceResult {
   /** The personal stream DID, if one was created on-the-fly. */
   personalStreamDid?: string;
   /**
-   * True when the appserver created a new personal stream on Leaf but
+   * True when the appserver created a new personal stream locally but
    * could not write the PDS record on the user's behalf. The client should
    * call `savePersonalStreamId` to persist the mapping.
    */
@@ -76,7 +75,7 @@ export const joinSpaceHandler: ProcedureHandler<
   // `entities.stream_id` isn't a reliable space-identity check — when both
   // a personal stream and the space itself materialise it, the first writer
   // wins and the value depends on event ordering. The entity row's mere
-  // presence is enough here; Leaf is the source of truth on the join path.
+  // presence is enough here; the space stream itself is the source of truth on the join path.
   const spaceRow = await db
     .query(
       "SELECT 1 AS n FROM entities WHERE id = ? LIMIT 1",
@@ -133,7 +132,7 @@ export const joinSpaceHandler: ProcedureHandler<
   } catch (err) {
     if (err instanceof PersonalStreamRecordNotFound) {
       // New user without a personal stream record on their PDS.
-      // Create the stream on Leaf and cache the mapping; the client
+      // Create a local personal stream and cache the mapping; the client
       // will be instructed to save the PDS record.
       personalStreamDid = await createAndCachePersonalStream(db, callerDid);
       needsPersonalStreamRecord = true;
@@ -142,61 +141,40 @@ export const joinSpaceHandler: ProcedureHandler<
     }
   }
 
-  const personalSpace = await getConnectedSpace(personalStreamDid);
-  await personalSpace.sendEvent(
-    {
-      id: newUlid(),
-      $type: "space.roomy.space.personal.joinSpace.v0",
-      spaceDid: spaceId as any /* StreamDid */,
-    },
+  const streamManager = getStreamManager();
+
+  const personalJoinResult = parseEvent({
+    id: newUlid(),
+    $type: "space.roomy.space.personal.joinSpace.v0",
+    spaceDid: spaceId,
+  });
+  if (!personalJoinResult.success) {
+    throw new Error(`Failed to create personal.joinSpace event: ${personalJoinResult.error}`);
+  }
+  await streamManager.sendEvents(
+    personalStreamDid,
+    [personalJoinResult.data],
     callerDid,
   );
 
   // ── 2. Send space-side joinSpace event ───────────────────────────────
-  const space = await getConnectedSpace(spaceId as any /* StreamDid */);
-  await space.sendEvent(
-    {
-      id: newUlid(),
-      $type: "space.roomy.space.joinSpace.v0",
-      ...(body.inviteToken ? { inviteToken: body.inviteToken } : {}),
-    },
+  const spaceJoinResult = parseEvent({
+    id: newUlid(),
+    $type: "space.roomy.space.joinSpace.v0",
+    ...(body.inviteToken ? { inviteToken: body.inviteToken } : {}),
+  });
+  if (!spaceJoinResult.success) {
+    throw new Error(`Failed to create joinSpace event: ${spaceJoinResult.error}`);
+  }
+  const spaceStreamDid = StreamDid.assert(spaceId);
+  await streamManager.sendEvents(
+    spaceStreamDid,
+    [spaceJoinResult.data],
     callerDid,
   );
 
-  // ── 2.5. Drain the space materialiser so the membership edge is ──────
-  //        materialised before we return. Without this, the client's
-  //        first getMetadata after navigating into the space still sees
-  //        isMember=false (the space-side joinSpace event is otherwise
-  //        only materialised by the background Leaf subscription), which
-  //        re-shows the "you need an invite" modal to someone who just
-  //        accepted an invite.
-  //
-  //        We do NOT block on backfillSettled — if the materializer is
-  //        still backfilling (Leaf slow/unreachable), the connect alone
-  //        can take 30s and occupy a Bun thread, starving other handlers.
-  //        Instead we drain only if backfill already completed, and let
-  //        invalidation signals catch the client up otherwise. Same
-  //        pattern as userHydration.ts.
-  const spaceMat = await getOrCreateMaterializer(spaceId as any /* StreamDid */);
-  if (spaceMat.backfillSettled) {
-    if (spaceMat.backfillError) {
-      throw new XrpcError(500, "InternalServerError", "Space materialization failed");
-    }
-    await spaceMat.drain();
-  }
-
-  // ── 3. Drain personal stream materialiser so the joinSpace event is
-  //        visible to subsequent getSpaces HTTP queries ────────────────
-  const personalMat = await getOrCreateMaterializer(personalStreamDid);
-  if (personalMat.backfillSettled) {
-    if (personalMat.backfillError) {
-      throw new XrpcError(500, "InternalServerError", "Personal stream materialization failed");
-    }
-    await personalMat.drain();
-  }
-
   // ── 3.5. Remove any leftSpace edge since the user is now rejoined ────
-  await removeLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
+  await removeLeftSpaceEdge(db, spaceStreamDid, personalStreamDid);
 
   // ── 4. Emit direct getSpaces invalidation signal ──────────────────────
   const router = InvalidationRouter.getInstance();

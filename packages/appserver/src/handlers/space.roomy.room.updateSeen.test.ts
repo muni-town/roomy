@@ -8,20 +8,9 @@
  */
 
 import { beforeEach, afterEach, describe, expect, test } from "bun:test";
-import {
-  StreamDid,
-  UserDid,
-  newUlid,
-  type EventCallback,
-  type StreamIndex,
-} from "@roomy-space/sdk";
+import { StreamDid, UserDid, newUlid } from "@roomy-space/sdk";
 
 import { closeDb, openDb } from "../db/db.ts";
-import {
-  _resetMaterializerRegistry,
-  getOrCreateMaterializer,
-} from "../materialization/registry.ts";
-import type { ConnectedSpaceLike } from "../materialization/SpaceMaterializer.ts";
 import { _resetHydrationInflight } from "../hydration/userHydration.ts";
 import { updateSeenHandler } from "./space.roomy.room.updateSeen.ts";
 
@@ -29,15 +18,6 @@ const USER = UserDid.assert("did:plc:seen-user");
 const PERSONAL = StreamDid.assert("did:web:personal.example");
 const SPACE = StreamDid.assert("did:web:space.example");
 
-/** Fake space whose backfill resolves immediately (no network). */
-function instantSpace(streamDid: StreamDid): ConnectedSpaceLike {
-  return {
-    streamDid,
-    subscribe: ((_cb: EventCallback, _start: StreamIndex) =>
-      Promise.resolve(newUlid())) as ConnectedSpaceLike["subscribe"],
-    unsubscribe: (() => Promise.resolve()) as ConnectedSpaceLike["unsubscribe"],
-  };
-}
 
 interface ReadPositionRow {
   seen_up_to: string;
@@ -61,7 +41,7 @@ let msgB: string;
 
 beforeEach(async () => {
   closeDb();
-  _resetMaterializerRegistry();
+
   _resetHydrationInflight();
 
   // In-memory singleton so the handler's internal openDb() sees this DB.
@@ -90,15 +70,11 @@ beforeEach(async () => {
     "insert into comp_user_personal_stream (user_did, personal_stream_did, resolved_at) values (?, ?, ?)",
     [USER, PERSONAL, 0],
   );
-  await getOrCreateMaterializer(PERSONAL, {
-    db,
-    getConnectedSpace: () => Promise.resolve(instantSpace(PERSONAL)),
-  });
 });
 
 afterEach(() => {
   closeDb();
-  _resetMaterializerRegistry();
+
   _resetHydrationInflight();
 });
 

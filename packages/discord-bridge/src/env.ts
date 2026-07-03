@@ -17,10 +17,11 @@ export const ATPROTO_BRIDGE_DID = () => required("ATPROTO_BRIDGE_DID");
 export const ATPROTO_BRIDGE_APP_PASSWORD = () =>
 	required("ATPROTO_BRIDGE_APP_PASSWORD");
 
-export const LEAF_URL = () =>
-	optional("LEAF_URL", "https://leaf-dev.muni.town");
-export const LEAF_SERVER_DID = () =>
-	optional("LEAF_SERVER_DID", `did:web:${new URL(LEAF_URL()).hostname}`);
+export const APPSERVER_URL = () => required("APPSERVER_URL");
+export const APPSERVER_DID = () => required("APPSERVER_DID");
+export const APPSERVER_WS_URL = () => required("APPSERVER_WS_URL");
+
+
 
 export const STREAM_NSID = () =>
 	optional("STREAM_NSID", "space.roomy.space.personal.dev");

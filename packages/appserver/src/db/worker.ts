@@ -35,6 +35,7 @@ function normaliseRowid(
 
 let mainDb: Database | null = null;
 let readStateDb: Database | null = null;
+let eventsDb: Database | null = null;
 const preparedStmts = new Map<number, ReturnType<Database["prepare"]>>();
 let nextHandle = 1;
 let closed = false;
@@ -44,6 +45,7 @@ let closed = false;
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = join(THIS_DIR, "schema.sql");
 const READSTATE_SCHEMA_PATH = join(THIS_DIR, "readStateSchema.sql");
+const EVENTS_SCHEMA_PATH = join(THIS_DIR, "eventsSchema.sql");
 
 // ─── Schema helpers (ported from db.ts / readStateDb.ts) ──────────────────
 
@@ -290,6 +292,25 @@ function handleInit(req: WorkerRequest): {
     );
   }
 
+  // Open events DB (append-only, never wiped — no schema version)
+  const eventsPath = opts.eventsDbPath ?? "data/roomy-events.sqlite";
+  mkdirSync(dirname(eventsPath), { recursive: true });
+  eventsDb = new Database(eventsPath, { create: true });
+  eventsDb.exec("pragma journal_mode = wal");
+  eventsDb.exec("pragma synchronous = normal");
+  const eventsSchemaSql = readFileSync(EVENTS_SCHEMA_PATH, "utf-8");
+  eventsDb.exec(eventsSchemaSql);
+
+  // ATTACH events DB to main DB
+  const eventsRow = eventsDb
+    .query<{ file: string }, []>("pragma database_list")
+    .all()
+    .find((r) => r.file !== "");
+  if (!eventsRow) throw new Error("Cannot resolve events DB path");
+  mainDb.exec(
+    `attach database '${eventsRow.file.replace(/'/g, "''")}' as events`,
+  );
+
   return {
     mainDbPath: mainPath,
     readStateDbPath: readStatePath,
@@ -391,6 +412,15 @@ function handleTransaction(req: WorkerRequest): unknown {
 function handleClose(): void {
   closed = true;
   preparedStmts.clear();
+  // DETACH events from mainDb before closing either, so no access to eventsDb
+  // via the ATTACH after mainDb drops it.
+  if (mainDb) {
+    mainDb.exec("detach database events");
+  }
+  if (eventsDb) {
+    eventsDb.close();
+    eventsDb = null;
+  }
   if (mainDb) {
     mainDb.close();
     mainDb = null;

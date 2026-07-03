@@ -10,15 +10,10 @@ import {
   deleteMessage,
   reorderMessage,
   forwardMessages,
-  type ConnectedSpace,
 } from "../../src";
 
-// Mock ConnectedSpace
+// Mock send event function
 const mockSendEvent = vi.fn();
-const mockSpace = {
-  sendEvent: mockSendEvent,
-  streamDid: "did:web:test.example",
-} as unknown as ConnectedSpace;
 
 beforeEach(() => {
   mockSendEvent.mockClear();
@@ -26,10 +21,10 @@ beforeEach(() => {
 
 describe("createMessage", () => {
   it("creates a basic message event", async () => {
-    const result = await createMessage(mockSpace, {
+    const result = await createMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Hello, world!",
-    });
+    }, mockSendEvent);
 
     expect(result.id).toMatch(/^[\w-]{26}$/); // ULID format
     expect(mockSendEvent).toHaveBeenCalledTimes(1);
@@ -48,22 +43,22 @@ describe("createMessage", () => {
   });
 
   it("creates a message with custom MIME type", async () => {
-    await createMessage(mockSpace, {
+    await createMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "plain text",
       mimeType: "text/plain",
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.body.mimeType).toBe("text/plain");
   });
 
   it("creates a message with reply attachment", async () => {
-    await createMessage(mockSpace, {
+    await createMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Reply message",
       replyTo: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.attachments).toEqual([
@@ -83,11 +78,11 @@ describe("createMessage", () => {
       },
     ];
 
-    await createMessage(mockSpace, {
+    await createMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Image message",
       attachments,
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.extensions).toMatchObject({
@@ -99,11 +94,11 @@ describe("createMessage", () => {
   });
 
   it("creates a message with author override extension", async () => {
-    await createMessage(mockSpace, {
+    await createMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Message",
       authorDid: "did:discord:12345",
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.extensions).toMatchObject({
@@ -116,11 +111,11 @@ describe("createMessage", () => {
 
   it("creates a message with timestamp override extension", async () => {
     const timestamp = 1704067200000; // 2024-01-01
-    await createMessage(mockSpace, {
+    await createMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Message",
       timestamp,
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.extensions).toMatchObject({
@@ -132,13 +127,13 @@ describe("createMessage", () => {
   });
 
   it("creates a message with custom extensions", async () => {
-    await createMessage(mockSpace, {
+    await createMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Message",
       extensions: {
         "custom.extension.v1": { custom: "data" },
       },
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.extensions).toMatchObject({
@@ -147,14 +142,14 @@ describe("createMessage", () => {
   });
 
   it("includes both reply attachments and custom extensions", async () => {
-    await createMessage(mockSpace, {
+    await createMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Message",
       replyTo: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       extensions: {
         "custom.extension.v1": { custom: "data" },
       },
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.attachments).toHaveLength(1);
@@ -172,11 +167,11 @@ describe("createMessage", () => {
 
 describe("editMessage", () => {
   it("creates an edit message event", async () => {
-    const result = await editMessage(mockSpace, {
+    const result = await editMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Edited message",
-    });
+    }, mockSendEvent);
 
     expect(result.id).toMatch(/^[\w-]{26}$/);
     expect(mockSendEvent).toHaveBeenCalledTimes(1);
@@ -194,12 +189,12 @@ describe("editMessage", () => {
   });
 
   it("creates an edit with custom MIME type", async () => {
-    await editMessage(mockSpace, {
+    await editMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "edited",
       mimeType: "text/plain",
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.body.mimeType).toBe("text/plain");
@@ -207,12 +202,12 @@ describe("editMessage", () => {
 
   it("creates an edit with timestamp override", async () => {
     const timestamp = 1704067200000;
-    await editMessage(mockSpace, {
+    await editMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       body: "Edited message",
       timestamp,
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.extensions).toMatchObject({
@@ -226,10 +221,10 @@ describe("editMessage", () => {
 
 describe("deleteMessage", () => {
   it("creates a delete message event", async () => {
-    const result = await deleteMessage(mockSpace, {
+    const result = await deleteMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-    });
+    }, mockSendEvent);
 
     expect(result.id).toMatch(/^[\w-]{26}$/);
     expect(mockSendEvent).toHaveBeenCalledTimes(1);
@@ -245,11 +240,11 @@ describe("deleteMessage", () => {
 
 describe("reorderMessage", () => {
   it("creates a reorder message event", async () => {
-    const result = await reorderMessage(mockSpace, {
+    const result = await reorderMessage({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       after: "01KXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-    });
+    }, mockSendEvent);
 
     expect(result.id).toMatch(/^[\w-]{26}$/);
     expect(mockSendEvent).toHaveBeenCalledTimes(1);
@@ -266,11 +261,11 @@ describe("reorderMessage", () => {
 
 describe("forwardMessages", () => {
   it("creates a forward messages event", async () => {
-    const result = await forwardMessages(mockSpace, {
+    const result = await forwardMessages({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       fromRoomId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       messageIds: ["01KXXXXXXXXXXXXXXXXXXXXXXXXXXXX", "01LXXXXXXXXXXXXXXXXXXXXXXXXXXXX"] as any,
-    });
+    }, mockSendEvent);
 
     expect(result.id).toMatch(/^[\w-]{26}$/);
     expect(mockSendEvent).toHaveBeenCalledTimes(1);
@@ -285,11 +280,11 @@ describe("forwardMessages", () => {
   });
 
   it("creates a forward with a single message", async () => {
-    await forwardMessages(mockSpace, {
+    await forwardMessages({
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       fromRoomId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
       messageIds: ["01KXXXXXXXXXXXXXXXXXXXXXXXXXXXX"] as any,
-    });
+    }, mockSendEvent);
 
     const event = mockSendEvent.mock.calls[0][0];
     expect(event.messageIds).toHaveLength(1);

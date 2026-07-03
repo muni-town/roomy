@@ -23,6 +23,9 @@ import {
 	type MessageProperties,
 } from "./discord/types.ts";
 import {
+	APPSERVER_DID,
+	APPSERVER_URL,
+	APPSERVER_WS_URL,
 	BRIDGE_DATA_DIR,
 	BRIDGE_DB_PATH,
 	DISCORD_TOKEN,
@@ -82,8 +85,8 @@ async function main() {
 
 	// Initialize Roomy client
 	const roomyClient = await initRoomyClient();
-	const spaceManager = new SpaceManager(roomyClient);
-	const roomy = new LiveRoomyGateway(spaceManager, repo);
+	const spaceManager = new SpaceManager(roomyClient, APPSERVER_URL(), APPSERVER_DID());
+	const roomy = new LiveRoomyGateway(spaceManager, repo, spaceManager.xrpc, APPSERVER_WS_URL());
 
 	// Start Discord gateway
 	// bot is assigned immediately after createBot; event handlers fire

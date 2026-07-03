@@ -8,16 +8,15 @@
  * @see packages/appserver/docs/plans/procedure-backlog.md
  */
 
-import { newUlid, type StreamDid } from "@roomy-space/sdk";
+import { newUlid, StreamDid, parseEvent } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
-import { getConnectedSpace } from "../serviceClient.ts";
+import { getStreamManager } from "../streams/StreamManager.ts";
 import { isMember, isAdmin } from "../auth/access.ts";
 import { resolvePersonalStreamDid } from "../hydration/resolvePersonalStream.ts";
 import { recordLeftSpaceEdge } from "../queries/joinedSpaces.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { Router as InvalidationRouter } from "../invalidation/index.ts";
-import { getOrCreateMaterializer } from "../materialization/registry.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
 interface LeaveSpaceBody {
@@ -63,13 +62,20 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
     );
   }
 
+  const spaceStreamDid = StreamDid.assert(spaceId);
+
   // ── 1. Send space-side leaveSpace event ──────────────────────────────
-  const space = await getConnectedSpace(spaceId as any /* StreamDid */);
-  await space.sendEvent(
-    {
-      id: newUlid(),
-      $type: "space.roomy.space.leaveSpace.v0",
-    },
+  const streamManager = getStreamManager();
+  const leaveResult = parseEvent({
+    id: newUlid(),
+    $type: "space.roomy.space.leaveSpace.v0",
+  });
+  if (!leaveResult.success) {
+    throw new Error(`Failed to create leaveSpace event: ${leaveResult.error}`);
+  }
+  await streamManager.sendEvents(
+    spaceStreamDid,
+    [leaveResult.data],
     callerDid,
   );
 
@@ -77,13 +83,17 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
   let personalStreamDid: StreamDid | undefined;
   try {
     personalStreamDid = await resolvePersonalStreamDid(db, callerDid);
-    const personalSpace = await getConnectedSpace(personalStreamDid);
-    await personalSpace.sendEvent(
-      {
-        id: newUlid(),
-        $type: "space.roomy.space.personal.leaveSpace.v0",
-        spaceDid: spaceId as any /* StreamDid */,
-      },
+    const personalLeaveResult = parseEvent({
+      id: newUlid(),
+      $type: "space.roomy.space.personal.leaveSpace.v0",
+      spaceDid: spaceId,
+    });
+    if (!personalLeaveResult.success) {
+      throw new Error(`Failed to create personal.leaveSpace event: ${personalLeaveResult.error}`);
+    }
+    await streamManager.sendEvents(
+      personalStreamDid,
+      [personalLeaveResult.data],
       callerDid,
     );
   } catch (err) {
@@ -93,19 +103,9 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
     );
   }
 
-  // ── 3. Drain personal stream materialiser ────────────────────────────
-  if (personalStreamDid) {
-    try {
-      const personalMat = await getOrCreateMaterializer(personalStreamDid);
-      await personalMat.drain();
-    } catch {
-      // Best-effort — the materializer pipeline will catch up asynchronously.
-    }
-  }
-
   // ── 4. Write leftSpace edge so the space appears with includeLeft ─────
   if (personalStreamDid) {
-    await recordLeftSpaceEdge(db, spaceId as any /* StreamDid */, personalStreamDid);
+    await recordLeftSpaceEdge(db, spaceStreamDid, personalStreamDid);
   }
 
   // ── 5. Emit direct getSpaces invalidation signal ─────────────────────

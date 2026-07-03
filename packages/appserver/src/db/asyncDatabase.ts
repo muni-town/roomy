@@ -140,6 +140,7 @@ export class AsyncDatabase {
   async init(opts: {
     mainDbPath?: string;
     readStateDbPath?: string;
+    eventsDbPath?: string;
     schemaVersion?: string;
     readStateSchemaVersion?: string;
   }): Promise<{ mainDbPath: string; readStateDbPath: string; version: string }> {

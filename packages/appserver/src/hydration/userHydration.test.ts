@@ -3,21 +3,10 @@ import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  StreamDid,
-  UserDid,
-  newUlid,
-  type EventCallback,
-  type StreamIndex,
-} from "@roomy-space/sdk";
+import { StreamDid, UserDid } from "@roomy-space/sdk";
 
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import type { DbLike } from "../db/types.ts";
-import {
-  _resetMaterializerRegistry,
-  type GetOrCreateOpts,
-} from "../materialization/registry.ts";
-import type { ConnectedSpaceLike } from "../materialization/SpaceMaterializer.ts";
 import {
   _resetHydrationInflight,
   hydrateUserMembership,
@@ -44,26 +33,6 @@ function freshDb(): { db: Database; asyncDb: DbLike } {
   return { db, asyncDb: toAsyncDb(db) };
 }
 
-/** Fake space whose backfill resolves immediately. */
-function instantSpace(streamDid: StreamDid): ConnectedSpaceLike {
-  return {
-    streamDid,
-    subscribe: ((_cb: EventCallback, _start: StreamIndex) =>
-      Promise.resolve(newUlid())) as ConnectedSpaceLike["subscribe"],
-    unsubscribe: () => Promise.resolve(),
-  };
-}
-
-function failingSpace(streamDid: StreamDid, msg: string): ConnectedSpaceLike {
-  return {
-    streamDid,
-    subscribe: ((_cb: EventCallback, _start: StreamIndex) =>
-      Promise.reject(new Error(msg))) as ConnectedSpaceLike["subscribe"],
-    unsubscribe: () => Promise.resolve(),
-  };
-}
-
-/**
 /**
  * Fake-personal-stream seeding: the production materializer would write these
  * rows from PersonalJoinSpace events. We bypass the materializer here and
@@ -96,7 +65,6 @@ function seedPersonalIntent(
 
 describe("hydrateUserMembership", () => {
   test("no personal stream record → empty result", async () => {
-    _resetMaterializerRegistry();
     _resetHydrationInflight();
     const { db, asyncDb } = freshDb();
 
@@ -112,28 +80,16 @@ describe("hydrateUserMembership", () => {
   });
 
   test("personal stream + two joined spaces → all hydrated", async () => {
-    _resetMaterializerRegistry();
     _resetHydrationInflight();
     const { db, asyncDb } = freshDb();
 
-    // Pre-seed personal-stream rows so the SQL for intent picks them up
-    // immediately when the personal stream materialiser "settles".
+    // Pre-seed personal-stream rows so the SQL for intent picks them up.
     seedPersonalIntent(db, PERSONAL, [SPACE_A, SPACE_B]);
-
-    const calls: StreamDid[] = [];
-    const matOpts: GetOrCreateOpts = {
-      db: asyncDb,
-      getConnectedSpace: async (s) => {
-        calls.push(s);
-        return instantSpace(s);
-      },
-    };
 
     const result = await hydrateUserMembership(USER, {
       db: asyncDb,
       resolveDid: async () => ({ pdsEndpoint: "https://pds.example" }),
       fetchRecord: async () => ({ id: PERSONAL }),
-      materializerOpts: matOpts,
     });
 
     expect(result.personalStreamDid).toBe(PERSONAL);
@@ -141,12 +97,9 @@ describe("hydrateUserMembership", () => {
       new Set([SPACE_A, SPACE_B]),
     );
     expect(result.hydrationFailures).toEqual([]);
-    // Personal stream + both spaces materialised.
-    expect(new Set(calls)).toEqual(new Set([PERSONAL, SPACE_A, SPACE_B]));
   });
 
   test("left spaces (no joinedSpace edge) are excluded from intent", async () => {
-    _resetMaterializerRegistry();
     _resetHydrationInflight();
     const { db, asyncDb } = freshDb();
 
@@ -156,40 +109,12 @@ describe("hydrateUserMembership", () => {
       db: asyncDb,
       resolveDid: async () => ({ pdsEndpoint: "https://pds.example" }),
       fetchRecord: async () => ({ id: PERSONAL }),
-      materializerOpts: {
-        db: asyncDb,
-        getConnectedSpace: async (s) => instantSpace(s),
-      },
     });
 
     expect(result.intendedSpaceDids).toEqual([SPACE_A]);
   });
 
-  test("a failing space is recorded but does not throw", async () => {
-    _resetMaterializerRegistry();
-    _resetHydrationInflight();
-    const { db, asyncDb } = freshDb();
-
-    seedPersonalIntent(db, PERSONAL, [SPACE_A, SPACE_B]);
-
-    const result = await hydrateUserMembership(USER, {
-      db: asyncDb,
-      resolveDid: async () => ({ pdsEndpoint: "https://pds.example" }),
-      fetchRecord: async () => ({ id: PERSONAL }),
-      materializerOpts: {
-        db: asyncDb,
-        getConnectedSpace: async (s) =>
-          s === SPACE_B ? failingSpace(s, "leaf down") : instantSpace(s),
-      },
-    });
-
-    expect(result.intendedSpaceDids.length).toBe(2);
-    expect(result.hydrationFailures.length).toBe(1);
-    expect(result.hydrationFailures[0]!.streamDid).toBe(SPACE_B);
-  });
-
   test("concurrent calls for the same user share an in-flight promise", async () => {
-    _resetMaterializerRegistry();
     _resetHydrationInflight();
     const { db, asyncDb } = freshDb();
 
@@ -206,10 +131,6 @@ describe("hydrateUserMembership", () => {
       fetchRecord: async () => {
         fetchCount++;
         return { id: PERSONAL };
-      },
-      materializerOpts: {
-        db: asyncDb,
-        getConnectedSpace: async (s: StreamDid) => instantSpace(s),
       },
     };
 

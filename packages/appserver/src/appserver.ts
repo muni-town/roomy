@@ -18,10 +18,10 @@ import type { Server } from "bun";
 import { XrpcRouter, type AuthVerifier, type SyncHandler, type WsData } from "./xrpc/index.ts";
 import { selectAuthVerifier } from "./xrpc/auth.ts";
 import { Router as InvalidationRouter } from "./invalidation/index.ts";
-import { setInvalidationRouter } from "./materialization/registry.ts";
 import { startEmbedSweeper, stopEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
 import { countPendingLinks } from "./embed/enricher.ts";
 import { openDb, closeDb } from "./db/db.ts";
+import { StreamManager, setStreamManager, _resetStreamManager } from "./streams/StreamManager.ts";
 import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
@@ -50,7 +50,6 @@ import { proxyBlob } from "./blob.ts";
 
 // ─── Options ──────────────────────────────────────────────────────────────
 
-export type BackfillMode = "eager" | "lazy" | "disabled";
 
 export interface AppserverOptions {
   /** Auth verifier. Defaults to `selectAuthVerifier()` (env-driven). */
@@ -67,22 +66,13 @@ export interface AppserverOptions {
   dbPath?: string;
   /** Read-state DB path. Defaults to `process.env.READSTATE_DB_PATH`. */
   readStateDbPath?: string;
-  /** When to backfill. `"disabled"` skips all Leaf contact (tests). */
-  backfillMode?: BackfillMode;
   /** Suppress the per-request console.log. Tests set this to quiet output. */
   quiet?: boolean;
+  /** Disable the background embed enrichment sweeper. Useful for tests that don't exercise embeds. */
+  disableEmbedSweeper?: boolean;
 }
 
 
-export interface BackfillStatus {
-  mode: string;
-  discovered: number;
-  started: number;
-  completed: number;
-  succeeded: number;
-  failed: number;
-  done: boolean;
-}
 
 // ─── Result handle ────────────────────────────────────────────────────────
 
@@ -93,10 +83,8 @@ export interface AppserverHandle {
   port: number;
   /** The appserver DID. */
   ownDid: string;
-  /** Live backfill status (mutated during eager backfill). */
-  backfillStatus: BackfillStatus;
   /** Stop the server, close DBs, and reset process-wide singletons. */
-  close(): void;
+  close(): Promise<void>;
 }
 
 // ─── Route registration ───────────────────────────────────────────────────
@@ -235,25 +223,15 @@ export function getRegisteredNsids(): { nsid: string; kind: string }[] {
 
 // ─── Factory ──────────────────────────────────────────────────────────────
 
-export function createAppserver(
+export async function createAppserver(
   opts: AppserverOptions = {},
-): AppserverHandle {
+): Promise<AppserverHandle> {
   const port = opts.port ?? Number(process.env.PORT ?? 8080);
   const ownDid = opts.ownDid ?? process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
   const serviceEndpoint = opts.serviceEndpoint ?? process.env.APPSERVER_ORIGIN ?? "https://api.roomy.space";
   const corsOrigin = opts.corsOrigin ?? process.env.CORS_ORIGIN ?? "*";
-  const backfillMode = opts.backfillMode ?? (process.env.APPSERVER_BACKFILL_MODE as BackfillMode | undefined) ?? "eager";
   const quiet = opts.quiet ?? false;
 
-  const backfillStatus: BackfillStatus = {
-    mode: backfillMode,
-    discovered: 0,
-    started: 0,
-    completed: 0,
-    succeeded: 0,
-    failed: 0,
-    done: backfillMode === "disabled",
-  };
 
   const DID_DOCUMENT = {
     "@context": ["https://www.w3.org/ns/did/v1"],
@@ -286,9 +264,15 @@ export function createAppserver(
 
   // ─── Invalidation + Sync ─────────────────────────────────────────────
   const invalidationRouter = new InvalidationRouter();
-  InvalidationRouter.setInstance(invalidationRouter);
-  setInvalidationRouter(invalidationRouter);
 
+  // ─── StreamManager ────────────────────────────────────────────────────
+  // Per-stream signing keys are generated on demand in createStreamDid.
+  // No appserver-wide signing key is needed.
+  const streamManager = new StreamManager(mainDb, {
+    invalidationRouter,
+    appserverUrl: serviceEndpoint,
+  });
+  setStreamManager(streamManager);
   // Start the centralized embed enrichment sweeper.
   startEmbedSweeper({ db: mainDb, invalidationRouter });
 
@@ -327,15 +311,9 @@ export function createAppserver(
             uptime: process.uptime(),
             did: ownDid,
             port,
-            backfillDone: backfillStatus.done,
           }),
           { headers: { "content-type": "application/json", ...corsHeaders } },
         );
-      }
-      if (url.pathname === "/health/backfill") {
-        return new Response(JSON.stringify(backfillStatus), {
-          headers: { "content-type": "application/json", ...corsHeaders },
-        });
       }
       if (url.pathname === "/health/embed") {
         const stats = embedSweeperStats();
@@ -383,12 +361,25 @@ export function createAppserver(
     server,
     port: server.port ?? port,
     ownDid,
-    backfillStatus,
-    close(): void {
-      stopEmbedSweeper();
-      server.stop(true);
-      clearInterval(maintenanceTimer);
-      closeDb();
+    close(): Promise<void> {
+      return stopEmbedSweeper().finally(() => {
+        try {
+          server.stop(true);
+        } catch (e) {
+          console.error("appserver close: server.stop failed", e);
+        }
+        try {
+          clearInterval(maintenanceTimer);
+          closeDb();
+        } catch (e) {
+          console.error("appserver close: closeDb failed", e);
+        }
+        try {
+          _resetStreamManager();
+        } catch (e) {
+          console.error("appserver close: _resetStreamManager failed", e);
+        }
+      });
     },
   };
 }

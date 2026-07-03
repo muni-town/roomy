@@ -499,10 +499,10 @@ export function _resetEmbedSweeper(): void {
 /**
  * Stop the background sweeper loop. Idempotent. Used by tests to prevent
  * the loop from running after the DB is closed. Signals the loop to exit
- * but does not wait for it — the loop checks `started` at the top of each
- * iteration and will exit on its own.
+ * and returns a promise that resolves once the loop has finished (with a
+ * short timeout as a safety net).
  */
-export function stopEmbedSweeper(): void {
+export function stopEmbedSweeper(): Promise<void> {
   started = false;
   sweeperDb = undefined;
   sweeperRouter = undefined;
@@ -514,4 +514,7 @@ export function stopEmbedSweeper(): void {
   dbBackoffUntil = 0;
   statsEnrichedOk = 0;
   statsEnrichedNull = 0;
+  const timeout = Promise.withResolvers<void>();
+  setTimeout(timeout.resolve, 50);
+  return Promise.race([loopPromise ?? Promise.resolve(), timeout.promise]);
 }

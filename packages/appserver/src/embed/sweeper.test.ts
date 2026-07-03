@@ -120,11 +120,11 @@ function seedLinkMessageRoom(
  */
 async function flushSweeper(opts: EmbedSweeperOpts): Promise<void> {
   // Stop any running background loop from a prior test.
-  stopEmbedSweeper();
+  await stopEmbedSweeper();
   startEmbedSweeper(opts);
   // Run one cycle synchronously, then stop the background loop.
   await sweepCycle(opts.db);
-  stopEmbedSweeper();
+  await stopEmbedSweeper();
 }
 
 describe("embed sweeper invalidation room resolution", () => {

@@ -24,7 +24,6 @@
 	"dependencies": {
 		"@atproto/api": "^0.14.22",
 		"@discordeno/bot": "^21.0.0",
-		"@muni-town/leaf-client": "link:../leaf/clients/typescript",
 		"@roomy-space/sdk": "workspace:*",
 		"arktype": "^2.1.29",
 		"dd-cache-proxy": "^2.7.0"

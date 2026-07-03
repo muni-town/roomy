@@ -3,36 +3,6 @@
  */
 
 import type { StreamDid, StreamIndex, UserDid, Event, Ulid } from "../schema";
-import type { ModuleWithCid } from "../modules";
-import { LeafClient } from "@muni-town/leaf-client";
-import { RoomyClientBase } from "../client/RoomyClientBase";
-
-/**
- * Configuration for connecting to a Roomy space.
- *
- * `client` only needs the Leaf-side surface, so either `RoomyClient` (user) or
- * `RoomyServiceClient` (service-to-service) can be passed.
- */
-export interface ConnectedSpaceConfig {
-  /** Client for Roomy. Provides the LeafClient used to talk to the space. */
-  client: RoomyClientBase;
-  /** DID of the stream (space) to connect to */
-  streamDid: StreamDid;
-  /** Module definition for the space */
-  module: ModuleWithCid;
-  /**
-   * Max events per subscription notification batch.
-   *
-   * Safari silently truncates binary WebSocket frames above ~30-50KB, so the
-   * browser SDK default is 10 (~6KB at ~600 bytes per event). Node.js/Bun
-   * consumers (e.g. the appserver) can safely set this much higher to avoid
-   * Leaf subscription pagination artefacts, e.g. 5000 to fetch an entire
-   * stream in one page.
-   *
-   * @default 10
-   */
-  subscriptionBatchLimit?: number;
-}
 
 /**
  * A decoded stream event with metadata.
@@ -76,7 +46,7 @@ export type BackfillStatus =
   | { status: "errored"; error: string };
 
 /**
- * Encoded stream event as received from Leaf.
+ * Encoded stream event.
  */
 export interface EncodedStreamEvent {
   idx: StreamIndex;

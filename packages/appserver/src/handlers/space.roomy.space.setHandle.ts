@@ -11,7 +11,6 @@
  */
 
 import { openDb } from "../db/db.ts";
-import { getServiceClient } from "../serviceClient.ts";
 import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
@@ -60,14 +59,9 @@ export const setHandleHandler: ProcedureHandler<SetHandleBody, void> = async (
     );
   }
 
-  // ── Proxy to Leaf ────────────────────────────────────────────────────
-  try {
-    const client = await getServiceClient();
-    await client.setHandle(spaceId as any /* StreamDid */, handle);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new XrpcError(500, "InternalError", `Failed to set handle: ${message}`);
-  }
+  // ── Leaf removed: setHandle was a Leaf operation ──────────────────────
+  // The handle is persisted in the local DB below. The Leaf-level handle
+  // registration is no longer performed.
 
   // ── Persist handle in local DB for fast query access ────────────
   if (handle !== null) {

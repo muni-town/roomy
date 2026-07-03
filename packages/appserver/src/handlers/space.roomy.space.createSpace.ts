@@ -1,23 +1,11 @@
-/**
- * XRPC: space.roomy.space.createSpace (procedure).
- *
- * Provisions a new Leaf stream, seeds it with the initial event set
- * (space metadata, lobby channel, sidebar, creator as admin + member),
- * writes a personal.joinSpace event to the creator's personal stream, and
- * starts materialisation so the space appears in getSpaces immediately.
- *
- * @see packages/appserver/docs/plans/procedure-backlog.md
- */
-
 import {
-  modules,
   newUlid,
   createDefaultSpaceEvents,
   StreamDid,
+  parseEvent,
 } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
-import { getServiceClient, getConnectedSpace } from "../serviceClient.ts";
-import { getOrCreateMaterializer } from "../materialization/registry.ts";
+import { getStreamManager } from "../streams/StreamManager.ts";
 import {
   PersonalStreamRecordNotFound,
   createAndCachePersonalStream,
@@ -42,7 +30,7 @@ interface CreateSpaceResult {
   /** The personal stream DID, if one was created on-the-fly. */
   personalStreamDid?: string;
   /**
-   * True when the appserver created a new personal stream on Leaf but
+   * True when the appserver created a new personal stream locally but
    * could not write the PDS record on the user's behalf. The client should
    * call `savePersonalStreamId` to persist the mapping.
    */
@@ -101,10 +89,9 @@ export const createSpaceHandler: ProcedureHandler<
     throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
 
-  // ── 1. Create Leaf stream + add admin ────────────────────────────────
-  const client = await getServiceClient();
-  const space = await client.createSpace(modules.space, callerDid);
-  const spaceId = space.streamDid;
+  // ── 1. Create stream locally ─────────────────────────────────────────
+  const streamManager = getStreamManager();
+  const spaceId = await streamManager.createStream(callerDid);
 
   // ── 2. Seed initial events (updateSpaceInfo, createRoom, updateSidebar)
   const seedEvents = createDefaultSpaceEvents({
@@ -121,14 +108,19 @@ export const createSpaceHandler: ProcedureHandler<
         ? body.allowMemberInvites
         : undefined,
   });
-  await space.sendEvents(seedEvents);
+  await streamManager.sendEvents(spaceId, seedEvents, callerDid);
 
   // ── 3. Join as member (addAdmin already added admin edge, but not member)
-  await space.sendEvent(
-    {
-      id: newUlid(),
-      $type: "space.roomy.space.joinSpace.v0",
-    },
+  const joinResult = parseEvent({
+    id: newUlid(),
+    $type: "space.roomy.space.joinSpace.v0",
+  });
+  if (!joinResult.success) {
+    throw new Error(`Failed to create joinSpace event: ${joinResult.error}`);
+  }
+  await streamManager.sendEvents(
+    spaceId,
+    [joinResult.data],
     callerDid,
   );
 
@@ -141,7 +133,7 @@ export const createSpaceHandler: ProcedureHandler<
   } catch (err) {
     if (err instanceof PersonalStreamRecordNotFound) {
       // New user without a personal stream record on their PDS.
-      // Create the stream on Leaf and cache the mapping; the client
+      // Create a local personal stream and cache the mapping; the client
       // will be instructed to save the PDS record.
       personalStreamDid = await createAndCachePersonalStream(db, callerDid);
       needsPersonalStreamRecord = true;
@@ -150,13 +142,17 @@ export const createSpaceHandler: ProcedureHandler<
     }
   }
 
-  const personalSpace = await getConnectedSpace(personalStreamDid);
-  await personalSpace.sendEvent(
-    {
-      id: newUlid(),
-      $type: "space.roomy.space.personal.joinSpace.v0",
-      spaceDid: spaceId,
-    },
+  const personalJoinResult = parseEvent({
+    id: newUlid(),
+    $type: "space.roomy.space.personal.joinSpace.v0",
+    spaceDid: spaceId,
+  });
+  if (!personalJoinResult.success) {
+    throw new Error(`Failed to create personal.joinSpace event: ${personalJoinResult.error}`);
+  }
+  await streamManager.sendEvents(
+    personalStreamDid,
+    [personalJoinResult.data],
     callerDid,
   );
 
@@ -168,17 +164,7 @@ export const createSpaceHandler: ProcedureHandler<
   // directly. Idempotent w.r.t. the later live materialisation.
   await recordPersonalSpaceMembership(db, spaceId, personalStreamDid);
 
-  // ── 5. Start materialiser for the new space ──────────────────────────
-  const mat = await getOrCreateMaterializer(spaceId);
-  await mat.backfillDone;
-  await mat.drain();
-
-  // ── 6. Drain personal stream materialiser so the joinSpace event is
-  //        visible to subsequent getSpaces HTTP queries ────────────────
-  const personalMat = await getOrCreateMaterializer(personalStreamDid);
-  await personalMat.drain();
-
-  // ── 7. Emit direct getSpaces invalidation signal ──────────────────────
+  // ── 5. Emit direct getSpaces invalidation signal ──────────────────────
   // The personal stream materializer will also emit this signal when it
   // processes the personal.joinSpace event via its live subscription, but
   // that delivery is asynchronous and may race with the HTTP response.

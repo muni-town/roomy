@@ -19,12 +19,10 @@ import { createAppserver, getRegisteredNsids } from "../src/appserver.ts";
 import { testAuthVerifier } from "../src/xrpc/auth.ts";
 import { closeDb, openDb } from "../src/db/db.ts";
 import { closeReadStateDb } from "../src/db/readStateDb.ts";
-import { _resetMaterializerRegistry } from "../src/materialization/registry.ts";
 import { _resetHydrationInflight } from "../src/hydration/userHydration.ts";
 import { _resetEmbedSweeper } from "../src/embed/sweeper.ts";
-import { getOrCreateMaterializer } from "../src/materialization/registry.ts";
 import { _setAdminDids } from "../src/admin.ts";
-import { newUlid, type StreamDid } from "@roomy-space/sdk";
+import { newUlid } from "@roomy-space/sdk";
 import type { Database } from "bun:sqlite";
 
 // ─── Config ────────────────────────────────────────────────────────────────
@@ -149,35 +147,7 @@ function seedFixture(db: Database): Fixture {
   };
 }
 
-/**
- * Pre-create a fake materializer that resolves immediately with no data.
- * This prevents handlers from trying to connect to Leaf.
- */
-function instantSpace(streamDid: string) {
-  return {
-    streamDid,
-    sendEvent: async () => {},
-    fetchRooms: async () => [],
-    fetchEvents: async () => ({ events: [], cursor: 0 }),
-    subscribe: async () => ({
-      [Symbol.asyncIterator]() {
-        return {
-          next: async () => ({ done: true as const, value: undefined }),
-        };
-      },
-    }),
-    close: () => {},
-  };
-}
 
-async function preWarmMaterializer(streamDid: string): Promise<void> {
-  const db = openDb();
-  await getOrCreateMaterializer(streamDid as unknown as StreamDid, {
-    db,
-    getConnectedSpace: () => Promise.resolve(instantSpace(streamDid)),
-    invalidationRouter: null,
-  });
-}
 
 // ─── Endpoint definitions ──────────────────────────────────────────────────
 

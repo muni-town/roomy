@@ -2,21 +2,20 @@
  * XRPC: space.roomy.space.sendEvents (procedure).
  *
  * Sends a batch of Roomy events to a space stream through the appserver.
- * The appserver validates authorization per-event, then proxies the batch
- * to Leaf with `userOverride` set to the caller's DID.
+ * The appserver validates authorization per-event, then writes events directly
+ * to the events DB and materializes inline.
  *
  * @see packages/appserver/docs/plans/sendEvents-procedure.md
  */
 
-import { parseEvent, type Event } from "@roomy-space/sdk";
+import { parseEvent, type Event, StreamDid } from "@roomy-space/sdk";
 import { log } from "../log.ts";
 import { openDb } from "../db/db.ts";
-import { sendEventsToStream } from "../serviceClient.ts";
 import { checkWriteAuth } from "../auth/writeAuth.ts";
 import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
-import { getOrCreateMaterializer } from "../materialization/registry.ts";
+import { getStreamManager } from "../streams/StreamManager.ts";
 
 const MAX_BATCH_SIZE = 50;
 
@@ -49,7 +48,7 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
     throw new XrpcError(
       400,
       "InvalidRequest",
-      `Batch size exceeds maximum of ${MAX_BATCH_SIZE}`,
+      `Too many events: max ${MAX_BATCH_SIZE}`,
     );
   }
 
@@ -66,41 +65,39 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
   const parsedEvents: (typeof Event.infer)[] = [];
   for (let i = 0; i < body.events.length; i++) {
     const raw = body.events[i];
-
-    // Schema validation
-    const result = parseEvent(raw);
-    if (!result.success) {
+    if (typeof raw !== "object" || raw === null) {
       throw new XrpcError(
         400,
         "InvalidRequest",
-        `Event at index ${i} failed validation: ${result.error}`,
+        `Event at index ${i} is not an object`,
       );
     }
-
-    // Authorization
-    const denial = await checkWriteAuth(db, spaceId, callerDid, result.data, access);
+    const parsed = parseEvent(raw);
+    if (!parsed.success) {
+      throw new XrpcError(
+        400,
+        "InvalidRequest",
+        `Event at index ${i} is invalid: ${parsed.error}`,
+      );
+    }
+    const event = parsed.data;
+    const denial = await checkWriteAuth(db, spaceId, callerDid, event, access);
     if (denial) {
       throw new XrpcError(
         denial.status,
         denial.error,
-        `Event at index ${i} ($type: ${result.data.$type}): ${denial.message}`,
+        denial.message,
       );
     }
-
-    parsedEvents.push(result.data);
+    parsedEvents.push(event);
   }
   log.debug("sendEvents", "validated", { spaceId, count: parsedEvents.length });
 
-  log.info("sendEvents", "sending to Leaf", { spaceId, count: parsedEvents.length });
-  await sendEventsToStream(spaceId as any /* StreamDid */, parsedEvents, callerDid);
+  // 4. Write to events DB + materialize inline
+  const streamManager = getStreamManager();
+  log.info("sendEvents", "writing to events DB", { spaceId, count: parsedEvents.length });
+  const streamDid = StreamDid.assert(spaceId);
+  await streamManager.sendEvents(streamDid, parsedEvents, callerDid);
 
-  // Ensure a materializer subscription exists for this space so the events
-  // are materialized and invalidation signals are emitted. getOrCreateMaterializer
-  // is idempotent — returns the cached materializer if one already exists.
-  // Fire-and-forget: the materializer processes events asynchronously via its
-  // Leaf subscription; we don't block the HTTP response on backfill.
-  getOrCreateMaterializer(spaceId as any /* StreamDid */).catch((err) => {
-    log.error("sendEvents", "failed to ensure materializer", { spaceId, error: err });
-  });
   log.info("sendEvents", "done", { spaceId, count: parsedEvents.length });
 };

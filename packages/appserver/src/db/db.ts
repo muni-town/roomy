@@ -99,6 +99,7 @@ export function openDb(opts: OpenDbOptions = {}): AsyncDatabase {
   db.init({
     mainDbPath: path,
     readStateDbPath: process.env.READSTATE_DB_PATH ?? "data/roomy-readstate.sqlite",
+    eventsDbPath: process.env.EVENTS_DB_PATH ?? "data/roomy-events.sqlite",
     schemaVersion: SCHEMA_VERSION,
     readStateSchemaVersion: READSTATE_SCHEMA_VERSION,
   });

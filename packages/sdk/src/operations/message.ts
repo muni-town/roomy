@@ -5,7 +5,6 @@
 
 import { newUlid, toBytes, type Ulid } from "../schema";
 import type { Event, Attachment } from "../schema";
-import type { ConnectedSpace } from "../connection";
 
 /**
  * Options for creating a message.
@@ -42,25 +41,25 @@ export interface CreateMessageResult {
 /**
  * Create a message in a room.
  *
- * @param space - The connected space to send the event to
  * @param options - Message creation options
+ * @param sendEvent - Function to send the event
  * @returns The ID of the created message
  *
  * @example
  * ```ts
- * const result = await createMessage(space, {
+ * const result = await createMessage({
  *   roomId: "01H...",
  *   body: "Hello, world!",
  *   attachments: [
  *     { $type: "space.roomy.attachment.reply.v0", target: "01J..." }
  *   ]
- * });
+ * }, sendEvent);
  * console.log("Created message:", result.id);
  * ```
  */
 export async function createMessage(
-  space: ConnectedSpace,
   options: CreateMessageOptions,
+  sendEvent: (event: Event) => Promise<void>,
 ): Promise<CreateMessageResult> {
   const messageId = newUlid();
 
@@ -115,7 +114,7 @@ export async function createMessage(
     extensions,
   };
 
-  await space.sendEvent(event);
+  await sendEvent(event);
 
   return { id: messageId };
 }
@@ -147,22 +146,22 @@ export interface EditMessageResult {
 /**
  * Edit a message in a room.
  *
- * @param space - The connected space to send the event to
  * @param options - Message edit options
+ * @param sendEvent - Function to send the event
  * @returns The ID of the edit event
  *
  * @example
  * ```ts
- * const result = await editMessage(space, {
+ * const result = await editMessage({
  *   roomId: "01H...",
  *   messageId: "01J...",
  *   body: "Updated message"
- * });
+ * }, sendEvent);
  * ```
  */
 export async function editMessage(
-  space: ConnectedSpace,
   options: EditMessageOptions,
+  sendEvent: (event: Event) => Promise<void>,
 ): Promise<EditMessageResult> {
   const editId = newUlid();
 
@@ -187,7 +186,7 @@ export async function editMessage(
     ...(Object.keys(extensions).length > 0 ? { extensions } : {}),
   };
 
-  await space.sendEvent(event);
+  await sendEvent(event);
 
   return { id: editId };
 }
@@ -213,21 +212,21 @@ export interface DeleteMessageResult {
 /**
  * Delete a message from a room.
  *
- * @param space - The connected space to send the event to
  * @param options - Message delete options
+ * @param sendEvent - Function to send the event
  * @returns The ID of the delete event
  *
  * @example
  * ```ts
- * const result = await deleteMessage(space, {
+ * const result = await deleteMessage({
  *   roomId: "01H...",
  *   messageId: "01J..."
- * });
+ * }, sendEvent);
  * ```
  */
 export async function deleteMessage(
-  space: ConnectedSpace,
   options: DeleteMessageOptions,
+  sendEvent: (event: Event) => Promise<void>,
 ): Promise<DeleteMessageResult> {
   const deleteId = newUlid();
 
@@ -238,7 +237,7 @@ export async function deleteMessage(
     messageId: options.messageId,
   };
 
-  await space.sendEvent(event);
+  await sendEvent(event);
 
   return { id: deleteId };
 }
@@ -266,22 +265,22 @@ export interface ReorderMessageResult {
 /**
  * Reorder a message in a room.
  *
- * @param space - The connected space to send the event to
  * @param options - Message reorder options
+ * @param sendEvent - Function to send the event
  * @returns The ID of the reorder event
  *
  * @example
  * ```ts
- * const result = await reorderMessage(space, {
+ * const result = await reorderMessage({
  *   roomId: "01H...",
  *   messageId: "01J...",
  *   after: "01K..."
- * });
+ * }, sendEvent);
  * ```
  */
 export async function reorderMessage(
-  space: ConnectedSpace,
   options: ReorderMessageOptions,
+  sendEvent: (event: Event) => Promise<void>,
 ): Promise<ReorderMessageResult> {
   const reorderId = newUlid();
 
@@ -293,11 +292,10 @@ export async function reorderMessage(
     after: options.after,
   };
 
-  await space.sendEvent(event);
+  await sendEvent(event);
 
   return { id: reorderId };
 }
-
 /**
  * Options for forwarding messages.
  */
@@ -317,26 +315,25 @@ export interface ForwardMessagesResult {
   /** The ID of the forward event */
   id: Ulid;
 }
-
 /**
  * Forward messages from one room to another (e.g., for threads).
  *
- * @param space - The connected space to send the event to
  * @param options - Message forward options
+ * @param sendEvent - Function to send the event
  * @returns The ID of the forward event
  *
  * @example
  * ```ts
- * const result = await forwardMessages(space, {
+ * const result = await forwardMessages({
  *   roomId: "01H...",  // thread room
  *   fromRoomId: "01J...", // parent channel
  *   messageIds: ["01K...", "01L..."]
- * });
+ * }, sendEvent);
  * ```
  */
 export async function forwardMessages(
-  space: ConnectedSpace,
   options: ForwardMessagesOptions,
+  sendEvent: (event: Event) => Promise<void>,
 ): Promise<ForwardMessagesResult> {
   const forwardId = newUlid();
 
@@ -348,7 +345,7 @@ export async function forwardMessages(
     fromRoomId: options.fromRoomId,
   };
 
-  await space.sendEvent(event);
+  await sendEvent(event);
 
   return { id: forwardId };
 }

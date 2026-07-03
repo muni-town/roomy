@@ -17,7 +17,7 @@ import { startAppserver } from "./helpers.ts";
 
 describe("Transport-level edge cases", () => {
   test("GET /blob/<did>/<cid> → graceful error (no Leaf)", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/blob/did%3Aplc%3Atest/some-cid-hash`,
     );
@@ -28,7 +28,7 @@ describe("Transport-level edge cases", () => {
   });
 
   test("OPTIONS preflight → 204 + CORS headers", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces`,
       { method: "OPTIONS" },
@@ -42,7 +42,7 @@ describe("Transport-level edge cases", () => {
   });
 
   test("OPTIONS on health endpoint → 204", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     const res = await ctx.anonFetch(`${ctx.baseUrl}/health`, {
       method: "OPTIONS",
     });
@@ -50,7 +50,7 @@ describe("Transport-level edge cases", () => {
   });
 
   test("GET /health/embed → 200 with stats", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     const res = await ctx.anonFetch(`${ctx.baseUrl}/health/embed`);
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -60,7 +60,7 @@ describe("Transport-level edge cases", () => {
   });
 
   test("non-existent path → 404", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.nonexistent.method`,
     );
@@ -71,13 +71,13 @@ describe("Transport-level edge cases", () => {
   });
 
   test("non-XRPC path → 404", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     const res = await ctx.anonFetch(`${ctx.baseUrl}/some/random/path`);
     expect(res.status).toBe(404);
   });
 
   test("malformed query params → 400 (schema rejection)", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     // getMessages expects roomId as a string; passing an empty string
     // should fail schema validation.
     const res = await ctx.authedFetch("did:plc:test")(
@@ -90,7 +90,7 @@ describe("Transport-level edge cases", () => {
   });
 
   test("GET on a procedure endpoint → 405", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.room.updateSeen`,
     );
@@ -101,7 +101,7 @@ describe("Transport-level edge cases", () => {
   });
 
   test("POST on a query endpoint → 405", async () => {
-    const ctx = startAppserver()
+    const ctx = await startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces`,
       { method: "POST", body: "{}" },

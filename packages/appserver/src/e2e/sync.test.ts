@@ -19,8 +19,6 @@ import {
   seedJoinedSpace,
   seedRoom,
   seedMessage,
-  preWarmPersonalMaterializer,
-  preWarmSpaceMaterializer,
   type E2eContext,
 } from "./helpers.ts";
 
@@ -34,7 +32,7 @@ const MSG = newUlid();
  * Set up a minimal seeded space for sync tests.
  */
 async function setupSyncSpace(): Promise<E2eContext> {
-  const ctx = startAppserver()
+  const ctx = await startAppserver()
   const { db } = ctx;
 
   seedSpace(db, SPACE, USER);
@@ -42,8 +40,6 @@ async function setupSyncSpace(): Promise<E2eContext> {
   seedJoinedSpace(db, PERSONAL, SPACE);
   seedRoom(db, ROOM, SPACE);
   seedMessage(db, MSG, ROOM, SPACE, "a");
-  await preWarmPersonalMaterializer(PERSONAL);
-  await preWarmSpaceMaterializer(SPACE);
 
   return ctx;
 }

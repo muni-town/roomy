@@ -12,6 +12,7 @@ import {
 } from "@discordeno/bot";
 
 import { StreamDid } from "@roomy-space/sdk";
+import { APPSERVER_WS_URL } from "../env.ts";
 import type { BridgeConfig, BridgeRepository } from "../db/repository.ts";
 import type { DiscordBotWithCache } from "../discord/cache.ts";
 import { LiveDiscordDataSource } from "../discord/live-data-source.ts";
@@ -75,7 +76,7 @@ function createAdapters(
 ) {
 	return {
 		discord: new LiveDiscordDataSource(bot),
-		roomy: new LiveRoomyGateway(spaceManager, repo),
+		roomy: new LiveRoomyGateway(spaceManager, repo, spaceManager.xrpc, APPSERVER_WS_URL()),
 	};
 }
 

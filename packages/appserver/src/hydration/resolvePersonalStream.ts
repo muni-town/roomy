@@ -12,8 +12,8 @@
 import type { DbLike } from "../db/types.ts";
 import { AtpAgent } from "@atproto/api";
 import { IdResolver } from "@atproto/identity";
-import { modules, StreamDid, type, type UserDid } from "@roomy-space/sdk";
-import { getServiceClient } from "../serviceClient.ts";
+import { StreamDid, type, type UserDid } from "@roomy-space/sdk";
+import { getStreamManager } from "../streams/StreamManager.ts";
 
 const PERSONAL_STREAM_NSID =
   process.env.APPSERVER_PERSONAL_STREAM_NSID ??
@@ -74,20 +74,19 @@ async function writeCachedPersonalStreamDid(
 }
 
 /**
- * Create a new personal stream on Leaf for a user who doesn't have one yet,
- * cache the mapping, and return the new stream DID.
+ * Create a new personal stream locally, cache the mapping, and return the
+ * new stream DID.
  *
- * The appserver has authority to create streams on Leaf (via the unsafe auth
- * token), but cannot write the PDS record on the user's behalf. The caller
- * should return the new DID to the client so it can save the record.
+ * The appserver has authority to create streams (via StreamManager), but
+ * cannot write the PDS record on the user's behalf. The caller should
+ * return the new DID to the client so it can save the record.
  */
 export async function createAndCachePersonalStream(
   db: DbLike,
   userDid: UserDid,
 ): Promise<StreamDid> {
-  const client = await getServiceClient();
-  const space = await client.createSpace(modules.personal, userDid);
-  const streamDid = space.streamDid;
+  const streamManager = getStreamManager();
+  const streamDid = await streamManager.createStream(userDid);
 
   await writeCachedPersonalStreamDid(db, userDid, streamDid);
   return streamDid;

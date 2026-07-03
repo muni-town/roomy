@@ -17,21 +17,17 @@
  * - `seedReaction(db, msgId, userDid, reaction)` — inserts a reaction.
  * - `seedActivityItem(db, roomId, spaceId, lastActivityAt)` — inserts an
  *   activity feed item.
- * - `preWarmPersonalMaterializer(personalStreamDid)` — pre-creates a fake
- *   materializer for the personal stream so hydrateUserMembership works
- *   without Leaf.
+
  */
 
-import { afterEach, beforeEach } from "bun:test";
+import { afterEach } from "bun:test";
 import { createAppserver, type AppserverHandle } from "../appserver.ts";
 import { testAuthVerifier } from "../xrpc/auth.ts";
 import { closeDb, openDb } from "../db/db.ts";
-import { _resetMaterializerRegistry, getOrCreateMaterializer } from "../materialization/registry.ts";
 import { _resetHydrationInflight } from "../hydration/userHydration.ts";
 import { _resetEmbedSweeper, stopEmbedSweeper } from "../embed/sweeper.ts";
-import { newUlid, type StreamDid, type UserDid } from "@roomy-space/sdk";
+import { newUlid } from "@roomy-space/sdk";
 import type { Database } from "bun:sqlite";
-import type { ConnectedSpaceLike } from "../materialization/SpaceMaterializer.ts";
 
 // ─── Appserver lifecycle ─────────────────────────────────────────────────
 
@@ -58,23 +54,21 @@ export interface E2eContext {
  * Registers a Bun test teardown to close the server and reset singletons.
  * Call this inside `beforeEach` or at the top of a `describe` block.
  */
-export function startAppserver(): E2eContext {
+export async function startAppserver(): Promise<E2eContext> {
   // Stop any running background sweeper loop before resetting state.
-  stopEmbedSweeper();
+  await stopEmbedSweeper();
   closeDb();
-  _resetMaterializerRegistry();
   _resetHydrationInflight();
   _resetEmbedSweeper();
 
   // Open the singleton DB in-memory so handlers' internal openDb() resolves.
   const db = openDb({ path: ":memory:" });
 
-  const handle = createAppserver({
+  const handle = await createAppserver({
     authVerifier: testAuthVerifier,
     port: 0,
     dbPath: ":memory:",
     readStateDbPath: ":memory:",
-    backfillMode: "disabled",
     quiet: true,
   });
 
@@ -102,11 +96,8 @@ export function startAppserver(): E2eContext {
     });
 
   // Register teardown so Bun cleans up after the test.
-  afterEach(() => {
-    stopEmbedSweeper();
-    handle.close();
-    closeDb();
-    _resetMaterializerRegistry();
+  afterEach(async () => {
+    await handle.close();
     _resetHydrationInflight();
     _resetEmbedSweeper();
   });
@@ -114,45 +105,6 @@ export function startAppserver(): E2eContext {
   return { handle, baseUrl, authedFetch, anonFetch, db };
 }
 
-// ─── Fake ConnectedSpace for hermetic materializer ────────────────────────
-
-/**
- * Create a fake ConnectedSpace that resolves immediately with no data.
- * Used to pre-warm the personal-stream materializer so hydrateUserMembership
- * works without Leaf.
- */
-function instantSpace(streamDid: StreamDid): ConnectedSpaceLike {
-  return {
-    streamDid,
-    sendEvent: async () => {},
-    fetchRooms: async () => [],
-    fetchEvents: async () => ({ events: [], cursor: 0 }),
-    subscribe: async () => ({
-      [Symbol.asyncIterator]() {
-        return {
-          next: async () => ({ done: true as const, value: undefined }),
-        };
-      },
-    }),
-    close: () => {},
-  };
-}
-
-/**
- * Pre-create a fake materializer for the given personal stream DID.
- * Call this after seeding `comp_user_personal_stream` so that
- * `hydrateUserMembership` can resolve the personal stream and read
- * `joinedSpace` edges without connecting to Leaf.
- */
-export async function preWarmPersonalMaterializer(
-  personalStreamDid: string,
-): Promise<void> {
-  const db = openDb();
-  await getOrCreateMaterializer(personalStreamDid as unknown as StreamDid, {
-    db,
-    getConnectedSpace: () => Promise.resolve(instantSpace(personalStreamDid as unknown as StreamDid)),
-  });
-}
 
 // ─── DB seed helpers ──────────────────────────────────────────────────────
 
@@ -210,19 +162,7 @@ export function seedSpace(
   );
 }
 
-/**
- * Pre-create a fake materializer for the given space so that
- * hydrateUserMembership doesn't try to connect to Leaf.
- */
-export async function preWarmSpaceMaterializer(
-  spaceId: string,
-): Promise<void> {
-  const db = openDb();
-  await getOrCreateMaterializer(spaceId as unknown as StreamDid, {
-    db,
-    getConnectedSpace: () => Promise.resolve(instantSpace(spaceId as unknown as StreamDid)),
-  });
-}
+
 
 /**
  * Seed a personal-stream cache row so hydrateUserMembership can resolve

@@ -12,9 +12,10 @@
   "dependencies": {
     "@atcute/cbor": "^2.2.8",
     "@atproto/api": "*",
+    "@atproto/crypto": "^0.4.2",
     "@atproto/identity": "^0.4.12",
     "@atproto/xrpc-server": "^0.10.19",
-    "@muni-town/leaf-client": "0.1.0-alpha.20",
+    "@did-plc/lib": "^0.0.4",
     "@roomy-space/sdk": "workspace:*",
     "arktype": "^2.1.29",
     "rate-limiter-flexible": "^11.2.0",
