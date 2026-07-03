@@ -16,6 +16,7 @@ import {
   isAdmin,
   isMember,
   isBanned,
+  type SpaceAccess,
 } from "./access.ts";
 
 // ── Result type ──────────────────────────────────────────────────────────
@@ -176,13 +177,13 @@ function denied(
 }
 
 // ── Auth check helpers ───────────────────────────────────────────────────
-
 async function requireSpaceAdminCheck(
   db: DbLike,
   spaceId: string,
   did: string,
+  access?: SpaceAccess,
 ): Promise<WriteAuthResult> {
-  const admin = await isAdmin(db, spaceId, did);
+  const admin = access ? access.isAdmin : await isAdmin(db, spaceId, did);
   if (!admin) {
     return denied(403, "Forbidden", "Caller is not a space admin");
   }
@@ -193,12 +194,13 @@ async function requireMembershipCheck(
   db: DbLike,
   spaceId: string,
   did: string,
+  access?: SpaceAccess,
 ): Promise<WriteAuthResult> {
-  const access = await spaceAccess(db, spaceId, did);
-  if (access.isBanned) {
+  const a = access ?? await spaceAccess(db, spaceId, did);
+  if (a.isBanned) {
     return denied(403, "Forbidden", "Caller is banned from this space");
   }
-  if (!access.isMember && !access.isAdmin) {
+  if (!a.isMember && !a.isAdmin) {
     return denied(
       403,
       "Forbidden",
@@ -212,13 +214,15 @@ async function requireNotBannedCheck(
   db: DbLike,
   spaceId: string,
   did: string,
+  access?: SpaceAccess,
 ): Promise<WriteAuthResult> {
-  const banned = await isBanned(db, spaceId, did);
+  const banned = access ? access.isBanned : await isBanned(db, spaceId, did);
   if (banned) {
     return denied(403, "Forbidden", "Caller is banned from this space");
   }
   return undefined;
 }
+
 
 async function requireRoomWriteCheck(
   db: DbLike,
@@ -279,6 +283,7 @@ export async function checkWriteAuth(
   spaceId: string,
   callerDid: string,
   event: { $type: string; [k: string]: unknown },
+  access?: SpaceAccess,
 ): Promise<WriteAuthResult> {
   const { $type } = event;
 
@@ -328,26 +333,26 @@ export async function checkWriteAuth(
 
   // ── Room manage ──
   if (ROOM_MANAGE_TYPES.has($type)) {
-    return await requireSpaceAdminCheck(db, spaceId, callerDid);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, access);
   }
 
   // ── Space manage ──
   if (SPACE_MANAGE_TYPES.has($type)) {
-    return await requireSpaceAdminCheck(db, spaceId, callerDid);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, access);
   }
 
   // ── Space member ──
   if (SPACE_MEMBER_TYPES.has($type)) {
     // joinSpace only requires "not banned"
     if ($type === "space.roomy.space.joinSpace.v0") {
-      return await requireNotBannedCheck(db, spaceId, callerDid);
+      return await requireNotBannedCheck(db, spaceId, callerDid, access);
     }
-    return await requireMembershipCheck(db, spaceId, callerDid);
+    return await requireMembershipCheck(db, spaceId, callerDid, access);
   }
 
   // ── Bridged ──
   if (BRIDGED_TYPES.has($type)) {
-    return await requireSpaceAdminCheck(db, spaceId, callerDid);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, access);
   }
 
   // Should be unreachable if ALLOWED_TYPES and the dispatch tables agree

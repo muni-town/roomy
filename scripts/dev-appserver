@@ -105,7 +105,7 @@ docker run -d \
   -v "$VOL_NM:/app/node_modules" \
   -v "$VOL_APPSERVER_NM:/app/packages/appserver/node_modules" \
   -p "$PORT:$PORT" \
-  -e "PORT=$PORT" \
+  -e "CI=true" \
   -e "REBUILD_SDK=$REBUILD_SDK" \
   "${NET_ARGS[@]}" \
   -w /app \

@@ -111,12 +111,16 @@ export async function sendEventsToStream(
   const encoded = encode(payload);
   const binary = Buffer.from(encoded);
 
-  const respBytes = await (client.leaf as any).socket.emitWithAck(
-    "stream/event_batch",
-    binary,
+  const respBytes = await withTimeout(
+    (client.leaf as any).socket.emitWithAck(
+      "stream/event_batch",
+      binary,
+    ) as Promise<unknown>,
+    30_000,
+    `sendEventsToStream ${streamDid}`,
   );
   const resp = decode(
-    respBytes instanceof Uint8Array ? respBytes : new Uint8Array(respBytes),
+    respBytes instanceof Uint8Array ? respBytes : new Uint8Array(respBytes as ArrayLike<number>),
   );
   if (
     resp &&

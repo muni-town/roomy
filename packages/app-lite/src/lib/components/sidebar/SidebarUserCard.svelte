@@ -1,3 +1,7 @@
+<script lang="ts" module>
+  import { browser } from "$app/environment";
+</script>
+
 <script lang="ts">
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import {
@@ -17,15 +21,16 @@
   // Falls back to localStorage for the initial render before the profile
   // fetch completes.
   let displayedProfile = $derived(
-    auth.profile ?? (() => {
+    auth.profile ?? (browser ? (() => {
       const raw = localStorage.getItem("last-login");
       return raw ? JSON.parse(raw) : undefined;
-    })(),
+    })() : undefined),
   );
 
   let isDark = $state(false);
 
   $effect(() => {
+    if (!browser) return;
     const stored = localStorage.getItem("darkMode");
     if (stored !== null) {
       isDark = JSON.parse(stored);
