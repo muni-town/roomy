@@ -6,7 +6,7 @@
 #
 # Steps:
 #   1. git worktree add (branches from HEAD or specified base)
-#   2. Copy .env from packages with env files (app-lite, discord-bridge, appserver, playground)
+#   2. Copy .env from packages with env files (app-lite, discord-bridge, appserver, appserver-admin)
 #   3. Install dependencies in a node:22 container
 #
 set -euo pipefail
@@ -37,7 +37,7 @@ echo "✔ Worktree created at $WORKTREE_PATH"
 
 # --- 2. Copy .env files ---
 # Packages that may have .env files
-ENV_PACKAGES=(app-lite discord-bridge appserver playground)
+ENV_PACKAGES=(app-lite discord-bridge appserver appserver-admin)
 
 for pkg in "${ENV_PACKAGES[@]}"; do
   SRC_DIR="$REPO_ROOT/packages/$pkg"

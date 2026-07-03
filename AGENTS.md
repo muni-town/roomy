@@ -25,7 +25,7 @@ roomy/
 │   ├── sdk/              # @roomy-space/sdk - Core SDK for Roomy clients
 │   ├── discord-bridge/   # Discord↔Roomy bridge service
 │   ├── discord-bridge-legacy/  # Legacy Discord bridge (archived)
-│   ├── playground/       # Experimental playground
+│   ├── appserver-admin/  # Admin dashboard (SvelteKit, XRPC debug tools)
 │   ├── roomy-cli/        # CLI tool (placeholder)
 │   └── tsconfig/         # Shared TypeScript configuration
 ├── compose.yaml          # Development services (Leaf, Grafana stack)
