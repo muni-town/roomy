@@ -275,6 +275,10 @@ export class XrpcRouter {
           return undefined;
         }
       } catch (err) {
+        console.error(`[xrpc] ${req.method} ${url.pathname} failed:`, err instanceof Error ? err.message : err);
+        if (err instanceof Error && err.stack) {
+          console.error(err.stack);
+        }
         return toErrorResponse(err);
       }
     };

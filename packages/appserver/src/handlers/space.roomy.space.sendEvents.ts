@@ -9,6 +9,7 @@
  */
 
 import { parseEvent, type Event } from "@roomy-space/sdk";
+import { log } from "../log.ts";
 import { openDb } from "../db/db.ts";
 import { sendEventsToStream } from "../serviceClient.ts";
 import { checkWriteAuth } from "../auth/writeAuth.ts";
@@ -56,9 +57,9 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
   if (callerDid === null) {
     throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
+  log.info("sendEvents", { spaceId, callerDid, count: body.events.length });
   const db = openDb();
-
-  await requireSpaceAccess(db, spaceId, callerDid);
+  const access = await requireSpaceAccess(db, spaceId, callerDid);
 
   // 3. Validate + authorize each event
   const parsedEvents: (typeof Event.infer)[] = [];
@@ -76,7 +77,7 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
     }
 
     // Authorization
-    const denial = await checkWriteAuth(db, spaceId, callerDid, result.data);
+    const denial = await checkWriteAuth(db, spaceId, callerDid, result.data, access);
     if (denial) {
       throw new XrpcError(
         denial.status,
@@ -87,7 +88,9 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
 
     parsedEvents.push(result.data);
   }
+  log.debug("sendEvents", "validated", { spaceId, count: parsedEvents.length });
 
-  // 4. Proxy to Leaf (bypasses ConnectedSpace module check)
+  log.info("sendEvents", "sending to Leaf", { spaceId, count: parsedEvents.length });
   await sendEventsToStream(spaceId as any /* StreamDid */, parsedEvents, callerDid);
+  log.info("sendEvents", "done", { spaceId, count: parsedEvents.length });
 };
