@@ -6,11 +6,14 @@
  * logic). Simple pass-through handlers are covered implicitly.
  */
 
-import { describe, it, expect, afterAll } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { StreamDid, UserDid, Ulid, EventType } from "@roomy-space/sdk";
 import { type, schemas } from "@roomy-space/sdk";
-import { openDb, closeDb } from "../db/db.ts";
+import { toAsyncDb } from "../db/syncAdapter.ts";
 import { inferSignals } from "./inferSignals.ts";
 import type {
   AppliedEvent,
@@ -18,6 +21,12 @@ import type {
   QueryInvalidation,
   QueryNsid,
 } from "./types.ts";
+import type { DbLike } from "../db/types.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -51,10 +60,9 @@ function invalidatedNsids(signals: InvalidationEvent[]): QueryNsid[] {
 function findMessageDiff(signals: InvalidationEvent[]) {
   return signals.find((s) => s.kind === "messageDiff");
 }
-
 /**
- * Materialize a message into a fresh in-memory DB and install it as the
- * process-wide singleton, so `inferSignals`' internal `openDb()` reads it.
+ * Materialize a message into a fresh in-memory DB and return a DbLike
+ * so `inferSignals` can read the materialized row.
  *
  * `handleCreateMessage` / `handleEditMessage` build the #messageDiff payload
  * via `selectMessages`, which reads back the materialized row — so the row
@@ -67,9 +75,14 @@ function seedMessageDb(opts: {
   authorDid: string;
   authorName: string;
   content: string;
-}): Database {
-  closeDb();
-  const db = openDb({ path: ":memory:" });
+}): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
   const ts = Date.parse("2026-05-08T12:00:00Z");
 
   db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
@@ -93,18 +106,14 @@ function seedMessageDb(opts: {
     opts.id,
     opts.authorDid,
   ]);
-  return db;
+  return { db, asyncDb: toAsyncDb(db) };
 }
-
-// `seedMessageDb` installs an in-memory DB as the process-wide singleton.
-// Restore the default so later test files aren't affected.
-afterAll(() => closeDb());
 
 // ─── Message events ─────────────────────────────────────────────────────
 
 describe("inferSignals: message events", () => {
-  it("createMessage produces a messageDiff + room/space invalidation", () => {
-    seedMessageDb({
+  it("createMessage produces a messageDiff + room/space invalidation", async () => {
+    const { asyncDb } = seedMessageDb({
       id: EVENT_ID,
       roomId: ROOM_ID,
       authorDid: USER_DID,
@@ -112,7 +121,7 @@ describe("inferSignals: message events", () => {
       content: "hello",
     });
 
-    const signals = inferSignals(
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.message.createMessage.v0",
         roomId: ROOM_ID,
@@ -122,6 +131,7 @@ describe("inferSignals: message events", () => {
           timestamp: "2026-05-08T12:00:00Z",
         },
       }),
+      asyncDb,
     );
 
     const diff = findMessageDiff(signals);
@@ -158,26 +168,19 @@ describe("inferSignals: message events", () => {
     expect(nsids).toContain("space.roomy.space.getMetadata");
   });
 
-  it("createMessage without roomId produces no signals", () => {
-    const signals = inferSignals(
+  it("createMessage without roomId produces no signals", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.message.createMessage.v0",
       }),
     );
     expect(signals).toHaveLength(0);
   });
-
-  it("editMessage produces a messageDiff update keyed by messageId, not the edit event id", () => {
-    // The edit event's own ULID (`EDIT_EVENT_ID`) is distinct from the
-    // message being edited (`MESSAGE_ID`). The original bug looked up and
-    // keyed the diff by `event.id`, which (combined with the edit
-    // materialiser creating a ghost entity for `event.id`) shipped an
-    // empty message keyed by the wrong id — the client appended it as a
-    // new empty message and left the original untouched.
+  it("editMessage produces a messageDiff update keyed by messageId, not the edit event id", async () => {
     const MESSAGE_ID = "01HXSXKBQ4TESTMSG00000000A" as Ulid;
     const EDIT_EVENT_ID = "01HXSXKBQ4TESTEDIT0000000B" as Ulid;
 
-    seedMessageDb({
+    const { asyncDb } = seedMessageDb({
       id: MESSAGE_ID,
       roomId: ROOM_ID,
       authorDid: USER_DID,
@@ -185,7 +188,7 @@ describe("inferSignals: message events", () => {
       content: "edited",
     });
 
-    const signals = inferSignals(
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.message.editMessage.v0",
         id: EDIT_EVENT_ID,
@@ -198,6 +201,7 @@ describe("inferSignals: message events", () => {
           timestamp: "2026-05-08T12:00:00Z",
         },
       }),
+      asyncDb,
     );
 
     const diff = findMessageDiff(signals);
@@ -222,11 +226,11 @@ describe("inferSignals: message events", () => {
     expect(nsids).not.toContain("space.roomy.space.getMetadata");
   });
 
-  it("deleteMessage produces a remove diff keyed by messageId + room/space invalidation", () => {
+  it("deleteMessage produces a remove diff keyed by messageId + room/space invalidation", async () => {
     const MESSAGE_ID = "01HXSXKBQ4TESTMSG00000000A" as Ulid;
     const DELETE_EVENT_ID = "01HXSXKBQ4TESTDEL000000000B" as Ulid;
 
-    const signals = inferSignals(
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.message.deleteMessage.v0",
         id: DELETE_EVENT_ID,
@@ -253,8 +257,8 @@ describe("inferSignals: message events", () => {
 // ─── Reaction events ────────────────────────────────────────────────────
 
 describe("inferSignals: reaction events", () => {
-  it("addReaction invalidates room messages and the specific message", () => {
-    const signals = inferSignals(
+  it("addReaction invalidates room messages and the specific message", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.reaction.addReaction.v0",
         roomId: ROOM_ID,
@@ -283,8 +287,8 @@ describe("inferSignals: reaction events", () => {
     ).toBe(0);
   });
 
-  it("removeReaction does the same", () => {
-    const signals = inferSignals(
+  it("removeReaction does the same", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.reaction.removeReaction.v0",
         roomId: ROOM_ID,
@@ -301,8 +305,8 @@ describe("inferSignals: reaction events", () => {
 // ─── Room events ────────────────────────────────────────────────────────
 
 describe("inferSignals: room events", () => {
-  it("createRoom invalidates space-level queries", () => {
-    const signals = inferSignals(
+  it("createRoom invalidates space-level queries", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.room.createRoom.v0",
       }),
@@ -315,8 +319,8 @@ describe("inferSignals: room events", () => {
     expect(nsids).toContain("space.roomy.space.getMembers");
   });
 
-  it("updateRoom with roomId invalidates room + space", () => {
-    const signals = inferSignals(
+  it("updateRoom with roomId invalidates room + space", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.room.updateRoom.v0",
         roomId: ROOM_ID,
@@ -333,8 +337,8 @@ describe("inferSignals: room events", () => {
 // ─── Space events ───────────────────────────────────────────────────────
 
 describe("inferSignals: space events", () => {
-  it("updateSpaceInfo invalidates metadata + spaces list", () => {
-    const signals = inferSignals(
+  it("updateSpaceInfo invalidates metadata + spaces list", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.space.updateSpaceInfo.v0",
       }),
@@ -345,8 +349,8 @@ describe("inferSignals: space events", () => {
     expect(nsids).toContain("space.roomy.space.getSpaces");
   });
 
-  it("updateSidebar invalidates only metadata (sidebar is part of it)", () => {
-    const signals = inferSignals(
+  it("updateSidebar invalidates only metadata (sidebar is part of it)", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.space.updateSidebar.v1",
       }),
@@ -357,8 +361,8 @@ describe("inferSignals: space events", () => {
     expect(nsids).toHaveLength(1);
   });
 
-  it("joinSpace invalidates space queries + the joining user's space list", () => {
-    const signals = inferSignals(
+  it("joinSpace invalidates space queries + the joining user's space list", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.space.joinSpace.v0",
       }),
@@ -378,9 +382,9 @@ describe("inferSignals: space events", () => {
     );
   });
 
-  it("addAdmin invalidates space queries + target user's view", () => {
+  it("addAdmin invalidates space queries + target user's view", async () => {
     const targetDid = "did:plc:bob" as import("@roomy-space/sdk").UserDid;
-    const signals = inferSignals(
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.space.addAdmin.v0",
         details: { userDid: targetDid },
@@ -401,8 +405,8 @@ describe("inferSignals: space events", () => {
 // ─── Role events ────────────────────────────────────────────────────────
 
 describe("inferSignals: role events", () => {
-  it("createRole only invalidates getRoles", () => {
-    const signals = inferSignals(
+  it("createRole only invalidates getRoles", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.role.createRole.v0",
       }),
@@ -412,8 +416,8 @@ describe("inferSignals: role events", () => {
     expect(nsids).toEqual(["space.roomy.space.getRoles"]);
   });
 
-  it("deleteRole invalidates roles + space metadata (permissions may have changed)", () => {
-    const signals = inferSignals(
+  it("deleteRole invalidates roles + space metadata (permissions may have changed)", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.role.deleteRole.v0",
       }),
@@ -424,9 +428,9 @@ describe("inferSignals: role events", () => {
     expect(nsids).toContain("space.roomy.space.getMetadata");
   });
 
-  it("addMemberRole invalidates roles + members + affected user's view", () => {
+  it("addMemberRole invalidates roles + members + affected user's view", async () => {
     const targetDid = "did:plc:carol" as import("@roomy-space/sdk").UserDid;
-    const signals = inferSignals(
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.role.addMemberRole.v0",
         details: { userDid: targetDid },
@@ -444,8 +448,8 @@ describe("inferSignals: role events", () => {
     expect(userScoped.length).toBeGreaterThan(0);
   });
 
-  it("setRoleRoomPermission invalidates roles + room + space", () => {
-    const signals = inferSignals(
+  it("setRoleRoomPermission invalidates roles + room + space", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.role.setRoleRoomPermission.v0",
         details: { roomId: ROOM_ID },
@@ -462,8 +466,8 @@ describe("inferSignals: role events", () => {
 // ─── Invite events ──────────────────────────────────────────────────────
 
 describe("inferSignals: invite events", () => {
-  it("createInvite invalidates only getInvites", () => {
-    const signals = inferSignals(
+  it("createInvite invalidates only getInvites", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.space.createInvite.v0",
       }),
@@ -477,10 +481,10 @@ describe("inferSignals: invite events", () => {
 // ─── Personal stream events ─────────────────────────────────────────────
 
 describe("inferSignals: personal stream events", () => {
-  it("personalJoinSpace invalidates user's space list + target space members", () => {
+  it("personalJoinSpace invalidates user's space list + target space members", async () => {
     const targetSpace =
       "did:web:target.space" as import("@roomy-space/sdk").StreamDid;
-    const signals = inferSignals(
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.space.personal.joinSpace.v0",
         details: { spaceDid: targetSpace },
@@ -508,8 +512,8 @@ describe("inferSignals: personal stream events", () => {
 // ─── State events ───────────────────────────────────────────────────────
 
 describe("inferSignals: state events", () => {
-  it("markRead invalidates room + space only for the reading user", () => {
-    const signals = inferSignals(
+  it("markRead invalidates room + space only for the reading user", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.state.markRead.v0",
         roomId: ROOM_ID,
@@ -533,8 +537,8 @@ describe("inferSignals: state events", () => {
 // ─── Link events ────────────────────────────────────────────────────────
 
 describe("inferSignals: link events", () => {
-  it("createRoomLink invalidates room + space threads + space metadata", () => {
-    const signals = inferSignals(
+  it("createRoomLink invalidates room + space threads + space metadata", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.link.createRoomLink.v0",
         roomId: ROOM_ID,
@@ -551,8 +555,8 @@ describe("inferSignals: link events", () => {
 // ─── Edge cases ─────────────────────────────────────────────────────────
 
 describe("inferSignals: edge cases", () => {
-  it("synthetic events produce no signals", () => {
-    const signals = inferSignals(
+  it("synthetic events produce no signals", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.query.spaceMeta.v0" as EventType,
       }),
@@ -560,8 +564,8 @@ describe("inferSignals: edge cases", () => {
     expect(signals).toHaveLength(0);
   });
 
-  it("unknown event types produce no signals", () => {
-    const signals = inferSignals(
+  it("unknown event types produce no signals", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.unknown.futureEvent.v0" as EventType,
       }),
@@ -569,8 +573,8 @@ describe("inferSignals: edge cases", () => {
     expect(signals).toHaveLength(0);
   });
 
-  it("page edit produces no signals (out of scope)", () => {
-    const signals = inferSignals(
+  it("page edit produces no signals (out of scope)", async () => {
+    const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.page.editPage.v0",
       }),

@@ -15,8 +15,12 @@
  */
 
 import { describe, test, expect } from "bun:test";
+import { Database } from "bun:sqlite";
+import { toAsyncDb } from "../../db/syncAdapter.ts";
+import type { DbLike } from "../../db/types.ts";
 import { existsSync, readdirSync, readFileSync } from "fs";
-import { resolve } from "path";
+import { join, dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 
 import { parseTrace } from "./itf.ts";
 import {
@@ -26,13 +30,31 @@ import {
   type SpecVars,
 } from "./types.ts";
 import { project, SPACE_ID } from "./project.ts";
-import { openDb } from "../../db/db.ts";
 import {
   roomAccess,
   spaceAccess,
   type RoomAccess,
   type SpaceAccess,
 } from "../access.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const SCHEMA_PATH = join(__dirname, "..", "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
+
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
+    SCHEMA_VERSION,
+  ]);
+  return { db, asyncDb: toAsyncDb(db) };
+}
 
 const TRACES_DIR = resolve(import.meta.dir, "../../../specs/traces");
 
@@ -87,12 +109,12 @@ describe("MBT: spec oracle ↔ access.ts parity", () => {
   }
 
   for (const file of traceFiles) {
-    test(file, () => {
+    test(file, async () => {
       const raw = JSON.parse(readFileSync(`${TRACES_DIR}/${file}`, "utf8"));
       const trace = parseTrace<SpecVars>(raw);
 
       for (const stateEntry of trace.states) {
-        const db = openDb({ path: ":memory:", isolated: true });
+        const { db, asyncDb } = freshDb();
         try {
           project(db, stateEntry.vars.state);
 
@@ -100,7 +122,7 @@ describe("MBT: spec oracle ↔ access.ts parity", () => {
 
           // spaceAccess parity over every user in the snapshot.
           for (const [uid, expected] of stateEntry.vars.oracleSnapshot.spaces) {
-            const got = spaceAccess(db, SPACE_ID, uid);
+            const got = await spaceAccess(asyncDb, SPACE_ID, uid);
             const want = expectedSpaceAccess(expected);
             try {
               expect(got).toEqual(want);
@@ -116,7 +138,7 @@ describe("MBT: spec oracle ↔ access.ts parity", () => {
           // roomAccess parity over every (user, room) in the snapshot.
           for (const [[uid, rid], expected] of stateEntry.vars.oracleSnapshot
             .rooms) {
-            const got = roomAccess(db, rid, uid);
+            const got = await roomAccess(asyncDb, rid, uid);
             const want = expectedRoomAccess(expected);
             try {
               expect(got).toEqual(want);
@@ -129,7 +151,7 @@ describe("MBT: spec oracle ↔ access.ts parity", () => {
             }
           }
         } finally {
-          db.close();
+          asyncDb.close();
         }
       }
     });

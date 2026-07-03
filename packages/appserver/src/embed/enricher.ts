@@ -9,7 +9,7 @@
  * crash the materialization pipeline.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import type { Embed, EmbedServiceResponse } from "./types.ts";
 import { log } from "../log.ts";
 
@@ -185,18 +185,18 @@ function isAbortError(err: unknown): boolean {
  * Used by the sweeper to prioritise freshly-detected links without
  * re-fetching ones that are already enriched (e.g. a popular URL reposted).
  */
-export function filterPendingUrls(db: Database, urls: string[]): string[] {
+export async function filterPendingUrls(db: DbLike, urls: string[]): Promise<string[]> {
   if (urls.length === 0) return [];
   const placeholders = urls.map(() => "?").join(",");
-  const rows = db
-    .query<{ entity: string }, string[]>(
+  const rows = await db
+    .query(
       `select el.entity
          from comp_embed_link el
          left join comp_embed_link_data eld on eld.entity = el.entity
         where eld.entity is null
           and el.entity in (${placeholders})`,
     )
-    .all(...urls);
+    .all<{ entity: string }>([...urls]);
   return rows.map((r) => r.entity);
 }
 
@@ -208,10 +208,10 @@ export function filterPendingUrls(db: Database, urls: string[]): string[] {
  * are excluded. Ordered oldest-first by link creation so backfill drains
  * before newer transient-failure retries.
  */
-export function findPendingLinks(db: Database, limit = 50): string[] {
+export async function findPendingLinks(db: DbLike, limit = 50): Promise<string[]> {
   const now = Date.now();
-  const rows = db
-    .query<{ entity: string }, [number, number]>(
+  const rows = await db
+    .query(
       `select el.entity
        from comp_embed_link el
        left join comp_embed_link_data eld on eld.entity = el.entity
@@ -220,7 +220,7 @@ export function findPendingLinks(db: Database, limit = 50): string[] {
        order by el.created_at asc
        limit ?`,
     )
-    .all(now, limit);
+    .all<{ entity: string }>([now, limit]);
   return rows.map((r) => r.entity);
 }
 
@@ -249,19 +249,19 @@ function backoffMs(attempts: number): number {
  * re-fetches. The transient path reads the existing attempt count first
  * (safe: `enrichLink` dedups per-URL so there is no concurrent writer).
  */
-export function storeEmbedData(
-  db: Database,
+export async function storeEmbedData(
+  db: DbLike,
   url: string,
   result: FetchResult,
-): void {
+): Promise<void> {
   if (result.status === "transient") {
-    const row = db
-      .query<{ attempts: number }, [string]>(
+    const row = await db
+      .query(
         `select attempts from comp_embed_link_data where entity = ?`,
       )
-      .get(url);
+      .get<{ attempts: number }>([url]);
     const attempts = (row?.attempts ?? 0) + 1;
-    db.run(
+    await db.run(
       `insert into comp_embed_link_data
          (entity, embed_json, attempts, retry_after, fetched_at, updated_at)
        values (?, null, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))
@@ -276,7 +276,7 @@ export function storeEmbedData(
     return;
   }
   // Success or definitive failure — settled, no retry.
-  db.run(
+  await db.run(
     `insert into comp_embed_link_data
        (entity, embed_json, attempts, retry_after, fetched_at, updated_at)
      values (?, ?, 0, null, (unixepoch() * 1000), (unixepoch() * 1000))
@@ -309,7 +309,7 @@ export function storeEmbedData(
  * backfill backlog drains.
  */
 export async function enrichLink(
-  db: Database,
+  db: DbLike,
   url: string,
   signal?: AbortSignal,
 ): Promise<Embed | null> {
@@ -319,7 +319,7 @@ export async function enrichLink(
   const promise = (async () => {
     try {
       const result = await fetchEmbedData(url, signal);
-      storeEmbedData(db, url, result);
+      await storeEmbedData(db, url, result);
       return result.status === "ok" ? result.embed : null;
     } catch (err) {
       // fetchEmbedData handles its own network errors (returns a
@@ -357,17 +357,17 @@ export function inFlightCount(): number {
  * {@link findPendingLinks} predicate but unbounded, for the `/health/embed`
  * endpoint so operators can watch the backlog drain.
  */
-export function countPendingLinks(db: Database): number {
+export async function countPendingLinks(db: DbLike): Promise<number> {
   const now = Date.now();
-  const row = db
-    .query<{ n: number }, [number]>(
+  const row = await db
+    .query(
       `select count(*) as n
          from comp_embed_link el
          left join comp_embed_link_data eld on eld.entity = el.entity
         where eld.entity is null
            or (eld.retry_after is not null and eld.retry_after <= ?)`,
     )
-    .get(now);
+    .get<{ n: number }>([now]);
   return row?.n ?? 0;
 }
 
@@ -385,30 +385,30 @@ export function countPendingLinks(db: Database): number {
  * pending links. URLs that already had a `comp_embed_link` row (already
  * pending or already enriched) are omitted from the return.
  */
-export function detectAndStoreLinks(
-  db: Database,
+export async function detectAndStoreLinks(
+  db: DbLike,
   messageId: string,
   content: string,
-): string[] {
+): Promise<string[]> {
   const urls = extractUrls(content);
   if (urls.length === 0) return [];
 
   const detected: string[] = [];
   for (const url of urls) {
     // Ensure the entity row exists (room = messageId so it's scoped to this message)
-    db.run(
+    await db.run(
       `insert or ignore into entities (id, stream_id, room, created_at)
        values (?, '', ?, (unixepoch() * 1000))`,
       [url, messageId],
     );
     // Insert into comp_embed_link if not already present. Track newly-inserted
     // rows (changes > 0) so only genuinely-new links get prioritised.
-    const res = db
-      .prepare(
+    const res = await (
+      await db.prepare(
         `insert or ignore into comp_embed_link (entity, show_preview, created_at, updated_at)
          values (?, 1, (unixepoch() * 1000), (unixepoch() * 1000))`,
       )
-      .run(url);
+    ).run([url]);
     if (res.changes > 0) detected.push(url);
   }
   return detected;

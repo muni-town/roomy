@@ -11,7 +11,7 @@
  * harmless — `entities` rows are reusable.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import {
   type DecodedStreamEvent,
   type EventType,
@@ -37,7 +37,7 @@ export type GetProfilesFn = (dids: UserDid[]) => Promise<ProfileViewDetailed[]>;
  * don't need profile materialisation.
  */
 export async function ensureProfilesForBatch(
-  db: Database,
+  db: DbLike,
   events: DecodedStreamEvent[],
   getProfiles: GetProfilesFn | undefined,
 ): Promise<void> {
@@ -46,65 +46,35 @@ export async function ensureProfilesForBatch(
   const candidates = collectCandidateDids(events);
   if (candidates.size === 0) return;
 
-  const missing = filterMissing(db, candidates);
+  const missing = await filterMissing(db, candidates);
   if (missing.length === 0) return;
 
   const profiles = await getProfiles(missing);
   if (profiles.length === 0) return;
 
-  insertProfiles(db, profiles);
+  await insertProfiles(db, profiles);
 }
 
 /** Scan a batch for user DIDs that warrant a profile lookup. */
 function collectCandidateDids(events: DecodedStreamEvent[]): Set<UserDid> {
-  const out = new Set<UserDid>();
-
+  const candidates = new Set<UserDid>();
   for (const e of events) {
-    const ev = e.event;
-    if (!NEW_USER_SIGNALS.includes(ev.$type as EventType)) continue;
-
-    if (UserDid.allows(e.user)) out.add(UserDid.assert(e.user));
-
-    // addAdmin / joinSpace may name a different DID than the event author —
-    // e.g. an existing admin promotes someone else, or a personal-stream
-    // joinSpace.v0 names the joining user via event.userDid (not e.user).
-    if (
-      ev.$type === "space.roomy.space.addAdmin.v0" ||
-      ev.$type === "space.roomy.space.joinSpace.v0"
-    ) {
-      const target = (ev as { userDid?: string }).userDid;
-      if (target && UserDid.allows(target)) {
-        out.add(UserDid.assert(target));
-      }
-    }
-
-    // createMessage may carry an authorOverride extension that names a
-    // different user. Pull that DID too so the override author has a profile.
-    if (ev.$type === "space.roomy.message.createMessage.v0") {
-      const override =
-        ev.extensions?.["space.roomy.extension.authorOverride.v0"]?.did;
-      if (override) {
-        const parsed = UserDid(override);
-        if (
-          !(parsed instanceof type.errors) &&
-          (parsed.startsWith("did:plc:") || parsed.startsWith("did:web:"))
-        ) {
-          out.add(parsed);
-        }
-      }
+    if (!NEW_USER_SIGNALS.includes(e.event.$type as EventType)) continue;
+    const user = e.user;
+    if (user && typeof user === "string") {
+      candidates.add(user as UserDid);
     }
   }
-
-  return out;
+  return candidates;
 }
 
 /**
  * Narrow to DIDs we can resolve via the bsky appview AND that don't yet have
- * an `entities` row. Only `did:plc:` and `did:web:` are appview-resolvable;
- * other DID methods (e.g. `did:discord:` for bridged users) are skipped here
- * — those entities are created by their respective materialisers.
+ * an entity row in the local DB. DIDs that don't start with `did:plc:` or
+ * `did:web:` are skipped — they're synthetic (e.g. `did:space:...`) and have
+ * no profile to fetch.
  */
-function filterMissing(db: Database, candidates: Set<UserDid>): UserDid[] {
+async function filterMissing(db: DbLike, candidates: Set<UserDid>): Promise<UserDid[]> {
   const resolvable = [...candidates].filter(
     (d) => d.startsWith("did:plc:") || d.startsWith("did:web:"),
   );
@@ -112,39 +82,22 @@ function filterMissing(db: Database, candidates: Set<UserDid>): UserDid[] {
 
   const placeholders = resolvable.map(() => "?").join(",");
   const present = new Set(
-    db
-      .query<{ id: string }, string[]>(
-        `select id from entities where id in (${placeholders})`,
-      )
-      .all(...resolvable)
-      .map((r) => r.id),
+    (await db
+      .query(`select id from entities where id in (${placeholders})`)
+      .all<{ id: string }>(...resolvable)
+    ).map((r) => r.id),
   );
 
   return resolvable.filter((d) => !present.has(d));
 }
 
 /** Insert one transaction's worth of profile rows. */
-function insertProfiles(db: Database, profiles: ProfileViewDetailed[]): void {
-  const insertEntity = db.prepare(
-    "insert into entities (id, stream_id) values (?, ?) on conflict(id) do nothing",
-  );
-  const insertUser = db.prepare(
-    "insert into comp_user (did, handle) values (?, ?) on conflict(did) do nothing",
-  );
-  const insertInfo = db.prepare(
-    "insert into comp_info (entity, name, avatar) values (?, ?, ?) on conflict(entity) do nothing",
-  );
-
-  const run = db.transaction(() => {
-    for (const p of profiles) {
-      // The frontend uses the DID as both id and stream_id for users; that
-      // matches the comp_user FK shape and keeps queries on the user entity
-      // consistent across spaces.
-      insertEntity.run(p.did, p.did);
-      insertUser.run(p.did, p.handle);
-      insertInfo.run(p.did, p.displayName ?? p.handle, p.avatar ?? null);
-    }
-  });
-
-  run();
+async function insertProfiles(db: DbLike, profiles: ProfileViewDetailed[]): Promise<void> {
+  const steps: Array<{ type: "query" | "run" | "exec"; sql: string; params?: unknown[] }> = [];
+  for (const p of profiles) {
+    steps.push({ type: "run", sql: "insert into entities (id, stream_id) values (?, ?) on conflict(id) do nothing", params: [p.did, p.did] });
+    steps.push({ type: "run", sql: "insert into comp_user (did, handle) values (?, ?) on conflict(did) do nothing", params: [p.did, p.handle] });
+    steps.push({ type: "run", sql: "insert into comp_info (entity, name, avatar) values (?, ?, ?) on conflict(entity) do nothing", params: [p.did, p.displayName ?? p.handle, p.avatar ?? null] });
+  }
+  await db.transaction(steps);
 }

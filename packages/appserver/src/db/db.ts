@@ -7,12 +7,16 @@
  *
  * Materialisation is fully deterministic from the Leaf event log, so on a
  * schema-version mismatch the file is automatically deleted and re-created.
+ *
+ * The actual SQLite operations run in a Bun.Worker thread. This module
+ * provides an AsyncDatabase proxy that communicates with the worker via
+ * message-passing.
  */
 
-import { Database } from "bun:sqlite";
-import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { AsyncDatabase } from "./asyncDatabase.ts";
+import { READSTATE_SCHEMA_VERSION } from "./readStateDb.ts";
 
 /**
  * Bump whenever schema.sql OR materialiser logic changes — a bump triggers
@@ -66,9 +70,7 @@ export const SCHEMA_VERSION = "10-appserver.4";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 
-const SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), "schema.sql");
-
-let dbInstance: Database | null = null;
+let dbInstance: AsyncDatabase | null = null;
 
 export interface OpenDbOptions {
   /** Filesystem path or `:memory:`. Defaults to `APPSERVER_DB_PATH` or `data/roomy.sqlite`. */
@@ -78,105 +80,45 @@ export interface OpenDbOptions {
 }
 
 /**
- * Open (or return) the appserver's SQLite database, applying the schema and
- * verifying the version row.
+ * Open (or return) the appserver's SQLite database, backed by a Bun.Worker.
  *
- * On schema-version mismatch the file is deleted and recreated (materialisation
- * is deterministic from the Leaf event log so this is always safe).
+ * The worker opens both the materialisation DB and the read-state DB,
+ * applies schemas, and ATTACHes the read-state DB as `readstate`.
  */
-export function openDb(opts: OpenDbOptions = {}): Database {
+export function openDb(opts: OpenDbOptions = {}): AsyncDatabase {
   if (!opts.isolated && dbInstance) return dbInstance;
 
   const path = opts.path ?? DEFAULT_DB_PATH;
-  const isFile = path !== ":memory:";
+  const workerPath = join(dirname(fileURLToPath(import.meta.url)), "worker.ts");
 
-  if (isFile) mkdirSync(dirname(path), { recursive: true });
+  const db = new AsyncDatabase(workerPath);
 
-  const db = new Database(path, { create: true });
-  db.exec("pragma journal_mode = wal");
-  db.exec("pragma synchronous = normal");
-  db.exec("pragma foreign_keys = on");
-
-  try {
-    initializeSchema(db);
-  } catch (err) {
-    if (err instanceof SchemaVersionMismatchError && isFile) {
-      db.close();
-      console.warn(
-        `[db] Schema version mismatch (${err.onDiskVersion} → ${err.expectedVersion}). ` +
-          "Wiping and re-creating.",
-      );
-      // Remove the DB file and its WAL/SHM companions.
-      for (const suffix of ["", "-wal", "-shm"]) {
-        try { unlinkSync(path + suffix); } catch { /* already gone */ }
-      }
-      mkdirSync(dirname(path), { recursive: true });
-      const rebuilt = new Database(path, { create: true });
-      rebuilt.exec("pragma journal_mode = wal");
-      rebuilt.exec("pragma synchronous = normal");
-      rebuilt.exec("pragma foreign_keys = on");
-      initializeSchema(rebuilt);
-      if (!opts.isolated) dbInstance = rebuilt;
-      return rebuilt;
-    }
-    throw err;
-  }
+  // Init is fire-and-forget; the returned proxy queues requests until init
+  // completes. The caller should await the result if they need to know when
+  // the DB is ready.
+  db.init({
+    mainDbPath: path,
+    readStateDbPath: process.env.READSTATE_DB_PATH ?? "data/roomy-readstate.sqlite",
+    schemaVersion: SCHEMA_VERSION,
+    readStateSchemaVersion: READSTATE_SCHEMA_VERSION,
+  });
 
   if (!opts.isolated) dbInstance = db;
   return db;
 }
 
+/** Return the singleton AsyncDatabase, or throw if not yet opened. */
+export function getDb(): AsyncDatabase {
+  if (!dbInstance) throw new Error("Database not opened. Call openDb() first.");
+  return dbInstance;
+}
+
 /**
- * Apply schema.sql and write the schema version row.
- *
- * Throws `SchemaVersionMismatchError` if the on-disk version differs from
- * `SCHEMA_VERSION`. The caller (`openDb`) catches this and auto-wipes.
- * Idempotent on a matching DB.
+ * Close the process-wide database singleton. Used by tests to reset state.
  */
-export function initializeSchema(db: Database): void {
-  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
-  // bun:sqlite executes multi-statement scripts via `exec`. Statements are
-  // separated by semicolons; CREATE TABLE / INDEX / VIRTUAL TABLE all parse
-  // correctly without splitting.
-  db.exec(schemaSql);
-
-  const row = db
-    .query<
-      { version: string },
-      []
-    >("select version from roomy_schema_version where id = 1")
-    .get();
-
-  if (!row) {
-    db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
-      SCHEMA_VERSION,
-    ]);
-    return;
-  }
-
-  if (row.version !== SCHEMA_VERSION) {
-    throw new SchemaVersionMismatchError(row.version, SCHEMA_VERSION);
-  }
-}
-
-export class SchemaVersionMismatchError extends Error {
-  readonly onDiskVersion: string;
-  readonly expectedVersion: string;
-
-  constructor(onDiskVersion: string, expectedVersion: string) {
-    super(
-      `Roomy SQLite schema version mismatch: on disk = ${onDiskVersion}, expected = ${expectedVersion}. ` +
-        `Materialisation is deterministic; delete the DB file and re-backfill.`,
-    );
-    this.name = "SchemaVersionMismatchError";
-    this.onDiskVersion = onDiskVersion;
-    this.expectedVersion = expectedVersion;
-  }
-}
-
-/** Close + clear the singleton. Tests only. */
 export function closeDb(): void {
-  if (!dbInstance) return;
-  dbInstance.close();
-  dbInstance = null;
+  if (dbInstance) {
+    dbInstance.close();
+    dbInstance = null;
+  }
 }

@@ -175,21 +175,23 @@ export function recordMaterialization(info: MaterializationResultInfo): void {
        (stream_did, idx, event_type, event_id, status, error_message,
         bundle_type, bundle_sql_count, materialized_ms)
      values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    info.streamDid,
-    info.idx,
-    info.eventType,
-    info.eventId,
-    info.status,
-    info.errorMessage ?? null,
-    info.bundle && info.bundle.status === "success"
-      ? info.bundle.event.$type
-      : info.bundle && info.bundle.status === "error"
-        ? "error"
+    [
+      info.streamDid,
+      info.idx,
+      info.eventType,
+      info.eventId,
+      info.status,
+      info.errorMessage ?? null,
+      info.bundle && info.bundle.status === "success"
+        ? info.bundle.event.$type
+        : info.bundle && info.bundle.status === "error"
+          ? "error"
+          : null,
+      info.bundle && info.bundle.status === "success"
+        ? info.bundle.statements.length
         : null,
-    info.bundle && info.bundle.status === "success"
-      ? info.bundle.statements.length
-      : null,
-    ms(),
+      ms(),
+    ],
   );
 }
 
@@ -223,11 +225,13 @@ export function recordDeliveryGap(info: GapDetectedInfo): void {
           where stream_did = ? and idx = ?
           limit 1
         )`,
-    info.gapStart,
-    info.gapEnd,
-    info.streamDid,
-    info.streamDid,
-    info.batchMinIdx, // use batchMinIdx (first event of the gap-detecting batch) instead of gapEnd
+    [
+      info.gapStart,
+      info.gapEnd,
+      info.streamDid,
+      info.streamDid,
+      info.batchMinIdx,
+    ],
   );
 }
 

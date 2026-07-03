@@ -11,7 +11,7 @@
  * increasing `idx` order so each new message is correctly prepended.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import type { StreamDid, Ulid } from "@roomy-space/sdk";
 import { decodeTime } from "ulidx";
 
@@ -30,15 +30,15 @@ export interface ActivityItemUpsertOpts {
  *      new messageId, slice to at most 5, and update last_activity_at.
  *   3. If no: insert with all denormalized metadata fetched in one query.
  */
-export function upsertActivityItem(
-  db: Database,
+export async function upsertActivityItem(
+  db: DbLike,
   opts: ActivityItemUpsertOpts,
-): void {
-  const existing = db
-    .query<{ recent_message_ids: string }, [string]>(
+): Promise<void> {
+  const existing = await db
+    .query(
       `select recent_message_ids from activity_item where room_id = ?`,
     )
-    .get(opts.roomId);
+    .get<{ recent_message_ids: string }>(opts.roomId);
 
   if (existing) {
     // Fast path: prepend to the message ID list, cap at 5.
@@ -46,15 +46,15 @@ export function upsertActivityItem(
     // Remove duplicate if somehow present, then prepend.
     const deduped = ids.filter((id) => id !== opts.messageId);
     deduped.unshift(opts.messageId);
-    const capped = deduped.slice(0, 5);
+    const capped: string[] = deduped.slice(0, 5);
 
-    db.prepare(
+    await (await db.prepare(
       `update activity_item
           set last_activity_at = ?,
               recent_message_ids = ?,
               updated_at = (unixepoch() * 1000)
         where room_id = ?`,
-    ).run(
+    )).run(
       // Timestamp: decode from the message ULID to match canonical ordering.
       decodeMessageTimestamp(opts.messageId),
       JSON.stringify(capped),
@@ -62,29 +62,19 @@ export function upsertActivityItem(
     );
   } else {
     // Slow path: first message in this room — fetch all metadata.
-    insertActivityItem(db, opts);
+    await insertActivityItem(db, opts);
   }
 }
 
 /**
  * First insert for a room: fetch all denormalized metadata in bulk.
  */
-function insertActivityItem(
-  db: Database,
+async function insertActivityItem(
+  db: DbLike,
   opts: ActivityItemUpsertOpts,
-): void {
-  const roomMeta = db
-    .query<
-      {
-        label: string | null;
-        room_name: string | null;
-        space_name: string | null;
-        space_avatar: string | null;
-        parent_id: string | null;
-        parent_name: string | null;
-      },
-      [string, string]
-    >(
+): Promise<void> {
+  const roomMeta = await db
+    .query(
       `select
          cr.label as label,
          ri.name as room_name,
@@ -102,19 +92,26 @@ function insertActivityItem(
        left join comp_info parent_ci on parent_ci.entity = parent_e.head
        where cr.entity = ?1`,
     )
-    .get(opts.roomId, opts.spaceId);
+    .get<{
+      label: string | null;
+      room_name: string | null;
+      space_name: string | null;
+      space_avatar: string | null;
+      parent_id: string | null;
+      parent_name: string | null;
+    }>(opts.roomId, opts.spaceId);
 
   const isThread = roomMeta?.label === "space.roomy.thread" ? 1 : 0;
   const timestamp = decodeMessageTimestamp(opts.messageId);
 
-  db.prepare(
+  await (await db.prepare(
     `insert into activity_item (
        room_id, space_id, is_thread, parent_channel_id, parent_channel_name,
        last_activity_at, recent_message_ids,
        room_name, space_name, space_avatar,
        created_at, updated_at
      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))`,
-  ).run(
+  )).run(
     opts.roomId,
     opts.spaceId,
     isThread,

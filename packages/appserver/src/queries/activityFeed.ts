@@ -8,7 +8,7 @@
  * The caller is responsible for filtering by room-level read access.
  */
 
-import type { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import { decodeContent } from "../db/content.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -27,6 +27,8 @@ export interface ActivityMessage {
   media?: Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>;
   /** Reactions on the message. Only hydrated on the latest message. */
   reactions?: Array<{ emoji: string; count: number; myReactionId?: string }>;
+  /** Link embeds with enriched metadata from the embed service. */
+  linkEmbeds?: Array<{ url: string; embed?: Record<string, unknown> }>;
 }
 
 export interface ActivityFeedItem {
@@ -53,12 +55,12 @@ export interface ActivityFeedScope {
 
 // ─── Query ────────────────────────────────────────────────────────────────
 
-export function selectActivityFeed(
-  db: Database,
+export async function selectActivityFeed(
+  db: DbLike,
   userDid: string,
   personalStreamDid: string,
   scope: ActivityFeedScope,
-): { feed: ActivityFeedItem[]; cursor: string | null } {
+): Promise<{ feed: ActivityFeedItem[]; cursor: string | null }> {
   // Step 1: fetch the raw activity_item rows, filtered and paginated.
   const spaceFilter = scope.spaceId;
 
@@ -94,22 +96,8 @@ export function selectActivityFeed(
 
   const whereClause = conditions.join(" and ");
 
-  const rows = db
-    .query<
-      {
-        room_id: string;
-        space_id: string;
-        is_thread: number;
-        parent_channel_id: string | null;
-        parent_channel_name: string | null;
-        last_activity_at: number;
-        recent_message_ids: string;
-        room_name: string | null;
-        space_name: string | null;
-        space_avatar: string | null;
-      },
-      (string | number)[]
-    >(
+  const rows = await db
+    .query(
       `select
          ai.room_id, ai.space_id, ai.is_thread,
          ai.parent_channel_id, ai.parent_channel_name,
@@ -121,7 +109,7 @@ export function selectActivityFeed(
        order by ai.last_activity_at desc, ai.room_id desc
        limit ?`,
     )
-    .all(...params, scope.limit + 1);
+    .all<{room_id: string; space_id: string; is_thread: number; parent_channel_id: string | null; parent_channel_name: string | null; last_activity_at: number; recent_message_ids: string; room_name: string | null; space_name: string | null; space_avatar: string | null;}>([...params, scope.limit + 1]);
 
   if (rows.length === 0) return { feed: [], cursor: null };
 
@@ -137,12 +125,12 @@ export function selectActivityFeed(
   }
 
   const messagesData = allMessageIds.length > 0
-    ? batchFetchMessages(db, allMessageIds)
+    ? await batchFetchMessages(db, allMessageIds)
     : new Map<string, ActivityMessage>();
 
   // Step 3: fetch unread counts for all rooms on the page.
   const roomIds = pageRows.map((r) => r.room_id);
-  const unreadCounts = batchFetchUnreadCounts(db, userDid, roomIds);
+  const unreadCounts = await batchFetchUnreadCounts(db, userDid, roomIds);
 
   // Step 4: assemble feed items.
   const feed: ActivityFeedItem[] = pageRows.map((r) => {
@@ -181,15 +169,15 @@ export function selectActivityFeed(
     .map((it) => it.messages[0]?.id)
     .filter((id): id is string => id != null);
   if (lastMsgIds.length > 0) {
-    const { mediaByMsg, linkEmbedsByMsg } = batchFetchEmbeds(db, lastMsgIds);
-    const reactionsByMsg = batchFetchReactions(db, lastMsgIds, userDid);
+    const { mediaByMsg, linkEmbedsByMsg } = await batchFetchEmbeds(db, lastMsgIds);
+    const reactionsByMsg = await batchFetchReactions(db, lastMsgIds, userDid);
     for (const it of feed) {
       const last = it.messages[0];
       if (!last) continue;
       const media = mediaByMsg.get(last.id);
       if (media && media.length > 0) last.media = media;
       const linkEmbeds = linkEmbedsByMsg.get(last.id);
-      if (linkEmbeds && linkEmbeds.length > 0) last.linkEmbeds = linkEmbeds;
+      if (linkEmbeds && linkEmbeds.length > 0) last.linkEmbeds = linkEmbeds as Array<{ url: string; embed?: Record<string, unknown> }>;
       const reactions = reactionsByMsg.get(last.id);
       if (reactions && reactions.length > 0) last.reactions = reactions;
     }
@@ -221,16 +209,16 @@ interface MessageRow {
  * Batch-fetch full message data for a set of message IDs.
  * Returns a Map<messageId, ActivityMessage>.
  */
-function batchFetchMessages(
-  db: Database,
+async function batchFetchMessages(
+  db: DbLike,
   messageIds: string[],
-): Map<string, ActivityMessage> {
+): Promise<Map<string, ActivityMessage>> {
   const result = new Map<string, ActivityMessage>();
   if (messageIds.length === 0) return result;
 
   const placeholders = messageIds.map(() => "?").join(",");
-  const rows = db
-    .query<MessageRow, string[]>(
+  const rows = await db
+    .query(
       `select
          e.id as id,
          cc.mime_type as mime_type,
@@ -246,7 +234,7 @@ function batchFetchMessages(
        left join comp_info author_info on author_info.entity = author_e.tail
        where e.id in (${placeholders})`,
     )
-    .all(...messageIds);
+    .all<MessageRow>(messageIds);
 
   for (const r of rows) {
     result.set(r.id, {
@@ -272,25 +260,22 @@ function batchFetchMessages(
  * prepared statements. The readstate DB is ATTACHed to the main DB
  * as "readstate" at startup, so cross-database queries work fine.
  */
-function batchFetchUnreadCounts(
-  db: Database,
+async function batchFetchUnreadCounts(
+  db: DbLike,
   userDid: string,
   roomIds: string[],
-): Map<string, number> {
+): Promise<Map<string, number>> {
   const result = new Map<string, number>();
   if (roomIds.length === 0) return result;
 
   const placeholders = roomIds.map(() => "?").join(",");
-  const rows = db
-    .query<
-      { room_id: string; unread_count: number },
-      [string, ...string[]]
-    >(
+  const rows = await db
+    .query(
       `select room_id, unread_count
          from readstate.read_positions
         where user_did = ? and room_id in (${placeholders})`,
     )
-    .all(userDid, ...roomIds);
+    .all<{room_id: string; unread_count: number}>([userDid, ...roomIds]);
 
   for (const row of rows) {
     result.set(row.room_id, row.unread_count);
@@ -322,20 +307,20 @@ interface EmbedRow {
  * points at the owning message), then a follow-up query for cached link-embed
  * enrichment data. Returns two maps keyed by message ID.
  */
-function batchFetchEmbeds(
-  db: Database,
+async function batchFetchEmbeds(
+  db: DbLike,
   messageIds: string[],
-): {
+): Promise<{
   mediaByMsg: Map<string, Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>>;
   linkEmbedsByMsg: Map<string, Array<{ url: string; embed?: Record<string, unknown> | null }>>;
-} {
+}> {
   const mediaByMsg = new Map<string, Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>>();
   const linkEmbedsByMsg = new Map<string, Array<{ url: string; embed?: Record<string, unknown> | null }>>();
   if (messageIds.length === 0) return { mediaByMsg, linkEmbedsByMsg };
 
   const idPh = messageIds.map(() => "?").join(",");
-  const embedRows = db
-    .query<EmbedRow, string[]>(
+  const embedRows = await db
+    .query(
       `select e.room as message_id, ei.entity as url,
               ei.mime_type as mime_type, ei.alt as alt,
               ei.width as width, ei.height as height,
@@ -374,7 +359,7 @@ function batchFetchEmbeds(
     )
     // Each UNION branch has its own `where ... in (${idPh})` — bind ids
     // once per branch (4× total). bun:sqlite has no positional reuse here.
-    .all(...messageIds, ...messageIds, ...messageIds, ...messageIds);
+    .all<EmbedRow>([...messageIds, ...messageIds, ...messageIds, ...messageIds]);
 
   // Collect link URLs so we can pull cached enrichment data in one query.
   const linkUrls = new Set<string>();
@@ -386,12 +371,12 @@ function batchFetchEmbeds(
   if (linkUrls.size > 0) {
     const urlList = [...linkUrls];
     const ph = urlList.map(() => "?").join(",");
-    const linkDataRows = db
-      .query<{ entity: string; embed_json: string | null }, string[]>(
+    const linkDataRows = await db
+      .query(
         `select entity, embed_json from comp_embed_link_data
           where entity in (${ph})`,
       )
-      .all(...urlList);
+      .all<{ entity: string; embed_json: string | null }>([...urlList]);
     for (const row of linkDataRows) {
       linkEmbedDataMap.set(
         row.entity,
@@ -447,21 +432,21 @@ interface ReactionRow {
  * only set for the viewer's own reaction (so the client can render/highlight
  * it). Mirrors the reaction assembly in `selectMessages.ts`.
  */
-function batchFetchReactions(
-  db: Database,
+async function batchFetchReactions(
+  db: DbLike,
   messageIds: string[],
   viewerDid?: string,
-): Map<string, Array<{ emoji: string; count: number; myReactionId?: string }>> {
+): Promise<Map<string, Array<{ emoji: string; count: number; myReactionId?: string }>>> {
   const result = new Map<string, Array<{ emoji: string; count: number; myReactionId?: string }>>();
   if (messageIds.length === 0) return result;
 
   const placeholders = messageIds.map(() => "?").join(",");
-  const rows = db
-    .query<ReactionRow, string[]>(
+  const rows = await db
+    .query(
       `select entity, reaction, user, reaction_id from comp_reaction
         where entity in (${placeholders})`,
     )
-    .all(...messageIds);
+    .all<ReactionRow>([...messageIds]);
 
   // Per-message: emoji -> set of reactor DIDs.
   const reactionMap = new Map<string, Map<string, Set<string>>>();

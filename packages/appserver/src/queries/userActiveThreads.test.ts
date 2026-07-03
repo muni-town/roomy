@@ -10,9 +10,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import type { Database } from "bun:sqlite";
-import { openDb } from "../db/db.ts";
-import { attachInMemoryReadState, initializeReadStateSchema } from "../db/readStateDb.ts";
+import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { toAsyncDb } from "../db/syncAdapter.ts";
+import type { DbLike } from "../db/types.ts";
 import {
   upsertUserThreadActivity,
   queryActiveThreads,
@@ -21,17 +24,48 @@ import {
   purgeStaleThreadActivity,
 } from "./userActiveThreads.ts";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const READSTATE_SCHEMA_PATH = join(__dirname, "..", "db", "readStateSchema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
+const READSTATE_SCHEMA_VERSION = "2";
+
 /** Create a fresh db pair (main + attached readstate) for testing. */
-function freshDb(): { db: Database; readStateDb: Database } {
-  const db = openDb({ path: ":memory:", isolated: true });
-  const readStateDb = attachInMemoryReadState(db);
-  return { db, readStateDb };
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  // Apply main schema
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
+    SCHEMA_VERSION,
+  ]);
+  // Attach and apply readstate schema (separate exec calls to avoid bun:sqlite multi-stmt issue)
+  db.exec("attach database ':memory:' as readstate");
+  db.exec(
+    "create table if not exists readstate_schema_version (id integer primary key check (id = 1), version text not null) strict",
+  );
+  db.exec(
+    "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
+  );
+  db.exec(
+    "create table if not exists readstate.user_thread_activity (user_did text not null, thread_id text not null, last_active_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, thread_id)) strict",
+  );
+  db.run(
+    "insert or replace into readstate_schema_version (id, version) values (1, ?)",
+    [READSTATE_SCHEMA_VERSION],
+  );
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 const SPACE = "did:web:space.example";
 const CHANNEL = "01CHANNEL00000000000000000";
-const THREAD_A = "01THREADA00000000000000000".slice(0, 26);
-const THREAD_B = "01THREADB00000000000000000".slice(0, 26);
+const THREAD_A = "01THREADA000000000000000000".slice(0, 26);
+const THREAD_B = "01THREADB000000000000000000".slice(0, 26);
 const USER = "did:plc:alice";
 const OTHER_USER = "did:plc:bob";
 
@@ -77,30 +111,30 @@ function seedBasic(db: Database) {
 }
 
 describe("isThread", () => {
-  test("returns true for thread rooms", () => {
-    const { db } = freshDb();
+  test("returns true for thread rooms", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
-    expect(isThread(db, THREAD_A)).toBe(true);
+    expect(await isThread(asyncDb, THREAD_A)).toBe(true);
   });
 
-  test("returns false for channels", () => {
-    const { db } = freshDb();
+  test("returns false for channels", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
-    expect(isThread(db, CHANNEL)).toBe(false);
+    expect(await isThread(asyncDb, CHANNEL)).toBe(false);
   });
 
-  test("returns false for non-existent rooms", () => {
-    const { db } = freshDb();
-    expect(isThread(db, "01NONEXIST0000000000000000")).toBe(false);
+  test("returns false for non-existent rooms", async () => {
+    const { asyncDb } = freshDb();
+    expect(await isThread(asyncDb, "01NONEXIST0000000000000000")).toBe(false);
   });
 });
 
 describe("upsertUserThreadActivity", () => {
-  test("inserts a new row on first call", () => {
-    const { db } = freshDb();
+  test("inserts a new row on first call", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
-    upsertUserThreadActivity(db, USER, THREAD_A, 1000);
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_A, 1000);
 
     const rows = db
       .query<{ user_did: string; thread_id: string; last_active_at: number }, []>(
@@ -113,12 +147,12 @@ describe("upsertUserThreadActivity", () => {
     expect(rows[0]!.last_active_at).toBe(1000);
   });
 
-  test("updates last_active_at on subsequent calls", () => {
-    const { db } = freshDb();
+  test("updates last_active_at on subsequent calls", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
-    upsertUserThreadActivity(db, USER, THREAD_A, 1000);
-    upsertUserThreadActivity(db, USER, THREAD_A, 2000);
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_A, 1000);
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_A, 2000);
 
     const rows = db
       .query<{ last_active_at: number }, []>(
@@ -131,53 +165,53 @@ describe("upsertUserThreadActivity", () => {
 });
 
 describe("queryActiveThreads", () => {
-  test("returns empty when no activity exists", () => {
-    const { db } = freshDb();
+  test("returns empty when no activity exists", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
-    const result = queryActiveThreads(db, USER, SPACE);
+    const result = await queryActiveThreads(asyncDb, USER, SPACE);
     expect(result).toHaveLength(0);
   });
 
-  test("returns threads within the 72h window, ordered by most recent", () => {
-    const { db } = freshDb();
+  test("returns threads within the 72h window, ordered by most recent", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
     const now = Date.now();
-    upsertUserThreadActivity(db, USER, THREAD_A, now - 60_000); // 1 min ago
-    upsertUserThreadActivity(db, USER, THREAD_B, now - 30_000); // 30 sec ago
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_A, now - 60_000); // 1 min ago
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_B, now - 30_000); // 30 sec ago
 
-    const result = queryActiveThreads(db, USER, SPACE);
+    const result = await queryActiveThreads(asyncDb, USER, SPACE);
     expect(result).toHaveLength(2);
     expect(result[0]!.id).toBe(THREAD_B);
     expect(result[1]!.id).toBe(THREAD_A);
   });
 
-  test("excludes threads older than 72 hours", () => {
-    const { db } = freshDb();
+  test("excludes threads older than 72 hours", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
     const now = Date.now();
-    upsertUserThreadActivity(db, USER, THREAD_A, now - 73 * 60 * 60 * 1000); // 73h ago
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_A, now - 73 * 60 * 60 * 1000); // 73h ago
 
-    const result = queryActiveThreads(db, USER, SPACE);
+    const result = await queryActiveThreads(asyncDb, USER, SPACE);
     expect(result).toHaveLength(0);
   });
 
-  test("scoped by user", () => {
-    const { db } = freshDb();
+  test("scoped by user", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
-    upsertUserThreadActivity(db, USER, THREAD_A, Date.now());
-    upsertUserThreadActivity(db, OTHER_USER, THREAD_B, Date.now());
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_A, Date.now());
+    await upsertUserThreadActivity(asyncDb, OTHER_USER, THREAD_B, Date.now());
 
-    const userResult = queryActiveThreads(db, USER, SPACE);
+    const userResult = await queryActiveThreads(asyncDb, USER, SPACE);
     expect(userResult).toHaveLength(1);
     expect(userResult[0]!.id).toBe(THREAD_A);
   });
 
-  test("lazy backfill populates from user-authored messages", () => {
-    const { db } = freshDb();
+  test("lazy backfill populates from user-authored messages", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
     // Insert a message authored by USER in THREAD_A
@@ -198,15 +232,15 @@ describe("queryActiveThreads", () => {
     ]);
 
     // No prior user_thread_activity rows — backfill should trigger
-    const result = queryActiveThreads(db, USER, SPACE);
+    const result = await queryActiveThreads(asyncDb, USER, SPACE);
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result.some((r) => r.id === THREAD_A)).toBe(true);
   });
 });
 
 describe("resolveThreadsByIds", () => {
-  test("returns metadata for given thread IDs", () => {
-    const { db } = freshDb();
+  test("returns metadata for given thread IDs", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
     // Post a message in THREAD_A
@@ -226,7 +260,7 @@ describe("resolveThreadsByIds", () => {
       USER,
     ]);
 
-    const result = resolveThreadsByIds(db, [THREAD_A, THREAD_B]);
+    const result = await resolveThreadsByIds(asyncDb, [THREAD_A, THREAD_B]);
 
     expect(result.has(THREAD_A)).toBe(true);
     expect(result.has(THREAD_B)).toBe(true);
@@ -239,21 +273,21 @@ describe("resolveThreadsByIds", () => {
     expect(a.latestMembers[0]!.did).toBe(USER);
   });
 
-  test("returns empty map for empty input", () => {
-    const { db } = freshDb();
-    expect(resolveThreadsByIds(db, []).size).toBe(0);
+  test("returns empty map for empty input", async () => {
+    const { asyncDb } = freshDb();
+    expect((await resolveThreadsByIds(asyncDb, [])).size).toBe(0);
   });
 });
 
 describe("purgeStaleThreadActivity", () => {
-  test("removes rows older than given cutoff", () => {
-    const { db } = freshDb();
+  test("removes rows older than given cutoff", async () => {
+    const { db, asyncDb } = freshDb();
     seedBasic(db);
 
-    upsertUserThreadActivity(db, USER, THREAD_A, 1000);
-    upsertUserThreadActivity(db, USER, THREAD_B, 5000);
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_A, 1000);
+    await upsertUserThreadActivity(asyncDb, USER, THREAD_B, 5000);
 
-    const purged = purgeStaleThreadActivity(db, 3000);
+    const purged = await purgeStaleThreadActivity(asyncDb, 3000);
     expect(purged).toBe(1);
 
     const remaining = db

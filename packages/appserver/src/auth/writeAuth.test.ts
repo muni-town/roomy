@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { openDb } from "../db/db.ts";
+import { toAsyncDb } from "../db/syncAdapter.ts";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { DbLike } from "../db/types.ts";
 import {
   checkWriteAuth,
   ALLOWED_TYPES,
@@ -8,8 +12,23 @@ import {
 } from "./writeAuth.ts";
 import { newUlid } from "@roomy-space/sdk";
 
-function freshDb(): Database {
-  return openDb({ path: ":memory:", isolated: true });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
+
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
+    SCHEMA_VERSION,
+  ]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 const SPACE = "did:web:space.example";
@@ -21,44 +40,44 @@ const ROLE = "01ROLE0000000000000000000";
 
 // ── Seed helpers (same pattern as access.test.ts) ─────────────────────
 
-function seedSpace(db: Database, spaceId = SPACE): void {
-  db.run("insert into entities (id, stream_id) values (?, ?)", [
+async function seedSpace(db: DbLike, spaceId = SPACE): Promise<void> {
+  await db.run("insert into entities (id, stream_id) values (?, ?)", [
     spaceId,
     spaceId,
   ]);
-  db.run("insert into comp_space (entity) values (?)", [spaceId]);
+  await db.run("insert into comp_space (entity) values (?)", [spaceId]);
 }
 
-function seedUser(db: Database, did: string): void {
-  db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+async function seedUser(db: DbLike, did: string): Promise<void> {
+  await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
     did,
     did,
   ]);
 }
 
-function seedChannel(
-  db: Database,
+async function seedChannel(
+  db: DbLike,
   channelId: string,
   spaceId: string,
   defaultAccess: "readwrite" | "read" | "none" = "readwrite",
-): void {
-  db.run("insert into entities (id, stream_id) values (?, ?)", [
+): Promise<void> {
+  await db.run("insert into entities (id, stream_id) values (?, ?)", [
     channelId,
     spaceId,
   ]);
-  db.run(
+  await db.run(
     "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.channel', ?)",
     [channelId, defaultAccess],
   );
 }
 
-function addEdge(
-  db: Database,
+async function addEdge(
+  db: DbLike,
   head: string,
   tail: string,
   label: string,
-): void {
-  db.run("insert into edges (head, tail, label) values (?, ?, ?)", [
+): Promise<void> {
+  await db.run("insert into edges (head, tail, label) values (?, ?, ?)", [
     head,
     tail,
     label,
@@ -101,9 +120,9 @@ function deleteMessageEvent(roomId: string, messageId: string) {
 // ── Tests ──────────────────────────────────────────────────────────────
 
 describe("auth/writeAuth — rejected types", () => {
-  test("personal.joinSpace is rejected with 400", () => {
-    const db = freshDb();
-    const result = checkWriteAuth(db, SPACE, USER, {
+  test("personal.joinSpace is rejected with 400", async () => {
+    const { asyncDb: db } = freshDb();
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.personal.joinSpace.v0",
       id: newUlid(),
     });
@@ -112,9 +131,9 @@ describe("auth/writeAuth — rejected types", () => {
     expect(result!.error).toBe("InvalidRequest");
   });
 
-  test("personal.leaveSpace is rejected with 400", () => {
-    const db = freshDb();
-    const result = checkWriteAuth(db, SPACE, USER, {
+  test("personal.leaveSpace is rejected with 400", async () => {
+    const { asyncDb: db } = freshDb();
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.personal.leaveSpace.v0",
       id: newUlid(),
     });
@@ -122,9 +141,9 @@ describe("auth/writeAuth — rejected types", () => {
     expect(result!.status).toBe(400);
   });
 
-  test("markRead is rejected with 400", () => {
-    const db = freshDb();
-    const result = checkWriteAuth(db, SPACE, USER, {
+  test("markRead is rejected with 400", async () => {
+    const { asyncDb: db } = freshDb();
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.state.markRead.v0",
       id: newUlid(),
     });
@@ -132,9 +151,9 @@ describe("auth/writeAuth — rejected types", () => {
     expect(result!.status).toBe(400);
   });
 
-  test("unknown type is rejected with 400", () => {
-    const db = freshDb();
-    const result = checkWriteAuth(db, SPACE, USER, {
+  test("unknown type is rejected with 400", async () => {
+    const { asyncDb: db } = freshDb();
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.fake.event.v0",
       id: newUlid(),
     });
@@ -145,14 +164,14 @@ describe("auth/writeAuth — rejected types", () => {
 });
 
 describe("auth/writeAuth — room write events", () => {
-  test("member can write to a readwrite room", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedChannel(db, CHANNEL, SPACE, "readwrite");
-    seedUser(db, USER);
-    addEdge(db, SPACE, USER, "member");
+  test("member can write to a readwrite room", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
 
-    const result = checkWriteAuth(
+    const result = await checkWriteAuth(
       db,
       SPACE,
       USER,
@@ -161,14 +180,14 @@ describe("auth/writeAuth — room write events", () => {
     expect(result).toBeUndefined();
   });
 
-  test("non-member cannot write to a readwrite room", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedChannel(db, CHANNEL, SPACE, "readwrite");
-    seedUser(db, USER);
+  test("non-member cannot write to a readwrite room", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
     // No member edge
 
-    const result = checkWriteAuth(
+    const result = await checkWriteAuth(
       db,
       SPACE,
       USER,
@@ -178,14 +197,14 @@ describe("auth/writeAuth — room write events", () => {
     expect(result!.status).toBe(403);
   });
 
-  test("admin can always write", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedChannel(db, CHANNEL, SPACE, "none");
-    seedUser(db, ADMIN);
-    addEdge(db, SPACE, ADMIN, "admin");
+  test("admin can always write", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "none");
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, ADMIN, "admin");
 
-    const result = checkWriteAuth(
+    const result = await checkWriteAuth(
       db,
       SPACE,
       ADMIN,
@@ -194,18 +213,18 @@ describe("auth/writeAuth — room write events", () => {
     expect(result).toBeUndefined();
   });
 
-  test("banned user cannot write", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedChannel(db, CHANNEL, SPACE, "readwrite");
-    seedUser(db, USER);
-    addEdge(db, SPACE, USER, "member");
-    db.run("insert into comp_bans (entity, user_did) values (?, ?)", [
+  test("banned user cannot write", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
+    await db.run("insert into comp_bans (entity, user_did) values (?, ?)", [
       SPACE,
       USER,
     ]);
 
-    const result = checkWriteAuth(
+    const result = await checkWriteAuth(
       db,
       SPACE,
       USER,
@@ -215,9 +234,9 @@ describe("auth/writeAuth — room write events", () => {
     expect(result!.status).toBe(403);
   });
 
-  test("missing room field returns 400", () => {
-    const db = freshDb();
-    const result = checkWriteAuth(db, SPACE, USER, {
+  test("missing room field returns 400", async () => {
+    const { asyncDb: db } = freshDb();
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.message.createMessage.v0",
       id: newUlid(),
     });
@@ -226,13 +245,13 @@ describe("auth/writeAuth — room write events", () => {
     expect(result!.message).toContain("room");
   });
 
-  test("nonexistent room returns 404", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
-    addEdge(db, SPACE, USER, "member");
+  test("nonexistent room returns 404", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
 
-    const result = checkWriteAuth(
+    const result = await checkWriteAuth(
       db,
       SPACE,
       USER,
@@ -244,30 +263,30 @@ describe("auth/writeAuth — room write events", () => {
 });
 
 describe("auth/writeAuth — edit/delete author check", () => {
-  function seedMessageWithAuthor(
-    db: Database,
+  async function seedMessageWithAuthor(
+    db: DbLike,
     messageId: string,
     roomId: string,
     authorDid: string,
   ) {
-    db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+    await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
       messageId,
       SPACE,
       roomId,
     ]);
-    addEdge(db, messageId, authorDid, "author");
+    await addEdge(db, messageId, authorDid, "author");
   }
 
-  test("author can edit own message", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedChannel(db, CHANNEL, SPACE, "readwrite");
-    seedUser(db, USER);
-    addEdge(db, SPACE, USER, "member");
+  test("author can edit own message", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
     const msgId = newUlid();
-    seedMessageWithAuthor(db, msgId, CHANNEL, USER);
+    await seedMessageWithAuthor(db, msgId, CHANNEL, USER);
 
-    const result = checkWriteAuth(
+    const result = await checkWriteAuth(
       db,
       SPACE,
       USER,
@@ -276,18 +295,18 @@ describe("auth/writeAuth — edit/delete author check", () => {
     expect(result).toBeUndefined();
   });
 
-  test("non-author non-admin cannot edit message", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedChannel(db, CHANNEL, SPACE, "readwrite");
-    seedUser(db, USER);
-    seedUser(db, OTHER);
-    addEdge(db, SPACE, USER, "member");
-    addEdge(db, SPACE, OTHER, "member");
+  test("non-author non-admin cannot edit message", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
+    await seedUser(db, OTHER);
+    await addEdge(db, SPACE, USER, "member");
+    await addEdge(db, SPACE, OTHER, "member");
     const msgId = newUlid();
-    seedMessageWithAuthor(db, msgId, CHANNEL, USER);
+    await seedMessageWithAuthor(db, msgId, CHANNEL, USER);
 
-    const result = checkWriteAuth(
+    const result = await checkWriteAuth(
       db,
       SPACE,
       OTHER,
@@ -298,17 +317,17 @@ describe("auth/writeAuth — edit/delete author check", () => {
     expect(result!.message).toContain("author");
   });
 
-  test("admin can edit anyone's message", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedChannel(db, CHANNEL, SPACE, "readwrite");
-    seedUser(db, USER);
-    seedUser(db, ADMIN);
-    addEdge(db, SPACE, ADMIN, "admin");
+  test("admin can edit anyone's message", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, ADMIN, "admin");
     const msgId = newUlid();
-    seedMessageWithAuthor(db, msgId, CHANNEL, USER);
+    await seedMessageWithAuthor(db, msgId, CHANNEL, USER);
 
-    const result = checkWriteAuth(
+    const result = await checkWriteAuth(
       db,
       SPACE,
       ADMIN,
@@ -319,13 +338,13 @@ describe("auth/writeAuth — edit/delete author check", () => {
 });
 
 describe("auth/writeAuth — room manage events", () => {
-  test("admin can create room", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, ADMIN);
-    addEdge(db, SPACE, ADMIN, "admin");
+  test("admin can create room", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, ADMIN, "admin");
 
-    const result = checkWriteAuth(db, SPACE, ADMIN, {
+    const result = await checkWriteAuth(db, SPACE, ADMIN, {
       $type: "space.roomy.room.createRoom.v0",
       id: newUlid(),
       kind: "space.roomy.channel",
@@ -333,13 +352,13 @@ describe("auth/writeAuth — room manage events", () => {
     expect(result).toBeUndefined();
   });
 
-  test("member cannot create room", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
-    addEdge(db, SPACE, USER, "member");
+  test("member cannot create room", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
 
-    const result = checkWriteAuth(db, SPACE, USER, {
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.room.createRoom.v0",
       id: newUlid(),
       kind: "space.roomy.channel",
@@ -351,26 +370,26 @@ describe("auth/writeAuth — room manage events", () => {
 });
 
 describe("auth/writeAuth — space manage events", () => {
-  test("admin can update space info", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, ADMIN);
-    addEdge(db, SPACE, ADMIN, "admin");
+  test("admin can update space info", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, ADMIN, "admin");
 
-    const result = checkWriteAuth(db, SPACE, ADMIN, {
+    const result = await checkWriteAuth(db, SPACE, ADMIN, {
       $type: "space.roomy.space.updateSpaceInfo.v0",
       id: newUlid(),
     });
     expect(result).toBeUndefined();
   });
 
-  test("member cannot add admin", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
-    addEdge(db, SPACE, USER, "member");
+  test("member cannot add admin", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
 
-    const result = checkWriteAuth(db, SPACE, USER, {
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.addAdmin.v0",
       id: newUlid(),
       userDid: OTHER,
@@ -381,29 +400,29 @@ describe("auth/writeAuth — space manage events", () => {
 });
 
 describe("auth/writeAuth — space member events", () => {
-  test("joinSpace allows non-banned user", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
+  test("joinSpace allows non-banned user", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
     // No member edge, no ban
 
-    const result = checkWriteAuth(db, SPACE, USER, {
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.joinSpace.v0",
       id: newUlid(),
     });
     expect(result).toBeUndefined();
   });
 
-  test("joinSpace rejects banned user", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
-    db.run("insert into comp_bans (entity, user_did) values (?, ?)", [
+  test("joinSpace rejects banned user", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
+    await db.run("insert into comp_bans (entity, user_did) values (?, ?)", [
       SPACE,
       USER,
     ]);
 
-    const result = checkWriteAuth(db, SPACE, USER, {
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.joinSpace.v0",
       id: newUlid(),
     });
@@ -411,13 +430,13 @@ describe("auth/writeAuth — space member events", () => {
     expect(result!.status).toBe(403);
   });
 
-  test("leaveSpace requires membership", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
+  test("leaveSpace requires membership", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
 
     // Non-member cannot leave
-    const result = checkWriteAuth(db, SPACE, USER, {
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.leaveSpace.v0",
       id: newUlid(),
     });
@@ -425,46 +444,46 @@ describe("auth/writeAuth — space member events", () => {
     expect(result!.status).toBe(403);
 
     // Member can leave
-    addEdge(db, SPACE, USER, "member");
-    const result2 = checkWriteAuth(db, SPACE, USER, {
+    await addEdge(db, SPACE, USER, "member");
+    const result2 = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.leaveSpace.v0",
       id: newUlid(),
     });
     expect(result2).toBeUndefined();
   });
 
-  test("updateProfile requires membership", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
+  test("updateProfile requires membership", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
 
-    const result = checkWriteAuth(db, SPACE, USER, {
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.user.updateProfile.v0",
       id: newUlid(),
     });
     expect(result).toBeDefined();
 
-    addEdge(db, SPACE, USER, "member");
-    const result2 = checkWriteAuth(db, SPACE, USER, {
+    await addEdge(db, SPACE, USER, "member");
+    const result2 = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.user.updateProfile.v0",
       id: newUlid(),
     });
     expect(result2).toBeUndefined();
   });
 
-  test("createInvite requires membership", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
+  test("createInvite requires membership", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
 
-    const result = checkWriteAuth(db, SPACE, USER, {
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.createInvite.v0",
       id: newUlid(),
     });
     expect(result).toBeDefined();
 
-    addEdge(db, SPACE, USER, "member");
-    const result2 = checkWriteAuth(db, SPACE, USER, {
+    await addEdge(db, SPACE, USER, "member");
+    const result2 = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.space.createInvite.v0",
       id: newUlid(),
     });
@@ -473,13 +492,13 @@ describe("auth/writeAuth — space member events", () => {
 });
 
 describe("auth/writeAuth — bridged events", () => {
-  test("admin can send bridged reaction", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, ADMIN);
-    addEdge(db, SPACE, ADMIN, "admin");
+  test("admin can send bridged reaction", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, ADMIN, "admin");
 
-    const result = checkWriteAuth(db, SPACE, ADMIN, {
+    const result = await checkWriteAuth(db, SPACE, ADMIN, {
       $type: "space.roomy.reaction.addBridgedReaction.v0",
       id: newUlid(),
       reactionTo: newUlid(),
@@ -489,13 +508,13 @@ describe("auth/writeAuth — bridged events", () => {
     expect(result).toBeUndefined();
   });
 
-  test("member cannot send bridged reaction", () => {
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, USER);
-    addEdge(db, SPACE, USER, "member");
+  test("member cannot send bridged reaction", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
 
-    const result = checkWriteAuth(db, SPACE, USER, {
+    const result = await checkWriteAuth(db, SPACE, USER, {
       $type: "space.roomy.reaction.addBridgedReaction.v0",
       id: newUlid(),
       reactionTo: newUlid(),
@@ -508,13 +527,13 @@ describe("auth/writeAuth — bridged events", () => {
 });
 
 describe("auth/writeAuth — allow list coverage", () => {
-  test("every allowed type is handled by a category", () => {
+  test("every allowed type is handled by a category", async () => {
     // Ensure no type falls through to the "unhandled" branch
-    const db = freshDb();
-    seedSpace(db);
-    seedUser(db, ADMIN);
-    addEdge(db, SPACE, ADMIN, "admin");
-    seedChannel(db, CHANNEL, SPACE, "readwrite");
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, ADMIN, "admin");
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
 
     for (const $type of ALLOWED_TYPES) {
       const event: { $type: string; [k: string]: unknown } = {
@@ -523,7 +542,7 @@ describe("auth/writeAuth — allow list coverage", () => {
         room: CHANNEL, // for room events
       };
       // The result should never be the "unhandled" message
-      const result = checkWriteAuth(db, SPACE, ADMIN, event);
+      const result = await checkWriteAuth(db, SPACE, ADMIN, event);
       if (result) {
         expect(result.message).not.toContain("Unhandled");
       }

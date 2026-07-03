@@ -19,7 +19,7 @@
  * `json_group_array(distinct ...)` over the top-N most recent messages.
  */
 
-import type { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import { decodeContent } from "../db/content.ts";
 
 export interface ThreadMember {
@@ -62,16 +62,16 @@ export type ThreadScope =
  * The caller is responsible for filtering by read access — this helper does
  * not check permissions.
  */
-export function listThreadActivity(
-  db: Database,
+export async function listThreadActivity(
+  db: DbLike,
   scope: ThreadScope,
   limit = 50,
-): ThreadActivity[] {
+): Promise<ThreadActivity[]> {
   // Step 1: select the candidate threads in scope.
   const threads =
     scope.kind === "space"
-      ? db
-          .query<{ id: string; name: string | null }, [string]>(
+      ? await db
+          .query(
             `select e.id as id, ci.name as name
                from entities e
                join comp_room cr on cr.entity = e.id
@@ -80,9 +80,9 @@ export function listThreadActivity(
                 and cr.label = 'space.roomy.thread'
                 and coalesce(cr.deleted, 0) = 0`,
           )
-          .all(scope.spaceId)
-      : db
-          .query<{ id: string; name: string | null }, [string]>(
+          .all<{ id: string; name: string | null }>([scope.spaceId])
+      : await db
+          .query(
             `select e.id as id, ci.name as name
                from entities e
                join comp_room cr on cr.entity = e.id
@@ -94,7 +94,7 @@ export function listThreadActivity(
                 and coalesce(cr.deleted, 0) = 0
                 and link_e.head = ?`,
           )
-          .all(scope.channelId);
+          .all<{ id: string; name: string | null }>([scope.channelId]);
 
   if (threads.length === 0) return [];
 
@@ -107,8 +107,8 @@ export function listThreadActivity(
   // their own — their content/timestamp lives on the original message reached
   // via the `forward` edge. We follow that edge so a thread created by
   // forwarding messages still surfaces a latest timestamp (the original's).
-  const latestRows = db
-    .query<{ room: string; ts: number | null }, string[]>(
+  const latestRows = await db
+    .query(
       `select e.room as room,
               max(coalesce(cc.timestamp, fwd_cc.timestamp)) as ts
          from entities e
@@ -120,7 +120,7 @@ export function listThreadActivity(
           and (cc.entity is not null or forward_e.tail is not null)
         group by e.room`,
     )
-    .all(...threadIds);
+    .all<{ room: string; ts: number | null }>([...threadIds]);
   const latestMap = new Map(latestRows.map((r) => [r.room, r.ts]));
 
   // Step 3: batch-fetch recent participants (up to 3 per thread).
@@ -130,11 +130,8 @@ export function listThreadActivity(
   // the `forward` edge), so we coalesce the message's own author with the
   // forwarded original's author. The original's author then counts as a
   // recent participant of the thread it was forwarded into.
-  const participantRows = db
-    .query<
-      { room: string; did: string; name: string | null; avatar: string | null; ts: number | null },
-      string[]
-    >(
+  const participantRows = await db
+    .query(
       `select msg.room as room,
               coalesce(author_e.tail, fwd_author_e.tail) as did,
               ci.name as name,
@@ -157,7 +154,7 @@ export function listThreadActivity(
         group by msg.room, coalesce(author_e.tail, fwd_author_e.tail)
         order by msg.room, ts desc`,
     )
-    .all(...threadIds);
+    .all<{ room: string; did: string; name: string | null; avatar: string | null; ts: number | null }>([...threadIds]);
 
   // Group participants by room, take top 3 per room.
   const participantsMap = new Map<string, ThreadMember[]>();
@@ -173,14 +170,14 @@ export function listThreadActivity(
   }
 
   // Step 4: batch-fetch canonical parent for all threads.
-  const parentRows = db
-    .query<{ tail: string; head: string }, string[]>(
+  const parentRows = await db
+    .query(
       `select tail, head from edges
         where tail in (${ph})
           and label = 'link'
           and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1`,
     )
-    .all(...threadIds);
+    .all<{ tail: string; head: string }>([...threadIds]);
   const parentMap = new Map(parentRows.map((r) => [r.tail, r.head]));
 
   // Step 5: batch-fetch latest message for all threads.
@@ -190,20 +187,8 @@ export function listThreadActivity(
   // Forwarded messages have no own content/author — follow the `forward` edge
   // to the original and coalesce so a thread created solely by forwarding
   // still reports a latest message (the original's content/author/timestamp).
-  const latestMsgRows = db
-    .query<
-      {
-        room: string;
-        id: string;
-        mime_type: string | null;
-        data: Buffer | Uint8Array | null;
-        author_did: string | null;
-        author_name: string | null;
-        author_avatar: string | null;
-        timestamp: number | null;
-      },
-      string[]
-    >(
+  const latestMsgRows = await db
+    .query(
       `select e.room as room,
               e.id as id,
               coalesce(cc.mime_type, fwd_cc.mime_type) as mime_type,
@@ -226,7 +211,18 @@ export function listThreadActivity(
         where e.room in (${ph})
           and (cc.entity is not null or forward_e.tail is not null)`,
     )
-    .all(...threadIds);
+    .all<
+      {
+        room: string;
+        id: string;
+        mime_type: string | null;
+        data: Buffer | Uint8Array | null;
+        author_did: string | null;
+        author_name: string | null;
+        author_avatar: string | null;
+        timestamp: number | null;
+      }
+    >([...threadIds]);
 
   // Pick the latest message per thread (highest timestamp).
   const latestMsgMap = new Map<
@@ -264,10 +260,9 @@ export function listThreadActivity(
           name: latestMsgRow.author_name,
           avatar: latestMsgRow.author_avatar,
         },
-        timestamp:
-          latestMsgRow.timestamp != null
-            ? new Date(latestMsgRow.timestamp).toISOString()
-            : null,
+        timestamp: latestMsgRow.timestamp
+          ? new Date(latestMsgRow.timestamp).toISOString()
+          : null,
       };
     }
 
@@ -275,22 +270,13 @@ export function listThreadActivity(
       id: t.id,
       name: t.name,
       canonicalParent: parent ?? null,
-      latestTimestamp:
-        latest != null ? new Date(latest).toISOString() : null,
+      latestTimestamp: latest
+        ? new Date(latest).toISOString()
+        : null,
       latestMembers: members,
       latestMessage,
     };
   });
 
-  // Sort: most-recently-active first, then alphabetic by name as a tiebreaker.
-  results.sort((a, b) => {
-    if (a.latestTimestamp === b.latestTimestamp) {
-      return (a.name ?? "").localeCompare(b.name ?? "");
-    }
-    if (a.latestTimestamp === null) return 1;
-    if (b.latestTimestamp === null) return -1;
-    return b.latestTimestamp.localeCompare(a.latestTimestamp);
-  });
-
-  return results.slice(0, limit);
+  return results;
 }

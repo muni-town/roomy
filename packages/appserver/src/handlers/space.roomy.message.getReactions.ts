@@ -43,11 +43,9 @@ export const getReactionsHandler: QueryHandler<
   const db = openDb();
 
   // Resolve the message's room for access control.
-  const row = db
-    .query<{ room: string | null }, [string]>(
-      "select room from entities where id = ?",
-    )
-    .get(messageId);
+  const row = await db
+    .query("select room from entities where id = ?")
+    .get<{ room: string | null }>(messageId);
 
   if (row === null) {
     throw new XrpcError(404, "NotFound", `Message not found: ${messageId}`);
@@ -60,20 +58,11 @@ export const getReactionsHandler: QueryHandler<
     );
   }
 
-  requireRoomRead(db, row.room, userDid);
+  await requireRoomRead(db, row.room, userDid);
 
   // Fetch reactions with user profile info.
-  const rows = db
-    .query<
-      {
-        reaction: string;
-        user: string;
-        name: string | null;
-        handle: string | null;
-        avatar: string | null;
-      },
-      [string]
-    >(
+  const rows = await db
+    .query(
       `select r.reaction, r.user, u.handle, i.name, i.avatar
        from comp_reaction r
        left join comp_user u on u.did = r.user
@@ -81,7 +70,13 @@ export const getReactionsHandler: QueryHandler<
        where r.entity = ?
        order by r.created_at asc`,
     )
-    .all(messageId);
+    .all<{
+      reaction: string;
+      user: string;
+      name: string | null;
+      handle: string | null;
+      avatar: string | null;
+    }>(messageId);
 
   // Group by emoji.
   const groups = new Map<string, ReactorInfo[]>();

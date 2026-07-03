@@ -15,7 +15,7 @@
  * drops nulls so the wire shape matches the lexicon (absent-or-present).
  */
 
-import type { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
 
 export interface MemberRow {
@@ -65,23 +65,14 @@ function searchFilter(
  * `search`. Caller is responsible for access control (the handler checks
  * `requireSpaceAccess` before calling this).
  */
-export function selectMembers(
-  db: Database,
+export async function selectMembers(
+  db: DbLike,
   spaceId: string,
   search?: string,
-): SelectMembersResult {
+): Promise<SelectMembersResult> {
   const memberFilter = searchFilter(search, "m.tail");
-  const memberRows = db
-    .query<
-      {
-        did: string;
-        handle: string | null;
-        name: string | null;
-        avatar: string | null;
-        is_admin: number;
-      },
-      string[]
-    >(
+  const memberRows = await db
+    .query(
       `select
            m.tail as did,
            cu.handle as handle,
@@ -96,36 +87,28 @@ export function selectMembers(
          left join comp_info ci on ci.entity = m.tail
         where m.head = ? and m.label = 'member'${memberFilter.clause}`,
     )
-    .all(spaceId, ...memberFilter.binds);
+    .all<{ did: string; handle: string | null; name: string | null; avatar: string | null; is_admin: number }>([spaceId, ...memberFilter.binds]);
 
   // Role assignments per member, scoped to this space's stream.
-  const roleStmt = db.query<{ role_id: string }, [string, string]>(
+  const roleStmt = await db.query(
     `select role_id from member_roles
         where user_id = ? and stream_id = ?`,
   );
 
-  const members: MemberRow[] = memberRows.map((r) =>
+  const members: MemberRow[] = await Promise.all(memberRows.map(async (r) =>
     stripNulls({
       did: r.did,
       handle: r.handle,
       name: r.name,
       avatar: r.avatar,
       isAdmin: !!r.is_admin,
-      roleIds: roleStmt.all(r.did, spaceId).map((row) => row.role_id),
+      roleIds: (await roleStmt.all<{ role_id: string }>([r.did, spaceId])).map((row) => row.role_id),
     }) as MemberRow,
-  );
+  ));
 
   const extFilter = searchFilter(search, "a.tail");
-  const externalAdminRows = db
-    .query<
-      {
-        did: string;
-        handle: string | null;
-        name: string | null;
-        avatar: string | null;
-      },
-      string[]
-    >(
+  const externalAdminRows = await db
+    .query(
       `select
            a.tail as did,
            cu.handle as handle,
@@ -141,7 +124,7 @@ export function selectMembers(
              where m.head = a.head and m.tail = a.tail and m.label = 'member'
           )${extFilter.clause}`,
     )
-    .all(spaceId, ...extFilter.binds);
+    .all<{ did: string; handle: string | null; name: string | null; avatar: string | null }>([spaceId, ...extFilter.binds]);
 
   return {
     members,

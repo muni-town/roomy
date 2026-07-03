@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test, mock } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
@@ -10,16 +13,29 @@ import {
 } from "@roomy-space/sdk";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
-import { openDb } from "../db/db.ts";
+import { toAsyncDb } from "../db/syncAdapter.ts";
 import { ensureProfilesForBatch } from "./profiles.ts";
+import type { DbLike } from "../db/types.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
 
 const STREAM = StreamDid.assert("did:web:profiles-test.example");
 const ALICE = UserDid.assert("did:plc:alice");
 const BOB = UserDid.assert("did:plc:bob");
 const DISCORD_USER = UserDid.assert("did:discord:9999");
 
-function freshDb(): Database {
-  return openDb({ path: ":memory:", isolated: true });
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 function decodedAs(
@@ -60,20 +76,20 @@ function createMessageEvent(authorOverride?: string): Event {
 
 describe("ensureProfilesForBatch", () => {
   test("is a no-op when getProfiles is undefined", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const events = [decodedAs(joinSpaceEvent(), 1, ALICE)];
 
-    await ensureProfilesForBatch(db, events, undefined);
+    await ensureProfilesForBatch(asyncDb, events, undefined);
 
     expect(
-      db
-        .query<{ count: number }, []>("select count(*) as count from entities")
-        .get()?.count,
+      (await asyncDb
+        .query("select count(*) as count from entities")
+        .get<{ count: number }>())?.count,
     ).toBe(0);
   });
 
   test("is a no-op when no events trigger profile lookup", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     // createRoom isn't a NEW_USER_SIGNAL — should not trigger fetch.
     const events = [
       decodedAs(
@@ -88,40 +104,34 @@ describe("ensureProfilesForBatch", () => {
     ];
     const getProfiles = mock(async () => [] as ProfileViewDetailed[]);
 
-    await ensureProfilesForBatch(db, events, getProfiles);
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
     expect(getProfiles).toHaveBeenCalledTimes(0);
   });
 
   test("fetches profiles for joinSpace authors and inserts entity + comp_user + comp_info", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const events = [decodedAs(joinSpaceEvent(), 1, ALICE)];
     const getProfiles = mock(async () => [profileFor(ALICE, "alice.test")]);
 
-    await ensureProfilesForBatch(db, events, getProfiles);
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
 
     expect(getProfiles).toHaveBeenCalledTimes(1);
     expect(getProfiles).toHaveBeenCalledWith([ALICE]);
 
     expect(
-      db
-        .query<{ id: string }, [string]>("select id from entities where id = ?")
-        .get(ALICE)?.id,
+      (await asyncDb
+        .query("select id from entities where id = ?")
+        .get<{ id: string }>(ALICE))?.id,
     ).toBe(ALICE);
     expect(
-      db
-        .query<
-          { handle: string },
-          [string]
-        >("select handle from comp_user where did = ?")
-        .get(ALICE)?.handle,
+      (await asyncDb
+        .query("select handle from comp_user where did = ?")
+        .get<{ handle: string }>(ALICE))?.handle,
     ).toBe("alice.test");
     expect(
-      db
-        .query<
-          { name: string; avatar: string },
-          [string]
-        >("select name, avatar from comp_info where entity = ?")
-        .get(ALICE),
+      await asyncDb
+        .query("select name, avatar from comp_info where entity = ?")
+        .get<{ name: string; avatar: string }>(ALICE),
     ).toEqual({
       name: "alice.test display",
       avatar: "https://cdn.example/alice.test.png",
@@ -129,7 +139,7 @@ describe("ensureProfilesForBatch", () => {
   });
 
   test("skips DIDs we already have entity rows for", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     db.run("insert into entities (id, stream_id) values (?, ?)", [
       ALICE,
       STREAM,
@@ -141,24 +151,24 @@ describe("ensureProfilesForBatch", () => {
     ];
     const getProfiles = mock(async () => [profileFor(BOB, "bob.test")]);
 
-    await ensureProfilesForBatch(db, events, getProfiles);
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
 
     expect(getProfiles).toHaveBeenCalledTimes(1);
     expect(getProfiles).toHaveBeenCalledWith([BOB]);
   });
 
   test("filters out non-bsky DIDs (e.g. did:discord:)", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const events = [decodedAs(joinSpaceEvent(), 1, DISCORD_USER)];
     const getProfiles = mock(async () => [] as ProfileViewDetailed[]);
 
-    await ensureProfilesForBatch(db, events, getProfiles);
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
 
     expect(getProfiles).toHaveBeenCalledTimes(0);
   });
 
   test("includes authorOverride DIDs from createMessage extensions", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const events = [
       decodedAs(createMessageEvent("did:plc:override-author"), 1, ALICE),
     ];
@@ -167,7 +177,7 @@ describe("ensureProfilesForBatch", () => {
       profileFor("did:plc:override-author", "override.test"),
     ]);
 
-    await ensureProfilesForBatch(db, events, getProfiles);
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
 
     expect(getProfiles).toHaveBeenCalledTimes(1);
     const arg = (getProfiles.mock.calls as unknown as UserDid[][][])[0]![0];
@@ -177,7 +187,7 @@ describe("ensureProfilesForBatch", () => {
   });
 
   test("dedupes the same DID across events", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const events = [
       decodedAs(joinSpaceEvent(), 1, ALICE),
       decodedAs(joinSpaceEvent(), 2, ALICE),
@@ -185,14 +195,14 @@ describe("ensureProfilesForBatch", () => {
     ];
     const getProfiles = mock(async () => [profileFor(ALICE, "alice.test")]);
 
-    await ensureProfilesForBatch(db, events, getProfiles);
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
 
     expect(getProfiles).toHaveBeenCalledTimes(1);
     expect(getProfiles).toHaveBeenCalledWith([ALICE]);
   });
 
   test("tolerates getProfiles returning fewer profiles than requested", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     const events = [
       decodedAs(joinSpaceEvent(), 1, ALICE),
       decodedAs(joinSpaceEvent(), 2, BOB),
@@ -200,12 +210,12 @@ describe("ensureProfilesForBatch", () => {
     // Bob is unresolvable — appview returned only alice.
     const getProfiles = mock(async () => [profileFor(ALICE, "alice.test")]);
 
-    await ensureProfilesForBatch(db, events, getProfiles);
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
 
     expect(
-      db
-        .query<{ count: number }, []>("select count(*) as count from entities")
-        .get()?.count,
+      (await asyncDb
+        .query("select count(*) as count from entities")
+        .get<{ count: number }>())?.count,
     ).toBe(1);
   });
-});
+})

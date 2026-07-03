@@ -22,7 +22,6 @@ import { setInvalidationRouter } from "./materialization/registry.ts";
 import { startEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
 import { countPendingLinks } from "./embed/enricher.ts";
 import { openDb, closeDb } from "./db/db.ts";
-import { attachReadState, attachInMemoryReadState, openReadStateDb, closeReadStateDb } from "./db/readStateDb.ts";
 import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
@@ -74,7 +73,6 @@ export interface AppserverOptions {
   quiet?: boolean;
 }
 
-// ─── Backfill status ──────────────────────────────────────────────────────
 
 export interface BackfillStatus {
   mode: string;
@@ -272,26 +270,14 @@ export function createAppserver(
   // ─── Databases ──────────────────────────────────────────────────────
   // Open as process-wide singletons so handlers' internal `openDb()` calls
   // resolve to the same handle. Tests that want isolation should reset the
-  // singletons (closeDb/closeReadStateDb) before calling createAppserver.
-  const mainDbPath = opts.dbPath ?? process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
-  const isMemory = mainDbPath === ":memory:";
-  const mainDb = opts.dbPath
-    ? openDb({ path: opts.dbPath })
-    : openDb();
-  // In-memory DBs can't be ATTACHed to each other (SQLite limitation), so
-  // use the temp-file-based helper when the main DB is in-memory.
-  const readStateDb = isMemory
-    ? attachInMemoryReadState(mainDb)
-    : opts.readStateDbPath
-      ? openReadStateDb({ path: opts.readStateDbPath })
-      : openReadStateDb();
-  if (!isMemory) attachReadState(mainDb, readStateDb);
+  // singletons (closeDb) before calling createAppserver.
+  const mainDb = openDb();
 
   // ─── Periodic maintenance ────────────────────────────────────────────
   // Purge stale user_thread_activity rows older than 72 hours once per hour.
-  const maintenanceTimer = setInterval(() => {
+  const maintenanceTimer = setInterval(async () => {
     const cutoff = Date.now() - 72 * 60 * 60 * 1000;
-    const purged = purgeStaleThreadActivity(mainDb, cutoff);
+    const purged = await purgeStaleThreadActivity(mainDb, cutoff);
     if (purged > 0) {
       console.log(`[maintenance] purged ${purged} stale user_thread_activity rows`);
     }
@@ -355,7 +341,7 @@ export function createAppserver(
         const stats = embedSweeperStats();
         let pending: number;
         try {
-          pending = countPendingLinks(mainDb);
+          pending = await countPendingLinks(mainDb);
         } catch {
           pending = -1;
         }
@@ -402,7 +388,6 @@ export function createAppserver(
       server.stop(true);
       clearInterval(maintenanceTimer);
       closeDb();
-      closeReadStateDb();
     },
   };
 }

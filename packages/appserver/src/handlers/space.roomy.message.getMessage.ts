@@ -26,13 +26,9 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
   }
 
   const db = openDb();
-  const row = db
-    .query<
-      { room: string | null },
-      [string]
-    >("select room from entities where id = ?")
-    .get(messageId);
-
+  const row = await db
+    .query("select room from entities where id = ?")
+    .get<{ room: string | null }>(messageId);
   if (row === null) {
     throw new XrpcError(404, "NotFound", `Message not found: ${messageId}`);
   }
@@ -44,9 +40,9 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
     );
   }
 
-  requireRoomRead(db, row.room, userDid);
+  await requireRoomRead(db, row.room!, userDid);
 
-  const { messages } = selectMessages(db, { kind: "ids", ids: [messageId] }, userDid ?? undefined);
+  const { messages } = await selectMessages(db, { kind: "ids", ids: [messageId] }, userDid ?? undefined);
   const message = messages[0];
   if (!message) {
     throw new XrpcError(404, "NotFound", `Message not found: ${messageId}`);
@@ -54,7 +50,7 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
 
   // Read-driven embed prioritisation (see getMessages): jump this message's
   // never-attempted links ahead of the backfill backlog for the viewer.
-  prioritiseLinksForRead(db, [message]);
+  await prioritiseLinksForRead(db, [message]);
 
   return message;
 };

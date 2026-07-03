@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, mock, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
@@ -10,18 +13,31 @@ import {
   type Event,
 } from "@roomy-space/sdk";
 
-import { openDb } from "../db/db.ts";
+import { toAsyncDb } from "../db/syncAdapter.ts";
 import {
   SpaceMaterializer,
   readBackfilledTo,
   type ConnectedSpaceLike,
 } from "./SpaceMaterializer.ts";
+import type { DbLike } from "../db/types.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
 
 const STREAM = StreamDid.assert("did:web:fake-stream.example");
 const USER = UserDid.assert("did:plc:fake-user");
 
-function freshDb(): Database {
-  return openDb({ path: ":memory:", isolated: true });
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 function seedSpace(db: Database, streamDid: StreamDid): void {
@@ -71,6 +87,10 @@ class FakeConnectedSpace {
     return this.backfillPromise;
   }
 
+  unsubscribe() {
+    return Promise.resolve();
+  }
+
   /** Test driver: deliver a batch through the registered callback. */
   emit(events: DecodedStreamEvent[], opts: { isBackfill: boolean }) {
     if (!this.callback) throw new Error("subscribe not called");
@@ -91,34 +111,15 @@ function withFake(streamDid: StreamDid): {
   getConnectedSpace: (s: StreamDid) => Promise<ConnectedSpaceLike>;
 } {
   const fake = new FakeConnectedSpace(streamDid);
-  return {
-    fake,
-    getConnectedSpace: async (s) => {
-      if (s !== streamDid) throw new Error(`unexpected stream ${s}`);
-      return fake;
-    },
-  };
+  return { fake, getConnectedSpace: async (s) => {
+    if (s !== streamDid) throw new Error(`unexpected stream ${s}`);
+    return fake;
+  } };
 }
-
-describe("readBackfilledTo", () => {
-  test("returns 0 when no comp_space row exists", () => {
-    const db = freshDb();
-    expect(readBackfilledTo(db, STREAM)).toBe(0);
-  });
-
-  test("returns the persisted cursor", () => {
-    const db = freshDb();
-    seedSpace(db, STREAM);
-    db.run("update comp_space set backfilled_to = 42 where entity = ?", [
-      STREAM,
-    ]);
-    expect(readBackfilledTo(db, STREAM)).toBe(42);
-  });
-});
 
 describe("SpaceMaterializer.start", () => {
   test("subscribes from cursor + 1 and applies events through applyBatch", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
     db.run("update comp_space set backfilled_to = 7 where entity = ?", [
       STREAM,
@@ -127,7 +128,7 @@ describe("SpaceMaterializer.start", () => {
     const { fake, getConnectedSpace } = withFake(STREAM);
     const mat = await SpaceMaterializer.start({
       streamDid: STREAM,
-      db,
+      db: asyncDb,
       getConnectedSpace,
     });
 
@@ -140,24 +141,21 @@ describe("SpaceMaterializer.start", () => {
     expect(mat.getStats().applied).toBe(1);
     expect(mat.getStats().batches).toBe(1);
     expect(
-      db
-        .query<
-          { count: number },
-          [string]
-        >("select count(*) as count from comp_room where entity = ?")
-        .get(room.id)?.count,
+      (await asyncDb
+        .query("select count(*) as count from comp_room where entity = ?")
+        .get<{ count: number }>(room.id))?.count,
     ).toBe(1);
-    expect(readBackfilledTo(db, STREAM)).toBe(8);
-  });
+    expect(await readBackfilledTo(asyncDb, STREAM)).toBe(8);
+  })
 
   test("aggregates stats across multiple batches", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const { fake, getConnectedSpace } = withFake(STREAM);
     const mat = await SpaceMaterializer.start({
       streamDid: STREAM,
-      db,
+      db: asyncDb,
       getConnectedSpace,
     });
 
@@ -185,17 +183,17 @@ describe("SpaceMaterializer.start", () => {
     expect(s.materializerErrors).toBe(1);
     expect(s.applyErrors).toBe(0);
     expect(s.batches).toBe(2);
-    expect(readBackfilledTo(db, STREAM)).toBe(4);
-  });
+    expect(await readBackfilledTo(asyncDb, STREAM)).toBe(4);
+  })
 
   test("backfillDone resolves when subscribe's promise resolves", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const { fake, getConnectedSpace } = withFake(STREAM);
     const mat = await SpaceMaterializer.start({
       streamDid: STREAM,
-      db,
+      db: asyncDb,
       getConnectedSpace,
     });
 
@@ -211,10 +209,10 @@ describe("SpaceMaterializer.start", () => {
     fake.finishBackfill();
     await mat.backfillDone;
     expect(resolved).toBe(true);
-  });
+  })
 
   test("prefetches profiles before applying a batch", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const { fake, getConnectedSpace } = withFake(STREAM);
@@ -231,7 +229,7 @@ describe("SpaceMaterializer.start", () => {
 
     const mat = await SpaceMaterializer.start({
       streamDid: STREAM,
-      db,
+      db: asyncDb,
       getConnectedSpace,
       getProfiles,
     });
@@ -253,17 +251,14 @@ describe("SpaceMaterializer.start", () => {
     // Profile fetched and persisted, even though the joinSpace materialiser
     // itself may have failed (it depends on fields we didn't populate).
     expect(
-      db
-        .query<
-          { handle: string },
-          [string]
-        >("select handle from comp_user where did = ?")
-        .get(USER)?.handle,
+      (await asyncDb
+        .query("select handle from comp_user where did = ?")
+        .get<{ handle: string }>(USER))?.handle,
     ).toBe("fake-user.test");
-  });
+  })
 
   test("a profile fetch failure does not block batch application", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const { fake, getConnectedSpace } = withFake(STREAM);
@@ -275,7 +270,7 @@ describe("SpaceMaterializer.start", () => {
 
     const mat = await SpaceMaterializer.start({
       streamDid: STREAM,
-      db,
+      db: asyncDb,
       getConnectedSpace,
       getProfiles,
     });
@@ -299,23 +294,23 @@ describe("SpaceMaterializer.start", () => {
 
     expect(mat.getStats().applied).toBeGreaterThanOrEqual(1);
     expect(
-      db
-        .query<{ count: number }, []>("select count(*) as count from comp_room")
-        .get()?.count,
+      (await asyncDb
+        .query("select count(*) as count from comp_room")
+        .get<{ count: number }>())?.count,
     ).toBeGreaterThanOrEqual(1);
-  });
+  })
 
   test("starts at idx 1 when no prior cursor exists", async () => {
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     // No seedSpace — first subscription against a fresh stream.
 
     const { fake, getConnectedSpace } = withFake(STREAM);
     await SpaceMaterializer.start({
       streamDid: STREAM,
-      db,
+      db: asyncDb,
       getConnectedSpace,
     });
 
     expect(fake.start).toBe(1 as StreamIndex);
-  });
+  })
 });

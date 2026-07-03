@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { openDb } from "../db/db.ts";
+import { toAsyncDb } from "../db/syncAdapter.ts";
 import {
   storeEmbedData,
   findPendingLinks,
@@ -9,10 +12,22 @@ import {
   fetchEmbedData,
   countPendingLinks,
 } from "./enricher.ts";
+import type { DbLike } from "../db/types.ts";
 import type { Embed } from "./types.ts";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
 
-function freshDb(): Database {
-  return openDb({ path: ":memory:", isolated: true });
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 /** Insert the entity + comp_embed_link rows needed for a URL to be enrichable. */
@@ -31,24 +46,24 @@ type DataRow = {
   attempts: number;
   retry_after: number | null;
 };
-
 function dataRow(db: Database, url: string): DataRow | null {
-  return db
+  const row = db
     .query<DataRow, [string]>(
       "select embed_json, attempts, retry_after from comp_embed_link_data where entity = ?",
     )
     .get(url);
+  return row ?? null;
 }
 
 const EMBED: Embed = { v: "1", ts: "x", ty: "link", t: "T" };
 
 describe("embed retry-with-backoff", () => {
-  test("transient failure schedules a retry with escalating backoff", () => {
-    const db = freshDb();
+  test("transient failure schedules a retry with escalating backoff", async () => {
+    const { db, asyncDb } = freshDb();
     seedLink(db, "https://a.example");
 
     // First transient failure: attempts=1, retry_after ~1m in the future.
-    storeEmbedData(db, "https://a.example", { status: "transient" });
+    await storeEmbedData(asyncDb, "https://a.example", { status: "transient" });
     let row = dataRow(db, "https://a.example")!;
     expect(row.attempts).toBe(1);
     expect(row.retry_after).not.toBeNull();
@@ -56,69 +71,68 @@ describe("embed retry-with-backoff", () => {
     const firstRetry = row.retry_after!;
 
     // Second transient failure: attempts=2, backoff escalates (later retry).
-    storeEmbedData(db, "https://a.example", { status: "transient" });
+    await storeEmbedData(asyncDb, "https://a.example", { status: "transient" });
     row = dataRow(db, "https://a.example")!;
     expect(row.attempts).toBe(2);
     expect((row.retry_after ?? 0) > firstRetry).toBe(true);
 
     // Backoff not yet elapsed → the URL is NOT in the pending set.
-    expect(findPendingLinks(db)).not.toContain("https://a.example");
+    expect(await findPendingLinks(asyncDb)).not.toContain("https://a.example");
   });
-
-  test("definitive failure (404 / no-data) settles with no retry", () => {
-    const db = freshDb();
+  test("definitive failure (404 / no-data) settles with no retry", async () => {
+    const { db, asyncDb } = freshDb();
     seedLink(db, "https://c.example");
-    storeEmbedData(db, "https://c.example", { status: "definitive" });
+    await storeEmbedData(asyncDb, "https://c.example", { status: "definitive" });
     const row = dataRow(db, "https://c.example")!;
     expect(row.embed_json).toBeNull();
     expect(row.attempts).toBe(0);
     expect(row.retry_after).toBeNull();
     // Settled — not pending, will never be retried.
-    expect(findPendingLinks(db)).not.toContain("https://c.example");
+    expect(await findPendingLinks(asyncDb)).not.toContain("https://c.example");
   });
 
-  test("success stores embed data and clears any prior retry state", () => {
-    const db = freshDb();
+  test("success stores embed data and clears any prior retry state", async () => {
+    const { db, asyncDb } = freshDb();
     seedLink(db, "https://d.example");
     // Fail transiently first (sets attempts + retry_after), then succeed.
-    storeEmbedData(db, "https://d.example", { status: "transient" });
-    storeEmbedData(db, "https://d.example", { status: "ok", embed: EMBED });
+    await storeEmbedData(asyncDb, "https://d.example", { status: "transient" });
+    await storeEmbedData(asyncDb, "https://d.example", { status: "ok", embed: EMBED });
     const row = dataRow(db, "https://d.example")!;
     expect(row.embed_json).not.toBeNull();
     expect(row.attempts).toBe(0);
     expect(row.retry_after).toBeNull();
-    expect(findPendingLinks(db)).not.toContain("https://d.example");
+    expect(await findPendingLinks(asyncDb)).not.toContain("https://d.example");
   });
 
-  test("findPendingLinks returns never-attempted and retry-eligible rows only", () => {
-    const db = freshDb();
+  test("findPendingLinks returns never-attempted and retry-eligible rows only", async () => {
+    const { db, asyncDb } = freshDb();
     seedLink(db, "https://never.example"); // no data row → pending
     seedLink(db, "https://retry.example");
     seedLink(db, "https://settled.example");
-    storeEmbedData(db, "https://retry.example", { status: "transient" }); // future retry_after
-    storeEmbedData(db, "https://settled.example", { status: "definitive" });
+    await storeEmbedData(asyncDb, "https://retry.example", { status: "transient" }); // future retry_after
+    await storeEmbedData(asyncDb, "https://settled.example", { status: "definitive" });
 
     // Only the never-attempted link is pending (retry's backoff hasn't elapsed).
-    let pending = findPendingLinks(db);
+    let pending = await findPendingLinks(asyncDb);
     expect(pending).toContain("https://never.example");
     expect(pending).not.toContain("https://retry.example");
     expect(pending).not.toContain("https://settled.example");
 
     // Fast-forward: force the retry row's retry_after into the past.
-    db.run(
+    await asyncDb.run(
       "update comp_embed_link_data set retry_after = ? where entity = ?",
       [Date.now() - 1000, "https://retry.example"],
     );
-    pending = findPendingLinks(db);
+    pending = await findPendingLinks(asyncDb);
     expect(pending).toContain("https://retry.example"); // now eligible for retry
   });
 
-  test("filterPendingUrls (priority) only returns never-attempted links", () => {
-    const db = freshDb();
+  test("filterPendingUrls (priority) only returns never-attempted links", async () => {
+    const { db, asyncDb } = freshDb();
     seedLink(db, "https://new.example");
     seedLink(db, "https://failed.example");
-    storeEmbedData(db, "https://failed.example", { status: "transient" });
-    const got = filterPendingUrls(db, [
+    await storeEmbedData(asyncDb, "https://failed.example", { status: "transient" });
+    const got = await filterPendingUrls(asyncDb, [
       "https://new.example",
       "https://failed.example",
     ]);
@@ -129,27 +143,27 @@ describe("embed retry-with-backoff", () => {
     expect(got).not.toContain("https://failed.example");
   });
 
-  test("countPendingLinks matches findPendingLinks across retry/backoff states", () => {
+  test("countPendingLinks matches findPendingLinks across retry/backoff states", async () => {
     // Backed by the same predicate as findPendingLinks but unbounded — used by
     // /health/embed to report backlog depth. Keep the two in lockstep.
-    const db = freshDb();
+    const { db, asyncDb } = freshDb();
     seedLink(db, "https://never.example"); // no data row → pending
     seedLink(db, "https://retry.example");
     seedLink(db, "https://settled.example");
-    storeEmbedData(db, "https://retry.example", { status: "transient" });
-    storeEmbedData(db, "https://settled.example", { status: "definitive" });
+    await storeEmbedData(asyncDb, "https://retry.example", { status: "transient" });
+    await storeEmbedData(asyncDb, "https://settled.example", { status: "definitive" });
 
     // Only the never-attempted link is pending (retry's backoff hasn't elapsed).
-    expect(countPendingLinks(db)).toBe(1);
-    expect(countPendingLinks(db)).toBe(findPendingLinks(db).length);
+    expect(await countPendingLinks(asyncDb)).toBe(1);
+    expect(await countPendingLinks(asyncDb)).toBe((await findPendingLinks(asyncDb)).length);
 
     // Fast-forward the retry row: now two are pending.
-    db.run(
+    await asyncDb.run(
       "update comp_embed_link_data set retry_after = ? where entity = ?",
       [Date.now() - 1000, "https://retry.example"],
     );
-    expect(countPendingLinks(db)).toBe(2);
-    expect(countPendingLinks(db)).toBe(findPendingLinks(db).length);
+    expect(await countPendingLinks(asyncDb)).toBe(2);
+    expect(await countPendingLinks(asyncDb)).toBe((await findPendingLinks(asyncDb)).length);
   });
 });
 
@@ -159,7 +173,7 @@ describe("fetchEmbedData status classification", () => {
   const realFetch = globalThis.fetch;
 
   function stubStatus(status: number, statusText = "", body = ""): void {
-    globalThis.fetch = (() =>
+    globalThis.fetch = ((_input: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(
         new Response(body, { status, statusText }),
       )) as typeof globalThis.fetch;
@@ -192,7 +206,7 @@ describe("fetchEmbedData status classification", () => {
 
   test("200 with a payload is ok", async () => {
     const embed: Embed = { v: "1", ts: "x", ty: "link", t: "T" };
-    globalThis.fetch = (() =>
+    globalThis.fetch = ((_input: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(
         new Response(JSON.stringify(["x", embed]), {
           status: 200,
@@ -206,7 +220,7 @@ describe("fetchEmbedData status classification", () => {
   });
 
   test("200 with a null payload is definitive", async () => {
-    globalThis.fetch = (() =>
+    globalThis.fetch = ((_input: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(
         new Response(JSON.stringify(["x", null]), {
           status: 200,

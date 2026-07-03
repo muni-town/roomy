@@ -14,7 +14,7 @@
  * read access.
  */
 
-import type { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import { decodeContent } from "../db/content.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
 
@@ -82,11 +82,11 @@ interface BaseRow {
   forward_target_room_name: string | null;
 }
 
-export function selectMessages(
-  db: Database,
+export async function selectMessages(
+  db: DbLike,
   scope: SelectScope,
   viewerDid?: string,
-): { messages: MessageDto[]; nextCursor: string | null } {
+): Promise<{ messages: MessageDto[]; nextCursor: string | null }> {
   // ── Step 1: pull the base rows ────────────────────────────────────────
   let baseRows: BaseRow[];
   if (scope.kind === "room") {
@@ -126,17 +126,17 @@ export function selectMessages(
       order by coalesce(e.sort_idx, e.id) desc
       limit ${Math.max(1, Math.min(scope.limit, 100))}
     `;
-    const stmt = db.query<BaseRow, string[]>(sql);
+    const stmt = db.query(sql);
     baseRows = scope.cursor
-      ? stmt.all(scope.roomId, scope.cursor)
-      : stmt.all(scope.roomId);
+      ? await stmt.all([scope.roomId, scope.cursor])
+      : await stmt.all([scope.roomId]);
   } else {
     if (scope.ids.length === 0) {
       return { messages: [], nextCursor: null };
     }
     const placeholders = scope.ids.map(() => "?").join(",");
-    baseRows = db
-      .query<BaseRow, string[]>(
+    baseRows = await db
+      .query(
         `
         select
           e.id as id,
@@ -170,7 +170,7 @@ export function selectMessages(
         where e.id in (${placeholders})
         `,
       )
-      .all(...scope.ids);
+      .all([...scope.ids]);
   }
 
   if (baseRows.length === 0) return { messages: [], nextCursor: null };
@@ -198,19 +198,8 @@ export function selectMessages(
   >();
   if (forwardTargets.length > 0) {
     const ph = forwardTargets.map(() => "?").join(",");
-    const rows = db
-      .query<
-        {
-          id: string;
-          mime_type: string | null;
-          data: Buffer | Uint8Array | null;
-          timestamp: number | null;
-          author_did: string | null;
-          author_name: string | null;
-          author_avatar: string | null;
-        },
-        string[]
-      >(
+    const rows = await db
+      .query(
         `select
            e.id as id,
            cc.mime_type as mime_type,
@@ -228,7 +217,16 @@ export function selectMessages(
          left join comp_user author_user on author_user.did = author_e.tail
          where e.id in (${ph})`,
       )
-      .all(...forwardTargets);
+      .all<{
+        id: string;
+        mime_type: string | null;
+        data: Buffer | Uint8Array | null;
+        timestamp: number | null;
+        author_did: string | null;
+        author_name: string | null;
+        author_handle: string | null;
+        author_avatar: string | null;
+      }>([...forwardTargets]);
     for (const r of rows) {
       forwardOrig.set(r.id, {
         mime_type: r.mime_type,
@@ -245,32 +243,15 @@ export function selectMessages(
   // ── Step 3: batch-fetch reactions / embeds / link embed data keyed by id ──
   const idPh = ids.map(() => "?").join(",");
 
-  const reactionRows = db
-    .query<
-      { entity: string; reaction: string; user: string; reaction_id: string },
-      string[]
-    >(
+  const reactionRows = await db
+    .query(
       `select entity, reaction, user, reaction_id from comp_reaction
         where entity in (${idPh})`,
     )
-    .all(...ids);
+    .all<{ entity: string; reaction: string; user: string; reaction_id: string }>([...ids]);
 
-  const embedRows = db
-    .query<
-      {
-        message_id: string;
-        url: string;
-        mime_type: string;
-        alt: string | null;
-        width: number | null;
-        height: number | null;
-        blurhash: string | null;
-        size: number | null;
-        length: number | null;
-        name: string | null;
-      },
-      string[]
-    >(
+  const embedRows = await db
+    .query(
       // entities.room = messageId for embed entities; UNION across the four
       // embed component tables. comp_embed_link has no media metadata — fall
       // back to nulls and "text/uri-list" mime type. Image/video share
@@ -313,7 +294,18 @@ export function selectMessages(
     )
     // Each UNION branch has its own `where ... in (${idPh})` — bind ids
     // once per branch (4× total). bun:sqlite has no positional reuse here.
-    .all(...ids, ...ids, ...ids, ...ids);
+    .all<{
+      message_id: string;
+      url: string;
+      mime_type: string;
+      alt: string | null;
+      width: number | null;
+      height: number | null;
+      blurhash: string | null;
+      size: number | null;
+      length: number | null;
+      name: string | null;
+    }>([...ids, ...ids, ...ids, ...ids]);
 
   // ── Step 4: assemble ──────────────────────────────────────────────────
   const reactionMap = new Map<string, Map<string, Set<string>>>();
@@ -380,15 +372,12 @@ export function selectMessages(
   if (linkUrls.size > 0) {
     const urlList = [...linkUrls];
     const ph = urlList.map(() => "?").join(",");
-    const linkDataRows = db
-      .query<
-        { entity: string; embed_json: string | null },
-        string[]
-      >(
+    const linkDataRows = await db
+      .query(
         `select entity, embed_json from comp_embed_link_data
           where entity in (${ph})`,
       )
-      .all(...urlList);
+      .all<{ entity: string; embed_json: string | null }>([...urlList]);
     for (const row of linkDataRows) {
       linkEmbedDataMap.set(
         row.entity,

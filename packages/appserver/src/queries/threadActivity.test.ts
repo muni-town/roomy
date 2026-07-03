@@ -1,10 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { openDb } from "../db/db.ts";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { toAsyncDb } from "../db/syncAdapter.ts";
+import type { DbLike } from "../db/types.ts";
 import { listThreadActivity } from "./threadActivity.ts";
 
-function freshDb(): Database {
-  return openDb({ path: ":memory:", isolated: true });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
+
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
+    SCHEMA_VERSION,
+  ]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 const SPACE = "did:web:space.example";
@@ -114,36 +133,36 @@ function forwardMessage(db: Database, threadId: string, origMsgId: string) {
 }
 
 describe("threadActivity", () => {
-  test("space scope returns all threads in space, sorted by most recent activity", () => {
-    const db = freshDb();
+  test("space scope returns all threads in space, sorted by most recent activity", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     postMessage(db, THREAD_A, ALICE, 1000);
     postMessage(db, THREAD_B, BOB, 3000); // most recent
     postMessage(db, THREAD_C, CAROL, 2000);
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     expect(result.map((t) => t.id)).toEqual([THREAD_B, THREAD_C, THREAD_A]);
     expect(result[0]!.latestTimestamp).toBe(new Date(3000).toISOString());
   });
 
-  test("channel scope filters to threads canonically linked from that channel", () => {
-    const db = freshDb();
+  test("channel scope filters to threads canonically linked from that channel", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     postMessage(db, THREAD_A, ALICE, 1000);
     postMessage(db, THREAD_B, BOB, 2000);
     postMessage(db, THREAD_C, CAROL, 3000); // in OTHER_CHANNEL
 
-    const result = listThreadActivity(db, {
+    const result = await listThreadActivity(asyncDb, {
       kind: "channel",
       channelId: CHANNEL,
     });
     expect(result.map((t) => t.id).sort()).toEqual([THREAD_A, THREAD_B].sort());
   });
 
-  test("up to 3 unique recent participants, ordered by most recent first", () => {
-    const db = freshDb();
+  test("up to 3 unique recent participants, ordered by most recent first", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     // Alice oldest, Bob middle, Carol most recent, Dave even more recent.
@@ -155,42 +174,42 @@ describe("threadActivity", () => {
     // her latest timestamp.
     postMessage(db, THREAD_A, CAROL, 5000);
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     // Most recent 3 distinct: carol(5000), dave(4000), bob(2000). Alice drops.
     expect(threadA.latestMembers.map((m) => m.did)).toEqual([CAROL, DAVE, BOB]);
   });
 
-  test("threads with no messages have null latestTimestamp and empty members", () => {
-    const db = freshDb();
+  test("threads with no messages have null latestTimestamp and empty members", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     expect(threadA.latestTimestamp).toBeNull();
     expect(threadA.latestMembers).toEqual([]);
   });
 
-  test("canonicalParent reflects the canonical 'link' edge head", () => {
-    const db = freshDb();
+  test("canonicalParent reflects the canonical 'link' edge head", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const a = result.find((t) => t.id === THREAD_A)!;
     const c = result.find((t) => t.id === THREAD_C)!;
     expect(a.canonicalParent).toBe(CHANNEL);
     expect(c.canonicalParent).toBe(OTHER_CHANNEL);
   });
 
-  test("latestMessage returns the most recent message with author and content", () => {
-    const db = freshDb();
+  test("latestMessage returns the most recent message with author and content", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     postMessage(db, THREAD_A, ALICE, 1000, "Hello from Alice");
     postMessage(db, THREAD_A, BOB, 2000, "Reply from Bob");
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     expect(threadA.latestMessage).not.toBeNull();
@@ -200,23 +219,23 @@ describe("threadActivity", () => {
     expect(threadA.latestMessage!.timestamp).toBe(new Date(2000).toISOString());
   });
 
-  test("latestMessage is null for threads with no messages", () => {
-    const db = freshDb();
+  test("latestMessage is null for threads with no messages", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     expect(threadA.latestMessage).toBeNull();
   });
 
-  test("latestMessage content decodes text content correctly", () => {
-    const db = freshDb();
+  test("latestMessage content decodes text content correctly", async () => {
+    const { db, asyncDb } = freshDb();
     seed(db);
 
     postMessage(db, THREAD_A, ALICE, 1000, "**bold** and _italic_");
 
-    const result = listThreadActivity(db, { kind: "space", spaceId: SPACE });
+    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     expect(threadA.latestMessage).not.toBeNull();

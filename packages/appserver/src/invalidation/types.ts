@@ -103,7 +103,7 @@ export interface InvalidationRouter {
     streamDid: StreamDid,
     events: readonly AppliedEvent[],
     meta: { isBackfill: boolean },
-  ): void;
+  ): void | Promise<void>;
 
   /**
    * Emit invalidation signals directly, outside the Leaf event pipeline.

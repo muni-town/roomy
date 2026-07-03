@@ -57,29 +57,29 @@ export const getSpaceThreadsHandler: QueryHandler<
   }
 
   const db = openDb();
-  requireSpaceRead(db, spaceId, userDid);
+  await requireSpaceRead(db, spaceId, userDid);
 
-  const all = listThreadActivity(db, { kind: "space", spaceId });
+  const all = await listThreadActivity(db, { kind: "space", spaceId });
 
   // Collect all thread IDs for batch unread lookup
   const threadIds = all.map((t) => t.id);
-  const readPositions = auth.did ? getReadPositions(db, auth.did, threadIds) : new Map();
+  const readPositions = auth.did ? await getReadPositions(db, auth.did, threadIds) : new Map();
 
   // Batch-fetch channel names for all canonical parents
   const parentIds = [...new Set(all.map((t) => t.canonicalParent).filter(Boolean))] as string[];
   const channelNames = new Map<string, string>();
   if (parentIds.length > 0) {
     const ph = parentIds.map(() => "?").join(",");
-    const rows = db
-      .query<{ id: string; name: string | null }, string[]>(
+    const rows = await db
+      .query(
         `select e.id as id, ci.name as name
            from entities e
            left join comp_info ci on ci.entity = e.id
           where e.id in (${ph})`,
       )
-      .all(...parentIds);
+      .all<{ id: string; name: string | null }>(...parentIds);
     for (const r of rows) {
-      if (r.name != null) channelNames.set(r.id, r.name);
+      if (r.name != null) channelNames.set(r.id as string, r.name);
     }
   }
 
@@ -89,24 +89,23 @@ export const getSpaceThreadsHandler: QueryHandler<
     // the auth unit to compute it. (The thread itself inherits via 'link',
     // so checking the thread directly would also work; checking via
     // canonicalParent matches the spec's "channel grants visibility" model.)
-    const acc = roomAccess(db, t.id, userDid);
+    const acc = await roomAccess(db, t.id, userDid);
     if (!acc.canRead) continue;
-    const members = t.latestMembers.map((m) => {
-      const out: { did: string; name?: string; avatar?: string } = { did: m.did };
-      if (m.name != null) out.name = m.name;
-      if (m.avatar != null) out.avatar = m.avatar;
-      return out;
-    });
+    const members = t.latestMembers.map((m) => ({
+      did: m.did,
+      name: m.name ?? undefined,
+      avatar: m.avatar ?? undefined,
+    }));
     const activity: ThreadRow["activity"] = {
       latestMembers: members,
     };
     if (t.latestTimestamp != null) activity.latestTimestamp = t.latestTimestamp;
     if (t.latestMessage != null) {
-      const author: { did: string; name?: string; avatar?: string } = {
+      const author: { did: string; name: string | null; avatar: string | null } = {
         did: t.latestMessage.author.did,
+        name: t.latestMessage.author.name ?? null,
+        avatar: t.latestMessage.author.avatar ?? null,
       };
-      if (t.latestMessage.author.name != null) author.name = t.latestMessage.author.name;
-      if (t.latestMessage.author.avatar != null) author.avatar = t.latestMessage.author.avatar;
       activity.latestMessage = {
         id: t.latestMessage.id,
         content: t.latestMessage.content,

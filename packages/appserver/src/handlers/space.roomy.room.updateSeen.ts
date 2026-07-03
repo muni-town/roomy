@@ -58,9 +58,9 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   void hydrateUserMembership(userDid).catch(() => {});
 
   const db = openDb();
-  let access: ReturnType<typeof requireRoomRead>;
+  let access: Awaited<ReturnType<typeof requireRoomRead>>;
   try {
-    access = requireRoomRead(db, roomId, userDid);
+    access = await requireRoomRead(db, roomId, userDid);
   } catch (err) {
     // The room may not be materialised yet on a cold (lazy) space if no read
     // handler ran first. Fall back to awaiting hydration once, then retry —
@@ -68,7 +68,7 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
     // call kicked off above rather than doing the work twice.
     if (err instanceof XrpcError && err.status === 404) {
       await hydrateUserMembership(userDid);
-      access = requireRoomRead(db, roomId, userDid);
+      access = await requireRoomRead(db, roomId, userDid);
     } else {
       throw err;
     }
@@ -79,23 +79,17 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
 
   if (seenUpToRaw === undefined) {
     // No watermark → mark everything as read up to the latest message.
-    const maxRow = db
-      .query<
-        { max_sort: string | null },
-        [string]
-      >("select max(sort_idx) as max_sort from entities where room = ?")
-      .get(roomId);
+    const maxRow = await db
+      .query("select max(sort_idx) as max_sort from entities where room = ?")
+      .get<{ max_sort: string | null }>(roomId);
 
-    seenUpTo = maxRow?.max_sort ?? "";
+    seenUpTo = (maxRow?.max_sort as string) ?? "";
     unreadCount = 0;
   } else {
     // Validate that the message exists and belongs to this room.
-    const msgRow = db
-      .query<
-        { sort_idx: string },
-        [string, string]
-      >("select sort_idx from entities where id = ? and room = ?")
-      .get(seenUpToRaw, roomId);
+    const msgRow = await db
+      .query("select sort_idx from entities where id = ? and room = ?")
+      .get<{ sort_idx: string }>(seenUpToRaw, roomId);
 
     if (!msgRow) {
       throw new XrpcError(
@@ -105,27 +99,25 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
       );
     }
 
-    seenUpTo = msgRow.sort_idx;
+    seenUpTo = msgRow.sort_idx as string;
 
     // One-time count of remaining messages after the watermark.
-    const countRow = db
-      .query<
-        { n: number },
-        [string, string]
-      >("select count(*) as n from entities where room = ? and sort_idx > ?")
-      .get(roomId, seenUpTo);
+    const countRow = await db
+      .query("select count(*) as n from entities where room = ? and sort_idx > ?")
+      .get<{ n: number }>(roomId, seenUpTo);
 
-    unreadCount = countRow?.n ?? 0;
+    unreadCount = (countRow?.n as number) ?? 0;
   }
 
-  db.prepare(
+  const stmt = await db.prepare(
     `insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count, updated_at)
      values (?, ?, ?, ?, (unixepoch() * 1000))
      on conflict(user_did, room_id) do update set
        seen_up_to = excluded.seen_up_to,
        unread_count = excluded.unread_count,
        updated_at = excluded.updated_at`,
-  ).run(userDid, roomId, seenUpTo, unreadCount);
+  );
+  await stmt.run([userDid, roomId, seenUpTo, unreadCount]);
 
   // Push invalidation signals to the sync manager so the caller's WS
   // connection re-fetches stale data.

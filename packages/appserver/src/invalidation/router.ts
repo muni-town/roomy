@@ -20,6 +20,8 @@ import type {
   InvalidationRouter as IInvalidationRouter,
   AppliedEvent,
 } from "./types.ts";
+import type { DbLike } from "../db/types.ts";
+import type { StreamDid } from "@roomy-space/sdk";
 import { inferSignals } from "./inferSignals.ts";
 
 export class Router implements IInvalidationRouter {
@@ -40,23 +42,17 @@ export class Router implements IInvalidationRouter {
     return Router.#instance;
   }
 
-  // ─── Leaf event pipeline ─────────────────────────────────────────
-
-  onEventsApplied(
-    streamDid: import("@roomy-space/sdk").StreamDid,
+  async onEventsApplied(
+    streamDid: StreamDid,
     events: AppliedEvent[],
     meta: { isBackfill: boolean },
-  ): void {
-    // During backfill, no subscribers care about historical data.
-    // Suppress to avoid flooding WS connections on first connect.
+    db?: DbLike,
+  ): Promise<void> {
     if (meta.isBackfill) return;
-
     if (this.#listeners.size === 0) return;
-
     const allSignals: InvalidationEvent[] = [];
     for (const event of events) {
-      // Stamp a monotonically increasing seq for message diffs (cursor replay).
-      const signals = inferSignals(event);
+      const signals = await inferSignals(event, db);
       for (const signal of signals) {
         if (signal.kind === "messageDiff") {
           signal.signal.seq = ++this.#seq;
@@ -64,11 +60,7 @@ export class Router implements IInvalidationRouter {
       }
       allSignals.push(...signals);
     }
-
     if (allSignals.length === 0) return;
-
-    // Dispatch to all listeners. If a listener throws, log and continue —
-    // one broken consumer shouldn't stop others from receiving signals.
     for (const listener of this.#listeners) {
       try {
         listener(allSignals);

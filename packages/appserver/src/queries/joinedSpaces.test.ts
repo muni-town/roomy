@@ -1,23 +1,55 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { StreamDid, UserDid } from "@roomy-space/sdk";
-import { openDb } from "../db/db.ts";
-import { attachInMemoryReadState } from "../db/readStateDb.ts";
+import { toAsyncDb } from "../db/syncAdapter.ts";
+import type { DbLike } from "../db/types.ts";
 import {
   JOINED_SPACE_LABEL,
   recordPersonalSpaceMembership,
   selectJoinedSpaces,
 } from "./joinedSpaces.ts";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
+
 const USER = UserDid.assert("did:plc:test-user");
 const PERSONAL = StreamDid.assert("did:web:personal-stream.example");
 const OTHER_PERSONAL = StreamDid.assert("did:web:other-personal.example");
 const SPACE = StreamDid.assert("did:web:space-stream.example");
 
-function freshDb(): Database {
-  const db = openDb({ path: ":memory:", isolated: true });
-  attachInMemoryReadState(db);
-  return db;
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  // Apply main schema
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [
+    SCHEMA_VERSION,
+  ]);
+  // Attach and apply readstate schema (needed by getSpaceUnreadCount; separate exec calls to avoid bun:sqlite multi-stmt issue)
+  db.exec("attach database ':memory:' as readstate");
+  db.exec(
+    "create table if not exists readstate_schema_version (id integer primary key check (id = 1), version text not null) strict",
+  );
+  db.exec(
+    "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
+  );
+  db.exec(
+    "create table if not exists readstate.user_thread_activity (user_did text not null, thread_id text not null, last_active_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, thread_id)) strict",
+  );
+  db.run(
+    "insert or replace into readstate_schema_version (id, version) values (1, ?)",
+    ["2"],
+  );
+  return { db, asyncDb: toAsyncDb(db) };
 }
 
 /** Seed an entity row. `stream_id` defaults to the entity's own id. */
@@ -57,13 +89,13 @@ function joinEdge(db: Database, personal: string, space: string): void {
 }
 
 describe("selectJoinedSpaces", () => {
-  test("a space the personal stream has a joinedSpace edge to is visible", () => {
-    const db = freshDb();
+  test("a space the personal stream has a joinedSpace edge to is visible", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db);
     seedEntity(db, PERSONAL);
     joinEdge(db, PERSONAL, SPACE);
 
-    const spaces = selectJoinedSpaces(db, USER, PERSONAL);
+    const spaces = await selectJoinedSpaces(asyncDb, USER, PERSONAL);
     expect(spaces).toHaveLength(1);
     expect(spaces[0]).toMatchObject({
       id: SPACE,
@@ -73,29 +105,29 @@ describe("selectJoinedSpaces", () => {
     });
   });
 
-  test("a space with no joinedSpace edge is invisible even if it exists", () => {
-    const db = freshDb();
+  test("a space with no joinedSpace edge is invisible even if it exists", async () => {
+    const { db, asyncDb } = freshDb();
     // Space fully materialised (entity, info, member edge) but the personal
     // stream never joined it — no joinedSpace edge.
     seedSpace(db);
     seedEntity(db, PERSONAL);
 
-    expect(selectJoinedSpaces(db, USER, PERSONAL)).toEqual([]);
+    expect(await selectJoinedSpaces(asyncDb, USER, PERSONAL)).toEqual([]);
   });
 
-  test("a space joined by a different personal stream is not visible (multi-user)", () => {
-    const db = freshDb();
+  test("a space joined by a different personal stream is not visible (multi-user)", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db);
     seedEntity(db, PERSONAL);
     seedEntity(db, OTHER_PERSONAL);
     // Another user joined the same space. Their edge must not leak into ours.
     joinEdge(db, OTHER_PERSONAL, SPACE);
 
-    expect(selectJoinedSpaces(db, USER, PERSONAL)).toEqual([]);
+    expect(await selectJoinedSpaces(asyncDb, USER, PERSONAL)).toEqual([]);
   });
 
-  test("a joined space the caller is banned from is excluded", () => {
-    const db = freshDb();
+  test("a joined space the caller is banned from is excluded", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db);
     seedEntity(db, PERSONAL);
     joinEdge(db, PERSONAL, SPACE);
@@ -104,11 +136,11 @@ describe("selectJoinedSpaces", () => {
       USER,
     ]);
 
-    expect(selectJoinedSpaces(db, USER, PERSONAL)).toEqual([]);
+    expect(await selectJoinedSpaces(asyncDb, USER, PERSONAL)).toEqual([]);
   });
 
-  test("a joined space with no member/admin edge for the caller is excluded", () => {
-    const db = freshDb();
+  test("a joined space with no member/admin edge for the caller is excluded", async () => {
+    const { db, asyncDb } = freshDb();
     // joinedSpace intent exists, but the space stream never recorded the
     // member edge (e.g. join not yet accepted) — not a real membership.
     seedEntity(db, SPACE);
@@ -119,27 +151,27 @@ describe("selectJoinedSpaces", () => {
     ]);
     joinEdge(db, PERSONAL, SPACE);
 
-    expect(selectJoinedSpaces(db, USER, PERSONAL)).toEqual([]);
+    expect(await selectJoinedSpaces(asyncDb, USER, PERSONAL)).toEqual([]);
   });
 });
 
 describe("recordPersonalSpaceMembership", () => {
-  test("makes an already-materialised space visible to getSpaces", () => {
-    const db = freshDb();
+  test("makes an already-materialised space visible to getSpaces", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db);
-    expect(selectJoinedSpaces(db, USER, PERSONAL)).toEqual([]);
+    expect(await selectJoinedSpaces(asyncDb, USER, PERSONAL)).toEqual([]);
 
-    recordPersonalSpaceMembership(db, SPACE, PERSONAL);
+    await recordPersonalSpaceMembership(asyncDb, SPACE, PERSONAL);
 
-    const spaces = selectJoinedSpaces(db, USER, PERSONAL);
+    const spaces = await selectJoinedSpaces(asyncDb, USER, PERSONAL);
     expect(spaces).toHaveLength(1);
     expect(spaces[0]).toMatchObject({ id: SPACE, name: "Test Space" });
   });
 
-  test("seeds the entity rows the joinedSpace edge depends on", () => {
-    const db = freshDb();
+  test("seeds the entity rows the joinedSpace edge depends on", async () => {
+    const { db, asyncDb } = freshDb();
     // Neither the space nor the personal stream entity exists yet.
-    recordPersonalSpaceMembership(db, SPACE, PERSONAL);
+    await recordPersonalSpaceMembership(asyncDb, SPACE, PERSONAL);
 
     const edge = db
       .query<
@@ -159,13 +191,13 @@ describe("recordPersonalSpaceMembership", () => {
     expect(spaceEntity?.stream_id).toBe(SPACE);
   });
 
-  test("is idempotent", () => {
-    const db = freshDb();
+  test("is idempotent", async () => {
+    const { db, asyncDb } = freshDb();
     seedSpace(db);
 
-    recordPersonalSpaceMembership(db, SPACE, PERSONAL);
-    recordPersonalSpaceMembership(db, SPACE, PERSONAL);
+    await recordPersonalSpaceMembership(asyncDb, SPACE, PERSONAL);
+    await recordPersonalSpaceMembership(asyncDb, SPACE, PERSONAL);
 
-    expect(selectJoinedSpaces(db, USER, PERSONAL)).toHaveLength(1);
+    expect(await selectJoinedSpaces(asyncDb, USER, PERSONAL)).toHaveLength(1);
   });
 });

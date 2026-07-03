@@ -8,17 +8,34 @@
  *   - Room metadata: is_thread, parent_channel, space/room names
  *   - decodeMessageTimestamp
  */
-
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { openDb } from "../db/db.ts";
-import { upsertActivityItem, decodeMessageTimestamp } from "./activityItem.ts";
 import { decodeTime } from "ulidx";
+import type { StreamDid, Ulid } from "@roomy-space/sdk";
+import { toAsyncDb } from "../db/syncAdapter.ts";
+import { upsertActivityItem, decodeMessageTimestamp } from "./activityItem.ts";
+import type { DbLike } from "../db/types.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_VERSION = "10-appserver.4";
 
 /** Create a fresh in-memory DB for testing. */
-function freshDb(): Database {
-  return openDb({ path: ":memory:", isolated: true });
+function freshDb(): { db: Database; asyncDb: DbLike } {
+  const db = new Database(":memory:");
+  db.exec("pragma journal_mode = wal");
+  db.exec("pragma synchronous = normal");
+  db.exec("pragma foreign_keys = on");
+  const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
+  db.exec(schemaSql);
+  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
+  return { db, asyncDb: toAsyncDb(db) };
 }
+
 
 const SPACE = "did:web:space.example";
 const CHANNEL = "01CHANNEL00000000000000000";
@@ -63,6 +80,7 @@ function seedThread(db: Database) {
   );
 }
 
+
 /**
  * Generate a ULID that encodes a specific timestamp.
  * ULIDs are 26-char Crockford base32; the first 10 chars encode the timestamp.
@@ -82,83 +100,76 @@ function ulidForTimestamp(ts: number): string {
   const suffix = String(msgCounter++).padStart(16, "0").slice(0, 16);
   return encoded + suffix;
 }
-
 describe("upsertActivityItem", () => {
   describe("slow path (first message in room)", () => {
-    test("creates a row for a channel room", () => {
-      const db = freshDb();
+    test("creates a row for a channel room", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db);
       seedChannel(db);
 
       const ts = 1_717_536_000_000;
       const msgId = ulidForTimestamp(ts);
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msgId });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
 
-      const row = db
-        .query<
-          {
-            room_id: string;
-            space_id: string;
-            is_thread: number;
-            parent_channel_id: string | null;
-            parent_channel_name: string | null;
-            last_activity_at: number;
-            recent_message_ids: string;
-            room_name: string | null;
-            space_name: string | null;
-            space_avatar: string | null;
-          },
-          [string]
-        >("select * from activity_item where room_id = ?")
-        .get(CHANNEL);
+      const row = await asyncDb
+        .query("select * from activity_item where room_id = ?")
+        .get<{
+          room_id: string;
+          space_id: string;
+          is_thread: number;
+          parent_channel_id: string | null;
+          parent_channel_name: string | null;
+          last_activity_at: number;
+          recent_message_ids: string;
+          room_name: string | null;
+          space_name: string | null;
+          space_avatar: string | null;
+        }>(CHANNEL);
 
       expect(row).not.toBeNull();
-      expect(row!.room_id).toBe(CHANNEL);
-      expect(row!.space_id).toBe(SPACE);
-      expect(row!.is_thread).toBe(0);
-      expect(row!.parent_channel_id).toBeNull();
-      expect(row!.parent_channel_name).toBeNull();
-      expect(row!.last_activity_at).toBe(ts);
-      expect(JSON.parse(row!.recent_message_ids)).toEqual([msgId]);
-      expect(row!.room_name).toBe("general");
-      expect(row!.space_name).toBe("Test Space");
-      expect(row!.space_avatar).toBe("https://example.com/avatar.png");
-    });
+      const r = row!;
+      expect(r.room_id).toBe(CHANNEL);
+      expect(r.space_id).toBe(SPACE);
+      expect(r.is_thread).toBe(0);
+      expect(r.parent_channel_id).toBeNull();
+      expect(r.parent_channel_name).toBeNull();
+      expect(r.last_activity_at).toBe(ts);
+      expect(JSON.parse(r.recent_message_ids)).toEqual([msgId]);
+      expect(r.room_name).toBe("general");
+      expect(r.space_name).toBe("Test Space");
+      expect(r.space_avatar).toBe("https://example.com/avatar.png");
+    })
 
-    test("creates a row for a thread room with parent channel metadata", () => {
-      const db = freshDb();
+    test("creates a row for a thread room with parent channel metadata", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db);
       seedChannel(db);
       seedThread(db);
 
       const ts = 1_717_536_000_000;
       const msgId = ulidForTimestamp(ts);
-      upsertActivityItem(db, { roomId: THREAD, spaceId: SPACE, messageId: msgId });
+      await upsertActivityItem(asyncDb, { roomId: THREAD, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
 
-      const row = db
-        .query<
-          {
-            room_id: string;
-            is_thread: number;
-            parent_channel_id: string | null;
-            parent_channel_name: string | null;
-            room_name: string | null;
-          },
-          [string]
-        >(
-          "select room_id, is_thread, parent_channel_id, parent_channel_name, room_name from activity_item where room_id = ?",
-        )
-        .get(THREAD);
+      const row = await asyncDb
+        .query("select room_id, is_thread, parent_channel_id, parent_channel_name, room_name from activity_item where room_id = ?")
+        .get<{
+          room_id: string;
+          is_thread: number;
+          parent_channel_id: string | null;
+          parent_channel_name: string | null;
+          room_name: string | null;
+        }>(THREAD);
 
       expect(row).not.toBeNull();
-      expect(row!.is_thread).toBe(1);
-      expect(row!.parent_channel_id).toBe(CHANNEL);
-      expect(row!.parent_channel_name).toBe("general");
-      expect(row!.room_name).toBe("My Thread");
-    });
+      const r = row!;
+      expect(r.is_thread).toBe(1);
+      expect(r.parent_channel_id).toBe(CHANNEL);
+      expect(r.parent_channel_name).toBe("general");
+      expect(r.room_name).toBe("My Thread");
+    })
 
-    test("handles missing comp_info gracefully (null names)", () => {
-      const db = freshDb();
+    test("handles missing comp_info gracefully (null names)", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db);
       // Channel without comp_info
       db.run("insert into entities (id, stream_id) values (?, ?)", [
@@ -172,23 +183,20 @@ describe("upsertActivityItem", () => {
 
       const ts = 1_717_536_000_000;
       const msgId = ulidForTimestamp(ts);
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msgId });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
 
-      const row = db
-        .query<
-          { room_name: string | null; space_name: string | null },
-          [string]
-        >("select room_name, space_name from activity_item where room_id = ?")
-        .get(CHANNEL);
+      const row = await asyncDb
+        .query("select room_name, space_name from activity_item where room_id = ?")
+        .get<{ room_name: string | null; space_name: string | null }>(CHANNEL);
 
       expect(row!.room_name).toBeNull();
       expect(row!.space_name).toBe("Test Space"); // space comp_info exists
-    });
+    })
   });
 
   describe("fast path (subsequent messages)", () => {
-    test("prepends new message ID and caps at 5", () => {
-      const db = freshDb();
+    test("prepends new message ID and caps at 5", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db);
       seedChannel(db);
 
@@ -198,14 +206,12 @@ describe("upsertActivityItem", () => {
         const ts = 1_717_536_000_000 + i * 1000;
         const id = ulidForTimestamp(ts);
         ids.push(id);
-        upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: id });
+        await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: id as Ulid });
       }
 
-      const row = db
-        .query<{ recent_message_ids: string }, [string]>(
-          "select recent_message_ids from activity_item where room_id = ?",
-        )
-        .get(CHANNEL);
+      const row = await asyncDb
+        .query("select recent_message_ids from activity_item where room_id = ?")
+        .get<{ recent_message_ids: string }>(CHANNEL);
 
       const stored: string[] = JSON.parse(row!.recent_message_ids);
       // Should have newest first, capped at 5.
@@ -214,32 +220,30 @@ describe("upsertActivityItem", () => {
       expect(stored[0]).toBe(ids[5]);
       // Oldest (lowest timestamp) should be dropped.
       expect(stored).not.toContain(ids[0]);
-    });
+    })
 
-    test("deduplicates if the same message ID is upserted twice", () => {
-      const db = freshDb();
+    test("deduplicates if the same message ID is upserted twice", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db);
       seedChannel(db);
 
       const ts = 1_717_536_000_000;
       const msgId = ulidForTimestamp(ts);
 
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msgId });
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msgId });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
 
-      const row = db
-        .query<{ recent_message_ids: string }, [string]>(
-          "select recent_message_ids from activity_item where room_id = ?",
-        )
-        .get(CHANNEL);
+      const row = await asyncDb
+        .query("select recent_message_ids from activity_item where room_id = ?")
+        .get<{ recent_message_ids: string }>(CHANNEL);
 
       const stored: string[] = JSON.parse(row!.recent_message_ids);
       expect(stored).toHaveLength(1);
       expect(stored[0]).toBe(msgId);
-    });
+    })
 
-    test("updates last_activity_at to the newest message timestamp", () => {
-      const db = freshDb();
+    test("updates last_activity_at to the newest message timestamp", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db);
       seedChannel(db);
 
@@ -248,22 +252,20 @@ describe("upsertActivityItem", () => {
       const msg1 = ulidForTimestamp(ts1);
       const msg2 = ulidForTimestamp(ts2);
 
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msg1 });
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msg2 });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg1 as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg2 as Ulid });
 
-      const row = db
-        .query<{ last_activity_at: number }, [string]>(
-          "select last_activity_at from activity_item where room_id = ?",
-        )
-        .get(CHANNEL);
+      const row = await asyncDb
+        .query("select last_activity_at from activity_item where room_id = ?")
+        .get<{ last_activity_at: number }>(CHANNEL);
 
       expect(row!.last_activity_at).toBe(ts2);
-    });
+    })
   });
 
   describe("backfill", () => {
-    test("processes events in order without special logic", () => {
-      const db = freshDb();
+    test("processes events in order without special logic", async () => {
+      const { db, asyncDb } = freshDb();
       seedSpace(db);
       seedChannel(db);
 
@@ -275,15 +277,13 @@ describe("upsertActivityItem", () => {
       const msg2 = ulidForTimestamp(ts2);
       const msg3 = ulidForTimestamp(ts3);
 
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msg1 });
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msg2 });
-      upsertActivityItem(db, { roomId: CHANNEL, spaceId: SPACE, messageId: msg3 });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg1 as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg2 as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg3 as Ulid });
 
-      const row = db
-        .query<{ recent_message_ids: string; last_activity_at: number }, [string]>(
-          "select recent_message_ids, last_activity_at from activity_item where room_id = ?",
-        )
-        .get(CHANNEL);
+      const row = await asyncDb
+        .query("select recent_message_ids, last_activity_at from activity_item where room_id = ?")
+        .get<{ recent_message_ids: string; last_activity_at: number }>(CHANNEL);
 
       const stored: string[] = JSON.parse(row!.recent_message_ids);
       expect(stored).toHaveLength(3);
@@ -292,7 +292,7 @@ describe("upsertActivityItem", () => {
       expect(stored[1]).toBe(msg2);
       expect(stored[2]).toBe(msg1);
       expect(row!.last_activity_at).toBe(ts3);
-    });
+    })
   });
 
   describe("decodeMessageTimestamp", () => {

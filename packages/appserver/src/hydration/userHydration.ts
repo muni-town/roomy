@@ -13,7 +13,7 @@
  * promise to avoid N parallel personal-stream reads.
  */
 
-import { Database } from "bun:sqlite";
+import type { DbLike } from "../db/types.ts";
 import { type StreamDid, type UserDid } from "@roomy-space/sdk";
 import { openDb } from "../db/db.ts";
 import {
@@ -42,7 +42,7 @@ export interface UserHydrationResult {
 }
 
 export interface HydrateOpts extends ResolveOpts {
-  db?: Database;
+  db?: DbLike;
   /** Override registry options (tests). Forwarded to every getOrCreateMaterializer call. */
   materializerOpts?: GetOrCreateOpts;
 }
@@ -109,7 +109,7 @@ async function run(
     await personalMat.drain();
   }
 
-  const intendedSpaceDids = readIntendedSpaceDids(db, personalStreamDid);
+  const intendedSpaceDids = await readIntendedSpaceDids(db, personalStreamDid);
 
   // Stage 2: each intended space, in parallel. Failures recorded, not thrown.
   const hydrationFailures: HydrationFailure[] = [];
@@ -152,18 +152,18 @@ async function run(
  * it. Membership is per-user, so it lives in `edges` rather than on the
  * single global `comp_space` row a space has.
  */
-function readIntendedSpaceDids(
-  db: Database,
+async function readIntendedSpaceDids(
+  db: DbLike,
   personalStreamDid: StreamDid,
-): StreamDid[] {
-  const rows = db
-    .query<{ id: string }, [string, string]>(
+): Promise<StreamDid[]> {
+  const rows = await db
+    .query(
       `select tail as id
          from edges
         where head = ?
           and label = ?`,
     )
-    .all(personalStreamDid, JOINED_SPACE_LABEL);
+    .all<{ id: string }>([personalStreamDid, JOINED_SPACE_LABEL]);
   return rows.map((r) => r.id as StreamDid);
 }
 

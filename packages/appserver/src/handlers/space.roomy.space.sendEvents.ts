@@ -58,8 +58,7 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
   }
   const db = openDb();
 
-  // 2. Verify space exists and caller has access
-  requireSpaceAccess(db, spaceId, callerDid);
+  await requireSpaceAccess(db, spaceId, callerDid);
 
   // 3. Validate + authorize each event
   const parsedEvents: (typeof Event.infer)[] = [];
@@ -77,7 +76,7 @@ export const sendEventsHandler: ProcedureHandler<SendEventsBody, void> = async (
     }
 
     // Authorization
-    const denial = checkWriteAuth(db, spaceId, callerDid, result.data);
+    const denial = await checkWriteAuth(db, spaceId, callerDid, result.data);
     if (denial) {
       throw new XrpcError(
         denial.status,

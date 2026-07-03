@@ -91,24 +91,14 @@ export const getMetadataHandler: QueryHandler<
   // here: compute the access decision directly and only block banned callers.
   // The channel/thread sidebar below is still gated on membership, so
   // non-members receive an empty sidebar.
-  const access = spaceAccess(db, spaceId, userDid);
+  const access = await spaceAccess(db, spaceId, userDid);
   if (access.isBanned) {
     throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
   }
 
-  const spaceRow = db
-    .query<
-      {
-        name: string | null;
-        avatar: string | null;
-        description: string | null;
-        handle: string | null;
-        allow_public_join: number | null;
-        allow_member_invites: number | null;
-        sidebar_config: string;
-      },
-      [string]
-    >(
+
+  const spaceRow = await db
+    .query(
       `select
            ci.name as name,
            ci.avatar as avatar,
@@ -121,7 +111,15 @@ export const getMetadataHandler: QueryHandler<
          left join comp_info ci on ci.entity = cs.entity
         where cs.entity = ?`,
     )
-    .get(spaceId);
+    .get<{
+      name: string | null;
+      avatar: string | null;
+      description: string | null;
+      handle: string | null;
+      allow_public_join: number | null;
+      allow_member_invites: number | null;
+      sidebar_config: string;
+    }>(spaceId);
 
   if (spaceRow === null) {
     throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`);
@@ -129,7 +127,7 @@ export const getMetadataHandler: QueryHandler<
 
   let config: SidebarConfig;
   try {
-    const parsed = JSON.parse(spaceRow.sidebar_config);
+    const parsed = JSON.parse(spaceRow.sidebar_config as string);
     config = {
       categories: Array.isArray(parsed?.categories) ? parsed.categories : [],
     };
@@ -145,15 +143,8 @@ export const getMetadataHandler: QueryHandler<
   // Sidebar requires a logged-in user — anonymous callers can't get member
   // or admin status, so isMember/isAdmin is always false for them.
   if (userDid !== null && (access.isMember || access.isAdmin)) {
-    const allChannelRows = db
-      .query<
-        {
-          id: string;
-          name: string | null;
-          default_access: string | null;
-        },
-        [string]
-      >(
+    const allChannelRows = await db
+      .query(
         `select e.id as id, ci.name as name, cr.default_access as default_access
              from entities e
              join comp_room cr on cr.entity = e.id
@@ -162,21 +153,25 @@ export const getMetadataHandler: QueryHandler<
               and cr.label = 'space.roomy.channel'
               and coalesce(cr.deleted, 0) = 0`,
       )
-      .all(spaceId);
+      .all<{
+        id: string;
+        name: string | null;
+        default_access: string | null;
+      }>(spaceId);
 
     const channelById = new Map(allChannelRows.map((r) => [r.id, r]));
 
     // Batch-fetch read positions for all channels in this space.
-    const readPositions = getReadPositions(
+    const readPositions = await getReadPositions(
       db,
       userDid,
-      allChannelRows.map((r) => r.id),
+      allChannelRows.map((r) => r.id as string),
     );
 
-    const buildChannel = (id: string): SidebarChannel | null => {
+    const buildChannel = async (id: string): Promise<SidebarChannel | null> => {
       const row = channelById.get(id);
       if (!row) return null;
-      const acc = roomAccess(db, id, userDid);
+      const acc = await roomAccess(db, id, userDid);
       if (!acc.canRead) return null;
       const pos = readPositions.get(id);
       return stripNulls({
@@ -191,11 +186,11 @@ export const getMetadataHandler: QueryHandler<
     };
 
     const referencedIds = new Set<string>();
-    categories = config.categories.map((cat, idx) => {
+    categories = await Promise.all(config.categories.map(async (cat, idx) => {
       const channels: SidebarChannel[] = [];
       for (const childId of cat.children ?? []) {
         referencedIds.add(childId);
-        const ch = buildChannel(childId);
+        const ch = await buildChannel(childId);
         if (ch) channels.push(ch);
       }
       return stripNulls({
@@ -204,32 +199,32 @@ export const getMetadataHandler: QueryHandler<
         position: idx,
         channels,
       }) as SidebarCategory;
-    });
+    }));
 
     for (const row of allChannelRows) {
-      if (referencedIds.has(row.id)) continue;
-      const ch = buildChannel(row.id);
+      if (referencedIds.has(row.id as string)) continue;
+      const ch = await buildChannel(row.id as string);
       if (ch) orphans.push(ch);
     }
 
     // ── Active threads ────────────────────────────────────────────────
     // Fetch up to 8 threads the user has recently interacted with and
     // distribute them into their parent channels for the sidebar.
-    const activeThreadEntries = queryActiveThreads(db, userDid, spaceId);
+    const activeThreadEntries = await queryActiveThreads(db, userDid, spaceId);
 
     if (activeThreadEntries.length > 0) {
       const threadIds = activeThreadEntries.map((t) => t.id);
-      const threadMetaMap = resolveThreadsByIds(db, threadIds);
+      const threadMetaMap = await resolveThreadsByIds(db, threadIds);
 
       // Build active thread objects with access checks and read positions.
-      const threadReadPositions = getReadPositions(db, userDid, threadIds);
+      const threadReadPositions = await getReadPositions(db, userDid, threadIds);
       const activeThreadsByParent = new Map<string, ActiveSidebarThread[]>();
 
       for (const entry of activeThreadEntries) {
         const meta = threadMetaMap.get(entry.id);
         if (!meta) continue;
 
-        const acc = roomAccess(db, entry.id, userDid);
+        const acc = await roomAccess(db, entry.id, userDid);
         if (!acc.canRead) continue;
 
         const parentId = meta.canonicalParent;
@@ -279,11 +274,8 @@ export const getMetadataHandler: QueryHandler<
   // Deleted rooms — only fetched when explicitly requested
   let deletedRooms: DeletedRoom[] | undefined;
   if (params.includeDeleted === "true") {
-    const deletedRows = db
-      .query<
-        { id: string; name: string | null },
-        [string]
-      >(
+    const deletedRows = await db
+      .query(
         `select e.id as id, ci.name as name
            from entities e
            join comp_room cr on cr.entity = e.id
@@ -292,7 +284,7 @@ export const getMetadataHandler: QueryHandler<
             and cr.label = 'space.roomy.channel'
             and cr.deleted = 1`,
       )
-      .all(spaceId);
+      .all<{ id: string; name: string | null }>(spaceId);
     deletedRooms = deletedRows.map((r) =>
       stripNulls({ id: r.id, name: r.name }) as DeletedRoom,
     );

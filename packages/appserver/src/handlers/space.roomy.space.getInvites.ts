@@ -37,15 +37,12 @@ export const getInvitesHandler: QueryHandler<
   await hydrateUserMembership(userDid);
 
   const db = openDb();
-  const access = requireSpaceAccess(db, spaceId, userDid);
+  const access = await requireSpaceAccess(db, spaceId, userDid);
 
   if (!access.isAdmin) {
-    const policy = db
-      .query<
-        { allow_member_invites: number | null },
-        [string]
-      >("select allow_member_invites from comp_space where entity = ?")
-      .get(spaceId);
+    const policy = await db
+      .query("select allow_member_invites from comp_space where entity = ?")
+      .get<{ allow_member_invites: number | null }>(spaceId);
     // null = unset; spec default is "false" — non-admins are blocked.
     if (policy?.allow_member_invites !== 1) {
       throw new XrpcError(
@@ -56,29 +53,23 @@ export const getInvitesHandler: QueryHandler<
     }
   }
 
-  const rows = access.isAdmin
+  const rows = await (access.isAdmin
     ? db
-        .query<
-          { token: string; created_by_did: string; event_ulid: string },
-          [string]
-        >(
+        .query(
           `select token, created_by_did, event_ulid
                from comp_invite where entity = ?`,
         )
-        .all(spaceId)
+        .all<{ token: string; created_by_did: string; event_ulid: string }>(spaceId)
     : db
-        .query<
-          { token: string; created_by_did: string; event_ulid: string },
-          [string, string]
-        >(
+        .query(
           `select token, created_by_did, event_ulid
                from comp_invite
               where entity = ? and created_by_did = ?`,
         )
-        .all(spaceId, userDid);
+        .all<{ token: string; created_by_did: string; event_ulid: string }>(spaceId, userDid));
 
   return {
-    invites: rows.map((r) => ({
+    invites: rows.map((r): InviteRow => ({
       token: r.token,
       createdBy: r.created_by_did,
       eventUlid: r.event_ulid,
