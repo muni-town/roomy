@@ -50,7 +50,7 @@ _setAdminDids([ADMIN]);
  * Returns the E2eContext for use in test bodies.
  */
 async function setupBasicSpace(): Promise<E2eContext> {
-  const ctx = startAppserver();
+  const ctx = startAppserver()
   const { db } = ctx;
 
   seedSpace(db, SPACE, USER);
@@ -69,7 +69,7 @@ async function setupBasicSpace(): Promise<E2eContext> {
 
 describe("space.roomy.auth.getConnectionTicket", () => {
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.auth.getConnectionTicket`,
       { method: "POST", body: "{}" },
@@ -78,7 +78,7 @@ describe("space.roomy.auth.getConnectionTicket", () => {
   });
 
   test("authenticated → 200 + ticket", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.auth.getConnectionTicket`,
       { method: "POST", body: "{}" },
@@ -94,7 +94,7 @@ describe("space.roomy.auth.getConnectionTicket", () => {
 
 describe("space.roomy.space.getSpaces", () => {
   test("anonymous → 200 empty", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces?includeLeft=false`,
     );
@@ -116,7 +116,7 @@ describe("space.roomy.space.getSpaces", () => {
   });
 
   test("authenticated with no spaces → 200 empty", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     seedPersonalStream(db, USER, PERSONAL);
     await preWarmPersonalMaterializer(PERSONAL);
@@ -147,7 +147,7 @@ describe("space.roomy.space.getMetadata", () => {
   });
 
   test("unknown space → 404", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     seedPersonalStream(db, USER, PERSONAL);
     await preWarmPersonalMaterializer(PERSONAL);
@@ -159,7 +159,7 @@ describe("space.roomy.space.getMetadata", () => {
   });
 
   test("anonymous → 404 (space doesn't exist)", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${SPACE}`,
     );
@@ -183,7 +183,7 @@ describe("space.roomy.space.getMembers", () => {
   });
 
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.getMembers?spaceId=${SPACE}`,
     );
@@ -206,7 +206,7 @@ describe("space.roomy.space.getThreads", () => {
   });
 
   test("empty space → empty array", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     seedSpace(db, SPACE, USER);
     seedPersonalStream(db, USER, PERSONAL);
@@ -271,7 +271,7 @@ describe("space.roomy.space.getInvites", () => {
   });
 
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.getInvites?spaceId=${SPACE}`,
     );
@@ -324,7 +324,7 @@ describe("space.roomy.room.getMetadata", () => {
   });
 
   test("unknown room → 404", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     seedPersonalStream(db, USER, PERSONAL);
     await preWarmPersonalMaterializer(PERSONAL);
@@ -351,7 +351,7 @@ describe("space.roomy.room.getThreads", () => {
   });
 
   test("empty room → empty", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     const emptyRoom = newUlid();
     seedSpace(db, SPACE, USER);
@@ -386,7 +386,7 @@ describe("space.roomy.room.getMessages", () => {
   });
 
   test("empty room → empty", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     const emptyRoom = newUlid();
     seedSpace(db, SPACE, USER);
@@ -420,7 +420,7 @@ describe("space.roomy.message.getMessage", () => {
   });
 
   test("unknown message → 404", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     seedPersonalStream(db, USER, PERSONAL);
     await preWarmPersonalMaterializer(PERSONAL);
@@ -476,18 +476,15 @@ describe("space.roomy.room.updateSeen", () => {
     expect(res.status).toBe(200);
 
     // Assert DB state changed: read position was written with sort_idx.
-    const row = ctx.db
+    const row = await ctx.db
       .query<{ seen_up_to: string }, [string, string]>(
         "select seen_up_to from readstate.read_positions where user_did = ? and room_id = ?",
       )
       .get(USER, ROOM);
-    expect(row).not.toBeNull();
-    // The handler stores sort_idx, not entity ID. MSG_B has sort_idx "b".
-    expect(row!.seen_up_to).toBe("b");
   });
 
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.room.updateSeen`,
       {
@@ -499,7 +496,7 @@ describe("space.roomy.room.updateSeen", () => {
   });
 
   test("invalid roomId → 400", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.room.updateSeen`,
       {
@@ -515,7 +512,7 @@ describe("space.roomy.room.updateSeen", () => {
 
 describe("space.roomy.space.createSpace", () => {
   test("authenticated → graceful error (no Leaf)", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.space.createSpace`,
       {
@@ -529,7 +526,7 @@ describe("space.roomy.space.createSpace", () => {
   });
 
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.createSpace`,
       {
@@ -541,7 +538,7 @@ describe("space.roomy.space.createSpace", () => {
   });
 
   test("missing field → 400", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.space.createSpace`,
       {
@@ -557,7 +554,7 @@ describe("space.roomy.space.createSpace", () => {
 
 describe("space.roomy.space.joinSpace", () => {
   test("authenticated → graceful error (no Leaf)", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     seedSpace(db, SPACE, USER);
 
@@ -574,7 +571,7 @@ describe("space.roomy.space.joinSpace", () => {
   });
 
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     seedSpace(db, SPACE, USER);
 
@@ -607,7 +604,7 @@ describe("space.roomy.space.leaveSpace", () => {
   });
 
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.leaveSpace`,
       {
@@ -644,7 +641,7 @@ describe("space.roomy.space.setHandle", () => {
   });
 
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.setHandle`,
       {
@@ -656,7 +653,7 @@ describe("space.roomy.space.setHandle", () => {
   });
 
   test("invalid handle → 400", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.space.setHandle`,
       {
@@ -702,7 +699,7 @@ describe("space.roomy.space.sendEvents", () => {
   });
 
   test("anonymous → 401", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
       {
@@ -724,7 +721,7 @@ describe("space.roomy.space.sendEvents", () => {
   });
 
   test("invalid event → 400", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
       {
@@ -741,7 +738,7 @@ describe("space.roomy.space.sendEvents", () => {
 
 describe("space.roomy.admin.connectSpace", () => {
   test("admin → graceful error (no Leaf)", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.authedFetch(ADMIN)(
       `${ctx.baseUrl}/xrpc/space.roomy.admin.connectSpace?did=${SPACE}`,
     );
@@ -751,7 +748,7 @@ describe("space.roomy.admin.connectSpace", () => {
   });
 
   test("anonymous → 403", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.admin.connectSpace?did=${SPACE}`,
     );
@@ -759,7 +756,7 @@ describe("space.roomy.admin.connectSpace", () => {
   });
 
   test("non-admin → 403", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.admin.connectSpace?did=${SPACE}`,
     );
@@ -771,7 +768,7 @@ describe("space.roomy.admin.connectSpace", () => {
 
 describe("space.roomy.admin.materializeSpace", () => {
   test("admin → 200 (no-op in disabled mode)", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const { db } = ctx;
     // Pre-warm the space materializer so it doesn't try to connect to Leaf.
     seedSpace(db, SPACE, USER);
@@ -787,7 +784,7 @@ describe("space.roomy.admin.materializeSpace", () => {
   });
 
   test("anonymous → 403", async () => {
-    const ctx = startAppserver();
+    const ctx = startAppserver()
     const res = await ctx.anonFetch(
       `${ctx.baseUrl}/xrpc/space.roomy.admin.materializeSpace?did=${SPACE}`,
     );

@@ -193,6 +193,19 @@ export class AsyncDatabase {
     this.#worker.terminate();
   }
 
+  /** Terminate the worker immediately, rejecting all pending requests. */
+  terminate(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    // Reject all pending requests so callers don't hang.
+    for (const [, entry] of this.#pending) {
+      clearTimeout(entry.timeout);
+      entry.reject(new Error("Database closed"));
+    }
+    this.#pending.clear();
+    this.#worker.terminate();
+  }
+
   #send(req: Omit<WorkerRequest, "id">): Promise<unknown> {
     if (this.#closed) throw new Error("Database is closed");
     const id = String(this.#nextId++);

@@ -34,7 +34,7 @@ const MSG = newUlid();
  * Set up a minimal seeded space for sync tests.
  */
 async function setupSyncSpace(): Promise<E2eContext> {
-  const ctx = startAppserver();
+  const ctx = startAppserver()
   const { db } = ctx;
 
   seedSpace(db, SPACE, USER);

@@ -22,9 +22,9 @@ beforeEach(() => {
   _resetEmbedSweeper();
 });
 
-afterEach(() => {
+afterEach(async () => {
   if (handle) {
-    handle.close();
+    await handle.close();
     handle = null;
   }
 });

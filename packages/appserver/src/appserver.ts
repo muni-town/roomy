@@ -19,7 +19,7 @@ import { XrpcRouter, type AuthVerifier, type SyncHandler, type WsData } from "./
 import { selectAuthVerifier } from "./xrpc/auth.ts";
 import { Router as InvalidationRouter } from "./invalidation/index.ts";
 import { setInvalidationRouter } from "./materialization/registry.ts";
-import { startEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
+import { startEmbedSweeper, stopEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
 import { countPendingLinks } from "./embed/enricher.ts";
 import { openDb, closeDb } from "./db/db.ts";
 import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
@@ -385,6 +385,7 @@ export function createAppserver(
     ownDid,
     backfillStatus,
     close(): void {
+      stopEmbedSweeper();
       server.stop(true);
       clearInterval(maintenanceTimer);
       closeDb();

@@ -9,7 +9,9 @@ import type { DbLike } from "../db/types.ts";
 import {
   startEmbedSweeper,
   prioritiseLinksForRead,
+  sweepCycle,
   _resetEmbedSweeper,
+  stopEmbedSweeper,
   type EmbedSweeperOpts,
 } from "./sweeper.ts";
 import type { Embed } from "./types.ts";
@@ -113,12 +115,16 @@ function seedLinkMessageRoom(
 
 /**
  * Drive the sweeper through one pending batch synchronously. The sweeper is
- * a detached async loop; for testing we start it, poke it, then poll the
- * captured signals until enrichment (a mock fetch) resolves and the
- * invalidation fires.
+ * a detached async loop; for testing we call sweepCycle directly instead of
+ * starting the background loop, then stop it to prevent interference.
  */
 async function flushSweeper(opts: EmbedSweeperOpts): Promise<void> {
+  // Stop any running background loop from a prior test.
+  stopEmbedSweeper();
   startEmbedSweeper(opts);
+  // Run one cycle synchronously, then stop the background loop.
+  await sweepCycle(opts.db);
+  stopEmbedSweeper();
 }
 
 describe("embed sweeper invalidation room resolution", () => {

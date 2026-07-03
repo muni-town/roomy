@@ -62,6 +62,8 @@ const CONCURRENCY = Number(process.env.EMBED_SWEEPER_CONCURRENCY ?? 8);
 let sweeperDb: DbLike | undefined;
 let sweeperRouter: InvalidationRouter | undefined;
 let started = false;
+/** Resolved when the background loop exits. Used by stopEmbedSweeper. */
+let loopPromise: Promise<void> | undefined;
 
 // ─── Stats (for /health/embed) ─────────────────────────────────────────
 // Lifetime counters incremented in the drain loop. Non-null enrichLink →
@@ -91,8 +93,6 @@ let dbBackoffUntil = 0;
  */
 const priorityLinks = new Set<string>();
 
-// ─── Public API ─────────────────────────────────────────────────────────
-
 export interface EmbedSweeperOpts {
   /** Process-wide materialisation DB. Pending links live here. */
   db: DbLike;
@@ -111,7 +111,7 @@ export function startEmbedSweeper(opts: EmbedSweeperOpts): void {
   sweeperRouter = opts.invalidationRouter;
   // Detached background loop — must never reject the process. Any throw is
   // logged and the loop continues (see inner try/catch per sweep).
-  void runSweeperLoop().catch((err) => {
+  loopPromise = runSweeperLoop().catch((err) => {
     log.error("[embed-sweeper] loop crashed:", err);
   });
 }
@@ -228,7 +228,9 @@ function markDbOk(): void {
  * `markDbError`). Any *unexpected* throw bubbles to {@link runSweeperLoop}'s
  * outer guard so the loop self-heals instead of dying.
  */
-async function sweepCycle(db: DbLike): Promise<boolean> {
+export async function sweepCycle(db: DbLike): Promise<boolean> {
+  // Bail out early if the sweeper has been stopped (e.g. during test teardown).
+  if (!started) return false;
   // If the DB has been erroring, wait out the backoff before touching it
   // again — don't fetch links only to fail every write (wastes embed-service
   // calls and spams logs). A poke can still wake us early, but we re-check
@@ -320,6 +322,7 @@ async function runSweeperLoop(): Promise<void> {
   if (!db) return;
 
   for (;;) {
+    if (!started) return; // allow clean exit via stopEmbedSweeper
     try {
       const full = await sweepCycle(db);
       if (full) continue;
@@ -486,6 +489,26 @@ export function _resetEmbedSweeper(): void {
   sweeperDb = undefined;
   sweeperRouter = undefined;
   wake = null;
+  priorityLinks.clear();
+  dbErrorCount = 0;
+  dbBackoffUntil = 0;
+  statsEnrichedOk = 0;
+  statsEnrichedNull = 0;
+}
+
+/**
+ * Stop the background sweeper loop. Idempotent. Used by tests to prevent
+ * the loop from running after the DB is closed. Signals the loop to exit
+ * but does not wait for it — the loop checks `started` at the top of each
+ * iteration and will exit on its own.
+ */
+export function stopEmbedSweeper(): void {
+  started = false;
+  sweeperDb = undefined;
+  sweeperRouter = undefined;
+  const w = wake;
+  wake = null;
+  w?.(); // wake the loop so it sees `started = false` and exits
   priorityLinks.clear();
   dbErrorCount = 0;
   dbBackoffUntil = 0;

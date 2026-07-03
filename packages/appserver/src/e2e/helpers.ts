@@ -28,7 +28,7 @@ import { testAuthVerifier } from "../xrpc/auth.ts";
 import { closeDb, openDb } from "../db/db.ts";
 import { _resetMaterializerRegistry, getOrCreateMaterializer } from "../materialization/registry.ts";
 import { _resetHydrationInflight } from "../hydration/userHydration.ts";
-import { _resetEmbedSweeper } from "../embed/sweeper.ts";
+import { _resetEmbedSweeper, stopEmbedSweeper } from "../embed/sweeper.ts";
 import { newUlid, type StreamDid, type UserDid } from "@roomy-space/sdk";
 import type { Database } from "bun:sqlite";
 import type { ConnectedSpaceLike } from "../materialization/SpaceMaterializer.ts";
@@ -59,7 +59,8 @@ export interface E2eContext {
  * Call this inside `beforeEach` or at the top of a `describe` block.
  */
 export function startAppserver(): E2eContext {
-  // Reset all process-wide singletons so each test gets a clean appserver.
+  // Stop any running background sweeper loop before resetting state.
+  stopEmbedSweeper();
   closeDb();
   _resetMaterializerRegistry();
   _resetHydrationInflight();
@@ -102,6 +103,7 @@ export function startAppserver(): E2eContext {
 
   // Register teardown so Bun cleans up after the test.
   afterEach(() => {
+    stopEmbedSweeper();
     handle.close();
     closeDb();
     _resetMaterializerRegistry();
