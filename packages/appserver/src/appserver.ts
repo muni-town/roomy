@@ -26,6 +26,7 @@ import { purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
+import { getEventsHandler } from "./handlers/space.roomy.sync.getEvents.ts";
 import { materializeSpaceHandler } from "./handlers/space.roomy.admin.materializeSpace.ts";
 import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
 import { getMembersHandler } from "./handlers/space.roomy.space.getMembers.ts";
@@ -142,6 +143,9 @@ export function buildRouter(
     })
     .query("space.roomy.admin.materializeSpace", {
       handler: materializeSpaceHandler,
+    })
+    .query("space.roomy.sync.getEvents", {
+      handler: getEventsHandler,
     })
     .query("space.roomy.space.getSpaces", {
       handler: getSpacesHandler,
