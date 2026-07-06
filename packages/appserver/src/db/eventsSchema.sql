@@ -25,7 +25,8 @@ create table if not exists dids (
 create table if not exists did_keys (
     did text references dids(did),
     p256_key blob,
-    k256_key blob
+    k256_key blob,
+    unique (did)
 ) strict;
 
 create table if not exists did_owners (
