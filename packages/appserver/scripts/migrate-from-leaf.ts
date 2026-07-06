@@ -6,8 +6,8 @@
  *
  * Usage: bun run scripts/migrate-from-leaf.ts [--dry-run] <leaf-data-dir>
  *
- *   <leaf-data-dir>  Path to Leaf's data/streams directory (e.g. gitignore/leaf-data-prod/streams)
- *                     The leaf.db is expected at <leaf-data-dir>/../leaf.db
+ *   <leaf-data-dir>  Path to Leaf's data directory (e.g. gitignore/leaf-data-prod).
+ *                     Expects <leaf-data-dir>/streams/ and <leaf-data-dir>/leaf.db.
  *
  * Environment variables (optional overrides):
  *   EVENTS_DB_PATH   — path to appserver events DB (default: data/roomy-events.sqlite)
@@ -143,20 +143,22 @@ export async function migrateDidKeys(
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
-  const leafDataDir = args.filter((a) => a !== "--dry-run")[0];
+  const leafDir = args.filter((a) => a !== "--dry-run")[0];
 
-  if (!leafDataDir) {
+  if (!leafDir) {
     console.error("Usage: bun run scripts/migrate-from-leaf.ts [--dry-run] <leaf-data-dir>");
-    console.error("  <leaf-data-dir>  Path to Leaf's data/streams directory");
+    console.error("  <leaf-data-dir>  Path to Leaf's data directory (contains streams/ and leaf.db)");
     process.exit(1);
   }
 
-  const leafMainDb = join(leafDataDir, "..", "leaf.db");
+  const leafDataDir = join(leafDir, "streams");
+  const leafMainDb = join(leafDir, "leaf.db");
   const eventsDbPath = process.env.EVENTS_DB_PATH ?? "data/roomy-events.sqlite";
   const mainDbPath = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 
   if (!existsSync(leafDataDir)) {
-    console.error(`Leaf data directory not found: ${leafDataDir}`);
+    console.error(`Leaf streams directory not found: ${leafDataDir}`);
+    console.error("Expected <leaf-data-dir>/streams/ to exist");
     process.exit(1);
   }
 
