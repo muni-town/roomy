@@ -363,6 +363,9 @@ importers:
 
   packages/discord-bridge:
     dependencies:
+      '@atcute/cbor':
+        specifier: ^2.2.8
+        version: 2.2.8
       '@atproto/api':
         specifier: ^0.14.22
         version: 0.14.22
@@ -4909,7 +4912,7 @@ snapshots:
     dependencies:
       '@atcute/cid': 2.2.6
       '@atcute/multibase': 1.1.6
-      '@atcute/uint8array': 1.0.6
+      '@atcute/uint8array': 1.1.1
 
   '@atcute/cid@2.2.6':
     dependencies:
@@ -4925,7 +4928,7 @@ snapshots:
 
   '@atcute/multibase@1.1.6':
     dependencies:
-      '@atcute/uint8array': 1.0.6
+      '@atcute/uint8array': 1.1.1
 
   '@atcute/uint8array@1.0.6': {}
 
@@ -6807,7 +6810,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@25.9.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
     transitivePeerDependencies:
       - supports-color
 

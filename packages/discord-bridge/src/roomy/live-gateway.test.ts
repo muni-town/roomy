@@ -1,24 +1,18 @@
 /**
  * Tests for LiveRoomyGateway.
  *
- * IMPORTANT: Tests 1 and 2 are expected to FAIL against the current
- * implementation. The onFrame handler in subscribe() does NOT invoke the
- * RoomyEventCallback — it only logs and persists the cursor. This is a known
- * regression tracked in the Leaf Consolidation Plan (Phase 4). Once the
- * callback is wired up, these tests should pass.
- *
- * Until then, a failing test is the correct outcome: it pins the regression.
- * Test 3 (no-event frames) should pass even now because the callback is never
- * called regardless.
+ * The onFrame handler in subscribe() polls the space.roomy.sync.getEvents
+ * XRPC endpoint for new events and invokes the RoomyEventCallback for each
+ * decoded event.
  */
 
+import { encode } from "@atcute/cbor";
 import { beforeEach, describe, expect, test, vi, afterEach } from "bun:test";
 import { type Event, newUlid, transport } from "@roomy-space/sdk";
 import { BridgeRepository } from "../db/repository.ts";
 import { LiveRoomyGateway } from "./live-gateway.ts";
 import type { RoomyEventCallback } from "./gateway.ts";
 import type { SpaceManager } from "./space-manager.ts";
-
 // ─── Minimal CBOR encoder ─────────────────────────────────────────────────
 // We only need to encode simple objects for test frames. This avoids pulling
 // @atcute/cbor as a direct dependency of the discord-bridge package.
@@ -171,6 +165,14 @@ function makeEvent(): Event {
 		description: "A test event",
 	} as Event;
 }
+/**
+ * CBOR-encode an event object so it can be used as a raw.payload in the
+ * getEvents response. The gateway decodes this with decode().
+ */
+function encodeEventPayload(event: Event): string {
+	const bytes = encode(event);
+	return btoa(String.fromCharCode(...bytes));
+}
 
 // ─── Setup ─────────────────────────────────────────────────────────────────
 
@@ -196,6 +198,7 @@ function setup() {
 describe("LiveRoomyGateway", () => {
 	let repo: BridgeRepository;
 	let gateway: LiveRoomyGateway;
+	let mockXrpc: transport.DirectXrpcClient;
 	let origWebSocket: typeof WebSocket | undefined;
 
 	beforeEach(() => {
@@ -208,6 +211,7 @@ describe("LiveRoomyGateway", () => {
 		const s = setup();
 		repo = s.repo;
 		gateway = s.gateway;
+		mockXrpc = s.mockXrpc;
 	});
 
 	afterEach(() => {
@@ -223,12 +227,17 @@ describe("LiveRoomyGateway", () => {
 	/**
 	 * Inject a sync frame into the SyncConnection and assert the callback is
 	 * invoked with the decoded event and metadata.
-	 *
-	 * EXPECTED TO FAIL until the onFrame handler in subscribe() is wired to
-	 * call the RoomyEventCallback.
 	 */
 	test("callback is invoked on frame", async () => {
 		const callback = vi.fn() as unknown as RoomyEventCallback;
+		const event = makeEvent();
+		const payloadB64 = encodeEventPayload(event);
+
+		// Mock the XRPC query to return one event when getEvents is called.
+		mockXrpc.query = vi.fn().mockResolvedValue({
+			events: [{ idx: 1, user: "did:web:test-user", payload: { $bytes: payloadB64 } }],
+			cursor: 1,
+		});
 
 		// Subscribe — creates a SyncConnection with our mock WebSocket
 		const subPromise = gateway.subscribe(SPACE_DID, callback);
@@ -243,23 +252,44 @@ describe("LiveRoomyGateway", () => {
 		lastSocket!._open();
 		await subPromise;
 
-		// Inject a frame
+		// Inject a frame — this triggers the onFrame handler which polls getEvents
 		lastSocket!._emitMessage(buildFrame("#invalidate", { nsid: "x" }));
 
+		// Wait for the async onFrame handler to complete
+		await Promise.resolve();
+		await Promise.resolve();
+
 		// The callback should be called once with the decoded event and meta.
-		// This assertion will FAIL because the current implementation never
-		// invokes the callback.
 		expect(callback).toHaveBeenCalledTimes(1);
+		expect(callback).toHaveBeenCalledWith(event, {
+			spaceDid: SPACE_DID,
+			isBackfill: false,
+			userDid: "did:web:test-user",
+		});
 	});
 
-	/**
-	 * Inject a frame with multiple events and assert the callback is called
-	 * once per event.
-	 *
-	 * EXPECTED TO FAIL for the same reason as test 1.
-	 */
 	test("callback invoked once per decoded event", async () => {
 		const callback = vi.fn() as unknown as RoomyEventCallback;
+		const event1 = makeEvent();
+		const event2 = makeEvent();
+		const payload1 = encodeEventPayload(event1);
+		const payload2 = encodeEventPayload(event2);
+
+		// Mock query to return one event per call, advancing cursor.
+		let callCount = 0;
+		mockXrpc.query = vi.fn().mockImplementation(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					events: [{ idx: 1, user: "did:web:user-a", payload: { $bytes: payload1 } }],
+					cursor: 1,
+				});
+			}
+			return Promise.resolve({
+				events: [{ idx: 2, user: "did:web:user-b", payload: { $bytes: payload2 } }],
+				cursor: 2,
+			});
+		});
 
 		const subPromise = gateway.subscribe(SPACE_DID, callback);
 		await Promise.resolve();
@@ -271,20 +301,36 @@ describe("LiveRoomyGateway", () => {
 		lastSocket!._emitMessage(buildFrame("#invalidate", { nsid: "a" }));
 		lastSocket!._emitMessage(buildFrame("#invalidate", { nsid: "b" }));
 
-		// This assertion will FAIL — callback is never called.
+		// Wait for both async onFrame handlers to complete
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
 		expect(callback).toHaveBeenCalledTimes(2);
+		expect(callback).toHaveBeenNthCalledWith(1, event1, {
+			spaceDid: SPACE_DID,
+			isBackfill: false,
+			userDid: "did:web:user-a",
+		});
+		expect(callback).toHaveBeenNthCalledWith(2, event2, {
+			spaceDid: SPACE_DID,
+			isBackfill: false,
+			userDid: "did:web:user-b",
+		});
 	});
 
 	/**
 	 * Inject a frame that carries no event (e.g. a heartbeat) and assert the
 	 * callback is NOT invoked.
-	 *
-	 * This test should pass even with the current implementation because the
-	 * callback is never called regardless. Once the callback is wired up, this
-	 * test guards against accidentally invoking the callback for non-event frames.
 	 */
 	test("frames with no event don't invoke callback", async () => {
 		const callback = vi.fn() as unknown as RoomyEventCallback;
+
+		// Mock query to return empty events array.
+		mockXrpc.query = vi.fn().mockResolvedValue({
+			events: [],
+			cursor: 0,
+		});
 
 		const subPromise = gateway.subscribe(SPACE_DID, callback);
 		await Promise.resolve();
@@ -294,6 +340,10 @@ describe("LiveRoomyGateway", () => {
 
 		// Inject a heartbeat frame (no event payload)
 		lastSocket!._emitMessage(buildFrame("#heartbeat", {}));
+
+		// Wait for the async onFrame handler
+		await Promise.resolve();
+		await Promise.resolve();
 
 		expect(callback).not.toHaveBeenCalled();
 	});

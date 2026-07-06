@@ -5,6 +5,7 @@
  * Subscriptions use the SDK's SyncConnection for WebSocket-based sync.
  */
 
+import { decode, fromBytes } from "@atcute/cbor";
 import { type Event, sync, transport } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
 import { createLogger } from "../logger.ts";
@@ -58,6 +59,9 @@ export class LiveRoomyGateway implements RoomyGateway {
 		// space history on every restart.
 		const cursor = this.#repo.getSpaceCursor(spaceDid);
 
+		// Track cursor as a mutable variable so it advances with each poll.
+		let currentCursor = cursor;
+
 		const connection = new sync.SyncConnection({
 			fetchTicket: async () => {
 				const { ticket } = await this.#xrpc.procedure("space.roomy.auth.getConnectionTicket", {});
@@ -68,25 +72,59 @@ export class LiveRoomyGateway implements RoomyGateway {
 
 		connection.subscribe({ kind: "space", id: spaceDid });
 
-		// NOTE: SyncConnection.subscribe() does not accept a start cursor/idx.
-		// The cursor is persisted on each received frame below so that on
-		// restart we at least know how far we got, but the sync system always
-		// starts from the current state (no historical backfill via cursor).
-		// Full backfill is handled separately by the backfill service.
-
-		connection.onFrame((frame: sync.SyncFrame) => {
+		connection.onFrame(async (_frame: sync.SyncFrame) => {
 			// The appserver sync system sends invalidation signals
-			// (#messageDiff / #invalidate), not raw events. We persist the
-			// cursor for restart resume and log the frame for diagnostics.
-			// Raw event delivery is handled by the sendEvents XRPC path;
-			// the bridge receives events from Discord and sends them to Roomy.
-			// Roomy→Discord event routing uses the persisted cursor to know
-			// where we left off.
-			log.info(`Received frame for ${spaceDid}: ${frame.header.t}`);
+			// (#messageDiff / #invalidate), not raw events. When any frame
+			// arrives, poll the getEvents endpoint for new events since our
+			// last-seen cursor.
+			try {
+				const params: Record<string, string> = { streamDid: spaceDid };
+				if (currentCursor !== undefined) {
+					params.cursor = String(currentCursor);
+				}
+				const result = await this.#xrpc.query(
+					"space.roomy.sync.getEvents",
+					params,
+				);
 
-			// Persist cursor so we can resume from this point on restart.
-			if (cursor !== undefined) {
-				this.#repo.setSpaceCursor(spaceDid, cursor + 1);
+				// Advance cursor first so a failing callback doesn't create a
+				// redelivery loop — the events are still in the DB and will be
+				// re-fetched on the next poll if the cursor didn't advance.
+				currentCursor = result.cursor;
+				this.#repo.setSpaceCursor(spaceDid, result.cursor);
+
+				for (const raw of result.events) {
+					// Decode the CBOR payload to a plain object.
+					// raw.payload is { $bytes: "base64string" } — convert to
+					// Uint8Array first, then decode the CBOR.
+					const payloadBytes = fromBytes(raw.payload);
+					const decoded = decode(payloadBytes);
+					// decoded is unknown; validate it's an object with $type
+					// before passing to the callback.
+					if (
+						decoded &&
+						typeof decoded === "object" &&
+						"$type" in decoded
+					) {
+						// Wrap each callback invocation so a single failing
+						// handler doesn't block the rest of the batch.
+						try {
+							await callback(decoded as Event, {
+								spaceDid,
+								isBackfill: false,
+								userDid: raw.user,
+							});
+						} catch (cbErr) {
+							log.error(
+								`Event callback failed for ${spaceDid} idx ${raw.idx}: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+							);
+						}
+					}
+				}
+			} catch (err) {
+				log.error(
+					`Failed to poll events for ${spaceDid}: ${err instanceof Error ? err.message : String(err)}`,
+				);
 			}
 		});
 
@@ -99,8 +137,8 @@ export class LiveRoomyGateway implements RoomyGateway {
 		this.#subscriptions.add(spaceDid);
 		log.info(
 			`Subscribed to events from ${spaceDid}` +
-				(cursor !== undefined
-					? ` (resuming from idx ${cursor + 1})`
+				(currentCursor !== undefined
+					? ` (resuming from idx ${currentCursor + 1})`
 					: " (full backfill)"),
 		);
 	}

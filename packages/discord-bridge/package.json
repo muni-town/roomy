@@ -22,6 +22,7 @@
 		"generate:fake-data:large": "bun run src/scripts/generate-fake-data.ts --channels 15 --threads 250"
 	},
 	"dependencies": {
+		"@atcute/cbor": "^2.2.8",
 		"@atproto/api": "^0.14.22",
 		"@discordeno/bot": "^21.0.0",
 		"@roomy-space/sdk": "workspace:*",
