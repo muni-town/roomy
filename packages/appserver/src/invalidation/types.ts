@@ -30,7 +30,8 @@ export type QueryNsid =
   | "space.roomy.room.getMetadata"
   | "space.roomy.room.getMessages"
   | "space.roomy.room.getThreads"
-  | "space.roomy.message.getMessage";
+  | "space.roomy.message.getMessage"
+  | "space.roomy.sync.getEvents"
 
 // ─── Signals ────────────────────────────────────────────────────────────
 

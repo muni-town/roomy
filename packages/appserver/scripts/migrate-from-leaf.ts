@@ -24,7 +24,7 @@ interface LeafEvent {
   signature: Uint8Array;
 }
 
-async function migrateStream(
+export async function migrateStream(
   eventsDb: Database,
   mainDb: Database,
   streamDid: string,
@@ -84,6 +84,61 @@ async function migrateStream(
   return { eventsMigrated: events.length, latestIdx };
 }
 
+export async function migrateDidKeys(
+  eventsDb: Database,
+  leafMainDbPath: string,
+  dryRun: boolean,
+): Promise<void> {
+  if (!existsSync(leafMainDbPath)) {
+    console.log(`\n[DID KEYS] Leaf main DB not found at ${leafMainDbPath} — skipping DID key migration`);
+    return;
+  }
+
+  const leafDb = new Database(leafMainDbPath, { readonly: true });
+
+  const didRows = leafDb.query("select did from dids").all() as { did: string }[];
+
+  if (dryRun) {
+    console.log(`\n[DID KEYS] Would migrate ${didRows.length} DIDs from ${leafMainDbPath}`);
+  } else {
+    let keyCount = 0;
+    let ownerCount = 0;
+
+    for (const { did } of didRows) {
+      eventsDb.run("insert or ignore into dids (did) values (?)", did);
+
+      const keyRow = leafDb
+        .query("select p256_key, k256_key from did_keys where did = ?")
+        .get(did) as { p256_key: Uint8Array | null; k256_key: Uint8Array | null } | undefined;
+      if (keyRow) {
+        eventsDb.run(
+          "insert or ignore into did_keys (did, p256_key, k256_key) values (?, ?, ?)",
+          did,
+          keyRow.p256_key,
+          keyRow.k256_key,
+        );
+        keyCount++;
+      }
+
+      const ownerRows = leafDb
+        .query("select owner from did_owners where did = ?")
+        .all(did) as { owner: string }[];
+      for (const { owner } of ownerRows) {
+        eventsDb.run(
+          "insert or ignore into did_owners (did, owner) values (?, ?)",
+          did,
+          owner,
+        );
+        ownerCount++;
+      }
+    }
+
+    console.log(`Migrated ${keyCount} DID keys, ${ownerCount} owners`);
+  }
+
+  leafDb.close();
+}
+
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
   const leafDataDir = process.env.LEAF_DATA_DIR ?? "data/streams";
@@ -124,53 +179,7 @@ async function main() {
   // ─── DID key migration ──────────────────────────────────────────────
   // Copy dids, did_keys, and did_owners from Leaf's main DB into the
   // events DB so per-stream signing keys are available for PLC operations.
-  if (existsSync(leafMainDb)) {
-    const leafDb = new Database(leafMainDb, { readonly: true });
-
-    const didRows = leafDb.query("select did from dids").all() as { did: string }[];
-
-    if (dryRun) {
-      console.log(`\n[DID KEYS] Would migrate ${didRows.length} DIDs from ${leafMainDb}`);
-    } else {
-      let keyCount = 0;
-      let ownerCount = 0;
-
-      for (const { did } of didRows) {
-        eventsDb.run("insert or ignore into dids (did) values (?)", did);
-
-        const keyRow = leafDb
-          .query("select p256_key, k256_key from did_keys where did = ?")
-          .get() as { p256_key: Uint8Array | null; k256_key: Uint8Array | null } | undefined;
-        if (keyRow) {
-          eventsDb.run(
-            "insert or ignore into did_keys (did, p256_key, k256_key) values (?, ?, ?)",
-            did,
-            keyRow.p256_key,
-            keyRow.k256_key,
-          );
-          keyCount++;
-        }
-
-        const ownerRows = leafDb
-          .query("select owner from did_owners where did = ?")
-          .all() as { owner: string }[];
-        for (const { owner } of ownerRows) {
-          eventsDb.run(
-            "insert or ignore into did_owners (did, owner) values (?, ?)",
-            did,
-            owner,
-          );
-          ownerCount++;
-        }
-      }
-
-      console.log(`Migrated ${keyCount} DID keys, ${ownerCount} owners`);
-    }
-
-    leafDb.close();
-  } else {
-    console.log(`\n[DID KEYS] Leaf main DB not found at ${leafMainDb} — skipping DID key migration`);
-  }
+  await migrateDidKeys(eventsDb, leafMainDb, dryRun);
 
   if (!dryRun) {
     mainDb.run(
@@ -187,4 +196,6 @@ async function main() {
   mainDb.close();
 }
 
-main().catch(console.error);
+if (import.meta.main) {
+  main().catch(console.error);
+}
