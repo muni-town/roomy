@@ -1,3 +1,106 @@
+# Leaf Consolidation Plan
+
+> **Status (2026-07-06):** Phases 1–4 are implemented in code. This plan was
+> written *before* implementation and several sections no longer match what
+> shipped. The deviations are called out inline under each phase, and a gap
+> analysis follows. **Read the "Testing Requirements (Write First)" section
+> before any further work** — four test files are missing and one of them
+> guards a production-breaking regression.
+
+---
+
+## Testing Requirements (Write First)
+
+Before any further feature work, the following tests must be written. They
+cover gaps that the current suite cannot detect. Three of the four are
+**promised by this plan's own Test Strategy but never written**; the fourth
+guards a regression that every existing test passes right now because it
+exercises the wrong code path.
+
+### 1. `packages/appserver/src/streams/did.test.ts` (NEW — Phase 1)
+The plan's Phase 1 Test Strategy lists this file; it does not exist.
+`StreamManager.test.ts` exists and covers `sendEvents`/`createStream`, but DID
+creation and per-stream key storage are untested in isolation.
+
+Assert:
+- `createStreamDid()` under the **did:web path** (`APPSERVER_USE_DID_WEB=true`
+  or `PLC_DIRECTORY_URL` unset) returns a `did:web:<host>` and makes **no** HTTP
+  call (stub/observe `fetch`).
+- The did:web DID is stored via `keys.ts`: `dids`, `did_keys.k256_key`, and
+  `did_owners` rows exist after creation.
+- **Key roundtrip:** `getStreamSigningKey()` reconstructs a `Secp256k1Keypair`
+  whose `.did()` equals the one used at creation; `listStreamOwners()` returns
+  the admin DID.
+- **Idempotency:** `storeStreamKey()` re-called for the same DID is a no-op
+  (`INSERT OR IGNORE`).
+- **PLC path** (`PLC_DIRECTORY_URL` set): `createOp` + `fetch` are invoked with
+  the per-stream key as both `signingKey` and the sole `rotationKey`; on a
+  non-2xx response the function throws (do not hit the real directory — stub `fetch`).
+- Generated DIDs are unique across two `createStreamDid` calls (fresh keypairs).
+
+### 2. `packages/appserver/scripts/__tests__/migrate-from-leaf.test.ts` (NEW — Phase 3)
+The plan's Phase 3 Test Strategy lists this file; it does not exist. The
+migration script is the one-shot, irreversible data move — it must be proven
+idempotent before it ever runs against production Leaf data.
+
+Build mock Leaf DBs with `bun:sqlite` (the script reads `data/streams/{did}/stream.db` + `leaf.db`):
+- Create a stream DB with 3 known events (varying idx, payload, signature); run
+  the script and assert all 3 rows land in `stream_events` with `stream_state.latest_event` set.
+- Create a `leaf.db` with `dids`/`did_keys`/`did_owners` rows; assert they copy
+  into the events DB and the k256 private key bytes are byte-identical.
+- **Idempotency:** re-run the script; event counts and key rows are unchanged
+  (`INSERT OR IGNORE`), and `stream_state` is not duplicated.
+- **Dry-run** (`--dry-run`): no writes occur to either appserver DB.
+- **Empty stream DB** (no events): returns `{eventsMigrated:0}`, no error.
+- **Missing `leaf.db`:** the DID-key step is skipped (warning logged), event
+  migration still completes.
+- `comp_space.backfilled_to` is updated per stream in the main DB, and
+  `roomy_schema_version.version` is set to `"MIGRATION_PENDING"`.
+
+### 3. `packages/appserver/src/handlers/space.roomy.space.sendEvents.test.ts` (NEW — Phase 1)
+The plan's Phase 1 Test Strategy says "create if not exists"; it does not exist.
+Handler-level coverage of the direct-ingestion path (auth → `StreamManager.sendEvents`).
+
+Assert (via `createAppserver` test harness with test-mode auth):
+- Valid events land in `events.stream_events` **and** are materialized (e.g. a
+  `createMessage` produces a queryable row), with an invalidation signal emitted.
+- **Auth:** unauthenticated request → 401; a caller without space access → 403.
+- **Batch limits:** >50 events → 400; empty array → 400; malformed event → 400.
+- `idx` values are sequential across two back-to-back calls on the same stream.
+
+### 4. `packages/discord-bridge/src/roomy/live-gateway.test.ts` (NEW — the gap-revealer)
+**This is the most important test.** It does not exist and there is no test for
+`LiveRoomyGateway` at all. It must exercise the **live** gateway, not
+`MockRoomyGateway` (which is what every existing bridge test uses — and is why
+the bug below ships green).
+
+Assert the contract that `RoomyGateway.subscribe` promises but `LiveRoomyGateway`
+currently breaks:
+- Inject a sync frame into a `SyncConnection` (fake/in-process transport — do
+  not require a live appserver) and assert the `RoomyEventCallback` passed to
+  `subscribe()` **is invoked** with a decoded `Event` and `{spaceDid, userDid, isBackfill}`.
+- Assert the callback is invoked once per decoded event, and not at all for
+  frames that carry no event.
+
+**This test is expected to FAIL against the current implementation** (the
+callback is never called — see the Phase 4 `live-gateway.ts` open task). A
+failing test here is the correct outcome: it pins the regression so the fix in
+#4 of that task can be verified. Do not stub around it.
+
+### 5. (Bonus, recommended) `streams/reMaterialize.test.ts` — idempotent re-apply
+Because re-materialization now runs on **every** boot (not only after a wipe —
+see Phase 3 `index.ts` deviation), assert that re-running `applyBatch` over an
+already-current stream is a no-op: materialized row counts and key columns are
+unchanged after a second pass. This guards the whole class of
+non-idempotent-materialiser regressions (cf. the `.10-appserver.4` changelog).
+
+### Test-writing order
+1 → 2 → 3 are independent of each other; 4 is the gate for shipping Phase 4 to
+production. Write 4 first if scope is constrained — it is the only one that
+blocks a production feature.
+
+---
+
 
 ## Phase 1: Events Database + Local Stream Creation + Direct Ingestion
 
@@ -55,14 +158,17 @@ export class StreamManager {
 8. Call `pokeEmbedSweeper()` for createMessage events
 
 **`createStream()` implementation:**
-1. Call `createStreamDid(appserverDid, appserverUrl, signingKey)` to register a new DID PLC
+1. Call `createStreamDid(appserverUrl, adminDid, db)` — generates a per-stream keypair, registers a DID PLC (or did:web fallback), and stores the key via `keys.ts`
 2. Insert space entity row: `INSERT INTO entities (id, stream_id) VALUES (?, ?)`
 3. Write addAdmin event to events.stream_events
 4. Call `sendEvents()` with the seed events from `createDefaultSpaceEvents()`
 5. Return the new stream DID
 
 #### `packages/appserver/src/db/eventsSchema.sql` (NEW)
-Schema for the events database (never wiped, append-only):
+Schema for the events database (never wiped, append-only). In addition to the
+raw event log and per-stream state, it stores **per-stream DID signing keys**
+(mirroring Leaf's `dids` / `did_keys` / `did_owners` tables — see `did.ts`
+below for why keys are stored per-stream).
 ```sql
 -- Raw event log. One row per event per stream.
 -- NEVER delete or modify rows — this is the source of truth.
@@ -83,6 +189,31 @@ create table if not exists stream_state (
     stream_id text primary key,
     latest_event integer not null default 0
 ) strict;
+
+-- Per-stream DID signing keys, mirroring Leaf's did_keys/did_owners tables.
+-- Each stream gets its own k256 keypair (see did.ts). The k256_key blob holds
+-- the raw 32-byte secp256k1 private key; Secp256k1Keypair.export()/import()
+-- round-trip it. Migrated from Leaf's leaf.db for existing streams by the
+-- Phase 3 migration script.
+create table if not exists dids (
+    did text primary key
+) strict;
+
+create table if not exists did_keys (
+    did text references dids(did),
+    p256_key blob,
+    k256_key blob
+) strict;
+
+create table if not exists did_owners (
+    did text references dids(did),
+    owner text not null,
+    unique (did, owner)
+) strict;
+
+-- NOTE: dids/did_keys/did_owners currently have no secondary indexes. Lookups
+-- by `did` are FK-validated but full-scanned. Add indexes if DID-key lookups
+-- become hot (see Risk Register).
 ```
 
 ### Files to Modify
@@ -100,36 +231,45 @@ initOpts?: {
 ```
 
 #### `packages/appserver/src/streams/did.ts` (NEW)
-DID creation via PLC directory using `@did-plc/lib`:
+Stream DID creation. **Each stream gets its own fresh secp256k1 keypair — this
+matches Leaf's `create_did()` model, where every stream DID has a dedicated
+key used as both PLC rotation key and verification method.** This is deliberate
+and required, not the original "one appserver key" sketch below — see
+"Plan vs. Implementation" for why the design changed.
+
 ```typescript
 import { StreamDid } from "@roomy-space/sdk";
 import { createOp } from "@did-plc/lib";
-import type { Keypair } from "@atproto/crypto";
+import { Secp256k1Keypair } from "@atproto/crypto";
+import type { DbLike } from "../db/types.ts";
+import { storeStreamKey } from "./keys.ts";
 
 const PLC_DIRECTORY = process.env.PLC_DIRECTORY_URL ?? "https://plc.directory";
+const USE_DID_WEB = process.env.APPSERVER_USE_DID_WEB === "true";
 
-/**
- * Create a new DID PLC for a stream, registered with the PLC directory.
- * Mirrors Leaf's `create_did()` in `leaf-server/src/did.rs`.
- *
- * The signing key is the appserver's own key (initialized at startup).
- * The key is NOT stored per-stream — the appserver doesn't sign events
- * (Leaf's signatures were never used). The DID document includes a
- * service endpoint pointing at the appserver.
- */
 export async function createStreamDid(
-  appserverDid: string,
   appserverUrl: string,
-  signingKey: Keypair,
+  adminDid: string,
+  db: DbLike,
 ): Promise<StreamDid> {
+  // Fresh per-stream keypair (matches Leaf). exportable so it can be persisted.
+  const key = await Secp256k1Keypair.create({ exportable: true });
+
+  if (USE_DID_WEB || !process.env.PLC_DIRECTORY_URL) {
+    // did:web fallback for local/dev — no external PLC registration needed.
+    const host = new URL(appserverUrl).host;
+    const did = StreamDid.assert(`did:web:${host}`);
+    await storeStreamKey(db, did, key, adminDid);
+    return did;
+  }
+
   const { op, did } = await createOp({
-    signingKey: signingKey.did(),
+    signingKey: key.did(),
     handle: "",
     pds: appserverUrl,
-    rotationKeys: [signingKey.did()],
-    signer: signingKey,
+    rotationKeys: [key.did()],
+    signer: key,
   });
-
   const resp = await fetch(`${PLC_DIRECTORY}/${did}`, {
     method: "POST",
     body: JSON.stringify(op),
@@ -138,22 +278,46 @@ export async function createStreamDid(
   if (!resp.ok) {
     throw new Error(`PLC directory error: ${resp.status}: ${await resp.text()}`);
   }
-
+  await storeStreamKey(db, did, key, adminDid);
   return StreamDid.assert(did);
 }
 ```
 
-**Dependencies to add:** `@did-plc/lib` to `packages/appserver/package.json`. The appserver already depends on `@atproto/api` which transitively provides `@atproto/crypto` (needed for `Keypair`).
+**Why per-stream keys (design change from the original sketch):** Leaf creates a
+distinct key per stream DID. Matching this keeps the appserver's PLC documents
+structurally identical to Leaf's, so migrated and freshly-created streams are
+indistinguishable, and per-stream key rotation / service-endpoint updates work
+the same way they did under Leaf. A single shared appserver key was the earlier
+sketch ("the key is NOT stored per-stream") — that approach was abandoned.
 
-**Signing key initialization:** The appserver needs a signing key at startup. This should be loaded from env or generated once and cached:
+**did:web fallback:** When `APPSERVER_USE_DID_WEB=true` or `PLC_DIRECTORY_URL`
+is unset, `createStreamDid` returns a `did:web:<host>` DID instead of hitting
+the PLC directory, so local/dev space creation has no external dependency. The
+key is still stored for consistency.
+
+#### `packages/appserver/src/streams/keys.ts` (NEW)
+Per-stream key storage, mirroring Leaf's `dids` / `did_keys` / `did_owners`
+tables in the events DB. All inserts use `INSERT OR IGNORE` so re-runs are
+idempotent. `k256_key` holds the raw 32-byte secp256k1 private key.
+
 ```typescript
-// In appserver.ts or index.ts:
-import { EcdsaKeypair } from "@atproto/crypto";
-const signingKey = await EcdsaKeypair.create();
-```
-The key is used only for PLC DID creation (signing genesis operations). It is NOT used for event signing.
+export async function storeStreamKey(
+  db: DbLike, did: string, key: Secp256k1Keypair, owner: string,
+): Promise<void>;          // insert into dids, did_keys, did_owners
 
-**Risk:** PLC directory availability. If the PLC directory is unreachable when creating a stream, space creation fails. Mitigation: retry with backoff, or fall back to `did:web:` for local/dev environments.
+export async function getStreamSigningKey(
+  db: DbLike, did: string,
+): Promise<Secp256k1Keypair | null>;  // reconstruct from k256_key blob
+
+export async function listStreamOwners(
+  db: DbLike, did: string,
+): Promise<string[]>;
+```
+
+**Dependencies to add:** `@did-plc/lib` to `packages/appserver/package.json`.
+`@atproto/crypto` (providing `Secp256k1Keypair`) is already available transitively
+via `@atproto/api`. No appserver-wide signing key is needed at startup — keys are
+generated on demand per stream in `createStreamDid`.
 
 #### `packages/appserver/src/db/worker.ts`
 Add events DB handling alongside the existing `mainDb` and `readStateDb`:
@@ -404,6 +568,9 @@ One-time migration script:
 // 4. Sets stream_state.latest_event
 // 5. Updates comp_space.backfilled_to in the main DB
 // 6. Bumps SCHEMA_VERSION in the main DB to trigger re-materialization on next boot
+// 7. Copies per-stream DID signing keys (dids/did_keys/did_owners) from Leaf's
+//    leaf.db into the events DB, so migrated streams keep their PLC keys for
+//    rotation / service-endpoint updates. (Implemented; see note below.)
 
 interface LeafEvent {
   idx: number;
@@ -513,23 +680,44 @@ async function main() {
 main().catch(console.error);
 ```
 
+**DID-key migration (implemented, undocumented in the original sketch):** In
+addition to events, the real script copies `dids` / `did_keys` / `did_owners`
+from Leaf's main DB (`<parent of LEAF_DATA_DIR>/leaf.db`, override via
+`LEAF_MAIN_DB`) into the events DB, using `INSERT OR IGNORE` for idempotency.
+This preserves every stream's PLC signing key after Leaf decommissioning, so
+the appserver can rotate service endpoints / update handles for migrated
+streams exactly as Leaf did. If `LEAF_MAIN_DB` is absent the step is skipped
+with a warning (space creation still works — only rotation for *migrated*
+streams loses its key). **Verify before prod** that Leaf actually stores
+personal-stream DIDs alongside space DIDs in `leaf.db` (Risk Register #7).
+
 ### Files to Modify
 
 #### `packages/appserver/src/db/db.ts`
-Bump `SCHEMA_VERSION` from `"10-appserver.4"` to `"10-appserver.5"`:
+**As implemented, `SCHEMA_VERSION` is NOT bumped** — it stays at
+`"10-appserver.4"`. The original plan called for a bump to `"10-appserver.5"`
+to force a wipe, but the wipe is already guaranteed by a different mechanism:
+the migration script writes the sentinel `"MIGRATION_PENDING"` into
+`roomy_schema_version`, which matches no code version, so `worker.ts`'s
+`initializeSchema()` detects a mismatch and wipes the materialisation DB on
+next boot regardless of the code constant.
+
 ```typescript
-export const SCHEMA_VERSION = "10-appserver.5";
+// As shipped — unchanged from pre-migration:
+export const SCHEMA_VERSION = "10-appserver.4";
 ```
 
-This bump triggers full re-materialization from `events.stream_events` on next boot. The migration script sets the DB version to `"MIGRATION_PENDING"` which won't match `"10-appserver.5"`, so the appserver wipes the materialization DB and re-derives.
+**Caveat (gap):** the sentinel only fires for DBs that ran the migration
+script. A fresh deploy (or an env that never ran the script) at `.4` against a
+`.4` DB produces no mismatch → no wipe → relies entirely on
+`reMaterializeFromLocalEvents` running idempotently on every boot (see
+`index.ts` below and Risk Register). If a materialiser change ever needs a
+forced re-derive outside the migration path, bump the constant then.
 
-**Migration sequence:**
-1. Stop appserver
-2. Run migration script (copies events to events DB, sets main DB version to `MIGRATION_PENDING`)
-3. Start new appserver version (detects schema mismatch, wipes materialized views, re-materializes from events DB)
-
-#### `packages/appserver/src/index.ts`
-Add local re-materialization on boot after schema initialization:
+#### `packages/appserver/src/streams/reMaterialize.ts` (NEW) + wired from `index.ts`
+Local re-materialization lives in its own module (`streams/reMaterialize.ts`),
+not inline in `index.ts` as the original sketch showed. `index.ts` imports and
+invokes it once at boot:
 
 ```typescript
 async function reMaterializeFromLocalEvents(appDb: AsyncDatabase): Promise<void> {
@@ -557,7 +745,19 @@ async function reMaterializeFromLocalEvents(appDb: AsyncDatabase): Promise<void>
 }
 ```
 
-This runs after schema initialization but before the server starts accepting requests. It replaces the old Leaf-based startup backfill.
+**Deviation from this plan (gap — see Risk Register):** the implementation runs
+re-materialization **fire-and-forget, AFTER the server is already listening**,
+not "before the server starts accepting requests" as written above. `index.ts`
+calls `createAppserver()` (which opens `Bun.serve`), then kicks off
+`reMaterializeFromLocalEvents(db)` without `await`. Consequence: during boot,
+and for a window after any post-migration wipe, XRPC reads can return empty or
+partially-materialised state. The plan's original ordering existed to prevent
+exactly this. **To resolve:** either `await` re-materialization before
+`Bun.serve` returns, or document the tradeoff and confirm query handlers degrade
+gracefully mid-rebuild. Additionally, re-materialization now runs on **every**
+boot (not only after a wipe), which is only safe if every materialiser is
+idempotent on re-apply — the `.10-appserver.4` changelog exists precisely
+because `createRoomLink`/`forwardMessages` were *not* idempotent historically.
 
 ### Dependencies
 - Phase 1 and 2 must be complete (events DB exists, StreamManager works).
@@ -811,6 +1011,34 @@ async subscribe(spaceDid: string, callback: RoomyEventCallback): Promise<void> {
 }
 ```
 
+> **⚠️ OPEN TASK — Roomy→Discord routing is unimplemented (production-breaking).**
+> The `// Decode frame and invoke callback // ...` sketch above was never filled
+> in. In the shipped `live-gateway.ts`, `subscribe()` **accepts `callback` but
+> never invokes it** — `connection.onFrame(...)` only logs the frame and bumps a
+> persisted cursor. This is dead because the appserver sync protocol emits
+> **invalidation signals** (`#messageDiff` / `#invalidate`), not decoded events,
+> so there is nothing on the wire for `onFrame` to hand to the callback.
+>
+> **Impact:** `RoomyEventRouter.start()` subscribes to every bridged space with
+> a callback that drives the entire Roomy→Discord pipeline (`createMessage`→
+> Discord post, edits, deletes, reactions, room sync). In production
+> (`index.ts` wires `LiveRoomyGateway`), **none of that fires**. Discord→Roomy
+> works (that path is the `sendEvents` XRPC above); Roomy→Discord does not.
+>
+> **Why tests don't catch it:** every discord-bridge test uses
+> `MockRoomyGateway`, whose `subscribe()` *does* invoke the callback. The
+> regression is invisible to the suite. This is exactly Risk #4 — and it was
+> never resolved.
+>
+> **To close this gap (must be done before Phase 4 ships):**
+> 1. Decide the transport: either the appserver sync protocol must carry decoded
+>    events (not just invalidation signals), OR the bridge needs a
+>    `getEvents`-by-cursor backfill/poll loop to drive `#handleEvent`.
+> 2. Implement frame→event decoding (or the poll loop) and **call `callback`**.
+> 3. Write a `LiveRoomyGateway` test that injects a frame and asserts the
+>    callback fires — see "Testing Requirements (Write First)" below. This test
+>    must NOT use `MockRoomyGateway`; it must exercise the live gateway.
+
 ##### `packages/discord-bridge/src/roomy/client.ts`
 Remove `ConnectedSpace` and `modules` imports. The `RoomyClient` initialization no longer needs Leaf config.
 
@@ -998,6 +1226,11 @@ This runs after schema initialization but before the server starts accepting req
 | 8 | **Event idx gaps after migration** | Low | Medium | Leaf assigns sequential idx per stream. The migration script reads events ORDER BY idx, so gaps (if any) are preserved. The materialization pipeline handles gaps gracefully. |
 | 9 | **Embed enrichment backlog after re-materialization** | Low | Low | Re-materialization re-creates all `comp_embed_link` rows. The embed sweeper will process them all, which could take time. The sweeper has backpressure and prioritization. |
 | 10 | **In-memory state lost on appserver restart** | Low | Low | The appserver is stateless (all state is in SQLite). Restart is safe. The only in-memory state is the invalidation router's listener set, which is re-established on WebSocket connect. |
+| 11 | **Roomy→Discord routing broken in production** | **Certain** | **Critical** | `LiveRoomyGateway.subscribe()` accepts but never invokes its callback; the appserver sync wire carries invalidation signals, not decoded events. Every existing test uses `MockRoomyGateway` so this ships green. **Mitigation:** implement frame→event decode (or a getEvents poll loop), call the callback, and gate on `live-gateway.test.ts` (test #4). |
+| 12 | **Re-materialization runs fire-and-forget after server is listening** | Medium | High | `index.ts` does not `await` `reMaterializeFromLocalEvents` before `Bun.serve` accepts traffic, contrary to this plan. After a post-migration wipe, reads can return empty/partial state during boot. **Mitigation:** await before serving, or prove handlers degrade gracefully mid-rebuild. |
+| 13 | **Non-idempotent materializers drift on every-boot re-apply** | Medium | High | Re-materialization now runs on every boot (not just after a wipe). If any materializer is not idempotent, repeated re-apply corrupts state — the `.10-appserver.4` changelog exists because `createRoomLink`/`forwardMessages` weren't. **Mitigation:** `reMaterialize.test.ts` asserting whole-stream re-apply is a no-op. |
+| 14 | **DID-key tables (`dids`/`did_keys`/`did_owners`) have no indexes** | Low | Low | Lookups by `did` are FK-validated but full-scanned. Acceptable at current scale; add a secondary index on `did_keys(did)` / `did_owners(did)` if DID-key lookups become hot. |
+| 15 | **Migration assumes Leaf layout for personal streams** | Medium | High | The script iterates `data/streams/{did}/stream.db` uniformly. Risk #7 flagged personal streams; **verify before prod** that Leaf stores personal-stream DIDs and their keys under the same layout as space streams, and that `leaf.db` holds personal-stream keys too. |
 
 ---
 
@@ -1008,6 +1241,7 @@ This runs after schema initialization but before the server starts accepting req
 |--------|------|
 | CREATE | `packages/appserver/src/streams/StreamManager.ts` |
 | CREATE | `packages/appserver/src/streams/did.ts` |
+| CREATE | `packages/appserver/src/streams/keys.ts` (per-stream DID key storage) |
 | CREATE | `packages/appserver/src/db/eventsSchema.sql` |
 | MODIFY | `packages/appserver/src/db/types.ts` (add eventsDbPath to initOpts) |
 | MODIFY | `packages/appserver/src/db/worker.ts` (add events DB init + ATTACH) |
@@ -1029,9 +1263,10 @@ This runs after schema initialization but before the server starts accepting req
 ### Phase 3
 | Action | File |
 |--------|------|
-| CREATE | `packages/appserver/scripts/migrate-from-leaf.ts` |
-| MODIFY | `packages/appserver/src/db/db.ts` (bump SCHEMA_VERSION) |
-| MODIFY | `packages/appserver/src/index.ts` (add local re-materialization) |
+| CREATE | `packages/appserver/scripts/migrate-from-leaf.ts` (events + DID-key copy) |
+| CREATE | `packages/appserver/src/streams/reMaterialize.ts` (local re-materialization module) |
+| MODIFY | `packages/appserver/src/db/db.ts` (SCHEMA_VERSION **not** bumped — sentinel `"MIGRATION_PENDING"` triggers the wipe; see phase text) |
+| MODIFY | `packages/appserver/src/index.ts` (invoke `reMaterializeFromLocalEvents` on boot — fire-and-forget, deviation noted) |
 
 ### Phase 4
 | Action | File |
@@ -1059,6 +1294,15 @@ This runs after schema initialization but before the server starts accepting req
 | MODIFY | `packages/appserver/src/e2e/helpers.ts` |
 | MODIFY | `packages/appserver/package.json` |
 | MODIFY | `packages/discord-bridge/src/roomy/space-manager.ts` |
-| MODIFY | `packages/discord-bridge/src/roomy/live-gateway.ts` |
+| MODIFY | `packages/discord-bridge/src/roomy/live-gateway.ts` ⚠️ **OPEN TASK: `subscribe()` never invokes its callback — Roomy→Discord routing is broken in production. See phase text + test #4.** |
 | MODIFY | `packages/discord-bridge/src/roomy/client.ts` |
 | MODIFY | `packages/discord-bridge/package.json` |
+
+### Test files (Write First — see "Testing Requirements" section)
+| Status | File | Guards |
+--------|------|--------|
+| MISSING | `packages/appserver/src/streams/did.test.ts` | DID creation + per-stream key storage |
+| MISSING | `packages/appserver/scripts/__tests__/migrate-from-leaf.test.ts` | One-shot migration idempotency + DID-key copy |
+| MISSING | `packages/appserver/src/handlers/space.roomy.space.sendEvents.test.ts` | Direct-ingestion handler (auth, batch limits) |
+| MISSING | `packages/discord-bridge/src/roomy/live-gateway.test.ts` | **Production-breaking: callback never invoked** |
+| RECOMMENDED | `packages/appserver/src/streams/reMaterialize.test.ts` | Idempotent re-apply on every boot |
