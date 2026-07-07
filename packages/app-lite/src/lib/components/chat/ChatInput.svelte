@@ -1,11 +1,11 @@
 <script module lang="ts">
-  let editor: Editor;
+  let editor: Editor | undefined;
   export function setInputFocus() {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     editor.commands.focus();
   }
   export function clearInput() {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     editor.commands.clearContent();
   }
 </script>
@@ -105,6 +105,10 @@
 
   onDestroy(() => {
     tiptap?.destroy();
+    // Reset the shared module-level binding so deferred setInputFocus/clearInput
+    // calls (e.g. from messagingState.setNormal() in a route $effect) don't
+    // land on a destroyed editor whose commandManager is null.
+    editor = undefined;
   });
 
   const handlePaste = (event: ClipboardEvent) => {
