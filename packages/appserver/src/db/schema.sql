@@ -345,3 +345,15 @@ create index if not exists idx_activity_item_space
 
 create index if not exists idx_activity_item_global
   on activity_item(last_activity_at desc);
+
+-- Per-stream materialization cursor. Tracks the highest event idx that has
+-- been applied to the materialized views for each stream. Written by
+-- applyBatch after each batch; read by reMaterializeFromLocalEvents on boot to
+-- skip streams that are already fully materialized. Lives in the materialized
+-- DB so it is automatically wiped on a schema-version bump (which triggers a
+-- full re-materialization from the event log). Purely additive — created via
+-- `create table if not exists` on existing DBs, no SCHEMA_VERSION bump needed.
+create table if not exists materialization_cursor (
+  stream_id text primary key,
+  materialized_to integer not null default -1
+) strict;

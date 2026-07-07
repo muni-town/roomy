@@ -18,11 +18,12 @@ import { openDb } from "./db/db.ts";
 const app: AppserverHandle = await createAppserver();
 
 // ─── Re-materialize from local events DB ─────────────────────────────────
-// After the server is listening, replay all events from the local events DB
-// to rebuild the materialized views. This runs on every boot — it's fast
-// when the materialized DB is already current (the events are already
-// applied, so applyBatch is a no-op for most events), and it catches up
-// after a schema version wipe or Leaf migration.
+// Replay un-materialized events from the local events DB to bring the
+// materialized views up to date. The `materialization_cursor` table tracks
+// how far each stream has been materialized; streams that are already caught
+// up are skipped entirely (no event reads, no materialization). A full
+// replay only happens after a schema-version wipe (which empties the cursor
+// table). On a normal restart the cursors are current, so this is cheap.
 //
 // Re-materialization is intentionally fire-and-forget: the server is already
 // accepting requests, and materialized data is available immediately for

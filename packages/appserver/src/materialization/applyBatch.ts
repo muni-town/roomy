@@ -175,7 +175,16 @@ export async function applyBatch(
       }
     }
 
-    // Run this chunk in a single transaction
+    // Compute the max idx for this chunk — used to advance the cursor after
+    // the chunk is processed (whether it succeeded or failed).
+    let chunkMaxIdx: StreamIndex = 0 as StreamIndex;
+    for (const e of chunk) {
+      if (e.idx > chunkMaxIdx) chunkMaxIdx = e.idx;
+    }
+
+    // Run this chunk in a single transaction (event SQL only — the cursor
+    // is advanced separately below so it also advances past chunks with
+    // apply errors, preventing infinite retry loops on every boot).
     if (chunkSteps.length > 0) {
       try {
         await db.transaction(chunkSteps);
@@ -193,6 +202,24 @@ export async function applyBatch(
         }
       }
     }
+
+    // Advance the materialization cursor for this chunk. This is a SEPARATE
+    // transaction from the chunk's event SQL, so it advances even when the
+    // chunk had apply errors. Without this, streams with 100% apply errors
+    // would never advance the cursor and would be fully replayed on every
+    // boot — an infinite retry loop. The materializer output is idempotent
+    // (upserts), so if a crash happens between the chunk commit and this
+    // cursor update, the chunk is replayed on restart but produces the same
+    // result — harmless.
+    await db.run(
+      `insert into materialization_cursor (stream_id, materialized_to)
+       values (?, ?)
+       on conflict (stream_id) do update set materialized_to = excluded.materialized_to
+       where materialization_cursor.materialized_to < excluded.materialized_to`,
+      streamId,
+      chunkMaxIdx,
+    );
+
     // Post-transaction side-effects for this chunk: activity_item upsert and
     // link detection. These need JS logic so they can't be inlined as SQL
     // steps. Running them per-chunk keeps them interleaved with progress
@@ -200,16 +227,21 @@ export async function applyBatch(
     await applyChunkSideEffects(db, chunk, streamId, opts.isBackfill, stats.detectedLinks);
   }
 
-  // Advance cursor
-  await db.transaction([{
-    type: "run",
-    sql: `update comp_space
+  // Advance the legacy comp_space.backfilled_to cursor. The authoritative
+  // materialization_cursor is now advanced per-chunk (above), so it already
+  // reflects progress. This legacy cursor is kept for backwards compatibility
+  // and only exists for streams that have a comp_space row.
+  await db.transaction([
+    {
+      type: "run",
+      sql: `update comp_space
            set backfilled_to = ?,
                updated_at = (unixepoch() * 1000)
            where entity = ?
              and (backfilled_to is null or backfilled_to < ?)`,
-    params: [latestIdx, streamId, latestIdx],
-  }]);
+      params: [latestIdx, streamId, latestIdx],
+    },
+  ]);
 
   return stats;
 }

@@ -1,12 +1,16 @@
 /**
- * Re-materialize all streams from the local events DB.
+ * Re-materialize streams from the local events DB, skipping streams that are
+ * already fully materialized.
  *
- * Reads every stream's events from `events.stream_events` and feeds them
- * through `applyBatch` to rebuild the materialized views. Called on boot
- * after a schema version wipe, or after running the Leaf migration script.
+ * Uses the `materialization_cursor` table to determine which streams need
+ * replay: for each stream with events, compares the cursor's `materialized_to`
+ * against the latest event idx in `events.stream_events`. Streams that are
+ * already caught up are skipped; the rest are replayed from `cursor + 1`.
  *
- * This replaces the old Leaf-based startup backfill — instead of subscribing
- * to Leaf for each stream, we replay the local event log.
+ * After a schema-version wipe the cursor table is empty (all cursors default
+ * to -1), so every stream is fully replayed. After a clean restart the
+ * cursors are current and nothing is replayed. After a crash mid-sendEvents
+ * only the un-materialized gap is replayed.
  */
 
 import { decode } from "@atcute/cbor";
@@ -22,12 +26,13 @@ interface RawEvent {
 }
 
 /**
- * Re-materialize every stream that has events in the local events DB.
+ * Re-materialize streams that have un-materialized events in the local events DB.
  *
  * Streams are processed sequentially (one at a time) to keep memory bounded.
- * Within a stream, events are batched — the entire stream's events are read
- * and materialized in one `applyBatch` call, which is the fastest path for
- * a full re-materialization.
+ * Within a stream, the un-materialized events are batched — read in one query
+ * and materialized in one `applyBatch` call, which is the fastest path for a
+ * replay. Streams whose cursor is already at the latest event idx are skipped
+ * entirely (no event reads, no materialization).
  *
  * Logs progress at info level. Errors for individual streams are logged but
  * do not abort the overall process — a failed stream will be re-materialized
@@ -43,22 +48,70 @@ export async function reMaterializeFromLocalEvents(db: DbLike): Promise<void> {
     return;
   }
 
-  log.info("startup", `re-materializing ${streams.length} streams from local events DB`);
+  // Read the materialization cursor for all streams in one query. Streams
+  // without a cursor row (e.g. after a schema-version wipe, or first boot)
+  // default to -1, meaning "nothing materialized yet — replay everything".
+  const cursors = new Map<string, number>();
+  const cursorRows = await db
+    .query("SELECT stream_id, materialized_to FROM materialization_cursor")
+    .all<{ stream_id: string; materialized_to: number }>();
+  for (const row of cursorRows) {
+    cursors.set(row.stream_id, row.materialized_to);
+  }
+
+  // Partition streams: those already fully materialized (cursor >= latest
+  // event idx in the events DB) are skipped; the rest get replayed from
+  // cursor + 1.
+  let skipped = 0;
+  const toReplay: Array<{ streamId: string; fromIdx: number }> = [];
+
+  for (const { stream_id } of streams) {
+    const materializedTo = cursors.get(stream_id) ?? -1;
+
+    // Check the latest event idx for this stream in the events DB.
+    const latestRow = await db
+      .query(
+        "SELECT coalesce(max(idx), -1) AS latest FROM events.stream_events WHERE stream_id = ?",
+      )
+      .get<{ latest: number }>(stream_id);
+    const latest = latestRow?.latest ?? -1;
+
+    if (materializedTo >= latest) {
+      skipped++;
+      continue;
+    }
+
+    toReplay.push({ streamId: stream_id, fromIdx: materializedTo + 1 });
+  }
+
+  if (toReplay.length === 0) {
+    log.info(
+      "startup",
+      `re-materialization: all ${skipped} streams already up to date, nothing to replay`,
+    );
+    return;
+  }
+
+  log.info(
+    "startup",
+    `re-materializing ${toReplay.length} streams from local events DB (${skipped} already up to date)`,
+  );
 
   let succeeded = 0;
   let failed = 0;
 
-  for (const { stream_id } of streams) {
-    const streamDid = stream_id as StreamDid;
-
+  for (const { streamId: streamDid, fromIdx } of toReplay) {
     try {
       const rawEvents = await db
         .query(
-          "SELECT idx, user, payload FROM events.stream_events WHERE stream_id = ? ORDER BY idx",
+          "SELECT idx, user, payload FROM events.stream_events WHERE stream_id = ? AND idx >= ? ORDER BY idx",
         )
-        .all<RawEvent>(streamDid);
+        .all<RawEvent>(streamDid, fromIdx);
 
-      if (rawEvents.length === 0) continue;
+      if (rawEvents.length === 0) {
+        succeeded++;
+        continue;
+      }
 
       const decodedEvents: DecodedStreamEvent[] = rawEvents.map(
         (e): DecodedStreamEvent => ({
@@ -68,14 +121,14 @@ export async function reMaterializeFromLocalEvents(db: DbLike): Promise<void> {
         }),
       );
 
-
-      const stats = await applyBatch(db, streamDid, decodedEvents, {
+      const stats = await applyBatch(db, streamDid as StreamDid, decodedEvents, {
         isBackfill: true,
       });
 
       succeeded++;
-      const pct = Math.round((succeeded / streams.length) * 100);
-      const progress = `[${succeeded}/${streams.length} ${pct}%]`;
+      const total = toReplay.length;
+      const pct = Math.round((succeeded / total) * 100);
+      const progress = `[${succeeded}/${total} ${pct}%]`;
 
       if (stats.materializerErrors > 0 || stats.applyErrors > 0) {
         log.warn(
