@@ -30,17 +30,11 @@ export async function setMessageSortIdxByTimestamp(db: DbLike, event: Event): Pr
     ? Number(overrideExt.timestamp)
     : decodeTime(event.id);
 
-  const existing = await db
-    .query("select sort_idx from entities where id = ?")
-    .get<{ sort_idx: string | null }>(event.id);
-
-  if (!existing || existing.sort_idx) return;
-
   const sortIdx = ulid(timestamp);
-  await (await db.prepare("update entities set sort_idx = ? where id = ?")).run(
-    sortIdx,
-    event.id,
-  );
+  // No SELECT needed: the entity was just created by ensureEntity in the same
+  // savepoint with sort_idx = NULL. If the row is missing or sort_idx is
+  // already set, this UPDATE is a no-op.
+  await db.run("update entities set sort_idx = ? where id = ? and sort_idx is null", sortIdx, event.id);
 }
 
 /**
@@ -75,10 +69,7 @@ export async function setMessageSortIdxByForward(db: DbLike, event: Event): Prom
 
   if (!orig || !orig.sort_idx) return;
 
-  await (await db.prepare("update entities set sort_idx = ? where id = ?")).run(
-    orig.sort_idx,
-    event.id,
-  );
+  await db.run("update entities set sort_idx = ? where id = ?", orig.sort_idx, event.id);
 }
 
 /**
@@ -149,10 +140,7 @@ export async function setMessageSortIdxByReorder(
     return;
   }
 
-  await (await db.prepare("update entities set sort_idx = ? where id = ?")).run(
-    sortIdx,
-    messageId,
-  );
+  await db.run("update entities set sort_idx = ? where id = ?", sortIdx, messageId);
 }
 
 /**

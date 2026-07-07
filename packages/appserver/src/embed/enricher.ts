@@ -403,12 +403,11 @@ export async function detectAndStoreLinks(
     );
     // Insert into comp_embed_link if not already present. Track newly-inserted
     // rows (changes > 0) so only genuinely-new links get prioritised.
-    const res = await (
-      await db.prepare(
-        `insert or ignore into comp_embed_link (entity, show_preview, created_at, updated_at)
-         values (?, 1, (unixepoch() * 1000), (unixepoch() * 1000))`,
-      )
-    ).run([url]);
+    const res = await db.run(
+      `insert or ignore into comp_embed_link (entity, show_preview, created_at, updated_at)
+       values (?, 1, (unixepoch() * 1000), (unixepoch() * 1000))`,
+      [url],
+    );
     if (res.changes > 0) detected.push(url);
   }
   return detected;

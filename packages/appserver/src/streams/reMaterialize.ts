@@ -68,6 +68,7 @@ export async function reMaterializeFromLocalEvents(db: DbLike): Promise<void> {
         }),
       );
 
+
       const stats = await applyBatch(db, streamDid, decodedEvents, {
         isBackfill: true,
       });

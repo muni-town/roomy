@@ -39,6 +39,18 @@ export async function applyBundle(
   const savepoint = `evt_${bundle.event.id.replace(/[^a-zA-Z0-9]/g, "")}`;
   await db.exec(`savepoint ${savepoint}`);
 
+  // Per-batch cache: isThread result is stable per room, avoid re-querying
+  // for every message in the same room within a batch.
+  const isThreadCache = new Map<string, boolean>();
+  const cachedIsThread = async (roomId: string): Promise<boolean> => {
+    let result = isThreadCache.get(roomId);
+    if (result === undefined) {
+      result = await isThread(db, roomId);
+      isThreadCache.set(roomId, result);
+    }
+    return result;
+  };
+
   try {
     for (const statement of bundle.statements) {
       await runStatement(db, statement);
@@ -68,16 +80,17 @@ export async function applyBundle(
     ) {
       // Increment unread for all users tracking this room. Replaces the old
       // per-room comp_last_read counter with per-user read_positions rows.
-      await (await db.prepare(
+      await db.run(
         `update readstate.read_positions
             set unread_count = unread_count + 1,
                 updated_at = (unixepoch() * 1000)
           where room_id = ?`,
-      )).run(bundle.event.room);
+        bundle.event.room,
+      );
 
       // Track thread activity: if the message is in a thread, upsert the
       // author's interaction so the thread appears in their sidebar.
-      if (await isThread(db, bundle.event.room)) {
+      if (await cachedIsThread(bundle.event.room)) {
         const timestamp = decodeTimeFromId(bundle.event.id);
         await upsertUserThreadActivity(db, bundle.user, bundle.event.room, timestamp);
       }
@@ -105,7 +118,7 @@ export async function applyBundle(
        bundle.event.$type === "space.roomy.reaction.removeBridgedReaction.v0") &&
       bundle.event.room
     ) {
-      if (await isThread(db, bundle.event.room)) {
+      if (await cachedIsThread(bundle.event.room)) {
         const timestamp = decodeTimeFromId(bundle.event.id);
         // For bridged reactions, use the reactingUser field instead of the
         // authenticated event sender.
@@ -126,13 +139,12 @@ export async function applyBundle(
 }
 
 async function runStatement(db: DbLike, statement: SqlStatement): Promise<void> {
-  const stmt = await db.prepare(statement.sql);
   const params = statement.params;
   if (params === undefined) {
-    await stmt.run();
+    await db.run(statement.sql);
   } else if (Array.isArray(params)) {
-    await stmt.run(...(params as unknown[] as never[]));
+    await db.run(statement.sql, ...(params as unknown[] as never[]));
   } else {
-    await stmt.run(params as never);
+    await db.run(statement.sql, params as never);
   }
 }

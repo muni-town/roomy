@@ -1,15 +1,12 @@
 /**
  * Apply a batch of decoded events to the database.
  *
- * Single transaction per batch, per-event savepoint inside (so one failing
- * event doesn't roll back the rest). Advances `comp_space.backfilled_to`
- * once at the end. Returns counts plus a bounded list of failures so the
- * caller can surface them without unbounded memory growth.
+ * Events are processed in chunks, each chunk in a single `db.transaction()`
+ * call. Per-event savepoints provide error isolation within each chunk.
+ * This reduces ~115k transaction round-trips to ~230 (for 500-event chunks).
  *
- * Note: dependency stash/unstash from the frontend worker is intentionally
- * absent. The appserver consumes a single Leaf subscription in monotonically
- * increasing `idx` order, so by the time event N arrives every event it
- * could depend on is already applied.
+ * Side-effects (activity_item, link detection) that need JS logic run
+ * post-transaction since they're idempotent.
  */
 
 import type { DbLike } from "../db/types.ts";
@@ -28,9 +25,11 @@ import {
 } from "../debug/eventStore.ts";
 import { detectAndStoreLinks } from "../embed/enricher.ts";
 import { decodeContent } from "../db/content.ts";
+import { decodeTime, ulid } from "ulidx";
 
 import { log } from "../log.ts";
 const MAX_TRACKED_FAILURES = 100;
+const CHUNK_SIZE = 500;
 
 export interface ApplyBatchOpts {
   /** True for backfill events — skips the unread-counter increment. */
@@ -39,24 +38,14 @@ export interface ApplyBatchOpts {
 
 export interface MaterializationStats {
   applied: number;
-  /** SDK materialiser threw or no handler is registered for this $type. */
   materializerErrors: number;
-  /** A SQL statement threw while applying the bundle. */
   applyErrors: number;
-  /** Up to MAX_TRACKED_FAILURES recent failures, for ops/inspection. */
   failed: Array<{
     eventId: Ulid;
     type: string;
     reason: "materializer" | "apply";
     message: string;
   }>;
-  /**
-   * Link URLs newly detected in this batch's createMessage events (inserted
-   * into `comp_embed_link` by `detectAndStoreLinks`). The SpaceMaterializer
-   * passes these to `pokeEmbedSweeper` so freshly-posted links are enriched
-   * with priority over the backfill backlog. Empty for batches without
-   * new link-bearing messages.
-   */
   detectedLinks: string[];
 }
 
@@ -81,65 +70,91 @@ export async function applyBatch(
     if (e.idx > latestIdx) latestIdx = e.idx;
   }
 
-  // Build transaction steps: bundle statements + cursor advance.
-  // Side-effects (sortIdx, activityItem, link detection) run outside the
-  // transaction since they're idempotent and don't need atomicity with the
-  // main bundle application.
-  const steps: Array<{ type: "query" | "run" | "exec"; sql: string; params?: unknown[] }> = [];
-
   const total = events.length;
-  // Log progress at 10% intervals, minimum every 500 events
   const logInterval = Math.max(500, Math.round(total / 10));
   let nextLogAt = logInterval;
 
-  for (const e of events) {
-    const bundle = materialize(e.event, { streamId, user: e.user }, e.idx);
+  // Process events in chunks, each chunk in one transaction
+  for (let offset = 0; offset < events.length; offset += CHUNK_SIZE) {
+    const chunk = events.slice(offset, offset + CHUNK_SIZE);
+    const chunkSteps: Array<{ type: "run" | "exec"; sql: string; params?: unknown[] }> = [];
 
-    if (bundle.status === "error") {
-      stats.materializerErrors++;
-      recordFailure(stats, {
-        eventId: bundle.eventId,
-        type: e.event.$type,
-        reason: "materializer",
-        message: bundle.message,
-      });
-      if (isDebugEnabled()) {
-        recordMaterialization({
-          streamDid: streamId,
-          idx: e.idx,
-          eventType: e.event.$type,
+    for (const e of chunk) {
+      const bundle = materialize(e.event, { streamId, user: e.user }, e.idx);
+
+      if (bundle.status === "error") {
+        stats.materializerErrors++;
+        recordFailure(stats, {
           eventId: bundle.eventId,
-          status: "materializer_error",
-          errorMessage: bundle.message,
-          bundle,
+          type: e.event.$type,
+          reason: "materializer",
+          message: bundle.message,
         });
+        if (isDebugEnabled()) {
+          recordMaterialization({
+            streamDid: streamId,
+            idx: e.idx,
+            eventType: e.event.$type,
+            eventId: bundle.eventId,
+            status: "materializer_error",
+            errorMessage: bundle.message,
+            bundle,
+          });
+        }
+        continue;
       }
-      continue;
-    }
 
-    try {
-      // Apply bundle statements via the async applyBundle (which handles
-      // savepoints, sortIdx, activityItem, unread counters, thread activity).
-      await applyBundle(db, bundle, { isBackfill: opts.isBackfill, streamId });
-      stats.applied++;
+      // Per-event savepoint for error isolation within the chunk
+      const savepoint = `evt_${e.event.id.replace(/[^a-zA-Z0-9]/g, "")}`;
+      chunkSteps.push({ type: "exec", sql: `savepoint ${savepoint}` });
 
-      // Detect URLs in message content and store as link embeds.
-      // This runs outside the transaction but is idempotent — enrichment
-      // (fetching OpenGraph data) happens asynchronously anyway.
-      if (
-        e.event.$type === "space.roomy.message.createMessage.v0" &&
-        e.event.room
-      ) {
-        const body = (e.event as Record<string, unknown>).body as
-          | { mimeType?: string; data?: { buf: Uint8Array } }
-          | undefined;
-        if (body?.data?.buf) {
-          const mime = body.mimeType ?? "text/markdown";
-          const content = decodeContent(mime, Buffer.from(body.data.buf));
-          const detected = await detectAndStoreLinks(db, e.event.id, content);
-          if (detected.length > 0) stats.detectedLinks.push(...detected);
+      for (const stmt of bundle.statements) {
+        const params = stmt.params;
+        if (params === undefined) {
+          chunkSteps.push({ type: "run", sql: stmt.sql });
+        } else if (Array.isArray(params)) {
+          chunkSteps.push({ type: "run", sql: stmt.sql, params: params as unknown[] });
+        } else {
+          chunkSteps.push({ type: "run", sql: stmt.sql, params: [params] });
         }
       }
+
+      // sort_idx: inline the UPDATE (no SELECT needed)
+      if (e.event.$type === "space.roomy.message.createMessage.v0") {
+        const overrideExt =
+          (e.event as Record<string, unknown>).extensions?.["space.roomy.extension.timestampOverride.v0"] as
+            | { timestamp?: string }
+            | undefined;
+        const timestamp = overrideExt
+          ? Number(overrideExt.timestamp)
+          : decodeTime(e.event.id);
+        const sortIdx = ulid(timestamp);
+        chunkSteps.push({
+          type: "run",
+          sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
+          params: [sortIdx, e.event.id],
+        });
+      }
+
+      // forwardMessages sort_idx copy
+      if (
+        e.event.$type === "space.roomy.message.forwardMessages.v0" &&
+        "messageIds" in e.event &&
+        Array.isArray((e.event as Record<string, unknown>).messageIds)
+      ) {
+        const originalId = (e.event as Record<string, unknown>).messageIds[0] as string | undefined;
+        if (originalId) {
+          chunkSteps.push({
+            type: "run",
+            sql: "update entities set sort_idx = (select sort_idx from entities where id = ?) where id = ? and sort_idx is null",
+            params: [originalId, e.event.id],
+          });
+        }
+      }
+
+      chunkSteps.push({ type: "exec", sql: `release ${savepoint}` });
+
+      stats.applied++;
 
       if (isDebugEnabled()) {
         recordMaterialization({
@@ -151,42 +166,42 @@ export async function applyBatch(
           bundle,
         });
       }
-    } catch (err) {
-      stats.applyErrors++;
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[materialize] apply failed for ${e.event.$type} ${e.event.id} (idx ${e.idx}) on stream ${streamId}: ${message}`,
-      );
-      recordFailure(stats, {
-        eventId: e.event.id,
-        type: e.event.$type,
-        reason: "apply",
-        message,
-      });
-      if (isDebugEnabled()) {
-        recordMaterialization({
-          streamDid: streamId,
-          idx: e.idx,
-          eventType: e.event.$type,
-          eventId: e.event.id,
-          status: "apply_error",
-          errorMessage: message,
-        });
+
+      const done = stats.applied + stats.materializerErrors + stats.applyErrors;
+      if (done >= nextLogAt && done < total) {
+        nextLogAt = done + logInterval;
+        const pct = Math.round((done / total) * 100);
+        log.info("materialize", `${streamId}: ${done}/${total} events (${pct}%) — ${stats.applied} applied, ${stats.materializerErrors} materializer errors, ${stats.applyErrors} apply errors`);
       }
     }
 
-    const done = stats.applied + stats.materializerErrors + stats.applyErrors;
-    if (done >= nextLogAt && done < total) {
-      nextLogAt = done + logInterval;
-      const pct = Math.round((done / total) * 100);
-      log.info("materialize", `${streamId}: ${done}/${total} events (${pct}%) — ${stats.applied} applied, ${stats.materializerErrors} materializer errors, ${stats.applyErrors} apply errors`);
+    // Run this chunk in a single transaction
+    if (chunkSteps.length > 0) {
+      try {
+        await db.transaction(chunkSteps);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        stats.applyErrors += chunk.length;
+        stats.applied -= chunk.length;
+        for (const e of chunk) {
+          recordFailure(stats, {
+            eventId: e.event.id,
+            type: e.event.$type,
+            reason: "apply",
+            message,
+          });
+        }
+      }
     }
+    // Post-transaction side-effects for this chunk: activity_item upsert and
+    // link detection. These need JS logic so they can't be inlined as SQL
+    // steps. Running them per-chunk keeps them interleaved with progress
+    // logging rather than causing a long freeze after the last progress line.
+    await applyChunkSideEffects(db, chunk, streamId, opts.isBackfill, stats.detectedLinks);
   }
 
-  // Advance the cursor in a transaction. The cursor update is the only
-  // operation that needs atomicity — it must not advance past events that
-  // failed to apply.
-  steps.push({
+  // Advance cursor
+  await db.transaction([{
     type: "run",
     sql: `update comp_space
            set backfilled_to = ?,
@@ -194,14 +209,49 @@ export async function applyBatch(
            where entity = ?
              and (backfilled_to is null or backfilled_to < ?)`,
     params: [latestIdx, streamId, latestIdx],
-  });
-
-  if (steps.length > 0) {
-    await db.transaction(steps);
-  }
+  }]);
 
   return stats;
 }
+
+/**
+ * Post-transaction side-effects for a chunk: activity_item upsert and link
+ * detection. These need JS logic (JSON array manipulation, URL extraction)
+ * so they can't be inlined as SQL steps. Running them per-chunk keeps them
+ * interleaved with progress logging rather than causing a long freeze after
+ * the last progress line.
+ */
+async function applyChunkSideEffects(
+  db: DbLike,
+  chunk: DecodedStreamEvent[],
+  streamId: StreamDid,
+  isBackfill: boolean,
+  detectedLinks: string[],
+): Promise<void> {
+  for (const e of chunk) {
+    if (e.event.$type === "space.roomy.message.createMessage.v0" && (e.event as Record<string, unknown>).room) {
+      await applyBundle(db, {
+        status: "success",
+        event: e.event,
+        eventIdx: e.idx,
+        user: e.user,
+        statements: [],
+        dependsOn: [],
+      }, { isBackfill, streamId });
+
+      const body = (e.event as Record<string, unknown>).body as
+        | { mimeType?: string; data?: { buf: Uint8Array } }
+        | undefined;
+      if (body?.data?.buf) {
+        const mime = body.mimeType ?? "text/markdown";
+        const content = decodeContent(mime, Buffer.from(body.data.buf));
+        const detected = await detectAndStoreLinks(db, e.event.id, content);
+        if (detected.length > 0) detectedLinks.push(...detected);
+      }
+    }
+  }
+}
+
 
 function recordFailure(
   stats: MaterializationStats,

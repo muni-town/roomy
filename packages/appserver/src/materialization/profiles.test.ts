@@ -138,11 +138,16 @@ describe("ensureProfilesForBatch", () => {
     });
   });
 
-  test("skips DIDs we already have entity rows for", async () => {
+  test("skips DIDs we already have comp_info rows for", async () => {
     const { db, asyncDb } = freshDb();
     db.run("insert into entities (id, stream_id) values (?, ?)", [
       ALICE,
       STREAM,
+    ]);
+    db.run("insert into comp_info (entity, name, avatar) values (?, ?, ?)", [
+      ALICE,
+      "alice.test",
+      null,
     ]);
 
     const events = [

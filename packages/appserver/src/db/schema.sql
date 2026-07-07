@@ -29,6 +29,10 @@ create table if not exists entities (
 ) strict;
 create index if not exists idx_entities_stream_id on entities (stream_id);
 create index if not exists idx_entities_sort_idx on entities(sort_idx);
+-- Covering index for threadActivity space scope: filter by stream_id, then
+-- join to comp_room on entity id. Without this, SQLite may scan comp_room
+-- first and do individual entity lookups.
+create index if not exists idx_entities_stream_room on entities (stream_id, room);
 
 -- This is an important index because it allows us to query for entities in a thread
 -- with a reverse sort order to get only the latest entities.
@@ -88,6 +92,7 @@ create table if not exists comp_room (
 ) strict;
 
 create index if not exists idx_comp_room_label on comp_room(label);
+create index if not exists idx_comp_room_label_entity on comp_room(label, entity);
 
 create table if not exists comp_discord_origin (
   entity text primary key references entities(id) on delete cascade,

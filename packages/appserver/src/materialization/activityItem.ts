@@ -48,14 +48,12 @@ export async function upsertActivityItem(
     deduped.unshift(opts.messageId);
     const capped: string[] = deduped.slice(0, 5);
 
-    await (await db.prepare(
+    await db.run(
       `update activity_item
           set last_activity_at = ?,
               recent_message_ids = ?,
               updated_at = (unixepoch() * 1000)
         where room_id = ?`,
-    )).run(
-      // Timestamp: decode from the message ULID to match canonical ordering.
       decodeMessageTimestamp(opts.messageId),
       JSON.stringify(capped),
       opts.roomId,
@@ -104,14 +102,13 @@ async function insertActivityItem(
   const isThread = roomMeta?.label === "space.roomy.thread" ? 1 : 0;
   const timestamp = decodeMessageTimestamp(opts.messageId);
 
-  await (await db.prepare(
+  await db.run(
     `insert into activity_item (
        room_id, space_id, is_thread, parent_channel_id, parent_channel_name,
        last_activity_at, recent_message_ids,
        room_name, space_name, space_avatar,
        created_at, updated_at
      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))`,
-  )).run(
     opts.roomId,
     opts.spaceId,
     isThread,

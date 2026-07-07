@@ -31,13 +31,14 @@ export async function upsertUserThreadActivity(
   threadId: string,
   timestamp: number,
 ): Promise<void> {
-  await (await db.prepare(
+  await db.run(
     `insert into readstate.user_thread_activity (user_did, thread_id, last_active_at, updated_at)
      values (?, ?, ?, ?)
      on conflict(user_did, thread_id) do update set
        last_active_at = excluded.last_active_at,
        updated_at = excluded.updated_at`,
-  )).run([userDid, threadId, timestamp, Date.now()]);
+    userDid, threadId, timestamp, Date.now(),
+  );
 }
 
 /**
