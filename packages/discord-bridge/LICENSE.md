@@ -5,7 +5,7 @@ and licensed as [PolyForm NonCommercial v1.0](https://polyformproject.org/licens
 
 ### PolyForm Countdown to Blue Oak
 
-By utilizing [PolyForm Countdown](https://writing.kemitchell.com/2023/12/01/PolyForm-Countdown#transition) for delayed relicensing, all Weird source code is made freely available as permissive open source software one year after its packaged release, licensed as [Blue Oak Model License v1.0](https://blueoakcouncil.org/license/1.0.0).
+By utilizing [PolyForm Countdown](https://writing.kemitchell.com/2023/12/01/PolyForm-Countdown#transition) for delayed relicensing, all Roomy source code is made freely available as permissive open source software one year after its packaged release, licensed as [Blue Oak Model License v1.0](https://blueoakcouncil.org/license/1.0.0).
 
 `{start date}` is automatically set to each version-release date.
 
