@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, test, mock } from "bun:test";
+import { afterEach, describe, expect, test, mock } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   StreamDid,
@@ -14,7 +14,7 @@ import {
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
 import { toAsyncDb } from "../db/syncAdapter.ts";
-import { ensureProfilesForBatch } from "./profiles.ts";
+import { defaultGetProfiles, ensureProfilesForBatch } from "./profiles.ts";
 import type { DbLike } from "../db/types.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -162,6 +162,32 @@ describe("ensureProfilesForBatch", () => {
     expect(getProfiles).toHaveBeenCalledWith([BOB]);
   });
 
+  test("retries DIDs that have an entities row but no comp_info (failed fetch recovery)", async () => {
+    // Regression: the message materialiser inserts an `entities` row for an
+    // author via ensureEntity regardless of whether a profile was fetched.
+    // A DID with entities-but-no-comp_info (e.g. after a failed getProfiles)
+    // must still be retried, not permanently skipped.
+    const { db, asyncDb } = freshDb();
+    db.run("insert into entities (id, stream_id) values (?, ?)", [
+      ALICE,
+      STREAM,
+    ]);
+    // NOTE: no comp_info row for ALICE — profile fetch previously failed.
+
+    const events = [decodedAs(joinSpaceEvent(), 1, ALICE)];
+    const getProfiles = mock(async () => [profileFor(ALICE, "alice.test")]);
+
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
+
+    expect(getProfiles).toHaveBeenCalledTimes(1);
+    expect(getProfiles).toHaveBeenCalledWith([ALICE]);
+    expect(
+      (await asyncDb
+        .query("select name from comp_info where entity = ?")
+        .get<{ name: string }>(ALICE))?.name,
+    ).toBe("alice.test display");
+  });
+
   test("filters out non-bsky DIDs (e.g. did:discord:)", async () => {
     const { db, asyncDb } = freshDb();
     const events = [decodedAs(joinSpaceEvent(), 1, DISCORD_USER)];
@@ -223,4 +249,105 @@ describe("ensureProfilesForBatch", () => {
         .get<{ count: number }>())?.count,
     ).toBe(1);
   });
-})
+
+});
+
+describe("defaultGetProfiles", () => {
+  const realFetch = globalThis.fetch;
+
+  // Restore the real fetch after each test so we never leak the mock into
+  // other tests in the same file/process.
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  test("uses the XRPC path with repeated actors= keys (not comma-joined)", async () => {
+    const fetchMock = mock(
+      async (_url: string | URL | Request): Promise<Response> =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ profiles: [] }),
+        }) as unknown as Response,
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    await defaultGetProfiles([ALICE, BOB]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = new URL(
+      (fetchMock.mock.calls as unknown as [string][])[0]![0],
+    );
+    expect(url.pathname).toBe("/xrpc/app.bsky.actor.getProfiles");
+    // Repeated `actors=` keys, NOT a comma-joined single value.
+    expect(url.searchParams.getAll("actors")).toEqual([
+      "did:plc:alice",
+      "did:plc:bob",
+    ]);
+    expect(url.searchParams.get("actors")).toBe("did:plc:alice");
+    expect([...url.searchParams.keys()]).toEqual(["actors", "actors"]);
+  });
+
+  test("chunks >25 DIDs into separate requests and concatenates results", async () => {
+    const dids = Array.from({ length: 30 }, (_, i) =>
+      UserDid.assert(`did:plc:user${String(i).padStart(2, "0")}`),
+    );
+    const fetchMock = mock(
+      async (url: string | URL | Request): Promise<Response> => {
+        const u = new URL(url.toString());
+        const actors = u.searchParams.getAll("actors");
+        // Assert the 25-actor cap is respected per request.
+        expect(actors.length).toBeLessThanOrEqual(25);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            profiles: actors.map((d) => ({ did: d, handle: `${d}.test` })),
+          }),
+        } as unknown as Promise<Response>;
+      },
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const profiles = await defaultGetProfiles(dids);
+
+    // 30 DIDs → 25 + 5 = 2 requests.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(profiles).toHaveLength(30);
+  });
+
+  test("a failing chunk does not drop profiles from other chunks", async () => {
+    const dids = Array.from({ length: 50 }, (_, i) =>
+      UserDid.assert(`did:plc:u${String(i).padStart(2, "0")}`),
+    );
+    let call = 0;
+    const fetchMock = mock(
+      async (_url: string | URL | Request): Promise<Response> => {
+        call++;
+        // 50 DIDs / 25 = exactly 2 chunks; second chunk fails, first succeeds.
+        if (call === 2) {
+          return { ok: false, status: 503 } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            profiles: [
+              { did: `did:plc:survivor-${call}`, handle: "x.test" },
+            ],
+          }),
+        } as unknown as Promise<Response>;
+      },
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const profiles = await defaultGetProfiles(dids);
+
+    // 2 chunks (50/25); first succeeds, second returns 503 and is skipped.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // First chunk's profile survives; second chunk's failure is skipped.
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]?.did).toBe("did:plc:survivor-1");
+  });
+});
+

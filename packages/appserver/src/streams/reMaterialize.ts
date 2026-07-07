@@ -17,6 +17,10 @@ import { decode } from "@atcute/cbor";
 import { type DecodedStreamEvent, type Event, type StreamDid, type StreamIndex, type UserDid } from "@roomy-space/sdk";
 import type { DbLike } from "../db/types.ts";
 import { applyBatch } from "../materialization/applyBatch.ts";
+import {
+  ensureProfilesForBatch,
+  type GetProfilesFn,
+} from "../materialization/profiles.ts";
 import { log } from "../log.ts";
 
 interface RawEvent {
@@ -34,11 +38,19 @@ interface RawEvent {
  * replay. Streams whose cursor is already at the latest event idx are skipped
  * entirely (no event reads, no materialization).
  *
+ * Profiles for any user DIDs referenced by profile-relevant events
+ * (joinSpace / createMessage / addAdmin) are hydrated from the bsky appview
+ * before the batch is applied — the live `sendEvents` path does the same, and
+ * without it backfilled messages render with blank author profiles.
+ *
  * Logs progress at info level. Errors for individual streams are logged but
  * do not abort the overall process — a failed stream will be re-materialized
  * on demand when first accessed.
  */
-export async function reMaterializeFromLocalEvents(db: DbLike): Promise<void> {
+export async function reMaterializeFromLocalEvents(
+  db: DbLike,
+  getProfiles: GetProfilesFn | undefined = undefined,
+): Promise<void> {
   const streams = await db
     .query("SELECT DISTINCT stream_id FROM events.stream_events ORDER BY stream_id")
     .all<{ stream_id: string }>();
@@ -120,6 +132,13 @@ export async function reMaterializeFromLocalEvents(db: DbLike): Promise<void> {
           user: e.user as UserDid,
         }),
       );
+
+      // Hydrate profiles for any new-user events in this batch before
+      // materializing, mirroring the live sendEvents path. Without this,
+      // backfilled messages render with blank author profiles.
+      if (getProfiles) {
+        await ensureProfilesForBatch(db, decodedEvents, getProfiles);
+      }
 
       const stats = await applyBatch(db, streamDid as StreamDid, decodedEvents, {
         isBackfill: true,

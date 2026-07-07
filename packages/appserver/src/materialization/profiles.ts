@@ -31,26 +31,52 @@ export type GetProfilesFn = (dids: UserDid[]) => Promise<ProfileViewDetailed[]>;
 /**
  * Default profile fetcher that calls the bsky appview directly.
  * Used when no custom `GetProfilesFn` is provided.
+ *
+ * The appview's `app.bsky.actor.getProfiles` takes `actors` as an *array*
+ * (repeated `actors=` query keys, NOT a comma-joined string) and caps at 25
+ * actors per request — exceeding either yields HTTP 400
+ * `InvalidRequest: Invalid AT identifier`. Backfill batches can reference far
+ * more than 25 users, so we chunk into groups of 25 and concatenate.
  */
 export const defaultGetProfiles: GetProfilesFn = async (dids: UserDid[]) => {
+  if (dids.length === 0) return [];
+  const MAX_ACTORS = 25;
+  const out: ProfileViewDetailed[] = [];
   try {
-    const url = `https://api.bsky.app/app/bsky.actor/getProfiles?actors=${dids.join(",")}`;
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      console.warn(
-        `[materialize] defaultGetProfiles: bsky appview returned ${resp.status} for ${dids.length} DIDs`,
-      );
-      return [];
+    for (let i = 0; i < dids.length; i += MAX_ACTORS) {
+      const chunk = dids.slice(i, i + MAX_ACTORS);
+      try {
+        const params = new URLSearchParams();
+        for (const d of chunk) params.append("actors", d);
+        const resp = await fetch(
+          `https://api.bsky.app/xrpc/app.bsky.actor.getProfiles?${params.toString()}`,
+        );
+        if (!resp.ok) {
+          console.warn(
+            `[materialize] defaultGetProfiles: bsky appview returned ${resp.status} for ${chunk.length} DIDs`,
+          );
+          continue;
+        }
+        const data = (await resp.json()) as { profiles?: ProfileViewDetailed[] };
+        if (data.profiles) out.push(...data.profiles);
+      } catch (err) {
+        // Per-chunk isolation: a network/parse failure on one chunk must not
+        // abort the remaining chunks. Affected DIDs self-heal on the next
+        // backfill (comp_info still missing → filterMissing returns them).
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[materialize] defaultGetProfiles: chunk failed (${chunk.length} DIDs): ${message}`,
+        );
+      }
     }
-    const data = await resp.json();
-    return data.profiles;
   } catch (err) {
+    // Defensive outer guard for unexpected non-fetch errors.
     const message = err instanceof Error ? err.message : String(err);
     console.warn(
-      `[materialize] defaultGetProfiles: failed to fetch profiles for ${dids.length} DIDs: ${message}`,
+      `[materialize] defaultGetProfiles: aborted for ${dids.length} DIDs: ${message}`,
     );
-    return [];
   }
+  return out;
 };
 
 /**
@@ -106,9 +132,16 @@ function collectCandidateDids(events: DecodedStreamEvent[]): Set<UserDid> {
 
 /**
  * Narrow to DIDs we can resolve via the bsky appview AND that don't yet have
- * an entity row in the local DB. DIDs that don't start with `did:plc:` or
- * `did:web:` are skipped — they're synthetic (e.g. `did:space:...`) and have
- * no profile to fetch.
+ * a profile row locally. DIDs that don't start with `did:plc:` or
+ * `did:web:` are skipped — they're synthetic (e.g. `did:space:...`,
+ * `did:discord:...`) and have no profile to fetch.
+ *
+ * We key "have we fetched this profile" off `comp_info`, NOT `entities`:
+ * the message/space materialisers insert `entities` rows for an author
+ * independently of any profile fetch (via `ensureEntity`), so an `entities`
+ * row can exist with no `comp_info`/`comp_user` — e.g. after a failed fetch.
+ * Checking `entities` would permanently skip such DIDs and never retry.
+ * Checking `comp_info` retries until the profile is actually materialised.
  */
 async function filterMissing(db: DbLike, candidates: Set<UserDid>): Promise<UserDid[]> {
   const resolvable = [...candidates].filter(
@@ -119,9 +152,9 @@ async function filterMissing(db: DbLike, candidates: Set<UserDid>): Promise<User
   const placeholders = resolvable.map(() => "?").join(",");
   const present = new Set(
     (await db
-      .query(`select id from entities where id in (${placeholders})`)
-      .all<{ id: string }>(...resolvable)
-    ).map((r) => r.id),
+      .query(`select entity from comp_info where entity in (${placeholders})`)
+      .all<{ entity: string }>(...resolvable)
+    ).map((r) => r.entity),
   );
 
   return resolvable.filter((d) => !present.has(d));

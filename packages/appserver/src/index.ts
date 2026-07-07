@@ -10,6 +10,7 @@
 
 import { createAppserver, type AppserverHandle } from "./appserver.ts";
 import { log } from "./log.ts";
+import { defaultGetProfiles } from "./materialization/profiles.ts";
 import { reMaterializeFromLocalEvents } from "./streams/reMaterialize.ts";
 import { openDb } from "./db/db.ts";
 
@@ -31,7 +32,7 @@ const app: AppserverHandle = await createAppserver();
 // or empty, the server still serves requests (with whatever materialized
 // state exists).
 const db = openDb();
-reMaterializeFromLocalEvents(db).catch((err) => {
+reMaterializeFromLocalEvents(db, defaultGetProfiles).catch((err) => {
   log.error("startup", `re-materialization failed: ${err instanceof Error ? err.message : String(err)}`);
 });
 

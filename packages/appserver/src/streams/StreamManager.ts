@@ -24,11 +24,22 @@ import { createStreamDid } from "./did.ts";
  * Singleton StreamManager — writes events directly to the events DB,
  * materializes inline, and emits invalidation signals.
  */
+export type StreamEventListener = (
+  streamDid: StreamDid,
+  events: readonly DecodedStreamEvent[],
+) => void;
+
+/**
+ * Singleton StreamManager — writes events directly to the events DB,
+ * materializes inline, and emits invalidation signals.
+ */
 export class StreamManager {
   readonly #db: DbLike;
   readonly #invalidationRouter?: InvalidationRouter;
   readonly #appserverUrl: string;
   readonly #getProfiles?: GetProfilesFn;
+  /** Live-event listeners, notified after each sendEvents batch. */
+  readonly #streamListeners = new Set<StreamEventListener>();
 
   constructor(
     db: DbLike,

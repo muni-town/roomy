@@ -6,13 +6,14 @@
  * Events are seeded directly into events.stream_events, bypassing StreamManager.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { encode, decode } from "@atcute/cbor";
 import {
   createDefaultSpaceEvents,
   StreamDid,
   StreamIndex,
   UserDid,
+  newUlid,
   type DecodedStreamEvent,
   type Event,
 } from "@roomy-space/sdk";
@@ -466,4 +467,43 @@ describe("reMaterializeFromLocalEvents", () => {
       .get<{ materialized_to: number }>(streamDid);
     expect(cursor2!.materialized_to).toBe(2);
   });
+  test("hydrates author profiles via getProfiles during backfill", async () => {
+    // Regression: reMaterializeFromLocalEvents used to call applyBatch
+    // directly without ensureProfilesForBatch, so backfilled messages
+    // rendered with blank author profiles. Passing a getProfiles fn must
+    // hydrate comp_info/comp_user for did:plc authors referenced by
+    // profile-relevant events (joinSpace here).
+    const streamDid = StreamDid.assert("did:web:profile-backfill.example");
+    const author = UserDid.assert("did:plc:backfill-author");
+
+    const joinEvent = {
+      $type: "space.roomy.space.joinSpace.v0",
+      id: newUlid(),
+    };
+    await seedEvents(db, streamDid, [joinEvent], author);
+
+    const getProfiles = mock(async () => [
+      {
+        did: author,
+        handle: "backfill.test",
+        displayName: "Backfill Author",
+        avatar: "https://cdn.example/backfill.png",
+      },
+    ]);
+
+    await reMaterializeFromLocalEvents(db, getProfiles as never);
+
+    expect(getProfiles).toHaveBeenCalledTimes(1);
+    expect(getProfiles).toHaveBeenCalledWith([author]);
+    const info = await db
+      .query("select name, avatar from comp_info where entity = ?")
+      .get<{ name: string; avatar: string }>(author);
+    expect(info?.name).toBe("Backfill Author");
+    expect(info?.avatar).toBe("https://cdn.example/backfill.png");
+    const user = await db
+      .query("select handle from comp_user where did = ?")
+      .get<{ handle: string }>(author);
+    expect(user?.handle).toBe("backfill.test");
+  });
+
 });
