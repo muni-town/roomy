@@ -29,12 +29,18 @@ export function materialize(
 ): StatementBundle {
   const kind = event.$type;
 
-  try {
-    const handler = getMaterializer(kind);
-    if (!handler) {
-      throw new Error(`No materializer found for event kind: ${kind}`);
-    }
+  // Check if we have a materializer for this event type before attempting
+  const handler = getMaterializer(kind);
+  if (!handler) {
+    console.warn(`[materialize] no materializer for event ${event.id} (kind: ${kind}) — skipping`);
+    return {
+      status: "error",
+      eventId: event.id,
+      message: `No materializer found for event kind: ${kind}`,
+    };
+  }
 
+  try {
     const statements = handler({
       ...opts,
       event,
@@ -52,7 +58,7 @@ export function materialize(
     } satisfies StatementBundleSuccess;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`Error materializing event ${event.id} (${kind}):`, error);
+    console.error(`[materialize] failed for event ${event.id} (${kind}): ${message}`);
     return {
       status: "error",
       eventId: event.id,

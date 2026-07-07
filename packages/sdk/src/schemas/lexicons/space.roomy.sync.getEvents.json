@@ -1,0 +1,79 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.sync.getEvents",
+  "defs": {
+    "payload": {
+      "type": "object",
+      "required": [
+        "$bytes"
+      ],
+      "properties": {
+        "$bytes": {
+          "type": "string"
+        }
+      }
+    },
+    "events": {
+      "type": "object",
+      "required": [
+        "idx",
+        "payload",
+        "user"
+      ],
+      "properties": {
+        "idx": {
+          "type": "integer"
+        },
+        "payload": {
+          "type": "ref",
+          "ref": "#payload"
+        },
+        "user": {
+          "type": "string"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "streamDid"
+        ],
+        "properties": {
+          "streamDid": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "cursor",
+            "events"
+          ],
+          "properties": {
+            "cursor": {
+              "type": "integer"
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#events"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

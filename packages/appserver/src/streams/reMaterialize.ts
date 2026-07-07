@@ -73,11 +73,18 @@ export async function reMaterializeFromLocalEvents(db: DbLike): Promise<void> {
       });
 
       succeeded++;
+      const pct = Math.round((succeeded / streams.length) * 100);
+      const progress = `[${succeeded}/${streams.length} ${pct}%]`;
 
       if (stats.materializerErrors > 0 || stats.applyErrors > 0) {
         log.warn(
           "startup",
-          `re-materialize ${streamDid}: ${stats.applied} applied, ${stats.materializerErrors} materializer errors, ${stats.applyErrors} apply errors`,
+          `${progress} re-materialize ${streamDid}: ${stats.applied} applied, ${stats.materializerErrors} materializer errors, ${stats.applyErrors} apply errors`,
+        );
+      } else {
+        log.info(
+          "startup",
+          `${progress} re-materialize ${streamDid}: ${stats.applied} applied, 0 errors`,
         );
       }
     } catch (err) {

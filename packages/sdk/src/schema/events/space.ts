@@ -27,6 +27,8 @@ For private spaces, an inviteToken matching a valid invite is required.",
 export const JoinSpace = defineEvent(
   JoinSpaceSchema,
   ({ streamId, user, event }) => [
+    // Ensure the joining user entity exists before referencing it in edges
+    ensureEntity(streamId, user),
     // Insert member edge, using admin permission if an 'admin' edge exists for this user.
     // This ensures that admins who leave and rejoin retain their admin status.
     sql`
@@ -344,6 +346,9 @@ const AddAdminSchema = type({
 
 export const AddAdmin = defineEvent(AddAdminSchema, ({ streamId, event }) => {
   return [
+    // Ensure the space entity and admin user entity exist before inserting edges
+    ensureEntity(streamId, streamId),
+    ensureEntity(streamId, event.userDid),
     sql`
       insert or replace into edges (head, tail, label, payload)
       values (

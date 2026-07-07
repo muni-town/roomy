@@ -29,6 +29,7 @@ import {
 import { detectAndStoreLinks } from "../embed/enricher.ts";
 import { decodeContent } from "../db/content.ts";
 
+import { log } from "../log.ts";
 const MAX_TRACKED_FAILURES = 100;
 
 export interface ApplyBatchOpts {
@@ -85,6 +86,11 @@ export async function applyBatch(
   // transaction since they're idempotent and don't need atomicity with the
   // main bundle application.
   const steps: Array<{ type: "query" | "run" | "exec"; sql: string; params?: unknown[] }> = [];
+
+  const total = events.length;
+  // Log progress at 10% intervals, minimum every 500 events
+  const logInterval = Math.max(500, Math.round(total / 10));
+  let nextLogAt = logInterval;
 
   for (const e of events) {
     const bundle = materialize(e.event, { streamId, user: e.user }, e.idx);
@@ -167,6 +173,13 @@ export async function applyBatch(
           errorMessage: message,
         });
       }
+    }
+
+    const done = stats.applied + stats.materializerErrors + stats.applyErrors;
+    if (done >= nextLogAt && done < total) {
+      nextLogAt = done + logInterval;
+      const pct = Math.round((done / total) * 100);
+      log.info("materialize", `${streamId}: ${done}/${total} events (${pct}%) — ${stats.applied} applied, ${stats.materializerErrors} materializer errors, ${stats.applyErrors} apply errors`);
     }
   }
 
