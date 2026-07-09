@@ -2,10 +2,12 @@
  * LiveRoomyGateway: wraps SpaceManager to send events to real Roomy spaces
  * and subscribe to events from Roomy spaces.
  *
- * Subscriptions use the SDK's SyncConnection for WebSocket-based sync.
+ * Subscriptions use the SDK's SyncConnection with a `stream` topic. The
+ * appserver backfills events from a persisted cursor, then streams live
+ * events as `#streamEvents` CBOR frames. Each frame carries a batch of
+ * decoded events, a cursor (the last-delivered idx), and a `hasMore` flag.
  */
 
-import { decode, fromBytes } from "@atcute/cbor";
 import { type Event, sync, transport } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
 import { createLogger } from "../logger.ts";
@@ -13,6 +15,21 @@ import type { RoomyEventCallback, RoomyGateway } from "./gateway.ts";
 import type { SpaceManager } from "./space-manager.ts";
 
 const log = createLogger("live-roomy");
+
+/** Shape of a single event in a #streamEvents frame body. */
+interface StreamEventEntry {
+	idx: number;
+	user: string;
+	payload: Record<string, unknown>;
+}
+
+/** Shape of a #streamEvents frame body. */
+interface StreamEventsBody {
+	streamDid: string;
+	cursor: number;
+	hasMore: boolean;
+	events: StreamEventEntry[];
+}
 
 export class LiveRoomyGateway implements RoomyGateway {
 	#spaceManager: SpaceManager;
@@ -23,6 +40,8 @@ export class LiveRoomyGateway implements RoomyGateway {
 	#subscriptions = new Set<string>();
 	/** Per-space SyncConnection instances. */
 	#connections = new Map<string, sync.SyncConnection>();
+	/** Per-space processing chain — ensures frames are processed sequentially. */
+	#processing = new Map<string, Promise<void>>();
 
 	constructor(
 		spaceManager: SpaceManager,
@@ -35,6 +54,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 		this.#xrpc = xrpc;
 		this.#appserverWsUrl = appserverWsUrl;
 	}
+
 	async sendEvent(spaceDid: string, event: Event): Promise<void> {
 		await this.sendEvents(spaceDid, [event]);
 	}
@@ -42,7 +62,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 	async sendEvents(spaceDid: string, events: Event[]): Promise<void> {
 		await this.#xrpc.procedure("space.roomy.space.sendEvents", {
 			spaceId: spaceDid,
-			events: events.map(e => ({ ...e })),
+			events: events.map((e) => ({ ...e })),
 		});
 	}
 
@@ -54,94 +74,154 @@ export class LiveRoomyGateway implements RoomyGateway {
 			log.warn(`Already subscribed to ${spaceDid}, skipping`);
 			return;
 		}
+		// Register immediately to guard against concurrent subscribe calls.
+		this.#subscriptions.add(spaceDid);
 
 		// Resume from the persisted cursor so we don't re-backfill the entire
-		// space history on every restart.
-		const cursor = this.#repo.getSpaceCursor(spaceDid);
-
-		// Track cursor as a mutable variable so it advances with each poll.
-		let currentCursor = cursor;
+		// space history on every restart. The cursor is exclusive (last-seen
+		// idx); use -1 for full backfill when no cursor is persisted.
+		const persisted = this.#repo.getSpaceCursor(spaceDid);
+		const cursor = persisted !== undefined ? persisted : -1;
 
 		const connection = new sync.SyncConnection({
 			fetchTicket: async () => {
-				const { ticket } = await this.#xrpc.procedure("space.roomy.auth.getConnectionTicket", {});
+				const { ticket } = await this.#xrpc.procedure(
+					"space.roomy.auth.getConnectionTicket",
+					{},
+				);
 				return ticket;
 			},
 			wsUrl: this.#appserverWsUrl,
 		});
 
-		connection.subscribe({ kind: "space", id: spaceDid });
+		// Subscribe to the stream topic with the cursor. The server backfills
+		// events with idx > cursor, then streams live events. This initial
+		// subscription is tracked by the SDK and replayed on reconnect; the
+		// onOpen handler below re-subscribes with a fresh cursor to override
+		// that replay (see M3).
+		connection.subscribe({ kind: "stream", id: spaceDid, cursor });
 
-		connection.onFrame(async (_frame: sync.SyncFrame) => {
-			// The appserver sync system sends invalidation signals
-			// (#messageDiff / #invalidate), not raw events. When any frame
-			// arrives, poll the getEvents endpoint for new events since our
-			// last-seen cursor.
-			try {
-				const params: Record<string, string> = { streamDid: spaceDid };
-				if (currentCursor !== undefined) {
-					params.cursor = String(currentCursor);
-				}
-				const result = await this.#xrpc.query(
-					"space.roomy.sync.getEvents",
-					params,
-				);
+		// Per-space backfill state. The first frame(s) with hasMore=true are
+		// backfill; once a frame arrives with hasMore=false the backfill is
+		// done and all later frames are live. See L1 for the semantics.
+		const backfillState = { value: true };
 
-				// Advance cursor first so a failing callback doesn't create a
-				// redelivery loop — the events are still in the DB and will be
-				// re-fetched on the next poll if the cursor didn't advance.
-				currentCursor = result.cursor;
-				this.#repo.setSpaceCursor(spaceDid, result.cursor);
+		// On every (re)connect, re-subscribe with the fresh cursor from the
+		// repo. The SDK replays the topic registered above using the cursor
+		// captured at subscribe() time, which goes stale as the persisted
+		// cursor advances — a reconnect would then re-backfill from the stale
+		// cursor. We unsubscribe the stale topic and re-subscribe with the
+		// up-to-date cursor so reconnects resume from where we left off.
+		connection.onOpen(() => {
+			// M3: re-enter the backfill phase on every reconnect. The first
+			// open after the initial backfill completed has backfillState
+			// stuck at false; without resetting, a reconnect's backfill
+			// frames (hasMore=true) would be mislabeled isBackfill=false.
+			backfillState.value = true;
+			const freshCursor = this.#repo.getSpaceCursor(spaceDid) ?? -1;
+			connection.unsubscribe({ kind: "stream", id: spaceDid });
+			connection.subscribe({ kind: "stream", id: spaceDid, cursor: freshCursor });
+		});
 
-				for (const raw of result.events) {
-					// Decode the CBOR payload to a plain object.
-					// raw.payload is { $bytes: "base64string" } — convert to
-					// Uint8Array first, then decode the CBOR.
-					const payloadBytes = fromBytes(raw.payload);
-					const decoded = decode(payloadBytes);
-					// decoded is unknown; validate it's an object with $type
-					// before passing to the callback.
-					if (
-						decoded &&
-						typeof decoded === "object" &&
-						"$type" in decoded
-					) {
-						// Wrap each callback invocation so a single failing
-						// handler doesn't block the rest of the batch.
-						try {
-							await callback(decoded as Event, {
-								spaceDid,
-								isBackfill: false,
-								userDid: raw.user,
-							});
-						} catch (cbErr) {
-							log.error(
-								`Event callback failed for ${spaceDid} idx ${raw.idx}: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
-							);
-						}
-					}
-				}
-			} catch (err) {
-				log.error(
-					`Failed to poll events for ${spaceDid}: ${err instanceof Error ? err.message : String(err)}`,
-				);
-			}
+		connection.onFrame((frame: sync.SyncFrame) => {
+			const t = frame.header["t"];
+			if (t !== "#streamEvents") return;
+			// Chain this frame onto any in-flight processing for this space
+			// so frames are processed sequentially (not concurrently).
+			const previous = this.#processing.get(spaceDid) ?? Promise.resolve();
+			const current = previous
+				.then(() =>
+					this.#processFrame(spaceDid, frame.body, callback, backfillState),
+				)
+				.catch((err) => {
+					log.error(`Error processing stream frame for ${spaceDid}`, err);
+				});
+			this.#processing.set(spaceDid, current);
 		});
 
 		// Open the WebSocket connection. Must be called after subscribe() so
 		// the topic is registered before the socket opens (the connect()
-		// method replays tracked subscriptions on open).
-		await connection.connect();
+		// method replays tracked subscriptions on open). If connect() fails,
+		// drop the subscription so a later subscribe() can retry (M2).
+		try {
+			await connection.connect();
+		} catch (err) {
+			// Kill the SDK's reconnect timer: connect() may have scheduled a
+			// reconnect via #handleAbnormalClose on a partial failure. close()
+			// sets #intentionalClose and clears that timer, so the connection
+			// can't zombie-reconnect and deliver frames for a failed subscribe.
+			connection.close();
+			this.#subscriptions.delete(spaceDid);
+			throw err;
+		}
 
 		this.#connections.set(spaceDid, connection);
-		this.#subscriptions.add(spaceDid);
 		log.info(
 			`Subscribed to events from ${spaceDid}` +
-				(currentCursor !== undefined
-					? ` (resuming from idx ${currentCursor + 1})`
+				(persisted !== undefined
+					? ` (resuming from idx ${persisted + 1})`
 					: " (full backfill)"),
 		);
 	}
+
+	/**
+	 * Process a #streamEvents frame: invoke the callback for each event, then
+	 * persist the cursor. Each callback invocation is wrapped so a single
+	 * failing handler doesn't block the rest of the batch.
+	 *
+	 * `backfillState` carries the per-space backfill flag across frames (L1).
+	 */
+	async #processFrame(
+		spaceDid: string,
+		body: Record<string, unknown>,
+		callback: RoomyEventCallback,
+		backfillState: { value: boolean },
+	): Promise<void> {
+		const data = body as unknown as StreamEventsBody;
+		if (!data || !Array.isArray(data.events)) return;
+
+		// L1: a frame is backfill only while we're still in the backfill phase
+		// AND the server signals more backfill to come. The final backfill
+		// batch carries hasMore=false, so it lands as isBackfill=false (the
+		// transition point). There is no explicit end-of-backfill marker from
+		// the server, so this is the closest approximation — the alternative
+		// would require a server-side marker, which is a larger change.
+		const isBackfill = backfillState.value && data.hasMore;
+
+		for (const entry of data.events) {
+			const event = entry.payload;
+			// Validate the payload has a $type before passing it to the
+			// callback — skip malformed events without aborting the batch.
+			if (!event || typeof event !== "object" || !("$type" in event)) {
+				log.warn(
+					`Skipping malformed event idx ${entry.idx} for ${spaceDid}`,
+				);
+				continue;
+			}
+			try {
+				await callback(event as Event, {
+					spaceDid,
+					isBackfill,
+					userDid: entry.user,
+				});
+			} catch (cbErr) {
+				log.error(
+					`Event callback failed for ${spaceDid} idx ${entry.idx}: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+				);
+			}
+		}
+
+		// M4: persist the cursor AFTER the callbacks have run so a crash
+		// between persisting and delivering doesn't permanently lose events
+		// (at-least-once delivery). A redelivery after restart is safe
+		// because handlers are idempotent at the app layer.
+		this.#repo.setSpaceCursor(spaceDid, data.cursor);
+
+		// Once the server signals no more backfill, the backfill phase is
+		// over — all subsequent frames are live.
+		if (!data.hasMore) backfillState.value = false;
+	}
+
 	async unsubscribe(spaceDid: string): Promise<void> {
 		if (!this.#subscriptions.has(spaceDid)) return;
 
@@ -151,15 +231,17 @@ export class LiveRoomyGateway implements RoomyGateway {
 		}
 		this.#connections.delete(spaceDid);
 		this.#subscriptions.delete(spaceDid);
+		this.#processing.delete(spaceDid);
 		log.info(`Unsubscribed from ${spaceDid}`);
 	}
 
 	async disconnectAll(): Promise<void> {
-		for (const [did, conn] of this.#connections) {
+		for (const conn of this.#connections.values()) {
 			conn.close();
 		}
 		this.#connections.clear();
 		this.#subscriptions.clear();
+		this.#processing.clear();
 		await this.#spaceManager.disconnectAll();
 	}
 }

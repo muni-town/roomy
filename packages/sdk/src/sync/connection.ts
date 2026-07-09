@@ -28,11 +28,18 @@ import { decodeFirst } from "@atcute/cbor";
 
 // ─── Public types ─────────────────────────────────────────────────────────
 
-export type TopicKind = "space" | "room";
+export type TopicKind = "space" | "room" | "stream";
 
 export interface Topic {
   kind: TopicKind;
   id: string;
+  /**
+   * Exclusive cursor for `stream` topics: the last-delivered event idx.
+   * The server backfills events with idx > cursor, then streams live
+   * events. Use -1 for full backfill from the beginning of the stream.
+   * Ignored for `space` and `room` topics.
+   */
+  cursor?: number;
 }
 
 export interface SyncFrame {
@@ -388,8 +395,6 @@ export class SyncConnection {
     return [...this.#topics.values()];
   }
 
-  // ── Internals ───────────────────────────────────────────────────────
-
   #buildUrl(ticket: string): string {
     const sep = this.#opts.wsUrl.includes("?") ? "&" : "?";
     return `${this.#opts.wsUrl}${sep}ticket=${encodeURIComponent(ticket)}`;
@@ -398,7 +403,10 @@ export class SyncConnection {
   #sendSubMessage(type: "sub" | "unsub", topic: Topic): void {
     const ws = this.#ws;
     if (!ws || ws.readyState !== this.#WS.OPEN) return;
-    const payload = JSON.stringify({ type, topic: topic.kind, id: topic.id });
+    const payload =
+      topic.kind === "stream" && type === "sub" && topic.cursor !== undefined
+        ? JSON.stringify({ type, topic: topic.kind, id: topic.id, cursor: topic.cursor })
+        : JSON.stringify({ type, topic: topic.kind, id: topic.id });
     try {
       ws.send(payload);
       this.#log(`→ ${type} ${topic.kind}:${shortId(topic.id)}`);

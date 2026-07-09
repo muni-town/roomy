@@ -15,8 +15,8 @@
  *     relevant topic, filtered by affectedUser
  */
 
-import type { UserDid } from "@roomy-space/sdk";
-import type { ClientMessage, SyncSocket } from "../xrpc/types.ts";
+import type { DecodedStreamEvent, StreamDid, UserDid } from "@roomy-space/sdk";
+import type { ClientMessage, Frame, SyncSocket } from "../xrpc/types.ts";
 import type {
   InvalidationEvent,
   InvalidationRouter,
@@ -26,10 +26,13 @@ import { messageFrame } from "../xrpc/frame.ts";
 
 // ─── Topic helpers ───────────────────────────────────────────────────────
 
-/** Canonical topic string: "space:<id>" or "room:<id>" */
+/** Topic kinds supported by the multiplexed sync connection. */
+type TopicKind = "space" | "room" | "stream";
+
+/** Canonical topic string: "space:<id>" / "room:<id>" / "stream:<id>" */
 type Topic = string;
 
-function topicKey(topic: "space" | "room", id: string): Topic {
+function topicKey(topic: TopicKind, id: string): Topic {
   return `${topic}:${id}`;
 }
 
@@ -79,18 +82,52 @@ function topicsForSignal(signal: InvalidationEvent["signal"]): Topic[] {
 
 // ─── Connection state ────────────────────────────────────────────────────
 
+interface StreamSubscription {
+  /** Stream DID being subscribed to. */
+  streamDid: string;
+  /** Last-delivered event idx (exclusive cursor). Advances as events are sent. */
+  cursor: number;
+  /** True while the initial backfill loop is still draining history. */
+  backfilling: boolean;
+  /**
+   * Set when a live event arrives while backfilling is in progress. The
+   * backfill loop checks this after each iteration and, if set, performs
+   * one more drain to pick up the straggler events that were skipped by
+   * #onStreamEvents (which can't deliver during backfill to preserve
+   * cursor ordering).
+   */
+  pendingLive: boolean;
+}
+
 interface ConnectionState {
+  /** Connection ID (key into #connections). */
+  connId: number;
   /** The topics this connection is currently subscribed to. */
   topics: Set<Topic>;
+  /** Per-stream subscription state (keyed by stream DID). */
+  streams: Map<string, StreamSubscription>;
   /** Authenticated DID of the connected user. */
   did: string;
   /** Whether the connection is still open. */
   isOpen: boolean;
   /** Send a frame to the client. */
-  send: (frame: import("../xrpc/types.ts").Frame) => void;
+  send: (frame: Frame) => void;
 }
 
 // ─── Sync manager ────────────────────────────────────────────────────────
+
+/**
+ * Minimal interface the SyncManager needs from StreamManager: a live-event
+ * subscription hook and a cursor-based backfill read. Defined as an interface
+ * so tests can supply a lightweight mock without casting to the full class.
+ */
+export interface StreamEventSource {
+  onEvents(listener: (streamDid: StreamDid, events: readonly DecodedStreamEvent[]) => void): () => void;
+  getEventsFrom(streamDid: StreamDid, cursor: number, limit: number): Promise<{ events: DecodedStreamEvent[]; cursor: number }>;
+}
+
+/** Max events per backfill batch. */
+const BACKFILL_BATCH = 100;
 
 /**
  * Manages all active sync connections and routes invalidation signals.
@@ -100,30 +137,50 @@ export class SyncManager {
   readonly #connections = new Map<number, ConnectionState>();
   /** Reverse index: topic → set of connection IDs subscribed to it. */
   readonly #topicIndex = new Map<Topic, Set<number>>();
+  /** Reverse index: stream DID → set of connection IDs subscribed to it. */
+  readonly #streamIndex = new Map<string, Set<number>>();
   /** Monotonically increasing connection ID. */
   #nextConnId = 0;
   /** Cleanup function for the router subscription. */
   readonly #unsubscribe: () => void;
+  /** Cleanup function for the StreamManager live-event subscription. */
+  readonly #unsubscribeStreams: () => void;
+  /** Stream event source for backfill reads. */
+  readonly #streamSource: StreamEventSource;
 
-  constructor(router: InvalidationRouter) {
+  constructor(router: InvalidationRouter, streamManager: StreamEventSource) {
+    this.#streamSource = streamManager;
     this.#unsubscribe = router.subscribe((events) => this.#onSignals(events));
-  }
+    this.#unsubscribeStreams = streamManager.onEvents((streamDid, events) =>
+      this.#onStreamEvents(streamDid, events),
+    );
+   }
 
   /** Register a new sync connection. Returns a connection ID. */
   register(socket: SyncSocket): number {
     const connId = this.#nextConnId++;
     const state: ConnectionState = {
+      connId,
       topics: new Set(),
+      streams: new Map(),
       did: socket.did,
       isOpen: true,
       send: (frame) => {
-        if (state.isOpen) socket.send(frame);
+        socket.send(frame);
       },
     };
     this.#connections.set(connId, state);
 
     // Handle client messages.
     socket.onMessage((msg: ClientMessage) => {
+      if (msg.type === "sub" && msg.topic === "stream") {
+        this.#startStreamSub(state, msg.id, msg.cursor ?? -1);
+        return;
+      }
+      if (msg.type === "unsub" && msg.topic === "stream") {
+        this.#stopStreamSub(state, msg.id);
+        return;
+      }
       if (msg.type === "sub") {
         const topic = topicKey(msg.topic, msg.id);
         state.topics.add(topic);
@@ -163,6 +220,10 @@ export class SyncManager {
         this.#topicIndex.get(topic)?.delete(connId);
       }
       state.topics.clear();
+      for (const streamDid of state.streams.keys()) {
+        this.#streamIndex.get(streamDid)?.delete(connId);
+      }
+      state.streams.clear();
     });
 
     return connId;
@@ -176,8 +237,10 @@ export class SyncManager {
   /** Tear down the manager (tests only). */
   destroy(): void {
     this.#unsubscribe();
+    this.#unsubscribeStreams();
     this.#connections.clear();
     this.#topicIndex.clear();
+    this.#streamIndex.clear();
   }
 
   // ─── Signal routing ────────────────────────────────────────────────
@@ -371,6 +434,149 @@ export class SyncManager {
       );
     }
   }
+
+  // ─── Stream (raw event) subscriptions ───────────────────────────────
+
+  /**
+   * Start a stream subscription: register in the stream index, then
+   * asynchronously backfill from the given cursor. Live events arriving
+   * while backfill is in progress are queued by the cursor — they'll be
+   * fetched in a later backfill batch once the initial drain catches up.
+   */
+  #startStreamSub(state: ConnectionState, streamDid: string, cursor: number): void {
+    // Replace any existing subscription for this stream on this connection.
+    const existing = state.streams.get(streamDid);
+    const alreadyBackfilling = existing?.backfilling === true;
+    if (existing) {
+      // Don't reset backfilling — a concurrent backfill loop (if any) will
+      // pick up the updated cursor at its next iteration. Only kick off a
+      // new backfill below if one isn't already in flight.
+      existing.cursor = cursor;
+    } else {
+      state.streams.set(streamDid, { streamDid, cursor, backfilling: false, pendingLive: false });
+      let subs = this.#streamIndex.get(streamDid);
+      if (!subs) {
+        subs = new Set();
+        this.#streamIndex.set(streamDid, subs);
+      }
+      subs.add(state.connId);
+    }
+    // Kick off backfill only if no loop is already running for this stream.
+    // Don't await — live events may arrive concurrently and will be
+    // delivered once the cursor catches up.
+    if (!alreadyBackfilling) {
+      this.#backfillStream(state, streamDid).catch((err) => {
+        console.error(
+          `Stream backfill failed for ${streamDid}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
+  }
+
+  /** Stop a stream subscription. */
+  #stopStreamSub(state: ConnectionState, streamDid: string): void {
+    if (!state.streams.delete(streamDid)) return;
+    const subs = this.#streamIndex.get(streamDid);
+    if (subs) {
+      subs.delete(state.connId);
+      if (subs.size === 0) this.#streamIndex.delete(streamDid);
+    }
+  }
+  async #backfillStream(state: ConnectionState, streamDid: string): Promise<void> {
+    const sub = state.streams.get(streamDid);
+    if (!sub || sub.backfilling) return;
+    sub.backfilling = true;
+    try {
+      for (;;) {
+        if (!state.isOpen || state.streams.get(streamDid) !== sub) return;
+        const { events, cursor } = await this.#streamSource.getEventsFrom(
+          streamDid as StreamDid,
+          sub.cursor,
+          BACKFILL_BATCH,
+        );
+        if (events.length === 0) break;
+        const hasMore = events.length >= BACKFILL_BATCH;
+        this.#sendStreamEvents(state, streamDid, events, cursor, hasMore);
+        sub.cursor = cursor;
+        if (!hasMore) break;
+      }
+      // A live event may have arrived during the backfill await and been
+      // skipped by #onStreamEvents (which can't deliver while backfilling).
+      // Drain the straggler events, looping until no more were armed during
+      // the await. The identity guard ensures a replaced sub stops draining.
+      if (!state.isOpen || state.streams.get(streamDid) !== sub) return;
+      while (sub.pendingLive) {
+        sub.pendingLive = false;
+        const { events, cursor } = await this.#streamSource.getEventsFrom(
+          streamDid as StreamDid,
+          sub.cursor,
+          BACKFILL_BATCH,
+        );
+        if (events.length > 0) {
+          this.#sendStreamEvents(state, streamDid, events, cursor, false);
+          sub.cursor = cursor;
+        }
+      }
+    } finally {
+      sub.backfilling = false;
+    }
+  }
+
+  /**
+   * Route live stream events from the StreamManager to all connections
+   * subscribed to that stream. Events are only sent to connections that
+   * have finished their initial backfill (so cursor ordering is preserved);
+   * events arriving during backfill are picked up by the next backfill
+   * batch via the cursor.
+   */
+  #onStreamEvents(streamDid: string, events: readonly DecodedStreamEvent[]): void {
+    if (events.length === 0) return;
+    const subs = this.#streamIndex.get(streamDid);
+    if (!subs || subs.size === 0) return;
+    for (const connId of subs) {
+      const state = this.#connections.get(connId);
+      if (!state || !state.isOpen) continue;
+      const sub = state.streams.get(streamDid);
+      if (!sub) continue;
+      if (sub.backfilling) {
+        // Can't deliver live during backfill (would break cursor ordering).
+        // Flag so the backfill loop performs one more drain after it catches
+        // up, picking up these straggler events.
+        sub.pendingLive = true;
+        continue;
+      }
+      // Advance the cursor past these events.
+      const cursor = events[events.length - 1]!.idx;
+      this.#sendStreamEvents(state, streamDid, events, cursor, false);
+      sub.cursor = cursor;
+    }
+  }
+
+  /**
+   * Send a #streamEvents frame containing a batch of raw events.
+   * `hasMore` indicates whether more backfill batches are following.
+   */
+  #sendStreamEvents(
+    state: ConnectionState,
+    streamDid: string,
+    events: readonly DecodedStreamEvent[],
+    cursor: number,
+    hasMore: boolean,
+  ): void {
+    state.send(
+      messageFrame("#streamEvents", {
+        streamDid,
+        cursor,
+        hasMore,
+        events: events.map((e) => ({
+          idx: e.idx,
+          user: e.user,
+          payload: e.event,
+        })),
+      }),
+    );
+  }
+
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────

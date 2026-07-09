@@ -1,6 +1,6 @@
 # @roomy/discord-bridge
 
-Unidirectional Discord → Roomy bridge. Listens to Discord gateway events, persists state in SQLite, and writes to Roomy spaces via the Leaf client. The bridge never mutates Discord — no channel topics, no marker messages, no webhooks, no role manipulation.
+Unidirectional Discord → Roomy bridge. Listens to Discord gateway events, persists state in SQLite, and writes to Roomy spaces via the appserver XRPC interface. The bridge never mutates Discord — no channel topics, no marker messages, no webhooks, no role manipulation.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ Discord Gateway ──► Bot event handlers
                   └─────┬──────┘
                         │
                         ▼
-                  SpaceManager ──► Leaf client ──► Roomy
+                  SpaceManager ──► Appserver (XRPC) ──► Roomy
 ```
 
 - **Unidirectional**: Discord → Roomy only. No events flow back to Discord.
@@ -42,8 +42,8 @@ src/
 │   ├── cache.ts               # Proxy cache extension
 │   └── slash-commands.ts      # Slash command registration + handlers
 ├── roomy/
-│   ├── client.ts              # ATProto session + Leaf client init
-│   └── space-manager.ts       # ConnectedSpace lifecycle (connect/disconnect)
+│   ├── client.ts              # ATProto session + Roomy client init
+│   └── space-manager.ts       # Space connection lifecycle (connect/disconnect)
 ├── services/
 │   ├── message-ingestion.ts   # Core message → Roomy event pipeline
 │   ├── message-edit-delete.ts # Edit and delete propagation
@@ -82,13 +82,14 @@ Events carry two extensions:
 | `DISCORD_TOKEN`               | Discord bot token                                       |
 | `ATPROTO_BRIDGE_DID`          | DID of the ATProto identity the bridge authenticates as |
 | `ATPROTO_BRIDGE_APP_PASSWORD` | App password for ATProto authentication                 |
+| `APPSERVER_URL`               | Appserver HTTP origin (e.g. `http://127.0.0.1:8080`)    |
+| `APPSERVER_DID`               | DID of the appserver service                            |
+| `APPSERVER_WS_URL`            | Appserver sync WebSocket URL (e.g. `ws://127.0.0.1:8080/xrpc/space.roomy.sync.subscribe`) |
 
 ### Optional
 
 | Variable             | Default                            | Description                                                                      |
 | -------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
-| `LEAF_URL`           | `https://leaf-dev.muni.town`       | Leaf server URL                                                                  |
-| `LEAF_SERVER_DID`    | `did:web:<LEAF_URL hostname>`      | Leaf server DID                                                                  |
 | `STREAM_NSID`        | `space.roomy.space.personal.dev`   | Stream NSID                                                                      |
 | `STREAM_HANDLE_NSID` | `space.roomy.space.handle.dev`     | Handle NSID                                                                      |
 | `BRIDGE_DATA_DIR`    | `./data`                           | Directory for SQLite database                                                    |
@@ -132,6 +133,9 @@ docker run -d \
   -e DISCORD_TOKEN=... \
   -e ATPROTO_BRIDGE_DID=... \
   -e ATPROTO_BRIDGE_APP_PASSWORD=... \
+  -e APPSERVER_URL=... \
+  -e APPSERVER_DID=... \
+  -e APPSERVER_WS_URL=... \
   -e S3_BUCKET=... \
   -e S3_ENDPOINT=... \
   -e S3_REGION=... \
@@ -147,7 +151,8 @@ The entrypoint restores the SQLite database from S3 on first start (if no local 
 
 ```bash
 cp .env.example .env
-# Fill in DISCORD_TOKEN, ATPROTO_BRIDGE_DID, ATPROTO_BRIDGE_APP_PASSWORD
+# Fill in DISCORD_TOKEN, ATPROTO_BRIDGE_DID, ATPROTO_BRIDGE_APP_PASSWORD,
+# APPSERVER_URL, APPSERVER_DID, APPSERVER_WS_URL
 bun install
 bun run dev       # watch mode
 bun run start     # production mode

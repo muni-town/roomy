@@ -66,6 +66,8 @@ export interface SubscriptionDef {
 export type ClientMessage =
   | { type: "sub"; topic: "space" | "room"; id: string }
   | { type: "unsub"; topic: "space" | "room"; id: string }
+  | { type: "sub"; topic: "stream"; id: string; cursor: number }
+  | { type: "unsub"; topic: "stream"; id: string }
   | { type: "cursor"; seq: number };
 
 /**

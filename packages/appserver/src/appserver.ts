@@ -282,7 +282,7 @@ export async function createAppserver(
 
   // ─── XRPC routes ──────────────────────────────────────────────────────
   const authVerifier = opts.authVerifier ?? selectAuthVerifier();
-  const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter);
+  const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter, streamManager);
   const router = buildRouter(authVerifier, syncSubscribeHandler);
 
   // ─── Server ─────────────────────────────────────────────────────────

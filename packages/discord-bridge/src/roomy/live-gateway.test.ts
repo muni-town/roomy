@@ -1,76 +1,29 @@
 /**
  * Tests for LiveRoomyGateway.
  *
- * The onFrame handler in subscribe() polls the space.roomy.sync.getEvents
- * XRPC endpoint for new events and invokes the RoomyEventCallback for each
- * decoded event.
+ * The gateway subscribes to a `stream` topic via SyncConnection. The
+ * appserver sends `#streamEvents` CBOR frames containing batches of
+ * decoded events. The gateway invokes the RoomyEventCallback for each
+ * event and persists the cursor.
  */
 
 import { encode } from "@atcute/cbor";
-import { beforeEach, describe, expect, test, vi, afterEach } from "bun:test";
+import { beforeEach, describe, expect, test, vi, afterEach, type Mock } from "bun:test";
 import { type Event, newUlid, transport } from "@roomy-space/sdk";
 import { BridgeRepository } from "../db/repository.ts";
 import { LiveRoomyGateway } from "./live-gateway.ts";
 import type { RoomyEventCallback } from "./gateway.ts";
 import type { SpaceManager } from "./space-manager.ts";
-// ─── Minimal CBOR encoder ─────────────────────────────────────────────────
-// We only need to encode simple objects for test frames. This avoids pulling
-// @atcute/cbor as a direct dependency of the discord-bridge package.
 
-function cborEncode(value: unknown): Uint8Array {
-	const bufs: Uint8Array[] = [];
-	function enc(v: unknown): void {
-		if (typeof v === "string") {
-			const bytes = new TextEncoder().encode(v);
-			const major = 3; // major type 3 = text string
-			encHead(major, bytes.length);
-			bufs.push(bytes);
-		} else if (typeof v === "number") {
-			if (v >= 0 && Number.isInteger(v) && v <= 0xffffffff) {
-				encHead(0, v);
-			} else {
-				throw new Error("unsupported number");
-			}
-		} else if (v === true) {
-			bufs.push(new Uint8Array([0xf5]));
-		} else if (v === false) {
-			bufs.push(new Uint8Array([0xf4]));
-		} else if (v === null) {
-			bufs.push(new Uint8Array([0xf6]));
-		} else if (Array.isArray(v)) {
-			encHead(4, v.length);
-			for (const item of v) enc(item);
-		} else if (v && typeof v === "object") {
-			const keys = Object.keys(v);
-			encHead(5, keys.length);
-			for (const key of keys) {
-				enc(key);
-				enc((v as Record<string, unknown>)[key]);
-			}
-		} else {
-			throw new Error(`unsupported CBOR value: ${typeof v}`);
-		}
-	}
-	function encHead(major: number, count: number): void {
-		if (count < 24) {
-			bufs.push(new Uint8Array([(major << 5) | count]));
-		} else if (count < 0x100) {
-			bufs.push(new Uint8Array([(major << 5) | 24, count]));
-		} else if (count < 0x10000) {
-			bufs.push(new Uint8Array([(major << 5) | 25, count >> 8, count & 0xff]));
-		} else {
-			bufs.push(new Uint8Array([(major << 5) | 26, (count >> 24) & 0xff, (count >> 16) & 0xff, (count >> 8) & 0xff, count & 0xff]));
-		}
-	}
-	enc(value);
-	const total = bufs.reduce((s, b) => s + b.length, 0);
-	const result = new Uint8Array(total);
-	let offset = 0;
-	for (const b of bufs) {
-		result.set(b, offset);
-		offset += b.length;
-	}
-	return result;
+// ─── CBOR frame builder ─────────────────────────────────────────────────
+
+function buildFrame(t: string, body: Record<string, unknown>): ArrayBuffer {
+	const headerBytes = encode({ t });
+	const bodyBytes = encode(body);
+	const out = new Uint8Array(headerBytes.byteLength + bodyBytes.byteLength);
+	out.set(headerBytes, 0);
+	out.set(bodyBytes, headerBytes.byteLength);
+	return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
 }
 
 // ─── Mock WebSocket ───────────────────────────────────────────────────────
@@ -135,21 +88,11 @@ function makeMockWS(): typeof WebSocket {
 		lastSocket = self;
 		sockets.push(self);
 	} as unknown as typeof WebSocket;
-	// Provide the readyState constants the SUT reads from the constructor.
 	(ctor as unknown as { OPEN: number }).OPEN = 1;
 	(ctor as unknown as { CONNECTING: number }).CONNECTING = 0;
 	(ctor as unknown as { CLOSING: number }).CLOSING = 2;
 	(ctor as unknown as { CLOSED: number }).CLOSED = 3;
 	return ctor;
-}
-
-function buildFrame(t: string, body: Record<string, unknown>): ArrayBuffer {
-	const header = cborEncode({ t });
-	const bodyBytes = cborEncode(body);
-	const out = new Uint8Array(header.byteLength + bodyBytes.byteLength);
-	out.set(header, 0);
-	out.set(bodyBytes, header.byteLength);
-	return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
 }
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
@@ -165,13 +108,27 @@ function makeEvent(): Event {
 		description: "A test event",
 	} as Event;
 }
+
 /**
- * CBOR-encode an event object so it can be used as a raw.payload in the
- * getEvents response. The gateway decodes this with decode().
+ * Build a #streamEvents frame body matching the appserver's format.
+ * Each event's `payload` is the decoded event object (not CBOR bytes).
  */
-function encodeEventPayload(event: Event): string {
-	const bytes = encode(event);
-	return btoa(String.fromCharCode(...bytes));
+function buildStreamEventsBody(
+	streamDid: string,
+	events: Array<{ idx: number; user: string; event: Event }>,
+	cursor: number,
+	hasMore = false,
+): Record<string, unknown> {
+	return {
+		streamDid,
+		cursor,
+		hasMore,
+		events: events.map((e) => ({
+			idx: e.idx,
+			user: e.user,
+			payload: e.event,
+		})),
+	};
 }
 
 // ─── Setup ─────────────────────────────────────────────────────────────────
@@ -179,8 +136,9 @@ function encodeEventPayload(event: Event): string {
 function setup() {
 	const repo = BridgeRepository.open(":memory:");
 
+	const procedure = vi.fn().mockResolvedValue({ ticket: "test-ticket" });
 	const mockXrpc = {
-		procedure: vi.fn().mockResolvedValue({ ticket: "test-ticket" }),
+		procedure,
 		query: vi.fn(),
 	} as unknown as transport.DirectXrpcClient;
 
@@ -190,7 +148,12 @@ function setup() {
 
 	const gateway = new LiveRoomyGateway(mockSpaceManager, repo, mockXrpc, WS_URL);
 
-	return { repo, gateway, mockXrpc, mockSpaceManager };
+	return { repo, gateway, mockXrpc, mockSpaceManager, procedure };
+}
+
+/** Drain the microtask queue enough for async frame processing to complete. */
+async function flush(): Promise<void> {
+	for (let i = 0; i < 30; i++) await Promise.resolve();
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -199,24 +162,23 @@ describe("LiveRoomyGateway", () => {
 	let repo: BridgeRepository;
 	let gateway: LiveRoomyGateway;
 	let mockXrpc: transport.DirectXrpcClient;
+	let procedure: Mock;
 	let origWebSocket: typeof WebSocket | undefined;
 
 	beforeEach(() => {
 		lastSocket = null;
 		sockets.length = 0;
-		// Mock the global WebSocket since LiveRoomyGateway doesn't pass
-		// webSocketImpl to SyncConnection — it reads from globalThis.
 		origWebSocket = (globalThis as { WebSocket?: typeof WebSocket }).WebSocket;
 		(globalThis as { WebSocket: typeof WebSocket }).WebSocket = makeMockWS();
 		const s = setup();
 		repo = s.repo;
 		gateway = s.gateway;
 		mockXrpc = s.mockXrpc;
+		procedure = s.procedure;
 	});
 
 	afterEach(() => {
 		repo.close();
-		// Restore the original WebSocket
 		if (origWebSocket) {
 			(globalThis as { WebSocket: typeof WebSocket }).WebSocket = origWebSocket;
 		} else {
@@ -224,42 +186,49 @@ describe("LiveRoomyGateway", () => {
 		}
 	});
 
-	/**
-	 * Inject a sync frame into the SyncConnection and assert the callback is
-	 * invoked with the decoded event and metadata.
-	 */
-	test("callback is invoked on frame", async () => {
-		const callback = vi.fn() as unknown as RoomyEventCallback;
-		const event = makeEvent();
-		const payloadB64 = encodeEventPayload(event);
-
-		// Mock the XRPC query to return one event when getEvents is called.
-		mockXrpc.query = vi.fn().mockResolvedValue({
-			events: [{ idx: 1, user: "did:web:test-user", payload: { $bytes: payloadB64 } }],
-			cursor: 1,
-		});
-
-		// Subscribe — creates a SyncConnection with our mock WebSocket
-		const subPromise = gateway.subscribe(SPACE_DID, callback);
-
-		// Let the ticket fetch resolve
+	/** Subscribe and open the mock socket so the connect() promise resolves. */
+	async function subscribeAndConnect(
+		spaceDid: string,
+		callback: RoomyEventCallback,
+	): Promise<void> {
+		const subPromise = gateway.subscribe(spaceDid, callback);
 		await Promise.resolve();
 		await Promise.resolve();
-
 		expect(lastSocket).toBeTruthy();
-
-		// Open the socket so the connect() promise resolves
 		lastSocket!._open();
 		await subPromise;
+	}
 
-		// Inject a frame — this triggers the onFrame handler which polls getEvents
-		lastSocket!._emitMessage(buildFrame("#invalidate", { nsid: "x" }));
+	/**
+	 * Inject a #streamEvents frame and wait for the async onFrame handler
+	 * to complete.
+	 */
+	async function emitStreamEvents(
+		spaceDid: string,
+		events: Array<{ idx: number; user: string; event: Event }>,
+		cursor: number,
+		hasMore = false,
+	): Promise<void> {
+		lastSocket!._emitMessage(
+			buildFrame(
+				"#streamEvents",
+				buildStreamEventsBody(spaceDid, events, cursor, hasMore),
+			),
+		);
+		await flush();
+	}
 
-		// Wait for the async onFrame handler to complete
-		await Promise.resolve();
-		await Promise.resolve();
+	test("callback is invoked for each event in a #streamEvents frame", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+		const event = makeEvent();
 
-		// The callback should be called once with the decoded event and meta.
+		await subscribeAndConnect(SPACE_DID, callback);
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 0, user: "did:web:test-user", event }],
+			0,
+		);
+
 		expect(callback).toHaveBeenCalledTimes(1);
 		expect(callback).toHaveBeenCalledWith(event, {
 			spaceDid: SPACE_DID,
@@ -268,43 +237,34 @@ describe("LiveRoomyGateway", () => {
 		});
 	});
 
-	test("callback invoked once per decoded event", async () => {
+	test("cursor is persisted after each frame", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+		const event = makeEvent();
+
+		await subscribeAndConnect(SPACE_DID, callback);
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 5, user: "did:web:test-user", event }],
+			5,
+		);
+
+		expect(repo.getSpaceCursor(SPACE_DID)).toBe(5);
+	});
+
+	test("multiple events in one frame are all delivered", async () => {
 		const callback = vi.fn() as unknown as RoomyEventCallback;
 		const event1 = makeEvent();
 		const event2 = makeEvent();
-		const payload1 = encodeEventPayload(event1);
-		const payload2 = encodeEventPayload(event2);
 
-		// Mock query to return one event per call, advancing cursor.
-		let callCount = 0;
-		mockXrpc.query = vi.fn().mockImplementation(() => {
-			callCount++;
-			if (callCount === 1) {
-				return Promise.resolve({
-					events: [{ idx: 1, user: "did:web:user-a", payload: { $bytes: payload1 } }],
-					cursor: 1,
-				});
-			}
-			return Promise.resolve({
-				events: [{ idx: 2, user: "did:web:user-b", payload: { $bytes: payload2 } }],
-				cursor: 2,
-			});
-		});
-
-		const subPromise = gateway.subscribe(SPACE_DID, callback);
-		await Promise.resolve();
-		await Promise.resolve();
-		lastSocket!._open();
-		await subPromise;
-
-		// Inject two frames
-		lastSocket!._emitMessage(buildFrame("#invalidate", { nsid: "a" }));
-		lastSocket!._emitMessage(buildFrame("#invalidate", { nsid: "b" }));
-
-		// Wait for both async onFrame handlers to complete
-		await Promise.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
+		await subscribeAndConnect(SPACE_DID, callback);
+		await emitStreamEvents(
+			SPACE_DID,
+			[
+				{ idx: 0, user: "did:web:user-a", event: event1 },
+				{ idx: 1, user: "did:web:user-b", event: event2 },
+			],
+			1,
+		);
 
 		expect(callback).toHaveBeenCalledTimes(2);
 		expect(callback).toHaveBeenNthCalledWith(1, event1, {
@@ -319,32 +279,258 @@ describe("LiveRoomyGateway", () => {
 		});
 	});
 
-	/**
-	 * Inject a frame that carries no event (e.g. a heartbeat) and assert the
-	 * callback is NOT invoked.
-	 */
-	test("frames with no event don't invoke callback", async () => {
+	test("isBackfill is true when hasMore is true", async () => {
 		const callback = vi.fn() as unknown as RoomyEventCallback;
+		const event = makeEvent();
 
-		// Mock query to return empty events array.
-		mockXrpc.query = vi.fn().mockResolvedValue({
-			events: [],
-			cursor: 0,
+		await subscribeAndConnect(SPACE_DID, callback);
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 0, user: "did:web:test-user", event }],
+			0,
+			true, // hasMore — still backfilling
+		);
+
+		expect(callback).toHaveBeenCalledWith(event, {
+			spaceDid: SPACE_DID,
+			isBackfill: true,
+			userDid: "did:web:test-user",
+		});
+	});
+
+	test("isBackfill transitions from true to false when hasMore flips to false (L1)", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+		const event1 = makeEvent();
+		const event2 = makeEvent();
+		const event3 = makeEvent();
+
+		await subscribeAndConnect(SPACE_DID, callback);
+
+		// First frame: hasMore=true → still backfilling → isBackfill=true.
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 0, user: "did:web:test-user", event: event1 }],
+			0,
+			true,
+		);
+		expect(callback).toHaveBeenNthCalledWith(1, event1, {
+			spaceDid: SPACE_DID,
+			isBackfill: true,
+			userDid: "did:web:test-user",
 		});
 
-		const subPromise = gateway.subscribe(SPACE_DID, callback);
-		await Promise.resolve();
-		await Promise.resolve();
-		lastSocket!._open();
-		await subPromise;
+		// Second frame: hasMore=false → transition point → isBackfill=false
+		// (backfilling was still true at the start of this frame, but
+		// `true && false === false`).
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 1, user: "did:web:test-user", event: event2 }],
+			1,
+			false,
+		);
+		expect(callback).toHaveBeenNthCalledWith(2, event2, {
+			spaceDid: SPACE_DID,
+			isBackfill: false,
+			userDid: "did:web:test-user",
+		});
 
-		// Inject a heartbeat frame (no event payload)
-		lastSocket!._emitMessage(buildFrame("#heartbeat", {}));
+		// Third frame: hasMore=false → now live → isBackfill=false.
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 2, user: "did:web:test-user", event: event3 }],
+			2,
+			false,
+		);
+		expect(callback).toHaveBeenNthCalledWith(3, event3, {
+			spaceDid: SPACE_DID,
+			isBackfill: false,
+			userDid: "did:web:test-user",
+		});
+	});
 
-		// Wait for the async onFrame handler
-		await Promise.resolve();
-		await Promise.resolve();
+	test("frames with no events don't invoke callback", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+
+		await subscribeAndConnect(SPACE_DID, callback);
+		await emitStreamEvents(SPACE_DID, [], 0);
 
 		expect(callback).not.toHaveBeenCalled();
 	});
+
+	test("non-#streamEvents frames are ignored", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+
+		await subscribeAndConnect(SPACE_DID, callback);
+		lastSocket!._emitMessage(buildFrame("#invalidate", { nsid: "x" }));
+		await flush();
+
+		expect(callback).not.toHaveBeenCalled();
+	});
+
+	test("a failing callback doesn't block subsequent events", async () => {
+		const callback = vi.fn().mockRejectedValueOnce(new Error("boom")) as unknown as RoomyEventCallback;
+		const event1 = makeEvent();
+		const event2 = makeEvent();
+
+		await subscribeAndConnect(SPACE_DID, callback);
+		await emitStreamEvents(
+			SPACE_DID,
+			[
+				{ idx: 0, user: "did:web:user-a", event: event1 },
+				{ idx: 1, user: "did:web:user-b", event: event2 },
+			],
+			1,
+		);
+
+		expect(callback).toHaveBeenCalledTimes(2);
+	});
+
+	test("malformed event payload is skipped without aborting the batch", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+		const goodEvent = makeEvent();
+
+	await subscribeAndConnect(SPACE_DID, callback);
+	// Inject a frame with one malformed event (no $type) and one good one.
+	const body = buildStreamEventsBody(
+		SPACE_DID,
+		[
+			{ idx: 0, user: "u", event: { notType: true } as unknown as Event },
+			{ idx: 1, user: "u", event: goodEvent },
+		],
+		1,
+	);
+	lastSocket!._emitMessage(buildFrame("#streamEvents", body));
+	await flush();
+
+	// Only the good event (idx 1) should be delivered.
+	expect(callback).toHaveBeenCalledTimes(1);
+	expect(callback).toHaveBeenCalledWith(goodEvent, expect.objectContaining({ userDid: "u" }));
+	});
+
+	test("unsubscribe closes the connection", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+
+		await subscribeAndConnect(SPACE_DID, callback);
+		await gateway.unsubscribe(SPACE_DID);
+
+		// The mock socket's close() schedules a close event via microtask.
+		await flush();
+		expect(lastSocket!.readyState).toBe(3); // CLOSED
+	});
+
+	test("resuming from a persisted cursor subscribes with that cursor", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+		// Seed a cursor.
+		repo.setSpaceCursor(SPACE_DID, 10);
+
+		await subscribeAndConnect(SPACE_DID, callback);
+
+		// The SDK replays the topic registered before connect (cursor 10),
+		// then the onOpen handler (M3) unsubscribes the stale topic and
+		// re-subscribes with the fresh cursor from the repo (also 10 here,
+		// since no frames have arrived yet). Both sub messages carry 10.
+		const subMessages = lastSocket!.sent.filter((s) => s.includes('"sub"'));
+		expect(subMessages.length).toBe(2);
+		expect(subMessages[0]).toContain('"cursor":10');
+		expect(subMessages[1]).toContain('"cursor":10');
+		// The onOpen handler sends an unsub before re-subscribing.
+		expect(lastSocket!.sent.some((s) => s.includes('"type":"unsub"'))).toBe(true);
+	});
+
+	test("no persisted cursor subscribes with cursor -1 (full backfill)", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+
+		await subscribeAndConnect(SPACE_DID, callback);
+
+		// Replay sub and the onOpen re-subscribe both use cursor -1 (no
+		// persisted cursor). The last sub message is the fresh-cursor one.
+		const subMessages = lastSocket!.sent.filter((s) => s.includes('"sub"'));
+		expect(subMessages.length).toBe(2);
+		expect(subMessages[subMessages.length - 1]).toContain('"cursor":-1');
+	});
+
+	test("connect failure cleans up the subscription so re-subscribe works (M2)", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+
+		// Make the next ticket fetch fail so connect() rejects.
+		procedure.mockRejectedValueOnce(new Error("ticket fail"));
+		await expect(gateway.subscribe(SPACE_DID, callback)).rejects.toThrow(
+			"ticket fail",
+		);
+
+		// No socket was constructed (fetchTicket rejects before the WS ctor),
+		// and the failed subscription must have been removed so a retry works.
+		expect(lastSocket).toBeNull();
+
+		// Re-subscribe: the default resolving procedure is restored, so this
+		// connects normally.
+		await subscribeAndConnect(SPACE_DID, callback);
+		const event = makeEvent();
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 0, user: "did:web:test-user", event }],
+			0,
+		);
+		expect(callback).toHaveBeenCalledWith(event, {
+			spaceDid: SPACE_DID,
+			isBackfill: false,
+			userDid: "did:web:test-user",
+		});
+	});
+
+	test("backfillState resets to true on reconnect (Med3)", async () => {
+		const callback = vi.fn() as unknown as RoomyEventCallback;
+		const event1 = makeEvent();
+		const event2 = makeEvent();
+		const event3 = makeEvent();
+
+		await subscribeAndConnect(SPACE_DID, callback);
+
+		// Backfill phase: hasMore=true → isBackfill=true.
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 0, user: "did:web:test-user", event: event1 }],
+			0,
+			true,
+		);
+		expect(callback).toHaveBeenNthCalledWith(1, event1, {
+			spaceDid: SPACE_DID,
+			isBackfill: true,
+			userDid: "did:web:test-user",
+		});
+
+		// Backfill completes: hasMore=false → isBackfill=false, backfillState now false.
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 1, user: "did:web:test-user", event: event2 }],
+			1,
+			false,
+		);
+		expect(callback).toHaveBeenNthCalledWith(2, event2, {
+			spaceDid: SPACE_DID,
+			isBackfill: false,
+			userDid: "did:web:test-user",
+		});
+
+		// Simulate a reconnect by re-firing the socket's onopen, which invokes
+		// the onOpen handlers the gateway registered. Med3 resets backfillState
+		// to true here, so the reconnect's backfill frames are labeled correctly.
+		lastSocket!._open();
+		await flush();
+
+		// Reconnect backfill frame: hasMore=true. Without the Med3 reset this
+		// would be isBackfill=false (backfillState stuck at false from before).
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 2, user: "did:web:test-user", event: event3 }],
+			2,
+			true,
+		);
+		expect(callback).toHaveBeenNthCalledWith(3, event3, {
+			spaceDid: SPACE_DID,
+			isBackfill: true,
+			userDid: "did:web:test-user",
+		});
+	});
+
 });

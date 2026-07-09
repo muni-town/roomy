@@ -143,6 +143,19 @@ export class StreamManager {
     if (hasCreateMessage) {
       pokeEmbedSweeper();
     }
+
+    // 8. Notify live-event listeners (e.g. sync stream subscriptions).
+    if (this.#streamListeners.size > 0) {
+      for (const listener of this.#streamListeners) {
+        try {
+          listener(streamDid, decodedEvents);
+        } catch (err) {
+          console.error(
+            `StreamEventListener threw for ${streamDid}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    }
   }
 
   /**
@@ -200,6 +213,47 @@ export class StreamManager {
       )
       .get<{ latest_event: number }>(streamDid);
     return (row?.latest_event ?? 0) as StreamIndex;
+  }
+
+  /**
+   * Register a live-event listener. Called after each `sendEvents` batch
+   * is committed. Used by the sync system to push raw events to stream
+   * subscribers. Returns an unsubscribe function.
+   */
+  onEvents(listener: StreamEventListener): () => void {
+    this.#streamListeners.add(listener);
+    return () => this.#streamListeners.delete(listener);
+  }
+
+  /**
+   * Fetch raw events for a stream strictly after `cursor` (exclusive),
+   * up to `limit`. Used by the sync system to backfill stream subscribers
+   * from a persisted cursor on (re)connect.
+   *
+   * Returns the events and the new cursor (the last returned idx, or the
+   * input cursor if no rows).
+   */
+  async getEventsFrom(
+    streamDid: StreamDid,
+    cursor: number,
+    limit: number,
+  ): Promise<{ events: DecodedStreamEvent[]; cursor: number }> {
+    const rows = await this.#db
+      .query(
+        "select idx, user, payload from events.stream_events where stream_id = ? and idx > ? order by idx limit ?",
+      )
+      .all<{ idx: number; user: string; payload: Uint8Array }>(
+        streamDid,
+        cursor,
+        limit,
+      );
+    const events = rows.map((r): DecodedStreamEvent => ({
+      idx: r.idx as StreamIndex,
+      event: decode(r.payload) as Event,
+      user: r.user as UserDid,
+    }));
+    const newCursor = rows.length > 0 ? rows[rows.length - 1]!.idx : cursor;
+    return { events, cursor: newCursor };
   }
 }
 

@@ -21,8 +21,6 @@ export const APPSERVER_URL = () => required("APPSERVER_URL");
 export const APPSERVER_DID = () => required("APPSERVER_DID");
 export const APPSERVER_WS_URL = () => required("APPSERVER_WS_URL");
 
-
-
 export const STREAM_NSID = () =>
 	optional("STREAM_NSID", "space.roomy.space.personal.dev");
 export const STREAM_HANDLE_NSID = () =>

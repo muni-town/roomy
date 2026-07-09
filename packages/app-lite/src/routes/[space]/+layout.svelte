@@ -16,10 +16,6 @@
 
   const metaQuery = createSpaceMetadataQuery(() => spaceId);
 
-  $effect(() => {
-    console.log($state.snapshot(metaQuery))
-  })
-
   import { base } from "$app/paths";
   import { resolveBlobUrl } from "$lib/utils";
 
