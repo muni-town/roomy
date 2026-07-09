@@ -84,7 +84,6 @@ Events carry two extensions:
 | `ATPROTO_BRIDGE_APP_PASSWORD` | App password for ATProto authentication                 |
 | `APPSERVER_URL`               | Appserver HTTP origin (e.g. `http://127.0.0.1:8080`)    |
 | `APPSERVER_DID`               | DID of the appserver service                            |
-| `APPSERVER_WS_URL`            | Appserver sync WebSocket URL (e.g. `ws://127.0.0.1:8080/xrpc/space.roomy.sync.subscribe`) |
 
 ### Optional
 
@@ -135,7 +134,6 @@ docker run -d \
   -e ATPROTO_BRIDGE_APP_PASSWORD=... \
   -e APPSERVER_URL=... \
   -e APPSERVER_DID=... \
-  -e APPSERVER_WS_URL=... \
   -e S3_BUCKET=... \
   -e S3_ENDPOINT=... \
   -e S3_REGION=... \
@@ -152,7 +150,7 @@ The entrypoint restores the SQLite database from S3 on first start (if no local 
 ```bash
 cp .env.example .env
 # Fill in DISCORD_TOKEN, ATPROTO_BRIDGE_DID, ATPROTO_BRIDGE_APP_PASSWORD,
-# APPSERVER_URL, APPSERVER_DID, APPSERVER_WS_URL
+# APPSERVER_URL, APPSERVER_DID
 bun install
 bun run dev       # watch mode
 bun run start     # production mode

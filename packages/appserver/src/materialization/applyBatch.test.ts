@@ -13,9 +13,12 @@ import {
   type Event,
 } from "@roomy-space/sdk";
 import type { DbLike } from "../db/types.ts";
+import type { SQLQueryBinding } from "bun:sqlite";
 
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import { applyBatch } from "./applyBatch.ts";
+import { applyBundle } from "./applyBundle.ts";
+import type { StatementBundleSuccess } from "./types.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -389,3 +392,152 @@ describe("forwardMessages sort order", () => {
     expect(messages[1]?.content).toBe("new msg");
   });
 })
+
+// ─── Concurrency: applyBundle savepoint serialization ────────────────────
+
+/**
+ * Async DB wrapper that yields to the event loop *before* each operation,
+ * simulating the AsyncDatabase worker's per-message interleaving. With
+ * `toAsyncDb`, operations execute synchronously before the promise resolves,
+ * so concurrent `applyBundle` calls never interleave. This wrapper forces
+ * interleaving so the savepoint-mutex fix can be verified.
+ */
+function yieldingAsyncDb(db: Database): DbLike {
+  const toBindings = (...params: unknown[]) => params as SQLQueryBinding[];
+  const normaliseRowid = (r: number | bigint | undefined) =>
+    r === undefined || r === null ? undefined : Number(r);
+
+  return {
+    query(sql: string) {
+      const stmt = db.query(sql);
+      return {
+        async all<T>(...params: unknown[]): Promise<T[]> {
+          await Promise.resolve();
+          return stmt.all(...toBindings(...params)) as T[];
+        },
+        async get<T>(...params: unknown[]): Promise<T | null> {
+          await Promise.resolve();
+          return (stmt.get(...toBindings(...params)) ?? null) as T | null;
+        },
+      };
+    },
+    async prepare(sql: string) {
+      const stmt = db.prepare(sql);
+      return {
+        async all<T>(...params: unknown[]): Promise<T[]> {
+          await Promise.resolve();
+          return stmt.all(...toBindings(...params)) as T[];
+        },
+        async get<T>(...params: unknown[]): Promise<T | null> {
+          await Promise.resolve();
+          return (stmt.get(...toBindings(...params)) ?? null) as T | null;
+        },
+        async run(...params: unknown[]): Promise<{ changes: number; lastInsertRowid?: number }> {
+          await Promise.resolve();
+          const result = stmt.run(...toBindings(...params));
+          return { changes: result.changes, lastInsertRowid: normaliseRowid(result.lastInsertRowid) };
+        },
+      };
+    },
+    async exec(sql: string): Promise<void> {
+      await Promise.resolve();
+      db.exec(sql);
+    },
+    async run(sql: string, ...params: unknown[]): Promise<{ changes: number; lastInsertRowid?: number }> {
+      await Promise.resolve();
+      const result = db.run(sql, ...toBindings(...params));
+      return { changes: result.changes, lastInsertRowid: normaliseRowid(result.lastInsertRowid) };
+    },
+    async transaction<T>(steps: Array<{ type: "query" | "run" | "exec"; sql: string; params?: unknown[] }>): Promise<T> {
+      // Simulate worker transaction: yield, then run synchronously
+      await Promise.resolve();
+      let lastResult: unknown;
+      const run = db.transaction(() => {
+        for (const step of steps) {
+          switch (step.type) {
+            case "query":
+              lastResult = db.prepare(step.sql).all(...toBindings(...(step.params ?? [])));
+              break;
+            case "run":
+              lastResult = db.run(step.sql, ...toBindings(...(step.params ?? [])));
+              break;
+            case "exec":
+              db.exec(step.sql);
+              lastResult = undefined;
+              break;
+          }
+        }
+      });
+      run();
+      return lastResult as T;
+    },
+    async close(): Promise<void> {
+      db.close();
+    },
+  };
+}
+
+describe("applyBundle concurrency", () => {
+  test("concurrent applyBundle calls do not destroy each other's savepoints", async () => {
+    const { db } = freshDb();
+    seedSpace(db, STREAM);
+
+    // Seed a channel room so createMessage events can reference it.
+    const channelId = newUlid();
+    db.run("insert into entities (id, stream_id) values (?, ?)", [channelId, STREAM]);
+    db.run(
+      "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.channel', 'readwrite')",
+      [channelId],
+    );
+
+    const asyncDb = yieldingAsyncDb(db);
+
+    // Two createMessage events with distinct ULIDs — each gets its own
+    // savepoint name in applyBundle.
+    const eventA = createMessageEvent(channelId, newUlid(), "message A");
+    const eventB = createMessageEvent(channelId, newUlid(), "message B");
+
+    // First, materialize the events (insert entities + comp_message rows)
+    // so applyBundle's side-effects can find them. We use applyBatch with
+    // the synchronous adapter for this setup step.
+    const syncDb = toAsyncDb(db);
+    await applyBatch(syncDb, STREAM, [decoded(eventA, 1)], { isBackfill: true });
+    await applyBatch(syncDb, STREAM, [decoded(eventB, 2)], { isBackfill: true });
+
+    // Now fire two applyBundle calls concurrently with the yielding adapter.
+    // Without the mutex, their SAVEPOINT/RELEASE operations interleave:
+    // A creates evt_AAA (starts implicit transaction), B creates evt_BBB
+    // (nested), A releases evt_AAA (commits, destroys evt_BBB), B fails
+    // with "no such savepoint: evt_BBB".
+    const bundleA: StatementBundleSuccess = {
+      status: "success",
+      event: eventA,
+      eventIdx: 1 as StreamIndex,
+      user: USER,
+      statements: [],
+      dependsOn: [],
+    };
+    const bundleB: StatementBundleSuccess = {
+      status: "success",
+      event: eventB,
+      eventIdx: 2 as StreamIndex,
+      user: USER,
+      statements: [],
+      dependsOn: [],
+    };
+
+    const results = await Promise.allSettled([
+      applyBundle(asyncDb, bundleA, { isBackfill: true, streamId: STREAM }),
+      applyBundle(asyncDb, bundleB, { isBackfill: true, streamId: STREAM }),
+    ]);
+
+    // Both must succeed — no "no such savepoint" errors.
+    for (const [i, result] of results.entries()) {
+      expect(result.status).toBe("fulfilled");
+      if (result.status === "rejected") {
+        // Provide a clear failure message with the actual error.
+        throw new Error(`applyBundle ${i} failed: ${result.reason}`);
+      }
+    }
+  });
+});

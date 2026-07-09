@@ -531,3 +531,80 @@ describe("ingestDiscordMessage — backfill path & subset mode", () => {
 		expectToBe(decoded, longContent);
 	});
 });
+
+describe("ingestDiscordMessage — webhook echo prevention", () => {
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
+	const WEBHOOK_ID = "999888777666555444";
+
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+		mapChannel(repo);
+		// Register a webhook for the channel — simulates ensureWebhook
+		// reusing a webhook from a previous bridge instance.
+		repo.setWebhookToken(CHANNEL, WEBHOOK_ID, "fake-token");
+	});
+
+	// WE01: Live ingestion skips messages from our own webhook (echo prevention)
+	test("WE01: live ingestion skips own webhook messages", async () => {
+		const msg = makeMessage({
+			id: MSG_ID,
+			webhookId: WEBHOOK_ID,
+			content: "echo from our webhook",
+		});
+		const result = await ingestDiscordMessage(msg, repo, roomy);
+
+		expect(result).toEqual({ synced: 0, skipped: 1 });
+		expect(createMessageEvent(roomy, SPACE_A)).toBeUndefined();
+	});
+
+	// WE02: Backfill ingests own-webhook messages (historical import)
+	test("WE02: backfill ingests own-webhook messages not yet mapped", async () => {
+		const msg = makeMessage({
+			id: MSG_ID,
+			webhookId: WEBHOOK_ID,
+			content: "historical webhook message from previous bridge",
+		});
+		// backfill=true — should NOT skip just because it's our webhook
+		const result = await ingestDiscordMessage(
+			msg,
+			repo,
+			roomy,
+			undefined,
+			undefined,
+			undefined,
+			true, // backfill
+		);
+
+		expect(result).toEqual({ synced: 1, skipped: 0 });
+		const event = createMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
+		expect(decodeBody(event)).toBe("historical webhook message from previous bridge");
+	});
+
+	// WE03: Backfill still skips own-webhook messages that are already mapped
+	// (e.g. the current bridge sent them live and the router registered the mapping)
+	test("WE03: backfill skips own-webhook messages already mapped to this space", async () => {
+		const msg = makeMessage({
+			id: MSG_ID,
+			webhookId: WEBHOOK_ID,
+			content: "already bridged by current instance",
+		});
+		// Simulate the router having already registered a mapping for this
+		// Discord message (it was sent as a webhook by the current bridge).
+		mapMessage(repo, MSG_ID, ROOMY_MESSAGE_ULID);
+
+		const result = await ingestDiscordMessage(
+			msg,
+			repo,
+			roomy,
+			undefined,
+			undefined,
+			undefined,
+			true, // backfill
+		);
+
+		expect(result).toEqual({ synced: 0, skipped: 1 });
+	});
+});

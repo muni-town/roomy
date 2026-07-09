@@ -70,6 +70,7 @@ export function makeMessage(
 		content: overrides.content ?? "Hello world",
 		timestamp: overrides.timestamp ?? Date.now(),
 		editedTimestamp: overrides.editedTimestamp ?? undefined,
+		webhookId: overrides.webhookId ?? undefined,
 		author,
 		attachments: overrides.attachments ?? [],
 		embeds: overrides.embeds ?? [],

@@ -9,6 +9,15 @@
  * Side-effects (sort_idx, unread counter) live here rather than inside the SDK
  * materialisers because the original design keeps materialisers free of
  * backfill awareness.
+ *
+ * Concurrency: `applyBundle` manages its SAVEPOINT via individual async
+ * `db.exec` calls (each a separate worker message). Without serialization,
+ * concurrent calls interleave: call A's `SAVEPOINT evt_AAA` starts an implicit
+ * transaction, call B's `SAVEPOINT evt_BBB` nests within it, then call A's
+ * `RELEASE evt_AAA` commits the transaction — destroying evt_BBB. When call B
+ * tries `RELEASE evt_BBB`, SQLite raises "no such savepoint". The mutex below
+ * serializes the savepoint-managed section so only one `applyBundle` has an
+ * open savepoint at a time.
  */
 
 import type { DbLike } from "../db/types.ts";
@@ -25,6 +34,30 @@ import { decodeTime } from "ulidx";
 
 const decodeTimeFromId = (id: string): number => decodeTime(id);
 
+// ─── Async mutex ─────────────────────────────────────────────────────────
+
+/**
+ * Minimal promise-based mutex. Serializes the savepoint-managed section of
+ * `applyBundle` so concurrent calls don't interleave their SAVEPOINT/RELEASE
+ * operations (which would destroy each other's savepoints — see file header).
+ */
+class AsyncMutex {
+  #chain: Promise<void> = Promise.resolve();
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    const chain = this.#chain;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    this.#chain = promise;
+    await chain;
+    try {
+      return await fn();
+    } finally {
+      resolve();
+    }
+  }
+}
+
+const savepointMutex = new AsyncMutex();
+
 export interface ApplyBundleOpts {
   /** True for backfill events — skips the unread-counter increment. */
   isBackfill: boolean;
@@ -32,6 +65,17 @@ export interface ApplyBundleOpts {
 }
 
 export async function applyBundle(
+  db: DbLike,
+  bundle: StatementBundleSuccess,
+  opts: ApplyBundleOpts,
+): Promise<void> {
+  // Serialize the savepoint-managed section: manual SAVEPOINT/RELEASE via
+  // individual async db.exec calls is not atomic. Without this lock,
+  // concurrent calls destroy each other's savepoints (see file header).
+  return savepointMutex.run(() => applyBundleInner(db, bundle, opts));
+}
+
+async function applyBundleInner(
   db: DbLike,
   bundle: StatementBundleSuccess,
   opts: ApplyBundleOpts,

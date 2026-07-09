@@ -68,7 +68,21 @@ export async function ingestDiscordMessage(
 	// completed before the gateway event arrives. Checking against our
 	// stored webhook IDs is deterministic and doesn't depend on timing.
 	// Other integrations' webhooks are not skipped.
-	if (message.webhookId && repo.isOurWebhook(message.webhookId)) {
+	//
+	// During backfill this check is skipped: the webhook may have been
+	// created by a previous bridge instance (ensureWebhook reuses existing
+	// webhooks from the DB), so isOurWebhook would return true for
+	// historical messages that should be ingested into the new space.
+	// The dedup check (getRoomyId) below handles echo prevention during
+	// backfill — the router registers the mapping synchronously right after
+	// the webhook message is created; backfill only observes the message via
+	// a later REST fetch, so the mapping always exists by the time backfill
+	// reaches it.
+	if (
+		!backfill &&
+		message.webhookId &&
+		repo.isOurWebhook(message.webhookId)
+	) {
 		log.debug(`Skipping own webhook message ${messageId}`);
 		writeSkipRecord("own_webhook_message", message);
 		return { synced: 0, skipped: 1 };

@@ -19,7 +19,12 @@ export const ATPROTO_BRIDGE_APP_PASSWORD = () =>
 
 export const APPSERVER_URL = () => required("APPSERVER_URL");
 export const APPSERVER_DID = () => required("APPSERVER_DID");
-export const APPSERVER_WS_URL = () => required("APPSERVER_WS_URL");
+/** Derived from APPSERVER_URL: HTTP origin → sync WebSocket URL.
+ *  Matches app-lite's convention (http(s):// → ws(s):// + /xrpc/space.roomy.sync.subscribe). */
+export const APPSERVER_WS_URL = () => {
+	const origin = APPSERVER_URL().replace(/\/+$/, "");
+	return `${origin.replace(/^http(s?):\/\//, "ws$1://")}/xrpc/space.roomy.sync.subscribe`;
+};
 
 export const STREAM_NSID = () =>
 	optional("STREAM_NSID", "space.roomy.space.personal.dev");
