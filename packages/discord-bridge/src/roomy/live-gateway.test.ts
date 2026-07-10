@@ -232,7 +232,10 @@ describe("LiveRoomyGateway", () => {
 		expect(callback).toHaveBeenCalledTimes(1);
 		expect(callback).toHaveBeenCalledWith(event, {
 			spaceDid: SPACE_DID,
-			isBackfill: false,
+			// A single hasMore=false frame is treated as the final backfill
+			// batch because the client cannot distinguish "no more backfill"
+			// from "no backfill at all" without a server-side marker.
+			isBackfill: true,
 			userDid: "did:web:test-user",
 		});
 	});
@@ -269,12 +272,12 @@ describe("LiveRoomyGateway", () => {
 		expect(callback).toHaveBeenCalledTimes(2);
 		expect(callback).toHaveBeenNthCalledWith(1, event1, {
 			spaceDid: SPACE_DID,
-			isBackfill: false,
+			isBackfill: true,
 			userDid: "did:web:user-a",
 		});
 		expect(callback).toHaveBeenNthCalledWith(2, event2, {
 			spaceDid: SPACE_DID,
-			isBackfill: false,
+			isBackfill: true,
 			userDid: "did:web:user-b",
 		});
 	});
@@ -319,9 +322,8 @@ describe("LiveRoomyGateway", () => {
 			userDid: "did:web:test-user",
 		});
 
-		// Second frame: hasMore=false → transition point → isBackfill=false
-		// (backfilling was still true at the start of this frame, but
-		// `true && false === false`).
+		// Second frame: hasMore=false → still backfill at the start of the
+		// frame, so the final backfill batch is flagged isBackfill=true.
 		await emitStreamEvents(
 			SPACE_DID,
 			[{ idx: 1, user: "did:web:test-user", event: event2 }],
@@ -330,7 +332,7 @@ describe("LiveRoomyGateway", () => {
 		);
 		expect(callback).toHaveBeenNthCalledWith(2, event2, {
 			spaceDid: SPACE_DID,
-			isBackfill: false,
+			isBackfill: true,
 			userDid: "did:web:test-user",
 		});
 
@@ -473,7 +475,7 @@ describe("LiveRoomyGateway", () => {
 		);
 		expect(callback).toHaveBeenCalledWith(event, {
 			spaceDid: SPACE_DID,
-			isBackfill: false,
+			isBackfill: true,
 			userDid: "did:web:test-user",
 		});
 	});
@@ -499,7 +501,8 @@ describe("LiveRoomyGateway", () => {
 			userDid: "did:web:test-user",
 		});
 
-		// Backfill completes: hasMore=false → isBackfill=false, backfillState now false.
+		// Backfill completes: hasMore=false → final batch is still backfill,
+		// then backfillState flips to false.
 		await emitStreamEvents(
 			SPACE_DID,
 			[{ idx: 1, user: "did:web:test-user", event: event2 }],
@@ -508,7 +511,7 @@ describe("LiveRoomyGateway", () => {
 		);
 		expect(callback).toHaveBeenNthCalledWith(2, event2, {
 			spaceDid: SPACE_DID,
-			isBackfill: false,
+			isBackfill: true,
 			userDid: "did:web:test-user",
 		});
 
@@ -533,4 +536,66 @@ describe("LiveRoomyGateway", () => {
 		});
 	});
 
+	test("a failing callback does not freeze the cursor and logs the error", async () => {
+		const callback = vi
+			.fn()
+			.mockResolvedValueOnce(undefined)
+			.mockRejectedValueOnce(new Error("boom")) as unknown as RoomyEventCallback;
+		const event1 = makeEvent();
+		const event2 = makeEvent();
+
+		await subscribeAndConnect(SPACE_DID, callback);
+		await emitStreamEvents(
+			SPACE_DID,
+			[
+				{ idx: 0, user: "did:web:user-a", event: event1 },
+				{ idx: 1, user: "did:web:user-b", event: event2 },
+			],
+			1,
+		);
+
+		expect(callback).toHaveBeenCalledTimes(2);
+		// Cursor advances past the failure so the bridge makes forward progress.
+		expect(repo.getSpaceCursor(SPACE_DID)).toBe(1);
+		const errors = repo.getEventErrors(SPACE_DID);
+		expect(errors.length).toBe(1);
+		expect(errors[0]).toMatchObject({
+			spaceDid: SPACE_DID,
+			eventIdx: 1,
+			eventType: event2.$type,
+			errorMessage: "boom",
+		});
+	});
+
+	test("subsequent frames advance the cursor after an earlier failure", async () => {
+		const callback = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("boom")) as unknown as RoomyEventCallback;
+		const event1 = makeEvent();
+		const event2 = makeEvent();
+		const event3 = makeEvent();
+
+		await subscribeAndConnect(SPACE_DID, callback);
+		await emitStreamEvents(
+			SPACE_DID,
+			[{ idx: 0, user: "did:web:test-user", event: event1 }],
+			0,
+		);
+		expect(repo.getSpaceCursor(SPACE_DID)).toBe(0);
+
+		await emitStreamEvents(
+			SPACE_DID,
+			[
+				{ idx: 1, user: "did:web:test-user", event: event2 },
+				{ idx: 2, user: "did:web:test-user", event: event3 },
+			],
+			2,
+		);
+
+		expect(callback).toHaveBeenCalledTimes(3);
+		expect(repo.getSpaceCursor(SPACE_DID)).toBe(2);
+		const errors = repo.getEventErrors(SPACE_DID);
+		expect(errors.length).toBe(1);
+		expect(errors[0]?.eventIdx).toBe(0);
+	});
 });

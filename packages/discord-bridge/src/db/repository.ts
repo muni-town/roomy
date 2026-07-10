@@ -40,6 +40,15 @@ export type WebhookToken = {
 	token: string;
 };
 
+export type EventError = {
+	id: number;
+	spaceDid: string;
+	eventIdx: number;
+	eventType: string;
+	errorMessage: string;
+	occurredAt: number;
+};
+
 export class BridgeRepository {
 	private constructor(private readonly db: Database) {}
 
@@ -480,6 +489,58 @@ export class BridgeRepository {
            updated_at = excluded.updated_at`,
 			)
 			.run(spaceDid, lastIdx, Date.now());
+	}
+
+	// === Event error log (Roomy→Discord) ===
+
+	/** Record an event that failed materialization to Discord. */
+	logEventError(
+		spaceDid: string,
+		eventIdx: number,
+		eventType: string,
+		errorMessage: string,
+	): void {
+		this.db
+			.prepare(
+				`INSERT INTO event_errors (space_did, event_idx, event_type, error_message, occurred_at)
+         VALUES (?, ?, ?, ?, ?)`,
+			)
+			.run(spaceDid, eventIdx, eventType, errorMessage, Date.now());
+	}
+
+	/** Get the most recent event errors for a space, oldest first. */
+	getEventErrors(
+		spaceDid: string,
+		limit = 100,
+		since?: number,
+	): EventError[] {
+		const rows = this.db
+			.query<
+				{
+					id: number;
+					space_did: string;
+					event_idx: number;
+					event_type: string;
+					error_message: string;
+					occurred_at: number;
+				},
+				[string, number | null, number | null, number]
+			>(
+				`SELECT id, space_did, event_idx, event_type, error_message, occurred_at
+         FROM event_errors
+         WHERE space_did = ? AND (? IS NULL OR occurred_at >= ?)
+         ORDER BY occurred_at ASC, id ASC
+         LIMIT ?`,
+			)
+			.all(spaceDid, since ?? null, since ?? null, limit);
+		return rows.map((r) => ({
+			id: r.id,
+			spaceDid: r.space_did,
+			eventIdx: r.event_idx,
+			eventType: r.event_type,
+			errorMessage: r.error_message,
+			occurredAt: r.occurred_at,
+		}));
 	}
 
 	// === Webhook tokens ===

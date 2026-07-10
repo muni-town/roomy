@@ -180,13 +180,13 @@ export class LiveRoomyGateway implements RoomyGateway {
 		const data = body as unknown as StreamEventsBody;
 		if (!data || !Array.isArray(data.events)) return;
 
-		// L1: a frame is backfill only while we're still in the backfill phase
-		// AND the server signals more backfill to come. The final backfill
-		// batch carries hasMore=false, so it lands as isBackfill=false (the
-		// transition point). There is no explicit end-of-backfill marker from
-		// the server, so this is the closest approximation — the alternative
-		// would require a server-side marker, which is a larger change.
-		const isBackfill = backfillState.value && data.hasMore;
+		// L1: `isBackfill` describes the state at the *start* of this frame,
+		// not the server's signal for the *next* frame. The final backfill
+		// batch still carries historical events, so it should be flagged as
+		// backfill. We only exit the backfill phase after processing a frame
+		// that the server says completes the backfill (hasMore=false).
+		const wasBackfill = backfillState.value;
+		const isBackfill = wasBackfill;
 
 		for (const entry of data.events) {
 			const event = entry.payload;
@@ -198,6 +198,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 				);
 				continue;
 			}
+
 			try {
 				await callback(event as Event, {
 					spaceDid,
@@ -205,21 +206,29 @@ export class LiveRoomyGateway implements RoomyGateway {
 					userDid: entry.user,
 				});
 			} catch (cbErr) {
+				const errorMessage =
+					cbErr instanceof Error ? cbErr.message : String(cbErr);
 				log.error(
-					`Event callback failed for ${spaceDid} idx ${entry.idx}: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+					`Event callback failed for ${spaceDid} idx ${entry.idx}: ${errorMessage}`,
+				);
+				this.#repo.logEventError(
+					spaceDid,
+					entry.idx,
+					String(event.$type),
+					errorMessage,
 				);
 			}
 		}
 
 		// M4: persist the cursor AFTER the callbacks have run so a crash
 		// between persisting and delivering doesn't permanently lose events
-		// (at-least-once delivery). A redelivery after restart is safe
-		// because handlers are idempotent at the app layer.
+		// (at-least-once delivery). Per-event errors are logged above and do
+		// not block forward progress.
 		this.#repo.setSpaceCursor(spaceDid, data.cursor);
 
-		// Once the server signals no more backfill, the backfill phase is
-		// over — all subsequent frames are live.
-		if (!data.hasMore) backfillState.value = false;
+		// Only exit the backfill phase once the server signals this frame
+		// completed the backfill.
+		if (wasBackfill && !data.hasMore) backfillState.value = false;
 	}
 
 	async unsubscribe(spaceDid: string): Promise<void> {

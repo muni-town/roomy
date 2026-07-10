@@ -15,8 +15,8 @@ describe("migrations", () => {
 	test("apply cleanly on a fresh database", () => {
 		const db = new Database(":memory:");
 		const result = runMigrations(db);
-		expect(result.applied).toEqual([1, 2, 3, 4, 5]);
-		expect(result.current).toBe(5);
+		expect(result.applied).toEqual([1, 2, 3, 4, 5, 6]);
+		expect(result.current).toBe(6);
 	});
 
 	test("are idempotent across re-runs", () => {
@@ -24,7 +24,7 @@ describe("migrations", () => {
 		runMigrations(db);
 		const second = runMigrations(db);
 		expect(second.applied).toEqual([]);
-		expect(second.current).toBe(5);
+		expect(second.current).toBe(6);
 	});
 });
 
@@ -311,5 +311,35 @@ describe("pending_room_creations", () => {
 		);
 		const pending = r.getPendingRoomCreation(SPACE_A, "roomy-thread-1");
 		expect(pending?.defaultAccess).toBeUndefined();
+	});
+});
+
+describe("event_errors", () => {
+	test("logs and retrieves errors for a space", () => {
+		const r = repo();
+		r.logEventError(SPACE_A, 42, "space.roomy.message.createMessage.v0", "boom");
+		r.logEventError(SPACE_A, 43, "space.roomy.message.editMessage.v0", "nope");
+		r.logEventError(SPACE_B, 1, "space.roomy.message.createMessage.v0", "other");
+
+		const errors = r.getEventErrors(SPACE_A);
+		expect(errors.length).toBe(2);
+		expect(errors[0]?.eventIdx).toBe(42);
+		expect(errors[0]?.eventType).toBe("space.roomy.message.createMessage.v0");
+		expect(errors[0]?.errorMessage).toBe("boom");
+		expect(errors[1]?.eventIdx).toBe(43);
+	});
+
+	test("filters errors by timestamp", () => {
+		const r = repo();
+		r.logEventError(SPACE_A, 1, "t", "old");
+		// Sleep briefly so timestamps are unambiguous.
+		const after = Date.now();
+		while (Date.now() <= after) {
+			// busy-wait to guarantee next log has a strictly greater timestamp
+		}
+		r.logEventError(SPACE_A, 2, "t", "new");
+		const filtered = r.getEventErrors(SPACE_A, 100, after + 1);
+		expect(filtered.length).toBe(1);
+		expect(filtered[0]?.errorMessage).toBe("new");
 	});
 });

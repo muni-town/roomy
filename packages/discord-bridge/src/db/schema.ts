@@ -138,6 +138,23 @@ export const MIGRATIONS: Migration[] = [
       `);
 		},
 	},
+	{
+		version: 6,
+		name: "event_errors",
+		up(db) {
+			db.run(`
+        CREATE TABLE event_errors (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          space_did     TEXT NOT NULL,
+          event_idx     INTEGER NOT NULL,
+          event_type    TEXT NOT NULL,
+          error_message TEXT NOT NULL,
+          occurred_at   INTEGER NOT NULL
+        );
+        CREATE INDEX idx_event_errors_space ON event_errors (space_did, occurred_at);
+      `);
+		},
+	},
 ];
 
 export function runMigrations(db: Database): {
