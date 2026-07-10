@@ -182,23 +182,53 @@ export async function applyBatch(
       if (e.idx > chunkMaxIdx) chunkMaxIdx = e.idx;
     }
 
-    // Run this chunk in a single transaction (event SQL only — the cursor
-    // is advanced separately below so it also advances past chunks with
-    // apply errors, preventing infinite retry loops on every boot).
+    // Run this chunk's event SQL individually, with per-event savepoints
+    // providing error isolation. Each event's SAVEPOINT/RELEASE pair wraps
+    // its statements; if one event fails, only that event's changes are
+    // rolled back. The cursor is advanced separately below so it also
+    // advances past chunks with apply errors, preventing infinite retry
+    // loops on every boot.
     if (chunkSteps.length > 0) {
-      try {
-        await db.transaction(chunkSteps);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        stats.applyErrors += chunk.length;
-        stats.applied -= chunk.length;
-        for (const e of chunk) {
-          recordFailure(stats, {
-            eventId: e.event.id,
-            type: e.event.$type,
-            reason: "apply",
-            message,
-          });
+      let eventStart = 0;
+      for (let i = 0; i < chunkSteps.length; i++) {
+        const step = chunkSteps[i]!;
+        if (step.type === "exec" && step.sql.startsWith("savepoint evt_")) {
+          // Collect all steps for this event (savepoint → statements → release)
+          const eventSteps: typeof chunkSteps = [];
+          for (let j = i; j < chunkSteps.length; j++) {
+            const s = chunkSteps[j]!;
+            eventSteps.push(s);
+            if (s.type === "exec" && s.sql.startsWith("release evt_")) {
+              i = j;
+              break;
+            }
+          }
+          try {
+            for (const s of eventSteps) {
+              if (s.type === "run") {
+                await db.run(s.sql, ...(s.params ?? []));
+              } else {
+                await db.exec(s.sql);
+              }
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            stats.applyErrors++;
+            stats.applied--;
+            const savepointName = eventSteps[0]!.sql.slice("savepoint ".length);
+            try {
+              await db.exec(`rollback to ${savepointName}`);
+              await db.exec(`release ${savepointName}`);
+            } catch {
+              // Best-effort cleanup
+            }
+            recordFailure(stats, {
+              eventId: "",
+              type: "unknown",
+              reason: "apply",
+              message,
+            });
+          }
         }
       }
     }

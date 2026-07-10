@@ -41,6 +41,15 @@ export class StreamManager {
   /** Live-event listeners, notified after each sendEvents batch. */
   readonly #streamListeners = new Set<StreamEventListener>();
 
+  /**
+   * Per-stream serialization queues. Concurrent sendEvents to the same
+   * stream chain off each other so the post-insert section (decode →
+   * materialize → invalidate → listeners) runs strictly in idx order.
+   * Different streams run in parallel. Entries are cleaned up once the
+   * queue drains.
+   */
+  readonly #streamQueues = new Map<string, Promise<void>>();
+
   constructor(
     db: DbLike,
     opts: {
@@ -53,6 +62,27 @@ export class StreamManager {
     this.#invalidationRouter = opts.invalidationRouter;
     this.#appserverUrl = opts.appserverUrl;
     this.#getProfiles = opts.getProfiles ?? defaultGetProfiles;
+  }
+
+  /**
+   * Run `fn` strictly after any prior serialized work for the same stream.
+   * Uses a chain-of-promises mutex keyed by streamDid so different streams
+   * never block each other. The next link always runs even if the previous
+   * rejected, and the queue entry is removed once it is the tail (no leak).
+   */
+  async #runSerialized(
+    streamDid: string,
+    fn: () => Promise<void>,
+  ): Promise<void> {
+    const prev = this.#streamQueues.get(streamDid) ?? Promise.resolve();
+    const next = prev.then(fn, fn); // run even if prev rejected
+    this.#streamQueues.set(streamDid, next);
+    next.finally(() => {
+      if (this.#streamQueues.get(streamDid) === next) {
+        this.#streamQueues.delete(streamDid);
+      }
+    });
+    return next;
   }
 
   /**
@@ -101,61 +131,68 @@ export class StreamManager {
     // Final step: return the startIdx we just used
     steps.push({
       type: "query",
-      sql: "select coalesce(max(idx), ?) - ? as start_idx from events.stream_events where stream_id = ?",
-      params: [0, encoded.length, streamDid],
+      sql: "select coalesce(max(idx), -1) + 1 - ? as start_idx from events.stream_events where stream_id = ?",
+      params: [encoded.length, streamDid],
     });
 
     const result = await this.#db.transaction<Array<{ start_idx: number }>>(steps);
     const startIdx = (result?.[0]?.start_idx ?? 0) as number;
 
-    // 3. Decode events back to DecodedStreamEvent[]
-    const decodedEvents: DecodedStreamEvent[] = encoded.map(
-      (bytes, i): DecodedStreamEvent => ({
-        idx: (startIdx + i) as StreamIndex,
-        event: decode(bytes) as Event,
-        user: (userOverride ?? "unknown") as UserDid,
-      }),
-    );
-
-    // 4. Ensure profiles for batch
-    await ensureProfilesForBatch(this.#db, decodedEvents, this.#getProfiles);
-
-    // 5. Apply batch to materialize
-    await applyBatch(this.#db, streamDid, decodedEvents, {
-      isBackfill: false,
-    });
-
-    // 6. Emit invalidation signals for live events
-    if (this.#invalidationRouter) {
-      const appliedEvents = decodedEvents.map((e) => toAppliedEvent(e, streamDid));
-      await this.#invalidationRouter.onEventsApplied(
-        streamDid,
-        appliedEvents,
-        { isBackfill: false },
-        this.#db,
+    // Serialize the post-insert section per stream so concurrent
+    // sendEvents to the same stream materialize strictly in idx order.
+    // The idx assignment above is already atomic; this guards the async
+    // gap between insert and materialize (decode → materialize →
+    // invalidate → listeners). Different streams are not serialized.
+    await this.#runSerialized(streamDid, async () => {
+      // 3. Decode events back to DecodedStreamEvent[]
+      const decodedEvents: DecodedStreamEvent[] = encoded.map(
+        (bytes, i): DecodedStreamEvent => ({
+          idx: (startIdx + i) as StreamIndex,
+          event: decode(bytes) as Event,
+          user: (userOverride ?? "unknown") as UserDid,
+        }),
       );
-    }
 
-    // 7. Poke embed sweeper for createMessage events
-    const hasCreateMessage = decodedEvents.some(
-      (e) => e.event.$type === "space.roomy.message.createMessage.v0",
-    );
-    if (hasCreateMessage) {
-      pokeEmbedSweeper();
-    }
+      // 4. Ensure profiles for batch
+      await ensureProfilesForBatch(this.#db, decodedEvents, this.#getProfiles);
 
-    // 8. Notify live-event listeners (e.g. sync stream subscriptions).
-    if (this.#streamListeners.size > 0) {
-      for (const listener of this.#streamListeners) {
-        try {
-          listener(streamDid, decodedEvents);
-        } catch (err) {
-          console.error(
-            `StreamEventListener threw for ${streamDid}: ${err instanceof Error ? err.message : String(err)}`,
-          );
+      // 5. Apply batch to materialize
+      await applyBatch(this.#db, streamDid, decodedEvents, {
+        isBackfill: false,
+      });
+
+      // 6. Emit invalidation signals for live events
+      if (this.#invalidationRouter) {
+        const appliedEvents = decodedEvents.map((e) => toAppliedEvent(e, streamDid));
+        await this.#invalidationRouter.onEventsApplied(
+          streamDid,
+          appliedEvents,
+          { isBackfill: false },
+          this.#db,
+        );
+      }
+
+      // 7. Poke embed sweeper for createMessage events
+      const hasCreateMessage = decodedEvents.some(
+        (e) => e.event.$type === "space.roomy.message.createMessage.v0",
+      );
+      if (hasCreateMessage) {
+        pokeEmbedSweeper();
+      }
+
+      // 8. Notify live-event listeners (e.g. sync stream subscriptions).
+      if (this.#streamListeners.size > 0) {
+        for (const listener of this.#streamListeners) {
+          try {
+            listener(streamDid, decodedEvents);
+          } catch (err) {
+            console.error(
+              `StreamEventListener threw for ${streamDid}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
       }
-    }
+    });
   }
 
   /**

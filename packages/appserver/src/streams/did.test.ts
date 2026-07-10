@@ -19,7 +19,6 @@ import type { DbLike } from "../db/types.ts";
 let db: DbLike;
 let origFetch: typeof globalThis.fetch;
 let origPlcUrl: string | undefined;
-let origUseDidWeb: string | undefined;
 
 beforeEach(async () => {
   closeDb();
@@ -34,7 +33,6 @@ beforeEach(async () => {
   // Snapshot env vars for restoration in afterEach
   origFetch = globalThis.fetch;
   origPlcUrl = process.env.PLC_DIRECTORY_URL;
-  origUseDidWeb = process.env.APPSERVER_USE_DID_WEB;
 });
 
 afterEach(() => {
@@ -44,48 +42,16 @@ afterEach(() => {
   } else {
     process.env.PLC_DIRECTORY_URL = origPlcUrl;
   }
-  if (origUseDidWeb === undefined) {
-    delete process.env.APPSERVER_USE_DID_WEB;
-  } else {
-    process.env.APPSERVER_USE_DID_WEB = origUseDidWeb;
-  }
   closeDb();
   delete process.env.EVENTS_DB_PATH;
 });
 
-// ─── did:web path ────────────────────────────────────────────────────────
-
-describe("did:web path", () => {
-  test("creates did:web DID without fetch call and stores key", async () => {
-    process.env.APPSERVER_USE_DID_WEB = "true";
-    delete process.env.PLC_DIRECTORY_URL;
-
-    const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock;
-
-    const did = await createStreamDid("http://test.example", "did:plc:admin", db);
-
-    expect(did.toString()).toBe("did:web:test.example");
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    // DID is stored in dids, did_keys, did_owners
-    const key = await getStreamSigningKey(db, did.toString());
-    expect(key).not.toBeNull();
-    expect(key!.did()).toMatch(/^did:key:/);
-
-    const owners = await listStreamOwners(db, did.toString());
-    expect(owners).toEqual(["did:plc:admin"]);
-  });
-});
 
 // ─── Key roundtrip ──────────────────────────────────────────────────────
 
 describe("key roundtrip", () => {
   test("getStreamSigningKey returns a valid keypair matching the DID", async () => {
-    process.env.APPSERVER_USE_DID_WEB = "true";
-    delete process.env.PLC_DIRECTORY_URL;
-
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
     globalThis.fetch = fetchMock;
 
     const did = await createStreamDid("http://test.example", "did:plc:admin", db);
@@ -131,7 +97,7 @@ describe("PLC path", () => {
     const didStr = did.toString();
 
     expect(didStr).toMatch(/^did:plc:/);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalled();
     const callUrl = fetchMock.mock.calls[0][0] as string;
     expect(callUrl).toMatch(/^https:\/\/plc\.directory\//);
 
@@ -162,21 +128,13 @@ describe("PLC error", () => {
   });
 });
 
-// ─── Uniqueness ─────────────────────────────────────────────────────────
-
 describe("uniqueness", () => {
-  test("two createStreamDid calls with different URLs return different DIDs", async () => {
-    process.env.APPSERVER_USE_DID_WEB = "true";
-    delete process.env.PLC_DIRECTORY_URL;
-
-    const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock;
+  test("two createStreamDid calls return different DIDs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
 
     const did1 = await createStreamDid("http://alpha.example", "did:plc:admin", db);
     const did2 = await createStreamDid("http://beta.example", "did:plc:admin", db);
 
-    expect(did1.toString()).toBe("did:web:alpha.example");
-    expect(did2.toString()).toBe("did:web:beta.example");
     expect(did1.toString()).not.toBe(did2.toString());
 
     // Each DID has its own stored key

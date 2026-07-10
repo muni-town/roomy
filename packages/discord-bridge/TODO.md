@@ -1,36 +1,24 @@
-# Discord Bridge — Two-Way Bridging Follow-Ups
+# Discord Bridge TODO
 
-Remaining items from the code review of the Roomy→Discord direction.
+Post-merge improvements and known issues for `packages/discord-bridge/`.
 
-## Done in this follow-up
+## Subscription / Connection
 
-- [x] **Add tests for `RoomyEventRouter`** — `src/services/__tests__/roomy-event-router.test.ts` covers create/edit/delete/reaction, echo prevention, unbridged rooms, profile attribution, `subscribeToSpace`, and x-dmp-patch skipping.
-- [x] **Ignore `text/x-dmp-patch` edits** — `RoomyEventRouter` now skips edit events with unsupported MIME types instead of sending blank content to Discord.
-- [x] **Use Discordeno webhook helper** — `LiveDiscordSender` now uses `bot.helpers.executeWebhook(..., { wait: true })` so rate-limiting and retries are handled by Discordeno.
-- [x] **Handle null webhook token** — `LiveWebhookManager.ensureWebhook` deletes tokenless webhooks and throws a clear error instead of persisting an unusable empty token.
-- [x] **Log `Promise.allSettled` subscription failures** — `RoomyEventRouter.start()` now logs each space subscription that rejects.
-- [x] **Fix profile cache eviction** — `LiveProfileResolver` now maintains a true LRU cache by re-inserting accessed entries and evicting the oldest key.
-- [x] **Fix `removeWebhook` error handling** — `LiveWebhookManager.removeWebhook` now keeps the repo token row if webhook deletion fails, making removal retryable.
-- [x] **Include Discord error body in webhook failures** — `executeWebhook` failures now propagate Discord's response context through Discordeno's error path.
+- **Retry failed subscriptions (H3):** `services/roomy-event-router.ts:100-116` — `start()` uses `Promise.allSettled`. A transient network error during `subscribe()` logs the error but the space remains permanently unmonitored. A code TODO exists at line 117; implement retry with backoff.
+- **disconnectAll doesn't await in-flight (M7):** `roomy/live-gateway.ts:247-255` — `disconnectAll()` clears `#processing` map without awaiting in-flight promises. Callbacks may fire after disconnect returns.
+- **Stale-cursor reconnect duplicate window (M):** `roomy/live-gateway.ts:102,115-124` — on reconnect, the SDK replays the tracked topic before firing `onOpen`, causing a brief window of duplicate event delivery. Currently harmless (router dedup via `getDiscordId`), but should be documented or fixed.
 
-## Roomy→Discord thread sync
+## Database
 
-- [ ] **Nested Roomy threads are not supported** — `#handleCreateRoomLink` only resolves the parent room as a Discord `channel`. If Roomy ever allows a thread inside another thread, the parent thread mapping would be ignored and no Discord thread would be created.
-
-## Functional gaps
-
-- [ ] **Forward attachments from Roomy to Discord** — The router only decodes the text body (`decodeBody`). Roomy messages with image/video/file attachments (`space.roomy.extension.attachments.v0`) are silently dropped. Media-only messages send an empty Discord message. The Discord webhook API supports `attachments` and `embeds` fields that could be used.
-
-- [ ] **Implement `removeReaction` in the router** — `#handleRemoveReaction` is currently a no-op. The `removeReaction` event only has `reactionId` (the ULID of the original `addReaction` event), not the emoji string needed to remove the reaction from Discord. Options:
-  1. Store the emoji in a reaction mapping when bridging `addReaction`.
-  2. Query the Leaf server for the original `addReaction` event to recover the emoji.
-
-  When this is implemented, `handleReactionRemove` in `reaction-sync.ts` will also need a `botUserId` parameter (like `handleReactionAdd`) to prevent the bot from re-bridging its own reaction removals back to Roomy.
-
-- [ ] **Handle empty-content Roomy messages** — If `decodeBody` returns `""`, the router still calls `sendMessage()` with empty content. For media-only messages this is wasted; for text-only messages it produces a blank Discord message. Skip or warn before sending (or wait until attachments are wired through).
+- **event_errors table grows without bound (M6):** `db/repository.ts:496-544`, `db/schema.ts:141-157` — `logEventError()` inserts rows unboundedly. No unique constraint on `(space_did, event_idx)`, no retention/cleanup. Add a prune method or periodic cleanup.
 
 ## Robustness
 
-- [ ] **Cursor freeze after failure requires restart** — When an event fails to bridge (e.g., Discord API error), the subscription cursor is frozen at the last successful position and stays frozen until the process restarts. Live events continue to be delivered (for UX) but the cursor doesn't advance, so on restart all events from the frozen position are re-delivered. The "already mapped" check prevents duplicate messages, but if the failure is permanent (e.g., invalid content), the cursor is stuck forever and every restart re-processes the same events. Consider adding a dead-letter mechanism or a maximum-retry count that allows the cursor to advance past permanently-failed events. Could store a `failure_count` in `space_cursors` and skip after N consecutive failures.
+- **Missing frame validation (L):** `roomy/live-gateway.ts:180,227,231` — `#processFrame` casts body as `StreamEventsBody` without validating `cursor` and `hasMore` fields. If `cursor` is undefined, `setSpaceCursor` throws. If `hasMore` is undefined, `!data.hasMore` evaluates to `true`, incorrectly setting `backfillState.value = false`.
+- **APPSERVER_URL path handling (L):** `env.ts:24-27` — if `APPSERVER_URL` contains a path (e.g. `http://example.com/appserver`), the path is preserved when deriving the WebSocket URL. Document that it should be a bare origin, or strip any path.
 
-- [ ] **Consider backfill behavior for Roomy→Discord** — On first startup with 2-way bridging enabled, the router backfills ALL historical Roomy-native messages into Discord. For a brand-new Discord guild this is usually fine because Roomy rooms are created fresh for each Discord channel, so there is little pre-existing Roomy history. For an existing Roomy space being attached to an already-active Discord guild, however, this may flood Discord. Consider adding a config option to skip backfill (only bridge live messages going forward) or to rate-limit backfill delivery. The `isBackfill` meta flag is already received by the router but currently ignored.
+## Cleanup
+
+- **Shallow copy in sendEvents (L):** `roomy/live-gateway.ts:62-67` — `sendEvents` maps events with `{ ...e }` (shallow copy). Serves no purpose; pass events directly.
+- **getEventErrors docstring (L):** `db/repository.ts:511` — "most recent ... oldest first" is contradictory. Fix to "Get event errors for a space, ordered oldest-first within the filter window."
+- **flush() microtask loop (L):** `roomy/live-gateway.test.ts:155-157` — uses a fixed 30-iteration loop to drain microtasks. Fragile if the processing chain grows deeper.

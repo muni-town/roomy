@@ -114,6 +114,11 @@ export class RoomyEventRouter {
 				);
 			}
 		}
+		// TODO: Retry failed subscriptions with backoff. A transient network error
+		// during startup permanently disables Roomy→Discord routing for that space
+		// until the process is restarted. The gateway's subscribe() catch block
+		// cleans up the failed subscription so a later retry can re-subscribe,
+		// but nothing currently triggers that retry.
 	}
 
 	/**

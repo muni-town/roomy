@@ -92,6 +92,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 				return ticket;
 			},
 			wsUrl: this.#appserverWsUrl,
+			logger: log.debug,
 		});
 
 		// Subscribe to the stream topic with the cursor. The server backfills
@@ -137,6 +138,24 @@ export class LiveRoomyGateway implements RoomyGateway {
 					log.error(`Error processing stream frame for ${spaceDid}`, err);
 				});
 			this.#processing.set(spaceDid, current);
+		});
+
+		// Connection-level lifecycle logging so WebSocket drops, reconnect
+		// attempts, and frame decode failures are observable rather than
+		// silent. The SDK also forwards its own human-readable status lines
+		// to the `logger` option above (debug); these handlers cover the
+		// structured error/close/status signals.
+		connection.onError((err: unknown) => {
+			log.error(`Connection error for ${spaceDid}`, err);
+		});
+		connection.onClose((info: sync.CloseEventInfo) => {
+			log.warn(
+				`Connection closed for ${spaceDid}: code=${info.code} reason=${info.reason}` +
+					(info.intentional ? " (intentional)" : ""),
+			);
+		});
+		connection.onStatusChange((status: sync.ConnectionStatus) => {
+			log.info(`Connection status for ${spaceDid}: ${status.state}`, status);
 		});
 
 		// Open the WebSocket connection. Must be called after subscribe() so
