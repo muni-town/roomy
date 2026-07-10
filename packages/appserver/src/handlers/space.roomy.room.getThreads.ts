@@ -3,6 +3,8 @@
  *
  * All threads canonically linked from the given channel, filtered by the
  * caller's read access.
+ *
+ * Supports cursor-based pagination via `limit` and `cursor` params.
  */
 
 import { roomAccess } from "../auth/access.ts";
@@ -11,7 +13,7 @@ import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { listThreadActivity } from "../queries/threadActivity.ts";
 import { getReadPositions } from "../queries/readPositions.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
-import { requireString } from "../xrpc/params.ts";
+import { optionalInt, optionalString, requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface ThreadRow {
@@ -41,6 +43,7 @@ interface ThreadRow {
 
 interface GetRoomThreadsResult {
   threads: ThreadRow[];
+  cursor?: string;
 }
 
 export const getRoomThreadsHandler: QueryHandler<
@@ -49,6 +52,8 @@ export const getRoomThreadsHandler: QueryHandler<
 > = async (params: QueryParams, auth: AuthCtx) => {
   const userDid = parseUserDid(auth);
   const roomId = requireString(params, "roomId");
+  const limit = optionalInt(params, "limit", { min: 1, max: 100, default: 50 })!;
+  const cursor = optionalString(params, "cursor") ?? null;
 
   if (userDid !== null) {
     await hydrateUserMembership(userDid);
@@ -57,7 +62,7 @@ export const getRoomThreadsHandler: QueryHandler<
   const db = openDb();
   await requireRoomRead(db, roomId, userDid);
 
-  const all = await listThreadActivity(db, { kind: "channel", channelId: roomId });
+  const { threads: all, cursor: nextCursor } = await listThreadActivity(db, { kind: "channel", channelId: roomId }, limit, cursor);
 
   // Collect all thread IDs for batch unread lookup
   const threadIds = all.map((t) => t.id);
@@ -96,5 +101,7 @@ export const getRoomThreadsHandler: QueryHandler<
     threads.push(thread);
   }
 
-  return { threads };
+  const result: GetRoomThreadsResult = { threads };
+  if (nextCursor) result.cursor = nextCursor;
+  return result;
 };

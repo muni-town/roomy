@@ -1,9 +1,11 @@
 /**
  * XRPC: space.roomy.space.getThreads (query).
  *
- * Returns all threads in a space for the board/index view, filtered by the
+ * Returns threads in a space for the board/index view, filtered by the
  * caller's read access (a thread is hidden when its parent channel is
  * unreadable to the caller).
+ *
+ * Supports cursor-based pagination via `limit` and `cursor` params.
  */
 
 import { roomAccess } from "../auth/access.ts";
@@ -12,7 +14,7 @@ import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { listThreadActivity } from "../queries/threadActivity.ts";
 import { getReadPositions } from "../queries/readPositions.ts";
 import { parseUserDid, requireSpaceRead } from "../xrpc/authGuards.ts";
-import { requireString } from "../xrpc/params.ts";
+import { optionalInt, optionalString, requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface ThreadRow {
@@ -43,6 +45,7 @@ interface ThreadRow {
 
 interface GetThreadsResult {
   threads: ThreadRow[];
+  cursor?: string;
 }
 
 export const getSpaceThreadsHandler: QueryHandler<
@@ -51,6 +54,8 @@ export const getSpaceThreadsHandler: QueryHandler<
 > = async (params: QueryParams, auth: AuthCtx) => {
   const userDid = parseUserDid(auth);
   const spaceId = requireString(params, "spaceId");
+  const limit = optionalInt(params, "limit", { min: 1, max: 100, default: 50 })!;
+  const cursor = optionalString(params, "cursor") ?? null;
 
   if (userDid !== null) {
     await hydrateUserMembership(userDid);
@@ -59,7 +64,7 @@ export const getSpaceThreadsHandler: QueryHandler<
   const db = openDb();
   await requireSpaceRead(db, spaceId, userDid);
 
-  const all = await listThreadActivity(db, { kind: "space", spaceId });
+  const { threads: all, cursor: nextCursor } = await listThreadActivity(db, { kind: "space", spaceId }, limit, cursor);
 
   // Collect all thread IDs for batch unread lookup
   const threadIds = all.map((t) => t.id);
@@ -124,5 +129,7 @@ export const getSpaceThreadsHandler: QueryHandler<
     threads.push(thread);
   }
 
-  return { threads };
+  const result: GetThreadsResult = { threads };
+  if (nextCursor) result.cursor = nextCursor;
+  return result;
 };

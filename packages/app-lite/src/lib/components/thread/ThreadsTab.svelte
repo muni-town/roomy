@@ -1,17 +1,13 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { createRoomThreadsQuery, type RoomThread } from "$lib/queries/threads";
+  import { createSpaceThreadsQuery } from "$lib/queries/threads";
   import BoardViewShell from "@roomy/design/components/content/thread/boardView/BoardView.svelte";
   import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
 
-  let {
-    emptyMessage = "No threads yet",
-  }: {
-    emptyMessage?: string;
-  } = $props();
+  let { spaceId }: { spaceId: string } = $props();
 
-  const roomId = $derived(page.params.room!);
-  const threadsQuery = createRoomThreadsQuery(() => roomId);
+  const threadsQuery = createSpaceThreadsQuery(() => spaceId);
 
   // Flatten all pages into a single array.
   let threads = $derived<ThreadInfo[]>(
@@ -24,12 +20,24 @@
     threadsQuery.fetchNextPage();
   }
 
-  function mapThread(t: RoomThread): ThreadInfo {
+  function mapThread(t: {
+    id: string;
+    name?: string;
+    channelName?: string;
+    canonicalParent?: string;
+    unreadCount?: number;
+    activity: {
+      latestTimestamp?: string;
+      latestMembers: Array<{ did: string; name?: string | null; avatar?: string | null }>;
+    };
+  }): ThreadInfo {
     return {
       id: t.id,
       name: t.name ?? "Unnamed Thread",
       kind: "space.roomy.thread",
+      channelName: t.channelName,
       canonicalParent: t.canonicalParent,
+      unread: (t.unreadCount ?? 0) > 0,
       activity: {
         members: t.activity.latestMembers.map((m) => ({
           id: m.did,
@@ -56,9 +64,7 @@
     <div class="text-sm text-base-400 p-2">Loading threads…</div>
   </div>
 {:else if threadsQuery.isError && !threadsQuery.data}
-  <div class="h-full w-full flex items-center justify-center">
-    <div class="text-sm text-red-600 p-2">{threadsQuery.error.message}</div>
-  </div>
+  <ErrorMessage message={threadsQuery.error.message} class="h-full w-full justify-center" />
 {:else}
-  <BoardViewShell {threads} {emptyMessage} {hrefFor} hideChannel {loadMore} {hasMore} />
+  <BoardViewShell {threads} emptyMessage="No threads yet" {hrefFor} {loadMore} {hasMore} />
 {/if}

@@ -6,7 +6,7 @@ import { type } from "arktype";
 
 export const NSID = "space.roomy.space.getThreads" as const;
 
-export const Params = type({ spaceId: "string" });
+export const Params = type({ spaceId: "string", "limit?": "string", "cursor?": "string" });
 
 export const ThreadMember = type({
   did: "string",
@@ -39,4 +39,5 @@ export const Thread = type({
 
 export const Response = type({
   threads: Thread.array(),
+  "cursor?": "string",
 });

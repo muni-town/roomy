@@ -54,10 +54,14 @@ export type ThreadScope =
 /**
  * Threads visible in this scope, with activity metadata.
  *
- * Scope semantics:
- *   - `space`: all threads (entities with comp_room.label='space.roomy.thread'
- *     and stream_id = spaceId).
- *   - `channel`: threads canonically linked from this channel.
+ * Supports cursor-based pagination via the `activity_item` table's
+ * `last_activity_at` column. Cursor format: `"<last_activity_at>::<room_id>"`.
+ * Returns at most `limit` threads (default 50), plus a `cursor` for the next
+ * page (null when there are no more results).
+ *
+ * Threads with no messages (no `activity_item` row) get sort key 0, so they
+ * sort last (after all active threads) and don't block pagination past active
+ * threads.
  *
  * The caller is responsible for filtering by read access — this helper does
  * not check permissions.
@@ -66,39 +70,70 @@ export async function listThreadActivity(
   db: DbLike,
   scope: ThreadScope,
   limit = 50,
-): Promise<ThreadActivity[]> {
-  // Step 1: select the candidate threads in scope.
-  const threads =
-    scope.kind === "space"
-      ? await db
-          .query(
-            `select e.id as id, ci.name as name
-               from entities e
-               join comp_room cr on cr.entity = e.id
-               left join comp_info ci on ci.entity = e.id
-              where e.stream_id = ?
-                and cr.label = 'space.roomy.thread'
-                and coalesce(cr.deleted, 0) = 0`,
-          )
-          .all<{ id: string; name: string | null }>([scope.spaceId])
-      : await db
-          .query(
-            `select e.id as id, ci.name as name
-               from entities e
-               join comp_room cr on cr.entity = e.id
-               left join comp_info ci on ci.entity = e.id
-               join edges link_e on link_e.tail = e.id
-                 and link_e.label = 'link'
-                 and coalesce(json_extract(link_e.payload, '$.canonical_parent'), 0) = 1
-              where cr.label = 'space.roomy.thread'
-                and coalesce(cr.deleted, 0) = 0
-                and link_e.head = ?`,
-          )
-          .all<{ id: string; name: string | null }>([scope.channelId]);
+  cursor?: string | null,
+): Promise<{ threads: ThreadActivity[]; cursor: string | null }> {
+  // Step 1: select the candidate threads in scope, with cursor pagination.
+  // LEFT JOIN activity_item so we can order/filter by last_activity_at even
+  // for threads with no messages (they get NULL -> COALESCE to 0).
+  let cursorTs: number | null = null;
+  let cursorId: string | null = null;
+  if (cursor) {
+    const sepIdx = cursor.lastIndexOf("::");
+    if (sepIdx !== -1) {
+      cursorTs = Number(cursor.slice(0, sepIdx));
+      cursorId = cursor.slice(sepIdx + 2);
+    }
+  }
 
-  if (threads.length === 0) return [];
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
 
-  const threadIds = threads.map((t) => t.id);
+  if (scope.kind === "space") {
+    conditions.push("e.stream_id = ?");
+    params.push(scope.spaceId);
+  } else {
+    conditions.push("link_e.head = ?");
+    params.push(scope.channelId);
+  }
+  conditions.push("cr.label = 'space.roomy.thread'");
+  conditions.push("coalesce(cr.deleted, 0) = 0");
+
+  // Cursor: newest-first by last_activity_at, tiebreak by room_id.
+  if (cursorTs !== null && cursorId !== null) {
+    conditions.push(
+      "(coalesce(ai.last_activity_at, 0) < ? or (coalesce(ai.last_activity_at, 0) = ? and e.id > ?))",
+    );
+    params.push(cursorTs, cursorTs, cursorId);
+  }
+
+  const whereClause = conditions.join(" and ");
+
+  const joinClause = scope.kind === "space"
+    ? ""
+    : "join edges link_e on link_e.tail = e.id and link_e.label = 'link' and coalesce(json_extract(link_e.payload, '$.canonical_parent'), 0) = 1";
+
+  const threads = await db
+    .query(
+      `select e.id as id, ci.name as name,
+              coalesce(ai.last_activity_at, 0) as sort_key
+         from entities e
+         join comp_room cr on cr.entity = e.id
+         left join comp_info ci on ci.entity = e.id
+         left join activity_item ai on ai.room_id = e.id
+         ${joinClause}
+        where ${whereClause}
+        order by sort_key desc, e.id asc
+        limit ?`,
+    )
+    .all<{ id: string; name: string | null; sort_key: number }>([...params, limit + 1]);
+
+  if (threads.length === 0) return { threads: [], cursor: null };
+
+  // Check if there are more pages (we fetched one extra row).
+  const hasMore = threads.length > limit;
+  const pageThreads = hasMore ? threads.slice(0, limit) : threads;
+
+  const threadIds = pageThreads.map((t) => t.id);
   const ph = threadIds.map(() => "?").join(",");
 
   // Step 2: batch-fetch latest timestamps for all threads at once.
@@ -244,7 +279,7 @@ export async function listThreadActivity(
     }
   }
 
-  const results: ThreadActivity[] = threads.map((t) => {
+  const results: ThreadActivity[] = pageThreads.map((t) => {
     const latest = latestMap.get(t.id);
     const members = participantsMap.get(t.id) ?? [];
     const parent = parentMap.get(t.id);
@@ -278,13 +313,12 @@ export async function listThreadActivity(
     };
   });
 
-  // Sort by latestTimestamp descending (nulls last), then alphabetically by name for tiebreaking.
-  results.sort((a, b) => {
-    const aTs = a.latestTimestamp ? new Date(a.latestTimestamp).getTime() : -Infinity;
-    const bTs = b.latestTimestamp ? new Date(b.latestTimestamp).getTime() : -Infinity;
-    if (bTs !== aTs) return bTs - aTs;
-    return (a.name ?? "").localeCompare(b.name ?? "");
-  });
+  // Compute next cursor from the last visible thread.
+  let nextCursor: string | null = null;
+  if (hasMore) {
+    const last = pageThreads[pageThreads.length - 1]!;
+    nextCursor = `${last.sort_key}::${last.id}`;
+  }
 
-  return results;
+  return { threads: results, cursor: nextCursor };
 }

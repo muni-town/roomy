@@ -106,6 +106,24 @@ function postMessage(
     msgId,
     authorDid,
   ]);
+  // Upsert activity_item so the paginated query can sort by last_activity_at.
+  const existing = db.query("select 1 from activity_item where room_id = ?").get(threadId);
+  if (existing) {
+    db.run(
+      `update activity_item set last_activity_at = ?, updated_at = (unixepoch() * 1000) where room_id = ?`,
+      ts,
+      threadId,
+    );
+  } else {
+    db.run(
+      `insert into activity_item (room_id, space_id, is_thread, last_activity_at, recent_message_ids, created_at, updated_at)
+       values (?, ?, 1, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))`,
+      threadId,
+      SPACE,
+      ts,
+      JSON.stringify([msgId]),
+    );
+  }
   return msgId;
 }
 
@@ -130,6 +148,29 @@ function forwardMessage(db: Database, threadId: string, origMsgId: string) {
     "insert into edges (head, tail, label) values (?, ?, 'forward')",
     [fwdId, origMsgId],
   );
+  // Upsert activity_item so the paginated query can sort by last_activity_at.
+  // Use the original message's timestamp from comp_content.
+  const origTs = db
+    .query("select timestamp from comp_content where entity = ?")
+    .get<{ timestamp: number }>(origMsgId);
+  const ts = origTs?.timestamp ?? Date.now();
+  const existing = db.query("select 1 from activity_item where room_id = ?").get(threadId);
+  if (existing) {
+    db.run(
+      `update activity_item set last_activity_at = ?, updated_at = (unixepoch() * 1000) where room_id = ?`,
+      ts,
+      threadId,
+    );
+  } else {
+    db.run(
+      `insert into activity_item (room_id, space_id, is_thread, last_activity_at, recent_message_ids, created_at, updated_at)
+       values (?, ?, 1, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))`,
+      threadId,
+      SPACE,
+      ts,
+      JSON.stringify([fwdId]),
+    );
+  }
 }
 
 describe("threadActivity", () => {
@@ -141,7 +182,7 @@ describe("threadActivity", () => {
     postMessage(db, THREAD_B, BOB, 3000); // most recent
     postMessage(db, THREAD_C, CAROL, 2000);
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     expect(result.map((t) => t.id)).toEqual([THREAD_B, THREAD_C, THREAD_A]);
     expect(result[0]!.latestTimestamp).toBe(new Date(3000).toISOString());
   });
@@ -154,10 +195,10 @@ describe("threadActivity", () => {
     postMessage(db, THREAD_B, BOB, 2000);
     postMessage(db, THREAD_C, CAROL, 3000); // in OTHER_CHANNEL
 
-    const result = await listThreadActivity(asyncDb, {
+    const { threads: result } = await listThreadActivity(asyncDb, {
       kind: "channel",
       channelId: CHANNEL,
-    });
+    })
     expect(result.map((t) => t.id).sort()).toEqual([THREAD_A, THREAD_B].sort());
   });
 
@@ -174,7 +215,7 @@ describe("threadActivity", () => {
     // her latest timestamp.
     postMessage(db, THREAD_A, CAROL, 5000);
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     // Most recent 3 distinct: carol(5000), dave(4000), bob(2000). Alice drops.
@@ -185,7 +226,7 @@ describe("threadActivity", () => {
     const { db, asyncDb } = freshDb();
     seed(db);
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     expect(threadA.latestTimestamp).toBeNull();
@@ -195,7 +236,7 @@ describe("threadActivity", () => {
   test("canonicalParent reflects the canonical 'link' edge head", async () => {
     const { db, asyncDb } = freshDb();
     seed(db);
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const a = result.find((t) => t.id === THREAD_A)!;
     const c = result.find((t) => t.id === THREAD_C)!;
     expect(a.canonicalParent).toBe(CHANNEL);
@@ -209,7 +250,7 @@ describe("threadActivity", () => {
     postMessage(db, THREAD_A, ALICE, 1000, "Hello from Alice");
     postMessage(db, THREAD_A, BOB, 2000, "Reply from Bob");
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     expect(threadA.latestMessage).not.toBeNull();
@@ -223,7 +264,7 @@ describe("threadActivity", () => {
     const { db, asyncDb } = freshDb();
     seed(db);
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     expect(threadA.latestMessage).toBeNull();
@@ -235,7 +276,7 @@ describe("threadActivity", () => {
 
     postMessage(db, THREAD_A, ALICE, 1000, "**bold** and _italic_");
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadA = result.find((t) => t.id === THREAD_A)!;
 
     expect(threadA.latestMessage).not.toBeNull();
@@ -258,7 +299,7 @@ describe("threadActivity", () => {
     const origId = postMessage(db, THREAD_A, ALICE, 9000, "forwarded hello");
     forwardMessage(db, THREAD_B, origId);
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadB = result.find((t) => t.id === THREAD_B)!;
     // THREAD_B has no direct messages — only a forwarded one. The forwarded
     // message's original timestamp (9000) must surface as the thread's latest.
@@ -281,7 +322,7 @@ describe("threadActivity", () => {
     const origId = postMessage(db, THREAD_A, BOB, 5000, "hi from bob");
     forwardMessage(db, THREAD_B, origId);
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadB = result.find((t) => t.id === THREAD_B)!;
     expect(threadB.latestMembers.map((m) => m.did)).toContain(BOB);
     expect(threadB.latestMembers.map((m) => m.name)).toContain("bob");
@@ -294,7 +335,7 @@ describe("threadActivity", () => {
     const origId = postMessage(db, THREAD_A, CAROL, 7000, "forwarded body");
     forwardMessage(db, THREAD_B, origId);
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadB = result.find((t) => t.id === THREAD_B)!;
     expect(threadB.latestMessage).not.toBeNull();
     expect(threadB.latestMessage!.content).toBe("forwarded body");
@@ -313,7 +354,7 @@ describe("threadActivity", () => {
     const origId = postMessage(db, THREAD_B, DAVE, 2000, "forwarded later");
     forwardMessage(db, THREAD_A, origId);
 
-    const result = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE });
+    const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     const threadA = result.find((t) => t.id === THREAD_A)!;
     expect(threadA.latestTimestamp).toBe(new Date(2000).toISOString());
     expect(threadA.latestMessage!.content).toBe("forwarded later");
@@ -322,5 +363,68 @@ describe("threadActivity", () => {
     expect(threadA.latestMembers.map((m) => m.did).sort()).toEqual(
       [ALICE, DAVE].sort(),
     );
+  });
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  //
+  // listThreadActivity now supports limit and cursor params. These tests
+  // verify cursor-based pagination works correctly.
+
+  test("limit returns at most N threads", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+    // 3 threads exist (THREAD_A, THREAD_B, THREAD_C). Limit 2 should return 2.
+    const { threads: result, cursor } = await listThreadActivity(
+      asyncDb,
+      { kind: "space", spaceId: SPACE },
+      2,
+    );
+    expect(result).toHaveLength(2);
+    expect(cursor).not.toBeNull();
+  });
+
+  test("cursor advances to the next page", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+
+    // Page 1: limit 2
+    const { threads: page1, cursor } = await listThreadActivity(
+      asyncDb,
+      { kind: "space", spaceId: SPACE },
+      2,
+    );
+    expect(page1).toHaveLength(2);
+    expect(cursor).not.toBeNull();
+
+    // Page 2: use cursor from page 1
+    const { threads: page2, cursor: cursor2 } = await listThreadActivity(
+      asyncDb,
+      { kind: "space", spaceId: SPACE },
+      2,
+      cursor,
+    );
+    expect(page2).toHaveLength(1);
+    // No more pages.
+    expect(cursor2).toBeNull();
+
+    // No overlap between pages.
+    const page1Ids = new Set(page1.map((t) => t.id));
+    for (const t of page2) {
+      expect(page1Ids.has(t.id)).toBe(false);
+    }
+  });
+
+  test("no cursor returns the first page", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+
+    const { threads: result, cursor } = await listThreadActivity(
+      asyncDb,
+      { kind: "space", spaceId: SPACE },
+    );
+    // Default limit is 50, we have 3 threads.
+    expect(result).toHaveLength(3);
+    // No more pages since 3 < 50.
+    expect(cursor).toBeNull();
   });
 });

@@ -124,6 +124,12 @@
         "properties": {
           "roomId": {
             "type": "string"
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "string"
           }
         }
       },
@@ -141,6 +147,9 @@
                 "type": "ref",
                 "ref": "#threads"
               }
+            },
+            "cursor": {
+              "type": "string"
             }
           }
         }

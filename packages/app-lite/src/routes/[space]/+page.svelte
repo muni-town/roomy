@@ -5,10 +5,7 @@
   import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
   import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
-  import { createSpaceThreadsQuery } from "$lib/queries/threads";
-  import BoardViewShell from "@roomy/design/components/content/thread/boardView/BoardView.svelte";
-  import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
-  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
+  import ThreadsTab from "$lib/components/thread/ThreadsTab.svelte";
 
   const spaceId = $derived(page.params.space!);
 
@@ -48,52 +45,6 @@
     });
   });
 
-  const threadsQuery = createSpaceThreadsQuery(() => spaceId);
-
-  type RawThread = {
-    id: string;
-    name?: string;
-    channelName?: string;
-    canonicalParent?: string;
-    unreadCount?: number;
-    activity: {
-      latestTimestamp?: string;
-      latestMembers: Array<{ did: string; name?: string; avatar?: string }>;
-    };
-  };
-
-  let threads = $derived<ThreadInfo[]>(
-    ((threadsQuery.data?.threads ?? []) as RawThread[]).map(mapThread),
-  );
-
-  function mapThread(t: RawThread): ThreadInfo {
-    return {
-      id: t.id,
-      name: t.name ?? "Unnamed Thread",
-      kind: "space.roomy.thread",
-      channelName: t.channelName,
-      canonicalParent: t.canonicalParent,
-      unread: (t.unreadCount ?? 0) > 0,
-      activity: {
-        members: t.activity.latestMembers.map((m) => ({
-          id: m.did,
-          name: m.name ?? null,
-          avatar: m.avatar ?? null,
-        })),
-        latestTimestamp: t.activity.latestTimestamp
-          ? new Date(t.activity.latestTimestamp).getTime()
-          : 0,
-      },
-    };
-  }
-
-  function hrefFor(thread: ThreadInfo): string {
-    const parentParam = thread.canonicalParent
-      ? "?parent=" + thread.canonicalParent
-      : "";
-    return `/${page.params.space}/${thread.id}${parentParam}`;
-  }
-
   onMount(() => {
     setNavbar(spaceNavbar);
     return () => setNavbar(undefined);
@@ -121,14 +72,6 @@
   {#if activeTab === "Feed"}
     <ActivityFeed {spaceId} limit={50} showSpaceInfo={false} />
   {:else}
-    {#if threadsQuery.isPending}
-      <div class="h-full w-full flex items-center justify-center">
-        <div class="text-sm text-base-400 p-2">Loading threads…</div>
-      </div>
-    {:else if threadsQuery.isError}
-      <ErrorMessage message={threadsQuery.error.message} class="h-full w-full justify-center" />
-    {:else}
-      <BoardViewShell {threads} emptyMessage="No threads yet" {hrefFor} />
-    {/if}
+    <ThreadsTab {spaceId} />
   {/if}
 </main>

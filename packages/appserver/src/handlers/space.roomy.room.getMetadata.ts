@@ -63,11 +63,11 @@ export const getRoomMetadataHandler: QueryHandler<
   // for threads (so we get sibling threads). Falls back to the room itself
   // when there's no parent (which yields an empty list).
   const channelForThreads = access.parentChannelId ?? roomId;
-  const threadActivity = (await listThreadActivity(
+  const { threads: threadActivity } = (await listThreadActivity(
     db,
     { kind: "channel", channelId: channelForThreads },
     20,
-  )) ?? [];
+  ));
 
   const recentThreads: RecentThread[] = [];
   if (userDid !== null) {
