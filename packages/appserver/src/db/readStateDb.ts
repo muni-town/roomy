@@ -8,4 +8,4 @@
  * Bump whenever readStateSchema.sql changes.
  * Uses a separate versioning namespace from the materialisation DB.
  */
-export const READSTATE_SCHEMA_VERSION = "2";
+export const READSTATE_SCHEMA_VERSION = "3";

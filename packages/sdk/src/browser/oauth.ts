@@ -46,6 +46,11 @@ import lexGetSpaceThreads from "../schemas/lexicons/space.roomy.space.getThreads
 import lexJoinSpace from "../schemas/lexicons/space.roomy.space.joinSpace.json";
 import lexLeaveSpace from "../schemas/lexicons/space.roomy.space.leaveSpace.json";
 import lexSendEvents from "../schemas/lexicons/space.roomy.space.sendEvents.json";
+import lexGetVapidPublicKey from "../schemas/lexicons/space.roomy.push.getVapidPublicKey.json";
+import lexRegisterSubscription from "../schemas/lexicons/space.roomy.push.registerSubscription.json";
+import lexUnregisterSubscription from "../schemas/lexicons/space.roomy.push.unregisterSubscription.json";
+import lexGetPushPreferences from "../schemas/lexicons/space.roomy.push.getPushPreferences.json";
+import lexSetPushPreferences from "../schemas/lexicons/space.roomy.push.setPushPreferences.json";
 
 /** Admin/internal NSIDs that have no arktype schema (so no generated lexicon). */
 const ADMIN_LEXICONS = [
@@ -109,6 +114,11 @@ const LEXICONS = [
   lexJoinSpace,
   lexLeaveSpace,
   lexSendEvents,
+  lexGetVapidPublicKey,
+  lexRegisterSubscription,
+  lexUnregisterSubscription,
+  lexGetPushPreferences,
+  lexSetPushPreferences,
   ...ADMIN_LEXICONS,
 ];
 

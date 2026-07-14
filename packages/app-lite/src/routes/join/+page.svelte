@@ -6,10 +6,12 @@
     JoinResolveState,
     JoinState,
   } from "@roomy/design/components/modals/JoinDialog.svelte";
+  import type { RhythmLevel } from "@roomy/design/components/user/UpdateRhythmChooser.svelte";
   import { cache } from "@roomy-space/sdk";
   import { auth, px } from "$lib/auth.svelte";
   import { queryClient } from "$lib/client";
   import { joinSpace } from "$lib/mutations/space";
+  import { setSpacePushLevel } from "$lib/mutations/push-preferences";
 
   const { queryKey } = cache;
 
@@ -82,7 +84,7 @@
       });
   });
 
-  async function onJoin() {
+  async function onJoin(level: RhythmLevel) {
     if (!spaceId) return;
     joinState = { status: "loading" };
     try {
@@ -112,6 +114,17 @@
           return false;
         },
       });
+      // Persist the chosen notification rhythm for this space. Best-effort: a
+      // failure here must not block the join — the level just defaults to the
+      // appserver default ("engaged") until the user changes it in settings.
+      try {
+        await setSpacePushLevel(spaceId, level);
+        await queryClient.invalidateQueries({
+          queryKey: cache.queryKey("space.roomy.push.getPushPreferences"),
+        });
+      } catch (err) {
+        console.warn("[join] could not save notification rhythm:", err);
+      }
       joinState = { status: "success" };
       goto(`/${spaceId}`);
     } catch (err) {

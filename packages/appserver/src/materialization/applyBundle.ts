@@ -29,6 +29,7 @@ import {
   setMessageSortIdxByTimestamp,
 } from "./sortIdx.ts";
 import { isThread, upsertUserThreadActivity } from "../queries/userActiveThreads.ts";
+import { upsertUserRoomParticipation } from "../queries/userRoomParticipation.ts";
 import { upsertActivityItem } from "./activityItem.ts";
 import { decodeTime } from "ulidx";
 
@@ -138,6 +139,22 @@ async function applyBundleInner(
         const timestamp = decodeTimeFromId(bundle.event.id);
         await upsertUserThreadActivity(db, bundle.user, bundle.event.room, timestamp);
       }
+
+      // Track the author's participation in this room (all room types —
+      // channels included). The Engaged push-digest gate uses this to
+      // restrict prompts to rooms you've spoken in. Uses the effective author
+      // (override-author for bridged messages) to match the `author` edge.
+      const ext = bundle.event.extensions?.[
+        "space.roomy.extension.authorOverride.v0"
+      ] as { did?: unknown } | undefined;
+      const overrideDid =
+        typeof ext?.did === "string" ? ext.did : undefined;
+      await upsertUserRoomParticipation(
+        db,
+        overrideDid ?? bundle.user,
+        bundle.event.room,
+        decodeTimeFromId(bundle.event.id),
+      );
     }
 
     // Track thread creation: if the event creates a thread, register the

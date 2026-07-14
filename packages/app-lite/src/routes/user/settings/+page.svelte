@@ -71,8 +71,9 @@
       </Button>
       <Button
         variant="ghost"
-        class="w-full justify-start opacity-40 pointer-events-none"
+        class="w-full justify-start"
         href="/user/settings/notifications"
+        data-current={page.url.pathname === "/user/settings/notifications"}
       >
         Notifications
       </Button>
