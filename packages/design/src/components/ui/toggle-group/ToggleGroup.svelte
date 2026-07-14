@@ -6,11 +6,19 @@
     name,
     value = $bindable(),
     options,
+    onchange,
   }: {
     name: string;
     value?: string;
     options: { label: string; value: string }[];
+    /** Fired with the newly selected value when the user picks an option. */
+    onchange?: (value: string) => void;
   } = $props();
+
+  function select(next: string): void {
+    value = next;
+    onchange?.(next);
+  }
 </script>
 
 <div class="flex gap-2" role="group">
@@ -28,7 +36,7 @@
         {name}
         value={option.value}
         checked={value === option.value}
-        onchange={() => (value = option.value)}
+        onchange={() => select(option.value)}
         class="sr-only"
       />
       {option.label}

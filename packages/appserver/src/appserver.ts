@@ -46,6 +46,12 @@ import { joinSpaceHandler } from "./handlers/space.roomy.space.joinSpace.ts";
 import { leaveSpaceHandler } from "./handlers/space.roomy.space.leaveSpace.ts";
 import { setHandleHandler } from "./handlers/space.roomy.space.setHandle.ts";
 import { getActivityFeedHandler } from "./handlers/space.roomy.space.getActivityFeed.ts";
+import { getVapidPublicKeyHandler } from "./handlers/space.roomy.push.getVapidPublicKey.ts";
+import { getPreferencesHandler } from "./handlers/space.roomy.push.getPreferences.ts";
+import { registerSubscriptionHandler } from "./handlers/space.roomy.push.registerSubscription.ts";
+import { unregisterSubscriptionHandler } from "./handlers/space.roomy.push.unregisterSubscription.ts";
+import { setPreferencesHandler } from "./handlers/space.roomy.push.setPreferences.ts";
+import { startPushDispatcher, pushDispatcherStats, _resetPushDispatcher } from "./push/dispatcher.ts";
 import { schemas } from "@roomy-space/sdk";
 import { proxyBlob } from "./blob.ts";
 
@@ -205,6 +211,29 @@ export function buildRouter(
     .query("space.roomy.message.getReactions", {
       handler: getReactionsHandler,
     })
+    // ── Web push ──────────────────────────────────────────────────────────
+    .query("space.roomy.push.getVapidPublicKey", {
+      handler: getVapidPublicKeyHandler,
+      paramsSchema: schemas.queries.getVapidPublicKey.Params,
+      outputSchema: schemas.queries.getVapidPublicKey.Response,
+    })
+    .query("space.roomy.push.getPushPreferences", {
+      handler: getPreferencesHandler,
+      paramsSchema: schemas.queries.getPushPreferences.Params,
+      outputSchema: schemas.queries.getPushPreferences.Response,
+    })
+    .procedure("space.roomy.push.registerSubscription", {
+      handler: registerSubscriptionHandler,
+      inputSchema: schemas.procedures.registerPushSubscription.Input,
+    })
+    .procedure("space.roomy.push.unregisterSubscription", {
+      handler: unregisterSubscriptionHandler,
+      inputSchema: schemas.procedures.unregisterPushSubscription.Input,
+    })
+    .procedure("space.roomy.push.setPreferences", {
+      handler: setPreferencesHandler,
+      inputSchema: schemas.procedures.setPushPreferences.Input,
+    })
     .sync("space.roomy.sync.subscribe", {
       handler: syncHandler,
     });
@@ -279,6 +308,10 @@ export async function createAppserver(
   setStreamManager(streamManager);
   // Start the centralized embed enrichment sweeper.
   startEmbedSweeper({ db: mainDb, invalidationRouter });
+  // Start the centralized push dispatcher. One process-wide loop owns all
+  // push delivery; the StreamManager pokes it on live createMessage (see
+  // push/dispatcher.ts). No-op-safe when VAPID isn't configured.
+  startPushDispatcher({ db: mainDb });
 
   // ─── XRPC routes ──────────────────────────────────────────────────────
   const authVerifier = opts.authVerifier ?? selectAuthVerifier();
@@ -332,6 +365,11 @@ export async function createAppserver(
           { headers: { "content-type": "application/json", ...corsHeaders } },
         );
       }
+      if (url.pathname === "/health/push") {
+        return new Response(JSON.stringify(pushDispatcherStats()), {
+          headers: { "content-type": "application/json", ...corsHeaders },
+        });
+      }
 
       const blobMatch = url.pathname.match(/^\/blob\/(.+?)\/(.+)$/);
       if (blobMatch && req.method === "GET") {
@@ -382,6 +420,11 @@ export async function createAppserver(
           _resetStreamManager();
         } catch (e) {
           console.error("appserver close: _resetStreamManager failed", e);
+        }
+        try {
+          _resetPushDispatcher();
+        } catch (e) {
+          console.error("appserver close: _resetPushDispatcher failed", e);
         }
       });
     },

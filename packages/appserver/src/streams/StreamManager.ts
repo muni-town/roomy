@@ -18,6 +18,8 @@ import {
 } from "../materialization/profiles.ts";
 import { toAppliedEvent } from "../materialization/toAppliedEvent.ts";
 import { pokeEmbedSweeper } from "../embed/sweeper.ts";
+import { pokePushDispatcher } from "../push/dispatcher.ts";
+import { decodeTime } from "ulidx";
 import { createStreamDid } from "./did.ts";
 
 /**
@@ -161,9 +163,12 @@ export class StreamManager {
         isBackfill: false,
       });
 
-      // 6. Emit invalidation signals for live events
+      // 6. Convert to applied events once — shared by invalidation (6a) and
+      //    the push dispatcher poke (6b).
+      const appliedEvents = decodedEvents.map((e) => toAppliedEvent(e, streamDid));
+
+      // 6a. Emit invalidation signals for live events.
       if (this.#invalidationRouter) {
-        const appliedEvents = decodedEvents.map((e) => toAppliedEvent(e, streamDid));
         await this.#invalidationRouter.onEventsApplied(
           streamDid,
           appliedEvents,
@@ -172,12 +177,28 @@ export class StreamManager {
         );
       }
 
-      // 7. Poke embed sweeper for createMessage events
-      const hasCreateMessage = decodedEvents.some(
-        (e) => e.event.$type === "space.roomy.message.createMessage.v0",
+      // 6b. Poke the embed sweeper and the push dispatcher for createMessage
+      // events. Both are process-wide background loops the materialiser pokes
+      // but never drives inline: embed enrichment and push delivery are
+      // network-bound and must not block sendEvents. sendEvents is only ever
+      // called with live events (the StreamManager owns the only write path),
+      // so there is no backfill gate here.
+      const createMessageEvents = appliedEvents.filter(
+        (e) =>
+          e.type === "space.roomy.message.createMessage.v0" &&
+          e.roomId !== undefined,
       );
-      if (hasCreateMessage) {
+      if (createMessageEvents.length > 0) {
         pokeEmbedSweeper();
+        pokePushDispatcher(
+          createMessageEvents.map((e) => ({
+            spaceId: streamDid,
+            roomId: e.roomId!,
+            messageId: e.id,
+            authorDid: (e.details?.authorDid ?? e.user) as UserDid,
+            timestamp: decodeTime(e.id),
+          })),
+        );
       }
 
       // 8. Notify live-event listeners (e.g. sync stream subscriptions).

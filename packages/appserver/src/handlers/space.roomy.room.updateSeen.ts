@@ -7,6 +7,7 @@
  */
 
 import { openDb } from "../db/db.ts";
+import { resetNotificationState } from "../queries/notificationState.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
@@ -118,6 +119,11 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
        updated_at = excluded.updated_at`,
   );
   await stmt.run([userDid, roomId, seenUpTo, unreadCount]);
+
+  // Reset the Engaged push-digest batch for this (user, room): the user has
+  // opened the room, so cancel any pending digest and re-arm the batch for the
+  // next burst ("until you open the room again"). Idempotent: no row = no-op.
+  await resetNotificationState(db, userDid, roomId);
 
   // Push invalidation signals to the sync manager so the caller's WS
   // connection re-fetches stale data.

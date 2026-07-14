@@ -1,7 +1,7 @@
 # Web Push Notifications Plan
 
-**Date:** 2026-06-23
-**Status:** Plan
+**Date:** 2026-07-14
+**Status:** Implemented (rebased onto main@26de4e5a)
 **Parent doc:** `appserver-architecture.md`
 
 ## Problem
@@ -70,7 +70,7 @@ appserver (Bun)                                                                 
   ├─ push_subscriptions / push_preferences / push_user_default  (readstate DB)
   │
   └─ PushDispatcher (background loop, embed-sweeper pattern)
-        ▲ poked by SpaceMaterializer on live createMessage
+        ▲ poked by StreamManager.sendEvents on live createMessage
         │
      evaluatePush(event, spaceId, roomId):
         - resolve recipients: space members (edges label='member') + admins, read-access filtered, minus author
@@ -87,15 +87,17 @@ appserver (Bun)                                                                 
 The design deliberately mirrors two patterns already in the codebase:
 
 - **The embed sweeper** (`src/embed/sweeper.ts`) — a single process-wide background loop
-  that per-space materializers *poke* but never drive directly. Push delivery is
+  that the `StreamManager` *pokes* but never drives directly. Push delivery is
   network-bound (calls to Mozilla/FCM/Apple push services) and must not block
   materialisation, so it gets the same treatment: a `PushDispatcher` background loop with
-  a queue, poked by the materializer.
+  a queue, poked by the `StreamManager`.
 - **The readstate DB** (`data/roomy-readstate.sqlite`, attached as `readstate.*`) —
   appserver-owned state that survives materialisation DB wipes. All push state
   (subscriptions, preferences, digest state, participation) lives here for the same
   reason `read_positions` and `user_thread_activity` do: it cannot be reconstructed from
-  the Leaf event log.
+  the event log (the appserver now owns the event store, but readstate is still
+  separate because it tracks user-scoped state that is not derivable from events).
+
 
 ## Web Push fundamentals
 
@@ -139,8 +141,11 @@ Lexicon `Level` enum: `"silent" | "quiet" | "engaged" | "busy"`.
 
 ## Storage schema (readstate DB)
 
-Bump `READSTATE_SCHEMA_VERSION` in `src/db/readStateDb.ts` and append migrations. Update
-`readStateSchema.sql` to reflect the final shape.
+Bump `READSTATE_SCHEMA_VERSION` in `src/db/readStateDb.ts` and add a v3 migration
+to the `MIGRATIONS` array in `src/db/worker.ts` (the worker owns readstate schema
+lifecycle). Update `readStateSchema.sql` to reflect the final shape — the schema
+file is applied via `db.exec()` on init (all `create table if not exists`), and the
+migration ensures existing v2 DBs advance their version row to 3.
 
 ```sql
 -- A device/browser subscription for a user. A user may have many (one per browser).
@@ -237,13 +242,17 @@ set.
 
 ### Hook point
 
-`SpaceMaterializer.processBatch` already calls `this.invalidationRouter.onEventsApplied(...)`
-for live events. Add a parallel poke to the `PushDispatcher` for live
-`createMessage` events only (skip backfill — same gate as the unread-counter increment
-and embed sweeper poke). Pass `{ streamDid, event, user, messageId, roomId }`.
+`StreamManager.sendEvents()` writes events to the appserver-owned events DB,
+materialises them inline via `applyBatch`, emits invalidation signals, pokes the
+embed sweeper, and notifies stream listeners. A parallel poke to the
+`PushDispatcher` is added in step 6b of `sendEvents()` (alongside
+`pokeEmbedSweeper()`), for live `createMessage` events only. The poke builds
+`PushJob[]` from the `AppliedEvent[]` already computed for invalidation,
+reusing `toAppliedEvent`'s `authorDid` (which handles the `authorOverride`
+extension for bridged messages).
 
-This keeps push out of the hot materialisation path: the materializer only enqueues a
-small job; all DB lookups + network delivery happen in the background loop.
+This keeps push out of the hot materialisation path: `sendEvents` only enqueues
+a small job; all DB lookups + network delivery happen in the background loop.
 
 ### `PushDispatcher` (new: `src/push/dispatcher.ts`)
 
@@ -418,14 +427,146 @@ No change to the lazy `ensureReadPositions` strategy is required for push.
 - End-to-end: a manual `setPreferences` + a test message produces a real browser
   notification (Busy level, no digest yet).
 
+> **Phase 1 implementation status (2026-06-24).** All plumbing above is landed.
+> The minimal Busy immediate-push slice the Phase 1 E2E test needs is included
+> even though the full dispatcher/digest loop is nominally Phase 2:
+> `src/push/{types,level,webpush,evaluate,dispatcher}.ts` +
+> `src/queries/{pushPreferences,pushSubscriptions}.ts`, the `StreamManager`
+> live-createMessage poke, and the 5 handlers + `appserver.ts` route registration
+> + `/health/push`. `evaluate` is Busy-only (digest/participation/mentions
+> deferred). Covered by `src/push/evaluate.test.ts` (Busy delivery, author
+> exclusion, engaged-no-immediate, banned-access filter, no-subscription
+> skip, per-space silent override) — run with `bun test src/push/evaluate.test.ts`.
+>
+> **Manual E2E (Busy notification) — requires a browser + push service:**
+> 1. Generate a VAPID keypair: `bun run packages/appserver/scripts/generate-vapid.ts`.
+> 2. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` in the
+>    appserver env (see `.env.example`).
+> 3. Start the appserver (`pnpm dev` / `bun run packages/appserver/src/index.ts`)
+>    and `pnpm dev:lite`.
+> 4. In a browser, log in to app-lite and open **Settings → Notifications**
+>    (`/user/settings/notifications`). Click **Enable notifications** — this
+>    requests permission from a user gesture (Safari requires this) and
+>    registers the subscription. Verify `GET /xrpc/space.roomy.push.getVapidPublicKey`
+>    returns the key and a `push_subscriptions` row exists.
+> 5. On the same page, set the **Default level** to **Busy** (or set a
+>    per-space override).
+> 6. From a second account in the same space, post a message in a room the
+>    busy user is a member of. A real notification appears (title
+>    "<author> in <room>", no body content). `GET /health/push` shows
+>    `deliveredOk` increment.
+> 7. Click **Disable on this device** (or sign out) — `clearPushSubscription()`
+>    unregisters the endpoint; no further pushes arrive on that device.
+>
+> **Verified browsers:** Firefox / Firefox forks (Zen) work end-to-end
+> (Mozilla push service, pure HTTPS). Google Chrome / Edge / Brave / Vivaldi
+> work (FCM with bundled Google API keys). Safari 16.1+ works once the user
+> clicks Enable (the permission prompt requires a user gesture). Vanilla
+> `chromium` / ungoogled-Chromium forks without Google FCM keys cannot do web
+> push — `pushManager.subscribe()` times out; this is a browser limitation, not
+> fixable in app code. A 20s timeout on `subscribe()` fails gracefully with a
+> clear console message instead of hanging forever.
+>
+> **Bugs found and fixed during E2E testing:**
+> - `registerSubscription` rejected Firefox's `expirationTime: null`
+>   (arktype `expirationTime?: number` didn't accept null) → schema now
+>   `number | null`; the handler/DB already handled null.
+> - web-push `topic: \`room:<roomId>\`` failed validation ("Unsupported
+>   characters set") because the Web Push `Topic` header must be ≤32 base64url
+>   chars and `room:` contains `:` → now a sha256→base64url→slice(32) of the
+>   roomId, preserving per-room coalescing.
+> - `Notification.requestPermission()` at login is blocked on Safari (no user
+>   gesture) → login now only re-subscribes if permission is already granted
+>   (`subscribeIfAlreadyPermitted`); the settings page's Enable button is the
+>   one prompt trigger.
+
 **Phase 2 — Engaged digest (the primary deliverable)**
 - `PushDispatcher` + `evaluate.ts` background loop; materializer poke on live
   `createMessage`.
 - `user_room_participation` upsert in `applyBundle` + lazy backfill.
 - `notification_state` upsert + 5-message threshold (on-event) + 1h sweep.
 - `updateSeen` reset hook.
-- `app-lite` `UpdateRhythmChooser` in join flow + settings; `/user/settings/notifications`
-  page live.
+- `app-lite` `UpdateRhythmChooser` in join flow; ~~`/user/settings/notifications`
+  page live~~ (DONE in Phase 1 — status + Enable button (Safari-gesture-safe),
+  default level selector, per-space overrides).
+
+> **Phase 2 implementation status (2026-06-29).** Landed:
+> - `src/queries/userRoomParticipation.ts` — `upsertUserRoomParticipation`
+>   (all room types, override-author aware), `hasUserParticipatedInSpace`
+>   (lazy backfill once per user+space via a process-lifetime cache), +
+>   `_resetParticipationBackfillCache` for tests.
+> - `src/materialization/applyBundle.ts` — upserts the effective author's
+>   participation on every live `createMessage` (override-author if the
+>   `authorOverride.v0` extension is present, else the stream user).
+> - `src/queries/notificationState.ts` — `upsertNotificationState` (atomic
+>   increment + on-event 5-message threshold that marks `notified` inline),
+>   `selectDueDigests` (1h sweep query), `markNotified`, `resetNotificationState`.
+> - `src/push/evaluate.ts` — extended with the Engaged digest path:
+>   read-access + subscription checks are now shared across `busy`/`engaged`;
+>   `engaged` gates on participation, upserts digest state, and emits an
+>   on-event `digest` delivery when the threshold is reached. `quiet` is
+>   skipped (no mentions until Phase 3). `silent` skipped.
+> - `src/push/dispatcher.ts` — refactored delivery into a shared
+>   `deliverPayload`; added `runDigestSweep` on every idle wake (resolves
+>   roomName + spaceId from the room entity, fires time-based digests, marks
+>   notified); added `digestsFired` to `/health/push`.
+> - `src/handlers/space.roomy.room.updateSeen.ts` — deletes the
+>   `notification_state` row on read ("until you open the room again").
+> - `@roomy/design` `components/user/UpdateRhythmChooser.svelte` — the shared
+>   ❌🍃💌👀 chooser (exports `RHYTHM_OPTIONS`, `RhythmLevel`, `DEFAULT_RHYTHM`).
+> - `JoinDialog.svelte` renders the chooser in the join flow and passes the
+>   chosen level out via `onJoin(level)`; both app-lite callers
+>   (`routes/join/+page.svelte`, `JoinSpaceModal.svelte`) persist it via
+>   `setSpacePushLevel` after `joinSpace` (best-effort, never blocks join).
+> - Service worker already handled the `digest` payload type from Phase 1.
+> - Tests: `src/push/evaluate.test.ts` (6 Busy + 6 Engaged digest + 3
+>   notificationState upsert = 15) and `applyBatch.test.ts` (2 participation).
+>   Full appserver suite: 257 pass, 1 skip, 0 fail.
+>
+> **Manual E2E (Engaged digest) — requires a browser + push service:**
+> 1. Appserver running with VAPID keys; `pnpm dev:lite`.
+> 2. User A: enable notifications (Settings → Notifications → Enable), keep
+>    default level **Engaged**, and **send a message in a room** (so they have a
+>    `user_room_participation` row — the digest gate requires participation).
+> 3. User A closes/leaves the room (so new messages become unseen).
+> 4. User B posts 5 messages in that room. On the 5th, the appserver fires an
+>    on-event digest: User A gets one notification "5 new messages in <room>",
+>    and `GET /health/push` shows `digestsFired` increment. `notification_state`
+>    for (A, room) is now `notified=1`; a 6th message does NOT re-fire.
+> 5. **Time threshold:** with a fresh batch (User A reopens the room to reset,
+>    then leaves), User B posts 1–4 messages (below threshold). Wait 1 hour
+>    (or temporarily lower `DIGEST_WINDOW_MS` for testing). The dispatcher's
+>    idle sweep fires one digest; `digestsFired` increments.
+> 6. User A reopens the room → `updateSeen` deletes the `notification_state`
+>    row → a new burst can fire another digest.
+>
+> **Note on the digest gate:** only rooms the recipient has **sent a message
+> in** get digests (the participation gate). A room the recipient merely
+> joined/read but never spoke in never prompts. Existing users get backfilled
+> lazily (once per user+space) so they don't have to send a new message first.
+>
+> **Notification icons (avatars).** Payloads carry an `icon` — a
+> browser-fetchable avatar URL the OS shows on the notification. The appserver
+> resolves it from `comp_info.avatar` (`src/push/avatars.ts`), mirroring
+> `app-lite`'s `resolveBlobUrl` exactly (`atblob://<did>/<cid>` →
+> `https://cdn.bsky.app/img/feed_fullsize/plain/<did>/<cid>`; plain URLs pass
+> through). **Both message and digest pushes use the same rule: sender avatar →
+> space avatar** ("user avatars, or failing that, space avatars"). For the
+> on-event digest the sender is the triggering author; for the time-based
+> sweep it's the room's most-recent author (`resolveLatestRoomAuthor`).
+>
+> *Why sender-first, not room/space-first:* empirically (inspected the live
+> `data/roomy.sqlite`) rooms have **0** avatars and only 11/38 spaces have one —
+> and those space avatars are `atblob://` refs whose blobs **404 on
+> `cdn.bsky.app`** (not on Bluesky's CDN), so they never render. User avatars,
+> by contrast, are materialised as pre-resolved plain `https://` URLs that load
+> (HTTP 200). Putting the sender avatar first surfaces a usable icon for the
+> vast majority of notifications. If neither resolves the `icon` field is
+> omitted and the notification shows with no icon. The service worker passes
+> `payload.icon` straight to `showNotification({ icon })`; the OS fetches the
+> image itself (it is not part of the encrypted payload bytes). Tested in
+> `avatars.test.ts` (resolver + `resolveLatestRoomAuthor`) and `evaluate.test.ts`
+> (message + digest icon cases).
 
 **Phase 3 — Mentions (unblocks Quiet + Engaged immediate)**
 - `space.roomy.extension.mentions.v0` in SDK; `app-lite` editor populates it.
@@ -461,29 +602,43 @@ No change to the lazy `ensureReadPositions` strategy is required for push.
 **appserver**
 - `scripts/generate-vapid.ts` (new)
 - `package.json` — add `web-push` dep
-- `src/db/readStateSchema.sql`, `src/db/readStateDb.ts` (schema v3 + migrations)
-- `src/push/dispatcher.ts`, `src/push/evaluate.ts`, `src/push/preview.ts`,
-  `src/push/mentions.ts`, `src/push/sweep.ts`, `src/push/webpush.ts` (new)
+- `src/db/readStateSchema.sql`, `src/db/readStateDb.ts` (schema v3)
+- `src/db/worker.ts` — v3 migration in `MIGRATIONS` array (push tables)
+- `src/push/dispatcher.ts`, `src/push/evaluate.ts`, `src/push/avatars.ts`,
+  `src/push/webpush.ts`, `src/push/types.ts`, `src/push/level.ts` (new)
 - `src/handlers/space.roomy.push.{getVapidPublicKey,registerSubscription,unregisterSubscription,getPreferences,setPreferences}.ts` (new)
-- `src/materialization/SpaceMaterializer.ts` — poke dispatcher on live createMessage
-- `src/materialization/applyBundle.ts` — upsert `user_room_participation`
+- `src/streams/StreamManager.ts` — poke dispatcher on live createMessage (step 6b)
+- `src/materialization/applyBundle.ts` — upsert `user_room_participation` (async)
 - `src/queries/userRoomParticipation.ts` (new, + lazy backfill)
 - `src/queries/pushPreferences.ts` (new — `resolveLevel`, get/set)
+- `src/queries/pushSubscriptions.ts` (new)
+- `src/queries/notificationState.ts` (new)
 - `src/handlers/space.roomy.room.updateSeen.ts` — delete `notification_state` row
-- `src/index.ts` — register push routes + start dispatcher
+- `src/appserver.ts` — register push routes in `buildRouter()`, start dispatcher,
+  `/health/push` endpoint, `_resetPushDispatcher()` in close()
 - `.env.example` — `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`
+
+All query helpers and the push pipeline (`evaluate.ts`, `dispatcher.ts`, `avatars.ts`,
+handlers) use the async `DbLike` interface (worker-backed), not sync `Database`.
 
 **sdk**
 - `src/schemas/lexicons/space.roomy.push.*.json` (new, 5 files)
 - `src/schemas/queries/index.ts`, `src/schemas/procedures/index.ts` — register schemas
+- `src/transport/registry.ts` — register in `QUERY_SCHEMAS` / `PROCEDURE_SCHEMAS`
 - (Phase 3) `src/schema/events/extensions/message.ts` — `mentions.v0` extension
 
 **app-lite**
-- `src/service-worker.ts` (new), `src/service-worker-register.ts` (new)
-- `src/lib/push.svelte.ts` (new), `src/lib/queries/push.ts`, `src/lib/mutations/push.ts` (new)
+- `src/service-worker.ts` (new)
+- `src/lib/push.svelte.ts` (new), `src/lib/queries/push-preferences.ts`,
+  `src/lib/queries/vapid-public-key.ts`, `src/lib/mutations/push-preferences.ts`,
+  `src/lib/mutations/push-subscription.ts`, `src/lib/push-debug.ts` (new)
 - `src/routes/user/settings/notifications/+page.svelte` (new; un-grey the sidebar link)
-- `src/routes/[space]/settings/+page.svelte` — add Notifications section
-- `src/routes/join/+page.svelte` / `JoinDialog.svelte` — add `UpdateRhythmChooser`
+- `src/routes/user/settings/+page.svelte` — add Notifications link
+- `src/routes/join/+page.svelte` / `JoinSpaceModal.svelte` — add `UpdateRhythmChooser`
+- `src/routes/+layout.svelte` — register service worker
+- `src/lib/auth.svelte.ts` — subscribe on login if permission already granted
+- `src/lib/config.ts` — add push XRPC scope
 
 **design (`@roomy/design`)**
 - `components/user/UpdateRhythmChooser.svelte` (new) — the ❌🍃💌👀 chooser, shared
+- `components/modals/JoinDialog.svelte` — render chooser in join flow
