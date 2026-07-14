@@ -47,6 +47,7 @@
       observer.disconnect();
       if (timer !== undefined) clearTimeout(timer);
     };
+  });
 </script>
 
 {#if threads.length}
