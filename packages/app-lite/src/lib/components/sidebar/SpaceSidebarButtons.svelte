@@ -63,21 +63,16 @@
   class="shrink-0 grid grid-cols-3 gap-1 px-2 py-2"
 >
   <!-- Notifications -->
-  <Tooltip tip="notifications — coming soon" side="right" sideOffset={8}>
-    {#snippet trigger({ props })}
-      <span {...props}>
-        <Button
-          variant="ghost"
-          size="default"
-          class="w-full justify-center"
-          aria-label="Notifications"
-          disabled
-        >
-          <IconBell />
-        </Button>
-      </span>
-    {/snippet}
-  </Tooltip>
+  <Button
+    variant="ghost"
+    size="default"
+    class="w-full justify-center"
+    aria-label="Notifications"
+    title="Notifications"
+    onclick={() => goto(`/${currentSpaceId}/settings/notifications`)}
+  >
+    <IconBell />
+  </Button>
 
   <!-- Invite -->
   <Button
