@@ -12,6 +12,8 @@
   import { queryClient } from "$lib/client";
   import { joinSpace } from "$lib/mutations/space";
   import { setSpacePushLevel } from "$lib/mutations/push-preferences";
+  import { onMount } from "svelte";
+  import { getPushSubscriptionEndpoint } from "$lib/push.svelte";
 
   const { queryKey } = cache;
 
@@ -20,6 +22,13 @@
 
   let resolveState = $state<JoinResolveState>({ status: "loading" });
   let joinState = $state<JoinState>({ status: "idle" });
+  let pushEnabled = $state(false);
+
+  onMount(() => {
+    getPushSubscriptionEndpoint().then((endpoint) => {
+      pushEnabled = endpoint !== null;
+    });
+  });
 
   // Translate a raw joinSpace XRPC error into something the user can act on.
   // The thrown error's message looks like
@@ -137,7 +146,7 @@
   }
 </script>
 
-<JoinDialog {resolveState} {joinState} {inviteToken} {onJoin}>
+<JoinDialog {resolveState} {joinState} {inviteToken} {onJoin} {pushEnabled}>
   {#snippet avatar()}
     <div class="w-10 h-10 rounded-full bg-base-200 dark:bg-base-700"></div>
   {/snippet}
