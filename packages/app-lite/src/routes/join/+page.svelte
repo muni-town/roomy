@@ -120,7 +120,7 @@
       try {
         await setSpacePushLevel(spaceId, level);
         await queryClient.invalidateQueries({
-          queryKey: cache.queryKey("space.roomy.push.getPushPreferences"),
+          queryKey: cache.queryKey("space.roomy.push.getPreferences"),
         });
       } catch (err) {
         console.warn("[join] could not save notification rhythm:", err);

@@ -11,7 +11,7 @@ const { queryKey } = cache;
  */
 export function createPushPreferencesQuery() {
   return createQuery(() => ({
-    queryKey: queryKey("space.roomy.push.getPushPreferences"),
-    queryFn: () => px().query("space.roomy.push.getPushPreferences", {}),
+    queryKey: queryKey("space.roomy.push.getPreferences"),
+    queryFn: () => px().query("space.roomy.push.getPreferences", {}),
   }));
 }

@@ -15,7 +15,9 @@ echo "OAuth Host URL: $target_url"
 # ║  SCOPE STRING                                                              ║
 # ║  IMPORTANT: Keep this in sync with src/lib/config.ts:                       ║
 # ║    - APPSERVER_RPCS → rpc:<nsid>?aud=*                                     ║
-# ║    - OAUTH_SCOPE repo entries → repo:<nsid>?<params>                        ║
+# ║    - OAUTH_SCOPE rpc:/repo: quoted entries → verbatim                       ║
+# ║    - OAUTH_SCOPE template literals (getServiceAuth, personalStream) →      ║
+# ║      env-var-backed defaults below                                         ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 SCOPE="atproto"
@@ -26,6 +28,10 @@ SCOPE+=" blob:*/*"
 # ── Repo Scopes (blob uploads + handle writes) ───────────────────────────
 SCOPE+=" repo:space.roomy.upload.v0"
 SCOPE+=" repo:${VITE_STREAM_HANDLE_NSID:-space.roomy.space.handle.dev}"
+SCOPE+=" repo:${VITE_PERSONAL_STREAM_NSID:-space.roomy.space.personal.dev}"
+
+# ── Service auth (for direct/non-proxied XRPC calls) ───────────────────
+SCOPE+=" rpc:com.atproto.server.getServiceAuth?aud=${VITE_APPSERVER_DID:-did:web:appserver.roomy.chat}"
 
 # ── Appserver RPCs (must match APPSERVER_RPCS in config.ts) ──────────────
 SCOPE+=" rpc:space.roomy.space.getSpaces?aud=*"
@@ -49,6 +55,13 @@ SCOPE+=" rpc:space.roomy.space.setHandle?aud=*"
 SCOPE+=" rpc:space.roomy.space.getCalendarLink?aud=*"
 SCOPE+=" rpc:space.roomy.space.getCalendarEvents?aud=*"
 SCOPE+=" rpc:space.roomy.space.getActivityFeed?aud=*"
+
+# ── Web push notification endpoints ──────────────────────────────────────
+SCOPE+=" rpc:space.roomy.push.getVapidPublicKey?aud=*"
+SCOPE+=" rpc:space.roomy.push.getPreferences?aud=*"
+SCOPE+=" rpc:space.roomy.push.registerSubscription?aud=*"
+SCOPE+=" rpc:space.roomy.push.unregisterSubscription?aud=*"
+SCOPE+=" rpc:space.roomy.push.setPreferences?aud=*"
 
 # Build the OAuth client metadata JSON
 oauth_config=$(
@@ -99,18 +112,28 @@ if (rpcMatch) {
   }
 }
 
-// Check OAUTH_SCOPE for repo entries
+// Check OAUTH_SCOPE for rpc: and repo: entries (quoted strings only;
+// template-literal entries like `repo:${CONFIG...}` are checked separately).
 const scopeMatch = src.match(/export const OAUTH_SCOPE\s*=\s*\[([\s\S]*?)\]/);
 if (scopeMatch) {
   const items = scopeMatch[1].split(/['\"]/).filter((_, i) => i % 2 === 1);
-  const missingRepo = items
-    .filter((s) => s.startsWith('repo:'))
-    .filter((repoScope) => !scope.includes(repoScope));
-  if (missingRepo.length) {
-    console.log('MISSING REPO SCOPES (from OAUTH_SCOPE):');
-    missingRepo.forEach(n => console.log('  ' + n));
+  const missingScopes = items
+    .filter((s) => s.startsWith('repo:') || s.startsWith('rpc:'))
+    .filter((s) => !scope.includes(s));
+  if (missingScopes.length) {
+    console.log('MISSING SCOPES (from OAUTH_SCOPE):');
+    missingScopes.forEach(n => console.log('  ' + n));
     hasErrors = true;
   }
+}
+
+// Check that the getServiceAuth scope (a template literal in config.ts with a
+// dynamic aud= value) is present by its static prefix. Without this scope
+// the DirectXrpcClient cannot obtain service auth tokens.
+if (!scope.includes('rpc:com.atproto.server.getServiceAuth?aud=')) {
+  console.log('MISSING SCOPES (from OAUTH_SCOPE):');
+  console.log('  rpc:com.atproto.server.getServiceAuth?aud=...');
+  hasErrors = true;
 }
 
 if (hasErrors) {

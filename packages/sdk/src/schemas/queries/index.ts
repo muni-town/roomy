@@ -18,4 +18,4 @@ export * as getMessage from "./getMessage";
 export * as getReactions from "./getReactions";
 export * as getEvents from "./getEvents";
 export * as getVapidPublicKey from "./getVapidPublicKey";
-export * as getPushPreferences from "./getPushPreferences";
+export * as getPreferences from "./getPreferences";

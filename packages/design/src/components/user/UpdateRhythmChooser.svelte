@@ -52,11 +52,17 @@
   let {
     value = $bindable(DEFAULT_RHYTHM),
     onchange,
+    horizontal = false,
+    name = "rhythm",
   }: {
     /** Currently selected level. Bindable so callers can `bind:value`. */
     value?: RhythmLevel;
     /** Fired with the newly selected level when the user picks one. */
     onchange?: (value: RhythmLevel) => void;
+    /** Render options in a horizontal row instead of a vertical list. */
+    horizontal?: boolean;
+    /** Radio group name. Must be unique per-instance when multiple choosers appear on the same page. */
+    name?: string;
   } = $props();
 
   function select(next: RhythmLevel): void {
@@ -64,34 +70,42 @@
     onchange?.(next);
   }
 </script>
-
-<div class="flex flex-col gap-1.5" role="radiogroup" aria-label="Update rhythm">
+<div
+  class={cn(
+    "flex gap-1.5",
+    horizontal ? "flex-row flex-wrap" : "flex-col",
+  )}
+  role="radiogroup"
+  aria-label="Update rhythm"
+>
   {#each RHYTHM_OPTIONS as option (option.value)}
     <label
       class={cn(
-        "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+        "rounded-lg border p-3 cursor-pointer transition-colors",
         "border-base-200 dark:border-base-700 hover:bg-base-50 dark:hover:bg-base-800",
         value === option.value
           ? "ring-2 ring-base-900 dark:ring-base-100 bg-base-50 dark:bg-base-800"
           : "",
-      )}
-    >
+        horizontal
+          ? "flex flex-col items-center justify-center gap-1 min-w-28 flex-1"
+          : "flex items-start gap-3",
+        )}>
       <input
         type="radio"
-        name="rhythm"
+        {name}
         value={option.value}
         checked={value === option.value}
         onchange={() => select(option.value)}
         class="sr-only"
       />
-      <span class="text-xl leading-none mt-0.5 select-none" aria-hidden="true">
+      <span class="text-xl leading-none select-none" aria-hidden="true">
         {option.emoji}
       </span>
-      <span class="flex flex-col min-w-0">
+      <span class={cn("flex flex-col min-w-0", horizontal ? "items-center" : "")}>
         <span class="text-sm font-medium text-base-900 dark:text-base-100">
           {option.label}
         </span>
-        <span class="text-xs text-base-500 dark:text-base-400">
+        <span class="text-xs text-base-500 dark:text-base-400 text-center">
           {option.description}
         </span>
       </span>

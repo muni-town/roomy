@@ -10,4 +10,4 @@ export * as leaveSpace from "./leaveSpace";
 export * as setHandle from "./setHandle";
 export * as registerPushSubscription from "./registerPushSubscription";
 export * as unregisterPushSubscription from "./unregisterPushSubscription";
-export * as setPushPreferences from "./setPushPreferences";
+export * as setPreferences from "./setPreferences";

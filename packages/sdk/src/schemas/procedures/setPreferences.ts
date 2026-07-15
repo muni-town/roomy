@@ -1,5 +1,5 @@
 /**
- * Schema for `space.roomy.push.setPushPreferences` (procedure).
+ * Schema for `space.roomy.push.setPreferences` (procedure).
  * Source of truth: packages/appserver/src/handlers/space.roomy.push.setPreferences.ts
  *
  * Sets the user-wide default notification level and/or a per-space override.
@@ -10,7 +10,7 @@
  */
 import { type } from "arktype";
 
-export const NSID = "space.roomy.push.setPushPreferences" as const;
+export const NSID = "space.roomy.push.setPreferences" as const;
 
 export const Input = type({
   "default?": "'silent' | 'quiet' | 'engaged' | 'busy'",

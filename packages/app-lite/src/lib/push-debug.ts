@@ -79,15 +79,15 @@ export function installPushDebug(): void {
       return sub;
     },
     async getPrefs() {
-      return px().query("space.roomy.push.getPushPreferences", {});
+      return px().query("space.roomy.push.getPreferences", {});
     },
     async setDefault(level) {
-      await px().procedure("space.roomy.push.setPushPreferences", {
+      await px().procedure("space.roomy.push.setPreferences", {
         default: level,
       });
     },
     async setSpace(spaceId, level) {
-      await px().procedure("space.roomy.push.setPushPreferences", {
+      await px().procedure("space.roomy.push.setPreferences", {
         spaceId,
         level,
       });

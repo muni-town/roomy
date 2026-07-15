@@ -44,7 +44,7 @@
     /**
      * Called with the chosen notification rhythm when the user clicks Join.
      * The caller is responsible for `joinSpace` + persisting the level via
-     * `setPushPreferences({ spaceId, level })`.
+     * `setPreferences({ spaceId, level })`.
      */
     onJoin: (level: RhythmLevel) => void;
   } = $props();

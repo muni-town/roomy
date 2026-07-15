@@ -46,7 +46,7 @@ export async function resolveLevel(
 }
 
 /** Get the user's full preference set (default + all per-space overrides). */
-export async function getPushPreferences(
+export async function getPreferences(
   db: DbLike,
   userDid: string,
 ): Promise<PushPreferences> {

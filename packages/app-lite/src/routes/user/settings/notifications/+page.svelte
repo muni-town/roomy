@@ -2,40 +2,28 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
-  import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
-  import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
+  import UpdateRhythmChooser from "@roomy/design/components/user/UpdateRhythmChooser.svelte";
   import ScrollArea from "@roomy/design/components/layout/ScrollArea.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import { IconArrowLeft, IconBell } from "@roomy/design/icons";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { setSidebar } from "$lib/components/layout/sidebar.svelte";
-  import { createSpacesQuery } from "$lib/queries/spaces";
   import { createPushPreferencesQuery } from "$lib/queries/push-preferences";
-  import { setDefaultPushLevel, setSpacePushLevel, type PushLevel } from "$lib/mutations/push-preferences";
+  import { setDefaultPushLevel, type PushLevel } from "$lib/mutations/push-preferences";
   import { ensurePushSubscription, clearPushSubscription, pushOutcomeMessage } from "$lib/push.svelte";
   import { toast } from "@foxui/core";
-  import { queryClient } from "$lib/client";
-  import { cache } from "@roomy-space/sdk";
-  import { resolveBlobUrl } from "$lib/utils";
 
-  const spacesQuery = createSpacesQuery({ includeLeft: false });
   const prefsQuery = createPushPreferencesQuery();
 
-  /** Level options shown in the selectors. */
-  const LEVEL_OPTIONS: { label: string; value: PushLevel }[] = [
-    { label: "Silent", value: "silent" },
-    { label: "Quiet", value: "quiet" },
-    { label: "Engaged", value: "engaged" },
-    { label: "Busy", value: "busy" },
-  ];
+  // Local state for the chooser — not re-derived from query data on every
+  // render, so the $bindable in UpdateRhythmChooser isn't overwritten.
+  let defaultLevel = $state<PushLevel>("engaged");
 
-  /** One-line explanation per level (shown under the default selector). */
-  const LEVEL_DESC: Record<PushLevel, string> = {
-    silent: "No notifications — never bug me.",
-    quiet: "Only when mentioned. (Coming in Phase 3.)",
-    engaged: "A periodic digest of missed activity. (Coming in Phase 2.)",
-    busy: "Real-time notification for every message — active now.",
-  };
+  $effect(() => {
+    if (prefsQuery.data) {
+      defaultLevel = (prefsQuery.data.default ?? "engaged") as PushLevel;
+    }
+  });
 
   // ── Push capability + permission state (browser-side, not on the server) ──
   let pushSupported = $state(false);
@@ -114,24 +102,8 @@
   }
 
   async function onChangeDefault(level: PushLevel): Promise<void> {
+    defaultLevel = level;
     await setDefaultPushLevel(level);
-    await queryClient.invalidateQueries({
-      queryKey: cache.queryKey("space.roomy.push.getPushPreferences"),
-    });
-  }
-
-  async function onChangeSpace(spaceId: string, level: PushLevel): Promise<void> {
-    await setSpacePushLevel(spaceId, level);
-    await queryClient.invalidateQueries({
-      queryKey: cache.queryKey("space.roomy.push.getPushPreferences"),
-    });
-  }
-
-  /** Resolve the effective level for a space (override → default). */
-  function effectiveLevel(spaceId: string, fallback: PushLevel): PushLevel {
-    const overrides = prefsQuery.data?.perSpace ?? [];
-    const ov = overrides.find((o: { spaceId: string }) => o.spaceId === spaceId);
-    return (ov?.level as PushLevel | undefined) ?? fallback;
   }
 
   onMount(() => {
@@ -241,7 +213,8 @@
           Default notification level
         </h2>
         <p class="text-sm text-base-400 mb-4">
-          Applies to every space you're a member of unless overridden below.
+          Applies to every space you're a member of unless overridden in each
+          space's settings.
         </p>
 
         {#if prefsQuery.isPending}
@@ -249,68 +222,16 @@
         {:else if prefsQuery.isError}
           <ErrorMessage message="Error: {prefsQuery.error.message}" class="py-4" />
         {:else if prefsQuery.data}
-          {@const current = prefsQuery.data.default as PushLevel}
-          <div class="flex flex-col gap-2">
-            <ToggleGroup
-              name="defaultLevel"
-              value={current}
-              options={LEVEL_OPTIONS}
-              onchange={(v: string) => onChangeDefault(v as PushLevel)}
-            />
-            <p class="text-sm text-base-400">{LEVEL_DESC[current]}</p>
-          </div>
+          <UpdateRhythmChooser
+            value={defaultLevel}
+            horizontal={true}
+            name="defaultLevel"
+            onchange={(v) => onChangeDefault(v)}
+          />
           <p class="text-xs text-base-400 mt-3">
             Only <strong>Busy</strong> delivers real-time notifications today;
             the other levels are under active development.
           </p>
-        {/if}
-      </section>
-
-      <!-- Per-space overrides -->
-      <section>
-        <h2 class="text-base font-semibold mb-1 text-base-900 dark:text-base-100">
-          Per-space overrides
-        </h2>
-        <p class="text-sm text-base-400 mb-4">
-          Pick a level for an individual space. Setting one creates an override
-          (you can change it, but removing it comes later).
-        </p>
-
-        {#if spacesQuery.isPending}
-          <p class="text-sm text-base-400">Loading spaces…</p>
-        {:else if spacesQuery.isError}
-          <ErrorMessage message="Error: {spacesQuery.error.message}" class="py-4" />
-        {:else if spacesQuery.data}
-          {@const members = spacesQuery.data.spaces.filter((s: { isMember: boolean }) => s.isMember)}
-
-          {#if members.length === 0}
-            <p class="text-sm text-base-400">You're not a member of any spaces.</p>
-          {:else if prefsQuery.data}
-            {@const fallback = (prefsQuery.data.default as PushLevel) ?? "engaged"}
-            <div class="flex flex-col gap-4">
-              {#each members as space (space.id)}
-                <div class="flex items-center justify-between gap-4">
-                  <div class="flex items-center gap-3 min-w-0">
-                    <SpaceAvatar
-                      src={resolveBlobUrl(space.avatar)}
-                      id={space.id}
-                      name={space.name ?? undefined}
-                      size={36}
-                    />
-                    <span class="text-sm font-medium truncate text-base-700 dark:text-base-300">
-                      {space.name || "Unnamed Space"}
-                    </span>
-                  </div>
-                  <ToggleGroup
-                    name={"level-" + space.id}
-                    value={effectiveLevel(space.id, fallback)}
-                    options={LEVEL_OPTIONS}
-                    onchange={(v: string) => onChangeSpace(space.id, v as PushLevel)}
-                  />
-                </div>
-              {/each}
-            </div>
-          {/if}
         {/if}
       </section>
     {/if}

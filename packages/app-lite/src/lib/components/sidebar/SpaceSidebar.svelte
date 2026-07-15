@@ -151,6 +151,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       { slug: "", label: "General" },
       { slug: "roles", label: "Roles" },
       { slug: "members", label: "Members" },
+      { slug: "notifications", label: "Notifications" },
       ...(showInvitesTab ? [{ slug: "invites", label: "Invites" }] : []),
       ...(showDiscordBridgeTab
         ? [{ slug: "discord-bridge", label: "Discord Bridge" }]
