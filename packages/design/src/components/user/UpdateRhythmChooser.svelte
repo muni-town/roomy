@@ -26,7 +26,7 @@
       value: "quiet",
       emoji: "🍃",
       label: "Quiet",
-      description: "Only when mentioned. (Coming soon.)",
+      description: "Only when mentioned.",
     },
     {
       value: "engaged",

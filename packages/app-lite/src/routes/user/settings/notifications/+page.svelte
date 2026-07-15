@@ -228,10 +228,6 @@
             name="defaultLevel"
             onchange={(v) => onChangeDefault(v)}
           />
-          <p class="text-xs text-base-400 mt-3">
-            Only <strong>Busy</strong> delivers real-time notifications today;
-            the other levels are under active development.
-          </p>
         {/if}
       </section>
     {/if}
