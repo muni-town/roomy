@@ -21,8 +21,14 @@
 export function stripMarkdownToPlaintext(input: string): string {
   let text = input;
 
-  // 1. Strip HTML tags (including self-closing, attributes, and void elements).
-  text = text.replace(/<[^>]*>/g, "");
+  // Strip HTML tags. Loop until stable to handle `>` inside attribute values
+  // (e.g. `<img src=">" onerror="alert(1)">` — first pass matches `<img src=">"`,
+  // leaving ` onerror="alert(1)">` which is still a live tag).
+  let previousText: string;
+  do {
+    previousText = text;
+    text = text.replace(/<[^>]*>/g, "");
+  } while (text !== previousText);
 
   // 2. Strip markdown images: ![alt](url) → keep alt text
   text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
