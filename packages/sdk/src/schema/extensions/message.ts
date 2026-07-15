@@ -100,12 +100,24 @@ export const Attachments = type({
   attachments: Attachment.array().describe("The list of attachments."),
 }).describe("Attachments to the message, like files, link embeds, or images.");
 
+export const Mentions = type({
+  $type: "'space.roomy.extension.mentions.v0'",
+  mentions: UserDid.array().describe(
+    "DIDs of users mentioned in the message body. \
+Used by the push pipeline to route Quiet/Engaged immediate notifications. \
+Each DID must appear at most once; order is not significant.",
+  ),
+}).describe(
+  "User mentions carried as structured data for notification routing.",
+);
+
 // Union of all message extensions
 export const messageExtension = type.or(
   AuthorOverride,
   TimestampOverride,
   Attachments,
   DiscordMessageOrigin,
+  Mentions,
 );
 
 export type MessageExtension = typeof messageExtension.infer;

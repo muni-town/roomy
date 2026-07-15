@@ -1,16 +1,19 @@
 /**
  * Push evaluation for a live `createMessage`.
  *
- * Phase 2 scope: **Busy** immediate pushes AND the **Engaged digest** path.
+ * Phase 3 scope: **Mentions** — Quiet and Engaged recipients who are mentioned
+ * in the message get an immediate `message` push instead of being skipped
+ * (quiet) or routed to the digest path (engaged).
+ *
  * For a live message in `roomId` (space `spaceId`) by `authorDid`:
  *   1. Resolve message facts (room name + author name for the payload).
  *   2. Enumerate recipients: space members ∪ admins.
  *   3. For each recipient (excluding the author), resolve their effective
  *      level (per-space override → user default → appserver default), then:
  *      - `silent`  → skip.
- *      - `quiet`   → skip (mentions land in Phase 3; until then quiet == silent).
+ *      - `quiet`   → mentioned ? immediate `message` push : skip.
  *      - `busy`    → immediate `message` push (one per message).
- *      - `engaged` → digest path:
+ *      - `engaged` → mentioned ? immediate `message` push : digest path:
  *          * read-access filter (never notify for a room they can't read);
  *          * subscription check (≥1 device);
  *          * participation gate — only rooms the recipient has sent a message
@@ -29,8 +32,9 @@
  * `applyBundle`'s unread-counter increment.
  *
  * Returns two kinds of {@link PushDelivery}: immediate `message` pushes
- * (Busy) and on-event `digest` pushes (Engaged threshold). Time-based digests
- * are emitted by the dispatcher sweep, not here.
+ * (Busy, quiet+mentioned, engaged+mentioned) and on-event `digest` pushes
+ * (Engaged threshold). Time-based digests are emitted by the dispatcher sweep,
+ * not here.
  */
 
 import type { DbLike } from "../db/types.ts";
@@ -105,16 +109,47 @@ export async function enumerateRecipients(
 }
 
 /**
+ * Build a `message`-type push payload for an immediate push (busy, quiet+mentioned,
+ * engaged+mentioned). Shared across all three paths to avoid duplication.
+ */
+function buildMessagePayload(
+  job: PushJob,
+  facts: MessageFacts,
+  icon: string | undefined,
+): PushPayload {
+  const payload: PushPayload = {
+    type: "message",
+    spaceId: job.spaceId,
+    roomId: job.roomId,
+    messageId: job.messageId,
+    count: 1,
+    ...(facts.roomName != null ? { roomName: facts.roomName } : {}),
+    ...(facts.authorName != null
+      ? { authorName: facts.authorName }
+      : {}),
+    ...(facts.messageContent != null
+      ? { messageContent: facts.messageContent }
+      : {}),
+  };
+  if (icon) payload.icon = icon;
+  return payload;
+}
+
+/**
  * Evaluate a live createMessage job and return the pushes to deliver (one per
  * recipient). Busy emits an immediate `message` push; Engaged emits an
  * on-event `digest` push when the 5-message threshold is reached (and records
  * digest state for the sweep to catch the 1-hour threshold otherwise).
+ *
+ * Phase 3 (mentions): Quiet and Engaged recipients who are mentioned in the
+ * message get an immediate `message` push instead of being skipped (quiet) or
+ * routed to the digest path (engaged).
  */
 export async function evaluatePush(
   db: DbLike,
   job: PushJob,
 ): Promise<PushDelivery[]> {
-  const { spaceId, roomId, authorDid, messageId, timestamp } = job;
+  const { spaceId, roomId, authorDid, messageId, timestamp, mentions } = job;
   const facts = await resolveMessageFacts(db, roomId, authorDid, messageId);
   log.info(`[push-evaluate] messageContent for ${messageId}: ${facts.messageContent ? facts.messageContent.slice(0, 60) + "…" : "null"}`);
 
@@ -135,10 +170,7 @@ export async function evaluatePush(
     if (did === authorDid) continue; // never notify the author
 
     const level = await resolveLevel(db, did, spaceId);
-    if (level === "silent" || level === "quiet") {
-      // quiet has no mentions path yet (Phase 3) → behaves like silent.
-      continue;
-    }
+    if (level === "silent") continue;
 
     // Read-access filter (reuse the auth unit). Skip users who can't read
     // the room — never leak a notification for a room they can't open.
@@ -149,27 +181,19 @@ export async function evaluatePush(
     const subs = await selectSubscriptions(db, did);
     if (subs.length === 0) continue;
 
-    if (level === "busy") {
-      const payload: PushPayload = {
-        type: "message",
-        spaceId,
-        roomId,
-        messageId,
-        count: 1,
-        ...(facts.roomName != null ? { roomName: facts.roomName } : {}),
-        ...(facts.authorName != null
-          ? { authorName: facts.authorName }
-          : {}),
-        ...(facts.messageContent != null
-          ? { messageContent: facts.messageContent }
-          : {}),
-      };
-      if (icon) payload.icon = icon;
-      deliveries.push({ userDid: did, payload });
+    // Phase 3: mention detection. Check if this recipient was mentioned.
+    const mentioned = mentions?.includes(did) ?? false;
+
+    // Immediate push paths: busy always, quiet+mentioned, engaged+mentioned.
+    if (level === "busy" || (level === "quiet" && mentioned) || (level === "engaged" && mentioned)) {
+      deliveries.push({ userDid: did, payload: buildMessagePayload(job, facts, icon) });
       continue;
     }
 
-    // level === "engaged" → digest path.
+    // Quiet (not mentioned) → skip (behaves like silent).
+    if (level === "quiet") continue;
+
+    // level === "engaged", not mentioned → digest path.
     // Participation gate: only rooms the recipient has sent a message in.
     // (Lazy-backfilled once per user+space so the gate works for existing
     // users without them sending a new message first.)

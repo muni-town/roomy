@@ -26,6 +26,8 @@ export interface CreateMessageOptions {
   authorName?: string;
   /** Unix timestamp for the message (default: now) */
   timestamp?: number;
+  /** DIDs of users mentioned in the message body */
+  mentions?: string[];
   /** Additional extensions to include with the event */
   extensions?: Record<string, unknown>;
 }
@@ -92,6 +94,14 @@ export async function createMessage(
     };
   }
 
+  // Add mentions extension if provided
+  if (options.mentions && options.mentions.length > 0) {
+    extensions["space.roomy.extension.mentions.v0"] = {
+      $type: "space.roomy.extension.mentions.v0",
+      mentions: options.mentions,
+    };
+  }
+
   // Build attachments array for the event body
   const bodyAttachments: Attachment[] = [];
   if (options.replyTo) {
@@ -123,6 +133,8 @@ export async function createMessage(
  * Options for editing a message.
  */
 export interface EditMessageOptions {
+  /** DIDs of users mentioned in the edited message body */
+  mentions?: string[];
   /** The room containing the message */
   roomId: Ulid;
   /** The ID of the message to edit */
@@ -171,6 +183,13 @@ export async function editMessage(
     extensions["space.roomy.extension.timestampOverride.v0"] = {
       $type: "space.roomy.extension.timestampOverride.v0",
       timestamp: options.timestamp,
+    };
+  }
+
+  if (options.mentions && options.mentions.length > 0) {
+    extensions["space.roomy.extension.mentions.v0"] = {
+      $type: "space.roomy.extension.mentions.v0",
+      mentions: options.mentions,
     };
   }
 

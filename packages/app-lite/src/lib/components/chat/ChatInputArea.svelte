@@ -201,7 +201,7 @@
     messagingState.setNormal();
   }
 
-  async function handleSend() {
+  async function handleSend(_message = "", mentions: string[] = []) {
     const state = messagingState.current;
     if (state.kind === "threading") return;
     if (!("input" in state)) return;
@@ -238,9 +238,18 @@
         });
       }
 
+      // Build mentions extension if any DIDs were mentioned
+      const mentionsExt = mentions.length > 0
+        ? { "space.roomy.extension.mentions.v0": { $type: "space.roomy.extension.mentions.v0", mentions } }
+        : undefined;
+
       // If we have attachments, send with extensions; otherwise use the simple path
       if (attachments.length > 0) {
         const id = newUlid();
+        const extensions: Record<string, unknown> = {
+          "space.roomy.extension.attachments.v0": { attachments },
+        };
+        if (mentionsExt) Object.assign(extensions, mentionsExt);
         const event: Record<string, unknown> = {
           id,
           room: roomId,
@@ -249,15 +258,14 @@
             mimeType: "text/markdown",
             data: toBytes(new TextEncoder().encode(message)),
           },
-          extensions: {
-            "space.roomy.extension.attachments.v0": { attachments },
-          },
+          extensions,
         };
         await sendEvents(spaceId, [event]);
       } else {
         await sendMessageMutation(spaceId, roomId, message, {
           replyTo:
             state.kind === "replying" ? state.replyTo.id : undefined,
+          mentions,
         });
       }
     } catch (e: unknown) {
