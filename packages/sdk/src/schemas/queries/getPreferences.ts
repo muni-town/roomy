@@ -1,5 +1,5 @@
 /**
- * Schema for `space.roomy.push.getPushPreferences` (query).
+ * Schema for `space.roomy.push.getPreferences` (query).
  * Source of truth: packages/appserver/src/handlers/space.roomy.push.getPreferences.ts
  *
  * Returns the caller's notification preferences: a user-wide default level
@@ -7,7 +7,7 @@
  */
 import { type } from "arktype";
 
-export const NSID = "space.roomy.push.getPushPreferences" as const;
+export const NSID = "space.roomy.push.getPreferences" as const;
 
 /** Notification level enum shared across the push lexicons. */
 export const Level = type("'silent' | 'quiet' | 'engaged' | 'busy'");

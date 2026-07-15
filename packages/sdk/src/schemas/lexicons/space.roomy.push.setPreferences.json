@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "space.roomy.push.setPushPreferences",
+  "id": "space.roomy.push.setPreferences",
   "defs": {
     "main": {
       "type": "procedure",

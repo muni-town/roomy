@@ -1,5 +1,5 @@
 /**
- * XRPC: space.roomy.push.setPushPreferences (procedure).
+ * XRPC: space.roomy.push.setPreferences (procedure).
  *
  * Sets the user-wide default notification level and/or a per-space override.
  *   - `spaceId` omitted → set the user-wide default (`body.default`).

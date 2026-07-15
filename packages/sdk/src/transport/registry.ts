@@ -69,9 +69,9 @@ export const QUERY_SCHEMAS = {
     params: queries.getVapidPublicKey.Params,
     response: queries.getVapidPublicKey.Response,
   },
-  "space.roomy.push.getPushPreferences": {
-    params: queries.getPushPreferences.Params,
-    response: queries.getPushPreferences.Response,
+  "space.roomy.push.getPreferences": {
+    params: queries.getPreferences.Params,
+    response: queries.getPreferences.Response,
   },
 } as const;
 
@@ -112,9 +112,9 @@ export const PROCEDURE_SCHEMAS = {
     input: procedures.unregisterPushSubscription.Input,
     output: procedures.unregisterPushSubscription.Output,
   },
-  "space.roomy.push.setPushPreferences": {
-    input: procedures.setPushPreferences.Input,
-    output: procedures.setPushPreferences.Output,
+  "space.roomy.push.setPreferences": {
+    input: procedures.setPreferences.Input,
+    output: procedures.setPreferences.Output,
   },
 } as const;
 

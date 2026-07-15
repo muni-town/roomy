@@ -1,12 +1,12 @@
 /**
- * XRPC: space.roomy.push.getPushPreferences (query).
+ * XRPC: space.roomy.push.getPreferences (query).
  *
  * Returns the caller's notification preferences: a user-wide default level
  * plus any per-space overrides. Authenticated via `parseUserDid`.
  */
 
 import { openDb } from "../db/db.ts";
-import { getPushPreferences } from "../queries/pushPreferences.ts";
+import { getPreferences } from "../queries/pushPreferences.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
@@ -26,5 +26,5 @@ export const getPreferencesHandler: QueryHandler<
     throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
   const db = openDb();
-  return await getPushPreferences(db, userDid);
+  return await getPreferences(db, userDid);
 };

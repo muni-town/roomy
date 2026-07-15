@@ -217,10 +217,10 @@ export function buildRouter(
       paramsSchema: schemas.queries.getVapidPublicKey.Params,
       outputSchema: schemas.queries.getVapidPublicKey.Response,
     })
-    .query("space.roomy.push.getPushPreferences", {
+    .query("space.roomy.push.getPreferences", {
       handler: getPreferencesHandler,
-      paramsSchema: schemas.queries.getPushPreferences.Params,
-      outputSchema: schemas.queries.getPushPreferences.Response,
+      paramsSchema: schemas.queries.getPreferences.Params,
+      outputSchema: schemas.queries.getPreferences.Response,
     })
     .procedure("space.roomy.push.registerSubscription", {
       handler: registerSubscriptionHandler,
@@ -232,7 +232,7 @@ export function buildRouter(
     })
     .procedure("space.roomy.push.setPreferences", {
       handler: setPreferencesHandler,
-      inputSchema: schemas.procedures.setPushPreferences.Input,
+      inputSchema: schemas.procedures.setPreferences.Input,
     })
     .sync("space.roomy.sync.subscribe", {
       handler: syncHandler,

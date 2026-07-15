@@ -7,7 +7,7 @@ export type PushLevel = "silent" | "quiet" | "engaged" | "busy";
  * (Use {@link setSpacePushLevel} for a per-space override.)
  */
 export async function setDefaultPushLevel(level: PushLevel): Promise<void> {
-  await px().procedure("space.roomy.push.setPushPreferences", { default: level });
+  await px().procedure("space.roomy.push.setPreferences", { default: level });
 }
 
 /**
@@ -17,7 +17,7 @@ export async function setSpacePushLevel(
   spaceId: string,
   level: PushLevel,
 ): Promise<void> {
-  await px().procedure("space.roomy.push.setPushPreferences", {
+  await px().procedure("space.roomy.push.setPreferences", {
     spaceId,
     level,
   });

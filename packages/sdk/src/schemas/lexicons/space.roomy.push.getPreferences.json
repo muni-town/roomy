@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "space.roomy.push.getPushPreferences",
+  "id": "space.roomy.push.getPreferences",
   "defs": {
     "perSpace": {
       "type": "object",
