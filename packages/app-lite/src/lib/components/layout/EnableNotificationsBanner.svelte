@@ -7,7 +7,7 @@
 
   const DISMISS_KEY = "roomy.push.bannerDismissed";
 
-  let pushEnabled = $state(false);
+  let pushEnabled: boolean | null = $state(null);
   let dismissed = $state(false);
 
   onMount(() => {
