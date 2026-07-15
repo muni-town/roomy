@@ -37,6 +37,7 @@
  * not here.
  */
 
+import { stripMarkdownToPlaintext } from "./plaintext.ts";
 import type { DbLike } from "../db/types.ts";
 import { decodeContent } from "../db/content.ts";
 import { roomAccess } from "../auth/access.ts";
@@ -87,9 +88,11 @@ export async function resolveMessageFacts(
   let messageContent: string | null = null;
   if (contentRow?.data) {
     const raw = decodeContent(contentRow.mime_type, contentRow.data);
-    messageContent = raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
+    messageContent = stripMarkdownToPlaintext(raw);
+    if (messageContent.length > 120) {
+      messageContent = messageContent.slice(0, 120) + "\u2026";
+    }
   }
-
   return { roomName, authorName, messageContent };
 }
 
