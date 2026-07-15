@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { onMount } from "svelte";
   import JoinDialog from "@roomy/design/components/modals/JoinDialog.svelte";
   import type {
     JoinResolveState,
@@ -10,10 +11,18 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { joinSpace } from "$lib/mutations/space";
   import { setSpacePushLevel } from "$lib/mutations/push-preferences";
+  import { getPushSubscriptionEndpoint } from "$lib/push.svelte";
   import { queryClient } from "$lib/client";
   import { resolveBlobUrl } from "$lib/utils";
 
   let { spaceId }: { spaceId: string } = $props();
+  let pushEnabled = $state(false);
+
+  onMount(() => {
+    getPushSubscriptionEndpoint().then((endpoint) => {
+      pushEnabled = endpoint !== null;
+    });
+  });
 
   const inviteToken = $derived(
     page.url.searchParams.get("invite") ?? undefined,
@@ -104,7 +113,7 @@
 </script>
 
 <div class="fixed inset-0 z-40 flex items-center justify-center bg-base-50/95 dark:bg-base-950/95 backdrop-blur-sm">
-  <JoinDialog {resolveState} {joinState} {inviteToken} {urlError} {onJoin}>
+  <JoinDialog {resolveState} {joinState} {inviteToken} {urlError} {onJoin} {pushEnabled}>
     {#snippet avatar()}
       <SpaceAvatar
         src={resolveBlobUrl(metaQuery.data?.avatar)}

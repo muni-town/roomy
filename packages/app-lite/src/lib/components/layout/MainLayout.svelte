@@ -12,6 +12,7 @@
   import { wideSidebar } from "./wide-sidebar.svelte";
   import NavbarSpaceInfo from "./NavbarSpaceInfo.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
+  import EnableNotificationsBanner from "./EnableNotificationsBanner.svelte";
   import ServerBar from "$lib/components/sidebar/ServerBar.svelte";
 
 let {
@@ -40,6 +41,7 @@ let {
     "sm:ml-64",
   ]}
 >
+  <EnableNotificationsBanner />
   <Navbar {compact} class={compact ? "h-11 dark:bg-base-900/20" : "dark:bg-base-900/20"}>
     <div class="flex gap-4 items-center mr-auto ml-2 sm:hidden">
       <ToggleNavigation bind:isSidebarVisible={mobileSidebar.visible} />

@@ -32,6 +32,10 @@
     urlError,
     avatar,
     onJoin,
+    /** When true, the UpdateRhythmChooser is shown so the user can pick a
+     *  per-space notification level. Callers should pass true only when push
+     *  notifications are already enabled on this device. */
+    pushEnabled = false,
   }: {
     resolveState: JoinResolveState;
     joinState: JoinState;
@@ -47,6 +51,8 @@
      * `setPreferences({ spaceId, level })`.
      */
     onJoin: (level: RhythmLevel) => void;
+    /** Whether to show the UpdateRhythmChooser (push enabled on device). */
+    pushEnabled?: boolean;
   } = $props();
 
   // The chosen notification rhythm, defaulted to the appserver's default
@@ -71,12 +77,14 @@
           <h1 class="font-bold text-xl min-w-0 truncate" title={resolveState.data.name}>{resolveState.data.name}</h1>
         </div>
         {#if canJoin}
+        {#if pushEnabled}
           <div class="mb-5">
             <p class="text-xs font-semibold uppercase tracking-wider text-base-400 dark:text-base-500 mb-2 px-1">
               Choose your update rhythm
             </p>
             <UpdateRhythmChooser bind:value={rhythm} />
           </div>
+        {/if}
 
           <Button size="lg" asyncState={joinState} onclick={() => onJoin(rhythm)}>
             {inviteToken ? "Accept Invite" : "Join Space"}

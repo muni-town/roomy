@@ -71,6 +71,24 @@ function supportsPush(): boolean {
     typeof Notification !== "undefined"
   );
 }
+/**
+ * Returns this device's active push subscription endpoint, or `null` if push
+ * is unsupported, permission isn't granted, or no subscription exists. Used
+ * by the join flow to decide whether to show the `UpdateRhythmChooser`.
+ */
+export async function getPushSubscriptionEndpoint(): Promise<string | null> {
+  if (!supportsPush()) return null;
+  if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+    return null;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return sub?.endpoint ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** base64url → Uint8Array (for the VAPID `applicationServerKey`). */
 export function base64UrlToUint8Array(base64Url: string): Uint8Array {
