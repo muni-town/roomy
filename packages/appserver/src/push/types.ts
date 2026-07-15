@@ -46,6 +46,13 @@ export interface PushPayload {
   /** Resolved author display name for `message` pushes, when available. */
   authorName?: string;
   /**
+   * Decoded message text content for `message` pushes. Only the first ~120
+   * characters to keep the encrypted payload small — the push service never
+   * sees the plaintext, but the payload is still transmitted over the wire
+   * inside the encrypted envelope.
+   */
+  messageContent?: string;
+  /**
    * Browser-fetchable avatar URL to show as the notification icon. The
    * appserver resolves this from `comp_info.avatar` (sender avatar for
    * `message` pushes, room/space avatar for `digest`), falling back through
