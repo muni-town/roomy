@@ -2,7 +2,6 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import {
-    callTicket,
     callConnectSpace,
     callMaterializeSpace,
     callGetSpaces,
@@ -10,6 +9,9 @@
     callRoomQuery,
     callGetMessages,
     callGetMessage,
+    callAdminGetFlags,
+    callAdminSetFlag,
+    callAdminClearFlag,
     NSIDS,
   } from "$lib/xrpc";
   import {
@@ -59,6 +61,74 @@
   $effect(() => { if (messageLimit) sessionStorage.setItem("message-limit", messageLimit); });
   $effect(() => { if (messageCursor) sessionStorage.setItem("message-cursor", messageCursor); });
   $effect(() => { if (wsUrl) sessionStorage.setItem("ws-url", wsUrl); });
+
+  // ── Feature flag state ──────────────────────────────────────────────────
+
+  let flags = $state<Array<{
+    key: string;
+    description: string;
+    globalEnabled: boolean;
+    assignedDids: string[];
+  }> | null>(null);
+  let flagDidsInput = $state<Record<string, string>>({});
+  let flagLoading = $state(false);
+
+  async function refreshFlags() {
+    flagLoading = true;
+    try {
+      const data = await callAdminGetFlags(auth.agent!, auth.session!.did);
+      flags = data.flags;
+    } catch (err: any) {
+      flags = null;
+      renderResult(`Failed to load flags: ${err?.message ?? err}`, true);
+    } finally {
+      flagLoading = false;
+    }
+  }
+
+  async function onFlagToggleGlobal(flagKey: string, current: boolean) {
+    flagLoading = true;
+    try {
+      await callAdminSetFlag(auth.agent!, auth.session!.did, flagKey, !current);
+      await refreshFlags();
+      renderResult(`Flag "${flagKey}" global set to ${!current}`);
+    } catch (err: any) {
+      renderResult(`Failed to set flag: ${err?.message ?? err}`, true);
+    } finally {
+      flagLoading = false;
+    }
+  }
+
+  async function onFlagSaveDids(flagKey: string) {
+    flagLoading = true;
+    try {
+      const input = flagDidsInput[flagKey] ?? "";
+      const dids = input
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      await callAdminSetFlag(auth.agent!, auth.session!.did, flagKey, undefined, dids);
+      await refreshFlags();
+      renderResult(`Flag "${flagKey}" DIDs updated (${dids.length} DID(s))`);
+    } catch (err: any) {
+      renderResult(`Failed to set flag DIDs: ${err?.message ?? err}`, true);
+    } finally {
+      flagLoading = false;
+    }
+  }
+
+  async function onFlagClear(flagKey: string) {
+    flagLoading = true;
+    try {
+      await callAdminClearFlag(auth.agent!, auth.session!.did, flagKey);
+      await refreshFlags();
+      renderResult(`Flag "${flagKey}" cleared (default off)`);
+    } catch (err: any) {
+      renderResult(`Failed to clear flag: ${err?.message ?? err}`, true);
+    } finally {
+      flagLoading = false;
+    }
+  }
   $effect(() => { if (wsSubId) sessionStorage.setItem("ws-sub-id", wsSubId); });
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -435,6 +505,69 @@
             {/each}
           </div>
         </div>
+      </details>
+    </section>
+
+    <!-- ─── Feature Flags ──────────────────────────────────────────────── -->
+    <section class="mb-6">
+      <details>
+        <summary class="text-lg font-semibold cursor-pointer mb-3">Feature Flags</summary>
+
+        <div class="mb-4">
+          <Button onclick={refreshFlags} disabled={flagLoading}>
+            {flagLoading ? "Loading…" : "Refresh Flags"}
+          </Button>
+        </div>
+
+        {#if flags === null}
+          <p class="text-sm text-base-500">Click "Refresh Flags" to load registered feature flags.</p>
+        {:else if flags.length === 0}
+          <p class="text-sm text-base-500">No feature flags are registered in the code registry.</p>
+        {:else}
+          {#each flags as flag (flag.key)}
+            <div class="border border-base-200 dark:border-base-800 rounded-2xl p-4 mb-4 bg-white dark:bg-base-900/50">
+              <div class="flex items-center justify-between mb-2">
+                <div>
+                  <h4 class="font-mono text-sm font-semibold">{flag.key}</h4>
+                  <p class="text-xs text-base-500">{flag.description || "(no description)"}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <label class="flex items-center gap-1 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={flag.globalEnabled}
+                      onchange={() => onFlagToggleGlobal(flag.key, flag.globalEnabled)}
+                      disabled={flagLoading}
+                    />
+                    Enable for all
+                  </label>
+                  <Button
+                    variant="ghost"
+                    onclick={() => onFlagClear(flag.key)}
+                    disabled={flagLoading}
+                  >Clear</Button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs mb-1">Assigned DIDs (one per line)</label>
+                <textarea
+                  class="w-full text-sm p-2 border border-base-200 dark:border-base-800 rounded-xl bg-white dark:bg-base-900/50 text-base-800 dark:text-base-200 font-mono"
+                  rows="3"
+                  placeholder="did:plc:abc..."
+                  value={flagDidsInput[flag.key] ?? flag.assignedDids.join("\n")}
+                  oninput={(e) => { flagDidsInput[flag.key] = (e.target as HTMLTextAreaElement).value; }}
+                ></textarea>
+                <div class="mt-2">
+                  <Button
+                    onclick={() => onFlagSaveDids(flag.key)}
+                    disabled={flagLoading}
+                  >Save DIDs</Button>
+                </div>
+              </div>
+            </div>
+          {/each}
+        {/if}
       </details>
     </section>
   {/if}

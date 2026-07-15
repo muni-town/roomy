@@ -569,7 +569,7 @@ class FakeStreamSource implements StreamEventSource {
     for (let i = 0; i < count; i++) {
       seeded.push({
         idx: (startIdx + i) as StreamIndex,
-        event: { $type: "space.roomy.space.updateInfo", id: `seed-${startIdx + i}` } as Event,
+        event: { $type: "space.roomy.space.updateInfo", id: `seed-${startIdx + i}` } as unknown as Event,
         user: USER_A,
       });
     }

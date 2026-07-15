@@ -13,7 +13,7 @@ import {
   type Event,
 } from "@roomy-space/sdk";
 import type { DbLike } from "../db/types.ts";
-import type { SQLQueryBinding } from "bun:sqlite";
+import type { SQLQueryBindings } from "bun:sqlite";
 
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import { applyBatch } from "./applyBatch.ts";
@@ -403,7 +403,7 @@ describe("forwardMessages sort order", () => {
  * interleaving so the savepoint-mutex fix can be verified.
  */
 function yieldingAsyncDb(db: Database): DbLike {
-  const toBindings = (...params: unknown[]) => params as SQLQueryBinding[];
+  const toBindings = (...params: unknown[]) => params as SQLQueryBindings[];
   const normaliseRowid = (r: number | bigint | undefined) =>
     r === undefined || r === null ? undefined : Number(r);
 
@@ -445,7 +445,7 @@ function yieldingAsyncDb(db: Database): DbLike {
     },
     async run(sql: string, ...params: unknown[]): Promise<{ changes: number; lastInsertRowid?: number }> {
       await Promise.resolve();
-      const result = db.run(sql, ...toBindings(...params));
+      const result = (db.run as (...args: unknown[]) => { changes: number; lastInsertRowid?: number | bigint })(sql, ...toBindings(...params));
       return { changes: result.changes, lastInsertRowid: normaliseRowid(result.lastInsertRowid) };
     },
     async transaction<T>(steps: Array<{ type: "query" | "run" | "exec"; sql: string; params?: unknown[] }>): Promise<T> {
@@ -459,7 +459,7 @@ function yieldingAsyncDb(db: Database): DbLike {
               lastResult = db.prepare(step.sql).all(...toBindings(...(step.params ?? [])));
               break;
             case "run":
-              lastResult = db.run(step.sql, ...toBindings(...(step.params ?? [])));
+              lastResult = (db.run as (...args: unknown[]) => { changes: number; lastInsertRowid?: number | bigint })(step.sql, ...toBindings(...(step.params ?? [])));
               break;
             case "exec":
               db.exec(step.sql);

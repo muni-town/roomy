@@ -51,8 +51,9 @@ afterEach(() => {
 
 describe("key roundtrip", () => {
   test("getStreamSigningKey returns a valid keypair matching the DID", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
-    globalThis.fetch = fetchMock;
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const did = await createStreamDid("http://test.example", "did:plc:admin", db);
     const didStr = did.toString();
@@ -90,15 +91,16 @@ describe("PLC path", () => {
     delete process.env.APPSERVER_USE_DID_WEB;
     process.env.PLC_DIRECTORY_URL = "https://plc.directory";
 
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    globalThis.fetch = fetchMock;
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const did = await createStreamDid("http://test.example", "did:plc:admin", db);
     const didStr = did.toString();
 
     expect(didStr).toMatch(/^did:plc:/);
     expect(fetchMock).toHaveBeenCalled();
-    const callUrl = fetchMock.mock.calls[0][0] as string;
+    const callUrl = fetchMock.mock.calls[0]?.[0] as string | undefined;
     expect(callUrl).toMatch(/^https:\/\/plc\.directory\//);
 
     // Key is stored
@@ -115,12 +117,9 @@ describe("PLC error", () => {
     delete process.env.APPSERVER_USE_DID_WEB;
     process.env.PLC_DIRECTORY_URL = "https://plc.directory";
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 400,
-      text: () => Promise.resolve("bad"),
-    });
-    globalThis.fetch = fetchMock;
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValue(new Response("bad", { status: 400 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     await expect(
       createStreamDid("http://test.example", "did:plc:admin", db),

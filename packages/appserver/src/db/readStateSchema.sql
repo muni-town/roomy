@@ -96,3 +96,23 @@ create table if not exists notification_state (
 -- Sweep index: find due digests (notified=0, first_unseen_at + 1h <= now).
 create index if not exists idx_notification_state_due
   on notification_state(notified, first_unseen_at);
+
+-- ── Feature flags (schema v4) ─────────────────────────────────────────────
+-- A flag registered in code. One row per flag key. global_enabled=1 means
+-- the flag is on for ALL users (no per-user assignment needed).
+create table if not exists feature_flags (
+  key             text primary key,
+  global_enabled  integer not null default 0 check(global_enabled in (0, 1)),
+  updated_at      integer not null default (unixepoch() * 1000)
+) strict;
+
+-- Per-user flag assignments. A user's flag is enabled if:
+--   global_enabled = 1  OR  a row exists in feature_flag_assignments
+create table if not exists feature_flag_assignments (
+  flag_key   text not null,
+  user_did   text not null,
+  updated_at integer not null default (unixepoch() * 1000),
+  primary key (flag_key, user_did)
+) strict;
+create index if not exists idx_ff_assignments_flag
+  on feature_flag_assignments(flag_key);

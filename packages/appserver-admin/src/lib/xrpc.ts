@@ -128,3 +128,55 @@ export async function callRoomQuery(
   const response = await p.call(nsid, { roomId });
   return response.data;
 }
+
+// ── Feature flag helpers (untyped, admin-only) ──────────────────────────
+
+export async function callGetFlags(
+  agent: Agent,
+  appserverDid: string,
+) {
+  const p = proxied(agent, appserverDid);
+  const response = await p.call("space.roomy.getFlags", {});
+  return response.data as { flags: string[] };
+}
+
+export async function callAdminGetFlags(
+  agent: Agent,
+  appserverDid: string,
+) {
+  const p = proxied(agent, appserverDid);
+  const response = await p.call("space.roomy.admin.getFlags", {});
+  return response.data as {
+    flags: Array<{
+      key: string;
+      description: string;
+      globalEnabled: boolean;
+      assignedDids: string[];
+    }>;
+  };
+}
+
+export async function callAdminSetFlag(
+  agent: Agent,
+  appserverDid: string,
+  flag: string,
+  all?: boolean,
+  userDids?: string[],
+) {
+  const p = proxied(agent, appserverDid);
+  const body: Record<string, unknown> = { flag };
+  if (all !== undefined) body.all = all;
+  if (userDids !== undefined) body.userDids = userDids;
+  const response = await p.call("space.roomy.admin.setFlag", {}, body);
+  return response.data;
+}
+
+export async function callAdminClearFlag(
+  agent: Agent,
+  appserverDid: string,
+  flag: string,
+) {
+  const p = proxied(agent, appserverDid);
+  const response = await p.call("space.roomy.admin.clearFlag", {}, { flag });
+  return response.data;
+}

@@ -459,9 +459,7 @@ describe("space.roomy.room.updateSeen", () => {
 
     // Assert DB state changed: read position was written with sort_idx.
     const row = await ctx.db
-      .query<{ seen_up_to: string }, [string, string]>(
-        "select seen_up_to from readstate.read_positions where user_did = ? and room_id = ?",
-      )
+      .query<{ seen_up_to: string }, [string, string]>("select seen_up_to from readstate.read_positions where user_did = ? and room_id = ?")
       .get(USER, ROOM);
   });
 
@@ -635,8 +633,8 @@ describe("space.roomy.space.setHandle", () => {
     );
     expect(res.status).toBe(200);
     const row = await db
-      .query("select handle from comp_space where entity = ?")
-      .get<{ handle: string | null }>(SPACE);
+      .query<{ handle: string | null }, [string]>("select handle from comp_space where entity = ?")
+      .get(SPACE);
     expect(row?.handle).toBe("my-space.example");
   });
 

@@ -4,7 +4,7 @@ import { READSTATE_SCHEMA_VERSION } from "./readStateDb.ts";
 
 describe("read-state schema", () => {
   test("READSTATE_SCHEMA_VERSION is exported", () => {
-    expect(READSTATE_SCHEMA_VERSION).toBe("3");
+    expect(READSTATE_SCHEMA_VERSION).toBe("4");
   });
 
   test("schema applies cleanly on a fresh database", () => {
@@ -172,6 +172,30 @@ describe("read-state schema", () => {
             db.exec(`
               create index if not exists idx_notification_state_due
                 on notification_state(notified, first_unseen_at)
+            `);
+          },
+        },
+        {
+          version: 4,
+          up(db: Database) {
+            db.exec(`
+              create table if not exists feature_flags (
+                key             text primary key,
+                global_enabled  integer not null default 0 check(global_enabled in (0, 1)),
+                updated_at      integer not null default (unixepoch() * 1000)
+              ) strict
+            `);
+            db.exec(`
+              create table if not exists feature_flag_assignments (
+                flag_key   text not null,
+                user_did   text not null,
+                updated_at integer not null default (unixepoch() * 1000),
+                primary key (flag_key, user_did)
+              ) strict
+            `);
+            db.exec(`
+              create index if not exists idx_ff_assignments_flag
+                on feature_flag_assignments(flag_key)
             `);
           },
         },

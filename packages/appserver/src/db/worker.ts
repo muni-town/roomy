@@ -9,7 +9,7 @@
  * in the response.
  */
 
-import { Database } from "bun:sqlite";
+import { Database, type Changes } from "bun:sqlite";
 import type { SQLQueryBindings } from "bun:sqlite";
 import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -173,6 +173,34 @@ const MIGRATIONS: Migration[] = [
       db.exec(`
         create index if not exists idx_notification_state_due
           on notification_state(notified, first_unseen_at)
+      `);
+    },
+  },
+  {
+    version: 4,
+    up(db: Database) {
+      // Feature flags. The schema file (readStateSchema.sql) also declares
+      // these with `create table if not exists` so a fresh DB gets them at
+      // exec time; this migration exists so an existing v3 readstate DB
+      // advances its version row to 4.
+      db.exec(`
+        create table if not exists feature_flags (
+          key             text primary key,
+          global_enabled  integer not null default 0 check(global_enabled in (0, 1)),
+          updated_at      integer not null default (unixepoch() * 1000)
+        ) strict
+      `);
+      db.exec(`
+        create table if not exists feature_flag_assignments (
+          flag_key   text not null,
+          user_did   text not null,
+          updated_at integer not null default (unixepoch() * 1000),
+          primary key (flag_key, user_did)
+        ) strict
+      `);
+      db.exec(`
+        create index if not exists idx_ff_assignments_flag
+          on feature_flag_assignments(flag_key)
       `);
     },
   },
@@ -404,7 +432,7 @@ function handleRun(req: WorkerRequest): {
   changes: number;
   lastInsertRowid?: number;
 } {
-  const result = mainDb!.run(req.sql!, ...toBindings(req.params));
+  const result = (mainDb!.run as (...args: unknown[]) => Changes)(req.sql!, ...toBindings(req.params));
   return {
     changes: result.changes,
     lastInsertRowid: normaliseRowid(result.lastInsertRowid),
@@ -463,12 +491,10 @@ function handleTransaction(req: WorkerRequest): unknown {
     for (const step of req.steps ?? []) {
       switch (step.type) {
         case "query":
-          lastResult = mainDb!.prepare(step.sql).all(
-            ...toBindings(step.params),
-          );
+          lastResult = mainDb!.prepare(step.sql).all(...toBindings(step.params));
           break;
         case "run":
-          lastResult = mainDb!.run(step.sql, ...toBindings(step.params));
+          lastResult = (mainDb!.run as (...args: unknown[]) => Changes)(step.sql, ...toBindings(step.params));
           break;
         case "exec":
           mainDb!.exec(step.sql);

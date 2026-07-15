@@ -73,6 +73,10 @@ export const QUERY_SCHEMAS = {
     params: queries.getPreferences.Params,
     response: queries.getPreferences.Response,
   },
+  "space.roomy.getFlags": {
+    params: queries.getFlags.Params,
+    response: queries.getFlags.Response,
+  },
 } as const;
 
 export const PROCEDURE_SCHEMAS = {

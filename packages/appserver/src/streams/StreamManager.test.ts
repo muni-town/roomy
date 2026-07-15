@@ -65,10 +65,8 @@ describe("sendEvents", () => {
     await sm.sendEvents(stream, [makeEvent("c")], ADMIN);
 
     const rows = await db
-      .query<{ idx: number }>(
-        "select idx from events.stream_events where stream_id = ? order by idx",
-      )
-      .all(stream);
+      .query("select idx from events.stream_events where stream_id = ? order by idx")
+      .all<{ idx: number }>(stream);
 
     expect(rows).toHaveLength(3);
     expect(rows[0]!.idx).toBe(0);
@@ -90,10 +88,8 @@ describe("sendEvents", () => {
     );
 
     const rows = await db
-      .query<{ idx: number }>(
-        "select idx from events.stream_events where stream_id = ? order by idx",
-      )
-      .all(stream);
+      .query("select idx from events.stream_events where stream_id = ? order by idx")
+      .all<{ idx: number }>(stream);
 
     // Expect N * M rows with unique contiguous idx
     expect(rows).toHaveLength(N * M);
@@ -109,17 +105,13 @@ describe("sendEvents", () => {
     await sm.sendEvents(stream, [event], ADMIN);
 
     const row = await db
-      .query<{ payload: Uint8Array }>(
-        "select payload from events.stream_events where stream_id = ? and idx = 0",
-      )
-      .get(stream);
+      .query("select payload from events.stream_events where stream_id = ? and idx = 0")
+      .get<{ payload: Uint8Array }>(stream);
 
     expect(row).not.toBeNull();
     expect(row!.payload).toBeInstanceOf(Uint8Array);
-
     const { decode } = await import("@atcute/cbor");
-    const decoded = decode(row!.payload);
-
+    const decoded = decode(row!.payload as Uint8Array);
     expect(decoded).toEqual(event);
   });
 });
@@ -132,20 +124,16 @@ describe("createStream", () => {
 
     // Entities row exists
     const entityRow = await db
-      .query<{ id: string; stream_id: string }>(
-        "select id, stream_id from entities where id = ?",
-      )
-      .get(streamDid);
+      .query("select id, stream_id from entities where id = ?")
+      .get<{ id: string; stream_id: string }>(streamDid);
     expect(entityRow).not.toBeNull();
     expect(entityRow!.id).toBe(streamDid);
     expect(entityRow!.stream_id).toBe(streamDid);
 
     // addAdmin event exists in events DB
     const eventRow = await db
-      .query<{ idx: number; user: string }>(
-        "select idx, user from events.stream_events where stream_id = ? order by idx",
-      )
-      .all(streamDid);
+      .query("select idx, user from events.stream_events where stream_id = ? order by idx")
+      .all<{ idx: number; user: string }>(streamDid);
     expect(eventRow.length).toBeGreaterThanOrEqual(1);
     expect(eventRow[0]!.user).toBe(ADMIN);
   });

@@ -28,6 +28,10 @@ import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscrib
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
 import { getEventsHandler } from "./handlers/space.roomy.sync.getEvents.ts";
 import { materializeSpaceHandler } from "./handlers/space.roomy.admin.materializeSpace.ts";
+import { getFlagsHandler } from "./handlers/space.roomy.getFlags.ts";
+import { adminGetFlagsHandler } from "./handlers/space.roomy.admin.getFlags.ts";
+import { adminSetFlagHandler } from "./handlers/space.roomy.admin.setFlag.ts";
+import { adminClearFlagHandler } from "./handlers/space.roomy.admin.clearFlag.ts";
 import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
 import { getMembersHandler } from "./handlers/space.roomy.space.getMembers.ts";
 import { getMetadataHandler } from "./handlers/space.roomy.space.getMetadata.ts";
@@ -149,6 +153,23 @@ export function buildRouter(
     })
     .query("space.roomy.admin.materializeSpace", {
       handler: materializeSpaceHandler,
+    })
+    // ── Feature flags ─────────────────────────────────────────────────────
+    .query("space.roomy.getFlags", {
+      handler: getFlagsHandler,
+      paramsSchema: schemas.queries.getFlags.Params,
+      outputSchema: schemas.queries.getFlags.Response,
+    })
+    // Admin flag endpoints (no arktype schemas — internal/admin, matching
+    // the connectSpace/materializeSpace convention).
+    .query("space.roomy.admin.getFlags", {
+      handler: adminGetFlagsHandler,
+    })
+    .procedure("space.roomy.admin.setFlag", {
+      handler: adminSetFlagHandler,
+    })
+    .procedure("space.roomy.admin.clearFlag", {
+      handler: adminClearFlagHandler,
     })
     .query("space.roomy.sync.getEvents", {
       handler: getEventsHandler,
@@ -308,10 +329,20 @@ export async function createAppserver(
   setStreamManager(streamManager);
   // Start the centralized embed enrichment sweeper.
   startEmbedSweeper({ db: mainDb, invalidationRouter });
-  // Start the centralized push dispatcher. One process-wide loop owns all
-  // push delivery; the StreamManager pokes it on live createMessage (see
+  // Start the centralized push dispatcher only if the push-notifications
+  // feature flag is globally enabled. One process-wide loop owns all push
+  // delivery; the StreamManager pokes it on live createMessage (see
   // push/dispatcher.ts). No-op-safe when VAPID isn't configured.
-  startPushDispatcher({ db: mainDb });
+  mainDb.query("select global_enabled from readstate.feature_flags where key = 'push-notifications'").get<{ global_enabled: number }>().then((row) => {
+    if (row?.global_enabled === 1) {
+      startPushDispatcher({ db: mainDb });
+    } else {
+      if (!quiet) console.log("[push] push-notifications flag not globally enabled; dispatcher skipped");
+    }
+  }).catch(() => {
+    // readstate DB may not have feature_flags table yet (fresh DB before migration)
+    if (!quiet) console.log("[push] could not check push-notifications flag; dispatcher skipped");
+  });
 
   // ─── XRPC routes ──────────────────────────────────────────────────────
   const authVerifier = opts.authVerifier ?? selectAuthVerifier();

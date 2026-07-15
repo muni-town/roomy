@@ -19,3 +19,4 @@ export * as getReactions from "./getReactions";
 export * as getEvents from "./getEvents";
 export * as getVapidPublicKey from "./getVapidPublicKey";
 export * as getPreferences from "./getPreferences";
+export * as getFlags from "./getFlags";

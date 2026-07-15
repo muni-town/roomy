@@ -62,7 +62,7 @@ export async function startAppserver(): Promise<E2eContext> {
   _resetEmbedSweeper();
 
   // Open the singleton DB in-memory so handlers' internal openDb() resolves.
-  const db = openDb({ path: ":memory:" });
+  const db = openDb({ path: ":memory:" }) as unknown as Database;
 
   const handle = await createAppserver({
     authVerifier: testAuthVerifier,
@@ -160,6 +160,7 @@ export function seedSpace(
      values (?, ?, 'member')`,
     [userDid, spaceId],
   );
+  return spaceId;
 }
 
 

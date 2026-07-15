@@ -300,10 +300,8 @@ async function notifState(
   roomId: string,
 ): Promise<{ unseen_count: number; notified: 0 | 1 } | undefined> {
   const row = await db
-    .query<{ unseen_count: number; notified: 0 | 1 }, [string, string]>(
-      "select unseen_count, notified from readstate.notification_state where user_did = ? and room_id = ?",
-    )
-    .get(userDid, roomId);
+    .query("select unseen_count, notified from readstate.notification_state where user_did = ? and room_id = ?")
+    .get<{ unseen_count: number; notified: 0 | 1 }>(userDid, roomId);
   return row ?? undefined;
 }
 

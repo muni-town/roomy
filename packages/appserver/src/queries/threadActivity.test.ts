@@ -111,17 +111,13 @@ function postMessage(
   if (existing) {
     db.run(
       `update activity_item set last_activity_at = ?, updated_at = (unixepoch() * 1000) where room_id = ?`,
-      ts,
-      threadId,
+      [ts, threadId],
     );
   } else {
     db.run(
       `insert into activity_item (room_id, space_id, is_thread, last_activity_at, recent_message_ids, created_at, updated_at)
        values (?, ?, 1, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))`,
-      threadId,
-      SPACE,
-      ts,
-      JSON.stringify([msgId]),
+      [threadId, SPACE, ts, JSON.stringify([msgId])],
     );
   }
   return msgId;
@@ -151,24 +147,20 @@ function forwardMessage(db: Database, threadId: string, origMsgId: string) {
   // Upsert activity_item so the paginated query can sort by last_activity_at.
   // Use the original message's timestamp from comp_content.
   const origTs = db
-    .query("select timestamp from comp_content where entity = ?")
-    .get<{ timestamp: number }>(origMsgId);
+    .query<{ timestamp: number }, [string]>("select timestamp from comp_content where entity = ?")
+    .get(origMsgId) as { timestamp: number } | undefined;
   const ts = origTs?.timestamp ?? Date.now();
   const existing = db.query("select 1 from activity_item where room_id = ?").get(threadId);
   if (existing) {
     db.run(
       `update activity_item set last_activity_at = ?, updated_at = (unixepoch() * 1000) where room_id = ?`,
-      ts,
-      threadId,
+      [ts, threadId],
     );
   } else {
     db.run(
       `insert into activity_item (room_id, space_id, is_thread, last_activity_at, recent_message_ids, created_at, updated_at)
        values (?, ?, 1, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))`,
-      threadId,
-      SPACE,
-      ts,
-      JSON.stringify([fwdId]),
+      [threadId, SPACE, ts, JSON.stringify([fwdId])],
     );
   }
 }

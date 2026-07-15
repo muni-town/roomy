@@ -1,5 +1,5 @@
-import type { Database } from "bun:sqlite";
-import type { SQLQueryBindings } from "bun:sqlite";
+import { type Changes } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import type { DbLike } from "./types.ts";
 
 /** Cast unknown[] to SQLQueryBindings[] for bun:sqlite. */
@@ -66,7 +66,7 @@ export function toAsyncDb(db: Database): DbLike {
       sql: string,
       ...params: unknown[]
     ): Promise<{ changes: number; lastInsertRowid?: number }> {
-      const result = db.run(sql, ...toBindings(...params));
+      const result = (db.run as (...args: unknown[]) => Changes)(sql, ...toBindings(...params));
       return Promise.resolve({
         changes: result.changes,
         lastInsertRowid: normaliseRowid(result.lastInsertRowid),
@@ -84,12 +84,10 @@ export function toAsyncDb(db: Database): DbLike {
         for (const step of steps) {
           switch (step.type) {
             case "query":
-              lastResult = db.prepare(step.sql).all(
-                ...toBindings(...(step.params ?? [])),
-              );
+              lastResult = db.prepare(step.sql).all(...toBindings(...(step.params ?? [])));
               break;
             case "run":
-              lastResult = db.run(step.sql, ...toBindings(...(step.params ?? [])));
+              lastResult = (db.run as (...args: unknown[]) => Changes)(step.sql, ...toBindings(...(step.params ?? [])));
               break;
             case "exec":
               db.exec(step.sql);

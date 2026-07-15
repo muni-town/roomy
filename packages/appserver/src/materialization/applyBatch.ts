@@ -121,14 +121,15 @@ export async function applyBatch(
 
       // sort_idx: inline the UPDATE (no SELECT needed)
       if (e.event.$type === "space.roomy.message.createMessage.v0") {
+        const event = e.event as Record<string, unknown>;
         const overrideExt =
-          (e.event as Record<string, unknown>).extensions?.["space.roomy.extension.timestampOverride.v0"] as
+          (event.extensions as Record<string, unknown> | undefined)?.["space.roomy.extension.timestampOverride.v0"] as
             | { timestamp?: string }
             | undefined;
         const timestamp = overrideExt
           ? Number(overrideExt.timestamp)
           : decodeTime(e.event.id);
-        const sortIdx = ulid(timestamp);
+        const sortIdx = ulid(timestamp) as Ulid;
         chunkSteps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
@@ -142,7 +143,8 @@ export async function applyBatch(
         "messageIds" in e.event &&
         Array.isArray((e.event as Record<string, unknown>).messageIds)
       ) {
-        const originalId = (e.event as Record<string, unknown>).messageIds[0] as string | undefined;
+        const messageIds = (e.event as Record<string, unknown>).messageIds as string[];
+        const originalId = messageIds[0];
         if (originalId) {
           chunkSteps.push({
             type: "run",
@@ -223,7 +225,7 @@ export async function applyBatch(
               // Best-effort cleanup
             }
             recordFailure(stats, {
-              eventId: "",
+              eventId: "" as unknown as Ulid,
               type: "unknown",
               reason: "apply",
               message,

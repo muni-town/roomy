@@ -26,13 +26,8 @@ interface ReadPositionRow {
 
 async function readPosition(roomId: string): Promise<ReadPositionRow | null> {
   return openDb()
-    .query<
-      ReadPositionRow,
-      [string, string]
-    >(
-      "select seen_up_to, unread_count from readstate.read_positions where user_did = ? and room_id = ?",
-    )
-    .get(USER, roomId);
+    .query("select seen_up_to, unread_count from readstate.read_positions where user_did = ? and room_id = ?")
+    .get<ReadPositionRow>(USER, roomId);
 }
 
 let roomId: string;

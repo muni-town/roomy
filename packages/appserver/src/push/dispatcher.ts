@@ -114,6 +114,7 @@ export function pushDispatcherStats(): {
  */
 export function pokePushDispatcher(jobs: PushJob[]): void {
   if (jobs.length === 0) return;
+  if (!started) return; // dispatcher not running (feature flag off)
   for (const j of jobs) queue.push(j);
   const fn = wake;
   if (fn) fn();
