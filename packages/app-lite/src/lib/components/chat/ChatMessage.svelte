@@ -78,7 +78,7 @@
   }
 
 
-  async function handleEdit(newContent: string) {
+  async function handleEdit(newContent: string, _mentions: string[]) {
     if (newContent === message.content) {
       onCancelEdit();
       return;

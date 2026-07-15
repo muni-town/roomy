@@ -48,6 +48,12 @@ function extractDetails(
       const timestampOverride = extensions?.[
         "space.roomy.extension.timestampOverride.v0"
       ] as { timestamp?: number } | undefined;
+      const mentionsExt = extensions?.[
+        "space.roomy.extension.mentions.v0"
+      ] as { mentions?: unknown } | undefined;
+      const mentions = Array.isArray(mentionsExt?.mentions)
+        ? mentionsExt!.mentions.filter((d): d is string => typeof d === "string")
+        : undefined;
 
       const base = {
         authorDid: authorOverride?.did,
@@ -56,6 +62,7 @@ function extractDetails(
             ? new Date(timestampOverride.timestamp).toISOString()
             : undefined,
         replyTo: undefined, // resolved from edges after materialization
+        mentions,
       };
 
       // createMessage's entity id IS the event id, so the invalidation

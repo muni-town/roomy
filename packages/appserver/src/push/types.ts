@@ -22,6 +22,8 @@ export interface PushJob {
   authorDid: UserDid;
   /** Message timestamp in epoch milliseconds. */
   timestamp: number;
+  /** DIDs mentioned in the message body (from the mentions extension). */
+  mentions?: string[];
 }
 
 /**

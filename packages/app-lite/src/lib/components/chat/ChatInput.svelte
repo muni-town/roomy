@@ -16,6 +16,7 @@
   import StarterKit from "@tiptap/starter-kit";
   import Placeholder from "@tiptap/extension-placeholder";
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
+  import { extractMentionDids } from "$lib/tiptap/mentions";
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
   import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
   import { RichTextLink } from "$lib/tiptap/RichTextLink";
@@ -28,7 +29,7 @@
     mentionSearch?: (query: string) => Promise<TypeaheadUser[]>;
     /** Rooms in space that can be mentioned with #room */
     context?: Item[];
-    onEnter: (content: string) => Promise<void>;
+    onEnter: (content: string, mentions: string[]) => Promise<void>;
     placeholder?: string;
     setFocus?: boolean;
     disabled?: boolean;
@@ -50,7 +51,8 @@
   let tiptap: Editor | undefined = $state();
 
   async function wrappedOnEnter() {
-    await onEnter(content);
+    const mentions = tiptap ? extractMentionDids(tiptap) : [];
+    await onEnter(content, mentions);
   }
 
   onMount(() => {

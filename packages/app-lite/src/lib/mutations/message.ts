@@ -5,7 +5,7 @@ export async function sendMessage(
   spaceId: string,
   roomId: string,
   body: string,
-  opts: { mimeType?: string; replyTo?: string } = {},
+  opts: { mimeType?: string; replyTo?: string; mentions?: string[] } = {},
 ): Promise<string> {
   const id = newUlid();
   const attachments = opts.replyTo
@@ -17,6 +17,14 @@ export async function sendMessage(
       ]
     : undefined;
 
+  const extensions: Record<string, unknown> = {};
+  if (opts.mentions && opts.mentions.length > 0) {
+    extensions["space.roomy.extension.mentions.v0"] = {
+      $type: "space.roomy.extension.mentions.v0",
+      mentions: opts.mentions,
+    };
+  }
+
   const event: Record<string, unknown> = {
     id,
     room: roomId,
@@ -25,7 +33,7 @@ export async function sendMessage(
       mimeType: opts.mimeType || "text/markdown",
       data: toBytes(new TextEncoder().encode(body)),
     },
-    extensions: {},
+    extensions,
     ...(attachments ? { attachments } : {}),
   };
 
@@ -38,9 +46,17 @@ export async function editMessage(
   roomId: string,
   messageId: string,
   body: string,
-  opts: { mimeType?: string } = {},
+  opts: { mimeType?: string; mentions?: string[] } = {},
 ): Promise<string> {
   const id = newUlid();
+  const extensions: Record<string, unknown> = {};
+  if (opts.mentions && opts.mentions.length > 0) {
+    extensions["space.roomy.extension.mentions.v0"] = {
+      $type: "space.roomy.extension.mentions.v0",
+      mentions: opts.mentions,
+    };
+  }
+
   const event: Record<string, unknown> = {
     id,
     room: roomId,
@@ -50,6 +66,7 @@ export async function editMessage(
       mimeType: opts.mimeType ?? "text/markdown",
       data: toBytes(new TextEncoder().encode(body)),
     },
+    ...(Object.keys(extensions).length > 0 ? { extensions } : {}),
   };
 
   await sendEvents(spaceId, [event]);

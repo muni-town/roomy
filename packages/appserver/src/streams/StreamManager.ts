@@ -197,6 +197,7 @@ export class StreamManager {
             messageId: e.id,
             authorDid: (e.details?.authorDid ?? e.user) as UserDid,
             timestamp: decodeTime(e.id),
+            mentions: e.details?.mentions as string[] | undefined,
           })),
         );
       }
