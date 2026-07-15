@@ -34,6 +34,7 @@
  */
 
 import type { DbLike } from "../db/types.ts";
+import { decodeContent } from "../db/content.ts";
 import { roomAccess } from "../auth/access.ts";
 import { resolveLevel } from "../queries/pushPreferences.ts";
 import { selectSubscriptions } from "../queries/pushSubscriptions.ts";
@@ -46,17 +47,21 @@ import type { PushDelivery, PushJob, PushPayload } from "./types.ts";
 export interface MessageFacts {
   roomName: string | null;
   authorName: string | null;
+  /** Decoded message text content (first ~120 chars). */
+  messageContent: string | null;
 }
 
 /**
- * Resolve the room + author display names for the payload. Per the plan's
- * recommendation (open question #4) we send names only, not message content,
- * so nothing the recipient can't already read traverses the push service.
+ * Resolve the room + author display names and message content for the payload.
+ * Message content is truncated to ~120 characters to keep the encrypted payload
+ * small — the push service never sees the plaintext, but the payload is still
+ * transmitted over the wire inside the encrypted envelope.
  */
 export async function resolveMessageFacts(
   db: DbLike,
   roomId: string,
   authorDid: string,
+  messageId: string,
 ): Promise<MessageFacts> {
   const roomRow = await db.query(
     "select name from comp_info where entity = ?",
@@ -71,7 +76,17 @@ export async function resolveMessageFacts(
   ).get<{ name: string | null; handle: string | null }>(authorDid, authorDid);
   const authorName = authorRow?.name ?? authorRow?.handle ?? null;
 
-  return { roomName, authorName };
+  // Fetch message content from comp_content, truncated to ~120 chars.
+  const contentRow = await db.query(
+    "select mime_type, data from comp_content where entity = ?",
+  ).get<{ mime_type: string | null; data: Buffer | Uint8Array | null }>(messageId);
+  let messageContent: string | null = null;
+  if (contentRow?.data) {
+    const raw = decodeContent(contentRow.mime_type, contentRow.data);
+    messageContent = raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
+  }
+
+  return { roomName, authorName, messageContent };
 }
 
 /**
@@ -100,7 +115,8 @@ export async function evaluatePush(
   job: PushJob,
 ): Promise<PushDelivery[]> {
   const { spaceId, roomId, authorDid, messageId, timestamp } = job;
-  const facts = await resolveMessageFacts(db, roomId, authorDid);
+  const facts = await resolveMessageFacts(db, roomId, authorDid, messageId);
+  log.info(`[push-evaluate] messageContent for ${messageId}: ${facts.messageContent ? facts.messageContent.slice(0, 60) + "…" : "null"}`);
 
   // Icon is recipient-independent → resolve once per message. Both message and
   // on-event digest pushes use the sender avatar → space avatar (per the plan:
@@ -143,6 +159,9 @@ export async function evaluatePush(
         ...(facts.roomName != null ? { roomName: facts.roomName } : {}),
         ...(facts.authorName != null
           ? { authorName: facts.authorName }
+          : {}),
+        ...(facts.messageContent != null
+          ? { messageContent: facts.messageContent }
           : {}),
       };
       if (icon) payload.icon = icon;

@@ -97,6 +97,8 @@ interface PushPayload {
   count?: number;
   roomName?: string;
   authorName?: string;
+  /** Decoded message text content (first ~120 chars). */
+  messageContent?: string;
   /** Browser-fetchable avatar URL (sender for messages, room/space for digests). */
   icon?: string;
 }
@@ -116,7 +118,6 @@ async function handlePush(event: PushEvent): Promise<void> {
     // would otherwise be silently dropped / flagged by the browser).
     payload = null;
   }
-
   const count = payload?.count ?? 1;
   const room = payload?.roomName ?? "a room";
   const title =
@@ -128,9 +129,11 @@ async function handlePush(event: PushEvent): Promise<void> {
   const body =
     payload?.type === "digest"
       ? `${count} new messages`
-      : payload?.authorName
-        ? `${payload.authorName} sent a message`
-        : "New message";
+      : payload?.messageContent
+        ? payload.messageContent
+        : payload?.authorName
+          ? `${payload.authorName} sent a message`
+          : "New message";
 
   // Stash the deep-link target on the notification so `notificationclick`
   // can route into the right room. Tag = roomId so a room's notifications
