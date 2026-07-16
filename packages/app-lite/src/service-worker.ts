@@ -10,9 +10,14 @@ import { build, files, version } from "$service-worker";
 // Create a unique cache name for this deployment
 const CACHE = `cache-${version}`;
 
+// The service worker must NOT cache its own file — otherwise the browser's
+// update check (a fetch of `/service-worker.js`) is intercepted by the old
+// SW's fetch handler, which serves the stale copy from cache, and the SW
+// never updates. Filter it out of the build/files asset lists.
+const SW_PATH = "/service-worker.js";
 const ASSETS = [
-  ...build, // the app itself
-  ...files, // everything in `static`
+  ...build.filter((p) => p !== SW_PATH),
+  ...files.filter((p) => p !== SW_PATH),
 ];
 
 self.addEventListener("install", (event) => {
@@ -22,6 +27,10 @@ self.addEventListener("install", (event) => {
     await cache.addAll(ASSETS);
   }
 
+  // Take over immediately so the new SW (with push support) activates
+  // without waiting for all existing tabs to close. Without this, a user
+  // who keeps a tab open never gets the push-capable SW.
+  self.skipWaiting();
   event.waitUntil(addFilesToCache());
 });
 
@@ -31,9 +40,20 @@ self.addEventListener("activate", (event) => {
     for (const key of await caches.keys()) {
       if (key !== CACHE) await caches.delete(key);
     }
+    // Claim all open clients so the new SW controls existing tabs
+    // immediately, not just future navigations.
+    await self.clients.claim();
   }
 
   event.waitUntil(deleteOldCaches());
+});
+
+// Allow the page to trigger an immediate update by posting
+// { type: "SKIP_WAITING" }. SvelteKit's built-in registration can also
+// listen for a waiting SW and prompt the user; this handler makes
+// `skipWaiting` available on demand from the client side.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event: FetchEvent) => {
@@ -42,6 +62,10 @@ self.addEventListener("fetch", (event: FetchEvent) => {
   if (event.request.method !== "GET") return;
   // ignore oauth pages
   if (url.pathname.startsWith("/oauth")) return;
+  // Never intercept the service worker's own file — the browser must always
+  // fetch it from the network to detect updates. Caching/serving it here
+  // would freeze the SW at its current version forever.
+  if (url.pathname === SW_PATH) return;
 
   async function respond() {
     const cache = await caches.open(CACHE);
