@@ -22,4 +22,5 @@ export const CONFIG = {
       .replace(/^ws(s?):\/\//, "http$1://")
       .replace(/\/+$/, "") || null,
   port: Number(import.meta.env.VITE_PORT) || 5200,
+  usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
 };

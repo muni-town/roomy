@@ -7,7 +7,7 @@ import {
   loadAppserverDid,
 } from "@roomy-space/sdk/browser";
 import type { OAuthSession } from "@roomy-space/sdk/browser";
-import { ADMIN_DIDS } from "./config";
+import { ADMIN_DIDS, CONFIG } from "./config";
 
 let agent = $state<Agent | null>(null);
 let session = $state<OAuthSession | null>(null);
@@ -44,7 +44,10 @@ export async function init() {
 
   try {
     const appserverDid = loadAppserverDid();
-    const res = await initSession(appserverDid, { port: 5200 });
+    const res = await initSession(appserverDid, {
+      port: CONFIG.port,
+      usePublicClient: CONFIG.usePublicClient,
+    });
     if (res) {
       const did = res.session.did;
       if (ADMIN_DIDS.has(did)) {
@@ -67,7 +70,10 @@ export async function login(handle: string) {
   authError = null;
   const appserverDid = loadAppserverDid();
   saveAppserverDid(appserverDid);
-  await sdkLogin(appserverDid, handle, { port: 5200 });
+  await sdkLogin(appserverDid, handle, {
+    port: CONFIG.port,
+    usePublicClient: CONFIG.usePublicClient,
+  });
 }
 
 export async function logout() {
