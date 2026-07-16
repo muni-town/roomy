@@ -159,7 +159,7 @@
             class="shrink-0 rounded-full"
             aria-label="Save changes"
             title="Save (Enter)"
-            onclick={() => handleEdit(editContent)}
+            onclick={() => handleEdit(editContent, [])}
           >
             <IconCheck />
           </Button>

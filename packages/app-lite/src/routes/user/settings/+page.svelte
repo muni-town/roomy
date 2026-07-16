@@ -14,9 +14,11 @@
   import { cache } from "@roomy-space/sdk";
   import { resolveBlobUrl } from "$lib/utils";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
+  import { isPushFeatureEnabled } from "$lib/push.svelte";
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
+  let pushFeatureEnabled = $state(false);
   let rejoining = $state<string | null>(null);
 
   async function rejoin(spaceId: string) {
@@ -36,6 +38,9 @@
   onMount(() => {
     setNavbar(settingsNavbar);
     setSidebar(settingsSidebar);
+    isPushFeatureEnabled().then((enabled) => {
+      pushFeatureEnabled = enabled;
+    });
     return () => {
       setNavbar(undefined);
       setSidebar(undefined);
@@ -69,14 +74,16 @@
       >
         General
       </Button>
-      <Button
-        variant="ghost"
-        class="w-full justify-start"
-        href="/user/settings/notifications"
-        data-current={page.url.pathname === "/user/settings/notifications"}
-      >
-        Notifications
-      </Button>
+      {#if pushFeatureEnabled}
+        <Button
+          variant="ghost"
+          class="w-full justify-start"
+          href="/user/settings/notifications"
+          data-current={page.url.pathname === "/user/settings/notifications"}
+        >
+          Notifications
+        </Button>
+      {/if}
     </div>
   </div>
 {/snippet}

@@ -164,6 +164,60 @@ export class DirectXrpcClient {
   get appserverUrl(): string {
     return this.#appserverUrl;
   }
+  /**
+   * Execute an untyped XRPC call (query or procedure) against the appserver.
+   *
+   * Unlike `query`/`procedure`, this method does not validate the response
+   * against a registered arktype schema. Use it for admin/internal NSIDs
+   * that have no schema entry in the registry.
+   *
+   * - GET for queries, POST for procedures (determined by `method`).
+   * - Returns the parsed JSON body as `unknown`.
+   */
+  async call(
+    nsid: string,
+    params: Record<string, string> = {},
+    body?: Record<string, unknown>,
+  ): Promise<{ data: unknown }> {
+    return withRateLimitRetry(async () => {
+      const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
+
+      if (body !== undefined) {
+        // Procedure (POST)
+        const url = `${this.#appserverUrl}/xrpc/${nsid}`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) {
+          throw await toXrpcError(resp, nsid);
+        }
+        const text = await resp.text();
+        return { data: text.length === 0 ? {} : JSON.parse(text) };
+      }
+
+      // Query (GET)
+      const url = new URL(`${this.#appserverUrl}/xrpc/${nsid}`);
+      for (const [k, v] of Object.entries(params)) {
+        url.searchParams.set(k, v);
+      }
+      const resp = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+      if (!resp.ok) {
+        throw await toXrpcError(resp, nsid);
+      }
+      return { data: await resp.json() };
+    }, this.#retryOpts);
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@
     callRoomQuery,
     callGetMessages,
     callGetMessage,
+    callTicket,
     callAdminGetFlags,
     callAdminSetFlag,
     callAdminClearFlag,
@@ -19,7 +20,6 @@
     logout as authLogout,
     auth,
   } from "$lib/auth.svelte";
-  import { makeProxiedAgent } from "@roomy-space/sdk/browser";
   import { sync } from "@roomy-space/sdk";
   const { decodeCborFrame } = sync;
 
@@ -76,7 +76,7 @@
   async function refreshFlags() {
     flagLoading = true;
     try {
-      const data = await callAdminGetFlags(auth.agent!, auth.session!.did);
+      const data = await callAdminGetFlags(auth.agent!);
       flags = data.flags;
     } catch (err: any) {
       flags = null;
@@ -89,7 +89,7 @@
   async function onFlagToggleGlobal(flagKey: string, current: boolean) {
     flagLoading = true;
     try {
-      await callAdminSetFlag(auth.agent!, auth.session!.did, flagKey, !current);
+      await callAdminSetFlag(auth.agent!, flagKey, !current);
       await refreshFlags();
       renderResult(`Flag "${flagKey}" global set to ${!current}`);
     } catch (err: any) {
@@ -107,7 +107,7 @@
         .split("\n")
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
-      await callAdminSetFlag(auth.agent!, auth.session!.did, flagKey, undefined, dids);
+      await callAdminSetFlag(auth.agent!, flagKey, undefined, dids);
       await refreshFlags();
       renderResult(`Flag "${flagKey}" DIDs updated (${dids.length} DID(s))`);
     } catch (err: any) {
@@ -120,7 +120,7 @@
   async function onFlagClear(flagKey: string) {
     flagLoading = true;
     try {
-      await callAdminClearFlag(auth.agent!, auth.session!.did, flagKey);
+      await callAdminClearFlag(auth.agent!, flagKey);
       await refreshFlags();
       renderResult(`Flag "${flagKey}" cleared (default off)`);
     } catch (err: any) {
@@ -175,46 +175,46 @@
   // ── XRPC call handlers ──────────────────────────────────────────────────
 
   function onCallTicket() {
-    runCall("Requesting connection ticket", () => callTicket(auth.agent!, auth.session!.did));
+    runCall("Requesting connection ticket", () => callTicket(auth.agent!));
   }
 
   function onConnectSpace() {
     if (!streamDid.trim()) { renderResult({ error: "Missing stream DID" }, true); return; }
-    runCall("Connecting to space", () => callConnectSpace(auth.agent!, auth.session!.did, streamDid.trim()));
+    runCall("Connecting to space", () => callConnectSpace(auth.agent!, streamDid.trim()));
   }
 
   function onMaterializeSpace(wait: boolean) {
     if (!streamDid.trim()) { renderResult({ error: "Missing stream DID" }, true); return; }
     runCall(
       wait ? "Materializing space (awaiting backfill)" : "Materializing space",
-      () => callMaterializeSpace(auth.agent!, auth.session!.did, streamDid.trim(), wait),
+      () => callMaterializeSpace(auth.agent!, streamDid.trim(), wait),
     );
   }
 
   function onGetSpaces() {
-    runCall("Fetching joined spaces", () => callGetSpaces(auth.agent!, auth.session!.did));
+    runCall("Fetching joined spaces", () => callGetSpaces(auth.agent!));
   }
 
   function onSpaceQuery(nsid: string, label: string) {
     if (!spaceId.trim()) { renderResult({ error: "Missing space ID" }, true); return; }
-    runCall(label, () => callSpaceQuery(auth.agent!, auth.session!.did, nsid, spaceId.trim()));
+    runCall(label, () => callSpaceQuery(auth.agent!, nsid, spaceId.trim()));
   }
 
   function onRoomQuery(nsid: string, label: string) {
     if (!roomId.trim()) { renderResult({ error: "Missing room ID" }, true); return; }
-    runCall(label, () => callRoomQuery(auth.agent!, auth.session!.did, nsid, roomId.trim()));
+    runCall(label, () => callRoomQuery(auth.agent!, nsid, roomId.trim()));
   }
 
   function onGetMessages() {
     if (!roomId.trim()) { renderResult({ error: "Missing room ID" }, true); return; }
     runCall("Fetching messages", () =>
-      callGetMessages(auth.agent!, auth.session!.did, roomId.trim(), messageLimit.trim() || undefined, messageCursor.trim() || undefined),
+      callGetMessages(auth.agent!, roomId.trim(), messageLimit.trim() || undefined, messageCursor.trim() || undefined),
     );
   }
 
   function onGetMessage() {
     if (!messageId.trim()) { renderResult({ error: "Missing message ID" }, true); return; }
-    runCall("Fetching message", () => callGetMessage(auth.agent!, auth.session!.did, messageId.trim()));
+    runCall("Fetching message", () => callGetMessage(auth.agent!, messageId.trim()));
   }
 
   // ── WebSocket sync handlers ─────────────────────────────────────────────
@@ -225,9 +225,8 @@
     appendWsLog("Requesting ticket…");
     let ticket: string;
     try {
-      const proxied = makeProxiedAgent(auth.agent!, auth.session!.did);
-      const response = await proxied.call("space.roomy.auth.getConnectionTicket");
-      ticket = (response.data as any).ticket;
+      const response = await callTicket(auth.agent!);
+      ticket = response.ticket;
       appendWsLog(`Got ticket: ${ticket.slice(0, 12)}…`);
     } catch (err: any) {
       appendWsLog(`Ticket failed: ${err?.message ?? err}`);

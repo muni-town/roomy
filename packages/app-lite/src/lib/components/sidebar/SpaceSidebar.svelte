@@ -31,6 +31,8 @@
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
+  import { isAuthenticated, isInitializing } from "$lib/auth.svelte";
+  import { isPushFeatureEnabled } from "$lib/push.svelte";
   import { createRoom, updateSidebar } from "$lib/mutations/room";
   import { newUlid, Ulid } from "@roomy-space/sdk";
   import { serverBar, toggleServerBar } from "$lib/components/layout/server-bar.svelte";
@@ -60,8 +62,14 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
     { enabled: !!spaceId },
   );
 
-  // Fetch metadata for the current room so we can inject the current thread
-  // into the sidebar even when it's not among the recent 8 active threads.
+  let pushFeatureEnabled = $state(false);
+  $effect(() => {
+    if (!isInitializing() && isAuthenticated()) {
+      isPushFeatureEnabled().then((enabled) => {
+        pushFeatureEnabled = enabled;
+      });
+    }
+  });
   const roomMetaQuery = createRoomMetadataQuery(
     () => page.params.room ?? "",
     { enabled: !!page.params.room },
@@ -139,7 +147,6 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
   // --- Settings panel (slides in from the right within the unified sidebar,
   //     mirroring the space selector / directory which slides in from the
   //     left, but in the opposite direction). The space header and space
-  //     action buttons stay intact; only the channels body slides out. ---
   const showInvitesTab = $derived(
     !(meta?.joinPolicy.allowPublicJoin ?? true) &&
       ((meta?.isAdmin ?? false) ||
@@ -151,7 +158,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       { slug: "", label: "General" },
       { slug: "roles", label: "Roles" },
       { slug: "members", label: "Members" },
-      { slug: "notifications", label: "Notifications" },
+      ...(pushFeatureEnabled ? [{ slug: "notifications", label: "Notifications" }] : []),
       ...(showInvitesTab ? [{ slug: "invites", label: "Invites" }] : []),
       ...(showDiscordBridgeTab
         ? [{ slug: "discord-bridge", label: "Discord Bridge" }]

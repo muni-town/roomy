@@ -4,9 +4,10 @@
   import { toast } from "@foxui/core";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconBell, IconSettings, IconUserPlus, IconX } from "@roomy/design/icons";
-  import Tooltip from "@roomy/design/components/helper/Tooltip.svelte";
   import { settingsBar } from "$lib/components/layout/settings-bar.svelte";
   import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
+  import { isPushFeatureEnabled } from "$lib/push.svelte";
+  import { isAuthenticated, isInitializing } from "$lib/auth.svelte";
 
   let {
     spaceId = $bindable(),
@@ -20,8 +21,17 @@
 
   const currentSpaceId = $derived(spaceId ?? page.params.space);
 
+  let pushFeatureEnabled = $state(false);
+  $effect(() => {
+    if (!isInitializing() && isAuthenticated()) {
+      isPushFeatureEnabled().then((enabled) => {
+        pushFeatureEnabled = enabled;
+      });
+    }
+  });
+
   // The cogs only swap to an X while hovered when the panel is open, so the
-  // button reads as “settings” at rest and “close” on intent.
+  // button reads as "settings" at rest and "close" on intent.
   let settingsHovered = $state(false);
 
   // Opening the settings panel just slides it in (no navigation) — the user
@@ -70,6 +80,7 @@
     aria-label="Notifications"
     title="Notifications"
     onclick={() => goto(`/${currentSpaceId}/settings/notifications`)}
+    disabled={!pushFeatureEnabled}
   >
     <IconBell />
   </Button>

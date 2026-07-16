@@ -19,7 +19,7 @@
  * silently skip — never breaking login.
  */
 
-import { px } from "$lib/auth.svelte";
+import { px, auth } from "$lib/auth.svelte";
 import { registerPushSubscription, unregisterPushSubscription } from "$lib/mutations/push-subscription";
 
 /**
@@ -28,7 +28,8 @@ import { registerPushSubscription, unregisterPushSubscription } from "$lib/mutat
  * Uses a direct XRPC call (no Tanstack Query — this is a one-shot check
  * at push time, not a reactive query).
  */
-async function isPushFeatureEnabled(): Promise<boolean> {
+export async function isPushFeatureEnabled(): Promise<boolean> {
+  if (!auth.authenticated) return false;
   try {
     const res = await px().query("space.roomy.getFlags", {});
     return res.flags.includes("push-notifications");

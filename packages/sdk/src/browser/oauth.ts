@@ -26,7 +26,7 @@ export const DEFAULT_APPSERVER_DID = "did:web:appserver.roomy.chat";
 // ── Lexicon definitions (for atproto agent proxy) ─────────────────────────
 //
 // Generated lexicons live in ../schemas/lexicons/*.json and are auto-generated
-// from the arktype schemas by `pnpm generate:lexicons`. Two admin-only NSIDs
+// from the arktype schemas by `pnpm generate:lexicons`. Admin-only NSIDs
 // that have no arktype schema are defined inline below.
 
 import lexGetConnectionTicket from "../schemas/lexicons/space.roomy.auth.getConnectionTicket.json";
@@ -51,7 +51,7 @@ import lexRegisterSubscription from "../schemas/lexicons/space.roomy.push.regist
 import lexUnregisterSubscription from "../schemas/lexicons/space.roomy.push.unregisterSubscription.json";
 import lexGetPreferences from "../schemas/lexicons/space.roomy.push.getPreferences.json";
 import lexSetPreferences from "../schemas/lexicons/space.roomy.push.setPreferences.json";
-
+import lexGetFlags from "../schemas/lexicons/space.roomy.getFlags.json";
 /** Admin/internal NSIDs that have no arktype schema (so no generated lexicon). */
 const ADMIN_LEXICONS = [
   {
@@ -93,6 +93,82 @@ const ADMIN_LEXICONS = [
       },
     },
   },
+  {
+    lexicon: 1,
+    id: "space.roomy.admin.getFlags",
+    defs: {
+      main: {
+        type: "query" as const,
+        output: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["flags"],
+            properties: {
+              flags: {
+                type: "array" as const,
+                items: {
+                  type: "object" as const,
+                  required: ["key", "description", "globalEnabled", "assignedDids"],
+                  properties: {
+                    key: { type: "string" as const },
+                    description: { type: "string" as const },
+                    globalEnabled: { type: "boolean" as const },
+                    assignedDids: {
+                      type: "array" as const,
+                      items: { type: "string" as const },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
+    id: "space.roomy.admin.setFlag",
+    defs: {
+      main: {
+        type: "procedure" as const,
+        input: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            properties: {
+              flag: { type: "string" as const },
+              all: { type: "boolean" as const },
+              userDids: {
+                type: "array" as const,
+                items: { type: "string" as const },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
+    id: "space.roomy.admin.clearFlag",
+    defs: {
+      main: {
+        type: "procedure" as const,
+        input: {
+          encoding: "application/json",
+          schema: {
+            type: "object" as const,
+            required: ["flag"],
+            properties: {
+              flag: { type: "string" as const },
+            },
+          },
+        },
+      },
+    },
+  },
 ];
 
 /** All Roomy lexicons, used by `makeProxiedAgent` to register on the atproto Agent. */
@@ -115,6 +191,7 @@ const LEXICONS = [
   lexLeaveSpace,
   lexSendEvents,
   lexGetVapidPublicKey,
+  lexGetFlags,
   lexRegisterSubscription,
   lexUnregisterSubscription,
   lexGetPreferences,

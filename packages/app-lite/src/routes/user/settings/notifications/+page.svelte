@@ -10,7 +10,7 @@
   import { setSidebar } from "$lib/components/layout/sidebar.svelte";
   import { createPushPreferencesQuery } from "$lib/queries/push-preferences";
   import { setDefaultPushLevel, type PushLevel } from "$lib/mutations/push-preferences";
-  import { ensurePushSubscription, clearPushSubscription, pushOutcomeMessage } from "$lib/push.svelte";
+  import { ensurePushSubscription, clearPushSubscription, pushOutcomeMessage, isPushFeatureEnabled } from "$lib/push.svelte";
   import { toast } from "@foxui/core";
 
   const prefsQuery = createPushPreferencesQuery();
@@ -24,6 +24,9 @@
       defaultLevel = (prefsQuery.data.default ?? "engaged") as PushLevel;
     }
   });
+
+  // ── Feature flag gate ──
+  let featureEnabled = $state<boolean | null>(null);
 
   // ── Push capability + permission state (browser-side, not on the server) ──
   let pushSupported = $state(false);
@@ -109,6 +112,9 @@
   onMount(() => {
     setNavbar(settingsNavbar);
     setSidebar(settingsSidebar);
+    isPushFeatureEnabled().then((enabled) => {
+      featureEnabled = enabled;
+    });
     refreshStatus();
     return () => {
       setNavbar(undefined);
@@ -157,79 +163,93 @@
 
 <ScrollArea class="h-full">
   <div class="max-w-3xl mx-auto w-full p-4 flex flex-col gap-10">
-    <!-- Enable / status section -->
-    <section>
-      <h2 class="text-base font-semibold mb-4 text-base-900 dark:text-base-100 flex items-center gap-2">
-        <IconBell class="size-4" />
-        Notifications
-      </h2>
-
-      {#if !pushSupported}
+    {#if featureEnabled === null}
+      <p class="text-sm text-base-400">Loading…</p>
+    {:else if !featureEnabled}
+      <section>
+        <h2 class="text-base font-semibold mb-4 text-base-900 dark:text-base-100 flex items-center gap-2">
+          <IconBell class="size-4" />
+          Notifications
+        </h2>
         <p class="text-sm text-base-400">
-          Web push isn't supported in this browser. Use a supported browser
-          (Firefox, Chrome, Edge, Brave, or Safari 16.1+) to receive
-          notifications.
+          Push notifications are not yet available for your account.
         </p>
-      {:else}
-        <div class="flex flex-col gap-3">
-          {#if permission === "denied"}
-            <p class="text-sm text-base-400">
-              Notifications are blocked in your browser settings. Re-enable them
-              in the site permissions, then click Enable again.
-            </p>
-          {:else if endpoint}
-            <div class="flex gap-2">
+      </section>
+    {:else}
+      <!-- Enable / status section -->
+      <section>
+        <h2 class="text-base font-semibold mb-4 text-base-900 dark:text-base-100 flex items-center gap-2">
+          <IconBell class="size-4" />
+          Notifications
+        </h2>
+
+        {#if !pushSupported}
+          <p class="text-sm text-base-400">
+            Web push isn't supported in this browser. Use a supported browser
+            (Firefox, Chrome, Edge, Brave, or Safari 16.1+) to receive
+            notifications.
+          </p>
+        {:else}
+          <div class="flex flex-col gap-3">
+            {#if permission === "denied"}
+              <p class="text-sm text-base-400">
+                Notifications are blocked in your browser settings. Re-enable them
+                in the site permissions, then click Enable again.
+              </p>
+            {:else if endpoint}
+              <div class="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onclick={disableNotifications}
+                  disabled={disabling}
+                >
+                  {disabling ? "Disabling…" : "Disable on this device"}
+                </Button>
+              </div>
+            {:else}
               <Button
                 size="sm"
                 variant="secondary"
-                onclick={disableNotifications}
-                disabled={disabling}
+                onclick={enableNotifications}
+                disabled={enabling}
               >
-                {disabling ? "Disabling…" : "Disable on this device"}
+                {enabling ? "Enabling…" : "Enable notifications"}
               </Button>
-            </div>
-          {:else}
-            <Button
-              size="sm"
-              variant="secondary"
-              onclick={enableNotifications}
-              disabled={enabling}
-            >
-              {enabling ? "Enabling…" : "Enable notifications"}
-            </Button>
-          {/if}
+            {/if}
 
-          {#if enableError}
-            <ErrorMessage message={enableError} class="py-2" />
-          {/if}
-        </div>
-      {/if}
-    </section>
-
-    {#if pushSupported && endpoint}
-      <!-- Default level -->
-      <section>
-        <h2 class="text-base font-semibold mb-1 text-base-900 dark:text-base-100">
-          Default notification level
-        </h2>
-        <p class="text-sm text-base-400 mb-4">
-          Applies to every space you're a member of unless overridden in each
-          space's settings.
-        </p>
-
-        {#if prefsQuery.isPending}
-          <p class="text-sm text-base-400">Loading preferences…</p>
-        {:else if prefsQuery.isError}
-          <ErrorMessage message="Error: {prefsQuery.error.message}" class="py-4" />
-        {:else if prefsQuery.data}
-          <UpdateRhythmChooser
-            value={defaultLevel}
-            horizontal={true}
-            name="defaultLevel"
-            onchange={(v) => onChangeDefault(v)}
-          />
+            {#if enableError}
+              <ErrorMessage message={enableError} class="py-2" />
+            {/if}
+          </div>
         {/if}
       </section>
+
+      {#if pushSupported && endpoint}
+        <!-- Default level -->
+        <section>
+          <h2 class="text-base font-semibold mb-1 text-base-900 dark:text-base-100">
+            Default notification level
+          </h2>
+          <p class="text-sm text-base-400 mb-4">
+            Applies to every space you're a member of unless overridden in each
+            space's settings.
+          </p>
+
+          {#if prefsQuery.isPending}
+            <p class="text-sm text-base-400">Loading preferences…</p>
+          {:else if prefsQuery.isError}
+            <ErrorMessage message="Error: {prefsQuery.error.message}" class="py-4" />
+          {:else if prefsQuery.data}
+            <UpdateRhythmChooser
+              value={defaultLevel}
+              horizontal={true}
+              name="defaultLevel"
+              onchange={(v) => onChangeDefault(v)}
+            />
+          {/if}
+        </section>
+      {/if}
     {/if}
   </div>
 </ScrollArea>

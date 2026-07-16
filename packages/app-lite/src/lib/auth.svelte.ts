@@ -21,6 +21,12 @@ let appPasswordAgent = $state<AtpAgent | null>(null);
 let authenticated = $state(false);
 let initializing = $state(true);
 let initError = $state<string | null>(null);
+export function isAuthenticated(): boolean {
+  return authenticated;
+}
+export function isInitializing(): boolean {
+  return initializing;
+}
 
 /** Cached profile for the current session, set reactively after login. */
 let profile = $state<{ handle: string; did: string; avatar: string; displayName?: string } | null>(null);

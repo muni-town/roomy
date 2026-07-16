@@ -3,22 +3,27 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { IconBell, IconX } from "@roomy/design/icons";
-  import { getPushSubscriptionEndpoint } from "$lib/push.svelte";
+  import { getPushSubscriptionEndpoint, isPushFeatureEnabled } from "$lib/push.svelte";
 
   const DISMISS_KEY = "roomy.push.bannerDismissed";
 
+  let featureEnabled: boolean | null = $state(null);
   let pushEnabled: boolean | null = $state(null);
   let dismissed = $state(false);
 
   onMount(() => {
     dismissed = localStorage.getItem(DISMISS_KEY) === "1";
+    isPushFeatureEnabled().then((enabled) => {
+      featureEnabled = enabled;
+    });
     getPushSubscriptionEndpoint().then((endpoint) => {
       pushEnabled = endpoint !== null;
     });
   });
 
   let visible = $derived(
-    pushEnabled === false &&
+    featureEnabled === true &&
+      pushEnabled === false &&
       !dismissed &&
       !page.url.pathname.startsWith("/user/settings/notifications"),
   );

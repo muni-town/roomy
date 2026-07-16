@@ -22,3 +22,4 @@ export * as cache from "./cache";
 // Arktype schemas (Slice 1) and validated XRPC transport (Slice 3).
 export * as schemas from "./schemas/index";
 export * as transport from "./transport/index";
+export { type RateLimitRetryOptions } from "./transport/index";
