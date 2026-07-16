@@ -29,6 +29,10 @@ import { registerPushSubscription, unregisterPushSubscription } from "$lib/mutat
  * at push time, not a reactive query).
  */
 export async function isPushFeatureEnabled(): Promise<boolean> {
+  // Wait for auth init to finish before checking auth state
+  while (auth.initializing) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
   if (!auth.authenticated) return false;
   try {
     const res = await px().query("space.roomy.getFlags", {});
