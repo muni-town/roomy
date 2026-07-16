@@ -11,6 +11,9 @@
         "did": {
           "type": "string"
         },
+        "handle": {
+          "type": "string"
+        },
         "avatar": {
           "type": "string"
         },

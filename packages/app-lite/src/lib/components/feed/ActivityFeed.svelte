@@ -108,7 +108,7 @@
                         }}
                         class="font-medium text-base-700 dark:text-base-300 hover:underline cursor-pointer bg-transparent border-none p-0 inline"
                       >
-                        {msg.author.name ?? msg.author.did.slice(0, 8)}
+                        {msg.author.name || msg.author.handle}
                       </button>
                       <span class="prose dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400 prose-a:no-underline text-base-600 dark:text-base-400 break-words [&_p]:inline [&_p]:m-0">
                         {@html renderMarkdownSanitized(msg.content)}
@@ -140,7 +140,7 @@
                     }}
                     class="font-medium text-accent-700 dark:text-accent-400 hover:underline cursor-pointer bg-transparent border-none p-0 inline"
                   >
-                    {last.author.name ?? last.author.did.slice(0, 8)}
+                    {last.author.name || last.author.handle}
                   </button>
                 </div>
                 <div class="prose dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400 prose-a:no-underline text-base font-normal text-left max-w-full overflow-auto hide-scrollbar break-words [&_p]:m-0 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0">

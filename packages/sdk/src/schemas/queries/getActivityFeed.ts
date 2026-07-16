@@ -16,6 +16,7 @@ export const Params = type({
 export const ActivityAuthor = type({
   did: "string",
   "name?": "string",
+  "handle?": "string",
   "avatar?": "string",
 });
 

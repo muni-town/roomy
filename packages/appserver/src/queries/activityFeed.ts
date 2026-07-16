@@ -16,6 +16,7 @@ import { decodeContent } from "../db/content.ts";
 export interface ActivityAuthor {
   did: string;
   name?: string;
+  handle?: string;
   avatar?: string;
 }
 
@@ -194,13 +195,13 @@ export async function selectActivityFeed(
 }
 
 // ─── Batch fetch helpers ─────────────────────────────────────────────────
-
 interface MessageRow {
   id: string;
   mime_type: string | null;
   data: Buffer | Uint8Array | null;
   author_did: string | null;
   author_name: string | null;
+  author_handle: string | null;
   author_avatar: string | null;
   timestamp: number | null;
 }
@@ -226,16 +227,17 @@ async function batchFetchMessages(
          coalesce(author_e.tail, '') as author_did,
          author_info.name as author_name,
          author_info.avatar as author_avatar,
+         author_user.handle as author_handle,
          cc.timestamp as timestamp
        from entities e
        left join comp_content cc on cc.entity = e.id
        left join edges author_e
          on author_e.head = e.id and author_e.label = 'author'
        left join comp_info author_info on author_info.entity = author_e.tail
+       left join comp_user author_user on author_user.did = author_e.tail
        where e.id in (${placeholders})`,
     )
-    .all<MessageRow>(messageIds);
-
+    .all<MessageRow>(messageIds)
   for (const r of rows) {
     result.set(r.id, {
       id: r.id,
@@ -243,6 +245,7 @@ async function batchFetchMessages(
       author: {
         did: r.author_did ?? "",
         ...(r.author_name != null ? { name: r.author_name } : {}),
+        ...(r.author_handle != null ? { handle: r.author_handle } : {}),
         ...(r.author_avatar != null ? { avatar: r.author_avatar } : {}),
       },
       ...(r.timestamp != null ? { timestamp: new Date(r.timestamp).toISOString() } : {}),
