@@ -67,6 +67,12 @@ function freshDb(): DbLike {
   db.exec(
     "create table if not exists readstate.notification_state (user_did text not null, room_id text not null, first_unseen_at integer, first_unseen_msg_id text, unseen_count integer not null default 0, notified integer not null default 0 check(notified in (0,1)), pushed_at integer, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
   );
+  db.exec(
+    "create table if not exists readstate.feature_flags (key text primary key, global_enabled integer not null default 0 check(global_enabled in (0, 1)), updated_at integer not null default (unixepoch() * 1000)) strict",
+  );
+  db.exec(
+    "create table if not exists readstate.feature_flag_assignments (flag_key text not null, user_did text not null, updated_at integer not null default (unixepoch() * 1000), primary key (flag_key, user_did)) strict",
+  );
   return toAsyncDb(db);
 }
 
@@ -150,6 +156,11 @@ async function seedFixture(db: DbLike): Promise<void> {
   await setUserDefault(db, BUSY_READER, "busy");
   await setUserDefault(db, QUIET_READER, "quiet");
   await setUserDefault(db, BANNED_BUSY, "busy");
+  // Enable push-notifications globally so recipients pass the per-user flag
+  // gate added in evaluatePush.
+  await db.run(
+    "insert into readstate.feature_flags (key, global_enabled, updated_at) values ('push-notifications', 1, (unixepoch() * 1000))",
+  );
   // Subscriptions: only busy reader + quiet reader + banned user have devices.
   await addSubscription(db, BUSY_READER);
   await addSubscription(db, QUIET_READER);

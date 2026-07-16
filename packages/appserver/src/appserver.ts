@@ -329,20 +329,14 @@ export async function createAppserver(
   setStreamManager(streamManager);
   // Start the centralized embed enrichment sweeper.
   startEmbedSweeper({ db: mainDb, invalidationRouter });
-  // Start the centralized push dispatcher only if the push-notifications
-  // feature flag is globally enabled. One process-wide loop owns all push
-  // delivery; the StreamManager pokes it on live createMessage (see
-  // push/dispatcher.ts). No-op-safe when VAPID isn't configured.
-  mainDb.query("select global_enabled from readstate.feature_flags where key = 'push-notifications'").get<{ global_enabled: number }>().then((row) => {
-    if (row?.global_enabled === 1) {
-      startPushDispatcher({ db: mainDb });
-    } else {
-      if (!quiet) console.log("[push] push-notifications flag not globally enabled; dispatcher skipped");
-    }
-  }).catch(() => {
-    // readstate DB may not have feature_flags table yet (fresh DB before migration)
-    if (!quiet) console.log("[push] could not check push-notifications flag; dispatcher skipped");
-  });
+  // Start the centralized push dispatcher unconditionally. The dispatcher is
+  // global infrastructure that processes every live createMessage and
+  // computes fan-out; the `push-notifications` feature flag is a per-recipient
+  // filter applied during evaluation (see push/evaluate.ts), not a process-
+  // level kill switch. Starting it here means the StreamManager's pokes are
+  // always queued and evaluated regardless of flag state. No-op-safe when
+  // VAPID isn't configured (deliveries just find no subscriptions).
+  startPushDispatcher({ db: mainDb });
 
   // ─── XRPC routes ──────────────────────────────────────────────────────
   const authVerifier = opts.authVerifier ?? selectAuthVerifier();

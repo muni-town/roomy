@@ -43,6 +43,7 @@ import { decodeContent } from "../db/content.ts";
 import { roomAccess } from "../auth/access.ts";
 import { resolveLevel } from "../queries/pushPreferences.ts";
 import { selectSubscriptions } from "../queries/pushSubscriptions.ts";
+import { getEnabledFlagsForUser } from "../queries/featureFlags.ts";
 import { upsertNotificationState } from "../queries/notificationState.ts";
 import { hasUserParticipatedInSpace } from "../queries/userRoomParticipation.ts";
 import { resolveMessageIcon } from "./avatars.ts";
@@ -171,6 +172,14 @@ export async function evaluatePush(
   const deliveries: PushDelivery[] = [];
   for (const did of candidateDids) {
     if (did === authorDid) continue; // never notify the author
+
+    // Per-recipient feature gate: the `push-notifications` flag must be
+    // enabled for this user (global or per-DID assignment) to receive any
+    // push. This is the flag's intended role — it gates recipients, not the
+    // dispatcher process — so a user without the flag is skipped even if
+    // they somehow have a stale subscription row.
+    const enabledFlags = await getEnabledFlagsForUser(db, did);
+    if (!enabledFlags.includes("push-notifications")) continue;
 
     const level = await resolveLevel(db, did, spaceId);
     if (level === "silent") continue;

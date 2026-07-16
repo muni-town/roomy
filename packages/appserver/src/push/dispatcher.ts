@@ -72,7 +72,6 @@ const queue: PushJob[] = [];
 
 /** Resolved by {@link pokePushDispatcher} to wake an idle loop. */
 let wake: (() => void) | null = null;
-
 export interface PushDispatcherOpts {
   /** Process-wide materialisation DB (readstate is attached as `readstate.*`). */
   db: DbLike;
@@ -87,6 +86,7 @@ export function startPushDispatcher(opts: PushDispatcherOpts): void {
     log.error("[push-dispatcher] loop crashed:", err);
   });
 }
+
 
 export function pushDispatcherStats(): {
   queueDepth: number;
@@ -114,7 +114,7 @@ export function pushDispatcherStats(): {
  */
 export function pokePushDispatcher(jobs: PushJob[]): void {
   if (jobs.length === 0) return;
-  if (!started) return; // dispatcher not running (feature flag off)
+  if (!started) return; // dispatcher not running
   for (const j of jobs) queue.push(j);
   const fn = wake;
   if (fn) fn();
