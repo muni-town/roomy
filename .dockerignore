@@ -8,3 +8,4 @@ packages/appserver-testing
 packages/discord-bridge-legacy
 Dockerfile
 Dockerfile.appserver
+Dockerfile.appserver-admin

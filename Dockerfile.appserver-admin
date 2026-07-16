@@ -1,0 +1,50 @@
+# ── appserver-admin Dockerfile ──────────────────────────────────────────
+# Multi-stage build for the admin dashboard (static SvelteKit SPA).
+# Deployed on Railway at admin.roomy.space.
+
+# ── Stage 1: Install dependencies & build ────────────────────────────────
+FROM node:22 AS build
+
+# Invalidate build cache on each deploy
+ARG CACHEBUST=0
+
+# Extract the first 8 characters of the git commit from railway as the build ID if present
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
+ARG VITE_APPSERVER_DID
+ENV VITE_APPSERVER_DID=$VITE_APPSERVER_DID
+
+ARG PUBLIC_APPSERVER_ADMIN_DIDS
+ENV PUBLIC_APPSERVER_ADMIN_DIDS=$PUBLIC_APPSERVER_ADMIN_DIDS
+WORKDIR /project
+
+# Copy workspace manifests and patches for install
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
+COPY patches/ patches/
+COPY packages/tsconfig/package.json packages/tsconfig/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/design/package.json packages/design/package.json
+COPY packages/appserver-admin/package.json packages/appserver-admin/package.json
+
+RUN npm i -g pnpm
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# Rebuild esbuild native binaries (skipped by --ignore-scripts, needed by Vite)
+RUN node node_modules/.pnpm/esbuild@*/node_modules/esbuild/install.js
+
+# Copy source for all required packages
+COPY packages/tsconfig/ packages/tsconfig/
+COPY packages/sdk/ packages/sdk/
+COPY packages/design/ packages/design/
+COPY packages/appserver-admin/ packages/appserver-admin/
+
+# Build workspace dependencies first, then the app
+RUN pnpm --filter @roomy-space/sdk build
+RUN pnpm --filter @roomy/design build
+RUN pnpm --filter appserver-admin build
+
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────
+FROM caddy:alpine
+
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /project/packages/appserver-admin/build /usr/share/caddy
