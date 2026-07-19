@@ -21,8 +21,10 @@ import type {
   AppliedEvent,
 } from "./types.ts";
 import type { DbLike } from "../db/types.ts";
-import type { StreamDid } from "@roomy-space/sdk";
+import type { StreamDid, Ulid } from "@roomy-space/sdk";
 import { inferSignals } from "./inferSignals.ts";
+import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
+import { openDb } from "../db/db.ts";
 
 export class Router implements IInvalidationRouter {
   readonly #listeners = new Set<InvalidationListener>();
@@ -50,9 +52,17 @@ export class Router implements IInvalidationRouter {
   ): Promise<void> {
     if (meta.isBackfill) return;
     if (this.#listeners.size === 0) return;
+
+    // Pre-fetch every message row the batch's handlers will reference, in a
+    // single `selectMessages` call. createMessage / forwardMessages key the
+    // messageDiff by `event.id`; editMessage keys it by `details.messageId`.
+    // Without batching, `inferSignals` would issue 5 queries per message
+    // event (5N for a batch of N); this collapses them to 5 queries total.
+    const messageSnapshots = await this.#fetchMessageSnapshots(events, db);
+
     const allSignals: InvalidationEvent[] = [];
     for (const event of events) {
-      const signals = await inferSignals(event, db);
+      const signals = await inferSignals(event, db, messageSnapshots);
       for (const signal of signals) {
         if (signal.kind === "messageDiff") {
           signal.signal.seq = ++this.#seq;
@@ -68,6 +78,42 @@ export class Router implements IInvalidationRouter {
         console.error("[InvalidationRouter] listener threw:", err);
       }
     }
+  }
+
+  /**
+   * Collect the message ids a batch's handlers will read, fetch them all in
+   * one `selectMessages` call, and return them keyed by message id. Returns
+   * an empty map when the batch has no message-shaped events so the per-event
+   * fallback path stays a no-op.
+   */
+  async #fetchMessageSnapshots(
+    events: readonly AppliedEvent[],
+    db?: DbLike,
+  ): Promise<ReadonlyMap<Ulid, MessageDto>> {
+    const ids = new Set<Ulid>();
+    for (const event of events) {
+      switch (event.type) {
+        // createMessage and forwardMessages: the message entity id is the
+        // event id (the messageDiff `add` op is keyed by it).
+        case "space.roomy.message.createMessage.v0":
+        case "space.roomy.message.forwardMessages.v0":
+          if (event.roomId) ids.add(event.id);
+          break;
+        // editMessage: the diff targets the original message, keyed by
+        // `details.messageId` (surfaced by `toAppliedEvent`).
+        case "space.roomy.message.editMessage.v0": {
+          const messageId = event.details?.messageId as Ulid | undefined;
+          if (messageId) ids.add(messageId);
+          break;
+        }
+      }
+    }
+    if (ids.size === 0) return new Map();
+    const { messages } = await selectMessages(db ?? openDb(), {
+      kind: "ids",
+      ids: [...ids],
+    });
+    return new Map(messages.map((m) => [m.id as Ulid, m] as const));
   }
 
   subscribe(listener: InvalidationListener): () => void {

@@ -15,6 +15,7 @@ import type { StreamDid, UserDid, Ulid, EventType } from "@roomy-space/sdk";
 import { type, schemas } from "@roomy-space/sdk";
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import { inferSignals } from "./inferSignals.ts";
+import type { MessageDto } from "../queries/selectMessages.ts";
 import type {
   AppliedEvent,
   InvalidationEvent,
@@ -166,6 +167,125 @@ describe("inferSignals: message events", () => {
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMetadata");
     expect(nsids).toContain("space.roomy.space.getMetadata");
+  });
+
+  it("createMessage uses a pre-fetched messageSnapshots map and skips the DB read", async () => {
+    // Seed a DB whose content is "from-db" but pass a snapshot map whose
+    // content is "from-snapshot". The diff MUST carry the snapshot's
+    // content — proving the handler used the map and did not read the DB.
+    const { asyncDb } = seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "from-db",
+    });
+    const snapshot: MessageDto = {
+      id: EVENT_ID,
+      content: "from-snapshot",
+      authorDid: USER_DID,
+      authorName: "Alice",
+      timestamp: "2026-05-08T12:00:00Z",
+      reactions: [],
+      media: [],
+      linkEmbeds: [],
+    };
+    const snapshots = new Map([[EVENT_ID, snapshot]]);
+
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.message.createMessage.v0",
+        roomId: ROOM_ID,
+      }),
+      asyncDb,
+      snapshots,
+    );
+
+    const diff = findMessageDiff(signals);
+    expect(diff).toBeDefined();
+    if (diff!.kind === "messageDiff") {
+      const op = diff!.signal.ops[0]!;
+      expect(op.op).toBe("add");
+      if (op.op === "add") {
+        expect(op.message.content).toBe("from-snapshot");
+      }
+    }
+  });
+
+  it("createMessage falls back to a DB read when the snapshot map has no entry for the id", async () => {
+    const { asyncDb } = seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "from-db",
+    });
+    // Empty snapshot map — handler must fall back to reading the DB.
+    const snapshots = new Map<Ulid, MessageDto>();
+
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.message.createMessage.v0",
+        roomId: ROOM_ID,
+      }),
+      asyncDb,
+      snapshots,
+    );
+
+    const diff = findMessageDiff(signals);
+    expect(diff).toBeDefined();
+    if (diff!.kind === "messageDiff") {
+      const op = diff!.signal.ops[0]!;
+      expect(op.op).toBe("add");
+      if (op.op === "add") {
+        expect(op.message.content).toBe("from-db");
+      }
+    }
+  });
+
+  it("editMessage uses a pre-fetched messageSnapshots map keyed by messageId", async () => {
+    const MESSAGE_ID = "01HXSXKBQ4TESTMSG00000000A" as Ulid;
+    const EDIT_EVENT_ID = "01HXSXKBQ4TESTEDIT0000000B" as Ulid;
+    const { asyncDb } = seedMessageDb({
+      id: MESSAGE_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "from-db",
+    });
+    const snapshot: MessageDto = {
+      id: MESSAGE_ID,
+      content: "edited-from-snapshot",
+      authorDid: USER_DID,
+      authorName: "Alice",
+      timestamp: "2026-05-08T12:00:00Z",
+      reactions: [],
+      media: [],
+      linkEmbeds: [],
+    };
+    const snapshots = new Map([[MESSAGE_ID, snapshot]]);
+
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.message.editMessage.v0",
+        id: EDIT_EVENT_ID,
+        roomId: ROOM_ID,
+        details: { messageId: MESSAGE_ID },
+      }),
+      asyncDb,
+      snapshots,
+    );
+
+    const diff = findMessageDiff(signals);
+    expect(diff).toBeDefined();
+    if (diff!.kind === "messageDiff") {
+      const op = diff!.signal.ops[0]!;
+      expect(op.op).toBe("update");
+      expect(op.key).toBe(MESSAGE_ID);
+      if (op.op === "update") {
+        expect(op.message.content).toBe("edited-from-snapshot");
+      }
+    }
   });
 
   it("createMessage without roomId produces no signals", async () => {

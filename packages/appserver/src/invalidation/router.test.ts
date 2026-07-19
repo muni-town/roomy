@@ -145,6 +145,72 @@ describe("Router", () => {
     expect(seqs[1]!).toBeGreaterThan(seqs[0]!);
   });
 
+  it("batch-fetches message snapshots once for a batch of message events", async () => {
+    // Two createMessage events with distinct ids in a single onEventsApplied
+    // call. The router should issue ONE selectMessages({kind:"ids"}) for
+    // both ids and emit a messageDiff for each — proving the batched
+    // snapshot fetch covers every event in the batch.
+    const EVENT_A = "01EVENTAAAAAAAAAAAAAAAAA" as Ulid;
+    const EVENT_B = "01EVENTBBBBBBBBBBBBBBBBB" as Ulid;
+    // Seed both rows into a single in-memory DB (seedMessageDb wipes on
+    // each call, so do it inline here to keep both rows alive).
+    closeDb();
+    const db = openDb({ path: ":memory:" });
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", USER_DID, USER_DID);
+    await db.run(
+      "insert or ignore into comp_info (entity, name, avatar) values (?, ?, ?)",
+      USER_DID, "Alice", null,
+    );
+    for (const [msgId, roomId] of [
+      [EVENT_A, "01ROOM_AAAAAAAAAAAAAA000"],
+      [EVENT_B, "01ROOM_BAAAAAAAAAAAAAA000"],
+    ] as const) {
+      await db.run(
+        "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+        msgId, STREAM_DID, roomId, msgId,
+      );
+      await db.run(
+        "insert into comp_content (entity, mime_type, data, last_edit, timestamp) " +
+          "values (?, 'text/plain', ?, ?, ?)",
+        msgId, Buffer.from("hello"), msgId, Date.now(),
+      );
+      await db.run(
+        "insert into edges (head, tail, label) values (?, ?, 'author')",
+        msgId, USER_DID,
+      );
+    }
+
+    const router = new Router();
+    const diffRoomIds: string[] = [];
+    router.subscribe((events) => {
+      for (const e of events) {
+        if (e.kind === "messageDiff") {
+          diffRoomIds.push(e.signal.roomId);
+        }
+      }
+    });
+
+    await router.onEventsApplied(
+      STREAM_DID,
+      [
+        makeEvent("space.roomy.message.createMessage.v0", {
+          id: EVENT_A,
+          roomId: "01ROOM_AAAAAAAAAAAAAA000" as Ulid,
+        }),
+        makeEvent("space.roomy.message.createMessage.v0", {
+          id: EVENT_B,
+          roomId: "01ROOM_BAAAAAAAAAAAAAA000" as Ulid,
+        }),
+      ],
+      { isBackfill: false },
+    );
+
+    // Both events produced a messageDiff, each keyed to its own room.
+    expect(diffRoomIds).toHaveLength(2);
+    expect(diffRoomIds).toContain("01ROOM_AAAAAAAAAAAAAA000");
+    expect(diffRoomIds).toContain("01ROOM_BAAAAAAAAAAAAAA000");
+  });
+
   it("unsubscribe stops delivery", async () => {
     const router = new Router();
     let count = 0;

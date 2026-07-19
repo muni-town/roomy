@@ -17,7 +17,7 @@ import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
 import type { AppliedEvent, InvalidationEvent, QueryNsid } from "./types.ts";
 import type { DbLike } from "../db/types.ts";
 import { openDb } from "../db/db.ts";
-import { selectMessages } from "../queries/selectMessages.ts";
+import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
 
 // ─── Public API ─────────────────────────────────────────────────────────
 
@@ -28,10 +28,18 @@ import { selectMessages } from "../queries/selectMessages.ts";
  *
  * @param event - The applied event to infer signals for.
  * @param db - Optional database instance. Defaults to `openDb()`.
+ * @param messageSnapshots - Optional pre-fetched message rows keyed by
+ *   message id. When the caller has already batch-fetched the messages a
+ *   batch of events will reference (e.g. `Router.onEventsApplied`), passing
+ *   the map here lets `handleCreateMessage` / `handleEditMessage` skip the
+ *   per-event `selectMessages` re-read — turning 5N queries into 5 per
+ *   batch. Handlers fall back to their own read when the map is absent or
+ *   does not contain the relevant id (direct callers like tests).
  */
 export async function inferSignals(
   event: AppliedEvent,
   db?: DbLike,
+  messageSnapshots?: ReadonlyMap<Ulid, MessageDto>,
 ): Promise<InvalidationEvent[]> {
   // Suppress signals for synthetic query events — they're bulk hydration,
   // not incremental changes.
@@ -39,7 +47,7 @@ export async function inferSignals(
 
   const handler = HANDLERS[event.type as keyof typeof HANDLERS];
   if (!handler) return [];
-  return await handler(event, db);
+  return await handler(event, db, messageSnapshots);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -76,22 +84,29 @@ function invalidateRoom(roomId: Ulid, spaceId: StreamDid): InvalidationEvent[] {
 
 // ─── Message events ─────────────────────────────────────────────────────
 
-async function handleCreateMessage(event: AppliedEvent, db?: DbLike): Promise<InvalidationEvent[]> {
+async function handleCreateMessage(
+  event: AppliedEvent,
+  db?: DbLike,
+  messageSnapshots?: ReadonlyMap<Ulid, MessageDto>,
+): Promise<InvalidationEvent[]> {
   const roomId = event.roomId;
   if (!roomId) return [];
 
   const spaceId = event.streamDid;
   const details = event.details ?? {};
 
-  // Build the full message row from the materialized DB. By this point the
-  // event has been applied to SQLite, so `selectMessages` resolves the exact
-  // shape `room.getMessages` returns. The client validates the #messageDiff
-  // frame against that schema and silently drops it if any field is missing.
-  const { messages } = await selectMessages(db ?? openDb(), {
-    kind: "ids",
-    ids: [event.id],
-  });
-  const message = messages[0];
+  // Resolve the full message row to carry in the #messageDiff. The client
+  // validates the diff against the `room.getMessages` response schema and
+  // silently drops it if any field is missing, so the payload must match
+  // the exact shape `selectMessages` returns.
+  //
+  // Prefer a pre-fetched snapshot from the batch (Router.onEventsApplied
+  // collects all message ids in a batch and reads them with a single
+  // `selectMessages` call — 5 queries per batch instead of 5N). Fall back
+  // to a per-event read for direct callers (tests, standalone use).
+  const message = messageSnapshots?.get(event.id) ?? (
+    await selectMessages(db ?? openDb(), { kind: "ids", ids: [event.id] })
+  ).messages[0];
 
   const signals: InvalidationEvent[] = [];
   if (message) {
@@ -105,20 +120,21 @@ async function handleCreateMessage(event: AppliedEvent, db?: DbLike): Promise<In
       },
     });
   }
-  // Room metadata may update (unread count, recentThreads).
-  // Sidebar may update (unread count on the channel).
+  // Room metadata (unread count, recentThreads) + space sidebar (unread
+  // counts on the channel). `invalidateRoom` already broadcasts
+  // `space.roomy.space.getMetadata` to every space-subscribed connection,
+  // so the author's activeThreads refresh is covered — no separate
+  // author-scoped invalidation needed.
   signals.push(...invalidateRoom(roomId, spaceId));
-
-  // If the message was sent in a thread, also invalidate sidebar for the
-  // author so activeThreads refreshes.
-  signals.push(
-    invalidate("space.roomy.space.getMetadata", { spaceId }, event.user),
-  );
 
   return signals;
 }
 
-async function handleEditMessage(event: AppliedEvent, db?: DbLike): Promise<InvalidationEvent[]> {
+async function handleEditMessage(
+  event: AppliedEvent,
+  db?: DbLike,
+  messageSnapshots?: ReadonlyMap<Ulid, MessageDto>,
+): Promise<InvalidationEvent[]> {
   const roomId = event.roomId;
   if (!roomId) return [];
 
@@ -131,12 +147,12 @@ async function handleEditMessage(event: AppliedEvent, db?: DbLike): Promise<Inva
   const messageId = (details.messageId as Ulid | undefined) ?? event.id;
 
   // Re-read the full message row post-materialization so the diff carries
-  // the complete, schema-valid shape (see `handleCreateMessage`).
-  const { messages } = await selectMessages(db ?? openDb(), {
-    kind: "ids",
-    ids: [messageId],
-  });
-  const message = messages[0];
+  // the complete, schema-valid shape (see `handleCreateMessage`). Prefer a
+  // pre-fetched batch snapshot when available (see `handleCreateMessage`
+  // for the rationale).
+  const message = messageSnapshots?.get(messageId) ?? (
+    await selectMessages(db ?? openDb(), { kind: "ids", ids: [messageId] })
+  ).messages[0];
 
   const signals: InvalidationEvent[] = [];
   if (message) {
@@ -497,7 +513,7 @@ function handleMarkRead(event: AppliedEvent): InvalidationEvent[] {
 
 // ─── Dispatch table ─────────────────────────────────────────────────────
 
-const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike) => InvalidationEvent[] | Promise<InvalidationEvent[]>> = {
+const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike, messageSnapshots?: ReadonlyMap<Ulid, MessageDto>) => InvalidationEvent[] | Promise<InvalidationEvent[]>> = {
   // Messages
   "space.roomy.message.createMessage.v0": handleCreateMessage,
   "space.roomy.message.editMessage.v0": handleEditMessage,
