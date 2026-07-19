@@ -211,6 +211,10 @@ async function subscribeAndRegister(): Promise<PushOutcome> {
         ),
       ]));
     console.debug("[push] pushManager.subscribe ok; endpoint:", subscription.endpoint);
+    // Cache the VAPID key in the service worker so it can resubscribe on
+    // `pushsubscriptionchange` (which fires with no page open). The SW can't
+    // call the authenticated XRPC endpoint, so it needs the key locally.
+    postVapidKeyToServiceWorker(vapidKey);
 
     await registerPushSubscription(subscription);
     console.info("[push] registered subscription with appserver:", subscription.endpoint);
@@ -257,4 +261,55 @@ export async function clearPushSubscription(): Promise<PushOutcome> {
     console.warn("[push] clearPushSubscription failed:", e);
     return { status: "failed", message };
   }
+}
+
+/**
+ * Post the VAPID public key to the service worker so it can resubscribe on
+ * `pushsubscriptionchange` (fired with no page open). Best-effort: if no SW
+ * is registered the message is dropped — the login-time re-subscribe covers it.
+ */
+async function postVapidKeyToServiceWorker(vapidKey: string): Promise<void> {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    reg.active?.postMessage({ type: "push-vapid-key", key: vapidKey });
+  } catch {
+    // SW not ready yet — non-fatal; resubscribe on next login.
+  }
+}
+
+/**
+ * Listen for `push-subscription-changed` messages from the service worker
+ * (fired when the browser rotates the push endpoint — primarily Chrome/FCM).
+ * The SW resubscribes itself (it can't call the authenticated XRPC endpoint),
+ * then hands the new subscription here for re-registration with the appserver.
+ * Install once in the root layout; the listener lives for the page lifetime.
+ */
+export function installPushSubscriptionChangeListener(): () => void {
+  if (!supportsPush()) return () => {};
+  const handler = async (event: MessageEvent) => {
+    if (event.data?.type !== "push-subscription-changed") return;
+    const sub = event.data.subscription as {
+      endpoint: string;
+      keys: { p256dh: string; auth: string };
+      expirationTime?: number | null;
+    } | null;
+    if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+      console.warn("[push] push-subscription-changed with incomplete subscription");
+      return;
+    }
+    try {
+      await px().procedure("space.roomy.push.registerSubscription", {
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+        expirationTime: sub.expirationTime,
+      });
+      localStorage.setItem(LAST_ENDPOINT_KEY, sub.endpoint);
+      console.info("[push] re-registered rotated subscription with appserver:", sub.endpoint);
+    } catch (e) {
+      // The login-time subscribeIfAlreadyPermitted will retry on next session.
+      console.warn("[push] re-register of rotated subscription failed:", e);
+    }
+  };
+  navigator.serviceWorker.addEventListener("message", handler);
+  return () => navigator.serviceWorker.removeEventListener("message", handler);
 }

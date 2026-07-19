@@ -11,6 +11,7 @@ import { goto } from "$app/navigation";
 import { CONFIG, OAUTH_SCOPE } from "./config";
 import { scheduleAutoReload } from "./error-recovery";
 import { setAppserverOrigin } from "./appserver-origin";
+import { subscribeIfAlreadyPermitted, clearPushSubscription } from "./push.svelte";
 
 const { ServiceAuthClient, DirectXrpcClient, resolveAppserverHttpOrigin } = transport;
 
@@ -136,6 +137,10 @@ export async function init() {
     // testing against a local appserver without a publicly-exposed redirect.
     if (CONFIG.testIdentifier && CONFIG.testAppPassword) {
       await loginWithAppPassword(CONFIG.testIdentifier, CONFIG.testAppPassword);
+      // Re-register this device's push subscription in case the browser
+      // rotated the endpoint (Chrome/FCM does this periodically). No-op if
+      // push is unsupported/unconfigured or permission was never granted.
+      void subscribeIfAlreadyPermitted();
       return;
     }
 
@@ -158,6 +163,10 @@ export async function init() {
       if (returnUrl && returnUrl !== currentReturnUrl()) {
         goto(returnUrl, { replaceState: true });
       }
+      // Re-register this device's push subscription in case the browser
+      // rotated the endpoint (Chrome/FCM does this periodically). No-op if
+      // push is unsupported/unconfigured or permission was never granted.
+      void subscribeIfAlreadyPermitted();
     }
   } catch (err) {
     initError = String(err);
@@ -209,6 +218,13 @@ export async function updateProfile() {
 }
 
 export async function logout() {
+  // Stop delivering push to this device while signed out. Best-effort: a
+  // failure here must not block logout. clearPushSubscription returns an
+  // outcome (never throws) — just log on non-ok.
+  const pushOutcome = await clearPushSubscription();
+  if (pushOutcome.status !== "ok" && pushOutcome.status !== "unsupported") {
+    console.warn("[push] clear on logout failed:", pushOutcome.status);
+  }
   if (appPasswordAgent) {
     await appPasswordAgent.logout();
   } else if (session) {

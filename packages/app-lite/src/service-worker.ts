@@ -20,6 +20,17 @@ const ASSETS = [
   ...files.filter((p) => p !== SW_PATH),
 ];
 
+// ── Web Push: VAPID key cache for resubscription ─────────────────────────
+// The page posts the appserver's VAPID public key to the SW after each
+// successful subscribe (message type "push-vapid-key"). The SW caches it so
+// `pushsubscriptionchange` (which fires with no page open) can resubscribe
+// without calling the authenticated XRPC endpoint — which the SW cannot do.
+// Without this, a rotated endpoint (Chrome/FCM does this periodically) is
+// never re-registered until the user next logs in.
+let cachedVapidKey: string | null = null;
+
+// (VAPID key message handling is merged into the main message listener below.)
+
 self.addEventListener("install", (event) => {
   // Create a new cache and add all files to it
   async function addFilesToCache() {
@@ -54,6 +65,9 @@ self.addEventListener("activate", (event) => {
 // `skipWaiting` available on demand from the client side.
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+  if (event.data?.type === "push-vapid-key" && typeof event.data.key === "string") {
+    cachedVapidKey = event.data.key;
+  }
 });
 
 self.addEventListener("fetch", (event: FetchEvent) => {
@@ -217,4 +231,85 @@ async function handleNotificationClick(
   const path =
     spaceId && roomId ? `/space/${spaceId}/${roomId}` : "/";
   await self.clients.openWindow(path);
+}
+
+// ── Push subscription rotation ───────────────────────────────────────────
+//
+// Chrome/FCM periodically expires and reissues push subscription endpoints
+// (Firefox's autopush and Safari's APNs do this far less often). The spec
+// event for this is `pushsubscriptionchange`, fired with the old (now-dead)
+// subscription and expecting the SW to call `pushManager.subscribe()` again
+// and report the new endpoint to the appserver.
+//
+// The SW cannot call the authenticated XRPC endpoint itself, so it does the
+// only thing it can: resubscribe (using the cached VAPID key) and post the
+// new subscription to any open page client, which re-registers it. If no
+// page is open, the new endpoint is reported on the next login via
+// `subscribeIfAlreadyPermitted()` in auth.svelte.ts — the old endpoint is
+// 410-pruned by the appserver in the meantime, so the user sees a brief gap
+// rather than a silent permanent loss.
+//
+// Note: Chrome's support for firing this event has historically been
+// unreliable (crbug 407523313), so the login-time re-subscribe is the
+// load-bearing recovery path; this handler covers Firefox/Safari and any
+// Chrome build that does fire it.
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(handlePushSubscriptionChange(event));
+});
+
+async function handlePushSubscriptionChange(event: PushSubscriptionChangeEvent): Promise<void> {
+  // Unsubscribe the old (dead) subscription if the browser hasn't already.
+  try {
+    await event.oldSubscription?.unsubscribe();
+  } catch {
+    // Already gone — fine.
+  }
+
+  if (!cachedVapidKey) {
+    // No VAPID key cached yet (the page hasn't subscribed since this SW
+    // activated). Can't resubscribe without it; the next login will.
+    console.warn("[sw] pushsubscriptionchange with no cached VAPID key — deferring to login re-subscribe");
+    return;
+  }
+
+  let newSubscription: PushSubscription;
+  try {
+    newSubscription = await self.registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64UrlToUint8Array(cachedVapidKey),
+    });
+  } catch (e) {
+    console.warn("[sw] resubscribe on pushsubscriptionchange failed:", e);
+    return;
+  }
+
+  // Hand the new subscription to any open page so it can register it with
+  // the appserver (the SW has no auth to do so itself). Post the JSON shape
+  // (not the live PushSubscription, which isn't cloneable across postMessage).
+  const json = newSubscription.toJSON();
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  const payload = {
+    type: "push-subscription-changed",
+    subscription: {
+      endpoint: json.endpoint,
+      keys: json.keys,
+      expirationTime: json.expirationTime,
+    },
+  };
+  await Promise.all(clients.map((c) => c.postMessage(payload)));
+}
+
+/** base64url → Uint8Array (for the VAPID `applicationServerKey`). Mirrors the
+ *  helper in push.svelte.ts — duplicated because the SW can't import $lib. */
+function base64UrlToUint8Array(base64Url: string): Uint8Array {
+  const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(
+    base64.length + ((4 - (base64.length % 4)) % 4),
+    "=",
+  );
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
