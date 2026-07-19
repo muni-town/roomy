@@ -66,11 +66,12 @@
    */
   async function enableNotifications(): Promise<void> {
     enabling = true;
-    enableError = null;
     try {
       const outcome = await ensurePushSubscription();
       if (outcome.status === "ok") {
         toast.success("Notifications enabled");
+        // Suppress the enable-notifications banner on other pages
+        localStorage.setItem("roomy.push.bannerDismissed", "1");
       } else {
         const msg = pushOutcomeMessage(outcome);
         enableError = msg;

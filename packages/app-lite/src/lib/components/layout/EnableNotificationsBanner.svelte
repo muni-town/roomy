@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { IconBell, IconX } from "@roomy/design/icons";
@@ -11,7 +10,10 @@
   let pushEnabled: boolean | null = $state(null);
   let dismissed = $state(false);
 
-  onMount(() => {
+  $effect(() => {
+    // Re-check on every navigation (page URL change) so enabling notifications
+    // on the settings page suppresses the banner immediately on return.
+    page.url;
     dismissed = localStorage.getItem(DISMISS_KEY) === "1";
     isPushFeatureEnabled().then((enabled) => {
       featureEnabled = enabled;
