@@ -250,6 +250,55 @@ describe("ensureProfilesForBatch", () => {
     ).toBe(1);
   });
 
+
+  test("re-fetches profiles for handle.invalid after cooldown elapses", async () => {
+    const { db, asyncDb } = freshDb();
+    // Seed ALICE with handle.invalid and an old updated_at (past cooldown)
+    db.run("insert into entities (id, stream_id) values (?, ?)", [ALICE, STREAM]);
+    db.run("insert into comp_info (entity, name, avatar) values (?, ?, ?)", [ALICE, "alice display", null]);
+    db.run(
+      "insert into comp_user (did, handle, updated_at) values (?, ?, ?)",
+      [ALICE, "handle.invalid", Date.now() - 2 * 60 * 60 * 1000], // 2 hours ago
+    );
+
+    const events = [decodedAs(joinSpaceEvent(), 1, ALICE)];
+    const getProfiles = mock(async () => [profileFor(ALICE, "alice.renewed.test")]);
+
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
+
+    // Should have fetched despite comp_info existing, because handle is stale
+    expect(getProfiles).toHaveBeenCalledTimes(1);
+    expect(getProfiles).toHaveBeenCalledWith([ALICE]);
+    expect(
+      (await asyncDb
+        .query("select handle from comp_user where did = ?")
+        .get<{ handle: string }>(ALICE))?.handle,
+    ).toBe("alice.renewed.test");
+  });
+
+  test("does NOT re-fetch handle.invalid within cooldown period", async () => {
+    const { db, asyncDb } = freshDb();
+    // Seed ALICE with handle.invalid and a recent updated_at (within cooldown)
+    db.run("insert into entities (id, stream_id) values (?, ?)", [ALICE, STREAM]);
+    db.run("insert into comp_info (entity, name, avatar) values (?, ?, ?)", [ALICE, "alice display", null]);
+    db.run(
+      "insert into comp_user (did, handle, updated_at) values (?, ?, ?)",
+      [ALICE, "handle.invalid", Date.now() - 10 * 60 * 1000], // 10 minutes ago
+    );
+
+    const events = [decodedAs(joinSpaceEvent(), 1, ALICE)];
+    const getProfiles = mock(async () => [profileFor(ALICE, "alice.renewed.test")]);
+
+    await ensureProfilesForBatch(asyncDb, events, getProfiles);
+
+    // Should NOT fetch — cooldown hasn't elapsed
+    expect(getProfiles).toHaveBeenCalledTimes(0);
+    expect(
+      (await asyncDb
+        .query("select handle from comp_user where did = ?")
+        .get<{ handle: string }>(ALICE))?.handle,
+    ).toBe("handle.invalid");
+  });
 });
 
 describe("defaultGetProfiles", () => {
@@ -350,4 +399,3 @@ describe("defaultGetProfiles", () => {
     expect(profiles[0]?.did).toBe("did:plc:survivor-1");
   });
 });
-

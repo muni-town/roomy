@@ -20,6 +20,14 @@ import {
 } from "@roomy-space/sdk";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
+
+/**
+ * Cooldown for re-fetching profiles with stale handles.
+ * A user whose handle is `handle.invalid` (expired domain) will be re-checked
+ * at most once per this interval, regardless of how many events reference them.
+ * Once the handle resolves to something valid, it stops being re-checked.
+ */
+const STALE_HANDLE_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 /** Event $types that signal a user we may not yet have a profile for. */
 const NEW_USER_SIGNALS: EventType[] = [
   "space.roomy.space.addAdmin.v0",
@@ -150,6 +158,8 @@ async function filterMissing(db: DbLike, candidates: Set<UserDid>): Promise<User
   if (resolvable.length === 0) return [];
 
   const placeholders = resolvable.map(() => "?").join(",");
+
+  // DIDs that already have a profile (comp_info exists)
   const present = new Set(
     (await db
       .query(`select entity from comp_info where entity in (${placeholders})`)
@@ -157,7 +167,16 @@ async function filterMissing(db: DbLike, candidates: Set<UserDid>): Promise<User
     ).map((r) => r.entity),
   );
 
-  return resolvable.filter((d) => !present.has(d));
+  // DIDs with a stale handle.invalid — re-fetch if cooldown has elapsed
+  const cutoff = Date.now() - STALE_HANDLE_COOLDOWN_MS;
+  const staleHandleDids = new Set(
+    (await db
+      .query(`select did from comp_user where handle = 'handle.invalid' and updated_at < ? and did in (${placeholders})`)
+      .all<{ did: string }>(cutoff, ...resolvable)
+    ).map((r) => r.did),
+  );
+
+  return resolvable.filter((d) => !present.has(d) || staleHandleDids.has(d));
 }
 
 /** Insert one transaction's worth of profile rows. */
@@ -165,7 +184,7 @@ async function insertProfiles(db: DbLike, profiles: ProfileViewDetailed[]): Prom
   const steps: Array<{ type: "query" | "run" | "exec"; sql: string; params?: unknown[] }> = [];
   for (const p of profiles) {
     steps.push({ type: "run", sql: "insert into entities (id, stream_id) values (?, ?) on conflict(id) do nothing", params: [p.did, p.did] });
-    steps.push({ type: "run", sql: "insert into comp_user (did, handle) values (?, ?) on conflict(did) do nothing", params: [p.did, p.handle] });
+    steps.push({ type: "run", sql: "insert into comp_user (did, handle) values (?, ?) on conflict(did) do update set handle = excluded.handle, updated_at = unixepoch() * 1000", params: [p.did, p.handle] });
     steps.push({ type: "run", sql: "insert into comp_info (entity, name, avatar) values (?, ?, ?) on conflict(entity) do nothing", params: [p.did, p.displayName ?? p.handle, p.avatar ?? null] });
   }
   await db.transaction(steps);
