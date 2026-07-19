@@ -157,3 +157,69 @@ export async function callAdminClearFlag(agent: Agent, flag: string) {
   const res = await c.call("space.roomy.admin.clearFlag", {}, { flag });
   return res.data;
 }
+
+// ── Push diagnostics (admin-only) ─────────────────────────────────────────
+
+export interface PushSubscriptionInfo {
+  endpoint: string;
+  pushService: string;
+  p256dh: string;
+  auth: string;
+  expirationTime: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export async function callAdminGetSubscriptions(
+  agent: Agent,
+  userDid: string,
+): Promise<{ userDid: string; subscriptions: PushSubscriptionInfo[] }> {
+  const c = await getClient(agent);
+  const res = await c.call("space.roomy.admin.push.getSubscriptions", { did: userDid });
+  return res.data as { userDid: string; subscriptions: PushSubscriptionInfo[] };
+}
+
+export interface PushStats {
+  vapidConfigured: boolean;
+  vapidPublicKey: string | null;
+  dispatcherStarted: boolean;
+  stats: {
+    queueDepth: number;
+    dispatched: number;
+    deliveredOk: number;
+    gone: number;
+    failed: number;
+    digestsFired: number;
+  };
+  totalSubscriptions: number;
+  pushFlag: {
+    globalEnabled: boolean;
+    assignedDids: string[];
+  } | null;
+}
+
+export async function callAdminGetPushStats(agent: Agent): Promise<PushStats> {
+  const c = await getClient(agent);
+  const res = await c.call("space.roomy.admin.push.getStats", {});
+  return res.data as PushStats;
+}
+
+export interface PushTestResult {
+  endpoint: string;
+  pushService: string;
+  status: number | null;
+  gone: boolean;
+  error: string | null;
+}
+
+export async function callAdminTestSend(
+  agent: Agent,
+  userDid: string,
+  endpoint?: string,
+): Promise<{ userDid: string; totalEndpoints: number; results: PushTestResult[] }> {
+  const c = await getClient(agent);
+  const body: Record<string, unknown> = { did: userDid };
+  if (endpoint) body.endpoint = endpoint;
+  const res = await c.call("space.roomy.admin.push.testSend", {}, body);
+  return res.data as { userDid: string; totalEndpoints: number; results: PushTestResult[] };
+}

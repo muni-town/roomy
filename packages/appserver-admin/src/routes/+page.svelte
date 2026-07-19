@@ -13,6 +13,12 @@
     callAdminGetFlags,
     callAdminSetFlag,
     callAdminClearFlag,
+    callAdminGetSubscriptions,
+    callAdminGetPushStats,
+    callAdminTestSend,
+    type PushSubscriptionInfo,
+    type PushStats,
+    type PushTestResult,
     NSIDS,
   } from "$lib/xrpc";
   import {
@@ -127,6 +133,58 @@
       renderResult(`Failed to clear flag: ${err?.message ?? err}`, true);
     } finally {
       flagLoading = false;
+    }
+  }
+
+  // ── Push diagnostics state ────────────────────────────────────────────────
+
+  let pushUserDid = $state(sessionStorage.getItem("push-user-did") ?? "");
+  let pushStats: PushStats | null = $state(null);
+  let pushSubscriptions: PushSubscriptionInfo[] | null = $state(null);
+  let pushTestResults: PushTestResult[] | null = $state(null);
+  let pushLoading = $state(false);
+
+  $effect(() => { if (pushUserDid) sessionStorage.setItem("push-user-did", pushUserDid); });
+
+  async function onPushGetStats() {
+    pushLoading = true;
+    try {
+      pushStats = await callAdminGetPushStats(auth.agent!);
+      renderResult(pushStats);
+    } catch (err: any) {
+      renderResult(`Failed to get push stats: ${err?.message ?? err}`, true);
+    } finally {
+      pushLoading = false;
+    }
+  }
+
+  async function onPushGetSubscriptions() {
+    if (!pushUserDid.trim()) { renderResult({ error: "Missing user DID" }, true); return; }
+    pushLoading = true;
+    try {
+      const data = await callAdminGetSubscriptions(auth.agent!, pushUserDid.trim());
+      pushSubscriptions = data.subscriptions;
+      renderResult(data);
+    } catch (err: any) {
+      pushSubscriptions = null;
+      renderResult(`Failed to get subscriptions: ${err?.message ?? err}`, true);
+    } finally {
+      pushLoading = false;
+    }
+  }
+
+  async function onPushTestSend(endpoint?: string) {
+    if (!pushUserDid.trim()) { renderResult({ error: "Missing user DID" }, true); return; }
+    pushLoading = true;
+    try {
+      const data = await callAdminTestSend(auth.agent!, pushUserDid.trim(), endpoint);
+      pushTestResults = data.results;
+      renderResult(data);
+    } catch (err: any) {
+      pushTestResults = null;
+      renderResult(`Failed to test send: ${err?.message ?? err}`, true);
+    } finally {
+      pushLoading = false;
     }
   }
   $effect(() => { if (wsSubId) sessionStorage.setItem("ws-sub-id", wsSubId); });
@@ -503,6 +561,125 @@
               <pre class="text-xs leading-relaxed whitespace-pre-wrap">{line}</pre>
             {/each}
           </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- ─── Push Diagnostics ─────────────────────────────────────────────── -->
+    <section class="mb-6">
+      <details>
+        <summary class="text-lg font-semibold cursor-pointer mb-3">Push Diagnostics</summary>
+
+        <!-- Pipeline stats -->
+        <div class="mb-4">
+          <h3 class="text-sm font-medium text-base-500 mb-2">Pipeline Stats</h3>
+          <div class="flex flex-wrap gap-2 mb-3">
+            <Button onclick={onPushGetStats} disabled={pushLoading}>Get Push Stats</Button>
+          </div>
+          {#if pushStats}
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">VAPID</p>
+                <p class="text-sm font-medium" class:text-green-600={pushStats.vapidConfigured} class:text-red-500={!pushStats.vapidConfigured}>
+                  {pushStats.vapidConfigured ? "Configured" : "Not configured"}
+                </p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Delivered OK</p>
+                <p class="text-sm font-medium text-green-600">{pushStats.stats.deliveredOk}</p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Gone (pruned)</p>
+                <p class="text-sm font-medium" class:text-amber-600={pushStats.stats.gone > 0} class:text-base-500={pushStats.stats.gone === 0}>
+                  {pushStats.stats.gone}
+                </p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Failed</p>
+                <p class="text-sm font-medium" class:text-red-500={pushStats.stats.failed > 0} class:text-base-500={pushStats.stats.failed === 0}>
+                  {pushStats.stats.failed}
+                </p>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Dispatched</p>
+                <p class="text-sm font-medium">{pushStats.stats.dispatched}</p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Digests Fired</p>
+                <p class="text-sm font-medium">{pushStats.stats.digestsFired}</p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Total Subs</p>
+                <p class="text-sm font-medium">{pushStats.totalSubscriptions}</p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Push Flag</p>
+                <p class="text-sm font-medium" class:text-green-600={pushStats.pushFlag?.globalEnabled} class:text-base-500={!pushStats.pushFlag?.globalEnabled}>
+                  {pushStats.pushFlag?.globalEnabled ? "Global ON" : "Off"}
+                </p>
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <!-- User subscriptions + test send -->
+        <div class="mb-4">
+          <h3 class="text-sm font-medium text-base-500 mb-2">User Subscriptions & Test Send</h3>
+          <label for="push-user-did" class="block text-xs mb-1">User DID</label>
+          <Input id="push-user-did" bind:value={pushUserDid} placeholder="did:plc:..." />
+          <div class="flex flex-wrap gap-2 mt-2 mb-3">
+            <Button onclick={onPushGetSubscriptions} disabled={pushLoading || !pushUserDid.trim()}>Get Subscriptions</Button>
+            <Button onclick={() => onPushTestSend()} disabled={pushLoading || !pushUserDid.trim()}>Test Send (all)</Button>
+            <Button onclick={() => onPushTestSend("fcm.googleapis.com")} disabled={pushLoading || !pushUserDid.trim()}>Test Send (Chrome/FCM)</Button>
+            <Button onclick={() => onPushTestSend("updates.push.services.mozilla.com")} disabled={pushLoading || !pushUserDid.trim()}>Test Send (Firefox)</Button>
+          </div>
+
+          {#if pushSubscriptions !== null}
+            {#if pushSubscriptions.length === 0}
+              <p class="text-sm text-amber-600 mb-2">No subscriptions registered for this user.</p>
+            {:else}
+              <h4 class="text-xs font-medium text-base-500 mb-1">Subscriptions ({pushSubscriptions.length})</h4>
+              <div class="space-y-2 mb-3">
+                {#each pushSubscriptions as sub}
+                  <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50 text-sm">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="font-mono text-xs px-2 py-0.5 rounded bg-base-100 dark:bg-base-800 text-base-600 dark:text-base-400">{sub.pushService}</span>
+                      {#if sub.expirationTime}
+                        <span class="text-xs text-amber-500">expires {new Date(sub.expirationTime).toLocaleString()}</span>
+                      {/if}
+                    </div>
+                    <p class="text-xs text-base-400 font-mono truncate" title={sub.endpoint}>{sub.endpoint}</p>
+                    <p class="text-xs text-base-400 mt-1">Updated: {new Date(sub.updatedAt).toLocaleString()}</p>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {/if}
+
+          {#if pushTestResults !== null}
+            <h4 class="text-xs font-medium text-base-500 mb-1">Test Send Results</h4>
+            <div class="space-y-2">
+              {#each pushTestResults as r}
+                <div class="border rounded-xl p-3 text-sm {r.gone ? 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30' : r.error ? 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30' : 'border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30'}">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="font-mono text-xs px-2 py-0.5 rounded bg-base-100 dark:bg-base-800 text-base-600 dark:text-base-400">{r.pushService}</span>
+                    {#if r.status !== null}
+                      <span class="text-xs font-medium" class:text-green-600={r.status >= 200 && r.status < 300} class:text-red-500={r.status >= 400}>HTTP {r.status}</span>
+                    {/if}
+                    {#if r.gone}
+                      <span class="text-xs text-red-500 font-medium">GONE (pruned)</span>
+                    {/if}
+                  </div>
+                  {#if r.error}
+                    <p class="text-xs text-red-500">{r.error}</p>
+                  {/if}
+                  <p class="text-xs text-base-400 font-mono truncate" title={r.endpoint}>{r.endpoint}</p>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       </details>
     </section>
