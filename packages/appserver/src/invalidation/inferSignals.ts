@@ -18,6 +18,7 @@ import type { AppliedEvent, InvalidationEvent, QueryNsid } from "./types.ts";
 import type { DbLike } from "../db/types.ts";
 import { openDb } from "../db/db.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
+import { getRoomReadPositionUsers } from "../queries/readPositions.ts";
 
 // ─── Public API ─────────────────────────────────────────────────────────
 
@@ -120,12 +121,41 @@ async function handleCreateMessage(
       },
     });
   }
-  // Room metadata (unread count, recentThreads) + space sidebar (unread
-  // counts on the channel). `invalidateRoom` already broadcasts
-  // `space.roomy.space.getMetadata` to every space-subscribed connection,
-  // so the author's activeThreads refresh is covered — no separate
-  // author-scoped invalidation needed.
-  signals.push(...invalidateRoom(roomId, spaceId));
+
+  // Per-user unread-count diff. The materializer already bumped
+  // `unread_count + 1` for every user with a `read_positions` row for
+  // this room; one read here yields the affected user set. The
+  // SyncManager sends a dedicated `#roomMetadataDiff` frame to each
+  // user's connection, which patches `room.getMetadata.unreadCount`,
+  // the matching `SpaceRow.unreadCount` in `getSpaces`, and the channel
+  // entry in the `space.getMetadata` sidebar tree — all with `delta +1`,
+  // no refetch.
+  const users = await getRoomReadPositionUsers(db ?? openDb(), roomId);
+  if (users.length > 0) {
+    signals.push({
+      kind: "roomMetadataDiff",
+      signal: {
+        spaceId,
+        roomId,
+        seq: 0,
+        delta: 1,
+        users,
+      },
+    });
+  }
+
+  // recentThreads / room.getThreads may have changed (the new message is
+  // the latest activity in the room). Unread count is handled by the diff
+  // above, so this invalidation is only for the thread-activity fields.
+  signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));
+  signals.push(invalidate("space.roomy.room.getThreads", { roomId }));
+
+  // A message in a thread may update the author's `activeThreads` in the
+  // space sidebar. The `roomMetadataDiff` only patches `unreadCount`, not
+  // `activeThreads`, so invalidate `space.getMetadata` for the author only.
+  signals.push(
+    invalidate("space.roomy.space.getMetadata", { spaceId }, event.user),
+  );
 
   return signals;
 }

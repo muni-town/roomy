@@ -64,7 +64,7 @@ export class Router implements IInvalidationRouter {
     for (const event of events) {
       const signals = await inferSignals(event, db, messageSnapshots);
       for (const signal of signals) {
-        if (signal.kind === "messageDiff") {
+        if (signal.kind === "messageDiff" || signal.kind === "roomMetadataDiff") {
           signal.signal.seq = ++this.#seq;
         }
       }

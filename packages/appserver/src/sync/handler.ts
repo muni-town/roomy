@@ -11,6 +11,8 @@
  *
  * When a signal arrives from the InvalidationRouter:
  *   - messageDiff → #messageDiff frame to connections subscribed to that room
+ *   - roomMetadataDiff → #roomMetadataDiff frame to each affected user's
+ *     connections (per-user unread count, not a broadcast)
  *   - queryInvalidation → #invalidate frame to connections subscribed to the
  *     relevant topic, filtered by affectedUser
  */
@@ -244,11 +246,12 @@ export class SyncManager {
   }
 
   // ─── Signal routing ────────────────────────────────────────────────
-
   #onSignals(events: readonly InvalidationEvent[]): void {
     for (const event of events) {
       if (event.kind === "messageDiff") {
         this.#routeMessageDiff(event.signal);
+      } else if (event.kind === "roomMetadataDiff") {
+        this.#routeRoomMetadataDiff(event.signal);
       } else if (event.kind === "queryInvalidation") {
         this.#routeQueryInvalidation(event.signal);
       }
@@ -275,6 +278,34 @@ export class SyncManager {
     for (const connId of connIds) {
       const conn = this.#connections.get(connId);
       if (conn?.isOpen) {
+        conn.send(frame);
+      }
+    }
+  }
+
+  #routeRoomMetadataDiff(
+    signal: InvalidationEvent["signal"] & {
+      spaceId: string;
+      roomId: string;
+      seq: number;
+      delta: number;
+      users: ReadonlyArray<string>;
+    },
+  ): void {
+    // Per-user: the frame carries a delta (the same for every user), but
+    // we still send one frame per user rather than broadcasting — only
+    // users with a read_positions row for this room should see the unread
+    // bump. A user may have multiple connections open (multiple tabs).
+    const frame = messageFrame("#roomMetadataDiff", {
+      spaceId: signal.spaceId,
+      roomId: signal.roomId,
+      delta: signal.delta,
+      seq: signal.seq,
+    });
+    for (const user of signal.users) {
+      for (const conn of this.#connections.values()) {
+        if (!conn.isOpen) continue;
+        if (conn.did !== user) continue;
         conn.send(frame);
       }
     }

@@ -73,10 +73,46 @@ export type MessageDiffOp =
  */
 export type MessageSnapshot = MessageDto;
 
+/**
+ * Unread-count delta for a room, emitted when a message is created.
+ * Unlike `MessageDiff` (broadcast to the room topic), this signal is
+ * per-user: the SyncManager sends a `#roomMetadataDiff` frame to each
+ * affected user's connection.
+ *
+ * The frame carries a `delta` (the increment, `+1` per message) rather
+ * than the absolute unread count — the client applies `prev + delta` to
+ * each cache entry, so the server never needs to read the absolute count
+ * or know the previous value.
+ *
+ * Replaces the broad `getSpaces` + `space.getMetadata` invalidation that
+ * previously fired on every message create — the client patches
+ * `room.getMetadata.unreadCount`, the matching `SpaceRow.unreadCount` in
+ * `getSpaces`, and the channel's `unreadCount` in the `space.getMetadata`
+ * sidebar tree directly from the frame, with no refetch.
+ */
+export interface RoomMetadataDiff {
+  spaceId: StreamDid;
+  roomId: Ulid;
+  /** Monotonically increasing sequence number for cursor replay. */
+  seq: number;
+  /**
+   * The unread-count increment (always `+1` per createMessage event). The
+   * client adds this to the cached `unreadCount` of each patched entry.
+   */
+  delta: number;
+  /**
+   * The users with a `read_positions` row for this room — exactly the set
+   * the materializer's unread-count bump touched. The SyncManager sends
+   * one `#roomMetadataDiff` frame per user in this list.
+   */
+  users: ReadonlyArray<UserDid>;
+}
+
 /** The union of what the invalidation system can emit. */
 export type InvalidationEvent =
   | { kind: "queryInvalidation"; signal: QueryInvalidation }
-  | { kind: "messageDiff"; signal: MessageDiff };
+  | { kind: "messageDiff"; signal: MessageDiff }
+  | { kind: "roomMetadataDiff"; signal: RoomMetadataDiff };
 
 // ─── Router ─────────────────────────────────────────────────────────────
 

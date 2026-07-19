@@ -11,10 +11,10 @@
         "did": {
           "type": "string"
         },
-        "handle": {
+        "avatar": {
           "type": "string"
         },
-        "avatar": {
+        "handle": {
           "type": "string"
         },
         "name": {

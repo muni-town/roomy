@@ -26,3 +26,8 @@ export {
 export { SyncRouter, type SyncRouterOptions } from "./router";
 export { TopicManager } from "./topics";
 export { applyMessageDiff, type Message, type MessageDiffOp } from "./diff";
+export {
+  patchRoomMetadata,
+  patchSpaces,
+  patchSpaceMetadata,
+} from "./roomMetadataDiff";

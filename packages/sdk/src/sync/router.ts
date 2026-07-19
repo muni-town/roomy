@@ -15,12 +15,24 @@
 import { type } from "arktype";
 import { Body as InvalidateBody } from "../schemas/frames/invalidate";
 import { Body as MessageDiffBody } from "../schemas/frames/messageDiff";
+import { Body as RoomMetadataDiffBody } from "../schemas/frames/roomMetadataDiff";
 import type { CacheAdapter } from "../cache/adapter";
 import { queryKey } from "../cache/query-key";
 import { applyMessageDiff, type Message } from "./diff";
+import {
+  patchRoomMetadata,
+  patchSpaces,
+  patchSpaceMetadata,
+  type RoomMetadataResponse,
+  type GetSpacesResponse,
+  type SpaceMetadataResponse,
+} from "./roomMetadataDiff";
 import type { SyncConnection, SyncFrame, Unsubscribe } from "./connection";
 
 const GET_MESSAGES_NSID = "space.roomy.room.getMessages" as const;
+const ROOM_METADATA_NSID = "space.roomy.room.getMetadata" as const;
+const GET_SPACES_NSID = "space.roomy.space.getSpaces" as const;
+const SPACE_METADATA_NSID = "space.roomy.space.getMetadata" as const;
 
 export interface SyncRouterOptions {
   /**
@@ -103,6 +115,34 @@ export class SyncRouter {
       this.#adapter.patch<Message[]>(
         queryKey(GET_MESSAGES_NSID, { roomId: parsed.roomId }),
         (prev) => applyMessageDiff(prev, parsed.ops),
+      );
+      return;
+    }
+
+    if (t === "#roomMetadataDiff") {
+      const parsed = RoomMetadataDiffBody(frame.body);
+      if (parsed instanceof type.errors) {
+        this.#opts.onValidationError?.({
+          frameType: t,
+          summary: parsed.summary,
+          raw: frame.body,
+        });
+        return;
+      }
+      // Patch three cache entries from the one frame. Each patcher returns
+      // undefined when its cache entry is absent or the target isn't found —
+      // a no-op (`setQueryData` treats undefined as "don't write").
+      this.#adapter.patch<RoomMetadataResponse>(
+        queryKey(ROOM_METADATA_NSID, { roomId: parsed.roomId }),
+        (prev) => patchRoomMetadata(prev, parsed.delta),
+      );
+      this.#adapter.patch<GetSpacesResponse>(
+        queryKey(GET_SPACES_NSID),
+        (prev) => patchSpaces(prev, parsed.spaceId, parsed.delta),
+      );
+      this.#adapter.patch<SpaceMetadataResponse>(
+        queryKey(SPACE_METADATA_NSID, { spaceId: parsed.spaceId }),
+        (prev) => patchSpaceMetadata(prev, parsed.roomId, parsed.delta),
       );
       return;
     }

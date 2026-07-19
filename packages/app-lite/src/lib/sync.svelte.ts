@@ -117,6 +117,21 @@ export function createSyncContext(deps: {
         if (typeof body.roomId === "string" && typeof body.seq === "number") {
           onMessageDiff?.(body.roomId, body.seq);
         }
+      } else if (t === "#roomMetadataDiff") {
+        const body = frame.body as {
+          spaceId?: string;
+          roomId?: string;
+          delta?: number;
+          seq?: number;
+        };
+        log(
+          `[roomMetadataDiff] spaceId=${body.spaceId} roomId=${body.roomId} delta=${body.delta} seq=${body.seq}`,
+        );
+        // The seq shares the same global counter as #messageDiff, so feed
+        // it into the same gap-detection path.
+        if (typeof body.roomId === "string" && typeof body.seq === "number") {
+          onMessageDiff?.(body.roomId, body.seq);
+        }
       } else if (t === "#invalidate") {
         const body = frame.body as { nsid?: string; params?: unknown };
         log(

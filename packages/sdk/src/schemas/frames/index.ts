@@ -3,6 +3,7 @@
  *
  * Server → client frames (CBOR body, paired with a header `{op, t}`):
  *   - messageDiff (#messageDiff)
+ *   - roomMetadataDiff (#roomMetadataDiff)
  *   - invalidate (#invalidate)
  *   - error (#error)
  *
@@ -10,6 +11,7 @@
  *   - clientMessage (sub / unsub / cursor)
  */
 export * as messageDiff from "./messageDiff";
+export * as roomMetadataDiff from "./roomMetadataDiff";
 export * as invalidate from "./invalidate";
 export * as errorFrame from "./error";
 export * as clientMessage from "./clientMessage";

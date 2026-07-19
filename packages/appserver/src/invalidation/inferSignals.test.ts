@@ -61,6 +61,10 @@ function invalidatedNsids(signals: InvalidationEvent[]): QueryNsid[] {
 function findMessageDiff(signals: InvalidationEvent[]) {
   return signals.find((s) => s.kind === "messageDiff");
 }
+
+function findRoomMetadataDiff(signals: InvalidationEvent[]) {
+  return signals.find((s) => s.kind === "roomMetadataDiff");
+}
 /**
  * Materialize a message into a fresh in-memory DB and return a DbLike
  * so `inferSignals` can read the materialized row.
@@ -84,6 +88,11 @@ function seedMessageDb(opts: {
   const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
   db.exec(schemaSql);
   db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
+  // Attach readstate schema (handleCreateMessage reads read_positions).
+  db.exec("attach database ':memory:' as readstate");
+  db.exec(
+    "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
+  );
   const ts = Date.parse("2026-05-08T12:00:00Z");
 
   db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
@@ -109,18 +118,24 @@ function seedMessageDb(opts: {
   ]);
   return { db, asyncDb: toAsyncDb(db) };
 }
-
 // ─── Message events ─────────────────────────────────────────────────────
 
 describe("inferSignals: message events", () => {
-  it("createMessage produces a messageDiff + room/space invalidation", async () => {
-    const { asyncDb } = seedMessageDb({
+  it("createMessage produces a messageDiff + roomMetadataDiff + room/space invalidation", async () => {
+    const { db, asyncDb } = seedMessageDb({
       id: EVENT_ID,
       roomId: ROOM_ID,
       authorDid: USER_DID,
       authorName: "Alice",
       content: "hello",
     });
+    // Seed a read_positions row so getRoomUnreadCounts has a user to report.
+    // In production the materializer bumps unread_count before inferSignals
+    // runs; here we pre-seed the row to simulate that.
+    db.run(
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
+      [USER_DID, ROOM_ID, "0", 1],
+    );
 
     const signals = await inferSignals(
       makeEvent({
@@ -163,10 +178,27 @@ describe("inferSignals: message events", () => {
       expect(diff!.signal.seq).toBe(0);
     }
 
-    // Also invalidates room metadata and space metadata (unread counts).
+    // roomMetadataDiff carries the delta and the affected user set. The
+    // message-create path replaces the broad getSpaces broadcast with
+    // this targeted diff.
+    const roomDiff = findRoomMetadataDiff(signals);
+    expect(roomDiff).toBeDefined();
+    if (roomDiff!.kind === "roomMetadataDiff") {
+      expect(roomDiff!.signal.spaceId).toBe(STREAM_DID);
+      expect(roomDiff!.signal.roomId).toBe(ROOM_ID);
+      expect(roomDiff!.signal.delta).toBe(1);
+      expect(roomDiff!.signal.users).toHaveLength(1);
+      expect(roomDiff!.signal.users[0]).toBe(USER_DID);
+    }
+
+    // Still invalidates room metadata (recentThreads) and space metadata
+    // (author's activeThreads). The getSpaces broadcast is gone — the
+    // roomMetadataDiff handles the unread-count patch instead.
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMetadata");
+    expect(nsids).toContain("space.roomy.room.getThreads");
     expect(nsids).toContain("space.roomy.space.getMetadata");
+    expect(nsids).not.toContain("space.roomy.space.getSpaces");
   });
 
   it("createMessage uses a pre-fetched messageSnapshots map and skips the DB read", async () => {

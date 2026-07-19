@@ -6,6 +6,7 @@
  */
 
 import type { DbLike } from "../db/types.ts";
+import type { UserDid } from "@roomy-space/sdk";
 
 export interface ReadPosition {
   unreadCount: number;
@@ -121,6 +122,30 @@ export async function getSpaceUnreadCount(
     )
     .get<{ total: number }>([userDid, spaceId]);
   return row?.total ?? 0;
+}
+/**
+ * Return every user with a `read_positions` row for `roomId`. This is
+ * exactly the set the materializer's unread-count bump touched (see
+ * `applyBundle`), so calling this right after a `createMessage` event
+ * yields the affected users in a single query — used to drive targeted
+ * `#roomMetadataDiff` frames instead of broadcasting a `getSpaces`
+ * invalidation to every connection.
+ *
+ * The frame carries a `delta` (the unread-count increment, always +1 per
+ * message), not the absolute count — the client applies `prev + delta` to
+ * each cache entry, avoiding the need to read the absolute count or to
+ * know the previous value server-side.
+ */
+export async function getRoomReadPositionUsers(
+  db: DbLike,
+  roomId: string,
+): Promise<UserDid[]> {
+  const rows = await db
+    .query(
+      `select user_did from readstate.read_positions where room_id = ?`,
+    )
+    .all<{ user_did: string }>([roomId]);
+  return rows.map((r) => r.user_did as UserDid);
 }
 
 /**

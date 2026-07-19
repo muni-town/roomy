@@ -21,9 +21,12 @@ export type QueryKey = readonly unknown[];
  * Patcher function passed to {@link CacheAdapter.patch}. Receives the
  * previous cached value (or `undefined` if the entry doesn't exist
  * yet — important for diff streams that race ahead of the initial
- * fetch) and returns the new value to store.
+ * fetch) and returns the new value to store. Returning `undefined`
+ * signals a no-op: the implementation leaves the cache entry as-is
+ * (for TanStack, `setQueryData` treats an undefined return as "don't
+ * write" — neither creating nor deleting an entry).
  */
-export type CachePatcher<T> = (prev: T | undefined) => T;
+export type CachePatcher<T> = (prev: T | undefined) => T | undefined;
 
 /**
  * Minimal write surface a cache library must expose to the SDK.
