@@ -32,6 +32,9 @@ import { getFlagsHandler } from "./handlers/space.roomy.getFlags.ts";
 import { adminGetFlagsHandler } from "./handlers/space.roomy.admin.getFlags.ts";
 import { adminSetFlagHandler } from "./handlers/space.roomy.admin.setFlag.ts";
 import { adminClearFlagHandler } from "./handlers/space.roomy.admin.clearFlag.ts";
+import { adminGetSubscriptionsHandler } from "./handlers/space.roomy.admin.push.getSubscriptions.ts";
+import { adminGetPushStatsHandler } from "./handlers/space.roomy.admin.push.getStats.ts";
+import { adminTestSendHandler } from "./handlers/space.roomy.admin.push.testSend.ts";
 import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
 import { getMembersHandler } from "./handlers/space.roomy.space.getMembers.ts";
 import { getMetadataHandler } from "./handlers/space.roomy.space.getMetadata.ts";
@@ -170,6 +173,16 @@ export function buildRouter(
     })
     .procedure("space.roomy.admin.clearFlag", {
       handler: adminClearFlagHandler,
+    })
+    // Admin push diagnostics (no arktype schemas — internal/admin).
+    .query("space.roomy.admin.push.getSubscriptions", {
+      handler: adminGetSubscriptionsHandler,
+    })
+    .query("space.roomy.admin.push.getStats", {
+      handler: adminGetPushStatsHandler,
+    })
+    .procedure("space.roomy.admin.push.testSend", {
+      handler: adminTestSendHandler,
     })
     .query("space.roomy.sync.getEvents", {
       handler: getEventsHandler,

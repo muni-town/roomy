@@ -260,9 +260,14 @@ async function deliverPayload(
           // Browser unsubscribed / expired — prune so we never retry it.
           await pruneSubscriptionByEndpoint(db, sub.endpoint);
           statsGone++;
-          log.debug(`[push-dispatcher] pruned gone subscription ${sub.endpoint.slice(0, 40)}…`);
+          let service = "unknown";
+          try { service = new URL(sub.endpoint).hostname; } catch { /* leave */ }
+          log.info(`[push-deliver] GONE (pruned) service=${service} endpoint=${sub.endpoint.slice(0, 60)}…`);
         } else if (res.status !== null) {
           statsDeliveredOk++;
+          let service = "unknown";
+          try { service = new URL(sub.endpoint).hostname; } catch { /* leave */ }
+          log.debug(`[push-deliver] OK status=${res.status} service=${service} endpoint=${sub.endpoint.slice(0, 60)}…`);
         }
       } catch (err) {
         statsFailed++;
@@ -277,11 +282,12 @@ async function deliverPayload(
         ) {
           status = String((err as { statusCode: number }).statusCode);
         }
+        let service = "unknown";
+        try { service = new URL(sub.endpoint).hostname; } catch { /* leave */ }
         log.warn(
-          `[push-dispatcher] send failed (status=${status}) for ${sub.endpoint.slice(0, 40)}…:`,
+          `[push-deliver] FAILED status=${status} service=${service} endpoint=${sub.endpoint.slice(0, 60)}…:`,
           err instanceof Error ? err.message : err,
         );
-        // Phase 2: log + move on. Phase 4 will add retry/backoff.
       }
     }),
   );

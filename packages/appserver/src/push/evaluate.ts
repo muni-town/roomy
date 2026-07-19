@@ -168,6 +168,7 @@ export async function evaluatePush(
   }
 
   const candidateDids = await enumerateRecipients(db, spaceId);
+  log.debug(`[push-evaluate] ${messageId} in ${roomId}: ${candidateDids.length} candidate recipients`);
 
   const deliveries: PushDelivery[] = [];
   for (const did of candidateDids) {
@@ -179,41 +180,64 @@ export async function evaluatePush(
     // dispatcher process — so a user without the flag is skipped even if
     // they somehow have a stale subscription row.
     const enabledFlags = await getEnabledFlagsForUser(db, did);
-    if (!enabledFlags.includes("push-notifications")) continue;
+    if (!enabledFlags.includes("push-notifications")) {
+      log.debug(`[push-evaluate] skip ${did.slice(0, 20)}…: push-notifications flag not enabled`);
+      continue;
+    }
 
     const level = await resolveLevel(db, did, spaceId);
-    if (level === "silent") continue;
+    if (level === "silent") {
+      log.debug(`[push-evaluate] skip ${did.slice(0, 20)}…: level=silent`);
+      continue;
+    }
 
     // Read-access filter (reuse the auth unit). Skip users who can't read
     // the room — never leak a notification for a room they can't open.
     const access = await roomAccess(db, roomId, did);
-    if (!access.canRead) continue;
+    if (!access.canRead) {
+      log.debug(`[push-evaluate] skip ${did.slice(0, 20)}…: no read access to room`);
+      continue;
+    }
 
     // Only enqueue if the user has at least one subscription.
     const subs = await selectSubscriptions(db, did);
-    if (subs.length === 0) continue;
+    if (subs.length === 0) {
+      log.debug(`[push-evaluate] skip ${did.slice(0, 20)}…: no push subscriptions registered`);
+      continue;
+    }
 
     // Phase 3: mention detection. Check if this recipient was mentioned.
     const mentioned = mentions?.includes(did) ?? false;
 
     // Immediate push paths: busy always, quiet+mentioned, engaged+mentioned.
     if (level === "busy" || (level === "quiet" && mentioned) || (level === "engaged" && mentioned)) {
+      log.info(`[push-evaluate] deliver ${level}${mentioned ? "+mentioned" : ""} → ${did.slice(0, 20)}… (${subs.length} subscription(s))`);
       deliveries.push({ userDid: did, payload: buildMessagePayload(job, facts, icon) });
       continue;
     }
 
     // Quiet (not mentioned) → skip (behaves like silent).
-    if (level === "quiet") continue;
+    if (level === "quiet") {
+      log.debug(`[push-evaluate] skip ${did.slice(0, 20)}…: level=quiet, not mentioned`);
+      continue;
+    }
 
     // level === "engaged", not mentioned → digest path.
     // Participation gate: only rooms the recipient has sent a message in.
     // (Lazy-backfilled once per user+space so the gate works for existing
     // users without them sending a new message first.)
-    if (!(await hasUserParticipatedInSpace(db, did, spaceId, roomId))) continue;
+    if (!(await hasUserParticipatedInSpace(db, did, spaceId, roomId))) {
+      log.debug(`[push-evaluate] skip ${did.slice(0, 20)}…: engaged, not participated in space`);
+      continue;
+    }
 
     const outcome = await upsertNotificationState(db, did, roomId, timestamp, messageId);
-    if (!outcome.fireNow) continue; // below threshold; sweep catches the 1h timer
+    if (!outcome.fireNow) {
+      log.debug(`[push-evaluate] skip ${did.slice(0, 20)}…: engaged digest pending (${outcome.unseenCount} unseen, threshold not reached)`);
+      continue; // below threshold; sweep catches the 1h timer
+    }
 
+    log.info(`[push-evaluate] deliver engaged digest → ${did.slice(0, 20)}… (${outcome.unseenCount} messages)`);
     const payload: PushPayload = {
       type: "digest",
       spaceId,
@@ -225,5 +249,6 @@ export async function evaluatePush(
     deliveries.push({ userDid: did, payload });
   }
 
+  log.debug(`[push-evaluate] ${messageId}: ${deliveries.length} delivery(s) from ${candidateDids.length} candidates`);
   return deliveries;
 }

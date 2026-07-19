@@ -160,14 +160,24 @@ export async function ensurePushSubscription(): Promise<PushOutcome> {
  * Outcome is logged but not surfaced (no toast at login).
  */
 export async function subscribeIfAlreadyPermitted(): Promise<void> {
-  if (!(await isPushFeatureEnabled())) return;
-  if (!supportsPush()) return;
-  if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+  console.debug("[push:login] subscribeIfAlreadyPermitted starting");
+  const flagOk = await isPushFeatureEnabled();
+  console.debug("[push:login] feature flag enabled:", flagOk);
+  if (!flagOk) return;
+  if (!supportsPush()) {
+    console.debug("[push:login] push not supported, skipping");
     return;
   }
+  if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+    console.debug("[push:login] permission not granted (", Notification.permission, "), skipping");
+    return;
+  }
+  console.debug("[push:login] calling subscribeAndRegister…");
   const outcome = await subscribeAndRegister();
   if (outcome.status !== "ok") {
-    console.warn("[push] background re-subscribe failed:", outcome.status, "message" in outcome ? outcome.message : "");
+    console.warn("[push:login] background re-subscribe failed:", outcome.status, "message" in outcome ? outcome.message : "");
+  } else {
+    console.info("[push:login] re-subscribe OK");
   }
 }
 

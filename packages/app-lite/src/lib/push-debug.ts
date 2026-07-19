@@ -25,12 +25,47 @@ const DEV = import.meta.env.DEV;
 
 type PushLevel = "silent" | "quiet" | "engaged" | "busy";
 
+interface PushDiagnostics {
+  timestamp: string;
+  browser: {
+    userAgent: string;
+    platform: string;
+    language: string;
+  };
+  pushSupport: {
+    serviceWorker: boolean;
+    pushManager: boolean;
+    notifications: boolean;
+  };
+  notificationPermission: NotificationPermission;
+  serviceWorker: {
+    registered: boolean;
+    scope: string | null;
+    active: boolean;
+    installing: boolean;
+    waiting: boolean;
+  } | null;
+  subscription: {
+    endpoint: string;
+    pushService: string;
+    expirationTime: number | null;
+    hasKeys: boolean;
+  } | null;
+  vapidKey: {
+    configured: boolean;
+    length: number | null;
+  } | null;
+  featureFlagEnabled: boolean | null;
+  lastRegisteredEndpoint: string | null;
+}
+
 interface RoomyPushDebug {
   subscribe: () => Promise<void>;
   testSubscribe: () => Promise<PushSubscription>;
   getPrefs: () => Promise<unknown>;
   setDefault: (level: PushLevel) => Promise<void>;
   setSpace: (spaceId: string, level: PushLevel) => Promise<void>;
+  diagnostics: () => Promise<PushDiagnostics>;
 }
 
 /** Install `window.roomyPush` in dev builds. Safe to call repeatedly. */
@@ -91,6 +126,82 @@ export function installPushDebug(): void {
         spaceId,
         level,
       });
+    },
+    async diagnostics() {
+      const now = new Date().toISOString();
+      const supports = {
+        serviceWorker: "serviceWorker" in navigator,
+        pushManager: "PushManager" in window,
+        notifications: typeof Notification !== "undefined",
+      };
+
+      let swInfo: PushDiagnostics["serviceWorker"] = null;
+      if (supports.serviceWorker) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          swInfo = {
+            registered: true,
+            scope: reg.scope,
+            active: reg.active !== null,
+            installing: reg.installing !== null,
+            waiting: reg.waiting !== null,
+          };
+        } catch {
+          swInfo = { registered: false, scope: null, active: false, installing: false, waiting: false };
+        }
+      }
+
+      let subInfo: PushDiagnostics["subscription"] = null;
+      if (swInfo && supports.pushManager) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            let pushService = "unknown";
+            try {
+              pushService = new URL(sub.endpoint).hostname;
+            } catch { /* leave as unknown */ }
+            subInfo = {
+              endpoint: sub.endpoint,
+              pushService,
+              expirationTime: sub.expirationTime,
+              hasKeys: !!sub.toJSON().keys?.p256dh,
+            };
+          }
+        } catch { /* leave null */ }
+      }
+
+      let vapidInfo: PushDiagnostics["vapidKey"] = null;
+      let featureFlag: boolean | null = null;
+      try {
+        const res = await px().query("space.roomy.push.getVapidPublicKey", {});
+        const key = typeof res.publicKey === "string" ? res.publicKey : "";
+        vapidInfo = { configured: key !== "", length: key ? key.length : null };
+      } catch { vapidInfo = { configured: false, length: null }; }
+
+      try {
+        const flagsRes = await px().query("space.roomy.getFlags", {});
+        const flags = Array.isArray(flagsRes.flags) ? flagsRes.flags : [];
+        featureFlag = flags.includes("push-notifications");
+      } catch { featureFlag = null; }
+
+      const result: PushDiagnostics = {
+        timestamp: now,
+        browser: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          language: navigator.language,
+        },
+        pushSupport: supports,
+        notificationPermission: typeof Notification !== "undefined" ? Notification.permission : "default",
+        serviceWorker: swInfo,
+        subscription: subInfo,
+        vapidKey: vapidInfo,
+        featureFlagEnabled: featureFlag,
+        lastRegisteredEndpoint: localStorage.getItem("roomy.push.lastEndpoint"),
+      };
+      console.info("[push] diagnostics:", result);
+      return result;
     },
   };
 
