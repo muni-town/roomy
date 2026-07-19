@@ -171,7 +171,6 @@ let {
   .sidebar-fixed {
     contain: layout style;
     padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
   }
 
