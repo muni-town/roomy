@@ -4,6 +4,7 @@
 		"moduleResolution": "bundler",
 		"allowImportingTsExtensions": true,
 		"types": ["bun"],
+		"customConditions": ["development"],
 		"outDir": "dist",
 		"rootDir": "src",
 		"noEmit": true

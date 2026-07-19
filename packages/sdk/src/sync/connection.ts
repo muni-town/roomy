@@ -107,6 +107,35 @@ export interface SyncConnectionOptions {
    * Default: 30000 (30 seconds).
    */
   backoffMaxMs?: number;
+  /**
+   * Heartbeat configuration. When set, the connection sends a WebSocket
+   * protocol-level `ping` frame on an interval and reconnects if no `pong`
+   * arrives within the timeout window. This keeps idle connections alive
+   * through proxies and load balancers that would otherwise drop them, and
+   * detects half-open sockets faster than relying on TCP keepalive alone.
+   *
+   * Uses RFC 6455 control frames: the server is required to auto-reply with
+   * a `pong`, so no appserver cooperation is needed. Only enable where the
+   * underlying `WebSocket` implementation exposes `.ping()` and emits
+   * `pong` events (Bun, Node ≥ 21). Browsers don't expose ping/pong to JS,
+   * so this option is a no-op there unless `webSocketImpl` is overridden.
+   *
+   * Disabled by default. Pass an empty object to enable with defaults
+   * (30s interval, 10s pong timeout). `heartbeat.enabled: false` forces it
+   * off regardless of other fields.
+   */
+  heartbeat?: {
+    /** Enable the heartbeat. Defaults to true when the object is passed. */
+    enabled?: boolean;
+    /** Time between ping frames in ms. Default: 30_000 (30s). */
+    intervalMs?: number;
+    /**
+     * How long to wait for a pong before declaring the connection dead and
+     * triggering an abnormal-close reconnect, in ms. Default: 10_000 (10s).
+     * Must be less than `intervalMs` to avoid racing the next ping.
+     */
+    pongTimeoutMs?: number;
+  };
 }
 
 export type Unsubscribe = () => void;
@@ -114,6 +143,21 @@ export type Unsubscribe = () => void;
 // ─── Implementation ───────────────────────────────────────────────────────
 
 type AnyWebSocket = WebSocket;
+
+/**
+ * Duck-typed WebSocket surface for protocol-level ping/pong. The DOM
+ * `WebSocket` type hides these (browsers don't expose them to JS), but Bun
+ * and Node ≥ 21 implement them. Used only after #configureHeartbeat has
+ * confirmed the constructor's prototype carries `.ping`.
+ */
+interface PingableWebSocket {
+  readyState: number;
+  ping(data?: string | ArrayBuffer): void;
+  close(code?: number, reason?: string): void;
+  addEventListener?(type: "pong", cb: (ev: Event) => void): void;
+  removeEventListener?(type: "pong", cb: (ev: Event) => void): void;
+  onpong?: ((ev: Event) => void) | null;
+}
 
 const TOPIC_KEY = (t: Topic) => `${t.kind}:${t.id}`;
 
@@ -148,6 +192,18 @@ export class SyncConnection {
   readonly #errorHandlers = new Set<(err: unknown) => void>();
   readonly #statusHandlers = new Set<(status: ConnectionStatus) => void>();
 
+  // ── Heartbeat ────────────────────────────────────────────────────────
+  /** Whether the heartbeat is enabled and supported by the WS impl. */
+  #heartbeatEnabled = false;
+  #heartbeatIntervalMs = 30_000;
+  #heartbeatPongTimeoutMs = 10_000;
+  /** Interval timer sending pings while the socket is open. */
+  #pingTimer: ReturnType<typeof setInterval> | null = null;
+  /** One-shot timer waiting for a pong; fires an abnormal close if it expires. */
+  #pongTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Listener unsubscribe for the WS impl's pong event. */
+  #pongUnsubscribe: (() => void) | null = null;
+
   constructor(opts: SyncConnectionOptions) {
     this.#opts = opts;
     const WS = opts.webSocketImpl ?? (globalThis as { WebSocket?: typeof WebSocket }).WebSocket;
@@ -165,6 +221,169 @@ export class SyncConnection {
       // Full jitter: random value in [0, cap]
       return Math.floor(Math.random() * cap);
     });
+    this.#configureHeartbeat(opts);
+  }
+
+  // ── Heartbeat ────────────────────────────────────────────────────────
+
+  /**
+   * Resolve heartbeat config. Enabled only when `opts.heartbeat` is passed
+   * (or an empty object), not explicitly disabled, and the WebSocket impl
+   * exposes a `.ping` method on its prototype — the reliable signal that
+   * pong control frames are also observable (Bun, Node ≥ 21). Browsers
+   * hide ping/pong from JS, so we silently no-op there rather than error.
+   */
+  #configureHeartbeat(opts: SyncConnectionOptions): void {
+    const hb = opts.heartbeat;
+    if (!hb) {
+      this.#heartbeatEnabled = false;
+      return;
+    }
+    if (hb.enabled === false) {
+      this.#heartbeatEnabled = false;
+      return;
+    }
+    // Probe the constructor's prototype for `.ping`. Bun and Node ≥ 21
+    // expose it; browsers (and the mock WS used by tests) do not.
+    const proto = this.#WS.prototype as { ping?: unknown };
+    const supportsPing = typeof proto.ping === "function";
+    if (!supportsPing) {
+      this.#log("heartbeat requested but WebSocket impl lacks .ping() — disabled");
+      this.#heartbeatEnabled = false;
+      return;
+    }
+    const interval = hb.intervalMs ?? 30_000;
+    const timeout = hb.pongTimeoutMs ?? 10_000;
+    if (!Number.isFinite(interval) || interval <= 0) {
+      throw new Error(`SyncConnection: heartbeat.intervalMs must be positive (got ${interval})`);
+    }
+    if (!Number.isFinite(timeout) || timeout <= 0) {
+      throw new Error(`SyncConnection: heartbeat.pongTimeoutMs must be positive (got ${timeout})`);
+    }
+    if (timeout >= interval) {
+      throw new Error(
+        `SyncConnection: heartbeat.pongTimeoutMs (${timeout}) must be < intervalMs (${interval})`,
+      );
+    }
+    this.#heartbeatEnabled = true;
+    this.#heartbeatIntervalMs = interval;
+    this.#heartbeatPongTimeoutMs = timeout;
+  }
+
+  /**
+   * Start the heartbeat loop on an open socket: register a pong listener,
+   * schedule the first ping, and arm the pong watchdog. Must be called
+   * after the socket is open and #ws is set. Idempotent.
+   */
+  #startHeartbeat(): void {
+    if (!this.#heartbeatEnabled) return;
+    const ws = this.#ws;
+    if (!ws) return;
+    this.#stopHeartbeatTimers();
+
+    // Pong listener. Bun fires a `pong` Event; other impls may pass the
+    // payload. Clear the pending watchdog and re-arm the next ping via
+    // the interval timer (which is already running).
+    this.#pongUnsubscribe = this.#addPongListener(ws, () => {
+      if (this.#pongTimer) {
+        clearTimeout(this.#pongTimer);
+        this.#pongTimer = null;
+      }
+    });
+
+    // Re-arming ping on every interval. Each tick sends a ping and arms
+    // a fresh pong watchdog; the watchdog is disarmed by the pong handler.
+    // The first tick is delayed by `intervalMs` so a just-opened socket
+    // isn't pinged immediately.
+    this.#pingTimer = setInterval(() => {
+      const current = this.#ws;
+      if (!current || current.readyState !== this.#WS.OPEN) return;
+      try {
+        // `.ping` isn't on the DOM WebSocket type (browsers hide it), so
+        // reach through the duck-typed surface. #configureHeartbeat only
+        // enabled the heartbeat after confirming the constructor's
+        // prototype has `.ping`, so this is sound at runtime.
+        (current as unknown as PingableWebSocket).ping();
+      } catch (err) {
+        this.#log(`ping send failed: ${describeError(err)}`);
+        this.#emitError(err);
+        // Treat a ping failure as a dead socket.
+        this.#onHeartbeatTimeout();
+        return;
+      }
+      if (this.#pongTimer) clearTimeout(this.#pongTimer);
+      this.#pongTimer = setTimeout(() => {
+        this.#onHeartbeatTimeout();
+      }, this.#heartbeatPongTimeoutMs);
+    }, this.#heartbeatIntervalMs);
+  }
+
+  /** Clear ping/pong timers and detach the pong listener. */
+  #stopHeartbeatTimers(): void {
+    if (this.#pingTimer) {
+      clearInterval(this.#pingTimer);
+      this.#pingTimer = null;
+    }
+    if (this.#pongTimer) {
+      clearTimeout(this.#pongTimer);
+      this.#pongTimer = null;
+    }
+    if (this.#pongUnsubscribe) {
+      this.#pongUnsubscribe();
+      this.#pongUnsubscribe = null;
+    }
+  }
+
+  /**
+   * Register a `pong` listener on a WebSocket. Returns an unsubscribe.
+   * Handles both addEventListener (Bun, browsers) and an `onpong` setter,
+   * so we don't couple to a single event API. The handler is wrapped so
+   * listener errors never crash the interval.
+   */
+  #addPongListener(ws: AnyWebSocket, handler: () => void): () => void {
+    const pws = ws as unknown as PingableWebSocket;
+    const wrapped = () => {
+      try {
+        handler();
+      } catch (err) {
+        this.#log(`pong handler error: ${describeError(err)}`);
+        this.#emitError(err);
+      }
+    };
+    if (typeof pws.addEventListener === "function") {
+      const cb = (_ev: Event) => wrapped();
+      pws.addEventListener("pong", cb);
+      return () => pws.removeEventListener?.("pong", cb);
+    }
+    if (typeof pws.onpong === "function" || "onpong" in pws) {
+      const prev = pws.onpong ?? null;
+      pws.onpong = (ev: Event) => { prev?.(ev); wrapped(); };
+      return () => { pws.onpong = prev; };
+    }
+    // No observable pong → heartbeat degrades to ping-only liveness probes.
+    return () => {};
+  }
+
+  /**
+   * No pong within the timeout window → the socket is half-open. Close it
+   * with code 1006 (abnormal) so the onclose handler routes into the
+   * existing reconnect path. Re-entrancy: called from the interval tick or
+   * a failed ping send, both of which hold #ws live.
+   */
+  #onHeartbeatTimeout(): void {
+    if (this.#intentionalClose) return;
+    const ws = this.#ws;
+    if (!ws) return;
+    this.#stopHeartbeatTimers();
+    this.#log(`heartbeat: no pong within ${this.#heartbeatPongTimeoutMs}ms — closing`);
+    // Force-abort the socket so onclose fires with an abnormal code,
+    // triggering the normal reconnect state machine.
+    try {
+      ws.close(4000, "heartbeat-timeout");
+    } catch (err) {
+      this.#log(`heartbeat close threw: ${describeError(err)}`);
+      this.#emitError(err);
+    }
   }
 
   // ── Status ──────────────────────────────────────────────────────────
@@ -256,6 +475,9 @@ export class SyncConnection {
           this.#sendSubMessage("sub", topic);
         }
         for (const h of this.#openHandlers) h();
+        // Start the heartbeat after subscriptions replay so a missed pong
+        // during backfill still triggers a clean reconnect.
+        this.#startHeartbeat();
         if (!settled) {
           settled = true;
           resolve();
@@ -300,6 +522,9 @@ export class SyncConnection {
       socket.onclose = (event: CloseEvent) => {
         const intentional = this.#intentionalClose;
         this.#ws = null;
+        // Heartbeat timers belong to this socket; tear them down before
+        // scheduling reconnect so a stray ping doesn't fire on a dead ws.
+        this.#stopHeartbeatTimers();
         this.#log(
           `Closed: code=${event.code} reason=${event.reason || "(none)"} intentional=${intentional}`,
         );
@@ -344,6 +569,7 @@ export class SyncConnection {
   close(): void {
     this.#intentionalClose = true;
     this.#reconnectAttempt = 0;
+    this.#stopHeartbeatTimers();
     if (this.#reconnectTimer) {
       clearTimeout(this.#reconnectTimer);
       this.#reconnectTimer = null;

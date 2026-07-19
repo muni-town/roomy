@@ -93,6 +93,12 @@ export class LiveRoomyGateway implements RoomyGateway {
 			},
 			wsUrl: this.#appserverWsUrl,
 			logger: log.debug,
+			// Keep idle sync WebSockets alive: Bun's WebSocket exposes
+			// protocol-level ping/pong, and the appserver auto-replies with
+			// pong (RFC 6455). Without a heartbeat, idle connections are
+			// silently dropped by intermediaries and the bridge only notices
+			// when it tries to send — by then events have been missed.
+			heartbeat: {},
 		});
 
 		// Subscribe to the stream topic with the cursor. The server backfills

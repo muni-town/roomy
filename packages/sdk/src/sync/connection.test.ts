@@ -96,6 +96,7 @@ function buildFrame(t: string, body: Record<string, unknown>): ArrayBuffer {
 
 beforeEach(() => {
   lastSocket = null;
+  lastPingSocket = null;
   sockets.length = 0;
 });
 
@@ -485,4 +486,252 @@ describe("SyncConnection — exponential backoff", () => {
     expect(delay0).toBeLessThanOrEqual(1000);
     expect(delay3).toBeLessThanOrEqual(5000);
   });
+});
+
+
+// ─── Heartbeat tests ──────────────────────────────────────────────────────
+//
+// The default makeMockWS() has no `.ping` on its prototype, so the
+// heartbeat self-disables — that keeps the suite above unaffected. These
+// tests use a ping-capable mock whose prototype exposes `.ping` (the
+// signal #configureHeartbeat probes for) and dispatches `pong` events
+// through addEventListener, matching Bun's client WebSocket surface.
+
+interface PingableSocket extends MockSocket {
+	ping: (data?: string | ArrayBuffer) => void;
+	pingCalls: number;
+	_emitPong: () => void;
+	_listeners: Map<string, Set<(ev: Event) => void>>;
+}
+
+let lastPingSocket: PingableSocket | null = null;
+
+function makePingableWS(): typeof WebSocket {
+	const ctor = function (this: PingableSocket, url: string) {
+		// Reuse the base mock's field setup by calling through.
+		const base: MockSocket = {
+			url,
+			readyState: 0,
+			binaryType: "blob",
+			sent: [],
+			onopen: null,
+			onmessage: null,
+			onclose: null,
+			onerror: null,
+			send: (data: string) => {
+				if (this.readyState !== 1) throw new Error("send on non-open socket");
+				this.sent.push(data);
+			},
+			close: () => {
+				if (this.readyState === 3) return;
+				this.readyState = 2;
+				queueMicrotask(() => this._emitClose(1000, "normal"));
+			},
+			_open: () => {
+				this.readyState = 1;
+				this.onopen?.(new Event("open"));
+			},
+			_emitMessage: (data: ArrayBuffer | string) => {
+				this.onmessage?.({ data } as MessageEvent);
+			},
+			_emitClose: (code = 1006, reason = "") => {
+				this.readyState = 3;
+				this.onclose?.({ code, reason } as CloseEvent);
+			},
+			_emitError: () => {
+				this.onerror?.(new Event("error"));
+			},
+		};
+		// Copy base fields onto `this`.
+		for (const key of Object.keys(base) as (keyof MockSocket)[]) {
+			(this as unknown as Record<keyof MockSocket, unknown>)[key] = base[key];
+		}
+		this.pingCalls = 0;
+		this.ping = (_data?: string | ArrayBuffer) => {
+			this.pingCalls++;
+		};
+		this._listeners = new Map();
+		this._emitPong = () => {
+			const set = this._listeners.get("pong");
+			if (set) for (const cb of set) cb(new Event("pong"));
+		};
+		lastPingSocket = this;
+		sockets.push(this as unknown as MockSocket);
+	} as unknown as typeof WebSocket;
+	// Prototype members the SUT probes for.
+	(ctor as unknown as { OPEN: number }).OPEN = 1;
+	(ctor as unknown as { CONNECTING: number }).CONNECTING = 0;
+	(ctor as unknown as { CLOSING: number }).CLOSING = 2;
+	(ctor as unknown as { CLOSED: number }).CLOSED = 3;
+	// Expose .ping on the prototype so #configureHeartbeat detects support.
+	(ctor as unknown as { prototype: { ping: unknown } }).prototype.ping =
+		function () {};
+	// addEventListener/removeEventListener live on the prototype so the
+	// SUT's runtime check (`typeof wsAny.addEventListener`) resolves true.
+	(ctor as unknown as { prototype: Record<string, unknown> }).prototype.addEventListener =
+		function (this: PingableSocket, type: string, cb: (ev: Event) => void) {
+			let set = this._listeners.get(type);
+			if (!set) {
+				set = new Set();
+				this._listeners.set(type, set);
+			}
+			set.add(cb);
+		};
+	(ctor as unknown as { prototype: Record<string, unknown> }).prototype.removeEventListener =
+		function (this: PingableSocket, type: string, cb: (ev: Event) => void) {
+			this._listeners.get(type)?.delete(cb);
+		};
+	return ctor;
+}
+
+describe("SyncConnection — heartbeat", () => {
+	it("disables heartbeat when WebSocket impl lacks .ping()", async () => {
+		// Default mock has no .ping on its prototype → silently disabled.
+		const conn = new SyncConnection({
+			fetchTicket: async () => "t",
+			wsUrl: "wss://srv/",
+			webSocketImpl: makeMockWS(),
+			heartbeat: {},
+		});
+		const p = conn.connect();
+		await Promise.resolve();
+		await Promise.resolve();
+		lastSocket!._open();
+		await p;
+
+		// No ping ever sent; connection stays open and healthy.
+		expect((lastSocket as unknown as { ping?: unknown }).ping).toBeUndefined();
+		conn.close();
+		await Promise.resolve();
+		await Promise.resolve();
+	});
+
+	it("sends a ping on the configured interval and clears watchdog on pong", async () => {
+		vi.useFakeTimers();
+		try {
+			const conn = new SyncConnection({
+				fetchTicket: async () => "t",
+				wsUrl: "wss://srv/",
+				webSocketImpl: makePingableWS(),
+				heartbeat: { intervalMs: 5000, pongTimeoutMs: 2000 },
+			});
+			const p = conn.connect();
+			await vi.advanceTimersByTimeAsync(0);
+			lastPingSocket!._open();
+			await p;
+			expect(conn.status.state).toBe("open");
+
+			// Before the interval elapses, no ping.
+			expect(lastPingSocket!.pingCalls).toBe(0);
+
+			// At 5s the first ping fires and arms the watchdog.
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(lastPingSocket!.pingCalls).toBe(1);
+
+			// Pong arrives before the 2s watchdog expires → no close.
+			lastPingSocket!._emitPong();
+			await vi.advanceTimersByTimeAsync(2000);
+			expect(conn.status.state).toBe("open");
+
+			// Next interval tick sends another ping.
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(lastPingSocket!.pingCalls).toBe(2);
+
+			conn.close();
+			await vi.advanceTimersByTimeAsync(0);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("closes the socket when no pong arrives within the timeout", async () => {
+		vi.useFakeTimers();
+		try {
+			const fetchTicket = vi.fn().mockResolvedValue("t");
+			const conn = new SyncConnection({
+				fetchTicket,
+				wsUrl: "wss://srv/",
+				webSocketImpl: makePingableWS(),
+				heartbeat: { intervalMs: 5000, pongTimeoutMs: 2000 },
+				reconnectDelay: (_attempt: number) => 10,
+			});
+			const closeSpy = vi.fn();
+			conn.onClose(closeSpy);
+			conn.onError(() => {});
+
+			const p = conn.connect();
+			await vi.advanceTimersByTimeAsync(0);
+			lastPingSocket!._open();
+			await p;
+
+			// First ping at 5s; no pong follows.
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(lastPingSocket!.pingCalls).toBe(1);
+
+			// Watchdog fires at +2s → abnormal close → reconnect scheduled.
+			await vi.advanceTimersByTimeAsync(2000);
+			expect(closeSpy).toHaveBeenCalledOnce();
+			expect(closeSpy.mock.calls[0]![0].intentional).toBe(false);
+			expect(conn.status.state).toBe("reconnecting");
+
+			// Reconnect fires after backoff and re-establishes a fresh socket.
+			await vi.advanceTimersByTimeAsync(15);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(fetchTicket).toHaveBeenCalledTimes(2);
+			lastPingSocket!._open();
+			expect(conn.status.state).toBe("open");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("stops heartbeat timers on intentional close", async () => {
+		vi.useFakeTimers();
+		try {
+			const conn = new SyncConnection({
+				fetchTicket: async () => "t",
+				wsUrl: "wss://srv/",
+				webSocketImpl: makePingableWS(),
+				heartbeat: { intervalMs: 5000, pongTimeoutMs: 2000 },
+			});
+			const p = conn.connect();
+			await vi.advanceTimersByTimeAsync(0);
+			lastPingSocket!._open();
+			await p;
+
+			// Close before the first interval tick.
+			conn.close();
+			await vi.advanceTimersByTimeAsync(0);
+
+			// Advance well past the interval; no ping should fire on the dead socket.
+			const callsBefore = lastPingSocket!.pingCalls;
+			await vi.advanceTimersByTimeAsync(10_000);
+			expect(lastPingSocket!.pingCalls).toBe(callsBefore);
+			expect(conn.status.state).toBe("closed");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("rejects invalid heartbeat config", () => {
+		expect(
+			() =>
+				new SyncConnection({
+					fetchTicket: async () => "t",
+					wsUrl: "wss://srv/",
+					webSocketImpl: makePingableWS(),
+					heartbeat: { intervalMs: 0 },
+				}),
+		).toThrow(/intervalMs must be positive/);
+
+		expect(
+			() =>
+				new SyncConnection({
+					fetchTicket: async () => "t",
+					wsUrl: "wss://srv/",
+					webSocketImpl: makePingableWS(),
+					heartbeat: { intervalMs: 5000, pongTimeoutMs: 5000 },
+				}),
+		).toThrow(/pongTimeoutMs .* must be < intervalMs/);
+	});
 });
