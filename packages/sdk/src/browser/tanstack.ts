@@ -47,7 +47,7 @@ export function createTanstackCacheAdapter(
       // others; the runtime accepts either.
       queryClient.setQueryData<T>(
         key as unknown[],
-        (prev: T | undefined): T => patcher(prev),
+        (prev: T | undefined) => patcher(prev),
       );
     },
   };
