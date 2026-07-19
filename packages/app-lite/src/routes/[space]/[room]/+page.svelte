@@ -158,20 +158,6 @@
     });
   });
 
-  // Track when we're actively switching tabs to avoid auto-focusing input
-  let isSwitchingTab = $state(false);
-  let prevActiveTab = $state(channelActiveTab);
-
-  $effect(() => {
-    if (prevActiveTab !== channelActiveTab) {
-      isSwitchingTab = true;
-      // Reset the switching flag after a short delay
-      setTimeout(() => {
-        isSwitchingTab = false;
-      }, 100);
-      prevActiveTab = channelActiveTab;
-    }
-  });
 
   // Only show chat input area in chat view and when not a thread
   let showChatInput = $derived(roomKind === "channel" && channelActiveTab === "Chat");
@@ -219,7 +205,7 @@
 
     <!-- Chat input area - only shown in chat view -->
     {#if showChatInput}
-      <ChatInputArea {spaceId} {roomId} canWrite={roomCanWrite} {disableUploads} autoFocus={!isSwitchingTab} />
+      <ChatInputArea {spaceId} {roomId} canWrite={roomCanWrite} {disableUploads} />
     {/if}
   {:else}
     <!-- Thread rooms only have chat view -->

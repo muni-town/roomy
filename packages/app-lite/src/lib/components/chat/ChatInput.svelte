@@ -102,7 +102,7 @@
 
   $effect(() => {
     tiptap?.setEditable(!disabled);
-    if (!disabled) setInputFocus();
+    if (setFocus && !disabled) setInputFocus();
   });
 
   onDestroy(() => {

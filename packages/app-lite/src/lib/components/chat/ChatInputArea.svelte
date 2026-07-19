@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
   import FullscreenImageDropper from "@roomy/design/components/helper/FullscreenImageDropper.svelte";
   import ChatInputShell, {
     type ChatInputShellMode,
@@ -37,10 +38,17 @@
 
   let { spaceId, roomId, canWrite, disableUploads = false, autoFocus = true }: Props = $props();
 
+  // On mobile (coarse pointer), never autofocus — the virtual keyboard
+  // appearing is disruptive. Covers both tab-switch and navigation cases.
+  // Computed synchronously (not in onMount) so the value is settled before
+  // child ChatInput's onMount runs and triggers focus.
+  const isCoarsePointer = browser && matchMedia("(pointer: coarse)").matches;
+
+
   let isSendingMessage = $state(false);
   let previewImages: string[] = $state([]);
 
-  let shouldFocus = $derived(autoFocus && !isSendingMessage && previewImages.length === 0);
+  let shouldFocus = $derived(autoFocus && !isCoarsePointer && !isSendingMessage && previewImages.length === 0);
 
   // Most-recently-active members in this room, derived from the cached
   // `getMessages` result (no extra fetch). Used to preseed the `@mention`
