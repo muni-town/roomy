@@ -6,7 +6,8 @@
   import type { Snippet } from "svelte";
   import Button from "../../ui/button/Button.svelte";
   import Input from "../../ui/input/Input.svelte";
-  import Popover from "../../ui/popover/Popover.svelte";
+  import ContextMenu from "../../ui/context-menu/ContextMenu.svelte";
+  import ContextMenuItem from "../../ui/context-menu/ContextMenuItem.svelte";
   import {
     IconNeedleThread,
     IconX,
@@ -241,15 +242,14 @@
                 <IconLoading class="animate-spin text-base-500" />
               </div>
             {:else}
-              <Popover
+              <ContextMenu
                 open={actionMenuOpen}
                 onOpenChange={onActionMenuOpenChange}
                 side="top"
                 sideOffset={8}
                 align="start"
-                class="p-2"
               >
-                {#snippet child({ props })}
+                {#snippet trigger({ props })}
                   <Button
                     variant="ghost"
                     {...props}
@@ -260,41 +260,25 @@
                     <IconPlus class="" />
                   </Button>
                 {/snippet}
-                <div class="flex flex-col items-start justify-stretch gap-1">
-                  {#if disableUploads}
-                    <span
-                      title="Media uploads aren't available in private spaces yet."
-                      class="w-full"
-                    >
-                      <Button
-                        variant="ghost"
-                        class="w-full justify-start gap-2 opacity-50"
-                        disabled
-                      >
-                        <IconImage class="size-4" />
-                        Upload Media
-                      </Button>
-                    </span>
-                  {:else}
-                    <Button
-                      variant="ghost"
-                      class="w-full justify-start gap-2"
-                      onclick={onUploadMedia}
-                    >
-                      <IconImage class="size-4" />
-                      Upload Media
-                    </Button>
-                  {/if}
-                  <Button
-                    variant="ghost"
-                    class="w-full justify-start gap-2"
-                    onclick={onCreateThreadFromMenu}
+                {#if disableUploads}
+                  <ContextMenuItem
+                    disabled
+                    title="Media uploads aren't available in private spaces yet."
                   >
-                    <IconNeedleThread class="size-4" />
-                    Create Thread
-                  </Button>
-                </div>
-              </Popover>
+                    <IconImage class="size-4" />
+                    Upload Media
+                  </ContextMenuItem>
+                {:else}
+                  <ContextMenuItem onclick={onUploadMedia}>
+                    <IconImage class="size-4" />
+                    Upload Media
+                  </ContextMenuItem>
+                {/if}
+                <ContextMenuItem onclick={onCreateThreadFromMenu}>
+                  <IconNeedleThread class="size-4" />
+                  Create Thread
+                </ContextMenuItem>
+              </ContextMenu>
 
               {#if !disableUploads}
                 <input
@@ -316,7 +300,7 @@
                 onclick={onSend}
                 variant="primary"
                 size="icon"
-                class="shrink-0 rounded-full"
+                class="shrink-0 rounded-full mr-2"
               >
                 <IconSend />
               </Button>
