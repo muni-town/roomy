@@ -34,7 +34,7 @@ export class Router implements IInvalidationRouter {
 
   static #instance: Router | undefined;
 
-  /** Set the process-wide router. Called once from index.ts. */
+  /** Set the process-wide router. Called once from createAppserver(). */
   static setInstance(router: Router): void {
     Router.#instance = router;
   }
@@ -42,6 +42,12 @@ export class Router implements IInvalidationRouter {
   /** Get the process-wide router. Handlers call this to emit signals. */
   static getInstance(): Router | undefined {
     return Router.#instance;
+  }
+
+  /** Clear the process-wide router. Called from appserver close() so tests
+   *  that spin up a fresh appserver per case don't see a stale singleton. */
+  static resetInstance(): void {
+    Router.#instance = undefined;
   }
 
   async onEventsApplied(

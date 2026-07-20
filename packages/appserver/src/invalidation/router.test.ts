@@ -342,3 +342,20 @@ describe("Router", () => {
     expect(events).toHaveLength(0);
   });
 });
+
+// ─── Singleton lifecycle ────────────────────────────────────────────────
+
+describe("Router singleton", () => {
+  it("setInstance / getInstance / resetInstance round-trip", () => {
+    // Clean slate — other tests may have left a stale instance.
+    Router.resetInstance();
+    expect(Router.getInstance()).toBeUndefined();
+
+    const router = new Router();
+    Router.setInstance(router);
+    expect(Router.getInstance()).toBe(router);
+
+    Router.resetInstance();
+    expect(Router.getInstance()).toBeUndefined();
+  });
+});

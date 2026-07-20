@@ -331,6 +331,7 @@ export async function createAppserver(
 
   // ─── Invalidation + Sync ─────────────────────────────────────────────
   const invalidationRouter = new InvalidationRouter();
+  InvalidationRouter.setInstance(invalidationRouter);
 
   // ─── StreamManager ────────────────────────────────────────────────────
   // Per-stream signing keys are generated on demand in createStreamDid.
@@ -463,6 +464,11 @@ export async function createAppserver(
           _resetPushDispatcher();
         } catch (e) {
           console.error("appserver close: _resetPushDispatcher failed", e);
+        }
+        try {
+          InvalidationRouter.resetInstance();
+        } catch (e) {
+          console.error("appserver close: resetInvalidationRouter failed", e);
         }
       });
     },
