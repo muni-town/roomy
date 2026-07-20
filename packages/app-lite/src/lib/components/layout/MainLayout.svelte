@@ -43,17 +43,19 @@ let {
 >
   <EnableNotificationsBanner />
   <Navbar {compact} class={compact ? "h-11 dark:bg-base-900/20" : "dark:bg-base-900/20"}>
-    <div class="flex gap-4 items-center mr-auto ml-2 sm:hidden">
-      <ToggleNavigation bind:isSidebarVisible={mobileSidebar.visible} />
-    </div>
+    <div class="flex items-center min-w-0">
+      <div class="flex gap-2 items-center ml-2 sm:hidden">
+        <ToggleNavigation bind:isSidebarVisible={mobileSidebar.visible} />
+      </div>
 
-    {#if compact}
-      {#if navbar.spaceInfo}
-        {@render navbar.spaceInfo?.()}
-      {:else}
-        <NavbarSpaceInfo />
+      {#if compact}
+        {#if navbar.spaceInfo}
+          {@render navbar.spaceInfo?.()}
+        {:else}
+          <NavbarSpaceInfo />
+        {/if}
       {/if}
-    {/if}
+    </div>
 
     {#if navbar.content}
       {@render navbar.content?.()}
