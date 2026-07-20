@@ -10,6 +10,36 @@ import { ChannelTypes, DiscordMessageReferenceType } from "@discordeno/bot";
 import type { DiscordSender, SendMessageOptions } from "./sender.ts";
 import type { DiscordBot } from "./types.ts";
 
+/**
+ * Hard deadline for a single Discord REST call on the Roomy→Discord path.
+ *
+ * Discordeno's rest manager has no per-request timeout (and its default
+ * `maxRetryCount` is Infinity), so a hung TCP connection to Discord would
+ * otherwise block the per-space delivery chain indefinitely — the same
+ * failure mode as the profile fetch. Capping the wait ensures a stuck
+ * send rejects fast and the chain advances, rather than stalling for the
+ * minutes it takes an intermediary to reap an idle socket.
+ */
+const DISCORD_REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Race a promise against a timeout. Resolves/rejects with the underlying
+ * result, or rejects with a TimeoutError if `ms` elapses first. The
+ * underlying promise is not cancelled (Discordeno exposes no signal), but
+ * the caller is unblocked; the in-flight request is left to settle.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			reject(new Error(`${label} timed out after ${ms}ms`));
+		}, ms);
+		Promise.resolve(promise).then(
+			(v) => { clearTimeout(timer); resolve(v); },
+			(e) => { clearTimeout(timer); reject(e); },
+		);
+	});
+}
+
 export class LiveDiscordSender implements DiscordSender {
 	#bot: DiscordBot;
 
@@ -27,9 +57,13 @@ export class LiveDiscordSender implements DiscordSender {
 		}
 
 		// Fallback: send as the bot itself
-		const result = await this.#bot.helpers.sendMessage(BigInt(channelId), {
-			content,
-		});
+		const result = await withTimeout(
+			this.#bot.helpers.sendMessage(BigInt(channelId), {
+				content,
+			}),
+			DISCORD_REQUEST_TIMEOUT_MS,
+			`bot sendMessage to channel ${channelId}`,
+		);
 		return result.id.toString();
 	}
 
@@ -77,10 +111,14 @@ export class LiveDiscordSender implements DiscordSender {
 			body.avatar_url = options.avatarUrl;
 		}
 
-		const result = await this.#bot.rest.post<{ id: string }>(url, {
-			body,
-			unauthorized: true,
-		});
+		const result = await withTimeout(
+			this.#bot.rest.post<{ id: string }>(url, {
+				body,
+				unauthorized: true,
+			}),
+			DISCORD_REQUEST_TIMEOUT_MS,
+			`webhook send to channel ${channelId}`,
+		);
 
 		if (!result) {
 			throw new Error(

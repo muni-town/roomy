@@ -58,9 +58,13 @@ export class RoomyClient {
 
   /**
    * Get a profile, returning the simplified Profile type.
+   *
+   * Accepts an optional `AbortSignal` to bound the underlying network
+   * request; see `getProfile` for details. Used by the Discord bridge
+   * to prevent a single slow profile lookup from stalling delivery.
    */
-  async getProfile(did?: Did): Promise<Profile | undefined> {
-    return getProfile(this.agent, did);
+  async getProfile(did?: Did, signal?: AbortSignal): Promise<Profile | undefined> {
+    return getProfile(this.agent, did, signal);
   }
 
   /**

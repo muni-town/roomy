@@ -126,6 +126,12 @@ export class LiveRoomyGateway implements RoomyGateway {
 			// frames (hasMore=true) would be mislabeled isBackfill=false.
 			backfillState.value = true;
 			const freshCursor = this.#repo.getSpaceCursor(spaceDid) ?? -1;
+			// Drop any in-flight processing chain from the previous socket.
+			// Frames on the old connection may still be working through
+			// callbacks (e.g. a slow profile fetch). A rejected leftover would
+			// serialise new frames behind a dead promise; clearing lets frames
+			// arriving on this fresh connection chain from a clean base.
+			this.#processing.delete(spaceDid);
 			connection.unsubscribe({ kind: "stream", id: spaceDid });
 			connection.subscribe({ kind: "stream", id: spaceDid, cursor: freshCursor });
 		});

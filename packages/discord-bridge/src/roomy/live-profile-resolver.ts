@@ -11,6 +11,20 @@ const log = createLogger("live-profile");
 
 const CACHE_MAX = 500;
 
+/**
+ * Hard deadline for a single profile lookup against api.bsky.app.
+ *
+ * Profile resolution runs on the Roomy→Discord delivery hot path: each
+ * frame is awaited sequentially per space, and `Agent.getProfile` issues an
+ * unauthenticated fetch to the public Bluesky appview with no built-in
+ * timeout. A hung or slow connection (e.g. an idle socket reaped by an
+ * intermediary after ~15 min) blocks the entire per-space processing
+ * chain until it resolves. Capping the wait keeps a single slow lookup
+ * from stalling message delivery for the whole space. On timeout we fall
+ * back to the default username/avatar so the message still ships.
+ */
+const PROFILE_FETCH_TIMEOUT_MS = 5000;
+
 export class LiveProfileResolver implements ProfileResolver {
 	#client: RoomyClient;
 	#cache = new Map<string, ProfileInfo>();
@@ -30,7 +44,10 @@ export class LiveProfileResolver implements ProfileResolver {
 		}
 
 		try {
-			const profile = await this.#client.getProfile(Did.assert(did));
+			const profile = await this.#client.getProfile(
+				Did.assert(did),
+				AbortSignal.timeout(PROFILE_FETCH_TIMEOUT_MS),
+			);
 			if (!profile) return undefined;
 
 			const info: ProfileInfo = {
@@ -48,7 +65,13 @@ export class LiveProfileResolver implements ProfileResolver {
 
 			return info;
 		} catch (err) {
-			log.warn(`Failed to resolve profile for ${did}`, err);
+			if (err instanceof DOMException && err.name === "TimeoutError") {
+				log.warn(
+					`Profile fetch for ${did} timed out after ${PROFILE_FETCH_TIMEOUT_MS}ms; using default identity`,
+				);
+			} else {
+				log.warn(`Failed to resolve profile for ${did}`, err);
+			}
 			return undefined;
 		}
 	}
