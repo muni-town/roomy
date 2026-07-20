@@ -13,6 +13,8 @@
   let { replyToId, roomId }: Props = $props();
 
   const target = createMessageQuery(() => replyToId, () => roomId);
+
+  let isBridged = $derived(target.data?.authorDid?.startsWith("did:discord:") ?? false);
 </script>
 
 {#if target.data}
@@ -23,24 +25,43 @@
       class="relative -bottom-1 ml-2 mr-1 left-0.75 stroke-black/25 dark:stroke-white/50 dark:stroke-1"
     />
     {#if target.data.authorAvatar || target.data.authorDid}
-      <button
-        onclick={() => goto(`/user/${target.data.authorDid}`)}
-        class="w-4 h-4 rounded-full shrink-0 hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
-      >
-        <UserAvatar
-          src={target.data.authorAvatar}
-          name={target.data.authorDid || ""}
-          size={16}
-          class="w-4 h-4"
-        />
-      </button>
+      {#if isBridged}
+        <div class="w-4 h-4 rounded-full shrink-0">
+          <UserAvatar
+            src={target.data.authorAvatar}
+            name={target.data.authorDid || ""}
+            size={16}
+            class="w-4 h-4"
+          />
+        </div>
+      {:else}
+        <button
+          onclick={() => goto(`/user/${target.data.authorDid}`)}
+          class="w-4 h-4 rounded-full shrink-0 hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
+        >
+          <UserAvatar
+            src={target.data.authorAvatar}
+            name={target.data.authorDid || ""}
+            size={16}
+            class="w-4 h-4"
+          />
+        </button>
+      {/if}
     {/if}
-    <a
-      href={`/user/${target.data.authorDid}`}
-      class="font-medium text-accent-700 dark:text-accent-300 hover:underline"
-    >
-      {target.data.authorName || target.data.authorDid.slice(0, 12)}
-    </a>
+    {#if isBridged}
+      <span
+        class="font-medium text-accent-700 dark:text-accent-300"
+      >
+        {target.data.authorName || target.data.authorDid.slice(0, 12)}
+      </span>
+    {:else}
+      <a
+        href={`/user/${target.data.authorDid}`}
+        class="font-medium text-accent-700 dark:text-accent-300 hover:underline"
+      >
+        {target.data.authorName || target.data.authorDid.slice(0, 12)}
+      </a>
+    {/if}
   </div>
   <div class="line-clamp-1 overflow-hidden italic">
     {@html renderMarkdownPlaintext(target.data.content ?? "")}

@@ -21,6 +21,10 @@
   function timeAgo(iso: string): string {
     return formatRelativeTime(new Date(iso));
   }
+  function isBridged(did: string): boolean {
+    return did.startsWith("did:discord:");
+  }
+
 
   function roomHref(item: ActivityItem): string {
     return `/${item.spaceId}/${item.threadId}`;
@@ -90,26 +94,45 @@
               <div class="flex flex-col justify-end gap-1.5 pl-1 max-h-24 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent_0%,black_20%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_20%)]">
                 {#each preceding as msg (msg.id)}
                   <div class="flex items-start gap-2 text-sm opacity-80">
-                    <button
-                      onclick={() => goto(`/user/${msg.author.did}`)}
-                      class="mt-1.25 rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer shrink-0"
-                    ><SpaceAvatar
-                      src={resolveBlobUrl(msg.author.avatar)}
-                      id={msg.author.did}
-                      name={msg.author.name ?? undefined}
-                      size={18}
-                    /></button>
-                    <div class="min-w-0">
+                    {#if isBridged(msg.author.did)}
+                      <div class="mt-1.25 rounded-full shrink-0">
+                        <SpaceAvatar
+                          src={resolveBlobUrl(msg.author.avatar)}
+                          id={msg.author.did}
+                          name={msg.author.name ?? undefined}
+                          size={18}
+                        />
+                      </div>
+                    {:else}
                       <button
-                        onclick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          goto(`/user/${msg.author.did}`);
-                        }}
-                        class="font-medium text-base-700 dark:text-base-300 hover:underline cursor-pointer bg-transparent border-none p-0 inline"
-                      >
-                        {msg.author.name || msg.author.handle}
-                      </button>
+                        onclick={() => goto(`/user/${msg.author.did}`)}
+                        class="mt-1.25 rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer shrink-0"
+                      ><SpaceAvatar
+                        src={resolveBlobUrl(msg.author.avatar)}
+                        id={msg.author.did}
+                        name={msg.author.name ?? undefined}
+                        size={18}
+                      /></button>
+                    {/if}
+                    <div class="min-w-0">
+                      {#if isBridged(msg.author.did)}
+                        <span
+                          class="font-medium text-base-700 dark:text-base-300"
+                        >
+                          {msg.author.name || msg.author.handle}
+                        </span>
+                      {:else}
+                        <button
+                          onclick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            goto(`/user/${msg.author.did}`);
+                          }}
+                          class="font-medium text-base-700 dark:text-base-300 hover:underline cursor-pointer bg-transparent border-none p-0 inline"
+                        >
+                          {msg.author.name || msg.author.handle}
+                        </button>
+                      {/if}
                       <span class="prose dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400 prose-a:no-underline text-base-600 dark:text-base-400 break-words [&_p]:inline [&_p]:m-0">
                         {@html renderMarkdownSanitized(msg.content)}
                       </span>
@@ -122,26 +145,44 @@
             {#if last}
             <!-- Most recent message (full height, chat-style layout) -->
             <div class="flex items-start gap-3 pl-1">
-              <button
-                onclick={() => goto(`/user/${last.author.did}`)}
-                class="mt-0.5 rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer shrink-0"
-              ><UserAvatar
-                src={resolveBlobUrl(last.author.avatar)}
-                name={last.author.did}
-                class="size-8 sm:size-10"
-              /></button>
+              {#if isBridged(last.author.did)}
+                <div class="mt-0.5 rounded-full shrink-0">
+                  <UserAvatar
+                    src={resolveBlobUrl(last.author.avatar)}
+                    name={last.author.did}
+                    class="size-8 sm:size-10"
+                  />
+                </div>
+              {:else}
+                <button
+                  onclick={() => goto(`/user/${last.author.did}`)}
+                  class="mt-0.5 rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer shrink-0"
+                ><UserAvatar
+                  src={resolveBlobUrl(last.author.avatar)}
+                  name={last.author.did}
+                  class="size-8 sm:size-10"
+                /></button>
+              {/if}
               <div class="flex flex-col flex-1 min-w-0">
                 <div class="text-sm w-full text-start">
-                  <button
-                    onclick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      goto(`/user/${last.author.did}`);
-                    }}
-                    class="font-medium text-accent-700 dark:text-accent-400 hover:underline cursor-pointer bg-transparent border-none p-0 inline"
-                  >
-                    {last.author.name || last.author.handle}
-                  </button>
+                  {#if isBridged(last.author.did)}
+                    <span
+                      class="font-medium text-accent-700 dark:text-accent-400"
+                    >
+                      {last.author.name || last.author.handle}
+                    </span>
+                  {:else}
+                    <button
+                      onclick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        goto(`/user/${last.author.did}`);
+                      }}
+                      class="font-medium text-accent-700 dark:text-accent-400 hover:underline cursor-pointer bg-transparent border-none p-0 inline"
+                    >
+                      {last.author.name || last.author.handle}
+                    </button>
+                  {/if}
                 </div>
                 <div class="prose dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400 prose-a:no-underline text-base font-normal text-left max-w-full overflow-auto hide-scrollbar break-words [&_p]:m-0 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0">
                   {@html renderMarkdownSanitized(last.content)}

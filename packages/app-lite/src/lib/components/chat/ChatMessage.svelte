@@ -101,8 +101,8 @@
       authorHandle={message.authorHandle ?? undefined}
       authorAvatarUrl={message.authorAvatar ?? undefined}
       avatarSrc={resolveBlobUrl(message.authorAvatar)}
-      profileUrl={`/user/${message.authorDid}`}
-      onAvatarClick={() => goto(`/user/${message.authorDid}`)}
+      profileUrl={isBridged ? undefined : `/user/${message.authorDid}`}
+      onAvatarClick={isBridged ? undefined : () => goto(`/user/${message.authorDid}`)}
       timestamp={new Date(message.timestamp)}
       {isBridged}
       {mergeWithPrevious}
