@@ -29,3 +29,19 @@ export const currentSpaceState = {
 export function setCurrentSpace(info: CurrentSpaceInfo | null) {
   currentSpace = info;
 }
+
+/**
+ * Tracks the last space the user was in, even after leaving the space layout.
+ * Used by the user settings "Back" button to return to the last-visited space/room.
+ */
+let lastActiveSpaceId = $state<string | null>(null);
+
+export const lastActiveSpaceIdState = {
+  get value() {
+    return lastActiveSpaceId;
+  },
+};
+
+export function setLastActiveSpaceId(id: string | null) {
+  lastActiveSpaceId = id;
+}

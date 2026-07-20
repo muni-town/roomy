@@ -7,6 +7,8 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconArrowLeft, IconSettings } from "@roomy/design/icons";
   import RoomyMark from "$lib/components/RoomyMark.svelte";
+  import { lastActiveSpaceIdState } from "$lib/components/layout/current-space.svelte";
+  import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
 
   let { children } = $props();
 
@@ -22,6 +24,15 @@
       default:
         return "Settings";
     }
+  });
+
+  // Navigate back to the last-visited space/room, or fall back to home.
+  const backHref = $derived.by(() => {
+    const spaceId = lastActiveSpaceIdState.value;
+    if (!spaceId) return "/";
+    const dest = spaceNavigation.get(spaceId)?.destination;
+    if (dest?.kind === "room") return `/${spaceId}/${dest.id}`;
+    return `/${spaceId}`;
   });
 
   onMount(() => {
@@ -65,9 +76,9 @@
 {#snippet settingsSidebar()}
   <div class="flex flex-col h-full">
     <div class="p-3">
-      <Button class="w-full justify-start" href="/" variant="ghost">
+      <Button class="w-full justify-start" href={backHref} variant="ghost">
         <IconArrowLeft class="size-4" />
-        Back to home
+        Back
       </Button>
     </div>
     <div class="flex flex-col gap-1 px-3">

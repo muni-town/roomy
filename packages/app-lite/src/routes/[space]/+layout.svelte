@@ -6,7 +6,7 @@
   import { sync_ } from "$lib/sync.svelte";
   import SpaceSidebar from "$lib/components/sidebar/SpaceSidebar.svelte";
   import { sidebarOverride, setSidebarContent } from "$lib/components/layout/sidebar.svelte";
-  import { setCurrentSpace } from "$lib/components/layout/current-space.svelte";
+  import { setCurrentSpace, setLastActiveSpaceId } from "$lib/components/layout/current-space.svelte";
   import JoinSpaceModal from "$lib/components/layout/JoinSpaceModal.svelte";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
 
@@ -29,6 +29,13 @@
         : null,
     );
     return () => setCurrentSpace(null);
+  });
+
+  // Track the last active space so user settings "Back" can return to it.
+  $effect(() => {
+    if (metaQuery.data) {
+      setLastActiveSpaceId(spaceId);
+    }
   });
 
   // Dynamic title & favicon based on the currently active space.
