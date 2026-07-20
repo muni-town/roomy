@@ -60,6 +60,7 @@
             {#snippet child({ props })}
               <Toggle
                 pressed={pressed}
+                {...props}
                 onclick={() => onToggleReaction(emoji)}
                 class={`h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15 min-w-4 p-1.5 rounded-full ${count > 1 ? "px-2" : ""}`}
               >
