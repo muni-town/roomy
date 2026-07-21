@@ -49,8 +49,10 @@
     tabindex="0"
   >
     <IconBell class="size-4 shrink-0 text-base-500" />
-    <span class="text-base-700 dark:text-base-300">Get notified when someone messages you.</span>
-    <span class="font-semibold text-accent-600 dark:text-accent-400">Enable notifications</span>
+    <span class="min-w-0">
+      <span class="text-base-700 dark:text-base-300">Get notified when someone messages you.</span>
+      <span class="font-semibold text-accent-600 dark:text-accent-400">Enable notifications</span>
+    </span>
     <button
       type="button"
       class="p-1 -mr-1 ml-auto text-base-400 hover:text-base-600 dark:hover:text-base-300 transition-colors"
