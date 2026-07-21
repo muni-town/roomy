@@ -60,7 +60,17 @@
    * Falls back to the dedicated room metadata query for rooms not in the
    * sidebar (e.g., threads that aren't active enough to appear there).
    */
-  const sidebarRoomInfo = $derived.by(() => {
+  const sidebarRoomInfo = $derived.by<{
+    id: string;
+    name?: string;
+    kind: "channel" | "thread";
+    unreadCount: number;
+    canRead: boolean;
+    canWrite: boolean;
+    lastRead?: string | null;
+    parentChannelId?: string;
+    parentChannelName?: string;
+  } | null>(() => {
     const meta = spaceMetaQuery.data;
     if (!meta) return null;
 
@@ -69,7 +79,7 @@
         if (ch.id === roomId) return { ...ch, kind: "channel" as const };
         if (ch.activeThreads) {
           for (const t of ch.activeThreads) {
-            if (t.id === roomId) return { ...t, kind: "thread" as const };
+            if (t.id === roomId) return { ...t, kind: "thread" as const, parentChannelId: ch.id, parentChannelName: ch.name };
           }
         }
       }
@@ -79,7 +89,7 @@
       if (ch.id === roomId) return { ...ch, kind: "channel" as const };
       if (ch.activeThreads) {
         for (const t of ch.activeThreads) {
-          if (t.id === roomId) return { ...t, kind: "thread" as const };
+          if (t.id === roomId) return { ...t, kind: "thread" as const, parentChannelId: ch.id, parentChannelName: ch.name };
         }
       }
     }
@@ -111,11 +121,15 @@
   $effect(() => {
     const name = roomName;
     const kind = roomKind;
+    const parentId = sidebarRoomInfo?.parentChannelId;
+    const parentName = sidebarRoomInfo?.parentChannelName;
     untrack(() => {
       setCurrentRoom({
         id: roomId,
         name,
         kind: kind === "thread" ? "thread" : "channel",
+        parentChannelId: parentId,
+        parentChannelName: parentName,
       });
     });
   });

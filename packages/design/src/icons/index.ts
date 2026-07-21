@@ -3,6 +3,7 @@ export { default as IconArrowDown } from "~icons/ph/arrow-down-bold";
 export { default as IconArrowLeft } from "~icons/ph/arrow-left-bold";
 export { default as IconChevronDown } from "~icons/ph/caret-down-bold";
 export { default as IconChevronUp } from "~icons/ph/caret-up-bold";
+export { default as IconChevronRight } from "~icons/ph/caret-right-bold";
 export { default as IconCornerDownRight } from "~icons/ph/arrow-bend-down-right-bold";
 export { default as IconHome } from "~icons/ph/house-bold";
 

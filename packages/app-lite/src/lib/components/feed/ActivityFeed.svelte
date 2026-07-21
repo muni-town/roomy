@@ -11,6 +11,7 @@
   import LinkCard from "../chat/embeds/LinkCard.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
   import { auth } from "$lib/auth.svelte";
+  import { IconChevronRight } from "@roomy/design/icons";
 
   let { spaceId, showSpaceInfo = true, limit = 20 }: { spaceId?: string; showSpaceInfo?: boolean; limit?: number } = $props();
 
@@ -50,7 +51,7 @@
           class="flex flex-col gap-2 p-4 transition-colors group no-underline hover:bg-base-100 dark:hover:bg-base-800/40 hover:shadow-[2px_2px_0_0_var(--color-base-300)] dark:hover:shadow-[2px_2px_0_0_var(--color-base-800)]"
         >
           <!-- Header: space avatar + space/channel context -->
-          <div class="flex items-baseline gap-2 text-xs">
+          <div class="flex items-baseline gap-1 text-xs">
             {#if showSpaceInfo}
               {#if item.spaceAvatar || item.spaceName}
                 <span class="self-center">
@@ -68,9 +69,9 @@
             {/if}
             {#if item.channelName || item.threadName}
               <span class={["truncate text-sm font-medium", item.channelName ? "opacity-70" : ""]}>#{item.channelName || item.threadName}</span>
-            {/if}
             {#if item.threadName && item.channelName}
-              <span class="truncate text-sm font-medium pl-1 -ml-1">/ {item.threadName}</span>
+              <span class="truncate text-sm font-medium flex items-center gap-1"><IconChevronRight class="size-2.5 shrink-0 opacity-70" /> {item.threadName}</span>
+            {/if}
             {/if}
 
             <span class="shrink-0 opacity-50 ml-1">{timeAgo(item.lastActivityAt)}</span>

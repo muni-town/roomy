@@ -6,6 +6,9 @@ export interface CurrentRoomInfo {
   id: string;
   name: string;
   kind: "channel" | "thread";
+  /** The channel this thread belongs to (only for threads). */
+  parentChannelId?: string;
+  parentChannelName?: string;
 }
 
 let currentRoom = $state<CurrentRoomInfo | null>(null);
