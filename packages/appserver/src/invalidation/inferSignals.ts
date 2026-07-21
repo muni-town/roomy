@@ -425,7 +425,13 @@ function handlePersonalLeaveSpace(event: AppliedEvent): InvalidationEvent[] {
     invalidate("space.roomy.space.getSpaces", {}, event.user),
   ];
   if (spaceId) {
-    signals.push(invalidate("space.roomy.space.getMembers", { spaceId }));
+    signals.push(
+      invalidate("space.roomy.space.getMembers", { spaceId }),
+      // getMetadata returns isMember, which flips to false on leave.
+      // Mirror handlePersonalJoinSpace (which emits getMetadata) so the
+      // leaver's cached space metadata is invalidated, not just getSpaces.
+      invalidate("space.roomy.space.getMetadata", { spaceId }, event.user),
+    );
   }
   return signals;
 }

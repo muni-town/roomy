@@ -13,6 +13,7 @@
 import { openDb } from "../db/db.ts";
 import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
+import { Router as InvalidationRouter } from "../invalidation/index.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
 interface SetHandleBody {
@@ -74,5 +75,29 @@ export const setHandleHandler: ProcedureHandler<SetHandleBody, void> = async (
       `update comp_space set handle = null, updated_at = unixepoch() * 1000 where entity = ?`,
       [spaceId],
     );
+  }
+
+  // ── Invalidate cached queries that surface the handle ───────────────
+  // `getMetadata` returns comp_space.handle; `getSpaces` may surface it in
+  // the space list. The handle is space-scoped (not per-user), so broadcast
+  // to every viewer of this space.
+  const router = InvalidationRouter.getInstance();
+  if (router) {
+    router.emit([
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getMetadata",
+          params: { spaceId },
+        },
+      },
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getSpaces",
+          params: {},
+        },
+      },
+    ]);
   }
 };

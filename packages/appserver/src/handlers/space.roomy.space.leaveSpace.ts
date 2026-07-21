@@ -108,7 +108,11 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
     await recordLeftSpaceEdge(db, spaceStreamDid, personalStreamDid);
   }
 
-  // ── 5. Emit direct getSpaces invalidation signal ─────────────────────
+  // ── 5. Emit direct getSpaces + getMetadata invalidation signals ──────
+  // The personal stream materializer also emits these when it processes
+  // the personal.leaveSpace event, but that delivery is asynchronous and
+  // may race with the HTTP response. Emitting directly for the caller
+  // closes the race window.
   const router = InvalidationRouter.getInstance();
   if (router) {
     router.emit([
@@ -117,6 +121,15 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
         signal: {
           nsid: "space.roomy.space.getSpaces",
           params: {},
+          affectedUser: callerDid,
+        },
+      },
+      // getMetadata returns isMember, which flips to false on leave.
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getMetadata",
+          params: { spaceId: spaceStreamDid },
           affectedUser: callerDid,
         },
       },

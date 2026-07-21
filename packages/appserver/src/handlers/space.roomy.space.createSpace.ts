@@ -181,6 +181,19 @@ export const createSpaceHandler: ProcedureHandler<
           affectedUser: callerDid,
         },
       },
+      // getMetadata returns isMember/isAdmin, which flips to true on join.
+      // The personal-stream materializer also emits this (broadcast, via
+      // handlePersonalJoinSpace), but its delivery is asynchronous and may
+      // race with the HTTP response — emit directly for the caller to close
+      // the race window, matching the getSpaces signal above.
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getMetadata",
+          params: { spaceId },
+          affectedUser: callerDid,
+        },
+      },
     ]);
   }
 

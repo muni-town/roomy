@@ -176,7 +176,11 @@ export const joinSpaceHandler: ProcedureHandler<
   // ── 3.5. Remove any leftSpace edge since the user is now rejoined ────
   await removeLeftSpaceEdge(db, spaceStreamDid, personalStreamDid);
 
-  // ── 4. Emit direct getSpaces invalidation signal ──────────────────────
+  // ── 4. Emit direct getSpaces + getMetadata invalidation signals ──────
+  // The personal stream materializer also emits these when it processes
+  // the personal.joinSpace event, but that delivery is asynchronous and
+  // may race with the HTTP response. Emitting directly for the caller
+  // closes the race window.
   const router = InvalidationRouter.getInstance();
   if (router) {
     router.emit([
@@ -185,6 +189,15 @@ export const joinSpaceHandler: ProcedureHandler<
         signal: {
           nsid: "space.roomy.space.getSpaces",
           params: {},
+          affectedUser: callerDid,
+        },
+      },
+      // getMetadata returns isMember/isAdmin, which flips to true on join.
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getMetadata",
+          params: { spaceId },
           affectedUser: callerDid,
         },
       },
