@@ -11,6 +11,12 @@
  *
  * Each event type is handled by a dedicated function. The main `inferSignals`
  * entry point dispatches by `$type`.
+ *
+ * IMPORTANT: The server-side query response cache (`src/cache/`) subscribes to
+ * these signals via `attachCacheEvictionListener` and evicts stale entries.
+ * When adding a new event type, you MUST add a handler here — a missing
+ * handler means the cache will serve stale data until the TTL safety net
+ * expires it (default 60s).
  */
 
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";

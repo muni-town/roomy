@@ -15,6 +15,7 @@ import {
   checkRateLimit,
   rateLimitResponse,
 } from "./rateLimit.ts";
+import type { QueryCache } from "../cache/queryCache.ts";
 
 function validateOrReject(
   schema: import("arktype").Type<any>,
@@ -66,9 +67,22 @@ export interface WsData {
 export class XrpcRouter {
   readonly #routes = new Map<string, RouteDef>();
   readonly #auth: AuthVerifier;
+  #queryCache: QueryCache | undefined;
+  #cacheableNsids: ReadonlySet<string> = new Set();
 
   constructor(auth: AuthVerifier) {
     this.#auth = auth;
+  }
+
+  /**
+   * Install a query response cache. Only NSIDs in `cacheableNsids` are
+   * cached; all other queries pass through uncached. When no cache is set
+   * (the default, including all existing unit tests), dispatch behaves
+   * exactly as before.
+   */
+  setQueryCache(queryCache: QueryCache, cacheableNsids: ReadonlySet<string>): void {
+    this.#queryCache = queryCache;
+    this.#cacheableNsids = cacheableNsids;
   }
 
   query(nsid: string, def: Omit<import("./types.ts").QueryDef, "kind">): this {
@@ -167,10 +181,33 @@ export class XrpcRouter {
             if (!v.ok) return v.response;
             params = v.data;
           }
+          // ── Response cache (lookup) ──────────────────────────────────
+          // Only consult the cache for the configured cacheable set. Auth
+          // has already run (above), so the resolved DID in the key is the
+          // authenticated identity, not a header value. A cache hit returns
+          // the previously-validated response directly — no re-validation,
+          // no handler call.
+          const cache = this.#queryCache;
+          const userDid = auth.did;
+          if (cache && this.#cacheableNsids.has(nsid)) {
+            const hit = cache.get(nsid, params as QueryParams, userDid);
+            if (hit !== undefined) {
+              return Response.json(hit.value);
+            }
+          }
+
           const result = await route.handler(params as QueryParams, auth);
           const validated = route.outputSchema
             ? validateOutputOrThrow(route.outputSchema, result, nsid)
             : result;
+
+          // ── Response cache (insert) ──────────────────────────────────
+          // Only successful handler results reach here (errors throw). The
+          // cached value is the post-validation object, so hits skip both
+          // the handler and `validateOutputOrThrow`.
+          if (cache && this.#cacheableNsids.has(nsid)) {
+            cache.set(nsid, params as QueryParams, userDid, validated);
+          }
           return Response.json(validated);
         }
 

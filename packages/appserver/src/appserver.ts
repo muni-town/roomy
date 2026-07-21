@@ -63,6 +63,12 @@ import { setPreferencesHandler } from "./handlers/space.roomy.push.setPreference
 import { startPushDispatcher, pushDispatcherStats, _resetPushDispatcher } from "./push/dispatcher.ts";
 import { schemas } from "@roomy-space/sdk";
 import { proxyBlob } from "./blob.ts";
+import {
+  CACHEABLE_NSIDS,
+  createQueryCacheFromEnv,
+  attachCacheEvictionListener,
+  type QueryCache,
+} from "./cache/index.ts";
 
 // ─── Options ──────────────────────────────────────────────────────────────
 
@@ -86,6 +92,10 @@ export interface AppserverOptions {
   quiet?: boolean;
   /** Disable the background embed enrichment sweeper. Useful for tests that don't exercise embeds. */
   disableEmbedSweeper?: boolean;
+  /** Disable the query response cache. Tests set this so handler call counts
+   *  are deterministic (the cache would skip the handler on the second call).
+   *  Also disabled when the `APPSERVER_QUERY_CACHE_ENABLED` env var is `"false"`. */
+  disableQueryCache?: boolean;
 }
 
 
@@ -99,6 +109,9 @@ export interface AppserverHandle {
   port: number;
   /** The appserver DID. */
   ownDid: string;
+  /** The query response cache, or undefined when caching is disabled. Exposed
+   *  for stats/metrics and for tests to assert hit/miss behaviour. */
+  queryCache: QueryCache | undefined;
   /** Stop the server, close DBs, and reset process-wide singletons. */
   close(): Promise<void>;
 }
@@ -369,6 +382,18 @@ export async function createAppserver(
   const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter, streamManager);
   const router = buildRouter(authVerifier, syncSubscribeHandler);
 
+  // ─── Query response cache ─────────────────────────────────────────────
+  // Process-local LRU cache for hot, expensive queries whose responses are
+  // fully covered by invalidation signals. Disabled via env kill switch.
+  // Registered after InvalidationRouter.setInstance so the eviction listener
+  // can subscribe to the singleton.
+  const queryCache = opts.disableQueryCache ? undefined : createQueryCacheFromEnv();
+  let cacheUnsub: (() => void) | undefined;
+  if (queryCache) {
+    router.setQueryCache(queryCache, CACHEABLE_NSIDS);
+    cacheUnsub = attachCacheEvictionListener(invalidationRouter, queryCache);
+  }
+
   // ─── Server ─────────────────────────────────────────────────────────
   const corsHeaders = {
     "Access-Control-Allow-Origin": corsOrigin,
@@ -421,6 +446,21 @@ export async function createAppserver(
           headers: { "content-type": "application/json", ...corsHeaders },
         });
       }
+      if (url.pathname === "/health/cache") {
+        const cacheStats = queryCache?.stats ?? {
+          hits: 0,
+          misses: 0,
+          evictions: 0,
+          size: 0,
+        };
+        return new Response(
+          JSON.stringify({
+            enabled: queryCache !== undefined,
+            ...cacheStats,
+          }),
+          { headers: { "content-type": "application/json", ...corsHeaders } },
+        );
+      }
 
       const blobMatch = url.pathname.match(/^\/blob\/(.+?)\/(.+)$/);
       if (blobMatch && req.method === "GET") {
@@ -454,6 +494,7 @@ export async function createAppserver(
     server,
     port: server.port ?? port,
     ownDid,
+    queryCache,
     close(): Promise<void> {
       return stopEmbedSweeper().finally(() => {
         try {
@@ -476,6 +517,12 @@ export async function createAppserver(
           _resetPushDispatcher();
         } catch (e) {
           console.error("appserver close: _resetPushDispatcher failed", e);
+        }
+        try {
+          if (cacheUnsub) cacheUnsub();
+          if (queryCache) queryCache.clear();
+        } catch (e) {
+          console.error("appserver close: query cache cleanup failed", e);
         }
         try {
           InvalidationRouter.resetInstance();
