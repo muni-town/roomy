@@ -229,7 +229,7 @@ async function handleNotificationClick(
 
   // No existing tab — open one at the room route (or root as fallback).
   const path =
-    spaceId && roomId ? `/space/${spaceId}/${roomId}` : "/";
+    spaceId && roomId ? `/${spaceId}/${roomId}` : "/";
   await self.clients.openWindow(path);
 }
 
