@@ -1,5 +1,5 @@
 export { cn } from "./cn.js";
-export { renderMarkdownSanitized, renderMarkdownPlaintext } from "./markdown.js";
+export { renderMarkdownSanitized, renderMarkdownPlaintext, renderInlineMarkdown } from "./markdown.js";
 export {
   formatRelativeTime,
   formatDate,

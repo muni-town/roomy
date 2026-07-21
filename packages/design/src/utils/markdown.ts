@@ -1,6 +1,10 @@
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 
+// Known Roomy domains — bare links to these are treated as internal space/room
+// references and replaced with rich badge components.
+const ROOMY_DOMAINS = new Set(["roomy.space", "a.roomy.space", "roomy.chat"]);
+
 marked.use({
   renderer: {
     link({ href, title, tokens }) {
@@ -12,7 +16,27 @@ marked.use({
       const targetAttr = isExternal
         ? ' target="_blank" rel="noopener noreferrer"'
         : "";
-      return `<a href="${href}"${titleAttr}${targetAttr}>${text}</a>`;
+
+      // Mark internal links (starting with /) so the client can replace them
+      // with rich badge components for space/room references.
+      const isInternalLink = !isExternal && href?.startsWith("/");
+      const internalAttr = isInternalLink ? ' data-roomy-internal-link="true"' : "";
+
+      // Also mark bare links to known Roomy domains (roomy.space, roomy.chat)
+      // so they get the same badge treatment.
+      let roomyDomainAttr = "";
+      if (isExternal && href) {
+        try {
+          const url = new URL(href);
+          if (ROOMY_DOMAINS.has(url.hostname)) {
+            roomyDomainAttr = ' data-roomy-internal-link="true"';
+          }
+        } catch {
+          // ignore invalid URLs
+        }
+      }
+
+      return `<a href="${href}"${titleAttr}${targetAttr}${internalAttr}${roomyDomainAttr}>${text}</a>`;
     },
   },
 });
@@ -38,7 +62,7 @@ function cachedGet(cache: Map<string, string>, key: string, compute: () => strin
 export function renderMarkdownSanitized(markdown: string) {
   return cachedGet(htmlCache, markdown, () =>
     DOMPurify.sanitize(marked.parse(markdown, { async: false }), {
-      ADD_ATTR: ["target", "rel"],
+      ADD_ATTR: ["target", "rel", "data-roomy-internal-link"],
     }) as string,
   );
 }
@@ -51,4 +75,17 @@ export function renderMarkdownPlaintext(markdown: string): string {
     const doc = new DOMParser().parseFromString(html, "text/html");
     return doc.body.textContent ?? "";
   });
+}
+
+/**
+ * Render inline markdown (no block-level wrapping like <p>) for use inside
+ * Svelte templates where block elements would break layout.
+ */
+export function renderInlineMarkdown(markdown: string): string {
+  if (!markdown) return "";
+  return cachedGet(htmlCache, `inline:${markdown}`, () =>
+    DOMPurify.sanitize(marked.parseInline(markdown, { async: false }), {
+      ADD_ATTR: ["target", "rel"],
+    }) as string,
+  );
 }

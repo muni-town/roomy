@@ -2,13 +2,14 @@
   import { goto } from "$app/navigation";
   import { createActivityFeedQuery, type ActivityItem } from "$lib/queries/activity-feed";
   import { resolveBlobUrl } from "$lib/utils";
-  import { renderMarkdownSanitized, formatRelativeTime } from "@roomy/design/utils";
+  import { formatRelativeTime } from "@roomy/design/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import ActivityFeedSkeleton from "./ActivityFeedSkeleton.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import MediaEmbed from "../chat/embeds/MediaEmbed.svelte";
   import LinkCard from "../chat/embeds/LinkCard.svelte";
+  import MessageContent from "../chat/MessageContent.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
   import { auth } from "$lib/auth.svelte";
   import { IconChevronRight } from "@roomy/design/icons";
@@ -135,7 +136,7 @@
                         </button>
                       {/if}
                       <span class="prose dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400 prose-a:no-underline text-base-600 dark:text-base-400 break-words [&_p]:inline [&_p]:m-0">
-                        {@html renderMarkdownSanitized(msg.content)}
+                        <MessageContent content={msg.content} />
                       </span>
                     </div>
                   </div>
@@ -186,7 +187,7 @@
                   {/if}
                 </div>
                 <div class="prose dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400 prose-a:no-underline text-base font-normal text-left max-w-full overflow-auto hide-scrollbar break-words [&_p]:m-0 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0">
-                  {@html renderMarkdownSanitized(last.content)}
+                  <MessageContent content={last.content} />
                 </div>
 
                 {#if last.media && last.media.length > 0}

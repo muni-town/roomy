@@ -3,7 +3,6 @@
   import { Checkbox } from "bits-ui";
   import MessageBubble from "@roomy/design/components/content/thread/message/MessageBubble.svelte";
   import { messagingState } from "./messaging-state.svelte";
-  import { renderMarkdownSanitized } from "@roomy/design/utils";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconCheck, IconX } from "@roomy/design/icons";
   import MessageContext from "./MessageContext.svelte";
@@ -11,6 +10,7 @@
   import MessageToolbar from "./MessageToolbar.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
   import LinkCard from "./embeds/LinkCard.svelte";
+  import MessageContent from "./MessageContent.svelte";
   import ChatInput from "./ChatInput.svelte";
   import { editMessage } from "$lib/mutations/message";
   import type { Message } from "$lib/queries/messages";
@@ -66,6 +66,7 @@
   let showToolbar = $derived(
     (!isEditing && hovered && !isThreading) || keepToolbarOpen,
   );
+
   let isBridged = $derived(message.authorDid.startsWith("did:discord:"));
   let canEditDelete = $derived(message.authorDid === currentUserDid);
 
@@ -137,7 +138,7 @@
             />
           </div>
         {:else}
-          {@html renderMarkdownSanitized(message.content)}
+          <MessageContent content={message.content} />
         {/if}
       {/snippet}
 
