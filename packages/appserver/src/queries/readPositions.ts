@@ -5,6 +5,7 @@
  * COUNT(*) against entities. This is O(1) per room.
  */
 
+import { roomAccess } from "../auth/access.ts";
 import type { DbLike } from "../db/types.ts";
 import type { UserDid } from "@roomy-space/sdk";
 
@@ -101,26 +102,64 @@ export async function getReadPositions(
 }
 
 /**
- * Sum unread counts across all rooms the user has read positions for in a
- * given space. This is used for the per-space unreadCount in getSpaces.
+ * Sum unread counts across all rooms the user can read in a given space.
+ * This is used for the per-space unreadCount in getSpaces.
  *
- * Calls ensureSpaceReadPositions first so that rows are lazily created.
+ * Filters channels by the user's roomAccess so inaccessible channels
+ * (e.g. role-gated or invite-only) are excluded from the total.
  */
 export async function getSpaceUnreadCount(
   db: DbLike,
   userDid: string,
   spaceId: string,
 ): Promise<number> {
-  await ensureSpaceReadPositions(db, userDid, spaceId);
-  const row = await db
+  // Fetch all non-deleted channels in the space.
+  const allChannels = await db
     .query(
-      `select coalesce(sum(rp.unread_count), 0) as total
-         from readstate.read_positions rp
-         join entities e on e.id = rp.room_id
-        where rp.user_did = ?
+      `select e.id from entities e
+         join comp_room cr on cr.entity = e.id
+        where e.stream_id = ?
+          and cr.label = 'space.roomy.channel'
+          and coalesce(cr.deleted, 0) = 0`,
+    )
+    .all<{ id: string }>([spaceId]);
+
+  // Filter to channels the user can read, then ensure read_positions rows exist.
+  const accessible: string[] = [];
+  for (const ch of allChannels) {
+    const acc = await roomAccess(db, ch.id, userDid);
+    if (acc.canRead) accessible.push(ch.id);
+  }
+
+  await ensureReadPositions(db, userDid, accessible);
+
+  // Also include threads the user has engaged with (user_thread_activity).
+  const engagedThreads = await db
+    .query(
+      `select uta.thread_id
+         from readstate.user_thread_activity uta
+         join entities e on e.id = uta.thread_id
+        where uta.user_did = ?
           and e.stream_id = ?`,
     )
-    .get<{ total: number }>([userDid, spaceId]);
+    .all<{ thread_id: string }>([userDid, spaceId]);
+
+  const threadIds = engagedThreads.map((r) => r.thread_id);
+  // Ensure read_positions rows exist for engaged threads too.
+  await ensureReadPositions(db, userDid, threadIds);
+
+  const allRoomIds = [...accessible, ...threadIds];
+  if (allRoomIds.length === 0) return 0;
+
+  // Sum unread counts across accessible channels and engaged threads.
+  const placeholders = allRoomIds.map(() => "?").join(",");
+  const row = await db
+    .query(
+      `select coalesce(sum(unread_count), 0) as total
+         from readstate.read_positions
+        where user_did = ? and room_id in (${placeholders})`,
+    )
+    .get<{ total: number }>([userDid, ...allRoomIds]);
   return row?.total ?? 0;
 }
 /**
@@ -151,21 +190,3 @@ export async function getRoomReadPositionUsers(
 /**
  * Ensure read_positions rows exist for a user across all rooms in a space.
  */
-async function ensureSpaceReadPositions(
-  db: DbLike,
-  userDid: string,
-  spaceId: string,
-): Promise<void> {
-  const roomIds = (await db
-    .query(
-      `select e.id from entities e
-         join comp_room cr on cr.entity = e.id
-        where e.stream_id = ?
-          and cr.label = 'space.roomy.channel'
-          and coalesce(cr.deleted, 0) = 0`,
-    )
-    .all<{ id: string }>([spaceId]))
-    .map((r) => r.id);
-
-  await ensureReadPositions(db, userDid, roomIds);
-}

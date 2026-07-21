@@ -123,19 +123,41 @@ async function applyBundleInner(
       bundle.event.$type === "space.roomy.message.createMessage.v0" &&
       bundle.event.room
     ) {
-      // Increment unread for all users tracking this room. Replaces the old
-      // per-room comp_last_read counter with per-user read_positions rows.
-      await db.run(
-        `update readstate.read_positions
-            set unread_count = unread_count + 1,
-                updated_at = (unixepoch() * 1000)
-          where room_id = ?`,
-        bundle.event.room,
-      );
+      const isThreadRoom = await cachedIsThread(bundle.event.room);
+
+      // Increment unread for all users tracking this room.
+      if (isThreadRoom) {
+        // Threads: only bump users who have engaged with this thread.
+        // Uses INSERT ... ON CONFLICT DO UPDATE so the read_positions row
+        // is created if it doesn't exist yet (lazy creation).
+        await db.run(
+          `insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count, updated_at)
+           select uta.user_did, ?, coalesce(
+             (select max(sort_idx) from entities where room = ?), '0'
+           ), 1, (unixepoch() * 1000)
+             from readstate.user_thread_activity uta
+            where uta.thread_id = ?
+           on conflict(user_did, room_id) do update set
+             unread_count = unread_count + 1,
+             updated_at = (unixepoch() * 1000)`,
+          bundle.event.room,
+          bundle.event.room,
+          bundle.event.room,
+        );
+      } else {
+        // Channels: bump all users with a read_positions row.
+        await db.run(
+          `update readstate.read_positions
+              set unread_count = unread_count + 1,
+                  updated_at = (unixepoch() * 1000)
+            where room_id = ?`,
+          bundle.event.room,
+        );
+      }
 
       // Track thread activity: if the message is in a thread, upsert the
       // author's interaction so the thread appears in their sidebar.
-      if (await cachedIsThread(bundle.event.room)) {
+      if (isThreadRoom) {
         const timestamp = decodeTimeFromId(bundle.event.id);
         await upsertUserThreadActivity(db, bundle.user, bundle.event.room, timestamp);
       }
