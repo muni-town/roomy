@@ -3,7 +3,7 @@
   import { currentSpaceState } from "./current-space.svelte";
   import { currentRoomState, setCurrentRoom } from "./current-room.svelte";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
-  import { IconHashtag, IconHome, IconThread } from "@roomy/design/icons";
+  import { IconHashtag, IconHome, IconNeedleThread } from "@roomy/design/icons";
   import { resolveBlobUrl } from "$lib/utils";
 
   const currentSpace = $derived(currentSpaceState.value);
@@ -29,7 +29,7 @@
     {#if currentRoom}
       <span class="text-base-300 dark:text-base-700 shrink-0 sm:hidden">/</span>
       {#if currentRoom.kind === "thread"}
-        <IconThread class="size-4 shrink-0 text-base-500" />
+        <IconNeedleThread class="size-4 shrink-0 text-base-500" />
       {:else}
         <IconHashtag class="size-4 shrink-0 text-base-500" />
       {/if}
