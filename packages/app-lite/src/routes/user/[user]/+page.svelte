@@ -8,6 +8,7 @@
   import { setSidebarContent } from "$lib/components/layout/sidebar.svelte";
   import { setWideSidebar } from "$lib/components/layout/wide-sidebar.svelte";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+  import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
 
   let profile = $state<ProfileViewDetailed | undefined>(undefined);
   let error = $state<string | null>(null);
@@ -37,6 +38,13 @@
     };
   });
 </script>
+
+<SeoMeta
+  title={profile?.displayName ? `${profile.displayName} (@${profile.handle}) - Roomy` : `@${page.params.user} - Roomy`}
+  description={profile?.description}
+  image={profile?.avatar}
+  type="profile"
+/>
 
 {#snippet userNavbar()}
   <div class="flex-1 text-center font-bold text-lg text-base-900 dark:text-base-100">

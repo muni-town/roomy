@@ -9,6 +9,7 @@
   import { setCurrentSpace, setLastActiveSpaceId } from "$lib/components/layout/current-space.svelte";
   import JoinSpaceModal from "$lib/components/layout/JoinSpaceModal.svelte";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
+  import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
 
   let { children } = $props();
 
@@ -84,6 +85,13 @@
     return () => setSidebarContent(undefined);
   });
 </script>
+
+<SeoMeta
+  title={metaQuery.data?.name ? `${metaQuery.data.name} - Roomy` : "Roomy"}
+  description={metaQuery.data?.description}
+  image={metaQuery.data?.avatar ? resolveBlobUrl(metaQuery.data.avatar) : undefined}
+  url={page.url.origin ? `${page.url.origin}/${spaceId}` : undefined}
+/>
 
 <div class="h-full dark:bg-base-900/20 text-base-800 dark:text-base-200">
   {@render children()}

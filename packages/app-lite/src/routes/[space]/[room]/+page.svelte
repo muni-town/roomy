@@ -15,6 +15,8 @@
   import ChatArea from "$lib/components/chat/ChatArea.svelte";
   import ChatInputArea from "$lib/components/chat/ChatInputArea.svelte";
   import ChannelBoardView from "$lib/components/thread/ChannelBoardView.svelte";
+  import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
 
   const spaceId = $derived(page.params.space!);
   const roomId = $derived(page.params.room!);
@@ -176,6 +178,13 @@
   // Only show chat input area in chat view and when not a thread
   let showChatInput = $derived(roomKind === "channel" && channelActiveTab === "Chat");
 </script>
+
+<SeoMeta
+  title={roomName !== "Channel" ? `${roomName} - ${spaceMetaQuery.data?.name ?? "Roomy"}` : spaceMetaQuery.data?.name ? `${spaceMetaQuery.data.name} - Roomy` : "Roomy"}
+  description={spaceMetaQuery.data?.description}
+  image={spaceMetaQuery.data?.avatar ? resolveBlobUrl(spaceMetaQuery.data.avatar) : undefined}
+  url={page.url.origin ? `${page.url.origin}/${spaceId}/${roomId}` : undefined}
+/>
 
 {#snippet roomNavbar()}
   <div class="flex items-center gap-2 px-2 min-w-0 grow">

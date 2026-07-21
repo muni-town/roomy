@@ -9,6 +9,7 @@
   import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import WelcomeContent from "$lib/components/welcome/WelcomeContent.svelte";
+  import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
@@ -22,7 +23,12 @@
       setWideSidebar(false);
     };
   });
+
+  const homeTitle = $derived("Roomy — Community Platform");
+  const homeDescription = $derived("A community platform integrated with the AT Protocol. Join spaces, chat in channels, and connect with others.");
 </script>
+
+<SeoMeta title={homeTitle} description={homeDescription} />
 
 {#snippet homeSidebar()}
   <SpaceSidebar />
