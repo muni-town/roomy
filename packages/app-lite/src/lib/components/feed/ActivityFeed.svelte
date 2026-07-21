@@ -10,6 +10,7 @@
   import MediaEmbed from "../chat/embeds/MediaEmbed.svelte";
   import LinkCard from "../chat/embeds/LinkCard.svelte";
   import MessageContent from "../chat/MessageContent.svelte";
+  import { prefetchInternalLinkSummaries } from "../chat/prefetch-link-summaries";
   import MessageReactions from "../chat/MessageReactions.svelte";
   import { auth } from "$lib/auth.svelte";
   import { IconChevronRight } from "@roomy/design/icons";
@@ -17,6 +18,20 @@
   let { spaceId, showSpaceInfo = true, limit = 20 }: { spaceId?: string; showSpaceInfo?: boolean; limit?: number } = $props();
 
   const feedQuery = createActivityFeedQuery(() => ({ spaceId, limit }));
+
+  // Warm badge-summary cache for internal links across the feed's messages
+  // (preceding context + last message of each activity item) so badges mount
+  // with cache hits. One pass per feed load, not per badge render.
+  $effect(() => {
+    const feed = feedQuery.data?.feed;
+    if (!feed || feed.length === 0) return;
+    const contents: string[] = [];
+    for (const item of feed) {
+      for (const msg of item.messages) contents.push(msg.content);
+    }
+    if (contents.length === 0) return;
+    prefetchInternalLinkSummaries(contents);
+  });
 
   const currentUserDid = $derived(auth.userDid);
 

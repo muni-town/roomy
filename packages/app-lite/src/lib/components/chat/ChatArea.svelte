@@ -14,6 +14,7 @@
   import { queryClient } from "$lib/client";
   import { px } from "$lib/auth.svelte";
   import { scrollPositionState } from "./scroll-position.svelte";
+  import { prefetchInternalLinkSummaries } from "./prefetch-link-summaries";
 
   const { queryKey } = cache;
 
@@ -78,6 +79,17 @@
       }
       return { ...message, mergeWithPrevious };
     });
+  });
+
+  // Warm the badge-summary cache for every internal link in the loaded
+  // message set so badges mount with a cache hit instead of each issuing a
+  // cold getSpaceSummary/getRoomSummary fetch. Runs once per timeline change
+  // (initial load + each infinite-scroll page) — not per render, not per
+  // virtualizer recycle. See prefetch-link-summaries.ts for rationale.
+  $effect(() => {
+    const msgs = timeline;
+    if (msgs.length === 0) return;
+    prefetchInternalLinkSummaries(msgs.map((m) => m.content));
   });
 
   let showJumpToPresent = $derived(!isAtBottom);
