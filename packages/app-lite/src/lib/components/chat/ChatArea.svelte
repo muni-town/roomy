@@ -20,9 +20,10 @@
   type Props = {
     spaceId: string;
     roomId: string;
+    onSeen?: () => void;
   };
-
-  let { spaceId, roomId }: Props = $props();
+  
+  let { spaceId, roomId, onSeen }: Props = $props();
 
   const messagesQuery = createMessagesQuery(() => roomId);
   const currentUserDid = $derived(auth.userDid);
@@ -30,6 +31,7 @@
   let virtualizer: VirtualizerHandle = $state(null!);
   let viewport: HTMLDivElement = $state(null!);
   let isAtBottom = $state(true);
+  let prevIsAtBottom = $state(true);
   let prevMessageCount = $state(0);
   let isLoadingOlder = $state(false);
   let isShifting = $state(false);
@@ -159,7 +161,13 @@
     const { scrollTop, scrollHeight, clientHeight } = viewport;
     isAtBottom = scrollHeight - (scrollTop + clientHeight) < 500;
     currentScrollOffset = scrollTop;
-
+  
+    // Detect transition to bottom — user scrolled down past unread messages
+    if (isAtBottom && !prevIsAtBottom && !isRestoring) {
+      onSeen?.();
+    }
+    prevIsAtBottom = isAtBottom;
+  
     // Update scroll position state when user scrolls
     if (timeline.length > 0) {
       if (isAtBottom) {
@@ -279,13 +287,19 @@
     // Track scroll position from virtualizer events (more reliable than viewport scroll)
     if (!isRestoring && timeline.length > 0) {
       currentScrollOffset = offset;
-
+  
       // Check if we're at the bottom
       const { scrollHeight, clientHeight } = viewport ?? {};
       if (scrollHeight && clientHeight) {
         isAtBottom = scrollHeight - (offset + clientHeight) < 500;
       }
-
+  
+      // Detect transition to bottom — user scrolled down past unread messages
+      if (isAtBottom && !prevIsAtBottom && !isRestoring) {
+        onSeen?.();
+      }
+      prevIsAtBottom = isAtBottom;
+  
       // Save scroll position proactively
       if (isAtBottom) {
         scrollPositionState.clear(roomId);
@@ -297,7 +311,7 @@
         });
       }
     }
-
+  
     // Load older messages when near the top
     if (offset < 100 && timeline.length > 0 && hasMore && !isLoadingOlder) {
       loadOlderMessages();
