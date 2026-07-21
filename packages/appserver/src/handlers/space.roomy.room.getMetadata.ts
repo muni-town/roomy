@@ -71,25 +71,30 @@ export const getRoomMetadataHandler: QueryHandler<
 
   const recentThreads: RecentThread[] = [];
   if (userDid !== null) {
-    const threadRoomIds = threadActivity
-      .filter((t) => t.id !== roomId);
-    const threadAccessResults = await Promise.all(
-      threadRoomIds.map((t) => roomAccess(db, t.id, userDid)),
+    // Compute roomAccess once per thread and reuse the result for both
+    // the read-gate filter and the canRead/canWrite fields below. The
+    // previous code discarded the first pass and recomputed roomAccess
+    // for every accessible thread — doubling the per-thread SQL cost
+    // (~6 statements per thread, ~120 per request for a full sidebar).
+    const candidates = threadActivity.filter((t) => t.id !== roomId);
+    const accessByIndex = await Promise.all(
+      candidates.map((t) => roomAccess(db, t.id, userDid)),
     );
-    const accessibleThreadRoomIds = threadRoomIds.filter((_, i) => threadAccessResults[i]?.canRead ?? false);
+    const accessible = candidates
+      .map((t, i) => ({ thread: t, access: accessByIndex[i]! }))
+      .filter(({ access }) => access.canRead);
     const threadPositions = await getReadPositions(
       db,
       userDid,
-      accessibleThreadRoomIds.map((t) => t.id),
+      accessible.map(({ thread }) => thread.id),
     );
-    for (const t of accessibleThreadRoomIds) {
-      const acc = await roomAccess(db, t.id, userDid);
-      const pos = threadPositions.get(t.id);
+    for (const { thread, access } of accessible) {
+      const pos = threadPositions.get(thread.id);
       recentThreads.push(stripNulls({
-        id: t.id,
-        name: t.name,
-        canRead: acc.canRead,
-        canWrite: acc.canWrite,
+        id: thread.id,
+        name: thread.name,
+        canRead: access.canRead,
+        canWrite: access.canWrite,
         unreadCount: pos?.unreadCount ?? 0,
         lastRead: (pos?.lastRead as string | null) ?? null,
       }) as RecentThread);
