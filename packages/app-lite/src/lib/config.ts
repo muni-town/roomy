@@ -3,11 +3,13 @@ import { env as dynamicEnv } from "$env/dynamic/public";
 const APPSERVER_RPCS = [
   "space.roomy.space.getSpaces",
   "space.roomy.space.getMetadata",
+  "space.roomy.space.getSpaceSummary",
   "space.roomy.space.getThreads",
   "space.roomy.space.getRoles",
   "space.roomy.space.getMembers",
   "space.roomy.space.getInvites",
   "space.roomy.room.getMetadata",
+  "space.roomy.room.getRoomSummary",
   "space.roomy.room.getMessages",
   "space.roomy.room.getThreads",
   "space.roomy.message.getMessage",

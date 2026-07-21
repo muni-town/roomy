@@ -38,10 +38,12 @@ import { adminTestSendHandler } from "./handlers/space.roomy.admin.push.testSend
 import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
 import { getMembersHandler } from "./handlers/space.roomy.space.getMembers.ts";
 import { getMetadataHandler } from "./handlers/space.roomy.space.getMetadata.ts";
+import { getSpaceSummaryHandler } from "./handlers/space.roomy.space.getSpaceSummary.ts";
 import { getSpaceThreadsHandler } from "./handlers/space.roomy.space.getThreads.ts";
 import { getRolesHandler } from "./handlers/space.roomy.space.getRoles.ts";
 import { getInvitesHandler } from "./handlers/space.roomy.space.getInvites.ts";
 import { getRoomMetadataHandler } from "./handlers/space.roomy.room.getMetadata.ts";
+import { getRoomSummaryHandler } from "./handlers/space.roomy.room.getRoomSummary.ts";
 import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts";
 import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
 import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
@@ -207,6 +209,11 @@ export function buildRouter(
       paramsSchema: schemas.queries.getSpaceMetadata.Params,
       outputSchema: schemas.queries.getSpaceMetadata.Response,
     })
+    .query("space.roomy.space.getSpaceSummary", {
+      handler: getSpaceSummaryHandler,
+      paramsSchema: schemas.queries.getSpaceSummary.Params,
+      outputSchema: schemas.queries.getSpaceSummary.Response,
+    })
     .query("space.roomy.space.getThreads", {
       handler: getSpaceThreadsHandler,
       paramsSchema: schemas.queries.getSpaceThreads.Params,
@@ -226,6 +233,11 @@ export function buildRouter(
       handler: getRoomMetadataHandler,
       paramsSchema: schemas.queries.getRoomMetadata.Params,
       outputSchema: schemas.queries.getRoomMetadata.Response,
+    })
+    .query("space.roomy.room.getRoomSummary", {
+      handler: getRoomSummaryHandler,
+      paramsSchema: schemas.queries.getRoomSummary.Params,
+      outputSchema: schemas.queries.getRoomSummary.Response,
     })
     .query("space.roomy.room.getThreads", {
       handler: getRoomThreadsHandler,

@@ -21,6 +21,10 @@ export const QUERY_SCHEMAS = {
     params: queries.getSpaceMetadata.Params,
     response: queries.getSpaceMetadata.Response,
   },
+  "space.roomy.space.getSpaceSummary": {
+    params: queries.getSpaceSummary.Params,
+    response: queries.getSpaceSummary.Response,
+  },
   "space.roomy.space.getThreads": {
     params: queries.getSpaceThreads.Params,
     response: queries.getSpaceThreads.Response,
@@ -40,6 +44,10 @@ export const QUERY_SCHEMAS = {
   "space.roomy.room.getMetadata": {
     params: queries.getRoomMetadata.Params,
     response: queries.getRoomMetadata.Response,
+  },
+  "space.roomy.room.getRoomSummary": {
+    params: queries.getRoomSummary.Params,
+    response: queries.getRoomSummary.Response,
   },
   "space.roomy.room.getThreads": {
     params: queries.getRoomThreads.Params,

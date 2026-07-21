@@ -1,0 +1,41 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.room.getRoomSummary",
+  "defs": {
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "roomId"
+        ],
+        "properties": {
+          "roomId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "kind",
+            "spaceId"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "spaceId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

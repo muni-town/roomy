@@ -10,6 +10,7 @@
 import type { DbLike } from "../db/types.ts";
 import { type, UserDid, type UserDid as UserDidT } from "@roomy-space/sdk";
 import {
+  type AccessMemo,
   type RoomAccess,
   type SpaceAccess,
   allowsPublicJoin,
@@ -40,16 +41,20 @@ export function parseUserDid(auth: AuthCtx): UserDidT | null {
 /**
  * Caller must be a member or admin of the space, and not banned. Returns the
  * full access decision so handlers don't re-query.
+ *
+ * Pass a per-request `memo` (from `createAccessMemo()`) to share access
+ * decisions across all checks in this request — see `access.ts`.
  */
 export async function requireSpaceAccess(
   db: DbLike,
   spaceId: string,
   did: string | null,
+  memo?: AccessMemo,
 ): Promise<SpaceAccess> {
   if (did === null) {
     throw new XrpcError(401, "AuthRequired", "Authentication required");
   }
-  const access = await spaceAccess(db, spaceId, did);
+  const access = await spaceAccess(db, spaceId, did, memo);
   if (access.isBanned) {
     throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
   }
@@ -67,19 +72,23 @@ export async function requireSpaceAccess(
  * Caller must have read access to the space (member, admin, OR public space
  * with allowPublicJoin). Unlike requireSpaceAccess, this allows anonymous
  * access to public spaces. Returns the full access decision.
+ *
+ * Pass a per-request `memo` (from `createAccessMemo()`) to share access
+ * decisions across all checks in this request — see `access.ts`.
  */
 export async function requireSpaceRead(
   db: DbLike,
   spaceId: string,
   did: string | null,
+  memo?: AccessMemo,
 ): Promise<SpaceAccess> {
-  const access = await spaceAccess(db, spaceId, did);
+  const access = await spaceAccess(db, spaceId, did, memo);
   if (access.isBanned) {
     throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
   }
   if (!access.isMember && !access.isAdmin) {
     // Allow anonymous/member access if the space allows public join.
-    if (!(await allowsPublicJoin(db, spaceId))) {
+    if (!(await allowsPublicJoin(db, spaceId, memo))) {
       throw new XrpcError(
         403,
         "Forbidden",
@@ -93,13 +102,17 @@ export async function requireSpaceRead(
 /**
  * Caller must have read access to the room. 404 if the room doesn't exist,
  * 403 otherwise. Returns the full access decision.
+ *
+ * Pass a per-request `memo` (from `createAccessMemo()`) to share access
+ * decisions across all checks in this request — see `access.ts`.
  */
 export async function requireRoomRead(
   db: DbLike,
   roomId: string,
   did: string | null,
+  memo?: AccessMemo,
 ): Promise<RoomAccess> {
-  const access = await roomAccess(db, roomId, did);
+  const access = await roomAccess(db, roomId, did, memo);
   if (!access.exists) {
     throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
   }
@@ -116,13 +129,17 @@ export async function requireRoomRead(
 /**
  * Caller must have write access to the room. 404 if the room doesn't exist,
  * 403 if banned or no write permission. Returns the full access decision.
+ *
+ * Pass a per-request `memo` (from `createAccessMemo()`) to share access
+ * decisions across all checks in this request — see `access.ts`.
  */
 export async function requireRoomWrite(
   db: DbLike,
   roomId: string,
   did: string | null,
+  memo?: AccessMemo,
 ): Promise<RoomAccess> {
-  const access = await roomAccess(db, roomId, did);
+  const access = await roomAccess(db, roomId, did, memo);
   if (!access.exists) {
     throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
   }

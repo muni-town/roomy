@@ -42,46 +42,160 @@ export interface RoomAccess {
   isBanned: boolean;
 }
 
+// ── Per-request memo ──────────────────────────────────────────────────────
+
+/**
+ * Per-request cache for access decisions.
+ *
+ * A single XRPC handler invocation often checks the same `(spaceId, did)`
+ * membership/admin/ban flags and the same `roomId` access decision many
+ * times — e.g. `space.roomy.room.getMetadata` calls `roomAccess` for each
+ * recent thread, and each call re-queries `isMember`/`isAdmin`/`isBanned`
+ * for the *same* parent space. Without a memo, that is ~6 SQL statements
+ * per thread, most of them redundant.
+ *
+ * The memo is keyed by `(did, spaceId)` for space-scoped booleans and by
+ * `(did, roomId)` for full room decisions. It is intentionally per-request
+ * (not process-global): access state can change between requests via Leaf
+ * events, and a stale cache would be a security bug. Callers create one
+ * with `createAccessMemo()` at the top of a handler and pass it through to
+ * every access call in that request.
+ *
+ * All access functions accept an optional `memo` final argument. When
+ * omitted, a transient memo is constructed for that call only — so nested
+ * calls within a single top-level call still deduplicate against each
+ * other, but unrelated callers do not share state. Threading the *same*
+ * memo across a whole handler is what collapses the N×SQL fan-out.
+ */
+export interface AccessMemo {
+  /** Cached `SpaceAccess` keyed by `${did}\0${spaceId}` (did=null → "\0spaceId"). */
+  readonly space: Map<string, SpaceAccess>;
+  /** Cached `allowsPublicJoin` keyed by spaceId. */
+  readonly publicJoin: Map<string, boolean>;
+  /** Cached `RoomAccess` keyed by `${did}\0${roomId}`. */
+  readonly room: Map<string, RoomAccess>;
+  /** In-flight `roomAccess` promises to coalesce concurrent calls for the same room. */
+  readonly roomInflight: Map<string, Promise<RoomAccess>>;
+}
+
+/** Create a fresh per-request access memo. */
+export function createAccessMemo(): AccessMemo {
+  return {
+    space: new Map(),
+    publicJoin: new Map(),
+    room: new Map(),
+    roomInflight: new Map(),
+  };
+}
+
+function spaceKey(did: string | null, spaceId: string): string {
+  return `${did ?? ""}\0${spaceId}`;
+}
+
+function roomKey(did: string | null, roomId: string): string {
+  return `${did ?? ""}\0${roomId}`;
+}
 
 // ── Membership / admin / ban ──────────────────────────────────────────────
 
-export async function isMember(db: DbLike, spaceId: string, did: string | null): Promise<boolean> {
+export async function isMember(
+  db: DbLike,
+  spaceId: string,
+  did: string | null,
+  memo?: AccessMemo,
+): Promise<boolean> {
+  return (await spaceAccessCached(db, spaceId, did, memo)).isMember;
+}
+
+export async function isAdmin(
+  db: DbLike,
+  spaceId: string,
+  did: string | null,
+  memo?: AccessMemo,
+): Promise<boolean> {
+  return (await spaceAccessCached(db, spaceId, did, memo)).isAdmin;
+}
+
+export async function isBanned(
+  db: DbLike,
+  spaceId: string,
+  did: string | null,
+  memo?: AccessMemo,
+): Promise<boolean> {
+  return (await spaceAccessCached(db, spaceId, did, memo)).isBanned;
+}
+
+/**
+ * Resolve `SpaceAccess` for `(spaceId, did)`, memoised per request.
+ *
+ * `isMember`/`isAdmin`/`isBanned` all derive from this, so a single
+ * `spaceAccess` call (or any combination of the three predicates) costs
+ * exactly three SQL statements per `(spaceId, did)` per memo lifetime —
+ * not three per predicate per call.
+ */
+export async function spaceAccess(
+  db: DbLike,
+  spaceId: string,
+  did: string | null,
+  memo?: AccessMemo,
+): Promise<SpaceAccess> {
+  return spaceAccessCached(db, spaceId, did, memo);
+}
+
+async function spaceAccessCached(
+  db: DbLike,
+  spaceId: string,
+  did: string | null,
+  memo?: AccessMemo,
+): Promise<SpaceAccess> {
+  const m = memo ?? createAccessMemo();
+  const key = spaceKey(did, spaceId);
+  const hit = m.space.get(key);
+  if (hit) return hit;
+
+  const result: SpaceAccess = {
+    isMember: await queryIsMember(db, spaceId, did),
+    isAdmin: await queryIsAdmin(db, spaceId, did),
+    isBanned: await queryIsBanned(db, spaceId, did),
+  };
+  m.space.set(key, result);
+  return result;
+}
+
+async function queryIsMember(db: DbLike, spaceId: string, did: string | null): Promise<boolean> {
   if (did === null) return false;
   const row = await db.query("select 1 as n from edges where head = ? and tail = ? and label = 'member' limit 1").get<{ n: number }>([spaceId, did]);
   return row !== null;
 }
 
-export async function isAdmin(db: DbLike, spaceId: string, did: string | null): Promise<boolean> {
+async function queryIsAdmin(db: DbLike, spaceId: string, did: string | null): Promise<boolean> {
   if (did === null) return false;
   const row = await db.query("select 1 as n from edges where head = ? and tail = ? and label = 'admin' limit 1").get<{ n: number }>([spaceId, did]);
   return row !== null;
 }
 
-export async function isBanned(db: DbLike, spaceId: string, did: string | null): Promise<boolean> {
+async function queryIsBanned(db: DbLike, spaceId: string, did: string | null): Promise<boolean> {
   if (did === null) return false;
   const row = await db.query("select 1 as n from comp_bans where entity = ? and user_did = ? limit 1").get<{ n: number }>([spaceId, did]);
   return row !== null;
-}
-
-export async function spaceAccess(
-  db: DbLike,
-  spaceId: string,
-  did: string | null,
-): Promise<SpaceAccess> {
-  return {
-    isMember: await isMember(db, spaceId, did),
-    isAdmin: await isAdmin(db, spaceId, did),
-    isBanned: await isBanned(db, spaceId, did),
-  };
 }
 
 /**
  * Whether the space allows public (no-invite) joining. NULL in the DB means
  * unset; per schema docs that defaults to "open" (true).
  */
-export async function allowsPublicJoin(db: DbLike, spaceId: string): Promise<boolean> {
-  const row = await db.query("select coalesce(allow_public_join, 1) as v from comp_space where entity = ?").get<{ v: number }>([spaceId]);
-  return row === null ? true : row.v === 1;
+export async function allowsPublicJoin(
+  db: DbLike,
+  spaceId: string,
+  memo?: AccessMemo,
+): Promise<boolean> {
+  const m = memo ?? createAccessMemo();
+  const hit = m.publicJoin.get(spaceId);
+  if (hit !== undefined) return hit;
+  const row = await db.query("select coalesce(allow_public_join, 1) as v from comp_space where entity = ?").get<{ v: number }>(spaceId);
+  const result = row === null ? true : row.v === 1;
+  m.publicJoin.set(spaceId, result);
+  return result;
 }
 
 // ── Room access ───────────────────────────────────────────────────────────
@@ -204,6 +318,34 @@ export async function roomAccess(
   db: DbLike,
   roomId: string,
   did: string | null,
+  memo?: AccessMemo,
+): Promise<RoomAccess> {
+  const m = memo ?? createAccessMemo();
+  const key = roomKey(did, roomId);
+  const hit = m.room.get(key);
+  if (hit) return hit;
+
+  // Coalesce concurrent calls for the same (did, roomId). Within a single
+  // handler, `Promise.all(threads.map(t => roomAccess(...)))` can issue
+  // duplicate checks for the same thread id (e.g. a thread appearing twice
+  // in an activity list) — without this, both would run the full SQL chain.
+  const inflight = m.roomInflight.get(key);
+  if (inflight) return inflight;
+
+  const promise = computeRoomAccess(db, roomId, did, m).then((result) => {
+    m.room.set(key, result);
+    m.roomInflight.delete(key);
+    return result;
+  });
+  m.roomInflight.set(key, promise);
+  return promise;
+}
+
+async function computeRoomAccess(
+  db: DbLike,
+  roomId: string,
+  did: string | null,
+  memo: AccessMemo,
 ): Promise<RoomAccess> {
   const { row, parentChannelId } = await resolveRoom(db, roomId);
 
@@ -221,11 +363,12 @@ export async function roomAccess(
   }
 
   const spaceId = row.spaceId;
-  const banned = await isBanned(db, spaceId, did);
-  const admin = await isAdmin(db, spaceId, did);
+  // Membership/admin/ban for the parent space — memoised across all rooms
+  // in this space that this request touches.
+  const space = await spaceAccessCached(db, spaceId, did, memo);
 
   // Banned users get nothing, even admins. (Bans are an explicit deny.)
-  if (banned) {
+  if (space.isBanned) {
     return {
       exists: true,
       canRead: false,
@@ -239,7 +382,7 @@ export async function roomAccess(
   }
 
   // Admin override.
-  if (admin) {
+  if (space.isAdmin) {
     return {
       exists: true,
       canRead: true,
@@ -264,14 +407,13 @@ export async function roomAccess(
   // Space-level gates: invite-only spaces require membership for read; all
   // spaces require membership for write (non-admins). See specCanRead /
   // specCanWrite in specs/auth.qnt.
-  const member = await isMember(db, spaceId, did);
-  const publicJoin = await allowsPublicJoin(db, spaceId);
-  const passesReadGate = publicJoin || member;
+  const publicJoin = await allowsPublicJoin(db, spaceId, memo);
+  const passesReadGate = publicJoin || space.isMember;
 
   return {
     exists: true,
     canRead: passesReadGate && (defaultGrantsRead || grant.canRead),
-    canWrite: member && (defaultGrantsWrite || grant.canWrite),
+    canWrite: space.isMember && (defaultGrantsWrite || grant.canWrite),
     isAdmin: false,
     defaultAccess: row.defaultAccess,
     spaceId,

@@ -7,7 +7,7 @@
  * Supports cursor-based pagination via `limit` and `cursor` params.
  */
 
-import { roomAccess } from "../auth/access.ts";
+import { createAccessMemo, roomAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { listThreadActivity } from "../queries/threadActivity.ts";
@@ -60,7 +60,11 @@ export const getRoomThreadsHandler: QueryHandler<
   }
 
   const db = openDb();
-  await requireRoomRead(db, roomId, userDid);
+  // Per-request memo: all threads in this channel share the same space-level
+  // membership/admin/ban flags — without the memo, each thread's roomAccess
+  // call re-queries them (~5 queries × N threads).
+  const memo = createAccessMemo();
+  await requireRoomRead(db, roomId, userDid, memo);
 
   const { threads: all, cursor: nextCursor } = await listThreadActivity(db, { kind: "channel", channelId: roomId }, limit, cursor);
 
@@ -70,7 +74,7 @@ export const getRoomThreadsHandler: QueryHandler<
 
   const threads: ThreadRow[] = [];
   for (const t of all) {
-    const acc = await roomAccess(db, t.id, userDid);
+    const acc = await roomAccess(db, t.id, userDid, memo);
     if (!acc.canRead) continue;
     const members = t.latestMembers.map((m) => ({
       did: m.did,

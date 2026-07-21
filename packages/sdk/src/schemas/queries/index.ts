@@ -7,11 +7,13 @@
 export * as getSpaces from "./getSpaces";
 export * as getActivityFeed from "./getActivityFeed";
 export * as getSpaceMetadata from "./getSpaceMetadata";
+export * as getSpaceSummary from "./getSpaceSummary";
 export * as getSpaceThreads from "./getSpaceThreads";
 export * as getRoles from "./getRoles";
 export * as getMembers from "./getMembers";
 export * as getInvites from "./getInvites";
 export * as getRoomMetadata from "./getRoomMetadata";
+export * as getRoomSummary from "./getRoomSummary";
 export * as getRoomThreads from "./getRoomThreads";
 export * as getMessages from "./getMessages";
 export * as getMessage from "./getMessage";

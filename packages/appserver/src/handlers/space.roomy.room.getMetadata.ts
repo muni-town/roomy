@@ -5,7 +5,7 @@
  * getLinkedRooms query). Stage-1: unread fields are 0/null.
  */
 
-import { roomAccess } from "../auth/access.ts";
+import { createAccessMemo, roomAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { getReadPosition, getReadPositions, type ReadPosition } from "../queries/readPositions.ts";
@@ -48,7 +48,14 @@ export const getRoomMetadataHandler: QueryHandler<
   }
 
   const db = openDb();
-  const access = await requireRoomRead(db, roomId, userDid);
+  // Per-request access memo: this handler calls roomAccess for the room
+  // itself plus up to 20 recent threads, and each roomAccess call
+  // internally checks isMember/isAdmin/isBanned/allowsPublicJoin on the
+  // same parent space. Without the memo, that's ~5 redundant space-level
+  // queries per thread (~100 per request). The memo collapses them to one
+  // set per (space, did).
+  const memo = createAccessMemo();
+  const access = await requireRoomRead(db, roomId, userDid, memo);
 
   const row = await db
     .query(
@@ -76,9 +83,13 @@ export const getRoomMetadataHandler: QueryHandler<
     // previous code discarded the first pass and recomputed roomAccess
     // for every accessible thread — doubling the per-thread SQL cost
     // (~6 statements per thread, ~120 per request for a full sidebar).
+    //
+    // The memo further collapses the per-thread space-level membership
+    // checks (all threads share the same parent space) into a single set
+    // of queries for the whole request.
     const candidates = threadActivity.filter((t) => t.id !== roomId);
     const accessByIndex = await Promise.all(
-      candidates.map((t) => roomAccess(db, t.id, userDid)),
+      candidates.map((t) => roomAccess(db, t.id, userDid, memo)),
     );
     const accessible = candidates
       .map((t, i) => ({ thread: t, access: accessByIndex[i]! }))

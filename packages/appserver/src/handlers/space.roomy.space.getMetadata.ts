@@ -6,7 +6,7 @@
  * (and from `orphans`). Stage-1: unreadCount/lastRead are 0/null.
  */
 
-import { roomAccess, spaceAccess } from "../auth/access.ts";
+import { createAccessMemo, roomAccess, spaceAccess } from "../auth/access.ts";
 import { openDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { getReadPositions } from "../queries/readPositions.ts";
@@ -91,7 +91,15 @@ export const getMetadataHandler: QueryHandler<
   // here: compute the access decision directly and only block banned callers.
   // The channel/thread sidebar below is still gated on membership, so
   // non-members receive an empty sidebar.
-  const access = await spaceAccess(db, spaceId, userDid);
+  //
+  // The memo shares access decisions across every channel and active-thread
+  // check below. Without it, `buildChannel` + the orphan loop + the
+  // active-threads loop each call `roomAccess` per room, and each call
+  // re-queries the same space-level membership/admin/ban flags (~5 queries
+  // × ~N channels × ~3 passes). The memo collapses the space-level checks
+  // to one set for the whole request and caches per-room decisions.
+  const memo = createAccessMemo();
+  const access = await spaceAccess(db, spaceId, userDid, memo);
   if (access.isBanned) {
     throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
   }
@@ -171,7 +179,7 @@ export const getMetadataHandler: QueryHandler<
     const buildChannel = async (id: string): Promise<SidebarChannel | null> => {
       const row = channelById.get(id);
       if (!row) return null;
-      const acc = await roomAccess(db, id, userDid);
+      const acc = await roomAccess(db, id, userDid, memo);
       if (!acc.canRead) return null;
       const pos = readPositions.get(id);
       return stripNulls({
@@ -224,7 +232,7 @@ export const getMetadataHandler: QueryHandler<
         const meta = threadMetaMap.get(entry.id);
         if (!meta) continue;
 
-        const acc = await roomAccess(db, entry.id, userDid);
+        const acc = await roomAccess(db, entry.id, userDid, memo);
         if (!acc.canRead) continue;
 
         const parentId = meta.canonicalParent;

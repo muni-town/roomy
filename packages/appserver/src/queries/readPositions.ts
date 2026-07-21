@@ -5,7 +5,7 @@
  * COUNT(*) against entities. This is O(1) per room.
  */
 
-import { roomAccess } from "../auth/access.ts";
+import { createAccessMemo, roomAccess, type AccessMemo } from "../auth/access.ts";
 import type { DbLike } from "../db/types.ts";
 import type { UserDid } from "@roomy-space/sdk";
 
@@ -112,6 +112,7 @@ export async function getSpaceUnreadCount(
   db: DbLike,
   userDid: string,
   spaceId: string,
+  memo?: AccessMemo,
 ): Promise<number> {
   // Fetch all non-deleted channels in the space.
   const allChannels = await db
@@ -125,9 +126,12 @@ export async function getSpaceUnreadCount(
     .all<{ id: string }>([spaceId]);
 
   // Filter to channels the user can read, then ensure read_positions rows exist.
+  // All channels share the same parent space, so a single memo collapses the
+  // space-level membership/admin/ban checks to one set for the whole loop.
+  const m = memo ?? createAccessMemo();
   const accessible: string[] = [];
   for (const ch of allChannels) {
-    const acc = await roomAccess(db, ch.id, userDid);
+    const acc = await roomAccess(db, ch.id, userDid, m);
     if (acc.canRead) accessible.push(ch.id);
   }
 

@@ -25,11 +25,18 @@
 
   // Use the global queryClient directly (not Svelte context) since this
   // component is mounted imperatively via mount() rather than in the template.
+  // Use the lightweight summary queries instead of getMetadata. A badge only
+  // needs name/avatar/kind — the full getMetadata handlers run the sidebar
+  // tree, recent threads, and per-thread access checks (~250 SQL statements
+  // for room.getMetadata), which is the load spike seen after the
+  // "enrich internal links" change. Summary queries are one SQL row + one
+  // access check. The query keys are distinct from getMetadata so they
+  // don't collide with / invalidate the sidebar's full-metadata cache.
   const spaceQuery = createQuery(
     () => ({
-      queryKey: queryKey("space.roomy.space.getMetadata", { spaceId }),
+      queryKey: queryKey("space.roomy.space.getSpaceSummary", { spaceId }),
       queryFn: () =>
-        px().query("space.roomy.space.getMetadata", {
+        px().query("space.roomy.space.getSpaceSummary", {
           spaceId,
         }),
     }),
@@ -38,9 +45,9 @@
 
   const roomQuery = createQuery(
     () => ({
-      queryKey: queryKey("space.roomy.room.getMetadata", { roomId: roomId ?? "" }),
+      queryKey: queryKey("space.roomy.room.getRoomSummary", { roomId: roomId ?? "" }),
       queryFn: () =>
-        px().query("space.roomy.room.getMetadata", { roomId: roomId ?? "" }),
+        px().query("space.roomy.room.getRoomSummary", { roomId: roomId ?? "" }),
       enabled: !!roomId,
     }),
     () => queryClient,
