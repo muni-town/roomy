@@ -37,7 +37,7 @@
       <div class="inline-flex w-full items-start justify-between min-w-0">
         <div class="max-h-4 overflow-visible">
           <IconThread
-            class={`shrink-0 stroke-[0.6] h-[1.85rem] -mt-2 ml-0.5 -mr-0.5 ${hasUnread || isActive ? "stroke-base-500" : "stroke-base-400 dark:stroke-base-500"}`}
+            class={`shrink-0 stroke-[0.6] h-[1.9rem] -mt-2 ml-0.5 -mr-0.5 ${hasUnread || isActive ? "stroke-base-500" : "stroke-base-400 dark:stroke-base-500"}`}
           />
         </div>
         <Button
