@@ -401,7 +401,30 @@ function handleInit(req: WorkerRequest): {
   const eventsSchemaSql = readFileSync(EVENTS_SCHEMA_PATH, "utf-8");
   eventsDb.exec(eventsSchemaSql);
 
-  // ATTACH events DB to main DB
+  // Add columns that were added after the table was first created.
+  // SQLite doesn't support ADD COLUMN IF NOT EXISTS, so we check the
+  // table info first.
+  const existingColumns = new Set(
+    eventsDb
+      .query<{ name: string }, []>(
+        "select name from pragma_table_info('stream_events')",
+      )
+      .all()
+      .map((r) => r.name),
+  );
+  if (!existingColumns.has("event_type")) {
+    eventsDb.exec(
+      "alter table stream_events add column event_type text",
+    );
+  }
+  if (!existingColumns.has("created_at")) {
+    eventsDb.exec(
+      "alter table stream_events add column created_at integer",
+    );
+  }
+
+  // ATTACH events DB to main DB so `events.stream_events` is queryable
+  // from the appserver's main DB handle (used by the dashboard handler).
   const eventsRow = eventsDb
     .query<{ file: string }, []>("pragma database_list")
     .all()

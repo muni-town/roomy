@@ -6,6 +6,8 @@ create table if not exists stream_events (
     user text not null,
     payload blob not null,
     signature blob not null default x'',
+    event_type text,          -- denormalized $type for dashboard stats
+    created_at integer,       -- epoch ms, set at insert time
     primary key (stream_id, idx)
 ) strict;
 

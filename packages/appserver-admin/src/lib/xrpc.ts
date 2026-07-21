@@ -223,3 +223,57 @@ export async function callAdminTestSend(
   const res = await c.call("space.roomy.admin.push.testSend", {}, body);
   return res.data as { userDid: string; totalEndpoints: number; results: PushTestResult[] };
 }
+
+// ── Dashboard stats (admin-only) ──────────────────────────────────────────
+
+export interface DashboardStats {
+  activity: {
+    activeSpaces: number;
+    totalEvents: number;
+    eventsToday: number;
+    connectedUsers: number;
+  };
+  system: {
+    uptime: number;
+    appserverDid: string;
+    dbSizeBytes: number;
+    pushVapidConfigured: boolean;
+    pushTotalSubscriptions: number;
+  };
+}
+
+export async function callAdminGetDashboardStats(
+  agent: Agent,
+): Promise<DashboardStats> {
+  const c = await getClient(agent);
+  const res = await c.call("space.roomy.admin.getDashboardStats", {});
+  return res.data as DashboardStats;
+}
+
+// ── Per-space stats (paginated, sorted by member count desc) ──────────────
+
+export interface AdminSpaceStats {
+  did: string;
+  name: string;
+  memberCount: number;
+  totalEvents: number;
+  eventsToday: number;
+  eventBreakdown: Record<string, number>;
+}
+
+export interface ListSpacesResult {
+  spaces: AdminSpaceStats[];
+  cursor?: string;
+}
+
+export async function callAdminListSpaces(
+  agent: Agent,
+  opts: { limit?: number; cursor?: string } = {},
+): Promise<ListSpacesResult> {
+  const c = await getClient(agent);
+  const params: Record<string, string> = {};
+  if (opts.limit !== undefined) params.limit = String(opts.limit);
+  if (opts.cursor !== undefined) params.cursor = opts.cursor;
+  const res = await c.call("space.roomy.admin.listSpaces", params);
+  return res.data as ListSpacesResult;
+}

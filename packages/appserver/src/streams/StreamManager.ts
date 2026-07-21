@@ -116,10 +116,11 @@ export class StreamManager {
     }> = [];
 
     for (let i = 0; i < encoded.length; i++) {
+      const eventType = events[i]!.$type;
       steps.push({
         type: "run",
-        sql: "insert into events.stream_events (stream_id, idx, user, payload, signature) select ?, coalesce(max(idx), -1) + 1, ?, ?, x'' from events.stream_events where stream_id = ?",
-        params: [streamDid, user, encoded[i] as Uint8Array, streamDid],
+        sql: "insert into events.stream_events (stream_id, idx, user, payload, signature, event_type, created_at) select ?, coalesce(max(idx), -1) + 1, ?, ?, x'', ?, unixepoch() * 1000 from events.stream_events where stream_id = ?",
+        params: [streamDid, user, encoded[i] as Uint8Array, eventType, streamDid],
       });
     }
 

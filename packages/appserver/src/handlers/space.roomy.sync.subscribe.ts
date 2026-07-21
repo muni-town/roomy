@@ -8,7 +8,7 @@
 
 import type { SyncHandler } from "../xrpc/types.ts";
 import type { InvalidationRouter } from "../invalidation/types.ts";
-import { SyncManager } from "../sync/handler.ts";
+import { SyncManager, setSyncManager } from "../sync/handler.ts";
 import type { StreamManager } from "../streams/StreamManager.ts";
 
 /**
@@ -20,5 +20,7 @@ export function createSyncSubscribeHandler(
   streamManager: StreamManager,
 ): SyncHandler {
   const manager = new SyncManager(router, streamManager);
+  const { setSyncManager } = require("../sync/handler.ts");
+  setSyncManager(manager);
   return (socket) => manager.register(socket);
 }

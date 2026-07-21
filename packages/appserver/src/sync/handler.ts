@@ -618,3 +618,29 @@ function hasSpaceTopic(topics: Set<string>): boolean {
   }
   return false;
 }
+
+// ─── Singleton ──────────────────────────────────────────────────────────
+
+let syncManagerInstance: SyncManager | null = null;
+
+/**
+ * Set the process-wide SyncManager singleton. Called once at startup
+ * from createSyncSubscribeHandler.
+ */
+export function setSyncManager(sm: SyncManager): void {
+  syncManagerInstance = sm;
+}
+
+/**
+ * Get the process-wide SyncManager singleton, or null if not yet set.
+ */
+export function getSyncManager(): SyncManager | null {
+  return syncManagerInstance;
+}
+
+/**
+ * Reset the singleton (tests only).
+ */
+export function _resetSyncManager(): void {
+  syncManagerInstance = null;
+}

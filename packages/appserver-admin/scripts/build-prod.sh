@@ -42,6 +42,8 @@ SCOPE+=" rpc:space.roomy.admin.clearFlag?aud=*"
 SCOPE+=" rpc:space.roomy.admin.push.getSubscriptions?aud=*"
 SCOPE+=" rpc:space.roomy.admin.push.getStats?aud=*"
 SCOPE+=" rpc:space.roomy.admin.push.testSend?aud=*"
+SCOPE+=" rpc:space.roomy.admin.getDashboardStats?aud=*"
+SCOPE+=" rpc:space.roomy.admin.listSpaces?aud=*"
 
 # Build the OAuth client metadata JSON
 oauth_config=$(

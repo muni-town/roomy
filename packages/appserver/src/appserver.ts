@@ -34,6 +34,8 @@ import { adminSetFlagHandler } from "./handlers/space.roomy.admin.setFlag.ts";
 import { adminClearFlagHandler } from "./handlers/space.roomy.admin.clearFlag.ts";
 import { adminGetSubscriptionsHandler } from "./handlers/space.roomy.admin.push.getSubscriptions.ts";
 import { adminGetPushStatsHandler } from "./handlers/space.roomy.admin.push.getStats.ts";
+import { adminGetDashboardStatsHandler } from "./handlers/space.roomy.admin.getDashboardStats.ts";
+import { adminListSpacesHandler } from "./handlers/space.roomy.admin.listSpaces.ts";
 import { adminTestSendHandler } from "./handlers/space.roomy.admin.push.testSend.ts";
 import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
 import { getMembersHandler } from "./handlers/space.roomy.space.getMembers.ts";
@@ -198,6 +200,12 @@ export function buildRouter(
     })
     .procedure("space.roomy.admin.push.testSend", {
       handler: adminTestSendHandler,
+    })
+    .query("space.roomy.admin.getDashboardStats", {
+      handler: adminGetDashboardStatsHandler,
+    })
+    .query("space.roomy.admin.listSpaces", {
+      handler: adminListSpacesHandler,
     })
     .query("space.roomy.sync.getEvents", {
       handler: getEventsHandler,
