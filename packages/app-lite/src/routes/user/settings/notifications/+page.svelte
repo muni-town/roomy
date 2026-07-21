@@ -6,6 +6,7 @@
   import { createPushPreferencesQuery } from "$lib/queries/push-preferences";
   import { setDefaultPushLevel, type PushLevel } from "$lib/mutations/push-preferences";
   import { ensurePushSubscription, clearPushSubscription, pushOutcomeMessage, isPushFeatureEnabled } from "$lib/push.svelte";
+  import { queryClient } from "$lib/client";
   import { toast } from "@foxui/core";
 
   const prefsQuery = createPushPreferencesQuery();
@@ -103,6 +104,9 @@
   async function onChangeDefault(level: PushLevel): Promise<void> {
     defaultLevel = level;
     await setDefaultPushLevel(level);
+    await queryClient.invalidateQueries({
+      queryKey: ["space.roomy.push.getPreferences"],
+    });
   }
 
   onMount(() => {

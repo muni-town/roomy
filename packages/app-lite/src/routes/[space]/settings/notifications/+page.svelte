@@ -7,6 +7,7 @@
   import { IconBell } from "@roomy/design/icons";
   import { createPushPreferencesQuery } from "$lib/queries/push-preferences";
   import { setSpacePushLevel, type PushLevel } from "$lib/mutations/push-preferences";
+  import { queryClient } from "$lib/client";
   import { getPushSubscriptionEndpoint } from "$lib/push.svelte";
 
   const spaceId = $derived(page.params.space!);
@@ -29,6 +30,9 @@
   async function onChange(level: PushLevel): Promise<void> {
     current = level;
     await setSpacePushLevel(spaceId, level);
+    await queryClient.invalidateQueries({
+      queryKey: ["space.roomy.push.getPreferences"],
+    });
   }
 
   // ── Push capability on this device ──
