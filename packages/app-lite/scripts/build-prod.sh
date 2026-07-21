@@ -36,11 +36,13 @@ SCOPE+=" rpc:com.atproto.server.getServiceAuth?aud=${VITE_APPSERVER_DID:-did:web
 # ── Appserver RPCs (must match APPSERVER_RPCS in config.ts) ──────────────
 SCOPE+=" rpc:space.roomy.space.getSpaces?aud=*"
 SCOPE+=" rpc:space.roomy.space.getMetadata?aud=*"
+SCOPE+=" rpc:space.roomy.space.getSpaceSummary?aud=*"
 SCOPE+=" rpc:space.roomy.space.getThreads?aud=*"
 SCOPE+=" rpc:space.roomy.space.getRoles?aud=*"
 SCOPE+=" rpc:space.roomy.space.getMembers?aud=*"
 SCOPE+=" rpc:space.roomy.space.getInvites?aud=*"
 SCOPE+=" rpc:space.roomy.room.getMetadata?aud=*"
+SCOPE+=" rpc:space.roomy.room.getRoomSummary?aud=*"
 SCOPE+=" rpc:space.roomy.room.getMessages?aud=*"
 SCOPE+=" rpc:space.roomy.room.getThreads?aud=*"
 SCOPE+=" rpc:space.roomy.message.getMessage?aud=*"
