@@ -76,7 +76,10 @@
         class:bg-red-500={!connected}
       ></div>
     </div>
-    <div class="flex flex-col min-w-0 flex-1 text-left leading-none">
+    <a
+      href={`/user/${auth.userDid}`}
+      class="flex flex-col min-w-0 flex-1 text-left leading-none"
+    >
       <span class="text-sm font-medium text-base-700 dark:text-base-300 truncate">
         {displayedProfile?.displayName ?? displayedProfile?.handle ?? "Log in"}
       </span>
@@ -85,7 +88,7 @@
           @{displayedProfile.handle}
         </span>
       {/if}
-    </div>
+    </a>
     <ContextMenu side="top" sideOffset={8} align="center">
       {#snippet trigger({ props })}
         <button

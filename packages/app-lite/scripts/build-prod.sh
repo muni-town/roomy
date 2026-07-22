@@ -29,6 +29,7 @@ SCOPE+=" blob:*/*"
 SCOPE+=" repo:space.roomy.upload.v0"
 SCOPE+=" repo:${VITE_STREAM_HANDLE_NSID:-space.roomy.space.handle.dev}"
 SCOPE+=" repo:${VITE_PERSONAL_STREAM_NSID:-space.roomy.space.personal.dev}"
+SCOPE+=" repo:space.roomy.user.profile"
 
 # ── Service auth (for direct/non-proxied XRPC calls) ───────────────────
 SCOPE+=" rpc:com.atproto.server.getServiceAuth?aud=${VITE_APPSERVER_DID:-did:web:appserver.roomy.chat}"

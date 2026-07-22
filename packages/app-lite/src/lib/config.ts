@@ -76,6 +76,7 @@ export const OAUTH_SCOPE = [
   "rpc:app.bsky.actor.getProfile?aud=*",
   "blob:*/*",
   "repo:space.roomy.upload.v0", // Grant all actions (create, update, delete)
+  `repo:space.roomy.user.profile`,
   `repo:${CONFIG.profileSpaceNsid}`,
   `repo:${CONFIG.personalStreamNsid}`,
   // Allow calling getServiceAuth on the appserver's PDS to obtain
