@@ -10,9 +10,9 @@
 
 import { createAppserver, type AppserverHandle } from "./appserver.ts";
 import { log } from "./log.ts";
-import { defaultGetProfiles } from "./materialization/profiles.ts";
 import { reMaterializeFromLocalEvents } from "./streams/reMaterialize.ts";
 import { openDb } from "./db/db.ts";
+import { getHappyView } from "./happyview.ts";
 
 // ─── Server construction ───────────────────────────────────────────────────
 
@@ -31,8 +31,12 @@ const app: AppserverHandle = await createAppserver();
 // streams that have already been processed. If the events DB is unreachable
 // or empty, the server still serves requests (with whatever materialized
 // state exists).
+//
+// Profile hydration uses the HappyView-first fetcher (HappyView → Bluesky
+// fallback, or Bluesky-only when HappyView is not configured).
 const db = openDb();
-reMaterializeFromLocalEvents(db, defaultGetProfiles).catch((err) => {
+const happyView = getHappyView();
+reMaterializeFromLocalEvents(db, undefined, happyView).catch((err) => {
   log.error("startup", `re-materialization failed: ${err instanceof Error ? err.message : String(err)}`);
 });
 

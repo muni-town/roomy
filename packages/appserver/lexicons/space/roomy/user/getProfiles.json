@@ -1,0 +1,50 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.user.getProfiles",
+  "defs": {
+    "profile": {
+      "type": "object",
+      "required": ["did"],
+      "properties": {
+        "did": { "type": "string" },
+        "handle": { "type": "string" },
+        "displayName": { "type": "string" },
+        "description": { "type": "string" },
+        "pronouns": { "type": "string" },
+        "website": { "type": "string" },
+        "avatar": { "type": "string" },
+        "banner": { "type": "string" }
+      }
+    },
+    "main": {
+      "type": "query",
+      "description": "Batch-fetch Roomy profile records from a HappyView index service. Returns profiles for DIDs that have a space.roomy.user.profile record. DIDs without a Roomy profile are omitted from the response — callers should fall back to Bluesky for those.",
+      "parameters": {
+        "type": "params",
+        "required": ["actors"],
+        "properties": {
+          "actors": {
+            "type": "string",
+            "description": "DID to look up. Repeat this parameter for each DID (max 25 per request)."
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["profiles"],
+          "properties": {
+            "profiles": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#profile"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

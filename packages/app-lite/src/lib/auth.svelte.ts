@@ -195,20 +195,26 @@ export async function login(handle: string) {
 }
 
 /**
- * Fetch the user's AT Protocol profile and update the reactive `auth.profile`
- * state + localStorage cache. Call this immediately on login/init.
+ * Fetch the user's Roomy profile from the appserver and update the reactive
+ * `auth.profile` state + localStorage cache. Call this immediately on
+ * login/init.
+ *
+ * Uses the appserver's `space.roomy.user.getProfile` XRPC (Roomy-first with
+ * Bluesky fallback) instead of calling the Bluesky appview directly. This
+ * keeps the profile source consistent: the appserver materializes the
+ * `space.roomy.user.profile/self` PDS record, falling back to the Bluesky
+ * appview when no Roomy record exists.
  */
 export async function updateProfile() {
-  if (!agent) return;
-  const did = session?.did ?? agent.did;
+  const did = session?.did ?? agent?.did;
   if (!did) return;
   try {
-    const res = await agent.app.bsky.actor.getProfile({ actor: did });
+    const res = await px().query("space.roomy.user.getProfile", { actor: did });
     const p = {
-      handle: res.data.handle,
+      handle: res.handle ?? "",
       did,
-      avatar: res.data.avatar ?? "",
-      displayName: res.data.displayName || undefined,
+      avatar: res.avatar ?? "",
+      displayName: res.displayName || undefined,
     };
     profile = p;
     localStorage.setItem("last-login", JSON.stringify(p));

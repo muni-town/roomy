@@ -1,0 +1,55 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.user.getProfile",
+  "defs": {
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "actor"
+        ],
+        "properties": {
+          "actor": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "did"
+          ],
+          "properties": {
+            "did": {
+              "type": "string"
+            },
+            "avatar": {
+              "type": "string"
+            },
+            "banner": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "handle": {
+              "type": "string"
+            },
+            "pronouns": {
+              "type": "string"
+            },
+            "website": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

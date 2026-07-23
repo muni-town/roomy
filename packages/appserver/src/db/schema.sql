@@ -130,6 +130,9 @@ create table if not exists comp_info (
   name text,
   avatar text,
   description text,
+  banner text, -- atblob://<did>/<cid> ref, from space.roomy.user.profile record
+  pronouns text, -- from space.roomy.user.profile record
+  website text, -- from space.roomy.user.profile record
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;

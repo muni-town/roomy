@@ -50,6 +50,7 @@ import { getRoomThreadsHandler } from "./handlers/space.roomy.room.getThreads.ts
 import { getMessagesHandler } from "./handlers/space.roomy.room.getMessages.ts";
 import { getMessageHandler } from "./handlers/space.roomy.message.getMessage.ts";
 import { getReactionsHandler } from "./handlers/space.roomy.message.getReactions.ts";
+import { getProfileHandler } from "./handlers/space.roomy.user.getProfile.ts";
 import { updateSeenHandler } from "./handlers/space.roomy.room.updateSeen.ts";
 import { sendEventsHandler } from "./handlers/space.roomy.space.sendEvents.ts";
 import { createSpaceHandler } from "./handlers/space.roomy.space.createSpace.ts";
@@ -64,6 +65,8 @@ import { unregisterSubscriptionHandler } from "./handlers/space.roomy.push.unreg
 import { setPreferencesHandler } from "./handlers/space.roomy.push.setPreferences.ts";
 import { startPushDispatcher, pushDispatcherStats, _resetPushDispatcher } from "./push/dispatcher.ts";
 import { schemas } from "@roomy-space/sdk";
+import { initHappyView, type HappyViewConfig } from "./happyview.ts";
+
 import { proxyBlob } from "./blob.ts";
 import {
   CACHEABLE_NSIDS,
@@ -98,6 +101,10 @@ export interface AppserverOptions {
    *  are deterministic (the cache would skip the handler on the second call).
    *  Also disabled when the `APPSERVER_QUERY_CACHE_ENABLED` env var is `"false"`. */
   disableQueryCache?: boolean;
+  /** HappyView profile index service config. When unset, reads from env
+   *  (`HAPPYVIEW_ENDPOINT` / `HAPPYVIEW_DID`). When `null`, HappyView is
+   *  disabled and profile fetching uses Bluesky only. */
+  happyView?: HappyViewConfig | null;
 }
 
 
@@ -278,6 +285,11 @@ export function buildRouter(
     .query("space.roomy.message.getReactions", {
       handler: getReactionsHandler,
     })
+    .query("space.roomy.user.getProfile", {
+      handler: getProfileHandler,
+      paramsSchema: schemas.queries.getProfile.Params,
+      outputSchema: schemas.queries.getProfile.Response,
+    })
     // ── Web push ──────────────────────────────────────────────────────────
     .query("space.roomy.push.getVapidPublicKey", {
       handler: getVapidPublicKeyHandler,
@@ -332,6 +344,13 @@ export async function createAppserver(
   const corsOrigin = opts.corsOrigin ?? process.env.CORS_ORIGIN ?? "*";
   const quiet = opts.quiet ?? false;
 
+  // ─── HappyView config ───────────────────────────────────────────────
+  // Initialize the process-wide singleton. When `opts.happyView` is unset,
+  // reads from env (`HAPPYVIEW_ENDPOINT` / `HAPPYVIEW_DID`). When `null`,
+  // HappyView is explicitly disabled.
+  const happyView = opts.happyView === undefined
+    ? initHappyView()
+    : (opts.happyView as HappyViewConfig | null);
 
   const DID_DOCUMENT = {
     "@context": ["https://www.w3.org/ns/did/v1"],
@@ -372,6 +391,7 @@ export async function createAppserver(
   const streamManager = new StreamManager(mainDb, {
     invalidationRouter,
     appserverUrl: serviceEndpoint,
+    happyView,
   });
   setStreamManager(streamManager);
   // Start the centralized embed enrichment sweeper.

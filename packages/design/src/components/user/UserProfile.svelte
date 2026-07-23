@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { type Snippet } from "svelte";
   import UserAvatar from "./UserAvatar.svelte";
 
   // Props
   let {
     profile,
+    actions,
   }: {
     profile: {
       did?: string;
@@ -14,6 +16,7 @@
       description?: string;
       accountId?: string;
     };
+    actions?: Snippet;
   } = $props();
 
   // Function to convert URLs in text to clickable links
@@ -77,6 +80,11 @@
           </a>
         {/if}
       </div>
+      {#if actions}
+        <div class="shrink-0">
+          {@render actions()}
+        </div>
+      {/if}
     </div>
   </div>
 

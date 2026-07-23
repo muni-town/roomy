@@ -119,17 +119,17 @@
       {#if !mergeWithPrevious}
         <div class="text-sm w-full text-start">
           <span class="gap-2">
-            {#if profileUrl}
-              <a
-                href={profileUrl}
-                class="font-medium text-accent-700 dark:text-accent-400 hover:underline"
-                >{authorName}</a
-              >
-            {:else}
-              <span class="font-medium text-accent-700 dark:text-accent-400"
-                >{authorName}</span
-              >
-            {/if}
+          {#if profileUrl}
+            <a
+              href={profileUrl}
+              class="font-medium text-accent-700 dark:text-accent-400 hover:underline"
+              >{authorName || authorHandle ? `@${authorHandle}` : ""}</a
+            >
+          {:else}
+            <span class="font-medium text-accent-700 dark:text-accent-400"
+              >{authorName || authorHandle ? `@${authorHandle}` : ""}</span
+            >
+          {/if}
             {#if authorHandle}
               {#if profileUrl}
                 <a

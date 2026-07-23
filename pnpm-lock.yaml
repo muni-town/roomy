@@ -6906,7 +6906,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@25.9.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
   '@vitest/utils@2.1.9':
     dependencies:

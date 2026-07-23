@@ -85,6 +85,14 @@ export const QUERY_SCHEMAS = {
     params: queries.getFlags.Params,
     response: queries.getFlags.Response,
   },
+  "space.roomy.user.getProfile": {
+    params: queries.getProfile.Params,
+    response: queries.getProfile.Response,
+  },
+  "space.roomy.user.getProfiles": {
+    params: queries.getProfiles.Params,
+    response: queries.getProfiles.Response,
+  },
 } as const;
 
 export const PROCEDURE_SCHEMAS = {

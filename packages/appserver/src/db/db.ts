@@ -50,23 +50,19 @@ import { READSTATE_SCHEMA_VERSION } from "./readStateDb.ts";
  * threads on streams that got re-backfilled. Wipe re-derives correct
  * canonical_parent values from the event log.
  *
- * `.10-appserver.4`: forwardMessages materialiser fix. (1) `dependsOn` no
- * longer lists the event's own id — that made every forwardMessages event
- * depend on itself, so the legacy worker stashed it permanently and never
- * materialised it. (2) The forward edge insert is now guarded with
- * `where exists (select 1 from entities where id = <original>)` so a
- * missing original (deleted before the forward, not-yet-materialised, or
- * cross-space) no longer trips the `edges.tail` FK and fail the whole event.
- * (3) deleteMessage now removes forward-reference entities that point at
- * the deleted message before deleting it, so forwarded copies don't leave
- * invisible orphan entity rows. (4) forwardMessages now sets sort_idx on the
- * forward-reference entity by copying the original message's sort_idx, so
- * forwarded copies sort at the original's chronological position instead of
- * by the forward event's ULID (which scrambled same-millisecond forwards in
- * a thread-creation batch). Wipe re-derives forward edges and sort_idx and
- * cleans up existing orphans from the event log.
+ * `.10-appserver.5`: added `banner`, `pronouns`, `website` columns to
+ * `comp_info` for the Roomy profile record (`space.roomy.user.profile`).
+ * Wipe re-materialises profiles from the new Roomy-first fetcher (PDS
+ * record with Bluesky fallback), populating the new columns.
+ *
+ * `.10-appserver.6`: fix display name regression — the Bluesky fallback
+ * path was overwriting `comp_info.name` with the handle when
+ * `displayName` was absent, clobbering names set by `SetUserProfile`
+ * events (bridged users) and prior fetches. Wipe re-materialises with
+ * the fixed insert strategy (Bluesky fallback uses `on conflict do
+ * nothing`, never writes handle as name).
  */
-export const SCHEMA_VERSION = "10-appserver.4";
+export const SCHEMA_VERSION = "10-appserver.6";
 
 const DEFAULT_DB_PATH = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
 

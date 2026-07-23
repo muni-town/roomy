@@ -19,8 +19,10 @@ import type { DbLike } from "../db/types.ts";
 import { applyBatch } from "../materialization/applyBatch.ts";
 import {
   ensureProfilesForBatch,
+  ensureProfilesRoomyFirst,
   type GetProfilesFn,
 } from "../materialization/profiles.ts";
+import type { HappyViewConfig } from "../happyview.ts";
 import { log } from "../log.ts";
 
 interface RawEvent {
@@ -50,6 +52,7 @@ interface RawEvent {
 export async function reMaterializeFromLocalEvents(
   db: DbLike,
   getProfiles: GetProfilesFn | undefined = undefined,
+  happyView: HappyViewConfig | null = null,
 ): Promise<void> {
   const streams = await db
     .query("SELECT DISTINCT stream_id FROM events.stream_events ORDER BY stream_id")
@@ -135,9 +138,14 @@ export async function reMaterializeFromLocalEvents(
 
       // Hydrate profiles for any new-user events in this batch before
       // materializing, mirroring the live sendEvents path. Without this,
-      // backfilled messages render with blank author profiles.
+      // backfilled messages render with blank author profiles. When a
+      // custom fetcher is provided (tests), use the injectable path.
+      // Otherwise use the HappyView-first fetcher (HappyView → Bluesky
+      // fallback, or Bluesky-only when HappyView is not configured).
       if (getProfiles) {
         await ensureProfilesForBatch(db, decodedEvents, getProfiles);
+      } else {
+        await ensureProfilesRoomyFirst(db, decodedEvents, happyView);
       }
 
       const stats = await applyBatch(db, streamDid as StreamDid, decodedEvents, {

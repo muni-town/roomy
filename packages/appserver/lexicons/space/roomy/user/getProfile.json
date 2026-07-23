@@ -1,0 +1,41 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.user.getProfile",
+  "defs": {
+    "profile": {
+      "type": "object",
+      "required": ["did"],
+      "properties": {
+        "did": { "type": "string" },
+        "handle": { "type": "string" },
+        "displayName": { "type": "string" },
+        "description": { "type": "string" },
+        "pronouns": { "type": "string" },
+        "website": { "type": "string" },
+        "avatar": { "type": "string" },
+        "banner": { "type": "string" }
+      }
+    },
+    "main": {
+      "type": "query",
+      "description": "Get a user's Roomy profile. Served from the appserver's materialized profile data (comp_info/comp_user), which is fetched Roomy-first (space.roomy.user.profile/self PDS record) with Bluesky fallback.",
+      "parameters": {
+        "type": "params",
+        "required": ["actor"],
+        "properties": {
+          "actor": {
+            "type": "string",
+            "description": "DID or handle of the user to fetch the profile for."
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "#profile"
+        }
+      }
+    }
+  }
+}

@@ -22,3 +22,5 @@ export * as getEvents from "./getEvents";
 export * as getVapidPublicKey from "./getVapidPublicKey";
 export * as getPreferences from "./getPreferences";
 export * as getFlags from "./getFlags";
+export * as getProfile from "./getProfile";
+export * as getProfiles from "./getProfiles";

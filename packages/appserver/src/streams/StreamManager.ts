@@ -12,10 +12,11 @@ import type { DbLike } from "../db/types.ts";
 import type { InvalidationRouter } from "../invalidation/types.ts";
 import { applyBatch } from "../materialization/applyBatch.ts";
 import {
-  defaultGetProfiles,
   ensureProfilesForBatch,
+  ensureProfilesRoomyFirst,
   type GetProfilesFn,
 } from "../materialization/profiles.ts";
+import type { HappyViewConfig } from "../happyview.ts";
 import { toAppliedEvent } from "../materialization/toAppliedEvent.ts";
 import { pokeEmbedSweeper } from "../embed/sweeper.ts";
 import { pokePushDispatcher } from "../push/dispatcher.ts";
@@ -40,6 +41,7 @@ export class StreamManager {
   readonly #invalidationRouter?: InvalidationRouter;
   readonly #appserverUrl: string;
   readonly #getProfiles?: GetProfilesFn;
+  readonly #happyView: HappyViewConfig | null;
   /** Live-event listeners, notified after each sendEvents batch. */
   readonly #streamListeners = new Set<StreamEventListener>();
 
@@ -51,19 +53,24 @@ export class StreamManager {
    * queue drains.
    */
   readonly #streamQueues = new Map<string, Promise<void>>();
-
   constructor(
     db: DbLike,
     opts: {
       invalidationRouter?: InvalidationRouter;
       appserverUrl: string;
       getProfiles?: GetProfilesFn;
+      /** HappyView profile index config. When `null`, Bluesky-only. */
+      happyView?: HappyViewConfig | null;
     },
   ) {
     this.#db = db;
     this.#invalidationRouter = opts.invalidationRouter;
     this.#appserverUrl = opts.appserverUrl;
-    this.#getProfiles = opts.getProfiles ?? defaultGetProfiles;
+    // When no custom fetcher is provided (production), use the Roomy-first
+    // path (ensureProfilesRoomyFirst). When a custom fetcher is provided
+    // (tests), use the injectable ensureProfilesForBatch path.
+    this.#getProfiles = opts.getProfiles;
+    this.#happyView = opts.happyView ?? null;
   }
 
   /**
@@ -156,8 +163,15 @@ export class StreamManager {
         }),
       );
 
-      // 4. Ensure profiles for batch
-      await ensureProfilesForBatch(this.#db, decodedEvents, this.#getProfiles);
+      // 4. Ensure profiles for batch. When a custom fetcher is provided
+      //    (tests), use the injectable path. Otherwise use the HappyView-first
+      //    fetcher (HappyView → Bluesky fallback, or Bluesky-only when
+      //    HappyView is not configured).
+      if (this.#getProfiles) {
+        await ensureProfilesForBatch(this.#db, decodedEvents, this.#getProfiles);
+      } else {
+        await ensureProfilesRoomyFirst(this.#db, decodedEvents, this.#happyView);
+      }
 
       // 5. Apply batch to materialize
       await applyBatch(this.#db, streamDid, decodedEvents, {
