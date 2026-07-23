@@ -5,8 +5,7 @@
   "identifier": "space.roomy",
   "build": {
     "frontendDist": "../build",
-    "devUrl": "http://localhost:5180",
-    "beforeDevCommand": "pnpm dev"
+    "devUrl": "http://localhost:5180"
   },
   "app": {
     "windows": [
