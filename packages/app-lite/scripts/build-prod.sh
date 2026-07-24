@@ -59,6 +59,7 @@ SCOPE+=" rpc:space.roomy.space.setHandle?aud=*"
 SCOPE+=" rpc:space.roomy.space.getCalendarLink?aud=*"
 SCOPE+=" rpc:space.roomy.space.getCalendarEvents?aud=*"
 SCOPE+=" rpc:space.roomy.space.getActivityFeed?aud=*"
+SCOPE+=" rpc:space.roomy.user.getProfile?aud=*"
 
 # ── Web push notification endpoints ──────────────────────────────────────
 SCOPE+=" rpc:space.roomy.push.getVapidPublicKey?aud=*"
