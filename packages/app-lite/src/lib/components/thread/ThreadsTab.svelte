@@ -4,6 +4,7 @@
   import BoardViewShell from "@roomy/design/components/content/thread/boardView/BoardView.svelte";
   import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
 
   let { spaceId }: { spaceId: string } = $props();
 
@@ -42,7 +43,7 @@
         members: t.activity.latestMembers.map((m) => ({
           id: m.did,
           name: m.name ?? null,
-          avatar: m.avatar ?? null,
+          avatar: resolveBlobUrl(m.avatar ?? undefined) ?? null,
         })),
         latestTimestamp: t.activity.latestTimestamp
           ? new Date(t.activity.latestTimestamp).getTime()

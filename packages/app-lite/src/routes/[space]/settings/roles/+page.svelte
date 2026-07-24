@@ -11,6 +11,7 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createRole, updateRole, deleteRole, addMemberRole, removeMemberRole } from "$lib/mutations/role";
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
   import {
     IconLoading,
     IconTrash,
@@ -35,7 +36,7 @@
       did: m.did,
       handle: m.handle,
       name: m.name,
-      avatar: m.avatar,
+      avatar: resolveBlobUrl(m.avatar),
     }));
   });
 
@@ -102,7 +103,7 @@
       did: m.did,
       handle: m.handle,
       name: m.name,
-      avatar: m.avatar,
+      avatar: resolveBlobUrl(m.avatar),
     }));
   }
 
@@ -214,7 +215,7 @@
                   class="flex items-center gap-3 rounded-2xl px-3 py-2 hover:bg-base-50 dark:hover:bg-base-800/60 group"
                 >
                   <UserAvatar
-                    src={member.avatar}
+                    src={resolveBlobUrl(member.avatar)}
                     name={member.did}
                     size={28}
                     class="size-7 shrink-0 rounded-full"

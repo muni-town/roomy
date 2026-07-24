@@ -3,6 +3,7 @@
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import { IconReplyLine } from "@roomy/design/icons";
   import { createMessageQuery } from "$lib/queries/message";
+  import { resolveBlobUrl } from "$lib/utils";
   import { renderMarkdownPlaintext } from "@roomy/design/utils";
 
   type Props = {
@@ -28,7 +29,7 @@
       {#if isBridged}
         <div class="w-4 h-4 rounded-full shrink-0">
           <UserAvatar
-            src={target.data.authorAvatar}
+            src={resolveBlobUrl(target.data.authorAvatar)}
             name={target.data.authorDid || ""}
             size={16}
             class="w-4 h-4"
@@ -40,7 +41,7 @@
           class="w-4 h-4 rounded-full shrink-0 hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
         >
           <UserAvatar
-            src={target.data.authorAvatar}
+            src={resolveBlobUrl(target.data.authorAvatar)}
             name={target.data.authorDid || ""}
             size={16}
             class="w-4 h-4"

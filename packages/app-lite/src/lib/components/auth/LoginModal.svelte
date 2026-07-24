@@ -12,6 +12,7 @@
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import HandleTypeahead from "./HandleTypeahead.svelte";
   import { login } from "$lib/auth.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
 
   let handle = $state("");
   let email = $state("");
@@ -153,7 +154,7 @@
             disabled={loading}
           >
             <UserAvatar
-              src={lastLogin.avatar}
+              src={resolveBlobUrl(lastLogin.avatar)}
               name={lastLogin.handle ?? lastLogin.did ?? "user"}
               size={24}
               class="size-6"

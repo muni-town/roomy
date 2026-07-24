@@ -4,6 +4,7 @@
 
 <script lang="ts">
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
   import {
     ContextMenu,
     ContextMenuItem,
@@ -64,7 +65,7 @@
     <div class="relative size-10 shrink-0">
       <div class="size-full rounded-full overflow-hidden">
         <UserAvatar
-          src={displayedProfile?.avatar}
+          src={resolveBlobUrl(displayedProfile?.avatar)}
           name={displayedProfile?.did ?? displayedProfile?.handle ?? "user"}
           size={40}
           class="size-full"

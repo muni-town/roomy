@@ -21,6 +21,7 @@
   import type { Message } from "$lib/queries/messages";
   import type { Member, ExternalAdmin } from "$lib/queries/members";
   import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
+  import { resolveBlobUrl } from "$lib/utils";
 
   type Props = {
     spaceId: string;
@@ -73,7 +74,7 @@
             did: m.authorDid,
             name: m.authorName,
             handle: m.authorHandle,
-            avatar: m.authorAvatar,
+            avatar: resolveBlobUrl(m.authorAvatar),
           },
           last: ord,
         });
@@ -103,7 +104,7 @@
       did: m.did,
       handle: m.handle,
       name: m.name,
-      avatar: m.avatar,
+      avatar: resolveBlobUrl(m.avatar),
     }));
   }
 

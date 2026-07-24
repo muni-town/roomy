@@ -137,6 +137,64 @@ export async function getProfilesFromHappyView(
   return results;
 }
 
+/**
+ * Fetch a single Roomy profile record from HappyView using the default
+ * query endpoint (`?did=<did>`).
+ *
+ * HappyView's default query handler returns `{ records: [...] }` where each
+ * record is the raw stored record value. This function queries for a single
+ * DID, extracts the `space.roomy.user.profile/self` record, and converts it
+ * to a `HappyViewProfile`.
+ *
+ * Returns `null` when HappyView has no record for the DID, when the query
+ * errors, or when HappyView is not configured.
+ */
+export async function getProfileFromHappyView(
+  did: UserDid,
+  config: HappyViewConfig,
+): Promise<HappyViewProfile | null> {
+  try {
+    const headers: Record<string, string> = {
+      "X-Client-Key": config.clientKey,
+    };
+    if (config.clientSecret) {
+      headers["X-Client-Secret"] = config.clientSecret;
+    }
+    const resp = await fetch(
+      `${config.endpoint}/xrpc/space.roomy.user.getProfiles?did=${encodeURIComponent(did)}`,
+      { headers },
+    );
+    if (!resp.ok) {
+      console.warn(
+        `[materialize] HappyView returned ${resp.status} for DID ${did}`,
+      );
+      return null;
+    }
+    const data = (await resp.json()) as { records?: Array<Record<string, unknown>> };
+    if (!data.records || data.records.length === 0) return null;
+
+    // Find the profile record — there should be only one per DID (rkey=self).
+    // The record value includes the raw record fields plus `uri` and `$type`.
+    const rec = data.records[0]!;
+    const record = parseRoomyProfileRecord(rec);
+    if (!record) return null;
+
+    return {
+      did,
+      displayName: record.displayName,
+      description: record.description,
+      pronouns: record.pronouns,
+      website: record.website,
+      avatar: record.avatar ? blobRefToAtblob(did, record.avatar) : undefined,
+      banner: record.banner ? blobRefToAtblob(did, record.banner) : undefined,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[materialize] HappyView single-DID fetch failed: ${message}`);
+    return null;
+  }
+}
+
 // ─── Conversion helpers ──────────────────────────────────────────────────
 
 /**
@@ -229,18 +287,43 @@ function parseRoomyProfileRecord(
   return record;
 }
 
-/** Narrow an unknown value to a blob ref, or undefined. */
+/**
+ * Narrow an unknown value to a blob ref, or undefined.
+ *
+ * Handles two representations:
+ * 1. **Raw JSON** (from `fetch`): `{ $type: "blob", ref: { $link: "bafy..." } }`
+ * 2. **Deserialised by `@atproto/api`**: `{ ref: CID, mimeType, size, original }`
+ *    — the client strips `$type` and converts `ref` to a `CID` object whose
+ *    `toString()` yields the CID string (e.g. `bafkrei...`).
+ */
 function parseBlobRef(value: unknown): BlobRef | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const v = value as Record<string, unknown>;
-  if (v["$type"] !== "blob") return undefined;
+  // Accept both `$type: "blob"` (raw JSON) and the deserialised shape (no
+  // `$type` but has a `ref` that is a CID or has `$link`).
+  const isBlob = v["$type"] === "blob" || "ref" in v;
+  if (!isBlob) return undefined;
   const ref = v["ref"];
   if (typeof ref !== "object" || ref === null) return undefined;
+  // Raw JSON: ref is { $link: "bafy..." }
   const r = ref as Record<string, unknown>;
-  if (typeof r["$link"] !== "string") return undefined;
+  let link: string | undefined;
+  if (typeof r["$link"] === "string") {
+    link = r["$link"];
+  } else {
+    // Deserialised CID: toString() yields the CID string (e.g. "bafkrei...")
+    // Accept any string that looks like a CID — they start with "baf" (CIDv1)
+    // or "ba" (legacy CIDv0). This is permissive but safe: a non-CID object
+    // stringifying to something else won't match.
+    const refStr = String(ref);
+    if (refStr && /^ba[a-z0-9]+$/i.test(refStr)) {
+      link = refStr;
+    }
+  }
+  if (!link) return undefined;
   return {
     $type: "blob",
-    ref: { $link: r["$link"] },
+    ref: { $link: link },
     mimeType: typeof v["mimeType"] === "string" ? v["mimeType"] : undefined,
     size: typeof v["size"] === "number" ? v["size"] : undefined,
   };

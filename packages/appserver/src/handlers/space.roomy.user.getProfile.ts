@@ -1,13 +1,18 @@
 /**
  * XRPC: space.roomy.user.getProfile (query).
  *
- * Returns a user's profile from the appserver's materialized data
- * (comp_info/comp_user). The `actor` param accepts a DID or handle; handles
- * are resolved to DIDs via the PLC directory.
+ * Returns a user's profile. The `actor` param accepts a DID or handle;
+ * handles are resolved to DIDs via the PLC directory.
  *
- * If the profile isn't yet materialized (the user hasn't appeared in any
- * space event), the handler hydrates it on demand using the Roomy-first
- * fetcher (PDS record → Bluesky fallback), inserts it, and returns it.
+ * **Read-after-write consistency:** The appserver processes Leaf stream
+ * events, not ATProto repo commits, so a `putRecord` to
+ * `space.roomy.user.profile/self` on the PDS does not trigger
+ * re-materialisation. To stay fresh, this handler always checks HappyView
+ * (which indexes the Jetstream firehose and caches Roomy profile records
+ * locally) and re-materialises from it when a record exists.
+ *
+ * When no Roomy record exists in HappyView, it falls back to the
+ * materialised `comp_info` row, then to on-demand Bluesky hydration.
  *
  * Profile fields (handle, displayName, etc.) may be absent when the user
  * has no Roomy profile record and no Bluesky profile — that's expected and
@@ -16,15 +21,17 @@
 
 import { openDb } from "../db/db.ts";
 import { idResolver } from "../identity.ts";
-import { getProfilesRoomyFirst } from "../materialization/profiles.ts";
-import { insertProfilesWithExtras } from "../materialization/profiles.ts";
+import { insertProfilesWithExtras, defaultGetProfiles } from "../materialization/profiles.ts";
 import { getHappyView } from "../happyview.ts";
-import { getRoomyProfileRecord, roomyRecordToProfileView, roomyRecordExtras } from "../materialization/roomyProfile.ts";
+import { getProfileFromHappyView, happyViewToProfileView, happyViewExtras } from "../materialization/roomyProfile.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 import type { UserDid } from "@roomy-space/sdk";
+import type { DbLike } from "../db/types.ts";
+import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import type { RoomyProfileExtras } from "../materialization/roomyProfile.ts";
 
 export interface GetProfileResult {
   did: string;
@@ -48,8 +55,106 @@ export const getProfileHandler: QueryHandler<
 
   const db = openDb();
 
-  // Try the materialized tables first.
-  const row = await db
+  // ── Roomy profile record from HappyView (authoritative) ──────────────
+  // The appserver processes Leaf stream events, not ATProto repo commits,
+  // so a `putRecord` to `space.roomy.user.profile/self` on the PDS does not
+  // trigger re-materialisation. HappyView subscribes to the Jetstream
+  // firehose and indexes Roomy profile records, so it has the freshest
+  // copy. Always check HappyView first and re-materialise from it when a
+  // record exists — `insertProfilesWithExtras` uses `on conflict do
+  // update` for Roomy-sourced profiles, so this is idempotent.
+  const happyView = getHappyView();
+  let freshPv: ProfileViewDetailed | null = null;
+  let freshEx: RoomyProfileExtras | null = null;
+
+  if (happyView) {
+    const hp = await getProfileFromHappyView(did as UserDid, happyView);
+    if (hp) {
+      freshPv = happyViewToProfileView(hp);
+      freshEx = happyViewExtras(hp);
+    }
+  }
+
+  if (freshPv && freshEx) {
+    await insertProfilesWithExtras(
+      db,
+      [freshPv],
+      new Map([[did, freshEx]]),
+    );
+
+    // Re-read the materialised row to get the handle (Roomy records don't
+    // carry one — the handle comes from comp_user, populated by prior
+    // Bluesky/Leaf hydration).
+    const row = await readProfileRow(db, did);
+    return stripNulls({
+      did,
+      handle: row?.handle,
+      displayName: freshPv.displayName,
+      avatar: freshPv.avatar,
+      description: freshPv.description,
+      banner: freshEx.banner,
+      pronouns: freshEx.pronouns,
+      website: freshEx.website,
+    }) as GetProfileResult;
+  }
+
+  // ── Materialised row (stale but fast) ─────────────────────────────────
+  // No Roomy record in HappyView (or HappyView not configured). Return
+  // whatever is materialised — this covers Bluesky-sourced profiles and
+  // bridged users whose profile data comes from Leaf stream events.
+  const row = await readProfileRow(db, did);
+  if (row) {
+    return stripNulls({
+      did: row.did,
+      handle: row.handle,
+      displayName: row.displayName,
+      avatar: row.avatar,
+      description: row.description,
+      banner: row.banner,
+      pronouns: row.pronouns,
+      website: row.website,
+    }) as GetProfileResult;
+  }
+
+  // ── On-demand hydration (no materialised row) ──────────────────────────
+  // Try Bluesky batch fetch as a last resort.
+  const bskyProfiles = await defaultGetProfiles([did as UserDid]);
+  if (bskyProfiles.length > 0) {
+    await insertProfilesWithExtras(db, bskyProfiles, new Map());
+    const p = bskyProfiles[0]!;
+    return stripNulls({
+      did: p.did,
+      handle: p.handle || undefined,
+      displayName: p.displayName,
+      avatar: p.avatar,
+      description: p.description,
+    }) as GetProfileResult;
+  }
+
+  // No profile found anywhere — return minimal profile with just the DID.
+  return { did };
+};
+
+/**
+ * Read the materialised profile row (comp_user + comp_info) for a DID.
+ * Returns null when no comp_user row exists (user never seen by the
+ * appserver). comp_info fields may be null when the user has comp_user but
+ * no materialised profile data.
+ */
+async function readProfileRow(
+  db: DbLike,
+  did: string,
+): Promise<{
+  did: string;
+  handle: string | null;
+  displayName: string | null;
+  avatar: string | null;
+  description: string | null;
+  banner: string | null;
+  pronouns: string | null;
+  website: string | null;
+} | null> {
+  return db
     .query(
       `select
         u.did      as did,
@@ -74,69 +179,7 @@ export const getProfileHandler: QueryHandler<
       pronouns: string | null;
       website: string | null;
     }>(did);
-
-  if (row) {
-    return stripNulls({
-      did: row.did,
-      handle: row.handle,
-      displayName: row.displayName,
-      avatar: row.avatar,
-      description: row.description,
-      banner: row.banner,
-      pronouns: row.pronouns,
-      website: row.website,
-    }) as GetProfileResult;
-  }
-
-  // Not materialized — hydrate on demand.
-  // Try HappyView/Bluesky batch fetch first (fast path).
-  const happyView = getHappyView();
-  const { profiles, extras } = await getProfilesRoomyFirst(
-    [did as UserDid],
-    happyView,
-  );
-  if (profiles.length > 0) {
-    await insertProfilesWithExtras(db, profiles, extras);
-    const p = profiles[0]!;
-    const ex = extras.get(p.did);
-    return stripNulls({
-      did: p.did,
-      handle: p.handle || undefined,
-      displayName: p.displayName,
-      avatar: p.avatar,
-      description: p.description,
-      banner: ex?.banner,
-      pronouns: ex?.pronouns,
-      website: ex?.website,
-    }) as GetProfileResult;
-  }
-
-  // Last resort: try a single-DID PDS fetch for the Roomy profile record.
-  // This covers the case where HappyView hasn't indexed the record yet but
-  // the user has created it. If this also misses, return minimal profile.
-  try {
-    const record = await getRoomyProfileRecord(did);
-    if (record) {
-      const pv = roomyRecordToProfileView(did, record);
-      const ex = roomyRecordExtras(did, record);
-      await insertProfilesWithExtras(db, [pv], new Map([[did, ex]]));
-      return stripNulls({
-        did,
-        displayName: pv.displayName,
-        avatar: pv.avatar,
-        description: pv.description,
-        banner: ex.banner,
-        pronouns: ex.pronouns,
-        website: ex.website,
-      }) as GetProfileResult;
-    }
-  } catch {
-    // PDS unreachable or DID unresolvable — not an error, just no profile.
-  }
-
-  // No profile found anywhere — return minimal profile with just the DID.
-  return { did };
-};
+}
 
 /**
  * Resolve an `actor` param (DID or handle) to a DID.

@@ -188,7 +188,7 @@
         },
       );
 
-      // Invalidate the appserver profile query so it re-fetches from PDS.
+      // Invalidate the appserver profile query so it re-fetches from HappyView.
       await queryClient.invalidateQueries({
         queryKey: cache.queryKey("space.roomy.user.getProfile", { actor: agent.assertDid }),
       });
