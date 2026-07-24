@@ -104,9 +104,8 @@ export async function getProfilesFromHappyView(
     const chunk = dids.slice(i, i + MAX_ACTORS);
     try {
       const params = new URLSearchParams();
-      for (const d of chunk) params.append("actors", d);
+      params.set("actors", chunk.join(","));
       const headers: Record<string, string> = {
-        "X-Client-Key": config.clientKey,
       };
       if (config.clientSecret) {
         headers["X-Client-Secret"] = config.clientSecret;
@@ -161,7 +160,7 @@ export async function getProfileFromHappyView(
       headers["X-Client-Secret"] = config.clientSecret;
     }
     const resp = await fetch(
-      `${config.endpoint}/xrpc/space.roomy.user.getProfiles?did=${encodeURIComponent(did)}`,
+      `${config.endpoint}/xrpc/space.roomy.user.getProfiles?actors=${encodeURIComponent(did)}`,
       { headers },
     );
     if (!resp.ok) {
@@ -170,24 +169,9 @@ export async function getProfileFromHappyView(
       );
       return null;
     }
-    const data = (await resp.json()) as { records?: Array<Record<string, unknown>> };
-    if (!data.records || data.records.length === 0) return null;
-
-    // Find the profile record — there should be only one per DID (rkey=self).
-    // The record value includes the raw record fields plus `uri` and `$type`.
-    const rec = data.records[0]!;
-    const record = parseRoomyProfileRecord(rec);
-    if (!record) return null;
-
-    return {
-      did,
-      displayName: record.displayName,
-      description: record.description,
-      pronouns: record.pronouns,
-      website: record.website,
-      avatar: record.avatar ? blobRefToAtblob(did, record.avatar) : undefined,
-      banner: record.banner ? blobRefToAtblob(did, record.banner) : undefined,
-    };
+    const data = (await resp.json()) as { profiles?: HappyViewProfile[] };
+    if (!data.profiles || data.profiles.length === 0) return null;
+    return data.profiles[0]!;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[materialize] HappyView single-DID fetch failed: ${message}`);
