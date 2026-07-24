@@ -69,7 +69,6 @@ SCOPE+=" rpc:space.roomy.push.setPreferences?aud=*"
 # Build the OAuth client metadata JSON
 oauth_shared=$(
   cat <<EOF
-  "client_id": "$target_url/oauth-client-metadata.json",
   "client_name": "Roomy Lite",
   "client_uri": "$target_url",
   "logo_uri": "$target_url/favicon.png",
@@ -84,6 +83,7 @@ EOF
 oauth_web_config=$(
   cat <<EOF
 {
+  "client_id": "$target_url/oauth-client-metadata.json",
   "redirect_uris": ["$target_url/"],
   "application_type": "web",
   ${oauth_shared}
@@ -94,6 +94,7 @@ EOF
 oauth_native_config=$(
   cat <<EOF
 {
+  "client_id": "$target_url/oauth-client-native.json",
   "redirect_uris": ["space.roomy:/","$target_url/"],
   "application_type": "native",
   ${oauth_shared}
