@@ -67,26 +67,43 @@ SCOPE+=" rpc:space.roomy.push.unregisterSubscription?aud=*"
 SCOPE+=" rpc:space.roomy.push.setPreferences?aud=*"
 
 # Build the OAuth client metadata JSON
-oauth_config=$(
+oauth_shared=$(
   cat <<EOF
-{
   "client_id": "$target_url/oauth-client-metadata.json",
   "client_name": "Roomy Lite",
   "client_uri": "$target_url",
   "logo_uri": "$target_url/favicon.png",
-  "redirect_uris": ["$target_url/"],
   "scope": "${SCOPE}",
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "token_endpoint_auth_method": "none",
-  "application_type": "web",
   "dpop_bound_access_tokens": true
+EOF
+)
+
+oauth_web_config=$(
+  cat <<EOF
+{
+  "redirect_uris": ["$target_url/"],
+  "application_type": "web",
+  ${oauth_shared}
+}
+EOF
+)
+
+oauth_native_config=$(
+  cat <<EOF
+{
+  "redirect_uris": ["space.roomy:/","$target_url/"],
+  "application_type": "native",
+  ${oauth_shared}
 }
 EOF
 )
 
 # Write first so the verification below can read the actual artifact
-echo "$oauth_config" > build/oauth-client-metadata.json
+echo "$oauth_web_config" > build/oauth-client-metadata.json
+echo "$oauth_native_config" > build/oauth-client-native.json
 
 echo "Scope: ${SCOPE:0:120}..."
 
