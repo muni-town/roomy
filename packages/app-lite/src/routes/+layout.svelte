@@ -113,6 +113,20 @@
       return () => untrack(() => stopSync());
     }
   });
+
+  // Queries mount while the login modal is up (page content renders beneath
+  // it) and call `px()`, which throws "Not authenticated" until `directXrpc`
+  // exists. Those errors are cached with `staleTime: Infinity`, and no page
+  // reload occurs on an in-place Tauri login, so they'd persist until refresh.
+  // On the unauthenticated → authenticated transition, invalidate everything
+  // so active queries refetch with the fresh session.
+  let wasAuthenticated = false;
+  $effect(() => {
+    if (auth.authenticated && !wasAuthenticated) {
+      queryClient.invalidateQueries();
+    }
+    wasAuthenticated = auth.authenticated;
+  });
 </script>
 
 <QueryClientProvider client={queryClient}>

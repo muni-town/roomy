@@ -8,6 +8,7 @@
     "devUrl": "http://localhost:5180"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Roomy",
@@ -45,7 +46,6 @@
         },
         {
           "scheme": ["https"],
-          "pathPrefix": ["/oauth/callback"],
           "host": "space.roomy",
           "appLink": true
         }

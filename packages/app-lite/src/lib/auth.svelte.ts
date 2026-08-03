@@ -186,12 +186,23 @@ export async function login(handle: string) {
   // Remember the page the user was on so `init()` can send them back here
   // after the PDS redirects to the fixed OAuth redirect URI (the homepage).
   const returnUrl = currentReturnUrl();
-  await sdkLogin(CONFIG.appserverDid, handle, {
+  const result = await sdkLogin(CONFIG.appserverDid, handle, {
     port: CONFIG.port,
     scope: OAUTH_SCOPE,
     usePublicClient: CONFIG.usePublicClient,
     state: returnUrl,
   });
+
+  if (result) {
+    session = result.session;
+    agent = result.agent;
+    await setupDirectXrpc(result.agent);
+    authenticated = true;
+    const target = safeReturnUrl(result.state) ?? returnUrl;
+    if (target && target !== currentReturnUrl()) {
+      goto(target, { replaceState: true });
+    }
+  }
 }
 
 /**
