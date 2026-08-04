@@ -40,13 +40,13 @@
     "deep-link": {
       "mobile": [
         {
-          "scheme": ["space.roomy"],
-          "host": "space.roomy",
+          "scheme": ["space.roomy", "roomy"],
           "appLink": false
         },
         {
           "scheme": ["https"],
-          "host": "space.roomy",
+          "host": "roomy.space",
+          "pathPrefix": ["/"],
           "appLink": true
         }
       ],
