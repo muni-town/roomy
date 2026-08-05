@@ -11,6 +11,7 @@
     open?: boolean;
     canEdit: boolean;
     canDelete: boolean;
+    onForward: (message: Message) => void;
     onStartEdit: (messageId: string) => void;
     /** Requests the delete confirmation (owned by ChatArea). */
     onRequestDelete: () => void;
@@ -23,6 +24,7 @@
     open = $bindable(false),
     canEdit,
     canDelete,
+    onForward,
     onStartEdit,
     onRequestDelete,
   }: Props = $props();
@@ -61,6 +63,7 @@
   {canDelete}
   {onToggleReaction}
   {onReply}
+  onForward={() => message && onForward(message)}
   {onStartThreading}
   {onEdit}
   {onDelete}

@@ -18,6 +18,7 @@
   import { px } from "$lib/auth.svelte";
   import { scrollPositionState } from "./scroll-position.svelte";
   import { prefetchInternalLinkSummaries } from "./prefetch-link-summaries";
+  import ForwardMessageModal from "./ForwardMessageModal.svelte";
 
   const { queryKey } = cache;
 
@@ -64,6 +65,15 @@
   function openDeleteConfirm(message: Message) {
     deleteMessageTarget = message;
     isDeleteConfirmOpen = true;
+  }
+
+  // Forward modal state — lifted here so one modal serves every message.
+  let forwardMessage = $state<Message | null>(null);
+  let isForwardModalOpen = $state(false);
+
+  function openForward(message: Message) {
+    forwardMessage = message;
+    isForwardModalOpen = true;
   }
 
   function openMobileMenu(message: Message) {
@@ -416,6 +426,7 @@
                       onCancelEdit={() => (editingMessageId = undefined)}
                       onOpenMobileMenu={openMobileMenu}
                       onRequestDelete={openDeleteConfirm}
+                      onForward={openForward}
                       mergeWithPrevious={message.mergeWithPrevious}
                     />
                   {/if}
@@ -455,6 +466,7 @@
       isMobileDrawerOpen = false;
       openDeleteConfirm(mobileMenuMessage);
     }}
+    onForward={openForward}
   />
 
   <DeleteMessageDialog
@@ -470,4 +482,13 @@
       await deleteMessage(spaceId, roomId, deleteMessageTarget.id);
     }}
   />
+
+  {#if forwardMessage}
+    <ForwardMessageModal
+      bind:open={isForwardModalOpen}
+      {spaceId}
+      fromRoomId={roomId}
+      messageId={forwardMessage.id}
+    />
+  {/if}
 </div>

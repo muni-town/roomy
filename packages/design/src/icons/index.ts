@@ -49,6 +49,7 @@ export { default as IconMessageCircleOff } from "~icons/ph/chat-circle-slash-bol
 export { default as IconMessageCirclePlus } from "~icons/ph/chat-circle-dots-bold";
 export { default as IconNeedleThread } from "~icons/tabler/needle-thread";
 export { default as IconReply } from "~icons/ph/arrow-bend-up-left-bold";
+export { default as IconForward } from "~icons/ph/arrow-bend-up-right-bold";
 
 // Status
 export { default as IconAlertCircle } from "~icons/ph/warning-circle-bold";
