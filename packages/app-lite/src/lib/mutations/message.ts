@@ -89,3 +89,22 @@ export async function deleteMessage(
   await sendEvents(spaceId, [event]);
   return id;
 }
+
+export async function forwardMessage(
+  spaceId: string,
+  fromRoomId: string,
+  messageId: string,
+  toRoomId: string,
+): Promise<string> {
+  const id = newUlid();
+  const event: Record<string, unknown> = {
+    id,
+    room: toRoomId,
+    $type: "space.roomy.message.forwardMessages.v0",
+    messageIds: [messageId],
+    fromRoomId,
+  };
+
+  await sendEvents(spaceId, [event]);
+  return id;
+}

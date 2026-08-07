@@ -5,6 +5,7 @@
   import {
     IconSmilePlus,
     IconReply,
+    IconForward,
     IconNeedleThread,
     IconEdit,
     IconTrash,
@@ -17,6 +18,7 @@
     canDelete,
     onToggleReaction,
     onReply,
+    onForward,
     onStartThreading,
     onEdit,
     onDelete,
@@ -30,6 +32,7 @@
     canDelete: boolean;
     onToggleReaction: (emoji: string) => void;
     onReply: () => void;
+    onForward: () => void;
     onStartThreading: () => void;
     onEdit: () => void;
     onDelete: () => void;
@@ -105,6 +108,16 @@
       >
         <IconReply />
         Reply
+      </Button>
+      <Button
+        onclick={() => {
+          onForward();
+          open = false;
+        }}
+        class="dz-join-item dz-btn w-full"
+      >
+        <IconForward />
+        Forward
       </Button>
       <Button
         onclick={() => {
