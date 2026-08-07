@@ -17,6 +17,26 @@ import {
 import { Agent } from "@atproto/api";
 import type { OAuthSession } from "@atproto/oauth-client-browser";
 
+// Declares necessary parts of tauri JS API exposed through `window.__TAURI__`. 
+// (available when `withGlobalTauri` is enabled in config.tauri.json)
+// without a dependency on @tauri-apps/api
+// Tauri apps gate access on the runtime check `'__TAURI__' in window`.
+declare global {
+  interface Window {
+    __TAURI__?: {
+      opener: {
+        openUrl(url: string | URL): Promise<void>;
+      };
+      deepLink: {
+        onOpenUrl(handler: (urls: string[]) => void): Promise<() => void>;
+      };
+      http: {
+        fetch(input: string | URL | Request, init?: RequestInit): Promise<Response>
+      }
+    };
+  }
+}
+
 // ── Config ────────────────────────────────────────────────────────────────
 
 const HANDLE_RESOLVER = "https://bsky.social";
@@ -226,12 +246,21 @@ export async function createOAuthClient(
 ): Promise<BrowserOAuthClient> {
   const scope = opts.scope ?? buildScope(appserverDid);
 
+  const tauri = window.__TAURI__
   // Production: fetch public client metadata deployed alongside the static build
   if (opts.usePublicClient) {
     const resp = await fetch("/oauth-client-metadata.json", {
       headers: [["accept", "application/json"]],
     });
     const clientMetadata = await resp.json();
+    return new BrowserOAuthClient({
+      clientMetadata,
+      handleResolver: HANDLE_RESOLVER,
+      responseMode: "query",
+    });
+  } else if (tauri) {
+    const req = await tauri.http.fetch("https://roomy.space/oauth-client-native.json")
+    const clientMetadata = await req.json()
     return new BrowserOAuthClient({
       clientMetadata,
       handleResolver: HANDLE_RESOLVER,
@@ -302,6 +331,11 @@ export interface InitSessionOptions {
    * signing in and redirect back to it after the PDS callback.
    */
   state?: string;
+  /**
+   * How long the login flow should stay pending before `login()`
+   * aborts (user abandoned auth). Defaults to 10 minutes,
+   */
+  loginTimeoutMs?: number;
 }
 
 /**
@@ -311,12 +345,34 @@ export interface InitSessionOptions {
  * is the OAuth `state` value round-tripped through the PDS (present only
  * when this call processed an OAuth callback, not a plain session restore).
  */
+export type LoginResult = { session: OAuthSession; agent: Agent; state?: string | null; }
+
 export async function initSession(
   appserverDid: string,
   opts: InitSessionOptions = {},
-): Promise<{ session: OAuthSession; agent: Agent; state?: string | null } | null> {
+): Promise<LoginResult | null> {
   const client = await createOAuthClient(appserverDid, opts);
-  const result = await client.init();
+  let result: {
+    session: OAuthSession;
+    state?: never;
+  } | {
+    session: OAuthSession;
+    state: string | null;
+  } | undefined
+
+  // Tauri / native custom-scheme callbacks can't be auto-detected by `client.init()`:
+  // `findRedirectUrl()` compares HTTP origins against the
+  // registered redirect URIs, and a `space.roomy:/…` scheme never matches the
+  // webview origin (`tauri://localhost`). 
+  if ('__TAURI__' in window) {
+    const params = new URLSearchParams(location.search);
+    if (params.has('state') && (params.has('code') || params.has('error'))) {
+      result = await client.initCallback(params, client.clientMetadata.redirect_uris[0]);
+    }
+  } else {
+    result = await client.init();
+  }
+
   if (result?.session) {
     return {
       session: result.session,
@@ -331,19 +387,82 @@ export async function initSession(
 }
 
 /**
- * Initiate an OAuth sign-in flow. This will redirect the browser to the
- * PDS authorization page; the promise does **not** resolve in the current
- * page context (the browser navigates away).
+ * Initiate an OAuth sign-in flow.
+ *
+ * Web: redirects the browser to the PDS authorization page; the promise does
+ * **not** resolve in the current page context (the browser navigates away)
+ * and the returned value is never reached.
+ *
+ * Tauri: opens the PDS in the system browser, then **blocks** until the
+ * deep-link redirect (`space.roomy:/?state=…&code=…`) arrives and processes
+ * the callback in place. Returns `LoginResult` on success and throws on error/denial
  */
 export async function login(
   appserverDid: string,
   handle: string,
   opts: InitSessionOptions = {},
-): Promise<void> {
+): Promise<void | LoginResult> {
   const client = await createOAuthClient(appserverDid, opts);
+
+  const tauri = window.__TAURI__;
+  if (tauri) {
+    // opener IPC promise or the deep-link listener could in theory never settle.
+    // Race the whole Tauri flow against a timeout so an abandoned login ALWAYS resolves,
+    // letting the caller revert its loading state and surface the expiry. 
+    const timeoutMs = opts.loginTimeoutMs ?? 10 * 60_000;
+    return await Promise.race([
+      tauriLogin(client, handle, opts, tauri),
+      new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Auth request has expired')), timeoutMs)),
+    ])
+  }
+
   // Forward `state` so the app can round-trip a return URL through the PDS.
   // The value comes back unchanged via `initSession()`'s `state` field.
   await client.signIn(handle, opts.state ? { state: opts.state } : undefined);
+}
+
+async function tauriLogin(
+  client: BrowserOAuthClient,
+  handle: string,
+  opts: InitSessionOptions,
+  tauri: NonNullable<Window["__TAURI__"]>,
+): Promise<LoginResult> {
+  const url = await client.authorize(handle, opts.state ? { state: opts.state } : undefined);
+
+  // Fire-and-forget. Promise may never settle on some platforms
+  tauri.opener.openUrl(url);
+
+
+  // Wait for the next deep-link event targeting this app. Resolves with the
+  // first URL (e.g. `space.roomy:/?state=…&code=…`) or `null` on timeout.
+  // The listener is removed on the first event (or after the timeout)
+  const deepUrl = await new Promise<string>((resolve, reject) => {
+    let unlisten: (() => void) | undefined;
+    tauri.deepLink
+      .onOpenUrl((urls) => {
+        unlisten?.();
+        const url = urls[0]
+        if (!url) {
+          reject(new Error('Error while opening url'))
+          return
+        }
+        resolve(url)
+      })
+      .then((unlistenFn) => {
+        unlisten = unlistenFn;
+      })
+      .catch(reject)
+  });
+
+  // initCallback throws on error in query params 
+  const params = new URLSearchParams(new URL(deepUrl).search);
+  const result = await client.initCallback(params, client.clientMetadata.redirect_uris[0]);
+  if (result.session) return {
+    session: result.session,
+    agent: new Agent(result.session as any),
+    state: result.state,
+  };
+  throw new Error('Invalid session result')
 }
 
 /**
