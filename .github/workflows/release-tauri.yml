@@ -25,7 +25,7 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-latest'
@@ -48,9 +48,9 @@ jobs:
           echo "Version $APP_VERSION validated"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
       - name: setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: 'pnpm'
@@ -68,42 +68,46 @@ jobs:
       - name: Generate Build Assets
         run: |
           pnpm install
+          pnpm -w add @tauri-apps/cli@2.11
           pnpm turbo run build-lib
           cd ./packages/app-lite
           pnpm tauri icon -o src-tauri/icons static/icons/icon-512.png
-          pnpm build:t
+          pnpm build
 
-      - name: Setup java
-        uses: actions/setup-java@v3
-        if: ${{ matrix.android }}
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup NDK 
-        uses: nttld/setup-ndk@v1
-        if: ${{ matrix.android }}
-        id: setup-ndk
-        with:
-          ndk-version: r25b
-          local-cache: true
-
-      - name: Setup Android Signing
+      - name: Init android
         if: ${{ matrix.android }}
         run: |
-          cd ./packages/app-lite/src-tauri/gen/android
+          cd ./packages/app-lite
+          pnpm tauri android init
+          ./scripts/copy-android-assets.sh
+          cd ./src-tauri/gen/android
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
           echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
           # generate keystore.jks locally and add to secrets with `base64 -i keystore.jks`
           base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > $RUNNER_TEMP/keystore.jks
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
+      - name: Setup java
+        uses: actions/setup-java@v5
+        if: ${{ matrix.android }}
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup NDK 
+        uses: nttld/setup-ndk@v1
+        if: ${{ matrix.android }}
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          local-cache: false
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
       - name: Build Android
         if: ${{ matrix.android }}
         run: |
           cd ./packages/app-lite
-          pnpm tauri android init
-          ./scripts/copy-android-assets.sh
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
           pnpm tauri android build --apk
           cp ./src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk ./src-tauri/gen/android/app/build/outputs/apk/universal/release/roomy-chat_${{ env.APP_VERSION}}.apk
@@ -112,7 +116,7 @@ jobs:
 
       # Could use this for everything if it gets more complicated
       - name: Release Android
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: ${{ matrix.android }}
         with:
           draft: false

@@ -26,7 +26,7 @@ cp -rv "$SRC/app/src/main/res/." "$DST/app/src/main/res/"
 
 if [ -d "$SRC/app/src/main/play" ]; then
   cp -rv "$SRC/app/src/main/play/." "$DST/app/src/main/play/"
-  cp -v "$SCRIPT_DIR/static/icons/icon-512.png" "$DST/app/src/main/play/icon.png"
+  cp -v "$SCRIPT_DIR/../static/icons/icon-512.png" "$DST/app/src/main/play/icon.png"
 fi
 
 echo "Done."
