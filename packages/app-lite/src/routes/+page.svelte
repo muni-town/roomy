@@ -24,11 +24,12 @@
     };
   });
 
-  const homeTitle = $derived("Roomy — Community Platform");
-  const homeDescription = $derived("A community platform integrated with the AT Protocol. Join spaces, chat in channels, and connect with others.");
+  const homeTitle = $derived("Roomy");
+  const homeDescription = $derived("Cozy community spaces; cultivate your digital gardens.");
+  const homeImage = $derived("https://roomy.space/logo/roomy_blob_flat.png");
 </script>
 
-<SeoMeta title={homeTitle} description={homeDescription} />
+<SeoMeta title={homeTitle} description={homeDescription} image={homeImage} />
 
 {#snippet homeSidebar()}
   <SpaceSidebar />
