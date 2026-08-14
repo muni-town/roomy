@@ -104,19 +104,19 @@
           break;
         case "space.roomy.richtext.facet#link": {
           const uri = (feature as { uri: string }).uri;
-          inner = `<a href="${escapeAttr(uri)}" class="text-accent-600 dark:text-accent-400 no-underline hover:underline">${inner}</a>`;
+          inner = `<a href="${escapeAttr(uri)}" oncontextmenu="event.stopPropagation()" class="text-accent-600 dark:text-accent-400 no-underline hover:underline">${inner}</a>`;
           break;
         }
         case "space.roomy.richtext.facet#didMention": {
           // The slice already carries the `@` prefix (the converter folds the
           // mention node's label into the block text as `@label`).
           const did = (feature as { did: string }).did;
-          inner = `<a href="/user/${escapeAttr(did)}" class="mention !no-underline">${inner}</a>`;
+          inner = `<a href="/user/${escapeAttr(did)}" oncontextmenu="event.stopPropagation()" class="mention !no-underline">${inner}</a>`;
           break;
         }
         case "space.roomy.richtext.facet#roomRef": {
           const roomRef = feature as { spaceId: string; roomId?: string };
-          inner = `<a href="/${escapeAttr(roomRef.spaceId)}${roomRef.roomId ? `/${escapeAttr(roomRef.roomId)}` : ""}" class="mention !no-underline">${inner}</a>`;
+          inner = `<a href="/${escapeAttr(roomRef.spaceId)}${roomRef.roomId ? `/${escapeAttr(roomRef.roomId)}` : ""}" oncontextmenu="event.stopPropagation()" class="mention !no-underline">${inner}</a>`;
           break;
         }
         default:
