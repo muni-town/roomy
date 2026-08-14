@@ -81,7 +81,7 @@ let {
 <!-- Main panel: navbar + page content, offset to clear the fixed sidebar -->
 <div
   class={[
-    "h-full flex flex-col overflow-hidden main-panel bg-white dark:bg-base-950",
+    "h-screen flex flex-col overflow-hidden main-panel bg-white dark:bg-base-950",
     "sm:ml-64",
   ]}
   ontouchstart={handleTouchStart}
