@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { MediaQuery } from "svelte/reactivity";
   import { Checkbox } from "bits-ui";
   import MessageBubble from "@roomy/design/components/content/thread/message/MessageBubble.svelte";
   import { messagingState } from "./messaging-state.svelte";
@@ -81,13 +82,14 @@
     }
     prevEditing = editing;
   });
+  let isMobile = new MediaQuery("(pointer: coarse)")
   let isThreading = $derived(messagingState.current.kind === "threading");
   let isSelected = $derived.by(() => {
     const cur = messagingState.current;
     return cur.kind === "threading" && cur.selectedMessages.some((m) => m.id === message.id);
   });
   let showToolbar = $derived(
-    (!isEditing && hovered && !isThreading) || keepToolbarOpen,
+    (!isEditing && hovered && !isThreading && !isMobile.current) || keepToolbarOpen,
   );
 
   let isBridged = $derived(message.authorDid.startsWith("did:discord:"));
@@ -98,7 +100,7 @@
 
   function handleContextAction(e: MouseEvent) {
     // On mobile (coarse pointer), long-press opens the drawer
-    if (matchMedia("(pointer: coarse)").matches) {
+    if (isMobile.current) {
       e.preventDefault();
       onOpenMobileMenu(message);
     }
