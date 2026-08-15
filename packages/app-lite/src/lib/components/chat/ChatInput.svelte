@@ -101,7 +101,7 @@
       // Headings enabled so markdown shortcuts (`# `, `## `, …) convert to
       // header blocks as the user types. Bullet/ordered list shortcuts
       // (`- `, `1. `) come from StarterKit's input rules by default.
-      StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] }, link: false }),
       Placeholder.configure({ placeholder }),
       RichTextLink.configure({
         openOnClick: false,
