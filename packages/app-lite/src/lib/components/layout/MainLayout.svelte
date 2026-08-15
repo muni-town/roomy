@@ -33,11 +33,8 @@ let {
     mobileSidebar.visible = false;
   });
 
-  // ── Touch gesture: left-edge swipe opens mobile sidebar ──────────
-  // On mobile, the browser's swipe-back gesture conflicts with the sidebar.
-  // We intercept left-edge touch and open the sidebar instead.
+  // ── Touch gesture: right swipe opens mobile sidebar ──────────────
   const SWIPE_THRESHOLD = 50; // px of horizontal travel to trigger
-  const EDGE_ZONE = 30; // px from left edge to detect
   const VERTICAL_TOLERANCE = 30; // max vertical drift to still count as horizontal swipe
 
   let touchStartX = $state(0);
@@ -47,8 +44,6 @@ let {
   function handleTouchStart(e: TouchEvent) {
     const touch = e.touches[0];
     if (!touch) return;
-    // Only intercept left-edge touches on mobile
-    if (touch.clientX > EDGE_ZONE) return;
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
     touchActive = true;
