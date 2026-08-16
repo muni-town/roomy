@@ -107,7 +107,7 @@
   }
 
 
-  async function handleEdit(newContent: string, _mentions: string[]) {
+  async function handleEdit(newContent: string, _mentions: string[], submittedBlocks: Block[]) {
     const isRichText = message.mimeType === RICHTEXT_MIME;
     if (!isRichText && newContent === message.content) {
       onCancelEdit();
@@ -120,7 +120,7 @@
       newContent,
       // Rich-text messages stay rich-text: send the blocks (which ChatInput
       // keeps in sync) rather than the base64-encoded wire body or markdown.
-      isRichText ? { blocks: editBlocks ?? [] } : {},
+      isRichText ? { blocks: submittedBlocks } : {},
     );
     onCancelEdit();
   }

@@ -290,7 +290,7 @@
     messagingState.setNormal();
   }
 
-  async function handleSend(_message = "", mentions: string[] = []) {
+  async function handleSend(_message = "", mentions: string[] = [], submittedBlocks: Block[] = []) {
     const state = messagingState.current;
     if (state.kind === "threading") return;
     if (!("input" in state)) return;
@@ -307,7 +307,7 @@
     // sidecar is dropped (mentions fold into `#didMention` facets). Until
     // the flag query has loaded, or when blocks are absent, the legacy
     // markdown path is used.
-    const useRichText = richtextEnabled && !!blocks && blocks.length > 0;
+    const useRichText = richtextEnabled && !!submittedBlocks && submittedBlocks.length > 0;
 
     try {
       const attachments: Record<string, unknown>[] = [];
@@ -357,7 +357,7 @@
                 mimeType: "application/vnd.roomy.richtext+json",
                 data: toBytes(new TextEncoder().encode(JSON.stringify({
                   $type: "space.roomy.richtext.document",
-                  blocks: blocks!,
+                  blocks: submittedBlocks,
                 }))),
               }
             : {
@@ -372,7 +372,7 @@
           replyTo:
             state.kind === "replying" ? state.replyTo.id : undefined,
           mentions,
-          ...(useRichText ? { blocks } : {}),
+          ...(useRichText ? { blocks: submittedBlocks } : {}),
         });
       }
     } catch (e: unknown) {
