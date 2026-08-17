@@ -128,11 +128,15 @@
   // dismissed before editing began).
   $effect(() => {
     const urls = editUrls;
-    editLinks = editLinks.filter((l) => urls.includes(l.url));
+    const current = editLinks;
+    const next = current.filter((l) => urls.includes(l.url));
     for (const url of urls) {
-      if (!editLinks.some((l) => l.url === url)) {
-        editLinks = [...editLinks, { url, embed: null, showPreview: !initialDismissed.has(url) }];
+      if (!next.some((l) => l.url === url)) {
+        next.push({ url, embed: null, showPreview: !initialDismissed.has(url) });
       }
+    }
+    if (next.length !== current.length || next.some((link, i) => link !== current[i])) {
+      editLinks = next;
     }
   });
   // Best-effort fetch of embed metadata for each preview (guarded so a URL is
