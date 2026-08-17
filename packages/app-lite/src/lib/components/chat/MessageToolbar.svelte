@@ -8,6 +8,7 @@
     spaceId: string;
     roomId: string;
     message: Message;
+    mergeWithPrevious?: boolean;
     canEdit: boolean;
     canDelete: boolean;
     keepToolbarOpen?: boolean;
@@ -20,6 +21,7 @@
     spaceId,
     roomId,
     message,
+    mergeWithPrevious = false,
     canEdit,
     canDelete,
     keepToolbarOpen = $bindable(false),
@@ -51,6 +53,7 @@
 <ToolbarShell
   {canEdit}
   {canDelete}
+  {mergeWithPrevious}
   bind:keepToolbarOpen
   {onToggleReaction}
   {onEdit}

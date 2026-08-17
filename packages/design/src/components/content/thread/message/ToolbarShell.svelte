@@ -14,6 +14,7 @@
   let {
     canEdit,
     canDelete,
+    mergeWithPrevious = false,
     keepToolbarOpen = $bindable(false),
     onToggleReaction,
     onEdit,
@@ -25,6 +26,8 @@
     canEdit: boolean;
     /** Author or space admin — shows the Delete button. */
     canDelete: boolean;
+    /** Whether this is a message sharing the previous message's author and timestamp row. */
+    mergeWithPrevious?: boolean;
     /** Bindable — kept open while the emoji picker is open. */
     keepToolbarOpen?: boolean;
     onToggleReaction: (emoji: string) => void;
@@ -48,7 +51,7 @@
 
 <BitsTooltip.Provider>
   <Toolbar.Root
-    class={`${isEmojiToolbarPickerOpen ? "flex" : "flex"} shadow-lg border border-base-200 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-0 bg-base-50 dark:bg-base-900/50 p-0.5 rounded-[12px] items-center`}
+    class={`${isEmojiToolbarPickerOpen ? "flex" : "flex"} shadow-lg border border-base-200 dark:border-base-300/10 backdrop-blur-sm absolute ${mergeWithPrevious ? "-top-9" : "-top-4"} right-0 bg-base-50 dark:bg-base-900/50 p-0.5 rounded-[12px] items-center`}
     onclick={(e) => e.stopPropagation()}
   >
     <Toolbar.Button

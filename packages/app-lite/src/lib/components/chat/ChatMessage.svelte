@@ -381,6 +381,7 @@
           {spaceId}
           {roomId}
           {message}
+          {mergeWithPrevious}
           {canEdit}
           {canDelete}
           bind:keepToolbarOpen
