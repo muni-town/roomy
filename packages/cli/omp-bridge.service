@@ -1,5 +1,5 @@
 [Unit]
-Description=Roomy -> omp agent bridge (Chanterelle)
+Description=Roomy -> omp agent bridge
 After=network-online.target
 Wants=network-online.target
 
