@@ -574,9 +574,9 @@ async function resolveSystemMessageNames(messages: MessageDto[]): Promise<void> 
         // Only rewrite the deterministic DID label (label === DID path); leave
         // any pre-existing baked handle or user-authored content untouched.
         if (!p || label !== didPath) return whole;
-        const display = p.name || (p.handle ? `@${p.handle}` : null);
-        if (!display) return whole;
-        return `[@${display}]${whole.slice(whole.indexOf("("))}`;
+        const rendered = p.name ?? (p.handle ? `@${p.handle}` : null);
+        if (!rendered) return whole;
+        return `[${rendered}]${whole.slice(whole.indexOf("("))}`;
       },
     );
   }

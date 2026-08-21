@@ -85,11 +85,50 @@ describe("selectMessages system messages", () => {
     expect(messages.length).toBe(1);
     const m = messages[0]!;
     expect(m.system).toBe(true);
-    // The DID label must be replaced by the display name; the raw DID never
-    // shows in the message body.
-    expect(m.content).toBe(`[@Alice Example](/user/${USER}) joined the space.`);
+    // The DID label must be replaced by the display name (no leading @ — the
+    // @ marker is only for handle labels); the raw DID never shows in the
+    // message body.
+    expect(m.content).toBe(`[Alice Example](/user/${USER}) joined the space.`);
     // The raw DID must never appear as the visible link label.
     expect(m.content).not.toContain(`[@${USER}]`);
+  });
+
+  test("users with only a handle keep the leading @ in the label", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const msgId = newUlid();
+
+    await db.run("insert into entities (id, stream_id) values (?, ?)", [STREAM, STREAM]);
+    await db.run(
+      "insert into entities (id, stream_id, room) values (?, ?, ?)",
+      [msgId, STREAM, roomId],
+    );
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      msgId,
+      STREAM,
+    ]);
+    const body = `[@${USER}](/user/${USER}) joined the space.`;
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit) values (?, 'text/markdown', ?, ?)",
+      [msgId, Buffer.from(body), msgId],
+    );
+
+    await seedGlobalProfile(STREAM, null, "Test Space");
+    // No display name — only a handle.
+    await seedGlobalProfile(USER, "alice.bsky.social", null);
+
+    const { messages } = await selectMessages(db, {
+      kind: "room",
+      roomId,
+      limit: 50,
+      cursor: null,
+    });
+
+    expect(messages.length).toBe(1);
+    const m = messages[0]!;
+    expect(m.system).toBe(true);
+    // Handle labels keep the @ marker; display names drop it.
+    expect(m.content).toBe(`[@alice.bsky.social](/user/${USER}) joined the space.`);
   });
 
   test("user-authored messages are not flagged system and are not rewritten", async () => {
