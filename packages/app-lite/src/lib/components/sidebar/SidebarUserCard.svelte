@@ -60,7 +60,7 @@
 
 <div class="shrink-0 px-2 pb-2 pt-1">
   <div
-    class="flex items-center gap-3 w-full rounded-lg px-3 py-2 bg-white dark:bg-base-950 border border-base-500/20"
+    class="flex items-center gap-3 w-full rounded-lg px-3 py-2 bg-white dark:bg-base-950 border border-base-500/20 mb-[env(safe-area-inset-bottom)]"
   >
     <div class="relative size-10 shrink-0">
       <div class="size-full rounded-full overflow-hidden">
