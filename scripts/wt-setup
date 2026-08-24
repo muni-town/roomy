@@ -22,6 +22,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 BRANCH="$1"
+SAFE_NAME="${BRANCH//\//-}"
 BASE="${2:-HEAD}"
 WORKTREE_PATH="$WORKTREES_DIR/$BRANCH"
 
@@ -34,6 +35,15 @@ fi
 mkdir -p "$WORKTREES_DIR"
 git worktree add "$WORKTREE_PATH" -b "$BRANCH" "$BASE"
 echo "✔ Worktree created at $WORKTREE_PATH"
+# --- 1b. Fix .git path to be relative (works from both host and container) ---
+WORKTREE_GIT="$WORKTREE_PATH/.git"
+if [[ -f "$WORKTREE_GIT" ]]; then
+  # git resolves the admin dir from the worktree; rewrite the absolute
+  # gitdir to a relative path so the worktree is relocatable (host/container)
+  RELATIVE="$(git -C "$WORKTREE_PATH" rev-parse --path-format=relative --git-dir)"
+  echo "gitdir: $RELATIVE" > "$WORKTREE_GIT"
+  echo "✔ Rewrote .git to relative path: $RELATIVE"
+fi
 
 # --- 2. Copy .env files ---
 # Packages that may have .env files
@@ -55,8 +65,6 @@ for pkg in "${ENV_PACKAGES[@]}"; do
   fi
 done
 
-# --- 3. Install dependencies in container ---
-SAFE_NAME="${BRANCH//\//-}"
 SETUP_NAME="setup-$SAFE_NAME"
 
 echo ""
@@ -66,7 +74,7 @@ docker run --rm \
   --name "$SETUP_NAME" \
   -v "$WORKTREE_PATH:/app" \
   node:22 \
-  bash -c "cd /app && npm i -g pnpm && pnpm install && pnpm build --filter=@roomy-space/sdk"
+  bash -c "cd /app && npm i -g pnpm && pnpm install && pnpm --filter @roomy-space/sdk build"
 echo "✔ Dependencies installed, SDK built"
 
 echo ""

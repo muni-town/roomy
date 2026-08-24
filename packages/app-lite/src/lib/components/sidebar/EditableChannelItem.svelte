@@ -1,6 +1,7 @@
 <script lang="ts">
   import { schemas } from "@roomy-space/sdk";
   import SidebarItemShell from "@roomy/design/components/sidebars/SidebarItemShell.svelte";
+  import ChannelIcon from "./ChannelIcon.svelte";
   import { IconSettings } from "@roomy/design/icons";
 
   type SidebarChannel =
@@ -32,7 +33,11 @@
       hasUnread={channel.unreadCount > 0 && !isEditing}
       plain={isEditing}
       onclick={isEditing ? () => onedit(channel.id) : undefined}
-    />
+    >
+      {#snippet icon()}
+        <ChannelIcon {channel} />
+      {/snippet}
+    </SidebarItemShell>
   </div>
   {#if isEditing}
     <button

@@ -24,6 +24,12 @@
         },
         "message": {
           "type": "string"
+        },
+        "requestedByHandle": {
+          "type": "string"
+        },
+        "requestedByName": {
+          "type": "string"
         }
       }
     },

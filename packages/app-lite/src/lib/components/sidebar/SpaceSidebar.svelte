@@ -24,11 +24,9 @@
   import {
     IconCheck,
     IconGripVertical,
-    IconHashtag,
     IconHome,
     IconPencil,
     IconPlus,
-    IconGlobe,
     IconTrash,
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
@@ -48,10 +46,11 @@
   import RestoreRoomModal from "./RestoreRoomModal.svelte";
   import EditableChannelItem from "./EditableChannelItem.svelte";
   import InviteModal from "$lib/components/InviteModal.svelte";
-import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
-import { createSpacesQuery } from "$lib/queries/spaces";
-import { toast } from "@foxui/core";
-import RoomyMark from "$lib/components/RoomyMark.svelte";
+  import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
+  import ChannelIcon from "./ChannelIcon.svelte";
+  import { createSpacesQuery } from "$lib/queries/spaces";
+  import { toast } from "@foxui/core";
+  import RoomyMark from "$lib/components/RoomyMark.svelte";
 
   type SidebarChannel =
     typeof schemas.queries.getSpaceMetadata.SidebarChannel.infer;
@@ -828,11 +827,7 @@ import RoomyMark from "$lib/components/RoomyMark.svelte";
       hasUnread={channel.unreadCount > 0}
     >
       {#snippet icon()}
-        {#if isFederated}
-          <IconGlobe class="shrink-0 size-3.5 text-base-500" aria-label="Federated from another space" />
-        {:else}
-          <IconHashtag class="shrink-0 text-base-500" />
-        {/if}
+        <ChannelIcon {channel} />
       {/snippet}
       {#snippet trailing()}
         {#if isFederated}

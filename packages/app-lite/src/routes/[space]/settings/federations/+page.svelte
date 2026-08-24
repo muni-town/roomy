@@ -3,7 +3,6 @@
   import { queryClient } from "$lib/client";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createSpacesQuery } from "$lib/queries/spaces";
-  import { createRolesQuery } from "$lib/queries/roles";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import {
     createFederationRequestsQuery,
@@ -16,7 +15,6 @@
     respondFederation,
     removeFederation,
     setRoomPermission,
-    setReceiverPermission,
   } from "$lib/mutations/federation";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
@@ -44,21 +42,7 @@
   const outgoingQuery = createFederationOutgoingQuery(() => spaceId, { enabled: () => federationEnabled && isAdmin });
   const incomingQuery = createFederationIncomingQuery(() => spaceId, { enabled: () => federationEnabled && isAdmin });
   const grantsQuery = createFederationGrantsQuery(() => spaceId, { enabled: () => federationEnabled && isAdmin });
-  const rolesQuery = createRolesQuery(() => spaceId);
   const spacesQuery = createSpacesQuery();
-
-
-
-  // Channel name map from the sidebar metadata (own + federated).
-  const roomNames = $derived.by(() => {
-    const meta = metaQuery.data;
-    const map = new Map<string, string>();
-    for (const cat of meta?.sidebar.categories ?? []) {
-      for (const ch of cat.channels ?? []) map.set(ch.id, ch.name ?? ch.id);
-    }
-    for (const ch of meta?.sidebar.orphans ?? []) map.set(ch.id, ch.name ?? ch.id);
-    return map;
-  });
 
   // Own channels of this space (excludes federated channels shown in orphans).
   const ownChannels = $derived.by(() => {
@@ -73,34 +57,12 @@
     return out;
   });
 
-  // Federated channels into this space, grouped by origin space.
-  const federatedChannelsByOrigin = $derived.by(() => {
-    const meta = metaQuery.data;
-    const map = new Map<string, { id: string; name: string }[]>();
-    for (const ch of meta?.sidebar.orphans ?? []) {
-      if (ch.federated) {
-        const list = map.get(ch.federated.originSpaceId) ?? [];
-        list.push({ id: ch.id, name: ch.name ?? ch.id });
-        map.set(ch.federated.originSpaceId, list);
-      }
-    }
-    return map;
-  });
-
   function originGrantOf(b: string, roomId: string): string {
     const g = grantsQuery.data?.originGrants?.find(
       (x) => x.federatingSpaceDid === b && x.roomId === roomId,
     );
     return g?.permission ?? "none";
   }
-  function receiverGrantOf(origin: string, roomId: string, grantee: string): string {
-    const g = grantsQuery.data?.receiverGrants?.find(
-      (x) => x.originSpaceId === origin && x.roomId === roomId && x.grantee === grantee,
-    );
-    return g?.permission ?? "none";
-  }
-
-  const roles = $derived(rolesQuery.data?.roles ?? []);
 
   let busy = $state<string | null>(null);
   const isBusy = (key: string) => busy === key;
@@ -155,28 +117,12 @@
       busy = null;
     }
   }
-  async function onReceiverGrant(origin: string, roomId: string, grantee: string, permission: string) {
-    busy = `rg:${roomId}:${grantee}`;
-    try {
-      await setReceiverPermission(spaceId, {
-        originSpaceId: origin,
-        roomId,
-        grantee,
-        kind: "role",
-        permission: permission === "none" ? null : (permission as "read" | "readwrite"),
-      });
-      await refresh();
-    } finally {
-      busy = null;
-    }
-  }
 
   const pending = $derived(requestsQuery.data?.requests ?? []);
   const outgoingActive = $derived(
     (outgoingQuery.data?.federations ?? []).filter((f) => f.status === "active"),
   );
   const incomingAll = $derived(incomingQuery.data?.federations ?? []);
-  const incomingActive = $derived(incomingAll.filter((f) => f.status === "active"));
   // Non-active relationships from this space's perspective (B): pending
   // requests awaiting the origin's decision, plus rejected/removed history.
   const incomingStatusRows = $derived(
@@ -221,6 +167,14 @@
 
   function spaceLabel(name: string | undefined, did: string): string {
     return name ?? did;
+  }
+
+  function requesterLabel(req: {
+    requestedByName?: string;
+    requestedByHandle?: string;
+    requestedByDid: string;
+  }): string {
+    return req.requestedByName ?? req.requestedByHandle ?? req.requestedByDid;
   }
 
   async function onRequest() {
@@ -373,7 +327,7 @@
                 </span>
               </div>
               <p class="text-xs text-base-400">
-                Requested {new Date(req.requestedAt).toLocaleString()} by {req.requestedByDid}
+                Requested {new Date(req.requestedAt).toLocaleString()} by {requesterLabel(req)}
                 {#if req.message}<br />“{req.message}”{/if}
               </p>
               <div class="flex gap-2 justify-end">
@@ -443,62 +397,5 @@
       {/if}
     </section>
 
-    <!-- Incoming: channels federated into this space + receiver grants -->
-    <section class="space-y-3">
-      <h2 class="text-base font-semibold text-base-900 dark:text-base-100">
-        Federated channels
-      </h2>
-      {#if incomingActive.length === 0}
-        <p class="text-sm text-base-400">
-          No active federations yet. Send a request above, or wait for another
-          space to request this one.
-        </p>
-      {:else}
-        <ul class="flex flex-col gap-3">
-          {#each incomingActive as f (f.originSpaceDid)}
-            {@const fedChannels = federatedChannelsByOrigin.get(f.originSpaceDid) ?? []}
-            <li class="rounded-2xl border border-base-200 dark:border-base-800 p-3">
-              <div class="text-sm font-semibold text-base-900 dark:text-base-100 mb-2">
-                {spaceLabel(f.originSpaceName, f.originSpaceDid)}
-              </div>
-              {#if fedChannels.length === 0}
-                <p class="text-sm text-base-400">
-                  This space hasn't granted any channels yet. As soon as a channel is shared, you can grant your roles access below.
-                </p>
-              {:else if roles.length === 0}
-                <p class="text-sm text-base-400">
-                  No roles to grant access to. Create a role in Permissions first.
-                </p>
-              {:else}
-                <div class="flex flex-col gap-3">
-                  {#each fedChannels as ch}
-                    <div class="rounded-xl bg-base-50 dark:bg-base-900/40 p-2">
-                      <div class="text-xs font-semibold text-base-700 dark:text-base-300 mb-1 truncate">
-                        {ch.name} <span class="text-base-400 font-normal">({roomNames.get(ch.id) ?? ch.id})</span>
-                      </div>
-                      <div class="flex flex-col gap-1.5">
-                        {#each roles as role}
-                          <div class="flex items-center justify-between gap-3">
-                            <span class="text-sm text-base-700 dark:text-base-300 truncate">
-                              {role.name ?? role.id}
-                            </span>
-                            <ToggleGroup
-                              name={`rg:${ch.id}:${role.id}`}
-                              value={receiverGrantOf(f.originSpaceDid, ch.id, role.id)}
-                              options={GRANT_OPTIONS}
-                              onchange={(v) => onReceiverGrant(f.originSpaceDid, ch.id, role.id, v)}
-                            />
-                          </div>
-                        {/each}
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </section>
   </div>
 {/if}

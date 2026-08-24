@@ -48,7 +48,7 @@
         {href}
         variant="ghost"
         class={[
-          "relative w-full justify-start min-w-0 px-2.5",
+          "relative w-full justify-start min-w-0 px-2.5 text-left",
           plain && "hover:bg-transparent dark:hover:bg-transparent hover:border-transparent",
         ]}
         data-current={active}

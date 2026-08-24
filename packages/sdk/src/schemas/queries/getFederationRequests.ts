@@ -15,6 +15,8 @@ export const FederationRequest = type({
   federatingSpaceDid: "string",
   "federatingSpaceName?": "string",
   requestedByDid: "string",
+  "requestedByName?": "string",
+  "requestedByHandle?": "string",
   requestedAt: "number",
   "message?": "string",
 });

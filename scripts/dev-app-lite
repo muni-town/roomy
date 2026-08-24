@@ -42,6 +42,7 @@ docker run -d \
   --name "$DEV_NAME" \
   -v "$WORKTREE_PATH:/app" \
   -p "$PORT:$PORT" \
+  -e "CI=true" \
   -e "VITE_PORT=$PORT" \
   --network roomy-dev \
   node:22 \

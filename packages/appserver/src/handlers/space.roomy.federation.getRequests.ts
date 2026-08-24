@@ -6,12 +6,15 @@
  */
 
 import { requireFederationAdmin, resolveSpaceName } from "./federationAdmin.ts";
+import { resolveProfiles } from "../queries/profileStore.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface RequestRow {
   federatingSpaceDid: string;
   federatingSpaceName?: string;
   requestedByDid: string;
+  requestedByName?: string;
+  requestedByHandle?: string;
   requestedAt: number;
   message?: string;
 }
@@ -43,17 +46,25 @@ export const getFederationRequestsHandler: QueryHandler<
       message: string | null;
     }>(spaceId);
 
+  const requesterDids = rows.map((r) => r.requested_by_did);
+  const profiles = await resolveProfiles(requesterDids);
+
   return {
     requests: await Promise.all(
-      rows.map(async (r) => ({
-        federatingSpaceDid: r.federating_space_did,
-        ...(await resolveSpaceName(r.federating_space_did).then(
-          (name) => (name ? { federatingSpaceName: name } : {}),
-        )),
-        requestedByDid: r.requested_by_did,
-        requestedAt: r.requested_at,
-        ...(r.message ? { message: r.message } : {}),
-      })),
+      rows.map(async (r) => {
+        const requester = profiles.get(r.requested_by_did);
+        return {
+          federatingSpaceDid: r.federating_space_did,
+          ...(await resolveSpaceName(r.federating_space_did).then(
+            (name) => (name ? { federatingSpaceName: name } : {}),
+          )),
+          requestedByDid: r.requested_by_did,
+          ...(requester?.name ? { requestedByName: requester.name } : {}),
+          ...(requester?.handle ? { requestedByHandle: requester.handle } : {}),
+          requestedAt: r.requested_at,
+          ...(r.message ? { message: r.message } : {}),
+        };
+      }),
     ),
   };
 };

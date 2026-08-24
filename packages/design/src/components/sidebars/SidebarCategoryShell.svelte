@@ -44,7 +44,7 @@
     <Button
       variant="ghost"
       class={[
-        "w-full shrink min-w-0 justify-start px-2 pt-1 pb-1 text-base-400 dark:text-base-500",
+        "w-full shrink min-w-0 justify-start px-2 pt-1 pb-1 text-left text-base-400 dark:text-base-500",
         isEditing
           ? "hover:cursor-pointer hover:bg-transparent dark:hover:bg-transparent hover:border-transparent"
           : "hover:cursor-default",

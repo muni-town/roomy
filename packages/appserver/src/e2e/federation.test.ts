@@ -18,6 +18,7 @@ import {
   seedSpace,
   seedRoom,
   seedJoinedSpace,
+  seedUser,
   type E2eContext,
 } from "./helpers.ts";
 
@@ -61,6 +62,13 @@ describe("channel federation — full HTTP E2E chain", () => {
     // home space for ADMIN_B / MEMBER_B.
     seedJoinedSpace(db, ADMIN_B, B);
     seedJoinedSpace(db, MEMBER_B, B);
+    // ADMIN_B's global profile (the requester) so getRequests can resolve
+    // the display name + handle instead of exposing the raw DID.
+    seedUser(db, ADMIN_B, "admin-b.example");
+    (db as any).global().run(
+      "update profiles set name = ? where did = ?",
+      ["Admin Bee", ADMIN_B],
+    );
     seedJoinedSpace(db, MEMBER_C, B);
     // A private channel in A: default_access 'none' so B can only access it
     // through federation, never natively.
@@ -96,6 +104,10 @@ describe("channel federation — full HTTP E2E chain", () => {
     expect(body.requests[0].federatingSpaceDid).toBe(B);
     // The counterpart space's display name is resolved from B's per-space DB.
     expect(body.requests[0].federatingSpaceName).toBe("Test Space");
+    // The requester's profile is resolved: display name + handle, not the DID.
+    expect(body.requests[0].requestedByDid).toBe(ADMIN_B);
+    expect(body.requests[0].requestedByName).toBe("Admin Bee");
+    expect(body.requests[0].requestedByHandle).toBe("admin-b.example");
 
 
     // 3. ADMIN_A approves.
