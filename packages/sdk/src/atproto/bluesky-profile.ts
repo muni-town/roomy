@@ -18,10 +18,44 @@ import type { ArbiterClient } from "./arbiter";
 export interface ProfileRecord {
   displayName?: string;
   description?: string;
+  /** An image blob reference (`BlobRef.toJSON()` shape) on the space's repo. */
+  avatar?: {
+    $type: "blob";
+    ref: { $link: string };
+    mimeType: string;
+    size: number;
+  };
 }
 
 const PROFILE_COLLECTION = "app.bsky.actor.profile";
 const PROFILE_RKEY = "self";
+
+/**
+ * Upload a blob (e.g. an avatar image) to the stewarded account's PDS repo,
+ * proxied through the arbiter so the policy governs the upload and the blob is
+ * stored in the space's own repo.
+ *
+ * Returns the blob reference as it should be embedded in a record's `avatar`
+ * field (the shape of `com.atproto.repo.uploadBlob`'s `blob` response).
+ */
+export async function uploadBlobToSpace(
+  arbiter: ArbiterClient,
+  spaceDid: string,
+  data: Uint8Array,
+  contentType: string,
+): Promise<ProfileRecord["avatar"]> {
+  const body = await arbiter.proxy(spaceDid, {
+    nsid: "com.atproto.repo.uploadBlob",
+    method: "POST",
+    bytes: data,
+    encoding: contentType,
+  });
+  const blob = body.blob as ProfileRecord["avatar"] | undefined;
+  if (!blob || blob.$type !== "blob" || typeof blob.ref?.$link !== "string") {
+    throw new Error(`uploadBlob returned no blob ref`);
+  }
+  return blob;
+}
 
 /**
  * Read the space's Bluesky profile record, routed to the space's PDS via the

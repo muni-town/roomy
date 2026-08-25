@@ -22,6 +22,7 @@ export {
 export {
   getSpaceProfileRecord,
   putProfileRecord,
+  uploadBlobToSpace,
   type ProfileRecord,
 } from "./bluesky-profile";
 

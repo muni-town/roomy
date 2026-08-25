@@ -33,6 +33,19 @@ export interface ProxyOperation {
   parameters?: Record<string, unknown>;
   /** Optional JSON body for the inner request. */
   body?: Record<string, unknown>;
+  /**
+   * Optional raw-bytes body (e.g. a blob upload). When set, `body` is
+   * ignored and the bytes are carried in the envelope as the AT Protocol
+   * binary marker `{ "$bytes": <base64> }`, with `encoding` as the inner
+   * request's content-type.
+   */
+  bytes?: Uint8Array;
+  /**
+   * Optional content-type (encoding) for the inner request body (e.g.
+   * `image/png`). Defaults to `application/json` for JSON bodies; for a raw
+   * bytes body it is required to convey the MIME type.
+   */
+  encoding?: string;
 }
 
 /** The `did#service` fragment for a steward's PDS. */
@@ -71,9 +84,18 @@ function arbiterUrlFromDid(arbiterDid: string): string {
   return `${scheme}://${host}`;
 }
 
+/** Base64-encode bytes for the `$bytes` binary marker (standard padded). */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 export class ArbiterClient {
   readonly #agent: Agent;
-  #tokens = new Map<string, { token: string; expiresAt: number }>();
 
   constructor(agent: Agent) {
     this.#agent = agent;
@@ -108,26 +130,21 @@ export class ArbiterClient {
   }
 
   /**
-   * Get a serviceAuth token scoped to the given arbiter server DID + the
-   * `town.muni.arbiter.proxy` method. Cached until near expiry, per DID.
+   * Mint a fresh serviceAuth token scoped to the given arbiter server DID +
+   * the `town.muni.arbiter.proxy` method.
+   *
+   * A new token is minted for every request: the arbiter enforces single-use
+   * (replay protection on the token `jti`), so a token must never be sent
+   * twice, even within its validity window.
    */
   async #getProxyToken(arbiterDid: string): Promise<string> {
-    const cached = this.#tokens.get(arbiterDid);
-    if (cached && Date.now() / 1000 < cached.expiresAt - 30) {
-      return cached.token;
-    }
     const exp = Math.floor(Date.now() / 1000) + TOKEN_LIFETIME_SEC;
     const resp = await this.#agent.com.atproto.server.getServiceAuth({
       aud: arbiterDid,
       lxm: "town.muni.arbiter.proxy",
       exp,
     });
-    const token = resp.data.token;
-    this.#tokens.set(arbiterDid, {
-      token,
-      expiresAt: this.#decodeExpiry(token),
-    });
-    return token;
+    return resp.data.token;
   }
 
   /**
@@ -153,23 +170,42 @@ export class ArbiterClient {
           method: op.method,
           nsid: op.nsid,
           ...(op.parameters ? { parameters: op.parameters } : {}),
-          ...(op.body ? { body: op.body } : {}),
+          // A raw-bytes body is carried as the AT Protocol binary marker
+          // `{ $bytes: <base64> }`; the arbiter decodes it back to bytes and
+          // sends it with `encoding` as the inner request's content-type.
+          body: op.bytes
+            ? { $bytes: bytesToBase64(op.bytes) }
+            : op.body,
+          encoding: op.encoding,
         }),
       },
     );
     if (!res.ok) {
-      // The arbiter relays the upstream XRPC error verbatim: status + body
-      // `{ $type, error: "<name>" }` (see leaf-0.4 `xrpc_result_to_response`).
+      // The arbiter relays the upstream XRPC error verbatim (see leaf-0.4
+      // `xrpc_result_to_response` / `AppError::into_response`). The `error`
+      // field may be a string name (`{ $type, error: "<name>" }`) or an object
+      // `{ error, message }` — parse both so the detail is surfaced.
       let errorName: string | null = null;
+      let errorMessage: string | null = null;
       try {
-        const body = (await res.json()) as { error?: unknown };
-        if (typeof body?.error === "string") errorName = body.error;
+        const body = (await res.json()) as { error?: unknown; message?: unknown };
+        if (typeof body?.error === "string") {
+          errorName = body.error;
+        } else if (body?.error && typeof body.error === "object") {
+          const obj = body.error as Record<string, unknown>;
+          if (typeof obj.error === "string") errorName = obj.error;
+          if (typeof obj.message === "string") errorMessage = obj.message;
+        }
+        if (!errorMessage && typeof body?.message === "string") {
+          errorMessage = body.message;
+        }
       } catch {
-        // Non-JSON error body; fall through with no error name.
+        // Non-JSON error body; fall through with no error detail.
       }
+      const detail = errorMessage ? `: ${errorMessage}` : "";
       throw new ArbiterProxyError(
         res.status,
-        `Arbiter proxy failed (${res.status}) for ${op.nsid}`,
+        `Arbiter proxy failed (${res.status}) for ${op.nsid}${detail}`,
         errorName,
       );
     }
@@ -181,14 +217,4 @@ export class ArbiterClient {
     return JSON.parse(text) as Record<string, unknown>;
   }
 
-  /** Decode the `exp` claim from a serviceAuth JWT. */
-  #decodeExpiry(token: string): number {
-    const payload = token.split(".")[1];
-    if (!payload) throw new Error("Service auth token is not a valid JWT");
-    const decoded = JSON.parse(atob(payload));
-    if (typeof decoded.exp !== "number") {
-      throw new Error("Service auth JWT payload missing exp claim");
-    }
-    return decoded.exp;
-  }
 }

@@ -51,6 +51,7 @@
       await upsertBlueskyProfile(spaceId, {
         displayName: meta.name ?? undefined,
         description: meta.description ?? undefined,
+        avatarUri: meta.avatar ?? undefined,
       });
       hasProfile = true;
       toast.success(wasCreate ? "Bluesky profile created." : "Bluesky profile updated.");
