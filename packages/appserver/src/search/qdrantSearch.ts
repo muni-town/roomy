@@ -160,7 +160,7 @@ export async function ensureMessagesCollection(
       try {
         await client.createPayloadIndex(MESSAGES_COLLECTION, {
           field_name: field,
-          field_schema: "keyword",
+          field_schema: "datetime",
         });
       } catch {
         // ignore — filtering still works without the index
