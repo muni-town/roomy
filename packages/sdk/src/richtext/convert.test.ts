@@ -159,13 +159,13 @@ describe("richtext convert — blocks ↔ ProseMirror round-trip", () => {
         {
           type: "paragraph",
           content: [
-            { type: "text", text: "https://roomy.space/did:plc:space/room-1" },
+            { type: "text", text: "https://roomy.space/did:plc:drzgt2m6lmcel62gfbzjeap3/01KZBRQMEP2FTE079YRVDFKGTA" },
           ],
         },
       ],
     });
     const text = blocks[0] as { text: string; facets?: { features: { $type: string }[] }[] };
-    expect(text.text).toBe("https://roomy.space/did:plc:space/room-1");
+    expect(text.text).toBe("https://roomy.space/did:plc:drzgt2m6lmcel62gfbzjeap3/01KZBRQMEP2FTE079YRVDFKGTA");
     // Plain text has no link mark here; build the mark explicitly to exercise
     // marksToFeatures' link + roomRef path.
     const withLink = proseMirrorDocToBlocks({
@@ -176,8 +176,8 @@ describe("richtext convert — blocks ↔ ProseMirror round-trip", () => {
           content: [
             {
               type: "text",
-              text: "https://roomy.space/did:plc:space/room-1",
-              marks: [{ type: "link", attrs: { href: "/did:plc:space/room-1" } }],
+              text: "https://roomy.space/did:plc:drzgt2m6lmcel62gfbzjeap3/01KZBRQMEP2FTE079YRVDFKGTA",
+              marks: [{ type: "link", attrs: { href: "/did:plc:drzgt2m6lmcel62gfbzjeap3/01KZBRQMEP2FTE079YRVDFKGTA" } }],
             },
           ],
         },

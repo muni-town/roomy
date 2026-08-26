@@ -143,6 +143,15 @@ export async function getProfilesRoomyFirst(
   // Step 2: fall back to Bluesky for DIDs HappyView didn't have (or all
   // DIDs when HappyView is not configured).
   if (missingDids.length > 0) {
+    // Under `bun test` (NODE_ENV=test) skip the live Bluesky appview fetch.
+    // Unit tests that exercise materialization/read paths don't assert on
+    // profile rows, and live fetches pile up under parallel load and blow
+    // the 5s per-test timeout (see the `_setTestGetProfiles` comment in
+    // src/e2e/helpers.ts). Tests that DO exercise the fetcher mock
+    // `globalThis.fetch` and call `defaultGetProfiles` directly.
+    if (process.env.NODE_ENV === "test") {
+      return { profiles, extras };
+    }
     const bskyProfiles = await defaultGetProfiles(missingDids);
     profiles.push(...bskyProfiles);
   }

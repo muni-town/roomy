@@ -22,6 +22,7 @@ import { StreamDid, UserDid } from "@roomy-space/sdk";
 import { closeDb, openDb, openReadStateDb, openSpaceDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
 import { selectActivityFeed } from "./activityFeed.ts";
+import { _setTestGetProfiles } from "./profileStore.ts";
 import { setUserSpaceMembership } from "./userSpaceMembership.ts";
 
 const SPACE = "did:web:space.example";
@@ -63,6 +64,9 @@ function ulidForTimestamp(ts: number): string {
 function setup(): { readState: DbLike } {
   closeDb();
   openDb({ path: ":memory:" });
+  // Hermetic: without a stub, on-demand profile hydration in
+  // selectActivityFeed hits live api.bsky.app fetches.
+  _setTestGetProfiles(async () => []);
   const readState = openReadStateDb();
   return { readState };
 }
@@ -648,5 +652,6 @@ describe("selectActivityFeed", () => {
 });
 
 afterEach(() => {
+  _setTestGetProfiles(null);
   closeDb();
 });

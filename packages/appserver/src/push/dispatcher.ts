@@ -60,6 +60,8 @@ const SWEEP_BATCH_LIMIT = 64;
 
 let dispatcherDb: DbLike | undefined;
 let started = false;
+/** Set when the loop should exit (test teardown); checked between cycles. */
+let stopped = false;
 
 /** Lifetime counters, exposed via {@link pushDispatcherStats}. */
 let statsDispatched = 0;
@@ -83,6 +85,7 @@ export function startPushDispatcher(opts: PushDispatcherOpts): void {
   if (started) return;
   dispatcherDb = opts.db;
   started = true;
+  stopped = false;
   void runDispatcherLoop().catch((err) => {
     log.error("[push-dispatcher] loop crashed:", err);
   });
@@ -125,7 +128,7 @@ async function runDispatcherLoop(): Promise<void> {
   const db = dispatcherDb;
   if (!db) return;
 
-  while (true) {
+  while (!stopped) {
     try {
       const batch = queue.splice(0, queue.length);
       if (batch.length > 0) {
@@ -346,8 +349,13 @@ function waitForWake(ms: number): Promise<void> {
   return promise;
 }
 
-/** Reset the dispatcher singleton (does not cancel a running loop). Tests only. */
+/**
+ * Reset the dispatcher singleton and stop the running loop. Tests only.
+ * The loop checks `stopped` between cycles and exits, so it can't cycle
+ * against a closed DB after teardown.
+ */
 export function _resetPushDispatcher(): void {
+  stopped = true;
   dispatcherDb = undefined;
   started = false;
   queue.length = 0;

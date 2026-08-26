@@ -152,6 +152,13 @@ export class WorkerLink {
     }, REQUEST_TIMEOUT_MS);
     this.#pending.set(id, { resolve, reject, timeout });
     this.#worker.postMessage({ ...req, ...route, id });
+    // Some callers fire-and-forget DB requests (background loops, teardown
+    // races). When the worker is terminated mid-request, `terminate()`
+    // rejects every pending promise; a dropped promise would surface as an
+    // unhandled rejection and fail the whole test run. Attach a no-op catch
+    // so the rejection is considered handled — awaited callers still observe
+    // it via the returned promise.
+    promise.catch(() => {});
     return promise;
   }
 

@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import type { DbLike } from "../db/types.ts";
 import { closeDb, openDb, openGlobalDb } from "../db/db.ts";
-import { _resetProfileStoreCache } from "./profileStore.ts";
+import { _resetProfileStoreCache, _setTestGetProfiles } from "./profileStore.ts";
 import { selectMembers } from "./members.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -127,6 +127,14 @@ function seedSpaceWithUsers(db: Database, users: SeedOpts[]): void {
 }
 
 describe("selectMembers", () => {
+  beforeEach(() => {
+    // Hermetic: without a stub, on-demand profile hydration hits live
+    // api.bsky.app fetches for cross-stream members.
+    _setTestGetProfiles(async () => []);
+  });
+  afterEach(() => {
+    _setTestGetProfiles(null);
+  });
   test("returns members with profile, admin flag, and roles", async () => {
     const { db, asyncDb } = freshDb();
     seedSpaceWithUsers(db, [

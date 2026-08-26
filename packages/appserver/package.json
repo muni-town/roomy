@@ -7,6 +7,7 @@
     "dev": "bun run --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target=bun",
     "typecheck": "tsc --noEmit",
+    "test": "bun test --isolate",
     "perf": "bun run perf/measure.ts",
     "test:e2e": "bun test src/e2e/"
   },

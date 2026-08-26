@@ -72,6 +72,12 @@
       "persistent": true,
       "cache": false
     },
+    "test": {
+      "dependsOn": [
+        "^build-lib"
+      ],
+      "cache": false
+    },
     "build-omp-bridge": {
       "dependsOn": [
         "^build-lib",
