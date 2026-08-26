@@ -31,9 +31,31 @@ import {
   type ProcedureInput,
   type ProcedureOutput,
 } from "./registry";
-import { XrpcResponseValidationError, RateLimitError } from "./errors";
+import {
+  XrpcResponseValidationError,
+  RateLimitError,
+  XrpcTimeoutError,
+} from "./errors";
 import { withRateLimitRetry, type RateLimitRetryOptions } from "./retry";
 import { ServiceAuthClient } from "./service-auth";
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+
+/**
+ * Constructor options for {@link DirectXrpcClient}.
+ */
+export interface DirectXrpcClientOptions {
+  /**
+   * Hard deadline for one XRPC call, in ms. Covers the service-auth token
+   * fetch (PDS round-trip), the HTTP request, the response body read, and
+   * any 429-retry backoff sleeps. When the deadline fires, the in-flight
+   * request is aborted and the call rejects with `XrpcTimeoutError` — a
+   * wedged appserver or PDS can never hang a call indefinitely.
+   *
+   * Default: 20_000.
+   */
+  requestTimeoutMs?: number;
+}
 
 export class DirectXrpcClient {
   readonly #appserverUrl: string;
@@ -44,16 +66,20 @@ export class DirectXrpcClient {
    * tests can inject a synchronous sleep and callers can tune limits.
    */
   #retryOpts: RateLimitRetryOptions = {};
+  readonly #requestTimeoutMs: number;
 
   constructor(
     appserverUrl: string,
     appserverDid: string,
     serviceAuth: ServiceAuthClient,
+    opts: DirectXrpcClientOptions = {},
   ) {
     // Strip trailing slash so callers can safely append paths like /xrpc/...
     this.#appserverUrl = appserverUrl.replace(/\/+$/, "");
     this.#appserverDid = appserverDid;
     this.#serviceAuth = serviceAuth;
+    this.#requestTimeoutMs =
+      opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   /**
@@ -78,7 +104,7 @@ export class DirectXrpcClient {
     const entry = QUERY_SCHEMAS[nsid];
     const stringParams = stringifyParams(params as Record<string, unknown>);
 
-    return withRateLimitRetry(async () => {
+    return this.#runWithDeadline(nsid, async (signal) => {
       const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
 
       const url = new URL(`${this.#appserverUrl}/xrpc/${nsid}`);
@@ -91,6 +117,7 @@ export class DirectXrpcClient {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        signal,
       });
 
       if (!resp.ok) {
@@ -103,7 +130,7 @@ export class DirectXrpcClient {
         throw new XrpcResponseValidationError(nsid, parsed);
       }
       return parsed as QueryResponse<N>;
-    }, this.#retryOpts);
+    });
   }
 
   /**
@@ -121,7 +148,7 @@ export class DirectXrpcClient {
   ): Promise<ProcedureOutput<N>> {
     const entry = PROCEDURE_SCHEMAS[nsid];
 
-    return withRateLimitRetry(async () => {
+    return this.#runWithDeadline(nsid, async (signal) => {
       const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
 
       const url = `${this.#appserverUrl}/xrpc/${nsid}`;
@@ -133,6 +160,7 @@ export class DirectXrpcClient {
           Accept: "application/json",
         },
         body: JSON.stringify(input),
+        signal,
       });
 
       if (!resp.ok) {
@@ -152,7 +180,7 @@ export class DirectXrpcClient {
         throw new XrpcResponseValidationError(nsid, parsed);
       }
       return parsed as ProcedureOutput<N>;
-    }, this.#retryOpts);
+    });
   }
 
   /** The appserver DID this client is configured to talk to. */
@@ -179,7 +207,7 @@ export class DirectXrpcClient {
     params: Record<string, string> = {},
     body?: Record<string, unknown>,
   ): Promise<{ data: unknown }> {
-    return withRateLimitRetry(async () => {
+    return this.#runWithDeadline(nsid, async (signal) => {
       const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
 
       if (body !== undefined) {
@@ -193,6 +221,7 @@ export class DirectXrpcClient {
             Accept: "application/json",
           },
           body: JSON.stringify(body),
+          signal,
         });
         if (!resp.ok) {
           throw await toXrpcError(resp, nsid);
@@ -211,12 +240,60 @@ export class DirectXrpcClient {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        signal,
       });
       if (!resp.ok) {
         throw await toXrpcError(resp, nsid);
       }
       return { data: await resp.json() };
-    }, this.#retryOpts);
+    });
+  }
+
+  /**
+   * Run one XRPC attempt (token fetch + HTTP request + response parse)
+   * under the client's request deadline, retrying on 429 with the
+   * configured backoff. The deadline spans the whole call, so a wedged
+   * PDS token fetch, a hung HTTP request, a stalled body read, or a long
+   * backoff sleep all reject with `XrpcTimeoutError` instead of hanging.
+   */
+  async #runWithDeadline<T>(
+    nsid: string,
+    run: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    // Hard deadline, registered FIRST: when it and the abort timer fire in
+    // the same tick, the deadline rejects the call with XrpcTimeoutError
+    // before the abort's side effects (waking the backoff sleep, re-firing
+    // the request) can settle the race with a different error.
+    let timeoutError: Error | undefined;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      deadlineTimer = setTimeout(() => {
+        timeoutError = new XrpcTimeoutError(nsid, this.#requestTimeoutMs);
+        reject(timeoutError);
+      }, this.#requestTimeoutMs);
+    });
+    // The deadline may fire after the call already won the race; swallow
+    // that rejection so it is never unhandled.
+    deadline.catch(() => {});
+    // Cooperative abort: fires the fetch's signal and the retry backoff's
+    // signal so a well-behaved request stops promptly.
+    const timer = setTimeout(() => controller.abort(), this.#requestTimeoutMs);
+    try {
+      return await Promise.race([
+        withRateLimitRetry(() => run(controller.signal), {
+          ...this.#retryOpts,
+          signal: controller.signal,
+        }),
+        deadline,
+      ]);
+    } catch (err) {
+      if (timeoutError !== undefined) throw timeoutError;
+      throw err;
+    } finally {
+      clearTimeout(timer);
+      clearTimeout(deadlineTimer);
+    }
   }
 }
 

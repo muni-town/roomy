@@ -2,7 +2,12 @@ export * from "./schema";
 // Rich text (blocks + facets) types and converters.
 export * from "./schema/richtext";
 export * from "./richtext/convert";
-export type { DecodedStreamEvent, EventCallback, EventCallbackMeta, EncodedStreamEvent } from "./connection"
+export type {
+  DecodedStreamEvent,
+  EventCallback,
+  EventCallbackMeta,
+  EncodedStreamEvent,
+} from "./connection";
 export * from "./atproto";
 export * from "./client";
 export * from "./utils";
@@ -26,3 +31,5 @@ export * as cache from "./cache";
 export * as schemas from "./schemas/index";
 export * as transport from "./transport/index";
 export { type RateLimitRetryOptions } from "./transport/index";
+export { type DirectXrpcClientOptions } from "./transport/index";
+export { type ServiceAuthClientOptions } from "./transport/index";

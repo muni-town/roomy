@@ -10,10 +10,32 @@ export class XrpcResponseValidationError extends Error {
   readonly arktypeError: type.errors;
 
   constructor(nsid: string, arktypeError: type.errors) {
-    super(`XRPC response failed validation for ${nsid}: ${arktypeError.summary}`);
+    super(
+      `XRPC response failed validation for ${nsid}: ${arktypeError.summary}`,
+    );
     this.name = "XrpcResponseValidationError";
     this.nsid = nsid;
     this.arktypeError = arktypeError;
+  }
+}
+
+/**
+ * Raised when an XRPC request exceeds its deadline. The request is aborted,
+ * so no response (success or error) will arrive for it. Distinct from a
+ * server error: the caller may retry the call, but must re-obtain a service
+ * auth token first (the token is not consumed by an aborted request).
+ */
+export class XrpcTimeoutError extends Error {
+  readonly nsid: string;
+  readonly timeoutMs: number;
+
+  constructor(nsid: string, timeoutMs: number) {
+    super(
+      `XRPC ${nsid} timed out after ${timeoutMs}ms (request aborted; no response received)`,
+    );
+    this.name = "XrpcTimeoutError";
+    this.nsid = nsid;
+    this.timeoutMs = timeoutMs;
   }
 }
 
@@ -38,7 +60,9 @@ export class RateLimitError extends Error {
  * Check if an error is (or wraps) an HTTP 429 / rate-limit response.
  * Walks the error chain and checks `status`, `statusCode`, and message content.
  */
-export function isRateLimitError(err: unknown): err is RateLimitError & { status: 429 } {
+export function isRateLimitError(
+  err: unknown,
+): err is RateLimitError & { status: 429 } {
   if (err instanceof RateLimitError) return true;
   if (err && typeof err === "object") {
     const e = err as Record<string, unknown>;

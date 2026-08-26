@@ -9,8 +9,17 @@
  * - `DirectXrpcClient` — direct HTTP to the appserver with service auth tokens
  */
 export { agentQuery, agentProcedure } from "./xrpc";
-export { resolveAppserverWsOrigin, resolveAppserverHttpOrigin } from "./did-resolve";
-export { XrpcResponseValidationError, RateLimitError, isRateLimitError, getRetryAfterMs } from "./errors";
+export {
+  resolveAppserverWsOrigin,
+  resolveAppserverHttpOrigin,
+} from "./did-resolve";
+export {
+  XrpcResponseValidationError,
+  XrpcTimeoutError,
+  RateLimitError,
+  isRateLimitError,
+  getRetryAfterMs,
+} from "./errors";
 export { withRateLimitRetry, type RateLimitRetryOptions } from "./retry";
 export {
   QUERY_SCHEMAS,
@@ -22,5 +31,9 @@ export {
   type ProcedureInput,
   type ProcedureOutput,
 } from "./registry";
-export { ServiceAuthClient, type CachedToken } from "./service-auth";
-export { DirectXrpcClient } from "./direct-xrpc";
+export {
+  ServiceAuthClient,
+  type CachedToken,
+  type ServiceAuthClientOptions,
+} from "./service-auth";
+export { DirectXrpcClient, type DirectXrpcClientOptions } from "./direct-xrpc";

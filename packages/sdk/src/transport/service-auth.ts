@@ -18,6 +18,8 @@
  */
 
 import type { Agent } from "@atproto/api";
+import { withRateLimitRetry } from "./retry";
+import { XrpcTimeoutError } from "./errors";
 
 export interface CachedToken {
   token: string;
@@ -38,12 +40,40 @@ const EXPIRY_MARGIN_SEC = 30;
  */
 const REQUESTED_TOKEN_LIFETIME_SEC = 300;
 
+/**
+ * Hard deadline for a single PDS token round-trip. A slow or wedged PDS
+ * must never hold up an XRPC call indefinitely — without this, a send
+ * whose token is expired (or whose PDS is unreachable) hangs forever on
+ * `getServiceAuth` and the request never leaves the client.
+ */
+const TOKEN_TIMEOUT_MS = 10_000;
+
+/**
+ * Extra attempts (beyond the first) when the PDS rate-limits the token
+ * fetch. The PDS is a third-party hop; a transient 429 there should not
+ * fail a send that the appserver would have accepted.
+ */
+const TOKEN_MAX_RETRIES = 2;
+
+/**
+ */
+export interface ServiceAuthClientOptions {
+  /** Per-attempt deadline for a PDS token round-trip, in ms (default 10_000). */
+  timeoutMs?: number;
+  /** Extra attempts beyond the first when the PDS rate-limits (default 2). */
+  maxRetries?: number;
+}
+
 export class ServiceAuthClient {
   readonly #agent: Agent;
   readonly #cache = new Map<string, CachedToken>();
+  readonly #timeoutMs: number;
+  readonly #maxRetries: number;
 
-  constructor(agent: Agent) {
+  constructor(agent: Agent, opts: ServiceAuthClientOptions = {}) {
     this.#agent = agent;
+    this.#timeoutMs = opts.timeoutMs ?? TOKEN_TIMEOUT_MS;
+    this.#maxRetries = opts.maxRetries ?? TOKEN_MAX_RETRIES;
   }
 
   /**
@@ -65,13 +95,60 @@ export class ServiceAuthClient {
     }
 
     const exp = Math.floor(Date.now() / 1000) + REQUESTED_TOKEN_LIFETIME_SEC;
-    const resp = await this.#agent.com.atproto.server.getServiceAuth({
-      aud,
-      exp,
-      ...(lxm !== undefined ? { lxm } : {}),
-    });
+    const token = await withRateLimitRetry(
+      async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
+        // Hard deadline: races the PDS round-trip so a transport that ignores
+        // the abort signal still cannot hang the caller.
+        let timedOut = false;
+        let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<never>((_resolve, reject) => {
+          deadlineTimer = setTimeout(() => {
+            timedOut = true;
+            reject(
+              new XrpcTimeoutError(
+                lxm ?? "com.atproto.server.getServiceAuth",
+                this.#timeoutMs,
+              ),
+            );
+          }, this.#timeoutMs);
+        });
+        deadline.catch(() => {});
+        try {
+          return await Promise.race([
+            this.#agent.com.atproto.server
+              .getServiceAuth(
+                {
+                  aud,
+                  exp,
+                  ...(lxm !== undefined ? { lxm } : {}),
+                },
+                { signal: controller.signal },
+              )
+              .then((resp) => resp.data.token),
+            deadline,
+          ]);
+        } catch (err) {
+          // The deadline fired: attribute the failure to the timeout —
+          // the PDS never answered in time, whatever error the agent wrapped
+          // the abort as. Quick non-abort errors (e.g. a 401) pass through
+          // untouched so session-recovery logic still sees them.
+          if (timedOut) {
+            throw new XrpcTimeoutError(
+              lxm ?? "com.atproto.server.getServiceAuth",
+              this.#timeoutMs,
+            );
+          }
+          throw err;
+        } finally {
+          clearTimeout(timer);
+          clearTimeout(deadlineTimer);
+        }
+      },
+      { maxRetries: this.#maxRetries },
+    );
 
-    const token = resp.data.token;
     const expiresAt = this.#decodeExpiry(token);
 
     this.#cache.set(key, { token, expiresAt });
