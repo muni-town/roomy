@@ -99,6 +99,16 @@ export class StreamManager {
     this.#ownDid = opts.ownDid ?? "";
   }
 
+  /** The appserver's own DID (the arbiter recovery admin / policy owner). */
+  get ownDid(): string {
+    return this.#ownDid;
+  }
+
+  /** The arbiter config, or null when arbiter provisioning is disabled. */
+  get arbiter(): ArbiterConfig | null {
+    return this.#arbiter;
+  }
+
   /**
    * Run `fn` strictly after any prior serialized work for the same stream.
    * Uses a chain-of-promises mutex keyed by streamDid so different streams

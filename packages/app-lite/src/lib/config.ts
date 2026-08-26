@@ -24,6 +24,7 @@ const APPSERVER_RPCS = [
   "space.roomy.space.joinSpace",
   "space.roomy.space.leaveSpace",
   "space.roomy.space.setHandle",
+  "space.roomy.space.updatePolicy",
   "space.roomy.space.getCalendarLink",
   "space.roomy.space.getCalendarEvents",
   "space.roomy.space.getActivityFeed",
@@ -84,5 +85,13 @@ export const OAUTH_SCOPE = [
   // Allow calling getServiceAuth on the appserver's PDS to obtain
   // service auth tokens for direct (non-proxied) XRPC calls.
   `rpc:com.atproto.server.getServiceAuth?aud=${CONFIG.appserverDid}`,
+  // Allow obtaining serviceAuth tokens targeted at any arbiter server (the
+  // arbiter DID is discovered per space from its service record), so the
+  // client can call `town.muni.arbiter.proxy` directly (acting on a space's
+  // stewarded account). aud=* because the arbiter DID is per-space.
+  `rpc:com.atproto.server.getServiceAuth?aud=*`,
+  // The actual proxied method the token is minted for. aud=* because the
+  // arbiter DID (and thus the token's aud) is discovered per space.
+  `rpc:town.muni.arbiter.proxy?aud=*`,
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
 ].join(" ");

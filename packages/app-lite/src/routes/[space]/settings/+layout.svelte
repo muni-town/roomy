@@ -32,6 +32,8 @@
         return "Discord Bridge";
       case "notifications":
         return "Notifications";
+      case "integrations":
+        return "Integrations";
       case "handle":
         return "Handle";
       default:

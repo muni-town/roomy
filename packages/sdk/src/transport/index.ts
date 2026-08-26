@@ -10,15 +10,17 @@
  */
 export { agentQuery, agentProcedure } from "./xrpc";
 export {
-  resolveAppserverWsOrigin,
-  resolveAppserverHttpOrigin,
+   resolveAppserverWsOrigin,
+   resolveAppserverHttpOrigin,
+   resolvePdsEndpoint,
 } from "./did-resolve";
 export {
-  XrpcResponseValidationError,
-  XrpcTimeoutError,
-  RateLimitError,
-  isRateLimitError,
-  getRetryAfterMs,
+   XrpcResponseValidationError,
+   XrpcTimeoutError,
+   RateLimitError,
+   ArbiterProxyError,
+   isRateLimitError,
+   getRetryAfterMs,
 } from "./errors";
 export { withRateLimitRetry, type RateLimitRetryOptions } from "./retry";
 export {

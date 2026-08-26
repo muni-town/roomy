@@ -17,6 +17,13 @@ import type { ArbiterConfig } from "./config.ts";
 import { DEFAULT_ARBITER_POLICY } from "./policy.ts";
 import { StreamDid } from "@roomy-space/sdk";
 
+/** The default policy for a newly-provisioned space, with placeholders filled in. */
+export function defaultPolicyFor(
+  ownDid: string,
+): string {
+  return DEFAULT_ARBITER_POLICY.replaceAll("${owner}", ownDid);
+}
+
 const SERVICE_COLLECTION = "space.roomy.service";
 const SERVICE_RKEY = "self";
 
@@ -32,9 +39,8 @@ export async function provisionSpace(
   // 1. Create the stewarded account.
   const spaceDid = await createArbiter(config, ownDid);
 
-  // 2. Install the default policy (owner = the appserver).
-  const policy = DEFAULT_ARBITER_POLICY.replace("${owner}", ownDid);
-  await resetPolicy(config, ownDid, spaceDid, policy);
+  // 2. Install the latest policy (owner = the appserver).
+  await resetPolicy(config, ownDid, spaceDid, defaultPolicyFor(ownDid));
 
   // 3. Write the space.roomy.service/self record under the new account,
   //    proxied through the arbiter as the space DID.

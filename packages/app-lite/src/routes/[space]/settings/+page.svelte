@@ -5,6 +5,11 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { updateSpaceInfo, leaveSpace } from "$lib/mutations/space";
   import { uploadFile } from "$lib/mutations/upload";
+  import {
+    getCurrentSpaceHandle,
+    getSpaceHandleDomainsForSpace,
+    setSpaceHandleForSpace,
+  } from "$lib/mutations/space-handle";
   import { resolveBlobUrl } from "$lib/utils";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
@@ -32,6 +37,35 @@
   let saveError = $state<string | null>(null);
   let fileInput = $state<HTMLInputElement | null>(null);
   let isLeaving = $state(false);
+
+  // Space handle (set on the stewarded account via the arbiter).
+  let handleDomains = $state<string[]>([]);
+  let handleError = $state<string | null>(null);
+  let handleSaving = $state(false);
+  let spaceHandle = $state("");
+  let currentHandle = $state<string | null>(null);
+
+  // Load the PDS's available handle suffixes + the current handle when the
+  // admin opens the page.
+  $effect(() => {
+    if (!isAdmin) return;
+    getSpaceHandleDomainsForSpace(spaceId)
+      .then((domains) => {
+        handleDomains = domains;
+      })
+      .catch((e) => {
+        handleError =
+          e instanceof Error ? e.message : "Failed to load available handle domains";
+      });
+    getCurrentSpaceHandle(spaceId)
+      .then((handle) => {
+        currentHandle = handle;
+        if (handle) spaceHandle = handle;
+      })
+      .catch(() => {
+        // Non-fatal; the input can still be used.
+      });
+  });
 
   function clearAvatarSelection() {
     avatarFile = null;
@@ -125,6 +159,21 @@
       await leaveSpace(spaceId);
     } finally {
       goto("/");
+    }
+  }
+
+  async function setHandle() {
+    if (!spaceHandle.trim() || handleSaving) return;
+    handleSaving = true;
+    handleError = null;
+    try {
+      const newHandle = spaceHandle.trim();
+      await setSpaceHandleForSpace(spaceId, newHandle);
+      currentHandle = newHandle;
+    } catch (e) {
+      handleError = e instanceof Error ? e.message : "Failed to set the space handle";
+    } finally {
+      handleSaving = false;
     }
   }
 </script>
@@ -254,6 +303,56 @@
           <Button type="submit" disabled={!hasChanged || isSaving}>
             {isSaving ? "Saving…" : "Save"}
           </Button>
+        </div>
+
+        <div class="border-t border-base-200 dark:border-base-800 pt-6">
+          <div class="flex flex-col gap-2">
+            <p class="block text-sm font-medium mb-1 text-base-900 dark:text-base-100">
+              Space handle
+            </p>
+            {#if currentHandle}
+              <p class="text-sm text-base-900 dark:text-base-100 font-mono">
+                {currentHandle}
+              </p>
+            {/if}
+            <p class="text-sm text-base-500 dark:text-base-400">
+              {#if handleDomains.length === 1}
+                Set a handle for this space on its account. It must end in
+                {handleDomains[0]}.
+              {:else if handleDomains.length > 1}
+                Set a handle for this space on its account. It must end in one
+                of {handleDomains.join(", ")}.
+              {:else}
+                Set a handle for this space on its account.
+              {/if}
+            </p>
+            <p class="text-sm text-base-500 dark:text-base-400">
+              <strong>Note:</strong> This feature is experimental and may not be
+              fully functional yet.
+            </p>
+            <div class="flex items-center gap-2">
+              <Input
+                placeholder={handleDomains.length
+                  ? `myname${handleDomains[0]}`
+                  : "handle"}
+                bind:value={spaceHandle}
+                class="flex-1"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onclick={setHandle}
+                asyncState={handleSaving ? { status: "loading" } : { status: "idle" }}
+                disabled={!spaceHandle.trim()}
+              >
+                {handleSaving ? "Setting…" : "Set handle"}
+              </Button>
+            </div>
+            {#if handleError}
+              <p class="text-sm text-red-600">{handleError}</p>
+            {/if}
+          </div>
         </div>
       </form>
     {/if}

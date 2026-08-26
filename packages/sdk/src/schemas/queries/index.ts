@@ -30,3 +30,4 @@ export * as getFederationRequests from "./getFederationRequests";
 export * as getFederationIncoming from "./getFederationIncoming";
 export * as getFederationOutgoing from "./getFederationOutgoing";
 export * as getFederationGrants from "./getFederationGrants";
+export * as getUserAccess from "./getUserAccess";

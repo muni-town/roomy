@@ -57,6 +57,28 @@ export class RateLimitError extends Error {
 }
 
 /**
+ * Raised when a proxied XRPC operation through the arbiter fails.
+ *
+ * The arbiter relays the upstream (stewarded PDS) XRPC error response
+ * verbatim: HTTP status + a JSON body `{ $type, error: "<name>" }`. This
+ * surfaces that error name (e.g. `HandleNotAvailable`, `InvalidHandle`,
+ * `InvalidPassword`) so callers can map it to a friendly message.
+ */
+export class ArbiterProxyError extends Error {
+  /** HTTP status of the upstream XRPC error. */
+  readonly status: number;
+  /** The upstream XRPC error name (e.g. `HandleNotAvailable`), if present. */
+  readonly errorName: string | null;
+
+  constructor(status: number, message: string, errorName: string | null) {
+    super(message);
+    this.name = "ArbiterProxyError";
+    this.status = status;
+    this.errorName = errorName;
+  }
+}
+
+/**
  * Check if an error is (or wraps) an HTTP 429 / rate-limit response.
  * Walks the error chain and checks `status`, `statusCode`, and message content.
  */

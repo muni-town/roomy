@@ -163,11 +163,13 @@
   const showFederationTab = $derived(
     federationEnabled && (meta?.isAdmin ?? false),
   );
+  const showIntegrationsTab = $derived(meta?.isAdmin ?? false);
   const settingsTabs = $derived(
     [
       { slug: "", label: "General" },
       { slug: "permissions", label: "Permissions" },
       { slug: "members", label: "Members" },
+      ...(showIntegrationsTab ? [{ slug: "integrations", label: "Integrations" }] : []),
       ...(showFederationTab ? [{ slug: "federations", label: "Federation" }] : []),
       ...(pushFeatureEnabled ? [{ slug: "notifications", label: "Notifications" }] : []),
       ...(showInvitesTab ? [{ slug: "invites", label: "Invites" }] : []),

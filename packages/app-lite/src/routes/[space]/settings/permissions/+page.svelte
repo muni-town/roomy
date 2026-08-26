@@ -1,6 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import { toast } from "@foxui/core";
+  import { updatePolicy } from "$lib/mutations/update-policy";
+
   import RoleCreateForm from "@roomy/design/components/modals/RoleCreateForm.svelte";
   import RoleEditForm from "@roomy/design/components/modals/RoleEditForm.svelte";
   import UserTypeahead from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
@@ -51,6 +54,20 @@
   let editOpen = $state(false);
   let isDeleting = $state(false);
   let menuOpen = $state(false);
+  let policyUpdating = $state(false);
+
+  async function onUpdatePolicy() {
+    policyUpdating = true;
+    try {
+      await updatePolicy(spaceId);
+      toast.success("Space policy updated.");
+    } catch (err) {
+      console.error("Failed to update space policy", err);
+      toast.error("Failed to update space policy.");
+    } finally {
+      policyUpdating = false;
+    }
+  }
 
   // selectedRole is now derived from selectedRoleId above,
   // so it stays in sync with query refetches automatically
@@ -327,6 +344,29 @@
         <p class="text-sm text-base-400 py-2">
           You are not a member of any roles.
         </p>
+      {/if}
+
+      {#if isAdmin}
+        <div class="border-t border-base-100 dark:border-base-800 pt-4 space-y-3 mt-24">
+          <h3 class="text-sm font-semibold text-base-700 dark:text-base-300 mt-4">
+            Advanced
+          </h3>
+          <p class="text-sm text-base-500 dark:text-base-400">
+            Update this space's account's policy to the latest Roomy app policy. This will allow
+            admins in the space to perform actions under the space's ATProto account.
+          </p>
+          <p class="text-sm text-base-500 dark:text-base-400">
+            This is for an experimental feature that is work-in-progress, so you
+            shouldn't have to worry about it yet unless you are testing it. </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onclick={onUpdatePolicy}
+            asyncState={policyUpdating ? { status: "loading" } : { status: "idle" }}
+          >
+            Update policy
+          </Button>
+        </div>
       {/if}
     </div>
   {/if}

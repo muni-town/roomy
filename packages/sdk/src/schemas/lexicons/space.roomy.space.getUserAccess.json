@@ -1,0 +1,45 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.space.getUserAccess",
+  "defs": {
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "spaceId",
+          "userDid"
+        ],
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          },
+          "userDid": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "isAdmin",
+            "roleIds"
+          ],
+          "properties": {
+            "isAdmin": {
+              "type": "boolean"
+            },
+            "roleIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

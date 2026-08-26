@@ -56,6 +56,8 @@ async function resolveAppserverEndpoint(appserverDid: string): Promise<string> {
 	return endpoint.replace(/\/+$/, "");
 }
 
+const PLC_DIRECTORY_URL = "https://plc.directory";
+
 async function resolveDidDocument(did: string): Promise<any> {
 	if (did.startsWith("did:web:")) {
 		const domain = did.slice("did:web:".length);
@@ -64,5 +66,29 @@ async function resolveDidDocument(did: string): Promise<any> {
 		if (!res.ok) throw new Error(`Failed to resolve ${did}: ${res.status}`);
 		return res.json();
 	}
+	if (did.startsWith("did:plc:")) {
+		const url = `${PLC_DIRECTORY_URL}/${did}`;
+		const res = await fetch(url);
+		if (!res.ok) throw new Error(`Failed to resolve ${did}: ${res.status}`);
+		return res.json();
+	}
 	throw new Error(`Unsupported DID method: ${did}`);
 }
+
+/**
+ * Resolve a DID's `#atproto_pds` service endpoint from its DID document.
+ *
+ * Returns the endpoint (e.g. `https://pds.roomy.chat`) with any trailing
+ * slash stripped, so callers can safely append `/xrpc/...`.
+ */
+export async function resolvePdsEndpoint(did: string): Promise<string> {
+	const didDoc = await resolveDidDocument(did);
+	const services: Array<{ id?: unknown; serviceEndpoint?: unknown }> =
+		didDoc.service ?? [];
+	const service = services.find((s) => s.id === "#atproto_pds");
+	if (typeof service?.serviceEndpoint !== "string") {
+		throw new Error(`No #atproto_pds service found in DID document for ${did}`);
+	}
+	return service.serviceEndpoint.replace(/\/+$/, "");
+}
+

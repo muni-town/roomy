@@ -148,6 +148,10 @@ export const PROCEDURE_SCHEMAS = {
     input: procedures.setHandle.Input,
     output: procedures.setHandle.Output,
   },
+  "space.roomy.space.updatePolicy": {
+    input: procedures.updatePolicy.Input,
+    output: procedures.updatePolicy.Output,
+  },
   "space.roomy.push.registerSubscription": {
     input: procedures.registerPushSubscription.Input,
     output: procedures.registerPushSubscription.Output,
