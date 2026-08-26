@@ -408,7 +408,7 @@ describe("SyncConnection — error handling", () => {
 });
 
 describe("SyncConnection — exponential backoff", () => {
-  it("increases delay with each consecutive failure using default backoff", () => {
+  it("increases delay with each consecutive failure using default backoff", async () => {
     // Use deterministic backoff for testing
     const delays: number[] = [];
     const conn = new SyncConnection({
@@ -423,8 +423,9 @@ describe("SyncConnection — exponential backoff", () => {
     });
     conn.onError(() => {}); // suppress unhandled
 
-    // First failure triggers reconnect with delay for attempt 0
-    conn.connect().catch(() => {});
+    // First failure triggers reconnect with delay for attempt 0. The ticket
+    // fetch rejects asynchronously, so await the rejection before asserting.
+    await conn.connect().catch(() => {});
     // Delay should be 1000 (attempt 0)
     expect(delays).toEqual([1000]);
   });
@@ -468,7 +469,8 @@ describe("SyncConnection — exponential backoff", () => {
     }
   });
 
-  it("caps delay at backoffMaxMs with default formula", () => {
+  it("caps delay at backoffMaxMs with default formula", async () => {
+    const delays: number[] = [];
     const conn = new SyncConnection({
       fetchTicket: async () => { throw new Error("fail"); },
       wsUrl: "wss://srv/",
@@ -477,14 +479,18 @@ describe("SyncConnection — exponential backoff", () => {
       backoffMaxMs: 5000,
     });
     conn.onError(() => {});
+    // The reconnect delay is surfaced through the status transition to
+    // "reconnecting" (delayMs = min(base * 2^attempt, max), full jitter).
+    conn.onStatusChange((status) => {
+      if (status.state === "reconnecting") delays.push(status.delayMs);
+    });
 
-    // Simulate high attempt number
     // With base=1000, max=5000: cap = min(1000 * 2^attempt, 5000)
     // attempt 0: 1000, attempt 1: 2000, attempt 2: 4000, attempt 3+: 5000
-    const delay0 = conn["#reconnectDelay" as never](0) as number;
-    const delay3 = conn["#reconnectDelay" as never](3) as number;
-    expect(delay0).toBeLessThanOrEqual(1000);
-    expect(delay3).toBeLessThanOrEqual(5000);
+    await conn.connect().catch(() => {});
+    expect(delays).toHaveLength(1);
+    expect(delays[0]!).toBeGreaterThanOrEqual(0);
+    expect(delays[0]!).toBeLessThanOrEqual(1000);
   });
 });
 

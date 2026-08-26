@@ -14,12 +14,12 @@ RUN pnpm install --frozen-lockfile --filter @roomy/discord-bridge... --ignore-sc
 
 RUN pnpm --filter @roomy-space/sdk build
 
-RUN npm install -g bun@latest
+RUN npm install -g bun@1.3.14
 
 WORKDIR /build/packages/discord-bridge
 RUN bun build src/index.ts --target=bun --outdir=dist --minify
 
-FROM oven/bun:latest
+FROM oven/bun:1.3.14
 
 ARG LITESTREAM_VERSION=0.3.13
 RUN apt-get update \

@@ -111,6 +111,7 @@ describe("schemas/queries", () => {
           handle: "alice.bsky.social",
           name: "Alice",
           isAdmin: true,
+          isBanned: false,
           roleIds: ["01R000000000000000000000XX"],
         },
       ],
@@ -182,8 +183,9 @@ describe("schemas/queries", () => {
           authorDid: "did:plc:abcdef",
           authorName: "alice",
           timestamp: "2026-05-17T00:00:00.000Z",
-          reactions: [{ emoji: "👍", dids: ["did:plc:abcdef"] }],
+          reactions: [{ emoji: "👍", count: 1, dids: ["did:plc:abcdef"] }],
           media: [{ url: "https://x/y.png", type: "image/png" }],
+          linkEmbeds: [],
           tags: [],
         },
       ],
@@ -203,6 +205,7 @@ describe("schemas/queries", () => {
       forwardedFrom: { messageId: "01M000000000000000000000XX", name: "other-room", roomId: "01CH0000000000000000000000" },
       reactions: [],
       media: [],
+      linkEmbeds: [],
       tags: [],
     };
     const parsed = queries.getMessage.Response(ex);
@@ -241,6 +244,7 @@ describe("schemas/frames", () => {
       timestamp: "2026-05-17T00:00:00.000Z",
       reactions: [],
       media: [],
+      linkEmbeds: [],
       tags: [],
     };
     const body = {

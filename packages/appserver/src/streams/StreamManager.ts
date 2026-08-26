@@ -112,11 +112,14 @@ export class StreamManager {
     const prev = this.#streamQueues.get(streamDid) ?? Promise.resolve();
     const next = prev.then(fn, fn); // run even if prev rejected
     this.#streamQueues.set(streamDid, next);
-    next.finally(() => {
+    // The finally-derived promise rejects when `next` rejects; the caller
+    // observes the original rejection via `return next`, so swallow the
+    // derived one to avoid an unhandled rejection (bun exits 1 on those).
+    void next.finally(() => {
       if (this.#streamQueues.get(streamDid) === next) {
         this.#streamQueues.delete(streamDid);
       }
-    });
+    }).catch(() => {});
     return next;
   }
 

@@ -232,10 +232,12 @@
 
   let draftOrder = $state<DraftOrder | null>(null);
 
-  const categories = $derived(meta?.sidebar.categories?.map(
-      cat => ({...cat,
-               channels: [...new Map(cat.channels?.map(ch => [ch.id, ch]) ?? []).values()]
-      }) ?? []));
+  const categories = $derived(
+    meta?.sidebar.categories?.map((cat) => ({
+      ...cat,
+      channels: [...new Map(cat.channels?.map((ch) => [ch.id, ch]) ?? []).values()],
+    })) ?? [],
+  );
 
   let categoryMap = $state(new Map<string, SidebarCategory>());
 

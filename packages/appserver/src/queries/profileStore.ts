@@ -58,6 +58,21 @@ const CACHE_TTL_MS = 60_000;
 
 const cache = new Map<string, CacheEntry>();
 
+/**
+ * Test-only override for on-demand hydration's network fetch. When set,
+ * `hydrateMissingProfiles` uses it instead of the HappyView-first / Bluesky
+ * pipeline. E2E tests set a no-op stub to keep runs hermetic (no
+ * api.bsky.app calls under parallel load).
+ */
+let testGetProfiles: ((dids: string[]) => Promise<unknown[]>) | null = null;
+
+/** Set a test-only profile fetcher override (or null to clear). */
+export function _setTestGetProfiles(
+  fn: ((dids: string[]) => Promise<unknown[]>) | null,
+): void {
+  testGetProfiles = fn;
+}
+
 function entryToFields(entry: CacheEntry): ProfileFields | null {
   if (entry.name === null && entry.handle === null && entry.avatar === null) {
     return null;
@@ -212,6 +227,10 @@ async function hydrateMissingProfiles(
 ): Promise<void> {
   if (dids.length === 0) return;
   try {
+    if (testGetProfiles) {
+      await testGetProfiles(dids);
+      return;
+    }
     const happyView = getHappyView();
     const { profiles, extras } = await getProfilesRoomyFirst(
       dids as UserDid[],
