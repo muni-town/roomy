@@ -5,7 +5,9 @@
   "identifier": "space.roomy",
   "build": {
     "frontendDist": "../build",
-    "devUrl": "http://localhost:5180"
+    "devUrl": "http://localhost:5180",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build && node -e \"const fs=require('fs');fs.rmSync('build',{recursive:true,force:true});fs.renameSync('build-staging','build')\""
   },
   "app": {
     "withGlobalTauri": true,
