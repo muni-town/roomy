@@ -17,6 +17,7 @@
     },
     "os:default",
     "log:default",
+    "notification:default",
     {"identifier": "opener:allow-open-path",
     "allow": [
       {"url": "https://*" }

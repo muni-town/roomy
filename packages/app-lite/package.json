@@ -7,7 +7,11 @@
     "dev": "vite dev --host 127.0.0.1 --port 5180",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "tauri:dev": "env -u CI tauri dev",
+    "tauri:build:macos": "env -u CI tauri build --bundles app",
+    "tauri:build:ios-sim": "env -u CI tauri ios build --debug --target aarch64-sim",
+    "tauri:run:ios-sim": "env -u CI tauri ios run --target aarch64-sim"
   },
   "dependencies": {
     "@atproto/api": "^0.14.22",
@@ -17,6 +21,7 @@
     "@roomy-space/sdk": "workspace:*",
     "@roomy/design": "workspace:*",
     "@tanstack/svelte-query": "^6.1.29",
+    "@tauri-apps/plugin-notification": "^2.3.3",
     "@tiptap/core": "3.27.1",
     "@tiptap/extension-link": "3.27.1",
     "@tiptap/extension-mention": "3.27.1",

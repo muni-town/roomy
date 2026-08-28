@@ -11,8 +11,9 @@ import type {
 import { createTanstackCacheAdapter } from "@roomy-space/sdk/browser";
 import type { QueryClient } from "@tanstack/svelte-query";
 import { queryClient } from "./client";
-import { px } from "./auth.svelte";
+import { auth, px } from "./auth.svelte";
 import { CONFIG } from "./config";
+import { nativePushSupported, showNativeMessageNotification } from "./native-push";
 
 const { SyncConnection, SyncRouter, TopicManager } = sync;
 const { resolveAppserverWsOrigin } = transport;
@@ -53,7 +54,7 @@ export function createSyncContext(deps: {
   queryClient: QueryClient;
   appserverDid: string;
   onLog?: (msg: string) => void;
-  onMessageDiff?: (roomId: string, seq: number) => void;
+  onMessageDiff?: (roomId: string, seq: number, ops?: unknown[]) => void;
 }): SyncContext {
   const { queryClient: qc, appserverDid, onLog, onMessageDiff } = deps;
 
@@ -115,7 +116,7 @@ export function createSyncContext(deps: {
           `[messageDiff] roomId=${body.roomId} seq=${body.seq} ops=${JSON.stringify(body.ops)?.slice(0, 200)}`,
         );
         if (typeof body.roomId === "string" && typeof body.seq === "number") {
-          onMessageDiff?.(body.roomId, body.seq);
+          onMessageDiff?.(body.roomId, body.seq, body.ops);
         }
       } else if (t === "#roomMetadataDiff") {
         const body = frame.body as {
@@ -215,6 +216,70 @@ let lastSeq: number | null = null;
 let hiddenSince: number | null = null;
 
 /**
+ * Disposers for the native-build "all rooms" topic subscriptions. Released
+ * in `stopSync`. Only active when the native notification bridge is present
+ * (Tauri webview) — the browser uses web push instead.
+ */
+let roomTopicDisposers: (() => void)[] = [];
+/** Disposer for the query-cache watcher that keeps room topics in sync. */
+let roomTopicWatch: (() => void) | null = null;
+
+/**
+ * Subscribe to every room topic across all joined spaces so `#messageDiff`
+ * frames arrive for rooms the user isn't currently viewing. The native
+ * notification bridge (`notifyNativeForDiff`) turns those into OS
+ * notifications. The room list comes from the `getSpaceMetadata` sidebar
+ * cache; re-scan when new metadata lands (the preload is async).
+ */
+function subscribeAllRoomTopics(): void {
+  if (!nativePushSupported()) return;
+  const manager = ctx?.topicManager;
+  if (!manager) return;
+
+  const seen = new Set<string>();
+  const spaces = queryClient.getQueryData<{ spaces: { id: string }[] }>(
+    queryKey("space.roomy.space.getSpaces", { includeLeft: "true" }),
+  );
+  for (const space of spaces?.spaces ?? []) {
+    const meta = queryClient.getQueryData<{
+      sidebar?: {
+        categories?: { channels?: { id: string }[] }[];
+        orphans?: { id: string }[];
+      };
+    }>(queryKey("space.roomy.space.getMetadata", { spaceId: space.id }));
+    const channels = [
+      ...(meta?.sidebar?.categories?.flatMap((c) => c.channels ?? []) ?? []),
+      ...(meta?.sidebar?.orphans ?? []),
+    ];
+    for (const room of channels) {
+      if (seen.has(room.id)) continue;
+      seen.add(room.id);
+      roomTopicDisposers.push(manager.acquire({ kind: "room", id: room.id }));
+    }
+  }
+}
+
+/**
+ * Re-run {@link subscribeAllRoomTopics} whenever the spaces/sidebar cache
+ * changes, so room subscriptions land once the async preload populates the
+ * metadata. Idempotent: `TopicManager.acquire` refcounts, and the disposer
+ * set is rebuilt on each pass.
+ */
+function watchRoomTopics(): void {
+  if (!nativePushSupported()) return;
+  const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" && event.type !== "added") return;
+    const key = event.query.queryKey;
+    if (!Array.isArray(key) || typeof key[0] !== "string") return;
+    if (key[0] !== "space.roomy.space.getSpaces" && key[0] !== "space.roomy.space.getMetadata") return;
+    for (const dispose of roomTopicDisposers) dispose();
+    roomTopicDisposers = [];
+    subscribeAllRoomTopics();
+  });
+  roomTopicWatch = unsubscribe;
+}
+
+/**
  * Invalidate the active room's `getMessages` query so it refetches.
  * Called when we detect a missed diff (seq gap / server seq reset) or
  * when the tab returns from a long backgrounding — both cases where the
@@ -270,7 +335,7 @@ export function startSync(opts: { onLog?: (msg: string) => void } = {}) {
     queryClient,
     appserverDid: CONFIG.appserverDid,
     onLog: opts.onLog,
-    onMessageDiff: (roomId, seq) => {
+    onMessageDiff: (roomId, seq, ops) => {
       // A seq discontinuity means we missed frames — almost always because
       // the tab was backgrounded and the WS was throttled, or the socket
       // dropped and reconnected with a gap the re-sub invalidation didn't
@@ -285,6 +350,12 @@ export function startSync(opts: { onLog?: (msg: string) => void } = {}) {
           updateSeen(roomId).catch(() => {});
         });
       }
+      // Native (Tauri) notifications: show an OS notification for new
+      // messages arriving over the live sync connection. Web push is
+      // unavailable in the webview, so this is the only in-app path.
+      if (ops?.length) {
+        void notifyNativeForDiff(roomId, ops);
+      }
     },
   });
   ctx.connect().catch((err) => {
@@ -292,14 +363,83 @@ export function startSync(opts: { onLog?: (msg: string) => void } = {}) {
     console.error(`[sync] ${msg}`);
     opts.onLog?.(msg);
   });
+  // Native builds: subscribe to every room so notifications fire for rooms
+  // the user isn't viewing. Browser builds skip this (web push handles it).
+  subscribeAllRoomTopics();
+  watchRoomTopics();
   document.addEventListener("visibilitychange", onVisibilityChange);
   return ctx;
 }
 
 export function stopSync() {
   document.removeEventListener("visibilitychange", onVisibilityChange);
+  roomTopicWatch?.();
+  roomTopicWatch = null;
+  for (const dispose of roomTopicDisposers) dispose();
+  roomTopicDisposers = [];
   ctx?.disconnect();
   ctx = null;
   lastSeq = null;
   hiddenSince = null;
+}
+
+/**
+ * Show a native notification for `add` ops in a `#messageDiff` frame.
+ * Best-effort: resolves the room's space + name from the space-metadata
+ * cache (preloaded by `preloadSpaceSidebars`), skips the current user's own
+ * messages, and never throws into the sync loop.
+ */
+async function notifyNativeForDiff(roomId: string, ops: unknown[]): Promise<void> {
+  const userDid = auth.userDid;
+  const adds = ops.filter(
+    (op): op is { op: "add"; message?: { authorDid?: string; content?: string; mimeType?: string; authorName?: string } } =>
+      typeof op === "object" && op !== null && (op as { op?: string }).op === "add",
+  );
+  if (adds.length === 0) return;
+  const messages = adds
+    .map((op) => op.message)
+    .filter(
+      (m): m is { authorDid?: string; content?: string; mimeType?: string; authorName?: string } =>
+        !!m && !!m.authorDid && m.authorDid !== userDid,
+    );
+  if (messages.length === 0) return;
+
+  // Resolve the room's space + display name from the space-metadata cache.
+  // The sidebar preload (`preloadSpaceSidebars`) populates one entry per
+  // joined space; scan them for the room.
+  let spaceId: string | undefined;
+  let roomName: string | undefined;
+  const spaces = queryClient.getQueriesData<{ spaces?: { id: string }[] }>({
+    queryKey: queryKey("space.roomy.space.getSpaces"),
+  });
+  for (const [, data] of spaces) {
+    for (const space of data?.spaces ?? []) {
+      const meta = queryClient.getQueryData<{
+        sidebar?: { categories?: { channels?: { id: string; name?: string }[] }[]; orphans?: { id: string; name?: string }[] };
+      }>(queryKey("space.roomy.space.getMetadata", { spaceId: space.id }));
+      const channels = [
+        ...(meta?.sidebar?.categories?.flatMap((c) => c.channels ?? []) ?? []),
+        ...(meta?.sidebar?.orphans ?? []),
+      ];
+      const room = channels.find((c) => c.id === roomId);
+      if (room) {
+        spaceId = space.id;
+        roomName = room.name;
+        break;
+      }
+    }
+    if (spaceId) break;
+  }
+  if (!spaceId) return;
+
+  for (const msg of messages) {
+    await showNativeMessageNotification({
+      roomName,
+      authorName: msg.authorName || msg.authorDid || "",
+      content: msg.content ?? "",
+      mimeType: msg.mimeType,
+      spaceId,
+      roomId,
+    });
+  }
 }
