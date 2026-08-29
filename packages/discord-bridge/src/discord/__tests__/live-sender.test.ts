@@ -16,7 +16,10 @@ const CHANNEL = "1475625518132105319";
 interface FakeBot {
 	helpers: {
 		sendMessage: (channelId: bigint, opts: unknown) => Promise<{ id: bigint }>;
-		getChannel: (channelId: bigint) => Promise<{ guildId?: bigint }>;
+		getChannel: (channelId: bigint) => Promise<{
+			guildId?: bigint;
+			parentId?: bigint;
+		}>;
 		getMessage: (
 			channelId: bigint,
 			messageId: bigint,
@@ -24,11 +27,25 @@ interface FakeBot {
 	};
 	rest: {
 		post: (url: string, opts: unknown) => Promise<{ id: string }>;
+		patch: (url: string, opts: unknown) => Promise<unknown>;
+		delete: (url: string, opts: unknown) => Promise<unknown>;
 	};
 }
 
-function makeBot(): FakeBot & { calls: { send: unknown[]; post: unknown[] } } {
-	const calls: { send: unknown[]; post: unknown[] } = { send: [], post: [] };
+function makeBot(): FakeBot & {
+	calls: { send: unknown[]; post: unknown[]; patch: unknown[]; delete: unknown[] };
+} {
+	const calls: {
+		send: unknown[];
+		post: unknown[];
+		patch: unknown[];
+		delete: unknown[];
+	} = {
+		send: [],
+		post: [],
+		patch: [],
+		delete: [],
+	};
 	const bot = {
 		helpers: {
 			sendMessage: async (channelId: bigint, opts: unknown) => {
@@ -44,6 +61,12 @@ function makeBot(): FakeBot & { calls: { send: unknown[]; post: unknown[] } } {
 			post: async (url: string, opts: unknown) => {
 				calls.post.push({ url, opts });
 				return { id: "9002" };
+			},
+			patch: async (url: string, opts: unknown) => {
+				calls.patch.push({ url, opts });
+			},
+			delete: async (url: string, opts: unknown) => {
+				calls.delete.push({ url, opts });
 			},
 		},
 	};
@@ -91,6 +114,60 @@ describe("LiveDiscordSender", () => {
 		expect(post.opts.files).toHaveLength(1);
 		expect(post.opts.files[0]?.name).toBe("a.png");
 		expect(post.opts.files[0]?.blob.type).toBe("image/png");
+	});
+
+	test("edits a webhook message in a thread with thread_id query param", async () => {
+		const bot = makeBot();
+		const s = sender(bot);
+		const threadId = "900000000000000001";
+		// Simulate a thread: getChannel returns a parentId for the thread.
+		bot.helpers.getChannel = async (channelId: bigint) => ({
+			guildId: channelId + 1n,
+			parentId: 800000000000000001n,
+		});
+
+		await s.editMessage(threadId, "123", "edited content", {
+			id: "wh1",
+			token: "tok1",
+		});
+
+		expect(bot.calls.patch).toHaveLength(1);
+		const patch = bot.calls.patch[0] as {
+			url: string;
+			opts: { body: Record<string, unknown> };
+		};
+		expect(patch.url).toBe(
+			`/webhooks/wh1/tok1/messages/123?thread_id=${threadId}`,
+		);
+		expect(patch.opts.body.content).toBe("edited content");
+	});
+
+	test("deletes a webhook message in a thread with thread_id query param", async () => {
+		const bot = makeBot();
+		const s = sender(bot);
+		const threadId = "900000000000000001";
+		// Simulate a thread: getChannel returns a parentId for the thread.
+		bot.helpers.getChannel = async (channelId: bigint) => ({
+			guildId: channelId + 1n,
+			parentId: 800000000000000001n,
+		});
+
+		await s.deleteMessage(threadId, "123", { id: "wh1", token: "tok1" });
+
+		expect(bot.calls.delete).toHaveLength(1);
+		const del = bot.calls.delete[0] as { url: string };
+		expect(del.url).toBe(`/webhooks/wh1/tok1/messages/123?thread_id=${threadId}`);
+	});
+
+	test("deletes a webhook message in a channel without thread_id", async () => {
+		const bot = makeBot();
+		const s = sender(bot);
+
+		await s.deleteMessage(CHANNEL, "123", { id: "wh1", token: "tok1" });
+
+		expect(bot.calls.delete).toHaveLength(1);
+		const del = bot.calls.delete[0] as { url: string };
+		expect(del.url).toBe("/webhooks/wh1/tok1/messages/123");
 	});
 
 	test("getGuildId resolves the guild for a channel", async () => {

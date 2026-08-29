@@ -156,7 +156,15 @@ export class LiveDiscordSender implements DiscordSender {
 		if (webhook?.token) {
 			// Messages sent via webhook are authored by the webhook, not the bot.
 			// Use the webhook's own edit endpoint to edit them.
-			const url = `/webhooks/${webhook.id}/${webhook.token}/messages/${messageId}`;
+			let url = `/webhooks/${webhook.id}/${webhook.token}/messages/${messageId}`;
+			// Webhook messages in threads are located by the thread's ID, not the
+			// parent channel's. Without `thread_id` Discord returns 404 Unknown
+			// Message, so edits in threads silently fail. Detect a thread by its
+			// parent channel and append the thread ID.
+			const parentId = await this.getParentChannelId(channelId);
+			if (parentId) {
+				url += `?thread_id=${channelId}`;
+			}
 			await this.#bot.rest.patch(url, {
 				body: { content },
 				unauthorized: true,
@@ -178,7 +186,15 @@ export class LiveDiscordSender implements DiscordSender {
 			// Messages sent via webhook are authored by the webhook, not the bot.
 			// Use the webhook's own delete endpoint, which doesn't require the
 			// bot to have the Manage Messages permission.
-			const url = `/webhooks/${webhook.id}/${webhook.token}/messages/${messageId}`;
+			let url = `/webhooks/${webhook.id}/${webhook.token}/messages/${messageId}`;
+			// Webhook messages in threads are located by the thread's ID, not the
+			// parent channel's. Without `thread_id` Discord returns 404 Unknown
+			// Message, so deletes in threads silently fail. Detect a thread by its
+			// parent channel and append the thread ID.
+			const parentId = await this.getParentChannelId(channelId);
+			if (parentId) {
+				url += `?thread_id=${channelId}`;
+			}
 			await this.#bot.rest.delete(url, { unauthorized: true });
 			return;
 		}
