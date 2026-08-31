@@ -107,7 +107,7 @@
   });
 </script>
 
-<div class="flex-none pt-2 pb-2 pr-2">
+<div class="flex-none pt-2 pb-[calc(--spacing(2)_+_env(safe-area-inset-bottom))] pr-2">
   {#if showContextPreview}
     <div
       class="flex justify-between bg-secondary text-secondary-content rounded-t-lg p-2 gap-2 pr-0"
