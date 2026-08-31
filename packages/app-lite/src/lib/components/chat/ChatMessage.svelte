@@ -495,12 +495,12 @@
       () => isSelected,
       () => messagingState.toggleMessageSelection(message)
     }
-    class="flex flex-col w-full relative max-w-full isolate px-4 select-none"
+    class="flex flex-col w-full relative max-w-full isolate px-2 select-none"
   >
     {@render messageBox()}
   </Checkbox.Root>
 {:else}
-  <div class="flex flex-col w-full relative max-w-full isolate px-4">
+  <div class="flex flex-col w-full relative max-w-full isolate px-2">
     {@render messageBox()}
   </div>
 {/if}

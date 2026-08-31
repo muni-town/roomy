@@ -14,7 +14,7 @@
   }
 </script>
 
-<div class="flex flex-col w-full relative max-w-full isolate px-4">
+<div class="flex flex-col w-full relative max-w-full isolate px-2">
   <div
     class={[
       "relative group w-full flex flex-col px-2 rounded",

@@ -31,13 +31,13 @@ let read = $derived(!thread.unread);
     />
   {/snippet}
   <!-- Unread marker column -->
-  <div class="w-6 shrink-0 flex items-center justify-start pl-2">
+  <div class="w-8 shrink-0 flex items-center justify-start pl-5.5">
     {#if thread.unread}
       <span class="size-2 rounded-full bg-accent-500" aria-label="Unread"></span>
     {/if}
   </div>
 
-  <div class="flex flex-row items-center gap-3 py-3 pl-1 pr-3 flex-1 min-w-0">
+  <div class="flex flex-row items-center gap-3 py-3 pl-2 pr-3 flex-1 min-w-0">
     <!-- Text column: title + mobile sub-row -->
     <div class="flex flex-col flex-1 min-w-0">
       <div class={"flex-1 min-w-0 flex items-center gap-2 text-base font-light " + (read ? "text-base-600/90 dark:text-base-400" : "text-base-900 dark:text-base-100")}>

@@ -107,7 +107,7 @@
   });
 </script>
 
-<div class="flex-none pt-2 pb-[calc(--spacing(2)_+_env(safe-area-inset-bottom))] pr-2">
+<div class="flex-none pt-2 pb-[calc(--spacing(1)_+_env(safe-area-inset-bottom))] pr-2">
   {#if showContextPreview}
     <div
       class="flex justify-between bg-secondary text-secondary-content rounded-t-lg p-2 gap-2 pr-0"
@@ -170,7 +170,7 @@
     </div>
   {/if}
 
-  <div class="w-full py-1">
+  <div class="w-full">
     <div class="prose-a:text-primary prose-a:underline relative isolate">
       {#if canWrite === false}
         <div
