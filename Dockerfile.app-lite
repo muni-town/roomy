@@ -25,6 +25,12 @@ ENV PUBLIC_DISCORD_BRIDGE=$PUBLIC_DISCORD_BRIDGE
 ARG PUBLIC_BRIDGE_DID
 ENV PUBLIC_BRIDGE_DID=$PUBLIC_BRIDGE_DID
 
+# Grafana Faro browser telemetry endpoint (frontend log collection). Read via
+# $env/dynamic/public and inlined at build time for adapter-static. Unset
+# (default) → Faro SDK never loaded.
+ARG PUBLIC_FARO_URL
+ENV PUBLIC_FARO_URL=$PUBLIC_FARO_URL
+
 ARG OAUTH_HOST
 ENV OAUTH_HOST=$OAUTH_HOST
 
@@ -65,7 +71,8 @@ RUN echo "[app-lite build debug] PUBLIC_PDS=$PUBLIC_PDS" && \
     echo "[app-lite build debug] PUBLIC_PDS_INVITE_CODE=$PUBLIC_PDS_INVITE_CODE" && \
     echo "[app-lite build debug] PUBLIC_DISCORD_BRIDGE=$PUBLIC_DISCORD_BRIDGE" && \
     echo "[app-lite build debug] PUBLIC_BRIDGE_DID=$PUBLIC_BRIDGE_DID" && \
-    echo "[app-lite build debug] VITE_APPSERVER_DID=$VITE_APPSERVER_DID"
+    echo "[app-lite build debug] VITE_APPSERVER_DID=$VITE_APPSERVER_DID" && \
+    echo "[app-lite build debug] PUBLIC_FARO_URL=$PUBLIC_FARO_URL"
 
 RUN bash packages/app-lite/scripts/build-prod.sh
 

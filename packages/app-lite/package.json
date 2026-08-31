@@ -13,6 +13,7 @@
     "@atproto/api": "^0.14.22",
     "@foxui/core": "^0.9.1",
     "@foxui/social": "^0.8.10",
+    "@grafana/faro-web-sdk": "^2.11.0",
     "@iconify-json/ph": "^1.2.2",
     "@roomy-space/sdk": "workspace:*",
     "@roomy/design": "workspace:*",

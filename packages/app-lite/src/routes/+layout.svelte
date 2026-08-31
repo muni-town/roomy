@@ -7,6 +7,7 @@
   import { auth, init, updateProfile } from "$lib/auth.svelte";
   import { installPushDebug } from "$lib/push-debug";
   import { preloadSpaceSidebars } from "$lib/preload";
+  import { initFaro } from "$lib/telemetry/faro";
   import {
     installNotificationNavigateListener,
     installPushSubscriptionChangeListener,
@@ -44,6 +45,9 @@
     // failures) that would otherwise leave the app unusable. In the PWA the
     // page cannot be manually refreshed, so this is the safety net.
     installGlobalErrorRecovery();
+    // Faro first so console capture/error instrumentation is active before
+    // auth/bootstrap logs anything (no-op unless PUBLIC_FARO_URL is set).
+    initFaro();
     console.log("[app-lite env debug] $env/dynamic/public:", {
       PUBLIC_PDS: dynamicEnv.PUBLIC_PDS,
       PUBLIC_PDS_HANDLE_SUFFIX: dynamicEnv.PUBLIC_PDS_HANDLE_SUFFIX,

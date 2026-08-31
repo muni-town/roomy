@@ -70,6 +70,21 @@ export const CONFIG = {
   /** Test-mode app-password credentials (bake into env for headless E2E). */
   testIdentifier: dynamicEnv.PUBLIC_TEST_IDENTIFIER || null,
   testAppPassword: dynamicEnv.PUBLIC_TEST_APP_PASSWORD || null,
+  /**
+   * Grafana Faro endpoint for browser telemetry (frontend log collection).
+   * Points at an Alloy `faro.receiver` (dev compose: http://127.0.0.1:12345,
+   * prod: the deploy/alloy collector). When unset the Faro SDK is never
+   * loaded/initialized — dev/build default is disabled.
+   */
+  faroUrl: dynamicEnv.PUBLIC_FARO_URL || null,
+  /**
+   * Faro API key sent as `x-api-key` with each telemetry POST. The dev
+   * compose `faro.receiver` requires the placeholder "bad_api_key"; prod
+   * defaults to no key (FARO_API_KEY unset on the collector). Note: a key
+   * baked into a static client bundle is readable by anyone — it only gates
+   * random browsers from writing to the collector, it is not a secret.
+   */
+  faroApiKey: dynamicEnv.PUBLIC_FARO_API_KEY || null,
 };
 
 export const OAUTH_SCOPE = [

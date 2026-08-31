@@ -59,3 +59,60 @@ otelcol.processor.batch "default" {
 otelcol.exporter.loki "apps" {
 	forward_to = [loki.write.cloud.receiver]
 }
+
+// ── Faro browser telemetry receiver (app-lite) ───────────────────────
+// The static SPA ships console logs + errors via the Grafana Faro browser
+// agent. This mirrors the dev compose `faro.receiver "frontend"` block:
+// logs pass through the same logfmt/label normalization so browser records
+// land in Loki with the same labels as the app services. No sourcemaps or
+// traces in v1 (no Tempo in production).
+//
+// Required env vars (set on Railway):
+//   - FARO_CORS_ORIGINS   comma-separated allowed browser origins, default
+//                         https://a.roomy.space (see Dockerfile ENV)
+//   - FARO_API_KEY        Faro API key, default "" (unset)
+loki.process "frontend" {
+	forward_to = [loki.write.cloud.receiver]
+
+	stage.logfmt {
+		mapping = { "service_name" = "app_name", kind = "" }
+	}
+
+	stage.labels {
+		values = { "kind" = "kind", "service_name" = "service_name", "app" = "service_name" }
+	}
+
+	// Make sure exceptions are logged at an error level instead of "unknown"
+	stage.match {
+		selector = "{kind=\"exception\"}"
+
+		stage.template {
+			source = "const_error"
+			template = "error"
+		}
+
+		stage.structured_metadata {
+			values = {
+				"level" = "const_error",
+			}
+		}
+	}
+}
+
+faro.receiver "frontend" {
+	server {
+		listen_address           = "0.0.0.0"
+		listen_port              = 12345
+		cors_allowed_origins     = split(env("FARO_CORS_ORIGINS"), ",")
+		api_key                  = env("FARO_API_KEY")
+		max_allowed_payload_size = "10MiB"
+
+		rate_limiting {
+			rate = 100
+		}
+	}
+
+	output {
+		logs = [loki.process.frontend.receiver]
+	}
+}
