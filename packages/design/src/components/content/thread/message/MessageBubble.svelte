@@ -31,6 +31,7 @@
     isEditing = false,
     // Visual / interaction state
     showToolbar = false,
+    compact = false,
     // Avatar fallback handling: wrappers may want a CDN-resolved URL
     avatarSrc,
     // Behaviour hooks
@@ -58,6 +59,8 @@
     isSelected?: boolean;
     isEditing?: boolean;
     showToolbar?: boolean;
+    /** Reduced top margin for dense contexts (e.g. search result lists). */
+    compact?: boolean;
     /** Pre-resolved avatar URL (e.g. after CDN rewriting). Falls back to authorAvatarUrl. */
     avatarSrc?: string;
     onAvatarClick?: (e: MouseEvent) => void;
@@ -89,7 +92,7 @@
 <div
   class={[
     `no-mobile-select relative group w-full flex flex-col px-2 rounded border ${isEditing ? "border-accent-400/60 dark:border-accent-800 bg-accent-100/50 dark:bg-accent-900/50" : isSelected ? "border-transparent bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : "border-transparent hover:bg-base-100/50 dark:hover:bg-base-400/5"}`,
-    mergeWithPrevious ? "mt-1" : "mt-5 pt-1",
+    mergeWithPrevious ? "mt-1" : compact ? "mt-1.5 pt-0.5" : "mt-5 pt-1",
   ]}
 >
   <div class={mergeWithPrevious ? "pl-12" : ""}>

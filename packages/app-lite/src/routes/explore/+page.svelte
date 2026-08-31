@@ -61,6 +61,21 @@
     searchQuery.fetchNextPage();
   }
 
+  // ids of messages that begin a contiguous run in their space+room — the
+  // location header is only rendered for these, so consecutive hits from the
+  // same room share one header.
+  const firstInRoom = $derived.by(() => {
+    const ids = new Set<string>();
+    for (let i = 0; i < messages.length; i++) {
+      const cur = messages[i];
+      const prev = messages[i - 1];
+      if (!cur) continue;
+      const sameRoom = prev !== undefined && prev.spaceId === cur.spaceId && prev.roomId === cur.roomId;
+      if (!sameRoom) ids.add(cur.id);
+    }
+    return ids;
+  });
+
   // Auto-pagination sentinel: when the sentinel scrolls into view (200px
   // before the end), fetch the next page. Same pattern as BoardView.
   let sentinel: HTMLElement | undefined = $state();
@@ -132,10 +147,34 @@
 
 {#snippet exploreNavbar()}
   <div class="flex w-full items-center gap-2 px-2 min-w-0 grow">
+    <IconSearch class="size-4 shrink-0 text-base-400" />
     <span class="text-sm font-semibold truncate">Explore</span>
   </div>
 {/snippet}
 
+
+{#snippet locationHeader(m: SearchMessage)}
+  <div class="flex items-center gap-1 px-3 pt-1.5 pb-1 text-xs text-base-500 dark:text-base-400">
+    <span class="inline-flex items-center gap-1 min-w-0">
+      <SpaceAvatar
+        src={resolveBlobUrl(m.spaceAvatar)}
+        id={m.spaceId}
+        name={m.spaceName ?? m.spaceId}
+        size={14}
+      />
+      <span class="truncate">{m.spaceName ?? m.spaceId}</span>
+    </span>
+    <IconChevronRight class="opacity-40 size-3 shrink-0" />
+    <span class="inline-flex items-center gap-1 min-w-0">
+      {#if m.roomKind === "thread"}
+        <IconNeedleThread class="opacity-60 size-3.5 shrink-0" />
+      {:else}
+        <span class="opacity-60 shrink-0">#</span>
+      {/if}
+      <span class="truncate">{m.roomName ?? m.roomId}</span>
+    </span>
+  </div>
+{/snippet}
 <div class="h-full dark:bg-base-900/20 text-base-800 dark:text-base-200">
   {#if !searchEnabled}
     <div class="h-full flex items-center justify-center">
@@ -206,29 +245,14 @@
                     }}
                   >
                     <!-- Where the result lives. Rendered above the message so
-                         the hit reads like a regular message in context. -->
-                    <div class="flex items-center gap-1 px-3 pt-1.5 pb-1 text-xs text-base-500 dark:text-base-400">
-                      <span class="inline-flex items-center gap-1 min-w-0">
-                        <SpaceAvatar
-                          src={resolveBlobUrl(m.spaceAvatar)}
-                          id={m.spaceId}
-                          name={m.spaceName ?? m.spaceId}
-                          size={14}
-                        />
-                        <span class="truncate">{m.spaceName ?? m.spaceId}</span>
-                      </span>
-                      <IconChevronRight class="opacity-40 size-3 shrink-0" />
-                      <span class="inline-flex items-center gap-1 min-w-0">
-                        {#if m.roomKind === "thread"}
-                          <IconNeedleThread class="opacity-60 size-3.5 shrink-0" />
-                        {:else}
-                          <span class="opacity-60 shrink-0">#</span>
-                        {/if}
-                        <span class="truncate">{m.roomName ?? m.roomId}</span>
-                      </span>
-                    </div>
+                         the hit reads like a regular message in context. Merge
+                         contiguous hits in the same room under one header. -->
+                    {#if firstInRoom.has(m.id)}
+                      {@render locationHeader(m)}
+                    {/if}
 
                     <MessageBubble
+                      compact
                       authorDid={original ? original.authorDid : m.authorDid}
                       authorName={original ? (original.authorName ?? undefined) : (m.authorName ?? undefined)}
                       authorHandle={original ? (original.authorHandle ?? undefined) : (m.authorHandle ?? undefined)}
@@ -241,72 +265,72 @@
                       isSystem={m.system === true}
                     >
                       {#snippet replyContext()}
-                        {#if m.forwardedFrom}
-                          <ForwardContext
-                            name={m.authorName}
-                            did={m.authorDid}
-                            avatar={m.authorAvatar}
-                            timestamp={new Date(m.timestamp)}
-                          />
-                        {:else if m.replyTo}
-                          {#if replyPreview}
-                            <div class="flex gap-1 items-center shrink-0">
-                              <IconReplyLine
-                                width="28px"
-                                height="12px"
-                                class="relative -bottom-1 ml-2 mr-1 left-0.75 stroke-black/25 dark:stroke-white/50 dark:stroke-1"
-                              />
-                              {#if replyPreview.authorAvatar || replyPreview.authorDid}
-                                {#if replyBridged}
-                                  <div class="w-4 h-4 rounded-full shrink-0">
-                                    <UserAvatar
-                                      src={resolveBlobUrl(replyPreview.authorAvatar)}
-                                      name={replyPreview.authorDid || ""}
-                                      size={16}
-                                      class="w-4 h-4"
-                                    />
-                                  </div>
-                                {:else}
-                                  <button
-                                    onclick={(e) => {
-                                      e.stopPropagation();
-                                      goto(`/user/${replyPreview.authorDid}`);
-                                    }}
-                                    class="w-4 h-4 rounded-full shrink-0 hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
-                                  >
-                                    <UserAvatar
-                                      src={resolveBlobUrl(replyPreview.authorAvatar)}
-                                      name={replyPreview.authorDid || ""}
-                                      size={16}
-                                      class="w-4 h-4"
-                                    />
-                                  </button>
-                                {/if}
-                              {/if}
+                      {#if m.forwardedFrom}
+                        <ForwardContext
+                          name={m.authorName}
+                          did={m.authorDid}
+                          avatar={m.authorAvatar}
+                          timestamp={new Date(m.timestamp)}
+                        />
+                      {:else if m.replyTo}
+                        {#if replyPreview}
+                          <div class="flex gap-1 items-center shrink-0">
+                            <IconReplyLine
+                              width="28px"
+                              height="12px"
+                              class="relative -bottom-1 ml-2 mr-1 left-0.75 stroke-black/25 dark:stroke-white/50 dark:stroke-1"
+                            />
+                            {#if replyPreview.authorAvatar || replyPreview.authorDid}
                               {#if replyBridged}
-                                <span class="font-medium text-accent-700 dark:text-accent-300">
-                                  {replyPreview.authorName || replyPreview.authorDid.slice(0, 12)}
-                                </span>
+                                <div class="w-4 h-4 rounded-full shrink-0">
+                                  <UserAvatar
+                                    src={resolveBlobUrl(replyPreview.authorAvatar)}
+                                    name={replyPreview.authorDid || ""}
+                                    size={16}
+                                    class="w-4 h-4"
+                                  />
+                                </div>
                               {:else}
-                                <a
-                                  href={`/user/${replyPreview.authorDid}`}
-                                  class="font-medium text-accent-700 dark:text-accent-300 hover:underline"
-                                >{replyPreview.authorName || replyPreview.authorDid.slice(0, 12)}</a
+                                <button
+                                  onclick={(e) => {
+                                    e.stopPropagation();
+                                    goto(`/user/${replyPreview.authorDid}`);
+                                  }}
+                                  class="w-4 h-4 rounded-full shrink-0 hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
                                 >
+                                  <UserAvatar
+                                    src={resolveBlobUrl(replyPreview.authorAvatar)}
+                                    name={replyPreview.authorDid || ""}
+                                    size={16}
+                                    class="w-4 h-4"
+                                  />
+                                </button>
                               {/if}
-                            </div>
-                            <div class="flex items-center gap-1 italic">
-                              {#if replyPreview.forwardedFrom}
-                                <IconForward class="size-3.5 shrink-0 text-base-500 dark:text-base-400" />
-                              {/if}
-                              <span class="line-clamp-1 overflow-hidden">
-                                {@html messageContentToPlaintext(replyPreviewContent, replyPreviewMime)}
+                            {/if}
+                            {#if replyBridged}
+                              <span class="font-medium text-accent-700 dark:text-accent-300">
+                                {replyPreview.authorName || replyPreview.authorDid.slice(0, 12)}
                               </span>
-                            </div>
-                          {:else}
-                            <span class="italic text-base-400">Reply unavailable</span>
-                          {/if}
+                            {:else}
+                              <a
+                                href={`/user/${replyPreview.authorDid}`}
+                                class="font-medium text-accent-700 dark:text-accent-300 hover:underline"
+                              >{replyPreview.authorName || replyPreview.authorDid.slice(0, 12)}</a
+                              >
+                            {/if}
+                          </div>
+                          <div class="flex items-center gap-1 italic">
+                            {#if replyPreview.forwardedFrom}
+                              <IconForward class="size-3.5 shrink-0 text-base-500 dark:text-base-400" />
+                            {/if}
+                            <span class="line-clamp-1 overflow-hidden">
+                              {@html messageContentToPlaintext(replyPreviewContent, replyPreviewMime)}
+                            </span>
+                          </div>
+                        {:else}
+                          <span class="italic text-base-400">Reply unavailable</span>
                         {/if}
+                      {/if}
                       {/snippet}
 
                       {#snippet content()}
