@@ -339,7 +339,19 @@
         "replyTo": {
           "type": "string"
         },
+        "roomKind": {
+          "type": "string"
+        },
+        "roomName": {
+          "type": "string"
+        },
         "sort_idx": {
+          "type": "string"
+        },
+        "spaceAvatar": {
+          "type": "string"
+        },
+        "spaceName": {
           "type": "string"
         },
         "system": {

@@ -461,7 +461,7 @@ describe("space.roomy.search.messages (Qdrant)", () => {
     expect(typeof body.messages[0].roomId).toBe("string");
   });
 
-  test("search results carry denormalised reply context", async () => {
+  test("search results carry denormalised reply context and display names", async () => {
     const { ctx } = await newAppWithQdrant();
     const { roomId } = await materializeSpace(ctx, SPACE, USER, {
       messageText: "original pineapple",
@@ -485,6 +485,10 @@ describe("space.roomy.search.messages (Qdrant)", () => {
       // The reply target is embedded fully hydrated — no client fetch needed.
       expect(typeof m.reply.message?.id).toBe("string");
       expect(m.reply.message.content).toContain("original");
+      // Display names ride along — no getSpaceSummary/getRoomSummary calls.
+      expect(m.spaceName).toBe("Test Space");
+      expect(m.roomName).toBe("general");
+      expect(m.roomKind).toBe("channel");
     }
 
     // A hit with no replyTo carries no reply field.
@@ -495,8 +499,8 @@ describe("space.roomy.search.messages (Qdrant)", () => {
       expect(m.reply).toBeUndefined();
     }
   });
-
 });
+
 describe("backfill sweeper (Qdrant)", () => {
   beforeEach(() => {
     _resetQdrantClient();

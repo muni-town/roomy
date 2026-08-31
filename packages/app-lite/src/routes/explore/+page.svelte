@@ -1,10 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { createQueries } from "@tanstack/svelte-query";
-  import { cache } from "@roomy-space/sdk";
-  import { px, auth } from "$lib/auth.svelte";
-  import { queryClient } from "$lib/client";
+  import { auth } from "$lib/auth.svelte";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { setSidebarContent, setSidebarHeader } from "$lib/components/layout/sidebar.svelte";
   import { setWideSidebar } from "$lib/components/layout/wide-sidebar.svelte";
@@ -30,8 +27,6 @@
   import MediaEmbed from "$lib/components/chat/embeds/MediaEmbed.svelte";
   import LinkCard from "$lib/components/chat/embeds/LinkCard.svelte";
   import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
-
-  const { queryKey } = cache;
 
   // Search feature flag: gates the whole Explore page (direct navigation
   // lands here even when the sidebar button is hidden).
@@ -93,60 +88,9 @@
     };
   });
 
-  // Space names for result context: one lightweight getSpaceSummary query
-  // per distinct space in the results. createQueries is reactive — the
-  // accessor re-runs as results change, and the results array updates as
-  // each summary lands (getQueryData reads would be non-reactive).
-  const spaceIds = $derived(
-    [...new Set(messages.map((m) => m.spaceId).filter(Boolean))] as string[],
-  );
-
-  const spaceSummaryQueries = createQueries(
-    () => ({
-      queries: spaceIds.map((sid) => ({
-        queryKey: queryKey("space.roomy.space.getSpaceSummary", { spaceId: sid }),
-        queryFn: () => px().query("space.roomy.space.getSpaceSummary", { spaceId: sid }),
-      })),
-    }),
-    () => queryClient,
-  );
-
-  const spaceNames = $derived.by<Map<string, { name?: string; avatar?: string }>>(() => {
-    const map = new Map<string, { name?: string; avatar?: string }>();
-    for (let i = 0; i < spaceIds.length; i++) {
-      const data = spaceSummaryQueries[i]?.data;
-      if (data) map.set(spaceIds[i]!, data);
-    }
-    return map;
-  });
-
-  // Room display names/kinds for the result context line: one lightweight
-  // getRoomSummary query per distinct room in the results (same pattern as
-  // the space summaries above).
-  const roomIds = $derived(
-    [...new Set(messages.map((m) => m.roomId).filter(Boolean))] as string[],
-  );
-
-  const roomSummaryQueries = createQueries(
-    () => ({
-      queries: roomIds.map((rid) => ({
-        queryKey: queryKey("space.roomy.room.getRoomSummary", { roomId: rid }),
-        queryFn: () => px().query("space.roomy.room.getRoomSummary", { roomId: rid }),
-      })),
-    }),
-    () => queryClient,
-  );
-
-  const roomSummaries = $derived.by<Map<string, { name?: string; kind?: string }>>(
-    () => {
-      const map = new Map<string, { name?: string; kind?: string }>();
-      for (let i = 0; i < roomIds.length; i++) {
-        const data = roomSummaryQueries[i]?.data;
-        if (data) map.set(roomIds[i]!, data);
-      }
-      return map;
-    },
-  );
+  // Display names ride along on each result (spaceName/spaceAvatar/
+  // roomName/roomKind) — the appserver denormalises them in-process, so no
+  // getSpaceSummary/getRoomSummary round-trips are needed.
 
   onMount(() => {
     setNavbar(exploreNavbar);
@@ -160,6 +104,7 @@
       setWideSidebar(false);
     };
   });
+
 
   function hrefFor(m: SearchMessage): string {
     return `/${m.spaceId}/${m.roomId}`;
@@ -224,8 +169,6 @@
           {:else}
             <ul class="space-y-3">
               {#each messages as m (m.id)}
-                {@const spaceMeta = spaceNames.get(m.spaceId ?? "")}
-                {@const roomMeta = roomSummaries.get(m.roomId ?? "")}
                 {@const isForward = !!m.forwardedFrom}
                 {@const original = m.forwardedFrom?.message}
                 {@const replyPreview = m.reply?.message}
@@ -267,21 +210,21 @@
                     <div class="flex items-center gap-1 px-3 pt-1.5 pb-1 text-xs text-base-500 dark:text-base-400">
                       <span class="inline-flex items-center gap-1 min-w-0">
                         <SpaceAvatar
-                          src={resolveBlobUrl(spaceMeta?.avatar)}
+                          src={resolveBlobUrl(m.spaceAvatar)}
                           id={m.spaceId}
-                          name={spaceMeta?.name ?? m.spaceId}
+                          name={m.spaceName ?? m.spaceId}
                           size={14}
                         />
-                        <span class="truncate">{spaceMeta?.name ?? m.spaceId}</span>
+                        <span class="truncate">{m.spaceName ?? m.spaceId}</span>
                       </span>
                       <IconChevronRight class="opacity-40 size-3 shrink-0" />
                       <span class="inline-flex items-center gap-1 min-w-0">
-                        {#if roomMeta?.kind === "thread"}
+                        {#if m.roomKind === "thread"}
                           <IconNeedleThread class="opacity-60 size-3.5 shrink-0" />
                         {:else}
                           <span class="opacity-60 shrink-0">#</span>
                         {/if}
-                        <span class="truncate">{roomMeta?.name ?? m.roomId}</span>
+                        <span class="truncate">{m.roomName ?? m.roomId}</span>
                       </span>
                     </div>
 

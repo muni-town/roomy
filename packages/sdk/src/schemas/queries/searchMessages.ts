@@ -6,11 +6,13 @@
  * search spans every space the caller has joined (cross-space). Returns
  * messages hydrated via selectMessages so the response shape matches the
  * shared Message schema, plus `roomId`/`spaceId` so cross-space results can
- * be linked back to their source room. Each hit carries a denormalised
- * `reply` (the replied-to message, fully hydrated) when it is resolvable and
- * the caller may read its room — search results render in a chat-style list,
- * so the preview rides along instead of costing the client a getMessage
- * fetch per hit.
+ * be linked back to their source room, and the resolved display names
+ * (`spaceName`/`spaceAvatar`/`roomName`/`roomKind`) so the result context
+ * line renders without extra summary queries. Each hit carries a
+ * denormalised `reply` (the replied-to message, fully hydrated) when it is
+ * resolvable and the caller may read its room — search results render in a
+ * chat-style list, so the preview rides along instead of costing the client
+ * a getMessage fetch per hit.
  */
 import { scope, type } from "arktype";
 import { Message } from "./_message";
@@ -47,6 +49,10 @@ export const SearchMessage = Message.and({
   roomId: "string",
   spaceId: "string",
   "reply?": Reply,
+  "spaceName?": "string",
+  "spaceAvatar?": "string",
+  "roomName?": "string",
+  "roomKind?": "string",
 });
 
 export const Response = type({

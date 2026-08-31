@@ -18,6 +18,11 @@
  * renders the preview without a getMessage fetch per hit, matching how
  * forwards embed their originals.
  *
+ * Display names are denormalised too: each hit carries its space name/
+ * avatar and room name/kind (resolved with two batched queries per
+ * distinct space, in-process), so the client's context line renders
+ * without getSpaceSummary/getRoomSummary round-trips.
+ *
  * When Qdrant is not configured the endpoint returns 503 — search is
  * unavailable without the search service.
  */
@@ -41,8 +46,18 @@ import { log } from "../log.ts";
 /** Over-fetch factor: Qdrant returns limit×this candidates, we post-filter. */
 const OVERFETCH = 3;
 
+type SearchHit = MessageDto & {
+  roomId?: string;
+  spaceId?: string;
+  reply?: SearchReply;
+  spaceName?: string;
+  spaceAvatar?: string;
+  roomName?: string;
+  roomKind?: string;
+};
+
 interface SearchMessagesResult {
-  messages: Array<MessageDto & { roomId?: string; spaceId?: string; reply?: SearchReply }>;
+  messages: SearchHit[];
   cursor?: string;
 }
 
@@ -50,6 +65,13 @@ interface SearchMessagesResult {
 interface SearchReply {
   messageId: string;
   message?: MessageDto;
+}
+
+/** Strip the `space.roomy.` prefix from a room kind label (matches getRoomSummary). */
+function stripLabel(label: string | null): string {
+  if (!label) return "";
+  const m = /^space\.roomy\.(.+)$/.exec(label);
+  return m?.[1] ?? label;
 }
 
 export const searchMessagesHandler: QueryHandler<
@@ -158,11 +180,61 @@ export const searchMessagesHandler: QueryHandler<
     if (m) ranked.push({ message: m, roomId: h.payload.roomId, spaceDid: h.payload.spaceDid });
   }
 
+  // Resolve display names for the result context line. Two batched queries
+  // per distinct space: the space's own name/avatar, then name/kind for
+  // every room this window's hits live in (the same rows getSpaceSummary /
+  // getRoomSummary would return — in-process, no extra HTTP round-trips).
+  // Results are already read-authorized, so no additional access checks.
+  const roomIdsBySpace = new Map<string, string[]>();
+  for (const hit of ranked) {
+    const arr = roomIdsBySpace.get(hit.spaceDid) ?? [];
+    if (!arr.includes(hit.roomId)) arr.push(hit.roomId);
+    roomIdsBySpace.set(hit.spaceDid, arr);
+  }
+
+  const spaceDisplay = new Map<string, { spaceName?: string; spaceAvatar?: string }>();
+  const roomDisplay = new Map<string, { roomName?: string; roomKind?: string }>();
+  for (const [space] of bySpace) {
+    const db = openSpaceDb(space);
+    const spaceRow = await db
+      .query(
+        `select ci.name as name, ci.avatar as avatar
+           from comp_space cs
+           left join comp_info ci on ci.entity = cs.entity
+          where cs.entity = ?`,
+      )
+      .get<{ name: string | null; avatar: string | null }>(space);
+    if (spaceRow) {
+      spaceDisplay.set(space, {
+        ...(spaceRow.name ? { spaceName: spaceRow.name } : {}),
+        ...(spaceRow.avatar ? { spaceAvatar: spaceRow.avatar } : {}),
+      });
+    }
+
+    const roomIds = roomIdsBySpace.get(space) ?? [];
+    if (roomIds.length > 0) {
+      const roomRows = await db
+        .query(
+          `select cr.entity as id, ci.name as name, cr.label as label
+             from comp_room cr
+             left join comp_info ci on ci.entity = cr.entity
+            where cr.entity in (${roomIds.map(() => "?").join(",")})`,
+        )
+        .all<{ id: string; name: string | null; label: string | null }>(roomIds);
+      for (const row of roomRows) {
+        roomDisplay.set(row.id, {
+          ...(row.name ? { roomName: row.name } : {}),
+          ...(row.label ? { roomKind: stripLabel(row.label) } : {}),
+        });
+      }
+    }
+  }
+
   // Post-filter by per-room read access (membership alone is not enough —
   // rooms may restrict access), then trim to the requested limit. Each
   // result carries the room/space it was found in so cross-space search
   // clients can show context and link to the hit.
-  const results: Array<MessageDto & { roomId?: string; spaceId?: string; reply?: SearchReply }> = [];
+  const results: SearchHit[] = [];
   const memos = new Map<string, ReturnType<typeof createAccessMemo>>();
   for (const { message, roomId, spaceDid } of ranked) {
     if (results.length >= limit) break;
@@ -174,10 +246,12 @@ export const searchMessagesHandler: QueryHandler<
     const acc = await roomAccess(openSpaceDb(spaceDid), roomId, userDid, memo);
     if (!acc.canRead) continue;
 
-    const result: MessageDto & { roomId?: string; spaceId?: string; reply?: SearchReply } = {
+    const result: SearchHit = {
       ...message,
       roomId,
       spaceId: spaceDid,
+      ...spaceDisplay.get(spaceDid),
+      ...roomDisplay.get(roomId),
     };
     // Denormalise the reply context. Only the message id rides along when
     // the target is unresolvable or unreadable — the client renders
