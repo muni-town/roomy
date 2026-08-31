@@ -115,6 +115,13 @@ export interface AppserverOptions {
   quiet?: boolean;
   /** Disable the background embed enrichment sweeper. Useful for tests that don't exercise embeds. */
   disableEmbedSweeper?: boolean;
+  /** Disable ALL background worker loops: the embed enrichment sweeper, the
+   *  search indexer + backfill sweeper, and the push dispatcher. E2E tests
+   *  that exercise request handling directly set this: no detached loop is
+   *  running against the test DB, so none can resume mid-teardown (a loop
+   *  waking against a closed DB is the #1 CI flake source). Implies
+   *  `disableEmbedSweeper`. */
+  disableBackgroundWorkers?: boolean;
   /** Disable the query response cache. Tests set this so handler call counts
    *  are deterministic (the cache would skip the handler on the second call).
    *  Also disabled when the `APPSERVER_QUERY_CACHE_ENABLED` env var is `"false"`. */
@@ -466,7 +473,13 @@ export async function createAppserver(
   // Open as process-wide singletons so handlers' internal `openDb()` calls
   // resolve to the same handle. Tests that want isolation should reset the
   // singletons (closeDb) before calling createAppserver.
-  const mainDb = openDb();
+  //
+  // `opts.dbPath` is honored here (event-log path; `:memory:` also pins the
+  // read-state/global/spaces DBs to memory, see `openDb`). Previously the
+  // option was dead: every factory test silently opened the real files under
+  // `DATA_DIR`, and closeDb→reopen cycles raced SQLite file locks on shared
+  // CI runners (surfacing as `database is locked` 500s).
+  const mainDb = openDb(opts.dbPath !== undefined ? { path: opts.dbPath } : {});
 
   // ─── Periodic maintenance ────────────────────────────────────────────
   // Purge stale user_thread_activity rows older than the activity window
@@ -496,20 +509,33 @@ export async function createAppserver(
     ownDid,
   });
   setStreamManager(streamManager);
-  // Start the centralized embed enrichment sweeper.
-  startEmbedSweeper({ globalDb: openGlobalDb(), invalidationRouter });
-  // Start the Qdrant message-search indexer (drains the enqueue queue from
-  // applyChunkSideEffects) and the boot backfill sweeper (re-indexes
-  // messages missing from Qdrant). Both are no-op-safe when Qdrant is not
-  // configured.
-  startSearchIndexer();
-  startSearchBackfill({ globalDb: openGlobalDb() });
-  // Start the centralized push dispatcher unconditionally. The dispatcher is
-  // global infrastructure that processes every live createMessage and
-  // computes fan-out. Starting it here means the StreamManager's pokes are
-  // always queued and evaluated. No-op-safe when VAPID isn't configured
-  // (deliveries just find no subscriptions).
-  startPushDispatcher({ db: openReadStateDb() });
+  // Background worker loops (embed sweeper, search indexer/backfill, push
+  // dispatcher). They are all safe to disable in tests: request handling is
+  // independent, and a detached loop that resumes against a closed DB is a
+  // teardown-race flake source (a loop's poke/backoff timer can fire after
+  // closeDb(), turning a "Database is closed" rejection into an unhandled
+  // error that fails the whole run).
+  const backgroundWorkers = !opts.disableBackgroundWorkers;
+  if (backgroundWorkers && !opts.disableEmbedSweeper) {
+    // Start the centralized embed enrichment sweeper.
+    startEmbedSweeper({ globalDb: openGlobalDb(), invalidationRouter });
+  }
+  if (backgroundWorkers) {
+    // Start the Qdrant message-search indexer (drains the enqueue queue from
+    // applyChunkSideEffects) and the boot backfill sweeper (re-indexes
+    // messages missing from Qdrant). Both are no-op-safe when Qdrant is not
+    // configured.
+    startSearchIndexer();
+    startSearchBackfill({ globalDb: openGlobalDb() });
+  }
+  if (backgroundWorkers) {
+    // Start the centralized push dispatcher unconditionally. The dispatcher is
+    // global infrastructure that processes every live createMessage and
+    // computes fan-out. Starting it here means the StreamManager's pokes are
+    // always queued and evaluated. No-op-safe when VAPID isn't configured
+    // (deliveries just find no subscriptions).
+    startPushDispatcher({ db: openReadStateDb() });
+  }
 
   // ─── XRPC routes ──────────────────────────────────────────────────────
   const authVerifier = opts.authVerifier ?? selectAuthVerifier();

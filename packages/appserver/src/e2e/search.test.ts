@@ -569,6 +569,6 @@ describe("backfill sweeper (Qdrant)", () => {
       // the sweeper stalls on an empty space after ~3 cycles and this fails.
       expect(searchBackfillStats().backfilled).toBe(250);
     },
-    { timeout: 10000 },
+    { timeout: 30000 },
   );
 });

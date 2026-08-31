@@ -86,6 +86,13 @@ export async function startAppserver(): Promise<E2eContext> {
     dbPath: ":memory:",
     readStateDbPath: ":memory:",
     quiet: true,
+    // No detached background loops (embed sweeper, search indexer/backfill,
+    // push dispatcher) in tests: request handling is what these tests
+    // exercise, and a loop that wakes against a closed DB after teardown is
+    // the #1 CI flake source (unhandled "Database is closed" rejections).
+    // Tests that exercise the loops start them explicitly (e.g.
+    // search.test.ts starts the backfill sweeper itself).
+    disableBackgroundWorkers: true,
     // Keep E2E runs hermetic: without a stub, materialization falls back to
     // live api.bsky.app profile fetches, which pile up under parallel load
     // and blow the 5s per-test timeout. Tests don't assert on profile

@@ -117,7 +117,7 @@ beforeEach(async () => {
     dbPath: ":memory:",
     readStateDbPath: ":memory:",
     quiet: true,
-    disableEmbedSweeper: true,
+    disableBackgroundWorkers: true,
     // Hermetic: without a stub, materialization hits live api.bsky.app
     // profile fetches, which pile up under parallel load and blow the
     // 5s per-test timeout.

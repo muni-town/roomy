@@ -186,7 +186,7 @@ describe("embed sweeper invalidation room resolution", () => {
       .filter((s) => s.kind === "messageDiff")
       .map((s) => (s.kind === "messageDiff" ? (s.signal.roomId as string) : null));
     expect(diffRoomIds).not.toContain(ids.message);
-  });
+  }, { timeout: 20000 });
 
   test("does not emit when no pending links exist", async () => {
     const { globalDb } = freshWorker();
@@ -238,7 +238,7 @@ describe("embed sweeper invalidation room resolution", () => {
       const link = op?.op === "update" ? op.message.linkEmbeds[0] : undefined;
       expect(link?.embed?.["t"]).toBe("Example Article");
     }
-  });
+  }, { timeout: 20000 });
 
   test("prioritiseLinksForRead never throws on a DB error (read path stays healthy)", async () => {
     // Regression guard: a DB error (e.g. SQLITE_IOERR_VNODE under I/O

@@ -10,13 +10,13 @@
  * Run: bun test --cwd packages/appserver src/e2e/updatePolicy.test.ts
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createAppserver, type AppserverHandle } from "../appserver.ts";
 import { testAuthVerifier } from "../xrpc/auth.ts";
 import { closeDb, openDb } from "../db/db.ts";
 import { _resetRateLimit } from "../xrpc/rateLimit.ts";
 import { _resetHydrationInflight } from "../hydration/userHydration.ts";
-import { _resetEmbedSweeper, stopEmbedSweeper } from "../embed/sweeper.ts";
+import { _resetEmbedSweeper } from "../embed/sweeper.ts";
 import { _resetProfileStoreCache } from "../queries/profileStore.ts";
 import type { ArbiterConfig } from "../arbiter/config.ts";
 import { DEFAULT_ARBITER_POLICY } from "../arbiter/policy.ts";
@@ -63,14 +63,9 @@ async function startMockArbiter(): Promise<{
 }
 
 describe("space.roomy.space.updatePolicy", () => {
-  afterEach(async () => {
-    await stopEmbedSweeper();
-  });
-
   test("admin → reinstalls latest policy on the stewarded account", async () => {
     const mock = await startMockArbiter();
     try {
-      stopEmbedSweeper();
       closeDb();
       _resetRateLimit();
       _resetHydrationInflight();
@@ -92,6 +87,8 @@ describe("space.roomy.space.updatePolicy", () => {
         quiet: true,
         ownDid: OWN_DID,
         arbiter,
+        // Pure admin-procedure test: no embed/search/push loops needed.
+        disableBackgroundWorkers: true,
       });
 
       try {
@@ -119,7 +116,6 @@ describe("space.roomy.space.updatePolicy", () => {
   test("non-admin → 403", async () => {
     const mock = await startMockArbiter();
     try {
-      stopEmbedSweeper();
       closeDb();
       _resetRateLimit();
       _resetHydrationInflight();
@@ -141,6 +137,8 @@ describe("space.roomy.space.updatePolicy", () => {
         quiet: true,
         ownDid: OWN_DID,
         arbiter,
+        // Pure admin-procedure test: no embed/search/push loops needed.
+        disableBackgroundWorkers: true,
       });
 
       try {

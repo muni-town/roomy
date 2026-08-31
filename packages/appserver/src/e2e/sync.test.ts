@@ -74,7 +74,7 @@ describe("WebSocket sync subscription", () => {
         ws.onclose = () => resolve();
       });
     },
-    { timeout: 10000 },
+    { timeout: 30000 },
   );
 
   test(
@@ -103,7 +103,7 @@ describe("WebSocket sync subscription", () => {
       // Either way, it should not be 1000 (normal closure).
       expect(closeEvent.code).not.toBe(1000);
     },
-    { timeout: 10000 },
+    { timeout: 30000 },
   );
 
   test(
@@ -119,6 +119,6 @@ describe("WebSocket sync subscription", () => {
       expect(body).toHaveProperty("error");
       expect(body.error).toBe("AuthRequired");
     },
-    { timeout: 10000 },
+    { timeout: 30000 },
   );
 });

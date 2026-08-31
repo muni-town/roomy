@@ -42,6 +42,7 @@ describe("createAppserver factory", () => {
       quiet: true,
       ownDid: "did:web:test.example",
       serviceEndpoint: "http://test.example",
+      disableBackgroundWorkers: true,
     });
 
     const base = `http://localhost:${handle.port}`;
@@ -76,7 +77,7 @@ describe("createAppserver factory", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
     });
 
     const base = `http://localhost:${handle.port}`;
@@ -110,7 +111,7 @@ describe("createAppserver factory", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
     });
 
     const base = `http://localhost:${handle.port}`;
@@ -134,7 +135,7 @@ describe("createAppserver factory", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
       corsOrigin: "https://app.test",
     });
 
@@ -161,7 +162,7 @@ describe("createAppserver factory", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
     });
 
     const base = `http://localhost:${handle.port}`;
@@ -217,7 +218,7 @@ describe("query response cache", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
     });
     seedMinimalSpace("did:web:cache-test.space", "did:plc:user1");
     const base = `http://localhost:${handle.port}`;
@@ -269,7 +270,7 @@ describe("query response cache", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
     });
     seedMinimalSpace("did:web:cache-test.space", "did:plc:user1");
     // Also seed user2's entity (the space entity already exists).
@@ -283,9 +284,16 @@ describe("query response cache", () => {
     const url = `${base}/xrpc/space.roomy.space.getMetadata?spaceId=did:web:cache-test.space`;
     const cache = handle.queryCache!;
 
-    // Two users fetch the same space.
-    await fetch(url, { headers: { "X-Test-Did": "did:plc:user1" } });
-    await fetch(url, { headers: { "X-Test-Did": "did:plc:user2" } });
+    // Two users fetch the same space. Check the requests actually succeeded
+    // before asserting cache state — a transient handler failure would
+    // otherwise surface as a confusing size mismatch instead of a 500.
+    const r1 = await fetch(url, { headers: { "X-Test-Did": "did:plc:user1" } });
+    expect(r1.status).toBe(200);
+    const r2 = await fetch(url, { headers: { "X-Test-Did": "did:plc:user2" } });
+    expect(r2.status).toBe(200);
+    // Per-user keys: each user's first fetch is a miss and both entries are
+    // stored (user1's entry does not satisfy user2's request).
+    expect(cache.stats.misses).toBe(2);
     expect(cache.stats.size).toBe(2);
 
     // Per-user invalidation for user1 only.
@@ -323,7 +331,7 @@ describe("query response cache", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
       disableQueryCache: true,
     });
     seedMinimalSpace("did:web:cache-test.space", "did:plc:user1");
@@ -349,7 +357,7 @@ describe("query response cache", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
     });
     seedMinimalSpace("did:web:cache-test.space", "did:plc:user1");
 
@@ -376,7 +384,7 @@ describe("query response cache", () => {
       dbPath: ":memory:",
       readStateDbPath: ":memory:",
       quiet: true,
-      disableEmbedSweeper: true,
+      disableBackgroundWorkers: true,
     });
 
     const base = `http://localhost:${handle.port}`;
