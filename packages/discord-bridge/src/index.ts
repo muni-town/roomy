@@ -345,6 +345,6 @@ async function main() {
 }
 
 main().catch((err) => {
-	console.error("fatal:", err);
+	log.error("fatal", err);
 	process.exit(1);
 });

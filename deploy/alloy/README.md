@@ -1,8 +1,9 @@
 # Grafana Alloy — Roomy production log collector
 
 Deploys `grafana/alloy` as a central log collector on Railway. The apps
-(appserver, discord-bridge, app-lite) forward their stdout here over the
-Railway private network, and Alloy ships the logs to Grafana Cloud Loki.
+(appserver, discord-bridge) push structured JSON logs here over the Railway
+private network (app-lite ships from the browser via Faro), and Alloy ships
+the logs to Grafana Cloud Loki.
 
 The config is **baked into the image** so no Railway volume is required.
 
@@ -29,9 +30,17 @@ The config is **baked into the image** so no Railway volume is required.
 
 ## How apps forward logs
 
-Each app service's **start command** pipes its stdout through a tiny Loki
-forwarder that POSTs to `http://alloy:3100/loki/api/v1/push`. See
-`packages/appserver` and `packages/discord-bridge` for the per-app wiring.
+Apps push structured JSON logs directly to Alloy over the Railway private
+network — no stdout pipes or sidecar forwarders.
+
+- **appserver** and **discord-bridge** — each ships an in-app Loki sink
+  (`src/telemetry/loki.ts` in both packages). When `ALLOY_URL` is set
+  (default `http://alloy:3100/loki/api/v1/push`), every structured log
+  record is batched (500 / 2s) and POSTed to the Alloy Loki push API with
+  stream labels `service_name`, `level`, `scope` (plus Railway replica
+  labels when present). Unset in dev → stdout only.
+- **app-lite** — ships logs from the browser via Faro (TASK-66), not the
+  Alloy collector.
 
 ## Ports
 - `3100`  — Loki push API receiver (`loki.source.api`)
