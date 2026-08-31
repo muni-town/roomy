@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "./fonts-hanken-grotesk.css";
+@import "@roomy/design/scrollbar.css";
 
 @source "../node_modules/@roomy/design";
 @source "../node_modules/@foxui";

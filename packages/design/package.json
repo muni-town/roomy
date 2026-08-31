@@ -9,6 +9,7 @@
     },
     "./icons": "./src/icons/index.ts",
     "./icons/*": "./src/icons/*",
+    "./scrollbar.css": "./src/scrollbar.css",
     "./utils": "./src/utils/index.ts",
     "./utils/*": "./src/utils/*",
     "./components/*": "./src/components/*"
