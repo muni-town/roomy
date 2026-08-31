@@ -352,26 +352,8 @@ export async function initSession(
   opts: InitSessionOptions = {},
 ): Promise<LoginResult | null> {
   const client = await createOAuthClient(appserverDid, opts);
-  let result: {
-    session: OAuthSession;
-    state?: never;
-  } | {
-    session: OAuthSession;
-    state: string | null;
-  } | undefined
 
-  // Tauri / native custom-scheme callbacks can't be auto-detected by `client.init()`:
-  // `findRedirectUrl()` compares HTTP origins against the
-  // registered redirect URIs, and a `space.roomy:/…` scheme never matches the
-  // webview origin (`tauri://localhost`). 
-  if ('__TAURI__' in window) {
-    const params = new URLSearchParams(location.search);
-    if (params.has('state') && (params.has('code') || params.has('error'))) {
-      result = await client.initCallback(params, client.clientMetadata.redirect_uris[0]);
-    }
-  } else {
-    result = await client.init();
-  }
+  let result = await client.init();
 
   if (result?.session) {
     return {
