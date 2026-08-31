@@ -1,0 +1,43 @@
+# Static build of @roomy/design Storybook, served with the same minimal
+# node server pattern as app-lite (packages/app-lite/serve-static.mjs).
+# Deployed to Railway as a web service (Railway injects PORT; default 3000).
+#
+# Build from the repo root:  docker build -f Dockerfile.design-storybook -t roomy-design-storybook .
+FROM node:22 AS build
+
+# Invalidate build cache on each deploy (same trick as Dockerfile.app-lite)
+ARG CACHEBUST=0
+
+WORKDIR /project
+
+# Copy workspace manifests and patches for install
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
+COPY patches/ patches/
+COPY packages/tsconfig/package.json packages/tsconfig/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/design/package.json packages/design/package.json
+
+RUN npm i -g pnpm
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# Rebuild esbuild native binaries (skipped by --ignore-scripts, needed by Vite)
+RUN node node_modules/.pnpm/esbuild@*/node_modules/esbuild/install.js
+
+# Copy source for all required packages (sdk is a build-time dep of design:
+# type-only AsyncStateWithIdle import in ui/button + richtext/types)
+COPY packages/tsconfig/ packages/tsconfig/
+COPY packages/sdk/ packages/sdk/
+COPY packages/design/ packages/design/
+
+RUN pnpm --filter @roomy-space/sdk build
+RUN pnpm --filter @roomy/design storybook:build
+
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+COPY --from=build /project/packages/design/serve-static.mjs ./serve-static.mjs
+COPY --from=build /project/packages/design/storybook-static ./storybook-static
+
+ENV NODE_ENV=production
+EXPOSE 3000
+CMD ["node", "serve-static.mjs"]
