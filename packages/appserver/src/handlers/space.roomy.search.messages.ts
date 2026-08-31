@@ -10,15 +10,20 @@
  * `limit`, and returned ranked best-match-first.
  *
  * Supports cursor-based pagination via `limit` and `cursor` (an opaque
- * offset token). The SDK schema is unchanged — one code path serves both
- * per-space and cross-space.
+ * offset token). One code path serves both per-space and cross-space.
+ *
+ * Reply context is denormalised: each hit that carries a `replyTo` gets a
+ * `reply.message` (the fully hydrated replied-to message) attached when the
+ * target resolves and the caller can read the target's room — the client
+ * renders the preview without a getMessage fetch per hit, matching how
+ * forwards embed their originals.
  *
  * When Qdrant is not configured the endpoint returns 503 — search is
  * unavailable without the search service.
  */
 
 import { createAccessMemo, roomAccess } from "../auth/access.ts";
-import { openReadStateDb, openSpaceDb } from "../db/db.ts";
+import { openReadStateDb, openSpaceDb, openSpaceDbForEntity } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { selectJoinedSpaceDids } from "../queries/userSpaceMembership.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
@@ -37,8 +42,14 @@ import { log } from "../log.ts";
 const OVERFETCH = 3;
 
 interface SearchMessagesResult {
-  messages: Array<MessageDto & { roomId?: string; spaceId?: string }>;
+  messages: Array<MessageDto & { roomId?: string; spaceId?: string; reply?: SearchReply }>;
   cursor?: string;
+}
+
+/** Denormalised reply context attached to a search hit. */
+interface SearchReply {
+  messageId: string;
+  message?: MessageDto;
 }
 
 export const searchMessagesHandler: QueryHandler<
@@ -151,7 +162,7 @@ export const searchMessagesHandler: QueryHandler<
   // rooms may restrict access), then trim to the requested limit. Each
   // result carries the room/space it was found in so cross-space search
   // clients can show context and link to the hit.
-  const results: Array<MessageDto & { roomId?: string; spaceId?: string }> = [];
+  const results: Array<MessageDto & { roomId?: string; spaceId?: string; reply?: SearchReply }> = [];
   const memos = new Map<string, ReturnType<typeof createAccessMemo>>();
   for (const { message, roomId, spaceDid } of ranked) {
     if (results.length >= limit) break;
@@ -161,7 +172,48 @@ export const searchMessagesHandler: QueryHandler<
       memos.set(spaceDid, memo);
     }
     const acc = await roomAccess(openSpaceDb(spaceDid), roomId, userDid, memo);
-    if (acc.canRead) results.push({ ...message, roomId, spaceId: spaceDid });
+    if (!acc.canRead) continue;
+
+    const result: MessageDto & { roomId?: string; spaceId?: string; reply?: SearchReply } = {
+      ...message,
+      roomId,
+      spaceId: spaceDid,
+    };
+    // Denormalise the reply context. Only the message id rides along when
+    // the target is unresolvable or unreadable — the client renders
+    // "Reply unavailable" instead of fetching per hit.
+    if (message.replyTo) {
+      result.reply = { messageId: message.replyTo };
+      try {
+        const targetDb = await openSpaceDbForEntity(message.replyTo);
+        if (targetDb) {
+          let targetMemo = memos.get(spaceDid);
+          if (!targetMemo) {
+            targetMemo = createAccessMemo();
+            memos.set(spaceDid, targetMemo);
+          }
+          const targetRow = await targetDb
+            .query("select room from entities where id = ?")
+            .get<{ room: string | null }>(message.replyTo);
+          const targetRoom = targetRow?.room;
+          if (targetRoom) {
+            const targetAcc = await roomAccess(targetDb, targetRoom, userDid, targetMemo);
+            if (targetAcc.canRead) {
+              const { messages: targets } = await selectMessages(
+                targetDb,
+                { kind: "ids", ids: [message.replyTo] },
+                userDid ?? "",
+              );
+              const target = targets[0];
+              if (target) result.reply = { messageId: message.replyTo, message: target };
+            }
+          }
+        }
+      } catch (err) {
+        log.warn(`[search] reply denormalisation failed for ${message.replyTo}:`, err);
+      }
+    }
+    results.push(result);
   }
 
   const result: SearchMessagesResult = { messages: results };

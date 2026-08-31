@@ -172,6 +172,51 @@ async function sendMessage(
   return messageId;
 }
 
+async function sendReply(
+  ctx: E2eContext,
+  roomId: string,
+  targetId: string,
+  text: string,
+): Promise<string> {
+  const messageId = newUlid();
+  const res = await ctx.authedFetch(USER)(
+    `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        spaceId: SPACE,
+        events: [
+          {
+            id: messageId,
+            $type: "space.roomy.message.createMessage.v0",
+            room: roomId,
+            body: {
+              mimeType: "text/plain",
+              data: { $bytes: Buffer.from(text).toString("base64") },
+            },
+            extensions: {
+              "space.roomy.extension.attachments.v0": {
+                $type: "space.roomy.extension.attachments.v0",
+                attachments: [
+                  {
+                    $type: "space.roomy.attachment.reply.v0",
+                    target: targetId,
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      }),
+    },
+  );
+  if (res.status !== 200) {
+    throw new Error(`sendReply failed ${res.status}: ${await res.text()}`);
+  }
+  await flushSearchQueue();
+  return messageId;
+}
+
 async function sendRoom(ctx: E2eContext, name: string): Promise<string> {
   const roomId = newUlid();
   const res = await ctx.authedFetch(USER)(
@@ -415,8 +460,43 @@ describe("space.roomy.search.messages (Qdrant)", () => {
     expect(body.messages[0].spaceId).toBe(SPACE);
     expect(typeof body.messages[0].roomId).toBe("string");
   });
-});
 
+  test("search results carry denormalised reply context", async () => {
+    const { ctx } = await newAppWithQdrant();
+    const { roomId } = await materializeSpace(ctx, SPACE, USER, {
+      messageText: "original pineapple",
+    });
+    await flushSearchQueue();
+    const searchRes = await get(ctx, `space.roomy.search.messages?spaceId=${SPACE}&q=original`);
+    const searchBody = (await searchRes.json()) as { messages: Array<{ id: string }> };
+    const originalId = searchBody.messages[0]!.id;
+
+    // A reply carrying a reply attachment materialises a `reply` edge.
+    await sendReply(ctx, roomId, originalId, "replied pineapple");
+    await flushSearchQueue();
+
+    const res = await get(ctx, `space.roomy.search.messages?spaceId=${SPACE}&q=replied`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.messages.length).toBeGreaterThanOrEqual(1);
+    for (const m of body.messages) {
+      expect(m.reply).toBeDefined();
+      expect(typeof m.reply.messageId).toBe("string");
+      // The reply target is embedded fully hydrated — no client fetch needed.
+      expect(typeof m.reply.message?.id).toBe("string");
+      expect(m.reply.message.content).toContain("original");
+    }
+
+    // A hit with no replyTo carries no reply field.
+    const originalRes = await get(ctx, `space.roomy.search.messages?spaceId=${SPACE}&q=original`);
+    const originalBody = await originalRes.json();
+    expect(originalBody.messages.length).toBeGreaterThanOrEqual(1);
+    for (const m of originalBody.messages) {
+      expect(m.reply).toBeUndefined();
+    }
+  });
+
+});
 describe("backfill sweeper (Qdrant)", () => {
   beforeEach(() => {
     _resetQdrantClient();

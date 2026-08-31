@@ -247,6 +247,21 @@
         }
       }
     },
+    "reply": {
+      "type": "object",
+      "required": [
+        "messageId"
+      ],
+      "properties": {
+        "messageId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "ref",
+          "ref": "#message"
+        }
+      }
+    },
     "messages": {
       "type": "object",
       "required": [
@@ -316,6 +331,10 @@
         },
         "mimeType": {
           "type": "string"
+        },
+        "reply": {
+          "type": "ref",
+          "ref": "#reply"
         },
         "replyTo": {
           "type": "string"

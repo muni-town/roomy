@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { createQueries } from "@tanstack/svelte-query";
   import { cache } from "@roomy-space/sdk";
-  import { px } from "$lib/auth.svelte";
+  import { px, auth } from "$lib/auth.svelte";
   import { queryClient } from "$lib/client";
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { setSidebarContent, setSidebarHeader } from "$lib/components/layout/sidebar.svelte";
@@ -12,9 +13,22 @@
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { resolveBlobUrl } from "$lib/utils";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
+  import MessageBubble from "@roomy/design/components/content/thread/message/MessageBubble.svelte";
+  import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
+  import {
+    IconSearch,
+    IconChevronRight,
+    IconNeedleThread,
+    IconForward,
+    IconReplyLine,
+  } from "@roomy/design/icons";
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
-  import { IconSearch } from "@roomy/design/icons";
   import MessageContent from "$lib/components/chat/MessageContent.svelte";
+  import ForwardContext from "$lib/components/chat/ForwardContext.svelte";
+  import { messageContentToPlaintext } from "$lib/components/chat/messagePreview";
+  import MessageReactions from "$lib/components/chat/MessageReactions.svelte";
+  import MediaEmbed from "$lib/components/chat/embeds/MediaEmbed.svelte";
+  import LinkCard from "$lib/components/chat/embeds/LinkCard.svelte";
   import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
 
   const { queryKey } = cache;
@@ -106,6 +120,34 @@
     return map;
   });
 
+  // Room display names/kinds for the result context line: one lightweight
+  // getRoomSummary query per distinct room in the results (same pattern as
+  // the space summaries above).
+  const roomIds = $derived(
+    [...new Set(messages.map((m) => m.roomId).filter(Boolean))] as string[],
+  );
+
+  const roomSummaryQueries = createQueries(
+    () => ({
+      queries: roomIds.map((rid) => ({
+        queryKey: queryKey("space.roomy.room.getRoomSummary", { roomId: rid }),
+        queryFn: () => px().query("space.roomy.room.getRoomSummary", { roomId: rid }),
+      })),
+    }),
+    () => queryClient,
+  );
+
+  const roomSummaries = $derived.by<Map<string, { name?: string; kind?: string }>>(
+    () => {
+      const map = new Map<string, { name?: string; kind?: string }>();
+      for (let i = 0; i < roomIds.length; i++) {
+        const data = roomSummaryQueries[i]?.data;
+        if (data) map.set(roomIds[i]!, data);
+      }
+      return map;
+    },
+  );
+
   onMount(() => {
     setNavbar(exploreNavbar);
     setSidebarContent(undefined);
@@ -180,29 +222,218 @@
           {#if messages.length === 0}
             <p class="text-sm text-base-400">No messages found.</p>
           {:else}
-            <ul class="space-y-2">
+            <ul class="space-y-3">
               {#each messages as m (m.id)}
+                {@const spaceMeta = spaceNames.get(m.spaceId ?? "")}
+                {@const roomMeta = roomSummaries.get(m.roomId ?? "")}
+                {@const isForward = !!m.forwardedFrom}
+                {@const original = m.forwardedFrom?.message}
+                {@const replyPreview = m.reply?.message}
+                {@const effBridged =
+                  m.authorDid.startsWith("did:discord:") ||
+                  (original?.authorDid.startsWith("did:discord:") ?? false)}
+                {@const replyBridged = replyPreview?.authorDid.startsWith("did:discord:") ?? false}
+                {@const replyPreviewContent =
+                  replyPreview?.forwardedFrom?.message?.content ??
+                  replyPreview?.content ??
+                  ""}
+                {@const replyPreviewMime =
+                  replyPreview?.forwardedFrom?.message?.mimeType ??
+                  replyPreview?.mimeType}
                 <li>
-                  <a
-                    href={hrefFor(m)}
-                    class="block p-3 rounded-xl bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 hover:border-accent-400 dark:hover:border-accent-600 transition-colors"
+                  <!-- Results render with the same MessageBubble the chat
+                       area uses. The whole row navigates to the room; inner
+                       interactive elements (avatar, links, reactions) are
+                       skipped. -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div
+                    role="link"
+                    tabindex="0"
+                    class="rounded-xl cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent-500/60 hover:bg-base-100/50 dark:hover:bg-base-400/5"
+                    onclick={(e) => {
+                      if ((e.target as Element)?.closest?.("a,button,[role=button]")) return;
+                      goto(hrefFor(m));
+                    }}
+                    onkeydown={(e) => {
+                      if ((e.target as Element)?.closest?.("a,button,[role=button]")) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        goto(hrefFor(m));
+                      }
+                    }}
                   >
-                    <div class="flex items-center gap-2 mb-1.5">
-                      <UserAvatar
-                        src={resolveBlobUrl(m.authorAvatar)}
-                        name={m.authorDid}
-                        size={20}
-                        class="size-5 shrink-0 rounded-full"
-                      />
-                      <span class="text-sm font-medium truncate">{m.authorName ?? m.authorDid}</span>
-                      <span class="text-xs text-base-400 truncate ml-auto">
-                        {spaceNames.get(m.spaceId ?? "")?.name ?? m.spaceId}
+                    <!-- Where the result lives. Rendered above the message so
+                         the hit reads like a regular message in context. -->
+                    <div class="flex items-center gap-1 px-3 pt-1.5 pb-1 text-xs text-base-500 dark:text-base-400">
+                      <span class="inline-flex items-center gap-1 min-w-0">
+                        <SpaceAvatar
+                          src={resolveBlobUrl(spaceMeta?.avatar)}
+                          id={m.spaceId}
+                          name={spaceMeta?.name ?? m.spaceId}
+                          size={14}
+                        />
+                        <span class="truncate">{spaceMeta?.name ?? m.spaceId}</span>
+                      </span>
+                      <IconChevronRight class="opacity-40 size-3 shrink-0" />
+                      <span class="inline-flex items-center gap-1 min-w-0">
+                        {#if roomMeta?.kind === "thread"}
+                          <IconNeedleThread class="opacity-60 size-3.5 shrink-0" />
+                        {:else}
+                          <span class="opacity-60 shrink-0">#</span>
+                        {/if}
+                        <span class="truncate">{roomMeta?.name ?? m.roomId}</span>
                       </span>
                     </div>
-                    <div class="text-sm text-base-700 dark:text-base-300 line-clamp-2">
-                      <MessageContent content={m.content} mimeType={m.mimeType} />
-                    </div>
-                  </a>
+
+                    <MessageBubble
+                      authorDid={original ? original.authorDid : m.authorDid}
+                      authorName={original ? (original.authorName ?? undefined) : (m.authorName ?? undefined)}
+                      authorHandle={original ? (original.authorHandle ?? undefined) : (m.authorHandle ?? undefined)}
+                      authorAvatarUrl={original ? (original.authorAvatar ?? undefined) : (m.authorAvatar ?? undefined)}
+                      avatarSrc={original ? resolveBlobUrl(original.authorAvatar) : resolveBlobUrl(m.authorAvatar)}
+                      profileUrl={effBridged ? undefined : `/user/${original ? original.authorDid : m.authorDid}`}
+                      onAvatarClick={effBridged ? undefined : () => goto(`/user/${original ? original.authorDid : m.authorDid}`)}
+                      timestamp={new Date(original ? original.timestamp : m.timestamp)}
+                      isBridged={effBridged}
+                      isSystem={m.system === true}
+                    >
+                      {#snippet replyContext()}
+                        {#if m.forwardedFrom}
+                          <ForwardContext
+                            name={m.authorName}
+                            did={m.authorDid}
+                            avatar={m.authorAvatar}
+                            timestamp={new Date(m.timestamp)}
+                          />
+                        {:else if m.replyTo}
+                          {#if replyPreview}
+                            <div class="flex gap-1 items-center shrink-0">
+                              <IconReplyLine
+                                width="28px"
+                                height="12px"
+                                class="relative -bottom-1 ml-2 mr-1 left-0.75 stroke-black/25 dark:stroke-white/50 dark:stroke-1"
+                              />
+                              {#if replyPreview.authorAvatar || replyPreview.authorDid}
+                                {#if replyBridged}
+                                  <div class="w-4 h-4 rounded-full shrink-0">
+                                    <UserAvatar
+                                      src={resolveBlobUrl(replyPreview.authorAvatar)}
+                                      name={replyPreview.authorDid || ""}
+                                      size={16}
+                                      class="w-4 h-4"
+                                    />
+                                  </div>
+                                {:else}
+                                  <button
+                                    onclick={(e) => {
+                                      e.stopPropagation();
+                                      goto(`/user/${replyPreview.authorDid}`);
+                                    }}
+                                    class="w-4 h-4 rounded-full shrink-0 hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
+                                  >
+                                    <UserAvatar
+                                      src={resolveBlobUrl(replyPreview.authorAvatar)}
+                                      name={replyPreview.authorDid || ""}
+                                      size={16}
+                                      class="w-4 h-4"
+                                    />
+                                  </button>
+                                {/if}
+                              {/if}
+                              {#if replyBridged}
+                                <span class="font-medium text-accent-700 dark:text-accent-300">
+                                  {replyPreview.authorName || replyPreview.authorDid.slice(0, 12)}
+                                </span>
+                              {:else}
+                                <a
+                                  href={`/user/${replyPreview.authorDid}`}
+                                  class="font-medium text-accent-700 dark:text-accent-300 hover:underline"
+                                >{replyPreview.authorName || replyPreview.authorDid.slice(0, 12)}</a
+                                >
+                              {/if}
+                            </div>
+                            <div class="flex items-center gap-1 italic">
+                              {#if replyPreview.forwardedFrom}
+                                <IconForward class="size-3.5 shrink-0 text-base-500 dark:text-base-400" />
+                              {/if}
+                              <span class="line-clamp-1 overflow-hidden">
+                                {@html messageContentToPlaintext(replyPreviewContent, replyPreviewMime)}
+                              </span>
+                            </div>
+                          {:else}
+                            <span class="italic text-base-400">Reply unavailable</span>
+                          {/if}
+                        {/if}
+                      {/snippet}
+
+                      {#snippet content()}
+                        {#if isForward}
+                          {#if original}
+                            <MessageContent content={original.content} mimeType={original.mimeType} />
+                          {:else}
+                            <span class="italic text-base-400 text-sm">Original message unavailable</span>
+                          {/if}
+                        {:else}
+                          <MessageContent content={m.content} mimeType={m.mimeType} />
+                        {/if}
+                      {/snippet}
+
+                      {#snippet linkEmbeds()}
+                        {@const embeds = (isForward ? original?.linkEmbeds : m.linkEmbeds) ?? []}
+                        {#if embeds.some((l) => l.embed)}
+                          <div class="flex flex-col gap-2 mt-1">
+                            {#each embeds.filter((l) => l.embed) as link (link.url)}
+                              <LinkCard url={link.url} embed={link.embed} />
+                            {/each}
+                          </div>
+                        {/if}
+                      {/snippet}
+
+                      {#snippet media()}
+                        {@const media = (isForward ? original?.media : m.media) ?? []}
+                        {#if media.some((item) => !item.type.startsWith("text/"))}
+                          <MediaEmbed
+                            media={media
+                              .filter((item) => !item.type.startsWith("text/"))
+                              .map((item) => ({ ...item, alt: item.alt ?? undefined }))}
+                          />
+                        {/if}
+                      {/snippet}
+
+                      {#snippet reactions()}
+                        {#if m.reactions.length > 0}
+                          <MessageReactions
+                            spaceId={m.spaceId}
+                            roomId={m.roomId}
+                            messageId={m.id}
+                            reactions={m.reactions}
+                            currentUserDid={auth.userDid}
+                          />
+                        {/if}
+                      {/snippet}
+                    </MessageBubble>
+
+                    {#if isForward && m.content}
+                      <!-- The forwarder's own note, below the forwarded
+                           original — same as the chat area. -->
+                      <div class="mt-1">
+                        <MessageBubble
+                          authorDid={m.authorDid}
+                          authorName={m.authorName ?? undefined}
+                          authorHandle={m.authorHandle ?? undefined}
+                          authorAvatarUrl={m.authorAvatar ?? undefined}
+                          avatarSrc={resolveBlobUrl(m.authorAvatar)}
+                          profileUrl={m.authorDid.startsWith("did:discord:") ? undefined : `/user/${m.authorDid}`}
+                          onAvatarClick={m.authorDid.startsWith("did:discord:") ? undefined : () => goto(`/user/${m.authorDid}`)}
+                          timestamp={new Date(m.timestamp)}
+                        >
+                          {#snippet content()}
+                            <MessageContent content={m.content} mimeType={m.mimeType} />
+                          {/snippet}
+                        </MessageBubble>
+                      </div>
+                    {/if}
+                  </div>
                 </li>
               {/each}
             </ul>
