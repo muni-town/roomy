@@ -55,3 +55,6 @@ mise.toml
 dist-staging
 build-staging
 build.old
+
+# Storybook build output
+storybook-static
