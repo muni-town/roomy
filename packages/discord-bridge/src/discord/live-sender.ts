@@ -228,7 +228,16 @@ export class LiveDiscordSender implements DiscordSender {
 
 	async getParentChannelId(channelId: string): Promise<string | undefined> {
 		const channel = await this.#bot.helpers.getChannel(BigInt(channelId));
-		return channel?.parentId?.toString();
+		if (!channel) return undefined;
+		// Only threads have a parent channel for webhook message targeting.
+		// Guild text channels also carry a parentId — their category — but
+		// appending `?thread_id=` for a non-thread channel makes Discord
+		// reject the request with 400 "Unknown Channel" (10003).
+		const isThread =
+			channel.type === ChannelTypes.AnnouncementThread ||
+			channel.type === ChannelTypes.PublicThread ||
+			channel.type === ChannelTypes.PrivateThread;
+		return isThread ? channel.parentId?.toString() : undefined;
 	}
 
 	async createThread(

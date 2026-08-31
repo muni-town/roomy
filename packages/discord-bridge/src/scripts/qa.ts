@@ -66,6 +66,38 @@ async function run() {
 	await step(
 		"Delete the message in Discord. Confirm it disappears (or is marked deleted) in Roomy.",
 	);
+	await step(
+		"In Roomy, send a message in the room bridged to #qa-1. Confirm it appears in Discord " +
+			"with the Roomy author's name/avatar (webhook).",
+	);
+	await step(
+		"Edit that Roomy message (plain text). Confirm the edit appears in Discord " +
+			"(edited_timestamp set, content updated).",
+	);
+	await step(
+		"Edit the same Roomy message again, this time with rich text (bold/code block). " +
+			"Confirm the formatted content appears in Discord.",
+	);
+	await step(
+		"Delete the Roomy message. Confirm it disappears in Discord.",
+	);
+
+	section("Media");
+	await step(
+		"In Discord #qa-1, send an image with a caption. Confirm it appears in Roomy with the image.",
+	);
+	await step(
+		"In Discord #qa-1, send an image with NO caption (media-only). Confirm it appears in Roomy with the image.",
+	);
+	await step(
+		"In Discord #qa-1, send a video. Confirm it appears in Roomy with the video.",
+	);
+	await step(
+		"In Discord #qa-1, send a file (e.g. .txt). Confirm it appears in Roomy as a file attachment.",
+	);
+	await step(
+		"In Roomy, send a message with an image attachment. Confirm it appears in Discord as an image.",
+	);
 
 	section("Threads");
 	await step(

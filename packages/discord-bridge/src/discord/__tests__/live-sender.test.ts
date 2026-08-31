@@ -19,6 +19,7 @@ interface FakeBot {
 		getChannel: (channelId: bigint) => Promise<{
 			guildId?: bigint;
 			parentId?: bigint;
+			type?: number;
 		}>;
 		getMessage: (
 			channelId: bigint,
@@ -124,6 +125,7 @@ describe("LiveDiscordSender", () => {
 		bot.helpers.getChannel = async (channelId: bigint) => ({
 			guildId: channelId + 1n,
 			parentId: 800000000000000001n,
+			type: 11, // ChannelTypes.PublicThread
 		});
 
 		await s.editMessage(threadId, "123", "edited content", {
@@ -150,6 +152,7 @@ describe("LiveDiscordSender", () => {
 		bot.helpers.getChannel = async (channelId: bigint) => ({
 			guildId: channelId + 1n,
 			parentId: 800000000000000001n,
+			type: 11, // ChannelTypes.PublicThread
 		});
 
 		await s.deleteMessage(threadId, "123", { id: "wh1", token: "tok1" });
@@ -162,6 +165,44 @@ describe("LiveDiscordSender", () => {
 	test("deletes a webhook message in a channel without thread_id", async () => {
 		const bot = makeBot();
 		const s = sender(bot);
+
+		await s.deleteMessage(CHANNEL, "123", { id: "wh1", token: "tok1" });
+
+		expect(bot.calls.delete).toHaveLength(1);
+		const del = bot.calls.delete[0] as { url: string };
+		expect(del.url).toBe("/webhooks/wh1/tok1/messages/123");
+	});
+
+	test("edits a webhook message in a non-thread channel without thread_id even when it has a category parent", async () => {
+		const bot = makeBot();
+		const s = sender(bot);
+		// Guild text channels carry a parentId — their category — but are not
+		// threads. Appending `?thread_id=` for them makes Discord reject the
+		// request with 400 "Unknown Channel" (10003).
+		bot.helpers.getChannel = async (channelId: bigint) => ({
+			guildId: channelId + 1n,
+			parentId: 800000000000000001n,
+			type: 0, // ChannelTypes.GuildText
+		});
+
+		await s.editMessage(CHANNEL, "123", "edited content", {
+			id: "wh1",
+			token: "tok1",
+		});
+
+		expect(bot.calls.patch).toHaveLength(1);
+		const patch = bot.calls.patch[0] as { url: string };
+		expect(patch.url).toBe("/webhooks/wh1/tok1/messages/123");
+	});
+
+	test("deletes a webhook message in a non-thread channel without thread_id even when it has a category parent", async () => {
+		const bot = makeBot();
+		const s = sender(bot);
+		bot.helpers.getChannel = async (channelId: bigint) => ({
+			guildId: channelId + 1n,
+			parentId: 800000000000000001n,
+			type: 0, // ChannelTypes.GuildText
+		});
 
 		await s.deleteMessage(CHANNEL, "123", { id: "wh1", token: "tok1" });
 

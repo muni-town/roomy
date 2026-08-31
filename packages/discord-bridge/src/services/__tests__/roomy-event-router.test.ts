@@ -30,6 +30,7 @@ import {
 	GUILD,
 	ROOMY_CHANNEL_ULID,
 	ROOMY_MESSAGE_ULID,
+	ROOMY_THREAD_ULID,
 	SPACE_A,
 	SPACE_B,
 	USER_ID,
@@ -529,6 +530,86 @@ describe("RoomyEventRouter", () => {
 		await roomy.fireEvent(SPACE_A, patchEvent);
 
 		expect(discord.edited).toHaveLength(0);
+	});
+
+	/**
+	 * RER35: editMessage with a rich text (blocks+facets) body is decoded and
+	 * bridged to Discord as rendered Discord markdown — the same path the
+	 * app-lite composer uses when editing a richtext message (TASK-64).
+	 */
+	test("RER35: bridges a rich text editMessage to Discord", async () => {
+		const { roomy, discord, router, repo } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		await router.subscribeToSpace(SPACE_A);
+
+		const blocks = [
+			{ $type: "space.roomy.richtext.blocks#text", text: "Edited from blocks" },
+			{ $type: "space.roomy.richtext.blocks#code", text: "const y = 2;" },
+		];
+		const body = serializeBlocks(blocks);
+		const editEvent = {
+			id: newUlid(),
+			room: ROOMY_CHANNEL_ULID,
+			$type: "space.roomy.message.editMessage.v0" as const,
+			messageId: ROOMY_MESSAGE_ULID,
+			body: { mimeType: body.mimeType, data: toBytes(body.data) },
+			extensions: {},
+		} satisfies Event;
+		await roomy.fireEvent(SPACE_A, editEvent);
+
+		expect(discord.edited).toHaveLength(1);
+		expect(discord.edited[0]).toEqual({
+			channelId: DISCORD_CHANNEL_ID,
+			messageId: DISCORD_MESSAGE_ID,
+			content: "Edited from blocks\n```\nconst y = 2;\n```",
+		});
+	});
+
+	/**
+	 * RER36: editMessage for a message in a bridged thread resolves the
+	 * parent channel's webhook and edits the message in the thread channel.
+	 * Regression test for TASK-64: without the parent-channel webhook the
+	 * edit would target the wrong webhook and Discord would 404.
+	 */
+	test("RER36: bridges editMessage in a thread via the parent webhook", async () => {
+		const { roomy, discord, router, repo } = setup();
+		const THREAD_CHANNEL_ID = "900000000000000001";
+		repo.registerMapping(
+			SPACE_A,
+			"thread",
+			THREAD_CHANNEL_ID,
+			ROOMY_THREAD_ULID,
+		);
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID,
+		);
+		discord.setParentChannelId(THREAD_CHANNEL_ID, DISCORD_CHANNEL_ID);
+		await router.subscribeToSpace(SPACE_A);
+
+		const editEvent = {
+			id: newUlid(),
+			room: ROOMY_THREAD_ULID,
+			$type: "space.roomy.message.editMessage.v0" as const,
+			messageId: ROOMY_MESSAGE_ULID,
+			body: makeTextBody("Edited in thread"),
+			extensions: {},
+		} satisfies Event;
+		await roomy.fireEvent(SPACE_A, editEvent);
+
+		expect(discord.edited).toHaveLength(1);
+		expect(discord.edited[0]).toEqual({
+			channelId: THREAD_CHANNEL_ID,
+			messageId: DISCORD_MESSAGE_ID,
+			content: "Edited in thread",
+		});
 	});
 
 	/**
