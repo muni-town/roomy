@@ -18,7 +18,7 @@ The config is **baked into the image** so no Railway volume is required.
    | `GRAFANA_CLOUD_LOKI_URL` | `https://logs-prod-<region>.grafana.net/loki/api/v1/push` |
    | `GRAFANA_CLOUD_LOKI_ID` | Grafana Cloud Loki instance ID |
    | `GRAFANA_CLOUD_LOKI_TOKEN` | Grafana Cloud access policy token |
-   | `FARO_CORS_ORIGINS` | Comma-separated browser origins allowed to POST Faro telemetry (default `https://a.roomy.space`) |
+   | `FARO_CORS_ORIGINS` | Comma-separated browser origins allowed to POST Faro telemetry (default `https://roomy.space` — the SPA origin) |
    | `FARO_API_KEY` | Optional Faro API key (default unset) |
 3. **Networking → Private networking** — add this service to a private
    network so the apps can reach it by name at `alloy:3100`.
@@ -45,11 +45,11 @@ network — no stdout pipes or sidecar forwarders.
   Alloy collector.
 
 app-lite is a static SPA (no server stdout): set `PUBLIC_FARO_URL` on the
-app-lite service to the collector's Faro endpoint
-(e.g. `https://alloy.<railway-domain>.up.railway.app:12345/collect` — the
-agent appends `/collect`) and the Faro browser agent POSTs console logs +
-errors to the `faro.receiver` here. See
-`packages/app-lite/src/lib/telemetry/faro.ts`.
+app-lite service to the collector's Faro endpoint — the path must be
+included, e.g. `https://alloy.<railway-domain>.up.railway.app:12345/collect`
+(the Faro agent POSTs verbatim to the configured URL; it does NOT append
+`/collect`) and the Faro browser agent POSTs console logs + errors to the
+`faro.receiver` here. See `packages/app-lite/src/lib/telemetry/faro.ts`.
 
 ## Ports
 - `3100`  — Loki push API receiver (`loki.source.api`)

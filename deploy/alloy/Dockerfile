@@ -22,8 +22,8 @@ FROM grafana/alloy:latest
 COPY deploy/alloy/config.alloy /etc/alloy/config.alloy
 
 # Faro receiver defaults — Railway env vars override these at runtime.
-# Default origin = the production app (a.roomy.space, the SPA origin).
-ENV FARO_CORS_ORIGINS=https://a.roomy.space
+# Default origin = the production app (roomy.space, the SPA origin).
+ENV FARO_CORS_ORIGINS=https://roomy.space
 ENV FARO_API_KEY=
 
 # Alloy writes WAL/positions to disk — keep the volume small but writable.

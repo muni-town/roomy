@@ -69,7 +69,7 @@ otelcol.exporter.loki "apps" {
 //
 // Required env vars (set on Railway):
 //   - FARO_CORS_ORIGINS   comma-separated allowed browser origins, default
-//                         https://a.roomy.space (see Dockerfile ENV)
+//                         https://roomy.space (see Dockerfile ENV)
 //   - FARO_API_KEY        Faro API key, default "" (unset)
 loki.process "frontend" {
 	forward_to = [loki.write.cloud.receiver]
