@@ -247,6 +247,11 @@ async function handleCreateMessage(
   signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));
   signals.push(invalidate("space.roomy.room.getThreads", { roomId }));
 
+  // The space index board (space.getThreads) re-orders on new activity
+  // (latest timestamp per room) and gains/clears unread dots for every
+  // subscriber — broadcast, not caller-scoped.
+  signals.push(invalidate("space.roomy.space.getThreads", { spaceId }));
+
   // A message in a thread may update the author's `activeThreads` in the
   // space sidebar. The `roomMetadataDiff` only patches `unreadCount`, not
   // `activeThreads`, so invalidate `space.getMetadata` for the author only.
@@ -301,8 +306,12 @@ async function handleEditMessage(
     );
   }
   // Edit doesn't change unread count, but room metadata's recentThreads
-  // might reference this message's activity.
+  // might reference this message's activity, and the space index board
+  // shows the edited message as its latest activity.
   signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));
+  signals.push(
+    invalidate("space.roomy.space.getThreads", { spaceId: event.streamDid }),
+  );
 
   return signals;
 }
@@ -330,6 +339,9 @@ async function handleDeleteMessage(
       },
     },
     ...invalidateRoom(roomId, event.streamDid),
+    // The space index board (space.getThreads) may drop this room or reorder
+    // it when its latest message is deleted — broadcast invalidation.
+    invalidate("space.roomy.space.getThreads", { spaceId: event.streamDid }),
   ];
 
   // Emit `remove` mention ops for every DID the deleted message mentioned,

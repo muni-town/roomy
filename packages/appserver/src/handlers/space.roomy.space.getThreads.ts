@@ -1,9 +1,10 @@
 /**
  * XRPC: space.roomy.space.getThreads (query).
  *
- * Returns threads in a space for the board/index view, filtered by the
- * caller's read access (a thread is hidden when its parent channel is
- * unreadable to the caller).
+ * Returns all rooms (channels + threads) in a space for the index board,
+ * ordered by latest activity, filtered by the caller's read access (a room
+ * is hidden when it is unreadable to the caller; threads inherit access
+ * from their canonical parent channel).
  *
  * Supports cursor-based pagination via `limit` and `cursor` params.
  */
@@ -17,13 +18,20 @@ import { parseUserDid, requireSpaceRead } from "../xrpc/authGuards.ts";
 import { optionalInt, optionalString, requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
-interface ThreadRow {
+interface RoomRow {
   id: string;
+  kind: "thread" | "channel";
   name?: string;
+  /** Parent channel ID (threads only). */
   channel?: string;
+  /** Parent channel name (threads only). */
   channelName?: string;
   unreadCount: number;
-  /** Honest unread flag: has messages and (unreadCount > 0 or not engaged). */
+  /**
+   * Honest unread flag for the board: has messages and (unreadCount > 0 or,
+   * for threads, not engaged). Channels use plain unreadCount > 0, matching
+   * the sidebar's per-channel unread counts.
+   */
   unread: boolean;
   activity: {
     latestTimestamp?: string;
@@ -46,7 +54,7 @@ interface ThreadRow {
 }
 
 interface GetThreadsResult {
-  threads: ThreadRow[];
+  rooms: RoomRow[];
   cursor?: string;
 }
 
@@ -66,25 +74,33 @@ export const getSpaceThreadsHandler: QueryHandler<
 
   const db = openSpaceDb(spaceId);
   const mainDb = openReadStateDb();
-  // Per-request memo: every thread in this space shares the same
-  // space-level membership/admin/ban flags — without the memo, each
-  // thread's roomAccess call re-queries them (~5 queries × N threads).
+  // Per-request memo: every room in this space shares the same space-level
+  // membership/admin/ban flags — without the memo, each roomAccess call
+  // re-queries them (~5 queries × N rooms).
   const memo = createAccessMemo();
   await requireSpaceRead(db, spaceId, userDid, memo);
 
-  const { threads: all, cursor: nextCursor } = await listThreadActivity(db, { kind: "space", spaceId }, limit, cursor, search);
+  // The index board shows channels AND threads, ordered by activity.
+  const { threads: all, cursor: nextCursor } = await listThreadActivity(
+    db,
+    { kind: "space", spaceId },
+    limit,
+    cursor,
+    search,
+    { kinds: ["thread", "channel"] },
+  );
 
-  // Collect all thread IDs for batch unread lookup
-  const threadIds = all.map((t) => t.id);
-  const readPositions = auth.did ? await getReadPositions(mainDb, auth.did, threadIds) : new Map();
+  // Collect all room IDs for batch unread lookup.
+  const roomIds = all.map((t) => t.id);
+  const readPositions = auth.did ? await getReadPositions(mainDb, auth.did, roomIds) : new Map();
   // Threads the user has never engaged with have no read_positions row of
-  // their own — they read as unread in the threads view even though their
+  // their own — they read as unread in the board even though their
   // unreadCount is 0 (the honest view of what you have and haven't read).
   const engagedThreadIds = auth.did
-    ? await getEngagedThreadIds(mainDb, auth.did, threadIds)
+    ? await getEngagedThreadIds(mainDb, auth.did, roomIds)
     : new Set<string>();
 
-  // Batch-fetch channel names for all canonical parents
+  // Batch-fetch channel names for all canonical parents.
   const parentIds = [...new Set(all.map((t) => t.canonicalParent).filter(Boolean))] as string[];
   const channelNames = new Map<string, string>();
   if (parentIds.length > 0) {
@@ -102,7 +118,7 @@ export const getSpaceThreadsHandler: QueryHandler<
     }
   }
 
-  const threads: ThreadRow[] = [];
+  const rooms: RoomRow[] = [];
   for (const t of all) {
     // Thread visibility hangs off the canonical parent channel — re-use
     // the auth unit to compute it. (The thread itself inherits via 'link',
@@ -115,7 +131,7 @@ export const getSpaceThreadsHandler: QueryHandler<
       name: m.name,
       avatar: m.avatar,
     }));
-    const activity: ThreadRow["activity"] = {
+    const activity: RoomRow["activity"] = {
       latestMembers: members,
     };
     if (t.latestTimestamp != null) activity.latestTimestamp = t.latestTimestamp;
@@ -135,22 +151,26 @@ export const getSpaceThreadsHandler: QueryHandler<
 
     const pos = readPositions.get(t.id);
     const unreadCount = pos?.unreadCount ?? 0;
-    const thread: ThreadRow = {
+    const isThread = t.kind === "thread";
+    const room: RoomRow = {
       id: t.id,
+      kind: t.kind,
       activity,
       unreadCount,
-      unread: t.latestTimestamp != null && (unreadCount > 0 || !engagedThreadIds.has(t.id)),
+      // Channels: plain unreadCount > 0 (matches the sidebar). Threads:
+      // honest flag — unread unless read and engaged.
+      unread: t.latestTimestamp != null && (unreadCount > 0 || (isThread && !engagedThreadIds.has(t.id))),
     };
-    if (t.name != null) thread.name = t.name;
-    if (t.canonicalParent != null) {
-      thread.channel = t.canonicalParent;
+    if (t.name != null) room.name = t.name;
+    if (isThread && t.canonicalParent != null) {
+      room.channel = t.canonicalParent;
       const cn = channelNames.get(t.canonicalParent);
-      if (cn != null) thread.channelName = cn;
+      if (cn != null) room.channelName = cn;
     }
-    threads.push(thread);
+    rooms.push(room);
   }
 
-  const result: GetThreadsResult = { threads };
+  const result: GetThreadsResult = { rooms };
   if (nextCursor) result.cursor = nextCursor;
   return result;
 };

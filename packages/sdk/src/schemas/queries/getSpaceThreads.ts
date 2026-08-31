@@ -1,6 +1,10 @@
 /**
  * Schema for `space.roomy.space.getThreads` (query).
  * Source of truth: packages/appserver/src/handlers/space.roomy.space.getThreads.ts
+ *
+ * Despite the NSID, this powers the space index board and returns ALL rooms
+ * (channels + threads), not just threads. The name is historical; the NSID
+ * is part of the OAuth consent scope and invalidation wiring, so it stays.
  */
 import { type } from "arktype";
 
@@ -10,7 +14,7 @@ export const Params = type({
   spaceId: "string",
   "limit?": "string",
   "cursor?": "string",
-  /** Optional case-insensitive substring filter on thread name. */
+  /** Optional case-insensitive substring filter on room name. */
   "search?": "string",
 });
 
@@ -34,23 +38,27 @@ export const ThreadActivity = type({
   "latestMessage?": ThreadMessage,
 });
 
-export const Thread = type({
+export const Room = type({
   id: "string",
+  /** `thread` (canonically linked from a channel) or `channel`. */
+  kind: "'thread' | 'channel'",
   "name?": "string",
+  /** Parent channel ID (threads only). */
   "channel?": "string",
+  /** Parent channel name (threads only). */
   "channelName?": "string",
   "unreadCount?": "number",
   /**
-   * Honest unread flag for the threads view: true when the thread has
-   * messages the user hasn't read, including threads they haven't engaged
-   * with (no read_positions row). UI badges only count engaged threads;
-   * this field is what the threads view renders.
+   * Honest unread flag for the board: true when the room has messages the
+   * user hasn't read. For threads this includes never-engaged threads (no
+   * read_positions row yet); for channels it's `unreadCount > 0`, matching
+   * the sidebar's per-channel unread counts.
    */
   "unread?": "boolean",
   activity: ThreadActivity,
 });
 
 export const Response = type({
-  threads: Thread.array(),
+  rooms: Room.array(),
   "cursor?": "string",
 });

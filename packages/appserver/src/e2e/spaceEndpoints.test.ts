@@ -59,14 +59,14 @@ describe("space.roomy.space.getMetadata (materialized)", () => {
 });
 
 describe("space.roomy.space.getThreads (materialized)", () => {
-  test("returns 200 with threads array", async () => {
+  test("returns 200 with rooms array", async () => {
     const ctx = await startAppserver();
     await materializeSpace(ctx, SPACE, USER);
 
     const res = await get(ctx, `space.roomy.space.getThreads?spaceId=${SPACE}`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(Array.isArray(body.threads)).toBe(true);
+    expect(Array.isArray(body.rooms)).toBe(true);
   });
 });
 

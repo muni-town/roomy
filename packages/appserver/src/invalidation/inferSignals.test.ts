@@ -204,6 +204,7 @@ describe("inferSignals: message events", () => {
     // (author's activeThreads). The getSpaces broadcast is gone — the
     // roomMetadataDiff handles the unread-count patch instead.
     const nsids = invalidatedNsids(signals);
+    expect(nsids).toContain("space.roomy.space.getThreads");
     expect(nsids).toContain("space.roomy.room.getMetadata");
     expect(nsids).toContain("space.roomy.room.getThreads");
     expect(nsids).toContain("space.roomy.space.getMetadata");
@@ -383,7 +384,9 @@ describe("inferSignals: message events", () => {
 
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMetadata");
-    // editMessage should NOT invalidate space-level queries (no unread change).
+    // An edit can change the latest-message preview on the space index board.
+    expect(nsids).toContain("space.roomy.space.getThreads");
+    // editMessage should NOT invalidate space metadata (no unread change).
     expect(nsids).not.toContain("space.roomy.space.getMetadata");
   });
 
@@ -408,10 +411,11 @@ describe("inferSignals: message events", () => {
       expect(diff!.signal.ops[0]).toEqual({ op: "remove", key: MESSAGE_ID });
       expect(diff!.signal.ops[0]!.key).not.toBe(DELETE_EVENT_ID);
     }
-
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.room.getMetadata");
     expect(nsids).toContain("space.roomy.space.getMetadata");
+    // Deleting a room's latest message can reorder/drop it on the index board.
+    expect(nsids).toContain("space.roomy.space.getThreads");
   });
 });
 

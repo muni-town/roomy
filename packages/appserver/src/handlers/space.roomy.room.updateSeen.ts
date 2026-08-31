@@ -160,6 +160,16 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
           affectedUser: userDid,
         },
       },
+      // Reading a room clears its unread dot on the space index board
+      // (space.getThreads), scoped to the reader.
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getThreads" as QueryNsid,
+          params: { spaceId: access.spaceId },
+          affectedUser: userDid,
+        },
+      },
       {
         kind: "queryInvalidation",
         signal: {

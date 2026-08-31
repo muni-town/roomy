@@ -4,7 +4,7 @@ import { px } from "$lib/auth.svelte";
 
 const { queryKey } = cache;
 
-export type SpaceThread = typeof schemas.queries.getSpaceThreads.Thread.infer;
+export type SpaceRoom = typeof schemas.queries.getSpaceThreads.Room.infer;
 export type RoomThread = typeof schemas.queries.getRoomThreads.RoomThread.infer;
 
 const DEFAULT_LIMIT = 20;

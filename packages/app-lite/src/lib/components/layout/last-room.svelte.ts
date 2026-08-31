@@ -2,44 +2,36 @@
  * A navigation destination within a space.
  *
  * - `{ kind: "room", id }` — a specific channel or thread
- * - `{ kind: "index" }` — the space home page (Feed / Threads)
+ * - `{ kind: "index" }` — the space home page (threads view)
  * - Future: `{ kind: "settings" }`, `{ kind: "members" }`, etc.
  */
 export type Destination =
   | { kind: "room"; id: string }
   | { kind: "index" };
 
-/** The view mode for pages that have a chat/feed vs threads toggle. */
-export type ViewMode = "chat" | "threads";
-
-export interface SpaceNavigationState {
-  destination: Destination;
-  viewMode: ViewMode;
-}
-
 /**
- * Reactive state for per-space navigation preferences.
+ * Reactive store of the last destination per space.
  *
- * Stores a single `SpaceNavigationState` per space, combining:
- * - `destination` — where to redirect when switching to this space
- *   (a room, the index, or future special pages)
- * - `viewMode` — whether the user was in chat/feed or threads view
- *   (shared between the space index and channel pages)
+ * Stores where the user was in each space so the server bar and space
+ * switcher can redirect back there when re-entering the space.
  *
- * Updated by the [room] page, [space] index page, and future special pages.
- * Read by the server bar when navigating to a space, and by both pages
- * on mount to restore the previous view mode.
+ * Updated by the [room] page and [space] index page, and future special pages.
+ * Read by the server bar / sidebar when navigating to a space.
+ *
+ * The channel/threads tab is deliberately NOT stored here: it is per-entry
+ * state (a channel always opens in Chat view), so it never crosses rooms or
+ * page loads.
  */
 
-const stateBySpace = $state(new Map<string, SpaceNavigationState>());
+const destinationBySpace = $state(new Map<string, Destination>());
 
 export const spaceNavigation = {
-  /** Get the stored navigation state for a space, if any. */
-  get(spaceId: string): SpaceNavigationState | undefined {
-    return stateBySpace.get(spaceId);
+  /** Get the stored destination for a space, if any. */
+  get(spaceId: string): Destination | undefined {
+    return destinationBySpace.get(spaceId);
   },
-  /** Set the stored navigation state for a space. */
-  set(spaceId: string, state: SpaceNavigationState) {
-    stateBySpace.set(spaceId, state);
+  /** Set the stored destination for a space. */
+  set(spaceId: string, destination: Destination) {
+    destinationBySpace.set(spaceId, destination);
   },
 };

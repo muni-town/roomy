@@ -38,13 +38,15 @@ export interface ThreadMessage {
 
 export interface ThreadActivity {
   id: string;
+  /** `thread` (canonically linked from a channel) or `channel`. */
+  kind: "thread" | "channel";
   name: string | null;
   /** Canonical parent channel ID (head of the canonical 'link' edge), null if none. */
   canonicalParent: string | null;
-  /** Latest message timestamp in this thread (ISO string), null if no messages. */
+  /** Latest message timestamp in this room (ISO string), null if no messages. */
   latestTimestamp: string | null;
   latestMembers: ThreadMember[];
-  /** The most recent message in this thread, null if no messages. */
+  /** The most recent message in this room, null if no messages. */
   latestMessage: ThreadMessage | null;
 }
 
@@ -52,17 +54,25 @@ export type ThreadScope =
   | { kind: "space"; spaceId: string }
   | { kind: "channel"; channelId: string };
 
+export interface ListActivityOptions {
+  /** Room kinds to include (defaults to `["thread"]`). */
+  kinds?: Array<"thread" | "channel">;
+}
+
 /**
- * Threads visible in this scope, with activity metadata.
+ * Rooms visible in this scope with activity metadata.
+ *
+ * Space scope can include channels via `opts.kinds` (the space index board);
+ * channel scope is always threads. Each row carries its `kind`.
  *
  * Supports cursor-based pagination via the `activity_item` table's
  * `last_activity_at` column. Cursor format: `"<last_activity_at>::<room_id>"`.
- * Returns at most `limit` threads (default 50), plus a `cursor` for the next
+ * Returns at most `limit` rooms (default 50), plus a `cursor` for the next
  * page (null when there are no more results).
  *
- * Threads with no messages (no `activity_item` row) get sort key 0, so they
- * sort last (after all active threads) and don't block pagination past active
- * threads.
+ * Rooms with no messages (no `activity_item` row) get sort key 0, so they
+ * sort last (after all active rooms) and don't block pagination past active
+ * rooms.
  *
  * The caller is responsible for filtering by read access — this helper does
  * not check permissions.
@@ -73,10 +83,11 @@ export async function listThreadActivity(
   limit = 50,
   cursor?: string | null,
   search?: string | null,
+  opts: ListActivityOptions = {},
 ): Promise<{ threads: ThreadActivity[]; cursor: string | null }> {
-  // Step 1: select the candidate threads in scope, with cursor pagination.
+  // Step 1: select the candidate rooms in scope, with cursor pagination.
   // LEFT JOIN activity_item so we can order/filter by last_activity_at even
-  // for threads with no messages (they get NULL -> COALESCE to 0).
+  // for rooms with no messages (they get NULL -> COALESCE to 0).
   let cursorTs: number | null = null;
   let cursorId: string | null = null;
   if (cursor) {
@@ -86,6 +97,9 @@ export async function listThreadActivity(
       cursorId = cursor.slice(sepIdx + 2);
     }
   }
+
+  const kinds = opts.kinds ?? ["thread"];
+  if (kinds.length === 0) return { threads: [], cursor: null };
 
   const conditions: string[] = [];
   const params: (string | number)[] = [];
@@ -97,10 +111,13 @@ export async function listThreadActivity(
     conditions.push("link_e.head = ?");
     params.push(scope.channelId);
   }
-  conditions.push("cr.label = 'space.roomy.thread'");
+  conditions.push(`cr.label in (${kinds.map(() => "?").join(",")})`);
+  params.push(
+    ...kinds.map((k) => (k === "thread" ? "space.roomy.thread" : "space.roomy.channel")),
+  );
   conditions.push("coalesce(cr.deleted, 0) = 0");
 
-  // Optional case-insensitive substring filter on thread name. Applied in
+  // Optional case-insensitive substring filter on room name. Applied in
   // SQL (not JS) so cursor pagination stays correct — filtering after the
   // page fetch would skip matches and misalign the cursor.
   if (search && search.trim() !== "") {
@@ -124,7 +141,7 @@ export async function listThreadActivity(
 
   const threads = await db
     .query(
-      `select e.id as id, ci.name as name,
+      `select e.id as id, ci.name as name, cr.label as label,
               coalesce(ai.last_activity_at, 0) as sort_key
          from entities e
          join comp_room cr on cr.entity = e.id
@@ -135,7 +152,7 @@ export async function listThreadActivity(
         order by sort_key desc, e.id asc
         limit ?`,
     )
-    .all<{ id: string; name: string | null; sort_key: number }>([...params, limit + 1]);
+    .all<{ id: string; name: string | null; label: string | null; sort_key: number }>([...params, limit + 1]);
 
   if (threads.length === 0) return { threads: [], cursor: null };
 
@@ -313,6 +330,7 @@ export async function listThreadActivity(
 
     return {
       id: t.id,
+      kind: t.label === "space.roomy.channel" ? "channel" : "thread",
       name: t.name,
       canonicalParent: parent ?? null,
       latestTimestamp: latest

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { createSpaceThreadsQuery } from "$lib/queries/threads";
+  import { createSpaceThreadsQuery, type SpaceRoom } from "$lib/queries/threads";
   import BoardViewShell from "@roomy/design/components/content/thread/boardView/BoardView.svelte";
   import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
@@ -9,8 +9,8 @@
 
   let { spaceId }: { spaceId: string } = $props();
 
-  // Debounced search input: filters threads by name server-side (SQLite LIKE
-  // on the thread name). 200ms matches the mention typeahead debounce.
+  // Debounced search input: filters rooms by name server-side (SQLite LIKE
+  // on the room name). 200ms matches the mention typeahead debounce.
   // NOTE: the input value must be read synchronously inside the effect —
   // Svelte 5 effects only track reads that happen during the effect run, so
   // reading it inside the setTimeout callback would never re-trigger.
@@ -24,67 +24,58 @@
     return () => clearTimeout(timer);
   });
 
-  const threadsQuery = createSpaceThreadsQuery(() => spaceId, () => searchTerm);
+  const roomsQuery = createSpaceThreadsQuery(() => spaceId, () => searchTerm);
 
-  // Flatten all pages into a single array.
-  let threads = $derived<ThreadInfo[]>(
-    (threadsQuery.data?.pages.flatMap((p) => p.threads) ?? []).map(mapThread),
+  // Flatten all pages into a single array. The space index board shows
+  // channels AND threads, ordered by latest activity.
+  let rooms = $derived<ThreadInfo[]>(
+    (roomsQuery.data?.pages.flatMap((p) => p.rooms) ?? []).map(mapRoom),
   );
 
-  let hasMore = $derived(threadsQuery.hasNextPage ?? false);
+  let hasMore = $derived(roomsQuery.hasNextPage ?? false);
 
   function loadMore() {
-    threadsQuery.fetchNextPage();
+    roomsQuery.fetchNextPage();
   }
 
-  function mapThread(t: {
-    id: string;
-    name?: string;
-    channelName?: string;
-    canonicalParent?: string;
-    unreadCount?: number;
-    unread?: boolean;
-    activity: {
-      latestTimestamp?: string;
-      latestMembers: Array<{ did: string; name?: string | null; avatar?: string | null }>;
-    };
-  }): ThreadInfo {
+  function mapRoom(r: SpaceRoom): ThreadInfo {
     return {
-      id: t.id,
-      name: t.name ?? "Unnamed Thread",
-      kind: "space.roomy.thread",
-      channelName: t.channelName,
-      canonicalParent: t.canonicalParent,
-      // Honest unread: the server marks threads with messages the user
-      // hasn't read, including threads they've never engaged with.
-      unread: t.unread ?? (t.unreadCount ?? 0) > 0,
+      id: r.id,
+      name: r.name ?? "Unnamed Thread",
+      kind: r.kind === "channel" ? "space.roomy.channel" : "space.roomy.thread",
+      channelName: r.channelName,
+      canonicalParent: r.channel,
+      // Honest unread: the server marks a room unread when it has messages
+      // the user hasn't read (threads this user never engaged with count
+      // as unread; channels follow the sidebar's unreadCount).
+      unread: r.unread ?? (r.unreadCount ?? 0) > 0,
       activity: {
-        members: t.activity.latestMembers.map((m) => ({
+        members: r.activity.latestMembers.map((m) => ({
           id: m.did,
           name: m.name ?? null,
           avatar: resolveBlobUrl(m.avatar ?? undefined) ?? null,
         })),
-        latestTimestamp: t.activity.latestTimestamp
-          ? new Date(t.activity.latestTimestamp).getTime()
+        latestTimestamp: r.activity.latestTimestamp
+          ? new Date(r.activity.latestTimestamp).getTime()
           : 0,
       },
     };
   }
 
-  function hrefFor(thread: ThreadInfo): string {
-    const parentParam = thread.canonicalParent
-      ? "?parent=" + thread.canonicalParent
+  function hrefFor(room: ThreadInfo): string {
+    const parentParam = room.canonicalParent
+      ? "?parent=" + room.canonicalParent
       : "";
-    return `/${page.params.space}/${thread.id}${parentParam}`;
+    return `/${page.params.space}/${room.id}${parentParam}`;
   }
 </script>
 
-{#if threadsQuery.isPending && !threadsQuery.data}
+{#if roomsQuery.isPending && !roomsQuery.data}
   <div class="h-full w-full flex items-center justify-center">
-    <div class="text-sm text-base-400 p-2">Loading threads…</div>
+    <div class="text-sm text-base-400 p-2">Loading…</div>
   </div>
-{:else if threadsQuery.isError && !threadsQuery.data}
-  <ErrorMessage message={threadsQuery.error.message} class="h-full w-full justify-center" />
+{:else if roomsQuery.isError && !roomsQuery.data}
+  <ErrorMessage message={roomsQuery.error.message} class="h-full w-full justify-center" />
 {:else}
   <div class="flex flex-col h-full min-h-0">
     <div class="shrink-0 px-3 pt-2">
@@ -93,13 +84,13 @@
         <input
           type="text"
           bind:value={searchInput}
-          placeholder="Search threads…"
+          placeholder="Search rooms…"
           class="w-full ring-1 ring-inset ring-base-300 dark:ring-base-700 focus:ring-2 focus:ring-accent-500 bg-base-100 dark:bg-base-800/50 focus:bg-accent-400/5 dark:focus:bg-accent-600/5 text-base-900 dark:text-base-100 placeholder:text-base-400 dark:placeholder:text-base-500 rounded-2xl pl-9 pr-3 py-1.5 text-sm font-medium outline-none border-0 transition-colors"
         />
       </div>
     </div>
     <div class="flex-1 min-h-0">
-      <BoardViewShell {threads} emptyMessage={searchTerm ? "No matching threads" : "No threads yet"} {hrefFor} {loadMore} {hasMore} />
+      <BoardViewShell threads={rooms} emptyMessage={searchTerm ? "No matching rooms" : "No activity yet"} {hrefFor} {loadMore} {hasMore} />
     </div>
   </div>
 {/if}

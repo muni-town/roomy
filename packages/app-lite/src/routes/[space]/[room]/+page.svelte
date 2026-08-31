@@ -156,26 +156,25 @@
   });
 
   // ── Tab state ─────────────────────────────────────────────────────────────
+  // The Chat/Threads tab is per-entry state: it starts in Chat on every room
+  // visit, so navigating from a channel in Threads view to another channel
+  // always lands in Chat.
   const channelTabList = ["Chat", "Threads"] as const;
-  let channelActiveTab = $state<(typeof channelTabList)[number]>(
-    spaceNavigation.get(spaceId)?.viewMode === "threads" ? "Threads" : "Chat",
-  );
+  let channelActiveTab = $state<(typeof channelTabList)[number]>("Chat");
 
-  // Re-sync from stored state when spaceId changes (component reuse across
-  // spaces — SvelteKit reuses the same page component for the same route
-  // pattern, so $state() only initializes once).
+  // Reset to Chat whenever the room changes. Navigating between rooms reuses
+  // this page component (same route pattern), so without this the tab would
+  // carry over from the previous room. Declared before the hash effect below
+  // so an explicit URL hash (ToggleTabs navigation, back/forward) wins.
   $effect(() => {
-    const sid = spaceId;
-    untrack(() => {
-      const stored = spaceNavigation.get(sid)?.viewMode;
-      channelActiveTab = stored === "threads" ? "Threads" : "Chat";
-    });
+    void roomId; // track room changes
+    channelActiveTab = "Chat";
   });
 
   // Sync tab state from URL hash — clicking a toggle tab navigates to the hash,
   // which gives the user working browser back/forward between views.
   // Only reacts when a hash is present; on initial load with no hash the
-  // stored view mode (or default "Chat") is preserved.
+  // default "Chat" is preserved.
   $effect(() => {
     if (page.url.hash === "#chat") {
       channelActiveTab = "Chat";
@@ -184,13 +183,10 @@
     }
   });
 
-  // Persist the active tab as a shared view mode ("chat" / "threads") so the
-  // space index page can pick it up and vice versa.
+  // Remember the last room in this space so the server bar and space switcher
+  // can redirect back to it when re-entering the space.
   $effect(() => {
-    spaceNavigation.set(spaceId, {
-      destination: { kind: "room", id: roomId },
-      viewMode: channelActiveTab === "Threads" ? "threads" : "chat",
-    });
+    spaceNavigation.set(spaceId, { kind: "room", id: roomId });
   });
 
 

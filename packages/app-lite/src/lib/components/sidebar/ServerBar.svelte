@@ -41,9 +41,9 @@
   const onExplore = $derived(page.url.pathname === "/explore");
 
   function navigateToSpace(spaceId: string) {
-    const state = spaceNavigation.get(spaceId);
-    if (state?.destination.kind === "room") {
-      goto(`/${spaceId}/${state.destination.id}`);
+    const destination = spaceNavigation.get(spaceId);
+    if (destination?.kind === "room") {
+      goto(`/${spaceId}/${destination.id}`);
     } else {
       goto(`/${spaceId}`);
     }

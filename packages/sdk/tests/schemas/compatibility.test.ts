@@ -74,10 +74,18 @@ describe("schemas/queries", () => {
 
   it("getSpaceThreads parses a response with null timestamp", () => {
     const ex = {
-      threads: [
+      rooms: [
         {
           id: "01T0000000000000000000000X",
+          kind: "thread",
           channel: "01CH00000000000000000000X0",
+          activity: {
+            latestMembers: [],
+          },
+        },
+        {
+          id: "01C0000000000000000000000X",
+          kind: "channel",
           activity: {
             latestMembers: [],
           },

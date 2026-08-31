@@ -89,11 +89,12 @@
         }
       }
     },
-    "threads": {
+    "rooms": {
       "type": "object",
       "required": [
         "activity",
-        "id"
+        "id",
+        "kind"
       ],
       "properties": {
         "activity": {
@@ -102,6 +103,13 @@
         },
         "id": {
           "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "knownValues": [
+            "channel",
+            "thread"
+          ]
         },
         "channel": {
           "type": "string"
@@ -147,14 +155,14 @@
         "schema": {
           "type": "object",
           "required": [
-            "threads"
+            "rooms"
           ],
           "properties": {
-            "threads": {
+            "rooms": {
               "type": "array",
               "items": {
                 "type": "ref",
-                "ref": "#threads"
+                "ref": "#rooms"
               }
             },
             "cursor": {

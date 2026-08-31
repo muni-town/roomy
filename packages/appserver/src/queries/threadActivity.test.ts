@@ -177,6 +177,60 @@ describe("threadActivity", () => {
     const { threads: result } = await listThreadActivity(asyncDb, { kind: "space", spaceId: SPACE })
     expect(result.map((t) => t.id)).toEqual([THREAD_B, THREAD_C, THREAD_A]);
     expect(result[0]!.latestTimestamp).toBe(new Date(3000).toISOString());
+    // Default kinds is threads-only — every row must be a thread.
+    expect(result.every((t) => t.kind === "thread")).toBe(true);
+  });
+
+  test("space scope with kinds including channels returns channels + threads", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+
+    // Channel activity: messages in CHANNEL (ts 1000) and OTHER_CHANNEL (ts 4000).
+    postMessage(db, CHANNEL, ALICE, 1000, "hello in channel");
+    postMessage(db, OTHER_CHANNEL, BOB, 4000, "newer channel msg");
+    postMessage(db, THREAD_A, CAROL, 2000);
+    postMessage(db, THREAD_B, DAVE, 3000);
+
+    const { threads: result } = await listThreadActivity(
+      asyncDb,
+      { kind: "space", spaceId: SPACE },
+      50,
+      null,
+      null,
+      { kinds: ["thread", "channel"] },
+    );
+
+    // Newest first: OTHER_CHANNEL(4000), THREAD_B(3000), THREAD_A(2000),
+    // CHANNEL(1000), then THREAD_C (no activity, sort key 0).
+    expect(result.map((t) => t.id)).toEqual([OTHER_CHANNEL, THREAD_B, THREAD_A, CHANNEL, THREAD_C]);
+    const channel = result.find((t) => t.id === CHANNEL)!;
+    expect(channel.kind).toBe("channel");
+    expect(channel.latestTimestamp).toBe(new Date(1000).toISOString());
+    expect(channel.latestMessage!.content).toBe("hello in channel");
+    const threadB = result.find((t) => t.id === THREAD_B)!;
+    expect(threadB.kind).toBe("thread");
+    // Channels have no canonical parent.
+    expect(channel.canonicalParent).toBeNull();
+  });
+
+  test("channel scope stays threads-only even when kinds include channels", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+
+    postMessage(db, CHANNEL, ALICE, 1000, "channel msg");
+    postMessage(db, THREAD_A, BOB, 2000);
+    postMessage(db, THREAD_B, CAROL, 3000);
+
+    const { threads: result } = await listThreadActivity(
+      asyncDb,
+      { kind: "channel", channelId: CHANNEL },
+      50,
+      null,
+      null,
+      { kinds: ["thread", "channel"] },
+    );
+    expect(result.map((t) => t.id)).toEqual([THREAD_B, THREAD_A]);
+    expect(result.every((t) => t.kind === "thread")).toBe(true);
   });
 
   test("channel scope filters to threads canonically linked from that channel", async () => {

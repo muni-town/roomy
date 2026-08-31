@@ -51,7 +51,7 @@
     settingsBar.expanded = false;
     const sid = currentSpaceId;
     if (!sid) return;
-    const destination = spaceNavigation.get(sid)?.destination;
+    const destination = spaceNavigation.get(sid);
     const target =
       destination?.kind === "room"
         ? `/${sid}/${destination.id}`

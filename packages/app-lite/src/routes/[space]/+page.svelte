@@ -1,86 +1,17 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
   import { page } from "$app/state";
-  import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
-  import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
-  import ActivityFeed from "$lib/components/feed/ActivityFeed.svelte";
   import ThreadsTab from "$lib/components/thread/ThreadsTab.svelte";
-  import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
 
   const spaceId = $derived(page.params.space!);
 
-  const spaceMetaQuery = createSpaceMetadataQuery(() => spaceId);
-
-  // Feed badge: channels with unreads. Threads badge: engaged threads with
-  // unreads. Both come from space.getMetadata (the sidebar query the layout
-  // already fetches, so this is a cache hit).
-  const unreadRoomCount = $derived(spaceMetaQuery.data?.unreadRoomCount ?? 0);
-  const unreadThreadCount = $derived(spaceMetaQuery.data?.unreadThreadCount ?? 0);
-
-  let activeTab = $state(
-    spaceNavigation.get(spaceId)?.viewMode === "threads" ? "Threads" : "Feed",
-  );
-
-  // Re-sync from stored state when spaceId changes (component reuse across
-  // spaces — SvelteKit reuses the same page component for the same route
-  // pattern, so $state() only initializes once).
+  // Visiting the index resets the stored destination so re-entering the space
+  // from the server bar / space switcher lands here rather than the last room.
   $effect(() => {
-    const sid = spaceId;
-    untrack(() => {
-      const stored = spaceNavigation.get(sid)?.viewMode;
-      activeTab = stored === "threads" ? "Threads" : "Feed";
-    });
-  });
-
-  // Sync tab state from URL hash — clicking a toggle tab navigates to the hash,
-  // which gives the user working browser back/forward between views.
-  // Only reacts when a hash is present; on initial load with no hash the
-  // stored state (or default "Feed") is preserved.
-  $effect(() => {
-    if (page.url.hash === "#feed") {
-      activeTab = "Feed";
-    } else if (page.url.hash === "#threads") {
-      activeTab = "Threads";
-    }
-  });
-
-  // Persist the active tab and destination together so the server bar and
-  // channel page can restore both when switching spaces.
-  $effect(() => {
-    spaceNavigation.set(spaceId, {
-      destination: { kind: "index" },
-      viewMode: activeTab === "Threads" ? "threads" : "chat",
-    });
-  });
-
-  onMount(() => {
-    setNavbar(spaceNavbar);
-    return () => setNavbar(undefined);
+    spaceNavigation.set(spaceId, { kind: "index" });
   });
 </script>
 
-{#snippet spaceNavbar()}
-  <div class="flex items-center gap-2 px-2 min-w-0 grow">
-    <span class="grow sm:hidden"></span>
-    <div
-      class="sm:absolute sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2"
-    >
-      <ToggleTabs
-        items={[
-          { name: "Feed", href: "#feed", badge: unreadRoomCount },
-          { name: "Threads", href: "#threads", badge: unreadThreadCount },
-        ]}
-        active={activeTab}
-      />
-    </div>
-  </div>
-{/snippet}
-
 <main class="h-full overflow-y-auto">
-  {#if activeTab === "Feed"}
-    <ActivityFeed {spaceId} limit={50} showSpaceInfo={false} />
-  {:else}
-    <ThreadsTab {spaceId} />
-  {/if}
+  <ThreadsTab {spaceId} />
 </main>

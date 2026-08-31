@@ -267,8 +267,43 @@ describe("space.roomy.space.getThreads", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveProperty("threads");
-    expect(Array.isArray(body.threads)).toBe(true);
+    expect(body).toHaveProperty("rooms");
+    expect(Array.isArray(body.rooms)).toBe(true);
+  });
+
+  test("returns channels alongside threads, with kind", async () => {
+    const ctx = await startAppserver();
+    const { db } = ctx;
+    seedSpace(db, SPACE, USER);
+    seedJoinedSpace(db, USER, SPACE);
+
+    const channel = newUlid();
+    seedRoom(db, channel, SPACE);
+    spaceDb(db, SPACE).run(
+      "insert into comp_info (entity, name) values (?, ?)",
+      [channel, "general"],
+    );
+    const msgId = newUlid();
+    seedMessage(db, msgId, channel, SPACE, "a");
+    spaceDb(db, SPACE).run(
+      "update comp_content set timestamp = ? where entity = ?",
+      [Date.now(), msgId],
+    );
+    seedActivityItem(db, channel, SPACE, Date.now());
+    seedReadPosition(db, USER, channel, "a", 2);
+
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getThreads?spaceId=${SPACE}`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const room = body.rooms.find((x: { id: string }) => x.id === channel);
+    expect(room).toBeDefined();
+    expect(room.kind).toBe("channel");
+    expect(room.name).toBe("general");
+    expect(room.unreadCount).toBe(2);
+    expect(room.unread).toBe(true);
+    expect(room.channel).toBeUndefined();
   });
 
   test("empty space → empty array", async () => {
@@ -281,7 +316,7 @@ describe("space.roomy.space.getThreads", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.threads).toEqual([]);
+    expect(body.rooms).toEqual([]);
   });
 
   test("threads the user never engaged with read as unread (honest view)", async () => {
@@ -316,8 +351,9 @@ describe("space.roomy.space.getThreads", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    const t = body.threads.find((x: { id: string }) => x.id === thread);
+    const t = body.rooms.find((x: { id: string }) => x.id === thread);
     expect(t).toBeDefined();
+    expect(t.kind).toBe("thread");
     // unreadCount is 0 (no read_positions row) but the honest flag is true.
     expect(t.unreadCount).toBe(0);
     expect(t.unread).toBe(true);

@@ -30,8 +30,8 @@
   const backHref = $derived.by(() => {
     const spaceId = lastActiveSpaceIdState.value;
     if (!spaceId) return "/";
-    const dest = spaceNavigation.get(spaceId)?.destination;
-    if (dest?.kind === "room") return `/${spaceId}/${dest.id}`;
+    const destination = spaceNavigation.get(spaceId);
+    if (destination?.kind === "room") return `/${spaceId}/${destination.id}`;
     return `/${spaceId}`;
   });
 
