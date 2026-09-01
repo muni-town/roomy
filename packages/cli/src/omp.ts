@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { utf8ByteLength } from "@roomy-space/sdk";
-import { plaintext, type AgentIdentity, type IncomingMessage } from "./messages.js";
+import { decodeMessageText, type MessageInfo } from "./messages.js";
 
 /** Result of running omp: the model's thinking trace and final answer. */
 export interface OmpReply {
@@ -170,14 +170,14 @@ export function parseOmpJson(raw: string): OmpReply {
 
 /** Build the prompt sent to omp from an incoming message. */
 export function buildPrompt(
-  msg: IncomingMessage,
+  msg: MessageInfo,
   roomId: string,
-  identity: AgentIdentity,
+  agentDid: string,
   prefix?: string,
   context?: string,
 ): string {
   const from = msg.authorName || msg.authorDid;
-  const body = plaintext(msg);
+  const body = decodeMessageText(msg.content, msg.mimeType);
   const parts: string[] = [];
   if (prefix) parts.push(prefix);
   // Recent conversation context for the room, so the agent sees what has been

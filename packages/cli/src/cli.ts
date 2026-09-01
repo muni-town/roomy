@@ -6,7 +6,7 @@ import { createSpace, listSpaces } from "./spaces.js";
 import { listRooms, findLobbyRoom } from "./rooms.js";
 import { sendMessage, readMessages, buildMentionBlocks } from "./messages.js";
 import { setProfile } from "./profile.js";
-import { listen as bridgeListen } from "@roomy/omp-bridge";
+import { respond } from "./respond.js";
 
 const program = new Command();
 export { program };
@@ -291,40 +291,34 @@ program
     }
   });
 
-// ── listen ────────────────────────────────────────────────────────────────
+// ── respond ─────────────────────────────────────────────────────────────
 
 program
-  .command("listen")
-  .description("Listen to a space/room and route mentioned messages to the omp agent")
-  .option("--space <id>", "Space ID (defaults to every space the agent has joined)")
-  .option("--room <id>", "Room ID (defaults to all rooms in the space)")
+  .command("respond")
+  .description("Read roomy-bridge mention events from stdin (NDJSON) and reply to each via omp")
   .option("--no-mention-only", "Respond to every message, not just mentions")
+  .option("--include-self", "Also respond to the agent's own messages (testing)")
   .option("--cwd <dir>", "Working directory for the omp agent")
   .option("--model <model>", "omp model override (fuzzy match)")
   .option("--prefix <text>", "Extra context prepended to every prompt")
   .option("--omp-bin <path>", "Path to the omp binary (default: omp on PATH)")
-  .option("--duration <ms>", "Stop after this many ms (0 = run forever)", "0")
-  .option("--include-self", "Also react to the agent's own messages (testing)")
-  .option("--no-thinking", "Don't post the agent's thinking trace, just the answer")
   .option("--no-continuity", "Give each mention a fresh omp session (default: resume per-room)")
   .option("--session-file <path>", "Path for the room → omp session map (default ~/.roomy/omp-sessions.json)")
+  .option("--no-thinking", "Don't post the agent's thinking trace, just the answer")
   .option("--no-stream-thinking", "Don't stream thinking chunks; bundle thinking with the final answer")
   .option("--thinking-chunk <n>", "Approx char threshold for each streamed thinking chunk (default 2000)", "2000")
   .option("--system-prompt-file <path>", "File appended to omp's system prompt (default: $OMP_SYSTEM_PROMPT_FILE)")
   .option("--recent <n>", "Recent room messages to load into context when mentioned (default 20; 0 disables)", "20")
   .action(async (options: {
-    space?: string;
-    room?: string;
     mentionOnly: boolean;
+    includeSelf?: boolean;
     cwd?: string;
     model?: string;
     prefix?: string;
     ompBin?: string;
-    duration: string;
-    includeSelf?: boolean;
-    thinking: boolean;
     continuity: boolean;
     sessionFile?: string;
+    thinking: boolean;
     streamThinking: boolean;
     thinkingChunk: string;
     systemPromptFile?: string;
@@ -333,19 +327,16 @@ program
     try {
       const config = loadConfig();
       const auth = await authenticate(config);
-      await bridgeListen(auth, {
-        spaceId: options.space,
-        roomId: options.room,
+      await respond(auth.xrpc, auth.agent, {
         mentionOnly: options.mentionOnly,
+        includeSelf: options.includeSelf,
         cwd: options.cwd,
         model: options.model,
         prefix: options.prefix,
         ompBin: options.ompBin,
-        durationMs: Number(options.duration),
-        includeSelf: options.includeSelf,
-        thinking: options.thinking,
         continuity: options.continuity,
         sessionFile: options.sessionFile,
+        thinking: options.thinking,
         streamThinking: options.streamThinking,
         thinkingChunkSize: Number(options.thinkingChunk),
         systemPromptFile: options.systemPromptFile ?? process.env.OMP_SYSTEM_PROMPT_FILE,

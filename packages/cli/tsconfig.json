@@ -4,6 +4,7 @@
     "outDir": "dist",
     "skipLibCheck": true,
     "noEmit": false,
+    "declaration": false,
     "module": "ESNext",
     "moduleResolution": "bundler",
     "target": "ES2022",

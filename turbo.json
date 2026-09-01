@@ -77,15 +77,6 @@
         "^build-lib"
       ],
       "cache": false
-    },
-    "build-omp-bridge": {
-      "dependsOn": [
-        "^build-lib",
-        "build-lib"
-      ],
-      "outputs": [
-        "./dist/**"
-      ]
     }
   }
 }

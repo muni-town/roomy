@@ -285,11 +285,8 @@ importers:
         specifier: ^0.14.22
         version: 0.14.22
       '@roomy-space/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@roomy/omp-bridge':
-        specifier: workspace:*
-        version: link:../omp-bridge
+        specifier: ^0.4.0
+        version: 0.4.0(@tanstack/svelte-query@6.1.29(svelte@5.53.0))(svelte@5.53.0)
       commander:
         specifier: ^13.1.0
         version: 13.1.0
@@ -528,25 +525,6 @@ importers:
       vite:
         specifier: ^6.3.6
         version: 6.3.6(@types/node@26.4.0)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)
-
-  packages/omp-bridge:
-    dependencies:
-      '@roomy-space/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-    devDependencies:
-      '@repo/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      '@types/node':
-        specifier: ^22.15.17
-        version: 22.19.5
-      tsx:
-        specifier: ^4.20.3
-        version: 4.20.3
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.2
 
   packages/sdk:
     dependencies:
@@ -1738,6 +1716,17 @@ packages:
     resolution: {integrity: sha512-APwKy6YUhvZaEoHyM+9xqmTpviEI+9eL7LoCH+aLcvWYHJ663qG5zx7WzWZY+a9qkg5JtzcMyJ9z0WtQBMDmgA==}
     cpu: [x64]
     os: [win32]
+
+  '@roomy-space/sdk@0.4.0':
+    resolution: {integrity: sha512-W/ROXA7mqAGHFOOKRi5qLWMKu8oJaQHxLpb3Oy42J07SLfcWSb/jwrVvS7v8wc5LCoLeUZUXtJjaaMB+f0zntg==}
+    peerDependencies:
+      '@tanstack/svelte-query': ^6.0.0
+      svelte: ^5.0.0
+    peerDependenciesMeta:
+      '@tanstack/svelte-query':
+        optional: true
+      svelte:
+        optional: true
 
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
@@ -5645,6 +5634,22 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.50.2':
     optional: true
+
+  '@roomy-space/sdk@0.4.0(@tanstack/svelte-query@6.1.29(svelte@5.53.0))(svelte@5.53.0)':
+    dependencies:
+      '@ark/util': 0.56.0
+      '@atcute/cbor': 2.2.8
+      '@atproto/api': 0.14.22
+      '@atproto/lexicon': 0.4.14
+      '@atproto/oauth-client': 0.5.13
+      '@atproto/oauth-client-browser': 0.3.39
+      '@opentelemetry/api': 1.9.0
+      '@tanstack/query-core': 5.100.10
+      arktype: 2.1.29
+      ulidx: 2.4.1
+    optionalDependencies:
+      '@tanstack/svelte-query': 6.1.29(svelte@5.53.0)
+      svelte: 5.53.0
 
   '@standard-schema/spec@1.0.0': {}
 

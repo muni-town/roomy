@@ -7,7 +7,6 @@ packages:
   - packages/sdk
   - packages/discord-bridge
   - packages/cli
-  - packages/omp-bridge
   - packages/tsconfig
 
 onlyBuiltDependencies:

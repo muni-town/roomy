@@ -5,8 +5,12 @@
   "type": "module",
   "description": "CLI tool for Roomy - agent testing and space management",
   "bin": {
-    "roomy-cli": "bin/roomy-cli.ts"
+    "roomy-cli": "dist/bin/roomy-cli.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "dev": "tsx watch src/cli.ts",
@@ -14,10 +18,9 @@
   },
   "dependencies": {
     "@atproto/api": "^0.14.22",
-    "@roomy-space/sdk": "workspace:*",
+    "@roomy-space/sdk": "^0.4.0",
     "commander": "^13.1.0",
-    "ulidx": "^2.4.1",
-    "@roomy/omp-bridge": "workspace:*"
+    "ulidx": "^2.4.1"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
