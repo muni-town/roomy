@@ -24,6 +24,8 @@ import type {
   InvalidationRouter,
   QueryNsid,
 } from "../invalidation/types.ts";
+import { allowsPublicJoin, roomAccess, spaceAccess } from "../auth/access.ts";
+import type { DbLike } from "../db/types.ts";
 import { messageFrame } from "../xrpc/frame.ts";
 import { log } from "../log.ts";
 
@@ -133,6 +135,23 @@ export interface StreamEventSource {
   getEventsFrom(streamDid: StreamDid, cursor: number, limit: number): Promise<{ events: DecodedStreamEvent[]; cursor: number }>;
 }
 
+/**
+ * Minimal DB surface the SyncManager needs for topic authorization.
+ *
+ * The manager must resolve a room's owning space (via the global
+ * `entity_space` index) and then run `roomAccess`/`spaceAccess` against the
+ * per-space DB — the same primitives the HTTP read path uses. Defined as an
+ * interface so unit tests can supply a lightweight mock without a real pool.
+ */
+export interface SyncDbAccess {
+  /** Resolve the space DID owning `entityId` (room/message) via the global
+   *  `entity_space` index, then return a handle to that space's per-space DB.
+   *  Returns null when the entity doesn't exist. */
+  openSpaceDbForEntity(entityId: string): Promise<DbLike | null>;
+  /** Return a handle to the per-space DB for `spaceDid`. */
+  openSpaceDb(spaceDid: string): DbLike;
+}
+
 /** Max events per backfill batch. */
 const BACKFILL_BATCH = 100;
 
@@ -154,9 +173,38 @@ export class SyncManager {
   readonly #unsubscribeStreams: () => void;
   /** Stream event source for backfill reads. */
   readonly #streamSource: StreamEventSource;
+  /** DB accessor for topic authorization (room/space/stream access checks). */
+  readonly #db: SyncDbAccess;
+  /**
+   * Short-TTL cache of room read-access decisions for delivery-time re-checks
+   * (see #routeMessageDiff). Keyed by `${did}\0${roomId}`. The TTL bounds how
+   * long a revoked user keeps receiving content frames after losing access.
+   */
+  readonly #roomAccessCache = new Map<string, { at: number; canRead: boolean }>();
+  /** TTL for the delivery-time room access cache (ms). */
+  readonly #roomAccessTtlMs: number;
+  /**
+   * Short-TTL cache of stream (space) read-access decisions for
+   * delivery-time re-checks (see #onStreamEvents / #backfillStream). Keyed
+   * by `${did}\0${streamDid}`.
+   */
+  readonly #streamAccessCache = new Map<string, { at: number; canRead: boolean }>();
+  /** TTL for the delivery-time stream access cache (ms). */
+  readonly #streamAccessTtlMs: number;
 
-  constructor(router: InvalidationRouter, streamManager: StreamEventSource) {
+  constructor(
+    router: InvalidationRouter,
+    streamManager: StreamEventSource,
+    db: SyncDbAccess,
+    opts: { accessCacheTtlMs?: number } = {},
+  ) {
     this.#streamSource = streamManager;
+    this.#db = db;
+    // Default 5s: bounds how long a revoked user keeps receiving content
+    // frames after losing access without a DB round-trip per frame per
+    // connection. Tests pass 0 to force a re-check on every delivery.
+    this.#roomAccessTtlMs = opts.accessCacheTtlMs ?? 5_000;
+    this.#streamAccessTtlMs = opts.accessCacheTtlMs ?? 5_000;
     this.#unsubscribe = router.subscribe((events) => this.#onSignals(events));
     this.#unsubscribeStreams = streamManager.onEvents((streamDid, events) =>
       this.#onStreamEvents(streamDid, events),
@@ -181,7 +229,7 @@ export class SyncManager {
     // Handle client messages.
     socket.onMessage((msg: ClientMessage) => {
       if (msg.type === "sub" && msg.topic === "stream") {
-        this.#startStreamSub(state, msg.id, msg.cursor ?? -1);
+        void this.#handleStreamSub(state, msg.id, msg.cursor ?? -1);
         return;
       }
       if (msg.type === "unsub" && msg.topic === "stream") {
@@ -195,6 +243,19 @@ export class SyncManager {
         if (msg.topic === "mentions" && msg.id !== state.did) {
           return;
         }
+        // Room/space/stream subscriptions are gated on the same access the
+        // HTTP read path grants (roomAccess / spaceAccess). Denied subs are
+        // silently ignored — no topic registered, no frames, no backfill —
+        // matching the mentions-topic behaviour. The check is async (DB
+        // queries), so the topic is only registered once access is confirmed.
+        if (msg.topic === "room" || msg.topic === "space") {
+          void this.#handleTopicSub(state, msg.topic, msg.id);
+          return;
+        }
+        // Only "mentions" reaches here (stream is handled above; room/space
+        // are handled by #handleTopicSub). A connection may only subscribe
+        // to its own mentions — the DID is the stable ID, and eavesdropping
+        // on another user's mentions is not allowed. Ignore otherwise.
         const topic = topicKey(msg.topic, msg.id);
         state.topics.add(topic);
 
@@ -204,16 +265,6 @@ export class SyncManager {
           this.#topicIndex.set(topic, subs);
         }
         subs.add(connId);
-
-        // When subscribing to a room topic, immediately invalidate
-        // room-scoped queries so the client re-fetches fresh data.
-        // Without this, a client that navigates away and back will
-        // serve stale TanStack cache (staleTime: Infinity) and miss
-        // any messages/invalidation frames that arrived while it was
-        // unsubscribed.
-        if (msg.topic === "room") {
-          this.#sendRoomInvalidation(state, msg.id);
-        }
       } else if (msg.type === "unsub") {
         const topic = topicKey(msg.topic, msg.id);
         state.topics.delete(topic);
@@ -245,6 +296,148 @@ export class SyncManager {
   /** Total active connections (for diagnostics). */
   get connectionCount(): number {
     return this.#connections.size;
+  }
+
+  /**
+   * Authorize and register a room/space topic subscription. The access check
+   * mirrors the HTTP read path:
+   *   - room:<id>  → roomAccess(spaceDb, roomId, did).canRead (and exists),
+   *     resolving the owning space via the global entity_space index.
+   *   - space:<id> → spaceAccess(spaceDb, spaceId, did): deny if banned;
+   *     otherwise mirror HTTP read semantics (public spaces readable by
+   *     non-members, invite-only requires membership).
+   * Denied subs are silently ignored — no topic registered, no frames.
+   */
+  async #handleTopicSub(
+    state: ConnectionState,
+    kind: "room" | "space",
+    id: string,
+  ): Promise<void> {
+    if (!state.isOpen) return;
+    const allowed = await this.#canReadTopic(kind, id, state.did);
+    if (!allowed) return;
+    if (!state.isOpen) return;
+
+    const topic = topicKey(kind, id);
+    state.topics.add(topic);
+
+    let subs = this.#topicIndex.get(topic);
+    if (!subs) {
+      subs = new Set();
+      this.#topicIndex.set(topic, subs);
+    }
+    subs.add(state.connId);
+
+    // When subscribing to a room topic, immediately invalidate
+    // room-scoped queries so the client re-fetches fresh data.
+    // Without this, a client that navigates away and back will
+    // serve stale TanStack cache (staleTime: Infinity) and miss
+    // any messages/invalidation frames that arrived while it was
+    // unsubscribed.
+    if (kind === "room") {
+      this.#sendRoomInvalidation(state, id);
+    }
+  }
+
+  /**
+   * Authorize and register a stream (raw event) subscription. Stream topics
+   * carry full message content, so access requires membership or admin of the
+   * space (the space DID is the stream DID); banned users are denied. Denied
+   * subs are silently ignored — no stream registered, no backfill.
+   */
+  async #handleStreamSub(
+    state: ConnectionState,
+    streamDid: string,
+    cursor: number,
+  ): Promise<void> {
+    if (!state.isOpen) return;
+    const allowed = await this.#canReadStream(streamDid, state.did);
+    if (!allowed) return;
+    if (!state.isOpen) return;
+    this.#startStreamSub(state, streamDid, cursor);
+  }
+
+  /**
+   * Whether the caller may read the given topic over the HTTP read path.
+   * Room topics resolve their owning space via the global entity_space index
+   * (openSpaceDbForEntity), then reuse roomAccess — the same check
+   * getMessages/getThreads run. Space topics reuse spaceAccess with the
+   * public-join gate (getMetadata/getSpaceSummary semantics).
+   */
+  async #canReadTopic(
+    kind: "room" | "space",
+    id: string,
+    did: string,
+  ): Promise<boolean> {
+    try {
+      if (kind === "room") {
+        const db = await this.#db.openSpaceDbForEntity(id);
+        if (!db) return false;
+        const access = await roomAccess(db, id, did);
+        return access.exists && access.canRead;
+      }
+      const db = this.#db.openSpaceDb(id);
+      const access = await spaceAccess(db, id, did);
+      if (access.isBanned) return false;
+      if (access.isMember || access.isAdmin) return true;
+      // Public spaces are readable by non-members (getMetadata/getSpaceSummary
+      // semantics); invite-only spaces require membership.
+      return await allowsPublicJoin(db, id);
+    } catch (err) {
+      log.error(
+        `Sync topic access check failed for ${kind}:${id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Whether the caller may subscribe to a stream (space DID). Streams carry
+   * raw message content, so this is stricter than the space topic: require
+   * membership or admin, deny banned users.
+   */
+  async #canReadStream(streamDid: string, did: string): Promise<boolean> {
+    try {
+      const db = this.#db.openSpaceDb(streamDid);
+      const access = await spaceAccess(db, streamDid, did);
+      if (access.isBanned) return false;
+      return access.isMember || access.isAdmin;
+    } catch (err) {
+      log.error(
+        `Sync stream access check failed for ${streamDid}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Delivery-time re-check for room content frames (#messageDiff). A user who
+   * loses access mid-connection (banned/removed) must stop receiving message
+   * content. The decision is memoized with a short TTL so the hot path does
+   * not do a DB round-trip per frame per connection.
+   */
+  async #canReceiveRoomContent(roomId: string, did: string): Promise<boolean> {
+    const key = `${did}\0${roomId}`;
+    const now = Date.now();
+    const cached = this.#roomAccessCache.get(key);
+    if (cached && now - cached.at < this.#roomAccessTtlMs) {
+      return cached.canRead;
+    }
+    let canRead = false;
+    try {
+      const db = await this.#db.openSpaceDbForEntity(roomId);
+      if (db) {
+        const access = await roomAccess(db, roomId, did);
+        canRead = access.exists && access.canRead;
+      }
+    } catch (err) {
+      log.error(
+        `Sync delivery access check failed for room ${roomId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      canRead = false;
+    }
+    this.#roomAccessCache.set(key, { at: now, canRead });
+    return canRead;
   }
 
   /** Tear down the manager (tests only). */
@@ -288,11 +481,25 @@ export class SyncManager {
       ops: signal.ops,
     });
 
+    // Delivery-time re-check: a connection may only receive content frames
+    // for rooms it can still read. Sub-time checks alone leave a window — a
+    // user banned/removed mid-connection would keep receiving message content
+    // until they reconnect. The access decision is memoized with a short TTL
+    // (see #canReceiveRoomContent) so the hot path doesn't do a DB round-trip
+    // per frame per connection.
+    void this.#deliverMessageDiff(signal.roomId, connIds, frame);
+  }
+
+  async #deliverMessageDiff(
+    roomId: string,
+    connIds: Set<number>,
+    frame: Frame,
+  ): Promise<void> {
     for (const connId of connIds) {
       const conn = this.#connections.get(connId);
-      if (conn?.isOpen) {
-        conn.send(frame);
-      }
+      if (!conn?.isOpen) continue;
+      if (!(await this.#canReceiveRoomContent(roomId, conn.did))) continue;
+      conn.send(frame);
     }
   }
 
@@ -579,7 +786,7 @@ export class SyncManager {
         );
         if (events.length === 0) break;
         const hasMore = events.length >= BACKFILL_BATCH;
-        this.#sendStreamEvents(state, streamDid, events, cursor, hasMore);
+        await this.#sendStreamEvents(state, streamDid, events, cursor, hasMore);
         sub.cursor = cursor;
         if (!hasMore) break;
       }
@@ -596,7 +803,7 @@ export class SyncManager {
           BACKFILL_BATCH,
         );
         if (events.length > 0) {
-          this.#sendStreamEvents(state, streamDid, events, cursor, false);
+          await this.#sendStreamEvents(state, streamDid, events, cursor, false);
           sub.cursor = cursor;
         }
       }
@@ -628,24 +835,61 @@ export class SyncManager {
         sub.pendingLive = true;
         continue;
       }
-      // Advance the cursor past these events.
+      // Advance the cursor past these events. The advance is deferred until
+      // the delivery access check resolves; guard against out-of-order
+      // resolution (concurrent batches) by only moving forward.
       const cursor = events[events.length - 1]!.idx;
-      this.#sendStreamEvents(state, streamDid, events, cursor, false);
-      sub.cursor = cursor;
+      void this.#sendStreamEvents(state, streamDid, events, cursor, false).then(
+        () => {
+          if (cursor > sub.cursor) sub.cursor = cursor;
+        },
+      );
     }
+  }
+
+  /**
+   * Delivery-time re-check for stream content frames (#streamEvents). A user
+   * who loses access mid-connection (banned/removed) must stop receiving raw
+   * events. Memoized with a short TTL like the room check.
+   */
+  async #canReceiveStream(streamDid: string, did: string): Promise<boolean> {
+    const key = `${did}\0${streamDid}`;
+    const now = Date.now();
+    const cached = this.#streamAccessCache.get(key);
+    if (cached && now - cached.at < this.#streamAccessTtlMs) {
+      return cached.canRead;
+    }
+    let canRead = false;
+    try {
+      const db = this.#db.openSpaceDb(streamDid);
+      const access = await spaceAccess(db, streamDid, did);
+      canRead = !access.isBanned && (access.isMember || access.isAdmin);
+    } catch (err) {
+      log.error(
+        `Sync stream delivery access check failed for ${streamDid}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      canRead = false;
+    }
+    this.#streamAccessCache.set(key, { at: now, canRead });
+    return canRead;
   }
 
   /**
    * Send a #streamEvents frame containing a batch of raw events.
    * `hasMore` indicates whether more backfill batches are following.
+   * Delivery is gated on the connection still having stream read access
+   * (membership/admin, not banned) so revoked users stop receiving content.
    */
-  #sendStreamEvents(
+  async #sendStreamEvents(
     state: ConnectionState,
     streamDid: string,
     events: readonly DecodedStreamEvent[],
     cursor: number,
     hasMore: boolean,
-  ): void {
+  ): Promise<void> {
+    if (!state.isOpen) return;
+    if (!(await this.#canReceiveStream(streamDid, state.did))) return;
+    if (!state.isOpen) return;
     state.send(
       messageFrame("#streamEvents", {
         streamDid,

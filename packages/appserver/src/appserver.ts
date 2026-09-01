@@ -21,7 +21,7 @@ import { appserverSigningKeyMultibase } from "./auth/serviceAuth.ts";
 import { Router as InvalidationRouter } from "./invalidation/index.ts";
 import { startEmbedSweeper, stopEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
 import { countPendingLinks } from "./embed/enricher.ts";
-import { openDb, openGlobalDb, openReadStateDb, closeDb, poolStats } from "./db/db.ts";
+import { openDb, openGlobalDb, openReadStateDb, openSpaceDb, openSpaceDbForEntity, closeDb, poolStats } from "./db/db.ts";
 import { StreamManager, setStreamManager, _resetStreamManager } from "./streams/StreamManager.ts";
 import { ACTIVE_WINDOW_MS, purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
@@ -539,7 +539,14 @@ export async function createAppserver(
 
   // ─── XRPC routes ──────────────────────────────────────────────────────
   const authVerifier = opts.authVerifier ?? selectAuthVerifier();
-  const syncSubscribeHandler = createSyncSubscribeHandler(invalidationRouter, streamManager);
+  const syncSubscribeHandler = createSyncSubscribeHandler(
+    invalidationRouter,
+    streamManager,
+    {
+      openSpaceDbForEntity,
+      openSpaceDb,
+    },
+  );
   const router = buildRouter(authVerifier, syncSubscribeHandler);
 
   // ─── Query response cache ─────────────────────────────────────────────

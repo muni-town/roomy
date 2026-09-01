@@ -6,7 +6,8 @@ import type {
   AppliedEvent,
 } from "../invalidation/types.ts";
 import type { DecodedStreamEvent, Event, StreamDid, StreamIndex, UserDid, Ulid } from "@roomy-space/sdk";
-import { SyncManager, type StreamEventSource } from "./handler.ts";
+import { SyncManager, type StreamEventSource, type SyncDbAccess } from "./handler.ts";
+import type { DbLike } from "../db/types.ts";
 
 // ─── Mock infrastructure ─────────────────────────────────────────────────
 
@@ -98,12 +99,184 @@ class MockStreamManager implements StreamEventSource {
 /** Shared mock instance. */
 const mockStreamManager: StreamEventSource = new MockStreamManager();
 
+/**
+ * In-memory mock of the SyncManager's DB access surface. Models the rows the
+ * access checks read: `edges` (member/admin), `comp_bans`, `comp_space`
+ * (allow_public_join), `entities` (room→space), and the global
+ * `entity_space` index. The real access.ts queries are exercised against
+ * these tables, so the mock must mirror the real schema.
+ */
+class MockDb {
+  /** Per-space DBs keyed by space DID. */
+  readonly spaces = new Map<string, MockSpaceDb>();
+  /** Global entity_space index: entityId → spaceDid. */
+  readonly entitySpace = new Map<string, string>();
+
+  space(spaceDid: string): MockSpaceDb {
+    let db = this.spaces.get(spaceDid);
+    if (!db) {
+      db = new MockSpaceDb(spaceDid, this);
+      this.spaces.set(spaceDid, db);
+    }
+    return db;
+  }
+
+  /** Seed a membership edge (member/admin) in a space. */
+  seedMembership(spaceDid: string, did: string, label: "member" | "admin"): void {
+    this.space(spaceDid).edges.push({ head: spaceDid, tail: did, label });
+  }
+
+  /** Seed a ban row in a space. */
+  seedBan(spaceDid: string, did: string): void {
+    this.space(spaceDid).bans.add(did);
+  }
+
+  /** Seed allow_public_join on a space (defaults to open when unset). */
+  seedPublicJoin(spaceDid: string, allow: boolean): void {
+    this.space(spaceDid).allowPublicJoin = allow;
+  }
+
+  /** Seed a room entity in a space + the global entity_space index. */
+  seedRoom(roomId: string, spaceDid: string): void {
+    this.space(spaceDid).rooms.add(roomId);
+    this.entitySpace.set(roomId, spaceDid);
+  }
+}
+
+class MockSpaceDb implements DbLike {
+  readonly spaceDid: string;
+  readonly edges: Array<{ head: string; tail: string; label: string }> = [];
+  readonly bans = new Set<string>();
+  readonly rooms = new Set<string>();
+  allowPublicJoin = true;
+  /** Back-reference for entity→space resolution in room queries. */
+  readonly owner: MockDb;
+
+  constructor(spaceDid: string, owner: MockDb) {
+    this.spaceDid = spaceDid;
+    this.owner = owner;
+  }
+
+  query(sql: string) {
+    return {
+      get: async <T>(...params: unknown[]): Promise<T | null> => {
+        // access.ts passes bindings as a single array argument: .get([a, b]).
+        const p = (params[0] ?? []) as unknown[];
+        const head = p[0] as string | undefined;
+        const tail = p[1] as string | undefined;
+        if (sql.includes("from edges") && sql.includes("label = 'member'")) {
+          return this.edges.some(
+            (e) => e.head === head && e.tail === tail && e.label === "member",
+          )
+            ? ({ n: 1 } as T)
+            : null;
+        }
+        if (sql.includes("from edges") && sql.includes("label = 'admin'")) {
+          return this.edges.some(
+            (e) => e.head === head && e.tail === tail && e.label === "admin",
+          )
+            ? ({ n: 1 } as T)
+            : null;
+        }
+        if (sql.includes("from comp_bans")) {
+          return this.bans.has(tail!) ? ({ n: 1 } as T) : null;
+        }
+        if (sql.includes("from comp_space")) {
+          return { v: this.allowPublicJoin ? 1 : 0 } as T;
+        }
+        if (sql.includes("from entities e")) {
+          if (this.rooms.has(head!)) {
+            return { space_id: this.spaceDid, default_access: "readwrite" } as T;
+          }
+          return null;
+        }
+        if (sql.includes("from edges") && sql.includes("label = 'link'")) {
+          return null;
+        }
+        if (sql.includes("from comp_room")) {
+          return { default_access: "readwrite" } as T;
+        }
+        if (sql.includes("from member_roles")) {
+          return null;
+        }
+        throw new Error(`MockSpaceDb: unexpected query: ${sql}`);
+      },
+      all: async <T>(): Promise<T[]> => {
+        throw new Error("MockSpaceDb: all() not expected");
+      },
+    };
+  }
+  prepare(): Promise<never> {
+    throw new Error("MockSpaceDb: prepare not expected");
+  }
+  exec(): Promise<never> {
+    throw new Error("MockSpaceDb: exec not expected");
+  }
+  run(): Promise<never> {
+    throw new Error("MockSpaceDb: run not expected");
+  }
+  transaction(): Promise<never> {
+    throw new Error("MockSpaceDb: transaction not expected");
+  }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+/** SyncDbAccess backed by a MockDb. */
+class MockDbAccess implements SyncDbAccess {
+  constructor(readonly db: MockDb) {}
+
+  async openSpaceDbForEntity(entityId: string): Promise<DbLike | null> {
+    const spaceDid = this.db.entitySpace.get(entityId);
+    if (!spaceDid) return null;
+    return this.db.space(spaceDid);
+  }
+
+  openSpaceDb(spaceDid: string): DbLike {
+    return this.db.space(spaceDid);
+  }
+}
+
+/** Shared mock db accessor. */
+const mockDbAccess: SyncDbAccess = new MockDbAccess(new MockDb());
+
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
 const SPACE_ID = "did:web:space.example" as StreamDid;
 const ROOM_ID = "01KR32FDQCCCEB8FEK76SQST9Y" as Ulid;
 const USER_A = "did:plc:user-a" as UserDid;
 const USER_B = "did:plc:user-b" as UserDid;
+
+/**
+ * Build a SyncManager with a fresh seeded mock db. Default seed: USER_A is a
+ * member of SPACE_ID, and ROOM_ID exists in SPACE_ID — so the existing
+ * tests' room/space/stream subs are authorized. Tests that need different
+ * access states seed their own MockDb (or add USER_B membership) and pass it
+ * in.
+ */
+function makeManager(
+  router: InvalidationRouter,
+  source: StreamEventSource = mockStreamManager,
+  db: MockDb = new MockDb(),
+): { manager: SyncManager; db: MockDb } {
+  db.seedMembership(SPACE_ID, USER_A, "member");
+  db.seedRoom(ROOM_ID, SPACE_ID);
+  // TTL 0: delivery-time access re-checks run on every frame, so tests can
+  // revoke access mid-test and observe the cut-off immediately.
+  return {
+    manager: new SyncManager(router, source, new MockDbAccess(db), {
+      accessCacheTtlMs: 0,
+    }),
+    db,
+  };
+}
+
+/** Receive a message and drain microtasks so async sub access checks settle. */
+async function sub(socket: MockSocket, msg: ClientMessage): Promise<void> {
+  socket.receive(msg);
+  await flush();
+}
 
 function queryInvalidation(
   nsid: string,
@@ -186,9 +359,9 @@ function decodeFrameBody(frame: Frame): Record<string, unknown> {
 // ─── Tests ───────────────────────────────────────────────────────────────
 
 describe("SyncManager", () => {
-  test("message diff is sent to connections subscribed to the room", () => {
+  test("message diff is sent to connections subscribed to the room", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
@@ -198,11 +371,12 @@ describe("SyncManager", () => {
     // Subscribe to room topic. (Room sub also eagerly invalidates room-scoped
     // queries — 3 #invalidate frames — see SyncManager.#sendRoomInvalidation.
     // Clear them so this test asserts only the signal-routing below.)
-    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     socket.sentFrames.length = 0;
 
     // Emit a message diff for that room.
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
 
     expect(socket.sentFrames.length).toBe(1);
     const body = decodeFrameBody(socket.sentFrames[0]!);
@@ -219,7 +393,7 @@ describe("SyncManager", () => {
 
   test("mention diff is sent to connections subscribed to mentions:<did>", () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_B);
     manager.register(socket as unknown as SyncSocket);
@@ -245,7 +419,7 @@ describe("SyncManager", () => {
 
   test("mention diff is NOT sent to connections not subscribed to that DID's mentions", () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_B);
     manager.register(socket as unknown as SyncSocket);
@@ -263,7 +437,7 @@ describe("SyncManager", () => {
 
   test("a connection cannot subscribe to another user's mentions", () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_B);
     manager.register(socket as unknown as SyncSocket);
@@ -279,9 +453,9 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("message diff is NOT sent to connections not subscribed to the room", () => {
+  test("message diff is NOT sent to connections not subscribed to the room", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
@@ -291,27 +465,28 @@ describe("SyncManager", () => {
     // Subscribe to a different room. (Room sub eagerly invalidates its room
     // queries — clear those frames so the assertion captures only the signal
     // routing below.)
-    socket.receive({ type: "sub", topic: "room", id: "other-room" as Ulid });
+    await sub(socket, { type: "sub", topic: "room", id: "other-room" as Ulid });
     socket.sentFrames.length = 0;
 
     // Emit a message diff for ROOM_ID.
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
 
     expect(socket.sentFrames.length).toBe(0);
 
     manager.destroy();
   });
 
-  test("query invalidation is sent to connections subscribed to the space", () => {
+  test("query invalidation is sent to connections subscribed to the space", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
       socket as unknown as SyncSocket,
     );
 
-    socket.receive({ type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socket, { type: "sub", topic: "space", id: SPACE_ID });
 
     router.emitSignals([
       queryInvalidation("space.roomy.space.getMetadata", { spaceId: SPACE_ID }),
@@ -329,7 +504,7 @@ describe("SyncManager", () => {
 
   test("query invalidation is NOT sent to connections not subscribed to the space", () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
@@ -346,9 +521,11 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("per-user invalidation only reaches the affected user", () => {
+  test("per-user invalidation only reaches the affected user", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_B, "member");
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
 
     const socketA = new MockSocket(USER_A);
     const socketB = new MockSocket(USER_B);
@@ -360,8 +537,8 @@ describe("SyncManager", () => {
     );
 
     // Both subscribed to the same space.
-    socketA.receive({ type: "sub", topic: "space", id: SPACE_ID });
-    socketB.receive({ type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socketA, { type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socketB, { type: "sub", topic: "space", id: SPACE_ID });
 
     // Invalidation only for USER_A.
     router.emitSignals([
@@ -378,38 +555,39 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("unsub stops delivery", () => {
+  test("unsub stops delivery", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
       socket as unknown as SyncSocket,
     );
 
-    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     socket.receive({ type: "unsub", topic: "room", id: ROOM_ID });
     // Room sub eagerly invalidated room queries (3 frames); clear so the
     // assertion captures only the post-unsub emit below.
     socket.sentFrames.length = 0;
 
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
 
     expect(socket.sentFrames.length).toBe(0);
 
     manager.destroy();
   });
 
-  test("connection close cleans up subscriptions", () => {
+  test("connection close cleans up subscriptions", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
       socket as unknown as SyncSocket,
     );
 
-    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     socket.close();
     // Room sub eagerly invalidated room queries (3 frames); clear so the
     // assertion captures only the post-close emit below.
@@ -417,15 +595,18 @@ describe("SyncManager", () => {
 
     // Emit after close — should not error.
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
     expect(socket.sentFrames.length).toBe(0);
     expect(manager.connectionCount).toBe(0);
 
     manager.destroy();
   });
 
-  test("getSpaces invalidation reaches all connections regardless of topic subscriptions", () => {
+  test("getSpaces invalidation reaches all connections regardless of topic subscriptions", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_B, "member");
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
 
     const socketA = new MockSocket(USER_A);
     const socketB = new MockSocket(USER_B);
@@ -437,8 +618,8 @@ describe("SyncManager", () => {
     );
 
     // A subscribed to a space, B subscribed only to a room.
-    socketA.receive({ type: "sub", topic: "space", id: SPACE_ID });
-    socketB.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socketA, { type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socketB, { type: "sub", topic: "room", id: ROOM_ID });
     // Room sub eagerly invalidates room-scoped queries (3 #invalidate frames
     // for socketB); clear so the assertions below capture only the getSpaces
     // broadcast.
@@ -454,9 +635,11 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("getSpaces invalidation with affectedUser only reaches that user", () => {
+  test("getSpaces invalidation with affectedUser only reaches that user", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_B, "member");
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
 
     const socketA = new MockSocket(USER_A);
     const socketB = new MockSocket(USER_B);
@@ -468,8 +651,8 @@ describe("SyncManager", () => {
     );
 
     // Both subscribed to a space.
-    socketA.receive({ type: "sub", topic: "space", id: SPACE_ID });
-    socketB.receive({ type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socketA, { type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socketB, { type: "sub", topic: "space", id: SPACE_ID });
 
     // Only affects USER_A.
     router.emitSignals([
@@ -482,17 +665,17 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("cursor triggers full invalidation for subscribed topics", () => {
+  test("cursor triggers full invalidation for subscribed topics", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
       socket as unknown as SyncSocket,
     );
 
-    socket.receive({ type: "sub", topic: "space", id: SPACE_ID });
-    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
 
     // Send cursor — should trigger broad invalidation.
     socket.receive({ type: "cursor", seq: 0 });
@@ -509,16 +692,16 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("room query invalidation routes via room topic", () => {
+  test("room query invalidation routes via room topic", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
       socket as unknown as SyncSocket,
     );
 
-    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     // Room sub eagerly invalidated room queries (incl. getMessages — 3 frames);
     // clear so the assertion captures only the routed signal below.
     socket.sentFrames.length = 0;
@@ -535,9 +718,9 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("subscribing to a room eagerly invalidates that room's queries", () => {
+  test("subscribing to a room eagerly invalidates that room's queries", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
@@ -547,7 +730,7 @@ describe("SyncManager", () => {
     // Subscribing to a room immediately emits #invalidate for the room-scoped
     // queries so a client re-fetches fresh data instead of serving stale
     // TanStack cache (see SyncManager.#sendRoomInvalidation).
-    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
 
     const nsids = socket.sentFrames.map(
       (f) => decodeFrameBody(f).nsid as string,
@@ -564,15 +747,15 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("destroy unsubscribes from router", () => {
+  test("destroy unsubscribes from router", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
       socket as unknown as SyncSocket,
     );
-    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     // Room sub eagerly invalidated room queries (3 frames); clear so the
     // assertion captures only the post-destroy emit below.
     socket.sentFrames.length = 0;
@@ -581,19 +764,20 @@ describe("SyncManager", () => {
 
     // Emit after destroy — socket should NOT receive anything.
     router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
     expect(socket.sentFrames.length).toBe(0);
   });
 
-  test("multiple events in one batch are all delivered", () => {
+  test("multiple events in one batch are all delivered", async () => {
     const router = new MockRouter();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
 
     const socket = new MockSocket(USER_A);
     manager.register(
       socket as unknown as SyncSocket,
     );
 
-    socket.receive({ type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     // Room sub eagerly invalidated room queries (incl. getMetadata — 3 frames);
     // clear so the assertion captures only the two routed signals below.
     socket.sentFrames.length = 0;
@@ -602,10 +786,226 @@ describe("SyncManager", () => {
       messageDiff(ROOM_ID, 1),
       queryInvalidation("space.roomy.room.getMetadata", { roomId: ROOM_ID }),
     ]);
+    await flush();
 
-    expect(socket.sentFrames.length).toBe(2);
+    // #messageDiff delivery is async (delivery-time access re-check), so the
+    // synchronous #invalidate frame may land first. Assert both arrive.
+    const types = socket.sentFrames.map((f) => f.header.t).sort();
+    expect(types).toEqual(["#invalidate", "#messageDiff"]);
+
+    manager.destroy();
+  });
+});
+
+// ─── Topic authorization tests ──────────────────────────────────────────
+
+describe("SyncManager — topic authorization", () => {
+  test("unauthorized room sub is silently ignored — no topic, no frames", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    // USER_A is a member; USER_B is NOT a member of SPACE_ID, and the space
+    // is invite-only (no public join) — so USER_B has no read access to the
+    // room over HTTP either.
+    db.seedMembership(SPACE_ID, USER_A, "member");
+    db.seedPublicJoin(SPACE_ID, false);
+    db.seedRoom(ROOM_ID, SPACE_ID);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socket = new MockSocket(USER_B);
+    manager.register(socket as unknown as SyncSocket);
+
+    // Non-member subscribes to the room — must be silently ignored.
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
+    expect(socket.sentFrames.length).toBe(0);
+
+    // A message diff for that room must NOT reach the non-member.
+    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
+    expect(socket.sentFrames.length).toBe(0);
+
+    manager.destroy();
+  });
+
+  test("authorized room sub works and receives message diffs", async () => {
+    const router = new MockRouter();
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
+    socket.sentFrames.length = 0;
+
+    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
+
+    expect(socket.sentFrames.length).toBe(1);
     expect(socket.sentFrames[0]!.header.t).toBe("#messageDiff");
-    expect(socket.sentFrames[1]!.header.t).toBe("#invalidate");
+
+    manager.destroy();
+  });
+
+  test("banned user is denied room, space, and stream subs", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_A, "member");
+    db.seedRoom(ROOM_ID, SPACE_ID);
+    db.seedBan(SPACE_ID, USER_A);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
+    await sub(socket, { type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
+    expect(socket.sentFrames.length).toBe(0);
+
+    // No content frames either way.
+    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
+    expect(socket.sentFrames.length).toBe(0);
+
+    manager.destroy();
+  });
+
+  test("non-member of invite-only space is denied space sub", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_A, "member");
+    db.seedPublicJoin(SPACE_ID, false); // invite-only
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socket = new MockSocket(USER_B);
+    manager.register(socket as unknown as SyncSocket);
+
+    await sub(socket, { type: "sub", topic: "space", id: SPACE_ID });
+    expect(socket.sentFrames.length).toBe(0);
+
+    // Space invalidation must not reach the non-member.
+    router.emitSignals([
+      queryInvalidation("space.roomy.space.getMetadata", { spaceId: SPACE_ID }),
+    ]);
+    expect(socket.sentFrames.length).toBe(0);
+
+    manager.destroy();
+  });
+
+  test("member of public space is allowed space sub", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_A, "member");
+    db.seedPublicJoin(SPACE_ID, true);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+
+    await sub(socket, { type: "sub", topic: "space", id: SPACE_ID });
+    expect(socket.sentFrames.length).toBe(0);
+
+    router.emitSignals([
+      queryInvalidation("space.roomy.space.getMetadata", { spaceId: SPACE_ID }),
+    ]);
+    expect(socket.sentFrames.length).toBe(1);
+    expect(socket.sentFrames[0]!.header.t).toBe("#invalidate");
+
+    manager.destroy();
+  });
+
+  test("non-member of public space is allowed space sub (HTTP read semantics)", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_A, "member");
+    db.seedPublicJoin(SPACE_ID, true);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socket = new MockSocket(USER_B);
+    manager.register(socket as unknown as SyncSocket);
+
+    await sub(socket, { type: "sub", topic: "space", id: SPACE_ID });
+    expect(socket.sentFrames.length).toBe(0);
+
+    router.emitSignals([
+      queryInvalidation("space.roomy.space.getMetadata", { spaceId: SPACE_ID }),
+    ]);
+    expect(socket.sentFrames.length).toBe(1);
+
+    manager.destroy();
+  });
+
+  test("stream sub requires member or admin; non-member is denied", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_A, "member");
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    // Non-member USER_B — denied.
+    const socketB = new MockSocket(USER_B);
+    manager.register(socketB as unknown as SyncSocket);
+    await sub(socketB, { type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
+    expect(socketB.sentFrames.length).toBe(0);
+
+    // Member USER_A — allowed.
+    const socketA = new MockSocket(USER_A);
+    manager.register(socketA as unknown as SyncSocket);
+    await sub(socketA, { type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
+    expect(socketA.sentFrames.length).toBe(0);
+
+    manager.destroy();
+  });
+
+  test("admin is allowed stream sub even when not a member", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_A, "admin");
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+    await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
+    expect(socket.sentFrames.length).toBe(0);
+
+    manager.destroy();
+  });
+
+  test("room sub for a nonexistent room is denied", async () => {
+    const router = new MockRouter();
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+
+    await sub(socket, { type: "sub", topic: "room", id: "01NOPE" as Ulid });
+    expect(socket.sentFrames.length).toBe(0);
+
+    manager.destroy();
+  });
+
+  test("revoked user stops receiving message content at delivery time", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_A, "member");
+    db.seedRoom(ROOM_ID, SPACE_ID);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
+    socket.sentFrames.length = 0;
+
+    // First diff arrives while USER_A is still a member.
+    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
+    expect(socket.sentFrames.length).toBe(1);
+
+    // USER_A is banned mid-connection. The next diff must NOT be delivered
+    // (delivery-time re-check), even though the topic is still registered.
+    db.seedBan(SPACE_ID, USER_A);
+    socket.sentFrames.length = 0;
+    router.emitSignals([messageDiff(ROOM_ID, 2)]);
+    await flush();
+    expect(socket.sentFrames.length).toBe(0);
 
     manager.destroy();
   });
@@ -689,14 +1089,14 @@ function streamEvent(idx: number, user: UserDid = USER_A): DecodedStreamEvent {
 
 /** Drain the microtask queue enough for async backfill to complete. */
 async function flush(): Promise<void> {
-  for (let i = 0; i < 30; i++) await Promise.resolve();
+  for (let i = 0; i < 200; i++) await Promise.resolve();
 }
 
 describe("SyncManager — stream topic", () => {
   test("subscribing backfills events from the cursor", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     // Seed 3 events before subscribing.
     source.seed(SPACE_ID, 3);
@@ -705,10 +1105,7 @@ describe("SyncManager — stream topic", () => {
     manager.register(socket as unknown as SyncSocket);
 
     // Subscribe from cursor -1 (full backfill — cursor is exclusive).
-    socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
-
-    // Backfill is async — let it drain.
-    await flush();
+    await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
 
     const frames = socket.sentFrames.filter((f) => f.header.t === "#streamEvents");
     expect(frames.length).toBe(1);
@@ -727,7 +1124,7 @@ describe("SyncManager — stream topic", () => {
   test("subscribing from a non-zero cursor skips already-seen events", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     source.seed(SPACE_ID, 5);
 
@@ -735,9 +1132,7 @@ describe("SyncManager — stream topic", () => {
     manager.register(socket as unknown as SyncSocket);
 
     // Resume from cursor 2 — should get events 3 and 4 only.
-    socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: 2 });
-
-    await flush();
+    await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: 2 });
 
     const frames = socket.sentFrames.filter((f) => f.header.t === "#streamEvents");
     expect(frames.length).toBe(1);
@@ -753,14 +1148,13 @@ describe("SyncManager — stream topic", () => {
   test("live events are delivered after backfill completes", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     const socket = new MockSocket(USER_A);
     manager.register(socket as unknown as SyncSocket);
 
     // Subscribe to an empty stream — backfill finds nothing.
-    socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
-    await flush();
+    await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
 
     // Now emit a live event.
     source.emitLive(SPACE_ID, [streamEvent(0)]);
@@ -780,12 +1174,11 @@ describe("SyncManager — stream topic", () => {
   test("an empty live-event batch does not throw or deliver", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     const socket = new MockSocket(USER_A);
     manager.register(socket as unknown as SyncSocket);
-    socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
-    await flush();
+    await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
 
     socket.sentFrames.length = 0;
     // Emitting an empty batch must not throw (previously events[-1]!.idx did).
@@ -800,7 +1193,7 @@ describe("SyncManager — stream topic", () => {
   test("live events arriving during backfill are drained via pendingLive", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     // Seed 2 events — backfill fetches them in a short (< 100) batch.
     source.seed(SPACE_ID, 2);
@@ -811,6 +1204,9 @@ describe("SyncManager — stream topic", () => {
     // backfilling=true, letting us emit a live event into the race window.
     const releaseFirst = source.gateNextGetEvents();
     socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
+    // The sub is async (access check) — let it settle so the backfill loop
+    // reaches the gated getEventsFrom and suspends on it.
+    await flush();
 
     // Release the first read (idx 0,1), then emit a live event (idx 2) while
     // the backfill loop is still suspended — #onStreamEvents must set
@@ -836,7 +1232,7 @@ describe("SyncManager — stream topic", () => {
   test("re-subscribing while backfill is in flight does not spawn a second loop", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     source.seed(SPACE_ID, 2);
     const socket = new MockSocket(USER_A);
@@ -845,11 +1241,15 @@ describe("SyncManager — stream topic", () => {
     // Gate the first backfill read so the loop is in flight (backfilling=true).
     const releaseFirst = source.gateNextGetEvents();
     socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
+    // Let the async sub access check settle so the backfill loop suspends on
+    // the gated read.
+    await flush();
 
     // Re-subscribe while the first loop is suspended (backfilling=true).
     // Before the M5 fix this reset backfilling=false and kicked off a second
     // concurrent #backfillStream, producing a duplicate backfill frame.
     socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
+    await flush();
 
     // Release the first read; the running loop completes (short batch).
     releaseFirst({ events: [streamEvent(0), streamEvent(1)], cursor: 1 });
@@ -867,12 +1267,11 @@ describe("SyncManager — stream topic", () => {
   test("unsub stops stream delivery", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     const socket = new MockSocket(USER_A);
     manager.register(socket as unknown as SyncSocket);
-    socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
-    await flush();
+    await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
 
     socket.sentFrames.length = 0;
     socket.receive({ type: "unsub", topic: "stream", id: SPACE_ID });
@@ -889,12 +1288,11 @@ describe("SyncManager — stream topic", () => {
   test("connection close cleans up stream subscription", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     const socket = new MockSocket(USER_A);
     manager.register(socket as unknown as SyncSocket);
-    socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
-    await flush();
+    await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
 
     socket.close();
 
@@ -909,7 +1307,7 @@ describe("SyncManager — stream topic", () => {
   test("stale backfill loop exits after unsub + re-sub (identity check)", async () => {
     const router = new MockRouter();
     const source = new FakeStreamSource();
-    const manager = new SyncManager(router as unknown as InvalidationRouter, source);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, source);
 
     // Seed 5 events (idx 0-4).
     source.seed(SPACE_ID, 5);
@@ -920,6 +1318,9 @@ describe("SyncManager — stream topic", () => {
     // gated getEventsFrom with backfilling=true.
     const releaseStale = source.gateNextGetEvents();
     socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
+    // Let the async sub access check settle so backfill #1 suspends on the
+    // gated read.
+    await flush();
 
     // Emit a live event while backfill #1 is suspended — #onStreamEvents sees
     // sub A with backfilling=true and arms sub A.pendingLive. This event is
@@ -930,6 +1331,7 @@ describe("SyncManager — stream topic", () => {
     // different cursor (creates a NEW sub B object and kicks off backfill #2).
     socket.receive({ type: "unsub", topic: "stream", id: SPACE_ID });
     socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: 2 });
+    await flush();
 
     // Release the stale backfill's gated read with an empty batch so it
     // breaks out of the for-loop. With the identity guard, the post-loop
