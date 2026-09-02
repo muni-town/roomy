@@ -164,7 +164,13 @@ export async function selectMessages(
       where e.room = ?1
         and (cc.entity is not null or forward_e.tail is not null)
         ${scope.cursor ? "and e.id < ?2" : ""}
-      order by coalesce(e.sort_idx, e.id) desc
+      -- Order by sort_idx directly (not coalesce(sort_idx, id)) so SQLite can
+      -- use idx_entities_room_sort and stop after the limit. Messages always
+      -- have sort_idx set by the materializer, so the coalesce fallback to id
+      -- was never exercised for the rows this filter keeps; the coalesce forced
+      -- a full temp-B-tree sort of every entity in the room, which is
+      -- catastrophic on a large bridged channel.
+      order by e.sort_idx desc
       limit ${Math.max(1, Math.min(scope.limit, 100))}
     `;
     const stmt = db.query(sql);

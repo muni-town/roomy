@@ -357,3 +357,50 @@ describe("selectMessages nested forwards", () => {
     expect(root?.forwardedFrom).toBeUndefined();
   });
 });
+
+describe("selectMessages room ordering", () => {
+  test("orders by sort_idx, not entity id (so SQLite can use idx_entities_room_sort)", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+
+    // Insert three messages whose ids are in the OPPOSITE order to their
+    // sort_idx. If the query ordered by id (or coalesce(sort_idx, id) with a
+    // NULL sort_idx), the result would be wrong. The fix orders by sort_idx
+    // directly so the index is used and ordering follows the canonical
+    // timestamp, not the event id.
+    const mk = (id: string, sortIdx: string, body: string) => ({
+      id,
+      sortIdx,
+      body,
+    });
+    const msgs = [
+      mk("msg-c", "sort-1", "oldest"),
+      mk("msg-a", "sort-3", "newest"),
+      mk("msg-b", "sort-2", "middle"),
+    ];
+
+    for (const m of msgs) {
+      await db.run(
+        "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+        [m.id, STREAM, roomId, m.sortIdx],
+      );
+      await db.run(
+        "insert into comp_content (entity, mime_type, data, last_edit) values (?, 'text/markdown', ?, ?)",
+        [m.id, Buffer.from(m.body), m.id],
+      );
+    }
+
+    const { messages } = await selectMessages(db, {
+      kind: "room",
+      roomId,
+      limit: 50,
+      cursor: null,
+    });
+
+    // selectMessages returns oldest → newest (it re-sorts the fetched page
+    // ascending in JS). The SQL fetch is newest-first by sort_idx; the point
+    // of this test is that ordering follows sort_idx (canonical timestamp),
+    // NOT the entity id — msg-a has the newest sort_idx but the oldest id.
+    expect(messages.map((m) => m.content)).toEqual(["oldest", "middle", "newest"]);
+  });
+});
