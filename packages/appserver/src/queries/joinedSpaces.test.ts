@@ -7,6 +7,7 @@ import {
   recordPersonalSpaceMembership,
   selectJoinedSpaces,
 } from "./joinedSpaces.ts";
+import { getSpaceUnreadStats } from "./readPositions.ts";
 import { setUserSpaceMembership } from "./userSpaceMembership.ts";
 
 const USER = UserDid.assert("did:plc:test-user");
@@ -204,6 +205,44 @@ describe("recordPersonalSpaceMembership", () => {
     await joinIntent(USER, SPACE);
 
     expect(await selectJoinedSpaces(mainDb, USER)).toHaveLength(1);
+  });
+
+  test("getSpaceUnreadStats counts engaged threads belonging to the space only", async () => {
+    const { mainDb } = setup();
+    const OTHER = StreamDid.assert("did:web:other-space.example");
+
+    // Two threads in this space, one thread in another space.
+    const t1 = "thread-in-space-1";
+    const t2 = "thread-in-space-2";
+    const tOther = "thread-in-other-space";
+    const spaceDb = openSpaceDb(SPACE);
+    for (const t of [t1, t2]) {
+      await spaceDb.run("insert into entities (id, stream_id) values (?, ?)", [t, SPACE]);
+    }
+    const otherDb = openSpaceDb(OTHER);
+    await otherDb.run("insert into entities (id, stream_id) values (?, ?)", [tOther, OTHER]);
+
+    // User engaged with all three threads.
+    const rs = openReadStateDb();
+    for (const t of [t1, t2, tOther]) {
+      await rs.run(
+        "insert into user_thread_activity (user_did, thread_id, last_active_at) values (?, ?, ?)",
+        [USER, t, Date.now()],
+      );
+    }
+
+    // Unread counts: t1 has 3 unread, t2 has 0, tOther has 5.
+    for (const [t, n] of [[t1, 3], [t2, 0], [tOther, 5]] as const) {
+      await rs.run(
+        "insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count) values (?, ?, ?, '0', ?)",
+        [USER, t, SPACE, n],
+      );
+    }
+
+    const stats = await getSpaceUnreadStats(rs, spaceDb, USER, SPACE);
+    // Only t1 (3 unread) belongs to this space; tOther is excluded.
+    expect(stats.unreadCount).toBe(3);
+    expect(stats.unreadThreadCount).toBe(1);
   });
 });
 

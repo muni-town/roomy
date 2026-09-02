@@ -164,14 +164,21 @@ export async function getSpaceUnreadStats(
     )
     .all<{ thread_id: string }>([userDid]);
 
-  const threadIds: string[] = [];
-  for (const t of engagedThreads) {
-    const belongs = await spaceDb
+  // Batch-check which engaged threads belong to this space in a single query
+  // instead of one per-thread round-trip. For a user who has engaged with
+  // thousands of threads across many spaces, the per-thread loop was
+  // O(engagedThreads) per-space DB round-trips — the dominant cost in
+  // getSpaces (which calls this once per joined space).
+  let threadIds: string[] = [];
+  if (engagedThreads.length > 0) {
+    const eph = engagedThreads.map(() => "?").join(",");
+    const belonging = await spaceDb
       .query(
-        "select 1 as n from entities where id = ? and stream_id = ? limit 1",
+        `select id from entities
+          where id in (${eph}) and stream_id = ?`,
       )
-      .get<{ n: number }>([t.thread_id, spaceId]);
-    if (belongs) threadIds.push(t.thread_id);
+      .all<{ id: string }>([...engagedThreads.map((t) => t.thread_id), spaceId]);
+    threadIds = belonging.map((r) => r.id);
   }
   // Ensure read_positions rows exist for engaged threads too.
   await ensureReadPositions(readStateDb, userDid, threadIds);
