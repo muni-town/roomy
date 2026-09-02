@@ -16,9 +16,12 @@
 //   - GRAFANA_CLOUD_MIMIR_TOKEN Grafana Cloud access policy token (basic auth pass)
 //
 // Optional:
-//   - APPSERVER_METRICS_URL     appserver /metrics scrape target (default
-//                               http://appserver:8080/metrics, set in the
-//                               Dockerfile ENV; override on Railway)
+//   - APPSERVER_METRICS_URL     appserver scrape target as host:port (NO
+//                               scheme or path), e.g. appserver:8080 or
+//                               appserver.railway.internal:8080. Default
+//                               appserver:8080 (set in the Dockerfile ENV;
+//                               override on Railway). Scheme is http, path
+//                               is /metrics.
 //   - ALLOY_LOG_LEVEL           default `info`.
 
 logging {
@@ -66,10 +69,14 @@ loki.source.api "apps" {
 // cache hit rate, embed backlog, DB timeouts). Scrape it over the Railway
 // private network and remote-write to Mimir.
 prometheus.scrape "appserver" {
+	// __address__ must be host:port only (no scheme or path) — Prometheus
+	// rejects a full URL here. The scheme defaults to http and the path is
+	// set via metrics_path below.
 	targets = [{
 		__address__ = env("APPSERVER_METRICS_URL"),
 	}]
-	forward_to = [prometheus.remote_write.mimir.receiver]
+	metrics_path = "/metrics"
+	forward_to   = [prometheus.remote_write.mimir.receiver]
 }
 
 // ── Optional: OTLP logs receiver (4317 gRPC / 4318 HTTP) ─────────────
