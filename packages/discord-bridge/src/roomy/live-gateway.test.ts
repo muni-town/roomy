@@ -11,7 +11,7 @@ import { encode } from "@atcute/cbor";
 import { beforeEach, describe, expect, test, vi, afterEach, type Mock } from "bun:test";
 import { type Event, newUlid, transport } from "@roomy-space/sdk";
 import { BridgeRepository } from "../db/repository.ts";
-import { LiveRoomyGateway } from "./live-gateway.ts";
+import { LiveRoomyGateway, reconnectDelayMs } from "./live-gateway.ts";
 import type { RoomyEventCallback } from "./gateway.ts";
 import type { SpaceManager } from "./space-manager.ts";
 
@@ -597,5 +597,100 @@ describe("LiveRoomyGateway", () => {
 		const errors = repo.getEventErrors(SPACE_DID);
 		expect(errors.length).toBe(1);
 		expect(errors[0]?.eventIdx).toBe(0);
+	});
+
+	// ─── Reconnect backoff (shared circuit breaker) ───────────────────────
+
+	describe("reconnectDelayMs", () => {
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
+
+		test("grows exponentially with the failure count", () => {
+			vi.spyOn(Math, "random").mockReturnValue(0.5);
+			// base 1000: attempt 0 → 500, attempt 1 → 1000, attempt 2 → 2000
+			expect(reconnectDelayMs(0, 1000, 100_000)).toBe(500);
+			expect(reconnectDelayMs(1, 1000, 100_000)).toBe(1000);
+			expect(reconnectDelayMs(2, 1000, 100_000)).toBe(2000);
+		});
+
+		test("caps at the max delay", () => {
+			vi.spyOn(Math, "random").mockReturnValue(1);
+			// base 1000, max 5000: attempt 3 → cap 5000 (2^3=8000 > 5000)
+			expect(reconnectDelayMs(3, 1000, 5000)).toBe(5000);
+			expect(reconnectDelayMs(10, 1000, 5000)).toBe(5000);
+		});
+
+		test("full jitter spreads reconnects (random in [0, cap))", () => {
+			vi.spyOn(Math, "random").mockReturnValue(0);
+			expect(reconnectDelayMs(0, 1000, 100_000)).toBe(0);
+			vi.spyOn(Math, "random").mockReturnValue(0.999);
+			expect(reconnectDelayMs(0, 1000, 100_000)).toBe(999);
+		});
+	});
+
+	describe("shared reconnect circuit breaker", () => {
+		let infoSpy: ReturnType<typeof vi.spyOn>;
+		let randomSpy: ReturnType<typeof vi.spyOn>;
+
+		beforeEach(() => {
+			process.env.BRIDGE_RECONNECT_BASE_MS = "1000";
+			process.env.BRIDGE_RECONNECT_MAX_MS = "100000";
+			randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+			infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+			vi.useFakeTimers();
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+			vi.restoreAllMocks();
+			delete process.env.BRIDGE_RECONNECT_BASE_MS;
+			delete process.env.BRIDGE_RECONNECT_MAX_MS;
+		});
+
+		/** Extract the delayMs from the most recent "reconnecting" status line. */
+		function lastReconnectDelay(): number | undefined {
+			const lines = infoSpy.mock.calls.map((c: unknown[]) => c[0] as string);
+			for (let i = lines.length - 1; i >= 0; i--) {
+				try {
+					const rec = JSON.parse(lines[i]!);
+					if (rec.state === "reconnecting") return rec.delayMs as number;
+				} catch {
+					// not a JSON status line
+				}
+			}
+			return undefined;
+		}
+
+		test("repeated failures grow the shared backoff", async () => {
+			const callback = vi.fn() as unknown as RoomyEventCallback;
+			await subscribeAndConnect(SPACE_DID, callback);
+
+			// First failure → counter=0 → delay 500, counter becomes 1.
+			lastSocket!._emitClose(1006);
+			expect(lastReconnectDelay()).toBe(500);
+
+			// Fail again without a successful open → counter=1 → delay 1000.
+			lastSocket!._emitClose(1006);
+			expect(lastReconnectDelay()).toBe(1000);
+		});
+
+		test("failure counter resets on a successful open", async () => {
+			const callback = vi.fn() as unknown as RoomyEventCallback;
+			await subscribeAndConnect(SPACE_DID, callback);
+
+			// Fail → reconnect scheduled (counter=1, delay 500).
+			lastSocket!._emitClose(1006);
+			expect(lastReconnectDelay()).toBe(500);
+
+			// Let the reconnect timer fire and open the new socket → counter resets.
+			vi.advanceTimersByTime(500);
+			lastSocket!._open();
+			await flush();
+
+			// Fail again → counter was reset to 0 → delay 500 (not 1000).
+			lastSocket!._emitClose(1006);
+			expect(lastReconnectDelay()).toBe(500);
+		});
 	});
 });

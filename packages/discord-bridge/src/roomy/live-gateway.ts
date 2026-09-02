@@ -10,6 +10,7 @@
 
 import { type Event, sync, transport } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
+import { BRIDGE_RECONNECT_BASE_MS, BRIDGE_RECONNECT_MAX_MS } from "../env.ts";
 import { createLogger } from "../logger.ts";
 import type { RoomyEventCallback, RoomyGateway } from "./gateway.ts";
 import type { SpaceManager } from "./space-manager.ts";
@@ -42,6 +43,15 @@ export class LiveRoomyGateway implements RoomyGateway {
 	#connections = new Map<string, sync.SyncConnection>();
 	/** Per-space processing chain — ensures frames are processed sequentially. */
 	#processing = new Map<string, Promise<void>>();
+	/**
+	 * Shared reconnect circuit breaker. When the appserver is failing, every
+	 * space connection drops and the SDK schedules a reconnect. If each used
+	 * its own backoff they'd reconnect in lockstep and hammer the appserver
+	 * (which prevents it from recovering). We share one failure counter across
+	 * all connections so they back off together with a growing delay, and
+	 * reset it the moment any connection opens successfully.
+	 */
+	#reconnectFailures = 0;
 
 	constructor(
 		spaceManager: SpaceManager,
@@ -93,6 +103,10 @@ export class LiveRoomyGateway implements RoomyGateway {
 			},
 			wsUrl: this.#appserverWsUrl,
 			logger: log.debug,
+			// Shared circuit-breaker backoff: all connections back off together
+			// (growing delay) when the appserver is failing, instead of each
+			// reconnecting in lockstep and amplifying the load. See #reconnectDelay.
+			reconnectDelay: () => this.#reconnectDelay(),
 			// Keep idle sync WebSockets alive: Bun's WebSocket exposes
 			// protocol-level ping/pong, and the appserver auto-replies with
 			// pong (RFC 6455). Without a heartbeat, idle connections are
@@ -120,6 +134,9 @@ export class LiveRoomyGateway implements RoomyGateway {
 		// cursor. We unsubscribe the stale topic and re-subscribe with the
 		// up-to-date cursor so reconnects resume from where we left off.
 		connection.onOpen(() => {
+			// A successful open means the appserver is healthy again — reset the
+			// shared circuit breaker so reconnects are fast from a clean slate.
+			this.#reconnectFailures = 0;
 			// M3: re-enter the backfill phase on every reconnect. The first
 			// open after the initial backfill completed has backfillState
 			// stuck at false; without resetting, a reconnect's backfill
@@ -284,4 +301,40 @@ export class LiveRoomyGateway implements RoomyGateway {
 		this.#processing.clear();
 		await this.#spaceManager.disconnectAll();
 	}
+
+	/**
+	 * Shared reconnect-delay calculator for the SDK's SyncConnection.
+	 *
+	 * The SDK calls this once per reconnect scheduling with the per-connection
+	 * attempt number. We ignore that and instead key the delay off the shared
+	 * {@link #reconnectFailures} counter, so every connection backs off together
+	 * when the appserver is failing. Each call advances the counter (a failed
+	 * reconnect attempt), and {@link #reconnectFailures} is reset to 0 on the
+	 * first successful open. Full jitter desynchronizes the connections so they
+	 * don't reconnect in lockstep.
+	 */
+	#reconnectDelay(): number {
+		const delay = reconnectDelayMs(
+			this.#reconnectFailures,
+			BRIDGE_RECONNECT_BASE_MS(),
+			BRIDGE_RECONNECT_MAX_MS(),
+		);
+		this.#reconnectFailures++;
+		return delay;
+	}
+}
+
+/**
+ * Compute the shared reconnect backoff delay for a given failure count.
+ *
+ * Exponential backoff with full jitter, capped at `max`:
+ * `min(base * 2^failures, max) * random()`. Exported for tests.
+ */
+export function reconnectDelayMs(
+	failures: number,
+	base: number,
+	max: number,
+): number {
+	const cap = Math.min(base * 2 ** failures, max);
+	return Math.floor(Math.random() * cap);
 }

@@ -95,6 +95,8 @@ Events carry two extensions:
 | `BRIDGE_DB_PATH`     | `${BRIDGE_DATA_DIR}/bridge.sqlite` | Path to SQLite database                                                          |
 | `PORT`               | `3301`                             | HTTP port for bridge API (`/info`, `/get-guild-id`, `/get-space-id`, `/bridges`) |
 | `LOG_LEVEL`          | `info`                             | Log level                                                                        |
+| `BRIDGE_RECONNECT_BASE_MS` | `5000`                       | Base delay (ms) for the shared reconnect backoff to a failing appserver          |
+| `BRIDGE_RECONNECT_MAX_MS`  | `300000`                     | Max delay (ms) cap for the shared reconnect backoff                              |
 
 ## Slash commands
 
