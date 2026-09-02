@@ -421,3 +421,207 @@ async function computeRoomAccess(
     isBanned: false,
   };
 }
+
+/**
+ * Resolve `RoomAccess` for many rooms in one batched pass.
+ *
+ * The per-room `roomAccess` path issues ~3–4 SQL round-trips per room
+ * (resolveRoom: entity+default_access, parent link, parent default_access for
+ * threads; plus roleGrant). Handlers that check every room in a space
+ * (`getThreads` up to 100 rooms, `getMetadata`'s sidebar) therefore fan out
+ * hundreds of round-trips to the per-space DB worker — a pool-saturation
+ * source under load.
+ *
+ * This batches the same lookups into ~4 queries total (entity+default_access,
+ * parent links, parent default_access, role grants), then assembles each
+ * `RoomAccess` in JS with the exact same decision logic as `computeRoomAccess`
+ * (banned deny, admin override, default_access ∪ role grant, public-join gate).
+ * Results are written into the shared memo so later single-room `roomAccess`
+ * calls hit the cache.
+ *
+ * Must stay in parity with `computeRoomAccess` — the MBT spec-oracle tests
+ * drive both against the same model.
+ */
+export async function roomAccessMany(
+  db: DbLike,
+  roomIds: string[],
+  did: string | null,
+  memo?: AccessMemo,
+): Promise<Map<string, RoomAccess>> {
+  const m = memo ?? createAccessMemo();
+  const result = new Map<string, RoomAccess>();
+
+  // Dedupe and skip rooms already resolved in this request.
+  const pending: string[] = [];
+  for (const roomId of roomIds) {
+    const key = roomKey(did, roomId);
+    const hit = m.room.get(key);
+    if (hit) {
+      result.set(roomId, hit);
+    } else {
+      pending.push(roomId);
+    }
+  }
+  if (pending.length === 0) return result;
+
+  const ph = pending.map(() => "?").join(",");
+
+  // 1. entity + default_access for all pending rooms.
+  const roomRows = await db
+    .query(
+      `select e.id as id, e.stream_id as space_id, cr.default_access as default_access
+         from entities e
+         left join comp_room cr on cr.entity = e.id
+        where e.id in (${ph})`,
+    )
+    .all<{ id: string; space_id: string | null; default_access: string | null }>(...pending);
+  const roomById = new Map(roomRows.map((r) => [r.id, r]));
+
+  // 2. canonical parent links for all pending rooms.
+  const parentRows = await db
+    .query(
+      `select tail, head from edges
+        where tail in (${ph})
+          and label = 'link'
+          and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1`,
+    )
+    .all<{ tail: string; head: string }>(...pending);
+  const parentByRoom = new Map(parentRows.map((r) => [r.tail, r.head]));
+
+  // 3. parent-channel default_access for the distinct parent ids.
+  const parentIds = [...new Set(parentByRoom.values())];
+  const parentAccess = new Map<string, DefaultAccess>();
+  if (parentIds.length > 0) {
+    const pph = parentIds.map(() => "?").join(",");
+    const pRows = await db
+      .query(
+        `select entity, default_access from comp_room where entity in (${pph})`,
+      )
+      .all<{ entity: string; default_access: string | null }>(...parentIds);
+    for (const r of pRows) parentAccess.set(r.entity, normalizeDefaultAccess(r.default_access));
+  }
+
+  // Space-level membership/admin/ban + public-join gate, once per distinct
+  // space (memoised across the whole request).
+  const spaceIds = [...new Set(roomRows.map((r) => r.space_id).filter((s): s is string => s !== null))];
+  const spaceBySpace = new Map<string, SpaceAccess>();
+  const publicJoinBySpace = new Map<string, boolean>();
+  for (const sid of spaceIds) {
+    spaceBySpace.set(sid, await spaceAccessCached(db, sid, did, m));
+    publicJoinBySpace.set(sid, await allowsPublicJoin(db, sid, m));
+  }
+
+  // 4. role grants for the distinct effective rooms (parentChannelId ?? roomId).
+  // Roles are space-scoped, so join entities to scope each grant by its own
+  // room's space — correct even if a batch spans multiple spaces.
+  const permRooms = [...new Set(pending.map((roomId) => parentByRoom.get(roomId) ?? roomId))];
+  const grantByRoom = new Map<string, { canRead: boolean; canWrite: boolean }>();
+  if (did !== null && permRooms.length > 0) {
+    const rph = permRooms.map(() => "?").join(",");
+    const grantRows = await db
+      .query(
+        `select rr.room_id as room_id,
+                max(case when rr.permission in ('read', 'readwrite') then 1 else 0 end) as has_read,
+                max(case when rr.permission = 'readwrite' then 1 else 0 end) as has_write
+           from member_roles mr
+           join role_rooms rr on rr.role_id = mr.role_id
+           join roles ro on ro.id = mr.role_id
+           join entities e on e.id = rr.room_id
+          where mr.user_id = ?1
+            and rr.room_id in (${rph})
+            and ro.stream_id = e.stream_id
+            and ro.deleted = 0
+          group by rr.room_id`,
+      )
+      .all<{ room_id: string; has_read: number; has_write: number }>(did, ...permRooms);
+    for (const r of grantRows) {
+      grantByRoom.set(r.room_id, { canRead: !!r.has_read, canWrite: !!r.has_write });
+    }
+  }
+
+  for (const roomId of pending) {
+    const row = roomById.get(roomId);
+    const parentChannelId = parentByRoom.get(roomId) ?? null;
+
+    // Room doesn't exist in the materialised view.
+    if (!row || row.space_id === null) {
+      const acc: RoomAccess = {
+        exists: false,
+        canRead: false,
+        canWrite: false,
+        isAdmin: false,
+        defaultAccess: "readwrite",
+        spaceId: null,
+        parentChannelId: null,
+        isBanned: false,
+      };
+      result.set(roomId, acc);
+      m.room.set(roomKey(did, roomId), acc);
+      continue;
+    }
+
+    // Effective default_access: threads inherit the more restrictive of the
+    // parent channel's and their own.
+    const ownAccess = normalizeDefaultAccess(row.default_access);
+    const effectiveAccess = parentChannelId !== null
+      ? minAccess(parentAccess.get(parentChannelId) ?? "readwrite", ownAccess)
+      : ownAccess;
+
+    const spaceId = row.space_id;
+    const space = spaceBySpace.get(spaceId)!;
+
+    if (space.isBanned) {
+      const acc: RoomAccess = {
+        exists: true,
+        canRead: false,
+        canWrite: false,
+        isAdmin: false,
+        defaultAccess: effectiveAccess,
+        spaceId,
+        parentChannelId,
+        isBanned: true,
+      };
+      result.set(roomId, acc);
+      m.room.set(roomKey(did, roomId), acc);
+      continue;
+    }
+
+    if (space.isAdmin) {
+      const acc: RoomAccess = {
+        exists: true,
+        canRead: true,
+        canWrite: true,
+        isAdmin: true,
+        defaultAccess: effectiveAccess,
+        spaceId,
+        parentChannelId,
+        isBanned: false,
+      };
+      result.set(roomId, acc);
+      m.room.set(roomKey(did, roomId), acc);
+      continue;
+    }
+
+    const permRoom = parentChannelId ?? roomId;
+    const grant = grantByRoom.get(permRoom) ?? { canRead: false, canWrite: false };
+    const defaultGrantsRead = effectiveAccess !== "none";
+    const defaultGrantsWrite = effectiveAccess === "readwrite";
+    const publicJoin = publicJoinBySpace.get(spaceId) ?? false;
+    const passesReadGate = publicJoin || space.isMember;
+
+    const acc: RoomAccess = {
+      exists: true,
+      canRead: passesReadGate && (defaultGrantsRead || grant.canRead),
+      canWrite: space.isMember && (defaultGrantsWrite || grant.canWrite),
+      isAdmin: false,
+      defaultAccess: effectiveAccess,
+      spaceId,
+      parentChannelId,
+      isBanned: false,
+    };
+    result.set(roomId, acc);
+    m.room.set(roomKey(did, roomId), acc);
+  }
+
+  return result;
+}

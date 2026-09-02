@@ -10,6 +10,7 @@ import {
   isBanned,
   isMember,
   roomAccess,
+  roomAccessMany,
   spaceAccess,
 } from "./access.ts";
 
@@ -474,5 +475,110 @@ describe("auth/access — room access", () => {
     expect(result.canWrite).toBe(false);
     expect(result.isAdmin).toBe(false);
     expect(result.isBanned).toBe(true);
+  });
+});
+
+describe("auth/access — roomAccessMany parity", () => {
+  test("matches roomAccess for a mixed batch (channels, threads, roles, ban, admin)", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
+
+    const CH1 = "01CHANNEL10000000000000000";
+    const CH2 = "01CHANNEL20000000000000000";
+    const CH3 = "01CHANNEL30000000000000000";
+    const TH1 = "01THREAD100000000000000000";
+    const TH2 = "01THREAD200000000000000000";
+    const MISSING = "01MISSING000000000000000000";
+
+    // readwrite channel (member)
+    await seedChannel(db, CH1, SPACE, "readwrite");
+    // read channel (member)
+    await seedChannel(db, CH2, SPACE, "read");
+    // none channel with a role grant for USER
+    await seedChannel(db, CH3, SPACE, "none");
+    await addRole(db, ROLE, SPACE, USER, CH3, "read");
+    // thread under CH1 (inherits readwrite)
+    await seedThread(db, TH1, CH1, SPACE);
+    // thread under CH3 (clamped to none, but role grant on CH3 grants read)
+    await seedThread(db, TH2, CH3, SPACE);
+
+    await addEdge(db, SPACE, USER, "member");
+
+    const roomIds = [CH1, CH2, CH3, TH1, TH2, MISSING];
+
+    // Individual roomAccess (fresh memo per call).
+    const individual = new Map<string, Awaited<ReturnType<typeof roomAccess>>>();
+    for (const id of roomIds) {
+      individual.set(id, await roomAccess(db, id, USER));
+    }
+
+    // Batched roomAccessMany (single memo).
+    const batched = await roomAccessMany(db, roomIds, USER);
+
+    for (const id of roomIds) {
+      const a = individual.get(id)!;
+      const b = batched.get(id)!;
+      expect(b, `roomAccessMany(${id})`).toBeDefined();
+      expect(b.exists).toBe(a.exists);
+      expect(b.canRead).toBe(a.canRead);
+      expect(b.canWrite).toBe(a.canWrite);
+      expect(b.isAdmin).toBe(a.isAdmin);
+      expect(b.defaultAccess).toBe(a.defaultAccess);
+      expect(b.spaceId).toBe(a.spaceId);
+      expect(b.parentChannelId).toBe(a.parentChannelId);
+      expect(b.isBanned).toBe(a.isBanned);
+    }
+  });
+
+  test("matches roomAccess for banned and admin callers", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedUser(db, USER);
+
+    const CH1 = "01CHANNEL10000000000000000";
+    const CH2 = "01CHANNEL20000000000000000";
+    await seedChannel(db, CH1, SPACE, "readwrite");
+    await seedChannel(db, CH2, SPACE, "none");
+
+    // USER is admin on the space.
+    await addEdge(db, SPACE, USER, "admin");
+
+    const roomIds = [CH1, CH2];
+
+    const individual = new Map<string, Awaited<ReturnType<typeof roomAccess>>>();
+    for (const id of roomIds) {
+      individual.set(id, await roomAccess(db, id, USER));
+    }
+    const batched = await roomAccessMany(db, roomIds, USER);
+    for (const id of roomIds) {
+      const a = individual.get(id)!;
+      const b = batched.get(id)!;
+      expect(b.canRead).toBe(a.canRead);
+      expect(b.canWrite).toBe(a.canWrite);
+      expect(b.isAdmin).toBe(a.isAdmin);
+      expect(b.defaultAccess).toBe(a.defaultAccess);
+    }
+
+    // Now ban the admin — ban must override admin in both paths.
+    await db.run("insert into comp_bans (entity, user_did) values (?, ?)", [SPACE, USER]);
+    const individualBanned = new Map<string, Awaited<ReturnType<typeof roomAccess>>>();
+    for (const id of roomIds) {
+      individualBanned.set(id, await roomAccess(db, id, USER));
+    }
+    const batchedBanned = await roomAccessMany(db, roomIds, USER);
+    for (const id of roomIds) {
+      const a = individualBanned.get(id)!;
+      const b = batchedBanned.get(id)!;
+      expect(b.canRead).toBe(a.canRead);
+      expect(b.canWrite).toBe(a.canWrite);
+      expect(b.isAdmin).toBe(a.isAdmin);
+      expect(b.isBanned).toBe(a.isBanned);
+    }
+  });
+
+  test("empty input returns empty map", async () => {
+    const { asyncDb: db } = freshDb();
+    expect((await roomAccessMany(db, [], USER)).size).toBe(0);
   });
 });

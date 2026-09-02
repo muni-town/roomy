@@ -6,7 +6,7 @@
  * (and from `orphans`). Stage-1: unreadCount/lastRead are 0/null.
  */
 
-import { createAccessMemo, roomAccess, spaceAccess } from "../auth/access.ts";
+import { createAccessMemo, roomAccessMany, spaceAccess } from "../auth/access.ts";
 import { createFederationMemo, federatedRoomAccess } from "../auth/federation.ts";
 import { openReadStateDb, openSpaceDb, openGlobalDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
@@ -199,11 +199,21 @@ export const getMetadataHandler: QueryHandler<
       allChannelRows.map((r) => r.id as string),
     );
 
+    // Resolve read access for every channel in one batched pass instead of
+    // one `roomAccess` round-trip per channel (the sidebar can reference
+    // many channels across categories + orphans).
+    const channelAccess = await roomAccessMany(
+      db,
+      allChannelRows.map((r) => r.id as string),
+      userDid,
+      memo,
+    );
+
     const buildChannel = async (id: string): Promise<SidebarChannel | null> => {
       const row = channelById.get(id);
       if (!row) return null;
-      const acc = await roomAccess(db, id, userDid, memo);
-      if (!acc.canRead) return null;
+      const acc = channelAccess.get(id);
+      if (!acc || !acc.canRead) return null;
       const pos = readPositions.get(id);
       return stripNulls({
         id: row.id,
@@ -271,14 +281,15 @@ export const getMetadataHandler: QueryHandler<
 
       // Build active thread objects with access checks and read positions.
       const threadReadPositions = await getReadPositions(mainDb, userDid, threadIds);
+      const threadAccess = await roomAccessMany(db, threadIds, userDid, memo);
       const activeThreadsByParent = new Map<string, ActiveSidebarThread[]>();
 
       for (const entry of activeThreadEntries) {
         const meta = threadMetaMap.get(entry.id);
         if (!meta) continue;
 
-        const acc = await roomAccess(db, entry.id, userDid, memo);
-        if (!acc.canRead) continue;
+        const acc = threadAccess.get(entry.id);
+        if (!acc || !acc.canRead) continue;
 
         const parentId = meta.canonicalParent;
         if (!parentId) continue; // orphan thread — not navigable

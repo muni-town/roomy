@@ -9,7 +9,7 @@
  * Supports cursor-based pagination via `limit` and `cursor` params.
  */
 
-import { createAccessMemo, roomAccess } from "../auth/access.ts";
+import { createAccessMemo, roomAccessMany } from "../auth/access.ts";
 import { openReadStateDb, openSpaceDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { listThreadActivity } from "../queries/threadActivity.ts";
@@ -118,14 +118,17 @@ export const getSpaceThreadsHandler: QueryHandler<
     }
   }
 
+  // Resolve read access for every room in one batched pass instead of one
+  // `roomAccess` round-trip per room (up to 100 rooms → ~300–400 per-space
+  // DB round-trips). Thread visibility hangs off the canonical parent channel
+  // — the auth unit computes that via the 'link' edge, matching the spec's
+  // "channel grants visibility" model.
+  const accessByRoom = await roomAccessMany(db, all.map((t) => t.id), userDid, memo);
+
   const rooms: RoomRow[] = [];
   for (const t of all) {
-    // Thread visibility hangs off the canonical parent channel — re-use
-    // the auth unit to compute it. (The thread itself inherits via 'link',
-    // so checking the thread directly would also work; checking via
-    // canonicalParent matches the spec's "channel grants visibility" model.)
-    const acc = await roomAccess(db, t.id, userDid, memo);
-    if (!acc.canRead) continue;
+    const acc = accessByRoom.get(t.id);
+    if (!acc || !acc.canRead) continue;
     const members = t.latestMembers.map((m) => ({
       did: m.did,
       name: m.name,
