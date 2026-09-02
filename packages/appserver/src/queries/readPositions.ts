@@ -5,7 +5,7 @@
  * COUNT(*) against entities. This is O(1) per room.
  */
 
-import { createAccessMemo, roomAccessMany, type AccessMemo } from "../auth/access.ts";
+import { createAccessMemo, roomAccessMany, type AccessMemo, type RoomAccess } from "../auth/access.ts";
 import type { DbLike } from "../db/types.ts";
 import type { UserDid } from "@roomy-space/sdk";
 
@@ -148,30 +148,83 @@ export async function getSpaceUnreadStats(
   spaceId: string,
   memo?: AccessMemo,
 ): Promise<SpaceUnreadStats> {
-  // Fetch all non-deleted channels in the space (per-space DB).
-  const allChannels = await spaceDb
+  const data = await getSpaceSidebarData(readStateDb, spaceDb, userDid, spaceId, memo);
+  return {
+    unreadCount: data.unreadCount,
+    unreadRoomCount: data.unreadRoomCount,
+    unreadThreadCount: data.unreadThreadCount,
+  };
+}
+
+/**
+ * Everything `space.getMetadata` needs from the per-space + read-state DBs,
+ * computed in ONE pass and returned together so the handler does not re-fetch
+ * the same rows (previously getSpaceUnreadStats fetched channel ids, then the
+ * handler re-fetched the same channels with names + re-read read positions,
+ * duplicating the per-space DB round-trips on the hottest sidebar path).
+ *
+ * Returns the non-deleted channels (with names + default_access), the batched
+ * read-access decisions and read positions for every channel + engaged thread,
+ * and the unread aggregates. `getSpaceUnreadStats` is a thin projection of this
+ * (it discards the per-room detail) so `getSpaces` stays exactly as cheap as
+ * before — `includeReadPositions` lets the sidebar path opt into the per-room
+ * read positions without penalising callers that only need the counts.
+ */
+export interface SpaceSidebarData {
+  /** Non-deleted channels in the space (id, name, default_access). */
+  channels: Array<{ id: string; name: string | null; defaultAccess: string | null }>;
+  /** Read-access decisions for every channel + engaged thread (roomId → decision). */
+  access: Map<string, RoomAccess>;
+  /** Read positions (unreadCount) for every channel + engaged thread. */
+  readPositions: Map<string, ReadPosition>;
+  /** Channel ids the caller can read. */
+  accessibleIds: string[];
+  /** Engaged thread ids belonging to this space. */
+  threadIds: string[];
+  unreadCount: number;
+  unreadRoomCount: number;
+  unreadThreadCount: number;
+}
+
+export async function getSpaceSidebarData(
+  readStateDb: DbLike,
+  spaceDb: DbLike,
+  userDid: string,
+  spaceId: string,
+  memo?: AccessMemo,
+  options: { includeReadPositions?: boolean } = {},
+): Promise<SpaceSidebarData> {
+  // Fetch all non-deleted channels in the space (per-space DB), WITH names +
+  // default_access. The sidebar assembly in getMetadata reuses these rows
+  // directly instead of re-querying channels after the unread computation.
+  const allChannelRows = await spaceDb
     .query(
-      `select e.id from entities e
+      `select e.id as id, ci.name as name, cr.default_access as default_access
+         from entities e
          join comp_room cr on cr.entity = e.id
+         left join comp_info ci on ci.entity = e.id
         where e.stream_id = ?
           and cr.label = 'space.roomy.channel'
           and coalesce(cr.deleted, 0) = 0`,
     )
-    .all<{ id: string }>([spaceId]);
+    .all<{ id: string; name: string | null; default_access: string | null }>(spaceId);
+  const channels = allChannelRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    defaultAccess: r.default_access,
+  }));
 
   // Filter to channels the user can read, then ensure read_positions rows exist.
   // All channels share the same parent space, so a single memo collapses the
   // space-level membership/admin/ban checks to one set for the whole request.
-  // Batch the per-channel access checks into one pass (roomAccessMany) instead
-  // of one roomAccess round-trip per channel to the per-space DB worker.
   const m = memo ?? createAccessMemo();
   const channelAccess = await roomAccessMany(
     spaceDb,
-    allChannels.map((c) => c.id),
+    channels.map((c) => c.id),
     userDid,
     m,
   );
-  const accessible = allChannels
+  const accessible = channels
     .filter((c) => channelAccess.get(c.id)?.canRead)
     .map((c) => c.id);
 
@@ -188,10 +241,7 @@ export async function getSpaceUnreadStats(
     .all<{ thread_id: string }>([userDid]);
 
   // Batch-check which engaged threads belong to this space in a single query
-  // instead of one per-thread round-trip. For a user who has engaged with
-  // thousands of threads across many spaces, the per-thread loop was
-  // O(engagedThreads) per-space DB round-trips — the dominant cost in
-  // getSpaces (which calls this once per joined space).
+  // instead of one per-thread round-trip.
   let threadIds: string[] = [];
   if (engagedThreads.length > 0) {
     const eph = engagedThreads.map(() => "?").join(",");
@@ -207,42 +257,58 @@ export async function getSpaceUnreadStats(
   await ensureReadPositions(readStateDb, userDid, threadIds);
 
   const allRoomIds = [...accessible, ...threadIds];
-  if (allRoomIds.length === 0) {
-    return { unreadCount: 0, unreadRoomCount: 0, unreadThreadCount: 0 };
+  let unreadCount = 0;
+  let unreadRoomCount = 0;
+  let unreadThreadCount = 0;
+  if (allRoomIds.length > 0) {
+    // Sum unread counts and count rooms with unreads across accessible
+    // channels and engaged threads.
+    const placeholders = allRoomIds.map(() => "?").join(",");
+    const row = await readStateDb
+      .query(
+        `select coalesce(sum(unread_count), 0) as total,
+                coalesce(sum(case when unread_count > 0 then 1 else 0 end), 0) as rooms_with_unread
+           from read_positions
+          where user_did = ? and room_id in (${placeholders})`,
+      )
+      .get<{ total: number; rooms_with_unread: number }>([userDid, ...allRoomIds]);
+    const total = row?.total ?? 0;
+    const roomsWithUnread = row?.rooms_with_unread ?? 0;
+
+    // Split the room count into channels vs engaged threads.
+    let threadRoomsWithUnread = 0;
+    if (threadIds.length > 0) {
+      const tph = threadIds.map(() => "?").join(",");
+      const trow = await readStateDb
+        .query(
+          `select count(*) as n from read_positions
+            where user_did = ? and room_id in (${tph}) and unread_count > 0`,
+        )
+        .get<{ n: number }>([userDid, ...threadIds]);
+      threadRoomsWithUnread = trow?.n ?? 0;
+    }
+
+    unreadCount = total;
+    unreadRoomCount = roomsWithUnread - threadRoomsWithUnread;
+    unreadThreadCount = threadRoomsWithUnread;
   }
 
-  // Sum unread counts and count rooms with unreads across accessible
-  // channels and engaged threads.
-  const placeholders = allRoomIds.map(() => "?").join(",");
-  const row = await readStateDb
-    .query(
-      `select coalesce(sum(unread_count), 0) as total,
-              coalesce(sum(case when unread_count > 0 then 1 else 0 end), 0) as rooms_with_unread
-         from read_positions
-        where user_did = ? and room_id in (${placeholders})`,
-    )
-    .get<{ total: number; rooms_with_unread: number }>([userDid, ...allRoomIds]);
-  const total = row?.total ?? 0;
-  const roomsWithUnread = row?.rooms_with_unread ?? 0;
-
-  // Split the room count into channels vs engaged threads. The thread ids
-  // are a subset of allRoomIds; count how many of them have unreads.
-  let threadRoomsWithUnread = 0;
-  if (threadIds.length > 0) {
-    const tph = threadIds.map(() => "?").join(",");
-    const trow = await readStateDb
-      .query(
-        `select count(*) as n from read_positions
-          where user_did = ? and room_id in (${tph}) and unread_count > 0`,
-      )
-      .get<{ n: number }>([userDid, ...threadIds]);
-    threadRoomsWithUnread = trow?.n ?? 0;
+  // Per-room read positions for the sidebar. Only computed when requested
+  // (getSpaces — via getSpaceUnreadStats — needs only the aggregates).
+  let readPositions = new Map<string, ReadPosition>();
+  if (options.includeReadPositions && allRoomIds.length > 0) {
+    readPositions = await getReadPositions(readStateDb, userDid, allRoomIds);
   }
 
   return {
-    unreadCount: total,
-    unreadRoomCount: roomsWithUnread - threadRoomsWithUnread,
-    unreadThreadCount: threadRoomsWithUnread,
+    channels,
+    access: channelAccess,
+    readPositions,
+    accessibleIds: accessible,
+    threadIds,
+    unreadCount,
+    unreadRoomCount,
+    unreadThreadCount,
   };
 }
 

@@ -10,7 +10,7 @@ import { createAccessMemo, roomAccessMany, spaceAccess } from "../auth/access.ts
 import { createFederationMemo, federatedRoomAccess } from "../auth/federation.ts";
 import { openReadStateDb, openSpaceDb, openGlobalDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
-import { getReadPositions, getSpaceUnreadStats } from "../queries/readPositions.ts";
+import { getReadPositions, getSpaceSidebarData } from "../queries/readPositions.ts";
 import { queryActiveThreads, resolveThreadsByIds } from "../queries/userActiveThreads.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
@@ -170,44 +170,19 @@ export const getMetadataHandler: QueryHandler<
   let unreadRoomCount = 0;
   let unreadThreadCount = 0;
   if (userDid !== null && (access.isMember || access.isAdmin)) {
-    const stats = await getSpaceUnreadStats(mainDb, db, userDid, spaceId, memo);
-    unreadRoomCount = stats.unreadRoomCount;
-    unreadThreadCount = stats.unreadThreadCount;
+    // Fetch the channel list, per-channel access, read positions, and unread
+    // aggregates in ONE pass (rather than getSpaceUnreadStats fetching only
+    // counts and this handler re-querying channels + read positions). Reuses
+    // the shared access memo, so roomAccessMany work is not repeated.
+    const data = await getSpaceSidebarData(mainDb, db, userDid, spaceId, memo, {
+      includeReadPositions: true,
+    });
+    unreadRoomCount = data.unreadRoomCount;
+    unreadThreadCount = data.unreadThreadCount;
 
-    const allChannelRows = await db
-      .query(
-        `select e.id as id, ci.name as name, cr.default_access as default_access
-             from entities e
-             join comp_room cr on cr.entity = e.id
-             left join comp_info ci on ci.entity = e.id
-            where e.stream_id = ?
-              and cr.label = 'space.roomy.channel'
-              and coalesce(cr.deleted, 0) = 0`,
-      )
-      .all<{
-        id: string;
-        name: string | null;
-        default_access: string | null;
-      }>(spaceId);
-
-    const channelById = new Map(allChannelRows.map((r) => [r.id, r]));
-
-    // Batch-fetch read positions for all channels in this space.
-    const readPositions = await getReadPositions(
-      mainDb,
-      userDid,
-      allChannelRows.map((r) => r.id as string),
-    );
-
-    // Resolve read access for every channel in one batched pass instead of
-    // one `roomAccess` round-trip per channel (the sidebar can reference
-    // many channels across categories + orphans).
-    const channelAccess = await roomAccessMany(
-      db,
-      allChannelRows.map((r) => r.id as string),
-      userDid,
-      memo,
-    );
+    const channelById = new Map(data.channels.map((c) => [c.id, c]));
+    const readPositions = data.readPositions;
+    const channelAccess = data.access;
 
     const buildChannel = async (id: string): Promise<SidebarChannel | null> => {
       const row = channelById.get(id);
@@ -258,9 +233,9 @@ export const getMetadataHandler: QueryHandler<
       }) as SidebarCategory;
     }));
 
-    for (const row of allChannelRows) {
-      if (referencedIds.has(row.id as string)) continue;
-      const ch = await buildChannel(row.id as string);
+    for (const row of data.channels) {
+      if (referencedIds.has(row.id)) continue;
+      const ch = await buildChannel(row.id);
       if (ch) orphans.push(ch);
     }
 

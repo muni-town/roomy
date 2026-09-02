@@ -58,8 +58,16 @@ export const SPACE_SCHEMA_VERSION = "2";
  */
 export const GLOBAL_SCHEMA_VERSION = "7";
 
-/** Default pool size (per-space workers). Override via `APPSERVER_DB_POOL_SIZE`. */
-const DEFAULT_POOL_SIZE = 4;
+/**
+ * Default pool size (per-space workers). Override via `APPSERVER_DB_POOL_SIZE`.
+ *
+ * Spaces are pinned to a worker by `hashSpace(spaceDid) % size`. At size 4 the
+ * appserver's two highest-traffic spaces collided, so all their reads + bridge
+ * materialization serialized on one thread — the space-worker saturation that
+ * drove the system-worker-split diagnosis (see per-space-dbs.md). 8 spreads the
+ * hot spaces onto distinct workers. Raise/lower via `APPSERVER_DB_POOL_SIZE`.
+ */
+const DEFAULT_POOL_SIZE = 8;
 
 let pool: DatabasePool | null = null;
 let router: PooledDatabase | null = null;
