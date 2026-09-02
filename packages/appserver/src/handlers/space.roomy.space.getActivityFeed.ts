@@ -9,7 +9,7 @@
  * and joined with full message data at query time.
  */
 
-import { createAccessMemo, roomAccess } from "../auth/access.ts";
+import { createAccessMemo, roomAccessMany, type RoomAccess } from "../auth/access.ts";
 import { openReadStateDb, openSpaceDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import {
@@ -64,10 +64,21 @@ export const getActivityFeedHandler: QueryHandler<
 
   // Filter by room-level read access: silently skip rooms the user can't read.
   // Each feed item carries its spaceId, so open that item's per-space DB.
-  const accessResults = await Promise.all(
-    feed.map((item) => roomAccess(openSpaceDb(item.spaceId), item.threadId, userDid, memo)),
-  );
-  const accessible = feed.filter((_, i) => accessResults[i]?.canRead ?? false);
+  // Group items by space and batch the access checks per space (roomAccessMany)
+  // instead of one roomAccess round-trip per item — the feed can span many
+  // spaces, and each item was previously a separate per-space worker round-trip.
+  const bySpace = new Map<string, string[]>();
+  for (const item of feed) {
+    const list = bySpace.get(item.spaceId) ?? [];
+    list.push(item.threadId);
+    bySpace.set(item.spaceId, list);
+  }
+  const accessByRoom = new Map<string, RoomAccess>();
+  for (const [sid, threadIds] of bySpace) {
+    const acc = await roomAccessMany(openSpaceDb(sid), threadIds, userDid, memo);
+    for (const [roomId, a] of acc) accessByRoom.set(roomId, a);
+  }
+  const accessible = feed.filter((item) => accessByRoom.get(item.threadId)?.canRead ?? false);
 
   const result: GetActivityFeedResult = { feed: accessible };
   if (nextCursor) result.cursor = nextCursor;

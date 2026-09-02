@@ -5,7 +5,7 @@
  * COUNT(*) against entities. This is O(1) per room.
  */
 
-import { createAccessMemo, roomAccess, type AccessMemo } from "../auth/access.ts";
+import { createAccessMemo, roomAccessMany, type AccessMemo } from "../auth/access.ts";
 import type { DbLike } from "../db/types.ts";
 import type { UserDid } from "@roomy-space/sdk";
 
@@ -36,16 +36,22 @@ export async function ensureReadPositions(
   // write-only today (nothing reads them back — `getReadPosition` returns
   // `lastRead: null`), so default them to ''/'0'. Materialization populates
   // them correctly via `applyBundle` for live message creates.
-  const insert = await db.prepare(
-    `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-     values (?, ?, '', '0', 0, ?)
-     on conflict(user_did, room_id) do nothing`,
-  );
-
+  //
+  // Batch all rows into a single multi-row INSERT instead of one round-trip
+  // per room. The read-state DB lives on the system worker, so the previous
+  // per-room loop was an N+1 that saturated it under load (getMetadata /
+  // getThreads call this for every channel + engaged thread).
+  const values = roomIds.map(() => "(?, ?, '', '0', 0, ?)").join(",");
+  const params: (string | number)[] = [];
   for (const roomId of roomIds) {
-    await insert.run([userDid, roomId, now]);
+    params.push(userDid, roomId, now);
   }
-
+  await db.run(
+    `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
+     values ${values}
+     on conflict(user_did, room_id) do nothing`,
+    ...params,
+  );
 }
 
 /**
@@ -90,16 +96,27 @@ export async function getReadPositions(
   // Lazily create rows for any rooms that don't have one yet.
   await ensureReadPositions(db, userDid, roomIds);
 
-  const stmt = await db.prepare(
-    "select room_id, unread_count, seen_up_to from read_positions where user_did = ? and room_id = ?",
-  );
-
-  for (const roomId of roomIds) {
-    const row = await stmt.get<{ unread_count: number; seen_up_to: string }>([userDid, roomId]);
-    result.set(roomId, {
-      unreadCount: row?.unread_count ?? 0,
+  // Batch the read into a single `in (...)` query instead of one round-trip
+  // per room to the read-state DB (system worker) — the previous loop was an
+  // N+1 that saturated the system worker under load.
+  const ph = roomIds.map(() => "?").join(",");
+  const rows = await db
+    .query(
+      `select room_id, unread_count, seen_up_to from read_positions
+        where user_did = ? and room_id in (${ph})`,
+    )
+    .all<{ room_id: string; unread_count: number; seen_up_to: string }>(userDid, ...roomIds);
+  for (const r of rows) {
+    result.set(r.room_id, {
+      unreadCount: r.unread_count,
       lastRead: null,
     });
+  }
+  // Rooms without a row get the default.
+  for (const roomId of roomIds) {
+    if (!result.has(roomId)) {
+      result.set(roomId, { unreadCount: 0, lastRead: null });
+    }
   }
 
   return result;
@@ -144,13 +161,19 @@ export async function getSpaceUnreadStats(
 
   // Filter to channels the user can read, then ensure read_positions rows exist.
   // All channels share the same parent space, so a single memo collapses the
-  // space-level membership/admin/ban checks to one set for the whole loop.
+  // space-level membership/admin/ban checks to one set for the whole request.
+  // Batch the per-channel access checks into one pass (roomAccessMany) instead
+  // of one roomAccess round-trip per channel to the per-space DB worker.
   const m = memo ?? createAccessMemo();
-  const accessible: string[] = [];
-  for (const ch of allChannels) {
-    const acc = await roomAccess(spaceDb, ch.id, userDid, m);
-    if (acc.canRead) accessible.push(ch.id);
-  }
+  const channelAccess = await roomAccessMany(
+    spaceDb,
+    allChannels.map((c) => c.id),
+    userDid,
+    m,
+  );
+  const accessible = allChannels
+    .filter((c) => channelAccess.get(c.id)?.canRead)
+    .map((c) => c.id);
 
   await ensureReadPositions(readStateDb, userDid, accessible);
 
@@ -266,13 +289,18 @@ export async function getChannelUnreadThreadCount(
   if (linked.length === 0) return 0;
 
   // Filter to threads the user can read (threads inherit access from their
-  // parent channel, but role grants can differ per room).
+  // parent channel, but role grants can differ per room). Batch the access
+  // checks into one pass instead of one roomAccess round-trip per thread.
   const m = memo ?? createAccessMemo();
-  const accessible: string[] = [];
-  for (const r of linked) {
-    const acc = await roomAccess(spaceDb, r.thread_id, userDid, m);
-    if (acc.canRead) accessible.push(r.thread_id);
-  }
+  const threadAccess = await roomAccessMany(
+    spaceDb,
+    linked.map((r) => r.thread_id),
+    userDid,
+    m,
+  );
+  const accessible = linked
+    .filter((r) => threadAccess.get(r.thread_id)?.canRead)
+    .map((r) => r.thread_id);
   if (accessible.length === 0) return 0;
 
   await ensureReadPositions(readStateDb, userDid, accessible);
