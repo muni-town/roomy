@@ -59,34 +59,48 @@ export const getRolesHandler: QueryHandler<
 			description: string | null;
 		}>(spaceId);
 
-	const roomsStmt = db.query(
-		`select room_id, permission from role_rooms
-        where role_id = ? and stream_id = ?`,
-	);
+	// Per-role rooms + members, fetched in TWO batched queries (WHERE stream_id = ?)
+	// and grouped by role_id in JS — instead of 2 round-trips per role (N+1).
+	const roomRows = await db
+		.query(
+			`select role_id, room_id, permission from role_rooms
+        where stream_id = ?`,
+		)
+		.all<{ role_id: string; room_id: string; permission: "read" | "readwrite" }>(spaceId);
+	const roomsByRole = new Map<string, RoleRoom[]>();
+	for (const row of roomRows) {
+		const list = roomsByRole.get(row.role_id) ?? [];
+		list.push({ roomId: row.room_id, permission: row.permission });
+		roomsByRole.set(row.role_id, list);
+	}
 
-	const membersStmt = db.query(
-		`select user_id from member_roles
-        where role_id = ? and stream_id = ?`,
-	);
+	const memberRows = await db
+		.query(
+			`select role_id, user_id from member_roles
+        where stream_id = ?`,
+		)
+		.all<{ role_id: string; user_id: string }>(spaceId);
+	const membersByRole = new Map<string, string[]>();
+	for (const row of memberRows) {
+		const list = membersByRole.get(row.role_id) ?? [];
+		list.push(row.user_id);
+		membersByRole.set(row.role_id, list);
+	}
 
-	const roles: RoleRow[] = (await Promise.all(
-		roleRows.map(
-			async (r) =>
-				stripNulls({
-					id: r.id,
-					name: r.name,
-					avatar: r.avatar,
-					description: r.description,
-					rooms: (await roomsStmt.all(r.id, spaceId)).map((row) => ({
-						roomId: row.room_id,
-						permission: row.permission,
-					})),
-					memberDids: (await membersStmt.all(r.id, spaceId)).map((row) => row.user_id),
-				}) as RoleRow,
-		),
-	)).filter(
-		(r) => access.isAdmin || (userDid !== null && r.memberDids.includes(userDid)),
-	);
+	const roles: RoleRow[] = roleRows
+		.map((r) =>
+			stripNulls({
+				id: r.id,
+				name: r.name,
+				avatar: r.avatar,
+				description: r.description,
+				rooms: roomsByRole.get(r.id) ?? [],
+				memberDids: membersByRole.get(r.id) ?? [],
+			}) as RoleRow,
+		)
+		.filter(
+			(r) => access.isAdmin || (userDid !== null && r.memberDids.includes(userDid)),
+		);
 
 	return { roles };
 };

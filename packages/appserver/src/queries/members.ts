@@ -104,13 +104,24 @@ export async function selectMembers(
     )
     .all<{ did: string; handle: string | null; name: string | null; avatar: string | null; is_admin: number; is_banned: number }>([spaceId]);
 
-  // Role assignments per member, scoped to this space's stream.
-  const roleStmt = await db.query(
-    `select role_id from member_roles
-        where user_id = ? and stream_id = ?`,
-  );
+  // Role assignments per member, scoped to this space's stream. Fetched in
+  // ONE batched query (WHERE stream_id = ?) and grouped by user_id in JS,
+  // instead of one round-trip per member (N+1) — a space with many members
+  // previously serialized N role queries on the space worker.
+  const roleRows = await db
+    .query(
+      `select user_id, role_id from member_roles
+        where stream_id = ?`,
+    )
+    .all<{ user_id: string; role_id: string }>([spaceId]);
+  const rolesByUser = new Map<string, string[]>();
+  for (const row of roleRows) {
+    const list = rolesByUser.get(row.user_id) ?? [];
+    list.push(row.role_id);
+    rolesByUser.set(row.user_id, list);
+  }
 
-  const members: MemberRow[] = await Promise.all(memberRows.map(async (r) =>
+  const members: MemberRow[] = memberRows.map((r) =>
     stripNulls({
       did: r.did,
       handle: r.handle,
@@ -118,9 +129,9 @@ export async function selectMembers(
       avatar: r.avatar,
       isAdmin: !!r.is_admin,
       isBanned: !!r.is_banned,
-      roleIds: (await roleStmt.all<{ role_id: string }>([r.did, spaceId])).map((row) => row.role_id),
+      roleIds: rolesByUser.get(r.did) ?? [],
     }) as MemberRow,
-  ));
+  );
 
   const externalAdminRows = await db
     .query(
