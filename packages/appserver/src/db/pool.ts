@@ -11,8 +11,14 @@
  *   - N "space" workers: open per-space DBs (`data/spaces/<spaceDid>.sqlite`)
  *     lazily, LRU-cached. `hash(spaceDid) % N` pins a space to one worker so
  *     its handle + prepared statements stay warm.
- *   - 1 "system" worker: owns the global DB, read-state DB and event-log DB
- *     (and can open per-space DBs for the entity_space backfill).
+ *   - 1 "global" worker: owns the global DB (`data/global.sqlite`), and can
+ *     open per-space DBs for the entity_space backfill.
+ *   - 1 "readstate" worker: owns the read-state DB (`data/roomy-readstate.sqlite`).
+ *   - 1 "events" worker: owns the event-log DB (`data/roomy-events.sqlite`).
+ *
+ * The three shared DBs each get a DEDICATED worker so a slow query on any one
+ * doesn't serialize the other two (previously global, read-state and event-log
+ * all shared a single "system" worker thread).
  *
  * The pool is a drop-in replacement for the single `WorkerLink` behind
  * `openSpaceDb`: `forSpace(spaceDid)` returns an `AsyncDatabase` pinned to the
@@ -49,13 +55,16 @@ export interface PoolInitOptions {
 }
 
 /**
- * Owns N per-space workers + 1 system worker. Handles are `AsyncDatabase`s
+ * Owns N per-space workers + 3 dedicated workers (global, readstate, events).
+ * Handles are `AsyncDatabase`s
  * routed to the correct worker, so callers can't tell the pool from the old
  * single worker.
  */
 export class DatabasePool {
   readonly #poolLinks: WorkerLink[];
-  readonly #systemLink: WorkerLink;
+  readonly #globalLink: WorkerLink;
+  readonly #readStateLink: WorkerLink;
+  readonly #eventsLink: WorkerLink;
   readonly #size: number;
 
   constructor(size: number, workerPath: string) {
@@ -64,7 +73,9 @@ export class DatabasePool {
       { length: this.#size },
       () => new WorkerLink(workerPath),
     );
-    this.#systemLink = new WorkerLink(workerPath);
+    this.#globalLink = new WorkerLink(workerPath);
+    this.#readStateLink = new WorkerLink(workerPath);
+    this.#eventsLink = new WorkerLink(workerPath);
   }
 
   get size(): number {
@@ -116,19 +127,19 @@ export class DatabasePool {
     return this.forSpace(spaceDid).checkSpaceSchema(spaceDid);
   }
 
-  /** A handle to the system worker's global DB. */
+  /** A handle to the global DB's dedicated worker. */
   global(): AsyncDatabase {
-    return new AsyncDatabase(this.#systemLink, { targetDb: "global" });
+    return new AsyncDatabase(this.#globalLink, { targetDb: "global" });
   }
 
-  /** A handle to the system worker's read-state DB. */
+  /** A handle to the read-state DB's dedicated worker. */
   readState(): AsyncDatabase {
-    return new AsyncDatabase(this.#systemLink, { targetDb: "readstate" });
+    return new AsyncDatabase(this.#readStateLink, { targetDb: "readstate" });
   }
 
-  /** A handle to the system worker's event-log DB. */
+  /** A handle to the event-log DB's dedicated worker. */
   events(): AsyncDatabase {
-    return new AsyncDatabase(this.#systemLink, { targetDb: "events" });
+    return new AsyncDatabase(this.#eventsLink, { targetDb: "events" });
   }
 
   /** The router handle returned by `openDb()` (see `PooledDatabase`). */
@@ -138,8 +149,9 @@ export class DatabasePool {
 
   /**
    * Initialise every worker. Space workers get `role: \"space\"` (per-space
-   * DBs only); the system worker gets the full init (global/read-state/
-   * event-log + spacesDir for the entity_space backfill).
+   * DBs only); the global/readstate/events workers each open only the shared
+   * DB they own (the global worker also gets per-space access for the
+   * entity_space backfill).
    */
   async init(opts: PoolInitOptions): Promise<void> {
     const spaceOpts = {
@@ -148,47 +160,80 @@ export class DatabasePool {
       maxSpaceDbs: opts.maxSpaceDbs,
       role: "space" as const,
     };
-    // Post every init message synchronously (before awaiting) so the system
-    // worker's init is queued ahead of any subsequent router query — the
-    // fire-and-forget `openDb()` path relies on message ordering, not on the
-    // init promise resolving first.
+    // Post every init message synchronously (before awaiting) so each worker
+    // is initialised before any subsequent routed query — the fire-and-forget
+    // `openDb()` path relies on message ordering, not on the init promise
+    // resolving first.
     const poolPromises = this.#poolLinks.map((l) =>
       l.send({ type: "init", initOpts: spaceOpts }),
     );
-    const systemPromise = this.#systemLink.send({
+    const globalPromise = this.#globalLink.send({
       type: "init",
-      initOpts: { ...opts, role: "system" },
+      initOpts: {
+        spacesDir: opts.spacesDir,
+        globalDbPath: opts.globalDbPath,
+        globalSchemaVersion: opts.globalSchemaVersion,
+        spaceSchemaVersion: opts.spaceSchemaVersion,
+        maxSpaceDbs: opts.maxSpaceDbs,
+        role: "global",
+      },
     });
-    await Promise.all([...poolPromises, systemPromise]);
+    const readStatePromise = this.#readStateLink.send({
+      type: "init",
+      initOpts: {
+        readStateDbPath: opts.readStateDbPath,
+        readStateSchemaVersion: opts.readStateSchemaVersion,
+        role: "readstate",
+      },
+    });
+    const eventsPromise = this.#eventsLink.send({
+      type: "init",
+      initOpts: {
+        eventsDbPath: opts.eventsDbPath,
+        role: "events",
+      },
+    });
+    await Promise.all([
+      ...poolPromises,
+      globalPromise,
+      readStatePromise,
+      eventsPromise,
+    ]);
   }
 
   /** Terminate all workers, rejecting in-flight requests. */
   close(): void {
     for (const l of this.#poolLinks) l.terminate();
-    this.#systemLink.terminate();
+    this.#globalLink.terminate();
+    this.#readStateLink.terminate();
+    this.#eventsLink.terminate();
   }
 
   /**
    * Per-worker observability (Phase 4 evaluation): pool size and in-flight
    * request counts per worker. Lets an operator see whether load is spreading
-   * across the pool or collapsing onto one worker.
+   * across the pool and the three shared-DB workers, or collapsing onto one.
    */
   stats(): {
     size: number;
     spaceWorkers: Array<{ pending: number }>;
-    systemWorker: { pending: number };
+    globalWorker: { pending: number };
+    readStateWorker: { pending: number };
+    eventsWorker: { pending: number };
   } {
     return {
       size: this.#size,
       spaceWorkers: this.#poolLinks.map((l) => ({ pending: l.pendingCount })),
-      systemWorker: { pending: this.#systemLink.pendingCount },
+      globalWorker: { pending: this.#globalLink.pendingCount },
+      readStateWorker: { pending: this.#readStateLink.pendingCount },
+      eventsWorker: { pending: this.#eventsLink.pendingCount },
     };
   }
 }
 
 /**
  * The router handle returned by `openDb()`. Default operations (query/run/
- * exec/prepare/transaction) target the event-log DB on the system worker;
+ * exec/prepare/transaction) target the event-log DB on the events worker;
  * `forSpace`/`global`/`readState`/`events`/`backfillEntitySpace` dispatch to
  * the correct worker. This is what `StreamManager`, `reMaterialize` and the
  * handlers see — it satisfies `DbLike` exactly like the old single-worker
@@ -259,7 +304,7 @@ export class PooledDatabase implements DbLike {
     return this.#pool.events();
   }
   backfillEntitySpace(spaceDid: string): Promise<{ backfilled: number }> {
-    // Runs on the system worker, which owns the global DB and can open the
+    // Runs on the global worker, which owns the global DB and can open the
     // per-space DB file for the entity_space backfill.
     return this.#pool.global().backfillEntitySpace(spaceDid);
   }

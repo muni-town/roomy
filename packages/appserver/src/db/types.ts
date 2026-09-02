@@ -152,12 +152,13 @@ export interface WorkerRequest {
     globalSchemaVersion?: string;
     maxSpaceDbs?: number;
     /**
-     * Worker role (Phase 4). "space" workers only open per-space DBs and
-     * reject global/readstate/events requests; "system" workers own the
-     * global, read-state and event-log DBs (and can open per-space DBs for
-     * the entity_space backfill). Defaults to "system".
+     * Worker role (Phase 4 / system-worker split). "space" workers only open
+     * per-space DBs and reject shared-DB requests; "global", "readstate" and
+     * "events" workers each own exactly one of the shared DBs (the global
+     * worker can also open per-space DBs for the entity_space backfill);
+     * "system" is the legacy combined role. Defaults to "system".
      */
-    role?: "space" | "system";
+    role?: "space" | "system" | "global" | "readstate" | "events";
   };
 }
 

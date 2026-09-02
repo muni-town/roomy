@@ -71,11 +71,18 @@ let globalSchemaVersion: string | null = null;
 /** Max concurrently-open space DBs before LRU eviction. */
 let maxSpaceDbs = 100;
 /**
- * Worker role (Phase 4). "space" workers only open per-space DBs; "system"
- * workers own the global/read-state/event-log DBs. Defaults to "system" for
- * backward compatibility with the single-worker path.
+ * Worker role. "space" workers only open per-space DBs; "global", "readstate"
+ * and "events" workers each own exactly one of the shared DBs; "system" is the
+ * legacy combined role that owns the global/read-state/event-log DBs on one
+ * thread (used by isolated pools and kept for backward compat). Defaults to
+ * "system" for the single-worker path.
  */
-let role: "space" | "system" = "system";
+let role:
+  | "space"
+  | "system"
+  | "global"
+  | "readstate"
+  | "events" = "system";
 
 // ─── Schema paths ─────────────────────────────────────────────────────────
 
@@ -706,7 +713,9 @@ function dbForRequest(req: WorkerRequest): Database {
     if (!req.spaceDid) throw new Error("spaceDid required for space target");
     // Blue-green route: a "rebuild" target is the temp new-schema DB being
     // materialised; the default "canonical" target is the read-serving DB
-    // (which never wipes on schema mismatch).
+    // (which never wipes on schema mismatch). Space DBs are opened only on
+    // workers whose init set `spacesDir` (space / global / system); the
+    // readstate and events workers leave it unset and throw here.
     if (req.route === "rebuild") return openSpaceDbRebuild(req.spaceDid);
     return openSpaceDb(req.spaceDid);
   }
@@ -716,11 +725,26 @@ function dbForRequest(req: WorkerRequest): Database {
     );
   }
   if (req.targetDb === "global") {
+    if (role !== "global" && role !== "system") {
+      throw new Error(
+        `targetDb "global" not available on a ${role} worker`,
+      );
+    }
     return openGlobalDbInternal();
   }
   if (req.targetDb === "readstate") {
+    if (role !== "readstate" && role !== "system") {
+      throw new Error(
+        `targetDb "readstate" not available on a ${role} worker`,
+      );
+    }
     if (!readStateDb) throw new Error("Read-state DB not initialized (no init)");
     return readStateDb;
+  }
+  if (role !== "events" && role !== "system") {
+    throw new Error(
+      `targetDb "events" not available on a ${role} worker`,
+    );
   }
   if (!eventsDb) throw new Error("Events DB not initialized (no init)");
   return eventsDb;
@@ -821,8 +845,8 @@ function handleRequest(req: WorkerRequest): unknown {
  * on boot for every stream to make room-scoped handlers work.
  */
 function handleBackfillEntitySpace(req: WorkerRequest): { backfilled: number } {
-  if (role === "space") {
-    throw new Error("backfillEntitySpace requires the global DB (system worker)");
+  if (role !== "global" && role !== "system") {
+    throw new Error("backfillEntitySpace requires the global DB (global worker)");
   }
   if (!req.spaceDid) throw new Error("spaceDid required for backfillEntitySpace");
   const spaceDb = openSpaceDb(req.spaceDid);
@@ -855,75 +879,93 @@ function handleInit(req: WorkerRequest): {
   const eventsPath = opts.eventsDbPath ?? dbPath("roomy-events.sqlite");
 
   // Per-space split (Phase 3): lazily-created space DBs + global DB. When
-  // the read-state DB is :memory: (tests), keep the derived DBs in-memory
-  // too so tests never touch the filesystem.
-  const isMemory = readStatePath === ":memory:";
-  spacesDir = opts.spacesDir ?? (isMemory ? ":memory:" : resolveSpacesDir());
-  globalDbPath =
-    opts.globalDbPath ?? (isMemory ? ":memory:" : dbPath("global.sqlite"));
+  // any shared DB is :memory: (tests), keep the derived DBs in-memory too so
+  // tests never touch the filesystem. The fallbacks are per-role below.
+  const anyMemory =
+    readStatePath === ":memory:" ||
+    eventsPath === ":memory:" ||
+    (opts.globalDbPath ?? "") === ":memory:";
   spaceSchemaVersion = opts.spaceSchemaVersion ?? "";
   globalSchemaVersion = opts.globalSchemaVersion ?? "";
   if (opts.maxSpaceDbs !== undefined) maxSpaceDbs = opts.maxSpaceDbs;
   role = opts.role ?? "system";
 
-  // Phase 4: a "space" worker only opens per-space DBs (lazily on first
-  // request). It does NOT open the read-state, event-log or global DBs —
-  // those live on the dedicated system worker(s).
+  // Per-space DB access is only available on roles that own (or assist the
+  // ownership of) space DBs: "space" workers, the "global" worker (entity_space
+  // backfill), and the legacy "system" role. The dedicated readstate/events
+  // workers leave `spacesDir` null so a mis-routed space/global request fails
+  // loudly instead of silently serving from the wrong worker.
+  if (role === "readstate" || role === "events") {
+    spacesDir = null;
+    globalDbPath = null;
+  } else {
+    spacesDir = opts.spacesDir ?? (anyMemory ? ":memory:" : resolveSpacesDir());
+    globalDbPath =
+      opts.globalDbPath ?? (anyMemory ? ":memory:" : dbPath("global.sqlite"));
+  }
+  const openWithPragmas = (path: string): Database => {
+    const db = path === ":memory:" ? new Database(":memory:") : (() => {
+      mkdirSync(dirname(path), { recursive: true });
+      return new Database(path, { create: true });
+    })();
+    db.exec("pragma journal_mode = wal");
+    db.exec("pragma synchronous = normal");
+    db.exec("pragma foreign_keys = on");
+    db.exec("pragma busy_timeout = 5000");
+    return db;
+  };
+
+  // Role-split (system-worker split): a dedicated worker per shared DB, so a
+  // slow query on one DB no longer blocks the others. Each role opens only
+  // the DB(s) it owns; everything else stays NULL. The "space" and "global"
+  // roles set `spacesDir` so space DBs can be opened lazily (the global
+  // worker needs them for the entity_space backfill).
   if (role === "space") {
     return { readStateDbPath: "", eventsDbPath: "" };
   }
 
-  // Open read-state DB (own file, no ATTACH — Phase 3)
-  if (isMemory) {
-    readStateDb = new Database(":memory:");
-  } else {
-    mkdirSync(dirname(readStatePath), { recursive: true });
-    readStateDb = new Database(readStatePath, { create: true });
+  if (role === "global" || role === "system") {
+    // Global DB is opened lazily on first request (openGlobalDbInternal).
   }
-  readStateDb.exec("pragma journal_mode = wal");
-  readStateDb.exec("pragma synchronous = normal");
-  readStateDb.exec("pragma foreign_keys = on");
-  readStateDb.exec("pragma busy_timeout = 5000");
-  initializeReadStateSchema(
-    readStateDb,
-    READSTATE_SCHEMA_PATH,
-    opts.readStateSchemaVersion ?? "",
-  );
 
-  // Open events DB (append-only, never wiped — no schema version)
-  if (eventsPath === ":memory:") {
-    eventsDb = new Database(":memory:");
-  } else {
-    mkdirSync(dirname(eventsPath), { recursive: true });
-    eventsDb = new Database(eventsPath, { create: true });
+  if (role === "readstate" || role === "system") {
+    // Open read-state DB (own file, no ATTACH — Phase 3).
+    readStateDb = openWithPragmas(readStatePath);
+    initializeReadStateSchema(
+      readStateDb,
+      READSTATE_SCHEMA_PATH,
+      opts.readStateSchemaVersion ?? "",
+    );
   }
-  eventsDb.exec("pragma journal_mode = wal");
-  eventsDb.exec("pragma synchronous = normal");
-  eventsDb.exec("pragma busy_timeout = 5000");
-  const eventsSchemaSql = readFileSync(EVENTS_SCHEMA_PATH, "utf-8");
-  eventsDb.exec(eventsSchemaSql);
 
-  // Add columns that were added after the table was first created.
-  // SQLite doesn't support ADD COLUMN IF NOT EXISTS, so we check the
-  // table info first.
-  const existingColumns = new Set(
-    eventsDb
-      .query<{ name: string }, []>(
-        "select name from pragma_table_info('stream_events')",
-      )
-      .all()
-      .map((r) => r.name),
-  );
-  if (!existingColumns.has("event_type")) {
-    eventsDb.exec("alter table stream_events add column event_type text");
-  }
-  if (!existingColumns.has("created_at")) {
-    eventsDb.exec("alter table stream_events add column created_at integer");
+  if (role === "events" || role === "system") {
+    // Open events DB (append-only, never wiped — no schema version).
+    eventsDb = openWithPragmas(eventsPath);
+    const eventsSchemaSql = readFileSync(EVENTS_SCHEMA_PATH, "utf-8");
+    eventsDb.exec(eventsSchemaSql);
+
+    // Add columns that were added after the table was first created.
+    // SQLite doesn't support ADD COLUMN IF NOT EXISTS, so we check the
+    // table info first.
+    const existingColumns = new Set(
+      eventsDb
+        .query<{ name: string }, []>(
+          "select name from pragma_table_info('stream_events')",
+        )
+        .all()
+        .map((r) => r.name),
+    );
+    if (!existingColumns.has("event_type")) {
+      eventsDb.exec("alter table stream_events add column event_type text");
+    }
+    if (!existingColumns.has("created_at")) {
+      eventsDb.exec("alter table stream_events add column created_at integer");
+    }
   }
 
   return {
-    readStateDbPath: readStatePath,
-    eventsDbPath: eventsPath,
+    readStateDbPath: readStateDb ? readStatePath : "",
+    eventsDbPath: eventsDb ? eventsPath : "",
   };
 }
 

@@ -52,7 +52,7 @@ describe("DatabasePool routing", () => {
     expect(a?.id).toBe("entity-a");
     expect(b?.id).toBe("entity-b");
 
-    // The global DB is shared across spaces (system worker).
+    // The global DB is shared across spaces (global worker).
     await db.global().run(
       "insert into edges (head, tail, label) values (?, ?, ?)",
       "user",

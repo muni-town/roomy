@@ -1,7 +1,7 @@
 # Per-Space Database Architecture
 
 **Date:** 2026-07-03
-**Status:** Phase 1 (dual-write) + Phase 2 (read cutover, dual-write kept) + Phase 3 (remove monolithic) shipped. The monolithic materialised DB is gone; per-space DBs are the source of truth for space data, the global DB holds membership/profiles/entity index, and the event-log DB is the append-only source of truth. Phase 4 (worker pool) pending — the split is currently file-level only; all four DBs still run on a single `Bun.Worker` thread.
+**Status:** Phase 1 (dual-write) + Phase 2 (read cutover, dual-write kept) + Phase 3 (remove monolithic) shipped. The monolithic materialised DB is gone; per-space DBs are the source of truth for space data, the global DB holds membership/profiles/entity index, and the event-log DB is the append-only source of truth. Phase 4 (worker pool) shipped — per-space DBs run on N pool workers; the global, read-state and event-log DBs each run on their own dedicated worker (so a slow query on one shared DB no longer blocks the other two).
 
 ## Problem
 

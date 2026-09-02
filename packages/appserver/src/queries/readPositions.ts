@@ -38,7 +38,7 @@ export async function ensureReadPositions(
   // them correctly via `applyBundle` for live message creates.
   //
   // Batch all rows into a single multi-row INSERT instead of one round-trip
-  // per room. The read-state DB lives on the system worker, so the previous
+  // per room. The read-state DB lives on its own worker, so the previous
   // per-room loop was an N+1 that saturated it under load (getMetadata /
   // getThreads call this for every channel + engaged thread).
   const values = roomIds.map(() => "(?, ?, '', '0', 0, ?)").join(",");
@@ -97,8 +97,8 @@ export async function getReadPositions(
   await ensureReadPositions(db, userDid, roomIds);
 
   // Batch the read into a single `in (...)` query instead of one round-trip
-  // per room to the read-state DB (system worker) — the previous loop was an
-  // N+1 that saturated the system worker under load.
+  // per room to the read-state worker — the previous loop was an N+1 that
+  // saturated it under load.
   const ph = roomIds.map(() => "?").join(",");
   const rows = await db
     .query(

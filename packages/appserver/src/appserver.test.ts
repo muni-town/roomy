@@ -434,6 +434,11 @@ describe("query response cache", () => {
     expect(body.size).toBeGreaterThanOrEqual(1);
     expect(Array.isArray(body.spaceWorkers)).toBe(true);
     expect(body.spaceWorkers.length).toBe(body.size);
-    expect(body.systemWorker).toBeDefined();
+    expect(body.globalWorker).toBeDefined();
+    expect(typeof body.globalWorker.pending).toBe("number");
+    expect(body.readStateWorker).toBeDefined();
+    expect(typeof body.readStateWorker.pending).toBe("number");
+    expect(body.eventsWorker).toBeDefined();
+    expect(typeof body.eventsWorker.pending).toBe("number");
   });
 });

@@ -510,7 +510,9 @@ export async function createAppserver(
         ? {
             size: pool.size,
             spaceWorkers: pool.spaceWorkers.map((w) => w.pending),
-            systemWorker: pool.systemWorker.pending,
+            globalWorker: pool.globalWorker.pending,
+            readStateWorker: pool.readStateWorker.pending,
+            eventsWorker: pool.eventsWorker.pending,
           }
         : null,
       cache,
@@ -724,9 +726,9 @@ export async function createAppserver(
         );
       }
       if (url.pathname === "/health/pool") {
-        // Phase 4: per-worker pool stats (size + in-flight per worker) so an
-        // operator can see whether load is spreading across the pool or
-        // collapsing onto one worker.
+        // Per-worker pool stats (size + in-flight per worker) so an operator
+        // can see whether load is spreading across the pool and the three
+        // shared-DB workers, or collapsing onto one.
         const stats = poolStats();
         return new Response(
           JSON.stringify(stats ? { enabled: true, ...stats } : { enabled: false }),
@@ -744,7 +746,9 @@ export async function createAppserver(
         if (pool) {
           poolGauge.set({}, pool.size);
           pool.spaceWorkers.forEach((w, i) => poolWorkerPending.set({ worker: `space-${i}` }, w.pending));
-          poolWorkerPending.set({ worker: "system" }, pool.systemWorker.pending);
+          poolWorkerPending.set({ worker: "global" }, pool.globalWorker.pending);
+          poolWorkerPending.set({ worker: "readstate" }, pool.readStateWorker.pending);
+          poolWorkerPending.set({ worker: "events" }, pool.eventsWorker.pending);
         }
         const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0 };
         cacheHits.set({}, cache.hits);
