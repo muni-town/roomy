@@ -1,15 +1,24 @@
-// Grafana Alloy config — Roomy production log collector (Grafana Cloud).
+// Grafana Alloy config — Roomy production telemetry collector (Grafana Cloud).
 //
 // Receives logs from the Railway app services and forwards them to Grafana
-// Cloud Loki. The apps POST to this collector (see deploy/alloy/README.md).
+// Cloud Loki; scrapes the appserver's Prometheus /metrics endpoint and
+// remote-writes to Grafana Cloud Mimir. The apps POST to this collector (see
+// deploy/alloy/README.md).
 //
 // Required env vars:
 //   - GRAFANA_CLOUD_LOKI_URL    full push URL, e.g.
 //                               https://logs-prod-<region>.grafana.net/loki/api/v1/push
 //   - GRAFANA_CLOUD_LOKI_ID     Grafana Cloud Loki instance ID (basic auth user)
 //   - GRAFANA_CLOUD_LOKI_TOKEN  Grafana Cloud access policy token (basic auth pass)
+//   - GRAFANA_CLOUD_MIMIR_URL   Prometheus remote-write URL, e.g.
+//                               https://prometheus-prod-<region>.grafana.net/api/prom/push
+//   - GRAFANA_CLOUD_MIMIR_ID    Grafana Cloud Prometheus instance ID (basic auth user)
+//   - GRAFANA_CLOUD_MIMIR_TOKEN Grafana Cloud access policy token (basic auth pass)
 //
-// Optional: ALLOY_LOG_LEVEL (default `info`).
+// Optional:
+//   - APPSERVER_METRICS_URL     appserver /metrics scrape target, default
+//                               http://appserver:8080/metrics (Railway private net)
+//   - ALLOY_LOG_LEVEL           default `info`.
 
 logging {
 	level = "info" // override via ALLOY_LOG_LEVEL at runtime if desired
@@ -19,9 +28,22 @@ logging {
 loki.write "cloud" {
 	endpoint {
 		url = env("GRAFANA_CLOUD_LOKI_URL")
+
 		basic_auth {
 			username = env("GRAFANA_CLOUD_LOKI_ID")
 			password = env("GRAFANA_CLOUD_LOKI_TOKEN")
+		}
+	}
+}
+
+// ── Ship metrics to Grafana Cloud Mimir ─────────────────────────────
+prometheus.remote_write "mimir" {
+	endpoint {
+		url = env("GRAFANA_CLOUD_MIMIR_URL")
+
+		basic_auth {
+			username = env("GRAFANA_CLOUD_MIMIR_ID")
+			password = env("GRAFANA_CLOUD_MIMIR_TOKEN")
 		}
 	}
 }
@@ -38,12 +60,28 @@ loki.source.api "apps" {
 	forward_to = [loki.write.cloud.receiver]
 }
 
+// ── Scrape appserver Prometheus metrics ──────────────────────────────
+// The appserver exposes /metrics (request latency, DB pool queue depth,
+// cache hit rate, embed backlog, DB timeouts). Scrape it over the Railway
+// private network and remote-write to Mimir.
+prometheus.scrape "appserver" {
+	targets = [{
+		__address__ = env("APPSERVER_METRICS_URL", "http://appserver:8080/metrics"),
+	}]
+	forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
 // ── Optional: OTLP logs receiver (4317 gRPC / 4318 HTTP) ─────────────
 // Enable if you later instrument an app with OpenTelemetry and want to send
 // OTLP logs directly to Alloy instead of the Loki push API above.
 otelcol.receiver.otlp "apps" {
-	grpc { endpoint = "0.0.0.0:4317" }
-	http  { endpoint = "0.0.0.0:4318" }
+	grpc {
+		endpoint = "0.0.0.0:4317"
+	}
+
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
 
 	output {
 		logs = [otelcol.processor.batch.default.input]
@@ -75,11 +113,11 @@ loki.process "frontend" {
 	forward_to = [loki.write.cloud.receiver]
 
 	stage.logfmt {
-		mapping = { "service_name" = "app_name", kind = "" }
+		mapping = {"service_name" = "app_name", kind = ""}
 	}
 
 	stage.labels {
-		values = { "kind" = "kind", "service_name" = "service_name", "app" = "service_name" }
+		values = {"kind" = "kind", "service_name" = "service_name", "app" = "service_name"}
 	}
 
 	// Make sure exceptions are logged at an error level instead of "unknown"
@@ -87,7 +125,7 @@ loki.process "frontend" {
 		selector = "{kind=\"exception\"}"
 
 		stage.template {
-			source = "const_error"
+			source   = "const_error"
 			template = "error"
 		}
 

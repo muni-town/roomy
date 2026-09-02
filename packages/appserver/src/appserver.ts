@@ -85,6 +85,7 @@ import type { GetProfilesFn } from "./materialization/profiles.ts";
 
 import { proxyBlob } from "./blob.ts";
 import { log } from "./log.ts";
+import { metrics } from "./metrics.ts";
 import { resolveBuildId } from "./telemetry/build.ts";
 import {
   CACHEABLE_NSIDS,
@@ -493,6 +494,40 @@ export async function createAppserver(
   }, 60 * 60 * 1000);
   maintenanceTimer.unref();
 
+  // ─── Periodic metrics snapshot ──────────────────────────────────────
+  // Emit a compact pool/cache/embed/search snapshot to Loki every 30s so
+  // operators can chart saturation over time in Grafana without a metrics
+  // backend. This is what surfaces a worker backlog (e.g. the system-worker
+  // N+1) as a visible trend rather than a manual /health/pool curl.
+  const metricsTimer = setInterval(() => {
+    const pool = poolStats();
+    const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0 };
+    const embed = embedSweeperStats();
+    const search = searchIndexerStats();
+    const backfill = searchBackfillStats();
+    log.info("[metrics] snapshot", {
+      pool: pool
+        ? {
+            size: pool.size,
+            spaceWorkers: pool.spaceWorkers.map((w) => w.pending),
+            systemWorker: pool.systemWorker.pending,
+          }
+        : null,
+      cache,
+      embed: {
+        pending: embed.priorityQueue ?? 0,
+        inFlight: embed.inFlight ?? 0,
+        enrichedNull: embed.enrichedNull ?? 0,
+        dbBackoff: embed.dbBackoffActive ?? false,
+      },
+      search: {
+        queue: search.queueLength ?? 0,
+        backfilled: backfill.backfilled ?? 0,
+      },
+    });
+  }, 30 * 1000);
+  metricsTimer.unref();
+
   // ─── Invalidation + Sync ─────────────────────────────────────────────
   const invalidationRouter = new InvalidationRouter();
   InvalidationRouter.setInstance(invalidationRouter);
@@ -568,6 +603,41 @@ export async function createAppserver(
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   };
 
+  // ─── Request metrics ────────────────────────────────────────────────
+  // Per-endpoint request counter + latency histogram. The /metrics endpoint
+  // (Prometheus scrape) exposes these so a dashboard can show which XRPC
+  // endpoint is slow and how often it's called — the first signal that
+  // pinpoints a pool-saturation / N+1 bottleneck.
+  const xrpcRequests = metrics.counter(
+    "roomy_xrpc_requests_total",
+    "Total XRPC/HTTP requests handled, by endpoint, method and status.",
+    ["endpoint", "method", "status"],
+  );
+  const xrpcDuration = metrics.histogram(
+    "roomy_xrpc_request_duration_seconds",
+    "Request handling latency in seconds, by endpoint and method.",
+    ["endpoint", "method"],
+  );
+
+  // Live gauges refreshed on each /metrics scrape from the health stats.
+  const poolGauge = metrics.gauge("roomy_pool_size", "Number of per-space DB workers in the pool.");
+  const poolWorkerPending = metrics.gauge(
+    "roomy_pool_worker_pending",
+    "In-flight (queued) requests on a pool worker.",
+    ["worker"],
+  );
+  const cacheHits = metrics.gauge("roomy_cache_hits_total", "Query response cache hits.");
+  const cacheMisses = metrics.gauge("roomy_cache_misses_total", "Query response cache misses.");
+  const cacheEvictions = metrics.gauge("roomy_cache_evictions_total", "Query response cache evictions.");
+  const cacheSize = metrics.gauge("roomy_cache_size", "Query response cache entries.");
+  const embedPending = metrics.gauge("roomy_embed_pending", "Embed links awaiting enrichment.");
+  const embedInFlight = metrics.gauge("roomy_embed_in_flight", "Embed enrichments currently in flight.");
+  const embedEnrichedNull = metrics.gauge("roomy_embed_enriched_null", "Embed links enriched to null (no card).");
+  const embedDbBackoff = metrics.gauge("roomy_embed_db_backoff", "1 when the embed sweeper is in DB backoff.");
+  const searchQueue = metrics.gauge("roomy_search_indexer_queue", "Search indexer queue length.");
+  const searchBackfilled = metrics.gauge("roomy_search_backfilled", "Search backfill progress.");
+  const pushQueued = metrics.gauge("roomy_push_queued", "Push dispatcher queued messages.");
+
   const server = Bun.serve({
     port,
     idleTimeout: 255,
@@ -586,7 +656,7 @@ export async function createAppserver(
     websocket: router.websocket,
   });
 
-  async function handleFetch(req: Request, server: Server<WsData>): Promise<Response | undefined> {
+  async function handleFetchInner(req: Request, server: Server<WsData>): Promise<Response | undefined> {
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
@@ -664,12 +734,44 @@ export async function createAppserver(
         );
       }
 
+      if (url.pathname === "/metrics") {
+        // Prometheus text exposition for the observability stack (Alloy
+        // scrapes this and remote-writes to Grafana Cloud Mimir). Pulls the
+        // live pool/cache/embed/search/push stats into gauges, then renders
+        // the registry (request counters/histograms + DB timeouts are
+        // maintained incrementally elsewhere).
+        const pool = poolStats();
+        if (pool) {
+          poolGauge.set({}, pool.size);
+          pool.spaceWorkers.forEach((w, i) => poolWorkerPending.set({ worker: `space-${i}` }, w.pending));
+          poolWorkerPending.set({ worker: "system" }, pool.systemWorker.pending);
+        }
+        const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0 };
+        cacheHits.set({}, cache.hits);
+        cacheMisses.set({}, cache.misses);
+        cacheEvictions.set({}, cache.evictions);
+        cacheSize.set({}, cache.size);
+        const embed = embedSweeperStats();
+        embedPending.set({}, embed.priorityQueue ?? 0);
+        embedInFlight.set({}, embed.inFlight ?? 0);
+        embedEnrichedNull.set({}, embed.enrichedNull ?? 0);
+        embedDbBackoff.set({}, embed.dbBackoffActive ? 1 : 0);
+        const search = searchIndexerStats();
+        searchQueue.set({}, search.queueLength ?? 0);
+        const backfill = searchBackfillStats();
+        searchBackfilled.set({}, backfill.backfilled ?? 0);
+        const push = pushDispatcherStats();
+        pushQueued.set({}, push.queueDepth ?? 0);
+        return new Response(metrics.render(), {
+          headers: { "content-type": "text/plain; version=0.0.4; charset=utf-8", ...corsHeaders },
+        });
+      }
+
       const blobMatch = url.pathname.match(/^\/blob\/(.+?)\/(.+)$/);
       if (blobMatch && req.method === "GET") {
         const did = decodeURIComponent(blobMatch[1]!);
         const cid = decodeURIComponent(blobMatch[2]!);
         const res = await proxyBlob(did, cid, req);
-        if (!quiet) log.info(`${req.method} ${url.pathname} → ${res.status}`);
         for (const [k, v] of Object.entries(corsHeaders)) {
           res.headers.set(k, v);
         }
@@ -678,14 +780,37 @@ export async function createAppserver(
 
       const res = await router.fetch(req, server);
       if (res === undefined) {
-        if (!quiet) log.info(`${req.method} ${url.pathname} → [ws upgrade]`);
         return undefined;
       }
-      if (!quiet) log.info(`${req.method} ${url.pathname} → ${res.status}`);
       for (const [k, v] of Object.entries(corsHeaders)) {
         res.headers.set(k, v);
       }
       return res;
+  }
+
+  // Wrapper that records per-request metrics (counter + latency histogram)
+  // and adds a duration field to the access log. The inner function has many
+  // early returns (health endpoints, blob proxy, ws upgrade), so measuring
+  // here keeps the instrumentation in one place.
+  async function handleFetch(req: Request, server: Server<WsData>): Promise<Response | undefined> {
+    const start = performance.now();
+    const pathname = new URL(req.url).pathname;
+    try {
+      const res = await handleFetchInner(req, server);
+      const status = res?.status ?? 0; // 0 = ws upgrade (undefined response)
+      const durationMs = performance.now() - start;
+      xrpcRequests.inc({ endpoint: pathname, method: req.method, status: String(status) });
+      xrpcDuration.observe({ endpoint: pathname, method: req.method }, durationMs / 1000);
+      if (!quiet && res) {
+        log.info(`[xrpc] ${req.method} ${pathname} → ${res.status}`, { duration_ms: Math.round(durationMs) });
+      }
+      return res;
+    } catch (err) {
+      const durationMs = performance.now() - start;
+      xrpcRequests.inc({ endpoint: pathname, method: req.method, status: "500" });
+      xrpcDuration.observe({ endpoint: pathname, method: req.method }, durationMs / 1000);
+      throw err;
+    }
   }
 
   if (!quiet) log.info(`Appserver listening on port ${port} (DID: ${ownDid})`);
@@ -711,6 +836,7 @@ export async function createAppserver(
         }
         try {
           clearInterval(maintenanceTimer);
+          clearInterval(metricsTimer);
           closeDb();
         } catch (e) {
           log.error("appserver close: closeDb failed", e);

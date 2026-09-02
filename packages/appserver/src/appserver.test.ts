@@ -70,6 +70,45 @@ describe("createAppserver factory", () => {
 
   });
 
+  test("/metrics exposes Prometheus text format with core families", async () => {
+    handle = await createAppserver({
+      port: ephemeralPort(),
+      authVerifier: testAuthVerifier,
+      dbPath: ":memory:",
+      readStateDbPath: ":memory:",
+      quiet: true,
+      ownDid: "did:web:test.example",
+      serviceEndpoint: "http://test.example",
+      disableBackgroundWorkers: true,
+    });
+
+    const base = `http://localhost:${handle.port}`;
+
+    // Hit a real endpoint so the request counter/histogram have a sample.
+    await fetch(`${base}/health`);
+
+    const res = await fetch(`${base}/metrics`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/plain");
+    const body = await res.text();
+
+    // Core families present in Prometheus text exposition format.
+    for (const name of [
+      "roomy_xrpc_requests_total",
+      "roomy_xrpc_request_duration_seconds",
+      "roomy_pool_size",
+      "roomy_pool_worker_pending",
+      "roomy_cache_hits_total",
+      "roomy_embed_pending",
+      "roomy_db_timeouts_total",
+    ]) {
+      expect(body).toContain(`# TYPE ${name}`);
+    }
+    // The /health hit should have been recorded as a request.
+    expect(body).toContain('endpoint="/health"');
+    expect(body).toContain('method="GET"');
+  });
+
   test("getConnectionTicket works with test auth header", async () => {
     handle = await createAppserver({
       port: ephemeralPort(),

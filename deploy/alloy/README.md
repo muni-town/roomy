@@ -1,9 +1,10 @@
-# Grafana Alloy — Roomy production log collector
+# Grafana Alloy — Roomy production telemetry collector
 
-Deploys `grafana/alloy` as a central log collector on Railway. The apps
+Deploys `grafana/alloy` as a central telemetry collector on Railway. The apps
 (appserver, discord-bridge) push structured JSON logs here over the Railway
-private network (app-lite ships from the browser via Faro), and Alloy ships
-the logs to Grafana Cloud Loki.
+private network (app-lite ships from the browser via Faro); Alloy ships the
+logs to Grafana Cloud Loki **and** scrapes the appserver's Prometheus
+`/metrics` endpoint, remote-writing to Grafana Cloud Mimir.
 
 The config is **baked into the image** so no Railway volume is required.
 
@@ -18,6 +19,10 @@ The config is **baked into the image** so no Railway volume is required.
    | `GRAFANA_CLOUD_LOKI_URL` | `https://logs-prod-<region>.grafana.net/loki/api/v1/push` |
    | `GRAFANA_CLOUD_LOKI_ID` | Grafana Cloud Loki instance ID |
    | `GRAFANA_CLOUD_LOKI_TOKEN` | Grafana Cloud access policy token |
+   | `GRAFANA_CLOUD_MIMIR_URL` | `https://prometheus-prod-<region>.grafana.net/api/prom/push` |
+   | `GRAFANA_CLOUD_MIMIR_ID` | Grafana Cloud Prometheus instance ID |
+   | `GRAFANA_CLOUD_MIMIR_TOKEN` | Grafana Cloud access policy token |
+   | `APPSERVER_METRICS_URL` | appserver `/metrics` scrape target, default `http://appserver:8080/metrics` (Railway private net) |
    | `FARO_CORS_ORIGINS` | Comma-separated browser origins allowed to POST Faro telemetry (default `https://roomy.space` — the SPA origin) |
    | `FARO_API_KEY` | Optional Faro API key (default unset) |
 3. **Networking → Private networking** — add this service to a private
@@ -29,6 +34,27 @@ The config is **baked into the image** so no Railway volume is required.
 > Grafana Cloud: *Your Stack → Details* shows your Loki push URL
 > (`logs-prod-<region>.grafana.net`). Create an Access Policy token for the
 > password; use the Loki instance ID as the user.
+
+## Metrics
+
+The appserver exposes a Prometheus `/metrics` endpoint (see
+`packages/appserver/src/metrics.ts`) with:
+
+- `roomy_xrpc_requests_total` / `roomy_xrpc_request_duration_seconds` — per-endpoint request count + latency histogram
+- `roomy_pool_size` / `roomy_pool_worker_pending` — DB pool size + per-worker queue depth (the signal that caught the system-worker N+1)
+- `roomy_cache_hits_total` / `roomy_cache_misses_total` / `roomy_cache_evictions_total` / `roomy_cache_size`
+- `roomy_embed_pending` / `roomy_embed_in_flight` / `roomy_embed_enriched_null` / `roomy_embed_db_backoff`
+- `roomy_search_indexer_queue` / `roomy_search_backfilled` / `roomy_push_queued`
+- `roomy_db_timeouts_total` — DB requests that hit the 30s timeout (pool saturation)
+
+Alloy scrapes it (`prometheus.scrape "appserver"`) and remote-writes to
+Grafana Cloud Mimir. Build Grafana dashboards + alerts on these, e.g. alert
+when any `roomy_pool_worker_pending` > threshold or `roomy_db_timeouts_total`
+rate > 0.
+
+The appserver also emits a **periodic metrics snapshot** to Loki every 30s
+(`[metrics] snapshot` log line) so saturation trends are visible in Grafana
+Loki even without a metrics backend.
 
 ## How apps forward logs
 

@@ -1,6 +1,7 @@
 // Worker is a global in Bun — no import needed.
 
 import type { WorkerRequest, WorkerResponse } from "./types.ts";
+import { metrics } from "../metrics.ts";
 
 // ─── Error types ──────────────────────────────────────────────────────────
 
@@ -103,6 +104,15 @@ interface PendingEntry {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
+// Counts DB requests that hit the 30s timeout — the direct signal for pool
+// saturation / N+1 bottlenecks (see metrics.ts). Labeled by request type
+// (query / run / prepareRun / ...) so a spike shows which operation stalled.
+const dbTimeouts = metrics.counter(
+  "roomy_db_timeouts_total",
+  "DB worker requests that exceeded the request timeout.",
+  ["type"],
+);
+
 /**
  * Owns one Bun.Worker thread and the request/response correlation for it.
  * Multiple `AsyncDatabase` handles can share one link; each handle stamps a
@@ -148,6 +158,7 @@ export class WorkerLink {
     const { promise, resolve, reject } = Promise.withResolvers<unknown>();
     const timeout = setTimeout(() => {
       this.#pending.delete(id);
+      dbTimeouts.inc({ type: req.type });
       reject(new Error(`Request timed out: ${req.type}`));
     }, REQUEST_TIMEOUT_MS);
     this.#pending.set(id, { resolve, reject, timeout });
