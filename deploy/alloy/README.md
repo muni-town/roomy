@@ -22,7 +22,7 @@ The config is **baked into the image** so no Railway volume is required.
    | `GRAFANA_CLOUD_MIMIR_URL` | `https://prometheus-prod-<region>.grafana.net/api/prom/push` |
    | `GRAFANA_CLOUD_MIMIR_ID` | Grafana Cloud Prometheus instance ID |
    | `GRAFANA_CLOUD_MIMIR_TOKEN` | Grafana Cloud access policy token |
-   | `APPSERVER_METRICS_URL` | appserver `/metrics` scrape target, default `http://appserver:8080/metrics` (Railway private net) |
+   | `APPSERVER_METRICS_URL` | appserver `/metrics` scrape target (default `http://appserver:8080/metrics`, set in the Dockerfile ENV; override on Railway) |
    | `FARO_CORS_ORIGINS` | Comma-separated browser origins allowed to POST Faro telemetry (default `https://roomy.space` — the SPA origin) |
    | `FARO_API_KEY` | Optional Faro API key (default unset) |
 3. **Networking → Private networking** — add this service to a private

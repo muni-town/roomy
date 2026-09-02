@@ -26,6 +26,10 @@ COPY deploy/alloy/config.alloy /etc/alloy/config.alloy
 ENV FARO_CORS_ORIGINS=https://roomy.space
 ENV FARO_API_KEY=
 
+# Appserver Prometheus scrape target (Railway private network). Override on
+# Railway if the appserver service has a different name/port.
+ENV APPSERVER_METRICS_URL=http://appserver:8080/metrics
+
 # Alloy writes WAL/positions to disk — keep the volume small but writable.
 ENV ALLOY_WAL_DIR=/var/lib/alloy
 
