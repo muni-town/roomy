@@ -419,6 +419,14 @@ function initializeReadStateSchema(
     )
     .get();
   if (!row) {
+    // Fresh DB: the schema file creates user_thread_activity WITH space_did,
+    // but the per-space index is intentionally not in the schema file (see
+    // readStateSchema.sql) so it can't throw on pre-v7 DBs. Create it here for
+    // fresh DBs; the v7 migration creates it for existing DBs.
+    db.exec(`
+      create index if not exists idx_user_thread_activity_user_space
+        on user_thread_activity(user_did, space_did, last_active_at desc)
+    `);
     db.exec(
       `insert into readstate_schema_version (id, version) values (1, '${expectedVersion}')`,
     );

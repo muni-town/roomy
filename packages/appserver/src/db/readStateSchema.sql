@@ -57,8 +57,15 @@ create table if not exists user_thread_activity (
 
 create index if not exists idx_user_thread_activity_user
   on user_thread_activity(user_did, last_active_at desc);
-create index if not exists idx_user_thread_activity_user_space
-  on user_thread_activity(user_did, space_did, last_active_at desc);
+
+-- NOTE: the per-space index idx_user_thread_activity_user_space
+-- (user_did, space_did, last_active_at desc) is intentionally NOT declared
+-- here. It references the `space_did` column, which does not exist on
+-- pre-v7 databases; declaring it in this schema file would make
+-- `db.exec(schema)` throw "no such column: space_did" on an existing v6 DB
+-- before the v7 migration can add the column. It is created by the v7
+-- migration (existing DBs) and by the fresh-DB path in
+-- initializeReadStateSchema (worker.ts).
 
 -- ── Web push (schema v3) ────────────────────────────────────────────────
 -- A device/browser subscription for a user. A user may have many (one per

@@ -46,6 +46,72 @@ describe("read-state schema", () => {
     expect(tables).toContain("user_thread_activity");
   });
 
+  test("schema file does not throw on a pre-v7 DB (space_did index is migration-only)", () => {
+    const db = new Database(":memory:");
+    db.exec("pragma foreign_keys = on");
+
+    // Simulate a v6 DB: user_thread_activity WITHOUT space_did, version row = 6.
+    db.exec(`
+      create table user_thread_activity (
+        user_did      text not null,
+        thread_id     text not null,
+        last_active_at integer not null,
+        updated_at    integer not null default (unixepoch() * 1000),
+        primary key (user_did, thread_id)
+      ) strict
+    `);
+    db.exec(`
+      create table readstate_schema_version (
+        id integer primary key check (id = 1),
+        version text not null
+      ) strict
+    `);
+    db.exec("insert into readstate_schema_version (id, version) values (1, '6')");
+
+    // Applying the current schema file must NOT throw (the per-space index is
+    // not in the file — it is created by the v7 migration / fresh-DB path).
+    const { readFileSync } = require("node:fs");
+    const { join, dirname } = require("node:path");
+    const { fileURLToPath } = require("node:url");
+    const schemaPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "readStateSchema.sql",
+    );
+    expect(() => db.exec(readFileSync(schemaPath, "utf8"))).not.toThrow();
+
+    // The v7 migration adds the column + index.
+    const cols = db
+      .query<{ name: string }, []>(
+        "select name from pragma_table_info('user_thread_activity')",
+      )
+      .all()
+      .map((r) => r.name);
+    if (!cols.includes("space_did")) {
+      db.exec("alter table user_thread_activity add column space_did text not null default ''");
+    }
+    db.exec(`
+      create index if not exists idx_user_thread_activity_user_space
+        on user_thread_activity(user_did, space_did, last_active_at desc)
+    `);
+
+    const colsAfter = db
+      .query<{ name: string }, []>(
+        "select name from pragma_table_info('user_thread_activity')",
+      )
+      .all()
+      .map((r) => r.name);
+    expect(colsAfter).toContain("space_did");
+
+    // The per-space query now works.
+    db.exec("insert into user_thread_activity (user_did, thread_id, space_did, last_active_at) values ('u','t','s',1)");
+    const rows = db
+      .query<{ thread_id: string }, [string, string]>(
+        "select thread_id from user_thread_activity where user_did = ? and space_did = ?",
+      )
+      .all("u", "s");
+    expect(rows).toHaveLength(1);
+  });
+
   test("migration runs from v1 schema to current version", () => {
     const db = new Database(":memory:");
     db.exec("pragma foreign_keys = on");
