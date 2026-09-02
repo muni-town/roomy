@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { page } from "$app/state";
   import { useTopicSubscription } from "@roomy-space/sdk/svelte";
   import type { Topic } from "@roomy-space/sdk/svelte";
@@ -41,12 +41,19 @@
   });
 
   // Background data preloading: once this space's sidebar (getSpaceMetadata)
-  // is loaded, prefetch the first page of messages for every readable room so
-  // navigating into a room renders instantly. Idempotent via ensureQueryData
-  // — re-runs on sidebar updates only fetch newly-appeared rooms.
+  // is loaded, prefetch the first page of messages for a prioritized, capped
+  // set of rooms so navigating into one renders instantly. The currently-open
+  // room is ranked first (reopening it is the most likely next action), then
+  // unread rooms. Idempotent via ensureQueryData. Reads the active room
+  // untracked so this effect stays keyed on sidebar availability, not on every
+  // room change.
   $effect(() => {
     if (metaQuery.data) {
-      void preloadRoomMessages(spaceId);
+      untrack(() => {
+        void preloadRoomMessages(spaceId, {
+          preferredFirstId: sync_.activeRoomId ?? undefined,
+        });
+      });
     }
   });
 
