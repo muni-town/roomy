@@ -110,7 +110,7 @@ describe("upsertUserThreadActivity", () => {
   test("inserts a new row on first call", async () => {
     const { readState } = freshDb();
 
-    await upsertUserThreadActivity(readState, USER, THREAD_A, 1000);
+    await upsertUserThreadActivity(readState, USER, THREAD_A, SPACE, 1000);
 
     const rows = await readState
       .query(
@@ -126,8 +126,8 @@ describe("upsertUserThreadActivity", () => {
   test("updates last_active_at on subsequent calls", async () => {
     const { readState } = freshDb();
 
-    await upsertUserThreadActivity(readState, USER, THREAD_A, 1000);
-    await upsertUserThreadActivity(readState, USER, THREAD_A, 2000);
+    await upsertUserThreadActivity(readState, USER, THREAD_A, SPACE, 1000);
+    await upsertUserThreadActivity(readState, USER, THREAD_A, SPACE, 2000);
 
     const rows = await readState
       .query(
@@ -145,13 +145,13 @@ describe("refreshThreadActivityOnMessage", () => {
     await seedBasic(spaceDb);
 
     const now = Date.now();
-    await upsertUserThreadActivity(readState, USER, THREAD_A, now - 60_000);
-    await upsertUserThreadActivity(readState, OTHER_USER, THREAD_A, now - 60_000);
+    await upsertUserThreadActivity(readState, USER, THREAD_A, SPACE, now - 60_000);
+    await upsertUserThreadActivity(readState, OTHER_USER, THREAD_A, SPACE, now - 60_000);
 
     const AUTHOR = "did:plc:carol";
     await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [AUTHOR, SPACE]);
     const msgTime = now - 10_000;
-    await refreshThreadActivityOnMessage(readState, THREAD_A, AUTHOR, msgTime);
+    await refreshThreadActivityOnMessage(readState, THREAD_A, AUTHOR, SPACE, msgTime);
 
     const rows = await readState
       .query(
@@ -170,9 +170,9 @@ describe("refreshThreadActivityOnMessage", () => {
     await seedBasic(spaceDb);
 
     const now = Date.now();
-    await upsertUserThreadActivity(readState, USER, THREAD_B, now - 60_000);
+    await upsertUserThreadActivity(readState, USER, THREAD_B, SPACE, now - 60_000);
 
-    await refreshThreadActivityOnMessage(readState, THREAD_A, USER, now);
+    await refreshThreadActivityOnMessage(readState, THREAD_A, USER, SPACE, now);
 
     const b = await readState
       .query(
@@ -197,8 +197,8 @@ describe("queryActiveThreads", () => {
     await seedBasic(spaceDb);
 
     const now = Date.now();
-    await upsertUserThreadActivity(readState, USER, THREAD_A, now - 60_000); // 1 min ago
-    await upsertUserThreadActivity(readState, USER, THREAD_B, now - 30_000); // 30 sec ago
+    await upsertUserThreadActivity(readState, USER, THREAD_A, SPACE, now - 60_000); // 1 min ago
+    await upsertUserThreadActivity(readState, USER, THREAD_B, SPACE, now - 30_000); // 30 sec ago
 
     const result = await queryActiveThreads(readState, spaceDb, USER, SPACE);
     expect(result).toHaveLength(2);
@@ -211,7 +211,7 @@ describe("queryActiveThreads", () => {
     await seedBasic(spaceDb);
 
     const now = Date.now();
-    await upsertUserThreadActivity(readState, USER, THREAD_A, now - 121 * 60 * 60 * 1000); // 121h ago
+    await upsertUserThreadActivity(readState, USER, THREAD_A, SPACE, now - 121 * 60 * 60 * 1000); // 121h ago
 
     const result = await queryActiveThreads(readState, spaceDb, USER, SPACE);
     expect(result).toHaveLength(0);
@@ -221,8 +221,8 @@ describe("queryActiveThreads", () => {
     const { readState, spaceDb } = freshDb();
     await seedBasic(spaceDb);
 
-    await upsertUserThreadActivity(readState, USER, THREAD_A, Date.now());
-    await upsertUserThreadActivity(readState, OTHER_USER, THREAD_B, Date.now());
+    await upsertUserThreadActivity(readState, USER, THREAD_A, SPACE, Date.now());
+    await upsertUserThreadActivity(readState, OTHER_USER, THREAD_B, SPACE, Date.now());
 
     const userResult = await queryActiveThreads(readState, spaceDb, USER, SPACE);
     expect(userResult).toHaveLength(1);
@@ -302,8 +302,8 @@ describe("purgeStaleThreadActivity", () => {
   test("removes rows older than given cutoff", async () => {
     const { readState } = freshDb();
 
-    await upsertUserThreadActivity(readState, USER, THREAD_A, 1000);
-    await upsertUserThreadActivity(readState, USER, THREAD_B, 5000);
+    await upsertUserThreadActivity(readState, USER, THREAD_A, SPACE, 1000);
+    await upsertUserThreadActivity(readState, USER, THREAD_B, SPACE, 5000);
 
     const purged = await purgeStaleThreadActivity(readState, 3000);
     expect(purged).toBe(1);

@@ -374,6 +374,35 @@ const MIGRATIONS: Migration[] = [
       ).run();
     },
   },
+  {
+    version: 7,
+    up(db: Database) {
+      // Per-space split (§1f): user_thread_activity gains a denormalized
+      // `space_did` column so the sidebar/unread queries can scope engaged
+      // threads per space instead of scanning every thread the user has
+      // engaged with across all spaces. Purely additive — no data loss.
+      // The column is backfilled from the global `entity_space` index by the
+      // v7 read-state post-migration task (see userSpaceMembershipMigration.ts).
+      const cols = db
+        .query<{ name: string }, []>(
+          "select name from pragma_table_info('user_thread_activity')",
+        )
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes("space_did")) {
+        db.exec(
+          "alter table user_thread_activity add column space_did text not null default ''",
+        );
+      }
+      db.exec(`
+        create index if not exists idx_user_thread_activity_user_space
+          on user_thread_activity(user_did, space_did, last_active_at desc)
+      `);
+      db.query(
+        "insert or ignore into readstate_schema_migrations (version, completed_at) values ('7', null)",
+      ).run();
+    },
+  },
 ];
 
 function initializeReadStateSchema(

@@ -49,6 +49,7 @@ create table if not exists read_positions (
 create table if not exists user_thread_activity (
   user_did      text not null,
   thread_id     text not null,
+  space_did     text not null default '',  -- space stream DID (per-space split §1f)
   last_active_at integer not null,   -- unix epoch milliseconds
   updated_at    integer not null default (unixepoch() * 1000),
   primary key (user_did, thread_id)
@@ -56,6 +57,8 @@ create table if not exists user_thread_activity (
 
 create index if not exists idx_user_thread_activity_user
   on user_thread_activity(user_did, last_active_at desc);
+create index if not exists idx_user_thread_activity_user_space
+  on user_thread_activity(user_did, space_did, last_active_at desc);
 
 -- ── Web push (schema v3) ────────────────────────────────────────────────
 -- A device/browser subscription for a user. A user may have many (one per

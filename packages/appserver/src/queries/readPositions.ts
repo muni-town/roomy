@@ -232,13 +232,16 @@ export async function getSpaceSidebarData(
 
   // Also include threads the user has engaged with (user_thread_activity,
   // read-state DB) that belong to this space (entities, per-space DB).
+  // Scoped by space_did so we only scan this space's engaged threads instead
+  // of every thread the user has engaged with across all spaces.
   const engagedThreads = await readStateDb
     .query(
       `select uta.thread_id
          from user_thread_activity uta
-        where uta.user_did = ?`,
+        where uta.user_did = ?
+          and uta.space_did = ?`,
     )
-    .all<{ thread_id: string }>([userDid]);
+    .all<{ thread_id: string }>([userDid, spaceId]);
 
   // Batch-check which engaged threads belong to this space in a single query
   // instead of one per-thread round-trip.

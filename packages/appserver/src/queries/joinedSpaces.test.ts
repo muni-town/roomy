@@ -224,10 +224,10 @@ describe("recordPersonalSpaceMembership", () => {
 
     // User engaged with all three threads.
     const rs = openReadStateDb();
-    for (const t of [t1, t2, tOther]) {
+    for (const [t, space] of [[t1, SPACE], [t2, SPACE], [tOther, OTHER]] as const) {
       await rs.run(
-        "insert into user_thread_activity (user_did, thread_id, last_active_at) values (?, ?, ?)",
-        [USER, t, Date.now()],
+        "insert into user_thread_activity (user_did, thread_id, space_did, last_active_at) values (?, ?, ?, ?)",
+        [USER, t, space, Date.now()],
       );
     }
 

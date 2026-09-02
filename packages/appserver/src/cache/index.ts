@@ -38,6 +38,15 @@ export const CACHEABLE_NSIDS: ReadonlySet<QueryNsid> = new Set<QueryNsid>([
   "space.roomy.space.getMetadata",
   "space.roomy.room.getMetadata",
   "space.roomy.space.getSpaces",
+  // The space index board and the activity feed are the two slowest read
+  // endpoints (metrics: 13s / 14s p50 under load). Both are fully covered by
+  // invalidation signals (see inferSignals.ts) — getThreads on room/message/
+  // reaction/role events, getActivityFeed on message/reaction/read events —
+  // so caching them short-circuits the expensive read-state + per-space
+  // fan-out. Cursor-paginated, so a page is evicted wholesale on any change
+  // to the space (coarse but correct); the TTL is the safety net.
+  "space.roomy.space.getThreads",
+  "space.roomy.space.getActivityFeed",
 ]);
 
 /**

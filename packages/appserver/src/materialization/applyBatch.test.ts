@@ -927,7 +927,7 @@ describe("applyBatch concurrency", () => {
       "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
     );
     db.exec(
-      "create table if not exists readstate.user_thread_activity (user_did text not null, thread_id text not null, last_active_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, thread_id)) strict",
+      "create table if not exists readstate.user_thread_activity (user_did text not null, thread_id text not null, space_did text not null default '', last_active_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, thread_id)) strict",
     );
     db.exec(
       "create table if not exists readstate.user_room_participation (user_did text not null, room_id text not null, last_message_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",

@@ -252,6 +252,11 @@ async function handleCreateMessage(
   // subscriber — broadcast, not caller-scoped.
   signals.push(invalidate("space.roomy.space.getThreads", { spaceId }));
 
+  // A new message is a new activity-feed item (and bumps the feed's unread
+  // counts for every subscriber). The activity feed is a global per-user
+  // query, so invalidate with no params — broadcast to all users.
+  signals.push(invalidate("space.roomy.space.getActivityFeed", {}));
+
   // A message in a thread may update the author's `activeThreads` in the
   // space sidebar. The `roomMetadataDiff` only patches `unreadCount`, not
   // `activeThreads`, so invalidate `space.getMetadata` for the author only.
@@ -312,6 +317,8 @@ async function handleEditMessage(
   signals.push(
     invalidate("space.roomy.space.getThreads", { spaceId: event.streamDid }),
   );
+  // An edited message may change the activity feed's rendered item.
+  signals.push(invalidate("space.roomy.space.getActivityFeed", {}));
 
   return signals;
 }
@@ -342,6 +349,8 @@ async function handleDeleteMessage(
     // The space index board (space.getThreads) may drop this room or reorder
     // it when its latest message is deleted — broadcast invalidation.
     invalidate("space.roomy.space.getThreads", { spaceId: event.streamDid }),
+    // A deleted message may remove an activity-feed item.
+    invalidate("space.roomy.space.getActivityFeed", {}),
   ];
 
   // Emit `remove` mention ops for every DID the deleted message mentioned,
@@ -387,6 +396,9 @@ function handleReactionChange(event: AppliedEvent): InvalidationEvent[] {
     // Per the "over-invalidate" principle this broadcasts to all users;
     // a reaction on a non-latest message triggers a harmless no-op refetch.
     invalidate("space.roomy.space.getActivityFeed", {}),
+    // A reaction on a room's latest message changes the space index board's
+    // `latestMembers` (recent participants) for that room — broadcast.
+    invalidate("space.roomy.space.getThreads", { spaceId }),
     ...(details.messageId
       ? [
           invalidate("space.roomy.message.getMessage", {
@@ -452,7 +464,11 @@ function handleDeleteRoom(event: AppliedEvent): InvalidationEvent[] {
   const details = event.details ?? {};
   const roomId = (details.roomId as Ulid | undefined) ?? event.roomId;
 
-  const signals: InvalidationEvent[] = [...invalidateSpace(spaceId)];
+  const signals: InvalidationEvent[] = [
+    ...invalidateSpace(spaceId),
+    // Deleting a room removes its activity items from every feed.
+    invalidate("space.roomy.space.getActivityFeed", {}),
+  ];
   if (roomId) {
     signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));
   }
@@ -483,6 +499,8 @@ function handleJoinSpace(event: AppliedEvent): InvalidationEvent[] {
   return [
     ...invalidateSpace(spaceId),
     invalidate("space.roomy.space.getSpaces", {}, event.user),
+    // Joining a space adds its recent activity to the caller's feed.
+    invalidate("space.roomy.space.getActivityFeed", {}, event.user),
   ];
 }
 
@@ -491,6 +509,8 @@ function handleLeaveSpace(event: AppliedEvent): InvalidationEvent[] {
   return [
     ...invalidateSpace(spaceId),
     invalidate("space.roomy.space.getSpaces", {}, event.user),
+    // Leaving a space removes its activity from the caller's feed.
+    invalidate("space.roomy.space.getActivityFeed", {}, event.user),
   ];
 }
 

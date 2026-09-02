@@ -130,8 +130,8 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   // your sidebar. Only threads get tracked -- channel reads don't touch the
   // sidebar's user_thread_activity. `db` is the per-space DB (isThread reads
   // comp_room there); `mainDb` is the read-state DB where activity lives.
-  if (await isThread(db, roomId)) {
-    await upsertUserThreadActivity(mainDb, userDid, roomId, Date.now());
+  if (await isThread(db, roomId) && access.spaceId) {
+    await upsertUserThreadActivity(mainDb, userDid, roomId, access.spaceId, Date.now());
   }
 
   // Reset the Engaged push-digest batch for this (user, room): the user has
@@ -167,6 +167,16 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
         signal: {
           nsid: "space.roomy.space.getThreads" as QueryNsid,
           params: { spaceId: access.spaceId },
+          affectedUser: userDid,
+        },
+      },
+      // Reading a room clears the activity feed's unread count for the
+      // reader (the feed shows unread per room).
+      {
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getActivityFeed" as QueryNsid,
+          params: {},
           affectedUser: userDid,
         },
       },

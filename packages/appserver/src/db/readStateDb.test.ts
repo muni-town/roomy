@@ -4,7 +4,7 @@ import { READSTATE_SCHEMA_VERSION } from "./readStateDb.ts";
 
 describe("read-state schema", () => {
   test("READSTATE_SCHEMA_VERSION is exported", () => {
-    expect(READSTATE_SCHEMA_VERSION).toBe("6");
+    expect(READSTATE_SCHEMA_VERSION).toBe("7");
   });
 
   test("schema applies cleanly on a fresh database", () => {
@@ -238,6 +238,26 @@ describe("read-state schema", () => {
             db.exec(`
               create index if not exists idx_user_space_membership_user_state
                 on user_space_membership(user_did, state, updated_at desc)
+            `);
+          },
+        },
+        {
+          version: 7,
+          up(db: Database) {
+            const cols = db
+              .query<{ name: string }, []>(
+                "select name from pragma_table_info('user_thread_activity')",
+              )
+              .all()
+              .map((r) => r.name);
+            if (!cols.includes("space_did")) {
+              db.exec(
+                "alter table user_thread_activity add column space_did text not null default ''",
+              );
+            }
+            db.exec(`
+              create index if not exists idx_user_thread_activity_user_space
+                on user_thread_activity(user_did, space_did, last_active_at desc)
             `);
           },
         },

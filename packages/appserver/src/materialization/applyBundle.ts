@@ -206,7 +206,7 @@ async function applyBundleInner(
       // sidebar when someone else posts) and registers the author.
       if (isThreadRoom) {
         const timestamp = decodeTimeFromId(bundle.event.id);
-        await refreshThreadActivityOnMessage(readStateDb, bundle.event.room, bundle.user, timestamp);
+        await refreshThreadActivityOnMessage(readStateDb, bundle.event.room, bundle.user, opts.streamId, timestamp);
       }
 
       // Track the author's participation in this room (all room types —
@@ -237,7 +237,7 @@ async function applyBundleInner(
       readStateDb
     ) {
       const timestamp = decodeTimeFromId(bundle.event.id);
-      await upsertUserThreadActivity(readStateDb, bundle.user, bundle.event.id, timestamp);
+      await upsertUserThreadActivity(readStateDb, bundle.user, bundle.event.id, opts.streamId, timestamp);
     }
 
     // Track reaction activity in threads (non-backfill only).
@@ -258,7 +258,7 @@ async function applyBundleInner(
           "reactingUser" in bundle.event && typeof bundle.event.reactingUser === "string"
             ? bundle.event.reactingUser
             : bundle.user;
-        await upsertUserThreadActivity(readStateDb, reactingUser, bundle.event.room, timestamp);
+        await upsertUserThreadActivity(readStateDb, reactingUser, bundle.event.room, opts.streamId, timestamp);
       }
     }
 

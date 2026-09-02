@@ -30,15 +30,17 @@ export async function upsertUserThreadActivity(
   db: DbLike,
   userDid: string,
   threadId: string,
+  spaceDid: string,
   timestamp: number,
 ): Promise<void> {
   await db.run(
-    `insert into user_thread_activity (user_did, thread_id, last_active_at, updated_at)
-     values (?, ?, ?, ?)
+    `insert into user_thread_activity (user_did, thread_id, space_did, last_active_at, updated_at)
+     values (?, ?, ?, ?, ?)
      on conflict(user_did, thread_id) do update set
+       space_did = excluded.space_did,
        last_active_at = excluded.last_active_at,
        updated_at = excluded.updated_at`,
-    userDid, threadId, timestamp, Date.now(),
+    userDid, threadId, spaceDid, timestamp, Date.now(),
   );
 }
 
@@ -54,6 +56,7 @@ export async function refreshThreadActivityOnMessage(
   db: DbLike,
   threadId: string,
   authorDid: string,
+  spaceDid: string,
   timestamp: number,
 ): Promise<void> {
   const now = Date.now();
@@ -64,7 +67,7 @@ export async function refreshThreadActivityOnMessage(
     timestamp, now, threadId,
   );
   // Ensure the author is tracking it too.
-  await upsertUserThreadActivity(db, authorDid, threadId, timestamp);
+  await upsertUserThreadActivity(db, authorDid, threadId, spaceDid, timestamp);
 }
 
 /**
@@ -236,8 +239,8 @@ export async function queryActiveThreads(
   // the read-state DB; the entity/room checks live in the per-space DB (Phase
   // 3 — entities moved out of the read-state DB).
   const myThreads = await readStateDb
-    .query("select thread_id from user_thread_activity where user_did = ?")
-    .all<{ thread_id: string }>([userDid]);
+    .query("select thread_id from user_thread_activity where user_did = ? and space_did = ?")
+    .all<{ thread_id: string }>([userDid, spaceId]);
   let existingCount = 0;
   if (myThreads.length > 0) {
     const ids = myThreads.map((r) => r.thread_id);
@@ -259,11 +262,12 @@ export async function queryActiveThreads(
       `select thread_id, last_active_at
          from user_thread_activity
         where user_did = ?
+          and space_did = ?
           and last_active_at > ?
         order by last_active_at desc
         limit ?`,
     )
-    .all<{ thread_id: string; last_active_at: number }>([userDid, windowStart, MAX_ACTIVE_THREADS]);
+    .all<{ thread_id: string; last_active_at: number }>([userDid, spaceId, windowStart, MAX_ACTIVE_THREADS]);
 
   // Confirm which candidates are non-deleted threads in this space in a
   // single batched query instead of one per-thread round-trip to the
@@ -324,9 +328,9 @@ async function backfillUserThreadActivity(
     .all<{ room: string; ts: number | null }>([userDid, spaceId, windowStart]);
   for (const c of candidates) {
     await readStateDb.run(
-      `insert or ignore into user_thread_activity (user_did, thread_id, last_active_at, updated_at)
-       values (?, ?, ?, ?)`,
-      userDid, c.room, c.ts ?? windowStart, Date.now(),
+      `insert or ignore into user_thread_activity (user_did, thread_id, space_did, last_active_at, updated_at)
+       values (?, ?, ?, ?, ?)`,
+      userDid, c.room, spaceId, c.ts ?? windowStart, Date.now(),
     );
   }
 }

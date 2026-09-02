@@ -139,9 +139,9 @@ describe("space.roomy.space.getSpaces", () => {
     const thread = newUlid();
     seedRoom(db, thread, SPACE, "space.roomy.thread");
     readStateDb(db).run(
-      `insert into user_thread_activity (user_did, thread_id, last_active_at, updated_at)
-       values (?, ?, ?, ?)`,
-      [USER, thread, Date.now(), Date.now()],
+      `insert into user_thread_activity (user_did, thread_id, space_did, last_active_at, updated_at)
+       values (?, ?, ?, ?, ?)`,
+      [USER, thread, SPACE, Date.now(), Date.now()],
     );
     seedReadPosition(db, USER, thread, "0", 1);
 
@@ -211,9 +211,9 @@ describe("space.roomy.space.getMetadata", () => {
       [channel, thread, JSON.stringify({ canonical_parent: 1 })],
     );
     readStateDb(db).run(
-      `insert into user_thread_activity (user_did, thread_id, last_active_at, updated_at)
-       values (?, ?, ?, ?)`,
-      [USER, thread, Date.now(), Date.now()],
+      `insert into user_thread_activity (user_did, thread_id, space_did, last_active_at, updated_at)
+       values (?, ?, ?, ?, ?)`,
+      [USER, thread, SPACE, Date.now(), Date.now()],
     );
 
     const res = await ctx.authedFetch(USER)(
@@ -489,9 +489,9 @@ describe("space.roomy.room.getMetadata", () => {
         [channel, t, JSON.stringify({ canonical_parent: 1 })],
       );
       readStateDb(db).run(
-        `insert into user_thread_activity (user_did, thread_id, last_active_at, updated_at)
-         values (?, ?, ?, ?)`,
-        [USER, t, Date.now(), Date.now()],
+        `insert into user_thread_activity (user_did, thread_id, space_did, last_active_at, updated_at)
+         values (?, ?, ?, ?, ?)`,
+        [USER, t, SPACE, Date.now(), Date.now()],
       );
     }
     seedReadPosition(db, USER, t1, "0", 2); // unread

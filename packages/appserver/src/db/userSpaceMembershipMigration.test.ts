@@ -4,6 +4,7 @@ import { StreamDid, UserDid } from "@roomy-space/sdk";
 import { closeDb, openDb, openReadStateDb } from "./db.ts";
 import type { DbLike } from "./types.ts";
 import {
+  backfillUserThreadActivitySpaceDid,
   recoverUserSpaceMembership,
   reduceMembershipEvents,
   runPendingReadStateMigrationsWithRetry,
@@ -168,5 +169,53 @@ describe("runPendingReadStateMigrationsWithRetry", () => {
       .query("select completed_at from readstate_schema_migrations where version = '6'")
       .get<{ completed_at: number | null }>();
     expect(row?.completed_at).not.toBeNull();
+  });
+});
+
+describe("backfillUserThreadActivitySpaceDid", () => {
+  test("backfills space_did from the global entity_space index", async () => {
+    const readState = openReadStateDb();
+    const global = db.global!();
+
+    // Two threads the user engaged with, both missing space_did (legacy rows).
+    const t1 = "01THREAD10000000000000000000";
+    const t2 = "01THREAD20000000000000000000";
+    for (const t of [t1, t2]) {
+      await readState.run(
+        "insert into user_thread_activity (user_did, thread_id, space_did, last_active_at) values (?, ?, '', ?)",
+        [USER, t, Date.now()],
+      );
+    }
+
+    // entity_space maps t1 → SPACE, t2 → SPACE2.
+    await global.run("insert into entity_space (entity_id, space_did) values (?, ?)", [t1, SPACE]);
+    await global.run("insert into entity_space (entity_id, space_did) values (?, ?)", [t2, SPACE2]);
+
+    await backfillUserThreadActivitySpaceDid(db);
+
+    const rows = await readState
+      .query("select thread_id, space_did from user_thread_activity order by thread_id")
+      .all<{ thread_id: string; space_did: string }>();
+    expect(rows).toEqual([
+      { thread_id: t1, space_did: SPACE },
+      { thread_id: t2, space_did: SPACE2 },
+    ]);
+  });
+
+  test("leaves unresolvable rows as ''", async () => {
+    const readState = openReadStateDb();
+    const t = "01THREAD30000000000000000000";
+    await readState.run(
+      "insert into user_thread_activity (user_did, thread_id, space_did, last_active_at) values (?, ?, '', ?)",
+      [USER, t, Date.now()],
+    );
+    // No entity_space entry for t.
+
+    await backfillUserThreadActivitySpaceDid(db);
+
+    const row = await readState
+      .query("select space_did from user_thread_activity where thread_id = ?")
+      .get<{ space_did: string }>(t);
+    expect(row?.space_did).toBe("");
   });
 });
