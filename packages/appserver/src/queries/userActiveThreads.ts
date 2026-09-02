@@ -110,23 +110,38 @@ export async function resolveThreadsByIds(
 
   if (threadIds.length === 0) return result;
 
-  // Batch query thread names
-  const nameStmt = await db.query(
-    `select ci.name from comp_info ci where ci.entity = ?`,
-  );
+  // Batch all four lookups into single `in (...)` queries instead of the
+  // previous per-thread loop (4 round-trips × N threads). For the sidebar's
+  // up-to-8 active threads that was ~32 round-trips to the per-space DB
+  // worker per getMetadata request — a significant pool-saturation source
+  // under load. Mirrors the batching already used by `listThreadActivity`.
+  const ph = threadIds.map(() => "?").join(",");
+
+  // Thread names
+  const nameRows = await db
+    .query(`select entity, name from comp_info where entity in (${ph})`)
+    .all<{ entity: string; name: string | null }>(...threadIds);
+  const nameMap = new Map(nameRows.map((r) => [r.entity, r.name]));
 
   // Latest timestamp per thread
-  const latestStmt = await db.query(
-    `select max(cc.timestamp) as ts
-       from entities e
-       join comp_content cc on cc.entity = e.id
-      where e.room = ?`,
-  );
+  const latestRows = await db
+    .query(
+      `select e.room as room, max(cc.timestamp) as ts
+         from entities e
+         join comp_content cc on cc.entity = e.id
+        where e.room in (${ph})
+        group by e.room`,
+    )
+    .all<{ room: string; ts: number | null }>(...threadIds);
+  const latestMap = new Map(latestRows.map((r) => [r.room, r.ts]));
 
-  // Recent participants (up to 3)
-  const participantsStmt = await db.query(
-    `select did, name, avatar from (
-       select author_e.tail as did,
+  // Recent participants (up to 3 per thread). SQLite has no LIMIT per group,
+  // so fetch all and take the top 3 per thread in JS (same approach as
+  // `listThreadActivity`).
+  const participantRows = await db
+    .query(
+      `select msg.room as room,
+              author_e.tail as did,
               ci.name as name,
               ci.avatar as avatar,
               max(cc.timestamp) as ts
@@ -134,37 +149,42 @@ export async function resolveThreadsByIds(
          join comp_content cc on cc.entity = msg.id
          join edges author_e on author_e.head = msg.id and author_e.label = 'author'
          left join comp_info ci on ci.entity = author_e.tail
-        where msg.room = ?
-        group by author_e.tail
-     )
-     order by ts desc
-     limit 3`,
-  );
+        where msg.room in (${ph})
+        group by msg.room, author_e.tail
+        order by msg.room, ts desc`,
+    )
+    .all<{ room: string; did: string; name: string | null; avatar: string | null; ts: number | null }>(...threadIds);
+  const participantsMap = new Map<string, Array<{ did: string; name: string | null; avatar: string | null }>>();
+  for (const r of participantRows) {
+    let arr = participantsMap.get(r.room);
+    if (!arr) {
+      arr = [];
+      participantsMap.set(r.room, arr);
+    }
+    if (arr.length < 3) {
+      arr.push({ did: r.did, name: r.name, avatar: r.avatar });
+    }
+  }
 
   // Canonical parent (the link edge with canonical_parent=1)
-  const parentStmt = await db.query(
-    `select head from edges
-      where tail = ? and label = 'link'
-        and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1
-      limit 1`,
-  );
+  const parentRows = await db
+    .query(
+      `select tail, head from edges
+        where tail in (${ph})
+          and label = 'link'
+          and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1`,
+    )
+    .all<{ tail: string; head: string }>(...threadIds);
+  const parentMap = new Map(parentRows.map((r) => [r.tail, r.head]));
 
   for (const tid of threadIds) {
-    const nameRow = await nameStmt.get<{ name: string | null }>([tid]);
-    const latest = await latestStmt.get<{ ts: number | null }>([tid]);
-    const members = await participantsStmt.all<{ did: string; name: string | null; avatar: string | null }>([tid]);
-    const parent = await parentStmt.get<{ head: string }>([tid]);
-
+    const latest = latestMap.get(tid);
     result.set(tid, {
-      name: nameRow?.name ?? null,
+      name: nameMap.get(tid) ?? null,
       latestTimestamp:
-        latest?.ts != null ? new Date(latest.ts).toISOString() : null,
-      latestMembers: members.map((m) => ({
-        did: m.did,
-        name: m.name,
-        avatar: m.avatar,
-      })),
-      canonicalParent: parent?.head ?? null,
+        latest != null ? new Date(latest).toISOString() : null,
+      latestMembers: participantsMap.get(tid) ?? [],
+      canonicalParent: parentMap.get(tid) ?? null,
     });
   }
 
@@ -245,21 +265,28 @@ export async function queryActiveThreads(
     )
     .all<{ thread_id: string; last_active_at: number }>([userDid, windowStart, MAX_ACTIVE_THREADS]);
 
+  // Confirm which candidates are non-deleted threads in this space in a
+  // single batched query instead of one per-thread round-trip to the
+  // per-space DB worker (up to 8 round-trips per getMetadata request).
   const rows: Array<{ thread_id: string; last_active_at: number }> = [];
-  for (const r of utaRows) {
-    const thread = await spaceDb
+  if (utaRows.length > 0) {
+    const cph = utaRows.map(() => "?").join(",");
+    const confirmed = await spaceDb
       .query(
-        `select 1 as n from entities e
+        `select e.id as id from entities e
            join comp_room cr on cr.entity = e.id
-          where e.id = ?
+          where e.id in (${cph})
             and e.stream_id = ?
             and cr.label = 'space.roomy.thread'
-            and coalesce(cr.deleted, 0) = 0
-          limit 1`,
+            and coalesce(cr.deleted, 0) = 0`,
       )
-      .get<{ n: number }>([r.thread_id, spaceId]);
-    if (thread) rows.push(r);
-    if (rows.length >= MAX_ACTIVE_THREADS) break;
+      .all<{ id: string }>([...utaRows.map((r) => r.thread_id), spaceId]);
+    const confirmedSet = new Set(confirmed.map((r) => r.id));
+    // utaRows is already ordered by last_active_at desc and capped at
+    // MAX_ACTIVE_THREADS, so filtering preserves order and the cap.
+    for (const r of utaRows) {
+      if (confirmedSet.has(r.thread_id)) rows.push(r);
+    }
   }
 
   return rows.map((r) => ({
