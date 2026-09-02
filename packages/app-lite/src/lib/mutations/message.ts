@@ -180,28 +180,53 @@ export async function forwardMessage(
   messageId: string,
   toRoomId: string,
   body = "",
+  opts: {
+    /** Blocks+facets commentary body (new format). When set, `body` is
+     *  ignored and the wire body is the serialized blocks; the mentions
+     *  sidecar is dropped (mentions fold into `#didMention` facets). */
+    blocks?: Block[];
+    /** Mentions sidecar for legacy markdown commentary bodies. */
+    mentions?: string[];
+  } = {},
 ): Promise<string> {
   const id = newUlid();
+  const extensions: Record<string, unknown> = {
+    "space.roomy.extension.attachments.v0": {
+      $type: "space.roomy.extension.attachments.v0",
+      attachments: [
+        {
+          $type: "space.roomy.attachment.forward.v0",
+          target: messageId,
+          fromRoomId,
+        },
+      ],
+    },
+  };
+  if (opts.blocks) {
+    // New format: mentions live in `#didMention` facets — no sidecar.
+  } else if (opts.mentions && opts.mentions.length > 0) {
+    extensions["space.roomy.extension.mentions.v0"] = {
+      $type: "space.roomy.extension.mentions.v0",
+      mentions: opts.mentions,
+    };
+  }
   const event: Record<string, unknown> = {
     id,
     room: toRoomId,
     $type: "space.roomy.message.createMessage.v0",
-    body: {
-      mimeType: "text/markdown",
-      data: toBytes(new TextEncoder().encode(body)),
-    },
-    extensions: {
-      "space.roomy.extension.attachments.v0": {
-        $type: "space.roomy.extension.attachments.v0",
-        attachments: [
-          {
-            $type: "space.roomy.attachment.forward.v0",
-            target: messageId,
-            fromRoomId,
-          },
-        ],
-      },
-    },
+    body: opts.blocks
+      ? {
+          mimeType: "application/vnd.roomy.richtext+json",
+          data: toBytes(new TextEncoder().encode(JSON.stringify({
+            $type: "space.roomy.richtext.document",
+            blocks: opts.blocks,
+          }))),
+        }
+      : {
+          mimeType: "text/markdown",
+          data: toBytes(new TextEncoder().encode(body)),
+        },
+    extensions,
   };
 
   await sendEvents(spaceId, [event]);

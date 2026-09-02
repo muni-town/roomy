@@ -271,6 +271,9 @@
                           did={m.authorDid}
                           avatar={m.authorAvatar}
                           timestamp={new Date(m.timestamp)}
+                          spaceId={m.spaceId}
+                          roomId={m.forwardedFrom.roomId}
+                          messageId={m.forwardedFrom.messageId}
                         />
                       {:else if m.replyTo}
                         {#if replyPreview}

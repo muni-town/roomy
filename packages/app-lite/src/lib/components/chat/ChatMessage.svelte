@@ -14,6 +14,7 @@
   import ForwardContext from "./ForwardContext.svelte";
   import MessageContent from "./MessageContent.svelte";
   import ChatInput from "./ChatInput.svelte";
+  import { createMentionSearch } from "$lib/tiptap/mentions";
   import { editMessage, removeLinkEmbed } from "$lib/mutations/message";
   import type { Message } from "$lib/queries/messages";
   import { resolveBlobUrl } from "$lib/utils";
@@ -74,6 +75,10 @@
   // the save path re-encodes the same format instead of downgrading to
   // markdown.
   let editBlocks: Block[] | undefined = $state();
+  // DIDs mentioned in the in-place editor, kept in sync by ChatInput. Only
+  // used for legacy markdown messages — rich-text messages carry mentions in
+  // their blocks' `#didMention` facets.
+  let editMentions: string[] = $state([]);
   let prevEditing = false;
   // ── Edit-mode link preview management ──────────────────────────────────
   // While editing, the author can dismiss or re-add link previews the same
@@ -88,6 +93,7 @@
   $effect.pre(() => {
     const editing = isEditing;
     if (editing && !prevEditing) {
+      editMentions = [];
       if (message.mimeType === RICHTEXT_MIME) {
         // Seed the editor from the decoded blocks (ChatInput reads these via
         // `initialBlocks`); `editContent` is synced to markdown on mount.
@@ -252,6 +258,9 @@
         // Rich-text messages stay rich-text: send the blocks (which ChatInput
         // keeps in sync) rather than the base64-encoded wire body or markdown.
         ...(isRichText ? { blocks: submittedBlocks } : {}),
+        // Legacy markdown messages carry mentions in the sidecar. Without
+        // this, mentions added while editing are silently dropped.
+        ...(!isRichText && _mentions.length > 0 ? { mentions: _mentions } : {}),
         ...(linkAttachments.length > 0 ? { attachments: linkAttachments } : {}),
       },
     );
@@ -309,6 +318,9 @@
             did={message.authorDid}
             avatar={message.authorAvatar}
             timestamp={new Date(message.timestamp)}
+            {spaceId}
+            roomId={message.forwardedFrom.roomId}
+            messageId={message.forwardedFrom.messageId}
           />
         {:else if message.replyTo}
           <MessageContext context={{ kind: "replying", replyTo: { id: message.replyTo } }} roomId={roomId} />
@@ -330,11 +342,13 @@
             <ChatInput
               bind:content={editContent}
               bind:blocks={editBlocks}
+              bind:mentions={editMentions}
               initialBlocks={editBlocks}
               onEnter={handleEdit}
               placeholder="Edit message..."
               disabled={false}
               setFocus={true}
+              mentionSearch={createMentionSearch(spaceId, roomId)}
             />
             {#if editLinks.length > 0}
               <div class="flex flex-col gap-2 mt-2">
@@ -399,7 +413,7 @@
             class="shrink-0 rounded-full"
             aria-label="Save changes"
             title="Save (Enter)"
-            onclick={() => handleEdit(editContent, [], editBlocks ?? [])}
+            onclick={() => handleEdit(editContent, editMentions, editBlocks ?? [])}
           >
             <IconCheck />
           </Button>

@@ -9,6 +9,7 @@
   import { createSearchRoomsQuery } from "$lib/queries/search-rooms";
   import { forwardMessage } from "$lib/mutations/message";
   import ChatInput from "./ChatInput.svelte";
+  import { createMentionSearch } from "$lib/tiptap/mentions";
   import { toast } from "@foxui/core";
 
   type SidebarChannel =
@@ -30,6 +31,10 @@
   // WYSIWYG composer body (markdown + blocks), bound from ChatInput.
   let body = $state("");
   let bodyBlocks: Block[] | undefined = $state();
+  // DIDs mentioned in the commentary, kept in sync by ChatInput. Used for
+  // the legacy markdown body path — rich-text bodies carry mentions in
+  // their blocks' `#didMention` facets.
+  let bodyMentions: string[] = $state([]);
 
   // Room-name search term typed into the modal's input. The design modal
   // owns the input (bind:query); when non-empty we search the server for
@@ -43,6 +48,7 @@
     if (open) {
       body = "";
       bodyBlocks = undefined;
+      bodyMentions = [];
     }
   });
 
@@ -153,9 +159,13 @@
   });
 
   async function handleForward(roomIds: string[]) {
+    const hasBlocks = !!bodyBlocks && bodyBlocks.length > 0;
     await Promise.all(
       roomIds.map((roomId) =>
-        forwardMessage(spaceId, fromRoomId, messageId, roomId, body),
+        forwardMessage(spaceId, fromRoomId, messageId, roomId, body, {
+          ...(hasBlocks ? { blocks: bodyBlocks } : {}),
+          ...(!hasBlocks && bodyMentions.length > 0 ? { mentions: bodyMentions } : {}),
+        }),
       ),
     );
     toast.success(
@@ -174,10 +184,12 @@
     <ChatInput
       bind:content={body}
       bind:blocks={bodyBlocks}
+      bind:mentions={bodyMentions}
       placeholder="Say something with the forwarded message…"
       onEnter={() => Promise.resolve()}
       sendOnEnter={false}
       setFocus={true}
+      mentionSearch={createMentionSearch(spaceId, fromRoomId)}
     />
   {/snippet}
 </ForwardMessageModal>

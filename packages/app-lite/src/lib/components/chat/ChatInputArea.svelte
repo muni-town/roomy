@@ -5,23 +5,18 @@
     type ChatInputShellMode,
   } from "@roomy/design/components/content/thread/ChatInputShell.svelte";
   import { messagingState } from "./messaging-state.svelte";
-  import { newUlid, toBytes, cache, extractFacetUrls } from "@roomy-space/sdk";
+  import { newUlid, toBytes, extractFacetUrls } from "@roomy-space/sdk";
   import type { schemas, Block } from "@roomy-space/sdk";
   import ChatInput, {
     clearInput,
     setInputFocus,
   } from "./ChatInput.svelte";
+  import { createMentionSearch } from "$lib/tiptap/mentions";
   import { sendMessage as sendMessageMutation } from "$lib/mutations/message";
   import { uploadFile } from "$lib/mutations/upload";
   import { sendEvents } from "$lib/mutations/send-events";
   import { createThread } from "$lib/mutations/thread";
   import MessageContext from "./MessageContext.svelte";
-  import { px, auth } from "$lib/auth.svelte";
-  import { queryClient } from "$lib/client";
-  import type { Message } from "$lib/queries/messages";
-  import type { Member, ExternalAdmin } from "$lib/queries/members";
-  import type { TypeaheadUser } from "@roomy/design/components/ui/user-typeahead/UserTypeahead.svelte";
-  import { resolveBlobUrl } from "$lib/utils";
   import LinkCard from "./embeds/LinkCard.svelte";
   import { extractUrls, fetchEmbedData } from "$lib/embed/embed-service";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
@@ -121,62 +116,11 @@
 
   let shouldFocus = $derived(autoFocus && !isCoarsePointer && !isSendingMessage && previewImages.length === 0);
 
-  // Most-recently-active members in this room, derived from the cached
-  // `getMessages` result (no extra fetch). Used to preseed the `@mention`
-  // popup before the user types anything. Self is excluded; ordered by last
-  // activity with the most recent at the bottom of the popup.
-  function recentActiveMembers(): TypeaheadUser[] {
-    const msgs = queryClient.getQueryData<Message[]>(
-      cache.queryKey("space.roomy.room.getMessages", { roomId }),
-    );
-    if (!msgs || msgs.length === 0) return [];
-    const selfDid = auth.userDid;
-    // Track each author's most recent message; `sort_idx` (ULID) is the
-    // canonical timeline order, falling back to the ISO `timestamp`.
-    const lastByDid = new Map<string, { user: TypeaheadUser; last: string }>();
-    for (const m of msgs) {
-      if (m.authorDid === selfDid) continue;
-      const ord = m.sort_idx ?? m.timestamp;
-      const existing = lastByDid.get(m.authorDid);
-      if (!existing || ord > existing.last) {
-        lastByDid.set(m.authorDid, {
-          user: {
-            did: m.authorDid,
-            name: m.authorName,
-            handle: m.authorHandle,
-            avatar: resolveBlobUrl(m.authorAvatar),
-          },
-          last: ord,
-        });
-      }
-    }
-    return [...lastByDid.values()]
-      .sort((a, b) => (a.last < b.last ? -1 : a.last > b.last ? 1 : 0))
-      .map((v) => v.user)
-      .slice(-8); // cap to the 8 most-recently-active; most recent stays last
-  }
-
   // Server-side member search for `@mention` in the chat input. Empty query →
-  // recent-active preseed (above). Non-empty → `getMembers?search=` on the
-  // appserver, including both members and external admins so space admins
-  // without membership are mentionable too. (Self-exclusion applies only to
-  // the preseed, not to search results.)
-  async function mentionSearch(q: string): Promise<TypeaheadUser[]> {
-    const query = q.trim();
-    if (query === "") {
-      return recentActiveMembers();
-    }
-    const res = (await px().query("space.roomy.space.getMembers", {
-      spaceId,
-      search: query,
-    })) as { members: Member[]; externalAdmins: ExternalAdmin[] };
-    return [...res.members, ...res.externalAdmins].map((m) => ({
-      did: m.did,
-      handle: m.handle,
-      name: m.name,
-      avatar: resolveBlobUrl(m.avatar),
-    }));
-  }
+  // recent-active preseed; non-empty → `getMembers?search=` on the appserver.
+  // Shared with the edit-message editor and forward composer (see
+  // `$lib/tiptap/mentions.ts`).
+  const mentionSearch = createMentionSearch(spaceId, roomId);
 
   let fileInput: HTMLInputElement | undefined = $state();
   let actionMenuOpen = $state(false);

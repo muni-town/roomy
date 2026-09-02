@@ -9,6 +9,9 @@
     did,
     avatar,
     timestamp,
+    spaceId,
+    roomId,
+    messageId,
   }: {
     /** The forwarding user's display name. */
     name?: string;
@@ -18,10 +21,24 @@
     avatar?: string;
     /** When the message was forwarded. */
     timestamp: Date;
+    /** Space the original message lives in (for the back-link). */
+    spaceId?: string;
+    /** Room the original message lives in (for the back-link). */
+    roomId?: string;
+    /** The original message's id (for the back-link). */
+    messageId?: string;
   } = $props();
 
   // Bridged (Discord) forwards have no navigable profile; render name as text.
   const isBridged = $derived(did?.startsWith("did:discord:") ?? false);
+  // The context line links back to the original message. The room page does
+  // not handle `?message=` yet, but the param is the agreed contract for
+  // deep-linking to a specific message.
+  const originalHref = $derived(
+    spaceId && roomId && messageId
+      ? `/${spaceId}/${roomId}?message=${messageId}`
+      : undefined,
+  );
 </script>
 
 <div class="flex items-center gap-1.5 text-sm text-base-500 dark:text-base-400 pl-0.5">
@@ -48,6 +65,16 @@
       {name || did?.slice(0, 12)}
     </span>
   {/if}
-  <span class="shrink-0">forwarded</span>
+  {#if originalHref}
+    <a
+      href={originalHref}
+      class="shrink-0 hover:underline"
+      title="View original message"
+    >
+      forwarded
+    </a>
+  {:else}
+    <span class="shrink-0">forwarded</span>
+  {/if}
   <time class="shrink-0 text-[13px] opacity-70">{formatMessageTimestamp(timestamp)}</time>
 </div>
