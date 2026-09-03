@@ -43,8 +43,9 @@
       id: r.id,
       name: r.name ?? "Unnamed Thread",
       kind: r.kind === "channel" ? "space.roomy.channel" : "space.roomy.thread",
-      channelName: r.channelName,
-      canonicalParent: r.channel,
+      // Channels have no parent channel; show their own name in the right
+      // column too so the board reads consistently (duplicated — intended).
+      channelName: r.channelName ?? (r.kind === "channel" ? r.name : undefined),
       // Honest unread: the server marks a room unread when it has messages
       // the user hasn't read (threads this user never engaged with count
       // as unread; channels follow the sidebar's unreadCount).
@@ -58,6 +59,14 @@
         latestTimestamp: r.activity.latestTimestamp
           ? new Date(r.activity.latestTimestamp).getTime()
           : 0,
+        ...(r.activity.latestMessage
+          ? {
+              latestMessage: {
+                id: r.activity.latestMessage.id,
+                text: r.activity.latestMessage.content,
+              },
+            }
+          : {}),
       },
     };
   }

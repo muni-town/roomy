@@ -21,6 +21,10 @@
           { avatar: "https://placehold.co/64x64/10b981/ffffff?text=B", name: "Bob", id: "bob" },
         ],
         latestTimestamp: Date.now() - 1000 * 60 * 5,
+        latestMessage: {
+          id: "msg-1",
+          text: "Sounds good, let's ship it after the release freeze.",
+        },
       },
     },
     {

@@ -20,7 +20,8 @@
  */
 
 import type { DbLike } from "../db/types.ts";
-import { decodeContent } from "../db/content.ts";
+import { decodeContent, decodeRichTextBody } from "../db/content.ts";
+import { RICHTEXT_MIME, blocksToPlaintext } from "@roomy-space/sdk";
 import { hydrateProfiles } from "./profileStore.ts";
 
 export interface ThreadMember {
@@ -316,7 +317,18 @@ export async function listThreadActivity(
     if (latestMsgRow && latestMsgRow.author_did) {
       latestMessage = {
         id: latestMsgRow.id,
-        content: decodeContent(latestMsgRow.mime_type, latestMsgRow.data),
+        // Rich-text bodies are base64-encoded on the wire (decodeContent
+        // base64s non-text mimeTypes). Decode them to plaintext so the board
+        // preview shows readable text, not the encoded blob. Legacy text/*
+        // content is already plaintext and stays as-is.
+        content: (() => {
+          const { mime_type: mime, data } = latestMsgRow;
+          if (mime === RICHTEXT_MIME) {
+            const blocks = decodeRichTextBody(mime, data);
+            return blocks ? blocksToPlaintext(blocks) : "";
+          }
+          return decodeContent(mime, data);
+        })(),
         author: {
           did: latestMsgRow.author_did,
           name: latestMsgRow.author_name,

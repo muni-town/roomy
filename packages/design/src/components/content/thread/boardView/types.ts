@@ -10,5 +10,7 @@ export type ThreadInfo = {
   activity: {
     members: { avatar: string | null; name: string | null; id: string }[];
     latestTimestamp: number;
+    /** Latest message preview (text-only) for the inbox-style sub-line. */
+    latestMessage?: { id: string; text: string };
   };
 };

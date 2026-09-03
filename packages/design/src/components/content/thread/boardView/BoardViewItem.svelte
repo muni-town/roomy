@@ -41,13 +41,17 @@ let read = $derived(!thread.unread);
     <!-- Text column: title + mobile sub-row -->
     <div class="flex flex-col flex-1 min-w-0">
       <div class={"flex-1 min-w-0 flex items-center gap-2 text-base font-light " + (read ? "text-base-600/90 dark:text-base-400" : "text-base-900 dark:text-base-100")}>
-        <span class="truncate">
-          {#if thread.kind == "space.roomy.channel"}
-            #&nbsp;
-          {/if}
+        <span class={"truncate " + (thread.kind == "space.roomy.channel" ? "italic" : "")}>
           {thread.name}
         </span>
       </div>
+
+      <!-- Latest message preview (inbox-style, muted) -->
+      {#if thread.activity.latestMessage?.text}
+        <div class={"min-w-0 truncate text-xs font-light " + (read ? "text-base-400 dark:text-base-600" : "text-base-500 dark:text-base-400")}>
+          {thread.activity.latestMessage.text}
+        </div>
+      {/if}
 
       <!-- Mobile sub-row: channel + date (smaller, lower contrast) -->
       <div class={"flex @[40rem]:hidden items-center gap-2 text-xs ml-0.5 " + (read ? "text-base-400 dark:text-base-500" : "text-base-500 dark:text-base-400")}>
@@ -72,10 +76,9 @@ let read = $derived(!thread.unread);
     </div>
 
     <!-- Desktop columns (hidden on mobile) -->
-    <div class={"hidden @[40rem]:flex w-16 shrink-0 items-center justify-start transition-all " + (read ? "opacity-80 saturate-75" : "opacity-100 saturate-100") + " group-hover:opacity-100 group-hover:saturate-100"}>
+    <div class={"hidden @[40rem]:flex w-20 shrink-0 items-center justify-start transition-all " + (read ? "opacity-80 saturate-75" : "opacity-100 saturate-100") + " group-hover:opacity-100 group-hover:saturate-100"}>
       {@render avatarGroup()}
     </div>
-
     {#if !hideChannel}
       <div class={"hidden @[40rem]:flex w-[5.5rem] shrink-0 text-sm items-center gap-1 overflow-hidden " + (read ? "text-base-500 dark:text-base-500" : "text-base-600 dark:text-base-300/80")}>
         {#if thread.channelName}

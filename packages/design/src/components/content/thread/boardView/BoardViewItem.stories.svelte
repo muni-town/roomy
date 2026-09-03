@@ -21,6 +21,10 @@
         { avatar: "https://placehold.co/64x64/f97316/ffffff?text=C", name: "Carol", id: "carol" },
       ],
       latestTimestamp: Date.now() - 1000 * 60 * 4,
+      latestMessage: {
+        id: "msg-1",
+        text: "That refactor looks clean — merging it now.",
+      },
     },
   };
 </script>
