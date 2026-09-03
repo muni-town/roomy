@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#
+# dev-design — Spin up the Storybook dev server for the design package.
+#
+# Usage: dev-design [--port <port>]
+#
+# Run from the repo root.
+#
+# Requirements:
+#   - Docker
+#   - Dependencies installed: `pnpm install` at repo root
+#
+# Notes:
+#   - Runs Storybook for packages/design on port 6006 by default (the same
+#     default as `pnpm --filter @roomy/design storybook`). Pass --port to
+#     override.
+#   - @roomy/design depends on @roomy-space/sdk, whose `exports` resolve to
+#     the built packages/sdk/dist (not its src) — this script builds the SDK
+#     if it's missing, same as dev-app-lite.
+#
+# set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+# ── Defaults ──────────────────────────────────────────────────────────────
+PORT=6006
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port) PORT="$2"; shift 2 ;;
+    -h|--help)
+      sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+if [[ ! -d packages/design ]]; then
+  echo "✗ Run from the repo root — packages/design not found."
+  exit 1
+fi
+
+SAFE_NAME="$(basename "$REPO_ROOT")"
+DEV_NAME="dev-design-${SAFE_NAME//\//-}"
+
+# --- Clean up any previous container ---
+docker rm -f "$DEV_NAME" 2>/dev/null || true
+
+# --- Ensure the roomy-dev network exists (so agents can reach this by name) ---
+docker network inspect roomy-dev >/dev/null 2>&1 || docker network create roomy-dev >/dev/null
+echo "Starting design Storybook: $DEV_NAME on port $PORT (roomy-dev)"
+docker run -d \
+  --name "$DEV_NAME" \
+  -v "$REPO_ROOT:/app" \
+  -p "$PORT:$PORT" \
+  -e "CI=true" \
+  --network roomy-dev \
+  node:22 \
+  bash -c "
+    set -euo pipefail
+    cd /app
+    npm i -g pnpm
+    # Install deps if missing OR if a design devDependency (e.g. the
+    # storybook binary) is absent — node_modules can exist yet be stale or
+    # incomplete from another install (worktrees, cross-machine bind mounts).
+    if [ ! -d node_modules ] || [ ! -e packages/design/node_modules/.bin/storybook ]; then
+      echo 'Installing dependencies …'
+      pnpm install --frozen-lockfile
+    fi
+    # Build SDK if not already built (@roomy/design depends on it)
+    if [ ! -d packages/sdk/dist ]; then
+      echo 'Building @roomy-space/sdk …'
+      pnpm --filter @roomy-space/sdk build
+    fi
+    cd packages/design
+    pnpm exec storybook dev --host 0.0.0.0 --port $PORT
+  "
+echo "✔ Design Storybook started (http://localhost:$PORT)"
+echo "  Agent (roomy-dev) → http://$DEV_NAME:$PORT"
+echo "To stop: docker rm -f $DEV_NAME"
