@@ -30,28 +30,23 @@ let read = $derived(!thread.unread);
         }))}
     />
   {/snippet}
-  <!-- Unread marker column -->
-  <div class="w-8 shrink-0 flex items-center justify-start pl-5.5">
-    {#if thread.unread}
-      <span class="size-2 rounded-full bg-accent-500" aria-label="Unread"></span>
-    {/if}
-  </div>
 
-  <div class="flex flex-row items-center gap-3 py-3 pl-2 pr-3 flex-1 min-w-0">
+  <div class="flex flex-row items-center gap-3 py-3 pl-4 sm:pl-5.5 pr-3 flex-1 min-w-0">
     <!-- Text column: title + mobile sub-row -->
     <div class="flex flex-col flex-1 min-w-0">
       <div class={"flex-1 min-w-0 flex items-center gap-2 text-base font-light " + (read ? "text-base-600/90 dark:text-base-400" : "text-base-900 dark:text-base-100")}>
-        <span class={"truncate " + (thread.kind == "space.roomy.channel" ? "italic" : "")}>
+        {#if thread.unread}
+          <span class="shrink-0 size-1.5 rounded-full bg-accent-500" aria-label="Unread"></span>
+        {/if}
+        <span class={"font-normal truncate " + (thread.kind == "space.roomy.channel" ? "italic" : "")}>
           {thread.name}
         </span>
+        {#if thread.activity.latestMessage?.text}
+          <span class={"flex flex-1 min-w-0 truncate items-center " + (read ? "text-base-500 dark:text-base-600" : "text-base-600 dark:text-base-300")}>
+            {thread.activity.latestMessage.text}
+          </span>
+        {/if}
       </div>
-
-      <!-- Latest message preview (inbox-style, muted) -->
-      {#if thread.activity.latestMessage?.text}
-        <div class={"min-w-0 truncate text-xs font-light " + (read ? "text-base-400 dark:text-base-600" : "text-base-500 dark:text-base-400")}>
-          {thread.activity.latestMessage.text}
-        </div>
-      {/if}
 
       <!-- Mobile sub-row: channel + date (smaller, lower contrast) -->
       <div class={"flex @[40rem]:hidden items-center gap-2 text-xs ml-0.5 " + (read ? "text-base-400 dark:text-base-500" : "text-base-500 dark:text-base-400")}>
