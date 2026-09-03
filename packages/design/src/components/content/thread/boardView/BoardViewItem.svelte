@@ -31,18 +31,24 @@ let read = $derived(!thread.unread);
     />
   {/snippet}
 
-  <div class="flex flex-row items-center gap-3 py-3 pl-4 sm:pl-5.5 pr-3 flex-1 min-w-0">
+  <!-- Unread marker column (desktop only) -->
+  <div class="hidden @[40rem]:flex w-8 shrink-0 items-center justify-start pl-5.5">
+    {#if thread.unread}
+      <span class="size-2 rounded-full bg-accent-500" aria-label="Unread"></span>
+    {/if}
+  </div>
+  <div class="flex flex-row items-center gap-3 py-3 pl-4 sm:pl-3 pr-3 flex-1 min-w-0">
     <!-- Text column: title + mobile sub-row -->
     <div class="flex flex-col flex-1 min-w-0">
-      <div class={"flex-1 min-w-0 flex items-center gap-2 text-base font-light " + (read ? "text-base-600/90 dark:text-base-400" : "text-base-900 dark:text-base-100")}>
+      <div class={"flex-1 min-w-0 flex items-baseline gap-2 text-base font-light " + (read ? "text-base-600/90 dark:text-base-400" : "text-base-900 dark:text-base-100")}>
         {#if thread.unread}
-          <span class="shrink-0 size-1.5 rounded-full bg-accent-500" aria-label="Unread"></span>
+          <span class="shrink-0 size-1.5 rounded-full bg-accent-500 @[40rem]:hidden" aria-label="Unread"></span>
         {/if}
         <span class={"font-normal truncate " + (thread.kind == "space.roomy.channel" ? "italic" : "")}>
           {thread.name}
         </span>
-        {#if thread.activity.latestMessage?.text}
-          <span class={"flex flex-1 min-w-0 truncate items-center " + (read ? "text-base-500 dark:text-base-600" : "text-base-600 dark:text-base-300")}>
+        {#if thread.activity.latestMessage?.text && thread.kind == "space.roomy.channel"}
+          <span class={"flex-1 min-w-0 text-xs truncate max-w-full items-center " + (read ? "text-base-500 dark:text-base-600" : "text-base-600 dark:text-base-300")}>
             {thread.activity.latestMessage.text}
           </span>
         {/if}
@@ -83,7 +89,7 @@ let read = $derived(!thread.unread);
       </div>
     {/if}
 
-    <div class={"hidden @[40rem]:block w-[4.5rem] shrink-0 text-left text-xs " + (read ? "text-base-500 dark:text-base-500" : "text-base-600 dark:text-base-300/80")}>
+    <div class={"hidden @[40rem]:block w-[4.5rem] shrink-0 text-left text-[13px] " + (read ? "text-base-500 dark:text-base-500" : "text-base-600 dark:text-base-300/80")}>
       {#if lastMessageTimestamp}
         {formatRelativeTime(new Date(lastMessageTimestamp))}
       {/if}
