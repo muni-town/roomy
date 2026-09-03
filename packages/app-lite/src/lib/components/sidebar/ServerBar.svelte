@@ -280,7 +280,7 @@
   >
     <div
       class={[
-        "flex flex-col gap-0 w-full",
+        "space-switcher flex flex-col gap-0 w-full select-none",
         wide ? "" : "items-center",
       ].join(" ")}
       use:dndzone={{
@@ -378,6 +378,13 @@
 </div>
 
 <style>
+
+  .space-switcher {
+    /* Prevent iOS long-press from selecting text/callout, which would break
+       the long-press-to-arm drag reordering. select-none (user-select) is
+       applied via the Tailwind class; this kills the native callout menu. */
+    -webkit-touch-callout: none;
+  }
   .sidebar-server-bar {
     /* contain + will-change = compositor-only */
     contain: layout style;
