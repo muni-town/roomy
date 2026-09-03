@@ -151,7 +151,11 @@ export class SyncRouter {
           (prev) => patchChannelThreadCount(prev, parsed.threadUnreadDelta!),
         );
       }
-      this.#adapter.patch<GetSpacesResponse>(
+      // Patch every cached variant of getSpaces (the server bar caches
+      // `?includeLeft=true`, the home page the bare query). `patchAll`
+      // prefix-matches rather than requiring the exact key, so a single
+      // frame updates every mounted variant; no cache entry = no-op.
+      this.#adapter.patchAll<GetSpacesResponse>(
         queryKey(GET_SPACES_NSID),
         (prev) => patchSpaces(prev, parsed.spaceId, patch),
       );

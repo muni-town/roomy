@@ -270,7 +270,6 @@
         id: string;
         name: string;
         unreadCount: number;
-        lastRead: number;
       }>
     >();
 
@@ -284,7 +283,6 @@
               id: t.id,
               name: t.name ?? t.id,
               unreadCount: t.unreadCount,
-              lastRead: t.lastRead ? new Date(t.lastRead).getTime() : -1,
             })),
           );
         }
@@ -298,7 +296,6 @@
             id: t.id,
             name: t.name ?? t.id,
             unreadCount: t.unreadCount,
-            lastRead: t.lastRead ? new Date(t.lastRead).getTime() : -1,
           })),
         );
       }
@@ -317,9 +314,6 @@
             id: currentRoom,
             name: roomMeta.name ?? currentRoom,
             unreadCount: roomMeta.unreadCount ?? 0,
-            lastRead: roomMeta.lastRead
-              ? new Date(roomMeta.lastRead).getTime()
-              : -1,
           },
         ]);
       }

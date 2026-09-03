@@ -3,7 +3,6 @@
     id: string;
     name: string;
     unreadCount: number;
-    lastRead: number;
   };
 </script>
 
@@ -31,7 +30,6 @@
     {#each rooms as room}
       {@const isActive = room.id === currentRoomId}
       {@const hasUnread =
-        room.lastRead > 0 &&
         room.unreadCount > 0 &&
         !isActive}
       <div class="inline-flex w-full items-start justify-between min-w-0">

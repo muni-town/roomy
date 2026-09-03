@@ -21,6 +21,7 @@ import type {
   InvalidationEvent,
   QueryInvalidation,
   QueryNsid,
+  RoomMetadataDiff,
 } from "./types.ts";
 import type { DbLike } from "../db/types.ts";
 
@@ -337,6 +338,95 @@ describe("inferSignals: message events", () => {
       }),
     );
     expect(signals).toHaveLength(0);
+  });
+
+  it("createMessage in a federated room invalidates the receiving spaces", async () => {
+    const { asyncDb } = seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "hello",
+    });
+    // Seed a read_positions row so the unread bump has a user to report.
+    await asyncDb.run(
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
+      [USER_DID, ROOM_ID, "0", 1],
+    );
+
+    // A federation: ROOM_ID (stream A = STREAM_DID) is granted to B and C.
+    const globalDb = new Database(":memory:");
+    globalDb.exec(
+      `create table if not exists space_federations (
+         space_id text not null,
+         federating_space_did text not null,
+         status text not null,
+         primary key (space_id, federating_space_did)
+       ) strict;`,
+    );
+    globalDb.exec(
+      `create table if not exists federation_room_permissions (
+         space_id text not null,
+         federating_space_did text not null,
+         room_id text not null,
+         permission text not null,
+         primary key (space_id, federating_space_did, room_id)
+       ) strict;`,
+    );
+    for (const home of ["did:web:space-b.example", "did:web:space-c.example"]) {
+      globalDb.run(
+        "insert into space_federations (space_id, federating_space_did, status) values (?, ?, 'active')",
+        [STREAM_DID, home],
+      );
+      globalDb.run(
+        "insert into federation_room_permissions (space_id, federating_space_did, room_id, permission) values (?, ?, ?, 'readwrite')",
+        [STREAM_DID, home, ROOM_ID],
+      );
+    }
+    // The handler reads messages + read state from the space DB and the
+    // federation registry from the global DB; the same object exposes both.
+    const db: DbLike = Object.assign(toAsyncDb(globalDb), {
+      global: () => toAsyncDb(globalDb),
+      ...asyncDb,
+    });
+
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.message.createMessage.v0",
+        roomId: ROOM_ID,
+        details: { content: "hello", authorName: "Alice" },
+      }),
+      db,
+    );
+
+    // One fed roomMetadataDiff per receiving space, plus the metadata +
+    // getSpaces invalidations for each.
+    const fedDiffs = signals.filter(
+      (s): s is { kind: "roomMetadataDiff"; signal: RoomMetadataDiff } =>
+        s.kind === "roomMetadataDiff" && s.signal.spaceId !== STREAM_DID,
+    );
+    expect(fedDiffs).toHaveLength(2);
+    const fedHomes = fedDiffs
+      .map((s) => s.signal.spaceId)
+      .sort();
+    expect(fedHomes).toEqual([
+      "did:web:space-b.example" as StreamDid,
+      "did:web:space-c.example" as StreamDid,
+    ]);
+    for (const diff of fedDiffs) {
+      expect(diff.signal.roomId).toBe(ROOM_ID);
+      expect(diff.signal.delta).toBe(1);
+      expect(diff.signal.users).toContain(USER_DID);
+    }
+
+    // Receiving-space metadata invalidations for every fed home.
+    const metaInvalidations = signals.filter(
+      (s) =>
+        s.kind === "queryInvalidation" &&
+        s.signal.nsid === "space.roomy.space.getMetadata" &&
+        s.signal.params["spaceId"] !== STREAM_DID,
+    );
+    expect(metaInvalidations).toHaveLength(2);
   });
   it("editMessage produces a messageDiff update keyed by messageId, not the edit event id", async () => {
     const MESSAGE_ID = "01HXSXKBQ4TESTMSG00000000A" as Ulid;

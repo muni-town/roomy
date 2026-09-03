@@ -50,6 +50,12 @@
       // the user hasn't read (threads this user never engaged with count
       // as unread; channels follow the sidebar's unreadCount).
       unread: r.unread ?? (r.unreadCount ?? 0) > 0,
+      // 3-state: the dot marks rooms the user has ENGAGED with and not
+      // finished reading. For threads, the server only bumps unreadCount
+      // for engaged users, so count > 0 implies engagement — a
+      // never-engaged thread with messages is bold but dotless. Channels
+      // always get the dot when unread (their count is the sidebar's).
+      unreadDot: (r.unreadCount ?? 0) > 0,
       activity: {
         members: r.activity.latestMembers.map((m) => ({
           id: m.did,

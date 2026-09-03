@@ -110,4 +110,76 @@ describe("createTanstackCacheAdapter", () => {
       expect(cache.find({ queryKey: k2 as unknown[] })?.isStale()).toBe(true);
     });
   });
+
+  describe("patchAll", () => {
+    it("patches every param variant matching the prefix key", () => {
+      const adapter = createTanstackCacheAdapter(queryClient);
+      // The server bar mounts getSpaces?includeLeft=true; the home page the
+      // bare getSpaces. A #roomMetadataDiff must live-patch BOTH.
+      const withParams = queryKey("space.roomy.space.getSpaces", {
+        includeLeft: "true",
+      });
+      const bare = queryKey("space.roomy.space.getSpaces");
+
+      queryClient.setQueryData(withParams as unknown[], {
+        spaces: [
+          { id: "s1", unreadCount: 2, unreadRoomCount: 1, isMember: true, isAdmin: false, roleIds: [] },
+        ],
+      });
+      queryClient.setQueryData(bare as unknown[], {
+        spaces: [
+          { id: "s1", unreadCount: 2, unreadRoomCount: 1, isMember: true, isAdmin: false, roleIds: [] },
+        ],
+      });
+
+      adapter.patchAll<{ spaces: Array<{ unreadCount: number }> }>(
+        queryKey("space.roomy.space.getSpaces"),
+        (prev) => {
+          if (!prev) return undefined;
+          return {
+            spaces: prev.spaces.map((s) => ({
+              ...s,
+              unreadCount: s.unreadCount + 1,
+            })),
+          };
+        },
+      );
+
+      expect(queryClient.getQueryData(withParams as unknown[])).toEqual({
+        spaces: [expect.objectContaining({ unreadCount: 3 })],
+      });
+      expect(queryClient.getQueryData(bare as unknown[])).toEqual({
+        spaces: [expect.objectContaining({ unreadCount: 3 })],
+      });
+    });
+
+    it("creates nothing when no entry matches (no-op, like patch)", () => {
+      const adapter = createTanstackCacheAdapter(queryClient);
+      const patcher = vi.fn().mockReturnValue(["seeded"]);
+
+      adapter.patchAll<string[]>(
+        queryKey("space.roomy.space.getSpaces"),
+        patcher,
+      );
+
+      // The patcher is never invoked — there is no cache entry to patch —
+      // and no entry is created in its place.
+      expect(patcher).not.toHaveBeenCalled();
+      expect(
+        queryClient.getQueryData(
+          queryKey("space.roomy.space.getSpaces") as unknown[],
+        ),
+      ).toBeUndefined();
+    });
+
+    it("an undefined-returning patcher leaves matching entries unchanged", () => {
+      const adapter = createTanstackCacheAdapter(queryClient);
+      const key = queryKey("nsid.test", { id: "a" });
+      queryClient.setQueryData(key as unknown[], "v1");
+
+      adapter.patchAll<string>(queryKey("nsid.test"), () => undefined);
+
+      expect(queryClient.getQueryData(key as unknown[])).toBe("v1");
+    });
+  });
 });

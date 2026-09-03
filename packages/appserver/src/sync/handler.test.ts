@@ -111,6 +111,12 @@ class MockDb {
   readonly spaces = new Map<string, MockSpaceDb>();
   /** Global entity_space index: entityId → spaceDid. */
   readonly entitySpace = new Map<string, string>();
+  /** Joined-space edges for the federation access fallback (did → home space DIDs). */
+  readonly joinedHomes = new Map<string, string[]>();
+  /** Active federations: `${origin}\0${home}`. */
+  readonly activeFederations = new Set<string>();
+  /** Origin grants: `${origin}\0${home}\0${room}` (readwrite). */
+  readonly originGrants = new Set<string>();
 
   space(spaceDid: string): MockSpaceDb {
     let db = this.spaces.get(spaceDid);
@@ -119,6 +125,10 @@ class MockDb {
       this.spaces.set(spaceDid, db);
     }
     return db;
+  }
+
+  global(): DbLike {
+    return new MockGlobalDb(this);
   }
 
   /** Seed a membership edge (member/admin) in a space. */
@@ -223,9 +233,81 @@ class MockSpaceDb implements DbLike {
   }
 }
 
+/**
+ * Minimal global-DB mock for the federation access fallback: serves the
+ * joinedSpace edge lookup (federatedRoomAccess's first query) and returns
+ * "no federation" for everything else.
+ */
+class MockGlobalDb implements DbLike {
+  constructor(readonly owner: MockDb) {}
+
+  query(sql: string) {
+    return {
+      get: async <T>(...params: unknown[]): Promise<T | null> => {
+        // Callers mix conventions: some pass spread args, some a single
+        // array. Normalise so every branch reads positional fields.
+        const p = (params.length === 1 && Array.isArray(params[0])
+          ? params[0]
+          : params) as unknown[];
+        if (sql.includes("space_federations")) {
+          // where space_id = ? and federating_space_did = ? and status = 'active'
+          const origin = p[0] as string;
+          const home = p[1] as string;
+          return this.owner.activeFederations.has(`${origin}\0${home}`)
+            ? ({ n: 1 } as T)
+            : null;
+        }
+        if (sql.includes("federation_room_permissions")) {
+          const origin = p[0] as string;
+          const home = p[1] as string;
+          const room = p[2] as string;
+          return this.owner.originGrants.has(`${origin}\0${home}\0${room}`)
+            ? ({ permission: "readwrite" } as T)
+            : null;
+        }
+        if (sql.includes("federation_receiver_permissions")) return null;
+        if (sql.includes("from edges") && sql.includes("joinedSpace")) {
+          const did = p[0] as string;
+          const homes = this.owner.joinedHomes.get(did) ?? [];
+          return homes.length > 0 ? ({ n: 1 } as T) : null;
+        }
+        throw new Error(`MockGlobalDb: unexpected query: ${sql}`);
+      },
+      all: async <T>(...params: unknown[]): Promise<T[]> => {
+        // federatedRoomAccess lists the caller's joined spaces FIRST
+        // (select tail from edges where head = ? and label = 'joinedSpace')
+        // and passes the DID as a spread arg (or a single array arg).
+        if (sql.includes("from edges") && sql.includes("joinedSpace")) {
+          const raw = params.length === 1 && Array.isArray(params[0])
+            ? params[0]
+            : params;
+          const did = raw[0] as string;
+          const rows = (this.owner.joinedHomes.get(did) ?? []).map((tail) => ({ tail }));
+          return rows as unknown as T[];
+        }
+        throw new Error(`MockGlobalDb: unexpected query: ${sql}`);
+      },
+    };
+  }
+  prepare(): Promise<never> {
+    throw new Error("MockGlobalDb: prepare not expected");
+  }
+  exec(): Promise<never> {
+    throw new Error("MockGlobalDb: exec not expected");
+  }
+  run(): Promise<never> {
+    throw new Error("MockGlobalDb: run not expected");
+  }
+  transaction(): Promise<never> {
+    throw new Error("MockGlobalDb: transaction not expected");
+  }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 /** SyncDbAccess backed by a MockDb. */
-class MockDbAccess implements SyncDbAccess {
-  constructor(readonly db: MockDb) {}
+class MockDbAccess implements SyncDbAccess {  constructor(readonly db: MockDb) {}
 
   async openSpaceDbForEntity(entityId: string): Promise<DbLike | null> {
     const spaceDid = this.db.entitySpace.get(entityId);
@@ -235,6 +317,10 @@ class MockDbAccess implements SyncDbAccess {
 
   openSpaceDb(spaceDid: string): DbLike {
     return this.db.space(spaceDid);
+  }
+
+  openGlobalDb(): DbLike {
+    return this.db.global();
   }
 }
 
@@ -833,6 +919,36 @@ describe("SyncManager — topic authorization", () => {
     const socket = new MockSocket(USER_A);
     manager.register(socket as unknown as SyncSocket);
 
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
+    socket.sentFrames.length = 0;
+
+    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    await flush();
+
+    expect(socket.sentFrames.length).toBe(1);
+    expect(socket.sentFrames[0]!.header.t).toBe("#messageDiff");
+
+    manager.destroy();
+  });
+
+  test("federated viewer (receiving-space member) can sub to the room and receives message diffs", async () => {
+    const router = new MockRouter();
+    const db = new MockDb();
+    // B = receiving space; USER_B is a member of B (not of the origin).
+    const B = "did:web:space-b.example" as StreamDid;
+    db.seedMembership(B, USER_B, "member");
+    db.seedRoom(ROOM_ID, SPACE_ID); // ROOM_ID belongs to origin SPACE_ID
+    // Active federation SPACE_ID → B with an origin grant on ROOM_ID.
+    db.joinedHomes.set(USER_B, [B]);
+    db.activeFederations.add(`${SPACE_ID}\0${B}`);
+    db.originGrants.add(`${SPACE_ID}\0${B}\0${ROOM_ID}`);
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socket = new MockSocket(USER_B);
+    manager.register(socket as unknown as SyncSocket);
+
+    // Native access denies (USER_B is not a member of the origin space), but
+    // the federation grant lets them read → the room sub is authorized.
     await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     socket.sentFrames.length = 0;
 

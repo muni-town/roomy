@@ -58,8 +58,8 @@ async function setupBasicSpace(): Promise<E2eContext> {
   seedSpace(db, SPACE, USER);
   seedJoinedSpace(db, USER, SPACE);
   seedRoom(db, ROOM, SPACE);
-  seedMessage(db, MSG_A, ROOM, SPACE, "a");
-  seedMessage(db, MSG_B, ROOM, SPACE, "b");
+  seedMessage(db, MSG_A, ROOM, SPACE, MSG_A);
+  seedMessage(db, MSG_B, ROOM, SPACE, MSG_B);
   return ctx;
 }
 
@@ -814,6 +814,21 @@ describe("space.roomy.room.updateSeen", () => {
       .readState()
       .query("select seen_up_to from read_positions where user_did = ? and room_id = ?")
       .get<{ seen_up_to: string }>(USER, ROOM);
+    if (!row) throw new Error("read_positions row not written by updateSeen");
+    // seen_up_to is the last-read message's sort_idx (a ULID).
+    expect(row.seen_up_to.length).toBeGreaterThan(0);
+
+    // The HTTP read path surfaces the watermark as an ISO timestamp: with a
+    // real seen_up_to the sidebar can show "read at X" / unread semantics.
+    // (Regression guard for getReadPosition returning lastRead: null
+    // unconditionally — the field was write-only.)
+    const metaRes = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.room.getMetadata?roomId=${ROOM}`,
+    );
+    expect(metaRes.status).toBe(200);
+    const metaBody = await metaRes.json();
+    expect(metaBody.lastRead).toBeTypeOf("string");
+    expect(Number.isNaN(Date.parse(metaBody.lastRead))).toBe(false);
   });
 
   test("anonymous → 401", async () => {

@@ -50,5 +50,19 @@ export function createTanstackCacheAdapter(
         (prev: T | undefined) => patcher(prev),
       );
     },
+
+    patchAll<T>(key: QueryKey, patcher: CachePatcher<T>): void {
+      // `setQueriesData` finds every query whose key prefix-matches
+      // (same rule `invalidateQueries` uses — TanStack's
+      // `partialMatchKey`) and applies the updater to each, batched so
+      // observers notify once. An updater returning undefined leaves
+      // that entry untouched (setQueryData semantics), so this never
+      // creates or deletes entries — purely a live patch of what's
+      // already cached, exactly like `patch` but for every variant.
+      queryClient.setQueriesData<T>(
+        { queryKey: key as unknown[] },
+        (prev: T | undefined) => patcher(prev),
+      );
+    },
   };
 }

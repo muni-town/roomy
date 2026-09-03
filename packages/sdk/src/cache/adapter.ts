@@ -50,4 +50,20 @@ export interface CacheAdapter {
    * replacement.
    */
   patch<T>(key: QueryKey, patcher: CachePatcher<T>): void;
+
+  /**
+   * Apply a structural update to **every** cached entry whose key matches
+   * `key` by prefix (the same matching rule `invalidate` uses). A key like
+   * `["space.roomy.space.getSpaces"]` (no params) matches every param
+   * variant of that query — `["space.roomy.space.getSpaces"]`,
+   * `["space.roomy.space.getSpaces", { includeLeft: "true" }]`, etc.
+   *
+   * Needed because a single `#roomMetadataDiff` frame must patch every
+   * cached variant of a query the client has mounted (e.g. the server bar's
+   * `getSpaces?includeLeft=true` and the home page's bare `getSpaces`), and
+   * `patch` (exact key hash) only touches the one exact key.
+   *
+   * When no cached entry matches, this is a no-op (nothing is created).
+   */
+  patchAll<T>(key: QueryKey, patcher: CachePatcher<T>): void;
 }

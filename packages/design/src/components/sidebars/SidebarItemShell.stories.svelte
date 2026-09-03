@@ -82,8 +82,8 @@
   {#snippet children()}
     <LinkedRoomList
       rooms={[
-        { id: "r1", name: "Weekend plans", unreadCount: 2, lastRead: 1725062400000 },
-        { id: "r2", name: "Books", unreadCount: 0, lastRead: 1725062400000 },
+        { id: "r1", name: "Weekend plans", unreadCount: 2 },
+        { id: "r2", name: "Books", unreadCount: 0 },
       ]}
       currentRoomId="r1"
       hrefFor={(id: string) => `#/${id}`}

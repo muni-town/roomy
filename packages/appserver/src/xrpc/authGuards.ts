@@ -135,6 +135,9 @@ export async function requireRoomRead(
         ...access,
         canRead: true,
         canWrite: fed.canWrite,
+        // The receiving space (B) whose members read this room through the
+        // federation — callers use it to target invalidation at B's sidebar.
+        federatedHomeSpaceId: fed.homeSpaceDid,
       };
     }
   }
@@ -178,6 +181,7 @@ export async function requireRoomWrite(
         ...access,
         canRead: true,
         canWrite: true,
+        federatedHomeSpaceId: fed.homeSpaceDid,
       };
     }
   }

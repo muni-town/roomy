@@ -22,7 +22,7 @@
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
 import type { AppliedEvent, InvalidationEvent, MessageDiffOp, QueryNsid } from "./types.ts";
 import type { DbLike } from "../db/types.ts";
-import { openReadStateDb, openSpaceDb } from "../db/db.ts";
+import { openReadStateDb, openSpaceDb, tryOpenGlobalDb } from "../db/db.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
 import { getRoomReadPositionUsers } from "../queries/readPositions.ts";
 import { getMentionedDidsForMessage } from "../queries/mentions.ts";
@@ -80,6 +80,69 @@ function invalidateSpace(spaceId: StreamDid): InvalidationEvent[] {
     invalidate("space.roomy.space.getThreads", { spaceId }),
     invalidate("space.roomy.space.getMembers", { spaceId }),
   ];
+}
+
+/**
+ * Invalidations a message in `spaceId` triggers on every space that has one
+ * of `spaceId`'s rooms federated INTO it (receiving spaces). The receiving
+ * spaces' sidebars render those rooms as federated rows, so a new message
+ * there must refresh their unread markers even though it never lands on the
+ * receiving space's event stream.
+ *
+ * Only channel messages call this (thread messages don't render on the
+ * receiving side; the fed row is the channel). Returns one `roomMetadataDiff`
+ * per receiving space (the receiving-side patch for the fed room row and the
+ * space's room-count badge) plus the `space.getMetadata`/`getSpaces`
+ * invalidations — the frames patch receiving-space connections directly; the
+ * invalidations catch other tabs/connections and keep the server-side query
+ * cache coherent.
+ */
+async function federatedReceiversInvalidation(
+  globalDb: DbLike | null,
+  spaceId: StreamDid,
+  roomId: Ulid,
+  signal: {
+    seq: number;
+    delta: number;
+    users: ReadonlyArray<UserDid>;
+    roomUnreadDeltas: ReadonlyMap<UserDid, number>;
+  },
+): Promise<InvalidationEvent[]> {
+  if (!globalDb) return [];
+
+  const fedRows = await globalDb
+    .query(
+      `select frp.federating_space_did as home
+         from federation_room_permissions frp
+         join space_federations sf
+           on sf.space_id = frp.space_id
+          and sf.federating_space_did = frp.federating_space_did
+        where frp.space_id = ?
+          and frp.room_id = ?
+          and sf.status = 'active'`,
+    )
+    .all<{ home: string }>([spaceId, roomId]);
+  if (fedRows.length === 0) return [];
+
+  const signals: InvalidationEvent[] = [];
+  for (const r of fedRows) {
+    signals.push({
+      kind: "roomMetadataDiff",
+      signal: {
+        spaceId: r.home as StreamDid,
+        roomId,
+        seq: signal.seq,
+        delta: signal.delta,
+        users: [...signal.users],
+        roomUnreadDeltas: signal.roomUnreadDeltas,
+      },
+    });
+    // Receiving-space sidebar + space list refetch for clients the live
+    // frame missed (other tabs/connections, cache coherence).
+    signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: r.home as StreamDid }));
+    signals.push(invalidate("space.roomy.space.getSpaces", {}));
+  }
+  return signals;
 }
 
 function invalidateRoom(roomId: Ulid, spaceId: StreamDid): InvalidationEvent[] {
@@ -239,6 +302,35 @@ async function handleCreateMessage(
             }),
       },
     });
+
+    // Federation: if this room is federated into other (receiving) spaces,
+    // those spaces' sidebars show it as an unread row. Send the same live
+    // roomMetadataDiff (room id, +1 delta) scoped to each receiving space's
+    // connections, plus broadcast metadata invalidations for the spaces
+    // themselves — the message never lands on their event streams, so
+    // without this their sidebar unread markers only update on refetch.
+    // Thread messages are skipped: B's sidebar renders the federated
+    // CHANNEL row (bumped by channel messages), not individual threads.
+    if (!isThread) {
+      signals.push(
+        ...(await federatedReceiversInvalidation(
+          // Production passes the routed pool handle (Router.onEventsApplied);
+          // direct callers/tests fall back to the process-wide registry.
+          (db as { global?: () => DbLike } | undefined)?.global?.()
+            ?? tryOpenGlobalDb(),
+          spaceId,
+          roomId,
+          {
+            seq: 0, // stamped by the Router
+            delta: 1,
+            users,
+            roomUnreadDeltas: new Map(
+              newlyUnread.map((u) => [u, 1] as const),
+            ),
+          },
+        )),
+      );
+    }
   }
 
   // recentThreads / room.getThreads may have changed (the new message is

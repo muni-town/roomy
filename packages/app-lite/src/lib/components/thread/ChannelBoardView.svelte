@@ -51,6 +51,11 @@
       // Honest unread: the server marks threads with messages the user
       // hasn't read, including threads they've never engaged with.
       unread: t.unread ?? (t.unreadCount ?? 0) > 0,
+      // 3-state: the dot marks threads the user has ENGAGED with and not
+      // finished reading. The server only bumps unreadCount for engaged
+      // users, so count > 0 implies engagement — a never-engaged thread
+      // with messages is bold (unread) but dotless.
+      unreadDot: (t.unreadCount ?? 0) > 0,
       activity: {
         members: t.activity.latestMembers.map((m) => ({
           id: m.did,

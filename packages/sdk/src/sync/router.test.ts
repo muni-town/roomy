@@ -26,16 +26,21 @@ function mockAdapter(): {
   adapter: CacheAdapter;
   invalidate: ReturnType<typeof vi.fn>;
   patch: ReturnType<typeof vi.fn>;
+  patchAll: ReturnType<typeof vi.fn>;
 } {
   const invalidate = vi.fn((_k: QueryKey) => {});
   const patch = vi.fn((_key: QueryKey, _patcher: CachePatcher<never>) => {});
+  const patchAll = vi.fn((_key: QueryKey, _patcher: CachePatcher<never>) => {});
   const adapter: CacheAdapter = {
     invalidate,
     patch<T>(_key: QueryKey, patcher: CachePatcher<T>) {
       patch(_key, patcher as unknown as CachePatcher<never>);
     },
+    patchAll<T>(_key: QueryKey, patcher: CachePatcher<T>) {
+      patchAll(_key, patcher as unknown as CachePatcher<never>);
+    },
   };
-  return { adapter, invalidate, patch };
+  return { adapter, invalidate, patch, patchAll };
 }
 
 function makeFrame(t: string, body: Record<string, unknown>): SyncFrame {
@@ -111,7 +116,7 @@ describe("SyncRouter", () => {
 
   it("routes #roomMetadataDiff frames into adapter.patch calls", () => {
     const { conn, emit } = mockConnection();
-    const { adapter, patch } = mockAdapter();
+    const { adapter, patch, patchAll } = mockAdapter();
     const router = new SyncRouter(conn as SyncConnection, adapter);
     router.start();
 
@@ -124,18 +129,24 @@ describe("SyncRouter", () => {
       }),
     );
 
-    // One frame → three patch calls (room.getMetadata, getSpaces, space.getMetadata).
-    expect(patch).toHaveBeenCalledTimes(3);
+    // One frame → two exact-key patch calls (room.getMetadata,
+    // space.getMetadata) + a prefix-matched patchAll (getSpaces — any
+    // param variant, e.g. `?includeLeft=true`).
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(patchAll).toHaveBeenCalledTimes(1);
 
     const keys = patch.mock.calls.map((c) => c[0] as QueryKey);
     expect(keys[0]).toEqual([
       "space.roomy.room.getMetadata",
       { roomId: "01ROOM" },
     ]);
-    expect(keys[1]).toEqual(["space.roomy.space.getSpaces"]);
-    expect(keys[2]).toEqual([
+    expect(keys[1]).toEqual([
       "space.roomy.space.getMetadata",
       { spaceId: "did:web:space.example.com" },
+    ]);
+    // getSpaces patching is prefix-matched, not exact-key.
+    expect(patchAll.mock.calls[0]?.[0]).toEqual([
+      "space.roomy.space.getSpaces",
     ]);
 
     // The room.getMetadata patcher adds delta to the cached unreadCount.
@@ -147,7 +158,7 @@ describe("SyncRouter", () => {
     expect(roomPatch(undefined)).toBeUndefined();
 
     // The getSpaces patcher adds delta to the matching space's unreadCount.
-    const spacesPatch = patch.mock.calls[1]![1] as CachePatcher<unknown>;
+    const spacesPatch = patchAll.mock.calls[0]![1] as CachePatcher<unknown>;
     expect(
       spacesPatch({
         spaces: [
@@ -163,7 +174,7 @@ describe("SyncRouter", () => {
     });
 
     // The space.getMetadata patcher adds delta to the sidebar channel.
-    const spaceMetaPatch = patch.mock.calls[2]![1] as CachePatcher<unknown>;
+    const spaceMetaPatch = patch.mock.calls[1]![1] as CachePatcher<unknown>;
     const patched = spaceMetaPatch({
       isMember: true,
       isAdmin: false,
@@ -186,7 +197,7 @@ describe("SyncRouter", () => {
 
   it("routes thread #roomMetadataDiff frames with per-user deltas and parent channel", () => {
     const { conn, emit } = mockConnection();
-    const { adapter, patch } = mockAdapter();
+    const { adapter, patch, patchAll } = mockAdapter();
     const router = new SyncRouter(conn as SyncConnection, adapter);
     router.start();
 
@@ -203,8 +214,13 @@ describe("SyncRouter", () => {
     );
 
     // room.getMetadata (thread) + room.getMetadata (parent channel) +
-    // getSpaces + space.getMetadata = four patch calls.
-    expect(patch).toHaveBeenCalledTimes(4);
+    // space.getMetadata = three exact-key patch calls; getSpaces is
+    // prefix-matched via patchAll.
+    expect(patch).toHaveBeenCalledTimes(3);
+    expect(patchAll).toHaveBeenCalledTimes(1);
+    expect(patchAll.mock.calls[0]?.[0]).toEqual([
+      "space.roomy.space.getSpaces",
+    ]);
 
     const keys = patch.mock.calls.map((c) => c[0] as QueryKey);
     expect(keys[0]).toEqual([
@@ -216,8 +232,7 @@ describe("SyncRouter", () => {
       "space.roomy.room.getMetadata",
       { roomId: "01CHANNEL" },
     ]);
-    expect(keys[2]).toEqual(["space.roomy.space.getSpaces"]);
-    expect(keys[3]).toEqual([
+    expect(keys[2]).toEqual([
       "space.roomy.space.getMetadata",
       { spaceId: "did:web:space.example.com" },
     ]);
@@ -230,7 +245,7 @@ describe("SyncRouter", () => {
 
     // The getSpaces patcher bumps the combined rooms-with-unreads count by
     // roomUnreadDelta + threadUnreadDelta (0 + 1 here).
-    const spacesPatch = patch.mock.calls[2]![1] as CachePatcher<unknown>;
+    const spacesPatch = patchAll.mock.calls[0]![1] as CachePatcher<unknown>;
     expect(
       spacesPatch({
         spaces: [
@@ -245,7 +260,7 @@ describe("SyncRouter", () => {
 
     // The space.getMetadata patcher bumps the top-level thread count and the
     // matching active-thread entry under the parent channel.
-    const spaceMetaPatch = patch.mock.calls[3]![1] as CachePatcher<unknown>;
+    const spaceMetaPatch = patch.mock.calls[2]![1] as CachePatcher<unknown>;
     const patched = spaceMetaPatch({
       isMember: true,
       isAdmin: false,

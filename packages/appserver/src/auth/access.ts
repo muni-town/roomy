@@ -40,6 +40,14 @@ export interface RoomAccess {
   parentChannelId: string | null;
   /** Caller is banned from the room's parent space. */
   isBanned: boolean;
+  /**
+   * Set only when the caller's access came through a federation (a channel of
+   * the room's origin space federated into a space the caller belongs to).
+   * The caller's home space through which the grant flowed — used to target
+   * unread/read invalidation at the receiving space's sidebar rather than the
+   * origin's. Absent for native access.
+   */
+  federatedHomeSpaceId?: string | null;
 }
 
 // ── Per-request memo ──────────────────────────────────────────────────────

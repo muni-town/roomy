@@ -12,6 +12,9 @@ let {
 
 let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
 let read = $derived(!thread.unread);
+// 3-state unread: `unread` (bold) covers engaged-unread plus never-engaged
+// rooms with content; the dot is only for engaged-unread (`unreadDot`).
+let showDot = $derived(thread.unreadDot ?? thread.unread);
 </script>
 
 <a
@@ -33,7 +36,7 @@ let read = $derived(!thread.unread);
 
   <!-- Unread marker column (desktop only) -->
   <div class="hidden @[40rem]:flex w-8 shrink-0 items-center justify-start pl-5.5">
-    {#if thread.unread}
+    {#if showDot}
       <span class="size-2 rounded-full bg-accent-500" aria-label="Unread"></span>
     {/if}
   </div>
@@ -41,7 +44,7 @@ let read = $derived(!thread.unread);
     <!-- Text column: title + mobile sub-row -->
     <div class="flex flex-col flex-1 min-w-0">
       <div class={"flex-1 min-w-0 flex items-baseline gap-2 text-base font-light " + (read ? "text-base-600/90 dark:text-base-400" : "text-base-900 dark:text-base-100")}>
-        {#if thread.unread}
+        {#if showDot}
           <span class="shrink-0 size-1.5 rounded-full bg-accent-500 @[40rem]:hidden" aria-label="Unread"></span>
         {/if}
         <span class={"font-normal truncate " + (thread.kind == "space.roomy.channel" ? "italic" : "")}>

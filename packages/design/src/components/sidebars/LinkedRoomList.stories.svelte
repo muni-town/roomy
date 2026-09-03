@@ -8,7 +8,7 @@
   });
 
   type Args = {
-    rooms: { id: string; name: string; unreadCount: number; lastRead: number }[];
+    rooms: { id: string; name: string; unreadCount: number }[];
     currentRoomId: string;
   };
 </script>
@@ -33,9 +33,9 @@
   name="Default"
   args={{
     rooms: [
-      { id: "r1", name: "General", unreadCount: 0, lastRead: 1725062400000 },
-      { id: "r2", name: "Random", unreadCount: 3, lastRead: 1725062400000 },
-      { id: "r3", name: "Design", unreadCount: 12, lastRead: 1725062400000 },
+      { id: "r1", name: "General", unreadCount: 0 },
+      { id: "r2", name: "Random", unreadCount: 3 },
+      { id: "r3", name: "Design", unreadCount: 12 },
     ],
     currentRoomId: "r1",
   }}

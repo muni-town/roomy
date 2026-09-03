@@ -202,6 +202,30 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
         },
       });
     }
+    // A federated reader marked the room read — the receiving space's (B)
+    // sidebar rendered it as unread. The read position lives in the origin
+    // space's DB, so this invalidation is what clears the marker in B's
+    // sidebar tree for this user. Native readers have no federated home
+    // space and get no extra signal.
+    const fedHome = access.federatedHomeSpaceId;
+    if (fedHome) {
+      signals.push({
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getMetadata" as QueryNsid,
+          params: { spaceId: fedHome },
+          affectedUser: userDid,
+        },
+      });
+      signals.push({
+        kind: "queryInvalidation",
+        signal: {
+          nsid: "space.roomy.space.getSpaces" as QueryNsid,
+          params: {},
+          affectedUser: userDid,
+        },
+      });
+    }
     router.emit(signals);
   }
 };

@@ -167,6 +167,9 @@ describe("channel federation — full HTTP E2E chain", () => {
       originSpaceName: "Test Space",
       permission: "readwrite",
     });
+    // No messages in the channel yet → no unread marker on the federated row
+    // (the sidebar renders unreadCount > 0 as the unread dot).
+    expect(fedChannel?.unreadCount).toBe(0);
 
     // 6. ADMIN_B configures a receiver grant for MEMBER_B (on B's stream).
     res = await send(ADMIN_B, B, {
@@ -226,6 +229,43 @@ describe("channel federation — full HTTP E2E chain", () => {
     body = await res.json();
     expect(Array.isArray(body.messages)).toBe(true);
     expect(body.messages.length).toBeGreaterThanOrEqual(1);
+
+    // 11. The federated channel follows native-channel unread semantics.
+    // MEMBER_B's earlier getMetadata (step 8) lazily created her read
+    // position at 0; the message at step 9 bumped it to 1 — so the
+    // receiving space's sidebar now shows the unread dot for a federated
+    // channel (the fix for "federated channels never show unreads").
+    res = await ctx.authedFetch(MEMBER_B)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${B}`,
+    );
+    expect(res.status).toBe(200);
+    body = await res.json();
+    let fedAfterMsg = (body.sidebar.orphans ?? []).find(
+      (ch: { id: string }) => ch.id === CHANNEL,
+    );
+    expect(fedAfterMsg?.unreadCount).toBeGreaterThan(0);
+
+    // 12. Marking the federated room read clears the receiving-space
+    // sidebar dot (updateSeen resolves federated access the same way reads
+    // do, and invalidates B's metadata for this user).
+    res = await ctx.authedFetch(MEMBER_B)(
+      `${ctx.baseUrl}/xrpc/space.roomy.room.updateSeen`,
+      {
+        method: "POST",
+        body: JSON.stringify({ roomId: CHANNEL }),
+      },
+    );
+    expect(res.status).toBe(200);
+
+    res = await ctx.authedFetch(MEMBER_B)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${B}`,
+    );
+    expect(res.status).toBe(200);
+    body = await res.json();
+    fedAfterMsg = (body.sidebar.orphans ?? []).find(
+      (ch: { id: string }) => ch.id === CHANNEL,
+    );
+    expect(fedAfterMsg?.unreadCount).toBe(0);
   });
 
   test("a federated channel placed in a category by reorder stays there", async () => {

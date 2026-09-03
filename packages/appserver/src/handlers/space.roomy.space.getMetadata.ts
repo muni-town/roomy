@@ -10,7 +10,7 @@ import { createAccessMemo, roomAccessMany, spaceAccess } from "../auth/access.ts
 import { createFederationMemo, federatedRoomAccess } from "../auth/federation.ts";
 import { openReadStateDb, openSpaceDb, openGlobalDb } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
-import { getReadPositions, getSpaceSidebarData } from "../queries/readPositions.ts";
+import { getReadPositions, getSpaceSidebarData, ensureReadPositions } from "../queries/readPositions.ts";
 import { queryActiveThreads, resolveThreadsByIds } from "../queries/userActiveThreads.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
@@ -384,6 +384,14 @@ async function buildFederatedSidebarChannels(
     byOrigin.set(r.origin, list);
   }
   const out: SidebarChannel[] = [];
+  // Federated rooms' read positions live in the shared read-state DB (the
+  // origin's materializer bumps the caller's row, see applyBundle), so real
+  // per-user unreadCounts are available — batch-fetch them once for all
+  // federated rooms, like the native channel pass does.
+  const mainDb = openReadStateDb();
+  const fedGrantRoomIds = rows.map((r) => r.room_id);
+  await ensureReadPositions(mainDb, userDid, fedGrantRoomIds);
+  const fedPositions = await getReadPositions(mainDb, userDid, fedGrantRoomIds);
   for (const [origin, grants] of byOrigin) {
     const originDb = openSpaceDb(origin);
     // Origin space display info (name + avatar) for the sidebar decoration
@@ -434,7 +442,11 @@ async function buildFederatedSidebarChannels(
         defaultAccess: fed.canWrite ? "readwrite" : "read",
         canRead: true,
         canWrite: fed.canWrite,
-        unreadCount: 0,
+        // Real per-user unread count: fed rooms' read positions live in the
+        // shared read-state DB (the origin's materializer bumps the caller's
+        // row on every new message, even for receiving-space members), so
+        // the sidebar dot/bold match native channels.
+        unreadCount: fedPositions.get(g.roomId)?.unreadCount ?? 0,
         federated: {
           originSpaceId: origin,
           ...(originInfo?.name ? { originSpaceName: originInfo.name } : {}),

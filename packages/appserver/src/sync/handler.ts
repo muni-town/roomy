@@ -25,6 +25,7 @@ import type {
   QueryNsid,
 } from "../invalidation/types.ts";
 import { allowsPublicJoin, roomAccess, spaceAccess } from "../auth/access.ts";
+import { federatedRoomAccess } from "../auth/federation.ts";
 import type { DbLike } from "../db/types.ts";
 import { messageFrame } from "../xrpc/frame.ts";
 import { log } from "../log.ts";
@@ -150,6 +151,9 @@ export interface SyncDbAccess {
   openSpaceDbForEntity(entityId: string): Promise<DbLike | null>;
   /** Return a handle to the per-space DB for `spaceDid`. */
   openSpaceDb(spaceDid: string): DbLike;
+  /** Return a handle to the global DB (federation registry, membership).
+   *  Used by the federated-room access fallback for receiving-space members. */
+  openGlobalDb(): DbLike;
 }
 
 /** Max events per backfill batch. */
@@ -374,7 +378,15 @@ export class SyncManager {
         const db = await this.#db.openSpaceDbForEntity(id);
         if (!db) return false;
         const access = await roomAccess(db, id, did);
-        return access.exists && access.canRead;
+        if (access.exists && access.canRead) return true;
+        // Federation fallback: the room belongs to another space (origin)
+        // whose members are not the caller — a member of a receiving space
+        // reads it through the federation grant. Mirror the HTTP read path
+        // (requireRoomRead consults federatedRoomAccess when native denies).
+        const fed = await federatedRoomAccess(db, this.#db.openGlobalDb(), id, did, {
+          spaceDbResolver: (spaceDid: string) => this.#db.openSpaceDb(spaceDid),
+        });
+        return fed?.canRead ?? false;
       }
       const db = this.#db.openSpaceDb(id);
       const access = await spaceAccess(db, id, did);
@@ -429,6 +441,16 @@ export class SyncManager {
       if (db) {
         const access = await roomAccess(db, roomId, did);
         canRead = access.exists && access.canRead;
+        if (!canRead) {
+          const fed = await federatedRoomAccess(
+            db,
+            this.#db.openGlobalDb(),
+            roomId,
+            did,
+            { spaceDbResolver: (spaceDid: string) => this.#db.openSpaceDb(spaceDid) },
+          );
+          canRead = fed?.canRead ?? false;
+        }
       }
     } catch (err) {
       log.error(
