@@ -65,6 +65,7 @@ import { sendEventsHandler } from "./handlers/space.roomy.space.sendEvents.ts";
 import { createSpaceHandler } from "./handlers/space.roomy.space.createSpace.ts";
 import { joinSpaceHandler } from "./handlers/space.roomy.space.joinSpace.ts";
 import { leaveSpaceHandler } from "./handlers/space.roomy.space.leaveSpace.ts";
+import { reorderSpacesHandler } from "./handlers/space.roomy.space.reorderSpaces.ts";
 import { setHandleHandler } from "./handlers/space.roomy.space.setHandle.ts";
 import { updatePolicyHandler } from "./handlers/space.roomy.space.updatePolicy.ts";
 import { getActivityFeedHandler } from "./handlers/space.roomy.space.getActivityFeed.ts";
@@ -199,6 +200,11 @@ export function buildRouter(
     .procedure("space.roomy.space.leaveSpace", {
       handler: leaveSpaceHandler,
       inputSchema: schemas.procedures.leaveSpace.Input,
+      // No outputSchema: void return; short-circuits to 200 with empty body.
+    })
+    .procedure("space.roomy.space.reorderSpaces", {
+      handler: reorderSpacesHandler,
+      inputSchema: schemas.procedures.reorderSpaces.Input,
       // No outputSchema: void return; short-circuits to 200 with empty body.
     })
     .procedure("space.roomy.space.setHandle", {

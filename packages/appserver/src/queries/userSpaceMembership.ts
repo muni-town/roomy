@@ -134,10 +134,15 @@ export async function selectUserSpaces(
 ): Promise<UserSpaceRow[]> {
   const rows = await db
     .query(
-      `select space_did, state
-         from user_space_membership
-        where user_did = ? ${includeLeft ? "" : "and state = 'joined'"}
-        order by updated_at desc`,
+      `select usm.space_did, usm.state
+         from user_space_membership usm
+         left join space_order so
+           on so.user_did = usm.user_did and so.space_did = usm.space_did
+        where usm.user_did = ? ${includeLeft ? "" : "and usm.state = 'joined'"}
+        order by
+          case when so.position is null then 1 else 0 end,
+          so.position asc,
+          usm.updated_at desc`,
     )
     .all<{ space_did: string; state: MembershipState }>([userDid]);
   return rows.map((r) => ({ space_did: r.space_did, state: r.state }));

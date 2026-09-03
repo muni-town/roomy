@@ -403,6 +403,31 @@ const MIGRATIONS: Migration[] = [
       ).run();
     },
   },
+  {
+      // Per-user space ordering. The schema file (readStateSchema.sql) also
+      // declares this with `create table if not exists` so a fresh DB gets
+      // it at exec time; this migration exists so an existing v7 readstate
+      // DB advances its version row to 8.
+      version: 8,
+      up(db: Database) {
+        db.exec(`
+          create table if not exists space_order (
+            user_did   text not null,
+            space_did  text not null,
+            position   integer not null,
+            updated_at integer not null default (unixepoch() * 1000),
+            primary key (user_did, space_did)
+          ) strict
+        `);
+        db.exec(`
+          create index if not exists idx_space_order_user_position
+            on space_order(user_did, position)
+        `);
+        db.query(
+          "insert or ignore into readstate_schema_migrations (version, completed_at) values ('8', null)",
+        ).run();
+      },
+    },
 ];
 
 function initializeReadStateSchema(

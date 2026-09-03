@@ -152,6 +152,10 @@ export const PROCEDURE_SCHEMAS = {
     input: procedures.leaveSpace.Input,
     output: procedures.leaveSpace.Output,
   },
+  "space.roomy.space.reorderSpaces": {
+    input: procedures.reorderSpaces.Input,
+    output: procedures.reorderSpaces.Output,
+  },
   "space.roomy.space.setHandle": {
     input: procedures.setHandle.Input,
     output: procedures.setHandle.Output,

@@ -36,6 +36,20 @@ create table if not exists user_space_membership (
 create index if not exists idx_user_space_membership_user_state
   on user_space_membership(user_did, state, updated_at desc);
 
+-- Per-user space ordering (schema v8). One row per (user, space); `position`
+-- is the 0-based index in the user's space list. Absent row → fall back to
+-- the default ordering (updated_at desc). Written by the reorderSpaces
+-- procedure; read by getSpaces.
+create table if not exists space_order (
+  user_did   text not null,
+  space_did  text not null,
+  position   integer not null,
+  updated_at integer not null default (unixepoch() * 1000),
+  primary key (user_did, space_did)
+) strict;
+create index if not exists idx_space_order_user_position
+  on space_order(user_did, position);
+
 create table if not exists read_positions (
   user_did    text not null,
   room_id     text not null,

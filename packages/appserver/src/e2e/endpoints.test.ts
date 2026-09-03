@@ -976,6 +976,86 @@ describe("space.roomy.space.leaveSpace", () => {
   });
 });
 
+// ─── space.roomy.space.reorderSpaces (procedure) ────────────────────────
+
+describe("space.roomy.space.reorderSpaces", () => {
+  test("authenticated → persists order and getSpaces reflects it", async () => {
+    const ctx = await startAppserver();
+    const { db } = ctx;
+    const SPACE2 = "did:web:space-two.example";
+    seedSpace(db, SPACE, USER);
+    seedSpace(db, SPACE2, USER);
+    seedJoinedSpace(db, USER, SPACE);
+    seedJoinedSpace(db, USER, SPACE2);
+
+    // Default order: most recently joined first. Seed distinct updated_at
+    // values so the tie-break is deterministic (SPACE2 joined after SPACE).
+    readStateDb(db).run(
+      "update user_space_membership set updated_at = ? where user_did = ? and space_did = ?",
+      [1000, USER, SPACE],
+    );
+    readStateDb(db).run(
+      "update user_space_membership set updated_at = ? where user_did = ? and space_did = ?",
+      [2000, USER, SPACE2],
+    );
+
+    const before = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces?includeLeft=false`,
+    );
+    const beforeBody = await before.json();
+    expect(beforeBody.spaces.map((s: { id: string }) => s.id)).toEqual([
+      SPACE2,
+      SPACE,
+    ]);
+
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.reorderSpaces`,
+      {
+        method: "POST",
+        body: JSON.stringify({ spaceIds: [SPACE, SPACE2] }),
+      },
+    );
+    expect(res.status).toBe(200);
+
+    const after = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces?includeLeft=false`,
+    );
+    const afterBody = await after.json();
+    expect(afterBody.spaces.map((s: { id: string }) => s.id)).toEqual([
+      SPACE,
+      SPACE2,
+    ]);
+  });
+
+  test("rejects a space the caller has not joined", async () => {
+    const ctx = await startAppserver();
+    const { db } = ctx;
+    seedSpace(db, SPACE, USER);
+    seedJoinedSpace(db, USER, SPACE);
+
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.reorderSpaces`,
+      {
+        method: "POST",
+        body: JSON.stringify({ spaceIds: [SPACE, "did:web:not-joined.example"] }),
+      },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("anonymous → 401", async () => {
+    const ctx = await startAppserver();
+    const res = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.reorderSpaces`,
+      {
+        method: "POST",
+        body: JSON.stringify({ spaceIds: [] }),
+      },
+    );
+    expect(res.status).toBe(401);
+  });
+});
+
 // ─── space.roomy.space.setHandle (procedure) ─────────────────────────────
 
 describe("space.roomy.space.setHandle", () => {

@@ -23,6 +23,7 @@ const APPSERVER_RPCS = [
   "space.roomy.space.createSpace",
   "space.roomy.space.joinSpace",
   "space.roomy.space.leaveSpace",
+  "space.roomy.space.reorderSpaces",
   "space.roomy.space.setHandle",
   "space.roomy.space.updatePolicy",
   "space.roomy.space.getCalendarLink",

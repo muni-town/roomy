@@ -152,6 +152,95 @@ describe("selectJoinedSpaces", () => {
     expect(left).toHaveLength(1);
     expect(left[0]).toMatchObject({ id: SPACE, isMember: false, isAdmin: false });
   });
+
+  test("stored space_order rows override the default updated_at order", async () => {
+    const { mainDb } = setup();
+    const SPACE_B = StreamDid.assert("did:web:space-b.example");
+    const SPACE_C = StreamDid.assert("did:web:space-c.example");
+
+    // Seed three fully materialised spaces with membership intent. Join
+    // times are staggered so the default order (updated_at desc) is
+    // C, B, A.
+    for (const [i, space] of [SPACE, SPACE_B, SPACE_C].entries()) {
+      const db = openSpaceDb(space);
+      await seedEntity(space, space);
+      await seedEntity(space, USER);
+      await db.run("insert into comp_info (entity, name) values (?, ?)", [
+        space,
+        `Space ${i}`,
+      ]);
+      await db.run("insert into edges (head, tail, label) values (?, ?, 'member')", [
+        space,
+        USER,
+      ]);
+      await setUserSpaceMembership(
+        openReadStateDb(),
+        USER,
+        space,
+        "joined",
+        "test",
+        `01TEST000000000000000000000${i}`,
+      );
+    }
+
+    // Default order: most recently joined first.
+    const before = await selectJoinedSpaces(mainDb, USER);
+    expect(before.map((s) => s.id)).toEqual([SPACE_C, SPACE_B, SPACE]);
+
+    // Store an explicit order: A, C, B.
+    await mainDb.run(
+      "insert into space_order (user_did, space_did, position) values (?, ?, ?)",
+      [USER, SPACE, 0],
+    );
+    await mainDb.run(
+      "insert into space_order (user_did, space_did, position) values (?, ?, ?)",
+      [USER, SPACE_C, 1],
+    );
+    await mainDb.run(
+      "insert into space_order (user_did, space_did, position) values (?, ?, ?)",
+      [USER, SPACE_B, 2],
+    );
+
+    const after = await selectJoinedSpaces(mainDb, USER);
+    expect(after.map((s) => s.id)).toEqual([SPACE, SPACE_C, SPACE_B]);
+  });
+
+  test("spaces without a stored position sort after ordered ones", async () => {
+    const { mainDb } = setup();
+    const SPACE_B = StreamDid.assert("did:web:space-b.example");
+
+    for (const [i, space] of [SPACE, SPACE_B].entries()) {
+      const db = openSpaceDb(space);
+      await seedEntity(space, space);
+      await seedEntity(space, USER);
+      await db.run("insert into comp_info (entity, name) values (?, ?)", [
+        space,
+        `Space ${i}`,
+      ]);
+      await db.run("insert into edges (head, tail, label) values (?, ?, 'member')", [
+        space,
+        USER,
+      ]);
+      await setUserSpaceMembership(
+        openReadStateDb(),
+        USER,
+        space,
+        "joined",
+        "test",
+        `01TEST000000000000000000000${i}`,
+      );
+    }
+
+    // Only SPACE_B has an explicit position; SPACE (joined later) has none
+    // and must sort after the ordered one.
+    await mainDb.run(
+      "insert into space_order (user_did, space_did, position) values (?, ?, ?)",
+      [USER, SPACE_B, 0],
+    );
+
+    const spaces = await selectJoinedSpaces(mainDb, USER);
+    expect(spaces.map((s) => s.id)).toEqual([SPACE_B, SPACE]);
+  });
 });
 
 describe("recordPersonalSpaceMembership", () => {

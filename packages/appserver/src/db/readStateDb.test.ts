@@ -4,7 +4,7 @@ import { READSTATE_SCHEMA_VERSION } from "./readStateDb.ts";
 
 describe("read-state schema", () => {
   test("READSTATE_SCHEMA_VERSION is exported", () => {
-    expect(READSTATE_SCHEMA_VERSION).toBe("7");
+    expect(READSTATE_SCHEMA_VERSION).toBe("8");
   });
 
   test("schema applies cleanly on a fresh database", () => {
@@ -324,6 +324,24 @@ describe("read-state schema", () => {
             db.exec(`
               create index if not exists idx_user_thread_activity_user_space
                 on user_thread_activity(user_did, space_did, last_active_at desc)
+            `);
+          },
+        },
+        {
+          version: 8,
+          up(db: Database) {
+            db.exec(`
+              create table if not exists space_order (
+                user_did   text not null,
+                space_did  text not null,
+                position   integer not null,
+                updated_at integer not null default (unixepoch() * 1000),
+                primary key (user_did, space_did)
+              ) strict
+            `);
+            db.exec(`
+              create index if not exists idx_space_order_user_position
+                on space_order(user_did, position)
             `);
           },
         },

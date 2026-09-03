@@ -65,6 +65,7 @@ import lexGetActivityFeed from "../schemas/lexicons/space.roomy.space.getActivit
 import lexGetSpaceThreads from "../schemas/lexicons/space.roomy.space.getThreads.json";
 import lexJoinSpace from "../schemas/lexicons/space.roomy.space.joinSpace.json";
 import lexLeaveSpace from "../schemas/lexicons/space.roomy.space.leaveSpace.json";
+import lexReorderSpaces from "../schemas/lexicons/space.roomy.space.reorderSpaces.json";
 import lexSendEvents from "../schemas/lexicons/space.roomy.space.sendEvents.json";
 import lexGetVapidPublicKey from "../schemas/lexicons/space.roomy.push.getVapidPublicKey.json";
 import lexRegisterSubscription from "../schemas/lexicons/space.roomy.push.registerSubscription.json";
@@ -209,6 +210,7 @@ const LEXICONS = [
   lexGetSpaceThreads,
   lexJoinSpace,
   lexLeaveSpace,
+  lexReorderSpaces,
   lexSendEvents,
   lexGetVapidPublicKey,
   lexGetFlags,

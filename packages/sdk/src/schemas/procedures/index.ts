@@ -7,6 +7,7 @@ export * as updateSeen from "./updateSeen";
 export * as createSpace from "./createSpace";
 export * as joinSpace from "./joinSpace";
 export * as leaveSpace from "./leaveSpace";
+export * as reorderSpaces from "./reorderSpaces";
 export * as setHandle from "./setHandle";
 export * as updatePolicy from "./updatePolicy";
 export * as registerPushSubscription from "./registerPushSubscription";

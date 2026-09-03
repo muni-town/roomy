@@ -22,6 +22,14 @@ export async function leaveSpace(spaceId: string): Promise<void> {
   });
 }
 
+export async function reorderSpaces(spaceIds: string[]): Promise<void> {
+  // Invalidation is handled by the appserver's sync signal
+  // (reorderSpaces → getSpaces invalidation via WebSocket).
+  await px().procedure("space.roomy.space.reorderSpaces", {
+    spaceIds,
+  });
+}
+
 export async function createSpace(opts: {
   name: string;
   description?: string;
