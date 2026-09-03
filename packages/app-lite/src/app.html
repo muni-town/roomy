@@ -89,6 +89,10 @@
       const baseColor = localStorage.getItem("baseColor");
       if (baseColor) root.classList.add(JSON.parse(baseColor));
     </script>
+    <style>
+      :root { color-scheme: light; }
+      :root.dark { color-scheme: dark; }
+    </style>
   </head>
   <body data-sveltekit-preload-data="hover" class="bg-base-50 dark:bg-base-950">
     <div style="display: contents; padding-top: env(safe-area-inset-top);">%sveltekit.body%</div>
