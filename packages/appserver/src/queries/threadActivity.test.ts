@@ -316,6 +316,42 @@ describe("threadActivity", () => {
     expect(threadA.latestMessage).toBeNull();
   });
 
+  test("content entity with a null timestamp is not surfaced as latestMessage", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+
+    // Mirror the real-world fresh-space case: a system message ("x joined the
+    // space") whose comp_content row has NO timestamp (join materialiser writes
+    // comp_content without the timestamp column). It must not become the
+    // room's latestMessage — the wire contract requires a string timestamp.
+    const sysId = "01SYS000000000000000000000".slice(0, 26);
+    db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      sysId,
+      SPACE,
+      CHANNEL,
+    ]);
+    db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit) values (?, 'text/markdown', ?, ?)",
+      [sysId, Buffer.from("Alice joined the space."), sysId],
+    );
+    db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      sysId,
+      ALICE,
+    ]);
+
+    const { threads: result } = await listThreadActivity(
+      asyncDb,
+      { kind: "space", spaceId: SPACE },
+      50,
+      null,
+      null,
+      { kinds: ["thread", "channel"] },
+    );
+    const channel = result.find((t) => t.id === CHANNEL)!;
+    expect(channel.latestTimestamp).toBeNull();
+    expect(channel.latestMessage).toBeNull();
+  });
+
   test("latestMessage content decodes text content correctly", async () => {
     const { db, asyncDb } = freshDb();
     seed(db);

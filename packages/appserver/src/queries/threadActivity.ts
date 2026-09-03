@@ -272,7 +272,8 @@ export async function listThreadActivity(
          left join comp_info author_info
            on author_info.entity = coalesce(author_e.tail, fwd_author_e.tail)
         where e.room in (${ph})
-          and (cc.entity is not null or forward_e.tail is not null)`,
+          and (cc.entity is not null or forward_e.tail is not null)
+          and coalesce(cc.timestamp, fwd_cc.timestamp) is not null`,
     )
     .all<
       {
