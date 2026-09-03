@@ -3,6 +3,7 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { toast } from "@foxui/core";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
+  import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { getBlueskyProfile, upsertBlueskyProfile } from "$lib/mutations/bluesky-profile";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
 
@@ -11,6 +12,12 @@
   const metaQuery = createSpaceMetadataQuery(() => spaceId);
   const meta = $derived(metaQuery.data);
   const isAdmin = $derived(metaQuery.data?.isAdmin ?? false);
+  // Space-account-management flag gates this arbiter-powered WIP feature
+  // (direct navigation lands here even when the tab is hidden).
+  const flagsQuery = createFeatureFlagsQuery();
+  const spaceAccountMgmtEnabled = $derived(
+    flagsQuery.data?.flags.includes("space-account-management") ?? false,
+  );
 
   // Bluesky profile state: whether the space has a profile record yet.
   let profileLoading = $state(true);
@@ -19,7 +26,7 @@
   let saving = $state(false);
 
   $effect(() => {
-    if (!isAdmin) {
+    if (!isAdmin || !spaceAccountMgmtEnabled) {
       profileLoading = false;
       return;
     }
@@ -56,7 +63,13 @@
 </script>
 
 <div class="max-w-2xl">
-  {#if isAdmin}
+  {#if !spaceAccountMgmtEnabled}
+    <div class="flex flex-col items-center gap-4 py-12">
+      <p class="text-sm text-base-500 dark:text-base-400">
+        Space account management is not enabled for your account yet.
+      </p>
+    </div>
+  {:else if isAdmin}
     {#if metaQuery.isPending}
       <p class="text-sm text-base-400">Loading…</p>
     {:else if metaQuery.isError}

@@ -153,7 +153,12 @@
   const showFederationTab = $derived(
     federationEnabled && (meta?.isAdmin ?? false),
   );
-  const showIntegrationsTab = $derived(meta?.isAdmin ?? false);
+  const spaceAccountMgmtEnabled = $derived(
+    flagsQuery.data?.flags.includes("space-account-management") ?? false,
+  );
+  const showIntegrationsTab = $derived(
+    spaceAccountMgmtEnabled && (meta?.isAdmin ?? false),
+  );
   const settingsTabs = $derived(
     [
       { slug: "", label: "General" },

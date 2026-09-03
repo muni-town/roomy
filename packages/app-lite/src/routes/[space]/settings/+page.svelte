@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
+  import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { updateSpaceInfo, leaveSpace } from "$lib/mutations/space";
   import { uploadFile } from "$lib/mutations/upload";
   import {
@@ -24,6 +25,12 @@
   const metaQuery = createSpaceMetadataQuery(() => spaceId);
   const meta = $derived(metaQuery.data);
   const isAdmin = $derived(metaQuery.data?.isAdmin ?? false);
+  // Space-account-management flag gates the arbiter-powered WIP features
+  // (space handle settings, Bluesky profile integration).
+  const flagsQuery = createFeatureFlagsQuery();
+  const spaceAccountMgmtEnabled = $derived(
+    flagsQuery.data?.flags.includes("space-account-management") ?? false,
+  );
 
   // Editable form state, (re)initialised from server metadata.
   let name = $state("");
@@ -48,7 +55,7 @@
   // Load the PDS's available handle suffixes + the current handle when the
   // admin opens the page.
   $effect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || !spaceAccountMgmtEnabled) return;
     getSpaceHandleDomainsForSpace(spaceId)
       .then((domains) => {
         handleDomains = domains;
@@ -305,6 +312,7 @@
           </Button>
         </div>
 
+        {#if spaceAccountMgmtEnabled}
         <div class="border-t border-base-200 dark:border-base-800 pt-6">
           <div class="flex flex-col gap-2">
             <p class="block text-sm font-medium mb-1 text-base-900 dark:text-base-100">
@@ -354,6 +362,7 @@
             {/if}
           </div>
         </div>
+        {/if}
       </form>
     {/if}
   {:else}
