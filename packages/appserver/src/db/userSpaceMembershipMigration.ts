@@ -211,6 +211,12 @@ export async function backfillUserThreadActivitySpaceDid(
 const READSTATE_MIGRATION_TASKS: Record<string, ReadStateMigrationTask> = {
   "6": recoverUserSpaceMembership,
   "7": backfillUserThreadActivitySpaceDid,
+  // Schema v8 ("per-user space reordering", TASK-28) is structural-only:
+  // the space_order table + index are created synchronously by the DB worker.
+  // It needs no event-log scan, so no async task exists — register a no-op so
+  // runPendingReadStateMigrations stamps it complete instead of crashing the
+  // boot loop with "No read-state post-migration task registered for schema 8".
+  "8": async () => {},
 };
 
 /**
