@@ -219,6 +219,20 @@
     editingId = id;
   }
 
+  // When the edited sidebar item is a federated channel, carry its origin
+  // info + origin-grant ceiling into the edit modal so it renders the
+  // receiver-grant editor instead of the native members/roles editor.
+  const editingFederated = $derived.by(() => {
+    if (!editingId || !("room" in editingId)) return undefined;
+    const ch = channelMap.get(editingId.room);
+    if (!ch?.federated) return undefined;
+    return {
+      originSpaceId: ch.federated.originSpaceId,
+      originSpaceName: ch.federated.originSpaceName,
+      permission: ch.federated.permission,
+    };
+  });
+
   // --- Draft order for drag-and-drop reordering ---
 
   type DraftOrder = {
@@ -782,6 +796,7 @@
     bind:open={openEditRoomModal}
     {spaceId}
     id={editingId}
+    federated={editingFederated}
     {renameCategory}
     {deleteCategory}
   />

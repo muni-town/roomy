@@ -9,6 +9,7 @@
     open = $bindable(false),
     kind,
     name = $bindable(""),
+    nameReadonly = false,
     canDelete = false,
     permissions,
     onSave,
@@ -24,6 +25,8 @@
     /** "Channel" / "Category" / etc. — used in the title and description. */
     kind: string;
     name: string;
+    /** Lock the name field — remote (federated) channels can't be renamed. */
+    nameReadonly?: boolean;
     /** When true, renders the "Delete" danger-zone button. */
     canDelete?: boolean;
     /** Optional permissions editor (e.g. ChannelPermissions component). */
@@ -65,7 +68,20 @@
         >
           {kind} Name
         </label>
-        <Input bind:value={name} placeholder="Name" type="text" required />
+        <Input
+          bind:value={name}
+          placeholder="Name"
+          type="text"
+          required
+          readonly={nameReadonly}
+          disabled={nameReadonly}
+        />
+        {#if nameReadonly}
+          <p class="text-xs text-base-400 dark:text-base-500 mt-1">
+            This channel belongs to the origin space — you can manage who has
+            access here, but you can't rename or archive it.
+          </p>
+        {/if}
       </div>
       {#if permissions}
         <div class="border-t border-base-200 dark:border-base-700 pt-6">

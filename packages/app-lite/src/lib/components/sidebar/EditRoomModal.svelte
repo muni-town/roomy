@@ -8,8 +8,10 @@
   import { createQuery } from "@tanstack/svelte-query";
   import { cache, newUlid } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
+  import { queryClient } from "$lib/client";
   import ChannelPermissions from "$lib/components/ui/ChannelPermissions.svelte";
   import { createRolesQuery } from "$lib/queries/roles";
+  import { createFederationGrantsQuery } from "$lib/queries/federation";
   import { sendEvents } from "$lib/mutations/send-events";
 
   const { queryKey } = cache;
@@ -18,12 +20,21 @@
     open = $bindable(false),
     spaceId,
     id,
+    federated,
     renameCategory,
     deleteCategory,
   }: {
     open: boolean;
     spaceId: string;
     id: { room: string } | { categoryId: string; categoryName: string } | null;
+    /** Set when the edited room is a federated channel: its origin space and
+     * origin grant ceiling. Disables rename/archive and switches the
+     * permissions editor to receiver grants. */
+    federated?: {
+      originSpaceId: string;
+      originSpaceName?: string;
+      permission: "read" | "readwrite";
+    };
     renameCategory: (id: string, newName: string) => void;
     deleteCategory: (id: string) => void;
   } = $props();
@@ -54,6 +65,7 @@
   });
 
   let kind = $derived.by(() => {
+    if (federated) return "Federated Channel";
     if (!room) return "Category";
     switch (room.kind) {
       case "space.roomy.channel":
@@ -78,10 +90,62 @@
 
   // Fetch roles for permission diffing on save
   const rolesQuery = createRolesQuery(() => spaceId);
+  // Current receiver grants for federated channels into this space — used to
+  // diff receiver-grant changes in the federated edit mode below.
+  const grantsQuery = createFederationGrantsQuery(() => spaceId, {
+    enabled: () => !!federated,
+  });
 
   async function onSave() {
     if (!id) return;
     if (!name) return;
+
+    if ("room" in id && federated) {
+      // Federated (remote) channel: the only editable settings are receiver
+      // grants for this space's roles. Renames and native permission rows
+      // belong to the origin space and are skipped — updateRoom on B's
+      // stream would 403 (not an A admin) and role_rooms writes are inert.
+      const allRoles = rolesQuery.data?.roles as
+        | Array<{ id: string }>
+        | undefined;
+      const existingGrants = grantsQuery.data?.receiverGrants ?? [];
+      const events: Array<Record<string, unknown>> = [];
+      for (const role of allRoles ?? []) {
+        const desired = (rolePermissions[role.id] ?? "none") as
+          | "none"
+          | "read"
+          | "readwrite";
+        const current =
+          existingGrants.find(
+            (g) =>
+              g.originSpaceId === federated.originSpaceId &&
+              g.roomId === id.room &&
+              g.grantee === role.id &&
+              g.kind === "role",
+          )?.permission ?? "none";
+        if (desired === current) continue;
+        events.push({
+          id: newUlid(),
+          $type: "space.roomy.federation.setReceiverPermission.v0",
+          originSpaceId: federated.originSpaceId,
+          roomId: id.room,
+          grantee: role.id,
+          kind: "role",
+          permission: desired === "none" ? null : desired,
+        });
+      }
+      if (events.length > 0) {
+        await sendEvents(spaceId, events);
+        await queryClient.invalidateQueries({
+          queryKey: ["space.roomy.federation.getGrants"],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["space.roomy.space.getMetadata"],
+        });
+      }
+      open = false;
+      return;
+    }
 
     if ("room" in id) {
       const events: Array<Record<string, unknown>> = [];
@@ -161,7 +225,7 @@
     open = false;
   }
 
-  let canDelete = $derived(!!id);
+  let canDelete = $derived(!!id && !federated);
   let isCategory = $derived(!!id && "categoryId" in id);
 </script>
 
@@ -170,6 +234,7 @@
     bind:open
     {kind}
     bind:name
+    nameReadonly={!!federated}
     {canDelete}
     {onSave}
     {onDelete}
@@ -189,10 +254,11 @@
       {/if}
     {/snippet}
     {#snippet permissions()}
-      {#if kind === "Channel"}
+      {#if kind === "Channel" || federated}
         <ChannelPermissions
           {spaceId}
           roomId={id && "room" in id ? id.room : undefined}
+          {federated}
           bind:accessMode
           bind:rolePermissions
           bind:defaultAccess
