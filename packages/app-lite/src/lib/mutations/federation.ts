@@ -71,16 +71,19 @@ export async function setRoomPermission(
 }
 
 /**
- * Set/clear a receiver grant: what access a B member/role has to a federated
- * channel (capped by the origin grant). Sent on B's stream by an admin of B.
+ * Set/clear a receiver grant: what access a B member, role, or all B members
+ * have to a federated channel (capped by the origin grant). Sent on B's
+ * stream by an admin of B. `kind='members'` grants every B member
+ * (`grantee` = B's space DID) — the federated equivalent of a channel's
+ * defaultAccess.
  */
 export async function setReceiverPermission(
   spaceId: string, // B (receiving)
   opts: {
     originSpaceId: string; // A
     roomId: string;
-    grantee: string; // B user DID or B role id
-    kind: "user" | "role";
+    grantee: string; // B space DID (members) / B user DID / B role id
+    kind: "members" | "user" | "role";
     permission: PermissionLevel;
   },
 ): Promise<void> {

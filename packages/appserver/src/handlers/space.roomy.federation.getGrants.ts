@@ -31,7 +31,7 @@ interface ReceiverGrant {
   originSpaceName?: string;
   roomId: string;
   grantee: string;
-  kind: "user" | "role";
+  kind: "members" | "user" | "role";
   permission: "read" | "readwrite";
 }
 
@@ -82,7 +82,7 @@ export const getFederationGrantsHandler: QueryHandler<
       space_id: string;
       room_id: string;
       grantee: string;
-      kind: "user" | "role";
+      kind: "members" | "user" | "role";
       permission: "read" | "readwrite";
     }>(spaceId);
 

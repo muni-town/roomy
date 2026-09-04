@@ -130,6 +130,44 @@ describe("federation access — origin + receiver grants", () => {
     expect(fed!.canWrite).toBe(false);
   });
 
+  test("members-wide receiver grant (kind='members', grantee = B) grants every member", async () => {
+    const spaceDb = freshSpaceDb();
+    const globalDb = freshGlobalDb();
+    await seedSpaceA(spaceDb);
+    await seedActiveFederationWithOriginGrant(globalDb, "readwrite");
+    // Grantee is B's own space DID; no per-user or per-role row exists.
+    await seedReceiverGrant(globalDb, B, "members", "readwrite");
+    const fed = await federatedRoomAccess(spaceDb, globalDb, CHANNEL, USER, { spaceDbResolver: freshSpaceDb });
+    expect(fed).not.toBeNull();
+    expect(fed!.canRead).toBe(true);
+    expect(fed!.canWrite).toBe(true);
+  });
+
+  test("members-wide grant is capped by the origin grant", async () => {
+    const spaceDb = freshSpaceDb();
+    const globalDb = freshGlobalDb();
+    await seedSpaceA(spaceDb);
+    await seedActiveFederationWithOriginGrant(globalDb, "read");
+    await seedReceiverGrant(globalDb, B, "members", "readwrite");
+    const fed = await federatedRoomAccess(spaceDb, globalDb, CHANNEL, USER, { spaceDbResolver: freshSpaceDb });
+    expect(fed!.canRead).toBe(true);
+    expect(fed!.canWrite).toBe(false);
+  });
+
+  test("a specific user grant overrides the members-grant baseline", async () => {
+    const spaceDb = freshSpaceDb();
+    const globalDb = freshGlobalDb();
+    await seedSpaceA(spaceDb);
+    await seedActiveFederationWithOriginGrant(globalDb, "readwrite");
+    // Members get 'read'; this user is granted 'readwrite' — the per-user
+    // (and per-role) grants must raise, not be capped by, the members base.
+    await seedReceiverGrant(globalDb, B, "members", "read");
+    await seedReceiverGrant(globalDb, USER, "user", "readwrite");
+    const fed = await federatedRoomAccess(spaceDb, globalDb, CHANNEL, USER, { spaceDbResolver: freshSpaceDb });
+    expect(fed!.canRead).toBe(true);
+    expect(fed!.canWrite).toBe(true);
+  });
+
   test("role-based receiver grant grants access to a B role member", async () => {
     const spaceDb = freshSpaceDb();
     const globalDb = freshGlobalDb();

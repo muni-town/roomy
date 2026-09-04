@@ -102,14 +102,39 @@
 
     if ("room" in id && federated) {
       // Federated (remote) channel: the only editable settings are receiver
-      // grants for this space's roles. Renames and native permission rows
-      // belong to the origin space and are skipped — updateRoom on B's
-      // stream would 403 (not an A admin) and role_rooms writes are inert.
+      // grants for this space's members and roles. Renames and native
+      // permission rows belong to the origin space and are skipped —
+      // updateRoom on B's stream would 403 (not an A admin) and role_rooms
+      // writes are inert.
       const allRoles = rolesQuery.data?.roles as
         | Array<{ id: string }>
         | undefined;
       const existingGrants = grantsQuery.data?.receiverGrants ?? [];
       const events: Array<Record<string, unknown>> = [];
+      // The "Members" toggle maps to the members-wide receiver grant
+      // (kind='members', grantee = this space's DID).
+      const desiredMembers = (defaultAccess ?? "none") as
+        | "none"
+        | "read"
+        | "readwrite";
+      const currentMembers =
+        existingGrants.find(
+          (g) =>
+            g.originSpaceId === federated.originSpaceId &&
+            g.roomId === id.room &&
+            g.kind === "members",
+        )?.permission ?? "none";
+      if (desiredMembers !== currentMembers) {
+        events.push({
+          id: newUlid(),
+          $type: "space.roomy.federation.setReceiverPermission.v0",
+          originSpaceId: federated.originSpaceId,
+          roomId: id.room,
+          grantee: spaceId,
+          kind: "members",
+          permission: desiredMembers === "none" ? null : desiredMembers,
+        });
+      }
       for (const role of allRoles ?? []) {
         const desired = (rolePermissions[role.id] ?? "none") as
           | "none"

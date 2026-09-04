@@ -228,8 +228,9 @@ export async function federatedRoomAccess(
 
 /**
  * Resolve the most permissive receiver grant a B member holds on a channel:
- * a direct user grant for their DID, plus any role grants for roles they hold
- * in B. Returns null when there is no matching grant.
+ * the members-wide grant (kind='members', grantee = B's space DID) as the
+ * base, a direct user grant for their DID, plus any role grants for roles
+ * they hold in B. Returns null when there is no matching grant.
  */
 async function resolveReceiverGrant(
   globalDb: DbLike,
@@ -241,12 +242,21 @@ async function resolveReceiverGrant(
 ): Promise<Permission | null> {
   let best: Permission | null = null;
 
+  // Members-wide grant: one row per (origin, B, room) with kind='members'
+  // and grantee = B's space DID; every member of B picks it up.
+  const membersGrant = await globalDb
+    .query(
+      "select permission from federation_receiver_permissions where space_id = ? and federating_space_did = ? and room_id = ? and grantee = ? and kind = 'members'",
+    )
+    .get<{ permission: Permission }>(originSpace, homeSpace, roomId, homeSpace);
+  if (membersGrant) best = membersGrant.permission;
+
   const userGrant = await globalDb
     .query(
       "select permission from federation_receiver_permissions where space_id = ? and federating_space_did = ? and room_id = ? and grantee = ? and kind = 'user'",
     )
     .get<{ permission: Permission }>(originSpace, homeSpace, roomId, did);
-  if (userGrant) best = userGrant.permission;
+  if (userGrant) best = maxPermission(best, userGrant.permission);
 
   if (spaceDbResolver) {
     const bDb = spaceDbResolver(homeSpace);

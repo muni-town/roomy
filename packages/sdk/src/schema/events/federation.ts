@@ -173,10 +173,12 @@ const SetReceiverPermissionSchema = type({
     "The federated channel (in A) whose receiver access is being set.",
   ),
   grantee: type("string").describe(
-    "A B user DID (kind='user') or a B role id (kind='role').",
+    "The B space DID (kind='members'), a B user DID (kind='user'), or a B " +
+      "role id (kind='role') the grant applies to.",
   ),
-  kind: type("'user' | 'role'").describe(
-    "Whether the grantee is a B user or a B role.",
+  kind: type("'members' | 'user' | 'role'").describe(
+    "Whether the grantee is every member of B ('members', grantee = B's " +
+      "space DID), a single B user, or a B role.",
   ),
   permission: type("'read' | 'readwrite'")
     .or(type.null)
@@ -184,9 +186,9 @@ const SetReceiverPermissionSchema = type({
       "The receiver grant level for this grantee on the channel. null removes it.",
     ),
 }).describe(
-  "Set (or clear) a receiver grant: what access a specific B member or role " +
-    "has to a federated channel, capped by the origin grant. Sent on B's " +
-    "stream by an admin of B.",
+  "Set (or clear) a receiver grant: what access a specific B member, role, " +
+    "or all B members have to a federated channel, capped by the origin " +
+    "grant. Sent on B's stream by an admin of B.",
 );
 
 export const SetReceiverPermission = defineEvent(

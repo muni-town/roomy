@@ -7,15 +7,21 @@
     value = $bindable(),
     options,
     onchange,
+    disabled = false,
   }: {
     name: string;
     value?: string;
-    options: { label: string; value: string }[];
+    options: { label: string; value: string; disabled?: boolean }[];
     /** Fired with the newly selected value when the user picks an option. */
     onchange?: (value: string) => void;
+    /** Disable the whole group. */
+    disabled?: boolean;
   } = $props();
 
   function select(next: string): void {
+    if (disabled) return;
+    const option = options.find((o) => o.value === next);
+    if (option?.disabled) return;
     value = next;
     onchange?.(next);
   }
@@ -29,6 +35,7 @@
           variant: value === option.value ? "toggle" : "ghost",
         }),
         "cursor-pointer",
+        option.disabled ? "pointer-events-none opacity-40" : "",
       )}
     >
       <input
@@ -37,6 +44,7 @@
         value={option.value}
         checked={value === option.value}
         onchange={() => select(option.value)}
+        disabled={disabled || option.disabled}
         class="sr-only"
       />
       {option.label}

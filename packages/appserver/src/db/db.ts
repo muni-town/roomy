@@ -56,7 +56,7 @@ export const SPACE_SCHEMA_VERSION = "2";
  * one-time repair of active joined-space edges from per-space membership
  * truth. This recovers global DBs wiped by the v4→v5 deployment bug.
  */
-export const GLOBAL_SCHEMA_VERSION = "7";
+export const GLOBAL_SCHEMA_VERSION = "8";
 
 /**
  * Default pool size (per-space workers). Override via `APPSERVER_DB_POOL_SIZE`.

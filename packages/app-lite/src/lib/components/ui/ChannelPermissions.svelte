@@ -2,8 +2,6 @@
   import PermissionEditor, {
     type PermissionRole,
   } from "@roomy/design/components/ui/PermissionEditor.svelte";
-  import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
-  import { IconLoading } from "@roomy/design/icons";
   import { createQuery } from "@tanstack/svelte-query";
   import { cache } from "@roomy-space/sdk";
   import { px } from "$lib/auth.svelte";
@@ -19,19 +17,13 @@
   };
 
   /** Federated-channel context (from the sidebar entry): the origin space
-   * (A) and the origin grant level (`permission`) that caps what roles in
-   * this space (B) can be granted. */
+   * (A) and the origin grant level (`permission`) that caps what members and
+   * roles in this space (B) can be granted. */
   type FederatedInfo = {
     originSpaceId: string;
     originSpaceName?: string;
     permission: "read" | "readwrite";
   };
-
-  const PERM_OPTIONS = [
-    { label: "None", value: "none" },
-    { label: "Read", value: "read" },
-    { label: "Read & Write", value: "readwrite" },
-  ];
 
   let {
     spaceId,
@@ -44,8 +36,8 @@
     spaceId: string;
     roomId?: string;
     /** When set, the room is a federated (remote) channel: the editor shows
-     * receiver-grant toggles per role in THIS space instead of the native
-     * members/roles editor. */
+     * receiver-grant toggles for THIS space's members and roles instead of
+     * the native members/roles editor. */
     federated?: FederatedInfo;
     accessMode: "open" | "roles";
     rolePermissions: Record<string, LocalPermission>;
@@ -102,6 +94,9 @@
     if (key === lastRoomKey) return;
     lastRoomKey = key;
     rolePermissions = {};
+    // Federated rooms have no server defaultAccess; the Members toggle is
+    // grant-driven and must start at "none" until grants load.
+    if (federated) defaultAccess = "none";
     rolesInitialized = false;
     receiverInitialized = false;
   });
@@ -138,6 +133,18 @@
     if (!grants) return;
     const roles_ = roles;
     if (!roles_) return;
+    // The "Members" toggle reflects the members-wide grant (kind='members',
+    // grantee = this space's DID). The raw stored permission is shown — an
+    // over-ceiling readwrite renders as a disabled Read & Write option.
+    const membersGrant = grants.find(
+      (x) =>
+        x.originSpaceId === federated.originSpaceId &&
+        x.roomId === roomId &&
+        x.kind === "members",
+    );
+    defaultAccess = membersGrant
+      ? (membersGrant.permission as LocalPermission)
+      : "none";
     for (const role of roles_) {
       const g = grants.find(
         (x) =>
@@ -150,67 +157,12 @@
     }
     receiverInitialized = true;
   });
-
-  /**
-   * Clamp a role toggle to the origin grant's ceiling: a receiver grant can
-   * never exceed what the origin space offered (server enforces the same cap
-   * at read time via minPermission — this keeps the UI from showing a
-   * setting that silently reads back lower).
-   */
-  function onRoleChange(roleId: string, v: string) {
-    const ceiling = federated?.permission;
-    const perm: LocalPermission =
-      v === "none" ? "none" : ceiling === "read" && v === "readwrite" ? "read" : (v as LocalPermission);
-    rolePermissions[roleId] = perm;
-  }
 </script>
 
-{#if federated && roomId}
-  <div class="flex flex-col gap-5">
-    <div class="flex items-center justify-between">
-      <span class="text-md font-regular text-base-900 dark:text-base-100 shrink-0">
-        Federated channel access
-      </span>
-      <span class="text-sm text-base-500 dark:text-base-400 shrink-0">
-        Origin grants {federated.permission === "readwrite" ? "Read & Write" : "Read"}
-      </span>
-    </div>
-    <p class="text-sm text-base-400">
-      This channel belongs to {federated.originSpaceName ?? federated.originSpaceId}.
-      The origin space exposes it at most
-      {federated.permission === "readwrite" ? "read & write" : "read"}; choose which
-      roles in this space can use it, up to that ceiling.
-    </p>
-    {#if rolesQuery.isLoading && roles === null}
-      <IconLoading class="animate-spin" font-size={20} />
-    {:else if roles !== null && roles.length === 0}
-      <p class="text-sm text-base-400">
-        No roles configured. Create roles in <b>Space Settings -&gt; Permissions</b> to
-        grant access to this channel.
-      </p>
-    {:else if roles !== null}
-      <div class="flex flex-col">
-        {#each roles as role (role.id)}
-          <div class="flex items-center justify-between gap-4">
-            <span class="text-md font-regular text-base-900 dark:text-base-100 shrink-0">
-              {role.name ?? "Unnamed role"}
-            </span>
-            <ToggleGroup
-              name={`fed-role-${role.id}`}
-              value={rolePermissions[role.id] ?? "none"}
-              options={PERM_OPTIONS}
-              onchange={(v) => onRoleChange(role.id, v)}
-            />
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-{:else}
-  <PermissionEditor
-    bind:defaultAccess
-    bind:rolePermissions
-    {roles}
-    rolesLoading={rolesQuery.isLoading}
-  />
-{/if}
+<PermissionEditor
+  bind:defaultAccess
+  bind:rolePermissions
+  {roles}
+  rolesLoading={rolesQuery.isLoading}
+  ceiling={federated?.permission ?? "readwrite"}
+/>

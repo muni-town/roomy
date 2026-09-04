@@ -160,15 +160,18 @@ create table if not exists federation_room_permissions (
 create index if not exists idx_frp_recv on federation_room_permissions(federating_space_did, permission);
 create index if not exists idx_frp_room on federation_room_permissions(room_id);
 
--- Receiver grant: B-admin-set access for a B member or role on a federated
--- channel of A. Ceiling is the origin grant (federation_room_permissions).
--- kind = 'user' (grantee is a B user DID) | 'role' (grantee is a B role id).
+-- Receiver grant: B-admin-set access for a B member, role, or ALL B members
+-- on a federated channel of A. Ceiling is the origin grant
+-- (federation_room_permissions).
+-- kind = 'members' (grantee = B space DID, applies to every B member)
+--      | 'user'    (grantee is a B user DID)
+--      | 'role'    (grantee is a B role id).
 create table if not exists federation_receiver_permissions (
   space_id             text not null,   -- origin space A
   federating_space_did text not null,   -- receiving space B
   room_id              text not null,   -- channel id in A
-  grantee              text not null,   -- B user DID or B role id
-  kind                 text not null check(kind in ('user','role')),
+  grantee              text not null,   -- B space DID / B user DID / B role id
+  kind                 text not null check(kind in ('members','user','role')),
   permission           text not null check(permission in ('read','readwrite')),
   primary key (space_id, federating_space_did, room_id, grantee, kind)
 ) strict;

@@ -44,6 +44,7 @@
         "kind": {
           "type": "string",
           "knownValues": [
+            "members",
             "role",
             "user"
           ]

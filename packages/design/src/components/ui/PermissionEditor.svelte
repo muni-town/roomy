@@ -15,13 +15,28 @@
     rolePermissions = $bindable({}),
     roles,
     rolesLoading = false,
+    ceiling = "readwrite",
   }: {
     defaultAccess: Permission;
     rolePermissions: Record<string, Permission>;
     /** Roles list — null while not yet fetched. */
     roles: PermissionRole[] | null;
     rolesLoading?: boolean;
+    /** Highest grantable permission. Below "readwrite" the Read & Write
+     *  option renders disabled on every toggle — a federated channel's
+     *  origin grants the receiving space at most this level. */
+    ceiling?: "read" | "readwrite";
   } = $props();
+
+  const OPTIONS: { label: string; value: Permission; disabled?: boolean }[] = [
+    { label: "None", value: "none" },
+    { label: "Read", value: "read" },
+    {
+      label: "Read & Write",
+      value: "readwrite",
+      disabled: ceiling !== "readwrite",
+    },
+  ];
 </script>
 
 <div class="flex flex-col gap-5">
@@ -32,11 +47,7 @@
     <ToggleGroup
       name="members-permission"
       bind:value={defaultAccess}
-      options={[
-        { label: "None", value: "none" },
-        { label: "Read", value: "read" },
-        { label: "Read & Write", value: "readwrite" },
-      ]}
+      options={OPTIONS}
     />
   </div>
 
@@ -62,11 +73,7 @@
           <ToggleGroup
             name="role-{role.id}"
             bind:value={rolePermissions[role.id]}
-            options={[
-              { label: "None", value: "none" },
-              { label: "Read", value: "read" },
-              { label: "Read & Write", value: "readwrite" },
-            ]}
+            options={OPTIONS}
           />
         </div>
       {/each}

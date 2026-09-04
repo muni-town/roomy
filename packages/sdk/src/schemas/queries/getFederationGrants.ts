@@ -24,7 +24,7 @@ export const ReceiverGrant = type({
   "originSpaceName?": "string",
   roomId: "string",
   grantee: "string",
-  kind: "'user' | 'role'",
+  kind: "'members' | 'user' | 'role'",
   permission: "'read' | 'readwrite'",
 });
 
