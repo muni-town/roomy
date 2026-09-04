@@ -71,4 +71,4 @@ GET /xrpc/space.roomy.space.getActivityFeed?limit=20&cursor=1717535900000::01J0A
 
 ## Materialisation
 
-Feed items are **materialised at write time** — every `createMessage.v0` event upserts a row in the `activity_item` table. No on-the-fly computation. The `recent_message_ids` column stores a JSON array of up to 5 most recent message ULIDs (newest first). Full message content is joined at query time, so edits to existing messages are reflected immediately.
+Feed items are **materialised at write time** — every `createMessage.v0` event upserts a row in the `activity_item` table. No on-the-fly computation. The `recent_message_ids` column stores a JSON array of up to 5 most recent message entries as `{ id, ts }` objects (newest first, by canonical message time — the `timestampOverride` extension for bridged messages, else the message ULID's own time). Full message content is joined at query time, so edits to existing messages are reflected immediately.

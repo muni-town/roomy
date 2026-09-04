@@ -10,6 +10,7 @@
 
 import type { DbLike } from "../db/types.ts";
 import type { UserDid } from "@roomy-space/sdk";
+import { decodeTime } from "ulidx";
 import { decodeContent } from "../db/content.ts";
 import { openSpaceDb } from "../db/db.ts";
 import { hydrateProfiles } from "./profileStore.ts";
@@ -62,6 +63,41 @@ export interface ActivityFeedScope {
   limit: number;
   /** Cursor: "timestamp::roomId" of the last item on the previous page. */
   cursor: string | null;
+}
+
+/**
+ * Parse the `recent_message_ids` JSON column into `{ id, ts }` entries
+ * (newest first). The column stores objects so the window can be ordered by
+ * canonical message time — the message ULID alone encodes bridge-ingestion
+ * time for Discord-bridged messages, not the original Discord send time.
+ * Legacy rows (plain ULID strings) are tolerated: they decode to the ULID
+ * time, which is the best available timestamp for pre-fix data.
+ */
+function parseRecentMessageIds(raw: string): Array<{ id: string; ts: number }> {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) return [];
+  const entries: Array<{ id: string; ts: number }> = [];
+  for (const item of parsed) {
+    if (typeof item === "string") {
+      // Legacy rows store plain ULID strings. Tolerate malformed IDs
+      // (e.g. ghost rows) — they decode to 0 and are skipped downstream.
+      let ts = 0;
+      try {
+        ts = decodeTime(item);
+      } catch {
+        // not a valid ULID — keep ts 0
+      }
+      entries.push({ id: item, ts });
+      continue;
+    }
+    if (item === null || typeof item !== "object") continue;
+    const id = (item as Record<string, unknown>).id;
+    const ts = (item as Record<string, unknown>).ts;
+    if (typeof id === "string" && typeof ts === "number") {
+      entries.push({ id, ts });
+    }
+  }
+  return entries;
 }
 
 // ─── Query ────────────────────────────────────────────────────────────────
@@ -174,7 +210,11 @@ export async function selectActivityFeed(
   }
   for (const [spaceDid, rows] of bySpace) {
     const msgIds: string[] = [];
-    for (const r of rows) msgIds.push(...JSON.parse(r.recent_message_ids));
+    for (const r of rows) {
+      for (const e of parseRecentMessageIds(r.recent_message_ids)) {
+        msgIds.push(e.id);
+      }
+    }
     if (msgIds.length === 0) continue;
     const spaceDb = openSpaceDb(spaceDid);
     const fetched = await batchFetchMessages(spaceDb, msgIds);
@@ -188,10 +228,10 @@ export async function selectActivityFeed(
 
   // Step 7: assemble feed items.
   const feed: ActivityFeedItem[] = pageRows.map((r) => {
-    const messageIds: string[] = JSON.parse(r.recent_message_ids);
+    const messageIds = parseRecentMessageIds(r.recent_message_ids);
     const messages: ActivityMessage[] = [];
-    for (const mid of messageIds) {
-      const msg = messagesData.get(mid);
+    for (const e of messageIds) {
+      const msg = messagesData.get(e.id);
       if (msg) messages.push(msg);
     }
 

@@ -13,12 +13,14 @@
 
 import type { DbLike } from "../db/types.ts";
 import type { StreamDid, Ulid } from "@roomy-space/sdk";
-import { decodeTime } from "ulidx";
 
 export interface ActivityItemUpsertOpts {
   roomId: string;
   spaceId: StreamDid;
   messageId: Ulid;
+  /** Canonical message timestamp (ms since epoch) — the timestampOverride
+   *  extension for bridged messages, else the message ULID's own time. */
+  timestamp: number;
 }
 
 /**
@@ -29,6 +31,12 @@ export interface ActivityItemUpsertOpts {
  *   2. If yes: read the existing recent_message_ids JSON array, prepend the
  *      new messageId, slice to at most 5, and update last_activity_at.
  *   3. If no: insert with all denormalized metadata fetched in one query.
+ *
+ * `recent_message_ids` stores `{ id, ts }` entries (newest first) so the
+ * read path can order the window by canonical message time. The `ts` field
+ * is the canonical timestamp (timestampOverride for bridged messages, else
+ * the ULID time) — the message ULID alone encodes bridge-ingestion time for
+ * Discord-bridged messages, which would mis-order the window.
  */
 export async function upsertActivityItem(
   db: DbLike,
@@ -42,11 +50,11 @@ export async function upsertActivityItem(
 
   if (existing) {
     // Fast path: prepend to the message ID list, cap at 5.
-    const ids: string[] = JSON.parse(existing.recent_message_ids);
+    const ids: Array<{ id: string; ts: number }> = JSON.parse(existing.recent_message_ids);
     // Remove duplicate if somehow present, then prepend.
-    const deduped = ids.filter((id) => id !== opts.messageId);
-    deduped.unshift(opts.messageId);
-    const capped: string[] = deduped.slice(0, 5);
+    const deduped = ids.filter((e) => e.id !== opts.messageId);
+    deduped.unshift({ id: opts.messageId, ts: opts.timestamp });
+    const capped: Array<{ id: string; ts: number }> = deduped.slice(0, 5);
 
     await db.run(
       `update activity_item
@@ -54,7 +62,7 @@ export async function upsertActivityItem(
               recent_message_ids = ?,
               updated_at = (unixepoch() * 1000)
         where room_id = ?`,
-      decodeMessageTimestamp(opts.messageId),
+      opts.timestamp,
       JSON.stringify(capped),
       opts.roomId,
     );
@@ -100,7 +108,6 @@ async function insertActivityItem(
     }>(opts.roomId, opts.spaceId);
 
   const isThread = roomMeta?.label === "space.roomy.thread" ? 1 : 0;
-  const timestamp = decodeMessageTimestamp(opts.messageId);
 
   await db.run(
     `insert into activity_item (
@@ -114,18 +121,10 @@ async function insertActivityItem(
     isThread,
     roomMeta?.parent_id ?? null,
     roomMeta?.parent_name ?? null,
-    timestamp,
-    JSON.stringify([opts.messageId]),
+    opts.timestamp,
+    JSON.stringify([{ id: opts.messageId, ts: opts.timestamp }]),
     roomMeta?.room_name ?? null,
     roomMeta?.space_name ?? null,
     roomMeta?.space_avatar ?? null,
   );
-}
-
-/**
- * Decode the canonical timestamp from a message ULID.
- * Matches the materializer's decodeTime(event.id) logic.
- */
-export function decodeMessageTimestamp(messageId: string): number {
-  return decodeTime(messageId);
 }

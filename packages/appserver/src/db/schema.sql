@@ -317,8 +317,10 @@ create index if not exists idx_comp_invite_creator on comp_invite(entity, create
 
 -- Materialized activity feed items. One row per room (channel or thread) that
 -- has seen at least one message. Upserted on every createMessage event.
--- recent_message_ids stores a JSON array of up to 5 most recent message ULIDs
--- (newest first) so the read path can batch-query full message data.
+-- recent_message_ids stores a JSON array of up to 5 most recent message
+-- entries as { id, ts } objects (newest first, by canonical message time —
+-- timestampOverride for bridged messages, else ULID time) so the read path
+-- can batch-query full message data.
 create table if not exists activity_item (
   room_id text primary key,
   space_id text not null,
@@ -326,7 +328,7 @@ create table if not exists activity_item (
   parent_channel_id text,
   parent_channel_name text,
   last_activity_at integer not null,
-  recent_message_ids text not null default '[]',  -- JSON array of ULIDs, newest first
+  recent_message_ids text not null default '[]',  -- JSON array of {id, ts}, newest first
   room_name text,
   space_name text,
   space_avatar text,

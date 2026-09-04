@@ -158,3 +158,23 @@ function midpointUlid(earlier: Ulid, later?: Ulid): string {
   }
   return ulid(Math.floor((e + l) / 2));
 }
+
+/**
+ * Canonical timestamp (ms since epoch) for a message event: the
+ * `timestampOverride` extension when present (Discord-bridged messages carry
+ * the original Discord send time), otherwise the event ULID's own time.
+ *
+ * This is the same rule the SDK materialiser uses for `comp_content.timestamp`
+ * and `setMessageSortIdxByTimestamp` uses for `entities.sort_idx`. Consumers
+ * that derive a timestamp from the message ULID alone (e.g. the activity
+ * feed) mis-order bridged messages, whose ULIDs encode bridge-ingestion time
+ * rather than the original Discord time.
+ */
+export function canonicalMessageTimestamp(event: Event): number {
+  if (event.$type !== "space.roomy.message.createMessage.v0") {
+    return decodeTime(event.id);
+  }
+  const overrideExt =
+    event.extensions?.["space.roomy.extension.timestampOverride.v0"];
+  return overrideExt ? Number(overrideExt.timestamp) : decodeTime(event.id);
+}

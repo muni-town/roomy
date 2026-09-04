@@ -27,6 +27,7 @@ import type {
 
 import { materialize } from "./materializer.ts";
 import { applyBundle, getSavepointMutex } from "./applyBundle.ts";
+import { canonicalMessageTimestamp } from "./sortIdx.ts";
 import { isGlobalDbStatement } from "./statementRouting.ts";
 import type { StatementBundleSuccess } from "./types.ts";
 import {
@@ -186,15 +187,7 @@ export async function applyBatch(
 
       // sort_idx: inline the UPDATE (no SELECT needed)
       if (e.event.$type === "space.roomy.message.createMessage.v0") {
-        const event = e.event as Record<string, unknown>;
-        const overrideExt =
-          (event.extensions as Record<string, unknown> | undefined)?.["space.roomy.extension.timestampOverride.v0"] as
-            | { timestamp?: string }
-            | undefined;
-        const timestamp = overrideExt
-          ? Number(overrideExt.timestamp)
-          : decodeTime(e.event.id);
-        const sortIdx = ulid(timestamp) as Ulid;
+        const sortIdx = ulid(canonicalMessageTimestamp(e.event)) as Ulid;
         chunkSteps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",

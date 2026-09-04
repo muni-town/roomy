@@ -54,9 +54,9 @@ This table is **materialised at write time** — rows are upserted on every `cre
 **Trigger:** Every `createMessage.v0` event in `applyBundle.ts`.
 
 **Fast path (existing row):**
-1. Read the existing `recent_message_ids` JSON array.
-2. Prepend the new message ID, deduplicate, cap at 5.
-3. Update `last_activity_at` (decoded from the message ULID) and `updated_at`.
+1. Read the existing `recent_message_ids` JSON array of `{ id, ts }` entries.
+2. Prepend the new `{ id, ts }` entry (canonical message time — the `timestampOverride` extension for bridged messages, else the message ULID's own time), deduplicate, cap at 5.
+3. Update `last_activity_at` (the canonical timestamp) and `updated_at`.
 
 **Slow path (first message in room):**
 1. Fetch denormalized metadata in a single query:

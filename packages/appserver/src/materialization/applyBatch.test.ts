@@ -1247,3 +1247,76 @@ describe("applyBatch — link embed dismissal via editMessage", () => {
     expect(msg?.media.map((m) => m.url)).toContain(imgUri + "?message=" + msgId);
   });
 });
+
+describe("applyBatch — activity item canonical timestamps", () => {
+  // Regression: bridged messages carry a timestampOverride extension (the
+  // original Discord send time), but their ULIDs encode bridge-ingestion
+  // time. The activity_item upsert used the ULID time, so getThreads /
+  // getActivityFeed ordered bridged threads by ingestion order — which for a
+  // backfill is reverse Discord-chronological (rooms created in backfill
+  // order, messages ingested oldest-first per channel). The upsert must use
+  // the canonical timestamp for last_activity_at and the window entries.
+  test("bridged messages order activity by Discord time, not ULID time", async () => {
+    const { db, asyncDb } = freshDb();
+    seedSpace(db, STREAM);
+
+    const channelId = newUlid();
+    db.run("insert into entities (id, stream_id) values (?, ?)", [channelId, STREAM]);
+    db.run(
+      "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.channel', 'readwrite')",
+      [channelId],
+    );
+
+    // ULID times: msg1 ingested AFTER msg2 (bridge processed msg2 first).
+    const ingestTs1 = 1_717_536_100_000;
+    const ingestTs2 = 1_717_536_000_000;
+    // Discord times: msg1 is OLDER than msg2.
+    const discordTs1 = 1_700_000_000_000;
+    const discordTs2 = 1_700_000_100_000;
+
+    const bridgedMessage = (id: string, discordTs: number, text: string): Event =>
+      ({
+        $type: "space.roomy.message.createMessage.v0",
+        id,
+        room: channelId,
+        body: {
+          mimeType: "text/markdown",
+          data: { buf: new TextEncoder().encode(text) },
+        },
+        extensions: {
+          "space.roomy.extension.timestampOverride.v0": {
+            $type: "space.roomy.extension.timestampOverride.v0",
+            timestamp: discordTs,
+          },
+        },
+      }) as unknown as Event;
+
+    const msg1 = ulid(ingestTs1);
+    const msg2 = ulid(ingestTs2);
+
+    await applyBatch(
+      asyncDb,
+      STREAM,
+      [
+        decoded(bridgedMessage(msg1, discordTs1, "older discord msg"), 1),
+        decoded(bridgedMessage(msg2, discordTs2, "newer discord msg"), 2),
+      ],
+      { isBackfill: true },
+    );
+
+    const row = await asyncDb
+      .query("select last_activity_at, recent_message_ids from activity_item where room_id = ?")
+      .get<{ last_activity_at: number; recent_message_ids: string }>(channelId);
+
+    expect(row).not.toBeNull();
+    // last_activity_at is the newest DISCORD time, not the newest ULID time.
+    expect(row!.last_activity_at).toBe(discordTs2);
+    const stored: Array<{ id: string; ts: number }> = JSON.parse(row!.recent_message_ids);
+    // Newest by canonical time first — msg2 (newer Discord time) ahead of
+    // msg1 even though msg1 was ingested later.
+    expect(stored[0]!.id).toBe(msg2);
+    expect(stored[0]!.ts).toBe(discordTs2);
+    expect(stored[1]!.id).toBe(msg1);
+    expect(stored[1]!.ts).toBe(discordTs1);
+  });
+});

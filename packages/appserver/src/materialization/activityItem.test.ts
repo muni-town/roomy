@@ -6,17 +6,15 @@
  *   - Fast path: subsequent messages (dedup, cap at 5)
  *   - Backfill: events arrive in order
  *   - Room metadata: is_thread, parent_channel, space/room names
- *   - decodeMessageTimestamp
  */
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { decodeTime } from "ulidx";
 import type { StreamDid, Ulid } from "@roomy-space/sdk";
 import { toAsyncDb } from "../db/syncAdapter.ts";
-import { upsertActivityItem, decodeMessageTimestamp } from "./activityItem.ts";
+import { upsertActivityItem } from "./activityItem.ts";
 import type { DbLike } from "../db/types.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -109,7 +107,7 @@ describe("upsertActivityItem", () => {
 
       const ts = 1_717_536_000_000;
       const msgId = ulidForTimestamp(ts);
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid, timestamp: ts });
 
       const row = await asyncDb
         .query("select * from activity_item where room_id = ?")
@@ -134,7 +132,7 @@ describe("upsertActivityItem", () => {
       expect(r.parent_channel_id).toBeNull();
       expect(r.parent_channel_name).toBeNull();
       expect(r.last_activity_at).toBe(ts);
-      expect(JSON.parse(r.recent_message_ids)).toEqual([msgId]);
+      expect(JSON.parse(r.recent_message_ids)).toEqual([{ id: msgId, ts }]);
       expect(r.room_name).toBe("general");
       expect(r.space_name).toBe("Test Space");
       expect(r.space_avatar).toBe("https://example.com/avatar.png");
@@ -148,7 +146,7 @@ describe("upsertActivityItem", () => {
 
       const ts = 1_717_536_000_000;
       const msgId = ulidForTimestamp(ts);
-      await upsertActivityItem(asyncDb, { roomId: THREAD, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: THREAD, spaceId: SPACE as StreamDid, messageId: msgId as Ulid, timestamp: ts });
 
       const row = await asyncDb
         .query("select room_id, is_thread, parent_channel_id, parent_channel_name, room_name from activity_item where room_id = ?")
@@ -183,7 +181,7 @@ describe("upsertActivityItem", () => {
 
       const ts = 1_717_536_000_000;
       const msgId = ulidForTimestamp(ts);
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid, timestamp: ts });
 
       const row = await asyncDb
         .query("select room_name, space_name from activity_item where room_id = ?")
@@ -206,20 +204,20 @@ describe("upsertActivityItem", () => {
         const ts = 1_717_536_000_000 + i * 1000;
         const id = ulidForTimestamp(ts);
         ids.push(id);
-        await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: id as Ulid });
+        await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: id as Ulid, timestamp: ts });
       }
 
       const row = await asyncDb
         .query("select recent_message_ids from activity_item where room_id = ?")
         .get<{ recent_message_ids: string }>(CHANNEL);
 
-      const stored: string[] = JSON.parse(row!.recent_message_ids);
+      const stored: Array<{ id: string; ts: number }> = JSON.parse(row!.recent_message_ids);
       // Should have newest first, capped at 5.
       expect(stored).toHaveLength(5);
       // Most recent (highest timestamp) should be first.
-      expect(stored[0]).toBe(ids[5]);
+      expect(stored[0]!.id).toBe(ids[5]!);
       // Oldest (lowest timestamp) should be dropped.
-      expect(stored).not.toContain(ids[0]);
+      expect(stored.map((e) => e.id)).not.toContain(ids[0]);
     })
 
     test("deduplicates if the same message ID is upserted twice", async () => {
@@ -230,16 +228,16 @@ describe("upsertActivityItem", () => {
       const ts = 1_717_536_000_000;
       const msgId = ulidForTimestamp(ts);
 
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid, timestamp: ts });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msgId as Ulid, timestamp: ts });
 
       const row = await asyncDb
         .query("select recent_message_ids from activity_item where room_id = ?")
         .get<{ recent_message_ids: string }>(CHANNEL);
 
-      const stored: string[] = JSON.parse(row!.recent_message_ids);
+      const stored: Array<{ id: string; ts: number }> = JSON.parse(row!.recent_message_ids);
       expect(stored).toHaveLength(1);
-      expect(stored[0]).toBe(msgId);
+      expect(stored[0]!.id).toBe(msgId);
     })
 
     test("updates last_activity_at to the newest message timestamp", async () => {
@@ -252,14 +250,52 @@ describe("upsertActivityItem", () => {
       const msg1 = ulidForTimestamp(ts1);
       const msg2 = ulidForTimestamp(ts2);
 
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg1 as Ulid });
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg2 as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg1 as Ulid, timestamp: ts1 });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg2 as Ulid, timestamp: ts2 });
 
       const row = await asyncDb
         .query("select last_activity_at from activity_item where room_id = ?")
         .get<{ last_activity_at: number }>(CHANNEL);
 
       expect(row!.last_activity_at).toBe(ts2);
+    })
+
+    test("uses the canonical timestamp, not the ULID time, for bridged messages", async () => {
+      // Regression: bridged messages carry a timestampOverride extension
+      // (the original Discord send time), but their ULIDs encode
+      // bridge-ingestion time. Ordering the activity window by ULID time
+      // mis-orders bridged threads (getThreads returned them in reverse
+      // Discord-chronological order). The upsert must use the canonical
+      // timestamp for both last_activity_at and the window entries.
+      const { db, asyncDb } = freshDb();
+      seedSpace(db);
+      seedChannel(db);
+
+      // ULID times: msg1 ingested AFTER msg2 (bridge processed msg2 first).
+      const ingestTs1 = 1_717_536_100_000;
+      const ingestTs2 = 1_717_536_000_000;
+      // Discord times: msg1 is OLDER than msg2.
+      const discordTs1 = 1_700_000_000_000;
+      const discordTs2 = 1_700_000_100_000;
+      const msg1 = ulidForTimestamp(ingestTs1);
+      const msg2 = ulidForTimestamp(ingestTs2);
+
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg1 as Ulid, timestamp: discordTs1 });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg2 as Ulid, timestamp: discordTs2 });
+
+      const row = await asyncDb
+        .query("select last_activity_at, recent_message_ids from activity_item where room_id = ?")
+        .get<{ last_activity_at: number; recent_message_ids: string }>(CHANNEL);
+
+      // last_activity_at is the newest DISCORD time, not the newest ULID time.
+      expect(row!.last_activity_at).toBe(discordTs2);
+      const stored: Array<{ id: string; ts: number }> = JSON.parse(row!.recent_message_ids);
+      // Newest by canonical time first — msg2 (newer Discord time) ahead of
+      // msg1 even though msg1 was ingested later.
+      expect(stored[0]!.id).toBe(msg2);
+      expect(stored[0]!.ts).toBe(discordTs2);
+      expect(stored[1]!.id).toBe(msg1);
+      expect(stored[1]!.ts).toBe(discordTs1);
     })
   });
 
@@ -277,29 +313,21 @@ describe("upsertActivityItem", () => {
       const msg2 = ulidForTimestamp(ts2);
       const msg3 = ulidForTimestamp(ts3);
 
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg1 as Ulid });
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg2 as Ulid });
-      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg3 as Ulid });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg1 as Ulid, timestamp: ts1 });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg2 as Ulid, timestamp: ts2 });
+      await upsertActivityItem(asyncDb, { roomId: CHANNEL, spaceId: SPACE as StreamDid, messageId: msg3 as Ulid, timestamp: ts3 });
 
       const row = await asyncDb
         .query("select recent_message_ids, last_activity_at from activity_item where room_id = ?")
         .get<{ recent_message_ids: string; last_activity_at: number }>(CHANNEL);
 
-      const stored: string[] = JSON.parse(row!.recent_message_ids);
+      const stored: Array<{ id: string; ts: number }> = JSON.parse(row!.recent_message_ids);
       expect(stored).toHaveLength(3);
       // Newest first.
-      expect(stored[0]).toBe(msg3);
-      expect(stored[1]).toBe(msg2);
-      expect(stored[2]).toBe(msg1);
+      expect(stored[0]!.id).toBe(msg3);
+      expect(stored[1]!.id).toBe(msg2);
+      expect(stored[2]!.id).toBe(msg1);
       expect(row!.last_activity_at).toBe(ts3);
     })
-  });
-
-  describe("decodeMessageTimestamp", () => {
-    test("returns the same value as ulidx.decodeTime", () => {
-      const ts = 1_717_536_000_000;
-      const id = ulidForTimestamp(ts);
-      expect(decodeMessageTimestamp(id)).toBe(decodeTime(id));
-    });
   });
 });

@@ -31,6 +31,7 @@ import type { DbLike } from "../db/types.ts";
 import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
 import type { SqlStatement, StatementBundleSuccess } from "./types.ts";
 import {
+  canonicalMessageTimestamp,
   setMessageSortIdxByForward,
   setMessageSortIdxByReorder,
   setMessageSortIdxByTimestamp,
@@ -143,7 +144,10 @@ async function applyBundleInner(
     await setMessageSortIdxByForward(db, bundle.event);
 
     // Activity feed: upsert the activity item for every createMessage event
-    // (including backfill, so existing rooms get populated).
+    // (including backfill, so existing rooms get populated). The timestamp is
+    // the canonical message time (timestampOverride for bridged messages,
+    // else the ULID time) — the ULID alone encodes bridge-ingestion time for
+    // Discord-bridged messages, which would mis-order the feed.
     if (
       bundle.event.$type === "space.roomy.message.createMessage.v0" &&
       bundle.event.room
@@ -152,6 +156,7 @@ async function applyBundleInner(
         roomId: bundle.event.room,
         spaceId: opts.streamId,
         messageId: bundle.event.id,
+        timestamp: canonicalMessageTimestamp(bundle.event),
       });
     }
 
@@ -203,9 +208,11 @@ async function applyBundleInner(
 
       // Track thread activity: a message in a thread refreshes the activity
       // window for every user tracking the thread (re-surfacing it in their
-      // sidebar when someone else posts) and registers the author.
+      // sidebar when someone else posts) and registers the author. Uses the
+      // canonical message time (timestampOverride for bridged messages) so
+      // bridged threads order by Discord time, not ingestion time.
       if (isThreadRoom) {
-        const timestamp = decodeTimeFromId(bundle.event.id);
+        const timestamp = canonicalMessageTimestamp(bundle.event);
         await refreshThreadActivityOnMessage(readStateDb, bundle.event.room, bundle.user, opts.streamId, timestamp);
       }
 
@@ -222,7 +229,7 @@ async function applyBundleInner(
         readStateDb,
         overrideDid ?? bundle.user,
         bundle.event.room,
-        decodeTimeFromId(bundle.event.id),
+        canonicalMessageTimestamp(bundle.event),
       );
     }
 
