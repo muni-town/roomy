@@ -2,17 +2,19 @@
  * Schema for `space.roomy.search.messages` (query).
  *
  * Full-text message search backed by Qdrant, filtered by the caller's read
- * access. With `spaceId` the search is scoped to one space; without it the
- * search spans every space the caller has joined (cross-space). Returns
- * messages hydrated via selectMessages so the response shape matches the
- * shared Message schema, plus `roomId`/`spaceId` so cross-space results can
- * be linked back to their source room, and the resolved display names
- * (`spaceName`/`spaceAvatar`/`roomName`/`roomKind`) so the result context
- * line renders without extra summary queries. Each hit carries a
- * denormalised `reply` (the replied-to message, fully hydrated) when it is
- * resolvable and the caller may read its room — search results render in a
- * chat-style list, so the preview rides along instead of costing the client
- * a getMessage fetch per hit.
+ * access. Scope precedence: `roomId` narrows the search to one room (a
+ * channel plus its threads, or a thread plus its parent channel), `spaceId`
+ * narrows it to one space, and with neither the search spans every space
+ * the caller has joined (cross-space). A `spaceId` supplied alongside a
+ * `roomId` must be the room's owning space. Returns messages hydrated via
+ * selectMessages so the response shape matches the shared Message schema,
+ * plus `roomId`/`spaceId` so results can be linked back to their source
+ * room, and the resolved display names (`spaceName`/`spaceAvatar`/
+ * `roomName`/`roomKind`) so the result context line renders without extra
+ * summary queries. Each hit carries a denormalised `reply` (the replied-to
+ * message, fully hydrated) when it is resolvable and the caller may read
+ * its room — search results render in a chat-style list, so the preview
+ * rides along instead of costing the client a getMessage fetch per hit.
  */
 import { scope, type } from "arktype";
 import { Message } from "./_message";
@@ -20,8 +22,10 @@ import { Message } from "./_message";
 export const NSID = "space.roomy.search.messages" as const;
 
 export const Params = type({
-  /** Narrow the search to one space. Omitted → search the caller's joined spaces. */
+  /** Narrow the search to one space. Omitted → the caller's joined spaces (or the roomId's space when roomId is set). */
   "spaceId?": "string",
+  /** Narrow the search to one room (a channel plus its threads, or a thread plus its parent channel). Omitted → space/cross-space. */
+  "roomId?": "string",
   /** Search query. Must be at least 3 characters. */
   q: "string",
   "limit?": "string",

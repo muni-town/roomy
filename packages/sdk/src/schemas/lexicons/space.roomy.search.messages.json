@@ -394,6 +394,9 @@
           "limit": {
             "type": "string"
           },
+          "roomId": {
+            "type": "string"
+          },
           "spaceId": {
             "type": "string"
           }

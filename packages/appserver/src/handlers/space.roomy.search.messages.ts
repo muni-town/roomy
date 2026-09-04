@@ -4,13 +4,19 @@
  * Cross-space full-text message search backed by Qdrant (Phase 2 of
  * search-endpoints.md). The query is BM25-encoded to a sparse vector and
  * searched against the global `messages` collection, payload-filtered to
- * the caller's readable spaces (spaceId narrows the filter to one space).
- * Results are over-fetched (limit×3), hydrated via selectMessages
- * (`{ kind: "ids" }`), post-filtered by per-room read access, trimmed to
- * `limit`, and returned ranked best-match-first.
+ * the caller's readable spaces (spaceId narrows the filter to one space;
+ * roomId narrows it to one room — a channel plus its threads, or a thread
+ * plus its parent channel). Results are over-fetched (limit×3), hydrated
+ * via selectMessages (`{ kind: "ids" }`), post-filtered by per-room read
+ * access, trimmed to `limit`, and returned ranked best-match-first.
+ *
+ * Scope precedence: roomId < spaceId < joined spaces. A caller-supplied
+ * spaceId must match the room's owning space (a mismatch is 404 — the room
+ * doesn't exist in that space). With roomId and no spaceId the caller's
+ * room read access alone decides (federated channels included).
  *
  * Supports cursor-based pagination via `limit` and `cursor` (an opaque
- * offset token). One code path serves both per-space and cross-space.
+ * offset token). One code path serves all three scopes.
  *
  * Reply context is denormalised: each hit that carries a `replyTo` gets a
  * `reply.message` (the fully hydrated replied-to message) attached when the
@@ -27,8 +33,9 @@
  * unavailable without the search service.
  */
 
-import { createAccessMemo, roomAccess } from "../auth/access.ts";
-import { openReadStateDb, openSpaceDb, openSpaceDbForEntity } from "../db/db.ts";
+import { createAccessMemo, resolveRoom, roomAccess } from "../auth/access.ts";
+import { federatedRoomAccess } from "../auth/federation.ts";
+import { openGlobalDb, openReadStateDb, openSpaceDb, openSpaceDbForEntity } from "../db/db.ts";
 import { hydrateUserMembership } from "../hydration/userHydration.ts";
 import { selectJoinedSpaceDids } from "../queries/userSpaceMembership.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
@@ -79,6 +86,7 @@ export const searchMessagesHandler: QueryHandler<
   SearchMessagesResult
 > = async (params: QueryParams, auth: AuthCtx) => {
   const userDid = parseUserDid(auth);
+  const roomId = optionalString(params, "roomId") ?? null;
   const spaceId = optionalString(params, "spaceId") ?? null;
   const q = requireString(params, "q");
   const limit = optionalInt(params, "limit", { min: 1, max: 100, default: 50 })!;
@@ -104,11 +112,75 @@ export const searchMessagesHandler: QueryHandler<
   if (userDid !== null) {
     await hydrateUserMembership(userDid);
   }
+
+  // Room-scoped search (roomId): resolve the room's owning space and the
+  // caller's read access up front, and derive the exact set of payload
+  // roomIds to search — a channel includes its linked threads, a thread
+  // includes its parent channel (both directions of the same conversation).
+  // Unlike the space/cross-space paths this never falls back to anonymous
+  // space reads: `requireSpaceRead` is only applied below when the roomId is
+  // scoping *inside* a caller-supplied spaceId. With no spaceId, room access
+  // alone decides (federated channels included).
+  let roomScope: { spaceDid: string; roomIds: string[] } | null = null;
+  if (roomId !== null) {
+    const db = await openSpaceDbForEntity(roomId);
+    if (!db) {
+      throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
+    }
+    const { row, parentChannelId } = await resolveRoom(db, roomId);
+    if (row === null || row.spaceId === null) {
+      throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
+    }
+    // A channel scope includes its linked threads, a thread scope includes
+    // its parent channel — one conversation, searchable from either side.
+    // Threads are linked to their channel via a canonical `link` edge.
+    const threadRows = await db
+      .query(
+        `select tail from edges
+          where head = ? and label = 'link'
+            and coalesce(json_extract(payload, '$.canonical_parent'), 0) = 1`,
+      )
+      .all<{ tail: string }>(roomId);
+    const threadIds = threadRows.map((r) => r.tail);
+    const memo = createAccessMemo();
+    const access = await roomAccess(db, roomId, userDid, memo);
+    if (!access.exists) {
+      throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
+    }
+    if (access.isBanned) {
+      throw new XrpcError(403, "Forbidden", "Caller is banned from this space");
+    }
+    if (!access.canRead) {
+      // Federation fallback (mirrors requireRoomRead): the caller may hold
+      // federated read access even though native access denies.
+      if (userDid === null) {
+        throw new XrpcError(403, "Forbidden", "Caller has no read access to this room");
+      }
+      const fed = await federatedRoomAccess(db, openGlobalDb(), roomId, userDid, {
+        spaceDbResolver: openSpaceDb,
+      });
+      if (!fed?.canRead) {
+        throw new XrpcError(403, "Forbidden", "Caller has no read access to this room");
+      }
+    }
+    roomScope = {
+      spaceDid: row.spaceId,
+      roomIds: [roomId, ...(parentChannelId !== null ? [parentChannelId] : []), ...threadIds],
+    };
+  }
+
   // Resolve the caller's readable space set. With spaceId the filter narrows
   // to that space (requireSpaceRead below enforces access); without it we
-  // filter to the spaces the caller has joined.
+  // filter to the spaces the caller has joined. A room scope needs no space
+  // filter beyond its own room set — Qdrant filters by roomId exactly, so
+  // the space filter is just the room's owning space (already read-gated).
   let spaceDids: string[];
-  if (spaceId !== null) {
+  if (roomScope !== null) {
+    spaceDids = [roomScope.spaceDid];
+    if (spaceId !== null && spaceId !== roomScope.spaceDid) {
+      throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
+    }
+  } else if (spaceId !== null) {
     spaceDids = [spaceId];
     await requireSpaceRead(openSpaceDb(spaceId), spaceId, userDid);
   } else if (userDid === null) {
@@ -116,9 +188,6 @@ export const searchMessagesHandler: QueryHandler<
     spaceDids = [];
   } else {
     spaceDids = await selectJoinedSpaceDids(openReadStateDb(), userDid);
-  }
-  if (spaceDids.length === 0) {
-    return { messages: [] };
   }
 
   const window = limit * OVERFETCH;
@@ -129,6 +198,7 @@ export const searchMessagesHandler: QueryHandler<
     hits = await searchMessages(client, {
       sparse,
       spaceDids,
+      ...(roomScope !== null ? { roomIds: roomScope.roomIds } : {}),
       // Fixed window: Qdrant's sparse search returns tied points in an
       // order that DEPENDS on the requested limit (limit=1 → [m2],
       // limit=3 → [m1,m3,m2] for identical vectors), so re-fetching with a
@@ -139,9 +209,6 @@ export const searchMessagesHandler: QueryHandler<
       limit: window,
     });
   } catch (err) {
-    // Surface the configured endpoint so a misconfigured QDRANT_URL is
-    // diagnosable from the response (Bun's "Unable to connect" is generic —
-    // it covers refused, TLS mismatch, and DNS failures alike).
     const config = getQdrant();
     const target = config ? `${config.url}${config.port !== undefined ? `:${config.port}` : ""}` : "unset";
     throw new XrpcError(

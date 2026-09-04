@@ -219,6 +219,13 @@ export interface SearchMessagesOptions {
   /** Space DIDs the caller can read; results are restricted to these. */
   spaceDids: string[];
   /**
+   * Narrow the search to these rooms (exact payload `roomId` values, e.g. a
+   * channel's id set including its threads). When set, results never leave
+   * this set; must be non-empty when provided. `spaceDids` may then be a
+   * singleton (the rooms' owning space) or the caller's readable space set.
+   */
+  roomIds?: string[];
+  /**
    * Window size to fetch. The handler over-fetches (limit×3) and slices by
    * cursor itself: Qdrant's sparse search returns points in an undefined
    * order among equal scores, so offset-based pagination can repeat points
@@ -239,18 +246,24 @@ export async function searchMessages(
   client: QdrantClientLike,
   opts: SearchMessagesOptions,
 ): Promise<QdrantHit[]> {
-  if (opts.spaceDids.length === 0) return [];
+  const conditions: Array<{ key: string; match: { any: string[] } }> = [
+    {
+      key: "spaceDid",
+      match: { any: [...opts.spaceDids] },
+    },
+  ];
+  if (opts.roomIds !== undefined) {
+    conditions.push({
+      key: "roomId",
+      match: { any: [...opts.roomIds] },
+    });
+  }
 
   const res = await client.query(MESSAGES_COLLECTION, {
     query: opts.sparse,
     using: BM25_VECTOR_NAME,
     filter: {
-      must: [
-        {
-          key: "spaceDid",
-          match: { any: [...opts.spaceDids] },
-        },
-      ],
+      must: conditions,
     },
     limit: opts.limit,
     with_payload: true,

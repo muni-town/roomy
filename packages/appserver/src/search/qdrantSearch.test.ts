@@ -95,16 +95,21 @@ class FakeQdrant implements QdrantClientLike {
     if (using !== BM25_VECTOR_NAME) throw new Error("wrong vector name");
 
     const spaceDids = new Set<string>();
+    const roomIds = new Set<string>();
     for (const cond of filter?.must ?? []) {
       if (cond.key === "spaceDid" && cond.match) {
         if (cond.match.any) for (const v of cond.match.any) spaceDids.add(v);
         if (cond.match.value) spaceDids.add(cond.match.value);
+      }
+      if (cond.key === "roomId" && cond.match?.any) {
+        for (const v of cond.match.any) roomIds.add(v);
       }
     }
 
     const scored: Array<{ id: string; score: number; payload: Record<string, unknown> }> = [];
     for (const p of this.points) {
       if (spaceDids.size > 0 && !spaceDids.has(p.payload.spaceDid as string)) continue;
+      if (roomIds.size > 0 && !roomIds.has(p.payload.roomId as string)) continue;
       const doc = p.vector[using];
       if (!doc) continue;
       // Dot product of shared indices (query and doc), like Qdrant sparse.
@@ -300,5 +305,34 @@ describe("searchMessages", () => {
     // Distinct ids — a single window never repeats a point (offset-based
     // pagination can, on tied scores).
     expect(new Set(hits.map((h) => h.messageId)).size).toBe(3);
+  });
+
+  test("filters by roomIds payload when provided", async () => {
+    const fake = new FakeQdrant();
+    fake.exists = true;
+    // Two rooms in the same space, one message each.
+    await upsertMessage(fake, "01M1", FOX, {
+      spaceDid: SpaceRef,
+      roomId: "01RROOMA",
+      threadId: null,
+      authorDid: "did:plc:a",
+      timestamp: "2026-01-01T00:00:00.000Z",
+    });
+    await upsertMessage(fake, "01M2", FOX, {
+      spaceDid: SpaceRef,
+      roomId: "01RROOMB",
+      threadId: null,
+      authorDid: "did:plc:b",
+      timestamp: "2026-01-02T00:00:00.000Z",
+    });
+
+    const hits = await searchMessages(fake, {
+      sparse: FOX,
+      spaceDids: [SpaceRef],
+      roomIds: ["01RROOMA"],
+      limit: 10,
+    });
+    expect(hits.map((h) => h.messageId)).toEqual(["01M1"]);
+    expect(hits.every((h) => h.payload.roomId === "01RROOMA")).toBe(true);
   });
 });

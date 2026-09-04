@@ -96,9 +96,13 @@ class FakeQdrant implements QdrantClientLike {
     if (using !== "bm25") throw new Error("wrong vector name");
 
     const spaceDids = new Set<string>();
+    const roomIds = new Set<string>();
     for (const cond of filter?.must ?? []) {
       if (cond.key === "spaceDid" && cond.match?.any) {
         for (const v of cond.match.any) spaceDids.add(v);
+      }
+      if (cond.key === "roomId" && cond.match?.any) {
+        for (const v of cond.match.any) roomIds.add(v);
       }
     }
 
@@ -109,6 +113,7 @@ class FakeQdrant implements QdrantClientLike {
     }
     for (const p of this.points) {
       if (spaceDids.size > 0 && !spaceDids.has(p.payload.spaceDid as string)) continue;
+      if (roomIds.size > 0 && !roomIds.has(p.payload.roomId as string)) continue;
       const doc = p.vector[using];
       if (!doc) continue;
       let score = 0;
@@ -240,6 +245,38 @@ async function sendRoom(ctx: E2eContext, name: string): Promise<string> {
     throw new Error(`createRoom failed ${res.status}: ${await res.text()}`);
   }
   return roomId;
+}
+
+async function sendThread(ctx: E2eContext, parentChannelId: string): Promise<string> {
+  const threadId = newUlid();
+  const res = await ctx.authedFetch(USER)(
+    `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        spaceId: SPACE,
+        events: [
+          {
+            id: threadId,
+            $type: "space.roomy.room.createRoom.v0",
+            kind: "space.roomy.thread",
+            name: "thread",
+          },
+          {
+            id: newUlid(),
+            $type: "space.roomy.link.createRoomLink.v0",
+            room: parentChannelId,
+            linkToRoom: threadId,
+            isCreationLink: true,
+          },
+        ],
+      }),
+    },
+  );
+  if (res.status !== 200) {
+    throw new Error(`sendThread failed ${res.status}: ${await res.text()}`);
+  }
+  return threadId;
 }
 
 async function newAppWithQdrant(): Promise<{ ctx: E2eContext; fake: FakeQdrant }> {
@@ -498,6 +535,104 @@ describe("space.roomy.search.messages (Qdrant)", () => {
     for (const m of originalBody.messages) {
       expect(m.reply).toBeUndefined();
     }
+  });
+
+  test("room scope (roomId) searches one channel and its linked threads", async () => {
+    const { ctx } = await newAppWithQdrant();
+    const { roomId: general } = await materializeSpace(ctx, SPACE, USER, {
+      messageText: "shared pineapple base",
+    });
+    const otherChannel = await sendRoom(ctx, "other");
+    await sendMessage(ctx, otherChannel, "shared pineapple variant");
+
+    // A thread linked into the channel: searching the channel must include
+    // both the direct hit and the thread hit.
+    const thread = await sendThread(ctx, general);
+    await sendMessage(ctx, thread, "shared pineapple thread post");
+
+    // Search the channel by id — the thread's message is in it too.
+    const res = await get(ctx, `space.roomy.search.messages?spaceId=${SPACE}&roomId=${general}&q=shared`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const roomIds = new Set((body.messages as Array<{ roomId: string }>).map((m) => m.roomId));
+    expect(roomIds.has(general)).toBe(true);
+    expect(roomIds.has(thread)).toBe(true);
+    // The other channel's message is never a hit under this room scope.
+    for (const m of body.messages as Array<{ roomId: string }>) {
+      expect(m.roomId).not.toBe(otherChannel);
+    }
+
+    // Searching the linked thread by id finds the channel's message too.
+    const threadRes = await get(ctx, `space.roomy.search.messages?roomId=${thread}&q=shared`);
+    expect(threadRes.status).toBe(200);
+    const threadBody = await threadRes.json();
+    const threadRoomIds = new Set((threadBody.messages as Array<{ roomId: string }>).map((m) => m.roomId));
+    expect(threadRoomIds.has(general)).toBe(true);
+    expect(threadRoomIds.has(thread)).toBe(true);
+    for (const m of threadBody.messages as Array<{ roomId: string }>) {
+      expect(m.roomId).not.toBe(otherChannel);
+    }
+
+    // Every room-scoped hit carries the owning space.
+    for (const m of threadBody.messages as Array<{ spaceId: string }>) {
+      expect(m.spaceId).toBe(SPACE);
+    }
+  });
+
+  test("room scope enforces read access for non-members", async () => {
+    const { ctx } = await newAppWithQdrant();
+    const { roomId } = await materializeSpace(ctx, SPACE, USER, {
+      messageText: "open forum discussion",
+    });
+
+    const secretRoom = await sendRoom(ctx, "secret");
+    await sendMessage(ctx, secretRoom, "secret pineapple recipe");
+    await spaceDb(ctx.db, SPACE).run(
+      "update comp_room set default_access = 'none' where entity = ?",
+      [secretRoom],
+    );
+
+    // The seeded public-join visitor can search the open room…
+    const openRes = await ctx.authedFetch(VISITOR)(
+      `${ctx.baseUrl}/xrpc/space.roomy.search.messages?roomId=${roomId}&q=forum`,
+    );
+    expect(openRes.status).toBe(200);
+    const openBody = await openRes.json();
+    expect(openBody.messages.length).toBeGreaterThanOrEqual(1);
+
+    // …but the restricted room is a 403 for the same visitor.
+    const secretRes = await ctx.authedFetch(VISITOR)(
+      `${ctx.baseUrl}/xrpc/space.roomy.search.messages?roomId=${secretRoom}&q=pineapple`,
+    );
+    expect(secretRes.status).toBe(403);
+
+    // Admin still searches the restricted room.
+    const adminRes = await get(ctx, `space.roomy.search.messages?roomId=${secretRoom}&q=pineapple`);
+    expect(adminRes.status).toBe(200);
+    const adminBody = await adminRes.json();
+    expect(adminBody.messages.some((m: { content: string }) => m.content.includes("secret"))).toBe(true);
+  });
+
+  test("room scope with a mismatched spaceId is a 404", async () => {
+    const { ctx } = await newAppWithQdrant();
+    const { roomId } = await materializeSpace(ctx, SPACE, USER, {
+      messageText: "the quick brown fox",
+    });
+
+    const OTHER = "did:web:other-space.example";
+    const res = await get(
+      ctx,
+      `space.roomy.search.messages?spaceId=${OTHER}&roomId=${roomId}&q=brown`,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("room scope for an unknown room is a 404", async () => {
+    const { ctx } = await newAppWithQdrant();
+    await materializeSpace(ctx, SPACE, USER, { messageText: "the quick brown fox" });
+
+    const res = await get(ctx, `space.roomy.search.messages?roomId=01ZZZZZZZZZZZZZZZZZZZZZZZZ&q=brown`);
+    expect(res.status).toBe(404);
   });
 });
 
