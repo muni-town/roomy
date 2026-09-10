@@ -78,9 +78,9 @@
           { text: "members area", bold: true },
           { text: " with chat-based staff support" },
         ],
-        [{ text: "Early access to new features" }],
+        [{ text: "Help us survive as an open source community chat app!" }],
       ],
-      price: { old: "$60", current: "$30", per: "/month" },
+      price: { old: "$60", current: "$30", per: "/month", badge: "Introductory pricing" },
     },
     {
       name: "Custom",
@@ -100,7 +100,7 @@
     },
     {
       q: "What does Roomy Pro include?",
-      a: "Pro lets you bridge one Discord guild of up to 1000 members, unlocks the members area with chat-based staff support, and gives you early access to new features. It's $30/month (was $60).",
+      a: "Pro lets you bridge one Discord guild of up to 1000 members, unlocks the members area with chat-based staff support, and helps us survive as an open source community chat app. It's $30/month at introductory pricing.",
     },
     {
       q: "What if my community is bigger than 1000 members?",

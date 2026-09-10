@@ -6,7 +6,7 @@
   type Tier = {
     name: string;
     features: FeaturePart[][];
-    price?: { old: string; current: string; per: string };
+    price?: { old: string; current: string; per: string; badge?: string };
     cta?: { label: string; href: string };
   };
 
@@ -34,9 +34,9 @@
             { text: "members area", bold: true },
             { text: " with chat-based staff support" },
           ],
-          [{ text: "Early access to new features" }],
+          [{ text: "Help us survive as an open source community chat app!" }],
         ],
-        price: { old: "$60", current: "$30", per: "/month" },
+        price: { old: "$60", current: "$30", per: "/month", badge: "Introductory pricing" },
       },
       {
         name: "Custom",
@@ -55,6 +55,11 @@
     activeTier?: string;
     tiers?: Tier[];
   } = $props();
+
+  // Group hover: while a card is hovered it takes over the "selected" look
+  // (accent ring) and the active tier's ring is suppressed. The "Your plan"
+  // badge stays on the real active tier.
+  let hoveredTier = $state<string | null>(null);
 </script>
 
 <div class="pricing">
@@ -62,12 +67,17 @@
     {heading}
   </h2>
   <p class="intro text-base-600 dark:text-base-400 text-center mx-auto mt-3 max-w-xl">
-    {intro}
   </p>
 
   <div class="cards mt-10">
     {#each tiers as tier (tier.name)}
-      <article class="card" class:active={tier.name === activeTier}>
+      <article
+        class="card"
+        class:active={tier.name === activeTier}
+        class:hovered={tier.name === hoveredTier}
+        onmouseenter={() => (hoveredTier = tier.name)}
+        onmouseleave={() => (hoveredTier = null)}
+      >
         {#if tier.name === activeTier}
           <span
             class="self-center mb-4 px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-accent-400/20 text-accent-700 dark:text-accent-300"
@@ -91,13 +101,16 @@
           {/each}
         </ul>
         {#if tier.price}
-          <p class="price text-center mt-auto mb-6">
+          <p class="price text-center mt-auto mb-2">
             <del class="text-base-400 dark:text-base-500 mr-2">{tier.price.old}</del>
             <strong class="text-2xl font-bold text-base-900 dark:text-base-50">
               {tier.price.current}
             </strong>
             <span class="text-base-500 dark:text-base-400">{tier.price.per}</span>
           </p>
+          {#if tier.price.badge}
+            <span class="price-badge">{tier.price.badge}</span>
+          {/if}
         {/if}
         {#if tier.cta && tier.name !== activeTier}
           <Button href={tier.cta.href} variant="primary" class="cta no-underline">
@@ -146,21 +159,54 @@
     text-align: center;
     display: flex;
     flex-direction: column;
+    /* Shadow-lift: resting slightly lowered, lifting on hover with a hard
+       offset shadow underneath. Bigger than the shared `shadow-lift`
+       utility (4px vs 2px) so the pricing cards read as more tactile. */
+    translate: 0 2px;
+    outline: 1px solid transparent;
+    transition:
+      translate 0.075s ease-in,
+      box-shadow 0.075s ease-in,
+      border-color 0.15s ease,
+      outline-color 0.15s ease;
   }
 
-  .dark .card {
+  .card:hover {
+    translate: 0 0;
+    box-shadow: 0 4px 0 0 var(--color-base-300);
+  }
+
+  :global(.dark) .card:hover {
+    box-shadow: 0 4px 0 0 var(--color-base-800);
+  }
+
+  :global(.dark) .card {
     background: var(--color-base-900);
     border-color: var(--color-base-800);
   }
 
-  .card.active {
+  .card.active,
+  .card.hovered {
     border-color: var(--color-accent-400);
-    box-shadow: 0 0 0 1px var(--color-accent-400);
+    outline-color: var(--color-accent-400);
   }
 
-  .dark .card.active {
+  :global(.dark) .card.active,
+  :global(.dark) .card.hovered {
     border-color: var(--color-accent-500);
-    box-shadow: 0 0 0 1px var(--color-accent-500);
+    outline-color: var(--color-accent-500);
+  }
+
+  /* Group hover: hovering any card takes over the selected look. The
+     active tier keeps a lighter, lower-contrast accent border so it still
+     reads as the user's plan, and its ring fades out. */
+  .cards:hover .card.active:not(:hover) {
+    border-color: color-mix(in oklab, var(--color-accent-400) 35%, var(--color-base-200));
+    outline-color: transparent;
+  }
+
+  :global(.dark) .cards:hover .card.active:not(:hover) {
+    border-color: color-mix(in oklab, var(--color-accent-500) 35%, var(--color-base-800));
   }
 
   @media (width >= 768px) {
@@ -189,5 +235,23 @@
   .card :global(.cta) {
     margin-top: auto;
     align-self: center;
+  }
+  .price-badge {
+    display: block;
+    width: fit-content;
+    margin: 0 auto 1.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: color-mix(in oklab, var(--color-accent-400) 15%, transparent);
+    color: var(--color-accent-700);
+  }
+
+  :global(.dark) .price-badge {
+    background: color-mix(in oklab, var(--color-accent-500) 20%, transparent);
+    color: var(--color-accent-300);
   }
 </style>
