@@ -765,6 +765,11 @@ export const prose: Record<string, EndpointProse> = {
       "Clears a feature flag entirely (removes all state).",
     auth: "Admin allowlist (APPSERVER_ADMIN_DIDS).",
   },
+  "space.roomy.admin.resetSearchBackfill": {
+    description:
+      "Clears every search_backfill_cursor row so the Qdrant backfill sweeper re-indexes the full corpus from the beginning. Idempotent (point ids are deterministic UUIDv5). Use after a Qdrant outage that skipped messages; the sweeper picks up the reset on its next cycle — no restart needed.",
+    auth: "Admin allowlist (APPSERVER_ADMIN_DIDS).",
+  },
   "space.roomy.admin.push.getSubscriptions": {
     description:
       "Lists all push subscriptions for diagnostic purposes.",

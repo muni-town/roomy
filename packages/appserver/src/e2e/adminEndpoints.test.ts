@@ -13,12 +13,22 @@ import {
   type E2eContext,
 } from "./helpers.ts";
 import { _setAdminDids } from "../admin.ts";
+import { flushSearchQueue } from "../search/indexer.ts";
 
 const USER = "did:plc:e2e-user";
 const ADMIN = "did:plc:e2e-admin";
 const SPACE = "did:web:space-e2e.example";
 
 _setAdminDids([ADMIN]);
+
+/** Typed handle to the e2e appserver's routed global DB. */
+interface GlobalDbHandle {
+  query(sql: string): { get<T>(...p: unknown[]): Promise<T | null> };
+  run(sql: string, ...p: unknown[]): Promise<{ changes: number }>;
+}
+function globalDbOf(ctx: E2eContext): GlobalDbHandle {
+  return (ctx.db as unknown as { global(): GlobalDbHandle }).global();
+}
 
 describe("space.roomy.admin.connectSpace", () => {
   test("returns the materialized space's rooms", async () => {
@@ -95,5 +105,42 @@ describe("space.roomy.admin.getFlags / setFlag / clearFlag", () => {
       { method: "POST", body: JSON.stringify({ flag: "channel-federation", all: true }) },
     );
     expect(clear.status).toBe(200);
+  });
+});
+
+describe("space.roomy.admin.resetSearchBackfill", () => {
+  test("clears every search_backfill_cursor row", async () => {
+    const ctx = await startAppserver();
+    await materializeSpace(ctx, SPACE, USER, { messageText: "the quick brown fox" });
+    await flushSearchQueue();
+
+    // Seed a cursor row (as the backfill sweeper would after a cycle).
+    const globalDb = globalDbOf(ctx);
+    await globalDb.run(
+      "insert into search_backfill_cursor (space_did, cursor, updated_at) values (?, ?, ?)",
+      [SPACE, "01CURSOR000000000000000000", Date.now()],
+    );
+
+    const res = await ctx.authedFetch(ADMIN)(
+      `${ctx.baseUrl}/xrpc/space.roomy.admin.resetSearchBackfill`,
+      { method: "POST", body: "{}" },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.cleared).toBe(1);
+
+    const remaining = await globalDb
+      .query("select count(*) as n from search_backfill_cursor")
+      .get<{ n: number }>();
+    expect(remaining?.n).toBe(0);
+  });
+
+  test("anonymous → 403", async () => {
+    const ctx = await startAppserver();
+    const res = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.admin.resetSearchBackfill`,
+      { method: "POST", body: "{}" },
+    );
+    expect(res.status).toBe(403);
   });
 });

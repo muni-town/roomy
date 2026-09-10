@@ -44,6 +44,8 @@ let dbBackoffUntil = 0;
 
 // ─── Stats (for /health/search) ─────────────────────────────────────────
 let statsBackfilled = 0;
+/** Upserts that failed (e.g. Qdrant 507) — surfaced on /health/search. */
+let statsFailed = 0;
 /** Message of the most recent sweep error (null when none). */
 let statsLastError: string | null = null;
 
@@ -92,6 +94,7 @@ export async function stopSearchBackfill(): Promise<void> {
 /** Snapshot of sweeper state for the `/health/search` endpoint. */
 export function searchBackfillStats(): {
   backfilled: number;
+  failed: number;
   dbBackoffActive: boolean;
   /** Consecutive DB/Qdrant errors (escalates backoff). */
   errorCount: number;
@@ -100,6 +103,7 @@ export function searchBackfillStats(): {
 } {
   return {
     backfilled: statsBackfilled,
+    failed: statsFailed,
     dbBackoffActive: Date.now() < dbBackoffUntil,
     errorCount: dbErrorCount,
     lastError: statsLastError,
@@ -109,6 +113,7 @@ export function searchBackfillStats(): {
 /** Reset stats (tests only. Does not stop a running loop). */
 export function _resetSearchBackfill(): void {
   statsBackfilled = 0;
+  statsFailed = 0;
   dbErrorCount = 0;
   dbBackoffUntil = 0;
   statsLastError = null;
@@ -190,9 +195,20 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
     }>([spaceDid, cursor, cursor, SWEEP_BATCH]);
 
   let indexedCount = 0;
+  let failedCount = 0;
+  /** Id of the last row in the leading run of non-failed rows (indexed or
+   *  no indexable text). Once a row fails, the cursor must not advance past
+   *  it — so this stops updating at the first failure. */
+  let lastOkId: string | null = null;
+  let batchFailed = false;
   for (const row of rows) {
     const text = extractMessageText(row.mime_type, row.data);
-    if (text === "") continue;
+    if (text === "") {
+      // Nothing to index — the cursor may advance past it (unless a row
+      // before it already failed).
+      if (!batchFailed) lastOkId = row.id;
+      continue;
+    }
     try {
       const sparse = encodeSparse(text);
       const threadId = await resolveThreadId(spaceDb, row.room);
@@ -206,17 +222,30 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
           : new Date().toISOString(),
       });
       indexedCount++;
+      if (!batchFailed) lastOkId = row.id;
     } catch (err) {
+      failedCount++;
+      batchFailed = true;
       log.warn(`[search-backfill] upsert failed for ${row.id}:`, err);
     }
   }
 
   if (indexedCount > 0) statsBackfilled += indexedCount;
+  if (failedCount > 0) statsFailed += failedCount;
   if (indexedCount > 0 || rows.length > 0) markDbOk();
 
-  if (rows.length > 0) {
-    const lastId = rows[rows.length - 1]!.id;
-    await setCursor(globalDb, spaceDid, lastId);
+  if (lastOkId !== null) {
+    // Advance only past the last non-failed row. A failed upsert (e.g. a
+    // Qdrant 507) keeps the cursor before it, so the next cycle retries it
+    // instead of skipping it forever (the pre-fix behaviour skipped every
+    // failed batch — 1,758 messages lost in the Sep 2026 507 incident).
+    await setCursor(globalDb, spaceDid, lastOkId);
+  } else if (rows.length > 0) {
+    // Every sweepable row failed. Do NOT advance the cursor — retry the
+    // same batch next cycle. Stamp `updated_at` so the space still rotates
+    // in the round-robin (a stuck space must not starve the others while
+    // Qdrant is down).
+    await setCursor(globalDb, spaceDid, cursor ?? "");
   } else {
     // No sweepable rows (e.g. a space with entity_space entries but no
     // messages). Without a cursor this space sorts first in
@@ -241,6 +270,7 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
     cursor: cursor ?? "",
     rows: rows.length,
     indexed: indexedCount,
+    failed: failedCount,
     backfilled: statsBackfilled,
     errorCount: dbErrorCount,
     dbBackoffActive: Date.now() < dbBackoffUntil,

@@ -38,6 +38,7 @@ import { adminGetPushStatsHandler } from "./handlers/space.roomy.admin.push.getS
 import { adminGetDashboardStatsHandler } from "./handlers/space.roomy.admin.getDashboardStats.ts";
 import { adminListSpacesHandler } from "./handlers/space.roomy.admin.listSpaces.ts";
 import { adminTestSendHandler } from "./handlers/space.roomy.admin.push.testSend.ts";
+import { adminResetSearchBackfillHandler } from "./handlers/space.roomy.admin.resetSearchBackfill.ts";
 import { getSpacesHandler } from "./handlers/space.roomy.space.getSpaces.ts";
 import { getMembersHandler } from "./handlers/space.roomy.space.getMembers.ts";
 import { getMetadataHandler } from "./handlers/space.roomy.space.getMetadata.ts";
@@ -261,6 +262,9 @@ export function buildRouter(
     })
     .query("space.roomy.admin.getDashboardStats", {
       handler: adminGetDashboardStatsHandler,
+    })
+    .procedure("space.roomy.admin.resetSearchBackfill", {
+      handler: adminResetSearchBackfillHandler,
     })
     .query("space.roomy.admin.listSpaces", {
       handler: adminListSpacesHandler,

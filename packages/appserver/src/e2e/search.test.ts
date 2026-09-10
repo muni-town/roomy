@@ -143,6 +143,46 @@ class FakeQdrant implements QdrantClientLike {
 
 // ─── Fixture helpers ─────────────────────────────────────────────────────
 
+/** FakeQdrant that fails every upsert (simulates a Qdrant 507 outage). */
+class FailingQdrant extends FakeQdrant {
+  async upsert(_name: string, _args: unknown): Promise<unknown> {
+    throw new Error("Insufficient Storage");
+  }
+}
+
+/**
+ * FakeQdrant that fails upserts of one specific message id. Deterministic
+ * under concurrent sweep cycles (unlike a call counter, which the
+ * background loop and an explicit sweepCycle would race on).
+ */
+class FailOnMessageId extends FakeQdrant {
+  constructor(private readonly failMessageId: string) {
+    super();
+  }
+  async upsert(name: string, args: unknown): Promise<unknown> {
+    const { points } = args as {
+      points: Array<{ payload: { messageId?: unknown } }>;
+    };
+    if (points.some((p) => p.payload.messageId === this.failMessageId)) {
+      throw new Error("Insufficient Storage");
+    }
+    return super.upsert(name, args);
+  }
+}
+
+/**
+ * Typed handle to the e2e appserver's global DB. `ctx.db` is a routed
+ * PooledDatabase typed as `Database`; the routed `global()` handle is what
+ * the backfill sweeper reads/writes `search_backfill_cursor` through.
+ */
+interface GlobalDbHandle {
+  query(sql: string): { get<T>(...p: unknown[]): Promise<T | null> };
+  run(sql: string, ...p: unknown[]): Promise<{ changes: number }>;
+}
+function globalDbOf(ctx: E2eContext): GlobalDbHandle {
+  return (ctx.db as unknown as { global(): GlobalDbHandle }).global();
+}
+
 async function sendMessage(
   ctx: E2eContext,
   roomId: string,
@@ -677,6 +717,82 @@ describe("backfill sweeper (Qdrant)", () => {
     }
 
     expect(searchBackfillStats().backfilled).toBeGreaterThan(0);
+  });
+
+  test("a fully-failed batch does not advance the cursor (retried next cycle)", async () => {
+    const { ctx } = await newAppWithQdrant();
+    await materializeSpace(ctx, SPACE, USER, { messageText: "the quick brown fox jumps" });
+    await flushSearchQueue();
+
+    // Simulate a Qdrant outage: every upsert fails (507).
+    _setQdrantClientForTest(new FailingQdrant());
+
+    const globalDb = globalDbOf(ctx);
+    _resetSearchBackfill();
+    startSearchBackfill({ globalDb: globalDb as never });
+    try {
+      await sweepCycle(globalDb as never);
+      // Second cycle must retry the SAME batch (cursor did not advance).
+      await sweepCycle(globalDb as never);
+    } finally {
+      await stopSearchBackfill();
+    }
+
+    // The cursor must not have advanced past the failed rows: it is either
+    // absent or the "" sentinel (retry from the beginning).
+    const cursorRow = await globalDb
+      .query("select cursor from search_backfill_cursor where space_did = ?")
+      .get<{ cursor: string }>(SPACE);
+    expect(cursorRow?.cursor ?? "").toBe("");
+    // Both cycles failed every upsert.
+    expect(searchBackfillStats().failed).toBeGreaterThanOrEqual(2);
+    expect(searchBackfillStats().backfilled).toBe(0);
+  });
+
+  test("cursor advances only past the last successful upsert in a batch", async () => {
+    const { ctx } = await newAppWithQdrant();
+    const { roomId, messageId: m1 } = await materializeSpace(ctx, SPACE, USER, {
+      messageText: "alpha first message",
+    });
+    const m2 = await sendMessage(ctx, roomId, "beta second message");
+    const m3 = await sendMessage(ctx, roomId, "gamma third message");
+    await flushSearchQueue();
+
+    // Fail the sweep's upsert of m2 (the middle message) — m1 and m3 succeed.
+    // Use a FRESH fake: the live indexer already upserted m1/m2/m3 into the
+    // original one via flushSearchQueue, so only the sweep's upserts may be
+    // counted here.
+    const sweepFake = new FailOnMessageId(m2);
+    _setQdrantClientForTest(sweepFake);
+
+    const globalDb = globalDbOf(ctx);
+    _resetSearchBackfill();
+    startSearchBackfill({ globalDb: globalDb as never });
+    try {
+      await sweepCycle(globalDb as never);
+    } finally {
+      await stopSearchBackfill();
+    }
+
+    // Rows are processed in ULID order (m1 < m2 < m3). The cursor must sit
+    // at m1 — the last row before the failure — so m2 is retried next cycle.
+    const cursorRow = await globalDb
+      .query("select cursor from search_backfill_cursor where space_did = ?")
+      .get<{ cursor: string }>(SPACE);
+    expect(cursorRow?.cursor).toBe(m1);
+    // The background loop (started at appserver boot) may also have swept a
+    // cycle, so m2 can fail more than once and the global `backfilled`
+    // counter is not deterministic. The contract is: m2 failed at least
+    // once and was NEVER indexed; m1 and m3 were.
+    expect(searchBackfillStats().failed).toBeGreaterThanOrEqual(1);
+    const indexedIds = new Set(
+      sweepFake.points.map((p) => p.payload.messageId as string),
+    );
+    expect(indexedIds.has(m1)).toBe(true);
+    expect(indexedIds.has(m3)).toBe(true);
+    expect(indexedIds.has(m2)).toBe(false);
+    expect(m2).not.toBe(m1);
+    expect(m3).not.toBe(m1);
   });
 
   test("sweep cycles emit structured progress telemetry", async () => {

@@ -25,6 +25,7 @@
     permission: "read" | "readwrite";
   };
 
+
   let {
     spaceId,
     roomId = undefined,
