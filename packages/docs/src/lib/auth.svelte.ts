@@ -35,6 +35,15 @@ export const auth = {
   get authError() {
     return authError;
   },
+  /**
+   * Whether the signed-in DID is on the docs site's admin allowlist
+   * (PUBLIC_APPSERVER_ADMIN_DIDS). UI-only: it drives nav visibility and
+   * badges, never a security boundary. The appserver enforces real
+   * authorization via its own APPSERVER_ADMIN_DIDS allowlist.
+   */
+  get isAdmin() {
+    return authenticated && session !== null && ADMIN_DIDS.has(session.did);
+  },
 };
 
 export async function init() {
@@ -49,15 +58,11 @@ export async function init() {
       usePublicClient: CONFIG.usePublicClient,
     });
     if (res) {
-      const did = res.session.did;
-      if (ADMIN_DIDS.has(did)) {
-        session = res.session;
-        agent = res.agent;
-        authenticated = true;
-      } else {
-        authError = `DID ${did} is not on the admin allowlist`;
-        await sdkLogout(res.session);
-      }
+      // Anyone with a valid ATProto identity can use the docs site. Admin
+      // endpoints simply 403 for non-admins (enforced by the appserver).
+      session = res.session;
+      agent = res.agent;
+      authenticated = true;
     }
   } catch (err) {
     initError = String(err);

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# wt-run-admin — Spin up a dev server for an appserver-admin worktree.
+# wt-run-admin — Spin up a dev server for a docs worktree.
 #
 # Usage: wt-run-admin --port <port>
 #
@@ -44,6 +44,6 @@ docker run -d \
   -e "VITE_PORT=$PORT" \
   --network bridge \
   node:22 \
-  bash -c "cd /app/packages/appserver-admin && npm i -g pnpm && npx vite dev --host 0.0.0.0 --port $PORT"
+  bash -c "cd /app/packages/docs && npm i -g pnpm && npx vite dev --host 0.0.0.0 --port $PORT"
 echo "✔ Dev server started (http://localhost:$PORT)"
 echo "To stop: docker rm -f $DEV_NAME"

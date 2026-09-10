@@ -1,6 +1,7 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import Icons from "unplugin-icons/vite";
+import { FileSystemIconLoader } from "unplugin-icons/loaders";
 import { defineConfig } from "vite";
 
 export default defineConfig({
@@ -9,6 +10,9 @@ export default defineConfig({
     tailwindcss(),
     Icons({
       compiler: "svelte",
+      customCollections: {
+        custom: FileSystemIconLoader("../design/static/icons"),
+      },
     }),
   ],
   server: {

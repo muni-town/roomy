@@ -383,22 +383,10 @@
 <div class="mx-auto max-w-[960px] px-4 py-8 text-base-800 dark:text-base-200">
   {#if auth.initError}
     <pre class="text-red-800 bg-red-50 p-3 rounded-2xl text-sm whitespace-pre-wrap">{auth.initError}</pre>
-  {:else if auth.authError}
-    <div class="max-w-md mx-auto text-center py-16">
-      <h1 class="text-2xl font-bold mb-2">Access Denied</h1>
-      <p class="text-red-600 dark:text-red-400 mb-4">{auth.authError}</p>
-      <p class="text-sm text-base-500 mb-4">Only DIDs on the admin allowlist can access this dashboard.</p>
-      <Button onclick={handleLogout}>Sign out</Button>
-    </div>
   {:else if !auth.authenticated}
     <div class="max-w-md mx-auto text-center py-16">
-      <h1 class="text-2xl font-bold mb-1">Appserver Admin</h1>
-      <p class="text-base-500 dark:text-base-400 mb-4">Sign in with your ATProto handle</p>
-
-      <div class="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 text-sm mb-4 text-left">
-        <p class="font-medium mb-1">Access control</p>
-        <p>Only DIDs listed in <code class="bg-base-200/50 dark:bg-base-800/50 px-1 rounded">PUBLIC_APPSERVER_ADMIN_DIDS</code> can access this dashboard.</p>
-      </div>
+      <h1 class="text-2xl font-bold mb-1">XRPC Playground</h1>
+      <p class="text-base-500 dark:text-base-400 mb-4">Sign in with your ATProto handle to try the API</p>
 
       <label for="handle" class="block mb-1 font-medium text-sm text-left">ATProto handle</label>
       <Input id="handle" placeholder="user.bsky.social" bind:value={handle} />
@@ -565,7 +553,8 @@
       </details>
     </section>
 
-    <!-- ─── Push Diagnostics ─────────────────────────────────────────────── -->
+    <!-- ─── Push Diagnostics (admin only) ────────────────────────────────── -->
+    {#if auth.isAdmin}
     <section class="mb-6">
       <details>
         <summary class="text-lg font-semibold cursor-pointer mb-3">Push Diagnostics</summary>
@@ -677,8 +666,10 @@
         </div>
       </details>
     </section>
+    {/if}
 
-    <!-- ─── Feature Flags ──────────────────────────────────────────────── -->
+    <!-- ─── Feature Flags (admin only) ─────────────────────────────────── -->
+    {#if auth.isAdmin}
     <section class="mb-6">
       <details>
         <summary class="text-lg font-semibold cursor-pointer mb-3">Feature Flags</summary>
@@ -720,8 +711,9 @@
               </div>
 
               <div>
-                <label class="block text-xs mb-1">Assigned DIDs (one per line)</label>
+                <label for="flag-dids-{flag.key}" class="block text-xs mb-1">Assigned DIDs (one per line)</label>
                 <textarea
+                  id="flag-dids-{flag.key}"
                   class="w-full text-sm p-2 border border-base-200 dark:border-base-800 rounded-xl bg-white dark:bg-base-900/50 text-base-800 dark:text-base-200 font-mono"
                   rows="3"
                   placeholder="did:plc:abc..."
@@ -740,5 +732,6 @@
         {/if}
       </details>
     </section>
+    {/if}
   {/if}
 </div>

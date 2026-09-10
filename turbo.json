@@ -31,15 +31,6 @@
         "./dist/**"
       ]
     },
-    "build-appserver-admin": {
-      "dependsOn": [
-        "^build-appserver-admin",
-        "build-lib"
-      ],
-      "outputs": [
-        "./build/**"
-      ]
-    },
     "build-cli": {
       "dependsOn": [
         "^build-lib",
@@ -51,7 +42,8 @@
     },
     "build-docs": {
       "dependsOn": [
-        "^build-docs"
+        "^build-docs",
+        "build-lib"
       ],
       "outputs": [
         "./build/**"

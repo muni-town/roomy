@@ -117,6 +117,39 @@ export async function callRoomQuery(agent: Agent, nsid: string, roomId: string) 
   return res.data;
 }
 
+// ── Generic endpoint caller (used by the endpoint "Try it" panel) ─────────
+// Calls any registered endpoint with string params (queries) and/or a JSON
+// body (procedures). Untyped — the endpoint catalogue drives the form.
+
+export interface CallEndpointResult {
+  data: unknown;
+  /** HTTP status when available (0 for network errors). */
+  status: number;
+  /** Wall-clock duration of the call in ms. */
+  durationMs: number;
+}
+
+export async function callEndpoint(
+  agent: Agent,
+  nsid: string,
+  params: Record<string, string> = {},
+  body?: Record<string, unknown>,
+): Promise<CallEndpointResult> {
+  const c = await getClient(agent);
+  const started = performance.now();
+  try {
+    const res = await c.call(nsid, params, body);
+    return { data: res.data, status: 200, durationMs: performance.now() - started };
+  } catch (err: unknown) {
+    const status =
+      typeof err === "object" && err !== null && "status" in err && typeof err.status === "number"
+        ? err.status
+        : 0;
+    const durationMs = performance.now() - started;
+    throw Object.assign(err as Error, { _status: status, _durationMs: durationMs });
+  }
+}
+
 // ── Feature flag helpers (untyped, admin-only) ──────────────────────────
 
 export async function callGetFlags(agent: Agent) {

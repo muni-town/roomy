@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Endpoint } from "$lib/endpoints/registry";
+  import TryIt from "./TryIt.svelte";
 
   let { endpoint }: { endpoint: Endpoint } = $props();
 </script>
@@ -32,8 +33,8 @@
   <table>
     <tbody>
       <tr>
-        <th class="w-40">Source File</th>
-        <td><code>src/handlers/{endpoint.sourceFile}</code></td>
+        <th class="w-40">Group</th>
+        <td>{endpoint.group}</td>
       </tr>
       <tr>
         <th>Authorization</th>
@@ -132,3 +133,5 @@
     </ul>
   {/if}
 </div>
+
+<TryIt {endpoint} />

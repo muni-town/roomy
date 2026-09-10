@@ -47,7 +47,7 @@ fi
 
 # --- 2. Copy .env files ---
 # Packages that may have .env files
-ENV_PACKAGES=(app-lite discord-bridge appserver appserver-admin)
+ENV_PACKAGES=(app-lite discord-bridge appserver docs)
 
 for pkg in "${ENV_PACKAGES[@]}"; do
   SRC_DIR="$REPO_ROOT/packages/$pkg"

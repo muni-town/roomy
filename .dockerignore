@@ -7,4 +7,4 @@ data/
 packages/appserver-testing
 Dockerfile
 Dockerfile.appserver
-Dockerfile.appserver-admin
+Dockerfile.docs

@@ -1,0 +1,282 @@
+[
+  {
+    "nsid": "space.roomy.auth.getConnectionTicket",
+    "kind": "procedure",
+    "group": "Auth"
+  },
+  {
+    "nsid": "space.roomy.room.updateSeen",
+    "kind": "procedure",
+    "group": "Rooms"
+  },
+  {
+    "nsid": "space.roomy.space.sendEvents",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.createSpace",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.joinSpace",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.leaveSpace",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.reorderSpaces",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.setHandle",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.updatePolicy",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.admin.connectSpace",
+    "kind": "query",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.materializeSpace",
+    "kind": "query",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.getFlags",
+    "kind": "query",
+    "group": "Feature Flags"
+  },
+  {
+    "nsid": "space.roomy.admin.getFlags",
+    "kind": "query",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.setFlag",
+    "kind": "procedure",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.clearFlag",
+    "kind": "procedure",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.push.getSubscriptions",
+    "kind": "query",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.push.getStats",
+    "kind": "query",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.push.testSend",
+    "kind": "procedure",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.getDashboardStats",
+    "kind": "query",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.listSpaces",
+    "kind": "query",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.admin.getSpaceMembership",
+    "kind": "query",
+    "group": "Admin"
+  },
+  {
+    "nsid": "space.roomy.sync.getEvents",
+    "kind": "query",
+    "group": "Sync"
+  },
+  {
+    "nsid": "space.roomy.space.getSpaces",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getActivityFeed",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getMembers",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getMetadata",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getSpaceSummary",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getThreads",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getRoles",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getInvites",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getUserAccess",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.grantBridgeToken",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.revokeBridgeToken",
+    "kind": "procedure",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.space.getBridgeTokens",
+    "kind": "query",
+    "group": "Spaces"
+  },
+  {
+    "nsid": "space.roomy.federation.getRequests",
+    "kind": "query",
+    "group": "Federation"
+  },
+  {
+    "nsid": "space.roomy.federation.getIncoming",
+    "kind": "query",
+    "group": "Federation"
+  },
+  {
+    "nsid": "space.roomy.federation.getOutgoing",
+    "kind": "query",
+    "group": "Federation"
+  },
+  {
+    "nsid": "space.roomy.federation.getGrants",
+    "kind": "query",
+    "group": "Federation"
+  },
+  {
+    "nsid": "space.roomy.room.getMetadata",
+    "kind": "query",
+    "group": "Rooms"
+  },
+  {
+    "nsid": "space.roomy.room.getRoomSummary",
+    "kind": "query",
+    "group": "Rooms"
+  },
+  {
+    "nsid": "space.roomy.room.getThreads",
+    "kind": "query",
+    "group": "Rooms"
+  },
+  {
+    "nsid": "space.roomy.room.getMessages",
+    "kind": "query",
+    "group": "Rooms"
+  },
+  {
+    "nsid": "space.roomy.message.getMessage",
+    "kind": "query",
+    "group": "Messages"
+  },
+  {
+    "nsid": "space.roomy.message.getReactions",
+    "kind": "query",
+    "group": "Messages"
+  },
+  {
+    "nsid": "space.roomy.user.getProfile",
+    "kind": "query",
+    "group": "Users"
+  },
+  {
+    "nsid": "space.roomy.user.getMembershipStatus",
+    "kind": "query",
+    "group": "Users"
+  },
+  {
+    "nsid": "space.roomy.mention.getMentions",
+    "kind": "query",
+    "group": "Mentions"
+  },
+  {
+    "nsid": "space.roomy.search.messages",
+    "kind": "query",
+    "group": "Search"
+  },
+  {
+    "nsid": "space.roomy.search.rooms",
+    "kind": "query",
+    "group": "Search"
+  },
+  {
+    "nsid": "space.roomy.embed.getLinkMetadata",
+    "kind": "query",
+    "group": "Embeds"
+  },
+  {
+    "nsid": "space.roomy.push.getVapidPublicKey",
+    "kind": "query",
+    "group": "Push Notifications"
+  },
+  {
+    "nsid": "space.roomy.push.getPreferences",
+    "kind": "query",
+    "group": "Push Notifications"
+  },
+  {
+    "nsid": "space.roomy.push.registerSubscription",
+    "kind": "procedure",
+    "group": "Push Notifications"
+  },
+  {
+    "nsid": "space.roomy.push.unregisterSubscription",
+    "kind": "procedure",
+    "group": "Push Notifications"
+  },
+  {
+    "nsid": "space.roomy.push.setPreferences",
+    "kind": "procedure",
+    "group": "Push Notifications"
+  },
+  {
+    "nsid": "space.roomy.sync.subscribe",
+    "kind": "sync",
+    "group": "Sync"
+  }
+]

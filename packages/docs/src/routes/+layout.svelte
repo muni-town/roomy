@@ -1,9 +1,16 @@
 <script lang="ts">
   import "../app.css";
+  import { onMount } from "svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
-  import { page } from "$app/stores";
+  import { init } from "$lib/auth.svelte";
 
   let { children } = $props();
+
+  // Fire auth init on mount so interactive pages (endpoint "Try it", playground,
+  // dashboard) can use the session. Prose pages render immediately regardless.
+  onMount(() => {
+    init();
+  });
 </script>
 
 <div class="flex h-screen overflow-hidden">
