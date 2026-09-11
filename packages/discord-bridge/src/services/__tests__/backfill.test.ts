@@ -14,7 +14,7 @@
  *   bun test src/services/__tests__/backfill.test.ts
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { faker } from "@faker-js/faker";
 import { newUlid } from "@roomy-space/sdk";
 import { BridgeRepository } from "../../db/repository.ts";
@@ -27,6 +27,10 @@ import type {
 import type { DiscordDataSource } from "../../discord/data-source.ts";
 import { FileDiscordDataSource } from "../../discord/file-data-source.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
+import {
+	resetCapacityGate,
+	setCapacityGate,
+} from "../../roomy/capacity.ts";
 import { backfillChannel, ensureRoomyThreads } from "../backfill.ts";
 import { expectToBeDefined } from "./utils.ts";
 
@@ -844,5 +848,75 @@ describe("ensureRoomyThreads with active threads", () => {
 
 		// Thread should be in the allowlist
 		expect(repo.isAllowlisted(SPACE, activeThread.id)).toBe(true);
+	});
+});
+
+describe("backfill — capacity enforcement", () => {
+	beforeEach(() => {
+		setCapacityGate({ isEnabled: async () => false });
+	});
+
+	afterEach(() => {
+		resetCapacityGate();
+	});
+
+	test("CAP01: backfillChannel aborts when the guild is over capacity", async () => {
+		const { guild, channels, messages } = createFakeGuild({
+			seed: 42,
+			channelCount: 1,
+			messagesPerChannel: 10,
+		});
+
+		const discord = buildFakeDiscord(guild, channels, messages);
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+		mapChannels(repo, channels);
+
+		const ch = channels[0];
+		expectToBeDefined(ch);
+		await backfillChannel(discord, repo, roomy, ch.id, SPACE);
+
+		expect(countCreateMessageEvents(roomy, SPACE)).toBe(0);
+	});
+
+	test("CAP02: ensureRoomyThreads creates no threads when over capacity", async () => {
+		const parentChannel: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "capacity-thread",
+			parentId: parentChannel.id,
+			guildId: GUILD,
+		};
+
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [parentChannel] },
+			channels: [parentChannel, activeThread],
+			activeThreads: [activeThread],
+		});
+
+		const repo = BridgeRepository.open(":memory:");
+		repo.upsertBridgeConfig(GUILD, SPACE, "full");
+		repo.registerMapping(SPACE, "channel", parentChannel.id, newUlid());
+
+		const roomy = new MockRoomyGateway();
+
+		await ensureRoomyThreads(discord, repo, roomy, [
+			{
+				guildId: GUILD,
+				spaceDid: SPACE,
+				mode: "full",
+				createdAt: 0,
+				updatedAt: 0,
+			},
+		]);
+
+		expect(roomy.eventCount(SPACE)).toBe(0);
 	});
 });

@@ -35,6 +35,8 @@ export const desiredProperties = createDesiredPropertiesObject({
 	guild: {
 		id: true,
 		channels: true,
+		ownerId: true,
+		approximateMemberCount: true,
 	},
 	channel: {
 		id: true,

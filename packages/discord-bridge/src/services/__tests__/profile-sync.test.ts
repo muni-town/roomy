@@ -5,10 +5,14 @@
  * avatar URLs, fan-out.
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { UserDid } from "@roomy-space/sdk";
 import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
+import {
+	resetCapacityGate,
+	setCapacityGate,
+} from "../../roomy/capacity.ts";
 import { computeProfileHash } from "../../utils/hash.ts";
 import { retryStaleProfileSyncs, syncUserProfile } from "../profile-sync.ts";
 import { makeUser, SPACE_A, SPACE_B, USER_ID } from "./helpers/test-data.ts";
@@ -166,5 +170,34 @@ describe("retryStaleProfileSyncs", () => {
 	test("does nothing when queue is empty", async () => {
 		await retryStaleProfileSyncs(repo, roomy);
 		expect(roomy.eventCount(SPACE_A)).toBe(0);
+	});
+});
+
+describe("syncUserProfile — capacity enforcement", () => {
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
+
+	beforeEach(() => {
+		setCapacityGate({ isEnabled: async () => false });
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+	});
+
+	afterEach(() => {
+		resetCapacityGate();
+	});
+
+	test("CAP01: skips profile sync when the guild is over capacity", async () => {
+		await syncUserProfile(DEFAULT_USER, [SPACE_A], repo, roomy, "1234567890");
+
+		expect(profileEvent(roomy, SPACE_A)).toBeUndefined();
+		expect(repo.getProfileHash(SPACE_A, USER_ID)).toBeUndefined();
+	});
+
+	test("CAP02: syncs when no guild context is provided", async () => {
+		// Callers without guild context (e.g. retry queue) are not gated.
+		await syncUserProfile(DEFAULT_USER, [SPACE_A], repo, roomy);
+
+		expect(profileEvent(roomy, SPACE_A)).toBeDefined();
 	});
 });

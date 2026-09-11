@@ -53,6 +53,17 @@ export const PORT = () => parseInt(optional("PORT", "3301"), 10);
 export const ENABLE_GUILD_MEMBERS_INTENT = () =>
 	process.env.ENABLE_GUILD_MEMBERS_INTENT !== "false";
 
+/**
+ * Ops kill switch for capacity enforcement. When set to "true"/"1",
+ * per-guild capacity checks are disabled globally: every bridged space
+ * passes, regardless of member count vs Roomy Pro capacity. Emergency
+ * manual re-enable for when the appserver's membership picture is wrong
+ * (e.g. unprovisioned spaces, Polar outage). Off by default.
+ */
+export const BRIDGE_CAPACITY_KILL_SWITCH = () =>
+	process.env.BRIDGE_CAPACITY_KILL_SWITCH === "true" ||
+	process.env.BRIDGE_CAPACITY_KILL_SWITCH === "1";
+
 export const Level = type(
 	'"debug" | "info" | "warn" | "error" | undefined',
 ).pipe((v) => v ?? "info");

@@ -7,6 +7,7 @@ import { type DiscordBotWithCache, getProxyCacheBot } from "./discord/cache.ts";
 import { LiveDiscordDataSource } from "./discord/live-data-source.ts";
 import { LiveDiscordSender } from "./discord/live-sender.ts";
 import { LiveWebhookManager } from "./discord/live-webhook-manager.ts";
+import { DiscordMemberCountProvider } from "./discord/member-count.ts";
 import {
 	normalizeChannel,
 	normalizeMessage,
@@ -28,13 +29,20 @@ import {
 	APPSERVER_WS_URL,
 	BRIDGE_DATA_DIR,
 	BRIDGE_DB_PATH,
+	BRIDGE_CAPACITY_KILL_SWITCH,
 	DISCORD_TOKEN,
 	ENABLE_GUILD_MEMBERS_INTENT,
 } from "./env.ts";
 import { createLogger } from "./logger.ts";
 import { initRoomyClient } from "./roomy/client.ts";
+import {
+	CapacityService,
+	setCapacityGate,
+	type CapacityDecision,
+} from "./roomy/capacity.ts";
 import { LiveRoomyGateway } from "./roomy/live-gateway.ts";
 import { LiveProfileResolver } from "./roomy/live-profile-resolver.ts";
+import { XrpcMembershipClient } from "./roomy/membership-client.ts";
 import { SpaceManager } from "./roomy/space-manager.ts";
 import { runBackfill } from "./services/backfill.ts";
 import {
@@ -60,6 +68,10 @@ import { RoomyEventRouter } from "./services/roomy-event-router.ts";
 
 const log = createLogger("bridge");
 let appId: string | undefined;
+/** Capacity service — installed in the `ready` handler (needs the bot for
+ *  member counts). Discord guarantees `ready` fires before any other gateway
+ *  event, so event handlers can rely on it being set. */
+let capacity: CapacityService | undefined;
 /** Deferred router — resolved when the `ready` handler fires. All event
  *  handlers `await routerReady` before using the router. Since Discord
  *  guarantees `ready` fires before any other gateway event, the promise
@@ -68,6 +80,48 @@ let routerResolve!: (router: RoomyEventRouter) => void;
 const routerReady = new Promise<RoomyEventRouter>((resolve) => {
 	routerResolve = resolve;
 });
+
+/** DM the guild owner that bridging is paused because the guild's member
+ *  count exceeds the bridged space's capacity. Best-effort: failures are
+ *  logged, never thrown. */
+async function dmGuildOwner(
+	bot: DiscordBotWithCache,
+	decision: CapacityDecision,
+): Promise<void> {
+	try {
+		const guild = await bot.helpers.getGuild(BigInt(decision.guildId));
+		if (!guild?.ownerId) {
+			log.warn(
+				`capacity: cannot DM guild owner for ${decision.guildId}: no ownerId`,
+				{ guildId: decision.guildId },
+			);
+			return;
+		}
+		const dm = await bot.helpers.getDmChannel(guild.ownerId);
+		await bot.helpers.sendMessage(dm.id, {
+			content:
+				`Roomy bridging is paused for this server: ${decision.memberCount} members exceeds the ${decision.maxMembers} member capacity of the bridged space. ` +
+				`Upgrade your Roomy Pro plan or increase the space's capacity to resume bridging.`,
+		});
+		log.info(
+			`capacity: DMed guild owner ${guild.ownerId} about paused bridging for ${decision.spaceDid}`,
+			{ guildId: decision.guildId, spaceDid: decision.spaceDid },
+		);
+	} catch (err) {
+		log.error(
+			`capacity: failed to DM guild owner for ${decision.guildId}`,
+			err,
+		);
+	}
+}
+
+/** Force a capacity check for every (guild, space) bridge config. */
+function checkAllBridges(repo: BridgeRepository): void {
+	if (!capacity) return;
+	for (const config of repo.listAllBridgeConfigs()) {
+		void capacity.check(config.guildId, config.spaceDid, { force: true });
+	}
+}
 
 async function main() {
 	log.info("bridge starting");
@@ -121,6 +175,37 @@ async function main() {
 					registerSlashCommands(bot).catch((err) =>
 						log.error("Slash command registration failed", err),
 					);
+
+					// Capacity enforcement (Roomy Pro bridge tokens): per
+					// (guild, space) member-capacity checks. Sync halts while
+					// over the limit and resumes automatically once under it.
+					capacity = new CapacityService(
+						new XrpcMembershipClient(spaceManager.xrpc),
+						new DiscordMemberCountProvider(bot),
+						{
+							killSwitch: BRIDGE_CAPACITY_KILL_SWITCH(),
+							onStateChange: (decision) => {
+								if (!decision.enabled) {
+									void dmGuildOwner(bot, decision);
+								}
+							},
+						},
+					);
+					setCapacityGate(capacity);
+
+					// Startup: check every bridged (guild, space) tuple.
+					checkAllBridges(repo);
+
+					// Periodic sweep: every 5 minutes, force-refresh all
+					// bridged tuples so capacity changes are picked up even
+					// without member add/remove events.
+					setInterval(() => {
+						try {
+							checkAllBridges(repo);
+						} catch (err) {
+							log.error("Capacity sweep failed", err);
+						}
+					}, 5 * 60 * 1000);
 
 					// Create adapters and run backfill
 					const discord = new LiveDiscordDataSource(bot);
@@ -309,10 +394,42 @@ async function main() {
 						)
 						.map((c) => c.spaceDid);
 
+					// Capacity trigger: a member joined — force a re-check so
+					// a guild that just crossed its space's capacity halts sync
+					// promptly (and DMs the owner).
+					for (const config of configs) {
+						void capacity?.check(config.guildId, config.spaceDid, {
+							force: true,
+						});
+					}
+
 					if (targetSpaces.length === 0) return;
 
 					const userData = normalizeUser(user);
-					await syncUserProfile(userData, targetSpaces, repo, roomy);
+					await syncUserProfile(
+						userData,
+						targetSpaces,
+						repo,
+						roomy,
+						guildIdStr,
+					);
+				},
+
+				async guildMemberRemove(user, guildId) {
+					if (!ENABLE_GUILD_MEMBERS_INTENT()) return;
+
+					const guildIdStr = guildId.toString();
+					const configs = repo.listBridgeConfigsForGuild(guildIdStr);
+					if (configs.length === 0) return;
+
+					// Capacity trigger: a member left — force a re-check so a
+					// guild that dropped back under its space's capacity
+					// resumes sync automatically.
+					for (const config of configs) {
+						void capacity?.check(config.guildId, config.spaceDid, {
+							force: true,
+						});
+					}
 				},
 			},
 		}),

@@ -2,6 +2,7 @@ import { Did, type Event, newUlid } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
 import type { DiscordUserData } from "../discord/data.ts";
 import { createLogger } from "../logger.ts";
+import { getCapacityGate } from "../roomy/capacity.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import { computeProfileHash } from "../utils/hash.ts";
 
@@ -30,6 +31,7 @@ export async function syncUserProfile(
 	targetSpaces: string[],
 	repo: BridgeRepository,
 	roomy: RoomyGateway,
+	guildId?: string,
 ): Promise<void> {
 	const userIdStr = user.id;
 	const avatarHash = user.avatar ?? null;
@@ -46,6 +48,17 @@ export async function syncUserProfile(
 			: user.name;
 
 	for (const spaceDid of targetSpaces) {
+		// Capacity enforcement: halt profile sync for this space while the
+		// bridged guild is over the space's member capacity. Callers without
+		// a guild context (none today) skip the gate.
+		if (guildId && !(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+			log.warn(
+				`capacity: sync halted for ${spaceDid} (guild ${guildId}); skipping profile sync for Discord user ${userIdStr}`,
+				{ guildId, spaceDid, userId: userIdStr },
+			);
+			continue;
+		}
+
 		const existingHash = repo.getProfileHash(spaceDid, userIdStr);
 		if (existingHash === hash) continue;
 
@@ -105,6 +118,27 @@ export async function retryStaleProfileSyncs(
 
 	let succeeded = 0;
 	for (const entry of stale) {
+		// Capacity enforcement: skip retries for spaces whose every bridged
+		// guild is over capacity (the retry queue has no guild context, so a
+		// space is only skipped when all of its bridges are halted).
+		const bridged = repo
+			.listAllBridgeConfigs()
+			.filter((c) => c.spaceDid === entry.spaceDid);
+		if (bridged.length > 0) {
+			const enabled = await Promise.all(
+				bridged.map((c) =>
+					getCapacityGate().isEnabled(c.guildId, c.spaceDid),
+				),
+			);
+			if (!enabled.some(Boolean)) {
+				log.warn(
+					`capacity: sync halted for ${entry.spaceDid}; skipping profile sync retry for Discord user ${entry.discordUserId}`,
+					{ spaceDid: entry.spaceDid, userId: entry.discordUserId },
+				);
+				continue;
+			}
+		}
+
 		const hash = computeProfileHash(
 			entry.username,
 			entry.globalName,

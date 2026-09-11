@@ -5,9 +5,13 @@
  * full/subset mode, public/private, fan-out, idempotency.
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
+import {
+	resetCapacityGate,
+	setCapacityGate,
+} from "../../roomy/capacity.ts";
 import {
 	ensureRoomyChannel,
 	handleChannelCreate,
@@ -394,5 +398,41 @@ describe("ensureRoomyChannel", () => {
 		const event = createRoomEvent(roomy, SPACE_A);
 		expectToBe(event?.$type, "space.roomy.room.createRoom.v0");
 		expect(event?.defaultAccess).toBe("none");
+	});
+});
+
+describe("room-sync — capacity enforcement", () => {
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
+
+	beforeEach(() => {
+		setCapacityGate({ isEnabled: async () => false });
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+	});
+
+	afterEach(() => {
+		resetCapacityGate();
+	});
+
+	test("CAP01: handleChannelCreate creates no room when over capacity", async () => {
+		await handleChannelCreate(makeChannel(), repo, roomy);
+
+		expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBeUndefined();
+	});
+
+	test("CAP02: handleThreadCreate creates no room when over capacity", async () => {
+		await handleThreadCreate(makeThread(), repo, roomy);
+
+		expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
+	});
+
+	test("CAP03: ensureRoomyChannel creates no room when over capacity", async () => {
+		await ensureRoomyChannel(repo, roomy, CHANNEL, GUILD, "general", [
+			SPACE_A,
+		]);
+
+		expect(createRoomEvent(roomy, SPACE_A)).toBeUndefined();
 	});
 });

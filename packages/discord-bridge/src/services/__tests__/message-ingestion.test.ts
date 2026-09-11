@@ -5,10 +5,14 @@
  * thread starters, mentions, attachments, backfill restriction, subset mode.
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Did, newUlid } from "@roomy-space/sdk";
 import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
+import {
+	resetCapacityGate,
+	setCapacityGate,
+} from "../../roomy/capacity.ts";
 import { ingestDiscordMessage } from "../message-ingestion.ts";
 import {
 	CHANNEL,
@@ -761,5 +765,50 @@ describe("ingestDiscordMessage — forwarded messages (HAS_SNAPSHOT flag)", () =
 		expect(forwardMessageEvent(roomy, SPACE_A)).toBeUndefined();
 		expect(result).toEqual({ synced: 1, skipped: 0 });
 		expect(createMessageEvent(roomy, SPACE_A)).toBeDefined();
+	});
+});
+
+describe("ingestDiscordMessage — capacity enforcement", () => {
+	// The module-level capacity gate defaults to always-enabled; these tests
+	// install a disabled gate and verify ingestion halts for the space.
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
+
+	beforeEach(() => {
+		setCapacityGate({ isEnabled: async () => false });
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+		mapChannel(repo);
+	});
+
+	afterEach(() => {
+		resetCapacityGate();
+	});
+
+	test("CAP01: skips the message when the guild is over capacity", async () => {
+		const msg = makeMessage({
+			id: "1111111119",
+			channelId: CHANNEL,
+			guildId: GUILD,
+			content: "hello",
+		});
+		const result = await ingestDiscordMessage(msg, repo, roomy);
+
+		expect(result).toEqual({ synced: 0, skipped: 1 });
+		expect(createMessageEvent(roomy, SPACE_A)).toBeUndefined();
+	});
+
+	test("CAP02: skips forwards when the guild is over capacity", async () => {
+		const originalId = "6666666666";
+		const sourceChannelId = CHANNEL_2;
+		const sourceRoomUlid = newUlid();
+		mapMessage(repo, originalId, ROOMY_MESSAGE_ULID);
+		repo.registerMapping(SPACE_A, "channel", sourceChannelId, sourceRoomUlid);
+
+		const msg = makeForwardMessage(originalId, CHANNEL, sourceChannelId);
+		const result = await ingestDiscordMessage(msg, repo, roomy);
+
+		expect(result).toEqual({ synced: 0, skipped: 1 });
+		expect(forwardMessageEvent(roomy, SPACE_A)).toBeUndefined();
 	});
 });

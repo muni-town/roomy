@@ -9,6 +9,7 @@ import {
 import type { BridgeRepository } from "../db/repository.ts";
 import type { DiscordMessageData } from "../discord/data.ts";
 import { createLogger } from "../logger.ts";
+import { getCapacityGate } from "../roomy/capacity.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import {
 	type MentionContext,
@@ -72,6 +73,16 @@ export async function handleMessageEdit(
 			continue;
 		}
 
+		// Capacity enforcement: halt sync for this space while the bridged
+		// guild is over the space's member capacity.
+		if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+			log.warn(
+				`capacity: sync halted for ${spaceDid} (guild ${guildId}); skipping edit for message ${messageId}`,
+				{ guildId, spaceDid, messageId },
+			);
+			continue;
+		}
+
 		const roomyRoomId = repo.getRoomyRoomId(spaceDid, channelId);
 		if (!roomyRoomId) {
 			log.warn(
@@ -81,7 +92,7 @@ export async function handleMessageEdit(
 		}
 
 		// Sync author profile before edit
-		await syncUserProfile(message.author, [spaceDid], repo, roomy);
+		await syncUserProfile(message.author, [spaceDid], repo, roomy, guildId);
 
 		const eventUlid = newUlid();
 

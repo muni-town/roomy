@@ -13,6 +13,7 @@ import {
 } from "../discord/data.ts";
 import type { DiscordDataSource } from "../discord/data-source.ts";
 import { createLogger } from "../logger.ts";
+import { getCapacityGate } from "../roomy/capacity.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
 import { ensureRoomyChannel } from "./room-sync.ts";
@@ -54,6 +55,15 @@ export async function runBackfill(
 	// Backfill is per (channel, space) — each pair has its own cursor.
 	const tasks: Array<{ channelId: string; spaceDid: string }> = [];
 	for (const config of configs) {
+		// Capacity enforcement: skip configs whose bridged guild is over the
+		// space's member capacity (backfill is the main cost driver).
+		if (!(await getCapacityGate().isEnabled(config.guildId, config.spaceDid))) {
+			log.warn(
+				`capacity: backfill skipped for ${config.spaceDid} (guild ${config.guildId}): guild over space member capacity`,
+				{ guildId: config.guildId, spaceDid: config.spaceDid },
+			);
+			continue;
+		}
 		const channelIds = await channelsForConfig(discord, repo, config);
 		for (const channelId of channelIds) {
 			tasks.push({ channelId, spaceDid: config.spaceDid });
@@ -94,6 +104,17 @@ async function ensureRoomyRooms(
 	for (const config of configs) {
 		try {
 			const { guildId, spaceDid, mode } = config;
+
+			// Capacity enforcement: skip room creation for spaces whose
+			// bridged guild is over the space's member capacity.
+			if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+				log.warn(
+					`capacity: room creation skipped for ${spaceDid} (guild ${guildId}): guild over space member capacity`,
+					{ guildId, spaceDid },
+				);
+				continue;
+			}
+
 			let channelIds: string[];
 
 			if (mode === "full") {
@@ -197,6 +218,16 @@ export async function ensureRoomyThreads(
 	for (const config of configs) {
 		try {
 			const { guildId, spaceDid, mode } = config;
+
+			// Capacity enforcement: skip thread creation for spaces whose
+			// bridged guild is over the space's member capacity.
+			if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+				log.warn(
+					`capacity: thread creation skipped for ${spaceDid} (guild ${guildId}): guild over space member capacity`,
+					{ guildId, spaceDid },
+				);
+				continue;
+			}
 
 			const guild = await discord.getGuild(guildId);
 			if (!guild?.channels) continue;
@@ -417,6 +448,18 @@ export async function backfillChannel(
 			return;
 		}
 
+		// Capacity enforcement: backfill is the main cost driver — abort
+		// before it starts when the bridged guild is over the space's member
+		// capacity. The owner DM fires via the capacity service's state-change
+		// callback when the check flips to disabled.
+		if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+			log.warn(
+				`capacity: backfill aborted for channel ${channelId} → ${spaceDid} (guild ${guildId}): guild over space member capacity`,
+				{ guildId, spaceDid, channelId },
+			);
+			return;
+		}
+
 		const cursor = repo.getChannelCursor(spaceDid, channelId);
 		// First-time backfill: start from the channel snowflake (which is older
 		// than any message in the channel). Resume: start from last cursor.
@@ -476,6 +519,11 @@ export async function backfillChannel(
 		log.info(
 			`Channel ${channelId} → ${spaceDid} backfill done: ${totalSynced} synced, ${totalSkipped} skipped`,
 		);
+
+		// Capacity enforcement: refresh the decision after a backfill so a
+		// member-count change during the run is picked up promptly (the
+		// state-change callback logs/DMs on any flip).
+		await getCapacityGate().isEnabled(guildId, spaceDid);
 	} finally {
 		activeBackfills.delete(key);
 	}
@@ -500,6 +548,17 @@ async function ensureAndBackfillArchivedThreads(
 	for (const config of configs) {
 		try {
 			const { guildId, spaceDid, mode } = config;
+
+			// Capacity enforcement: skip archived-thread backfill for spaces
+			// whose bridged guild is over the space's member capacity.
+			if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+				log.warn(
+					`capacity: archived thread backfill skipped for ${spaceDid} (guild ${guildId}): guild over space member capacity`,
+					{ guildId, spaceDid },
+				);
+				continue;
+			}
+
 			const guild = await discord.getGuild(guildId);
 			if (!guild?.channels) continue;
 

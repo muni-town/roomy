@@ -9,6 +9,7 @@ import {
 	THREAD_TYPES,
 } from "../discord/data.ts";
 import { createLogger } from "../logger.ts";
+import { getCapacityGate } from "../roomy/capacity.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 
 const log = createLogger("room");
@@ -29,6 +30,16 @@ export async function ensureRoomyChannel(
 	for (const spaceDid of targetSpaces) {
 		if (repo.getRoomyId(spaceDid, "channel", channelId)) {
 			log.debug(`Channel ${channelId} already synced to ${spaceDid}`);
+			continue;
+		}
+
+		// Capacity enforcement: halt room creation for this space while the
+		// bridged guild is over the space's member capacity.
+		if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+			log.warn(
+				`capacity: sync halted for ${spaceDid} (guild ${guildId}); skipping room creation for channel ${channelId}`,
+				{ guildId, spaceDid, channelId },
+			);
 			continue;
 		}
 
@@ -163,6 +174,16 @@ export async function handleThreadCreate(
 	for (const spaceDid of targetSpaces) {
 		if (repo.getRoomyId(spaceDid, "thread", threadId)) {
 			log.debug(`Thread ${threadId} already synced to ${spaceDid}`);
+			continue;
+		}
+
+		// Capacity enforcement: halt thread creation for this space while the
+		// bridged guild is over the space's member capacity.
+		if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+			log.warn(
+				`capacity: sync halted for ${spaceDid} (guild ${guildId}); skipping thread creation for ${threadId}`,
+				{ guildId, spaceDid, threadId },
+			);
 			continue;
 		}
 

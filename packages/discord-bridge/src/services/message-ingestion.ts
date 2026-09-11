@@ -12,6 +12,7 @@ import type { BridgeRepository } from "../db/repository.ts";
 import type { DiscordMessageData } from "../discord/data.ts";
 import { MESSAGE_FLAG_HAS_SNAPSHOT, MsgType } from "../discord/data.ts";
 import { createLogger } from "../logger.ts";
+import { getCapacityGate } from "../roomy/capacity.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import {
 	type MentionContext,
@@ -199,6 +200,17 @@ export async function ingestDiscordMessage(
 			continue;
 		}
 
+		// Capacity enforcement: halt sync for this space while the bridged
+		// guild is over the space's member capacity.
+		if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+			log.warn(
+				`capacity: sync halted for ${spaceDid} (guild ${guildId}); skipping message ${messageId}`,
+				{ guildId, spaceDid, messageId },
+			);
+			writeSkipRecord("capacity_over_limit", message, spaceDid);
+			continue;
+		}
+
 		// Resolve the Roomy room for this channel or thread
 		const roomyRoomId = repo.getRoomyRoomId(spaceDid, channelId);
 		if (!roomyRoomId) {
@@ -217,7 +229,7 @@ export async function ingestDiscordMessage(
 		const attachments = buildAttachments(message, repo, spaceDid);
 
 		// Sync author profile before sending the message.
-		await syncUserProfile(message.author, [spaceDid], repo, roomy);
+		await syncUserProfile(message.author, [spaceDid], repo, roomy, guildId);
 
 		// Skip messages with no content and no attachments
 		if (!message.content && attachments.length === 0) {
@@ -434,6 +446,17 @@ async function handleThreadStarterMessage(
 			continue;
 		}
 
+		// Capacity enforcement: halt sync for this space while the bridged
+		// guild is over the space's member capacity.
+		if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+			log.warn(
+				`capacity: sync halted for ${spaceDid} (guild ${guildId}); skipping thread starter ${messageId}`,
+				{ guildId, spaceDid, messageId },
+			);
+			writeSkipRecord("capacity_over_limit", message, spaceDid);
+			continue;
+		}
+
 		const threadRoomyId = repo.getRoomyId(spaceDid, "thread", threadId);
 		if (!threadRoomyId) {
 			log.debug(
@@ -562,6 +585,17 @@ async function handleForwardMessage(
 		if (existing) {
 			log.debug(`Skipping forward ${messageId}: already synced to ${spaceDid}`);
 			writeSkipRecord("forward_already_synced", message, spaceDid);
+			continue;
+		}
+
+		// Capacity enforcement: halt sync for this space while the bridged
+		// guild is over the space's member capacity.
+		if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) {
+			log.warn(
+				`capacity: sync halted for ${spaceDid} (guild ${guildId}); skipping forward ${messageId}`,
+				{ guildId, spaceDid, messageId },
+			);
+			writeSkipRecord("capacity_over_limit", message, spaceDid);
 			continue;
 		}
 
