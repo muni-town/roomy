@@ -19,7 +19,7 @@
 
 import type { DbLike } from "../db/types.ts";
 import { openSpaceDb } from "../db/db.ts";
-import { getQdrantClient, ensureMessagesCollection, upsertMessage, type QdrantClientLike } from "./qdrantSearch.ts";
+import { getQdrantClient, ensureMessagesCollection, upsertMessages, upsertMessage, type QdrantClientLike, type QueuedMessageUpsert } from "./qdrantSearch.ts";
 import { encodeSparse } from "./bm25.ts";
 import { extractMessageText } from "./text.ts";
 import { log } from "../log.ts";
@@ -142,9 +142,10 @@ async function runBackfillLoop(): Promise<void> {
 }
 
 /**
- * Run one sweep cycle: pick the space with the oldest cursor, find its
- * messages after the cursor, index them, and advance. Returns true when a
- * batch was full (more likely remain → loop without waiting).
+ * Run one sweep cycle: pick the space with the oldest cursor, index its
+ * messages after the cursor in a batched Qdrant upsert, and advance the
+ * cursor. Returns true when the batch was full (more likely remain → loop
+ * without waiting).
  */
 export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
   if (!started) return false;
@@ -167,6 +168,15 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
   const spaceDid = await nextCursorSpace(globalDb);
   if (spaceDid === null) return false;
 
+  return sweepOneSpace(globalDb, client, spaceDid);
+}
+
+/** Index one space's pending messages after its cursor. Returns true when the batch was full. */
+async function sweepOneSpace(
+  globalDb: DbLike,
+  client: QdrantClientLike,
+  spaceDid: string,
+): Promise<boolean> {
   const spaceDb = openSpaceDb(spaceDid);
   const cursorRow = await globalDb
     .query("select cursor from search_backfill_cursor where space_did = ?")
@@ -201,6 +211,39 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
    *  it — so this stops updating at the first failure. */
   let lastOkId: string | null = null;
   let batchFailed = false;
+
+  if (rows.length === 0) {
+    // No sweepable rows (e.g. a space with entity_space entries but no
+    // messages). Without a cursor this space sorts first in
+    // `nextCursorSpace` (coalesce(updated_at, 0) = 0) and is picked on
+    // every cycle, starving every other space — the sweep never advances
+    // and `backfilled` stays 0 with no error or backoff. Stamp a cursor
+    // (sentinel "" when none) AND refresh `updated_at` on every 0-row
+    // visit so the space rotates to the back of the round-robin — a
+    // stale `updated_at` would re-pick it forever once all empty spaces
+    // are stamped. The cursor value is opaque (never compared), so a
+    // sentinel is safe; a fully-swept space keeps its cursor and just
+    // bumps its recency.
+    await setCursor(globalDb, spaceDid, cursor ?? "");
+    // Emit a progress line so operators can see the empty space was visited
+    // (without it, a sparse space's visit leaves no telemetry trace).
+    log.info("[search-backfill] progress", {
+      spaceDid,
+      cursor: cursor ?? "",
+      rows: 0,
+      indexed: 0,
+      failed: 0,
+      backfilled: statsBackfilled,
+      errorCount: dbErrorCount,
+      dbBackoffActive: Date.now() < dbBackoffUntil,
+    });
+    return false;
+  }
+
+  // Build the batched upsert payload. One HTTP call to Qdrant for the whole
+  // batch instead of one call per message — the dominant cost when
+  // re-indexing dense spaces.
+  const toUpsert: QueuedMessageUpsert[] = [];
   for (const row of rows) {
     const text = extractMessageText(row.mime_type, row.data);
     if (text === "") {
@@ -210,23 +253,54 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
       continue;
     }
     try {
-      const sparse = encodeSparse(text);
       const threadId = await resolveThreadId(spaceDb, row.room);
-      await upsertMessage(client, row.id, sparse, {
-        spaceDid,
-        roomId: row.room,
-        threadId,
-        authorDid: "",
-        timestamp: row.timestamp != null
-          ? new Date(row.timestamp).toISOString()
-          : new Date().toISOString(),
+      toUpsert.push({
+        messageId: row.id,
+        sparse: encodeSparse(text),
+        payload: {
+          spaceDid,
+          roomId: row.room,
+          threadId,
+          authorDid: "",
+          timestamp: row.timestamp != null
+            ? new Date(row.timestamp).toISOString()
+            : new Date().toISOString(),
+        },
       });
-      indexedCount++;
-      if (!batchFailed) lastOkId = row.id;
     } catch (err) {
       failedCount++;
       batchFailed = true;
-      log.warn(`[search-backfill] upsert failed for ${row.id}:`, err);
+      log.warn(`[search-backfill] encode failed for ${row.id}:`, err);
+    }
+  }
+
+  if (toUpsert.length > 0) {
+    try {
+      await upsertMessages(client, toUpsert);
+      indexedCount = toUpsert.length;
+      // Advance through the batch (including trailing empty-text rows that
+      // were already marked Ok above — `batchFailed` is still false here).
+      if (!batchFailed) lastOkId = rows[rows.length - 1]!.id;
+    } catch (err) {
+      // A batch-wide failure (e.g. a Qdrant 507 / payload-index hiccup). We
+      // must NOT lose the per-message failure granularity: individually
+      // upsert each so a genuinely-failed message keeps the cursor before
+      // it (retried next cycle) while the others still make progress and
+      // advance. One batched Qdrant call that errored is opaque — it
+      // doesn't tell us WHICH point failed — so we retry point-by-point to
+      // preserve the never-skip-past-a-failure guarantee.
+      log.warn(`[search-backfill] batched upsert failed for ${spaceDid} (falling back per-message):`, err);
+      for (const q of toUpsert) {
+        try {
+          await upsertMessage(client, q.messageId, q.sparse, q.payload);
+          indexedCount++;
+          if (!batchFailed) lastOkId = q.messageId;
+        } catch (perErr) {
+          failedCount++;
+          batchFailed = true;
+          log.warn(`[search-backfill] upsert failed for ${q.messageId}:`, perErr);
+        }
+      }
     }
   }
 
@@ -246,19 +320,6 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
     // in the round-robin (a stuck space must not starve the others while
     // Qdrant is down).
     await setCursor(globalDb, spaceDid, cursor ?? "");
-  } else {
-    // No sweepable rows (e.g. a space with entity_space entries but no
-    // messages). Without a cursor this space sorts first in
-    // `nextCursorSpace` (coalesce(updated_at, 0) = 0) and is picked on
-    // every cycle, starving every other space — the sweep never advances
-    // and `backfilled` stays 0 with no error or backoff. Stamp a cursor
-    // (sentinel "" when none) AND refresh `updated_at` on every 0-row
-    // visit so the space rotates to the back of the round-robin — a
-    // stale `updated_at` would re-pick it forever once all empty spaces
-    // are stamped. The cursor value is opaque (never compared), so a
-    // sentinel is safe; a fully-swept space keeps its cursor and just
-    // bumps its recency.
-    await setCursor(globalDb, spaceDid, cursor ?? "");
   }
 
   // Progress telemetry (Loki): one structured line per cycle. `backfilled`
@@ -277,6 +338,50 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
   });
 
   return rows.length >= SWEEP_BATCH;
+}
+
+/**
+ * Run backfill catch-up: drain pending spaces in a tight loop until no cursor-less
+ * spaces remain and the last cycle was not a full batch.
+ *
+ * The background loop naps IDLE_POLL_MS after a non-full cycle, which is the
+ * right cadence when caught up but agonisingly slow after a reset or cold start
+ * (the Roomy space model is sparse — thousands of mostly-empty spaces each
+ * yield a partial batch, so a 60s nap per space would take days). This runs the
+ * same sweepCycle back-to-back, sleeping only between batches, so it chews
+ * through the sparse backlog and the dense hotspots as fast as Qdrant and the
+ * DB pool allow.
+ *
+ * Used by the admin runSearchBackfill procedure to trigger a whole-corpus
+ * re-index on demand without waiting on the background loop's idle cadence.
+ */
+export async function runBackfillCatchUp(globalDb: DbLike): Promise<void> {
+  // Prime the singleton state so sweepCycle runs even when the background
+  // loop hasn't been started (e.g. e2e/background-workers-disabled, or a
+  // one-shot admin-triggered re-index before boot).
+  sweeperGlobalDb = globalDb;
+  started = true;
+  for (;;) {
+    const full = await sweepCycle(globalDb);
+    if (full) continue; // keep going — more in this dense space / cursor-less backlog
+    if (!getQdrantClient()) return; // Qdrant not configured — nothing can be indexed
+    if (await hasCursorlessBacklog(globalDb)) continue; // sparse tail still ahead
+    return;
+  }
+}
+
+/** True when any space is missing a `search_backfill_cursor` row (backlog). */
+async function hasCursorlessBacklog(globalDb: DbLike): Promise<boolean> {
+  const row = await globalDb
+    .query(
+      `select s.space_did as id
+         from (select distinct space_did from entity_space) s
+         left join search_backfill_cursor c on c.space_did = s.space_did
+        where c.space_did is null
+        limit 1`,
+    )
+    .get<{ id: string }>();
+  return row !== null;
 }
 
 /** Pick the space whose cursor is oldest/absent (round-robin fairness). */

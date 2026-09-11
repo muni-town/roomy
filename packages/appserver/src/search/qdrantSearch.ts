@@ -187,17 +187,47 @@ export async function upsertMessage(
   sparse: SparseVector,
   payload: MessagePayload,
 ): Promise<void> {
+  await upsertMessages(client, [{ messageId, sparse, payload }]);
+}
+
+/**
+ * A single message to upsert, as part of a batched {@link upsertMessages} call.
+ */
+export interface QueuedMessageUpsert {
+  /** Message id — hashed to the deterministic point id via UUIDv5. */
+  messageId: string;
+  /** BM25 sparse vector of the message plaintext. */
+  sparse: SparseVector;
+  /** Filter/display payload (never the message body). */
+  payload: MessagePayload;
+}
+
+/**
+ * Upsert many messages in a SINGLE Qdrant HTTP call.
+ *
+ * The appserver backfill sweeper re-indexes dense spaces in bulk — a
+ * per-message HTTP round-trip to Qdrant is the dominant cost at scale (one
+ * message per call, for a 100-message batch = 100 network round-trips).
+ * Qdrant's `/points` upsert accepts many points in one body, so batching the
+ * whole backfill batch into one call cuts the round-trips from `n` to 1.
+ *
+ * Point ids are deterministic (UUIDv5(messageId)), so batching stays
+ * idempotent — re-upserting the same point overwrites it.
+ */
+export async function upsertMessages(
+  client: QdrantClientLike,
+  messages: QueuedMessageUpsert[],
+): Promise<void> {
+  if (messages.length === 0) return;
   await client.upsert(MESSAGES_COLLECTION, {
-    points: [
-      {
-        id: messagePointId(messageId),
-        vector: { [BM25_VECTOR_NAME]: sparse },
-        // The point id is UUIDv5(messageId) — a one-way hash — so the
-        // original message id is carried in the payload for the hydration
-        // step (Qdrant returns point ids, SQLite hydrates the DTOs).
-        payload: { ...payload, messageId, threadId: payload.threadId ?? null },
-      },
-    ],
+    points: messages.map(({ messageId, sparse, payload }) => ({
+      id: messagePointId(messageId),
+      vector: { [BM25_VECTOR_NAME]: sparse },
+      // The point id is UUIDv5(messageId) — a one-way hash — so the
+      // original message id is carried in the payload for the hydration
+      // step (Qdrant returns point ids, SQLite hydrates the DTOs).
+      payload: { ...payload, messageId, threadId: payload.threadId ?? null },
+    })),
   });
 }
 
