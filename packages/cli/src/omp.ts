@@ -175,6 +175,7 @@ export function buildPrompt(
   agentDid: string,
   prefix?: string,
   context?: string,
+  roomName?: string,
 ): string {
   const from = msg.authorName || msg.authorDid;
   const body = decodeMessageText(msg.content, msg.mimeType);
@@ -183,8 +184,11 @@ export function buildPrompt(
   // Recent conversation context for the room, so the agent sees what has been
   // said (loaded when the agent is mentioned) rather than only the mention.
   if (context) parts.push(context);
+  // Explicit room context: the room the agent was prompted in, by name when
+  // resolvable, so the agent can fetch preceding messages if necessary.
+  const room = roomName && roomName !== roomId ? `${roomName} (${roomId})` : roomId;
   parts.push(
-    `[Message from ${from} in Roomy room ${roomId}]\n\n${body}`,
+    `[Message from ${from} in Roomy room ${room}]\n\n${body}`,
   );
   return parts.join("\n\n");
 }
