@@ -332,6 +332,51 @@ describe("RoomyEventRouter", () => {
 	});
 
 	/**
+	 * RER35: a markdown autolink (`<https://…>`) in a legacy text/markdown body
+	 * must reach Discord intact as a bare URL — it is a link, not an HTML tag.
+	 * The old `<[^>]*>` stripper deleted it wholesale, which dropped the link
+	 * from the bridged Discord message.
+	 */
+	test("RER35: bridges a markdown autolink in legacy markdown as a bare URL", async () => {
+		const { roomy, discord, router } = setup();
+		await router.subscribeToSpace(SPACE_A);
+
+		const event = makeCreateMessageEvent({
+			id: ROOMY_MESSAGE_ULID,
+			body: makeTextBody(
+				"there it is: <https://belgium-atmosphe.re/vidi> try it",
+			),
+		});
+
+		await roomy.fireEvent(SPACE_A, event);
+
+		expect(discord.sent).toHaveLength(1);
+		expect(discord.sent[0]?.content).toBe(
+			"there it is: https://belgium-atmosphe.re/vidi try it",
+		);
+	});
+
+	/**
+	 * RER36: HTML-looking text that is neither a tag nor an autolink (e.g.
+	 * "I <3 x") passes through untouched — the narrowed stripper must not
+	 * delete text between `<` and a later `>` the way `<[^>]*>` did.
+	 */
+	test("RER36: keeps non-tag angle-bracket text in legacy markdown", async () => {
+		const { roomy, discord, router } = setup();
+		await router.subscribeToSpace(SPACE_A);
+
+		const event = makeCreateMessageEvent({
+			id: ROOMY_MESSAGE_ULID,
+			body: makeTextBody("I <3 Roomy <3 bridges"),
+		});
+
+		await roomy.fireEvent(SPACE_A, event);
+
+		expect(discord.sent).toHaveLength(1);
+		expect(discord.sent[0]?.content).toBe("I <3 Roomy <3 bridges");
+	});
+
+	/**
 	 * RER02: editMessage updates the previously bridged Discord message.
 	 */
 	test("RER02: bridges editMessage to Discord", async () => {
