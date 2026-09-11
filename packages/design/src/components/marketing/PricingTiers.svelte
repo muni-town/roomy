@@ -7,7 +7,7 @@
     name: string;
     features: FeaturePart[][];
     price?: { old: string; current: string; per: string; badge?: string };
-    cta?: { label: string; href: string };
+    cta?: { label: string; href?: string; action?: () => void };
   };
 
   let {
@@ -113,22 +113,45 @@
           {/if}
         {/if}
         {#if tier.cta && tier.name !== activeTier}
-          <Button href={tier.cta.href} variant="primary" class="cta no-underline">
-            {tier.cta.label}
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+          {#if tier.cta.action}
+            <Button
+              variant="primary"
+              class="cta no-underline"
+              onclick={tier.cta.action}
             >
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
-          </Button>
+              {tier.cta.label}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </Button>
+          {:else if tier.cta.href}
+            <Button href={tier.cta.href} variant="primary" class="cta no-underline">
+              {tier.cta.label}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </Button>
+          {/if}
         {/if}
       </article>
     {/each}

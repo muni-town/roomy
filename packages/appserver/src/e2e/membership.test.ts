@@ -28,6 +28,7 @@ const CONFIG: PolarConfig = {
   endpoint: "https://sandbox-api.polar.sh/v1",
   accessToken: "polar_oat_test",
   roomyProProductId: "prod_roomy_pro",
+  appOrigin: "https://roomy.space",
 };
 
 function proState() {
@@ -433,5 +434,64 @@ describe("space.roomy.user.getMembershipStatus", () => {
     expect(body.isPro).toBe(true);
     expect(body.capacity).toBe(1000);
     expect(fetches).toBe(2);
+  });
+});
+
+// ─── space.roomy.pro.createCheckout ────────────────────────────────────────
+
+describe("space.roomy.pro.createCheckout", () => {
+  function checkoutUrl(ctx: E2eContext): string {
+    return `${ctx.baseUrl}/xrpc/space.roomy.pro.createCheckout`;
+  }
+
+  test("mints a Polar session bound to caller DID as external_customer_id", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/checkouts/")) {
+        requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Response.json(
+          { id: "chk_e2e", url: "https://buy.polar.sh/session/e2e" },
+          { status: 201 },
+        );
+      }
+      return realFetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    const ctx = await startTest();
+    const res = await ctx.authedFetch(GRANTOR)(checkoutUrl(ctx), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.checkoutUrl).toBe("https://buy.polar.sh/session/e2e");
+    expect(requestBody).toEqual({
+      products: [CONFIG.roomyProProductId],
+      external_customer_id: GRANTOR,
+      success_url:
+        "https://roomy.space/user/settings/subscription?checkout={CHECKOUT_ID}",
+    });
+  });
+
+  test("anonymous → 401", async () => {
+    const ctx = await startTest();
+    const res = await ctx.anonFetch(checkoutUrl(ctx), {
+      method: "POST",
+      body: "{}",
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("Polar disabled → 503", async () => {
+    const ctx = await startTest();
+    setPolar(null);
+    const res = await ctx.authedFetch(GRANTOR)(checkoutUrl(ctx), {
+      method: "POST",
+      body: "{}",
+    });
+    expect(res.status).toBe(503);
   });
 });

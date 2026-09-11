@@ -388,6 +388,17 @@ export const prose: Record<string, EndpointProse> = {
     auth: "Caller must be a member of the space.",
   },
 
+  // ── Pro / billing ───────────────────────────────────────────────────────
+  "space.roomy.pro.createCheckout": {
+    description:
+      "Creates a Polar checkout session for the caller's Roomy Pro purchase, bound to their Roomy DID as the Polar customer external ID. On successful payment Polar creates the customer with external_id = the DID, which is what the subscription-status endpoints look up (getMembershipStatus, bridge-token grants) — a static Polar Checkout Link cannot carry that external ID, so every checkout must be minted server-side. Returns the Polar-hosted checkout URL the client redirects the browser to; Polar redirects back to the app's subscription page with ?checkout={CHECKOUT_ID}.",
+    auth: "Authenticated. The caller's DID becomes the Polar customer external ID.",
+    notes: [
+      "Polar not configured (no POLAR_ACCESS_TOKEN) → 503.",
+      "Polar outage while creating the session → 503 (checkout cannot be started).",
+    ],
+  },
+
   // ── Rooms ───────────────────────────────────────────────────────────────
   "space.roomy.room.getMetadata": {
     description:

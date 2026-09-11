@@ -43,6 +43,7 @@ const APPSERVER_RPCS = [
   "space.roomy.push.registerSubscription",
   "space.roomy.push.unregisterSubscription",
   "space.roomy.push.setPreferences",
+  "space.roomy.pro.createCheckout",
 ];
 
 export const CONFIG = {

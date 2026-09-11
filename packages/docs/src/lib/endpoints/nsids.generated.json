@@ -180,6 +180,11 @@
     "group": "Spaces"
   },
   {
+    "nsid": "space.roomy.pro.createCheckout",
+    "kind": "procedure",
+    "group": "Other"
+  },
+  {
     "nsid": "space.roomy.federation.getRequests",
     "kind": "query",
     "group": "Federation"

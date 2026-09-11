@@ -10,6 +10,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   _clearPolarCache,
   _expirePolarCache,
+  createCheckoutSession,
   getCachedCustomerState,
   getCustomerState,
   getPolarConfig,
@@ -25,6 +26,7 @@ const CONFIG: PolarConfig = {
   endpoint: "https://sandbox-api.polar.sh/v1",
   accessToken: "polar_oat_test",
   roomyProProductId: "prod_roomy_pro",
+  appOrigin: "https://roomy.space",
 };
 
 function polarState(partial?: Partial<PolarCustomerState>): PolarCustomerState {
@@ -76,11 +78,20 @@ describe("getPolarConfig", () => {
     process.env.POLAR_ACCESS_TOKEN = "polar_oat_x";
     process.env.ROOMY_PRO_PRODUCT_ID = "prod_x";
     delete process.env.POLAR_ENDPOINT;
+    delete process.env.ROOMY_APP_ORIGIN;
     const cfg = getPolarConfig();
     expect(cfg).not.toBeNull();
     expect(cfg?.endpoint).toBe("https://api.polar.sh/v1");
     expect(cfg?.accessToken).toBe("polar_oat_x");
     expect(cfg?.roomyProProductId).toBe("prod_x");
+    expect(cfg?.appOrigin).toBe("https://roomy.space");
+  });
+
+  test("honors ROOMY_APP_ORIGIN + strips trailing slash", () => {
+    process.env.POLAR_ACCESS_TOKEN = "polar_oat_x";
+    process.env.ROOMY_PRO_PRODUCT_ID = "prod_x";
+    process.env.ROOMY_APP_ORIGIN = "https://app.roomy.space/";
+    expect(getPolarConfig()?.appOrigin).toBe("https://app.roomy.space");
   });
 
   test("honors POLAR_ENDPOINT + strips trailing slash", () => {
@@ -437,5 +448,78 @@ describe("getCachedCustomerState / resolveGrantorCapacityWith", () => {
     const after = await resolveGrantorCapacityWith(CONFIG, DID, { force: true });
     expect(after).toEqual({ capacity: ROOMY_PRO_CAPACITY, stale: false });
     expect(fetches).toBe(2);
+  });
+});
+
+// ─── checkout-session creation ────────────────────────────────────────────
+
+describe("createCheckoutSession", () => {
+  const DID = "did:plc:buyer-user";
+  const SUCCESS_URL = "https://roomy.space/user/settings/subscription?checkout={CHECKOUT_ID}";
+
+  test("POSTs product + external_customer_id + success_url, returns id+url", async () => {
+    let body: unknown;
+    stubFetch((url, init) => {
+      expect(url).toBe("https://sandbox-api.polar.sh/v1/checkouts/");
+      expect(init?.method).toBe("POST");
+      const headers = init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe("Bearer polar_oat_test");
+      expect(headers["Content-Type"]).toBe("application/json");
+      body = JSON.parse(String(init?.body));
+      return Response.json({ id: "chk_123", url: "https://buy.polar.sh/session/abc" }, { status: 201 });
+    });
+
+    const session = await createCheckoutSession(CONFIG, {
+      externalCustomerId: DID,
+      successUrl: SUCCESS_URL,
+    });
+
+    expect(body).toEqual({
+      products: [CONFIG.roomyProProductId],
+      external_customer_id: DID,
+      success_url: SUCCESS_URL,
+    });
+    expect(session).toEqual({ id: "chk_123", url: "https://buy.polar.sh/session/abc" });
+  });
+
+  test("non-201 → PolarUnavailableError", async () => {
+    stubFetch(() => new Response("nope", { status: 422 }));
+    try {
+      await createCheckoutSession(CONFIG, {
+        externalCustomerId: DID,
+        successUrl: SUCCESS_URL,
+      });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PolarUnavailableError);
+    }
+  });
+
+  test("malformed body → PolarUnavailableError", async () => {
+    stubFetch(() => Response.json({ id: "chk_123" }, { status: 201 }));
+    try {
+      await createCheckoutSession(CONFIG, {
+        externalCustomerId: DID,
+        successUrl: SUCCESS_URL,
+      });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PolarUnavailableError);
+    }
+  });
+
+  test("network failure → PolarUnavailableError", async () => {
+    stubFetch(() => {
+      throw new TypeError("fetch failed");
+    });
+    try {
+      await createCheckoutSession(CONFIG, {
+        externalCustomerId: DID,
+        successUrl: SUCCESS_URL,
+      });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PolarUnavailableError);
+    }
   });
 });

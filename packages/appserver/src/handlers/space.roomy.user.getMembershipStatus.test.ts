@@ -21,6 +21,7 @@ const CONFIG: PolarConfig = {
   endpoint: "https://sandbox-api.polar.sh/v1",
   accessToken: "polar_oat_test",
   roomyProProductId: "prod_roomy_pro",
+  appOrigin: "https://roomy.space",
 };
 
 function proState() {

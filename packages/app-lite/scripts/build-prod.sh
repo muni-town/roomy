@@ -81,6 +81,7 @@ SCOPE+=" rpc:space.roomy.federation.getGrants?aud=*"
 # ── Web push notification endpoints ──────────────────────────────────────
 SCOPE+=" rpc:space.roomy.push.getVapidPublicKey?aud=*"
 SCOPE+=" rpc:space.roomy.push.getPreferences?aud=*"
+SCOPE+=" rpc:space.roomy.pro.createCheckout?aud=*"
 SCOPE+=" rpc:space.roomy.push.registerSubscription?aud=*"
 SCOPE+=" rpc:space.roomy.push.unregisterSubscription?aud=*"
 SCOPE+=" rpc:space.roomy.push.setPreferences?aud=*"

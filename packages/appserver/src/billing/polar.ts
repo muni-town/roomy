@@ -52,11 +52,14 @@ import { log } from "../log.ts";
  *
  * Env vars:
  * - `POLAR_ACCESS_TOKEN` — Organization Access Token (`polar_oat_…`, scope
- *   `customers:read`). Required to enable the provider.
+ *   `customers:read`, `checkouts:write`). Required to enable the provider.
  * - `POLAR_ENDPOINT` — API base URL. Defaults to `https://api.polar.sh/v1`;
  *   tests point at the sandbox (`https://sandbox-api.polar.sh/v1`).
  * - `ROOMY_PRO_PRODUCT_ID` — the Polar product ID of the Roomy Pro
  *   subscription (a subscription to it grants 1000 capacity).
+ * - `ROOMY_APP_ORIGIN` — public origin of the Roomy app; Polar checkout
+ *   sessions redirect the customer back here after payment (with
+ *   `?checkout={CHECKOUT_ID}`). Defaults to `https://roomy.space`.
  */
 export interface PolarConfig {
   /** API base URL (no trailing slash). */
@@ -65,6 +68,8 @@ export interface PolarConfig {
   accessToken: string;
   /** Polar product ID for the Roomy Pro subscription. */
   roomyProProductId: string;
+  /** Public origin of the Roomy app (checkout success_url target). */
+  appOrigin: string;
 }
 
 /**
@@ -82,6 +87,7 @@ export function getPolarConfig(): PolarConfig | null {
     endpoint: endpoint.replace(/\/+$/, ""),
     accessToken,
     roomyProProductId,
+    appOrigin: (process.env.ROOMY_APP_ORIGIN ?? "https://roomy.space").replace(/\/+$/, ""),
   };
 }
 
@@ -285,6 +291,88 @@ export async function getCustomerState(
     if (err instanceof PolarUnavailableError) throw err;
     throw new PolarUnavailableError(
       err instanceof Error ? err.message : "Polar customer-state fetch failed",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Create a Polar checkout session bound to a customer external ID.
+ *
+ * Roomy's subscription checks look customers up by external ID == user DID
+ * (`GET /customers/external/{external_id}/state`). The only way that
+ * external ID gets set is by passing it as `external_customer_id` when the
+ * session is created (Checkout API, scope `checkouts:write`): on successful
+ * payment Polar creates the customer with that external ID. A static
+ * Checkout Link cannot carry an external ID, so the appserver must create
+ * every session.
+ *
+ * Returns the `url` the client should redirect the browser to (the
+ * Polar-hosted checkout page). The `success_url` carries
+ * `checkout_id={CHECKOUT_ID}`, which Polar substitutes at redirect time —
+ * that's what the subscription page's `?checkout=` param reads.
+ *
+ * Throws `PolarUnavailableError` on transport errors / non-2xx / malformed
+ * response — the same fail-open contract as `getCustomerState`.
+ */
+export interface PolarCheckoutSession {
+  id: string;
+  url: string;
+}
+
+export async function createCheckoutSession(
+  config: PolarConfig,
+  opts: {
+    /** Roomy user DID — becomes the customer's external_id in Polar. */
+    externalCustomerId: string;
+    /** URL Polar redirects to after payment; `{CHECKOUT_ID}` is substituted. */
+    successUrl: string;
+    /** Polar product id to sell (defaults to the Roomy Pro product). */
+    productId?: string;
+  },
+): Promise<PolarCheckoutSession> {
+  const url = `${config.endpoint}/checkouts/`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), POLAR_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        products: [opts.productId ?? config.roomyProProductId],
+        external_customer_id: opts.externalCustomerId,
+        success_url: opts.successUrl,
+      }),
+      signal: controller.signal,
+    });
+    if (res.status !== 201) {
+      throw new PolarUnavailableError(
+        `Polar checkout-session creation returned HTTP ${res.status}`,
+      );
+    }
+    const body: unknown = await res.json();
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("id" in body) ||
+      !("url" in body) ||
+      typeof body.id !== "string" ||
+      typeof body.url !== "string"
+    ) {
+      throw new PolarUnavailableError(
+        "Polar checkout-session response did not match expected shape",
+      );
+    }
+    return { id: body.id, url: body.url };
+  } catch (err) {
+    if (err instanceof PolarUnavailableError) throw err;
+    throw new PolarUnavailableError(
+      err instanceof Error ? err.message : "Polar checkout-session creation failed",
     );
   } finally {
     clearTimeout(timer);

@@ -180,6 +180,10 @@ export const PROCEDURE_SCHEMAS = {
     input: procedures.setPreferences.Input,
     output: procedures.setPreferences.Output,
   },
+  "space.roomy.pro.createCheckout": {
+    input: procedures.createProCheckout.Input,
+    output: procedures.createProCheckout.Output,
+  },
 } as const;
 
 export type QueryNsid = keyof typeof QUERY_SCHEMAS;

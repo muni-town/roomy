@@ -5,6 +5,7 @@
   import { IconCheck, IconAlertCircle, IconArrowRight } from "@roomy/design/icons";
   import { createMembershipStatusQuery } from "$lib/queries/membership-status";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
+  import { createProCheckout } from "$lib/mutations/pro-checkout";
 
   // The SDK lexicon doesn't type space.roomy.user.getMembershipStatus yet, so
   // px().query returns a union — narrow the shape we render here.
@@ -25,8 +26,27 @@
     );
   }
 
-  // Polar checkout URL for Roomy Pro (billed via polar.sh).
-  const CHECKOUT_URL = "https://buy.polar.sh/polar_cl_lsCqRe7pBprn4yTCjKcdJ8ShjMQGnEXPoUPoG3xUIPl";
+  // Polar checkout for Roomy Pro (billed via polar.sh). The session is
+  // minted server-side (space.roomy.pro.createCheckout) bound to the
+  // caller's DID as the Polar customer external ID — a static checkout link
+  // cannot carry that ID, and without it the appserver's status checks
+  // would never resolve the customer.
+  let checkoutError = $state<string | null>(null);
+  let checkoutBusy = $state(false);
+
+  async function startCheckout() {
+    if (checkoutBusy) return;
+    checkoutBusy = true;
+    try {
+      const url = await createProCheckout();
+      window.location.assign(url);
+    } catch (err) {
+      checkoutError =
+        err instanceof Error ? err.message : "Could not start checkout — try again.";
+    } finally {
+      checkoutBusy = false;
+    }
+  }
 
   // The pro-subscription flag gates this page (direct navigation lands
   // here even when the sidebar tab is hidden).
@@ -65,7 +85,7 @@
     },
     {
       name: "Pro",
-      cta: { label: "Subscribe", href: CHECKOUT_URL },
+      cta: { label: "Subscribe", action: startCheckout },
       features: [
         [
           { text: "Bridge " },
@@ -153,10 +173,21 @@
             You're a Roomy Pro member
           </span>
         {:else}
-          <Button href={CHECKOUT_URL} variant="cta" size="lg">
+          <Button
+            onclick={startCheckout}
+            variant="cta"
+            size="lg"
+            asyncState={checkoutBusy ? { status: "loading" } : { status: "idle" }}
+          >
             Subscribe to Roomy Pro
             <IconArrowRight class="size-5" />
           </Button>
+        {/if}
+        {#if checkoutError}
+          <p class="text-sm text-base-400 flex items-center gap-1.5">
+            <IconAlertCircle class="size-4 shrink-0 text-base-400" />
+            {checkoutError}
+          </p>
         {/if}
         {#if status?.stale}
           <p class="text-sm text-base-400 flex items-center gap-1.5">
@@ -207,7 +238,12 @@
         If you're on Bluesky or the Atmosphere, you already have an account.
       </p>
       <div class="mt-4">
-        <Button href={CHECKOUT_URL} variant="cta" size="lg">
+        <Button
+          onclick={startCheckout}
+          variant="cta"
+          size="lg"
+          asyncState={checkoutBusy ? { status: "loading" } : { status: "idle" }}
+        >
           Subscribe to Roomy Pro
           <IconArrowRight class="size-5" />
         </Button>

@@ -76,6 +76,7 @@ import { getUserAccessHandler } from "./handlers/space.roomy.space.getUserAccess
 import { grantBridgeTokenHandler } from "./handlers/space.roomy.space.grantBridgeToken.ts";
 import { revokeBridgeTokenHandler } from "./handlers/space.roomy.space.revokeBridgeToken.ts";
 import { getBridgeTokensHandler } from "./handlers/space.roomy.space.getBridgeTokens.ts";
+import { createProCheckoutHandler } from "./handlers/space.roomy.pro.createCheckout.ts";
 import { adminGetSpaceMembershipHandler } from "./handlers/space.roomy.admin.getSpaceMembership.ts";
 import { getVapidPublicKeyHandler } from "./handlers/space.roomy.push.getVapidPublicKey.ts";
 import { getPreferencesHandler } from "./handlers/space.roomy.push.getPreferences.ts";
@@ -338,6 +339,11 @@ export function buildRouter(
       handler: getBridgeTokensHandler,
       paramsSchema: schemas.queries.getBridgeTokens.Params,
       outputSchema: schemas.queries.getBridgeTokens.Response,
+    })
+    .procedure("space.roomy.pro.createCheckout", {
+      handler: createProCheckoutHandler,
+      inputSchema: schemas.procedures.createProCheckout.Input,
+      outputSchema: schemas.procedures.createProCheckout.Output,
     })
     .query("space.roomy.federation.getRequests", {
       handler: getFederationRequestsHandler,
