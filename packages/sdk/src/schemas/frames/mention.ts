@@ -18,6 +18,9 @@ export const Op = type({
   op: "'add' | 'update' | 'remove'",
   key: "string",
   "message?": Message,
+  // Present on add/update ops: 'mention' (plain #didMention) or 'reply'
+  // (depth-1 reply to this DID's message). Remove ops carry no kind.
+  "kind?": "'mention' | 'reply'",
 });
 
 export const Body = type({

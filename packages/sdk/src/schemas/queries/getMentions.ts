@@ -23,6 +23,8 @@ export const Mention = type({
   message: Message,
   spaceId: "string",
   roomId: "string",
+  /** 'mention' (plain #didMention) or 'reply' (depth-1 reply to this DID's message). */
+  kind: "'mention' | 'reply'",
 });
 
 export const Response = type({

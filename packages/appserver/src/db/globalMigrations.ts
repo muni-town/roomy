@@ -27,6 +27,11 @@ const GLOBAL_MIGRATION_TASKS: Record<string, GlobalMigrationTask> = {
   // CHECK, so the table is rebuilt. Runs before per-stream replay, so
   // 'members' grants replayed from the event log insert cleanly.
   "8": rebuildReceiverPermissionsConstraint,
+  // v9: the `mentions` table gained `kind` ('mention' | 'reply'). The
+  // schema exec creates the new column on fresh DBs, but an existing DB's
+  // table predates it — add the column and backfill existing rows to
+  // 'mention' so the dual-write never hits a missing column.
+  "9": backfillMentionsKind,
 };
 
 
@@ -87,6 +92,42 @@ async function rebuildReceiverPermissionsConstraint(
 }
 /** No-op for additive-DDL-only bumps (the table is created by the schema exec). */
 async function noopMigration(): Promise<void> {}
+
+/**
+ * v9: add `mentions.kind` ('mention' | 'reply', default 'mention').
+ *
+ * The schema exec creates the column on fresh DBs, but an existing global DB
+ * predates it. SQLite can't add a table column in a `create table if not
+ * exists`, so this ALTERs the table and backfills every existing row to
+ * 'mention'. Idempotent: a DB that already has the column (fresh v9 install
+ * or a completed migration) is a no-op.
+ */
+async function backfillMentionsKind(
+  db: DbLike,
+  _streamDids: StreamDid[],
+): Promise<void> {
+  const globalDb = db.global?.();
+  if (!globalDb) return;
+
+  const current = await globalDb
+    .query("select sql from sqlite_master where type = 'table' and name = 'mentions'")
+    .get<{ sql: string }>();
+  // Fresh database on the current schema — the column already exists.
+  if (!current || current.sql.includes("kind")) return;
+
+  await globalDb.transaction([
+    {
+      type: "exec",
+      sql: `alter table mentions add column kind text not null default 'mention' check(kind in ('mention','reply'))`,
+    },
+    // Backfill is implicit: the DEFAULT stamps 'mention' into every
+    // existing row. Keep the row explicit for clarity/safety.
+    {
+      type: "exec",
+      sql: `update mentions set kind = 'mention' where kind is null`,
+    },
+  ]);
+}
 
 /**
  * Run incomplete global post-migrations in version order.

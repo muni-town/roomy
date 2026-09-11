@@ -812,6 +812,8 @@ describe("space.roomy.mention.getMentions", () => {
     expect(body.mentions[0].message.id).toBe(MSG_A);
     expect(body.mentions[0].spaceId).toBe(SPACE);
     expect(body.mentions[0].roomId).toBe(ROOM);
+    // Schema default stamps plain-mention rows with kind='mention'.
+    expect(body.mentions[0].kind).toBe("mention");
   });
 
   test("empty mentions → empty", async () => {

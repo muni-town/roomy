@@ -63,8 +63,8 @@ export interface MessageDiff {
 }
 
 export type MessageDiffOp =
-  | { op: "add"; key: Ulid; message: MessageSnapshot }
-  | { op: "update"; key: Ulid; message: MessageSnapshot }
+  | { op: "add"; key: Ulid; message: MessageSnapshot; kind?: "mention" | "reply" }
+  | { op: "update"; key: Ulid; message: MessageSnapshot; kind?: "mention" | "reply" }
   | { op: "remove"; key: Ulid };
 
 /**

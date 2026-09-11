@@ -4,11 +4,12 @@
   "defs": {
     "mention": {
       "type": "object",
-      "required": ["message", "spaceId", "roomId"],
+      "required": ["message", "spaceId", "roomId", "kind"],
       "properties": {
         "message": { "type": "unknown" },
         "spaceId": { "type": "string" },
-        "roomId": { "type": "string" }
+        "roomId": { "type": "string" },
+        "kind": { "type": "string", "knownValues": ["mention", "reply"] }
       }
     },
     "main": {

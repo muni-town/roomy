@@ -227,6 +227,16 @@ function convertSlot(
     if (!rawDef) {
       throw new Error(`${nsid}: ${path} → unresolved $defs entry ${defKey}`);
     }
+    // Enum-style `$defs` entries (e.g. a string-literal union hoisted by a
+    // `scope` type) are inlined at the reference site as knownValues — the
+    // same conversion as an inline `{ enum: [...] }` slot; they never need a
+    // named lexicon def.
+    if (Array.isArray(rawDef["enum"]) || (typeof rawDef["type"] === "string" && Array.isArray(rawDef["enum"]))) {
+      return {
+        type: "string",
+        knownValues: (rawDef["enum"] as unknown[]).map((v) => String(v)),
+      };
+    }
     // Array defs are inlined at the reference site (items must still be
     // refs) — matching how the non-recursive generator handled arrays — so
     // only the item object gets a named def. Object defs are extracted as

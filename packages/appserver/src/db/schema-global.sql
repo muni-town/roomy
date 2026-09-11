@@ -101,6 +101,7 @@ create table if not exists mentions (
   message_id text not null,  -- the message that mentioned them
   space_did text not null,
   room_id text not null,
+  kind text not null default 'mention' check(kind in ('mention','reply')),
   created_at integer not null default (unixepoch() * 1000),
   primary key (did, message_id)
 ) strict;

@@ -25,7 +25,7 @@ import type { DbLike } from "../db/types.ts";
 import { openReadStateDb, openSpaceDb, tryOpenGlobalDb } from "../db/db.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
 import { getRoomReadPositionUsers } from "../queries/readPositions.ts";
-import { getMentionedDidsForMessage } from "../queries/mentions.ts";
+import { getMentionedDidsForMessage, resolveReplyToAuthors } from "../queries/mentions.ts";
 
 // ─── Public API ─────────────────────────────────────────────────────────
 
@@ -50,6 +50,7 @@ export async function inferSignals(
   event: AppliedEvent,
   db?: DbLike,
   messageSnapshots?: ReadonlyMap<Ulid, MessageDto>,
+  replyToAuthors?: ReadonlyMap<Ulid, UserDid>,
 ): Promise<InvalidationEvent[]> {
   // Suppress signals for synthetic query events — they're bulk hydration,
   // not incremental changes.
@@ -57,7 +58,7 @@ export async function inferSignals(
 
   const handler = HANDLERS[event.type as keyof typeof HANDLERS];
   if (!handler) return [];
-  return await handler(event, db, messageSnapshots);
+  return await handler(event, db, messageSnapshots, replyToAuthors);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -159,23 +160,31 @@ function invalidateRoom(roomId: Ulid, spaceId: StreamDid): InvalidationEvent[] {
 
 
 /**
+ * A `#mention` op variant — only add/update ops carry `kind` (remove ops
+ * have no message to classify).
+ */
+type MentionableOp = Extract<MessageDiffOp, { op: "add" | "update" }>;
+
+/**
  * Build `mentionDiff` signals for a message that mentions users.
  *
- * Emits one `MentionDiff` per mentioned DID (excluding the author's own DID —
- * self-mentions don't notify the author). The DID is the stable ID carried by
- * `#didMention` facets / the mentions extension; it never changes, unlike
- * handles or display names.
+ * Emits one `MentionDiff` per mentioned DID, self-mentions included — the
+ * bridge/client-side filter is the customization point (self-mentions flow
+ * through the normal mentions index, #mention frames, and getMentions; the
+ * Roomy UI mention list showing its own self-mentions is accepted). The DID
+ * is the stable ID carried by `#didMention` facets / the mentions extension;
+ * it never changes, unlike handles or display names.
  */
 function mentionDiffs(
   event: AppliedEvent,
   roomId: Ulid,
   mentionedDids: readonly string[] | undefined,
-  op: MessageDiffOp,
+  op: MentionableOp,
+  kind: "mention" | "reply",
 ): InvalidationEvent[] {
   if (!mentionedDids || mentionedDids.length === 0) return [];
   const signals: InvalidationEvent[] = [];
   for (const did of mentionedDids) {
-    if (did === event.user) continue; // self-mention
     signals.push({
       kind: "mentionDiff",
       signal: {
@@ -183,17 +192,68 @@ function mentionDiffs(
         spaceId: event.streamDid,
         roomId,
         seq: 0,
-        ops: [op],
+        ops: [{ ...op, kind }],
       },
     });
   }
   return signals;
 }
 
+/**
+ * Build a `mentionDiff` signal for a depth-1 reply: the author of the
+ * replied-to message receives a `kind: 'reply'` op. Only direct replies
+ * notify — the replied-to author must differ from the reply's author, and
+ * no reply-chain walk happens (replies further downstream never notify the
+ * chain root). When the replied-to author is ALSO mentioned, the caller
+ * drops the duplicate `kind: 'mention'` op so each did receives exactly one
+ * op, the reply (mirroring the mentions-index overlap row upgrade).
+ */
+function replyDiff(
+  event: AppliedEvent,
+  roomId: Ulid,
+  replyAuthor: UserDid | undefined,
+  op: MentionableOp,
+): InvalidationEvent[] {
+  if (!replyAuthor || replyAuthor === event.user) return [];
+  return [
+    {
+      kind: "mentionDiff",
+      signal: {
+        did: replyAuthor,
+        spaceId: event.streamDid,
+        roomId,
+        seq: 0,
+        ops: [{ ...op, kind: "reply" }],
+      },
+    },
+  ];
+}
+
+/**
+ * Resolve the replied-to message's author for the event's message entity.
+ * Prefers the router's pre-resolved batch map (one query per stream);
+ * falls back to a per-space DB read for direct callers/tests.
+ */
+async function replyAuthorFor(
+  event: AppliedEvent,
+  db: DbLike | undefined,
+  replyToAuthors: ReadonlyMap<Ulid, UserDid> | undefined,
+): Promise<UserDid | undefined> {
+  const messageId =
+    event.type === "space.roomy.message.editMessage.v0"
+      ? ((event.details?.messageId as Ulid | undefined) ?? event.id)
+      : event.id;
+  if (replyToAuthors) return replyToAuthors.get(messageId);
+  const spaceDb = db ?? openSpaceDb(event.streamDid);
+  const map = await resolveReplyToAuthors(spaceDb, [messageId]);
+  return map.get(messageId);
+}
+
 async function handleCreateMessage(
   event: AppliedEvent,
   db?: DbLike,
   messageSnapshots?: ReadonlyMap<Ulid, MessageDto>,
+  replyToAuthors?: ReadonlyMap<Ulid, UserDid>,
 ): Promise<InvalidationEvent[]> {
   const roomId = event.roomId;
   if (!roomId) return [];
@@ -225,14 +285,26 @@ async function handleCreateMessage(
         ops: [{ op: "add", key: event.id, message }],
       },
     });
+    const mentions = details.mentions as string[] | undefined;
+    // Depth-1 reply — notify the replied-to message's author (unless they
+    // wrote the reply). Overlap (replied-to author also mentioned) yields a
+    // single `kind: 'reply'` op for that did, mirroring the mentions-index
+    // row upgrade — so drop them from the plain-mention list first.
+    const replyAuthor = await replyAuthorFor(event, db, replyToAuthors);
+    const mentionDids = mentions?.filter((d) => d !== replyAuthor);
     // Mentions — route to connections subscribed to `mentions:<did>`.
     signals.push(
-      ...mentionDiffs(event, roomId, details.mentions as string[] | undefined, {
+      ...mentionDiffs(event, roomId, mentionDids, {
         op: "add",
         key: event.id,
         message,
-      }),
+      }, "mention"),
     );
+    signals.push(...replyDiff(event, roomId, replyAuthor, {
+      op: "add",
+      key: event.id,
+      message,
+    }));
   }
 
   // Per-user unread-count diff. The materializer already bumped
@@ -363,6 +435,7 @@ async function handleEditMessage(
   event: AppliedEvent,
   db?: DbLike,
   messageSnapshots?: ReadonlyMap<Ulid, MessageDto>,
+  replyToAuthors?: ReadonlyMap<Ulid, UserDid>,
 ): Promise<InvalidationEvent[]> {
   const roomId = event.roomId;
   if (!roomId) return [];
@@ -394,13 +467,23 @@ async function handleEditMessage(
       },
     });
     // Mentions may have changed on edit — re-route to `mentions:<did>`.
+    // The replied-to author gets one `kind: 'reply'` op (or the mention op
+    // when the overlap filter drops them), mirroring the index upgrade.
+    const mentions = details.mentions as string[] | undefined;
+    const replyAuthor = await replyAuthorFor(event, db, replyToAuthors);
+    const mentionDids = mentions?.filter((d) => d !== replyAuthor);
     signals.push(
-      ...mentionDiffs(event, roomId, details.mentions as string[] | undefined, {
+      ...mentionDiffs(event, roomId, mentionDids, {
         op: "update",
         key: messageId,
         message,
-      }),
+      }, "mention"),
     );
+    signals.push(...replyDiff(event, roomId, replyAuthor, {
+      op: "update",
+      key: messageId,
+      message,
+    }));
   }
   // Edit doesn't change unread count, but room metadata's recentThreads
   // might reference this message's activity, and the space index board
@@ -453,7 +536,6 @@ async function handleDeleteMessage(
   if (globalDb) {
     const dids = await getMentionedDidsForMessage(globalDb, messageId);
     for (const did of dids) {
-      if (did === event.user) continue;
       signals.push({
         kind: "mentionDiff",
         signal: {
@@ -856,7 +938,7 @@ function handleSetReceiverPermission(event: AppliedEvent): InvalidationEvent[] {
 
 // ─── Dispatch table ─────────────────────────────────────────────────────
 
-const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike, messageSnapshots?: ReadonlyMap<Ulid, MessageDto>) => InvalidationEvent[] | Promise<InvalidationEvent[]>> = {
+const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike, messageSnapshots?: ReadonlyMap<Ulid, MessageDto>, replyToAuthors?: ReadonlyMap<Ulid, UserDid>) => InvalidationEvent[] | Promise<InvalidationEvent[]>> = {
   // Messages
   "space.roomy.message.createMessage.v0": handleCreateMessage,
   "space.roomy.message.editMessage.v0": handleEditMessage,

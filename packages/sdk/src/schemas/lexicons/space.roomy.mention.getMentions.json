@@ -250,11 +250,19 @@
     "mentions": {
       "type": "object",
       "required": [
+        "kind",
         "message",
         "roomId",
         "spaceId"
       ],
       "properties": {
+        "kind": {
+          "type": "string",
+          "knownValues": [
+            "mention",
+            "reply"
+          ]
+        },
         "message": {
           "type": "ref",
           "ref": "#message"

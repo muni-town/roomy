@@ -24,6 +24,12 @@ export interface PushJob {
   timestamp: number;
   /** DIDs mentioned in the message body (from the mentions extension). */
   mentions?: string[];
+  /**
+   * DIDs notified of a direct (depth-1) reply: the author(s) of the
+   * replied-to message(s). Resolved by the enqueue site (StreamManager,
+   * on the write path, batched) — the dispatcher never walks reply edges.
+   */
+  repliedToDids?: string[];
 }
 
 /**

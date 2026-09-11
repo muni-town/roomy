@@ -24,7 +24,7 @@ import type { DbLike } from "../db/types.ts";
 import type { StreamDid, Ulid } from "@roomy-space/sdk";
 import { inferSignals } from "./inferSignals.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
-import { syncMentionsIndex } from "../queries/mentions.ts";
+import { syncMentionsIndex, resolveReplyToAuthors } from "../queries/mentions.ts";
 import { openSpaceDb } from "../db/db.ts";
 import { log } from "../log.ts";
 
@@ -68,16 +68,40 @@ export class Router implements IInvalidationRouter {
     // event (5N for a batch of N); this collapses them to 5 queries total.
     const messageSnapshots = await this.#fetchMessageSnapshots(streamDid, events);
 
+    // Resolve reply-edge authors (depth-1 replies) once per batch, not per
+    // event — a single batched per-space query per stream keeps the write
+    // path batch-friendly (the 'reply' edge isn't on the AppliedEvent; it's
+    // materialised into the per-space DB by applyBatch). Shared by the
+    // mentions index (syncMentionsIndex) and the mentionDiff signals
+    // (inferSignals).
+    const spaceDb = (db as { forSpace?: (d: string) => DbLike } | undefined)?.forSpace?.(streamDid);
+    const replyToAuthors = spaceDb
+      ? await resolveReplyToAuthors(
+          spaceDb,
+          events
+            .filter((e) =>
+              e.type === "space.roomy.message.createMessage.v0" ||
+              e.type === "space.roomy.message.forwardMessages.v0" ||
+              e.type === "space.roomy.message.editMessage.v0",
+            )
+            .map((e) =>
+              e.type === "space.roomy.message.editMessage.v0"
+                ? ((e.details?.messageId as Ulid | undefined) ?? e.id)
+                : e.id,
+            ),
+        )
+      : undefined;
+
     // Dual-write the global mentions index so the `mentions:<did>` sync topic
     // can backfill and deleteMessage can resolve a deleted message's DIDs.
     const globalDb = (db as { global?: () => DbLike } | undefined)?.global?.();
     if (globalDb) {
-      await syncMentionsIndex(globalDb, events);
+      await syncMentionsIndex(globalDb, events, { spaceDb, replyToAuthors });
     }
 
     const allSignals: InvalidationEvent[] = [];
     for (const event of events) {
-      const signals = await inferSignals(event, undefined, messageSnapshots);
+      const signals = await inferSignals(event, undefined, messageSnapshots, replyToAuthors);
       this.#stampSeq(signals);
       allSignals.push(...signals);
     }

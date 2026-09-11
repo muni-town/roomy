@@ -20,6 +20,7 @@ import type { HappyViewConfig } from "../happyview.ts";
 import { toAppliedEvent } from "../materialization/toAppliedEvent.ts";
 import { pokeEmbedSweeper } from "../embed/sweeper.ts";
 import { pokePushDispatcher } from "../push/dispatcher.ts";
+import { resolveReplyToAuthors } from "../queries/mentions.ts";
 import { decodeTime } from "ulidx";
 import { createStreamDid } from "./did.ts";
 import { provisionSpace } from "../arbiter/provision.ts";
@@ -264,6 +265,17 @@ export class StreamManager {
         // backlog (which can be tens of thousands of historical links) before
         // its card is enriched.
         pokeEmbedSweeper(batchStats.detectedLinks);
+        // Resolve depth-1 reply targets once per batch (see
+        // resolveReplyToAuthors — the 'reply' edge is materialised into the
+        // per-space DB by applyBatch) so the PUSH DISPATCHER never walks
+        // edges: push stays a background loop off the write path.
+        const spaceDb = this.#db.forSpace?.(streamDid);
+        const replyToAuthors = spaceDb
+          ? await resolveReplyToAuthors(
+              spaceDb,
+              createMessageEvents.map((e) => e.id),
+            )
+          : undefined;
         pokePushDispatcher(
           createMessageEvents.map((e) => ({
             spaceId: streamDid,
@@ -272,6 +284,9 @@ export class StreamManager {
             authorDid: (e.details?.authorDid ?? e.user) as UserDid,
             timestamp: decodeTime(e.id),
             mentions: e.details?.mentions as string[] | undefined,
+            ...(replyToAuthors?.get(e.id)
+              ? { repliedToDids: [replyToAuthors.get(e.id)!] }
+              : {}),
           })),
         );
       }

@@ -55,8 +55,13 @@ export const SPACE_SCHEMA_VERSION = "2";
  * `.6`: added resumable global post-migration tracking and schedules a
  * one-time repair of active joined-space edges from per-space membership
  * truth. This recovers global DBs wiped by the v4→v5 deployment bug.
+ *
+ * `.9`: added the `mentions.kind` column (`'mention'` | `'reply'`, default
+ * `'mention'`) — reply notifications (depth-1) land as `kind='reply'` rows
+ * so clients can distinguish direct replies from plain mentions. Existing
+ * rows are backfilled to `'mention'` by the v9 post-migration.
  */
-export const GLOBAL_SCHEMA_VERSION = "8";
+export const GLOBAL_SCHEMA_VERSION = "9";
 
 /**
  * Default pool size (per-space workers). Override via `APPSERVER_DB_POOL_SIZE`.

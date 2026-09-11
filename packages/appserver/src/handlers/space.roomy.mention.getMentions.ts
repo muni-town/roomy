@@ -22,6 +22,8 @@ export interface GetMentionsResult {
     message: MessageDto;
     spaceId: string;
     roomId: string;
+    /** 'mention' (plain #didMention) or 'reply' (depth-1 reply to this DID's message). */
+    kind: "mention" | "reply";
   }>;
   cursor?: string;
 }
@@ -50,6 +52,7 @@ export const getMentionsHandler: QueryHandler<
         message: messages.get(m.message_id)!,
         spaceId: m.space_did,
         roomId: m.room_id,
+        kind: m.kind,
       })),
     ...(nextCursor ? { cursor: nextCursor } : {}),
   };
