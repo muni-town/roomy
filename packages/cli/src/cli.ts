@@ -279,7 +279,8 @@ program
   .option("--description <desc>", "Profile description")
   .option("--pronouns <pronouns>", "Pronouns")
   .option("--website <url>", "Website URL")
-  .action(async (options: { displayName?: string; description?: string; pronouns?: string; website?: string }) => {
+  .option("--avatar <path>", "Path to an image file (PNG/JPEG) to set as the profile avatar")
+  .action(async (options: { displayName?: string; description?: string; pronouns?: string; website?: string; avatar?: string }) => {
     try {
       const config = loadConfig();
       const { agent } = await authenticate(config);
