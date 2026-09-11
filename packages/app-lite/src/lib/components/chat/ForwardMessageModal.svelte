@@ -9,6 +9,7 @@
   import { createSearchRoomsQuery } from "$lib/queries/search-rooms";
   import { forwardMessage } from "$lib/mutations/message";
   import ChatInput from "./ChatInput.svelte";
+  import { messagingState } from "./messaging-state.svelte";
   import { createMentionSearch } from "$lib/tiptap/mentions";
   import { toast } from "@foxui/core";
 
@@ -19,13 +20,14 @@
     open = $bindable(false),
     spaceId,
     fromRoomId,
-    messageId,
+    messageIds,
   }: {
     open: boolean;
     spaceId: string;
-    /** The room the forwarded message currently lives in. */
+    /** The room the forwarded messages currently live in. */
     fromRoomId: string;
-    messageId: string;
+    /** The message(s) to forward. */
+    messageIds: string[];
   } = $props();
 
   // WYSIWYG composer body (markdown + blocks), bound from ChatInput.
@@ -162,15 +164,26 @@
     const hasBlocks = !!bodyBlocks && bodyBlocks.length > 0;
     await Promise.all(
       roomIds.map((roomId) =>
-        forwardMessage(spaceId, fromRoomId, messageId, roomId, body, {
-          ...(hasBlocks ? { blocks: bodyBlocks } : {}),
-          ...(!hasBlocks && bodyMentions.length > 0 ? { mentions: bodyMentions } : {}),
-        }),
+        Promise.all(
+          messageIds.map((messageId) =>
+            forwardMessage(spaceId, fromRoomId, messageId, roomId, body, {
+              ...(hasBlocks ? { blocks: bodyBlocks } : {}),
+              ...(!hasBlocks && bodyMentions.length > 0 ? { mentions: bodyMentions } : {}),
+            }),
+          ),
+        ),
       ),
     );
     toast.success(
-      `Message forwarded to ${roomIds.length} room${roomIds.length > 1 ? "s" : ""}`,
+      `Forwarded ${messageIds.length} message${messageIds.length > 1 ? "s" : ""} to ${roomIds.length} room${roomIds.length > 1 ? "s" : ""}`,
     );
+    // Forwarding consumes the selection — leave select mode (Signal/WhatsApp
+    // pattern) so the composer returns to normal after a multi-message
+    // forward. Harmless for the single-message toolbar path (state is
+    // already normal; setNormal preserves the draft).
+    if (messagingState.current.kind === "selecting") {
+      messagingState.setNormal();
+    }
   }
 </script>
 

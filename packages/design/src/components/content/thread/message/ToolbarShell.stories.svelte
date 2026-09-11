@@ -19,6 +19,7 @@
       onEdit={() => {}}
       onDelete={() => {}}
       onStartThreading={() => {}}
+      onSelect={() => {}}
       onReply={() => {}}
       onForward={() => {}}
     />

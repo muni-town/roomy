@@ -36,6 +36,8 @@
       onUploadMedia={() => {}}
       onCreateThreadFromMenu={() => {}}
       onCreateThread={() => {}}
+      onForwardSelection={() => {}}
+      onSelectCreateThread={() => {}}
       onRemoveImage={() => {}}
       onThreadNameChange={() => {}}
       onFileInput={() => {}}

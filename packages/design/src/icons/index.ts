@@ -30,6 +30,7 @@ export { default as IconArchive } from "~icons/ph/archive-bold";
 export { default as IconUserPlus } from "~icons/ph/user-plus-bold";
 export { default as IconArrowUturnLeft } from "~icons/ph/arrow-u-up-left-bold";
 export { default as IconCopy } from "~icons/ph/clipboard-bold";
+export { default as IconCheckSquare } from "~icons/ph/check-square-bold";
 
 // Close / Remove
 export { default as IconCloseCircle } from "~icons/ph/x-circle-bold";

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./ChatMessage.svelte";
-  import MobileMessageDrawer from "./MobileMessageDrawer.svelte";
   import DeleteMessageDialog from "@roomy/design/components/content/thread/message/DeleteMessageDialog.svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { setContext, onMount } from "svelte";
@@ -24,7 +23,6 @@
   import { parseRichTextContent } from "./enrich-internal-links";
   import { RICHTEXT_MIME } from "@roomy-space/sdk";
   import type { Block } from "@roomy-space/sdk";
-  import ForwardMessageModal from "./ForwardMessageModal.svelte";
   import { goto } from "$app/navigation";
   const { queryKey } = cache;
 
@@ -38,9 +36,11 @@
      * the loaded window, scrolls it to center, and briefly highlights it.
      */
     highlightMessage?: string | null;
+    /** Forward one or more messages (modal owned by the route page). */
+    onForward: (messages: Message[]) => void;
   };
   
-  let { spaceId, roomId, onSeen, highlightMessage = null }: Props = $props();
+  let { spaceId, roomId, onSeen, highlightMessage = null, onForward }: Props = $props();
 
   const messagesQuery = createMessagesQuery(() => roomId);
 
@@ -65,9 +65,6 @@
 
   // Lifted state for editing messages
   let editingMessageId = $state<string | undefined>(undefined);
-  // Mobile drawer state
-  let mobileMenuMessage = $state<Message | null>(null);
-  let isMobileDrawerOpen = $state(false);
 
   // Delete-confirmation state — lifted here (not inside the hover-gated
   // toolbar) so the modal survives while it is open.
@@ -77,20 +74,6 @@
   function openDeleteConfirm(message: Message) {
     deleteMessageTarget = message;
     isDeleteConfirmOpen = true;
-  }
-
-  // Forward modal state — lifted here so one modal serves every message.
-  let forwardMessage = $state<Message | null>(null);
-  let isForwardModalOpen = $state(false);
-
-  function openForward(message: Message) {
-    forwardMessage = message;
-    isForwardModalOpen = true;
-  }
-
-  function openMobileMenu(message: Message) {
-    mobileMenuMessage = message;
-    isMobileDrawerOpen = true;
   }
 
   // Compute chronological order + mergeWithPrevious from the query data
@@ -538,9 +521,8 @@
                       editingMessageId={editingMessageId}
                       onStartEdit={(id) => (editingMessageId = id)}
                       onCancelEdit={() => (editingMessageId = undefined)}
-                      onOpenMobileMenu={openMobileMenu}
                       onRequestDelete={openDeleteConfirm}
-                      onForward={openForward}
+                      onForward={(messages) => onForward(messages)}
                       mergeWithPrevious={message.mergeWithPrevious}
                       highlighted={highlight?.id === message.id}
                     />
@@ -563,27 +545,6 @@
     <ScrollArea.Corner />
   </ScrollArea.Root>
 
-  <!-- Mobile drawer - outside virtualizer so it doesn't get recycled -->
-  <MobileMessageDrawer
-    spaceId={spaceId}
-    roomId={roomId}
-    message={mobileMenuMessage}
-    bind:open={isMobileDrawerOpen}
-    canEdit={mobileMenuMessage?.authorDid === currentUserDid}
-    canDelete={
-      mobileMenuMessage
-        ? mobileMenuMessage.authorDid === currentUserDid || isAdmin
-        : false
-    }
-    onStartEdit={(id) => (editingMessageId = id)}
-    onRequestDelete={() => {
-      if (!mobileMenuMessage) return;
-      isMobileDrawerOpen = false;
-      openDeleteConfirm(mobileMenuMessage);
-    }}
-    onForward={openForward}
-  />
-
   <DeleteMessageDialog
     bind:open={isDeleteConfirmOpen}
     authorName={deleteMessageTarget?.authorName}
@@ -597,13 +558,4 @@
       await deleteMessage(spaceId, roomId, deleteMessageTarget.id);
     }}
   />
-
-  {#if forwardMessage}
-    <ForwardMessageModal
-      bind:open={isForwardModalOpen}
-      {spaceId}
-      fromRoomId={roomId}
-      messageId={forwardMessage.id}
-    />
-  {/if}
 </div>

@@ -7,13 +7,15 @@
   import { setNavbar } from "$lib/components/layout/navbar.svelte";
   import { setCurrentRoom } from "$lib/components/layout/current-room.svelte";
   import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
-  import { closeToolbar } from "$lib/components/chat/messaging-state.svelte";
+  import { closeToolbar, messagingState } from "$lib/components/chat/messaging-state.svelte";
   import ToggleTabs from "@roomy/design/components/layout/ToggleTabs.svelte";
   import { createRoomMetadataQuery } from "$lib/queries/room-metadata";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { updateSeen } from "$lib/mutations/update-seen";
   import ChatArea from "$lib/components/chat/ChatArea.svelte";
   import ChatInputArea from "$lib/components/chat/ChatInputArea.svelte";
+  import ForwardMessageModal from "$lib/components/chat/ForwardMessageModal.svelte";
+  import type { Message } from "$lib/queries/messages";
   import ChannelBoardView from "$lib/components/thread/ChannelBoardView.svelte";
   import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
   import { resolveBlobUrl } from "$lib/utils";
@@ -25,6 +27,21 @@
   const highlightMessage = $derived(
     page.url.searchParams.get("message") ?? undefined,
   );
+
+  // ── Forward modal ───────────────────────────────────────────────────────
+  // Owned here (not ChatArea/ChatInputArea) so both the per-message toolbar
+  // forward and select mode's multi-message forward share one modal, and its
+  // state survives hover-toolbar and select-mode lifetimes. `forwardSource`
+  // is the source room for the messages being forwarded.
+  let forwardMessages = $state<Message[] | null>(null);
+  let isForwardModalOpen = $state(false);
+  let forwardSourceRoom = $state<string | null>(null);
+
+  function openForward(messages: Message[]) {
+    forwardMessages = messages;
+    forwardSourceRoom = roomId;
+    isForwardModalOpen = true;
+  }
 
   useTopicSubscription(
     () => sync_.ctx?.topicManager ?? null,
@@ -40,6 +57,14 @@
     // (effect_update_depth_exceeded).
     untrack(() => {
       closeToolbar();
+      // Selecting is room-scoped: cancel it when leaving the room so a stale
+      // selection never carries into the next room's composer.
+      if (
+        messagingState.current.kind === "selecting" ||
+        messagingState.current.kind === "threading"
+      ) {
+        messagingState.setNormal();
+      }
       sync_.setActiveRoom(roomId);
     });
     updateSeen(roomId).catch(() => {});
@@ -246,7 +271,7 @@
     <div class="relative flex-1 min-h-0">
       <!-- Chat view - always rendered but visibility toggled -->
       <div class="absolute inset-0 flex flex-col" class:hidden={channelActiveTab !== "Chat"}>
-        <ChatArea spaceId={effectiveSpaceId} {roomId} {highlightMessage} onSeen={() => { if (roomUnreadCount > 0) updateSeen(roomId).catch(() => {}); }} />
+        <ChatArea spaceId={effectiveSpaceId} {roomId} {highlightMessage} onSeen={() => { if (roomUnreadCount > 0) updateSeen(roomId).catch(() => {}); }} onForward={openForward} /> 
       </div>
 
       <!-- Threads view - always rendered but visibility toggled -->
@@ -262,14 +287,23 @@
            previous room's text. Remounting re-seeds from the recalled per-room
            composer document (draft string + blocks). -->
       {#key roomId}
-        <ChatInputArea spaceId={effectiveSpaceId} {roomId} canWrite={roomCanWrite} {disableUploads} />
+        <ChatInputArea spaceId={effectiveSpaceId} {roomId} canWrite={roomCanWrite} {disableUploads} onForwardSelection={openForward} />
       {/key}
     {/if}
   {:else}
     <!-- Thread rooms only have chat view -->
-    <ChatArea spaceId={effectiveSpaceId} {roomId} {highlightMessage} onSeen={() => { if (roomUnreadCount > 0) updateSeen(roomId).catch(() => {}); }} />
+    <ChatArea spaceId={effectiveSpaceId} {roomId} {highlightMessage} onSeen={() => { if (roomUnreadCount > 0) updateSeen(roomId).catch(() => {}); }} onForward={openForward} />
     {#key roomId}
-      <ChatInputArea spaceId={effectiveSpaceId} {roomId} canWrite={roomCanWrite} {disableUploads} />
+      <ChatInputArea spaceId={effectiveSpaceId} {roomId} canWrite={roomCanWrite} {disableUploads} onForwardSelection={openForward} />
     {/key}
+  {/if}
+
+  {#if forwardMessages && forwardSourceRoom}
+    <ForwardMessageModal
+      bind:open={isForwardModalOpen}
+      spaceId={effectiveSpaceId}
+      fromRoomId={forwardSourceRoom}
+      messageIds={forwardMessages.map((m) => m.id)}
+    />
   {/if}
 </div>

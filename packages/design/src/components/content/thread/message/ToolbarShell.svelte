@@ -2,6 +2,8 @@
   import { Toolbar, Tooltip as BitsTooltip } from "bits-ui";
   import Tooltip from "../../../helper/Tooltip.svelte";
   import Button, { buttonVariants } from "../../../ui/button/Button.svelte";
+  import ContextMenu from "../../../ui/context-menu/ContextMenu.svelte";
+  import ContextMenuItem from "../../../ui/context-menu/ContextMenuItem.svelte";
   import { PopoverEmojiPicker } from "@foxui/social";
   import {
     IconSmilePlus,
@@ -10,6 +12,8 @@
     IconNeedleThread,
     IconEdit,
     IconTrash,
+    IconEllipsisHorizontal,
+    IconCheckSquare,
   } from "../../../../icons/index";
 
   let {
@@ -21,6 +25,7 @@
     onEdit,
     onDelete,
     onStartThreading,
+    onSelect,
     onReply,
     onForward,
   }: {
@@ -36,14 +41,20 @@
     onEdit: () => void;
     onDelete: () => void;
     onStartThreading: () => void;
+    /** Enters multi-select mode for this message. */
+    onSelect: () => void;
     onReply: () => void;
     onForward: () => void;
   } = $props();
 
   let isEmojiToolbarPickerOpen = $state(false);
+  let isActionMenuOpen = $state(false);
 
   $effect(() => {
-    keepToolbarOpen = isEmojiToolbarPickerOpen;
+    // The context menu portals to `body`, so leaving the message row fires
+    // `mouseleave` and would hide the toolbar (unmounting the menu) while it
+    // is open. Keep the toolbar mounted for the lifetime of either popover.
+    keepToolbarOpen = isEmojiToolbarPickerOpen || isActionMenuOpen;
   });
 
   function handlePick(emoji: string) {
@@ -106,49 +117,6 @@
       </PopoverEmojiPicker>
     </Tooltip>
 
-    {#if canEdit}
-      <Tooltip tip="Edit Message">
-        <Toolbar.Button
-          onclick={onEdit}
-          class={[
-            buttonVariants({ variant: "ghost", size: "icon" }),
-            "backdrop-blur-none h-[34px]",
-          ]}
-          aria-label="Edit Message"
-        >
-          <IconEdit />
-        </Toolbar.Button>
-      </Tooltip>
-    {/if}
-
-    {#if canDelete}
-      <Tooltip tip="Delete Message">
-        <Toolbar.Button
-          onclick={onDelete}
-          class={[
-            buttonVariants({ variant: "ghost", size: "icon" }),
-            "backdrop-blur-none h-[34px]",
-          ]}
-          aria-label="Delete Message"
-        >
-          <IconTrash class="text-warning" />
-        </Toolbar.Button>
-      </Tooltip>
-    {/if}
-
-    <Tooltip tip="Create Thread">
-      <Toolbar.Button
-        onclick={onStartThreading}
-        class={[
-          buttonVariants({ variant: "ghost", size: "icon" }),
-          "backdrop-blur-none h-[34px]",
-        ]}
-        aria-label="Create Thread"
-      >
-        <IconNeedleThread class="text-primary" />
-      </Toolbar.Button>
-    </Tooltip>
-
     <Tooltip tip="Reply">
       <Toolbar.Button
         onclick={onReply}
@@ -174,5 +142,45 @@
         <IconForward />
       </Toolbar.Button>
     </Tooltip>
+
+    <ContextMenu side="bottom" align="end" sideOffset={8} bind:open={isActionMenuOpen}>
+      {#snippet trigger({ props })}
+        <Toolbar.Button
+          {...props}
+          class={[
+            buttonVariants({ variant: "ghost", size: "icon" }),
+            "backdrop-blur-none h-[34px]",
+          ]}
+          aria-label="More actions"
+        >
+          <IconEllipsisHorizontal />
+        </Toolbar.Button>
+      {/snippet}
+
+      {#if canEdit}
+        <ContextMenuItem onclick={onEdit}>
+          <IconEdit class="size-4" />
+          Edit
+        </ContextMenuItem>
+      {/if}
+      {#if canDelete}
+        <ContextMenuItem variant="danger" onclick={onDelete}>
+          <IconTrash class="size-4" />
+          Delete
+        </ContextMenuItem>
+      {/if}
+      <ContextMenuItem onclick={onForward}>
+        <IconForward class="size-4" />
+        Forward
+      </ContextMenuItem>
+      <ContextMenuItem onclick={onStartThreading}>
+        <IconNeedleThread class="size-4" />
+        Create Thread
+      </ContextMenuItem>
+      <ContextMenuItem onclick={onSelect}>
+        <IconCheckSquare class="size-4" />
+        Select
+      </ContextMenuItem>
+    </ContextMenu>
   </Toolbar.Root>
 </BitsTooltip.Provider>

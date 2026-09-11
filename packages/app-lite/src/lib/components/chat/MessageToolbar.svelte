@@ -12,7 +12,7 @@
     canEdit: boolean;
     canDelete: boolean;
     keepToolbarOpen?: boolean;
-    onForward: (message: Message) => void;
+    onForward: (messages: Message[]) => void;
     onStartEdit: (messageId: string) => void;
     /** Requests the delete confirmation (owned by ChatArea). */
     onRequestDelete: () => void;
@@ -43,6 +43,10 @@
     messagingState.startThreading(message);
   }
 
+  function onSelect() {
+    messagingState.startSelectMode(message);
+  }
+
   function onEdit() {
     onStartEdit(message.id);
   }
@@ -61,6 +65,7 @@
   {onEdit}
   {onDelete}
   {onStartThreading}
+  {onSelect}
   {onReply}
-  onForward={() => onForward(message)}
+  onForward={() => onForward([message])}
 />

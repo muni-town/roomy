@@ -33,7 +33,12 @@ export type Threading = {
   selectedMessages: Message[];
 };
 
-export type MessagingState = Normal | Replying | Threading;
+export type Selecting = {
+  kind: "selecting";
+  selectedMessages: Message[];
+};
+
+export type MessagingState = Normal | Replying | Threading | Selecting;
 
 function emptyDraft(): Normal {
   return { kind: "normal", input: "", files: [], blocks: [], mentions: [], previewImages: [] };
@@ -185,7 +190,11 @@ class MessagingStateManager {
   }
 
   toggleMessageSelection(message: Message) {
-    if (this.state.kind !== "threading") return;
+    if (
+      this.state.kind !== "threading" &&
+      this.state.kind !== "selecting"
+    )
+      return;
     const messages = new Map(
       this.state.selectedMessages.map((m) => [m.id, m]),
     );
@@ -211,6 +220,21 @@ class MessagingStateManager {
       selectedMessages: message ? [message] : [],
     });
     setInputFocus();
+  }
+
+  /** Enter select mode (Signal/WhatsApp-style multi-select). An optional
+   *  first message is pre-selected (long-press / toolbar › Select). The
+   *  composer draft (input/files/blocks) is preserved so canceling
+   *  selection restores it. */
+  startSelectMode(message?: Message) {
+    console.debug("Start select mode", message);
+    const currentState = this.state;
+    this.setState({
+      ...currentState,
+      kind: "selecting",
+      selectedMessages: message ? [message] : [],
+    });
+    closeToolbar();
   }
 
   setThreadingFromMessages(messages: Message[], name?: string) {

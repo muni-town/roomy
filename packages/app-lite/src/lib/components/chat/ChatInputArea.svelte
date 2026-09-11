@@ -11,6 +11,7 @@
     clearInput,
     setInputFocus,
   } from "./ChatInput.svelte";
+  import type { Message } from "$lib/queries/messages";
   import { createMentionSearch } from "$lib/tiptap/mentions";
   import { sendMessage as sendMessageMutation } from "$lib/mutations/message";
   import { uploadFile } from "$lib/mutations/upload";
@@ -36,9 +37,18 @@
     disableUploads?: boolean;
     /** Whether to auto-focus the input on mount/tab switch. Default: true */
     autoFocus?: boolean;
+    /** Select mode: forward the selected messages (modal owned by the route page). */
+    onForwardSelection?: (messages: Message[]) => void;
   };
 
-  let { spaceId, roomId, canWrite, disableUploads = false, autoFocus = true }: Props = $props();
+  let {
+    spaceId,
+    roomId,
+    canWrite,
+    disableUploads = false,
+    autoFocus = true,
+    onForwardSelection,
+  }: Props = $props();
 
   // On mobile (coarse pointer), never autofocus — the virtual keyboard
   // appearing is disruptive. Covers both tab-switch and navigation cases.
@@ -157,8 +167,15 @@
       ? messagingState.current.selectedMessages.length
       : 0,
   );
+  // Selecting mode uses the same selected-message count, shown as "N selected".
+  let selectedCount = $derived(
+    messagingState.current.kind === "selecting"
+      ? messagingState.current.selectedMessages.length
+      : 0,
+  );
   let canSend = $derived(
     messagingState.current.kind !== "threading" &&
+      messagingState.current.kind !== "selecting" &&
       (("input" in messagingState.current &&
         !!messagingState.current.input) ||
         ("files" in messagingState.current &&
@@ -166,7 +183,8 @@
   );
   let showContextPreview = $derived(
     messagingState.current.kind === "replying" ||
-      messagingState.current.kind === "threading",
+      messagingState.current.kind === "threading" ||
+      messagingState.current.kind === "selecting",
   );
 
   function getVideoThumbnail(file: File): Promise<string> {
@@ -200,7 +218,11 @@
 
   function processImageFile(file: File) {
     if (disableUploads) return;
-    if (messagingState.current.kind === "threading") return;
+    if (
+      messagingState.current.kind === "threading" ||
+      messagingState.current.kind === "selecting"
+    )
+      return;
     messagingState.addFile(file);
 
     // Preview URLs are stored on this room's draft (not the active one) so an
@@ -240,8 +262,20 @@
   }
 
   function handleCreateThreadFromMenu() {
-    messagingState.startThreading();
+    messagingState.startSelectMode();
     actionMenuOpen = false;
+  }
+
+  function handleForwardSelection() {
+    if (messagingState.current.kind !== "selecting") return;
+    onForwardSelection?.(messagingState.current.selectedMessages);
+  }
+
+  function handleSelectCreateThread() {
+    if (messagingState.current.kind !== "selecting") return;
+    messagingState.setThreadingFromMessages(
+      messagingState.current.selectedMessages,
+    );
   }
 
   function handleClearContext() {
@@ -250,7 +284,7 @@
 
   async function handleSend(_message = "", mentions: string[] = [], submittedBlocks: Block[] = []) {
     const state = messagingState.current;
-    if (state.kind === "threading") return;
+    if (state.kind === "threading" || state.kind === "selecting") return;
     if (!("input" in state)) return;
     if (!state.input && state.files.length === 0) return;
 
@@ -376,6 +410,7 @@
   onActionMenuOpenChange={(o) => (actionMenuOpen = o)}
   {threadName}
   {threadSelectedCount}
+  {selectedCount}
   {canSend}
   {showContextPreview}
   onClearContext={handleClearContext}
@@ -383,6 +418,8 @@
   onUploadMedia={handleUploadMedia}
   onCreateThreadFromMenu={handleCreateThreadFromMenu}
   onCreateThread={handleCreateThread}
+  onForwardSelection={handleForwardSelection}
+  onSelectCreateThread={handleSelectCreateThread}
   onRemoveImage={removeImageFile}
   onThreadNameChange={(name) => (messagingState.name = name)}
   onFileInput={handleFileProcess}
@@ -393,10 +430,14 @@
       <MessageContext context={{ kind: "replying", replyTo: { id: messagingState.current.replyTo.id } }} roomId={roomId} />
     {:else if messagingState.current.kind === "threading"}
       <MessageContext context={{ kind: "threading", selectedMessages: messagingState.current.selectedMessages }} roomId={roomId} />
+    {:else if messagingState.current.kind === "selecting"}
+      <!-- Preview of the first selected message, same form as the thread
+           creation strip. -->
+      <MessageContext context={{ kind: "threading", selectedMessages: messagingState.current.selectedMessages }} roomId={roomId} />
     {/if}
   {/snippet}
   {#snippet input()}
-    {#if messagingState.current.kind !== "threading"}
+    {#if messagingState.current.kind === "normal" || messagingState.current.kind === "replying"}
       <ChatInput
         composer
         bind:content={

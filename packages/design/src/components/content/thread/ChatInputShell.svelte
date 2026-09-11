@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ChatInputShellMode = "normal" | "replying" | "threading" | "commenting";
+  export type ChatInputShellMode = "normal" | "replying" | "threading" | "commenting" | "selecting";
 </script>
 
 <script lang="ts">
@@ -15,6 +15,8 @@
     IconImage,
     IconPlus,
     IconLoading,
+    IconForward,
+    IconCheckSquare,
   } from "../../../icons";
 
   type Props = {
@@ -38,14 +40,16 @@
     threadName?: string;
     /** Threading: number of currently selected messages. */
     threadSelectedCount?: number;
+    /** Selecting: number of currently selected messages. */
+    selectedCount?: number;
     /** Whether the send button should be visible (input has content or files). */
     canSend: boolean;
-    /** Whether to render the context preview bar (reply / thread / comment). */
+    /** Whether to render the context preview bar (reply / thread / comment / select). */
     showContextPreview: boolean;
 
     /** Action menu open state change. */
     onActionMenuOpenChange: (open: boolean) => void;
-    /** Clear the current context (reply / thread / comment). */
+    /** Clear the current context (reply / thread / comment / select). */
     onClearContext: () => void;
     /** Send the current message. */
     onSend: () => void;
@@ -55,6 +59,10 @@
     onCreateThreadFromMenu: () => void;
     /** Submit the thread-creation form. */
     onCreateThread: () => void;
+    /** Selecting: forward the selected messages. */
+    onForwardSelection: () => void;
+    /** Selecting: create a thread from the selected messages. */
+    onSelectCreateThread: () => void;
     /** Remove a preview image by index. */
     onRemoveImage: (index: number) => void;
     /** Update the thread name. */
@@ -83,6 +91,7 @@
     actionMenuOpen,
     threadName = "",
     threadSelectedCount = 0,
+    selectedCount = 0,
     canSend,
     showContextPreview,
     onActionMenuOpenChange,
@@ -91,6 +100,8 @@
     onUploadMedia,
     onCreateThreadFromMenu,
     onCreateThread,
+    onForwardSelection,
+    onSelectCreateThread,
     onRemoveImage,
     onThreadNameChange,
     onFileInput,
@@ -163,6 +174,46 @@
           variant="ghost"
           onclick={onClearContext}
           class="flex-shrink-0"
+        >
+          <IconX class="size-4" />
+        </Button>
+      {:else if mode === "selecting"}
+        <div class="flex items-center gap-1 overflow-hidden text-xs w-full px-2">
+          <IconCheckSquare class="size-4 shrink-0" />
+          <span class="shrink-0 text-base-900 dark:text-base-100"
+            >{selectedCount} selected</span
+          >
+          {#if selectedCount > 0}
+            <div class="max-w-[28rem]">
+              {@render contextPreview?.()}
+            </div>
+          {/if}
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={selectedCount === 0}
+            onclick={onForwardSelection}
+          >
+            <IconForward class="size-4" />
+            Forward
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={selectedCount === 0}
+            onclick={onSelectCreateThread}
+          >
+            <IconNeedleThread class="size-4" />
+            Create Thread
+          </Button>
+        </div>
+        <Button
+          variant="ghost"
+          onclick={onClearContext}
+          class="flex-shrink-0"
+          aria-label="Cancel selection"
         >
           <IconX class="size-4" />
         </Button>
@@ -239,6 +290,9 @@
 
               <Button type="submit"><IconNeedleThread />Create Thread</Button>
             </form>
+          {:else if mode === "selecting"}
+            <!-- Selecting mode has no composer input — the context preview
+                 bar above carries the Forward / Create Thread actions. -->
           {:else}
             {#if isSendingMessage}
               <div class="flex items-center justify-center p-3 ml-2">
