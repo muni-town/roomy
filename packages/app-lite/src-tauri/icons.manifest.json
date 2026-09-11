@@ -1,0 +1,7 @@
+{
+  "default": "../static/icons/icon-512.png",
+  "bg_color": "#250041",
+  "android_fg": "../static/icons/icon_foreground.png",
+  "android_fg_scale": 70,
+  "android_monochrome": "../static/icons/icon_monochrome.png"
+}
