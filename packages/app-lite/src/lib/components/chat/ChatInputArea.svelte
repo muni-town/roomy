@@ -262,7 +262,11 @@
   }
 
   function handleCreateThreadFromMenu() {
-    messagingState.startSelectMode();
+    // Directly enter threading mode: the plus-menu's "Create Thread" starts a
+    // fresh thread with no pre-selected messages — not the multi-select flow
+    // (message long-press / toolbar › Select). Zero selections creates the
+    // thread empty.
+    messagingState.startThreading();
     actionMenuOpen = false;
   }
 
