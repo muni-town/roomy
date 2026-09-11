@@ -154,9 +154,22 @@ async function handleEvent(
     const reply = await runOmp(prompt, { ...opts, resume }, {
       onThinking: (chunk) => {
         streamedThinking = true;
-        thinkingChain = thinkingChain.then(() =>
-          sendReply(xrpc, spaceId, roomId, chunk, buildThinkingBlocks(chunk), parent),
-        );
+        // Each sendReply is chained onto thinkingChain, which is later awaited at
+        // `await thinkingChain`. But onThinking fires synchronously while runOmp is
+        // still streaming, so a rejected sendReply (e.g. a transient 5xx) would leave
+        // this link with no rejection handler in that window — an unhandled rejection
+        // that crashed the responder and, via the broken pipe, killed the bridge.
+        // Attach a handler immediately so rejections are handled here, not unhandled.
+        thinkingChain = thinkingChain
+          .then(() =>
+            sendReply(xrpc, spaceId, roomId, chunk, buildThinkingBlocks(chunk), parent),
+          )
+          .catch((e) => {
+            log(`thinking-chunk post failed: ${e instanceof Error ? e.message : String(e)}`);
+            // Reject so the final `await thinkingChain` (and handleEvent's outer
+            // try/catch) surfaces the failure instead of silently swallowing it.
+            return Promise.reject(e);
+          });
       },
     });
     if (reply.sessionId) sessions?.set(spaceId, roomId, reply.sessionId);
