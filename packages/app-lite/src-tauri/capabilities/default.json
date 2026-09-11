@@ -7,6 +7,7 @@
     "core:default",
     "core:event:default",
     "deep-link:default",
+    "updater:default",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

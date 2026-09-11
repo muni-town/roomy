@@ -29,6 +29,7 @@
 
   // Debug: log all public env vars
   import { env as dynamicEnv } from "$env/dynamic/public";
+  import { enableAutoupdate, tryUpdate } from "$lib/nativeUpdate.svelte";
 
   console.log("[app-lite env debug] import.meta.env (static):", {
     VITE_APPSERVER_DID: import.meta.env.VITE_APPSERVER_DID,
@@ -82,10 +83,17 @@
       saveScrollPositionsToStorage();
     }, 30000);
 
+    // Check for update once on load then every 24 hours
+    tryUpdate()
+    const checkUpdate = enableAutoupdate.value && setInterval(() => {
+      tryUpdate();
+    },  86_400_000 );
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       clearInterval(saveInterval);
       clearInterval(preloadTimer);
+      checkUpdate && clearInterval(checkUpdate);
       saveScrollPositionsToStorage();
     };
   });

@@ -19,6 +19,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .setup(|app| {
+            #[cfg(desktop)]
+            let _ = app
+                .handle()
+                .plugin(tauri_plugin_updater::Builder::new().build());
             // runtime deep_link registration
             #[cfg(any(target_os = "linux", windows))]
             {

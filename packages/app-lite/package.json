@@ -18,6 +18,7 @@
     "@roomy-space/sdk": "workspace:*",
     "@roomy/design": "workspace:*",
     "@tanstack/svelte-query": "^6.1.29",
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "@tiptap/core": "3.27.1",
     "@tiptap/extension-link": "3.27.1",
     "@tiptap/extension-mention": "3.27.1",
