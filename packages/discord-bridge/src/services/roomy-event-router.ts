@@ -94,9 +94,14 @@ function filenameFromUri(uri: string, mimeType: string): string {
  * verbatim into `text/markdown` bodies; this guarantees no raw HTML is ever
  * forwarded even if a producer regresses. Deliberately a small regex stripper
  * (no DOM lib): it only removes `<…>` tag spans, keeping the text between them.
+ *
+ * The pattern only matches tag-shaped spans: `<` + optional `/` + an ASCII tag
+ * name + optional attributes + `>`. Markdown autolinks (`<https://…>`) do not
+ * match — the `:` after the "tag name" can't start an attribute list or close
+ * the tag — so user links survive stripping.
  */
 function stripHtmlTags(text: string): string {
-	return text.replace(/<[^>]*>/g, "");
+	return text.replace(/<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?\/?>/g, "");
 }
 
 /**
@@ -105,8 +110,9 @@ function stripHtmlTags(text: string): string {
  * - Rich text bodies (`application/vnd.roomy.richtext+json`) are parsed into
  *   blocks and rendered to Discord markdown via `blocksToDiscordMarkdown`.
  * - Legacy `text/markdown` / `text/plain` bodies are passed through as-is
- *   (Roomy markdown is largely Discord-compatible), after stripping any HTML
- *   tags so mentions can't leak raw anchors into Discord.
+ *   (Roomy markdown is largely Discord-compatible) after stripping raw HTML
+ *   tags (mention anchors can't leak into Discord) and unwrapping markdown
+ *   autolinks (`<url>` → `url`, so Discord embeds the link like a normal one).
  *
  * Uses the SDK's `fromBytes` to handle both BytesWrapper instances and the
  * `{ $bytes }` JSON form. Returns undefined for unsupported MIME types (or an
@@ -134,9 +140,16 @@ function decodeBody(body: {
 	if (body.mimeType !== "text/markdown" && body.mimeType !== "text/plain") {
 		return undefined;
 	}
-
 	try {
-		return stripHtmlTags(new TextDecoder().decode(fromBytes(body.data)));
+		// Strip raw HTML, then unwrap markdown autolinks (`<https://…>`) to bare
+		// URLs: Discord treats `<url>` as embed-suppression syntax, and a bare
+		// URL auto-links with its preview — matching how the rich-text path
+		// emits link facets whose text is the URI. Unwrapping must run after
+		// stripping; the stripper leaves the autolink's `<>` pair intact (see
+		// stripHtmlTags — `https://…` isn't tag-shaped).
+		return stripHtmlTags(
+			new TextDecoder().decode(fromBytes(body.data)),
+		).replace(/<(https?:\/\/[^\s<>]+)>/g, "$1");
 	} catch {
 		return "";
 	}
