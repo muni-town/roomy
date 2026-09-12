@@ -1,13 +1,13 @@
 /**
  * XRPC: space.roomy.space.updatePolicy (procedure).
  *
- * Reinstalls the appserver's latest arbiter policy on a space's stewarded
- * account. Requires admin access on the space. The appserver, acting as the
- * arbiter's recovery admin for every stewarded space, calls
- * `town.muni.arbiter.resetPolicy` with the current default policy — the same
- * policy newly-provisioned spaces get. This upgrades an existing space to the
- * latest policy (e.g. the one that lets Roomy admins act under the space's
- * account).
+ * Re-applies the reference arbiter config on a space's stewarded account.
+ * Requires admin access on the space. The appserver, acting as the arbiter's
+ * recovery admin for every stewarded space, calls
+ * `town.muni.arbiter.resetConfig` with the reference config — the same
+ * config newly-provisioned spaces get (`REFERENCE_ARBITER_CONFIG`). This
+ * repairs an existing space's config (e.g. after the arbiter's config model
+ * changed) without touching anything else on the account.
  *
  * When the arbiter is not configured, the procedure is a no-op success —
  * there is no stewarded account to update.
@@ -17,8 +17,8 @@ import { openSpaceDb } from "../db/db.ts";
 import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { getStreamManager } from "../streams/StreamManager.ts";
-import { resetPolicy } from "../arbiter/client.ts";
-import { defaultPolicyFor } from "../arbiter/provision.ts";
+import { resetConfig } from "../arbiter/client.ts";
+import { REFERENCE_ARBITER_CONFIG } from "../arbiter/provision.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
 
 interface UpdatePolicyBody {
@@ -56,18 +56,13 @@ export const updatePolicyHandler: ProcedureHandler<UpdatePolicyBody, void> = asy
     );
   }
 
-  // ── Reinstall the latest policy on the stewarded account ────────────
+  // ── Re-apply the reference config on the stewarded account ──────────
   const streamManager = getStreamManager();
   const arbiter = streamManager.arbiter;
   if (arbiter) {
     // The appserver is the recovery admin for every stewarded account, so it
-    // may install the policy. `resetPolicy` throws ArbiterError on failure.
-    await resetPolicy(
-      arbiter,
-      streamManager.ownDid,
-      spaceId,
-      defaultPolicyFor(streamManager.ownDid),
-    );
+    // may reset the config. `resetConfig` throws ArbiterError on failure.
+    await resetConfig(arbiter, streamManager.ownDid, spaceId, REFERENCE_ARBITER_CONFIG);
   }
   // No arbiter configured → no stewarded account to update (no-op).
 };

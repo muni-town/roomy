@@ -206,7 +206,7 @@ describe("createStream", () => {
   });
 
   test("provisions via the arbiter when configured", async () => {
-    // A minimal mock arbiter that answers createArbiter / resetPolicy / proxy.
+    // A minimal mock arbiter that answers createArbiter / resetConfig / proxy.
     const calls: string[] = [];
     const arbiterDid = "did:plc:arbiter-provisioned";
     const server = Bun.serve({
@@ -217,8 +217,8 @@ describe("createStream", () => {
         if (url.pathname.endsWith("/town.muni.arbiter.createArbiter")) {
           return Response.json({ did: arbiterDid });
         }
-        if (url.pathname.endsWith("/town.muni.arbiter.resetPolicy")) {
-          return Response.json({});
+        if (url.pathname.endsWith("/town.muni.arbiter.resetConfig")) {
+          return Response.json({ ok: true });
         }
         if (url.pathname.endsWith("/town.muni.arbiter.proxy")) {
           return Response.json({});
@@ -242,9 +242,9 @@ describe("createStream", () => {
 
       // The space DID is the arbiter-returned DID.
       expect(streamDid).toBe(StreamDid.assert(arbiterDid));
-      // The arbiter was called for createArbiter, resetPolicy, and proxy.
+      // The arbiter was called for createArbiter, resetConfig, and proxy.
       expect(calls).toContain("/xrpc/town.muni.arbiter.createArbiter");
-      expect(calls).toContain("/xrpc/town.muni.arbiter.resetPolicy");
+      expect(calls).toContain("/xrpc/town.muni.arbiter.resetConfig");
       expect(calls).toContain("/xrpc/town.muni.arbiter.proxy");
     } finally {
       server.stop();

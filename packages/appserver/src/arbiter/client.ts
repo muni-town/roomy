@@ -6,11 +6,14 @@
  * JWT (Phase 0) and calls:
  *
  * - `town.muni.arbiter.createArbiter` — provision a new stewarded account,
- *   returns `{ did }`.
- * - `town.muni.arbiter.resetPolicy` — install the root Rego policy (the
- *   appserver is the recovery admin, so it may do this).
- * - `town.muni.arbiter.proxy` — drive the policy over an inner XRPC request,
- *   proxying it to the steward's PDS as the stewarded account.
+ *   returns `{ did }`. No policy is written: the account stays offline
+ *   (fail-closed) until configured.
+ * - `town.muni.arbiter.resetConfig` — bootstrap/replace the account's
+ *   `town.muni.arbiter.config/self` record (recovery-admin-only hatch; the
+ *   appserver is the recovery admin, so it may do this). Performs no policy
+ *   evaluation, so it works while the arbiter is offline.
+ * - `town.muni.arbiter.proxy` — drive the policy pipeline over an inner XRPC
+ *   request, proxying it to the steward's PDS as the stewarded account.
  */
 
 import { mintServiceAuth } from "../auth/serviceAuth.ts";
@@ -90,7 +93,7 @@ async function arbiterFetch(
  * Provision a new stewarded account via `town.muni.arbiter.createArbiter`.
  *
  * The arbiter creates a real account on the Roomy PDS and returns its DID.
- * The account is fail-closed until a policy is installed via `resetPolicy`.
+ * The account is fail-closed until a config is bootstrapped via `resetConfig`.
  */
 export async function createArbiter(
   config: ArbiterConfig,
@@ -104,19 +107,24 @@ export async function createArbiter(
 }
 
 /**
- * Install the root Rego policy on a stewarded account via
- * `town.muni.arbiter.resetPolicy`. Only the recovery admin (the appserver)
- * may do this.
+ * Bootstrap or wholesale-replace a stewarded account's configuration via
+ * `town.muni.arbiter.resetConfig`. Only the recovery admin (the appserver)
+ * may call it. The request performs no policy evaluation, so it works while
+ * the arbiter is offline — exactly the state of a freshly-provisioned
+ * account (`createArbiter` writes no config). The arbiter writes the
+ * `town.muni.arbiter.config/self` record verbatim (CAS putRecord) and
+ * re-onboards.
  */
-export async function resetPolicy(
+export async function resetConfig(
   config: ArbiterConfig,
   ownDid: string,
   arbiterDid: string,
-  policy: string,
+  reference: { trustedScopes: string[]; policyLayers: string[] },
 ): Promise<void> {
-  await arbiterFetch(config, ownDid, "town.muni.arbiter.resetPolicy", {
+  await arbiterFetch(config, ownDid, "town.muni.arbiter.resetConfig", {
     arbiterDid,
-    policy,
+    trustedScopes: reference.trustedScopes,
+    policyLayers: reference.policyLayers,
   });
 }
 
