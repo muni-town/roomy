@@ -9,9 +9,8 @@
   import { resolveBlobUrl } from "$lib/utils";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import Switch from "@roomy/design/components/ui/toggle/Toggle.svelte";
-  import { checkUpdate, desktopUpdatesEnabled, enableAutoupdate } from "$lib/nativeUpdate.svelte";
-  import type { Update as TauriUpdate } from "@tauri-apps/plugin-updater";
-  import { slide } from 'svelte/transition'
+  import { desktopUpdatesEnabled, getUpdater } from "$lib/nativeUpdate.svelte";
+  import { slide } from "svelte/transition";
 
   const spacesQuery = createSpacesQuery({ includeLeft: true });
 
@@ -30,30 +29,7 @@
       rejoining = null;
     }
   }
-  let update: TauriUpdate | null | undefined = $state(undefined);
-  let updateProgress = $state(0);
-  let updateTotal = $state(0);
-
-  let percent = $derived(
-    Math.min(100, Math.max(0, (updateProgress / updateTotal) * 100)),
-  );
-
-  const downloadUpdate = async () => {
-    if (!update) return;
-    await update.downloadAndInstall((event) => {
-      switch (event.event) {
-        case "Started":
-          updateTotal = event.data.contentLength ?? 0;
-          break;
-        case "Progress":
-          updateProgress += event.data.chunkLength;
-          break;
-        case "Finished":
-          update = undefined;
-          break;
-      }
-    });
-  };
+  const updater = getUpdater();
 </script>
 
 <div class="flex flex-col gap-10">
@@ -129,32 +105,43 @@
               {/await}
             </p>
             <p class="text-sm font-medium text-base-400">
-              {#if update}
-                v{update.version} available
+              {#if updater.update}
+                v{updater.update.version} available
               {/if}
             </p>
           </div>
           <Button
+            disabled={updater.status === "downloading" }
             onclick={() => {
-              if (!update) checkUpdate().then((u) => (update = u));
-              else downloadUpdate();
+              if (
+                updater.status === "initialized" ||
+                updater.status === "unavailable"
+              )
+                updater.checkUpdate()
+              else if (updater.status === "ready") updater.downloadAndInstall();
+              else if (updater.status === "complete") window.__TAURI__?.process.relaunch();
             }}
-            >{#if !update}
-              Check for Updates
-            {:else}
+          >
+            {#if updater.status === "ready"}
               Install
+            {:else if updater.status === "downloading"}
+              Downloading...
+            {:else if updater.status === "complete"}
+              Restart Roomy
+            {:else}
+              Check for Updates
             {/if}
           </Button>
         </div>
 
-        {#if updateTotal > 0}
+        {#if updater.size > 0}
           <div
-          	in:slide={{duration: 200}}
+            in:slide={{ duration: 200 }}
             class="w-full h-2 rounded-full bg-base-200 dark:bg-base-800 overflow-hidden"
           >
             <div
               class="h-full rounded-full bg-accent-500 transition-[width] duration-300 ease-out"
-              style:width="{percent}%"
+              style:width="{updater.progress}%"
             ></div>
           </div>
         {/if}
@@ -165,7 +152,7 @@
               Download and install new versions in the background
             </p>
           </div>
-          <Switch bind:checked={enableAutoupdate.value} />
+          <Switch bind:checked={updater.enableAutoupdate} />
         </div>
       </div>
     </section>

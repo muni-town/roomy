@@ -29,7 +29,7 @@
 
   // Debug: log all public env vars
   import { env as dynamicEnv } from "$env/dynamic/public";
-  import { enableAutoupdate, tryUpdate } from "$lib/nativeUpdate.svelte";
+  import { setUpdater, Updater,  } from "$lib/nativeUpdate.svelte";
 
   console.log("[app-lite env debug] import.meta.env (static):", {
     VITE_APPSERVER_DID: import.meta.env.VITE_APPSERVER_DID,
@@ -40,6 +40,9 @@
   });
 
   let { children } = $props();
+
+  let updater = new Updater()
+  setUpdater(updater)
 
   onMount(() => {
     // Catch unhandled ATProto rejections (e.g. background token refresh
@@ -84,9 +87,9 @@
     }, 30000);
 
     // Check for update once on load then every 24 hours
-    tryUpdate()
-    const checkUpdate = enableAutoupdate.value && setInterval(() => {
-      tryUpdate();
+    updater.tryUpdate()
+    const checkUpdate = updater.enableAutoupdate && setInterval(() => {
+      updater.tryUpdate();
     },  86_400_000 );
 
     return () => {
