@@ -36,6 +36,9 @@ declare global {
       app: {
         getVersion(): Promise<string>;
       };
+      process: {
+        relaunch(): Promise<void>;
+      };
     };
   }
 }
