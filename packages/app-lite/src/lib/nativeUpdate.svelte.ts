@@ -1,8 +1,6 @@
-import type { DownloadEvent, Update } from '@tauri-apps/plugin-updater';
+import type { Update } from '@tauri-apps/plugin-updater';
 import { createContext } from 'svelte';
 
-function persistedBool(key: string, defaultValue = false) {
-}
 
 // TODO: expose this as an env flag during build,
 //       for package managers handling updates externally.
