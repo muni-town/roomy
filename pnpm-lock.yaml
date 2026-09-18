@@ -80,6 +80,9 @@ importers:
       '@tanstack/svelte-query':
         specifier: ^6.1.29
         version: 6.1.29(svelte@5.53.0)
+      '@tauri-apps/plugin-notification':
+        specifier: ^2.4.0
+        version: 2.4.0
       '@tauri-apps/plugin-updater':
         specifier: ^2.11.0
         version: 2.11.0
@@ -116,6 +119,9 @@ importers:
       svelte-dnd-action:
         specifier: ^0.9.65
         version: 0.9.65(svelte@5.53.0)
+      tauri-plugin-mobile-push-api:
+        specifier: ^0.1.4
+        version: 0.1.4(@tauri-apps/api@2.11.1)
       tiptap-markdown:
         specifier: ^0.9.0
         version: 0.9.0(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))
@@ -274,10 +280,10 @@ importers:
     dependencies:
       '@foxui/core':
         specifier: ^0.9.1
-        version: 0.9.1(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+        version: 0.9.1(@internationalized/date@3.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@foxui/social':
         specifier: ^0.8.10
-        version: 0.8.10(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/extensions@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+        version: 0.8.10(@internationalized/date@3.9.0)(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/extensions@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@iconify/svelte':
         specifier: ^4.2.0
         version: 4.2.0(svelte@5.53.0)
@@ -2088,6 +2094,9 @@ packages:
 
   '@tauri-apps/api@2.11.1':
     resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
+
+  '@tauri-apps/plugin-notification@2.4.0':
+    resolution: {integrity: sha512-xlJXMcUoKOjNupzDue5wrEsa1wytf+l/2gCAPhafHyP683Y3N7J/8clUWLZ3vpnwkpT2C1zcLMMQFjjecIG2xg==}
 
   '@tauri-apps/plugin-updater@2.11.0':
     resolution: {integrity: sha512-AE36XkOoSna24G40jZMY15nzAnkXEPL/73tGoseGrtGOHuI/cZwWzHpZFLjKXDPgzYZ435z1gHu28LgrsBwIxQ==}
@@ -4220,6 +4229,11 @@ packages:
     engines: {node: '>=18'}
     deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
+  tauri-plugin-mobile-push-api@0.1.4:
+    resolution: {integrity: sha512-AJayYS3iAQ8zoXdTebs1Ml91H+mDBA3wexWjfoEx8oa4EsE6AiODvVZHzQZ7l0QeXTvYcxyCF3txI7XJjI8IBw==}
+    peerDependencies:
+      '@tauri-apps/api': '>=2.0.0'
+
   test-exclude@7.0.1:
     resolution: {integrity: sha512-pFYqmTw68LXVjeWJMST4+borgQP2AyMNbg1BpZh9LbyhUeNkeaPF9gzfPGUAnSMV3qPYdWUwDIjjCLiSDOl7vg==}
     engines: {node: '>=18'}
@@ -5340,14 +5354,14 @@ snapshots:
       - react-dom
       - vue
 
-  '@foxui/core@0.9.1(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/core@0.9.1(@internationalized/date@3.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
       '@fontsource-variable/geist': 5.2.9
       '@fontsource-variable/geist-mono': 5.2.8
       '@jis3r/icons': 2.7.0(svelte@5.53.0)
       '@lucide/svelte': 1.23.0(svelte@5.53.0)
       '@number-flow/svelte': 0.4.1(svelte@5.53.0)
-      bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
+      bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       clsx: 2.1.1
       dompurify: 3.3.3
       mode-watcher: 1.1.0(svelte@5.53.0)
@@ -5389,15 +5403,15 @@ snapshots:
       - react-dom
       - vue
 
-  '@foxui/social@0.8.10(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/extensions@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/social@0.8.10(@internationalized/date@3.9.0)(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/extensions@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
       '@atcute/bluesky': 3.3.0
       '@atcute/bluesky-richtext-segmenter': 3.0.0
-      '@foxui/core': 0.9.1(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
-      '@foxui/text': 0.8.5(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/extensions@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
-      '@foxui/time': 0.8.5(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/core': 0.9.1(@internationalized/date@3.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/text': 0.8.5(@internationalized/date@3.9.0)(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/extensions@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/time': 0.8.5(@internationalized/date@3.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@use-gesture/vanilla': 10.3.1
-      bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
+      bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       emoji-picker-element: 1.29.0
       hls.js: 1.6.15
       is-emoji-supported: 0.0.5
@@ -5453,10 +5467,10 @@ snapshots:
       - react-dom
       - vue
 
-  '@foxui/text@0.8.5(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/extensions@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/text@0.8.5(@internationalized/date@3.9.0)(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/extensions@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
       '@floating-ui/dom': 1.7.4
-      '@foxui/core': 0.9.1(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/core': 0.9.1(@internationalized/date@3.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@tiptap/core': 3.27.1(@tiptap/pm@3.27.1)
       '@tiptap/extension-bubble-menu': 3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1)
       '@tiptap/extension-code-block-lowlight': 3.20.0(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/extension-code-block@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1)(highlight.js@11.11.1)(lowlight@3.3.0)
@@ -5476,7 +5490,7 @@ snapshots:
       '@tiptap/pm': 3.27.1
       '@tiptap/starter-kit': 3.27.1
       '@tiptap/suggestion': 3.27.1(@floating-ui/dom@1.7.4)(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1)
-      bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
+      bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       lowlight: 3.3.0
       state: link:@tiptap/pm/state
       svelte: 5.53.0
@@ -5506,11 +5520,11 @@ snapshots:
       - react-dom
       - vue
 
-  '@foxui/time@0.8.5(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/time@0.8.5(@internationalized/date@3.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
-      '@foxui/core': 0.9.1(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/core': 0.9.1(@internationalized/date@3.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@number-flow/svelte': 0.4.1(svelte@5.53.0)
-      bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
+      bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       svelte: 5.53.0
       tailwindcss: 4.2.1
     transitivePeerDependencies:
@@ -6038,29 +6052,6 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       typescript: 5.9.2
 
-  '@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1))':
-    dependencies:
-      '@standard-schema/spec': 1.0.0
-      '@sveltejs/acorn-typescript': 1.0.5(acorn@8.15.0)
-      '@sveltejs/vite-plugin-svelte': 6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1))
-      '@types/cookie': 0.6.0
-      acorn: 8.15.0
-      cookie: 0.6.0
-      devalue: 5.3.2
-      esm-env: 1.2.2
-      kleur: 4.1.5
-      magic-string: 0.30.19
-      mrmime: 2.0.1
-      sade: 1.8.1
-      set-cookie-parser: 2.7.1
-      sirv: 3.0.2
-      svelte: 5.53.0
-      vite: 6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)
-    optionalDependencies:
-      '@opentelemetry/api': 1.9.0
-      typescript: 5.9.2
-    optional: true
-
   '@sveltejs/vite-plugin-svelte-inspector@4.0.1(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1))':
     dependencies:
       '@sveltejs/vite-plugin-svelte': 5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1))
@@ -6267,6 +6258,10 @@ snapshots:
       svelte: 5.53.0
 
   '@tauri-apps/api@2.11.1': {}
+
+  '@tauri-apps/plugin-notification@2.4.0':
+    dependencies:
+      '@tauri-apps/api': 2.11.1
 
   '@tauri-apps/plugin-updater@2.11.0':
     dependencies:
@@ -6657,7 +6652,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@26.4.0)(@vitest/ui@2.1.9)(lightningcss@1.32.0)
+      vitest: 2.1.9(@types/node@25.9.1)(@vitest/ui@2.1.9)(lightningcss@1.32.0)
 
   '@vitest/utils@2.1.9':
     dependencies:
@@ -6818,19 +6813,6 @@ snapshots:
       runed: 0.35.1(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       svelte: 5.53.0
       svelte-toolbelt: 0.10.6(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
-      tabbable: 6.2.0
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-
-  bits-ui@2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0):
-    dependencies:
-      '@floating-ui/core': 1.7.3
-      '@floating-ui/dom': 1.7.4
-      '@internationalized/date': 3.9.0
-      esm-env: 1.2.2
-      runed: 0.35.1(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
-      svelte: 5.53.0
-      svelte-toolbelt: 0.10.6(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       tabbable: 6.2.0
     transitivePeerDependencies:
       - '@sveltejs/kit'
@@ -8233,15 +8215,6 @@ snapshots:
     optionalDependencies:
       '@sveltejs/kit': 2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1))
 
-  runed@0.35.1(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0):
-    dependencies:
-      dequal: 2.0.3
-      esm-env: 1.2.2
-      lz-string: 1.5.0
-      svelte: 5.53.0
-    optionalDependencies:
-      '@sveltejs/kit': 2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1))
-
   sade@1.8.1:
     dependencies:
       mri: 1.2.0
@@ -8468,15 +8441,6 @@ snapshots:
     transitivePeerDependencies:
       - '@sveltejs/kit'
 
-  svelte-toolbelt@0.10.6(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0):
-    dependencies:
-      clsx: 2.1.1
-      runed: 0.35.1(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.53.0)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@26.4.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
-      style-to-object: 1.0.9
-      svelte: 5.53.0
-    transitivePeerDependencies:
-      - '@sveltejs/kit'
-
   svelte-toolbelt@0.7.1(svelte@5.53.0):
     dependencies:
       clsx: 2.1.1
@@ -8544,6 +8508,10 @@ snapshots:
       minizlib: 3.0.2
       mkdirp: 3.0.1
       yallist: 5.0.0
+
+  tauri-plugin-mobile-push-api@0.1.4(@tauri-apps/api@2.11.1):
+    dependencies:
+      '@tauri-apps/api': 2.11.1
 
   test-exclude@7.0.1:
     dependencies:

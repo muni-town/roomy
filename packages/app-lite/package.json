@@ -19,6 +19,7 @@
     "@roomy-space/sdk": "workspace:*",
     "@roomy/design": "workspace:*",
     "@tanstack/svelte-query": "^6.1.29",
+    "@tauri-apps/plugin-notification": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.11.0",
     "@tiptap/core": "3.27.1",
     "@tiptap/extension-link": "3.27.1",
@@ -31,6 +32,7 @@
     "bits-ui": "^1.8.0",
     "svelte-boring-avatars": "^1.2.6",
     "svelte-dnd-action": "^0.9.65",
+    "tauri-plugin-mobile-push-api": "^0.1.4",
     "tiptap-markdown": "^0.9.0",
     "virtua": "^0.43.2"
   },

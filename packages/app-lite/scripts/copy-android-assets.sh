@@ -22,7 +22,8 @@ echo "  src: $SRC"
 echo "  dst: $DST"
 
 cp -v "$SRC/app/build.gradle.kts" "$DST/app/build.gradle.kts"
-cp -rv "$SRC/app/src/main/res/." "$DST/app/src/main/res/"
+cp -v "$SRC/app/src/main/AndroidManifest.xml" "$DST/app/src/main/AndroidManifest.xml"
+cp -v "$SRC/build.gradle.kts" "$DST/build.gradle.kts"
 
 if [ -d "$SRC/app/src/main/play" ]; then
   cp -rv "$SRC/app/src/main/play/." "$DST/app/src/main/play/"
