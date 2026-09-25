@@ -60,6 +60,25 @@
 />
 
 <Story
+  name="LongRoomName"
+  args={{
+    open: true,
+    mode: "forward",
+    fetchState: {
+      status: "success",
+      data: [
+        {
+          id: "r1",
+          name: "A very long room name that would otherwise widen the modal past its maximum width and overflow horizontally",
+        },
+        { id: "r2", name: "Short" },
+      ],
+    },
+  }}
+  {template}
+/>
+
+<Story
   name="Empty"
   args={{
     open: true,

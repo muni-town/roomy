@@ -105,7 +105,11 @@
 </script>
 
 <Modal bind:open>
-  <div class="flex flex-col gap-4">
+  <!-- The modal body is a grid item of Dialog.Content, so its `min-width: auto`
+       resolves to the widest child's min-content width — a long room name in
+       the list would widen the whole body past the dialog and spill out.
+       `min-w-0` lets the body shrink so the row's `truncate` can engage. -->
+  <div class="flex flex-col gap-4 min-w-0">
     <div>
       <h3 class="text-base font-semibold text-base-900 dark:text-base-100">
         {isMove ? "Move message" : "Forward message"}
