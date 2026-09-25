@@ -32,6 +32,7 @@
   // Debug: log all public env vars
   import { env as dynamicEnv } from "$env/dynamic/public";
   import { setUpdater, Updater,  } from "$lib/nativeUpdate.svelte";
+  import { dev } from "$app/environment";
 
   console.log("[app-lite env debug] import.meta.env (static):", {
     VITE_APPSERVER_DID: import.meta.env.VITE_APPSERVER_DID,
@@ -93,8 +94,8 @@
     }, 30000);
 
     // Check for update once on load then every 24 hours
-    updater.tryUpdate()
-    const checkUpdate = updater.enableAutoupdate && setInterval(() => {
+    !dev && updater.tryUpdate()
+    const checkUpdate = !dev && updater.enableAutoupdate && setInterval(() => {
       updater.tryUpdate();
     },  86_400_000 );
 
