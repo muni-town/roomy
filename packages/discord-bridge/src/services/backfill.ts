@@ -198,17 +198,17 @@ export async function runBackfill(
 	// ── Phase 1: bounded recent window, serial ───────────────────────────
 	// For each pair with no durable progress yet, ingest the most recent
 	// PHASE1_MESSAGE_BOUND messages so the space is immediately usable, then
-	// let Phase 2 walk the rest in the background. Pairs that already have a
-	// progress row or cursor (mid-walk, completed, interrupted) are left to
-	// Phase 2 — re-running the window would redo work or reset the boundary
-	// mid-flight. The per-pair guard in `activeBackfills` keeps this pass
-	// from overlapping a running walk.
+	// let Phase 2 walk the rest in the background. Pairs with real progress
+	// (mid-walk, completed, interrupted) are left to Phase 2 — re-running the
+	// window would redo work or reset the boundary mid-flight. A channel
+	// cursor does NOT count: the live path writes it for every live message,
+	// so a cursor without a progress row says nothing about how much history
+	// is in the space. The per-pair guard in `activeBackfills` keeps this
+	// pass from overlapping a running walk.
 	for (const t of tasks) {
 		const key = `${t.channelId}:${t.spaceDid}`;
 		if (activeBackfills.has(key)) continue;
 		const progress = repo.getBackfillProgress(t.spaceDid, t.channelId);
-		const cursor = repo.getChannelCursor(t.spaceDid, t.channelId);
-		if (cursor) continue;
 		// Enumeration rows (zero real work) must still get their Phase-1
 		// window; only rows with real progress are left to Phase 2.
 		if (progress && hasRealBackfillProgress(progress)) continue;
@@ -1006,7 +1006,6 @@ export async function backfillChannel(
 			return;
 		}
 
-		const cursor = repo.getChannelCursor(spaceDid, channelId);
 		const progress = repo.getBackfillProgress(spaceDid, channelId);
 		if (progress?.phase === "complete") {
 			log.info(
@@ -1015,13 +1014,14 @@ export async function backfillChannel(
 			return;
 		}
 
-		// Brand-new pair (no progress row and no cursor): run the bounded
-		// recent window first (Phase 1), then walk the remainder below.
-		// A fresh enumeration row (zero real work) counts as brand-new too —
-		// its window has not run yet. Pairs with a cursor or real progress
-		// are mid-walk or interrupted — Phase 2 resumes them without
+		// No durable progress yet (no row, or a fresh enumeration row with
+		// zero real work): run the bounded recent window first (Phase 1),
+		// then walk the remainder below. A channel cursor does not make the
+		// pair mid-walk — the live path writes it for every live message —
+		// so a live cursor still gets its window. Pairs with real progress
+		// are mid-walk or interrupted: Phase 2 resumes them without
 		// re-running the window.
-		if (!cursor && (!progress || !hasRealBackfillProgress(progress))) {
+		if (!progress || !hasRealBackfillProgress(progress)) {
 			const cachedChannel = await discord.getChannel(channelId);
 			const kind = cachedChannel ? mappingKindForChannel(cachedChannel) : null;
 			await backfillRecentWindow(
@@ -1052,15 +1052,15 @@ export async function backfillChannel(
 		let afterCursor: string;
 		if (progress2?.walkCursor) {
 			afterCursor = progress2.walkCursor;
-		} else if (progress2) {
-			// Interrupted window (phase1) or window done / walk not started
-			// (phase2): start below everything — the boundary guard skips the
-			// already-ingested top.
-			afterCursor = channelId;
 		} else {
-			// No progress row: resume from the newest ingested message, or
-			// from the channel start when there is none.
-			afterCursor = cursor?.lastMessageId ?? channelId;
+			// Start from the channel start. A pair with a window still running
+			// (phase1) or a window done with the walk not started (phase2) is
+			// protected by the boundary guard, which skips the already-ingested
+			// top. A pair with no progress row has no durable record of what was
+			// ingested — its channel cursor is the live path's high-water mark,
+			// not a statement about the history — so its whole history must be
+			// walked.
+			afterCursor = channelId;
 		}
 
 		log.info(

@@ -46,6 +46,7 @@ import {
 	runBackfill,
 	setBackfillNoticeSender,
 } from "../backfill.ts";
+import { ingestDiscordMessage } from "../message-ingestion.ts";
 import type { DiscordSender } from "../../discord/sender.ts";
 import { expectToBeDefined } from "./utils.ts";
 
@@ -2125,5 +2126,206 @@ describe("backfill work order", () => {
 		expect(structureAt).toBeLessThan(threadRoomAt);
 		expect(Math.max(...channelMessageIndexes)).toBeLessThan(threadRoomAt);
 		expect(threadRoomAt).toBeLessThan(firstThreadMessageAt);
+	});
+});
+
+// ─── A live cursor is not backfill progress ─────────────────────────────
+
+/**
+ * The shape a channel has when the live path has ingested to it and the
+ * backfill has never walked it: a channel cursor at the live message, no
+ * backfill_progress row. The cursor is the live path's high-water mark and
+ * records nothing about how much history is in the space, so the bounded
+ * Phase-1 window must still run and the Phase-2 walk must still cover
+ * everything below it.
+ */
+describe("live cursor is not backfill progress", () => {
+	beforeEach(() => {
+		faker.seed(42);
+	});
+
+	afterEach(() => {
+		setBackfillNoticeSender(undefined);
+	});
+
+	/** createMessage events the run sent into a channel/thread's Roomy room. */
+	function roomMessageEvents(
+		roomy: MockRoomyGateway,
+		repo: BridgeRepository,
+		kind: "channel" | "thread",
+		discordId: string,
+	): number {
+		const roomyId = repo.getRoomyId(SPACE, kind, discordId);
+		return roomy
+			.eventsFor(SPACE)
+			.filter(
+				(e) =>
+					e.$type === "space.roomy.message.createMessage.v0" &&
+					e.room === roomyId,
+			).length;
+	}
+
+	/** Announcement channel for a fake guild — the notice destination. */
+	function announcementChannel(id: string): DiscordChannelData {
+		return { id, type: 5, name: "announcements", guildId: GUILD };
+	}
+
+	test("BF15: a live-ingested message does not hide the channel's history from runBackfill", async () => {
+		const { guild, channels, messages } = createFakeGuild({
+			seed: 42,
+			channelCount: 1,
+			messagesPerChannel: 3000,
+		});
+		channels.push(announcementChannel("290000000000000001"));
+		const discord = buildFakeDiscord(guild, channels, messages);
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+		mapChannels(repo, channels);
+
+		const channel = channels[0];
+		expectToBeDefined(channel);
+		const history = messages[channel.id] ?? [];
+		expect(history.length).toBe(3000);
+
+		// Live ingest of the newest message: the live path writes the channel
+		// cursor and no progress row.
+		const liveMessage = history.at(-1);
+		expectToBeDefined(liveMessage);
+		await ingestDiscordMessage(
+			liveMessage,
+			repo,
+			roomy,
+			GUILD,
+			SPACE,
+			(snowflake) => discord.resolveChannelName(snowflake),
+		);
+		expect(repo.getChannelCursor(SPACE, channel.id)?.lastMessageId).toBe(
+			liveMessage.id,
+		);
+		expect(repo.getBackfillProgress(SPACE, channel.id)).toBeUndefined();
+
+		const { mock, noticePosted } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+		await runBackfill(discord, repo, roomy);
+		await noticePosted;
+
+		// The whole history — the live message alone is not a backfill.
+		expect(
+			roomMessageEvents(roomy, repo, "channel", channel.id),
+		).toBeGreaterThanOrEqual(3000 - 300);
+		const progress = repo.getBackfillProgress(SPACE, channel.id);
+		expectToBeDefined(progress);
+		expect(progress?.phase).toBe("complete");
+		expect(progress?.messagesSynced).toBeGreaterThanOrEqual(3000 - 300);
+	});
+
+	test("BF16: a mid-history cursor with no progress row still backfills the whole channel", async () => {
+		const { guild, channels, messages } = createFakeGuild({
+			seed: 42,
+			channelCount: 1,
+			messagesPerChannel: 2500,
+		});
+		channels.push(announcementChannel("290000000000000002"));
+		const discord = buildFakeDiscord(guild, channels, messages);
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+		mapChannels(repo, channels);
+
+		const channel = channels[0];
+		expectToBeDefined(channel);
+		const history = messages[channel.id] ?? [];
+
+		// The pre-two-phase upgrade shape: a cursor partway up the channel and
+		// no durable progress row at all.
+		const midfield = history[999];
+		expectToBeDefined(midfield);
+		repo.setChannelCursor(SPACE, channel.id, midfield.id);
+		expect(repo.getBackfillProgress(SPACE, channel.id)).toBeUndefined();
+
+		const { mock, noticePosted } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+		await runBackfill(discord, repo, roomy);
+		await noticePosted;
+
+		// Everything below the cursor too, not just the newer half.
+		expect(
+			roomMessageEvents(roomy, repo, "channel", channel.id),
+		).toBeGreaterThanOrEqual(2500 - 250);
+		const progress = repo.getBackfillProgress(SPACE, channel.id);
+		expectToBeDefined(progress);
+		expect(progress?.phase).toBe("complete");
+		expect(progress?.messagesSynced).toBeGreaterThanOrEqual(2500 - 250);
+	});
+
+	test("BF17: a thread whose live path wrote a cursor still gets its whole history", async () => {
+		const general: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "help",
+			parentId: general.id,
+			guildId: GUILD,
+		};
+		const announcement = announcementChannel("290000000000000003");
+		const generalMessages = Array.from({ length: 5 }, (_, i) =>
+			cnMessage(`2000000000000000${String(i + 10)}`, general.id),
+		);
+		const threadMessages = Array.from({ length: 1200 }, (_, i) =>
+			cnMessage(
+				(300000000000000000n + BigInt(i) * 2n).toString(),
+				activeThread.id,
+			),
+		);
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [general, announcement] },
+			channels: [general, activeThread, announcement],
+			messages: {
+				[general.id]: generalMessages,
+				[activeThread.id]: threadMessages,
+			},
+			activeThreads: [activeThread],
+		});
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+
+		// The channel and thread rooms already exist — the live path created
+		// the thread's room, so ensureRoomyThreads skips it (and its Phase-1
+		// window) and only Phase 2 walks the thread.
+		repo.registerMapping(SPACE, "channel", general.id, newUlid());
+		repo.registerMapping(SPACE, "thread", activeThread.id, newUlid());
+
+		const newest = threadMessages.at(-1);
+		expectToBeDefined(newest);
+		await ingestDiscordMessage(
+			newest,
+			repo,
+			roomy,
+			GUILD,
+			SPACE,
+			(snowflake) => discord.resolveChannelName(snowflake),
+		);
+		expect(repo.getChannelCursor(SPACE, activeThread.id)?.lastMessageId).toBe(
+			newest.id,
+		);
+		expect(repo.getBackfillProgress(SPACE, activeThread.id)).toBeUndefined();
+
+		const { mock, noticePosted } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+		await runBackfill(discord, repo, roomy);
+		await noticePosted;
+
+		expect(
+			roomMessageEvents(roomy, repo, "thread", activeThread.id),
+		).toBeGreaterThanOrEqual(1200 - 120);
+		const progress = repo.getBackfillProgress(SPACE, activeThread.id);
+		expectToBeDefined(progress);
+		expect(progress?.kind).toBe("thread");
+		expect(progress?.phase).toBe("complete");
+		expect(progress?.messagesSynced).toBeGreaterThanOrEqual(1200 - 120);
 	});
 });
