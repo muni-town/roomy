@@ -356,8 +356,8 @@ export class CapacityService implements CapacityGate {
 	/**
 	 * Record that (guild, space) left the grant-less fail-open state: a
 	 * grant shipped (enforcement now applies) or the space dropped back
-	 * under its capacity. Silent unless the tuple was previously failing
-	 * open, so the sweep cannot flood the log for healthy spaces.
+	 * under its capacity. Silent for a tuple that is not currently tracked as
+	 * failing open, so the sweep cannot flood the log for healthy spaces.
 	 */
 	#noteFailOpenCleared(
 		key: string,

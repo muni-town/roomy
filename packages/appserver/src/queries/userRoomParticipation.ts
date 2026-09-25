@@ -62,7 +62,7 @@ export async function hasUserParticipated(
  * to `backfillUserThreadActivity`.
  *
  * Reads candidates from the per-space DB (`spaceDb` — entities/content/edges
- * live there since the Phase 3 per-space split) and writes rows to the
+ * live there) and writes rows to the
  * read-state DB (`readStateDb`).
  *
  * Uses the `author` edge (set by the message materialiser) to identify

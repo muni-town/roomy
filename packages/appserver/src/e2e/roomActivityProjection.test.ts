@@ -1,5 +1,5 @@
 /**
- * E2E regression test for the `room_activity` projection (TASK-175, R3).
+ * E2E test for the `room_activity` projection.
  *
  * The projection replaces a per-board read that scanned EVERY message in every
  * room in scope to pick one per room. Its maintenance rides the per-event
@@ -9,9 +9,9 @@
  *
  * These tests therefore drive the REAL write path (`sendEvents` → materialize →
  * projection maintenance) and then read the board the way a client does,
- * asserting that the projected read equals what the pre-projection scan returns
- * for the same fixture. Equality is the contract: the projection is an
- * optimisation, so any difference is a bug in one of them.
+ * asserting that the projected read equals what the scan returns for the same
+ * fixture. Equality is the contract: the projection is an optimisation, so any
+ * difference is a bug in one of them.
  *
  * Run: bun test --cwd packages/appserver src/e2e/roomActivityProjection.test.ts
  */
@@ -109,7 +109,7 @@ const asJson = (m: Map<string, unknown>) =>
     JSON.stringify([...m.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))),
   );
 
-describe("room_activity projection (TASK-175 R3)", () => {
+describe("room_activity projection", () => {
   test("a live message is reflected by the board read, matching the scan", async () => {
     const ctx = await fixture();
 

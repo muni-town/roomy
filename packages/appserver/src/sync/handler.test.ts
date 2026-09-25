@@ -1421,7 +1421,8 @@ describe("SyncManager — stream topic", () => {
     await sub(socket, { type: "sub", topic: "stream", id: SPACE_ID, cursor: 0 });
 
     socket.sentFrames.length = 0;
-    // Emitting an empty batch must not throw (previously events[-1]!.idx did).
+    // Emitting an empty batch must not throw (an unguarded `events[-1]!.idx`
+    // read would).
     source.emitLive(SPACE_ID, []);
     await flush();
 
@@ -1485,9 +1486,9 @@ describe("SyncManager — stream topic", () => {
     // the gated read.
     await flush();
 
-    // Re-subscribe while the first loop is suspended (backfilling=true).
-    // Before the M5 fix this reset backfilling=false and kicked off a second
-    // concurrent #backfillStream, producing a duplicate backfill frame.
+    // Re-subscribe while the first loop is suspended (backfilling=true). The
+    // re-subscribe must not reset backfilling=false and kick off a second
+    // concurrent #backfillStream, which would emit a duplicate backfill frame.
     socket.receive({ type: "sub", topic: "stream", id: SPACE_ID, cursor: -1 });
     await flush();
 
@@ -1577,8 +1578,9 @@ describe("SyncManager — stream topic", () => {
     // breaks out of the for-loop. With the identity guard, the post-loop
     // check sees state.streams.get(streamDid) === sub B ≠ sub A and returns
     // BEFORE draining pendingLive — no stale-cursor frames are sent.
-    // (Without the fix, the key-presence guard passes, sub A.pendingLive
-    // is true, and the stale loop drains and delivers stale-cursor frames.)
+    // (A key-presence guard alone would pass here: sub A.pendingLive is true,
+    // so the stale loop would drain and deliver stale-cursor frames. The
+    // identity guard is what stops it.)
     releaseStale({ events: [], cursor: -1 });
     await flush();
 

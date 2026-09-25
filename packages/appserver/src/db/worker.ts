@@ -3,14 +3,13 @@
  *
  * Owns the read-state DB (`readStateDb`), the event-log DB (`eventsDb`),
  * the per-space DBs (`data/spaces/<spaceDid>.sqlite`), and the global DB
- * (`data/global.sqlite`). There is no monolithic materialised DB — the
- * per-space DBs are the source of truth for space data (Phase 3 of
- * docs/plans/per-space-dbs.md).
+ * (`data/global.sqlite`). The per-space DBs are the source of truth for space
+ * data.
  *
  * Per-space DBs (`data/spaces/<spaceDid>.sqlite`) are opened lazily on first
  * request for that space, cached with LRU eviction, and created by
- * re-materialising that stream from the event log (not backfilled from a
- * monolithic DB). The global DB (`data/global.sqlite`) is opened lazily on
+ * re-materialising that stream from the event log (never backfilled from
+ * another DB). The global DB (`data/global.sqlite`) is opened lazily on
  * first request and holds `joinedSpace`/`leftSpace` edges, the global
  * `profiles` table, and the `entity_space` entity→space index.
  *
@@ -100,7 +99,7 @@ const GLOBAL_SCHEMA_PATH = join(THIS_DIR, "schema-global.sql");
 const READSTATE_SCHEMA_PATH = join(THIS_DIR, "readStateSchema.sql");
 const EVENTS_SCHEMA_PATH = join(THIS_DIR, "eventsSchema.sql");
 
-// ─── Schema helpers (ported from db.ts / readStateDb.ts) ──────────────────
+// ─── Schema helpers ───────────────────────────────────────────────────────
 
 class SchemaVersionMismatchError extends Error {
   constructor(expected: string, actual: string) {
@@ -114,10 +113,10 @@ class SchemaVersionMismatchError extends Error {
 /**
  * Schema-version tracking for a DB that keeps its own version table.
  *
- * Blue-green (P1): reads the on-disk version FIRST and only applies the schema
+ * Blue-green: reads the on-disk version FIRST and only applies the schema
  * DDL to a fresh/current DB. It must never exec the *new* schema onto a stale
- * DB before deciding it is a mismatch — that would mutate the old data the
- * rebuild is meant to keep serving unchanged. A stale DB is reported via
+ * DB before deciding it is a mismatch — that would mutate the data the rebuild
+ * is meant to keep serving unchanged. A stale DB is reported via
  * `SchemaVersionMismatchError` with the file left byte-for-byte untouched.
  */
 function initializeVersionedSchema(
@@ -319,8 +318,7 @@ function initializeReadStateSchema(
 /**
  * Open (or return from the LRU cache) the per-space DB for `spaceDid`.
  * On first open: create the file and apply the per-space schema. The DB is
- * populated by re-materialising the stream from the event log (Phase 3 —
- * there is no monolithic DB to backfill from).
+ * populated by re-materialising the stream from the event log.
  */
 function openSpaceDb(spaceDid: string): Database {
   if (!spacesDir) throw new Error("Per-space DBs not initialized (no init)");
@@ -341,11 +339,11 @@ function openSpaceDb(spaceDid: string): Database {
 
   } catch (err) {
     if (err instanceof SchemaVersionMismatchError) {
-      // Blue-green (P1): the on-disk schema is stale. Do NOT wipe it — serve
-      // the OLD DB as-is so reads see pre-deploy data until an explicit
-      // rebuild (spaceRebuildBegin → replay → commit) swaps it. The rebuild
-      // is driven by reMaterializeFromLocalEvents, never by a read. The file
-      // is left untouched (initializeVersionedSchema checks version first).
+      // Blue-green: the on-disk schema is stale. Do NOT wipe it — serve
+      // the OLD DB as-is so reads keep returning the existing data until an
+      // explicit rebuild (spaceRebuildBegin → replay → commit) swaps it. The
+      // rebuild is driven by reMaterializeFromLocalEvents, never by a read. The
+      // file is left untouched (initializeVersionedSchema checks version first).
     } else {
       // The space DB must never be left half-initialised: a partial file
       // (schema applied but init failed, or worse) reads back as
@@ -425,7 +423,7 @@ function openSpaceDbFile(spaceDid: string): Database {
   return db;
 }
 
-// ─── Blue-green rebuild (L1 seam) ─────────────────────────────────────────
+// ─── Blue-green rebuild (worker seam) ─────────────────────────────────────
 
 /**
  * Open (or return) the temp rebuild DB for `spaceDid` at
@@ -507,7 +505,7 @@ function handleSpaceRebuildCommit(spaceDid: string): { committed: boolean } {
     spaceDbs.delete(spaceDid);
   }
   // Checkpoint the rebuild's WAL into the temp file, then atomically rename
-  // it over the canonical file (same filesystem ⇒ atomic, P3).
+  // it over the canonical file (same filesystem ⇒ atomic rename).
   rb.rebuild.close();
   renameSync(tmpPath, canonicalPath);
   for (const suffix of ["-wal", "-shm"]) {
@@ -526,8 +524,8 @@ function handleSpaceRebuildCommit(spaceDid: string): { committed: boolean } {
 }
 
 /**
- * Abandon a rebuild: delete the temp file and clear the rebuilding flag. The
- * old DB keeps serving (P6). Returns `{ aborted: false }` when not rebuilding.
+ * Abandon a rebuild: delete the temp file and clear the rebuilding flag; the
+ * canonical DB keeps serving. Returns `{ aborted: false }` when not rebuilding.
  */
 function handleSpaceRebuildAbort(spaceDid: string): { aborted: boolean } {
   const rb = spaceRebuilds.get(spaceDid);
@@ -736,7 +734,7 @@ function handleRequest(req: WorkerRequest): unknown {
  * row from the per-space DB and inserts its (id, stream_id) mapping into the
  * global DB. Idempotent (`insert or ignore`).
  *
- * Phase 3: `openSpaceDbForEntity` resolves a room/message id to its owning
+ * `openSpaceDbForEntity` resolves a room/message id to its owning
  * space via this index. Existing per-space DBs materialized before the index
  * existed (or before a schema bump) have no entries, so this backfill is run
  * on boot for every stream to make room-scoped handlers work.
@@ -775,7 +773,7 @@ function handleInit(req: WorkerRequest): {
     opts.readStateDbPath ?? dbPath("roomy-readstate.sqlite");
   const eventsPath = opts.eventsDbPath ?? dbPath("roomy-events.sqlite");
 
-  // Per-space split (Phase 3): lazily-created space DBs + global DB. When
+  // Per-space split: lazily-created space DBs + global DB. When
   // any shared DB is :memory: (tests), keep the derived DBs in-memory too so
   // tests never touch the filesystem. The fallbacks are per-role below.
   const anyMemory =
@@ -813,7 +811,7 @@ function handleInit(req: WorkerRequest): {
   };
 
   // Role-split (system-worker split): a dedicated worker per shared DB, so a
-  // slow query on one DB no longer blocks the others. Each role opens only
+  // slow query on one DB blocks only that DB. Each role opens only
   // the DB(s) it owns; everything else stays NULL. The "space" and "global"
   // roles set `spacesDir` so space DBs can be opened lazily (the global
   // worker needs them for the entity_space backfill).
@@ -826,7 +824,7 @@ function handleInit(req: WorkerRequest): {
   }
 
   if (role === "readstate" || role === "system") {
-    // Open read-state DB (own file, no ATTACH — Phase 3).
+    // Open read-state DB (own file, no ATTACH).
     readStateDb = openWithPragmas(readStatePath);
     initializeReadStateSchema(
       readStateDb,

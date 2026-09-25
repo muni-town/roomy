@@ -2,9 +2,9 @@
  * Shared DID → PDS endpoint resolution with a stale-while-revalidate cache.
  *
  * Used by the blob proxy (`blob.ts`), the Roomy profile record fetcher
- * (`materialization/roomyProfile.ts`), and on-demand profile hydration.
- * Each consumer previously had its own copy of this logic; this module
- * centralises it so the cache is shared.
+ * (`materialization/roomyProfile.ts`), and on-demand profile hydration. All
+ * consumers go through this module so the cache is shared rather than
+ * duplicated per call site.
  */
 
 import { IdResolver } from "@atproto/identity";

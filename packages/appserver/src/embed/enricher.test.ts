@@ -211,8 +211,9 @@ describe("global pending_links index (findPendingLinks / countPendingLinks)", ()
   });
 
   test("classifyPendingLinks reports zero selectable when every row is parked", async () => {
-    // The production shape: 727 more rows than parked URLs looked selectable,
-    // but every ROW was parked. The row-level count must say 0.
+    // A URL-keyed count over-reports here: many rows can share few parked
+    // URLs, so `total - parkedUrls` looks selectable while every ROW is
+    // parked. The row-level count must say 0.
     const { db, asyncDb } = freshGlobalDb();
     seedPendingLink(db, "https://a.example", "did:web:a", "m1");
     seedPendingLink(db, "https://a.example", "did:web:a", "m2");

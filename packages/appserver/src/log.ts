@@ -148,8 +148,7 @@ export function _setLokiSink(sink: LokiSink | null): void {
 /**
  * Flush the Loki sink's queue, bounded by `timeoutMs` so a dead Alloy can
  * never hold the caller open. Used by the fatal-exit path (`fatal.ts`) to get
- * the record of *why* the process died into Loki before it exits — the record
- * that was missing entirely from the 2026-09-14 restart loop.
+ * the record of *why* the process died into Loki before it exits.
  *
  * Bounded for a different reason than it looks: the sink's own `flush()` is
  * already fire-and-forget and swallows its errors, so the race is not a

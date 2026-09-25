@@ -279,8 +279,8 @@ function denied(
  * flags in the target space, the target room's `default_access` + parent
  * channel, and every room's role grants. Resolved per event, a 50-message
  * batch to one room issues ~15 SQL round-trips per event for facts that
- * cannot differ between them (see docs/sendevents-write-path-review.md, the
- * `sendEvents.authorize 11449ms` span).
+ * cannot differ between them, so authorization must cost a constant per
+ * request — one access decision for the page, not N × constant.
  *
  * The memos are per-request by construction (created in the handler, never
  * shared across requests) — access state changes through events, so a
@@ -412,7 +412,7 @@ async function requireRoomWriteCheck(
   }
   if (access.canWrite) return undefined;
 
-  // Federation fallback (Phase 3): a member of a federated receiving space
+  // Federation fallback: a member of a federated receiving space
   // may write when both the origin and receiver grants allow it.
   if (globalDb && dbResolver) {
     const fed = await federatedRoomAccess(db, globalDb, roomId, did, {

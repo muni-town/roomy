@@ -49,13 +49,12 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   async function activate() {
-    // In dev mode, unregister the SW entirely and wipe all caches. This
-    // ensures the old (prod-caching) SW that may have been registered
-    // previously is fully cleared — otherwise it keeps intercepting
-    // Vite's module requests with its network-first fetch handler,
-    // turning transient errors into permanent 404s. The browser will
-    // re-register the SW on the next page load (SvelteKit's auto-
-    // registration), but the new SW will also self-unregister in dev.
+    // In dev mode, unregister the SW entirely and wipe all caches. A
+    // prod-caching SW registered against this origin would otherwise keep
+    // intercepting Vite's module requests with its network-first fetch handler,
+    // turning transient errors into permanent 404s. The browser re-registers
+    // the SW on the next page load (SvelteKit's auto-registration), and the
+    // new SW also self-unregisters in dev.
     if (build.length === 0) {
       for (const key of await caches.keys()) await caches.delete(key);
       await self.registration.unregister();
@@ -205,7 +204,7 @@ async function handlePush(event: PushEvent): Promise<void> {
     // public CDN URL by the appserver. The OS fetches the image itself; if the
     // URL is unreachable the notification simply shows without an icon.
     ...(payload?.icon ? { icon: payload.icon } : {}),
-    // Phase 1: no badge yet. Phase polish can add a monochrome maskable badge.
+    // No badge is shown for a push; a monochrome maskable badge would go here.
   });
 }
 
@@ -255,7 +254,7 @@ async function handleNotificationClick(
 //
 // Chrome/FCM periodically expires and reissues push subscription endpoints
 // (Firefox's autopush and Safari's APNs do this far less often). The spec
-// event for this is `pushsubscriptionchange`, fired with the old (now-dead)
+// event for this is `pushsubscriptionchange`, fired with the dead
 // subscription and expecting the SW to call `pushManager.subscribe()` again
 // and report the new endpoint to the appserver.
 //
@@ -263,21 +262,20 @@ async function handleNotificationClick(
 // only thing it can: resubscribe (using the cached VAPID key) and post the
 // new subscription to any open page client, which re-registers it. If no
 // page is open, the new endpoint is reported on the next login via
-// `subscribeIfAlreadyPermitted()` in auth.svelte.ts — the old endpoint is
+// `subscribeIfAlreadyPermitted()` in auth.svelte.ts — the replaced endpoint is
 // 410-pruned by the appserver in the meantime, so the user sees a brief gap
 // rather than a silent permanent loss.
 //
-// Note: Chrome's support for firing this event has historically been
-// unreliable (crbug 407523313), so the login-time re-subscribe is the
-// load-bearing recovery path; this handler covers Firefox/Safari and any
-// Chrome build that does fire it.
+// Note: Chrome's firing of this event is unreliable (crbug 407523313), so the
+// login-time re-subscribe is the load-bearing recovery path; this handler
+// covers Firefox/Safari and any Chrome build that does fire it.
 
 self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil(handlePushSubscriptionChange(event));
 });
 
 async function handlePushSubscriptionChange(event: PushSubscriptionChangeEvent): Promise<void> {
-  // Unsubscribe the old (dead) subscription if the browser hasn't already.
+  // Unsubscribe the dead subscription if the browser hasn't already.
   try {
     await event.oldSubscription?.unsubscribe();
   } catch {

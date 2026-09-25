@@ -91,9 +91,9 @@ function filenameFromUri(uri: string, mimeType: string): string {
 
 /**
  * Strip HTML tags from a legacy body before it reaches Discord. The composer's
- * tiptap-markdown serializer used to inline mention anchors (`<a …>@label</a>`)
+ * tiptap-markdown serializer can inline mention anchors (`<a …>@label</a>`)
  * verbatim into `text/markdown` bodies; this guarantees no raw HTML is ever
- * forwarded even if a producer regresses. Deliberately a small regex stripper
+ * forwarded, even if a producer regresses. Deliberately a small regex stripper
  * (no DOM lib): it only removes `<…>` tag spans, keeping the text between them.
  *
  * The pattern only matches tag-shaped spans: `<` + optional `/` + an ASCII tag
@@ -870,7 +870,7 @@ export class RoomyEventRouter {
 		// original addReaction event), not the emoji itself. To remove the reaction
 		// from Discord we need the emoji. Options:
 		//   1. Store emoji in the reaction mapping when bridging addReaction
-		//   2. Query the Leaf server for the original addReaction event
+		//   2. Resolve the original addReaction event's content from the event log
 		// For now, skip — the reaction is removed from Roomy but not from Discord.
 		// This is a minor gap; reactions are ephemeral and rarely removed.
 	}

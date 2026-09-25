@@ -6,7 +6,7 @@
  * when their subscription lapses. This table tracks the DIDs the sweep
  * itself granted — it is the ownership record that lets the sweep remove a
  * lapsed subscriber WITHOUT ever clobbering a manually-assigned member who
- * is not (or no longer) a subscriber. Removal only applies to a tracked DID
+ * is not a subscriber. Removal only applies to a tracked DID
  * whose subscription has lapsed; a manually-granted non-subscriber is left
  * untouched.
  */

@@ -860,8 +860,8 @@ describe("space.roomy.room.updateSeen", () => {
 
     // The HTTP read path surfaces the watermark as an ISO timestamp: with a
     // real seen_up_to the sidebar can show "read at X" / unread semantics.
-    // (Regression guard for getReadPosition returning lastRead: null
-    // unconditionally — the field was write-only.)
+    // getReadPosition must derive lastRead from the watermark, never return
+    // null unconditionally.
     const metaRes = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.room.getMetadata?roomId=${ROOM}`,
     );
@@ -910,7 +910,7 @@ describe("space.roomy.space.createSpace", () => {
     );
     // createStreamDid calls PLC directory which may not be available in test;
     // if it succeeds, expect 200 with spaceId; if it fails, expect a 500
-    // with a PLC-related error (not the old no-backend error).
+    // carrying a PLC-related error rather than a generic internal one.
     if (res.status === 200) {
       const body = await res.json();
       expect(body).toHaveProperty("spaceId");
@@ -919,7 +919,8 @@ describe("space.roomy.space.createSpace", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body).toHaveProperty("error");
-      // Must NOT be the old no-backend error
+      // A failure here must be the specific PLC error, not a generic
+      // InternalServerError
       expect(body.error).not.toBe("InternalServerError");
     }
   });

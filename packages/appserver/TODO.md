@@ -36,7 +36,6 @@ Post-merge improvements and known issues for `packages/appserver/`.
 - **reMaterialize N+1 queries (L2):** `reMaterialize.ts:80-97` — per-stream `max(idx)` lookup inside the loop. Collapse into one `GROUP BY` query.
 - **Full replay on first boot (L3):** `materialization_cursor` is empty on existing DBs → first post-deploy boot does a full re-materialization of every stream. Consider seeding from `comp_space.backfilled_to`.
 - **reMaterialize per-stream catch untested:** No test for one stream throwing (e.g. decode failure) while others succeed.
-- ~~**Unhandled "Database closed" rejections:** `StreamManager.test.ts` and `did.test.ts` — `closeDb()` in `afterEach` rejects pending async-worker requests, producing unhandled promise rejections. Drain/await pending ops before close.~~ **Fixed** (2026-08-02): the pending request was the fire-and-forget `openDb` init; `db.ts` now attaches a `.catch()` to the un-awaited init promise (errors still surface via the first queued request's response).
 
 ## Known test noise (not failures)
 

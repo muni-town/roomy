@@ -214,8 +214,9 @@ describe("embed sweeper invalidation room resolution", () => {
 
   test("read-driven prioritisation enriches a viewed message's pending link", async () => {
     // Regression: links in messages a user is READING (detected during
-    // backfill, never write-poked) used to sit behind the entire backlog.
-    // The read handler now calls prioritiseLinksForRead so they jump the queue.
+    // backfill, never write-poked) would otherwise sit behind the entire
+    // backlog. The read handler calls prioritiseLinksForRead so they jump the
+    // queue.
     const { globalDb, spaceDb } = freshWorker();
     const { router, signals } = captureRouter();
     const ids = {
@@ -285,11 +286,11 @@ describe("embed sweeper invalidation room resolution", () => {
   });
 
   test("definitively-settled (no-data) links are dropped from pending_links so the backlog drains", async () => {
-    // Regression: the sweeper only removed SUCCESSFULLY-enriched URLs from the
-    // global `pending_links` index. Definitive no-data links (page loaded but
-    // no OG/oEmbed, or a stable 4xx) stayed pending forever and were re-fetched
-    // on every sweep, pinning the backlog on dead links and starving real ones
-    // (production showed enrichedOk: 0 with a 30k+ backlog that never drained).
+    // Regression: removing only SUCCESSFULLY-enriched URLs from the
+    // global `pending_links` index leaves definitive no-data links (page
+    // loaded but no OG/oEmbed, or a stable 4xx) pending forever, re-fetched
+    // on every sweep — pinning the backlog on dead links and starving real
+    // ones.
     const { globalDb, spaceDb } = freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/no-og";
@@ -444,11 +445,11 @@ describe("embed sweeper invalidation room resolution", () => {
   });
 
   test("backlogStuck flags a backlog that is entirely parked in transient backoff", async () => {
-    // The production stall (TASK-179): a 5k-row `pending_links` backlog whose
-    // every link had already burned through the 1m/5m/30m/2h/6h transient
-    // schedule. `inFlight` reads 0 and `dbBackoffActive` is false, so the
-    // obvious in-memory signals look idle while the backlog goes nowhere.
-    // The stall flag must be set, and the oldest row must be old enough.
+    // A `pending_links` backlog whose every link has already burned through
+    // the 1m/5m/30m/2h/6h transient schedule: `inFlight` reads 0 and
+    // `dbBackoffActive` is false, so the obvious in-memory signals look idle
+    // while the backlog goes nowhere. The stall flag must be set, and the
+    // oldest row must be old enough.
     const { globalDb, spaceDb } = freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/stuck";
@@ -487,8 +488,8 @@ describe("embed sweeper invalidation room resolution", () => {
       expect(stats.transientBackoff).toBe(1);
 
       // The row is still in the DB backlog, so `pending` (countPendingLinks)
-      // is 1 while the sweeper is doing nothing — exactly the production
-      // shape the gauge fix must expose.
+      // is 1 while the sweeper is doing nothing — the shape the gauge must
+      // expose.
       const n = await globalDb
         .query("select count(*) as n from pending_links")
         .get<{ n: number }>();
@@ -568,9 +569,9 @@ describe("embed sweeper invalidation room resolution", () => {
 
 describe("embed sweeper stall reporting", () => {
   test("stall log reports the measured numbers and the all-parked cause", async () => {
-    // Regression for TASK-186: the stall warn asserted a fixed cause ("all
-    // pending links are in transient-retry backoff") and published no numbers.
-    // It must report what it measured: the row/URL counts, and a cause derived
+    // Regression: the stall warn must not assert a fixed cause ("all
+    // pending links are in transient-retry backoff") or publish no numbers.
+    // It reports what it measured: the row/URL counts, and a cause derived
     // from them.
     const { globalDb, spaceDb } = freshWorker();
     const { router } = captureRouter();
@@ -628,7 +629,7 @@ describe("embed sweeper stall reporting", () => {
   });
 
   test("the parked/selectable split counts ROWS, so a duplicated URL cannot fake selectable work", async () => {
-    // The production shape: a URL pending in TWO messages yields 2 rows.
+    // A URL pending in TWO messages yields 2 rows.
     // Parking that one URL parks BOTH rows, so `pending - transientBackoff`
     // (= 2 - 1 = 1) falsely reports a selectable row. The measured split must
     // say selectableRows=0 and blame parking — not a phantom selection bug.
@@ -667,7 +668,7 @@ describe("embed sweeper stall reporting", () => {
       expect(stats.lastCycle?.selectableRows).toBe(0);
       expect(stats.lastCycle?.parkedRows).toBe(2);
       expect(stats.lastCycle?.backoffUrls).toBe(1);
-      // The naive subtraction the brief's arithmetic used would read 1 here.
+      // A naive `pendingRows - transientBackoff` subtraction reads 1 here.
       const naive = (stats.lastCycle?.pendingRows ?? 0) - stats.transientBackoff;
       expect(naive).toBe(1);
       expect(stats.lastCycle?.selectableRows).not.toBe(naive);
@@ -692,12 +693,12 @@ describe("embed sweeper stall reporting", () => {
   });
 
   test("a selection query that misses selectable rows is reported as an ERROR, not blamed on parking", async () => {
-    // The wired path for the branch the old fixed cause string would have
-    // concealed. An old PARKED row (so the stall can't be blamed on a fresh,
-    // benign backlog) sits alongside an old SELECTABLE row that the backlog
-    // query fails to return — the exact "selectable rows exist, the query
-    // returns none" signature. The stall must be reported as
-    // selectable-but-absent (console.error), NOT all-parked.
+    // The wired path for the selectable-but-absent branch. An old PARKED row
+    // (so the stall can't be blamed on a fresh, benign backlog) sits alongside
+    // an old SELECTABLE row the backlog query fails to return — the exact
+    // "selectable rows exist, the query returns none" signature. The stall
+    // must be reported as selectable-but-absent (console.error), NOT
+    // all-parked.
     const { globalDb, spaceDb } = freshWorker();
     const { router } = captureRouter();
     const parkedUrl = "https://example.com/parked-ghost";
@@ -797,12 +798,12 @@ describe("embed sweeper stall reporting", () => {
 
 describe("embed sweeper retry-state persistence and stall pacing", () => {
   test("a restart restores parked URL backoff from comp_embed_link_data.retry_after", async () => {
-    // Defect (A): the sweeper's transient-retry gate was process-local while
-    // the enricher already PERSISTED `retry_after`/`attempts` and nothing ever
-    // read them. A restart therefore dropped all backoff while `pending_links`
-    // survived, making every parked row selectable at once and re-fetching the
-    // whole backlog. A first cycle after "restart" must select NOTHING when
-    // every parked row's window is still open.
+    // Defect: the sweeper's transient-retry gate is process-local while
+    // the enricher PERSISTS `retry_after`/`attempts`, so a restart without
+    // seeding drops all backoff while `pending_links` survives — every parked
+    // row becomes selectable at once and the whole backlog is re-fetched. A
+    // first cycle after "restart" must select NOTHING when every parked row's
+    // window is still open.
     const { globalDb, spaceDb } = freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/persisted-park";
@@ -927,11 +928,11 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
   });
 
   test("the stall warn is emitted once per cause, not once per flap", async () => {
-    // Defect (B): the log guard compared against `backlogStuck`-scoped state,
-    // so a 1→0→1 flap reset it to null and re-logged an UNCHANGED cause 2,081+
-    // times a day. Latching on the cause independently must yield ONE line for
-    // a run of cycles whose cause never changes — including cycles that select
-    // work but settle nothing.
+    // Defect: a log guard comparing against `backlogStuck`-scoped state
+    // resets to null on a 1→0→1 flap and re-logs an UNCHANGED cause on every
+    // flap. Latching on the cause independently must yield ONE line for a run
+    // of cycles whose cause never changes — including cycles that select work
+    // but settle nothing.
     const { globalDb, spaceDb } = freshWorker();
     const { router } = captureRouter();
     const flakyUrl = "https://example.com/flaky-flap";
@@ -979,7 +980,7 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
   test("a cycle that selects work but settles no rows does not clear the stall", async () => {
     // The flap driver: when a parked window EXPIRES the link is selected
     // again, fails transiently again, and the backlog is unchanged. Clearing
-    // the stall flag on that selection is what produced 396 transitions/24h.
+    // the stall flag on that selection flaps the gauge.
     const { globalDb, spaceDb } = freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/eternally-flaky";
@@ -1008,8 +1009,7 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
       // A NEW link arrives that will also fail transiently. The next cycle
       // SELECTS it — so the queue is "moving" — but parks it again, settling
       // no rows. Selection alone is not progress: the flag and its counters
-      // must persist. (Clearing on this selection is what produced the 396
-      // transitions/24h flap.)
+      // must persist.
       await seedLinkMessageRoom(
         spaceDb,
         globalDb,
@@ -1117,9 +1117,9 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
   });
 
   test("the idle poll escalates while stalled and returns to the base poll on recovery", async () => {
-    // Defect (C): with every URL parked, `findPendingLinks` returns 0 rows, so
-    // the batch is never full and TASK-197's full-batch throttle can never
-    // engage — the loop took the plain 30s idle branch forever. The stalled
+    // Defect: with every URL parked, `findPendingLinks` returns 0 rows, so
+    // the batch is never full and the full-batch throttle can never engage —
+    // the loop would take the plain 30s idle branch forever. The stalled
     // poll must back off instead, bounded so an EXPIRING window is still
     // noticed promptly.
     const { globalDb, spaceDb } = freshWorker();

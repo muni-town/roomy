@@ -2,7 +2,7 @@ import { Extension } from "@tiptap/core";
 import { keymap } from "@tiptap/pm/keymap";
 import { splitBlock } from "@tiptap/pm/commands";
 
-/* Keyboard Shortcuts: used to add and override existing shortcuts */
+/* Keyboard Shortcuts: adds and overrides existing shortcuts */
 export type KeyboardShortcutHandlerProps = {
   onEnter: () => void;
   /**

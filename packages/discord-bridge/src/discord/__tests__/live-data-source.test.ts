@@ -5,10 +5,10 @@
  *   1. The snowflake cursor must survive discordeno's `before` encoding.
  *      @discordeno/rest routes.cjs builds the URL as
  *      `before=${new Date(before).toISOString()}`, so the value we pass
- *      must be a valid epoch-ms Date. Pre-fix the code passed
- *      `Number(snowflake)` (~7.2e17, outside Date's ±8.64e15 ms range),
- *      which made `.toISOString()` throw `RangeError: Invalid Date`
- *      on the second page of every archived-thread backfill.
+ *      must be a valid epoch-ms Date: `Number(snowflake)` (~7.2e17) is
+ *      outside Date's ±8.64e15 ms range and would make `.toISOString()`
+ *      throw `RangeError: Invalid Date` on the second page of every
+ *      archived-thread backfill.
  *   2. A transient REST failure is retried with backoff, so one bad page
  *      costs retry latency, not the parent channel's remaining history.
  *   3. A deterministic 4xx client error (403 Missing Access on a mapped
@@ -26,7 +26,7 @@ const CHANNEL = "1475625518132105319";
 const SNOWFLAKE = "720751906225586180";
 const DISCORD_EPOCH_MS = 1420070400000;
 
-/** Epoch ms encoded in a snowflake (upper 22 bits) — mirrors the fix. */
+/** Epoch ms encoded in a snowflake (upper 22 bits) — the cursor's own time. */
 function snowflakeEpochMs(snowflake: string): number {
 	return Number(BigInt(snowflake) >> 22n) + DISCORD_EPOCH_MS;
 }
@@ -108,7 +108,7 @@ describe("LiveDiscordDataSource.getPublicArchivedThreads", () => {
 		expect(before).toBeDefined();
 
 		// Replicate discordeno's route encoding: `new Date(before).toISOString()`.
-		// Pre-fix this threw RangeError — Number(snowflake) is an Invalid Date.
+		// Number(snowflake) here would be an Invalid Date.
 		if (before === undefined) throw new Error("before was not passed");
 		const encoded = new Date(before).toISOString();
 
@@ -149,13 +149,11 @@ describe("LiveDiscordDataSource.getPublicArchivedThreads", () => {
 	});
 
 	/**
-	 * TASK-156: the prod signature — a first-page failure with no cursor on
-	 * a channel the bot cannot read. Discord answers `403 Missing Access`
-	 * (code 50001); discordeno wraps it in "Failed to send request to
-	 * discord." with the status only in `cause`. This is deterministic:
-	 * backoff cannot fix a permission denial, so it must fail after ONE
-	 * attempt, not burn the whole 3-attempt budget (and previously made the
-	 * same indistinguishable generic error 3× per parent channel per boot).
+	 * A first-page failure with no cursor on a channel the bot cannot read.
+	 * Discord answers `403 Missing Access` (code 50001); discordeno wraps it
+	 * in "Failed to send request to discord." with the status only in `cause`.
+	 * Backoff cannot fix a permission denial, so this must fail after ONE
+	 * attempt rather than burn the whole 3-attempt budget.
 	 */
 	test("fails fast on a deterministic 4xx — 403 Missing Access, no retry", async () => {
 		const { ds, calls } = makeDataSource(10, () =>

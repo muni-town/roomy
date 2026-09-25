@@ -38,7 +38,7 @@ create table did_owners ( did text references dids(did), owner text not null, un
 
   <h2>Materialised Views (schema.sql)</h2>
 
-  <p>Ported from the legacy frontend worker schema so the SDK's pure materializer functions are reused unchanged; the column names and types must stay in sync with the SDK. <code>SCHEMA_VERSION</code> bumps wipe this DB and trigger a full re-materialisation from the event log.</p>
+  <p>The column names and types must stay in sync with the SDK's materializer output. <code>SCHEMA_VERSION</code> bumps wipe this DB and trigger a full re-materialisation from the event log.</p>
 
   <h3>entities</h3>
   <p>The base table for all entities (spaces, rooms, messages, users). Every entity has a unique ID (DID or ULID) and belongs to a stream.</p>

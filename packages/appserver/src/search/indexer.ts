@@ -1,8 +1,8 @@
 /**
- * Qdrant message indexer — async, out-of-band (Phase 2).
+ * Qdrant message indexer — async, out-of-band.
  *
- * The materialiser no longer does any search work synchronously (TASK-57).
- * Instead `applyChunkSideEffects` enqueues search jobs here; a background
+ * The materialiser does no search work synchronously; instead
+ * `applyChunkSideEffects` enqueues search jobs here; a background
  * worker loop drains the queue: reads the message's materialised rows from
  * its per-space DB, extracts the plaintext, computes the sparse BM25 vector,
  * and upserts the point to Qdrant.
@@ -296,7 +296,7 @@ async function indexOne(client: QdrantClientLike, job: IndexJob): Promise<void> 
   });
 }
 
-/** Base row needed to index a message (mirrors the Phase 1 FTS indexer). */
+/** Base row needed to index a message. */
 interface MessageRow {
   room: string | null;
   mimeType: string | null;

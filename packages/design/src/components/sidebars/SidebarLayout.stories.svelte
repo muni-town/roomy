@@ -25,7 +25,7 @@
               >MF</div
             >
             <span class="text-sm font-semibold text-base-900 dark:text-base-100"
-              >Meri Forest</span
+              >Test Space</span
             >
           </div>
         </div>
@@ -64,7 +64,7 @@
             >MF</div
           >
           <span class="text-sm text-base-800 dark:text-base-200 truncate"
-            >Meri</span
+            >Test</span
           >
         </div>
       {/snippet}

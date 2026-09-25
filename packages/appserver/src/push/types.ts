@@ -31,7 +31,7 @@ export interface PushJob {
    * This is the only time value that distinguishes a genuinely new message
    * from historical content ingested now: `timestamp` is derived from the
    * event ULID, which is fresh for a replay. The freshness gate
-   * (`push/freshness.ts`) keys on this field — see TASK-151.
+   * (`push/freshness.ts`) keys on this field.
    */
   canonicalTimestamp?: number;
   /** DIDs mentioned in the message body (from the mentions extension). */

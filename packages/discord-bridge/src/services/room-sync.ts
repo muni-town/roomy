@@ -344,19 +344,17 @@ export async function handleRoomDelete(
 // first bridged. It is never re-synced: Discord stays the source of truth for
 // message content, but the Roomy sidebar belongs to the space's admins after
 // the initial import, so a later Discord channel rename, move, or reorder
-// must not stomp their layout. Meri, TASK-140: "Only in the initial sync, not
-// trying to keep them in sync ongoing."
+// must not stomp their layout.
 //
 // The one-shot property is enforced by a persisted marker in the bridge's own
 // DB (`structure_sync`, repository.ts), NOT by a check against the live
-// sidebar. A sidebar check would re-apply structure whenever the merge
-// happened to produce a different result — which is exactly the re-sync this
-// task rules out — and a marker also survives the space being modified by an
-// admin afterwards, which a check cannot distinguish from "not yet synced".
-// The marker is claimed before any event is sent, so a crash mid-sync leaves
-// it set and the structure is never applied twice; a failed first attempt can
-// be retried once by the recovery path (see below) and is otherwise reported
-// as the honest outcome (`applied: false`).
+// sidebar: a sidebar check would re-apply structure whenever the merge
+// happened to produce a different result, and a marker survives the space
+// being modified by an admin afterwards, which a check cannot distinguish
+// from "not yet synced". The marker is claimed before any event is sent, so a
+// crash mid-sync leaves it set and the structure is never applied twice; a
+// failed first attempt can be retried once by the recovery path (see below)
+// and is otherwise reported as the honest outcome (`applied: false`).
 
 /**
  * Discord's guild structure, as read for the initial sync: the categories in
@@ -446,8 +444,8 @@ export function mergeGuildStructure(
 	// lower-case `general` (`sdk/src/operations/space.ts`) while Discord
 	// guilds report whatever casing the admin typed, so a verbatim match
 	// creates a second, differently-cased header beside the seeded one.
-	// First-wins: if the sidebar already holds both casings (a pre-fix
-	// duplicate), the first — the seeded, canonical one — gets the rooms.
+	// First-wins: if the sidebar holds both casings, the first — the seeded,
+	// canonical one — gets the rooms.
 	const byName = new Map<string, BridgeSidebarCategory>();
 	for (const cat of merged) {
 		const key = cat.name.toLowerCase();
@@ -545,7 +543,7 @@ export function mergeGuildStructure(
  * connect/backfill slash commands), never from a live gateway event handler.
  * `handleChannelCreate` and friends deliberately do not call this: they fire
  * on ongoing Discord events, and a structure write there would be exactly the
- * ongoing re-sync the task forbids.
+ * ongoing re-sync this one-shot mirror prevents.
  *
  * The marker is per (guild, space). `repo.claimStructureSync` returns false
  * once claimed, so a second call — a reconnect, a second backfill, a
@@ -637,9 +635,9 @@ export async function syncInitialStructure(
 		} catch (err) {
 			// The claim stays set on failure. That is deliberate: once an
 			// event may have reached the space we cannot prove it did not, so
-			// retrying would risk a second structure write — the one thing
-			// this task rules out. `applied_at` stays null, which is how an
-			// operator tells "sync never completed" from "sync done".
+			// retrying would risk a second structure write. `applied_at` stays
+			// null, which is how an operator tells "sync never completed" from
+			// "sync done".
 			log.error(
 				`Failed to sync initial structure for ${spaceDid} (guild ${guildId})`,
 				err,

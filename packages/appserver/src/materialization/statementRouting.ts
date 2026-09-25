@@ -1,10 +1,8 @@
 /**
- * Statement routing for the per-space DB split (Phase 1 of
- * docs/plans/per-space-dbs.md).
+ * Statement routing for the per-space DB split.
  *
  * Materializer statements are opaque SQL, so the target DB is derived from
- * the statement text (plan §"Global DB writes during materialization").
- * The rule is deliberately narrow:
+ * the statement text. The rule is deliberately narrow:
  *
  * - `edges` statements mentioning `'joinedSpace'` or `'leftSpace'` are the
  *   per-user membership edges written by the `JoinSpace`/`LeaveSpace`
@@ -19,7 +17,7 @@
  *   author, link, reply, forward, ...) — lives in the per-space DB.
  *
  * The set of global-DB statements is small and stable, so text matching is
- * the pragmatic approach the plan calls for.
+ * the pragmatic approach.
  */
 
 /** True when the statement writes the global membership edges or registry. */

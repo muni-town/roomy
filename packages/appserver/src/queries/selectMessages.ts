@@ -188,8 +188,8 @@ export async function selectMessages(
       -- Order by sort_idx directly (not coalesce(sort_idx, id)) so SQLite can
       -- use idx_entities_room_sort and stop after the limit. Messages always
       -- have sort_idx set by the materializer, so the coalesce fallback to id
-      -- was never exercised for the rows this filter keeps; the coalesce forced
-      -- a full temp-B-tree sort of every entity in the room, which is
+      -- never applies to the rows this filter keeps; the coalesce instead
+      -- forces a full temp-B-tree sort of every entity in the room, which is
       -- catastrophic on a large bridged channel.
       order by e.sort_idx desc
       limit ${Math.max(1, Math.min(scope.limit, 100))}
@@ -255,11 +255,11 @@ export async function selectMessages(
   // link embeds are all resolved) and embedded in `forwardedFrom.message`.
   // Clients render the embedded original directly — no extra fetches.
   //
-  // Previously this step substituted the original's content and author into
-  // the forward row, which made a forward look like the ORIGINAL's message
-  // and (with the forwarder's own content present) rendered the same content
-  // twice. That substitution is gone: a forward is always the forwarder's
-  // message, with the original nested under `forwardedFrom.message`.
+  // Substituting the original's content and author into the forward row would
+  // make a forward look like the ORIGINAL's message and (with the forwarder's
+  // own content present) render the same content twice. A forward is always
+  // the forwarder's message, with the original nested under
+  // `forwardedFrom.message`.
   //
   // Constant query count: one `selectMessages` batch call per chain level.
   // The chain set bounds pathological cycles (A forwards B, B forwards A):

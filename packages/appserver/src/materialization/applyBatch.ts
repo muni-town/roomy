@@ -8,8 +8,8 @@
  * Side-effects (activity_item, link detection) that need JS logic run
  * post-transaction since they're idempotent.
  *
- * Per-space split (Phase 3): `db` is the per-space DB — the source of truth
- * for space data. There is no monolithic DB. `globalDb` (optional) receives
+ * Per-space split: `db` is the per-space DB — the source of truth
+ * for space data. `globalDb` (optional) receives
  * the `joinedSpace`/`leftSpace` membership edges and the `entity_space`
  * entity→space index. The materialization cursor advances on the per-space
  * DB so each space DB is self-describing about its own re-materialisation
@@ -186,7 +186,7 @@ export async function applyBatch(
                 : [params],
           derived: isGlobalDbStatement(stmt.sql) ? "global" : "space",
         });
-        // Phase 3: maintain the global entity→space index. Every `insert
+        // Maintain the global entity→space index. Every `insert
         // into entities` statement carries (id, stream_id) as its first two
         // params; record the mapping so `openSpaceDbForEntity` can resolve
         // which per-space DB a room/message id lives in. Skip entities with
@@ -220,12 +220,12 @@ export async function applyBatch(
 
       // forwardMessages sort_idx: the forward-reference entity sorts by the
       // forward event's OWN time (its ULID), so a forward appears at the top
-      // of the destination room's timeline — matching the modern
-      // forward-as-embed representation (createMessage + forward attachment).
-      // Previously the original's sort_idx was copied, which buried a forward
-      // of an old message deep in history, outside the first getMessages page
-      // (the client's room query returns the newest `limit` rows), so the
-      // forward flashed in via the WS diff and vanished on the next refetch.
+      // of the destination room's timeline, matching the forward-as-embed
+      // representation (createMessage + forward attachment).
+      // Copying the original's sort_idx instead would bury a forward of an old
+      // message deep in history, outside the first getMessages page (the
+      // client's room query returns the newest `limit` rows), so the forward
+      // would flash in via the WS diff and vanish on the next refetch.
       if (e.event.$type === "space.roomy.message.forwardMessages.v0") {
         const sortIdx = ulid(decodeTime(e.event.id)) as Ulid;
         chunkSteps.push({
@@ -236,7 +236,7 @@ export async function applyBatch(
         });
       }
 
-      // Denormalised read projection (TASK-173): maintain `room_access` for the
+      // Denormalised read projection: maintain `room_access` for the
       // rooms this event can have changed, INSIDE the same per-event
       // transaction as the event's own statements. Appending one step here
       // costs no extra worker round-trip (the transaction is already sent) and
@@ -263,7 +263,7 @@ export async function applyBatch(
         });
       }
 
-      // Denormalised read projection (TASK-175, R3): maintain `room_activity`,
+      // Denormalised read projection: maintain `room_activity`,
       // the per-room latest-message/recent-authors summary the board reads.
       // Same placement and same rules as `room_access` above — one statement
       // inside the per-event transaction, upsert on live events and invalidate
@@ -328,30 +328,20 @@ export async function applyBatch(
       if (e.idx > chunkMaxIdx) chunkMaxIdx = e.idx;
     }
 
-    // Run this chunk's event SQL individually, with per-event savepoints
-    // providing error isolation. Each event's SAVEPOINT/RELEASE pair wraps
-    // its statements; if one event fails, only that event's changes are
-    // rolled back. The cursor is advanced separately below so it also
-    // advances past chunks with apply errors, preventing infinite retry
-    // loops on every boot.
-    //
-    // Run this chunk's event SQL batched into per-event transactions
-    // (Phase 4b). Each event's statements go to the per-space DB in a single
-    // `transaction` message — one worker round-trip instead of one per
-    // statement. The worker runs it as an atomic SQLite transaction, giving
-    // the same per-event error isolation the old SAVEPOINT/RELEASE did, but
-    // collapsing ~N round-trips into one. Global statements (membership edges
-    // + entity_space index) go to the global DB in a second single
-    // `transaction` message. This directly attacks the dominant materialization
-    // cost — main-thread postMessage round-trip overhead was ~28% self-time in
-    // the CPU profile.
+    // Run this chunk's event SQL batched into per-event transactions. Each
+    // event's statements go to the per-space DB in a single `transaction`
+    // message — one worker round-trip instead of one per statement. The worker
+    // runs it as an atomic SQLite transaction, so a failing event rolls back
+    // just that event. Global statements (membership edges + entity_space
+    // index) go to the global DB in a second single `transaction` message. The
+    // cursor is advanced separately below so it also advances past chunks with
+    // apply errors, preventing infinite retry loops on every boot.
     //
     // Concurrency: each event is a single atomic transaction message, so the
-    // worker serializes them — no SAVEPOINT/RELEASE to interleave. Different
-    // spaces no longer wait on one process-wide `savepointMutex`. But same-space
-    // sections still take a per-space lock shared with `applyBundle`: its
-    // SAVEPOINT section must never overlap our `transaction` (a `BEGIN` nested
-    // in an open SAVEPOINT fails). Per-space lock keeps cross-space parallelism.
+    // worker serializes them. Same-space sections take a per-space lock shared
+    // with `applyBundle`: its SAVEPOINT section must never overlap our
+    // `transaction` (a `BEGIN` nested in an open SAVEPOINT fails). Different
+    // spaces hold different locks and run in parallel.
     await getSavepointMutex(streamId).run(async () => {
       for (let i = 0; i < chunkSteps.length; i++) {
         const step = chunkSteps[i]!;
@@ -375,7 +365,7 @@ export async function applyBatch(
 
           // ── Per-space DB (source of truth) ──────────────────────────────
           // One atomic transaction per event; a failure rolls back just this
-          // event (equivalent to the old savepoint isolation).
+          // event.
           let spaceFailed = false;
           try {
             if (spaceSteps.length > 0) {
@@ -477,12 +467,11 @@ export async function applyBatch(
 
     // Delete side-effects: rebuild each affected room's activity window from
     // its remaining messages (dropping the row when the room is empty) and
-    // unwind the readers' unread counts for exactly the messages that were
-    // still unread. Runs after the chunk's SQL (the rows must already be gone
-    // for the window rebuild to be correct) but uses the ordering keys
-    // captured above, which the delete would otherwise have destroyed. This is
-    // the same derived-state maintenance `moveMessages` performs on its source
-    // room, via the same helpers.
+    // unwind the readers' unread counts for exactly the messages still unread.
+    // Runs after the chunk's SQL (the rows must already be gone for the window
+    // rebuild to be correct) but uses the ordering keys captured above, which
+    // the delete destroys. This is the same derived-state maintenance
+    // `moveMessages` performs on its source room, via the same helpers.
     if (pendingDeletes.length > 0) {
       try {
         await applyDeleteSideEffects(db, pendingDeletes, {
@@ -527,8 +516,8 @@ export async function applyBatch(
   }
 
   // Advance the legacy comp_space.backfilled_to cursor. The authoritative
-  // materialization_cursor is now advanced per-chunk (above), so it already
-  // reflects progress. This legacy cursor is kept for backwards compatibility
+  // materialization_cursor is advanced per-chunk (above), so it already
+  // reflects progress. This cursor is kept for backwards compatibility
   // and only exists for streams that have a comp_space row.
   await db.transaction([
     {
@@ -586,7 +575,7 @@ async function applyChunkSideEffects(
       };
       await applyBundle(db, bundle, { isBackfill, streamId }, globalDb, openReadStateDb());
 
-      // Search indexing (Phase 2): enqueue the message for the out-of-band
+      // Search indexing: enqueue the message for the out-of-band
       // Qdrant indexer — the worker re-reads the materialised rows, so no
       // synchronous search work happens here.
       enqueueIndexMessage(streamId, e.event.id);

@@ -22,8 +22,8 @@ type GlobalMigrationTask = (
  * `kind: "structural"` version is a type error. The two lists cannot drift.
  */
 const GLOBAL_MIGRATION_TASKS: Record<GlobalAsyncVersion, GlobalMigrationTask> = {
-  // v6: reconstruct active joinedSpace edges from per-space membership truth
-  // (recovers global DBs wiped by the v4→v5 deployment bug).
+  // v6: reconstruct active joinedSpace edges from per-space membership truth,
+  // so a global DB whose edges were wiped by a v4→v5 upgrade is repaired.
   "6": repairGlobalMembership,
   // v8: `federation_receiver_permissions.kind` widened from
   // ('user','role') to ('members','user','role') — SQLite can't alter a

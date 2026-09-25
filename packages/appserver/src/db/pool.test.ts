@@ -102,7 +102,7 @@ describe("DatabasePool routing", () => {
   });
 });
 
-describe("DatabasePool teardown (TASK-122)", () => {
+describe("DatabasePool teardown", () => {
   // Yield to the event loop so a latent unhandled-rejection (had the bug
   // been present) would be surfaced before the assertion. The worker pool is
   // a real thread, so this cannot be driven by fake timers; a macrotask
@@ -110,10 +110,10 @@ describe("DatabasePool teardown (TASK-122)", () => {
   const yieldToLoop = () => new Promise<void>((r) => setImmediate(r));
 
   test("fire-and-forget routed run() before closeDb() raises no unhandled rejection", async () => {
-    // Regression test for CI "Test Appserver" teardown flake: an `async`
-    // DB wrapper created a fresh (unhandled) promise around the already
-    // handled `send()` promise, so terminating the worker mid-request left
-    // an unhandled rejection that failed the whole `bun test` run.
+    // The teardown path must not surface an unhandled rejection: terminating
+    // the worker mid-request rejects the pending `send()` promise, and a DB
+    // wrapper that re-wraps it in a fresh promise would leave that rejection
+    // unhandled and fail the whole `bun test` run.
     const unhandled: Error[] = [];
     const onUnhandled = (e: Error) => {
       unhandled.push(e);
@@ -157,8 +157,8 @@ describe("DatabasePool teardown (TASK-122)", () => {
     try {
       openDb({ path: ":memory:" });
       closeDb();
-      // Post-teardown call — previously a synchronous throw, which on the
-      // async wrapper became an unhandled rejected promise.
+      // Post-teardown call — it must reject the returned promise, not throw
+      // synchronously.
       void openDb({ path: ":memory:" }).forSpace("did:plc:after-close").run(
         "insert or ignore into entities (id, stream_id) values (?, ?)",
         "entity-after",

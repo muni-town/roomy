@@ -48,7 +48,7 @@ const ACCEPT_HTML =
 // ─── Types ──────────────────────────────────────────────────────────────
 /**
  * Normalized link metadata, mirroring the SDK's `LinkEmbedData` shape so the
- * frontend's `LinkCard` can render it unchanged. All fields optional — a URL
+ * client's `LinkCard` can render it unchanged. All fields optional — a URL
  * may yield only a title, or nothing at all.
  */
 export interface LinkEmbedMetadata {

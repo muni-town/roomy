@@ -1,8 +1,7 @@
 /**
  * RoomyServiceClient - Service-to-service client for Roomy infrastructure.
  *
- * After Phase 4, this is a simple profile-fetching utility that queries the
- * bsky appview directly. All Leaf-related functionality has been removed.
+ * A simple profile-fetching utility that queries the bsky appview directly.
  */
 
 import { AtpAgent } from "@atproto/api";

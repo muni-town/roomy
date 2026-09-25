@@ -1,10 +1,10 @@
 /**
  * Dev-only debug hook for web push, exposed on `window.roomyPush`.
  *
- * Phase 1 ships the push plumbing with no settings UI yet (the
- * `UpdateRhythmChooser` + notifications settings page land in Phase 2). To
- * run the Phase 1 end-to-end Busy test manually, open the browser console and
- * drive the pipeline from here:
+ * Drives the push pipeline manually: subscribe this device, set the user-wide
+ * default or a per-space level, and read the current preferences. To run the
+ * end-to-end Busy test by hand, open the browser console and drive the
+ * pipeline from here:
  *
  *   await window.roomyPush.subscribe()                 // (re)register this device
  *   await window.roomyPush.setDefault("busy")          // user-wide default

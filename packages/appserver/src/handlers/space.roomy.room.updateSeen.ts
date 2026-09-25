@@ -2,8 +2,8 @@
  * XRPC: space.roomy.room.updateSeen (procedure).
  *
  * Mark messages in a room as read up to a given message entity. The appserver
- * is the source of truth for read positions — this replaces the former Leaf state
- * event `space.roomy.state.markRead.v0`.
+ * is the source of truth for read positions; the `space.roomy.state.markRead.v0`
+ * state event is rejected at the write path.
  */
 
 import { openReadStateDb, openSpaceDbForEntity } from "../db/db.ts";

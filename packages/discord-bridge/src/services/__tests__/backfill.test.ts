@@ -512,7 +512,7 @@ describe("backfillChannel with faker-generated guild", () => {
 			await backfillChannel(discord, repo, roomy, ch.id, SPACE);
 		}
 
-		// All channels should be fully synced after the fix.
+		// All channels should be fully synced.
 		// A small number of messages may be skipped by ingestDiscordMessage
 		for (let ci = 0; ci < channelCount; ci++) {
 			const ch = channels[ci];
@@ -566,7 +566,7 @@ describe("backfillChannel with faker-generated guild", () => {
 	});
 });
 
-// ─── TASK-139: two-phase backfill (bounded Phase-1 window + Phase-2 walk) ─
+// ─── Two-phase backfill (bounded Phase-1 window + Phase-2 walk) ─────────
 
 function buildFakeGuildForMessages(count: number) {
 	return createFakeGuild({
@@ -916,7 +916,7 @@ describe("two-phase backfill", () => {
 			expect(entry.running).toBe(false);
 			expect(typeof entry.updatedAt).toBe("number");
 
-			// TASK-193 payload extensions: durable identity + phase snapshot.
+			// Payload extensions: durable identity + phase snapshot.
 			expect(entry.parentId).toBeNull(); // top-level channel
 			// The Phase-1 window hit the bound before Phase 2 walked the
 			// remainder; the phase1→phase2 snapshot must be preserved.
@@ -1311,7 +1311,7 @@ describe("backfill — capacity enforcement", () => {
 	});
 });
 
-// ─── Archived-thread backfill regression tests ─────────────────────────────
+// ─── Archived-thread backfill ───────────────────────────────────────────
 
 interface FakeThreadsScenario {
 	parents: Array<{
@@ -1560,7 +1560,7 @@ describe("ensureAndBackfillArchivedThreads", () => {
 	});
 });
 
-// ─── TASK-193: up-front enumeration & Discord-side completion notice ─────
+// ─── Up-front enumeration & Discord-side completion notice ──────────────
 
 /**
  * Enumeration writes every bridged pair + active thread up front (so the
@@ -1568,7 +1568,7 @@ describe("ensureAndBackfillArchivedThreads", () => {
  * Discord message per space the run actually did work for, only after every
  * phase (channels, active threads, archived threads) has settled.
  */
-describe("backfill enumeration & completion notice (TASK-193)", () => {
+describe("backfill enumeration & completion notice", () => {
 	afterEach(() => {
 		setBackfillNoticeSender(undefined);
 		delete process.env.BACKFILL_NOTICE_CHANNEL;

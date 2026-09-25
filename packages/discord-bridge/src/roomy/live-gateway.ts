@@ -151,12 +151,12 @@ export class LiveRoomyGateway implements RoomyGateway {
 		// events with idx > cursor, then streams live events. This initial
 		// subscription is tracked by the SDK and replayed on reconnect; the
 		// onOpen handler below re-subscribes with a fresh cursor to override
-		// that replay (see M3).
+		// that replay.
 		connection.subscribe({ kind: "stream", id: spaceDid, cursor });
 
 		// Per-space backfill state. The first frame(s) with hasMore=true are
 		// backfill; once a frame arrives with hasMore=false the backfill is
-		// done and all later frames are live. See L1 for the semantics.
+		// done and all later frames are live.
 		const backfillState = { value: true };
 
 		// On every (re)connect, re-subscribe with the fresh cursor from the
@@ -169,14 +169,14 @@ export class LiveRoomyGateway implements RoomyGateway {
 			// A successful open means the appserver is healthy again — reset the
 			// shared circuit breaker so reconnects are fast from a clean slate.
 			this.#reconnectFailures = 0;
-			// M3: re-enter the backfill phase on every reconnect. The first
+			// Re-enter the backfill phase on every reconnect. The first
 			// open after the initial backfill completed has backfillState
 			// stuck at false; without resetting, a reconnect's backfill
 			// frames (hasMore=true) would be mislabeled isBackfill=false.
 			backfillState.value = true;
 			const freshCursor = this.#repo.getSpaceCursor(spaceDid) ?? -1;
 			// Drop any in-flight processing chain from the previous socket.
-			// Frames on the old connection may still be working through
+			// Frames on that connection may still be working through
 			// callbacks (e.g. a slow profile fetch). A rejected leftover would
 			// serialise new frames behind a dead promise; clearing lets frames
 			// arriving on this fresh connection chain from a clean base.
@@ -226,7 +226,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 		// Open the WebSocket connection. Must be called after subscribe() so
 		// the topic is registered before the socket opens (the connect()
 		// method replays tracked subscriptions on open). If connect() fails,
-		// drop the subscription so a later subscribe() can retry (M2).
+		// drop the subscription so a later subscribe() can retry.
 		try {
 			await connection.connect();
 		} catch (err) {
@@ -253,7 +253,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 	 * persist the cursor. Each callback invocation is wrapped so a single
 	 * failing handler doesn't block the rest of the batch.
 	 *
-	 * `backfillState` carries the per-space backfill flag across frames (L1).
+	 * `backfillState` carries the per-space backfill flag across frames.
 	 */
 	async #processFrame(
 		spaceDid: string,
@@ -264,7 +264,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 		const data = body as unknown as StreamEventsBody;
 		if (!data || !Array.isArray(data.events)) return;
 
-		// L1: `isBackfill` describes the state at the *start* of this frame,
+		// `isBackfill` describes the state at the *start* of this frame,
 		// not the server's signal for the *next* frame. The final backfill
 		// batch still carries historical events, so it should be flagged as
 		// backfill. We only exit the backfill phase after processing a frame
@@ -302,7 +302,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 			}
 		}
 
-		// M4: persist the cursor AFTER the callbacks have run so a crash
+		// Persist the cursor AFTER the callbacks have run so a crash
 		// between persisting and delivering doesn't permanently lose events
 		// (at-least-once delivery). Per-event errors are logged above and do
 		// not block forward progress.

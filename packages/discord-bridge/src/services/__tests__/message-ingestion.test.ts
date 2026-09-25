@@ -395,8 +395,7 @@ describe("ingestDiscordMessage — mention resolution", () => {
 	// MI14c: A bridged channel/thread referenced via <#id> in the content gets
 	// a roomRef/link facet even when it's absent from mentionChannelIds and its
 	// display name can't be resolved (Discord omits threads from mention
-	// channels, and name resolution may fail). Previously this rendered as
-	// plaintext "#snowflake" with no link to the bridged Roomy room.
+	// channels, and name resolution may fail).
 	test("MI14c: bridges a thread/channel <#id> mention as a link even without mentionChannelIds", async () => {
 		// Mention a THREAD that IS bridged, but is not in mentionChannelIds (Discord
 		// omits threads from that field). Its display name comes from a content
@@ -734,10 +733,9 @@ describe("ingestDiscordMessage — forwarded messages (HAS_SNAPSHOT flag)", () =
 	});
 
 	// FW05: Type 26 is NOT a forward — it is INTERACTION_PREMIUM_UPSELL, a
-	// system message. Regression guard: the old code keyed forward detection
-	// on `type === 26`, which never matched real forwards (they are type 0 +
-	// HAS_SNAPSHOT flag) and would have misclassified premium-upsell system
-	// messages as forwards.
+	// system message. Forward detection keys on type 0 + the HAS_SNAPSHOT
+	// flag, never on `type === 26`: a real forward is type 0 + HAS_SNAPSHOT,
+	// and a type-26 premium-upsell would otherwise be misclassified.
 	test("FW05: type 26 (INTERACTION_PREMIUM_UPSELL) is not treated as a forward", async () => {
 		const originalId = "6666666666";
 		const sourceChannelId = CHANNEL_2;
@@ -761,7 +759,7 @@ describe("ingestDiscordMessage — forwarded messages (HAS_SNAPSHOT flag)", () =
 
 		// Not a forward: no forwardMessages event. The message falls through
 		// to the normal path (where its messageReference becomes a reply
-		// attachment) — the old code would have emitted a forward event.
+		// attachment).
 		expect(forwardMessageEvent(roomy, SPACE_A)).toBeUndefined();
 		expect(result).toEqual({ synced: 1, skipped: 0 });
 		expect(createMessageEvent(roomy, SPACE_A)).toBeDefined();

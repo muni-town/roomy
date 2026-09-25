@@ -437,8 +437,7 @@ export interface MoveMessagesResult {
  *
  * The event schema caps `messageIds` at one entry (`MoveMessagesSchema` in
  * `schema/events/message.ts`: "Must be exactly one until we have TVFs in
- * LibSQL"), so this emits one event per message — same shape the legacy
- * thread-creation flow used.
+ * LibSQL"), so this emits one event per message.
  *
  * @param options - Message move options
  * @param sendEvent - Function to send the event

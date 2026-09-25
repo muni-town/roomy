@@ -1,10 +1,9 @@
 /**
  * Profile prefetch + materialisation.
  *
- * Mirrors the frontend `worker.ts → ensureProfiles` flow: scan a batch of
- * events for user DIDs that need a profile, look up which ones we don't yet
- * have, fetch profiles, and write them to the global `profiles` table (the
- * authoritative per-user Roomy profile store).
+ * Scan a batch of events for user DIDs that need a profile, look up which ones
+ * we don't yet have, fetch profiles, and write them to the global `profiles`
+ * table (the authoritative per-user Roomy profile store).
  *
  * **HappyView-first with Bluesky fallback.** When a HappyView index service
  * is configured, bulk profile fetches query it in batch (one HTTP call per 25
@@ -65,14 +64,13 @@ export const PROFILE_REFRESH_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * Negative cache: how long a DID that resolved to no profile at all is kept
  * out of the fetch path.
  *
- * Both fetch paths only ever suppressed a retry *after a success*, because a
- * cache row is written from the fetch result. A DID that neither HappyView nor
- * the Bluesky appview can resolve — a brand-new DID, a `did:web`, an appview
- * hiccup — therefore had no row to find, so `filterMissing` returned it again
- * and the write path re-ran the full pipeline (HappyView + Bluesky, two HTTP
- * round-trips) on *every single event* by that author, forever. N concurrent
- * writes by the same unresolved author each issued their own copy: this is
- * what put 48 requests on one worker in production.
+ * A cache row is only written from a successful fetch result, so a DID that
+ * neither HappyView nor the Bluesky appview can resolve — a brand-new DID, a
+ * `did:web`, an appview hiccup — has no row to find. Without this backoff
+ * `filterMissing` returns it again and the write path re-runs the full
+ * pipeline (HappyView + Bluesky, two HTTP round-trips) on every event by that
+ * author, and N concurrent writes by the same unresolved author each issue
+ * their own copy.
  *
  * Keyed by DID and shared by both callers of this pipeline: materialisation's
  * `ensureProfilesForBatch`/`ensureProfilesRoomyFirst` and the read path's
@@ -287,8 +285,8 @@ export async function getProfilesRoomyFirst(
   // Every source has now been asked (or, under `bun test`, the only source
   // that exists in this environment has been). Anything still absent is
   // unresolvable, so back it off instead of re-running both lookups on the
-  // next event or read — the failure that made production re-fetch the same
-  // author forever.
+  // next event or read — without the backoff the same unresolvable author is
+  // re-fetched forever.
   recordUnresolvedProfiles(requested, new Set(profiles.map((p) => p.did)));
 
   return { profiles, extras };
@@ -424,8 +422,8 @@ async function filterMissing(db: DbLike, candidates: Set<UserDid>): Promise<User
 
   // DIDs whose row is older than the freshness TTL — re-fetch regardless of
   // handle state so a display-name/avatar change on the PDS propagates to
-  // message lists (a valid-handled row used to be pinned forever). Bounded by
-  // the TTL: a row is re-fetched at most once per interval.
+  // message lists instead of the first-fetched values being pinned forever.
+  // Bounded by the TTL: a row is re-fetched at most once per interval.
   const refreshCutoff = Date.now() - PROFILE_REFRESH_TTL_MS;
   const staleRows = new Set(
     (await globalDb
@@ -458,10 +456,10 @@ async function filterMissing(db: DbLike, candidates: Set<UserDid>): Promise<User
  *
  * The handle is normalized on both sides of the merge: `""` from the incoming
  * profile is treated as absent (so it can't overwrite a real handle), and a
- * legacy `''` already in the column is healed to the incoming handle. Both
- * sides go through `nullif(..., '')` for exactly that reason — `''` and "no
- * handle" are the same state as far as every reader is concerned, so rows
- * poisoned by the old conversion recover without a migration.
+ * `''` already in the column is healed to the incoming handle. Both sides go
+ * through `nullif(..., '')` for exactly that reason — `''` and "no handle" are
+ * the same state as far as every reader is concerned, so a row holding `''`
+ * recovers on the next write without a migration.
  */
 async function writeGlobalProfile(
   p: ProfileViewDetailed,
@@ -562,7 +560,7 @@ export async function writeSetUserProfileToGlobal(event: {
  * Insert one batch of profile rows (Bluesky-only path) into the global
  * `profiles` table.
  *
- * Phase 3: profiles are global — the authoritative copy lives in the global
+ * Profiles are global — the authoritative copy lives in the global
  * `profiles` table. The per-space `entities`/`comp_user`/`comp_info` writes
  * are dropped; per-space DBs keep their own denormalised copy via their own
  * materialisation, and cross-stream reads resolve from the global store.

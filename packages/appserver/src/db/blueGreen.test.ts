@@ -1,10 +1,11 @@
 /**
- * L1 — Blue-green read-serving worker DB-management tests.
+ * Blue-green read-serving worker DB-management tests.
  *
- * Proves the raw rebuild/swap mechanism (P1/P3/P5/P6) plus the P7 edge case
- * (clean error on a changed-column read) and the P8 seam (`isSpaceRebuilding`
- * toggles exactly around the rebuild window, which is what the StreamManager
- * write gate keys off — the reject itself is L2/L3).
+ * Proves the raw rebuild/swap mechanism (stale-schema DB keeps serving,
+ * replay→commit swap, abort) plus the changed-column read edge case (clean
+ * error) and the rebuild seam (`isSpaceRebuilding` toggles exactly around the
+ * rebuild window, which is what the StreamManager write gate keys off — the
+ * reject itself is tested in the StreamManager suites).
  *
  * Uses a real temp `spacesDir` (not `:memory:`) because the swap is an atomic
  * file `rename()`; an in-memory DB can't express it. The event/global/read-state
@@ -20,8 +21,8 @@
  * cross-test cache collision in the shared pool.
  *
  * Each test seeds a canonical `<spaceDid>.sqlite` at the OLD schema version
- * (version "0" vs current `SPACE_SCHEMA_VERSION`), simulating a pre-deploy DB
- * after a schema bump.
+ * (version "0" vs current `SPACE_SCHEMA_VERSION`), simulating a DB that
+ * predates a schema bump.
  */
 
 import {
@@ -103,7 +104,7 @@ beforeEach(() => {
 });
 
 describe("blue-green read serving (worker seam)", () => {
-  test("P1: a stale-schema DB serves reads unchanged and is never wiped", async () => {
+  test("a stale-schema DB serves reads unchanged and is never wiped", async () => {
     seedOldSpaceDb();
 
     // checkSpaceSchema flags it stale, but reads still return old data.
@@ -121,7 +122,7 @@ describe("blue-green read serving (worker seam)", () => {
     expect(existsSync(tmpPath)).toBe(false);
   });
 
-  test("P1/seam: forSpaceRebuild returns a fresh new-schema DB; canonical untouched", async () => {
+  test("forSpaceRebuild returns a fresh new-schema DB; canonical untouched", async () => {
     seedOldSpaceDb();
 
     const rebuild = pool.forSpaceRebuild(SPACE);
@@ -148,7 +149,7 @@ describe("blue-green read serving (worker seam)", () => {
     expect(existsSync(tmpPath)).toBe(true);
   });
 
-  test("P3/P4: replay → commit makes reads see new data and drops the old file", async () => {
+  test("replay → commit makes reads see new data and drops the old file", async () => {
     seedOldSpaceDb();
 
     const rebuild = pool.forSpaceRebuild(SPACE);
@@ -156,7 +157,7 @@ describe("blue-green read serving (worker seam)", () => {
       "entity-new",
       SPACE,
     ]);
-    // Old DB still serving during the window (P1).
+    // Old DB still serving during the window.
     const oldRow = await pool
       .forSpace(SPACE)
       .query("select id from entities where id = ?")
@@ -178,7 +179,7 @@ describe("blue-green read serving (worker seam)", () => {
     expect(existsSync(canonicalPath)).toBe(true);
   });
 
-  test("P5: commit is idempotent and the space is current + not rebuilding after", async () => {
+  test("commit is idempotent and the space is current + not rebuilding after", async () => {
     seedOldSpaceDb();
 
     const rebuild = pool.forSpaceRebuild(SPACE);
@@ -197,7 +198,7 @@ describe("blue-green read serving (worker seam)", () => {
     expect(await pool.isSpaceRebuilding(SPACE)).toBe(false);
   });
 
-  test("P5: cursor written during rebuild is readable after swap", async () => {
+  test("cursor written during rebuild is readable after swap", async () => {
     seedOldSpaceDb();
 
     const rebuild = pool.forSpaceRebuild(SPACE);
@@ -216,7 +217,7 @@ describe("blue-green read serving (worker seam)", () => {
     expect(cursor?.materialized_to).toBe(42);
   });
 
-  test("P6: abort keeps the old DB serving and removes the temp file", async () => {
+  test("abort keeps the old DB serving and removes the temp file", async () => {
     seedOldSpaceDb();
 
     const rebuild = pool.forSpaceRebuild(SPACE);
@@ -239,7 +240,7 @@ describe("blue-green read serving (worker seam)", () => {
     expect((await pool.spaceRebuildAbort(SPACE)).aborted).toBe(false);
   });
 
-  test("P7: a read touching a column missing from the old schema errors cleanly", async () => {
+  test("a read touching a column missing from the old schema errors cleanly", async () => {
     seedOldSpaceDb();
 
     // The old-schema DB lacks `some_new_column` (a column added by the new
@@ -250,7 +251,7 @@ describe("blue-green read serving (worker seam)", () => {
     ).rejects.toThrow(/some_new_column/);
   });
 
-  test("P8: isSpaceRebuilding toggles exactly around the rebuild window", async () => {
+  test("isSpaceRebuilding toggles exactly around the rebuild window", async () => {
     seedOldSpaceDb();
 
     expect(await pool.isSpaceRebuilding(SPACE)).toBe(false);

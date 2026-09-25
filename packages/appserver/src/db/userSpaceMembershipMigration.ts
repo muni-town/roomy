@@ -214,8 +214,8 @@ export async function backfillUserThreadActivitySpaceDid(
  * Typed as `Record<ReadStateAsyncVersion, …>`, where `ReadStateAsyncVersion` is
  * derived from `READSTATE_MIGRATIONS`. Adding a `kind: "data"` version to the
  * manifest therefore fails the typecheck until a task is registered here, and
- * registering a task for a `kind: "structural"` version is a type error — so
- * the two lists can no longer drift into a boot-time crash loop.
+ * registering a task for a `kind: "structural"` version is a type error — the
+ * two lists cannot drift into a boot-time crash loop.
  */
 const READSTATE_MIGRATION_TASKS: Record<
   ReadStateAsyncVersion,

@@ -191,7 +191,7 @@ describe("mentions index", () => {
     const EDIT_ID = "01KR32FDQCCCEB8FEK76SQSTA1" as Ulid;
     await seedReplyEdge(spaceDb, MSG, MSG2, BOB);
     // Edit event's own id differs from the message id — rows must key on the
-    // latter (the original bug keyed on event.id, orphaning rows).
+    // latter, never on event.id, which would orphan them.
     await syncMentionsIndex(
       globalDb,
       [

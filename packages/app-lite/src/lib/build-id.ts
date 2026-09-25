@@ -4,10 +4,8 @@
  * A deployed client bundle must be able to name the commit it was built from,
  * otherwise nothing can tie the running code to a revision — a change can be
  * merged and "deployed" while the served bundle is still the previous build.
- * The only stamp the bundle carried was SvelteKit's `/_app/version.json`, a
- * build *timestamp* with no commit mapping. (TASK-136: a fix merged at 03:07
- * was probably not live because the served bundle predated it, and that could
- * only be inferred from a timestamp, never checked against a commit.)
+ * SvelteKit's `/_app/version.json` is a build *timestamp* with no commit
+ * mapping, so it identifies nothing about the code being served.
  *
  * `resolveBuildId` is called once, in `vite.config.ts`, and its result reaches
  * the outside world two ways that cannot disagree: inlined into the JS bundle

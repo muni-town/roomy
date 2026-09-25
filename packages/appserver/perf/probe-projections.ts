@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Projection A/B probe (TASK-173).
+ * Projection A/B probe.
  *
  * Measures the two things a denormalised read projection is supposed to move:
  *

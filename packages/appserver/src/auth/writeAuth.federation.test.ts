@@ -364,7 +364,7 @@ describe("auth/writeAuth — federation setReceiverPermission", () => {
   });
 });
 
-describe("auth/writeAuth — federated writes (Phase 3)", () => {
+describe("auth/writeAuth — federated writes", () => {
   const CHANNEL = "01CHANNEL00000000000000000";
 
   async function seedFederatedWriteContext(receiverPermission: string) {

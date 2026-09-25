@@ -585,7 +585,7 @@ describe("auth/access — roomAccessMany parity", () => {
   });
 });
 
-// ─── room_access read projection (TASK-173) ───────────────────────────────
+// ─── room_access read projection ──────────────────────────────────────────
 //
 // The projection pre-joins a room's owning space and canonical parent channel.
 // Its contract is: a room served from a WARMED projection resolves exactly as

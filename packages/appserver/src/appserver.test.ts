@@ -94,7 +94,7 @@ describe("createAppserver factory", () => {
     await fetch(`${base}/health`);
 
     // Simulate this process's boot so the restart-rate counter has a series —
-    // the signal that turns 289 silent restarts into an alertable rate.
+    // the signal that turns silent restarts into an alertable rate.
     recordProcessStart();
 
     const res = await fetch(`${base}/metrics`);
@@ -111,8 +111,8 @@ describe("createAppserver factory", () => {
       "roomy_cache_hits_total",
       "roomy_embed_pending",
       // The stall-flap counter: a rate on it with a flat
-      // `roomy_embed_enriched_ok_total` is the oscillation, and it is why the
-      // sweeper no longer has to be watched through a 1,441-sample range query.
+      // `roomy_embed_enriched_ok_total` is the oscillation, so it can be
+      // alerted on directly rather than through a range query.
       "roomy_embed_backlog_stuck_transitions_total",
       "roomy_db_timeouts_total",
     ]) {
@@ -128,11 +128,11 @@ describe("createAppserver factory", () => {
   });
 
   test("roomy_embed_pending equals /health/embed's pending (both read the DB backlog)", async () => {
-    // The bug this guards (TASK-179): the gauge was set from the in-memory
-    // priority queue (`embedSweeperStats().priorityQueue`), which reads 0 when
-    // the backlog is parked in transient backoff — so a Grafana alert on
-    // `roomy_embed_pending` could never fire on a 5k-row stalled backlog.
-    // It must carry the DB backlog, exactly as /health/embed reports it.
+    // The gauge must be set from the DB backlog, not the in-memory priority
+    // queue: `embedSweeperStats().priorityQueue` reads 0 when the backlog is
+    // parked in transient backoff, so a Grafana alert on `roomy_embed_pending`
+    // could never fire on a 5k-row stalled backlog. It carries the DB backlog,
+    // exactly as /health/embed reports it.
     handle = await createAppserver({
       port: ephemeralPort(),
       authVerifier: testAuthVerifier,

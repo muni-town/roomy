@@ -1,18 +1,18 @@
 /**
- * L2 — Blue-green rematerialisation integration tests.
+ * Blue-green rematerialisation integration tests.
  *
  * Seeded + materialised at the OLD schema, a schema bump makes the canonical
  * per-space DB stale, and `reMaterializeFromLocalEvents` rebuilds it into a
  * temp `.sqlite.new` (begin → replay → commit) while the old DB keeps serving
- * reads and the write gate rejects writes. Proves P1/P2/P4/P5 end-to-end, plus
- * P6 (a failed rebuild aborts and the old DB keeps serving).
+ * reads and the write gate rejects writes. Covers the whole path end to end,
+ * including a failed rebuild aborting so the old DB keeps serving.
  *
  * NOTE: this is a SEPARATE file from reMaterialize.test.ts on purpose. That
  * file's module-level `openDb()`/`closeDb()` spawn/terminate the shared
  * singleton pool (4 workers) around every test, and that worker churn
  * intermittently hangs a concurrently-active isolated pool under bun:test
- * (see blueGreen.test.ts). Keeping L2 self-contained (one shared pool, real
- * temp `spacesDir`, no openDb singleton churn) is deterministic.
+ * (see blueGreen.test.ts). Keeping this file self-contained (one shared pool,
+ * real temp `spacesDir`, no openDb singleton churn) is deterministic.
  */
 
 import {
@@ -86,7 +86,7 @@ async function waitFor(
   throw new Error("waitFor timed out");
 }
 
-describe("blue-green rematerialization (L2)", () => {
+describe("blue-green rematerialization", () => {
   let pool: DatabasePool;
   let router: DbLike;
   let spacesDir: string;
@@ -95,7 +95,7 @@ describe("blue-green rematerialization (L2)", () => {
   let canonicalPath: string;
 
   beforeAll(async () => {
-    spacesDir = mkdtempSync(join(tmpdir(), "roomy-bluegreen-l2-"));
+    spacesDir = mkdtempSync(join(tmpdir(), "roomy-bluegreen-"));
     pool = new DatabasePool(1, join(THIS_DIR, "../db/worker.ts"));
     await pool.init({
       readStateDbPath: ":memory:",
@@ -143,7 +143,7 @@ describe("blue-green rematerialization (L2)", () => {
   }
 
   test(
-    "P1/P2/P4/P5: rebuilds a stale space while serving old reads and rejecting writes",
+    "rebuilds a stale space while serving old reads and rejecting writes",
     async () => {
       const author = UserDid.assert("did:plc:bluegreen-author");
       seedOldSpaceDb();
@@ -169,7 +169,7 @@ describe("blue-green rematerialization (L2)", () => {
         getProfiles: (async () => []) as never,
       });
 
-      // P2: while the space is marked rebuilding, the single write gate in
+      // While the space is marked rebuilding, the single write gate in
       // StreamManager.sendEvents rejects the write BEFORE it lands in the
       // event log. This is checked with a controlled begin→abort cycle (no
       // concurrent reMaterialize hammering the same single worker, which is
@@ -224,7 +224,7 @@ describe("blue-green rematerialization (L2)", () => {
       // rebuilding) — the window is now open.
       await waitFor(() => router.isSpaceRebuilding!(streamDid));
 
-      // P1: during the window, reads serve the OLD DB, not empty/partial.
+      // During the window, reads serve the OLD DB, not empty/partial.
       const oldRow = await router
         .forSpace!(streamDid)
         .query("select id from entities where id = ?")
@@ -235,7 +235,7 @@ describe("blue-green rematerialization (L2)", () => {
       release();
       await remat;
 
-      // P4: after swap, the new DB is a complete rematerialisation — the old
+      // After swap, the new DB is a complete rematerialisation — the old
       // row is gone and the new room is present (comp_room row + comp_info name).
       const roomCount = await router
         .forSpace!(streamDid)
@@ -253,7 +253,7 @@ describe("blue-green rematerialization (L2)", () => {
         .get<{ id: string }>("entity-old");
       expect(oldGone).toBeNull();
 
-      // P5: cursor is current, schema is current, space no longer rebuilding.
+      // Cursor is current, schema is current, space no longer rebuilding.
       const cursor = await router
         .forSpace!(streamDid)
         .query(
@@ -264,7 +264,7 @@ describe("blue-green rematerialization (L2)", () => {
       expect((await router.checkSpaceSchema!(streamDid)).current).toBe(true);
       expect(await router.isSpaceRebuilding!(streamDid)).toBe(false);
 
-      // P5: a second cold rematerialisation is a no-op (cursor unchanged).
+      // A second cold rematerialisation is a no-op (cursor unchanged).
       await reMaterializeFromLocalEvents(router, getProfiles as never, null, 1);
       const cursor2 = await router
         .forSpace!(streamDid)
@@ -276,7 +276,7 @@ describe("blue-green rematerialization (L2)", () => {
     },
   );
 
-  test("P6: a failed rebuild aborts and the old DB keeps serving", async () => {
+  test("a failed rebuild aborts and the old DB keeps serving", async () => {
     seedOldSpaceDb();
 
     await seedEvents(router, streamDid, [

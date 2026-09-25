@@ -6,8 +6,8 @@
  * exposes the mutators the app calls.
  *
  * `current` is seeded *only* by verification, never from storage directly: a
- * snapshot offered during the verification round-trip would still let a click
- * reach the PDS with a dead handle — the bug this feature exists to fix.
+ * snapshot offered during the verification round-trip would let a click reach
+ * the PDS with a dead handle.
  */
 
 import {

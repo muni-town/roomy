@@ -38,7 +38,7 @@ export interface DbLike {
   }>): Promise<T>;
   close(): Promise<void>;
   /**
-   * Optional (per-space split, Phase 1): a routed handle whose requests
+   * Optional (per-space split): a routed handle whose requests
    * target the per-space DB for `spaceDid`. Absent on sync adapters used in
    * tests that don't exercise dual-write.
    */
@@ -64,14 +64,14 @@ export interface DbLike {
   spaceRebuildBegin?(spaceDid: string): Promise<{ ok: boolean }>;
   /**
    * Optional (blue-green): atomically swap the temp `.sqlite.new` over the
-   * canonical file, dropping the old DB, and flip routing. Idempotent:
+   * canonical file, dropping the superseded DB, and flip routing. Idempotent:
    * `{ committed: false }` when nothing is rebuilding.
    */
   spaceRebuildCommit?(spaceDid: string): Promise<{ committed: boolean }>;
   /**
    * Optional (blue-green): abandon a rebuild — delete the temp file and clear
-   * the rebuilding flag; the old DB keeps serving. `{ aborted: false }` when
-   * nothing is rebuilding.
+   * the rebuilding flag; the canonical DB keeps serving. `{ aborted: false }`
+   * when nothing is rebuilding.
    */
   spaceRebuildAbort?(spaceDid: string): Promise<{ aborted: boolean }>;
   /**
@@ -81,7 +81,7 @@ export interface DbLike {
    */
   checkSpaceSchema?(spaceDid: string): Promise<{ current: boolean }>;
   /**
-   * Optional (per-space split, Phase 1): a routed handle whose requests
+   * Optional (per-space split): a routed handle whose requests
    * target the global DB. Absent on sync adapters used in tests that don't
    * exercise dual-write.
    */
@@ -99,7 +99,7 @@ export interface DbLike {
    */
   events?(): DbLike;
   /**
-   * Optional (Phase 3): backfill the global `entity_space` index from a
+   * Optional: backfill the global `entity_space` index from a
    * per-space DB's `entities` table. Absent on sync adapters used in tests
    * that don't exercise the entity→space index.
    */
@@ -166,7 +166,7 @@ export interface WorkerRequest {
     globalSchemaVersion?: string;
     maxSpaceDbs?: number;
     /**
-     * Worker role (Phase 4 / system-worker split). "space" workers only open
+     * Worker role (system-worker split). "space" workers only open
      * per-space DBs and reject shared-DB requests; "global", "readstate" and
      * "events" workers each own exactly one of the shared DBs (the global
      * worker can also open per-space DBs for the entity_space backfill);

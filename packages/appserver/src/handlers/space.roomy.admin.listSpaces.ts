@@ -16,16 +16,13 @@
  *
  * ── Cost model ──────────────────────────────────────────────────────────
  *
- * This handler used to be O(all spaces): it read the event log for every
- * stream, opened EVERY space's DB to count member edges, sorted in JS, and
- * sliced the page last — so `limit` bought nothing. On a 4276-space dataset
- * that was ~19 s and ~4200 DB worker round-trips per request, and several
- * dashboard clients polling it was enough to time the request out in prod.
- *
- * Now only the page's spaces are opened. The floor is one grouped scan of the
- * event log (`group by stream_id`, an index scan over the `(stream_id, idx)`
+ * This handler opens only the page's spaces. The floor is one grouped scan of
+ * the event log (`group by stream_id`, an index scan over the `(stream_id, idx)`
  * primary key: ~0.5 s for 436k events), which is what enumerates the space
- * list and its event counters. Everything per-space — the member count and the
+ * list and its event counters. Opening every space's DB to count member edges
+ * and slicing the page last would make `limit` buy nothing — a 4276-space
+ * dataset costs ~19 s and ~4200 DB worker round-trips per request, past the
+ * request timeout. Everything per-space — the member count and the
  * display name — is either precomputed or read for the page only:
  *
  *   - Member counts come from the global `space_stats` aggregate
@@ -46,9 +43,9 @@
  * Invariant: a space with members always HAS a `space_stats` row. Its member
  * edges can only come from an event that publishes on materialisation
  * (joinSpace / leaveSpace / addAdmin / removeAdmin / the synthetic spaceMeta —
- * see MEMBERSHIP_EVENT_TYPES in materialization/applyBatch.ts) or from data
- * materialised before this aggregate existed, which the boot sweep rewrites.
- * That is what makes `coalesce(member_count, 0)` exact rather than a guess for
+ * see MEMBERSHIP_EVENT_TYPES in materialization/applyBatch.ts) or from space
+ * data predating the aggregate, which the boot sweep reconciles. That is what
+ * makes `coalesce(member_count, 0)` exact rather than a guess for
  * spaces that have no row. The sweep is not awaited before serving (neither is
  * the sibling `entity_space` backfill), so a request in the boot window can
  * under-report for a space the sweep has not reached yet; that is what the
@@ -186,7 +183,7 @@ export const adminListSpacesHandler: QueryHandler<
   // resolved BEFORE the ordering can be trusted, not just the ones that happen
   // to land on the current page: an unswept space sorts as if it had no
   // members, so leaving any unresolved can push a space with members below the
-  // page boundary and return a different page than the old per-space scan did.
+  // page boundary.
   //
   // In steady state this loop does nothing: the boot sweep writes a row for
   // every space it visits, INCLUDING a count of 0, so "no row" is rare and

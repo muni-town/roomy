@@ -128,8 +128,8 @@ export const adminGetSpaceMembershipHandler: QueryHandler<
       } catch {
         // Polar unavailable with nothing cached: fail open — the grant's
         // grant-time snapshot keeps it visible, but it contributes 0 and
-        // gets no live flag. Never an error: the space keeps serving on
-        // the previously-known picture.
+        // gets no live flag. Never an error: the space keeps serving on its
+        // last-known-valid picture.
         stale = true;
       }
     }

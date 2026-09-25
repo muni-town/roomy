@@ -1,15 +1,13 @@
 /**
- * Freshness gate (TASK-151).
+ * Freshness gate.
  *
- * Regression cover for the 2026-09-16 push flood: a replay of historical
- * messages (Discord bridge `runBackfill`) ingests old messages with fresh
- * event ULIDs, and the push pipeline had no age check anywhere — so every
- * replayed message produced a live push.
+ * Cover for the push burst a replay causes: the Discord bridge `runBackfill`
+ * ingests historical messages with fresh event ULIDs, and without an age check
+ * every replayed message produces a live push.
  *
- * Pre-fix, the code these tests cover did not exist: the enqueue site passed
- * only `decodeTime(event.id)` (always "now") and nothing consulted it. The
- * boundary test below is the one that fails on the pre-fix behaviour, where
- * every message was treated as fresh.
+ * An enqueue site that passes only `decodeTime(event.id)` (always "now") leaves
+ * nothing to consult, so the boundary test below is the one that distinguishes
+ * a real age check from always-fresh behaviour.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -25,9 +23,9 @@ describe("push/freshness — isPushFresh", () => {
     expect(isPushFresh({ canonicalTimestamp: NOW - 2_000, messageId: freshId }, NOW)).toBe(true);
   });
 
-  test("historical message replayed now is NOT fresh (the flood)", () => {
-    // The 2026-09-16 shape: a day-old message, ingested this instant. The
-    // event ULID is fresh; only the canonical time reveals the message is old.
+  test("historical message replayed now is NOT fresh", () => {
+    // A day-old message, ingested this instant. The event ULID is fresh; only
+    // the canonical time reveals the message is old.
     const dayOld = NOW - 24 * 60 * 60 * 1000;
     expect(isPushFresh({ canonicalTimestamp: dayOld, messageId: freshId }, NOW)).toBe(false);
   });

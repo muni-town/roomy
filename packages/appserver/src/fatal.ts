@@ -1,42 +1,37 @@
 /**
  * Fatal-exit visibility: record *why* the process died, then die.
  *
- * Why this exists (TASK-114): on 2026-09-14 the appserver restart-looped 289
- * times in ~28 minutes (~25 minutes with `up{job="prometheus.scrape.appserver"}`
- * at 0) and not one `level="error"` line recorded a cause — so there was
- * nothing to post-mortem. Bun aborts the process on an uncaught exception or an
- * unhandled rejection, but that abort writes a raw stderr trace which never
- * reaches the app's Loki sink: the cause existed only as container stdout noise
- * and was gone when the container went away.
+ * Bun aborts the process on an uncaught exception or an unhandled rejection,
+ * but that abort writes a raw stderr trace which never reaches the app's Loki
+ * sink: the cause exists only as container stdout noise, and is gone when the
+ * container goes away.
  *
  * Two gaps, both closed here:
  *
  *   1. `installFatalHandlers()` records the fatal through the structured
  *      logger (scope `fatal`, `fatal: true`, error name/message/stack) and then
  *      exits non-zero. Installing a `process.on` listener SUPPRESSES Bun's own
- *      abort — verified on Bun 1.3.14: a process that exited 1 on an uncaught
- *      throw kept running once a listener was installed — so the handler must
- *      exit explicitly. Returning instead would swallow the crash and leave a
- *      process serving requests in an undefined state.
+ *      abort, so the handler must exit explicitly. Returning instead would
+ *      swallow the crash and leave a process serving requests in an undefined
+ *      state.
  *   2. `recordProcessStart()` increments `roomy_process_starts_total` once at
- *      boot, exposing a restart loop as a scrape-visible signal in Mimir:
+ *      boot, exposing a restart loop as a scrape-visible signal:
  *
  *        increase(roomy_process_starts_total[10m]) > 3
  *
- * Deliberately NOT here: signal handling / graceful shutdown. There is no
- * SIGTERM path anywhere in `src/` (grep, 2026-09-15); the container runs under
- * `litestream replicate`, which forwards signals to Bun and leaves Bun's
- * default terminate as the shutdown. Adding one is out of scope. Nothing here
- * changes restart semantics either: the exit code is non-zero, exactly the
- * signal the abort it replaces produced, so a supervisor's restart policy
- * (`Restart=always`, Railway's restart) still restarts the process.
+ * Deliberately NOT here: signal handling / graceful shutdown. The container
+ * runs under `litestream replicate`, which forwards signals to Bun and leaves
+ * Bun's default terminate as the shutdown, and no `src/` module installs a
+ * competing SIGTERM handler. The exit code is non-zero, so a supervisor's
+ * restart policy (`Restart=always`, Railway's restart) still restarts the
+ * process.
  */
 
 import { log, flushLogs } from "./log.ts";
 import { metrics } from "./metrics.ts";
 
-/** Non-zero so a supervisor's restart policy sees a crash — the same signal
- *  Bun's own abort produced (exit 1) before these handlers were installed. */
+/** Non-zero so a supervisor's restart policy sees a crash, matching the exit
+ *  code Bun's own abort on an uncaught throw produces. */
 const FATAL_EXIT_CODE = 1;
 
 /** Bound on the Loki flush before the forced exit. The record of *why* the
@@ -103,8 +98,8 @@ function handleFatal(
         fatal: true,
         kind,
         // `error.message`/`error.stack` are serialized by `log.ts`; the name
-        // rides as a field so a post-mortem can tell a TypeError from a
-        // rejected non-Error.
+        // rides as a field so a reader can tell a TypeError from a rejected
+        // non-Error.
         error_name: error.name,
         pid: process.pid,
         uptime_seconds: Math.round(process.uptime()),
@@ -158,9 +153,7 @@ const installedOn = new WeakSet<FatalEventEmitter>();
  * Install the fatal handlers. Idempotent per emitter; call once, as the first
  * statement of the entry point — before any top-level `await`, so a boot
  * failure (DB open, migration, factory construction) is recorded too, not just
- * a failure while serving. The 2026-09-14 loop is inferred to have started at
- * boot against a deploy that touched a migration, which is exactly the window
- * this ordering covers.
+ * a failure while serving.
  *
  * `emitter` defaults to `process`; the parameter exists so tests can assert the
  * registration without arming the handlers in the test runner.

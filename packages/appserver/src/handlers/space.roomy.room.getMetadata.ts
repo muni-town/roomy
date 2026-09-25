@@ -1,8 +1,8 @@
 /**
  * XRPC: space.roomy.room.getMetadata (query).
  *
- * Room metadata + recently active threads (replaces the separate
- * getLinkedRooms query). Stage-1: unread fields are 0/null.
+ * Room metadata plus the channel's recently active threads, which the caller
+ * renders as the sidebar's thread list.
  */
 
 import { createAccessMemo, roomAccessMany } from "../auth/access.ts";
@@ -82,10 +82,9 @@ export const getRoomMetadataHandler: QueryHandler<
   const recentThreads: RecentThread[] = [];
   if (userDid !== null) {
     // Compute roomAccess once per thread and reuse the result for both
-    // the read-gate filter and the canRead/canWrite fields below. The
-    // previous code discarded the first pass and recomputed roomAccess
-    // for every accessible thread — doubling the per-thread SQL cost
-    // (~6 statements per thread, ~120 per request for a full sidebar).
+    // the read-gate filter and the canRead/canWrite fields below: a second
+    // pass would double the per-thread SQL cost (~6 statements per thread,
+    // ~120 per request for a full sidebar).
     //
     // The memo further collapses the per-thread space-level membership
     // checks (all threads share the same parent space) into a single set
@@ -94,7 +93,7 @@ export const getRoomMetadataHandler: QueryHandler<
     // One batched access pass across every candidate thread, rather than a
     // `roomAccess` call per thread. `roomAccess` is memoised but not batched:
     // each distinct thread is its own round-trip. With the `room_access`
-    // projection (TASK-173) the whole page collapses to one per-space read.
+    // projection the whole page collapses to one per-space read.
     const threadAccess = await roomAccessMany(
       db,
       candidates.map((t) => t.id),

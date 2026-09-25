@@ -2,9 +2,8 @@
  * Hardcoded room-metadata-diff applicator.
  *
  * Companion to {@link applyMessageDiff} — patches cache entries from a
- * single `#roomMetadataDiff` frame so message-create no longer forces a
- * `getSpaces` / `space.getMetadata` / `room.getMetadata` refetch for the
- * unread-count fields.
+ * single `#roomMetadataDiff` frame for the unread-count fields, avoiding a
+ * `getSpaces` / `space.getMetadata` / `room.getMetadata` refetch.
  *
  * The frame carries a `delta` (always `+1` per message), not an absolute
  * count — each patcher adds `delta` to the cached `unreadCount`. When the

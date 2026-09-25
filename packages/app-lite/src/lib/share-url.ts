@@ -1,13 +1,11 @@
 /**
  * Building shareable Roomy links.
  *
- * **The bug these exist for.** Invite links were built from `location.origin`.
- * The desktop app is a Tauri webview served from a custom scheme, so its
- * document origin is `tauri://localhost` — every link copied out of the
- * desktop invite modal read `tauri://localhost/join?space=…`, while the same
- * link in the web app read `https://roomy.space/join?space=…` (community
- * report, Roomy Space #bugs, 2026-09-15). A recipient can only open the web
- * origin, so shareable links are now rooted at the public web deployment.
+ * **Why links are not built from `location.origin`.** The desktop app is a
+ * Tauri webview served from a custom scheme, so its document origin is
+ * `tauri://localhost` — a link copied out of the desktop invite modal would
+ * read `tauri://localhost/join?space=…`. A recipient can only open the public
+ * web origin, so shareable links are rooted at the public web deployment.
  *
  * **How the desktop app is told apart from the web app.** The same static
  * bundle is both the web deployment and what the webview serves, so the
@@ -83,7 +81,7 @@ export function shareUrl(origin: string, base: URL | string): URL {
  *
  * Every invite surface (the sidebar's invite modal, the space settings →
  * invites page, the sidebar's copy-space-link) shares this one shape, so a
- * link can no longer differ by the surface that produced it.
+ * link cannot differ by the surface that produced it.
  */
 export function inviteUrl(
   origin: string,

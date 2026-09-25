@@ -51,12 +51,12 @@
 
 <Story
   name="Admin"
-  args={{ spaceName: "Meri Forest", isAdmin: true, showInviteButton: true }}
+  args={{ spaceName: "Test Space", isAdmin: true, showInviteButton: true }}
   {template}
 />
 
 <Story
   name="Member"
-  args={{ spaceName: "Meri Forest", isAdmin: false, showInviteButton: false }}
+  args={{ spaceName: "Test Space", isAdmin: false, showInviteButton: false }}
   {template}
 />

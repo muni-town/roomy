@@ -131,9 +131,9 @@ export const joinSpaceHandler: ProcedureHandler<
   // ── 2. Write joinedSpace edge directly ────────────────────────────────
   // The SDK materialiser (space.joinSpace) also writes this edge — routed
   // to the global DB — but the live materialisation may not have landed by
-  // the time the HTTP response returns. Writing directly to both the
-  // monolithic DB (Phase-1 read source) and the global DB (membership store)
-  // makes the space immediately visible and keeps the global DB consistent.
+  // the time the HTTP response returns. Writing directly to the global DB
+  // (the membership store) makes the space immediately visible and keeps
+  // the global DB consistent.
   await recordGlobalMembership(
     openGlobalDb(),
     spaceStreamDid,

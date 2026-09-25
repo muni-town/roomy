@@ -1,11 +1,9 @@
 /**
  * Timeline merge grouping.
  *
- * The bug this defends: a user forwards someone else's message with no
- * caption, then sends their own message right after. The forward shows the
- * ORIGINAL author, but it was grouped by the FORWARDER's authorDid, so the
- * follow-up merged into the forward's row and lost its header — the pair read
- * as two messages by the original author.
+ * A forward shows the ORIGINAL author, so grouping it by the FORWARDER's
+ * authorDid would let a follow-up message merge into the forward's row and lose
+ * its header — the pair reading as two messages by the original author.
  *
  * A forward is therefore a hard merge boundary: it never merges, and nothing
  * merges into it. These tests pin that, plus the ordinary same-author merge
@@ -102,7 +100,7 @@ describe("mergeTimeline", () => {
     );
   });
 
-  // ── The regression ────────────────────────────────────────────────────
+  // ── Forwards are hard boundaries ──────────────────────────────────────
 
   test("a forward never merges, even after the forwarder's own message", () => {
     const merged = mergeTimeline([

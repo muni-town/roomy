@@ -1,8 +1,7 @@
 -- Roomy appserver SQLite schema.
 --
--- Ported from packages/app/src/lib/workers/sqlite/schema.sql. Materialiser
--- functions in the SDK target this exact shape, so column names and types
--- must stay in sync with the frontend schema.
+-- Materialiser functions in the SDK target this exact shape, so column names
+-- and types must stay in sync with them.
 --
 -- IMPORTANT: bump the version constant in db.ts whenever this file changes.
 
@@ -13,10 +12,9 @@ create table if not exists roomy_schema_version (
   version text not null
 ) strict;
 
--- NOTE: the frontend schema includes an `events` table used for stash/unstash
--- of out-of-order events. The appserver materialises strictly in increasing
--- `idx` order from the local event store, so dependencies are always
--- already applied — no stash machinery is needed and the table is omitted.
+-- NOTE: this file declares no `events` stash table. Materialisation runs
+-- strictly in increasing `idx` order from the local event store, so
+-- dependencies are always already applied and no stash machinery is needed.
 -- The backfill cursor lives on `comp_space.backfilled_to`.
 
 create table if not exists entities (
@@ -66,9 +64,8 @@ create index if not exists idx_edges_label_tail on edges(label, tail);
 -- NOTE: `hidden` is per-user join intent and so does NOT belong on this
 -- global row — with multiple members one user leaving would hide the space
 -- for everyone. The appserver reads membership from `edges` rows labelled
--- 'joinedSpace' instead (see queries/joinedSpaces.ts). `hidden` is still
--- written by the shared SDK materialiser (the main app's local DB reads it)
--- but the appserver ignores it. Drop it once the main app also migrates.
+-- 'joinedSpace' instead (see queries/joinedSpaces.ts) and neither reads nor
+-- writes `hidden`.
 create table if not exists comp_space (
   entity text primary key references entities(id) on delete cascade,
   hidden integer not null default 0 check(hidden in (0, 1)),
@@ -120,10 +117,10 @@ create table if not exists comp_content (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 
--- NOTE: the frontend schema declares a comp_text_content_fts virtual table
--- referencing a (nonexistent) comp_text_content content table. The browser
--- worker swallows the resulting error; we drop the table here until full-text
--- search is actually implemented. Re-add when the backing content table exists.
+-- NOTE: this file declares no full-text search virtual table, and there is no
+-- `comp_text_content` content table for one to index — message bodies live in
+-- `comp_content`. Re-add an FTS table when full-text search is implemented
+-- over that table.
 
 create table if not exists comp_info (
   entity text primary key references entities(id) on delete cascade,
@@ -290,10 +287,9 @@ create table if not exists role_rooms (
 create index if not exists idx_role_rooms_room_id on role_rooms(room_id);
 
 -- Banned users per space. Written by the SDK's BanAccount materializer
--- (`insert into comp_bans (entity, user_did)`). Notably the frontend schema
--- never declared this table — banAccount events silently no-op there because
--- the worker swallows per-statement errors. The appserver applies events
--- transactionally so we need a real table.
+-- (`insert into comp_bans (entity, user_did)`). Events are applied
+-- transactionally and ban checks are enforced at join, so this is a real
+-- table rather than an optional one.
 create table if not exists comp_bans (
   entity text not null references entities(id) on delete cascade,
   user_did text not null,
@@ -303,8 +299,7 @@ create table if not exists comp_bans (
 create index if not exists idx_comp_bans_user_did on comp_bans(user_did);
 
 -- Active invite tokens per space. Written by the SDK's CreateInvite/RevokeInvite
--- materializers. Frontend has no equivalent table today; the worker swallows
--- per-statement errors there, so this is appserver-only.
+-- materializers and read by the invite-validation path for private spaces.
 create table if not exists comp_invite (
   entity text not null references entities(id) on delete cascade,
   token text not null,
@@ -354,7 +349,7 @@ create table if not exists materialization_cursor (
   materialized_to integer not null default -1
 ) strict;
 
--- Denormalised read projection (TASK-173): the room→space→parent→access facts
+-- Denormalised read projection: the room→space→parent→access facts
 -- `auth/access.ts:resolveRoom` would otherwise re-derive per room, per request,
 -- per caller. Declared here as well as in schema-space.sql because this file is
 -- the in-memory schema used by unit tests (toAsyncDb), which exercise handlers
@@ -368,7 +363,7 @@ create table if not exists room_access (
 
 create index if not exists idx_room_access_space on room_access(space_id);
 
--- Denormalised read projection (TASK-175, R3): each room's latest message and
+-- Denormalised read projection: each room's latest message and
 -- its distinct recent authors, so board reads are O(rooms in scope) instead of
 -- O(messages in scope). Declared here as well as in schema-space.sql because
 -- this file is the in-memory schema used by unit tests (toAsyncDb), which

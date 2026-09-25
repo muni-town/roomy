@@ -1,9 +1,9 @@
 /**
- * `room_access` read projection (TASK-173).
+ * `room_access` read projection.
  *
  * `auth/access.ts:resolveRoom` answers "which space owns this room, what is its
  * canonical parent channel, and what access does each carry" with up to three
- * queries, and the room-listing handlers called it once per room — measured at
+ * queries, and the room-listing handlers call it once per room — measured at
  * 36 of `room.getThreads`' ~50 DB round-trips (`perf/probe-projections.ts`).
  *
  * ## What is projected, and why only this
@@ -11,13 +11,13 @@
  * The projection carries the **structural** half of that answer:
  * `space_id` and `parent_channel_id`. Those come from `entities.stream_id` and
  * the canonical `'link'` edge — the expensive part (the link lookup runs a
- * `json_extract` predicate and was 13 of the 36 round-trips).
+ * `json_extract` predicate and accounts for 13 of the 36 round-trips).
  *
  * `default_access` is deliberately **not** stored here; it is always read live
  * from `comp_room`, batched across the room ids and their parent ids.
  * `default_access` is a security input that any writer of `comp_room` can
- * change, and this table is only maintained on the live event path (see the
- * TASK-173 constraint: projections are never written during rematerialisation).
+ * change, and this table is only maintained on the live event path:
+ * projections are never written during rematerialisation.
  * A replayed `updateRoom` inside a boot gap, or any out-of-band write, would
  * silently serve a stale access decision — a projection that is *wrong about
  * authorisation* is not worth the query it saves. Structure is safe to project
@@ -38,7 +38,7 @@
  *   heals on first access with no backfill.
  *
  * Every read fails soft: a handle without the table (a sync adapter whose
- * schema predates it) degrades to the pre-projection path rather than throwing,
+ * schema predates it) degrades to the live-table path rather than throwing,
  * because this is an optimisation and must never be a correctness dependency.
  */
 

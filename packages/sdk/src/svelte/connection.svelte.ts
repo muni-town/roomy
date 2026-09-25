@@ -4,8 +4,8 @@
  *
  * Accepts a getter function so it can track reactive connection changes
  * (e.g. when the connection is created inside an `$effect` and stored in
- * a `$state` variable). When the connection changes, the old subscription
- * is cleaned up and a new one is established automatically.
+ * a `$state` variable). When the connection changes, its subscription is
+ * torn down and a new one is established automatically.
  *
  * Uses a structural interface (`SyncConnectionLike`) rather than the
  * concrete `SyncConnection` class so that consumers importing from

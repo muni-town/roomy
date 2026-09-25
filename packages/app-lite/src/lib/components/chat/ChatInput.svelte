@@ -168,7 +168,7 @@
    * provided), convert each mention-marked text run into a mention NODE so
    * the mention survives the edit as a chip and re-serializes to its facet on
    * save. When the extension is absent, drop the mark — the mention text
-   * stays, only its special formatting is lost (the old behaviour).
+   * stays, only its special formatting is lost.
    */
   function normalizeMentionMarks(
     doc: ProseMirrorDoc,

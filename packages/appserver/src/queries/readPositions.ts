@@ -55,7 +55,7 @@ export async function ensureReadPositions(
   if (roomIds.length === 0) return;
 
   const now = Date.now();
-  // Phase 3: `entities` lives in the per-space DBs, not the read-state DB, so
+  // `entities` lives in the per-space DBs, not the read-state DB, so
   // `space_did` / a real `seen_up_to` can't be derived from a subquery here.
   // Defaults: space_did '' / seen_up_to '0' (no real watermark — decodes to
   // lastRead null). Materialization populates them correctly via
@@ -215,9 +215,8 @@ export async function getSpaceUnreadStats(
 /**
  * Everything `space.getMetadata` needs from the per-space + read-state DBs,
  * computed in ONE pass and returned together so the handler does not re-fetch
- * the same rows (previously getSpaceUnreadStats fetched channel ids, then the
- * handler re-fetched the same channels with names + re-read read positions,
- * duplicating the per-space DB round-trips on the hottest sidebar path).
+ * the same rows — the per-space DB round-trips on this sidebar path are the
+ * hottest in the app.
  *
  * Returns the non-deleted channels (with names + default_access), the batched
  * read-access decisions and read positions for every channel + engaged thread,

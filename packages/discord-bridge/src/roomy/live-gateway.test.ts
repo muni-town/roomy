@@ -301,7 +301,7 @@ describe("LiveRoomyGateway", () => {
 		});
 	});
 
-	test("isBackfill transitions from true to false when hasMore flips to false (L1)", async () => {
+	test("isBackfill transitions from true to false when hasMore flips to false", async () => {
 		const callback = vi.fn() as unknown as RoomyEventCallback;
 		const event1 = makeEvent();
 		const event2 = makeEvent();
@@ -428,7 +428,7 @@ describe("LiveRoomyGateway", () => {
 		await subscribeAndConnect(SPACE_DID, callback);
 
 		// The SDK replays the topic registered before connect (cursor 10),
-		// then the onOpen handler (M3) unsubscribes the stale topic and
+		// then the onOpen handler unsubscribes the stale topic and
 		// re-subscribes with the fresh cursor from the repo (also 10 here,
 		// since no frames have arrived yet). Both sub messages carry 10.
 		const subMessages = lastSocket!.sent.filter((s) => s.includes('"sub"'));
@@ -451,7 +451,7 @@ describe("LiveRoomyGateway", () => {
 		expect(subMessages[subMessages.length - 1]).toContain('"cursor":-1');
 	});
 
-	test("connect failure cleans up the subscription so re-subscribe works (M2)", async () => {
+	test("connect failure cleans up the subscription so re-subscribe works", async () => {
 		const callback = vi.fn() as unknown as RoomyEventCallback;
 
 		// Make the next ticket fetch fail so connect() rejects.
@@ -628,7 +628,7 @@ describe("LiveRoomyGateway", () => {
 		});
 
 		test("a zero jitter draw never disables reconnect", () => {
-			// Pre-fix this returned 0, which SyncConnection reads as the
+			// A zero draw must floor at 1ms: SyncConnection reads 0 as the
 			// "stop reconnecting" signal — a permanent, silent wedge.
 			vi.spyOn(Math, "random").mockReturnValue(0);
 			expect(reconnectDelayMs(0, 1000, 100_000)).toBe(1);

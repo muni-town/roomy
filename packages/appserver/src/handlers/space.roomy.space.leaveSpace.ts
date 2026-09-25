@@ -52,10 +52,10 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
   // ── Authorisation: caller must be a member or admin ──────────────────
   // The auth check doubles as the existence check: member/admin edges have
   // FKs onto entities(spaceId), so if either edge is present the space is
-  // known. A bogus spaceId yields neither edge and a 403. (An older
-  // `entities WHERE id = ? AND stream_id = ?` existence check was unreliable
+  // known. A bogus spaceId yields neither edge and a 403. An
+  // `entities WHERE id = ? AND stream_id = ?` existence check is unreliable
   // because stream_id depends on which materialiser wrote the entity row
-  // first — see queries/joinedSpaces.ts.)
+  // first — see queries/joinedSpaces.ts.
   const member = await isMember(spaceDb, spaceId, callerDid);
   const admin = await isAdmin(spaceDb, spaceId, callerDid);
   if (!member && !admin) {
@@ -84,10 +84,9 @@ export const leaveSpaceHandler: ProcedureHandler<LeaveSpaceBody, void> = async (
   );
 
   // ── 2. Delete the joinedSpace edge (membership) ──────────────────────
-  // The space-side LeaveSpace materialiser now deletes this edge (routed to
+  // The space-side LeaveSpace materialiser also deletes this edge (routed to
   // the global DB), but remove it here directly too for read-after-write
-  // consistency, in both the monolithic DB (Phase-1 read source) and the
-  // global DB (membership store).
+  // consistency in the global DB (the membership store).
   await deleteGlobalMembership(
     openGlobalDb(),
     spaceStreamDid,

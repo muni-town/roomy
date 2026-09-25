@@ -4,20 +4,14 @@ import { PostChain, errorText } from "./postChain.js";
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 /**
- * Regression coverage for the responder's streamed thinking-chunk chain.
+ * Coverage for the responder's streamed thinking-chunk chain.
  *
- * Production failure (meri-agent-4, 2026-09-14 01:09-01:16): seven
- * `sendEvents` calls for thinking chunks each timed out after 20s; the
- * responder logged "thinking-chunk post failed" for each and then died with an
- * unhandled `XrpcTimeoutError`, taking the whole `roomy-bridge | respond`
- * pipeline down via EPIPE and losing the in-flight answer.
- *
- * Cause: the old chain's `.catch` logged the error and then returned
- * `Promise.reject(e)`, so the link stayed rejected for the remaining streaming
- * window with nothing attached to it — an unhandled rejection. Because the
- * chain had already failed, every *subsequent* chunk's `.then` was skipped and
- * its error propagated straight into the next `.catch`, so one real timeout
- * was logged as N failures.
+ * A chunk post can time out (XRPC). When its rejection reaches the chain's last
+ * link unhandled, Node treats it as an unhandled rejection and kills the
+ * process — taking the whole `roomy-bridge | respond` pipeline down via EPIPE
+ * and losing the in-flight answer. A chain whose links stay rejected also skips
+ * every subsequent chunk's `.then`, so one real timeout gets logged as N
+ * failures.
  */
 describe("PostChain", () => {
   test("a failing post does not reject the chain or crash the process", async () => {
@@ -50,8 +44,7 @@ describe("PostChain", () => {
     }
 
     await chain.drain();
-    // Old code: only chunk 1 ran; 2..7 inherited the rejected chain and were
-    // never attempted, each re-logging chunk 1's error.
+    // Every chunk must be attempted exactly once.
     expect(attempted).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(chain.failureCount()).toBe(7);
     // The FIRST error is the original timeout, not a later re-run of it.

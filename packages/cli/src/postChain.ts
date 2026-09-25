@@ -18,10 +18,9 @@
  *    has settled, then consult `failureCount()`/`firstError()` to decide
  *    whether to warn and continue (the answer is still worth posting) or bail.
  *
- * This is commit a64ad5dd ("attach a rejection handler immediately") done
- * properly: that fix logged the failure but *re-rejected*, so the last link
- * sat unhandled for the whole remaining streaming window — exactly the window
- * a 20s XRPC timeout spans. Rejections are contained here instead.
+ * Rejections are contained, never re-thrown: a link left rejected with nothing
+ * attached sits unhandled for the whole remaining streaming window — exactly
+ * the window a 20s XRPC timeout spans.
  *
  * Deliberately no retry: a chunk post that times out has an ambiguous
  * outcome (the appserver may have already appended the event), and sendReply
@@ -49,7 +48,7 @@ export class PostChain {
   }
 
   /**
-   * Append a post to the chain. It runs after every previously queued post
+   * Append a post to the chain. It runs after every post queued before it
    * has settled. Never rejects, so the chain link is always handled.
    */
   push(post: () => Promise<void>): void {

@@ -1,14 +1,14 @@
 /**
- * Tests for the derived-state side-effects of `deleteMessage` (TASK-134).
+ * Tests for the derived-state side-effects of `deleteMessage`.
  *
- * Deleting a message used to touch only the search index, leaving the
- * appserver's derived state describing a message that no longer exists:
+ * Deleting the entity rows alone would leave the appserver's derived state
+ * describing a message that does not exist:
  *
- *   - the room's `activity_item.recent_message_ids` window kept naming the
- *     deleted message (and the room kept appearing in the activity feed after
- *     every one of its messages was deleted), and
- *   - every reader's `unread_count` kept counting it, so an unread badge could
- *     never be cleared.
+ *   - the room's `activity_item.recent_message_ids` window would keep naming
+ *     the deleted message (and the room would keep appearing in the activity
+ *     feed after every one of its messages was deleted), and
+ *   - every reader's `unread_count` would keep counting it, so an unread badge
+ *     could never be cleared.
  *
  * These pin the unwind, including the two ways it can be wrong: decrementing
  * a message a user had already read, and going below zero.

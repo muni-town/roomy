@@ -17,9 +17,8 @@
  * **Handles.** A Roomy profile record carries no handle, so for a user whose
  * only profile source is a Roomy record the global `profiles` row is the sole
  * place a handle can come from. When that row has no usable handle — absent or
- * the `''` left by an older revision of the write path — the handler resolves
- * one from the Bluesky appview and persists it, rather than returning an empty
- * handle. See `hydrateHandle`.
+ * persisted empty — the handler resolves one from the Bluesky appview and
+ * persists it, rather than returning an empty handle. See `hydrateHandle`.
  *
  * Profile fields (handle, displayName, etc.) may be absent when the user
  * has no Roomy profile record and no Bluesky profile — that's expected and
@@ -89,12 +88,11 @@ export const getProfileHandler: QueryHandler<
   // The write path confirms the record on the PDS (`putRecord` with the
   // `atproto-proxy` header). The PDS is the record's source of truth, and
   // read-after-write consistency requires that a just-confirmed write is
-  // immediately visible. We used to check HappyView first, but HappyView is
-  // Jetstream-fed and eventually-consistent: immediately after a `putRecord`
-  // it may still serve the pre-write snapshot, and re-materialising from that
-  // clobbers the global `profiles` row with stale data — the read-after-write
-  // bug. So the PDS is consulted first; HappyView is only a fallback when the
-  // PDS has no record.
+  // immediately visible. HappyView is Jetstream-fed and eventually-consistent:
+  // immediately after a `putRecord` it may still serve the pre-write snapshot,
+  // and re-materialising from that clobbers the global `profiles` row with
+  // stale data, so it can never be the primary source. The PDS is consulted
+  // first; HappyView is only a fallback when the PDS has no record.
   let pdsRecord: RoomyProfileRecord | null = null;
   try {
     pdsRecord = await getRoomyProfileRecord(did);
@@ -178,9 +176,8 @@ export const getProfileHandler: QueryHandler<
   // No Roomy record in HappyView (or HappyView not configured). Return
   // whatever is in the global `profiles` table — this covers Bluesky-sourced
   // profiles and bridged users whose profile data comes from event
-  // processing. A row without a usable handle (a `''` left by an older
-  // revision of the write path, or a user whose handle has never been
-  // fetched) gets one resolved and persisted before we answer.
+  // processing. A row whose handle was never fetched or is persisted empty
+  // gets one resolved and persisted before we answer.
   let row = await readProfileRow(db, did);
   if (row) {
     if (!row.handle) row = await hydrateHandle(db, did) ?? row;

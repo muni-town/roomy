@@ -250,7 +250,7 @@ async function main() {
 
 					// Create adapters and run backfill. The sender is created
 					// first so runBackfill can install it for the
-					// Discord-side completion notice (TASK-193).
+					// Discord-side completion notice.
 					const discord = new LiveDiscordDataSource(bot);
 					const discordSender = new LiveDiscordSender(bot);
 					setBackfillNoticeSender(discordSender);

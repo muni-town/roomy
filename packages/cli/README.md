@@ -66,7 +66,7 @@ roomy-cli join --space <space-did> --invite-token <token>
 Set (or update) the authenticated user's Roomy profile.
 
 ```bash
-roomy-cli profile --display-name "Little Fox" [--description "..."] [--pronouns "she/her"] [--website https://...] [--avatar /path/to/image.png]
+roomy-cli profile --display-name "Test User" [--description "..."] [--pronouns "they/them"] [--website https://...] [--avatar /path/to/image.png]
 ```
 
 `--avatar` uploads a local PNG/JPEG as the profile picture.

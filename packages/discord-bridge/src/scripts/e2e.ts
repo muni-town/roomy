@@ -1,20 +1,20 @@
 /**
- * Scriptable E2E test for the Discord bridge — TASK-64 + TASK-206 regressions.
+ * Scriptable E2E test for the Discord bridge.
  *
  * Verifies, against a live staging bridge + staging Discord + staging
- * appserver, the regressions reported in TASK-64 and TASK-206:
+ * appserver:
  *
  *   1. Roomy → Discord message edits are synced (text/markdown AND
  *      application/vnd.roomy.richtext+json bodies).
  *   2. Discord → Roomy media attachments (image, video, file, and
  *      media-only messages) appear in Roomy with a `media` entry.
  *   3. Roomy → Discord message deletes are synced, both in a channel and in
- *      a thread (TASK-206). A thread has no webhook of its own, so a thread
- *      delete has to go through the parent channel's webhook while targeting
- *      the thread. Deleting a Discord-authored (non-webhook) message is
- *      covered by the router unit tests instead: whether the bot can delete
- *      it depends on its Manage Messages permission, so the outcome against
- *      a live guild isn't deterministic.
+ *      a thread: a thread has no webhook of its own, so a thread delete has
+ *      to go through the parent channel's webhook while targeting the thread.
+ *      Deleting a Discord-authored (non-webhook) message is covered by the
+ *      router unit tests instead: whether the bot can delete it depends on
+ *      its Manage Messages permission, so the outcome against a live guild
+ *      isn't deterministic.
  *
  * The bridge must be running (this script drives it end-to-end; it does not
  * start it). It authenticates as the bridge account and reads the bridge's
@@ -24,9 +24,9 @@
  * a bridged channel, a staging appserver, and the bridge account's app
  * password. It is written to be CI-adoptable: it takes all inputs from env,
  * exits non-zero on any failure, and cleans up the webhook and the thread it
- * creates. The TASK-206 delete checks need the bridge bot to have Create
- * Threads in that channel (as ordinary thread bridging does) and Manage
- * Threads to tear the test thread down again.
+ * creates. The delete checks need the bridge bot to have Create Threads in
+ * that channel (as ordinary thread bridging does) and Manage Threads to tear
+ * the test thread down again.
  *
  * Usage (from packages/discord-bridge, with .env loaded):
  *   export E2E_SPACE_DID=did:plc:...            # bridged space
@@ -205,7 +205,7 @@ function makeRichTextBody(blocks: unknown[]): {
 // ── main ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-	console.log("Discord bridge E2E (TASK-64 + TASK-206)");
+	console.log("Discord bridge E2E");
 	console.log(`  space: ${SPACE_DID}`);
 	console.log(`  room:  ${ROOM_ULID}`);
 	console.log(`  channel: ${CHANNEL_ID}`);
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
 
 	// ── 1. Roomy → Discord: send + edit (text/markdown) ─────────────────────
 	console.log("== R→D: send + edit (text/markdown) ==");
-	const originalText = `TASK-64 E2E original ${newUlid()}`;
+	const originalText = `E2E original ${newUlid()}`;
 	const createEvent = {
 		id: newUlid(),
 		room: ROOM_ULID,
@@ -252,7 +252,7 @@ async function main(): Promise<void> {
 	);
 	check("R→D message content matches", sent.content === originalText, sent.content);
 
-	const editedText = `TASK-64 E2E edited text ${newUlid()}`;
+	const editedText = `E2E edited text ${newUlid()}`;
 	await xrpc.procedure("space.roomy.space.sendEvents", {
 		spaceId: SPACE_DID,
 		events: [
@@ -283,7 +283,7 @@ async function main(): Promise<void> {
 
 	// ── 2. Roomy → Discord: edit (richtext body) ────────────────────────────
 	console.log("== R→D: edit (richtext body) ==");
-	const richtextText = `TASK-64 E2E edited richtext ${newUlid()}`;
+	const richtextText = `E2E edited richtext ${newUlid()}`;
 	const richtextBlocks = [
 		{ $type: "space.roomy.richtext.blocks#text", text: richtextText },
 		{ $type: "space.roomy.richtext.blocks#code", text: "const x = 1;" },
@@ -316,7 +316,7 @@ async function main(): Promise<void> {
 
 	// ── 3. Discord → Roomy: media attachments ────────────────────────────────
 	console.log("== D→R: media attachments ==");
-	const webhookName = `task64-e2e-${newUlid().slice(-8)}`;
+	const webhookName = `e2e-${newUlid().slice(-8)}`;
 	const webhook = await discordPost<{ id: string; token: string }>(
 		`/channels/${CHANNEL_ID}/webhooks`,
 		{ name: webhookName },
@@ -369,8 +369,8 @@ async function main(): Promise<void> {
 		0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 	]);
 	const imgMsgId = await postWithFile(
-		`TASK-64 E2E image ${newUlid()}`,
-		"task64-e2e.png",
+		`E2E image ${newUlid()}`,
+		"e2e.png",
 		png,
 		"image/png",
 	);
@@ -386,7 +386,7 @@ async function main(): Promise<void> {
 	);
 
 	// media-only (no text)
-	const mediaOnlyMsgId = await postWithFile("", "task64-e2e.png", png, "image/png");
+	const mediaOnlyMsgId = await postWithFile("", "e2e.png", png, "image/png");
 	const mediaOnlyInRoomy = await poll(
 		async () => roomyMessageWithMedia(mediaOnlyMsgId),
 		"media-only message to appear in Roomy with media",
@@ -399,10 +399,10 @@ async function main(): Promise<void> {
 	);
 
 	// file
-	const txt = new TextEncoder().encode(`TASK-64 E2E file ${newUlid()}\n`);
+	const txt = new TextEncoder().encode(`E2E file ${newUlid()}\n`);
 	const fileMsgId = await postWithFile(
-		`TASK-64 E2E file ${newUlid()}`,
-		"task64-e2e.txt",
+		`E2E file ${newUlid()}`,
+		"e2e.txt",
 		txt,
 		"text/plain",
 	);
@@ -421,7 +421,7 @@ async function main(): Promise<void> {
 	await discordDelete(`/webhooks/${webhook.id}/${webhook.token}`).catch(() => {});
 	console.log("  (cleaned up E2E webhook)");
 
-	// ── 4. Roomy → Discord: deletes (TASK-206) ──────────────────────────────
+	// ── 4. Roomy → Discord: deletes ─────────────────────────────────────────
 	console.log("== R→D: delete (channel + thread) ==");
 
 	async function sendText(roomId: string, content: string): Promise<string> {
@@ -462,7 +462,7 @@ async function main(): Promise<void> {
 	// A message bridged to a channel must disappear from Discord.
 	const channelDeleteRoomyId = await sendText(
 		ROOM_ULID,
-		`TASK-206 E2E delete ${newUlid()}`,
+		`E2E delete ${newUlid()}`,
 	);
 	const channelDeleteDiscordId = await poll(
 		async () => discordIdForRoomy("message", channelDeleteRoomyId),
@@ -489,9 +489,9 @@ async function main(): Promise<void> {
 		check("R→D delete: channel message removed", channelGone === true);
 	}
 
-	// A message bridged to a thread must disappear too — the TASK-206
-	// regression: the delete must use the parent channel's webhook (threads
-	// can't have webhooks) while targeting the thread itself.
+	// A message bridged to a thread must disappear too — a thread delete must
+	// use the parent channel's webhook (threads can't have webhooks) while
+	// targeting the thread itself.
 	const threadId = newUlid();
 	await xrpc.procedure("space.roomy.space.sendEvents", {
 		spaceId: SPACE_DID,
@@ -500,7 +500,7 @@ async function main(): Promise<void> {
 				id: threadId,
 				$type: "space.roomy.room.createRoom.v0",
 				kind: "space.roomy.thread",
-				name: `TASK-206 E2E thread ${threadId.slice(-8)}`,
+				name: `E2E thread ${threadId.slice(-8)}`,
 				defaultAccess: "readwrite",
 				extensions: {},
 			},
@@ -521,7 +521,7 @@ async function main(): Promise<void> {
 	if (discordThreadId) {
 		const threadDeleteRoomyId = await sendText(
 			threadId,
-			`TASK-206 E2E thread delete ${newUlid()}`,
+			`E2E thread delete ${newUlid()}`,
 		);
 		const threadDeleteDiscordId = await poll(
 			async () => discordIdForRoomy("message", threadDeleteRoomyId),

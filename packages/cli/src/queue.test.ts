@@ -151,12 +151,12 @@ describe("FileLock", () => {
 
 describe("bootHeal", () => {
   test("releases the lock when it boots idle (no squat)", () => {
-    // Regression: the responder took the lock in its startup acquire() and
-    // only ever released it from inside the pump, which never runs while the
-    // queue is empty. The lock heartbeat timer then kept it fresh forever, so
-    // every lock-freshness reader (self-check.sh queue_busy, `cli queue
-    // status`, the cron only-if-idle contract) saw "job in flight" on a
-    // permanently idle host. Observed live on bramble: 73 min held, 0 active.
+    // A responder that boots idle must release the lock it took in startup
+    // acquire(): the pump (the only other release site) never runs while the
+    // queue is empty, and the lock heartbeat keeps a held lock fresh forever,
+    // so every lock-freshness reader (self-check.sh queue_busy, `cli queue
+    // status`, the cron only-if-idle contract) would see "job in flight" on a
+    // permanently idle host and never start work.
     const dir = tmpdir();
     const q = new QueueStore(path.join(dir, "queue.json"));
     const lock = new FileLock(path.join(dir, "queue.json.lock"));
@@ -166,9 +166,9 @@ describe("bootHeal", () => {
   });
 
   test("requeues a job orphaned in active by a dead holder", () => {
-    // The heal this must not lose: a crashed responder leaves `active` set,
-    // and with nothing `enqueued` the drain timer never triggers the pump, so
-    // the orphan would otherwise never be retried.
+    // Why this heal exists: a crashed responder leaves `active` set, and with
+    // nothing `enqueued` the drain timer never triggers the pump, so the
+    // orphan would otherwise never be retried.
     const dir = tmpdir();
     const file = path.join(dir, "queue.json");
     const q = new QueueStore(file);

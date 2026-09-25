@@ -71,7 +71,7 @@ export interface ActivityFeedScope {
  * canonical message time — the message ULID alone encodes bridge-ingestion
  * time for Discord-bridged messages, not the original Discord send time.
  * Legacy rows (plain ULID strings) are tolerated: they decode to the ULID
- * time, which is the best available timestamp for pre-fix data.
+ * time, the best timestamp available for them.
  */
 function parseRecentMessageIds(raw: string): Array<{ id: string; ts: number }> {
   const parsed: unknown = JSON.parse(raw);
@@ -127,7 +127,7 @@ const ACTIVITY_ITEM_COLUMNS = `
 const NOT_DELETED = "(cr.deleted is null or cr.deleted = 0)";
 
 /**
- * Select the activity feed by fanning out to per-space DBs (Phase 2).
+ * Select the activity feed by fanning out to per-space DBs.
  *
  * `mainDb` is the READ-STATE handle, used ONLY for the read-state unread-count
  * query (read_positions lives in the read-state DB). All other reads go
@@ -221,8 +221,8 @@ export async function selectActivityFeed(
     for (const [k, v] of fetched) messagesData.set(k, v);
   }
 
-  // Step 6: fetch unread counts from the MONOLITHIC handle (readstate tables
-  // are not split — they live on the monolithic DB).
+  // Step 6: fetch unread counts from the read-state handle (`read_positions`
+  // lives in the read-state DB, not in the per-space DBs).
   const roomIds = pageRows.map((r) => r.room_id);
   const unreadCounts = await batchFetchUnreadCounts(mainDb, userDid, roomIds);
 

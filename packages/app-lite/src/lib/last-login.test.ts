@@ -1,12 +1,12 @@
 /**
- * Regression tests for the "Previously signed in as" record.
+ * Tests for the "Previously signed in as" record.
  *
- * The bug: the login screen offered the stored `handle` snapshot without ever
- * re-checking it, so after a rename the button named a handle that no longer
- * resolved, and clicking it failed with "Failed to resolve identity: <handle>".
+ * The record stores a `handle` snapshot. Offering it without re-checking would
+ * name a handle that no longer resolves after a rename, and clicking it would
+ * fail with "Failed to resolve identity: <handle>".
  *
- * These tests pin the contract that fixes it: a handle is offered only when the
- * stored DID's live handle matches it (or has been repaired from it).
+ * These tests pin the contract that prevents that: a handle is offered only when
+ * the stored DID's live handle matches it (or has been repaired from it).
  *
  * Written against `node:test` + `node:assert` (available without adding a
  * dependency to app-lite; app-lite ships no test runner of its own) so the file
@@ -27,10 +27,10 @@ import {
 const DID = "did:plc:uzi5qarfn75i6txjbqidz2wc";
 
 const stored: LastLogin = {
-  handle: "hedgehog-old.roomy.chat",
+  handle: "example-old.roomy.chat",
   did: DID,
   avatar: "atblob://did:plc:x/y",
-  displayName: "Hedgehog",
+  displayName: "Example",
 };
 
 function fakeStorage(initial?: LastLogin): LastLoginStorage & {
@@ -81,9 +81,9 @@ describe("parseLastLogin", () => {
 
 describe("decideLastLogin", () => {
   test("repairs a handle that no longer resolves to its DID", () => {
-    const decision = decideLastLogin(stored, "hedgehog-new.roomy.chat");
-    assert.equal(decision.record?.handle, "hedgehog-new.roomy.chat");
-    assert.equal(decision.persist?.handle, "hedgehog-new.roomy.chat");
+    const decision = decideLastLogin(stored, "example-new.roomy.chat");
+    assert.equal(decision.record?.handle, "example-new.roomy.chat");
+    assert.equal(decision.persist?.handle, "example-new.roomy.chat");
     // Identity fields survive the repair — only the handle was stale.
     assert.equal(decision.record?.did, DID);
     assert.equal(decision.record?.avatar, stored.avatar);
@@ -118,12 +118,12 @@ describe("verifyLastLogin", () => {
     const storage = fakeStorage(stored);
     const offered = await verifyLastLogin({
       storage,
-      fetch: stubFetch(200, { did: DID, handle: "hedgehog-new.roomy.chat" }),
+      fetch: stubFetch(200, { did: DID, handle: "example-new.roomy.chat" }),
     });
-    assert.equal(offered?.handle, "hedgehog-new.roomy.chat");
+    assert.equal(offered?.handle, "example-new.roomy.chat");
     assert.equal(
       JSON.parse(storage.value() ?? "{}").handle,
-      "hedgehog-new.roomy.chat",
+      "example-new.roomy.chat",
     );
   });
 

@@ -63,9 +63,9 @@ export const adminGetDashboardStatsHandler: QueryHandler<
   // ── Activity stats ──────────────────────────────────────────────────────
   //
   // The event log is the largest table in the process and grows without bound,
-  // so nothing here may scan it. As written these three were O(all events):
-  // production p50 19.4s (2026-09-16 08:00Z, n=268), against a 30s DB request
-  // timeout, refreshed every 30s by the admin dashboard.
+  // so nothing here may scan it. The admin dashboard refreshes every 30s and
+  // the DB request timeout is 30s, so each of these three queries must stay
+  // indexed / O(streams):
   //
   //   totalEvents  — `stream_state` has one row per stream, and `idx` is
   //                  assigned as max(idx)+1 and never deleted, so a stream

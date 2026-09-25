@@ -2,7 +2,7 @@
  * Schema for `space.roomy.space.setHandle` (procedure).
  *
  * Sets the handle for a space (updates the DID document with a
- * handle alias (historically leaf://)), or removes an existing alias when handle is null.
+ * handle alias), or removes an existing alias when handle is null.
  *
  * This is the DNS-based handle approach — it requires the user to create a
  * DNS TXT record for their domain pointing to the space DID. The appserver

@@ -7,8 +7,8 @@
  * stripped. Messages with no indexable text (null data, unparseable richtext,
  * non-text mime) yield "" and are skipped by the indexer.
  *
- * Ported from the Phase 1 FTS5 indexer (queries/messageSearch.ts, removed in
- * TASK-57) so the Qdrant index and the old FTS index indexed the same text.
+ * Both the Qdrant index and the FTS index must see the same text, so the
+ * extraction rules here are shared.
  */
 
 import { decodeContent, decodeRichTextBody } from "../db/content.ts";

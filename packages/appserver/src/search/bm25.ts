@@ -1,5 +1,5 @@
 /**
- * Sparse BM25 term weighting for Qdrant message search (Phase 2).
+ * Sparse BM25 term weighting for Qdrant message search.
  *
  * Qdrant's sparse vectors support BM25 via the `idf` modifier on the
  * collection's sparse-vector config: the modifier applies IDF (inverse
@@ -20,8 +20,8 @@
  * `ensureMessagesCollection` in `src/search/qdrantSearch.ts`).
  *
  * No external tokenizer/embedding dependency — lowercase + split on
- * non-alphanumerics, matching the FTS5 `unicode61` tokenizer behaviour the
- * Phase 1 index used. Output is a Qdrant sparse vector: sorted ascending
+ * non-alphanumerics, matching the FTS5 `unicode61` tokenizer behaviour.
+ * Output is a Qdrant sparse vector: sorted ascending
  * indices, one value per term. Values are strictly positive; repeated terms
  * weigh more than single occurrences (the tf saturation curve).
  */

@@ -857,10 +857,10 @@ describe("auth/writeAuth — reply targets must be messages", () => {
     expect(result).toBeUndefined();
   });
 
-  // The production signature this fixes: a message whose reply target is the
-  // room it lives in. `getMessage` resolves such a target as a message and
-  // 400s ("is not a message (no room)"), so the reply preview refetches a
-  // permanent failure. Nothing rejected it at write time before this check.
+  // A reply whose target is the room it lives in: `getMessage` resolves such
+  // a target as a message and 400s ("is not a message (no room)"), leaving
+  // the reply preview with a permanent failure. Nothing else rejects it at
+  // write time, so this check must.
   test("a reply targeting the room itself is rejected with 400", async () => {
     const { asyncDb: db } = freshDb();
     await seedSpace(db);
@@ -1006,11 +1006,10 @@ async function authorizeBatch(
 
 describe("auth/writeAuth — batched authorization", () => {
   /**
-   * The `sendEvents.authorize` N+1: a batch of N messages to one room used to
-   * re-resolve that room (and the caller's space standing) once per event —
-   * ~7 SQL statements each, measured in docs/sendevents-write-path-review.md
-   * as the 11.5 s authorize span under load. Authorizing through one memo
-   * must cost a constant, not N × constant.
+   * The `sendEvents.authorize` N+1: a batch of N messages to one room must
+   * not re-resolve that room (and the caller's space standing) once per
+   * event — ~7 SQL statements each. Authorizing through one memo must cost a
+   * constant, not N × constant.
    */
   test("a batch to one room does not cost a room resolution per event", async () => {
     const { asyncDb: db } = freshDb();
@@ -1035,9 +1034,9 @@ describe("auth/writeAuth — batched authorization", () => {
 
     expect(small.denial).toBeUndefined();
     expect(big.denial).toBeUndefined();
-    // Ten times the events, no meaningful extra SQL. The pre-fix cost was
-    // ~7 statements *per event*, so this assertion fails on the old path by
-    // two orders of magnitude.
+    // Ten times the events, no meaningful extra SQL: the batched path costs
+    // ~7 statements *per event* only if it re-resolves the room each time, so
+    // this assertion fails by two orders of magnitude on a per-event path.
     expect(big.statements - small.statements).toBeLessThanOrEqual(2);
     expect(big.statements).toBeLessThan(20);
   });

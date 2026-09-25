@@ -5,8 +5,7 @@
  * returned.
  *
  * The last two tests configure HappyView and stub `globalThis.fetch` so they
- * exercise the Roomy-record branch of the handler (which is where the
- * `handle: ""` bug lived) without touching the network.
+ * exercise the Roomy-record branch of the handler without touching the network.
  *
  * Run: bun test --cwd packages/appserver src/e2e/profileEndpoints.test.ts
  */
@@ -128,10 +127,10 @@ describe("space.roomy.user.getProfile", () => {
   });
 
   test("resolves the handle when only a Roomy record exists (no stored handle)", async () => {
-    // Regression: this is the live `handle: ""` bug. The user's only profile
-    // source is a Roomy record (HappyView), which carries no handle, and the
-    // global row is either absent or holds the `''` an older revision of the
-    // write path left there. Bluesky knows the handle — it must be resolved
+    // The user's only profile source is a Roomy record (HappyView), which
+    // carries no handle, and the global row is either absent or holds an
+    // empty string. Bluesky knows the handle — it must be resolved and
+    // persisted.
     // startAppserver() initialises the HappyView singleton from the env, so
     // the test config and fetch stub must be installed *after* it starts.
     const ctx = await startAppserver();
@@ -140,31 +139,30 @@ describe("space.roomy.user.getProfile", () => {
       happyView: [
         {
           did: USER,
-          displayName: "Little Fox",
+          displayName: "Test User",
           avatar: `atblob://${USER}/bafy`,
         },
       ],
-      bluesky: [{ did: USER, handle: "meri-little-fox.roomy.chat" }],
+      bluesky: [{ did: USER, handle: "test-user.roomy.chat" }],
     });
     await seedProfile(ctx, USER, "");
 
     const body = await getProfile(ctx, USER);
 
     expect(body.did).toBe(USER);
-    expect(body.handle).toBe("meri-little-fox.roomy.chat");
+    expect(body.handle).toBe("test-user.roomy.chat");
     // The Roomy record stays authoritative for display fields.
-    expect(body.displayName).toBe("Little Fox");
-    // Persisted: the poisoned `''` is gone from the row.
-    expect(await readStoredHandle(ctx, USER)).toBe("meri-little-fox.roomy.chat");
+    expect(body.displayName).toBe("Test User");
+    // Persisted: the empty row value is replaced by the resolved handle.
+    expect(await readStoredHandle(ctx, USER)).toBe("test-user.roomy.chat");
   });
 
   test("serves the PDS record over a stale HappyView snapshot (read-after-write)", async () => {
-    // Regression: read-after-write consistency. The write path confirms the
-    // record on the PDS, but HappyView is Jetstream-fed and can lag a
-    // just-confirmed write. getProfile used to consult HappyView first and
-    // re-materialise that snapshot into the global row, so immediately after
-    // a putRecord the stale pre-write fields were served — and clobbered the
-    // global row. Now the PDS is authoritative and consulted first.
+    // Read-after-write consistency. The write path confirms the record on
+    // the PDS, but HappyView is Jetstream-fed and can lag a just-confirmed
+    // write; re-materialising that snapshot into the global row would serve
+    // the stale pre-write fields and clobber the row. The PDS is
+    // authoritative and consulted first.
     const ctx = await startAppserver();
     setHappyView(HAPPYVIEW);
     // Fresh, just-written record on the PDS (post-putRecord).
@@ -217,7 +215,7 @@ describe("space.roomy.user.getProfile", () => {
     const ctx = await startAppserver();
     setHappyView(HAPPYVIEW);
     stubProfileSources({
-      happyView: [{ did: USER, displayName: "Little Fox" }],
+      happyView: [{ did: USER, displayName: "Test User" }],
       bluesky: [],
     });
     await seedProfile(ctx, USER, "");

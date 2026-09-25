@@ -289,14 +289,14 @@ describe("read-state schema", () => {
   });
 
   /**
-   * Regression (TASK-134 follow-up): the read-state write path filters
+   * Regression: the read-state write path filters
    * `read_positions` by `room_id` alone — the createMessage unread bump and
    * its `getRoomReadPositionUsers` read, plus the delete/move unwind's
    * `where room_id = ? and unread_count > 0`. The primary key is
    * `(user_did, room_id)`, which cannot serve a `room_id`-only filter, so
    * without an explicit index every one of those queries scans the whole
-   * table — global across all spaces. On a production-sized table that is
-   * seconds per scan inside `sendEvents`.
+   * table — global across all spaces. On a large table that is seconds per
+   * scan inside `sendEvents`.
    *
    * Asserts the plan, not just index presence: an index that SQLite declines
    * to use would leave the scan in place.
@@ -327,8 +327,8 @@ describe("read-state schema", () => {
 
   /**
    * The index must reach EXISTING databases: `initializeReadStateSchema`
-   * execs the schema file on every open regardless of version, so a
-   * production DB written before this change gains the index at next boot.
+   * execs the schema file on every open regardless of version, so a DB that
+   * predates the index gains it at next boot.
    * Asserts that path explicitly, since a migration-only index (or one gated
    * behind a version bump) would leave deployed databases scanning.
    */

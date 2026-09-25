@@ -27,7 +27,7 @@ const log = createLogger("backfill");
 const activeBackfills = new Set<string>();
 
 /**
- * Sender for the Discord-side backfill-completion notice (TASK-193). Set at
+ * Sender for the Discord-side backfill-completion notice. Set at
  * boot by index.ts; left undefined in unit tests unless a test installs a
  * sender. The notice is best-effort: failures are logged, never thrown, and
  * never fail the backfill itself.
@@ -54,7 +54,7 @@ function markRunWork(spaceDid: string): void {
 
 /**
  * Whether a progress row reflects real ingested work — as opposed to a fresh
- * enumeration row (TASK-193) that only marks the pair as known so the
+ * enumeration row that only marks the pair as known so the
  * status UI can list it up front. A row with no counts, no boundary, and no
  * walk cursor has never been backfilled: Phase 1 must still run its recent
  * window for it.
@@ -161,7 +161,7 @@ export async function runBackfill(
 		log.error("syncInitialStructure failed", err);
 	}
 
-	// Enumerate the full work set up front (TASK-193): create a progress row
+	// Enumerate the full work set up front: create a progress row
 	// for every bridged (channel, space) pair and active-thread pair so the
 	// Roomy backfill-status panel can list everything immediately instead of
 	// watching rows appear piecemeal as Phase 2 walks along. Rows that
@@ -200,14 +200,14 @@ export async function runBackfill(
 
 	log.info(`Backfilling ${tasks.length} (channel, space) pairs`);
 
-	// ── Phase 1: bounded recent window, serial (TASK-151) ────────────────
+	// ── Phase 1: bounded recent window, serial ───────────────────────────
 	// For each pair with no durable progress yet, ingest the most recent
 	// PHASE1_MESSAGE_BOUND messages so the space is immediately usable, then
 	// let Phase 2 walk the rest in the background. Pairs that already have a
-	// progress row or cursor (interrupted previous run, legacy mid-walk,
-	// completed) are left to Phase 2 — re-running the window would redo work
-	// or reset the boundary mid-flight. The per-pair guard in
-	// `activeBackfills` keeps this pass from overlapping a running walk.
+	// progress row or cursor (mid-walk, completed, interrupted) are left to
+	// Phase 2 — re-running the window would redo work or reset the boundary
+	// mid-flight. The per-pair guard in `activeBackfills` keeps this pass
+	// from overlapping a running walk.
 	for (const t of tasks) {
 		const key = `${t.channelId}:${t.spaceDid}`;
 		if (activeBackfills.has(key)) continue;
@@ -246,7 +246,7 @@ export async function runBackfill(
 
 /**
  * Kick off the Phase-2 remainder walk in the background. Serial (one
- * (channel, space) pair at a time, TASK-151); after the top-level channels,
+ * (channel, space) pair at a time); after the top-level channels,
  * sweeps active threads the window may have truncated, then the
  * deprioritized archived-thread sweep.
  */
@@ -336,7 +336,7 @@ function schedulePhase2(
 				log.error("ensureAndBackfillArchivedThreads failed", err);
 			}
 
-			// Discord-side completion notice (TASK-193): one message per
+			// Discord-side completion notice: one message per
 			// bridged space this run did work for, posted only now that all
 			// phases (channels, active threads, archived threads) have
 			// settled. Best-effort — never throws, never fails the walk.
@@ -648,7 +648,7 @@ async function channelsForConfig(
 }
 
 /**
- * Enumerate the backfill work set up front (TASK-193): create a progress row
+ * Enumerate the backfill work set up front: create a progress row
  * for every bridged (channel, space) pair and every bridged active-thread
  * pair so the Roomy backfill-status panel can list the entire set from the
  * start. Rows that already carry real progress (or a cursor) are left
@@ -1014,8 +1014,8 @@ export async function backfillChannel(
 		// recent window first (Phase 1), then walk the remainder below.
 		// A fresh enumeration row (zero real work) counts as brand-new too —
 		// its window has not run yet. Pairs with a cursor or real progress
-		// are mid-walk, legacy, or interrupted — Phase 2 resumes them
-		// without re-running the window.
+		// are mid-walk or interrupted — Phase 2 resumes them without
+		// re-running the window.
 		if (!cursor && (!progress || !hasRealBackfillProgress(progress))) {
 			const cachedChannel = await discord.getChannel(channelId);
 			const kind = cachedChannel ? mappingKindForChannel(cachedChannel) : null;
@@ -1053,9 +1053,8 @@ export async function backfillChannel(
 			// already-ingested top.
 			afterCursor = channelId;
 		} else {
-			// Legacy pair (mid-walk from a pre-progress release): resume from
-			// the newest ingested message, exactly like the old single-phase
-			// walk.
+			// No progress row: resume from the newest ingested message, or
+			// from the channel start when there is none.
 			afterCursor = cursor?.lastMessageId ?? channelId;
 		}
 
@@ -1069,8 +1068,8 @@ export async function backfillChannel(
 		let totalSkipped = 0;
 		let walkStalled = false;
 
-		// Progress-row identity; only resolved for rows that don't exist yet
-		// (legacy pairs) — existing rows already carry name/kind/guild.
+		// Progress-row identity; only resolved for pairs with no row yet
+		// (the walk's "legacy" phase) — existing rows carry name/kind/guild.
 		let identityKind = progress2?.kind ?? null;
 		let identityName = progress2?.channelName ?? null;
 		let identityParentId = parentId ?? progress2?.parentId ?? null;
@@ -1219,8 +1218,8 @@ export async function backfillChannel(
  * Fetch public archived threads for all bridged parent channels, create Roomy
  * rooms for any that aren't yet mapped, and backfill their messages.
  *
- * Exported for the regression tests covering pagination, page-failure
- * isolation, and the stall guard.
+ * Exported for the tests covering pagination, page-failure isolation, and the
+ * stall guard.
  */
 export async function ensureAndBackfillArchivedThreads(
 	discord: DiscordDataSource,
@@ -1394,7 +1393,7 @@ export async function ensureAndBackfillArchivedThreads(
 }
 
 /**
- * Post the Discord-side "backfill complete" system message (TASK-193) for
+ * Post the Discord-side "backfill complete" system message for
  * every bridged space that the current run actually did work for.
  *
  * Completion point: the NOTICE fires only after ALL phases are done — every

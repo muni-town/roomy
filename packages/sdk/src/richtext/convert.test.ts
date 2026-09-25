@@ -169,8 +169,8 @@ describe("richtext convert — blocks ↔ ProseMirror round-trip", () => {
         },
       ],
     };
-    // `start` absent, not `start: 1` — the block stays byte-identical to what
-    // pre-`start` writers produced, so old and new records compare equal.
+    // `start` absent, not `start: 1` — the block stays byte-identical to
+    // records written without a `start` field, so both compare equal.
     expect(proseMirrorDocToBlocks(doc)).toEqual([
       {
         $type: "space.roomy.richtext.blocks#orderedList",

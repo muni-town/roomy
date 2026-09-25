@@ -8,11 +8,10 @@
  *
  * **Why this module exists.** The stored `handle` is a *snapshot* taken at
  * profile-fetch time, but handles are mutable: a user can rename, or lose the
- * domain their handle lives on. The record outlives the handle it names, and
- * nothing ever re-checked it — so the login screen could offer a handle that
- * no longer resolves, and clicking it failed in identity resolution
- * ("Failed to resolve identity: <handle>"). Keeping a snapshot forever is what
- * caused that, so the record is no longer trusted on its own:
+ * domain their handle lives on. The record outlives the handle it names, and a
+ * snapshot trusted forever can name a handle that no longer resolves — offering
+ * it fails in identity resolution ("Failed to resolve identity: <handle>"). The
+ * record is therefore never trusted on its own:
  *
  * - `did` is the durable identity; the handle is treated as a cache of it.
  * - Before a record is offered, its handle is re-checked against the DID it was
@@ -23,8 +22,8 @@
  *   handle; a DID with no usable handle drops the record entirely.
  *
  * The check fails *closed*: when the appview cannot be reached the record is
- * withheld (a handle we cannot verify is exactly what produced the reported
- * error) but not deleted, so a later successful check can offer it again. The
+ * withheld (a handle we cannot verify is exactly the kind that fails resolution)
+ * but not deleted, so a later successful check can offer it again. The
  * user can still type their handle in the meantime.
  *
  * The record is deliberately **not** cleared on logout: it exists precisely to

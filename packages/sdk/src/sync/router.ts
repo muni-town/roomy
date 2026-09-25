@@ -8,9 +8,10 @@
  *  - `#messageDiff` → `adapter.patch(queryKey(GET_MESSAGES_NSID, { roomId }),
  *                                    prev => applyMessageDiff(prev, ops))`
  *
- * Per Slice 6, the per-frame dispatch is hardcoded rather than registered
- * through a pluggable table — we only have one diffable surface today.
- * `applyMessageDiff` tolerates `undefined` prev (commit `749992c1`).
+ * The per-frame dispatch is hardcoded rather than registered through a
+ * pluggable table — there is one diffable surface. `applyMessageDiff`
+ * tolerates `undefined` prev, because a diff frame can race ahead of the
+ * initial fetch.
  */
 import { type } from "arktype";
 import { Body as InvalidateBody } from "../schemas/frames/invalidate";

@@ -8,7 +8,7 @@
  *   - resolveThreadsByIds
  *   - purgeStaleThreadActivity
  *
- * Phase 3: `queryActiveThreads` takes `(readStateDb, spaceDb, userDid, spaceId)`.
+ * `queryActiveThreads` takes `(readStateDb, spaceDb, userDid, spaceId)`.
  * Read-state rows (`user_thread_activity`) go into the read-state DB via
  * `openReadStateDb`; per-space rows (entities, comp_room, comp_content, edges,
  * comp_info) go into the per-space DB via `openSpaceDb`. Other helpers

@@ -48,7 +48,7 @@
               >MF</div
             >
             <span class="text-sm text-base-800 dark:text-base-200 truncate"
-              >Meri</span
+              >Test</span
             >
             <span class="ml-auto text-base-400"
               ><IconSettings class="size-4" /></span

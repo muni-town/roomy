@@ -42,11 +42,10 @@ export type GlobalMigrationEntry =
 
 /**
  * Every global schema version, in order. `GLOBAL_SCHEMA_VERSION` is the highest
- * key. Versions <= 9 are historical: their DDL lives in `schema-global.sql`
- * (applied idempotently on every open) and their async tasks in
- * `GLOBAL_MIGRATION_TASKS`. Version 10 is the first driven end-to-end from this
- * manifest; re-stating 2..9 here as `structural` documents the real history —
- * none of them had a structural `up` beyond what the schema exec provides.
+ * key. Versions <= 9 carry no structural `up`: their DDL lives in
+ * `schema-global.sql` (applied idempotently on every open) and their async
+ * tasks in `GLOBAL_MIGRATION_TASKS`. Version 10 is the first driven end-to-end
+ * from this manifest.
  */
 export const GLOBAL_MIGRATIONS = {
   "2": { kind: "structural" },
@@ -66,8 +65,8 @@ export const GLOBAL_MIGRATIONS = {
   // space_stats aggregate for the admin dashboard's space list. Structural:
   // schema-global.sql creates the table on every open. Its rows are published
   // by the boot per-space sweep in reMaterializeFromLocalEvents (which runs
-  // for every boot and every stream, so an existing dataset self-heals on the
-  // next deploy) — a data migration here would duplicate that sweep.
+  // for every boot and every stream, so an existing dataset self-heals) — a
+  // data migration here would duplicate that sweep.
   "10": { kind: "structural" },
   // Next global schema change goes here, e.g.:
   //   "11": { kind: "structural" },   // table added to schema-global.sql

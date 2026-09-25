@@ -1,9 +1,9 @@
 /**
  * Every outbound profile call is bounded.
  *
- * `fetchTimeout.test.ts` covers the mechanism; what can still regress is the
- * *wiring* — a profile fetch added later that calls the global `fetch` directly
- * would silently be unbounded again, which is how this class of stall got in.
+ * `fetchTimeout.test.ts` covers the mechanism; what is left to guard is the
+ * *wiring* — a profile fetch that calls the global `fetch` directly is
+ * silently unbounded, which is exactly how a stall of this class gets in.
  * So each call site is driven against a server that never answers and asserted
  * to give up rather than hang.
  */

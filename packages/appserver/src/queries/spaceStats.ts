@@ -35,8 +35,7 @@ import type { DbLike } from "../db/types.ts";
  * `spaceMeta` synthetic event, whose own stream never produced the
  * `createSpace` that writes `comp_space`). The gate is preserved deliberately:
  * changing it would move ~2700 rows on the dashboard's member-count ordering,
- * which is a product decision, not a performance one. See the report on
- * TASK-116 for the finding.
+ * which is a product decision, not a performance one.
  *
  * Member and admin are counted as a union: every member edge counts once, and
  * an admin with no member edge is still a member. The two labels differ only in

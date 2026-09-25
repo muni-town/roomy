@@ -267,13 +267,11 @@ describe("SyncConnection — abnormal close + reconnect", () => {
   });
 
   it("still reconnects when the default backoff draws a zero jitter value", async () => {
-    // Regression (2026-09-15, hedgehog): the default generator is
-    // `floor(random() * cap)`, which draws exactly 0 with probability
-    // 1/cap. The abnormal-close handler treats a non-positive delay as the
-    // caller's "disable auto-reconnect" signal, so one unlucky draw killed
-    // reconnection permanently and SILENTLY while the process stayed alive
-    // (production: `Closed: code=1006 intentional=false`, then no reconnect
-    // line ever again). The default generator must never return 0.
+    // The default generator is `floor(random() * cap)`, which draws exactly 0
+    // with probability 1/cap. The abnormal-close handler treats a non-positive
+    // delay as the caller's "disable auto-reconnect" signal, so a zero draw
+    // would silently kill reconnection. The default generator must never
+    // return 0.
     vi.useFakeTimers();
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
     try {
@@ -538,11 +536,10 @@ describe("SyncConnection — exponential backoff", () => {
     expect(delays[0]!).toBeLessThanOrEqual(1000);
   });
 
-  // Math.random() can return exactly 0. With the unclamped full-jitter
-  // formula that yields delay 0, which #handleAbnormalClose treats as "stop
+  // Math.random() can return exactly 0. With an unclamped full-jitter formula
+  // that yields delay 0, which #handleAbnormalClose treats as "stop
   // reconnecting" — status flips to `closed`, no timer is armed, and the
-  // connection can never reopen without a full page reload. This is the
-  // intermittent "websocket closed and can't reopen" report.
+  // connection can never reopen without a full page reload.
   it("never disables reconnect when jitter floors to zero", async () => {
     vi.useFakeTimers();
     const randSpy = vi.spyOn(Math, "random").mockReturnValue(0);
@@ -826,10 +823,10 @@ describe("SyncConnection — heartbeat", () => {
 	});
 });
 describe("SyncConnection — failed handshake never wedges the reconnect loop", () => {
-  // Regression: Node's undici WebSocket fires `error` and then never fires
-  // `close` when the handshake fails (bad ticket, origin 502, DNS failure).
-  // The reconnect path is driven by `onclose`, so such a socket used to wedge
-  // the connection permanently: no open socket, no pending reconnect, no logs.
+  // Node's undici WebSocket fires `error` and then never fires `close` when the
+  // handshake fails (bad ticket, origin 502, DNS failure). The reconnect path is
+  // driven by `onclose`, so such a socket must be abandoned explicitly or it
+  // wedges the connection permanently: no open socket, no pending reconnect.
   it("schedules a reconnect when the socket errors without ever closing", async () => {
     vi.useFakeTimers();
     try {

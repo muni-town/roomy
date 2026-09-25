@@ -4,12 +4,11 @@
  * The composer (app-lite's `ChatInput`) and the rendered message
  * (`BlocksRenderer` / `MessageContent` inside `MessageBubble`) must be a true
  * WYSIWYG pair: the composer shows what the sent message will look like.
- * They previously drifted because each side hand-rolled its own block styles —
- * the composer set only `font-weight` on headings (so every level rendered at
- * body size) while the renderer leaned on `@tailwindcss/typography`'s
- * `.prose` (generous 20–48px block gaps). Both surfaces now read their block
- * styling from the rules below, and neither component carries block
- * typography of its own.
+ * Both surfaces read their block styling from the rules below, and neither
+ * component carries block typography of its own: hand-rolled styles on each
+ * side drift (the composer setting only `font-weight` on headings renders
+ * every level at body size, while `@tailwindcss/typography`'s `.prose` adds
+ * 20–48px block gaps).
  *
  * Imported once from `packages/app-lite/src/app.css`, so it is global and
  * reaches the `.tiptap` editor and the `.roomy-prose` message body alike.
@@ -21,14 +20,14 @@
  * treatment but NOT a full block layout — `ActivityFeed` renders messages
  * inline (`[&_p]:inline [&_p]:m-0`) and `UserProfile` renders a bio. Scoping
  * these rules to `.roomy-prose` (set only on the two WYSIWYG surfaces, beside
- * `.prose`) keeps this change contained to the pair that must agree.
+ * `.prose`) keeps these rules contained to the pair that must agree.
  *
  * ── Why unlayered, and why the doubled class ─────────────────────────────
  *
  * `.prose` styles come from `@tailwindcss/typography`, and the block elements
  * in `BlocksRenderer` also carry Tailwind utilities (`my-1`, `font-semibold`,
- * `pl-5`, …). Those two sources disagree, and which one won depended on
- * emission order — the drift behind the original bug. These rules are
+ * `pl-5`, …). Those two sources disagree, and which one wins depends on
+ * emission order — the drift these rules exist to remove. These rules are
  * therefore emitted outside every `@layer` (unlayered always beats layered)
  * and repeat the marker class to reach 0-2-0, clearing both
  * `.prose :where(h1)` (0-1-0; `:where()` adds no specificity) and any `.*`
@@ -39,15 +38,14 @@
  * reach into `.not-prose` regions (link cards, embed chrome) and override the
  * utilities that deliberately style them.
  *
- * ── What changed, and what deliberately did not ──────────────────────────
+ * ── Why these values ─────────────────────────────────────────────────────
  *
  * Font sizes, weights and paddings below are the values the rendered message
- * already produced (measured in-browser, per heading level), so this fix does
- * not silently restyle messages that already looked right. The one intended
- * change is inter-block spacing: every block now uses `--roomy-block-gap`,
- * which removes the "paragraph gaps too big in rendered messages / too small
- * in the composer" divergence in a single move. The gap is a custom property
- * rather than a literal so the two surfaces cannot drift apart again, and
+ * produces (measured in-browser, per heading level), so applying them here
+ * does not restyle messages that already look right. Only inter-block spacing
+ * is defined by this file: every block uses `--roomy-block-gap`, which keeps
+ * rendered messages and the composer from diverging. The gap is a custom
+ * property rather than a literal so the two surfaces cannot drift apart, and
  * headings divide by it uniformly instead of multiplying it by their own `em`.
  */
 
@@ -57,9 +55,9 @@
 }
 
 /*
- * Headings. Sizes, weights and line heights match what the rendered message
- * showed per level (h1 2.25em/1.111, h2 1.5em/1.333, h3 1.25em/1.6,
- * h4–h6 body-size), so a heading now looks the same in the composer as in the
+ * Headings. Sizes, weights and line heights match the rendered message's own
+ * values per level (h1 2.25em/1.111, h2 1.5em/1.333, h3 1.25em/1.6,
+ * h4–h6 body-size), so a heading looks the same in the composer as in the
  * thread. `.prose`'s own `margin-top: 0` on h1 is preserved.
  */
 .roomy-prose.roomy-prose :is(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"], [class~="not-prose"] *)),

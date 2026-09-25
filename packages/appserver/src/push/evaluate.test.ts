@@ -20,7 +20,8 @@ import {
 } from "../queries/userRoomParticipation.ts";
 
 /**
- * Tests for the Phase 1 push evaluator (Busy immediate pushes only).
+ * Tests for the push evaluator: per-recipient level routing, mention/reply
+ * handling, and digest state.
  *
  * These mirror the seeding style of `auth/access.test.ts`: a fresh isolated
  * in-memory materialisation DB plus an attached in-memory read-state DB
@@ -77,7 +78,7 @@ function freshDb(): DbLike {
 }
 
 /**
- * Two genuinely separate connections, mirroring production Phase 3/4:
+ * Two genuinely separate connections, mirroring the production split:
  * `spaceDb` = per-space materialisation DB (entities/edges/comp_*),
  * `readStateDb` = read-state DB (readstate tables only, NO materialisation
  * tables — any query crossing into `entities` fails with "no such table").
@@ -357,7 +358,7 @@ describe("push/evaluate — Busy immediate pushes", () => {
   });
 });
 
-// ── Phase 2: Engaged digest ───────────────────────────────────────────────
+// ── Engaged digest ────────────────────────────────────────────────────────
 
 async function addParticipation(
   db: DbLike,
@@ -422,8 +423,8 @@ describe("push/evaluate — Engaged digest path", () => {
     expect(digest!.payload.count).toBe(DIGEST_THRESHOLD);
     expect(digest!.payload.roomName).toBe("general");
     expect(digest!.payload.messageId).toBeUndefined();
-    // The digest names its triggering author too (TASK-117): the digest
-    // branch never falls back to an anonymous count while an author is known.
+    // The digest names its triggering author too: the digest branch never
+    // falls back to an anonymous count while an author is known.
     expect(digest!.payload.authorName).toBe("Alice");
     expect(digest!.payload.authorDid).toBe(AUTHOR);
     expect(await notifState(db, ENGAGED_READER, CHANNEL)).toEqual({
@@ -448,11 +449,11 @@ describe("push/evaluate — Engaged digest path", () => {
   });
 
   test("engaged backfill reads per-space DB, writes read-state DB (split handles)", async () => {
-    // Phase 3/4 regression: the participation backfill ran its whole SELECT
-    // against the read-state handle ("no such table: entities"), throwing
-    // before any Engaged digest could accumulate. These are genuinely
+    // The participation backfill must run its SELECT against the space
+    // handle: against the read-state handle it fails with "no such table:
+    // entities" before any Engaged digest can accumulate. These are genuinely
     // separate connections — the read-state side has NO materialisation
-    // tables — so the old wiring fails and the fixed wiring passes.
+    // tables — so a wiring that mixed them would fail here.
     const { readStateDb, spaceDb } = splitFreshDbs();
     _resetParticipationBackfillCache();
 
@@ -518,7 +519,7 @@ describe("push/evaluate — Engaged digest path", () => {
     const deliveries7 = await evaluatePush(db, db, msgJob(7));
     expect(deliveries6.find((d) => d.userDid === ENGAGED_READER)).toBeUndefined();
     expect(deliveries7.find((d) => d.userDid === ENGAGED_READER)).toBeUndefined();
-    // Per the plan, once notified the row "does nothing" for further messages
+    // Once notified the row does nothing for further messages
     // (one push per batch) — the count is left at the fire-time value and the
     // batch stays quiet until the user reopens the room (which resets it).
     expect(await notifState(db, ENGAGED_READER, CHANNEL)).toEqual({
@@ -581,7 +582,7 @@ describe("push/evaluate — Engaged digest path", () => {
   });
 });
 
-// ── Phase 3: Mention routing ───────────────────────────────────────────────
+// ── Mention routing ───────────────────────────────────────────────────────
 
 /** Build a createMessage job with a given ordinal and optional mentions. */
 function msgJobWithMentions(ordinal: number, mentions?: string[], repliedToDids?: string[]) {
@@ -597,7 +598,7 @@ function msgJobWithMentions(ordinal: number, mentions?: string[], repliedToDids?
   };
 }
 
-describe("push/evaluate — Phase 3 mention routing", () => {
+describe("push/evaluate — mention routing", () => {
   test("quiet + mentioned → immediate message push", async () => {
     const db = freshDb();
     await seedFixture(db);
@@ -681,7 +682,7 @@ describe("push/evaluate — Phase 3 mention routing", () => {
     expect(await notifState(db, ENGAGED_READER, CHANNEL)).toBeUndefined();
   });
 
-  test("quiet, neither mentioned nor repliedTo → no push (unchanged)", async () => {
+  test("quiet, neither mentioned nor repliedTo → no push", async () => {
     const db = freshDb();
     await seedFixture(db);
     _resetParticipationBackfillCache();
@@ -703,7 +704,7 @@ describe("push/evaluate — Phase 3 mention routing", () => {
     expect(deliveries.find((d) => d.userDid === AUTHOR)).toBeUndefined();
   });
 
-  test("engaged + not mentioned → digest path (unchanged, regression)", async () => {
+  test("engaged + not mentioned → digest path", async () => {
     const db = freshDb();
     await seedFixture(db);
     _resetParticipationBackfillCache();
@@ -721,7 +722,7 @@ describe("push/evaluate — Phase 3 mention routing", () => {
     expect(digest!.payload.type).toBe("digest");
   });
 
-  test("busy + mentioned → immediate push (unchanged, regression)", async () => {
+  test("busy + mentioned → immediate push", async () => {
     const db = freshDb();
     await seedFixture(db);
     // BUSY_READER is busy. Mention doesn't change busy behaviour — they get

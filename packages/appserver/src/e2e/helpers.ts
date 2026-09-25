@@ -199,7 +199,7 @@ export function seedSpace(
      values (?, ?, 'member')`,
     [userDid, spaceId],
   );
-  // Global entity→space index entry (Phase 3) so openSpaceDbForEntity and
+  // Global entity→space index entry so openSpaceDbForEntity and
   // related lookups resolve the space id.
   globalDb(db).run(
     "insert or ignore into entity_space (entity_id, space_did) values (?, ?)",
@@ -211,7 +211,7 @@ export function seedSpace(
 /**
  * Seed a joinedSpace edge from the user to the space (global DB, kept for
  * backward-compat assertions) AND durable membership intent in the read-state
- * DB (what getSpaces now reads).
+ * DB (what getSpaces reads).
  */
 export function seedJoinedSpace(
   db: Database,
@@ -237,7 +237,7 @@ export function seedJoinedSpace(
 
 /**
  * Seed a room entity + comp_room row in the room's per-space DB, plus the
- * global `entity_space` index entry (Phase 3) so `openSpaceDbForEntity`
+ * global `entity_space` index entry so `openSpaceDbForEntity`
  * can resolve the room to its owning space.
  */
 export function seedRoom(
@@ -291,7 +291,7 @@ export function seedMessage(
 }
 
 /**
- * Seed a user profile in the global `profiles` table (Phase 3). Roomy
+ * Seed a user profile in the global `profiles` table. Roomy
  * profiles are global (one per user), so `seedUser` writes there rather than
  * to any per-space DB.
  */
@@ -427,8 +427,8 @@ export function seedActivityItem(
 }
 
 /**
- * Seed a read position in the read-state DB (Phase 3: read-state is its own
- * routed DB, `data/roomy-readstate.sqlite`).
+ * Seed a read position in the read-state DB (read-state is its own routed
+ * DB, `data/roomy-readstate.sqlite`).
  */
 export function seedReadPosition(
   db: Database,
@@ -444,11 +444,11 @@ export function seedReadPosition(
   );
 }
 
-// ─── Phase 3 DB routing ──────────────────────────────────────────────────
+// ─── DB routing ──────────────────────────────────────────────────────────
 
 /**
  * The e2e seed helpers are handed the base AsyncDatabase handle returned by
- * `openDb()` (the event-log DB). In Phase 3 the materialised data lives in
+ * `openDb()` (the event-log DB). The materialised data lives in
  * the per-space DBs (`forSpace`) and the global DB (`global`), so the seed
  * helpers route each write to the correct database. These small helpers keep
  * that routing typed and local to this file.

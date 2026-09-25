@@ -95,7 +95,7 @@ export class StreamManager {
       /**
        * Override the push enqueue sink. Production pokes the process-wide
        * dispatcher; tests inject a collector to observe which messages the
-       * write path offers for push (freshness gate, TASK-151).
+       * write path offers for push.
        */
       pokePush?: (jobs: PushJob[]) => void;
     },
@@ -160,7 +160,7 @@ export class StreamManager {
     events: Event[],
     userOverride?: string,
   ): Promise<void> {
-    // 0. Blue-green write gate (P2/P8). If the space is currently rebuilding
+    // 0. Blue-green write gate. If the space is currently rebuilding
     // (a temp `.sqlite.new` is being materialised), reject the write BEFORE
     // it lands in the event log — otherwise it would be double-applied or
     // lost at the swap. This is the single choke point every handler's write
@@ -238,7 +238,7 @@ export class StreamManager {
       }
 
       // 5. Apply batch to materialize. The per-space DB is the source of
-      // truth (Phase 3); the global DB receives membership edges + the
+      // truth; the global DB receives membership edges + the
       // entity→space index.
       const globalDb = this.#db.global?.();
       const batchStats = await applyBatch(this.#db.forSpace!(streamDid), streamDid, decodedEvents, {
@@ -264,11 +264,10 @@ export class StreamManager {
       // but never drives inline: embed enrichment and push delivery are
       // network-bound and must not block sendEvents.
       //
-      // `sendEvents` is NOT a live-only path, and it never was: the Discord
-      // bridge replays history through it (backfillChannel →
-      // ingestDiscordMessage). Assuming otherwise is what let the 2026-09-16
-      // replay flood through — see the freshness gate below, which is the
-      // backfill gate this comment used to claim was unnecessary.
+      // `sendEvents` is NOT a live-only path: the Discord bridge replays
+      // history through it (backfillChannel → ingestDiscordMessage), so a job
+      // poked from here may carry an hours-old message. The freshness gate
+      // below is what keeps that replay from producing pushes.
       const createMessageEvents = appliedEvents.filter(
         (e) =>
           e.type === "space.roomy.message.createMessage.v0" &&
@@ -292,8 +291,8 @@ export class StreamManager {
               createMessageEvents.map((e) => e.id),
             )
           : undefined;
-        // Freshness gate (TASK-151). `sendEvents` is the LIVE write path, but
-        // "live write" does not imply "live message": a replay of historical
+        // Freshness gate. `sendEvents` is the LIVE write path, but "live
+        // write" does not imply "live message": a replay of historical
         // content (the Discord bridge's runBackfill, a client re-submitting an
         // old event) lands here too, and every job poked from here produces an
         // immediate push. Gate on the message's canonical age — the event ULID
@@ -334,8 +333,7 @@ export class StreamManager {
         }
         if (staleSkipped > 0) {
           // Log the drop so a replay is visible in production rather than
-          // silently swallowed (this is the counter that would have named the
-          // 2026-09-16 flood within seconds).
+          // silently swallowed: the count names the replay's scope.
           log.info(
             `[push-freshness] suppressed ${staleSkipped}/${createMessageEvents.length} stale message push(es) for ${streamDid} (older than ${PUSH_MAX_MESSAGE_AGE_MS}ms)`,
           );

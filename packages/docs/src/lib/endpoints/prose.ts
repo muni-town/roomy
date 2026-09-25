@@ -83,7 +83,7 @@ export const prose: Record<string, EndpointProse> = {
   },
   "space.roomy.space.getMetadata": {
     description:
-      "Returns space metadata AND the complete sidebar tree in a single response. The server handles orphan detection (channels not pinned to any category) that was previously done client-side. Channels the caller cannot read are omitted from each category and from orphans.",
+      "Returns space metadata AND the complete sidebar tree in a single response. The server handles orphan detection (channels not pinned to any category). Channels the caller cannot read are omitted from each category and from orphans.",
     auth: "Caller must be a member OR admin of the space.",
     params: [
       { name: "spaceId", type: "string", required: true, description: "DID of the space stream." },
@@ -348,7 +348,7 @@ export const prose: Record<string, EndpointProse> = {
       },
     },
     notes: [
-      "The handle was historically a Leaf-level registration with a leaf:// DID alias; that registration is no longer performed — the handle is only persisted locally.",
+      "The handle is persisted only in the space's own DB; no external registration is performed.",
       "Invalidates getMetadata and getSpaces for all viewers of this space.",
     ],
   },

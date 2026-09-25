@@ -4,7 +4,7 @@
  * The SDK materialiser only deletes the entity rows (the message, and any
  * forward references to it). That is enough for room-scoped READS, but a delete
  * must also unwind the derived state `createMessage` built, or the appserver
- * keeps serving the deleted message from paths it no longer appears in:
+ * keeps serving the deleted message out of derived paths that name it:
  *
  *   - `activity_item` → the deleted message stays in the room's
  *     `recent_message_ids` window and keeps being rendered by the activity feed

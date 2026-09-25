@@ -9,7 +9,7 @@ const PLC_DIRECTORY = process.env.PLC_DIRECTORY_URL ?? "https://plc.directory";
 /**
  * Create a new DID for a stream.
  *
- * Generates a fresh secp256k1 keypair per stream (matching the former Leaf create_did flow).
+ * Generates a fresh secp256k1 keypair per stream.
  * Registers a DID PLC with the PLC directory using the per-stream key as both
  * rotation key and verification method (named "appserver"). The key is stored
  * in the events DB for later PLC operations (rotate service endpoint, update

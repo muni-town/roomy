@@ -12,11 +12,10 @@
  * still reports a latest timestamp, recent participants (the original authors),
  * and a latest message — matching what `selectMessages` displays.
  *
- * Implementation note: the equivalent frontend LiveQuery used a window function
- * with `partition by author` over a SELECT alias and silently returned 0–1
- * members because window functions evaluate before aliases (memory:
- * 2026-01-30). We sidestep that here by using a per-thread aggregate with
- * `json_group_array(distinct ...)` over the top-N most recent messages.
+ * Implementation note: the participant list is a per-thread `json_group_array`
+ * aggregate over the top-N most recent messages, not a window function keyed
+ * on a SELECT alias — window functions evaluate before aliases, so that shape
+ * silently returns 0–1 members. The aggregate sidesteps that.
  */
 
 import type { DbLike } from "../db/types.ts";
@@ -200,10 +199,10 @@ export async function listThreadActivity(
  * `space.roomy.search.rooms` so search results render with the same activity
  * columns as the board views.
  *
- * Served from the `room_activity` projection (TASK-175), which holds the same
+ * Served from the `room_activity` projection, which holds the same
  * facts reduced once per write. `scanRoomActivity` below is the fallback: the
- * projection is an optimisation and a page it cannot answer in full is read the
- * old way, from the messages themselves.
+ * projection is an optimisation, and a page it cannot answer in full is read
+ * from the messages themselves.
  *
  * Rooms with no messages are absent from the map (or carry empty arrays) —
  * callers treat that as "no activity".
@@ -261,14 +260,14 @@ export async function fetchRoomActivity(
 }
 
 /**
- * The pre-projection implementation: derive each room's activity from its
- * messages. Kept as the fallback for a page the projection cannot answer — a
+ * The scan fallback: derive each room's activity from its
+ * messages. Used for a page the projection cannot answer — a
  * room whose row was invalidated, or a handle whose schema predates the table.
  *
  * Its cost is O(messages in scope) — SQLite has no `LIMIT` per group, so the
  * latest message is picked by reading every message in every requested room and
- * reducing in JS (measured: 8001 rows to keep 2 at 8000 messages). That is what
- * the projection replaces.
+ * reducing in JS (measured: 8001 rows to keep 2 at 8000 messages). The
+ * projection exists to avoid exactly that.
  */
 async function scanRoomActivity(
   db: DbLike,

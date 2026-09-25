@@ -264,7 +264,7 @@ export class AsyncDatabase {
     }) as Promise<{ committed: boolean }>;
   }
 
-  /** Abandon a rebuild; the old DB keeps serving. */
+  /** Abandon a rebuild; the canonical DB keeps serving. */
   spaceRebuildAbort(spaceDid: string): Promise<{ aborted: boolean }> {
     return this.#link.send({
       type: "spaceRebuildAbort",

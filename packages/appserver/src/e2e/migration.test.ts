@@ -33,9 +33,8 @@ const SPACE = "did:web:migration-test-space";
 
 /**
  * Create a read-state DB file at schema v6: `user_thread_activity` WITHOUT the
- * `space_did` column (the pre-v7 shape), version row = 6. This is the exact
- * on-disk state that triggered the "no such column: uta.space_did" production
- * incident.
+ * `space_did` column (the pre-v7 shape), version row = 6. This is the on-disk
+ * state a DB written by the v6 code has when boot encounters it.
  */
 function createV6ReadStateDb(path: string): void {
   const db = new Database(path, { create: true });

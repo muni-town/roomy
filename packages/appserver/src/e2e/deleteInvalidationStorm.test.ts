@@ -1,24 +1,24 @@
 /**
- * E2E regression test for the delete-invalidation storm (TASK-134).
+ * E2E test for the delete-invalidation storm.
  *
- * Reported symptom: deleting messages froze the app under a non-stopping
- * stream of `space.roomy.space.getActivityFeed` invalidations.
+ * Symptom: deleting messages freezes the app under a non-stopping stream of
+ * `space.roomy.space.getActivityFeed` invalidations.
  *
- * The amplification had three server-side sources, all exercised here through
+ * The amplification has three server-side sources, all exercised here through
  * the REAL write path (`space.roomy.space.sendEvents` → materialize →
  * InvalidationRouter → SyncManager → WS frames):
  *
- *   1. Per-event fan-out — a batch of N deletes emitted the whole batch-level
+ *   1. Per-event fan-out — a batch of N deletes emits the whole batch-level
  *      signal set N times (N identical `getActivityFeed` invalidations).
- *   2. Every one of those was broadcast to EVERY connection, because
+ *   2. Every one of those is broadcast to EVERY connection, because
  *      getActivityFeed (like getSpaces) is user-scoped and has no topic index
  *      to narrow delivery.
- *   3. The delete left derived state behind: the room kept its
- *      `activity_item` window naming the deleted messages, so the feed kept
- *      serving a room with nothing in it.
+ *   3. A delete must not leave derived state behind: the room's
+ *      `activity_item` window names the deleted messages, so the feed would
+ *      keep serving a room with nothing in it.
  *
- * This test asserts all three are fixed: ONE feed invalidation for a batch of
- * five deletes, and a feed that no longer lists the emptied room.
+ * This test asserts all three hold: ONE feed invalidation for a batch of
+ * five deletes, and a feed that does not list the emptied room.
  *
  * Run: bun test --cwd packages/appserver src/e2e/deleteInvalidationStorm.test.ts
  */
@@ -138,7 +138,7 @@ function deleteMessageEvent(roomId: string, messageId: string) {
   };
 }
 
-describe("delete invalidation storm (TASK-134)", () => {
+describe("delete invalidation storm", () => {
   test(
     "a batch of K deletes produces ONE getActivityFeed invalidation",
     async () => {
@@ -205,7 +205,8 @@ describe("delete invalidation storm (TASK-134)", () => {
       const after = countInvalidations(frames, FEED_NSID);
       const emitted = after - before;
 
-      // THE REGRESSION: this was 5 (one per delete) before the fix.
+      // A batch of deletes must produce ONE feed invalidation, not one per
+      // deleted message.
       expect(emitted).toBe(1);
 
       // The per-message diffs must still be one per deleted message.
@@ -261,8 +262,8 @@ describe("delete invalidation storm (TASK-134)", () => {
       );
       expect(deleteRes.status).toBe(200);
 
-      // THE REGRESSION: the room used to keep its (now meaningless)
-      // activity_item and stay listed. It must disappear entirely.
+      // The room must not stay listed: with every message deleted its
+      // activity window is meaningless and it disappears entirely.
       expect(await feedItem()).toBeNull();
     },
     { timeout: 30000 },

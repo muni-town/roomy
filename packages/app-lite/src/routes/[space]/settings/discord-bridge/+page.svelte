@@ -160,8 +160,8 @@
   // (in order) → active threads nested under their parent, then orphan
   // channels (+ their threads), then anything the sidebar doesn't know yet in
   // API order. The bridge's up-front enumeration makes the panel listable
-  // immediately; archived threads appear only once Phase 2 discovers them
-  // and lands at the end.
+  // immediately; archived threads appear only once the background walk
+  // discovers them and lands at the end.
   const spaceMetaQuery = createSpaceMetadataQuery(() => spaceId, {
     enabled: () => !!spaceId,
   });
@@ -204,8 +204,9 @@
       rows.push({ entry, parentRoomId: slot.parentRoomId });
       placed.add(entry.channelId);
     }
-    // Everything else (structure not synced yet, archived threads Phase 2
-    // just found): API order, threads nested under their parent entry.
+    // Everything else (structure not synced yet, archived threads the
+    // background walk just found): API order, threads nested under their
+    // parent entry.
     for (const entry of backfillChannels) {
       if (placed.has(entry.channelId)) continue;
       const parent = entry.parentId

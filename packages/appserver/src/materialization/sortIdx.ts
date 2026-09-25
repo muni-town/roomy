@@ -1,11 +1,8 @@
 /**
  * Sort-index materialisation for messages.
  *
- * Ported from `packages/app/src/lib/workers/sqlite/worker.ts` —
- * `materializeEntitySortPositionByTimestamp` and `materializeEntitySortPosition`.
- *
- * Kept *outside* the SDK materialisers because the original design
- * deliberately keeps materialisers backfill-agnostic and free of
+ * Kept *outside* the SDK materialisers, which are kept
+ * backfill-agnostic and free of
  * extension-aware ordering logic.
  */
 
@@ -47,12 +44,12 @@ export async function setMessageSortIdxByTimestamp(db: DbLike, event: Event): Pr
  * the entity id — which is the forward event's ULID anyway, so the fallback
  * would place it correctly. This explicit write keeps the sort_idx column
  * populated (consistent with every other message) and makes the forward
- * appear at the top of the destination room's timeline, matching the modern
+ * appear at the top of the destination room's timeline, matching the
  * forward-as-embed representation (createMessage + forward attachment).
  *
- * Previously the original message's sort_idx was copied here, which placed a
+ * Copying the original message's sort_idx here instead would place a
  * forward of an old message deep in history — outside the first getMessages
- * page — so it flashed in via the WS diff and vanished on the next refetch.
+ * page — so it would flash in via the WS diff and vanish on the next refetch.
  * No-op if the entity row is missing (materialiser failed earlier in the
  * batch) or if a sort_idx is already set.
  */
@@ -80,7 +77,7 @@ export async function setMessageSortIdxByForward(db: DbLike, event: Event): Prom
  * it outside the newest-50 page: it would flash into connected clients via
  * the WS `add` diff and vanish on the next refetch. Keying by the move
  * event's time makes the move immediately visible and consistent between the
- * diff and a refetch, which is the same reasoning the `forwardMessages` fix
+ * diff and a refetch, which is the same reasoning `setMessageSortIdxByForward`
  * above applies to a forward of an old message.
  *
  * `comp_content.timestamp` is deliberately NOT rewritten: the message's
@@ -135,7 +132,7 @@ export async function setMessageSortIdxByReorder(
   if (!existing) return; // materialiser failed earlier
 
   // Reorder always overwrites sort_idx — fall through even if one already
-  // exists. This matches the frontend's `update: true` semantics.
+  // exists.
 
   const before = await db
     .query(
@@ -183,8 +180,7 @@ export async function setMessageSortIdxByReorder(
 
 /**
  * Lexicographic midpoint between two ULIDs. If `later` is missing we sort the
- * new entry 10 ms after `earlier`. Mirrors the frontend's `midpointUlid`
- * helper in `worker.ts`.
+ * new entry 10 ms after `earlier`.
  */
 function midpointUlid(earlier: Ulid, later?: Ulid): string {
   if (!later) {

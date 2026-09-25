@@ -1,9 +1,8 @@
 /**
  * Qdrant message-search service configuration.
  *
- * Qdrant is the global message-search index (Phase 2 of
- * docs/plans/search-endpoints.md). The appserver indexes every message as a
- * sparse BM25 vector in the `messages` collection and serves
+ * Qdrant is the global message-search index. The appserver indexes every
+ * message as a sparse BM25 vector in the `messages` collection and serves
  * `space.roomy.search.messages` from it — see `src/search/`.
  *
  * This module is the process-wide config singleton — set once during

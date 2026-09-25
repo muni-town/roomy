@@ -430,7 +430,8 @@ export class BridgeRepository {
 				)
 				.run(spaceDid, channelId);
 			// Re-backfill starts from scratch, so the durable progress record
-			// (phase, window boundary, walk cursor) no longer reflects reality.
+			// (phase, window boundary, walk cursor) must be dropped with the
+			// cursor — keeping it would leave a stale phase and boundary.
 			this.db
 				.prepare(
 					"DELETE FROM backfill_progress WHERE space_did = ? AND channel_id = ?",
@@ -803,7 +804,7 @@ export class BridgeRepository {
 		return row != null;
 	}
 
-	// === Initial structure sync (one-shot, TASK-140) ===
+	// === Initial structure sync (one-shot) ===
 	//
 	// The Discord guild's category structure + channel order is applied to a
 	// space's sidebar exactly once, at initial sync. These methods are the

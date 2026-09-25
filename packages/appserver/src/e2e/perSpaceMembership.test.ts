@@ -1,8 +1,7 @@
 /**
- * E2E coverage for the per-space DB split (Phase 3):
+ * E2E coverage for the per-space DB split:
  *   - membership (joinedSpace/leftSpace) lives ONLY in the global DB
  *   - space data (entities, comp_* tables, member|admin edges) lives in the per-space DB
- *   - there is no monolithic materialised DB
  *
  * These run through the real HTTP transport (test-mode X-Test-Did auth) with
  * :memory: DBs and disabled backfill, mirroring the boot path.

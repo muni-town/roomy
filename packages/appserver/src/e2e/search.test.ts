@@ -1,5 +1,5 @@
 /**
- * E2E coverage for space.roomy.search.messages (Qdrant-backed, Phase 2).
+ * E2E coverage for space.roomy.search.messages (Qdrant-backed).
  *
  * These tests materialize a space through the REAL write path
  * (`space.roomy.space.sendEvents` → applyBatch → per-space DB + search

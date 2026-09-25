@@ -7,7 +7,7 @@
  *
  *   effective(A_channel, did, homeSpace=B) =
  *     origin grant    (A-admin sets read/readwrite for B on the channel)
- *     × receiver grant (B-admin sets per-member/role; Phase 3)
+ *     × receiver grant (B-admin sets per-member/role)
  *
  * Rules:
  *   - An **admin of the receiving space B** gets origin-level access (they
@@ -24,7 +24,7 @@
  * awareness. It is consulted only when the native `roomAccess` denies, so
  * non-federated spaces pay no cost.
  *
- * Threads inherit from their parent channel (see plan §5.5): grants are keyed
+ * Threads inherit from their parent channel: grants are keyed
  * on the canonical parent channel, mirroring `access.ts`'s
  * `permRoom = parentChannelId ?? roomId`.
  */

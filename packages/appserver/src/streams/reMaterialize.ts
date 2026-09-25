@@ -33,15 +33,15 @@ interface RawEvent {
   payload: Uint8Array;
 }
 
-/** Default number of streams re-materialized concurrently (matches the Phase 4 pool default). */
+/** Default number of streams re-materialized concurrently (matches the pool default). */
 export const DEFAULT_REMATERIALIZE_CONCURRENCY = 4;
 
 /**
  * Re-materialize streams that have un-materialized events in the local events DB.
  *
  * Streams are processed with bounded concurrency (up to `concurrency` at
- * once) so different spaces' replay lands on different Phase-4 pool workers
- * in parallel. The cap keeps memory bounded — we never load every stream's
+ * once) so different spaces' replay lands on different pool workers in
+ * parallel. The cap keeps memory bounded — we never load every stream's
  * event batch into memory at once. Within a stream, the un-materialized
  * events are batched — read in one query and materialized in one
  * `applyBatch` call, which is the fastest path for a replay. Streams whose
@@ -89,12 +89,11 @@ export async function reMaterializeFromLocalEvents(
 
   // Partition streams into blue-green rebuilds and incremental catch-ups.
   //
-  // Blue-green (P1/P3/P5/P6): a stream whose canonical per-space DB is on a
-  // STALE schema is rebuilt from the event log into a temp `.sqlite.new` DB
-  // (fresh, current schema) and atomically swapped over the canonical file.
-  // Reads keep serving the old DB until the swap, so a schema bump never
-  // makes a space appear empty. On any failure the temp DB is aborted and the
-  // old DB keeps serving (P6).
+  // A stream whose canonical per-space DB is on a STALE schema is rebuilt from
+  // the event log into a temp `.sqlite.new` DB (fresh, current schema) and
+  // atomically swapped over the canonical file. Reads keep serving the old DB
+  // until the swap, so a schema bump never makes a space appear empty. On any
+  // failure the temp DB is aborted and the old DB keeps serving.
   //
   // A stream whose canonical DB is on the CURRENT schema uses the existing
   // incremental catch-up path unchanged (skip if caught up, else replay the
@@ -123,7 +122,7 @@ export async function reMaterializeFromLocalEvents(
       continue;
     }
 
-    // Phase 3: backfill the global `entity_space` index from this space's
+    // Backfill the global `entity_space` index from this space's
     // per-space DB. Existing per-space DBs materialized before the index
     // existed have no entries, so `openSpaceDbForEntity` would 404 on every
     // room/message. This runs for every current-schema stream (caught up or
@@ -140,10 +139,10 @@ export async function reMaterializeFromLocalEvents(
 
     // Publish this space's `space_stats` aggregate row. Member count only
     // exists in the space's own DB, so the admin dashboard's member-count
-    // ordering needs it precomputed; doing that per request is what made
-    // listSpaces fan out over every space. This sweep runs for every stream on
-    // every boot (caught up or not), so an existing dataset self-heals on the
-    // next deploy and no separate data migration is needed. Idempotent.
+    // ordering needs it precomputed; a per-request aggregate would fan out over
+    // every space. This sweep runs for every stream on every boot (caught up or
+    // not), so an existing dataset self-heals on the next deploy and no separate
+    // data migration is needed. Idempotent.
     try {
       await refreshSpaceStats(db, stream_id as StreamDid);
     } catch (err) {
@@ -153,7 +152,7 @@ export async function reMaterializeFromLocalEvents(
       );
     }
 
-    // Phase 3: the materialization_cursor lives in the per-space DB (each
+    // The materialization_cursor lives in the per-space DB (each
     // space DB is self-describing about its own re-materialization state),
     // not the event-log DB. Read it from the per-space handle. Streams
     // without a cursor row (e.g. after a schema-version wipe, or first boot)
@@ -205,7 +204,7 @@ export async function reMaterializeFromLocalEvents(
 
   // Bounded-concurrency worker pool: up to `cap` streams are replayed at
   // once, each pulling the next pending stream as it finishes. Different
-  // streams hash to different Phase-4 pool workers, so their applyBatch
+  // streams hash to different pool workers, so their applyBatch
   // runs in parallel. The cap keeps memory bounded (never all streams in
   // flight at once) while still using the pool.
   const nextIndex = { i: 0 };
@@ -220,7 +219,7 @@ export async function reMaterializeFromLocalEvents(
         // created and the space is flagged rebuilding BEFORE replay starts
         // (and before any slow profile hydration holds the window open) —
         // otherwise `isSpaceRebuilding` is still false while we replay and the
-        // write gate (P2) wouldn't reject during the window. Idempotent, so it
+        // write gate wouldn't reject during the window. Idempotent, so it
         // is safe alongside the lazy `forSpaceRebuild` auto-begin.
         if (rebuild) {
           await db.spaceRebuildBegin!(streamDid as StreamDid);
@@ -285,14 +284,14 @@ export async function reMaterializeFromLocalEvents(
 
         if (rebuild) {
           // Atomic swap: the temp rebuild DB replaces the canonical file and
-          // routing flips. The cursor was advanced by applyBatch (P5).
+          // routing flips. The cursor was advanced by applyBatch.
           await db.spaceRebuildCommit!(streamDid as StreamDid);
         }
         succeeded++;
       } catch (err) {
         if (rebuild) {
           // Never swap in a broken/partial DB — abort and keep serving the
-          // old DB (P6). The next boot re-runs the rebuild for this stream.
+          // old DB. The next boot re-runs the rebuild for this stream.
           try {
             await db.spaceRebuildAbort!(streamDid as StreamDid);
           } catch {

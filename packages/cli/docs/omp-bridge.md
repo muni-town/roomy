@@ -1,7 +1,6 @@
 # Roomy as a web client for omp — research & ideation
 
 **Status:** research + working MVP prototype
-**Date:** 2026-08-18
 
 ## The idea
 

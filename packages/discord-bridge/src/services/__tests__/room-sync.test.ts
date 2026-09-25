@@ -450,7 +450,7 @@ describe("room-sync — capacity enforcement", () => {
 	});
 });
 
-// ─── Initial structure sync (one-shot, TASK-140) ────────────────────────
+// ─── Initial structure sync (one-shot) ──────────────────────────────────
 
 /** The bridge config the structure tests operate on. */
 const fullConfig: BridgeConfig[] = [
@@ -682,8 +682,8 @@ describe("mergeGuildStructure", () => {
 	});
 
 	test("keeps a channel whose category is missing from the payload", () => {
-		// parentId points at a category the payload no longer reports — the
-		// room must still appear, not vanish from the sidebar.
+		// parentId points at a category absent from the payload — the room
+		// must still appear, not vanish from the sidebar.
 		const structure = {
 			categories: [],
 			channels: [makeChannel({ id: CHANNEL, parentId: "999999999999999999" })],

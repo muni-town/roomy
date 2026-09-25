@@ -1,16 +1,17 @@
 /**
- * E2E regression test for the per-message invalidation fanout (TASK-174, R2).
+ * E2E test for the per-message invalidation fanout.
  *
- * Reported problem: ONE live message produced 5 `#invalidate` frames per
- * subscribed client, each of which forced an HTTP refetch — `room.getMetadata`
- * and `room.getThreads` by every createMessage, and `space.getThreads` too.
- * Four of those five land on endpoints carrying per-room access resolution, so
- * a message became ~16 reads and ~550 DB round-trips across 4 clients.
+ * Problem: ONE live message produces 5 `#invalidate` frames per subscribed
+ * client, each of which forces an HTTP refetch — `room.getMetadata` and
+ * `room.getThreads` by every createMessage, and `space.getThreads` too. Four
+ * of those five land on endpoints carrying per-room access resolution, so a
+ * message becomes ~16 reads and ~550 DB round-trips across 4 clients.
  *
- * R2 replaces the ordering-driven invalidations with a diff: an activity-ordered
- * view is a LIST, and a list only needs the row that moved. This test exercises
- * the REAL write path (`sendEvents` → materialize → InvalidationRouter →
- * SyncManager → WS frames) and asserts the observable frame set.
+ * An activity-ordered view is a LIST, and a list only needs the row that
+ * moved, so it is carried as a diff rather than an ordering-driven
+ * invalidation. This test exercises the REAL write path (`sendEvents` →
+ * materialize → InvalidationRouter → SyncManager → WS frames) and asserts the
+ * observable frame set.
  *
  * It is deliberately stated in terms of what a client receives, not in terms of
  * which internal signal fired: the contract is "a board is patchable from what
@@ -34,7 +35,7 @@ const USER = "did:plc:activity-fanout-user";
 const SPACE = "did:web:space-activity-fanout.example";
 const CHANNEL = newUlid();
 
-/** Boards whose invalidation is what R2 removed from the per-message path. */
+/** Boards that the per-message path must not invalidate. */
 const BOARD_NSIDS = [
   "space.roomy.room.getMetadata",
   "space.roomy.room.getThreads",
@@ -196,7 +197,7 @@ async function subscribedClient(): Promise<{
   return { ctx, ws, sink };
 }
 
-describe("per-message invalidation fanout (TASK-174 R2)", () => {
+describe("per-message invalidation fanout", () => {
   test(
     "one message patches the boards instead of invalidating them",
     async () => {
@@ -211,9 +212,9 @@ describe("per-message invalidation fanout (TASK-174 R2)", () => {
       expect(res.status).toBe(200);
       await activityArrived;
 
-      // THE REGRESSION: before R2 this frame set was
+      // The frame set must not include board invalidations:
       //   #messageDiff:1 #roomMetadataDiff:1 #invalidate:5
-      // and four of those invalidations were the boards plus the feed.
+      // would mean four boards plus the feed were told to refetch.
       for (const nsid of BOARD_NSIDS) {
         expect(invalidationsFor(sink.frames, nsid)).toBe(0);
       }
@@ -233,8 +234,8 @@ describe("per-message invalidation fanout (TASK-174 R2)", () => {
       expect(parsed.activity.latestMembers.map((m) => m.did)).toContain(USER);
       expect(parsed.activity.latestTimestamp).toBeDefined();
 
-      // The per-user unread patch and the message body still arrive: R2 moved
-      // the ORDERING fields to a diff, it did not drop the caller-scoped ones.
+      // The per-user unread patch and the message body still arrive: only the
+      // ORDERING fields move to a diff, the caller-scoped ones do not.
       expect(ofType(sink.frames, "#messageDiff").length).toBe(1);
       expect(ofType(sink.frames, "#roomMetadataDiff").length).toBe(1);
 

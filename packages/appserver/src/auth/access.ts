@@ -5,7 +5,7 @@
  * decision objects. Throws nothing, performs no I/O beyond the passed
  * `Database` handle, and has no awareness of XRPC/HTTP semantics.
  *
- * Coupling rules — see `docs/plans/.llm.2026-05-08-remaining-xrpc-queries.md`:
+ * Coupling rules:
  *   - No imports from `src/xrpc/`, `src/handlers/`, `src/hydration/`.
  *   - No `XrpcError`, no HTTP status codes, no logging.
  *   - HTTP translation lives in `src/xrpc/authGuards.ts` (a separate adapter).
@@ -228,7 +228,7 @@ export interface RoomRow {
  * Returns the resolved row plus the canonical parent channel ID (null when the
  * room is a channel itself, or has no canonical parent link).
  *
- * Reads the `room_access` projection first (TASK-173): it holds exactly the
+ * Reads the `room_access` projection first: it holds exactly the
  * facts this function derives, pre-joined, so a hit replaces up to three
  * queries with one. On a miss it falls back to the live tables and then WARMS
  * the projection with what it computed — the projection doubles as a cache, so

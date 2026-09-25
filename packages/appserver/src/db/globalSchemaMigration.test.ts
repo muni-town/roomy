@@ -1,8 +1,9 @@
 /**
  * Regression coverage for additive global schema upgrades.
  *
- * A v4→v5 bump previously deleted global.sqlite. Per-space cursors remained
- * current, so startup replay skipped every stream and getSpaces stayed empty.
+ * A global schema bump must not delete global.sqlite: per-space cursors stay
+ * current, so startup replay would skip every stream and getSpaces would stay
+ * empty.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -116,10 +117,12 @@ describe("global schema v8 — receiver permission kind widening", () => {
     old.exec("insert into federation_receiver_permissions values ('did:web:a', 'did:web:b', '01ROOM', '01ROLE', 'role', 'readwrite')");
     old.exec("insert into federation_receiver_permissions values ('did:web:a', 'did:web:b', '01ROOM', 'did:plc:user', 'user', 'read')");
     old.run("insert into global_schema_version (id, version) values (1, '7')");
-    // Simulate an interrupted v8 deployment: the version-8 pending marker was
-    // registered at that deployment's init but its task never completed, so
-    // runPendingGlobalMigrations must still replay the rebuild before the v9
-    // task (this mirrors how a production DB upgrading 7 → 9 looks).
+    // Simulate a DB left behind by an interrupted upgrade: the version-8
+    // pending marker was registered at init but its task never completed, so
+    // the global DB carries an uncompleted v8 marker while the table still has
+    // the old constraint. Boot must run the missing v8 task, and the runner
+    // must still replay the rebuild before the v9 task (a DB upgrading 7 → 9
+    // in one step).
     old.run("insert into global_schema_migrations (version, completed_at) values ('8', null)");
     old.close();
 

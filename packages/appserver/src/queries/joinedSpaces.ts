@@ -253,7 +253,7 @@ export async function removeLeftSpaceEdge(
  * fast-paths (`createSpace`/`joinSpace`/`leaveSpace`) for read-after-write
  * consistency before the materialiser lands. The global DB has only the
  * `edges` table (no `entities`), so this writes just the edge — no entity
- * seeding — unlike the monolithic-DB helpers above.
+ * seeding, unlike `recordPersonalSpaceMembership` above.
  *
  * `label` is `JOINED_SPACE_LABEL` or `LEFT_SPACE_LABEL`.
  */

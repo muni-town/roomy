@@ -5,7 +5,7 @@
  * membership, then queries local SQLite for the union of join intent
  * (`joinedSpace` edges from the user DID) and per-space membership truth.
  *
- * When `includeLeft=true`, also returns spaces the user has previously left
+ * When `includeLeft=true`, also returns spaces the user has left
  * (with `isMember=false`).
  */
 

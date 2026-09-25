@@ -3,9 +3,9 @@
  * Source of truth: packages/appserver/src/handlers/space.roomy.room.updateSeen.ts
  *
  * Returns no body — the handler is `ProcedureHandler<UpdateSeenBody, void>`.
- * The router short-circuits void outputs (commit b57ad1ca), so the wire
- * response is empty. We model `Output` as the empty object for parity with
- * how the existing wrappers see it.
+ * The router short-circuits void outputs, so the wire response is empty. We
+ * model `Output` as the empty object for parity with how the existing
+ * wrappers see it.
  */
 import { type } from "arktype";
 

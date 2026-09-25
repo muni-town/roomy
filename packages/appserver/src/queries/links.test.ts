@@ -4,9 +4,8 @@
  * The critical invariant this guards (per the embed sweeper's warning): a
  * link's `entities.room` is the MESSAGE id, NOT the room id. Resolving the
  * room therefore requires the two-hop join `link.room -> msg.id -> msg.room`.
- * A regression here would return the message id as the room id, and a
- * space/room-scoped link query would silently drop every link (or attribute
- * it to the wrong room).
+ * Returning the message id as the room id would make a space/room-scoped link
+ * query silently drop every link (or attribute it to the wrong room).
  */
 
 import { describe, expect, test } from "bun:test";

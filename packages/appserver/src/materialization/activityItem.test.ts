@@ -261,10 +261,10 @@ describe("upsertActivityItem", () => {
     })
 
     test("uses the canonical timestamp, not the ULID time, for bridged messages", async () => {
-      // Regression: bridged messages carry a timestampOverride extension
+      // Bridged messages carry a timestampOverride extension
       // (the original Discord send time), but their ULIDs encode
       // bridge-ingestion time. Ordering the activity window by ULID time
-      // mis-orders bridged threads (getThreads returned them in reverse
+      // mis-orders bridged threads (getThreads returns them in reverse
       // Discord-chronological order). The upsert must use the canonical
       // timestamp for both last_activity_at and the window entries.
       const { db, asyncDb } = freshDb();

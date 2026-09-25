@@ -186,7 +186,7 @@ export class XrpcRouter {
           // Only consult the cache for the configured cacheable set. Auth
           // has already run (above), so the resolved DID in the key is the
           // authenticated identity, not a header value. A cache hit returns
-          // the previously-validated response directly — no re-validation,
+          // the validated response directly — no re-validation,
           // no handler call.
           const cache = this.#queryCache;
           const userDid = auth.did;

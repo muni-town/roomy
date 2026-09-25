@@ -173,7 +173,7 @@ export const UpdateSpaceInfo = defineEvent(
       // Always ensure a comp_space row exists for this space. Without this,
       // a space created with only a name (no allowPublicJoin /
       // allowMemberInvites) never gets a comp_space row from its own stream
-      // (the join-space materializer now writes joinedSpace to the global DB,
+      // (the join-space materializer writes joinedSpace to the global DB,
       // not comp_space). getMetadata would 404.
       sql`
         insert into comp_space (entity)

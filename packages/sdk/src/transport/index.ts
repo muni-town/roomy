@@ -1,5 +1,5 @@
 /**
- * `@roomy-space/sdk` transport module (Slice 3).
+ * `@roomy-space/sdk` transport module.
  *
  * Typed XRPC wrappers that validate every response through the same arktype
  * schemas used by the appserver, plus the registry mapping NSIDs to schemas.

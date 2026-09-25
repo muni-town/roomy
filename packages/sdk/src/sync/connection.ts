@@ -14,8 +14,7 @@
  *    calls disable reconnection entirely.
  *  - CBOR frame decoding: binary frames are decoded via `@atcute/cbor`'s
  *    `decodeFirst` (header + body). Frames are surfaced through `onFrame`
- *    without interpretation — frame-type routing belongs to a higher layer
- *    (see Slice 6 in the SDK thin-client extraction plan).
+ *    without interpretation — frame-type routing belongs to a higher layer.
  *  - Topic resubscription: the set of currently-subscribed topics is tracked
  *    in memory; on reconnect, all topics are re-sent automatically.
  *
@@ -141,7 +140,7 @@ export interface SyncConnectionOptions {
    * The counter resets on a successful open, so this bounds only
    * *consecutive* failures.
    *
-   * Default: unlimited (preserving prior behaviour).
+   * Default: unlimited.
    */
   maxReconnectAttempts?: number;
   /**
@@ -302,12 +301,9 @@ export class SyncConnection {
       const cap = Math.min(this.#backoffBaseMs * 2 ** attempt, this.#backoffMaxMs);
       // Full jitter: random value in [0, cap]. Floor at 1ms: a draw of exactly
       // 0 is indistinguishable from the documented "return a non-positive
-      // number to disable auto-reconnect" signal below, so an unlucky RNG
-      // permanently and silently stopped reconnecting (observed in production:
-      // a bridge logged `Closed: code=1006 intentional=false`, then never
-      // logged a reconnect attempt again while its process stayed alive and
-      // every liveness probe read healthy). Disabling reconnect is the
-      // caller's explicit override, never a default-generator outcome.
+      // number to disable auto-reconnect" signal below, so a zero draw would
+      // silently stop reconnecting. Disabling reconnect is the caller's
+      // explicit override, never a default-generator outcome.
       return Math.max(1, Math.floor(Math.random() * cap));
     });
     this.#configureHeartbeat(opts);
@@ -913,9 +909,8 @@ export class SyncConnection {
     const delay = this.#reconnectDelay(attempt);
     if (!Number.isFinite(delay) || delay <= 0) {
       // The caller's explicit "stop reconnecting" signal (documented on
-      // `reconnectDelay`). This used to be silent, which made a disabled
-      // reconnect indistinguishable in the log from a healthy idle socket —
-      // say so loudly instead, so a stuck-but-alive process is visible.
+      // `reconnectDelay`), logged loudly so a process with auto-reconnect
+      // disabled is distinguishable from a healthy idle socket.
       this.#log(
         `Not reconnecting: reconnectDelay returned ${delay} on attempt ${attempt + 1}`
           + " (auto-reconnect disabled by caller)",
@@ -951,8 +946,7 @@ export class SyncConnection {
 
 /**
  * Decode a binary CBOR frame into its `{ header, body }` pair. Matches the
- * playground's `decodeCborFrame` helper bit-for-bit so wire compat is
- * preserved during the migration.
+ * playground's `decodeCborFrame` helper bit-for-bit so wire compat holds.
  */
 export function decodeCborFrame(data: ArrayBuffer): SyncFrame {
   const bytes = new Uint8Array(data);

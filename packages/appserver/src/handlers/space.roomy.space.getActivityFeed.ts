@@ -64,7 +64,8 @@ export const getActivityFeedHandler: QueryHandler<
   // Each feed item carries its spaceId, so open that item's per-space DB.
   // Group items by space and batch the access checks per space (roomAccessMany)
   // instead of one roomAccess round-trip per item — the feed can span many
-  // spaces, and each item was previously a separate per-space worker round-trip.
+  // spaces, so a per-item check would cost a worker round-trip per space per
+  // item.
   const bySpace = new Map<string, string[]>();
   for (const item of feed) {
     const list = bySpace.get(item.spaceId) ?? [];

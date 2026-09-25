@@ -123,7 +123,7 @@ export async function requireRoomRead(
   }
   if (access.canRead) return access;
 
-  // Federation fallback (Phase 2): the caller may not be a member of this
+  // Federation fallback: the caller may not be a member of this
   // space but may have federated read access via another space they belong
   // to. Only consulted when native access denies.
   if (did !== null) {
@@ -170,7 +170,7 @@ export async function requireRoomWrite(
   }
   if (access.canWrite) return access;
 
-  // Federation fallback (Phase 3): a member of a federated receiving space
+  // Federation fallback: a member of a federated receiving space
   // may write when both the origin and receiver grants allow it.
   if (did !== null) {
     const fed = await federatedRoomAccess(db, openGlobalDb(), roomId, did, {

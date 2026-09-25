@@ -107,10 +107,10 @@ export type MessageSnapshot = MessageDto;
  * each cache entry, so the server never needs to read the absolute count
  * or know the previous value.
  *
- * Replaces the broad `getSpaces` + `space.getMetadata` invalidation that
- * previously fired on every message create — the client patches
- * `room.getMetadata.unreadCount`, the matching `SpaceRow.unreadCount` in
- * `getSpaces`, and the channel's `unreadCount` in the `space.getMetadata`
+ * The frame carries the exact change the client needs, so the broad
+ * `getSpaces` + `space.getMetadata` invalidation is not required: the client
+ * patches `room.getMetadata.unreadCount`, the matching `SpaceRow.unreadCount`
+ * in `getSpaces`, and the channel's `unreadCount` in the `space.getMetadata`
  * sidebar tree directly from the frame, with no refetch.
  */
 export interface RoomMetadataDiff {

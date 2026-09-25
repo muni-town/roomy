@@ -134,7 +134,7 @@ export async function handleReactionRemove(
 	const key = reactionKey(messageId, userId, emoji);
 
 	for (const spaceDid of targetSpaces) {
-		// Find the Roomy reaction event we previously registered
+		// Find the Roomy reaction event registered for this reaction
 		const reactionEventId = repo.getRoomyId(spaceDid, "reaction", key);
 		if (!reactionEventId) {
 			log.debug(`Skipping reaction remove ${key}: no mapping in ${spaceDid}`);

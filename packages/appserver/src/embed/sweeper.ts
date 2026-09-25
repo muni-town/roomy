@@ -8,19 +8,14 @@
  *
  * Why this exists
  * ---------------
- * The original implementation called `enrichPendingLinks` independently from
- * (a) every SpaceMaterializer on every live event batch, (b) once per space
- * at startup, and (c) once per space after backfill. Because every space
- * shares one process-wide DB, each call re-read the *same global* pending
- * list, and because there was no in-flight dedup and no fetch timeout, a
- * single URL was fetched — and errored — dozens-to-hundreds of times while
- * the embed service was slow or down.
- *
- * Centralizing fixes all three amplifiers at once:
+ * Every space shares one process-wide DB, so a per-space fetch path would
+ * re-read the *same global* pending list for each space on every event batch
+ * (and again at startup and after backfill), fetching and erroring the same
+ * URL dozens-to-hundreds of times while the embed service is slow or down.
+ * Centralizing avoids all three amplifiers at once:
  *   - Exactly one in-flight fetch per URL (dedup lives in `enricher.ts`).
  *   - Every fetch has a hard timeout (see `FETCH_TIMEOUT_MS`).
- *   - Sequential processing — never more than one outbound embed request in
- *     flight at a time, so the service can't be flooded.
+ *   - Bounded concurrency (see `CONCURRENCY`) — the service can't be flooded.
  *   - A self-healing idle poll catches links detected during backfill or
  *     carried over from a previous session.
  */
@@ -60,9 +55,9 @@ const IDLE_POLL_MS = 30_000;
  * Age (ms) past which a non-empty, unselected backlog counts as STALLED
  * rather than merely waiting. A backlog whose oldest row is this old while
  * nothing is in flight and a cycle selected nothing means transient-retry
- * backoff is pinning the whole queue. Verified in production: ~5 retry
- * attempts per pending link, backoff capped at 6h, so the queue selects
- * nothing for hours at a time and the backlog never drains. Tunable via env.
+ * backoff is pinning the whole queue. Retry backoff runs to ~5 attempts per
+ * pending link with a 6h cap, so a fully parked queue selects nothing for
+ * hours at a time and never drains. Tunable via env.
  */
 const STALL_AGE_MS = Number(process.env.EMBED_STALL_AGE_MS ?? 30 * 60_000);
 /**
@@ -108,8 +103,8 @@ let statsEnrichmentDiffs = 0;
  * How many times {@link backlogStuck} has CHANGED VALUE since start (both
  * directions). Distinct from `backlogStuckSkipped` (how many cycles the stall
  * persisted through): the two together say whether one backlog is stalled, or
- * whether the gauge is flapping — production showed 957 samples `1`, 484 `0`
- * and 396 transitions in 24h, which took a 1,441-sample range query to see.
+ * whether the gauge is flapping — a range query over samples cannot show
+ * transitions.
  * Exposed on /health/embed and as `roomy_embed_backlog_stuck_transitions_total`.
  */
 let statsBacklogStuckTransitions = 0;
@@ -146,9 +141,8 @@ let dbBackoffUntil = 0;
  *
  * The CAUSE is deliberately not asserted here: {@link stallCause} and
  * {@link lastCycle} carry the measured numbers from the cycle that failed to
- * select, and the warn at the end of {@link sweepCycle} reports them. The
- * previous version hardcoded "all pending links are in transient-retry
- * backoff", which is false whenever the skip set does not cover every pending
+ * select, and the warn at the end of {@link sweepCycle} reports them. A fixed
+ * cause string is false whenever the skip set does not cover every pending
  * ROW — the sweeper's backoff is keyed by URL while the backlog is rows.
  */
 let backlogStuck = false;
@@ -208,11 +202,11 @@ let lastCycle: {
  * The stall cause last WRITTEN to the log, or null before the first line.
  *
  * The log guard compares against THIS, not against `backlogStuck`-scoped
- * state: the flag is cleared by any cycle that selects work, so a 1→0→1 flap
- * used to reset the comparison to `null` and re-log an UNCHANGED cause
- * (measured 2,081–2,640 warn lines/24h, every one of them this message). The
- * latch is cleared only by {@link clearStall} — i.e. by genuine recovery — so
- * a repeated cause is silent and a genuine re-stall is reported again.
+ * state: the flag is cleared by any cycle that selects work, so comparing
+ * against it would reset the comparison to `null` and re-log an UNCHANGED
+ * cause whenever selection flaps.
+ * The latch is cleared only by {@link clearStall} — i.e. by genuine recovery —
+ * so a repeated cause is silent and a genuine re-stall is reported again.
  */
 let loggedStallCause: StallCause | null = null;
 
@@ -243,9 +237,9 @@ function setStall(): void {
  * Called ONLY on genuine recovery — the backlog drained, or rows SETTLED (left
  * `pending_links`) — never merely because a cycle selected work: a trickle of
  * expired backoff windows that fail transiently again selects work and changes
- * nothing, and clearing on it is the measured 396-transitions/24h flap. The
- * log latch resets with it, because the next stall is then a NEW stall rather
- * than a repeat of the one just cleared.
+ * nothing, and clearing on it flaps the stall flag. The log latch resets
+ * with it, because the next stall is then a NEW stall rather than a repeat of
+ * the one just cleared.
  */
 function clearStall(): void {
   if (backlogStuck) {
@@ -461,13 +455,12 @@ async function seedTransientRetry(globalDb: DbLike): Promise<void> {
  * Idle-poll delay the loop uses after a cycle that selected nothing — the
  * pacing of the STALLED path.
  *
- * The empty-selection case is the state production is actually in (`pending`
- * 8.2k, `selectableRows` 0, `lastStallCause` all-parked). It took the plain
- * {@link IDLE_POLL_MS} idle branch forever: the batch is never "full", so a
- * full-batch throttle cannot engage, and every one of those 30-second cycles
- * ran the stall diagnostic (one aggregate plus one probe, each binding a
- * parameter per parked URL — 7,477 of them in production) and re-offered the
- * same log line.
+ * A fully parked backlog (`pending` non-zero, `selectableRows` 0,
+ * `lastStallCause` all-parked) would otherwise take the plain
+ * {@link IDLE_POLL_MS} idle branch forever: the batch is never "full", so the
+ * full-batch throttle cannot engage, and every 30-second cycle runs the stall
+ * diagnostic (one aggregate plus one probe, each binding a parameter per
+ * parked URL) and re-offers the same log line.
  *
  * While the stall persists the poll escalates 30s → 60s → 120s → 240s → 300s
  * and stops at {@link STALL_POLL_MAX_MS}. Bounded on purpose: nothing wakes the
@@ -586,7 +579,7 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
   // One-shot: restore the persisted transient-retry state BEFORE the skip set
   // and the selection that use it. Without this a restart re-fetches every
   // parked URL at once (see seedTransientRetry). Failure just retries next
-  // cycle — an unseeded gate degrades to the old behaviour, it is not a hole.
+  // cycle — an unseeded gate selects more than necessary, it is not a hole.
   if (!retryStateSeeded) {
     try {
       await seedTransientRetry(globalDb);
@@ -767,11 +760,10 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
   // again leaves the backlog exactly as it was — so it neither clears the
   // stall nor resets its counters (see `cycleSettledRows` and clearStall).
   //
-  // The CAUSE is MEASURED here, never assumed. The previous version asserted
-  // "all pending links are in transient-retry backoff" as a fixed string; that
-  // is false whenever a parked URL is pending in more than one message (the
-  // sweeper's backoff is keyed by URL, the backlog by row), and it sent the
-  // next reader hunting a backoff-window problem that was not the whole story.
+  // The CAUSE is MEASURED here, never assumed. A fixed cause string of "all
+  // pending links are in transient-retry backoff" is false whenever a parked
+  // URL is pending in more than one message (the sweeper's backoff is keyed by
+  // URL, the backlog by row).
   // `classifyPendingLinks` counts the ROWS the same skip set excludes, so the
   // numbers in the log line cannot disagree with what the query actually did.
   //
@@ -788,8 +780,8 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
         // Not a stall under this flag's own definition: either nothing is
         // pending (the backlog drained) or its oldest row is not yet stale.
         // Clear rather than keep an event that no longer describes the queue —
-        // the previous code cleared in neither case, so `backlogStuckSince`
-        // could outlive the backlog it was describing.
+        // leaving the flag set would let `backlogStuckSince` outlive the
+        // backlog it describes.
         if (backlogStuck) clearStall();
       } else {
         // Count the rows the SAME skip set excluded, via one aggregate.
@@ -828,14 +820,11 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
           setStall();
           // Log once per cause TRANSITION, latched independently of the
           // `backlogStuck` flag's lifetime. The flag is cleared by any cycle
-          // that selects work, so the old guard (which compared against
-          // flag-scoped state) reset on a 1→0→1 flap and re-logged an
-          // UNCHANGED cause 2,081–2,640×/24h while `roomy_embed_backlog_stuck`
-          // saw 396 transitions. The latch is cleared only by a GENUINE
-          // recovery (see clearStall), so a repeated cause is silent and a new
-          // stall after real recovery is reported again;
-          // `backlogStuckTransitions` makes any remaining flap countable
-          // without a 1,441-sample range query.
+          // that selects work, so a guard comparing against flag-scoped state
+          // resets on a 1→0→1 flap and re-logs an UNCHANGED cause. The latch is
+          // cleared only by a GENUINE recovery (see clearStall), so a repeated
+          // cause is silent and a new stall after real recovery is reported
+          // again; `backlogStuckTransitions` makes any remaining flap countable.
           if (cause !== loggedStallCause) {
             loggedStallCause = cause;
             if (cause === "all-parked") {
@@ -850,7 +839,7 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
               // A re-run of the selection returned nothing while selectable
               // rows exist: a real bug (the query, the skip-set bind, or the
               // two call sites reading different populations). ERROR, not warn
-              // — this is the state the old fixed-cause message concealed.
+              // — a fixed-cause message would conceal it.
               log.error(
                 `[embed-sweeper] backlog stalled: oldest pending row is ${age}m old ` +
                   `and the last cycle selected nothing — cause=selectable-but-absent ` +
@@ -877,8 +866,8 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
       // Rows left `pending_links` this cycle, so the queue IS draining — the
       // stall is over. A cycle that selected work but settled NOTHING (the
       // trickle of expired backoff windows that fail transiently again) has
-      // changed nothing, and clearing the flag on it is exactly the measured
-      // 396-transitions/24h flap that also reset the log latch.
+      // changed nothing, and clearing the flag on it flaps the stall gauge and
+      // resets the log latch.
       clearStall();
     } else if (backlogStuck) {
       // Still stalled and this cycle's work changed nothing — count it so the

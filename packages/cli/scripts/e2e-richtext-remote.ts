@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * End-to-end test of the rich-text (blocks+facets) message path against a
- * LIVE appserver (the head of the rich-text-migration branch).
+ * LIVE appserver.
  *
  * Exercises the full wire round-trip through the real HTTP transport:
  *   1. `space.roomy.space.sendEvents` with a new-format createMessage
@@ -14,8 +14,8 @@
  *
  * Env (same as the CLI):
  *   ATPROTO_IDENTIFIER / ATPROTO_APP_PASSWORD  (app-password login)
- *   APPSERVER_URL                             (e.g. https://meri-agent-4.exe.xyz)
- *   APPSERVER_DID                             (e.g. did:web:meri-agent-4.exe.xyz)
+ *   APPSERVER_URL                             (e.g. https://my-appserver.example.com)
+ *   APPSERVER_DID                             (e.g. did:web:my-appserver.example.com)
  *   E2E_CLEANUP                               ("false" keeps the test space)
  *
  * Usage:

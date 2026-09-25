@@ -35,7 +35,7 @@ export const connectSpaceHandler: QueryHandler<
 
   const parsed = StreamDid.assert(did);
 
-  // Phase 3: comp_room / comp_info / edges / entities live in the
+  // comp_room / comp_info / edges / entities live in the
   // per-space DB, not the event-log DB.
   const db = openSpaceDb(parsed);
   const rooms = await db

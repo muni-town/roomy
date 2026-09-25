@@ -3,11 +3,10 @@
  * the preference store, and the evaluator.
  *
  *   silent — no notifications
- *   quiet  — silent except mentions (mentions land in Phase 3; until then
- *            quiet behaves like silent)
- *   engaged — mentions + occasional digest prompts for missed conversations
- *             (digest lands in Phase 2; until then engaged runs digest-only
- *             and is effectively silent for immediate pushes)
+ *   quiet  — silent except mentions and replies to your own messages, which
+ *            get an immediate push
+ *   engaged — mentions and replies get an immediate push; other messages are
+ *             batched into occasional digest prompts for missed conversations
  *   busy   — push on every new message in readable rooms you're in
  */
 export type Level = "silent" | "quiet" | "engaged" | "busy";

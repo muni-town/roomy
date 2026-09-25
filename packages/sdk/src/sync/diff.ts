@@ -1,16 +1,13 @@
 /**
  * Hardcoded message-diff applicator.
  *
- * Per Slice 6 of the SDK thin-client extraction plan, diff applicators live
- * directly in the SDK rather than in a pluggable registry — we have one
- * diffable surface today (messages); generalising can wait until a second
- * one appears.
+ * Diff applicators live directly in the SDK rather than in a pluggable
+ * registry — messages are the only diffable surface.
  *
  * `applyMessageDiff` must tolerate `undefined` as `prev` because the
- * `#messageDiff` stream can race ahead of the initial `getMessages` fetch
- * (per commit `749992c1`). When there is no existing cached list, we
- * construct one from the diff's `add`/`update` ops (skipping `remove`s
- * with no target).
+ * `#messageDiff` stream can race ahead of the initial `getMessages` fetch.
+ * When there is no existing cached list, we construct one from the diff's
+ * `add`/`update` ops (skipping `remove`s with no target).
  */
 import { Message as MessageSchema } from "../schemas/queries/_message";
 import { Op as OpSchema } from "../schemas/frames/messageDiff";

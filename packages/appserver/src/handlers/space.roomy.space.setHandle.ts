@@ -1,13 +1,11 @@
 /**
  * XRPC: space.roomy.space.setHandle (procedure).
  *
- * Sets or removes a space handle for a space (DNS-based approach).
- * Updates the DID document with a handle alias (historically leaf://), or removes it when
- * handle is null.
+ * Sets or removes a space handle for a space (DNS-based approach). The handle
+ * is persisted in the space's own DB below for fast query access; a `null`
+ * handle removes it.
  *
  * Requires admin access on the space.
- *
- * @see packages/appserver/docs/plans/app-lite-space-handle.md
  */
 
 import { openSpaceDb } from "../db/db.ts";
@@ -60,11 +58,9 @@ export const setHandleHandler: ProcedureHandler<SetHandleBody, void> = async (
     );
   }
 
-  // setHandle was formerly a Leaf operation; the handle is now persisted in the local DB below.
-
   // ── Persist handle in local DB for fast query access ────────────
-  // Phase 3: the per-space DB is the source of truth for `comp_space`; the
-  // monolithic DB no longer exists, so there is no dual-write.
+  // The per-space DB is the source of truth for `comp_space`; there is no
+  // second DB to dual-write.
   if (handle !== null) {
     await db.run(
       `update comp_space set handle = ?, updated_at = unixepoch() * 1000 where entity = ?`,

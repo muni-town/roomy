@@ -3,7 +3,7 @@
  *
  * Enriches a URL with link metadata (OpenGraph + oEmbed discovery) served by
  * the appserver. Returns the same `LinkEmbedData` shape used on message link
- * embeds, so the frontend's `LinkCard` can render the result unchanged.
+ * embeds, so the client's `LinkCard` can render the result unchanged.
  *
  * All fields optional — a URL may yield partial data or none at all.
  */

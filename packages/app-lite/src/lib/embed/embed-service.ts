@@ -2,12 +2,10 @@
  * Client-side link-embed enrichment.
  *
  * The composer reaches out to the **appserver's** `space.roomy.embed.getLinkMetadata`
- * XRPC query to enrich a URL into link metadata for a pre-send preview. This
- * replaces the old path where the browser hit an external embed service
- * directly — enrichment now lives in the appserver (OpenGraph + oEmbed
- * discovery), so it's authenticated, CORS-free, and the seam where
- * ATProto-native enrichment (DID resolution, HappyView, PDS fetches) will
- * later be layered in.
+ * XRPC query to enrich a URL into link metadata for a pre-send preview.
+ * Enrichment lives in the appserver (OpenGraph + oEmbed discovery), so it's
+ * authenticated and CORS-free, and it's the seam where ATProto-native
+ * enrichment (DID resolution, HappyView, PDS fetches) will later be layered in.
  *
  * The endpoint returns the SDK's `LinkEmbedData` shape, which the existing
  * `LinkCard` component renders unchanged.

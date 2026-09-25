@@ -44,7 +44,7 @@
   args={{
     resolveState: {
       status: "success",
-      data: { name: "Meri Forest", allowPublicJoin: true },
+      data: { name: "Test Space", allowPublicJoin: true },
     },
     joinState: { status: "idle" },
     pushEnabled: false,
@@ -57,7 +57,7 @@
   args={{
     resolveState: {
       status: "success",
-      data: { name: "Meri Forest", allowPublicJoin: false },
+      data: { name: "Test Space", allowPublicJoin: false },
     },
     joinState: { status: "idle" },
     pushEnabled: false,

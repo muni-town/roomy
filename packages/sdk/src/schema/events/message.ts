@@ -164,7 +164,7 @@ export const CreateMessage = defineEvent(
         // missing original (deleted before the forward, not-yet-materialised,
         // or cross-space) does not trip the `edges.tail` foreign key and fail
         // the entire event — the forward message is still created, just
-        // without the edge. This mirrors the legacy forwardMessages event.
+        // without the edge. The `forwardMessages` event uses the same guard.
         statements.push(sql`
           insert or ignore into edges (head, tail, label)
           select
@@ -520,13 +520,11 @@ export const ForwardMessages = defineEvent(
       `,
     ]);
   },
-  // Depend on the original message(s) only — NOT our own id. Listing `x.id`
-  // here made every forwardMessages event depend on itself, which the legacy
-  // worker's stash gate can never satisfy (an event's own id is never in the
-  // already-applied set when it's first considered), so forward events were
-  // permanently stashed and never materialised. The original message must
-  // exist first because the forward edge references it, so we depend on
-  // exactly those ids — matching MoveMessages.
+  // Depend on the original message(s) only — NOT our own id. An event's own id
+  // is never in the already-applied set when it is first considered, so listing
+  // `x.id` would make every forwardMessages event depend on itself and stash it
+  // forever. The original message must exist first because the forward edge
+  // references it, so we depend on exactly those ids — matching MoveMessages.
   (x) => [...x.messageIds],
 );
 

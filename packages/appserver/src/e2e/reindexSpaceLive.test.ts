@@ -8,10 +8,10 @@
  * @qdrant/js-client-rest over the network, real BM25 encode + query. That is
  * the check the fake-Qdrant e2e tests cannot make.
  *
- * Reproduces the prod condition — a space whose backfill cursor has advanced
- * PAST messages absent from the index, which the background sweeper therefore
- * never revisits — runs the real admin procedure, then asserts the skipped
- * messages are searchable through the real search path.
+ * Reproduces the production condition — a space whose backfill cursor has
+ * advanced PAST messages absent from the index, which the background sweeper
+ * therefore never revisits — runs the real admin procedure, then asserts the
+ * skipped messages are searchable through the real search path.
  *
  * Usage:
  *   1. Start Qdrant:  docker run -d --rm -p 6333:6333 qdrant/qdrant:v1.12.4
@@ -147,7 +147,7 @@ describe("LIVE reindexSpace against real Qdrant", () => {
       if (res.status !== 200) throw new Error(`sendEvents ${res.status}: ${await res.text()}`);
     }
     // The live indexer already upserted these as they were sent. To reproduce
-    // the prod hole faithfully the index must be genuinely EMPTY while the
+    // the condition faithfully the index must be genuinely EMPTY while the
     // cursor sits past every message — otherwise the repair under test has
     // nothing to repair and the assertion is vacuous. Delete the points and
     // let the queue drain so no late upsert re-adds them behind our back.
@@ -204,8 +204,8 @@ describe("LIVE reindexSpace against real Qdrant", () => {
     expect(body.drained).toBe(true);
     expect(body.failed).toBe(0);
 
-    // ── Verify in real Qdrant: every message indexed, and the previously
-    //    skipped message is retrievable by a real BM25 query ──
+    // ── Verify in real Qdrant: every message indexed, and the skipped
+    //    message is retrievable by a real BM25 query ──
     const after = await real.count("messages", {
       filter: { must: [{ key: "spaceDid", match: { value: SPACE } }] },
       exact: true,

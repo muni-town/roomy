@@ -1,10 +1,10 @@
 /**
- * `room_activity` projection maintenance contract (TASK-175, R3).
+ * `room_activity` projection maintenance contract.
  *
  * The projection only exists to make board reads cheap, so the tests that matter
  * are the ones that pin what would make it *wrong*: an event that moves a room's
  * latest message and is not reflected, or a replay that leaves a stale row
- * behind. Exact equality with the pre-projection read path is asserted in
+ * behind. Exact equality with the scan read path is asserted in
  * `queries/threadActivity.test.ts`, against the same fixtures the read path
  * already uses.
  */

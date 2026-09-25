@@ -56,11 +56,11 @@ const CONCURRENCY = 4;
 /**
  * Hard cap on how many rooms get a first-page message prefetch per space entry.
  *
- * `preloadRoomMessages` used to prefetch *every* readable room in a space. For
- * a large room set that made each space-open × concurrent-user fan a
- * `getMessages` burst out to O(rooms) per-user DB queries — a load-amplifier on
- * the space worker (getMessages is not in the server response cache). Rooms past
- * the cap are not prefetched; they fetch their first page lazily on mount.
+ * Prefetching *every* readable room in a space would make each space-open ×
+ * concurrent-user fan a `getMessages` burst out to O(rooms) per-user DB queries
+ * — a load-amplifier on the space worker (getMessages is not in the server
+ * response cache). Rooms past the cap are not prefetched; they fetch their
+ * first page lazily on mount.
  */
 const MAX_ROOM_PREFETCH = 12;
 

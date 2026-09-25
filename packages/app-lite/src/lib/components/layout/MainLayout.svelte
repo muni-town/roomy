@@ -174,9 +174,9 @@
            the directory → space transition) instead of overlaying it.
            Absolute positioning keeps the row at a constant 256px (no layout
            jump / overlap), and the row's overflow-hidden clips the slide.
-           Animating transform only — no max-width curtain — avoids the
-           content being clipped mid-slide, which previously caused the
-           sidebar to flash in partway through. -->
+           Animating transform only — no max-width curtain — keeps the
+           content from being clipped mid-slide, which would make the
+           sidebar flash in partway through. -->
       <div
         class="absolute inset-y-0 left-0 w-64 h-full flex flex-col big-sidebar-wrapper"
         class:big-sidebar-hidden={onHomepage || serverBar.expanded}
@@ -235,8 +235,8 @@
   /* ── BigSidebar wrapper: pure translateX slide on the compositor.
      The row clips at 256px so the slide never overflows the main panel.
      No max-width animation: animating both max-width and translateX with
-     overflow:hidden previously clipped the content partway through the
-     slide, making the sidebar flash in mid-transition. ── */
+     overflow:hidden clips the content partway through the slide, making the
+     sidebar flash in mid-transition. ── */
   .big-sidebar-wrapper {
     contain: layout style paint;
     transition: transform 400ms cubic-bezier(0.33, 1, 0.68, 1);
@@ -297,7 +297,7 @@
 
   /* ── Space header wrapper: constant 256px bar above the sidebar row.
      The space selector overlays the row below instead of pushing the
-     sidebar wider, so this no longer animates. ── */
+     sidebar wider, so this wrapper does not animate. ── */
   .sidebar-header-wrapper {
     z-index: 50;
     width: 256px;

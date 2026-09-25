@@ -22,7 +22,7 @@
  * length), and NOT reproducible when it isn't (the room has to displace a row
  * we never loaded). Rather than assert an order the server would not return,
  * the patcher reports the miss and the router falls back to invalidating that
- * query — the pre-diff behaviour, always correct.
+ * query, which is always correct.
  *
  * ## Backdated messages
  *

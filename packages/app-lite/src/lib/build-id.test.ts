@@ -35,7 +35,7 @@ describe("resolveBuildId", () => {
   // The exact shape Dockerfile.app-lite produces when built without
   // --build-arg RAILWAY_GIT_COMMIT_SHA: `ENV BUILD_ID=${SHA%...}` is "".
   // A raw `??` chain keeps that "", which is indistinguishable from a real
-  // identity to every consumer downstream — the trap PR #216 fixed appserver-side.
+  // identity to every consumer downstream.
   test("an empty BUILD_ID falls through to the platform sha", () => {
     assert.equal(resolveBuildId({ BUILD_ID: "", RAILWAY_GIT_COMMIT_SHA: SHA }), SHA);
   });

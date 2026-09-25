@@ -5,21 +5,19 @@ import * as path from "node:path";
 import { BoundedTail, createOmpEventSink, parseOmpJson, runOmp } from "./omp.js";
 
 /**
- * Regression coverage for the responder crash of 2026-09-14 on bramble.
+ * Coverage for the responder surviving long omp runs.
  *
- * The scout job ran ~29 minutes and streamed NDJSON events the whole time.
- * `runOmp` accumulated the entire stream (`out += d.toString()` in the stdout
- * `data` handler) and only parsed it at process exit. Once the run's stdout
- * crossed V8's maximum string length the handler threw
- * `RangeError: Invalid string length` — an uncaught exception inside a stream
- * callback, so it killed the responder process mid-job rather than failing the
- * one job. The dead responder broke the pipeline's pipe, and omp then exited
- * with its own `EPIPE: broken pipe, write` unhandled rejections.
+ * A run streams NDJSON events for its whole duration; accumulating them in the
+ * stdout `data` handler and parsing at exit throws `RangeError: Invalid string
+ * length` once the stream crosses V8's maximum string length — an uncaught
+ * exception inside a stream callback, so it kills the responder process mid-job
+ * rather than failing the one job. A dead responder breaks the pipeline's pipe,
+ * and omp exits with its own `EPIPE: broken pipe, write` unhandled rejections.
  *
- * The fix removes unbounded accumulation entirely: raw stdout/stderr are kept
- * only as bounded tails (BoundedTail) for the last-resort fallback reply, and
- * the structured result is reduced event by event (createOmpEventSink), so
- * retained memory is O(largest single message), independent of run length.
+ * `runOmp` keeps raw stdout/stderr only as bounded tails (BoundedTail) for the
+ * last-resort fallback reply and reduces the structured result event by event
+ * (createOmpEventSink), so retained memory is O(largest single message),
+ * independent of run length.
  */
 
 const messageEnd = (text: string) =>

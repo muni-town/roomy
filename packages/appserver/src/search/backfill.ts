@@ -1,5 +1,5 @@
 /**
- * Qdrant backfill sweeper (Phase 2).
+ * Qdrant backfill sweeper.
  *
  * On boot, re-index messages that are missing from Qdrant. The appserver
  * keeps a per-space cursor in the global DB (`search_backfill_cursor`); each
@@ -370,8 +370,8 @@ async function sweepOneSpace(
   if (lastOkId !== null) {
     // Advance only past the last non-failed row. A failed upsert (e.g. a
     // Qdrant 507) keeps the cursor before it, so the next cycle retries it
-    // instead of skipping it forever (the pre-fix behaviour skipped every
-    // failed batch — 1,758 messages lost in the Sep 2026 507 incident).
+    // instead of skipping it forever (advancing past a failed batch loses
+    // every message in it).
     await setCursor(globalDb, spaceDid, lastOkId);
   } else if (rows.length > 0) {
     // Every sweepable row failed. Do NOT advance the cursor — retry the
@@ -459,9 +459,9 @@ export interface SpaceBackfillResult {
  *
  * Clears the space's `search_backfill_cursor` row and tight-loops
  * {@link sweepOneSpace} until the space is walked to its end. This is the
- * targeted repair for a cursor that has advanced PAST unindexed messages
- * (e.g. the Sep 2026 gap, where a cursor-advance bug skipped a contiguous
- * ULID range): the background sweeper never revisits such a space — its
+ * targeted repair for a cursor that has advanced PAST unindexed messages (a
+ * cursor-advance bug can skip a contiguous ULID range): the background
+ * sweeper never revisits such a space — its
  * cursor reads as "caught up" — and {@link runBackfillCatchUp} would
  * re-index every space to fix one.
  *

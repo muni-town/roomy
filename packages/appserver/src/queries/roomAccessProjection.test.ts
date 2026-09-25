@@ -1,5 +1,5 @@
 /**
- * `room_access` projection maintenance contract (TASK-173).
+ * `room_access` projection maintenance contract.
  *
  * The one behaviour here that is a HARD requirement rather than an
  * optimisation: **rematerialisation must not populate projections**. Replay

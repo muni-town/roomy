@@ -1,11 +1,10 @@
 /**
- * Regression tests for shareable-link origins.
+ * Tests for shareable-link origins.
  *
- * The bug: invite links were built from `location.origin`, which in the Tauri
- * desktop app is `tauri://localhost` — links copied out of the desktop invite
- * modal could not be opened by anyone else. These tests pin the rule that
- * replaces it: links are rooted at the public web origin unless the document
- * *is* the public web deployment.
+ * `location.origin` in the Tauri desktop app is `tauri://localhost`, so links
+ * built from it could not be opened by anyone else. These tests pin the rule:
+ * links are rooted at the public web origin unless the document *is* the public
+ * web deployment.
  *
  * Written against `node:test` + `node:assert` (available without adding a
  * dependency to app-lite; app-lite ships no test runner of its own) so the file
@@ -28,7 +27,7 @@ const TOKEN = "invite-token";
 
 describe("resolveShareOrigin", () => {
   test("uses the public web origin in the desktop app", () => {
-    // The reported bug: the webview document origin reached every link.
+    // The webview document origin must not reach the link.
     assert.equal(
       resolveShareOrigin(PUBLIC_ORIGIN, Tauri, null),
       PUBLIC_ORIGIN,

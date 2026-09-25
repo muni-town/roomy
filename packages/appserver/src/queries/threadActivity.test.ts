@@ -602,7 +602,7 @@ describe("threadActivity", () => {
 });
 
 /**
- * `room_activity` read parity (TASK-175, R3).
+ * `room_activity` read parity.
  *
  * The projection replaces a scan of every message in scope, so the only
  * assertion that matters is that the two produce the SAME board — otherwise the
@@ -807,14 +807,13 @@ describe("scanRoomActivity parity: in-process vs IPC", () => {
 
   /**
    * The scan's cost over IPC is the payload it structured-clones back, and the
-   * message body is the largest column in it. Every message in every requested
-   * room used to be returned with its body so the fold could pick one per room:
-   * 20 messages across 2 rooms is 20 bodies to keep 2 (measured on the
-   * 124k-message probe space: 1724 rows and 196 kB to keep 50, at ~100 ms).
+   * message body is the largest column in it. Returning every message with its
+   * body so the fold can pick one per room would send 20 bodies across 2 rooms
+   * to keep 2.
    *
    * This pins the payload, not the answer — the parity tests above already hold
-   * the answer. It fails on the pre-change shape regardless of how fast the
-   * machine is, because it counts the bytes rather than timing them.
+   * the answer. It counts the bytes rather than timing them, so it fails on a
+   * body-returning shape regardless of how fast the machine is.
    */
   test("the IPC scan does not return a body for a message it discards", async () => {
     const { db, asyncDb } = freshDb();
@@ -851,8 +850,8 @@ describe("scanRoomActivity parity: in-process vs IPC", () => {
     expect(result.get(THREAD_C)!.latestMessage!.content).toBe(BODY);
 
     // The widest single statement must not carry all 20 bodies. The 2 kept
-    // bodies plus the JSON scaffolding are ~9 kB; the pre-change statement
-    // returned all 20 (~82 kB).
+    // bodies plus the JSON scaffolding are ~9 kB; a statement returning all 20
+    // would be ~82 kB.
     const widest = Math.max(...seen.map((s) => s.bytes));
     expect(widest).toBeLessThan(20 * BODY.length);
     const total = seen.reduce((a, s) => a + s.bytes, 0);

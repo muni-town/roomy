@@ -1,5 +1,5 @@
 /**
- * Qdrant client wrapper for the global message index (Phase 2).
+ * Qdrant client wrapper for the global message index.
  *
  * Owns the process-wide `QdrantClient` (constructed from the config
  * singleton in `src/qdrant.ts`) and the `messages` collection schema:

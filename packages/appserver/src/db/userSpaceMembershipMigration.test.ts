@@ -180,9 +180,8 @@ describe("runPendingReadStateMigrationsWithRetry", () => {
   test("stamps structural-only versions and refuses unknown ones", async () => {
     // A `kind: "structural"` version has no async task: the worker created its
     // tables via the schema exec, and boot must simply stamp the marker rather
-    // than look for a task. v8, v9 and v10 regressed this at the type level
-    // before the manifest existed; that direction is now a compile error, so
-    // this asserts the runtime behaviour the manifest drives.
+    // than look for a task. A task registered for a structural version is a
+    // compile error, so this asserts the runtime behaviour the manifest drives.
     //
     // Use a real in-process sqlite DB (via toAsyncDb) so the runner sees
     // concrete pending rows without the worker-pool lifecycle that makes a

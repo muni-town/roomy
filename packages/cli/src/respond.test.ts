@@ -33,18 +33,17 @@ const fakeXrpc = {
   procedure: async () => ({ messageId: "msg:test" }),
 } as never;
 
-describe("respond reclaims a stranded active job (TASK-154)", () => {
+describe("respond reclaims a stranded active job", () => {
   test(
     "an active job behind a dead holder's stale lock is reclaimed without any stdin event",
     { timeout: 20_000 },
     async () => {
-      // Real wall-clock timers are required here: the defect is that the
-      // responder's *drain timer* never fires the pump when a job is stranded
-      // in `active` (only when `enqueued` is non-empty). The test must let the
-      // timer tick on the platform clock for real and verify the pump reclaims
-      // the orphan without an external stdin event. Fake timers cannot drive
-      // the async pump's genuine file I/O under the lock, so deterministic time
-      // control is not a substitute.
+      // Real wall-clock timers are required here: the pump is driven by the
+      // drain timer's tick, so the test must let the timer tick on the platform
+      // clock for real and verify the pump reclaims a job stranded in `active`
+      // (nothing `enqueued`) without an external stdin event. Fake timers
+      // cannot drive the async pump's genuine file I/O under the lock, so
+      // deterministic time control is not a substitute.
       const dir = tmpdir();
       const queueFile = path.join(dir, "queue.json");
       const lockFile = `${queueFile}.lock`;
@@ -77,8 +76,8 @@ describe("respond reclaims a stranded active job (TASK-154)", () => {
         await new Promise((r) => setTimeout(r, 100));
 
         // Now a dead holder strands a job in `active`: its process crashed mid
-        // job while its lock was still within TTL (so the boot heal, which only
-        // requeues when the lock is already stale, was a no-op at startup).
+        // job while its lock was still within TTL: the boot heal only requeues
+        // when the lock is already stale, so it does nothing at startup here.
         const queue = new QueueStore(queueFile);
         const job = queue.enqueue("cron", cronPayload("orphaned"));
         queue.claim(job.id);

@@ -19,10 +19,8 @@
  * materialisation and the `getProfile` handler. It can be missing a row for
  * a real user (backfill/fetch failure, a freshly-cleared store, or a user
  * seen for the first time after the backfill that materialised everyone
- * else). Previously this read path silently returned a fallback (the message
- * row's own author fields) for those users — so `getMessages` could omit a
- * profile that the profile page (which hydrates on demand via HappyView then
- * Bluesky) reliably showed.
+ * else). The profile page shows such a user because it hydrates on demand via
+ * HappyView then Bluesky; a read of this store alone must not omit them.
  *
  * To make reads as reliable as the profile page, DIDs that aren't in the
  * global store are hydrated on demand (HappyView-first, Bluesky fallback) and
@@ -69,19 +67,17 @@ const cache = new Map<string, CacheEntry>();
 /**
  * In-flight background hydrations, keyed by DID.
  *
- * A profile fetch is a third-party HTTP round-trip, and it used to sit inside
- * the caller's request: `room.getMessages` blocked on it, so a slow HappyView
- * or Bluesky became a slow message list (measured on the real pipeline: a
- * 300 ms upstream moved the read p50 from 3 ms to 308 ms, 1:1). No fetch is
- * on that path any more — reads serve whatever the global `profiles` row
- * already holds and the fetch lands in the background for the next read.
+ * A profile fetch is a third-party HTTP round-trip, so it must never sit
+ * inside the caller's request: `room.getMessages` blocking on it would make a
+ * slow HappyView or Bluesky a slow message list. No fetch runs on that path —
+ * reads serve whatever the global `profiles` row already holds and the fetch
+ * lands in the background for the next read.
  *
  * The map is what keeps that from multiplying the fetches: without it, N
- * concurrent readers of the same unknown author each launched their own batch
- * (measured: 25 readers → 25 upstream requests). With it, the second reader of
- * a DID already in flight joins the existing promise and issues nothing. The
- * negative cache covers the sequential case (a DID that resolved to nothing);
- * this covers the concurrent one.
+ * concurrent readers of the same unknown author each launch their own batch.
+ * With it, the second reader of a DID already in flight joins the existing
+ * promise and issues nothing. The negative cache covers the sequential case (a
+ * DID that resolved to nothing); this covers the concurrent one.
  */
 const hydrationInflight = new Map<string, Promise<void>>();
 
@@ -142,10 +138,10 @@ export function _setTestGetProfiles(
 }
 
 function entryToFields(entry: CacheEntry): ProfileFields | null {
-  // `''` is not a handle: it's what an older revision of the profile write
-  // path stored for Roomy-record users (whose records carry no handle). Treat
-  // it as absent so consumers fall back to name/did instead of rendering an
-  // empty `@`, and so the row is eligible for handle hydration below.
+  // `''` is not a handle: the profile write path stores it for Roomy-record
+  // users (whose records carry no handle). Treat it as absent so consumers
+  // fall back to name/did instead of rendering an empty `@`, and so the row is
+  // eligible for handle hydration below.
   const handle = entry.handle || null;
   if (entry.name === null && handle === null && entry.avatar === null) {
     return null;
@@ -209,8 +205,8 @@ export async function resolveProfiles(
  *
  * This function never touches the network itself. Fetching a profile is a
  * third-party HTTP round-trip to HappyView/Bluesky, and parking the caller's
- * request on it is what made a message list as slow as its slowest profile
- * lookup; the fetch now runs detached and whatever it writes is visible to the
+ * request on it would make a message list as slow as its slowest profile
+ * lookup; the fetch runs detached, and whatever it writes is visible to the
  * next read.
  *
  * `allowNetworkFetch: false` keeps the global-store read (an indexed SQLite
@@ -270,8 +266,8 @@ async function resolveFromGlobalDb(
   if (!allowNetworkFetch) return;
 
   const notInDb = dids.filter((d) => !present.has(d));
-  // Rows that exist but carry no usable handle — the `''` an older revision
-  // of the profile write path left behind. Hydrate them too, so the row heals
+  // Rows that exist but carry no usable handle — the `''` the profile write
+  // path stores for Roomy-record users. Hydrate them too, so the row heals
   // rather than being pinned to a handle-less profile forever (the write path
   // treats `''` as absent, so a successful fetch replaces it).
   const handleless = rows.filter((r) => !r.handle).map((r) => r.did);

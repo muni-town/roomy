@@ -788,10 +788,10 @@ export class SyncManager {
 
   /**
    * Send #invalidate for all room-scoped queries to one connection.
-   * Called when a client subscribes to a room topic that it was
-   * previously unsubscribed from. This ensures the client re-fetches
-   * fresh data rather than serving stale TanStack cache entries that
-   * accumulated while it wasn't subscribed.
+   * Called when a client subscribes to a room topic while not already
+   * subscribed to it. This ensures the client re-fetches fresh data rather
+   * than serving stale TanStack cache entries that accumulated while it was
+   * unsubscribed.
    */
   #sendRoomInvalidation(state: ConnectionState, roomId: string): void {
     const roomNsids: Array<{ nsid: QueryNsid }> = [

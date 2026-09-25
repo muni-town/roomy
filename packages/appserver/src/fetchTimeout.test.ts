@@ -3,7 +3,8 @@
  *
  * `fetch` has no timeout of its own, and on these paths the thing awaiting it
  * is a user request: a HappyView (or PDS, or appview) that accepts the
- * connection and then says nothing used to hold that request open forever.
+ * connection and then says nothing would otherwise hold that request open
+ * forever.
  * These tests pin the bound against a real server that never responds, rather
  * than against a mocked `fetch` — the behaviour under test is what `fetch`
  * does with an aborted signal, which a mock would replace.

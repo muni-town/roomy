@@ -130,8 +130,7 @@ create table if not exists push_preferences (
 ) strict;
 
 -- "User sent a message / participated in this room" signal. Used by the
--- Engaged digest to restrict prompts to rooms you've spoken in. (Phase 2
--- populates this; the table exists from schema v3 so it's ready.)
+-- Engaged digest to restrict prompts to rooms you've spoken in.
 create table if not exists user_room_participation (
   user_did         text not null,
   room_id          text not null,
@@ -144,8 +143,7 @@ create index if not exists idx_user_room_participation_user
 
 -- Per (user, room) digest state for the Engaged "occasional prompts". One
 -- row = one pending/fulfilled batch of unseen messages since the user last
--- opened the room. Reset (deleted) by the updateSeen handler. (Phase 2
--- drives this; the table exists from schema v3 so it's ready.)
+-- opened the room. Reset (deleted) by the updateSeen handler.
 create table if not exists notification_state (
   user_did            text not null,
   room_id             text not null,

@@ -21,9 +21,9 @@ export const CreateRoomLink = defineEvent(
       // createRoomLink would otherwise flip 1 → 0 and corrupt the thread's
       // parent channel. `on conflict do nothing` makes re-materialisation
       // safe — the first write establishes the payload and later writes
-      // (re-backfill, replay) leave it untouched. (The legacy `insert or
-      // replace` form re-evaluated the subquery each time, so its 2nd pass
-      // saw the row from the 1st and set canonical_parent to 0.)
+      // (re-backfill, replay) leave it untouched. `insert or replace` would
+      // instead re-evaluate the subquery each pass, so its second pass sees
+      // the row from the first and sets canonical_parent to 0.
       sql`
           insert into edges (head, tail, label, payload)
           values (

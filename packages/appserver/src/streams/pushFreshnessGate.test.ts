@@ -1,15 +1,14 @@
 /**
- * Push freshness gate at the `sendEvents` enqueue site (TASK-151).
+ * Push freshness gate at the `sendEvents` enqueue site.
  *
- * The 2026-09-16 flood: the Discord bridge's `runBackfill` replayed historical
- * Discord messages through the LIVE `sendEvents` path. Every one produced an
- * immediate push, because the enqueue site poked the dispatcher with every
- * createMessage and nothing checked how old the message actually was — the
- * only time carried was the event ULID's, which is fresh for a replay.
+ * The Discord bridge's `runBackfill` replays historical Discord messages
+ * through the LIVE `sendEvents` path. Each one would otherwise produce an
+ * immediate push, because the enqueue site pokes the dispatcher with every
+ * createMessage — the only time carried is the event ULID's, which is fresh
+ * for a replay.
  *
- * These tests observe the enqueue seam directly (`pokePushDispatcher`), so
- * they fail on pre-fix code: pre-fix, a replayed day-old message produced a
- * job identically to a live one.
+ * These tests observe the enqueue seam directly (`pokePushDispatcher`), so a
+ * replayed day-old message must not produce a job the way a live one does.
  */
 
 import { describe, expect, test, beforeEach } from "bun:test";
@@ -71,7 +70,7 @@ describe("sendEvents — push freshness gate", () => {
     expect(jobs[0]!.roomId).toBe(ROOM);
   });
 
-  test("historical message ingested now is NOT poked (the flood)", async () => {
+  test("historical message ingested now is NOT poked", async () => {
     // Replay shape: the event ULID is fresh (ingested this instant) but the
     // message's canonical time is a day old.
     const dayAgo = Date.now() - 24 * 60 * 60 * 1000;

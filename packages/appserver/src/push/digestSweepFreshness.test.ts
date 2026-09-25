@@ -1,18 +1,17 @@
 /**
- * Digest sweep freshness gate (TASK-151).
+ * Digest sweep freshness gate.
  *
- * The other half of the flood. `selectDueDigests` returns rows whose 1h timer
- * elapsed; the sweep runs on every idle wake (60s poll) and fires one digest
- * push per row. Rows are only deleted when the user reopens the room, so a
- * backlog that accumulated across a restart — or was seeded by a replay —
- * fires the moment the process comes back, up to 64 pushes/minute of
- * hours-old messages. That deploy-coupling is what made the 2026-09-16 flood
- * look index-triggered: the rows did not exist before the replay, and the
- * deploy was simply the next restart that swept them.
+ * The digest-side half of the push replay problem. `selectDueDigests` returns
+ * rows whose 1h timer elapsed; the sweep runs on every idle wake (60s poll) and
+ * fires one digest push per row. Rows are only deleted when the user reopens
+ * the room, so a backlog that accumulated across a restart — or was seeded by a
+ * replay — fires the moment the process comes back, up to 64 pushes/minute of
+ * hours-old messages.
  *
- * The sweep is driven directly (no loop, no wall-clock wait): the defect is
- * that the sweep had no age ceiling, and `selectDueDigests` returning a row is
- * itself still correct — asserting on the query alone would pass pre-fix.
+ * The sweep is driven directly (no loop, no wall-clock wait). What these tests
+ * must pin is the age ceiling itself: `selectDueDigests` returning a row is
+ * correct on its own, so asserting on the query would not catch a missing
+ * ceiling.
  */
 
 import { describe, expect, test, afterEach } from "bun:test";
@@ -74,16 +73,17 @@ describe("push/dispatcher — digest sweep freshness", () => {
   test("a stale pending batch is dropped, never fired", async () => {
     const db = freshDb();
     const room = "01STALEROOM00000000000000";
-    // The flood shape: the batch started long before the process came back,
-    // so its 1h timer is long past and `selectDueDigests` considers it due.
+    // Stale batch: it started long before the process came back, so its 1h
+    // timer is long past and `selectDueDigests` considers it due.
     await seedPending(db, room, Date.now() - PUSH_MAX_DIGEST_AGE_MS - 60_000);
 
     await _runDigestSweep(db);
 
     // Dropped — not delivered (no subscription exists, so a delivery would
     // also be invisible; the row state is the real signal), and not left
-    // pending for the next 60s poll to re-examine. Pre-fix the row survives
-    // (the sweep only ever marks it notified when a subscription exists).
+    // pending for the next 60s poll to re-examine. With no age ceiling the row
+    // survives (the sweep only ever marks it notified when a subscription
+    // exists).
     expect(await stateOf(db, room)).toBeNull();
     expect(pushDispatcherStats().digestsFired).toBe(0);
   });
@@ -98,8 +98,8 @@ describe("push/dispatcher — digest sweep freshness", () => {
     await _runDigestSweep(db);
 
     // No subscription → nothing delivered, but the row is marked notified
-    // rather than deleted, which is the pre-existing "fired, do not re-fire"
-    // behaviour. (Dropping it instead is the stale path above.)
+    // rather than deleted, the normal "fired, do not re-fire" behaviour.
+    // (Dropping it instead is the stale path above.)
     expect((await stateOf(db, room))?.notified).toBe(1);
   });
 

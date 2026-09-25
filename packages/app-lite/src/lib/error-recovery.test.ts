@@ -1,11 +1,11 @@
 /**
- * Regression test for the unhandled `vite:preloadError` dead-end.
+ * Tests for recovery from an unhandled `vite:preloadError`.
  *
- * The bug: a deploy replaces the hashed chunks under `/_app/immutable/`. A tab
- * opened before it holds an old document, so the next dynamic import of a chunk
+ * A deploy replaces the hashed chunks under `/_app/immutable/`. A tab opened
+ * before it holds an old document, so the next dynamic import of a chunk
  * invalidated by that deploy rejects; Vite's `__vitePreload` helper dispatches a
- * `vite:preloadError` event on `window` (and rethrows). Nothing listened, so the
- * rethrow surfaced as an unhandled rejection — a dead-end with no recovery.
+ * `vite:preloadError` event on `window` (and rethrows). Unhandled, the rethrow
+ * is a dead-end with no recovery.
  *
  * What these tests pin is the recovery contract: the event reloads the page,
  * through the SAME rate-limited path as the ATProto trigger, so the budget still

@@ -12,9 +12,9 @@
 -- The `materialization_cursor` table lives here too (one row per stream):
 -- each space DB is self-describing about its own re-materialization state.
 --
--- Materialiser functions in the SDK target the monolithic schema shape
--- (column names and types must stay in sync with the frontend schema), so
--- the per-space shape mirrors it exactly for the tables that remain.
+-- Materialiser functions in the SDK emit column names and types this file
+-- must stay in sync with, so the per-space shape mirrors them exactly for the
+-- tables that remain.
 --
 -- IMPORTANT: keep the per-space version constant in sync whenever this file
 -- changes (see src/db/db.ts, SPACE_SCHEMA_VERSION).
@@ -350,7 +350,7 @@ create table if not exists materialization_cursor (
   materialized_to integer not null default -1
 ) strict;
 
--- Denormalised read projection (TASK-173): the room→space→parent→access facts
+-- Denormalised read projection: the room→space→parent→access facts
 -- that `auth/access.ts:resolveRoom` re-derives per room, per request, per
 -- caller. Those three queries are 36 of the ~50 DB round-trips
 -- `room.getThreads` spends (measured in perf/probe-projections.ts).
@@ -372,7 +372,7 @@ create table if not exists room_access (
 
 create index if not exists idx_room_access_space on room_access(space_id);
 
--- Denormalised read projection (TASK-175, R3): each room's latest message and
+-- Denormalised read projection: each room's latest message and
 -- its distinct recent authors, reduced once per write instead of once per
 -- board read. `fetchRoomActivity` otherwise reads EVERY message in EVERY room
 -- in scope to pick one per room (measured: 8001 rows to keep 2 at 8000

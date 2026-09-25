@@ -1,7 +1,7 @@
 /**
  * Whether a message body renders anything visible.
  *
- * The regression this defends: a forward with no commentary renders an empty
+ * The failure this defends: a forward with no commentary renders an empty
  * bubble below the forwarded message, because the forwarder's body is a
  * blocks+facets document whose base64 encoding is a non-empty string even
  * when it holds no content. Testing `content` for truthiness therefore says

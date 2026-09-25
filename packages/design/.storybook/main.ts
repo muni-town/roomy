@@ -22,10 +22,10 @@ const config: StorybookConfig = {
   },
   core: {
     disableTelemetry: true,
-    // The exe.dev proxy forwards the original Host header
-    // (meri-agent-2.exe.xyz); Storybook's own host-validation middleware
-    // (core-server) rejects unknown hosts by default — this must be set at
-    // the core level, not vite `server.allowedHosts`.
+    // The dev proxy forwards requests with the original Host header;
+    // Storybook's own host-validation middleware (core-server) rejects
+    // unknown hosts by default — this must be set at the core level, not
+    // vite `server.allowedHosts`.
     allowedHosts: true,
   },
   viteFinal: async (viteConfig) => {
@@ -58,9 +58,9 @@ const config: StorybookConfig = {
       plugins: [...extraPlugins, ...(viteConfig.plugins ?? [])],
       server: {
         ...(viteConfig.server ?? {}),
-        // The exe.dev proxy forwards requests with the original Host header
-        // (meri-agent-2.exe.xyz); Vite 6 rejects unknown hosts by default.
-        // Mirrors app-lite's vite config (server.allowedHosts: true).
+        // The dev proxy forwards requests with the original Host header;
+        // Vite 6 rejects unknown hosts by default. Mirrors app-lite's vite
+        // config (server.allowedHosts: true).
         allowedHosts: true,
       },
       optimizeDeps: {

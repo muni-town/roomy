@@ -1,11 +1,10 @@
 /**
- * Worker pool for per-space DBs (Phase 4 of docs/plans/per-space-dbs.md).
+ * Worker pool for per-space DBs.
  *
- * Before Phase 4 every SQLite operation in the process ran on one `Bun.Worker`
- * thread, serialized through one `postMessage` queue. This module fans the
- * per-space DBs out across a pool of N workers, hash-routed by `spaceDid`, so
- * different spaces' materialization and reads run on different threads in
- * parallel.
+ * This module fans the per-space DBs out across a pool of N workers,
+ * hash-routed by `spaceDid`, so different spaces' materialization and reads
+ * run on different threads in parallel rather than serialized through one
+ * `postMessage` queue.
  *
  * Topology:
  *   - N "space" workers: open per-space DBs (`data/spaces/<spaceDid>.sqlite`)
@@ -21,14 +20,12 @@
  *   - 1 "events" worker: owns the event-log DB (`data/roomy-events.sqlite`).
  *
  * The three shared DBs each get a DEDICATED worker so a slow query on any one
- * doesn't serialize the other two (previously global, read-state and event-log
- * all shared a single "system" worker thread). The global worker is still a
- * single thread by design: the cross-space lookups that land on it
+ * doesn't serialize the other two. The global worker is a single thread by
+ * design: the cross-space lookups that land on it
  * (`entity_space` resolution, federation grants) are low-frequency.
  *
- * The pool is a drop-in replacement for the single `WorkerLink` behind
- * `openSpaceDb`: `forSpace(spaceDid)` returns an `AsyncDatabase` pinned to the
- * owning worker with the same `{ targetDb: "space", spaceDid }` route.
+ * `forSpace(spaceDid)` returns an `AsyncDatabase` pinned to the owning worker
+ * with the `{ targetDb: "space", spaceDid }` route `openSpaceDb` uses.
  */
 
 import { AsyncDatabase, WorkerLink } from "./asyncDatabase.ts";
@@ -62,9 +59,8 @@ export interface PoolInitOptions {
 
 /**
  * Owns N per-space workers + 3 dedicated workers (global, readstate, events).
- * Handles are `AsyncDatabase`s
- * routed to the correct worker, so callers can't tell the pool from the old
- * single worker.
+ * Handles are `AsyncDatabase`s routed to the correct worker, so callers cannot
+ * observe the routing.
  */
 export class DatabasePool {
   readonly #poolLinks: WorkerLink[];
@@ -118,7 +114,7 @@ export class DatabasePool {
     return this.forSpace(spaceDid).spaceRebuildCommit(spaceDid);
   }
 
-  /** Abandon a rebuild; the old DB keeps serving. */
+  /** Abandon a rebuild; the canonical DB keeps serving. */
   spaceRebuildAbort(spaceDid: string): Promise<{ aborted: boolean }> {
     return this.forSpace(spaceDid).spaceRebuildAbort(spaceDid);
   }
@@ -216,9 +212,9 @@ export class DatabasePool {
   }
 
   /**
-   * Per-worker observability (Phase 4 evaluation): pool size and in-flight
-   * request counts per worker. Lets an operator see whether load is spreading
-   * across the pool and the three shared-DB workers, or collapsing onto one.
+   * Pool size and in-flight request counts per worker. Lets an operator see
+   * whether load is spreading across the pool and the three shared-DB workers,
+   * or collapsing onto one.
    */
   stats(): {
     size: number;
@@ -242,8 +238,7 @@ export class DatabasePool {
  * exec/prepare/transaction) target the event-log DB on the events worker;
  * `forSpace`/`global`/`readState`/`events`/`backfillEntitySpace` dispatch to
  * the correct worker. This is what `StreamManager`, `reMaterialize` and the
- * handlers see — it satisfies `DbLike` exactly like the old single-worker
- * `AsyncDatabase` did.
+ * handlers see — it satisfies `DbLike`.
  */
 export class PooledDatabase implements DbLike {
   readonly #pool: DatabasePool;

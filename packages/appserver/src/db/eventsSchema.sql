@@ -26,9 +26,8 @@ create table if not exists stream_state (
     latest_event integer not null default 0
 ) strict;
 
--- Per-stream DID signing keys, mirroring the former Leaf did_keys/did_owners tables (one-time migration source).
--- Each stream gets its own k256 keypair for PLC operations (rotation key +
--- verification method). Migrated from Leaf's leaf.db for existing streams.
+-- Per-stream DID signing keys. Each stream gets its own k256 keypair for PLC
+-- operations (rotation key + verification method).
 create table if not exists dids (
     did text primary key
 ) strict;

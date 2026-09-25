@@ -33,8 +33,7 @@ export function isInitializing(): boolean {
 /** Cached profile for the current session, set reactively after login. */
 let profile = $state<{ handle: string; did: string; avatar: string; displayName?: string } | null>(null);
 
-// Direct XRPC client (replaces the proxied agent pattern).
-// Created lazily once the agent is available.
+// Direct XRPC client, created lazily once the agent is available.
 let serviceAuth: InstanceType<typeof ServiceAuthClient> | null = null;
 let directXrpc: InstanceType<typeof DirectXrpcClient> | null = null;
 

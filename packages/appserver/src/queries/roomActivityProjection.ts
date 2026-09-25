@@ -1,12 +1,12 @@
 /**
- * `room_activity` read projection (TASK-175, R3).
+ * `room_activity` read projection.
  *
  * `queries/threadActivity.ts:fetchRoomActivity` answers "what is each room's
  * latest message, its timestamp, and who has spoken recently" by reading
  * **every message in every room in scope** and reducing in JS — SQLite has no
  * `LIMIT` per group. Measured at 8000 messages it returns 8001 rows to keep 2,
  * and it is the reason `space.getThreads` moves 7 ms → 42 ms as a channel grows
- * (`perf/probe-projections.ts`, `denormalised-read-projections.md` §Scaling).
+ * (`perf/probe-projections.ts`).
  * It is O(rows in scope), it runs on every board read, and no cache absorbs it.
  *
  * This module maintains one row per room holding the reduced answer:
@@ -25,10 +25,10 @@
  *
  * Nothing here is an authorisation input: it is a summary of rows that live in
  * this same DB, so it cannot disagree with the event log the way a projected
- * `default_access` could (`roomAccessProjection.ts` — the TASK-173 finding). The
- * only way to move it is to add or remove a message, and both are handled below.
+ * `default_access` could (`roomAccessProjection.ts`). The only way to move it
+ * is to add or remove a message, and both are handled below.
  * A wrong or missing row is also recoverable in both directions: the read path
- * falls back to the legacy scan, and every write path re-derives the affected
+ * falls back to the live scan, and every write path re-derives the affected
  * rooms from the live tables rather than accumulating deltas.
  *
  * ## Maintenance
@@ -63,7 +63,7 @@ import { log } from "../log.ts";
  * `ts` is that author's newest message time, and is null for a message with an
  * author but no content timestamp — the "x joined the space" system message the
  * join materialiser writes. The board still lists such an author (they have
- * spoken in the room), ordered last, which is what the pre-projection scan does.
+ * spoken in the room), ordered last, matching the scan fallback.
  */
 export interface RoomActivityAuthor {
   did: string;
@@ -96,7 +96,7 @@ export interface RoomActivitySummary {
  * one-room and the many-room case alike, with no placeholder count to get wrong.
  *
  * Timestamps are deliberately NOT filtered here: an author's newest message may
- * have no content timestamp (a system message), and the pre-projection scan
+ * have no content timestamp (a system message), and the scan fallback
  * lists that author anyway. The two consumers below differ accordingly — the
  * latest message must have a time, its authors need not.
  */
@@ -145,7 +145,7 @@ function rebuildRoomActivitySql(roomIds: readonly string[]): {
            ),
            authors as (
              -- Distinct authors and their newest message time — the same
-             -- aggregate the pre-projection scan runs (group by room + author,
+             -- aggregate the scan fallback runs (group by room + author,
              -- taking max(timestamp)), so the member list, its order, and the
              -- 3-member cap it feeds all agree with it.
              --

@@ -117,10 +117,9 @@ export const createSpaceHandler: ProcedureHandler<
 
   // ── 4. Record the membership in the local DB ────────────────────────
   // getSpaces identifies joined spaces by a `joinedSpace` edge (head =
-  // caller DID). Membership now lives in the global DB, so the edge is
-  // written directly to both the monolithic DB (Phase-1 read source) and
-  // the global DB (the membership store) for read-after-write consistency
-  // before the materialiser lands. Idempotent.
+  // caller DID). Membership lives in the global DB, so the edge is written
+  // there directly for read-after-write consistency before the materialiser
+  // lands. Idempotent.
   await recordGlobalMembership(
     openGlobalDb(),
     spaceId,

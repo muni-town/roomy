@@ -6,9 +6,9 @@
  *
  *   request → approve → origin grant → receiver grant → federated read → federated write
  *
- * This is the integration test the Phase 5 plan calls for: it proves the
- * cross-space access, global-DB registry, and materialization all line up
- * through the real HTTP transport (not direct DB pokes).
+ * This integration test proves the cross-space access, global-DB registry,
+ * and materialization all line up through the real HTTP transport (not direct
+ * DB pokes).
  */
 
 import { describe, expect, test, beforeEach } from "bun:test";
@@ -233,8 +233,8 @@ describe("channel federation — full HTTP E2E chain", () => {
     // 11. The federated channel follows native-channel unread semantics.
     // MEMBER_B's earlier getMetadata (step 8) lazily created her read
     // position at 0; the message at step 9 bumped it to 1 — so the
-    // receiving space's sidebar now shows the unread dot for a federated
-    // channel (the fix for "federated channels never show unreads").
+    // receiving space's sidebar shows the unread dot for a federated
+    // channel, matching native-channel semantics.
     res = await ctx.authedFetch(MEMBER_B)(
       `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${B}`,
     );
@@ -482,9 +482,9 @@ describe("channel federation — full HTTP E2E chain", () => {
     });
 
     // Simulate B's per-space DB being on a stale schema that predates
-    // comp_info (blue-green serves the old file until rebuilt): drop the
-    // table so the name lookup throws. The handler must degrade to the DID
-    // instead of 500ing the whole outgoing list.
+    // comp_info (a blue-green rebuild serves the pre-rebuild file until it is
+    // rebuilt): drop the table so the name lookup throws. The handler must
+    // degrade to the DID instead of 500ing the whole outgoing list.
     (ctx.db as any).forSpace(B).run("drop table comp_info");
 
     const res = await ctx.authedFetch(ADMIN_A)(

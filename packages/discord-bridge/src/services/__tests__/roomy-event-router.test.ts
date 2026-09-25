@@ -307,16 +307,15 @@ describe("RoomyEventRouter", () => {
 
 	/**
 	 * RER33: a legacy text/markdown body containing raw mention anchor HTML
-	 * (as produced by the composer's tiptap-markdown serializer before
-	 * TASK-59) is bridged as clean text — no `<a` tags, no `data-*`
-	 * attributes reach Discord.
+	 * (as produced by the composer's tiptap-markdown serializer) is bridged as
+	 * clean text — no `<a` tags, no `data-*` attributes reach Discord.
 	 */
 	test("RER33: strips raw mention HTML from legacy text/markdown bodies", async () => {
 		const { roomy, discord, router } = setup();
 		await router.subscribeToSpace(SPACE_A);
 
 		const rawHtml =
-			'<a href="/user/did:plc:mmyj7mk7kh3jqhw6zs4prbuk" class="mention !no-underline" data-id="did:plc:mmyj7mk7kh3jqhw6zs4prbuk" data-label="Meri" data-mention-suggestion-char="@">@Meri</a>';
+			'<a href="/user/did:plc:mmyj7mk7kh3jqhw6zs4prbuk" class="mention !no-underline" data-id="did:plc:mmyj7mk7kh3jqhw6zs4prbuk" data-label="Alice" data-mention-suggestion-char="@">@Alice</a>';
 		const event = makeCreateMessageEvent({
 			id: ROOMY_MESSAGE_ULID,
 			body: makeTextBody(rawHtml),
@@ -326,7 +325,7 @@ describe("RoomyEventRouter", () => {
 
 		expect(discord.sent).toHaveLength(1);
 		const content = discord.sent[0]?.content;
-		expect(content).toBe("@Meri");
+		expect(content).toBe("@Alice");
 		expect(content).not.toContain("<a");
 		expect(content).not.toContain("data-");
 	});
@@ -345,7 +344,7 @@ describe("RoomyEventRouter", () => {
 				mimeType: "text/plain",
 				data: toBytes(
 					new TextEncoder().encode(
-						'<a href="/user/did:plc:abc" data-label="Meri">@Meri</a> hello',
+						'<a href="/user/did:plc:abc" data-label="Alice">@Alice</a> hello',
 					),
 				),
 			},
@@ -354,14 +353,13 @@ describe("RoomyEventRouter", () => {
 		await roomy.fireEvent(SPACE_A, event);
 
 		expect(discord.sent).toHaveLength(1);
-		expect(discord.sent[0]?.content).toBe("@Meri hello");
+		expect(discord.sent[0]?.content).toBe("@Alice hello");
 	});
 
 	/**
 	 * RER35: a markdown autolink (`<https://…>`) in a legacy text/markdown body
-	 * must reach Discord intact as a bare URL — it is a link, not an HTML tag.
-	 * The old `<[^>]*>` stripper deleted it wholesale, which dropped the link
-	 * from the bridged Discord message.
+	 * must reach Discord intact as a bare URL — it is a link, not an HTML tag,
+	 * so the stripper must not delete it wholesale.
 	 */
 	test("RER35: bridges a markdown autolink in legacy markdown as a bare URL", async () => {
 		const { roomy, discord, router } = setup();
@@ -384,8 +382,8 @@ describe("RoomyEventRouter", () => {
 
 	/**
 	 * RER36: HTML-looking text that is neither a tag nor an autolink (e.g.
-	 * "I <3 x") passes through untouched — the narrowed stripper must not
-	 * delete text between `<` and a later `>` the way `<[^>]*>` did.
+	 * "I <3 x") passes through untouched — the stripper matches tag-shaped
+	 * spans only, so text between `<` and a later `>` survives.
 	 */
 	test("RER36: keeps non-tag angle-bracket text in legacy markdown", async () => {
 		const { roomy, discord, router } = setup();
@@ -403,7 +401,7 @@ describe("RoomyEventRouter", () => {
 	});
 
 	/**
-	 * RER02: editMessage updates the previously bridged Discord message.
+	 * RER02: editMessage updates the bridged Discord message.
 	 */
 	test("RER02: bridges editMessage to Discord", async () => {
 		const { roomy, discord, router, repo } = setup();
@@ -434,7 +432,7 @@ describe("RoomyEventRouter", () => {
 	});
 
 	/**
-	 * RER03: deleteMessage removes the previously bridged Discord message and
+	 * RER03: deleteMessage removes the bridged Discord message and
 	 * clears the mapping.
 	 */
 	test("RER03: bridges deleteMessage to Discord and clears mapping", async () => {
@@ -464,7 +462,7 @@ describe("RoomyEventRouter", () => {
 	});
 
 	/**
-	 * RER04: addReaction adds the emoji to the previously bridged Discord message.
+	 * RER04: addReaction adds the emoji to the bridged Discord message.
 	 */
 	test("RER04: bridges addReaction to Discord", async () => {
 		const { roomy, discord, router, repo } = setup();
@@ -599,7 +597,7 @@ describe("RoomyEventRouter", () => {
 	/**
 	 * RER35: editMessage with a rich text (blocks+facets) body is decoded and
 	 * bridged to Discord as rendered Discord markdown — the same path the
-	 * app-lite composer uses when editing a richtext message (TASK-64).
+	 * app-lite composer uses when editing a richtext message.
 	 */
 	test("RER35: bridges a rich text editMessage to Discord", async () => {
 		const { roomy, discord, router, repo } = setup();
@@ -636,9 +634,9 @@ describe("RoomyEventRouter", () => {
 
 	/**
 	 * RER36: editMessage for a message in a bridged thread resolves the
-	 * parent channel's webhook and edits the message in the thread channel.
-	 * Regression test for TASK-64: without the parent-channel webhook the
-	 * edit would target the wrong webhook and Discord would 404.
+	 * parent channel's webhook and edits the message in the thread channel:
+	 * without the parent-channel webhook the edit would target the wrong
+	 * webhook and Discord would 404.
 	 */
 	test("RER36: bridges editMessage in a thread via the parent webhook", async () => {
 		const { roomy, discord, router, repo } = setup();
@@ -1343,9 +1341,8 @@ test("RER32: falls back to a plain message when reply target is not bridged", as
 /**
  * RER37: A modern forward — a createMessage carrying a
  * `space.roomy.attachment.forward.v0` embed with an empty body — is bridged
- * to Discord as a faux forward (TASK-110). Previously the bridge skipped it
- * entirely: forward.v0 was unknown to #extractAttachments and a bare forward
- * had nothing else renderable.
+ * to Discord as a faux forward: `forward.v0` is recognised by
+ * #extractAttachments, and a bare forward renders the forward block.
  */
 test("RER37: bridges a bare forward attachment as a faux forward via webhook", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1389,7 +1386,7 @@ test("RER37: bridges a bare forward attachment as a faux forward via webhook", a
 
 /**
  * RER38: A modern forward with commentary keeps the commentary AND renders
- * the forward block below it — the commentary is not dropped (TASK-110).
+ * the forward block below it — the commentary is not dropped.
  */
 test("RER38: bridges a forward with commentary as commentary plus faux forward", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1426,7 +1423,7 @@ test("RER38: bridges a forward with commentary as commentary plus faux forward",
 
 /**
  * RER39: a reply.v0 and a forward.v0 on one message coexist — the faux reply
- * prefix, the commentary, and the faux forward block all render (TASK-110).
+ * prefix, the commentary, and the faux forward block all render.
  */
 test("RER39: a reply and a forward on one message render both blocks", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1483,10 +1480,9 @@ test("RER39: a reply and a forward on one message render both blocks", async () 
 /**
  * RER40: A Roomy reply to a parent that was itself bridged to Discord as a
  * faux reply quotes the DIRECT parent's own text — the grandparent link from
- * the parent's `-# ↪` prefix line must not leak into the snippet. Pre-fix, the
- * snippet was a raw 50-char slice of the parent's Discord content, whose
- * leading marker line consumed the whole window and truncated mid-snowflake
- * (TASK-30).
+ * the parent's `-# ↪` prefix line must not leak into the snippet: the snippet
+ * is the parent's own text, not a raw slice whose leading marker line would
+ * consume the whole window and truncate mid-snowflake.
  */
 test("RER40: reply snippet is the direct parent's own text, not its inherited faux prefix", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1535,7 +1531,7 @@ test("RER40: reply snippet is the direct parent's own text, not its inherited fa
  * RER41: A faux forward of an original that was itself bridged to Discord as
  * a faux reply shows the original's own text as the forwarded body — the
  * original's `-# ↪` marker line is stripped, not duplicated under the
- * "Forwarded from" block (TASK-30).
+ * "Forwarded from" block.
  */
 test("RER41: forward body is the original's own text, not its inherited faux prefix", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1579,7 +1575,7 @@ test("RER41: forward body is the original's own text, not its inherited faux pre
  * RER42: When a reply's parent has no own text after stripping its faux
  * prefix line (e.g. a forward whose original was deleted, bridged as
  * `-# ↪ Forwarded from …` with an empty body), the faux reply falls back to
- * a link-only prefix — no marker residue (TASK-30).
+ * a link-only prefix — no marker residue.
  */
 test("RER42: reply to a marker-only parent falls back to a link-only prefix", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1618,7 +1614,7 @@ test("RER42: reply to a marker-only parent falls back to a link-only prefix", as
 /**
  * RER43: deleting a message inside a bridged thread deletes it in the thread
  * while resolving the webhook from the parent channel — threads can't have
- * their own webhooks (TASK-206).
+ * their own webhooks.
  */
 test("RER43: deletes a thread message via the parent channel's webhook", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1660,7 +1656,7 @@ test("RER43: deletes a thread message via the parent channel's webhook", async (
 
 /**
  * RER44: a thread whose parent channel is unknown has no webhook to delete
- * through, so the delete is skipped and the mapping kept (TASK-206).
+ * through, so the delete is skipped and the mapping kept.
  */
 test("RER44: skips the delete when the thread's parent channel is unknown", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1693,7 +1689,7 @@ test("RER44: skips the delete when the thread's parent channel is unknown", asyn
 
 /**
  * RER45: a message a Discord user authored belongs to no webhook, so its
- * delete goes through the bot, not the webhook's endpoint (TASK-206).
+ * delete goes through the bot, not the webhook's endpoint.
  */
 test("RER45: deletes a Discord-authored message through the bot", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1723,7 +1719,7 @@ test("RER45: deletes a Discord-authored message through the bot", async () => {
 
 /**
  * RER46: when the bot lacks Manage Messages for a user's message, the Roomy
- * delete is left unmirrored — mapping kept, event not failed (TASK-206).
+ * delete is left unmirrored — mapping kept, event not failed.
  */
 test("RER46: keeps the mapping when the bot can't delete a user's message", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1747,7 +1743,7 @@ test("RER46: keeps the mapping when the bot can't delete a user's message", asyn
 
 /**
  * RER47: a bridged message already gone from Discord is skipped — nothing to
- * delete, mapping kept (TASK-206).
+ * delete, mapping kept.
  */
 test("RER47: skips the delete when the Discord message is gone", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1770,7 +1766,7 @@ test("RER47: skips the delete when the Discord message is gone", async () => {
 /**
  * RER48: a delete that originated from Discord must not be mirrored back, or
  * the bridge and Discord would delete each other's copies of a message in a
- * loop (TASK-206).
+ * loop.
  */
 test("RER48: skips deletes that originated from Discord", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1809,7 +1805,7 @@ test("RER48: skips deletes that originated from Discord", async () => {
  * RER49: a Discord user's message inside a thread is deleted through the bot,
  * not the parent channel's webhook — a webhook only authorises the messages it
  * posted itself, so the thread's resolution must not leak into the endpoint
- * choice (TASK-206).
+ * choice.
  */
 test("RER49: deletes a user's thread message through the bot", async () => {
 	const { roomy, discord, router, repo } = setup();
@@ -1841,9 +1837,8 @@ test("RER49: deletes a user's thread message through the bot", async () => {
 
 /**
  * RER50: a failed authorship fetch must not be read as "nothing to delete" —
- * the delete still goes through the webhook, the endpoint the bridge used
- * before it could tell webhook- and user-authored messages apart, so a REST
- * hiccup can't silently drop a Roomy delete (TASK-206).
+ * the delete still goes through the webhook, so a REST hiccup can't silently
+ * drop a Roomy delete.
  */
 test("RER50: a failed fetch still deletes via the webhook", async () => {
 	const { roomy, discord, router, repo } = setup();

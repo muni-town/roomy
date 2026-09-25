@@ -1,5 +1,5 @@
 /**
- * Tests for fatal-exit visibility (TASK-114).
+ * Tests for fatal-exit visibility.
  *
  * Two independent things are asserted, because the handler has two jobs:
  *
@@ -7,8 +7,8 @@
  *      non-zero. This is driven for real: the handler terminates the process,
  *      so the only honest test is a child process that is allowed to die
  *      (`fatal.fixture.ts`). The exit code and the `level`/`kind`/`error`
- *      fields of the emitted JSON line are asserted — the same fields the
- *      2026-09-14 restart loop had none of.
+ *      fields of the emitted JSON line are asserted — the fields an operator
+ *      needs to attribute the crash.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -65,8 +65,7 @@ describe("fatal exit handlers (child process)", () => {
     expect(record.msg).toContain("uncaughtException");
     expect(record.error.message).toBe("fixture uncaught");
     expect(record.error.stack).toContain("fixture uncaught");
-    // The record must be attributable to a build and a replica — this is what
-    // was missing from the 2026-09-14 window.
+    // The record must be attributable to a build and a replica.
     expect(record.service).toBe("appserver");
     expect(record.build_id).toBeTypeOf("string");
     expect(record.pid).toBeTypeOf("number");
@@ -131,9 +130,9 @@ describe("roomy_process_starts_total", () => {
  *
  * Really installing them would make `handleFatal` live for the remainder of the
  * suite: any unrelated unhandled rejection in an unrelated test would then
- * `process.exit(1)` and truncate the whole run — silently hiding results, which
- * is the class of bug this task exists to fix. The handlers' real behaviour is
- * covered by the child-process tests above, where dying is the point.
+ * `process.exit(1)` and truncate the whole run, silently hiding results. The
+ * handlers' real behaviour is covered by the child-process tests above, where
+ * dying is the point.
  *
  * A class rather than an object literal because the interface is overloaded,
  * and overload signatures belong on a declaration.

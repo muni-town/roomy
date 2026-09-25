@@ -86,9 +86,9 @@ export const getRoomThreadsHandler: QueryHandler<
 
   const threads: ThreadRow[] = [];
   // One batched access pass for every thread in the page, instead of a
-  // `roomAccess` round-trip per thread. With the `room_access` projection
-  // (TASK-173) this is a single per-space read for the whole page rather than
-  // N sequential reads (measured: 13 threads → 1 round-trip).
+  // `roomAccess` round-trip per thread. With the `room_access` projection this
+  // is a single per-space read for the whole page rather than N sequential
+  // reads (measured: 13 threads → 1 round-trip).
   const accessByThread = await roomAccessMany(db, threadIds, userDid, memo);
   for (const t of all) {
     const acc = accessByThread.get(t.id);

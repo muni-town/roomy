@@ -70,10 +70,9 @@ const SEED_PROFILE = argv.includes("--seed-profile");
 // docs/sendevents-write-path-review.md.
 const READ_STATE_ROOMS = numArg("read-state-rooms", 0);
 const READ_STATE_READERS = numArg("read-state-readers", 50);
-// `--mode delete` exercises the TASK-134 delete side-effects instead of
+// `--mode delete` exercises the delete side-effects instead of
 // createMessage. Those run one read-state unwind per distinct room in the
-// batch, so they are the sharpest amplifier of an unindexed `room_id` scan
-// (and were what regressed 193x at #211).
+// batch, so they are the sharpest amplifier of an unindexed `room_id` scan.
 const strArg = (name: string, fallback: string): string => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? String(argv[i + 1]) : fallback;

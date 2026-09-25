@@ -14,7 +14,7 @@ const USER = UserDid.assert("did:plc:test-user");
 const SPACE = StreamDid.assert("did:web:space-stream.example");
 
 /**
- * Set up the worker-backed DBs for the Phase 3 fan-out read path:
+ * Set up the worker-backed DBs for the fan-out read path:
  *   - space-scoped rows (entities, comp_info, member/admin edges) go into the
  *     per-space DB via `openSpaceDb`
  *   - durable membership intent goes into the read-state DB via
@@ -250,7 +250,7 @@ describe("recordPersonalSpaceMembership", () => {
     expect(await selectJoinedSpaces(mainDb, USER)).toEqual([]);
 
     // `recordPersonalSpaceMembership` seeds the joinedSpace edge + entity rows
-    // in the per-space DB. The read path now reads durable intent from the
+    // in the per-space DB. The read path reads durable intent from the
     // read-state DB, so we mirror the join there too (as the handler does).
     const spaceDb = openSpaceDb(SPACE);
     await recordPersonalSpaceMembership(spaceDb, SPACE, USER);

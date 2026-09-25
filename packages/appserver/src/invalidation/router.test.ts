@@ -292,10 +292,10 @@ describe("Router", () => {
     expect(events).toHaveLength(0);
   });
 
-  // ─── Per-batch signal dedup (TASK-134) ───────────────────────────────
-  // A batch of N same-type events used to make every handler emit N copies of
-  // the whole batch-level signal set, and the WS handler broadcasts each copy
-  // to every connection. These pin the coalescing contract.
+  // ─── Per-batch signal dedup ──────────────────────────────────────────
+  // A batch of N same-type events would otherwise make every handler emit N
+  // copies of the whole batch-level signal set, and the WS handler broadcasts
+  // each copy to every connection. These pin the coalescing contract.
 
   it("a batch of N deletes emits ONE getActivityFeed invalidation", async () => {
     const router = new Router();
@@ -321,8 +321,7 @@ describe("Router", () => {
     );
     expect(feedInvalidations).toHaveLength(1);
 
-    // Every other batch-level invalidation collapses too (they were emitted
-    // once per delete before this fix).
+    // Every other batch-level invalidation collapses too.
     const nsids = events[0]!
       .filter((e) => e.kind === "queryInvalidation")
       .map((e) => (e.kind === "queryInvalidation" ? e.signal.nsid : ""));
@@ -564,9 +563,9 @@ describe("Router", () => {
   });
 
   it("emit stamps a monotonic seq on messageDiff signals (embed sweeper path)", () => {
-    // Regression: signals emitted via `emit` (e.g. the embed sweeper's
-    // enrichment diffs) used to carry seq 0, which the client read as a server
-    // seq reset and triggered a spurious refetch on every card-enrichment diff.
+    // Signals emitted via `emit` (e.g. the embed sweeper's enrichment diffs)
+    // must not carry seq 0 — the client reads a zero seq as a server seq reset,
+    // which triggers a spurious refetch on every card-enrichment diff.
     const router = new Router();
     const { events, listener } = collect();
     router.subscribe(listener);

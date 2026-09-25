@@ -11,7 +11,7 @@
  * `/_app/immutable/`, and a tab opened before it holds an old document. The
  * next dynamic import of a chunk invalidated by that deploy rejects; Vite's
  * `__vitePreload` helper surfaces it as a `vite:preloadError` event on
- * `window` (then rethrows). Nothing handled that event.
+ * `window` (then rethrows).
  *
  * SvelteKit covers part of this itself, and measurably wins the race for the
  * part it covers: when a *navigation*'s node chunk fails, the router catches
@@ -20,7 +20,7 @@
  * alone, so this handler only reloads where SvelteKit leaves the rejection
  * unhandled — hover/tap *code preloading* and the app's own dynamic imports
  * (`telemetry/faro.ts`, `sync.svelte.ts`, `nativeUpdate.svelte.ts`), which
- * previously surfaced as unhandled rejections and dead-ended.
+ * otherwise surface as unhandled rejections and dead-end.
  *
  * Solution: detect those failures and automatically reload the page, which
  * re-runs `init()` / re-attempts session restoration in the ATProto case, and
@@ -239,7 +239,7 @@ export function installGlobalErrorRecovery(): void {
   // Fired by Vite's `__vitePreload` helper, which also rethrows the original
   // error (so it reaches the `error` listener above too — that one ignores it,
   // since a module-load failure is not an ATProto error). Without this handler
-  // the rethrow surfaced nothing to the user and the navigation dead-ended.
+  // the rethrow reaches the user as nothing and the navigation dead-ends.
   //
   // The event itself is the signal: Vite dispatches it only when a dynamic
   // import (or one of its CSS preloads) was rejected. So the payload is for

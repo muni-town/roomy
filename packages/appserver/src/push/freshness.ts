@@ -1,20 +1,17 @@
 /**
- * Freshness gate for push delivery (TASK-151).
+ * Freshness gate for push delivery.
  *
- * A push is a *live* signal: "this just happened". Nothing in the push
- * pipeline enforced that. The only time a message carried was
- * `decodeTime(event.id)` — the event **ULID**, i.e. when the event was
- * *ingested*, not when the message was written. A replay of historical
- * messages therefore produced messages with fresh ULIDs and hours-old
- * content, and every downstream gate treated them as new.
+ * A push is a *live* signal: "this just happened". The only other candidate
+ * time a message carries is `decodeTime(event.id)` — the event **ULID**, i.e.
+ * when the event was *ingested*, not when the message was written. A replay of
+ * historical messages therefore carries fresh ULIDs with hours-old content,
+ * and every downstream gate would treat those as new.
  *
- * Observed production incident (2026-09-16): the Discord bridge's
- * `runBackfill` replay (`cursor: none`, historical Discord messages)
- * delivered historical messages over the live `sendEvents` path. It was
- * serial and slow — ~1–3 messages/second across the whole fleet — so the
- * per-second rate was low, but *every single replayed message* produced an
- * immediate `busy` push and re-armed `engaged` digest batches for hours.
- * Every message in the run was pushed regardless of its true age.
+ * The Discord bridge's `runBackfill` replay (`cursor: none`, historical
+ * Discord messages) delivers history over the live `sendEvents` path. It is
+ * serial and slow — a low per-second rate — but *every* replayed message would
+ * otherwise produce an immediate `busy` push and re-arm `engaged` digest
+ * batches, regardless of its true age.
  *
  * The gate keys on the **canonical message timestamp** —
  * `canonicalMessageTimestamp` (see `materialization/sortIdx.ts`), which
@@ -26,8 +23,6 @@
  * whose age cannot be determined must not be dropped — silently losing live
  * notifications is the opposite failure and a worse one. An undecodable
  * event id is not a replay signature.
- *
- * @see docs/push-freshness-gate.md for the incident write-up and evidence.
  */
 
 import { decodeTime } from "ulidx";
@@ -35,15 +30,13 @@ import { decodeTime } from "ulidx";
 /**
  * How old a message may be and still produce a push.
  *
- * Justification: this window absorbs clock skew and pipeline latency between
- * a user hitting send and the message reaching this process — it does not
- * batch anything. The live path measures 0–28s end-to-end in production
- * (TASK-151 Loki evidence), so 5 minutes is ~10x the observed worst case and
- * cannot clip a genuine live message.
+ * This window absorbs clock skew and pipeline latency between a user hitting
+ * send and the message reaching this process — it does not batch anything.
+ * The live path measures 0–28s end-to-end in production, so 5 minutes is ~10x
+ * the observed worst case and cannot clip a genuine live message.
  *
- * A replay of historical content is hours-to-days old, so no plausible value
- * of this constant would let the 2026-09-16 flood through; the window is
- * chosen for operator headroom, not for the flood's shape.
+ * A replay of historical content is hours-to-days old, so the window is chosen
+ * for operator headroom rather than to separate a replay from live traffic.
  */
 export const PUSH_MAX_MESSAGE_AGE_MS = 5 * 60 * 1000;
 
@@ -54,7 +47,7 @@ export const PUSH_MAX_MESSAGE_AGE_MS = 5 * 60 * 1000;
  * A digest answers "you missed something while you were away" — that question
  * is answerable for a while, then the batch is simply history. 24h is wide
  * enough to cover a normal overnight absence (the case digests exist for) and
- * far narrower than the rows that accumulated across the 2026-09-16 replay.
+ * far narrower than a replayed historical backlog.
  *
  * The sweep's 1h `DIGEST_WINDOW_MS` still governs *when* a fresh batch fires;
  * this constant only decides when a batch is too old to be worth firing at

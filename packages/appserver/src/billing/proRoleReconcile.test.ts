@@ -152,7 +152,7 @@ describe("reconcileProMembers", () => {
     expect(res.added).toEqual([SUB_A]);
     expect(new Set(await membersInRole())).toEqual(new Set([SUB_A, MANUAL]));
 
-    // LAPSED no longer tracked.
+    // LAPSED is tracked by no grant row once removed.
     const tracked = await openReadStateDb()
       .query("select did from pro_role_grants where did = ?")
       .get<{ did: string }>(LAPSED);

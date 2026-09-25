@@ -17,9 +17,9 @@ import { probeLinkMetadata } from "./metadata.ts";
  * it. Concurrent `enrichLink(url)` calls share a single network request and
  * a single DB write. The entry is cleared once the promise settles.
  *
- * This is the core fix for the over-fetching bug: previously each
- * SpaceMaterializer independently re-fetched the same global pending list
- * on every event batch, so one URL produced many concurrent fetches.
+ * Without this, each SpaceMaterializer independently re-fetches the same
+ * global pending list on every event batch, so one URL produces many
+ * concurrent fetches.
  */
 const inFlightLinks = new Map<string, Promise<EnrichOutcome>>();
 
@@ -68,7 +68,7 @@ export function extractUrls(text: string): string[] {
  *   refused it (400/401/403/404/410, or 200 with an empty payload) — not
  *   worth retrying. Client-error statuses are stable: bsky.app will always
  *   400 a scraper, eprint.iacr.org will always 403. Retrying them forever
- *   (the old behaviour) left a permanent backlog and a permanent log flood.
+ *   leaves a permanent backlog and a permanent log flood.
  * - `transient`: the request failed in a way that may succeed later
  *   (timeout, 5xx, 429, network error) — the caller should schedule a retry.
  */
@@ -79,8 +79,7 @@ export type FetchResult =
 
 /**
  * Fetch embed data for a single URL using the in-appserver OG + oEmbed
- * pipeline (`probeLinkMetadata`). This replaces the previous call out to an
- * external embed service — enrichment now runs in-process, so posted
+ * pipeline (`probeLinkMetadata`). Enrichment runs in-process, so posted
  * messages render the same link metadata the composer previews.
  *
  * Returns a {@link FetchResult} so the caller can distinguish a definitive
@@ -149,7 +148,7 @@ export interface PendingLink {
 }
 
 /**
- * Read the global `pending_links` index (Phase 3): the pending embed links
+ * Read the global `pending_links` index: the pending embed links
  * awaiting enrichment across ALL per-space DBs. Ordered oldest-first by
  * `created_at` so backfill drains before newer links. Returns the pending
  * rows (URL + owning space + message) so the sweeper can group by space and

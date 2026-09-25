@@ -2,20 +2,18 @@
  * The deployed bundle must name its commit, and the build must refuse to
  * publish one that cannot.
  *
- * Pre-fix, app-lite baked `__BUILD_ID__` into the bundle and served nothing:
- * a repo-wide grep found exactly two hits — the `declare` in `src/app.d.ts` and
- * the `define` in `vite.config.ts` — and zero consumers. The mechanism existed;
- * the wire did not. The only stamp on a deployed client was SvelteKit's
- * `/_app/version.json`, a build *timestamp* with no commit mapping, which is why
- * a merge (TASK-136, 03:07Z) could look deployed while the served bundle
- * predated it and that could only ever be INFERRED from a timestamp.
+ * `__BUILD_ID__` is baked into the bundle and served as `/build.json` from that
+ * same value: both surfaces read the one define resolved in `vite.config.ts`,
+ * so they cannot disagree about which commit they are. Without it the only
+ * stamp on a deployed client is SvelteKit's `/_app/version.json`, a build
+ * *timestamp* with no commit mapping, which identifies nothing about the code
+ * being served.
  *
  * These assertions read the tree, not a build: a full 9.4k-module Vite build is
  * minutes of CI and OOM-prone on small hosts, and the failures worth catching
  * here are structural (no route, no consumer, identity not supplied by the
- * script) rather than runtime. The end-to-end proof — a served `/build.json`
- * carrying the commit the image was built from — is the TASK-158 verification
- * recorded on the PR.
+ * script) rather than runtime. A served `/build.json` carrying the commit the
+ * image was built from is the end-to-end behaviour these checks stand in for.
  *
  * Written against `node:test` + `node:assert` (available without adding a
  * dependency; app-lite ships no test runner of its own) so the file runs under
@@ -45,9 +43,9 @@ describe("app-lite build identity is observable", () => {
     assert.match(config, /JSON\.stringify\(BUILD_ID\)/);
   });
 
-  test("vite.config.ts no longer emits the literal undefined", () => {
-    // Pre-fix: `process.env.BUILD_ID ? JSON.stringify(...) : "undefined"` —
-    // an absent id became the four-character string "undefined" in the bundle.
+  test("vite.config.ts does not emit the literal undefined", () => {
+    // `process.env.BUILD_ID ? JSON.stringify(...) : "undefined"` would bake an
+    // absent id into the bundle as the four-character string "undefined".
     const config = read("../../vite.config.ts");
     assert.doesNotMatch(config, /:\s*"undefined"/);
   });

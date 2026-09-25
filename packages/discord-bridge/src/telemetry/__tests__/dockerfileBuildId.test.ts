@@ -1,19 +1,14 @@
 /**
  * The bridge image must declare its build identity in the stage that RUNS the
- * bridge — not in the `builder` stage.
+ * bridge — not in the `builder` stage. Docker does not propagate `ARG`/`ENV`
+ * across `FROM` boundaries, so a `BUILD_ID` declared only in a build stage
+ * leaves the runtime process with nothing, and every log line carries
+ * `build_id: "unknown"` (`src/logger.ts` reads `BUILD_ID`).
  *
- * This is the regression the bridge shipped with: the logger has always read
- * `BUILD_ID` (`src/logger.ts`), but the Dockerfile never declared the
- * `ARG`/`ENV` pair anywhere, so every one of the 28,980 log lines in a 7-day
- * window carried `build_id: "unknown"`. The sibling failure mode is subtler and
- * is what TASK-150 / PR #216 hit appserver-side: declaring the pair only in a
- * build stage, which Docker does not propagate across `FROM` boundaries, so the
- * runtime process sees nothing.
- *
- * Neither failure is visible to a unit test of `resolveBuildId` — the rule works
- * fine there, it just receives no value — and neither is visible in CI, which
- * builds no image. Parsing the Dockerfile is the cheap guard that fails on the
- * broken layout.
+ * The failure is invisible to a unit test of `resolveBuildId` — the rule works
+ * fine there, it just receives no value — and invisible in CI, which builds no
+ * image. Parsing the Dockerfile is the cheap guard that fails on the broken
+ * layout.
  */
 
 import { describe, expect, test } from "bun:test";

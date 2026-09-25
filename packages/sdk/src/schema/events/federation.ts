@@ -2,10 +2,9 @@
  * Channel-federation events: request, approve/reject, remove.
  *
  * Federation lets a channel in space A be exposed to space B. These events
- * are the relationship-lifecycle half of that feature (Phases 1 of
- * packages/appserver/docs/plans/channel-federation.md): they establish,
+ * are the relationship-lifecycle half of that feature: they establish,
  * accept, and tear down the A<->B relationship. Per-channel origin/receiver
- * grants are later phases.
+ * grants are separate.
  *
  * All three events target the *origin* space (A) stream. The materializers
  * write to the global `space_federations` registry, which the appserver

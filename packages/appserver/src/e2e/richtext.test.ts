@@ -128,7 +128,7 @@ describe("rich text message E2E", () => {
     expect(sendRes.status).toBe(200);
 
     // The link entity row should exist (message_id = the link entity's room).
-    // Phase 3: comp_embed_link lives in the per-space DB.
+    // comp_embed_link lives in the per-space DB.
     const row = await (ctx.db as unknown as { forSpace(s: string): { query(q: string): { get<T>(...p: unknown[]): Promise<T | null> } } })
       .forSpace(SPACE)
       .query("select ei.entity from comp_embed_link ei where ei.entity = ?")

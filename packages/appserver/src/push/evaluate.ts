@@ -1,7 +1,7 @@
 /**
  * Push evaluation for a live `createMessage`.
  *
- * Phase 3 scope: **Mentions + replies** — Quiet and Engaged recipients who
+ * Scope: **Mentions + replies** — Quiet and Engaged recipients who
  * are mentioned in the message, OR are the author of a message being
  * directly replied to (depth-1), get an immediate `message` push instead of
  * being skipped (quiet) or routed to the digest path (engaged).
@@ -127,7 +127,7 @@ export async function resolveMessageFacts(
     // Degraded path marker: the author has no comp_info/comp_user row AND no
     // global profile (e.g. the Discord bridge bot) — the notification names
     // them by raw DID. Cheap info log so prod can confirm how often this
-    // happens (it's what used to render as "New message").
+    // happens.
     log.info(`[push-evaluate] authorName fell back to raw DID for ${messageId}: ${authorDid}`);
   }
 
@@ -200,7 +200,7 @@ function buildMessagePayload(
  * on-event `digest` push when the 5-message threshold is reached (and records
  * digest state for the sweep to catch the 1-hour threshold otherwise).
  *
- * Phase 3 (mentions): Quiet and Engaged recipients who are mentioned in the
+ * Quiet and Engaged recipients who are mentioned in the
  * message — or who authored a message the new message directly replies to —
  * get an immediate `message` push instead of being skipped (quiet) or routed
  * to the digest path (engaged).
@@ -219,8 +219,7 @@ export async function evaluatePush(
   log.info(`[push-evaluate] messageContent for ${messageId}: ${facts.messageContent ? facts.messageContent.slice(0, 60) + "…" : "null"}`);
 
   // Icon is recipient-independent → resolve once per message. Both message and
-  // on-event digest pushes use the sender avatar → space avatar (per the plan:
-  // "user avatars, or failing that, space avatars").
+  // on-event digest pushes use the sender avatar → space avatar.
   const icon = await resolveMessageIcon(spaceDb, authorDid, spaceId);
   if (icon) {
     log.info(`[push-evaluate] icon resolved for ${messageId}: ${icon}`);
@@ -256,7 +255,7 @@ export async function evaluatePush(
       continue;
     }
 
-    // Phase 3: mention detection. Check if this recipient was mentioned or
+    // Mention detection: check if this recipient was mentioned or
     // is the replied-to author (depth-1 reply — treats replied-to like
     // mentioned for the immediate-push decision).
     const mentioned = mentions?.includes(did) ?? false;

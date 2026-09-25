@@ -9,7 +9,7 @@
  *   - Missing/deleted messages gracefully skipped
  *   - Empty feed for empty DB
  *
- * Phase 3 (per-space read cutover): `selectActivityFeed` fans out to per-space
+ * Per-space read cutover: `selectActivityFeed` fans out to per-space
  * DBs. Space-scoped rows (entities, comp_space, comp_room, comp_info, edges,
  * activity_item) are seeded into the per-space DB via `openSpaceDb`;
  * `joinedSpace` edges go into the global DB via `openGlobalDb`; unread counts
@@ -54,7 +54,7 @@ function ulidForTimestamp(ts: number): string {
 }
 
 /**
- * Seed the worker-backed DBs for the Phase 3 fan-out read path:
+ * Seed the worker-backed DBs for the fan-out read path:
  *   - space-scoped rows are seeded into the per-space DBs
  *   - `joinedSpace` edges into the global DB
  *   - unread counts into the read-state DB
@@ -568,10 +568,9 @@ describe("selectActivityFeed", () => {
     });
 
     test("orders messages by canonical ts in {id, ts} entries", async () => {
-      // Regression: recent_message_ids now stores { id, ts } objects so the
-      // window orders by canonical message time (timestampOverride for
-      // bridged messages), not ULID time. The reader must assemble the feed
-      // in the stored order.
+      // recent_message_ids stores { id, ts } objects so the window orders by
+      // canonical message time (timestampOverride for bridged messages), not
+      // ULID time. The reader must assemble the feed in the stored order.
       const { readState } = setup();
       await seedSpace(SPACE);
       await seedUser(SPACE, USER);

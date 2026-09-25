@@ -332,12 +332,11 @@ describe("applyBatch", () => {
     ).toBe(0);
   })
 
-  // Regression: the createRoomLink materialiser computes canonical_parent
-  // ("first link wins") from the current edge count. With `insert or replace`
-  // it was non-idempotent — re-applying the same event flipped
-  // canonical_parent 1 → 0, corrupting the parent-channel link for any
-  // thread whose stream got re-backfilled. This re-ran on production data
-  // and left ~8% of threads orphaned from their channel.
+  // The createRoomLink materialiser computes canonical_parent ("first link
+  // wins") from the current edge count, so `insert or replace` is
+  // non-idempotent — re-applying the same event flips canonical_parent
+  // 1 → 0, corrupting the parent-channel link for any thread whose stream is
+  // re-backfilled. The materialiser must preserve the established parent.
   test("createRoomLink is idempotent under re-application (canonical_parent stays 1)", async () => {
     const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
@@ -371,10 +370,10 @@ describe("applyBatch", () => {
     expect(count).toBe(1);
   })
 
-  // Regression: a createRoomLink's system message ("created [thread]") must
-  // never be empty. When the acting user has no profile yet (e.g. the Discord
-  // bridge bot, which creates threads without a comp_user row), SQLite's ||
-  // with a NULL handle operand yields NULL for the whole content expression,
+  // A createRoomLink's system message ("created [thread]") must never be
+  // empty. When the acting user has no profile yet (e.g. the Discord bridge
+  // bot, which creates threads without a comp_user row), SQLite's || with a
+  // NULL handle operand yields NULL for the whole content expression,
   // materialising an *empty* system message in the parent room. The
   // materialiser must coalesce the author handle (to the DID) and the linked
   // room name so the message is always non-empty and clickable.
@@ -407,7 +406,7 @@ describe("applyBatch", () => {
 
   // The space.joinSpace materialiser must write the `joinedSpace` edge with
   // the *user DID* as head and the space stream as tail — this is what
-  // tracks membership. In Phase 3 the appserver routes these membership
+  // tracks membership. The appserver routes these membership
   // edges to the global DB, so we pass a globalDb and assert there.
   test("space.joinSpace writes joinedSpace edge with user DID as head", async () => {
     const { db, asyncDb } = freshDb();
@@ -448,19 +447,18 @@ describe("applyBatch", () => {
     expect(spaceEdge?.n).toBeUndefined();
   })
 
-  // Regression: the materialisation path (not just the XRPC fast-path
-  // handlers) must write durable membership intent to the read-state DB for
-  // LIVE join/leave events. Otherwise a join/leave that reaches applyBatch
-  // without a handler write (e.g. a future multi-writer / subscription
-  // source) would never update user_space_membership, and getSpaces would
-  // silently miss it.
+  // The materialisation path (not just the XRPC fast-path handlers) must write
+  // durable membership intent to the read-state DB for LIVE join/leave events.
+  // Otherwise a join/leave that reaches applyBatch without a handler write
+  // (e.g. a future multi-writer / subscription source) would never update
+  // user_space_membership, and getSpaces would silently miss it.
   test("live join/leave events write durable membership intent to the read-state DB",
     // These are REAL worker round-trips (applyBatch writes the read-state DB,
     // then we read it back). Under `--isolate` full-suite contention a 2-core
     // runner can exceed bun's default 5000 ms per-test timeout; when the
     // timeout severs the async body mid-`await`, closeDb() in afterEach
     // rejects the stranded read as an unhandled rejection. A generous timeout
-    // keeps the body on its promise instead of stranding it (TASK-128).
+    // keeps the body on its promise instead of stranding it.
     async () => {
       const { db, asyncDb } = freshDb();
       const { asyncDb: globalDb } = freshGlobalDb();
@@ -551,7 +549,7 @@ describe("applyBatch", () => {
       expect(row?.n).toBeUndefined();
     },
     // Worker-backed read-state round-trip: same stranding hazard as the
-    // live-join/leave test (see above, TASK-128).
+    // live-join/leave test (see above).
     30_000,
   )
 });
@@ -646,13 +644,12 @@ function forwardMessageEvent(
 }
 
 describe("forwardMessages sort order", () => {
-  // Regression: forward-reference entities copied the ORIGINAL message's
-  // sort_idx, so a forward of an old message was buried deep in the
-  // destination room's timeline — outside the first getMessages page (the
-  // room query returns the newest `limit` rows). The forward flashed in via
-  // the WS diff and vanished on the next refetch. The fix sorts the forward
-  // by the forward event's OWN time, so it appears at the top of the
-  // destination room, matching the modern forward-as-embed representation.
+  // Forward-reference entities must sort by the forward event's OWN time, so
+  // a forward appears at the top of the destination room instead of being
+  // buried per the original's send time — outside the first getMessages page
+  // (the room query returns the newest `limit` rows), where it would flash in
+  // via the WS diff and vanish on the next refetch. This matches the
+  // forward-as-embed representation.
   test("forwarded messages sort by the forward event's time, not the original's", async () => {
     const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
@@ -716,9 +713,9 @@ describe("forwardMessages sort order", () => {
 })
 
 describe("forward-as-embed (createMessage + forward attachment)", () => {
-  // The modern representation of a forward: a `createMessage` event carrying
-  // a `space.roomy.attachment.forward.v0` attachment creates a real message in
-  // the destination room (with the forwarder's own body) plus a `forward`
+  // A forward is materialised as a `createMessage` event carrying
+  // a `space.roomy.attachment.forward.v0` attachment: it creates a real message
+  // in the destination room (with the forwarder's own body) plus a `forward`
   // edge to the original. selectMessages keeps the forwarder's own content
   // and surfaces `forwardedFrom` for the embed.
   test("creates a real message with its own content and a forward edge", async () => {
@@ -1096,7 +1093,7 @@ describe("applyBatch — link embed dismissal via editMessage", () => {
       .get<{ sp: number }>(msgId, url);
     expect(link?.sp).toBe(0);
 
-    // And the read path no longer surfaces the embed.
+    // And the read path does not surface the embed.
     const after = await selectMessages(asyncDb, {
       kind: "room",
       roomId: channelId,
@@ -1270,11 +1267,10 @@ describe("applyBatch — link embed dismissal via editMessage", () => {
 });
 
 describe("applyBatch — activity item canonical timestamps", () => {
-  // Regression: bridged messages carry a timestampOverride extension (the
-  // original Discord send time), but their ULIDs encode bridge-ingestion
-  // time. The activity_item upsert used the ULID time, so getThreads /
-  // getActivityFeed ordered bridged threads by ingestion order — which for a
-  // backfill is reverse Discord-chronological (rooms created in backfill
+  // Bridged messages carry a timestampOverride extension (the original Discord
+  // send time), but their ULIDs encode bridge-ingestion time. Ordering the
+  // activity item by ULID time puts bridged threads in ingestion order — which
+  // for a backfill is reverse Discord-chronological (rooms created in backfill
   // order, messages ingested oldest-first per channel). The upsert must use
   // the canonical timestamp for last_activity_at and the window entries.
   test("bridged messages order activity by Discord time, not ULID time", async () => {

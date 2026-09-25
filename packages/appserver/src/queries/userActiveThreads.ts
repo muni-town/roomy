@@ -236,8 +236,7 @@ export async function queryActiveThreads(
 
   // Lazy backfill: if no `user_thread_activity` rows exist for this user in
   // THIS space, seed from authored messages. `user_thread_activity` lives in
-  // the read-state DB; the entity/room checks live in the per-space DB (Phase
-  // 3 — entities moved out of the read-state DB).
+  // the read-state DB; the entity/room checks live in the per-space DB.
   const myThreads = await readStateDb
     .query("select thread_id from user_thread_activity where user_did = ? and space_did = ?")
     .all<{ thread_id: string }>([userDid, spaceId]);
@@ -304,7 +303,7 @@ export async function queryActiveThreads(
  * within the given window. This gives the user an immediate populated sidebar
  * without needing to write a new message first. Reads candidate threads from
  * the per-space DB (`spaceDb`), writes rows to the read-state DB
- * (`readStateDb`) — Phase 3: entities/content/edges are per-space.
+ * (`readStateDb`) — entities/content/edges are per-space.
  */
 async function backfillUserThreadActivity(
   readStateDb: DbLike,

@@ -8,8 +8,8 @@
   import { IconSearch, IconX } from "@roomy/design/icons";
   import { searchTerm } from "./search-term.svelte";
 
-  // Search feature flag: gates the whole navbar search entry point, matching
-  // the flag that previously gated the Explore tab. All flags default false.
+  // Search feature flag: gates the whole navbar search entry point.
+  // All flags default false.
   const flagsQuery = createFeatureFlagsQuery();
   const searchEnabled = $derived(
     flagsQuery.data?.flags.includes("search") ?? false,

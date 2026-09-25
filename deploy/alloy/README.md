@@ -86,8 +86,8 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
   - `roomy_embed_transient_backoff` is how many URLs are currently skipped
     inside a transient-retry backoff window. When it approaches
     `roomy_embed_pending` with `roomy_embed_in_flight` at 0, the whole backlog
-    is parked and nothing is being enriched — the shape that produced the
-    5,085-pending / 0-gauge discrepancy on 2026-09-21.
+    is parked and nothing is being enriched — the DB backlog and the in-memory
+    gauge disagree.
 - `roomy_embed_backlog_stuck` / `roomy_embed_backlog_stuck_since_seconds` /
   `roomy_embed_backlog_stuck_transitions_total`
   - `roomy_embed_backlog_stuck` is 1 when the backlog is non-empty but the
@@ -100,9 +100,8 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
   - The flag is set/cleared only on a real change of state, and
     `roomy_embed_backlog_stuck_transitions_total` counts those changes in both
     directions. A rising rate there with a flat `roomy_embed_enriched_ok_total`
-    means the flag is flapping without the backlog moving — previously visible
-    only by range-querying 1,441 gauge samples (957 `1`, 484 `0`, 396
-    transitions in 24h). Read `lastStallCause` / `lastCycle` on `/health/embed`
+    means the flag is flapping without the backlog moving. Read
+    `lastStallCause` / `lastCycle` on `/health/embed`
     for the measured cause and row counts of the last stalled cycle.
 - `roomy_search_indexer_queue` / `roomy_search_backfilled` / `roomy_push_queued`
 - `roomy_db_timeouts_total` — DB requests that hit the 30s timeout (pool saturation)
@@ -116,8 +115,8 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
   the process dies, as a `level="error"`, `scope="fatal"`, `fatal=true`
   record carrying `kind`, `error_name`, and the error message/stack. Query
   Loki with `{service_name="appserver"} | json | scope="fatal"` to see why a
-  process died — the record that was missing entirely during the 2026-09-14
-  restart loop (289 restarts, zero error lines).
+  process died — without this record a crash-looping process leaves only
+  container stdout noise, which is gone once the container goes away.
 
 Alloy scrapes it (`prometheus.scrape "appserver"`) and remote-writes to
 Grafana Cloud Mimir. Build Grafana dashboards + alerts on these, e.g. alert
@@ -140,7 +139,7 @@ network — no stdout pipes or sidecar forwarders.
   unset means stdout only. Every structured log record is batched (500 / 2s)
   and POSTed with stream labels `service_name`, `level`, `scope` (plus
   Railway replica labels when present).
-- **app-lite** — ships logs from the browser via Faro (TASK-66), not the
+- **app-lite** — ships logs from the browser via Faro, not the
   Alloy collector.
 
 app-lite is a static SPA (no server stdout): set `PUBLIC_FARO_URL` on the

@@ -4,8 +4,9 @@ import { describe, expect, test } from "bun:test";
 // with the rest of the push-payload tests because app-lite has no test
 // suite (see AGENTS.md) and this is exactly the server↔client payload
 // contract the appserver owns. It renders synthetic payloads the way the
-// service worker does — including the TASK-117 regression: authorName
-// absent but authorDid known must render the author, never "New message".
+// service worker does, including the payload shape the server must never
+// emit: authorName absent but authorDid known must still render the author,
+// never "New message".
 import { notificationText } from "../../../app-lite/src/lib/notificationText";
 
 const DID = "did:plc:abcdef";
@@ -33,7 +34,7 @@ describe("push/notificationText — visible notification render", () => {
     expect(body).toBe("Alice sent a message");
   });
 
-  test("authorName absent but authorDid known renders the DID, not 'New message' (TASK-117)", () => {
+  test("authorName absent but authorDid known renders the DID, not 'New message'", () => {
     // Legacy/synthetic payload: the server always resolves a name now, but a
     // payload missing authorName must still name the author by DID.
     const { title, body } = notificationText({

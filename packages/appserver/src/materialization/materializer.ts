@@ -2,9 +2,8 @@
  * Per-event materialiser: turns one decoded Event into a bundle of SQL
  * statements via the SDK's pure `getMaterializer` registry.
  *
- * Mirrors the frontend `packages/app/src/lib/workers/sqlite/materializer.ts`
- * but synchronous (no async channel pipeline) and minus the EdgeLabel/EdgesMap
- * re-declarations — those types live in the SDK and are imported where
+ * Synchronous (no async channel pipeline), and it does not re-declare
+ * EdgeLabel/EdgesMap — those types live in the SDK and are imported where
  * needed.
  */
 

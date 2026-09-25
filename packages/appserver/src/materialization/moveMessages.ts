@@ -115,7 +115,7 @@ export async function applyMoveSideEffects(
   }
   await rebuildActivityWindow(db, event.room);
   await rebuildActivityWindow(db, event.toRoomId);
-  // `room_activity` (TASK-175) was invalidated for both rooms by the move's own
+  // `room_activity` was invalidated for both rooms by the move's own
   // maintenance step; restore both from the post-move tables. Also on backfill,
   // for the same reason the windows above are.
   await rebuildRoomActivity(db, [event.room, event.toRoomId]);

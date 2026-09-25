@@ -3,7 +3,7 @@
  *
  * The arbiter (leaf-0.4) provisions real ATProto accounts for new Roomy
  * spaces. The appserver authenticates to it with a self-signed serviceAuth
- * JWT (Phase 0) and calls:
+ * JWT and calls:
  *
  * - `town.muni.arbiter.createArbiter` — provision a new stewarded account,
  *   returns `{ did }`. No policy is written: the account stays offline

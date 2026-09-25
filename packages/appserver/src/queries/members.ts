@@ -14,7 +14,7 @@
  * global store, NOT in SQL. A member's profile entity lives in their own
  * stream, not this space's stream, so the per-space `comp_user`/`comp_info`
  * joins are null for cross-stream members (and are not written by the
- * materialiser at all in Phase 3). Filtering in SQL against those columns
+ * materialiser at all). Filtering in SQL against those columns
  * would silently drop every member whose handle/name only exists in the
  * global `profiles` table — the exact failure the mention typeahead hit
  * (typing a handle or display name returned no results). The global store is
@@ -105,9 +105,9 @@ export async function selectMembers(
     .all<{ did: string; handle: string | null; name: string | null; avatar: string | null; is_admin: number; is_banned: number }>([spaceId]);
 
   // Role assignments per member, scoped to this space's stream. Fetched in
-  // ONE batched query (WHERE stream_id = ?) and grouped by user_id in JS,
-  // instead of one round-trip per member (N+1) — a space with many members
-  // previously serialized N role queries on the space worker.
+  // ONE batched query (WHERE stream_id = ?) and grouped by user_id in JS —
+  // one round-trip per member (N+1) would serialize N role queries on the
+  // space worker for a space with many members.
   const roleRows = await db
     .query(
       `select user_id, role_id from member_roles

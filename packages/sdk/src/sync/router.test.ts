@@ -109,7 +109,7 @@ describe("SyncRouter", () => {
       { roomId: "01ROOM" },
     ]);
 
-    // Patcher must handle undefined prev (749992c1).
+    // Patcher must handle undefined prev (a diff can race the initial fetch).
     const built = patcher(undefined);
     expect(built).toHaveLength(1);
     expect(built[0]?.id).toBe("01MSG");

@@ -10,8 +10,8 @@
  *
  * The author is the headline: `authorName` when the server resolved one,
  * else the raw `authorDid`. A notification must name its sender — "New
- * message" is only for the (now unreachable in practice) case where the
- * payload carries no author at all.
+ * message" is only for the case where the payload carries no author at all,
+ * which the server does not produce in practice.
  */
 
 export interface PushNotificationView {

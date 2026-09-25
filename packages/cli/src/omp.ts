@@ -73,12 +73,11 @@ export interface OmpEventSink {
  * id — without retaining the raw stream.
  *
  * A long-running job can emit far more stdout than V8's maximum string length.
- * The previous implementation accumulated the entire stream (`out += chunk`)
- * and parsed it at exit; when a run crossed that limit the `data` handler threw
- * `RangeError: Invalid string length`, which is an uncaught exception in a
- * stream callback — it killed the responder process mid-job (bramble,
- * 2026-09-14) rather than failing the one job. Reducing per event makes
- * retained memory O(largest single message), independent of run length.
+ * An accumulator that crosses that limit throws `RangeError: Invalid string
+ * length` from the stdout `data` handler — an uncaught exception in a stream
+ * callback, so it kills the responder process mid-job rather than failing the
+ * one job. Reducing per event makes retained memory O(largest single message),
+ * independent of run length.
  */
 export function createOmpEventSink(): OmpEventSink {
   let thinking: string | undefined;
@@ -137,7 +136,7 @@ export function runOmp(
   const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
   // Only bounded tails of raw stdout/stderr are retained, for the last-resort
   // fallback reply; the structured result is reduced event by event through the
-  // sink. See createOmpEventSink for why unbounded accumulation here was a crash.
+  // sink. See createOmpEventSink for why unbounded accumulation crashes here.
   const tailCap = opts.maxRawTail ?? 64 * 1024;
   const outTail = new BoundedTail(tailCap);
   const errTail = new BoundedTail(tailCap);

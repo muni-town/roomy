@@ -3,11 +3,11 @@
  * from options, decoupled from the process env and the boot path in
  * `index.ts`.
  *
- * Why: `index.ts` previously called `Bun.serve()` at module top-level with
- * hard-wired env reads, so importing it started the server and hit the
- * network. Extracting the construction here lets tests spin up a clean
- * appserver on an ephemeral port with a test auth verifier, a temp DB, and
- * backfill disabled — then `close()` it — without spawning a process.
+ * Why: `index.ts` reads env and calls `Bun.serve()` at module top-level, so
+ * importing it starts the server and hits the network. Extracting the
+ * construction here lets tests spin up a clean appserver on an ephemeral port
+ * with a test auth verifier, a temp DB, and backfill disabled — then `close()`
+ * it — without spawning a process.
  *
  * The boot path (`index.ts`) calls `createAppserver` with env-derived
  * options and then starts backfill; tests call it with `backfillMode:
@@ -562,9 +562,9 @@ export async function createAppserver(
   // singletons (closeDb) before calling createAppserver.
   //
   // `opts.dbPath` is honored here (event-log path; `:memory:` also pins the
-  // read-state/global/spaces DBs to memory, see `openDb`). Previously the
-  // option was dead: every factory test silently opened the real files under
-  // `DATA_DIR`, and closeDb→reopen cycles raced SQLite file locks on shared
+  // read-state/global/spaces DBs to memory, see `openDb`). Honoring it matters
+  // in tests: ignoring the option silently opens the real files under
+  // `DATA_DIR`, and closeDb→reopen cycles then race SQLite file locks on shared
   // CI runners (surfacing as `database is locked` 500s).
   const mainDb = openDb(opts.dbPath !== undefined ? { path: opts.dbPath } : {});
 

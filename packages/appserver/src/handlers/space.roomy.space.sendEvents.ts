@@ -128,8 +128,9 @@ async function sendEventsImpl(
   // membership/admin/ban flags and the same room→space→parent→default_access
   // facts, and neither can differ between events in one request. The rooms
   // are resolved up front in one batched read (prewarmWriteAuthAccess), so
-  // the loop's room checks are memo hits rather than an N+1 — a 50-message
-  // batch to one room previously re-resolved that room 50 times.
+  // the loop's room checks are memo hits rather than an N+1 — without the
+  // up-front batch, a 50-message batch to one room would re-resolve that room
+  // 50 times.
   const authCtx: WriteAuthContext = {
     access,
     accessMemo: createAccessMemo(),
@@ -201,7 +202,7 @@ async function sendEventsImpl(
     try {
       await streamManager.sendEvents(streamDid, parsedEvents, callerDid);
     } catch (err) {
-      // Blue-green (P2/P8): a write to a space that is currently being
+      // Blue-green: a write to a space that is currently being
       // rebuilt is rejected before it lands in the event log. Surface it as a
       // retryable 409 so clients can back off and retry once the rebuild
       // commits — not a 500 (the write is safe to retry; nothing applied).

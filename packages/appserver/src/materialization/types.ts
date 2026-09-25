@@ -1,8 +1,7 @@
 /**
  * Local types for the appserver materialisation pipeline.
  *
- * Deliberately simpler than the frontend `workers/types.ts` Bundle/Batch
- * namespaces: we run synchronously inside a single Bun process so there is no
+ * We run synchronously inside a single Bun process, so there is no
  * cross-worker channel and no priority queue to model. Only the shapes that
  * meaningfully flow through the pipeline are kept.
  */

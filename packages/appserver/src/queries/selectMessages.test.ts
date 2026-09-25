@@ -155,7 +155,8 @@ describe("selectMessages system messages", () => {
 
     await seedGlobalProfile(STREAM, null, "Test Space");
     // The Bluesky appview returns displayName:"" for users without one — the
-    // empty string must NOT win over the handle (regression: raw DID label).
+    // empty string must NOT win over the handle (the raw DID must never be the
+    // visible label).
     await seedGlobalProfile(USER, "alice.bsky.social", "");
 
     const { messages } = await selectMessages(db, {
@@ -230,7 +231,7 @@ describe("selectMessages nested forwards", () => {
 
   /**
    * Seed a forward-as-embed row: a real message with its own content plus a
-   * `forward` edge to an original in another room (mirroring the modern
+   * `forward` edge to an original in another room (mirroring the
    * createMessage + forward attachment materialisation).
    */
   async function seedForward(
@@ -366,10 +367,9 @@ describe("selectMessages room ordering", () => {
     const roomId = newUlid();
 
     // Insert three messages whose ids are in the OPPOSITE order to their
-    // sort_idx. If the query ordered by id (or coalesce(sort_idx, id) with a
-    // NULL sort_idx), the result would be wrong. The fix orders by sort_idx
-    // directly so the index is used and ordering follows the canonical
-    // timestamp, not the event id.
+    // sort_idx. Ordering by id (or coalesce(sort_idx, id) with a NULL
+    // sort_idx) would return them wrong; ordering by sort_idx directly uses
+    // the index and follows the canonical timestamp, not the event id.
     const mk = (id: string, sortIdx: string, body: string) => ({
       id,
       sortIdx,
@@ -469,8 +469,8 @@ describe("selectMessages missing-author hydration", () => {
    * These two cases hold the stub's gate open for the whole test, so the only
    * way they can finish is if the read does NOT wait for the fetch. That makes
    * the timeout the failure mode — hence the explicit short one, instead of
-   * bun's 5s default: on pre-deferral code the read parks on the gate and the
-   * test fails in 1.5s with the name that says why.
+   * bun's 5s default: a read that parks on the gate fails in 1.5s with the name
+   * that says why.
    */
   const GATED_READ_TIMEOUT_MS = 1500;
 

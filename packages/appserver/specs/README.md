@@ -78,7 +78,7 @@ the spec oracle and `access.ts`. That covers:
 - 46656 (user, room) cells, of which 6584 are thread-with-parent cells and 215
   are cells where a role grant is the *only* reason for a read/write decision.
 
-The `room_access` projection added in TASK-175 is on the read path for both:
+The `room_access` projection is on the read path for both:
 the first touch of a room in a fresh DB is a cold miss (live compute, then the
 projection is warmed), and later touches hit the projection. Cold and warm
 reads were compared directly over 5832 pairs — identical.

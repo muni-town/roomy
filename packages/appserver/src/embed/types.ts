@@ -1,10 +1,10 @@
 /**
  * Embed types matching the Lantern-chat embed-service protocol.
  *
- * The embed service (embed.internal.weird.one) accepts a URL via POST and
- * returns a 2-element JSON array: `[timestamp, EmbedV1]`.
+ * These are the `EmbedV1` wire types: a payload travels as a 2-element JSON
+ * array, `[timestamp, EmbedV1]`. The SDK's `LinkEmbedData` is a subset of
+ * this shape, so stored and served embed payloads match the protocol.
  *
- * Ported from packages/app/src/lib/utils/getLinkEmbedData.ts
  * Source: https://github.com/Lantern-chat/embed-service
  */
 
@@ -100,6 +100,6 @@ export interface EmbedV1 {
 export type Embed = { v: "1" } & EmbedV1;
 
 /**
- * The embed service returns `[timestamp, EmbedV1]` as a JSON array.
+ * The protocol's response is `[timestamp, EmbedV1]` as a JSON array.
  */
 export type EmbedServiceResponse = [string, Embed];

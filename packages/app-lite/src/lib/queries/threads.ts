@@ -18,8 +18,8 @@ const DEFAULT_LIMIT = 20;
  * placeholder for ANY new query key — so switching spaces would keep showing
  * the previous space's threads while the new space's first page loads. By
  * comparing the previous query's key param against the current one, we only
- * carry the old list forward for in-place refetches (search typing), and show
- * a fresh loading state on a real space/room switch.
+ * carry the already-rendered list forward for in-place refetches (search
+ * typing), and show a fresh loading state on a real space/room switch.
  */
 function keepPreviousDataForSameParam(
   paramKey: "spaceId" | "roomId",

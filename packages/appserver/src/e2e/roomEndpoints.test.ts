@@ -4,8 +4,8 @@
  * Unlike the seed-directly tests, these materialize a space through the REAL
  * write path (`space.roomy.space.sendEvents` → applyBatch → per-space DB +
  * global entity_space index), then query each endpoint. This is what catches
- * regressions like room-scoped handlers 404ing because the entity→space
- * index was never populated for materialized rooms/messages.
+ * regressions like room-scoped handlers 404ing when the entity→space index is
+ * not populated for materialized rooms/messages.
  *
  * Run: bun test --cwd packages/appserver src/e2e/roomEndpoints.test.ts
  */
@@ -249,7 +249,8 @@ describe("message moving through the real write path", () => {
     const destRoomId = await moveMessage(ctx, roomId, messageId);
 
     // getMessage resolves the room from entities.room and re-checks read
-    // access there, so a stale room link would 404 or leak the old room.
+    // access there, so a stale room link must 404 rather than leak the
+    // message.
     const res = await get(ctx, `space.roomy.message.getMessage?messageId=${messageId}`);
     expect(res.status).toBe(200);
     const after = await res.json();

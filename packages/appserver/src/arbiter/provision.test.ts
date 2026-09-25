@@ -2,47 +2,34 @@
  * Regression test: space provisioning must use the arbiter's built-in
  * owner/manager proxy route, not a scoped `*.arbiter.proxy` route.
  *
- * Why (production outage): the scoped route
- * (`space.roomy.authComplete.arbiter.proxy`) applies two gates before the
- * policy pipeline runs —
+ * The scoped route (`space.roomy.authComplete.arbiter.proxy`) applies two
+ * gates before the policy pipeline runs —
  *
  *   1. a trusted-scope gate on the account's config record, then
  *   2. the *permission-set lexicon's* embedded Rego, evaluated over the inner
  *      request core alone (no caller DID — scope policies are pure functions
  *      of `{method, nsid, parameters, body, encoding}`).
  *
- * At the time of the outage, the published permission set for
- * `space.roomy.authComplete` admitted only NSIDs starting with
- * `space.roomy` / `network.cosmic`, plus `com.atproto.repo.uploadBlob`,
- * `com.atproto.identity.updateHandle`, and a `putRecord` of an
- * `app.bsky.actor.profile`. `provisionSpace` step 3 proxies a `putRecord` of
- * `space.roomy.service/self` — an inner NSID of `com.atproto.repo.putRecord`
- * with a `space.roomy.service` collection — which the scope policy denied
- * outright with
- * `403 {"error":"Forbidden","message":"request denied by scope policy"}`.
+ * A denial there fires before any policy layer, so no admin/recovery-admin
+ * authorization can rescue it: a `createSpace` proxied through the scoped
+ * route 500s. The built-in `town.muni.arbiter.proxy` route has no scope gate
+ * and reaches the pipeline, where the installed default policy admits the
+ * account's recovery admin (the appserver) — which is the appserver's
+ * authority model for provisioning. Provisioning therefore keeps the built-in
+ * route: the appserver's own writes must not depend on what the permission
+ * set happens to admit.
  *
- * The denial fired before any policy layer, so no admin/recovery-admin
- * authorization could rescue it: every `createSpace` proxied through the
- * scoped route 500s. The built-in `town.muni.arbiter.proxy` route has no
- * scope gate and reaches the pipeline, where the installed default policy
- * admits the account's recovery admin (the appserver) — which is the
- * appserver's authority model for provisioning.
- *
- * The published permission set has since grown — it now also admits record
- * creation (`putRecord`/`createRecord`) for Semble collections (the
- * space-card path) and an explicit `putRecord` of `space.roomy.service`. The
- * Semble branch was first published under a `network.cosmic` namespace
- * spelling — the lexicon is actually `network.cosmik` — and has since been
- * republished under `network.cosmik.*`. Provisioning keeps the built-in
- * route anyway: the appserver's own writes must not depend on what the
- * permission set happens to admit. `scopedScopePolicyAllows` below
- * transcribes the current policy, and the scoped-route tests at the bottom
- * pin what it admits and denies today.
+ * The published permission set also admits record creation
+ * (`putRecord`/`createRecord`) for `network.cosmik.*` collections (the
+ * Semble space-card path) and an explicit `putRecord` of
+ * `space.roomy.service`. `scopedScopePolicyAllows` below transcribes the
+ * current policy, and the scoped-route tests at the bottom pin what it admits
+ * and denies.
  *
  * The mock arbiter below reproduces the real server's routing: it applies the
  * scope policy on the scoped route (transcribed from the published lexicon,
  * see `scopedScopePolicyAllows` below) and the ownership check on the built-in
- * route. Pre-fix this test fails at step 3 with the real denial message.
+ * route.
  *
  * Run: bun test --cwd packages/appserver src/arbiter/provision.test.ts
  */
@@ -66,7 +53,7 @@ const BUILTIN_ROUTE = "town.muni.arbiter.proxy";
  * The scope policy embedded in the published permission-set lexicon
  * `space.roomy.authComplete` (writer `did:plc:cyqufxsezk33hqulcilckna6`, cid
  * `bafyreic4jrkeswhluqav4whjlvssx23oftjdsom72zmkpy7lyhzwdsemim`, fetched
- * 2026-09-22 from its PDS). Transcribed verbatim — the real server compiles
+ * from its PDS). Transcribed verbatim — the real server compiles
  * this Rego and requires `data.arbiter.allow == true`; the transcription is a
  * direct predicate translation of its `allow` rules (the published policy's
  * `cosmik_prefix` constant is inlined as `"network.cosmik."`).
@@ -189,8 +176,7 @@ test("provisionSpace succeeds — step 3 proxies via the built-in owner route", 
     expect(mock.proxiedNsids).toContain("com.atproto.repo.putRecord");
     // It must go through the owner route: the appserver's own provisioning
     // writes must not depend on what the scoped route's permission-set scope
-    // policy happens to admit (the production outage was exactly such a
-    // denial).
+    // policy happens to admit.
     expect(mock.calls).toContain(BUILTIN_ROUTE);
     expect(mock.calls).not.toContain(SCOPED_ROUTE);
   } finally {

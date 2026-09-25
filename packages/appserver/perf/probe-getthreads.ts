@@ -1,13 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Per-stage probe for `space.roomy.space.getThreads` against a REAL dataset
- * (TASK-194).
+ * Per-stage probe for `space.roomy.space.getThreads` against a REAL dataset.
  *
  * `probe-projections.ts` measures synthetic fixtures it seeds itself. This probe
- * measures an already-materialised data directory — Little Fox's multi-space
- * dataset under `packages/appserver/data` — so the numbers describe the shape
- * Meri sees: a large space, hundreds of rooms, a channel with tens of thousands
- * of messages, and whatever projection state that DB is actually in.
+ * measures an already-materialised data directory under
+ * `packages/appserver/data`, so the numbers describe a realistic multi-space
+ * shape: a large space, hundreds of rooms, a channel with tens of thousands of
+ * messages, and whatever projection state that DB is actually in.
  *
  * Two instruments, both reusing machinery that already exists:
  *

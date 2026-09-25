@@ -1,11 +1,11 @@
 /**
- * E2E regression test for sync WebSocket topic authorization (TASK-68).
+ * E2E test for sync WebSocket topic authorization.
  *
- * Security hole (confirmed): the sync WS path enforced identity but NOT
- * authorization — any authenticated user could subscribe to any room/space/
- * stream topic and receive message content they can't read over HTTP.
+ * Without it, the sync WS path enforces identity but NOT authorization — any
+ * authenticated user could subscribe to any room/space/stream topic and
+ * receive message content they can't read over HTTP.
  *
- * This test proves the exploit is closed:
+ * This test proves the enforcement holds:
  *   1. Two users, one member and one non-member of the same (invite-only)
  *      space. The non-member has no HTTP read access to the space's rooms.
  *   2. Both open a sync WS and subscribe to the room topic.
@@ -13,9 +13,6 @@
  *   4. Assert the non-member receives NO #messageDiff frame (content leak)
  *      while the member does.
  *   5. Assert the non-member's stream sub gets no #streamEvents backfill.
- *
- * This test FAILS on the pre-fix code (non-member receives content frames)
- * and PASSES after the fix.
  *
  * Run: bun test --cwd packages/appserver src/e2e/syncAuth.test.ts
  */

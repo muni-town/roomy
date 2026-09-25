@@ -48,7 +48,7 @@ export const materializeSpaceHandler: QueryHandler<
     .get<{ latest_event: number }>(parsed);
   const cursor = cursorRow?.latest_event ?? 0;
 
-  // comp_space / entities / comp_room live in the per-space DB (Phase 3).
+  // comp_space / entities / comp_room live in the per-space DB.
   const spaceDb = openSpaceDb(parsed);
 
   // Read backfill status from comp_space

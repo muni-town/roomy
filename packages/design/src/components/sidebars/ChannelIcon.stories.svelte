@@ -25,7 +25,7 @@
     name: "Weekend plans",
     federated: {
       originSpaceId: "did:plc:drzgt2m6lmcel62gfbzjeap3",
-      originSpaceName: "Meri's Forest",
+      originSpaceName: "Test Space",
       permission: "read",
     },
   };
