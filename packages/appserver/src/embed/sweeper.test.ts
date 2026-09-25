@@ -11,6 +11,7 @@ import {
   stopEmbedSweeper,
   embedSweeperStats,
   classifyStallCause,
+  sweepIdleDelayMs,
   type EmbedSweeperOpts,
 } from "./sweeper.ts";
 import { openDb, openGlobalDb, openSpaceDb, closeDb } from "../db/db.ts";
@@ -787,6 +788,410 @@ describe("embed sweeper stall reporting", () => {
     } finally {
       errorSpy.mockRestore();
       warnSpy.mockRestore();
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+});
+
+describe("embed sweeper retry-state persistence and stall pacing", () => {
+  test("a restart restores parked URL backoff from comp_embed_link_data.retry_after", async () => {
+    // Defect (A): the sweeper's transient-retry gate was process-local while
+    // the enricher already PERSISTED `retry_after`/`attempts` and nothing ever
+    // read them. A restart therefore dropped all backoff while `pending_links`
+    // survived, making every parked row selectable at once and re-fetching the
+    // whole backlog. A first cycle after "restart" must select NOTHING when
+    // every parked row's window is still open.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const url = "https://example.com/persisted-park";
+    await seedLinkMessageRoom(
+      spaceDb,
+      globalDb,
+      { room: "01KVRRRRRRRRRRRRRRRRRRRRRR", message: "01KVMMMMMMMMMMMMMMMMMMMMMM", url },
+      Date.now() - 60 * 60_000,
+    );
+    // The persisted retry state a previous process left behind: a window that
+    // is still open, with an escalated attempt count.
+    await spaceDb.run(
+      `insert into comp_embed_link_data (entity, embed_json, attempts, retry_after)
+       values (?, null, 4, ?)`,
+      [url, Date.now() + 30 * 60_000],
+    );
+
+    const realFetch = globalThis.fetch;
+    let fetches = 0;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> => {
+      fetches++;
+      return Promise.resolve(
+        new Response(
+          '<html><head><meta property="og:title" content="Fetched" /></head></html>',
+          { status: 200, headers: { "Content-Type": "text/html" } },
+        ),
+      );
+    }) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+
+      // First cycle of the new process: the restored window must park the URL
+      // BEFORE selection, so no fetch happens and the row stays pending.
+      await sweepCycle(globalDb);
+      expect(fetches).toBe(0);
+      const stats = embedSweeperStats();
+      expect(stats.transientBackoff).toBe(1);
+      const n = await globalDb
+        .query("select count(*) as n from pending_links")
+        .get<{ n: number }>();
+      expect(n?.n).toBe(1);
+      // The row was NOT re-fetched, so the persisted attempts survive intact.
+      const row = await spaceDb
+        .query("select attempts from comp_embed_link_data where entity = ?")
+        .get<{ attempts: number }>(url);
+      expect(row?.attempts).toBe(4);
+    } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("only the expired row is selected — an open retry_after in the future is skipped", async () => {
+    // The acceptance case: two rows, one with a future `retry_after`, one
+    // expired/null. Only the second may be fetched.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const futureUrl = "https://example.com/still-parked";
+    const expiredUrl = "https://example.com/expired-park";
+    await seedLinkMessageRoom(
+      spaceDb,
+      globalDb,
+      { room: "01KVRRRRRRRRRRRRRRRRRRRRRR", message: "01KVMMMMMMMMMMMMMMMMMMMMMM", url: futureUrl },
+      Date.now() - 60 * 60_000,
+    );
+    await seedLinkMessageRoom(
+      spaceDb,
+      globalDb,
+      { room: "01KVRRRRRRRRRRRRRRRRRRRRR2", message: "01KVNNNNNNNNNNNNNNNNNNNNNN", url: expiredUrl },
+      Date.now() - 60 * 60_000,
+    );
+    // One window still open; the other expired in the past.
+    await spaceDb.run(
+      `insert into comp_embed_link_data (entity, embed_json, attempts, retry_after)
+       values (?, null, 2, ?)`,
+      [futureUrl, Date.now() + 30 * 60_000],
+    );
+    await spaceDb.run(
+      `insert into comp_embed_link_data (entity, embed_json, attempts, retry_after)
+       values (?, null, 2, ?)`,
+      [expiredUrl, Date.now() - 60_000],
+    );
+
+    const realFetch = globalThis.fetch;
+    const fetched: string[] = [];
+    globalThis.fetch = ((
+      input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> => {
+      fetched.push(String(input));
+      return Promise.resolve(
+        new Response(
+          '<html><head><meta property="og:title" content="OK" /></head></html>',
+          { status: 200, headers: { "Content-Type": "text/html" } },
+        ),
+      );
+    }) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      await sweepCycle(globalDb);
+
+      expect(fetched.length).toBe(1);
+      expect(fetched[0]).toContain("expired-park");
+      // The expired row settled and left the backlog; the parked one remains.
+      const pending = await globalDb
+        .query("select url from pending_links")
+        .all<{ url: string }>();
+      expect(pending.map((r) => r.url)).toEqual([futureUrl]);
+    } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("the stall warn is emitted once per cause, not once per flap", async () => {
+    // Defect (B): the log guard compared against `backlogStuck`-scoped state,
+    // so a 1→0→1 flap reset it to null and re-logged an UNCHANGED cause 2,081+
+    // times a day. Latching on the cause independently must yield ONE line for
+    // a run of cycles whose cause never changes — including cycles that select
+    // work but settle nothing.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const flakyUrl = "https://example.com/flaky-flap";
+    await seedLinkMessageRoom(
+      spaceDb,
+      globalDb,
+      { room: "01KVRRRRRRRRRRRRRRRRRRRRRR", message: "01KVMMMMMMMMMMMMMMMMMMMMMM", url: flakyUrl },
+      Date.now() - 60 * 60_000,
+    );
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> =>
+      Promise.resolve(new Response("Service Unavailable", { status: 503 }))) as typeof globalThis.fetch;
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      await sweepCycle(globalDb); // parks the link transiently
+      warnSpy.mockClear();
+
+      // Drive the stalled state repeatedly. The cause never changes, so the
+      // warn latch must keep it to a single line for the whole run.
+      for (let i = 0; i < 8; i++) await sweepCycle(globalDb);
+
+      const lines = warnSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((l) => l.includes("backlog stalled"));
+      expect(lines.length).toBe(1);
+      expect(lines[0]).toContain("cause=all-parked");
+      expect(lines[0]).toContain("stuckTransitions=1");
+      // The flap is now countable without a range query.
+      expect(embedSweeperStats().backlogStuckTransitions).toBe(1);
+    } finally {
+      warnSpy.mockRestore();
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("a cycle that selects work but settles no rows does not clear the stall", async () => {
+    // The flap driver: when a parked window EXPIRES the link is selected
+    // again, fails transiently again, and the backlog is unchanged. Clearing
+    // the stall flag on that selection is what produced 396 transitions/24h.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const url = "https://example.com/eternally-flaky";
+    await seedLinkMessageRoom(
+      spaceDb,
+      globalDb,
+      { room: "01KVRRRRRRRRRRRRRRRRRRRRRR", message: "01KVMMMMMMMMMMMMMMMMMMMMMM", url },
+      Date.now() - 60 * 60_000,
+    );
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> =>
+      Promise.resolve(new Response("Service Unavailable", { status: 503 }))) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      await sweepCycle(globalDb); // parks it
+      await sweepCycle(globalDb); // selects nothing → stall
+      expect(embedSweeperStats().backlogStuck).toBe(true);
+      expect(embedSweeperStats().backlogStuckTransitions).toBe(1);
+
+      // A NEW link arrives that will also fail transiently. The next cycle
+      // SELECTS it — so the queue is "moving" — but parks it again, settling
+      // no rows. Selection alone is not progress: the flag and its counters
+      // must persist. (Clearing on this selection is what produced the 396
+      // transitions/24h flap.)
+      await seedLinkMessageRoom(
+        spaceDb,
+        globalDb,
+        { room: "01KVRRRRRRRRRRRRRRRRRRRRR2", message: "01KVNNNNNNNNNNNNNNNNNNNNNN", url: "https://example.com/also-flaky" },
+        Date.now() - 60 * 60_000,
+      );
+      await sweepCycle(globalDb);
+
+      const stats = embedSweeperStats();
+      expect(stats.backlogStuck).toBe(true);
+      expect(stats.backlogStuckTransitions).toBe(1);
+      expect(stats.backlogStuckSince).toBeGreaterThan(0);
+      expect(stats.backlogStuckSkipped).toBeGreaterThan(1);
+    } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("a settled row clears the stall and the next stall is logged again", async () => {
+    // The other half of the latch: genuine recovery must clear it, so a
+    // re-stall after real recovery is reported again rather than suppressed.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const flakyUrl = "https://example.com/flaky-park";
+    await seedLinkMessageRoom(
+      spaceDb,
+      globalDb,
+      { room: "01KVRRRRRRRRRRRRRRRRRRRRRR", message: "01KVMMMMMMMMMMMMMMMMMMMMMM", url: flakyUrl },
+      Date.now() - 60 * 60_000,
+    );
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> => {
+      if (String(input).includes("flaky-park")) {
+        return Promise.resolve(new Response("Service Unavailable", { status: 503 }));
+      }
+      return Promise.resolve(
+        new Response(
+          '<html><head><meta property="og:title" content="Drained" /></head></html>',
+          { status: 200, headers: { "Content-Type": "text/html" } },
+        ),
+      );
+    }) as typeof globalThis.fetch;
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      await sweepCycle(globalDb); // parks the flaky link
+      await sweepCycle(globalDb); // selects nothing → stall #1
+      expect(embedSweeperStats().backlogStuck).toBe(true);
+      expect(
+        warnSpy.mock.calls
+          .map((c) => String(c[0]))
+          .filter((l) => l.includes("backlog stalled")).length,
+      ).toBe(1);
+
+      // RECOVERY: a fresh link enriches and SETTLES, so rows leave the
+      // backlog. That is genuine progress and must clear the stall.
+      await seedLinkMessageRoom(
+        spaceDb,
+        globalDb,
+        { room: "01KVRRRRRRRRRRRRRRRRRRRRR2", message: "01KVNNNNNNNNNNNNNNNNNNNNNN", url: "https://example.com/drains-now" },
+        Date.now() - 60 * 60_000,
+      );
+      await sweepCycle(globalDb);
+      const stats = embedSweeperStats();
+      expect(stats.backlogStuck).toBe(false);
+      expect(stats.lastStallCause).toBeNull();
+      // One transition in and one out.
+      expect(stats.backlogStuckTransitions).toBe(2);
+
+      // A NEW stall must be logged again — recovery cleared the latch.
+      warnSpy.mockClear();
+      globalThis.fetch = ((
+        _input: RequestInfo | URL,
+        _init?: RequestInit,
+      ): Promise<Response> =>
+        Promise.resolve(new Response("Service Unavailable", { status: 503 }))) as typeof globalThis.fetch;
+      await seedLinkMessageRoom(
+        spaceDb,
+        globalDb,
+        { room: "01KVRRRRRRRRRRRRRRRRRRRRR3", message: "01KVO000000000000000000000", url: "https://example.com/re-stall" },
+        Date.now() - 60 * 60_000,
+      );
+      await sweepCycle(globalDb); // parks the new link
+      await sweepCycle(globalDb); // stalls on it → stall #2
+      const relogged = warnSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((l) => l.includes("backlog stalled"));
+      expect(relogged.length).toBe(1);
+      expect(relogged[0]).toContain("cause=all-parked");
+      expect(embedSweeperStats().backlogStuckTransitions).toBe(3);
+    } finally {
+      warnSpy.mockRestore();
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("the idle poll escalates while stalled and returns to the base poll on recovery", async () => {
+    // Defect (C): with every URL parked, `findPendingLinks` returns 0 rows, so
+    // the batch is never full and TASK-197's full-batch throttle can never
+    // engage — the loop took the plain 30s idle branch forever. The stalled
+    // poll must back off instead, bounded so an EXPIRING window is still
+    // noticed promptly.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const parkedUrl = "https://example.com/poll-parked";
+    await seedLinkMessageRoom(
+      spaceDb,
+      globalDb,
+      { room: "01KVRRRRRRRRRRRRRRRRRRRRRR", message: "01KVMMMMMMMMMMMMMMMMMMMMMM", url: parkedUrl },
+      Date.now() - 60 * 60_000,
+    );
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> =>
+      Promise.resolve(new Response("Service Unavailable", { status: 503 }))) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      // Healthy start: the base idle poll.
+      expect(sweepIdleDelayMs()).toBe(30_000);
+
+      await sweepCycle(globalDb); // parks the link
+      await sweepCycle(globalDb); // selects nothing → stalled
+      expect(embedSweeperStats().backlogStuck).toBe(true);
+      const stalled = sweepIdleDelayMs();
+      expect(stalled).toBeGreaterThan(30_000);
+
+      // More links that will also park, one per cycle: each is selected but
+      // settles nothing, so the stall persists and the poll keeps escalating —
+      // capped, never past the ceiling.
+      for (let i = 0; i < 6; i++) {
+        await seedLinkMessageRoom(
+          spaceDb,
+          globalDb,
+          {
+            room: `01KVRRRRRRRRRRRRRRRRRRRR${i}`,
+            message: `01KVNNNNNNNNNNNNNNNNNNNNN${i}`,
+            url: `https://example.com/poll-flaky-${i}`,
+          },
+          Date.now() - 60 * 60_000,
+        );
+        await sweepCycle(globalDb);
+      }
+      expect(sweepIdleDelayMs()).toBe(300_000);
+      expect(embedSweeperStats().backlogStuckSkipped).toBeGreaterThanOrEqual(5);
+
+      // RECOVERY: a link that ENRICHES settles its row, so the backlog drains
+      // and the poll must return to the base interval immediately.
+      globalThis.fetch = ((
+        _input: RequestInfo | URL,
+        _init?: RequestInit,
+      ): Promise<Response> =>
+        Promise.resolve(
+          new Response(
+            '<html><head><meta property="og:title" content="Recovered" /></head></html>',
+            { status: 200, headers: { "Content-Type": "text/html" } },
+          ),
+        )) as typeof globalThis.fetch;
+      await seedLinkMessageRoom(
+        spaceDb,
+        globalDb,
+        { room: "01KVRRRRRRRRRRRRRRRRRRRRR2", message: "01KVOOOOOOOOOOOOOOOOOOOOOO", url: "https://example.com/poll-drains" },
+        Date.now() - 60 * 60_000,
+      );
+      await sweepCycle(globalDb);
+      expect(embedSweeperStats().backlogStuck).toBe(false);
+      expect(sweepIdleDelayMs()).toBe(30_000);
+    } finally {
       globalThis.fetch = realFetch;
       await stopEmbedSweeper();
     }

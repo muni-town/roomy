@@ -624,6 +624,7 @@ export async function createAppserver(
           dbBackoff: embed.dbBackoffActive ?? false,
           transientBackoff: embed.transientBackoff ?? 0,
           backlogStuck: embed.backlogStuck ?? false,
+          backlogStuckTransitions: embed.backlogStuckTransitions ?? 0,
           lastStallCause: embed.lastStallCause ?? null,
           lastCycle: embed.lastCycle ?? null,
         },

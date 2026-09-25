@@ -78,7 +78,7 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
 - `roomy_xrpc_requests_total` / `roomy_xrpc_request_duration_seconds` — per-endpoint request count + latency histogram
 - `roomy_pool_size` / `roomy_pool_worker_pending` — DB pool size + per-worker queue depth (the signal that caught the system-worker N+1)
 - `roomy_cache_hits_total` / `roomy_cache_misses_total` / `roomy_cache_evictions_total` / `roomy_cache_size`
-- `roomy_embed_pending` / `roomy_embed_in_flight` / `roomy_embed_enriched_null` / `roomy_embed_db_backoff` / `roomy_embed_priority_queue` / `roomy_embed_transient_backoff` / `roomy_embed_backlog_stuck` / `roomy_embed_backlog_stuck_since_seconds`
+- `roomy_embed_pending` / `roomy_embed_in_flight` / `roomy_embed_enriched_null` / `roomy_embed_db_backoff` / `roomy_embed_priority_queue` / `roomy_embed_transient_backoff`
   - `roomy_embed_pending` is the DB `pending_links` backlog — the same number
     `/health/embed` reports as `pending` (both are a `count(*)` on the global
     DB). It is **not** the in-memory queue; that is `roomy_embed_priority_queue`.
@@ -88,11 +88,22 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
     `roomy_embed_pending` with `roomy_embed_in_flight` at 0, the whole backlog
     is parked and nothing is being enriched — the shape that produced the
     5,085-pending / 0-gauge discrepancy on 2026-09-21.
+- `roomy_embed_backlog_stuck` / `roomy_embed_backlog_stuck_since_seconds` /
+  `roomy_embed_backlog_stuck_transitions_total`
   - `roomy_embed_backlog_stuck` is 1 when the backlog is non-empty but the
-    sweeper is selecting nothing because every pending link is inside its
-    transient-retry backoff (`inFlight` 0 and `dbBackoff` 0 in that state, so
-    those two gauges cannot express it). **Alert:** `roomy_embed_backlog_stuck
-    == 1` for 15m — the backlog is not draining and needs intervention.
+    sweeper is making no progress: it selected nothing (every pending link is
+    inside its transient-retry backoff, or the selection is broken), or the
+    work it selected settled no rows. `inFlight` 0 and `dbBackoff` 0 in that
+    state, so those two gauges cannot express it. **Alert:**
+    `roomy_embed_backlog_stuck == 1` for 15m — the backlog is not draining and
+    needs intervention.
+  - The flag is set/cleared only on a real change of state, and
+    `roomy_embed_backlog_stuck_transitions_total` counts those changes in both
+    directions. A rising rate there with a flat `roomy_embed_enriched_ok_total`
+    means the flag is flapping without the backlog moving — previously visible
+    only by range-querying 1,441 gauge samples (957 `1`, 484 `0`, 396
+    transitions in 24h). Read `lastStallCause` / `lastCycle` on `/health/embed`
+    for the measured cause and row counts of the last stalled cycle.
 - `roomy_search_indexer_queue` / `roomy_search_backfilled` / `roomy_push_queued`
 - `roomy_db_timeouts_total` — DB requests that hit the 30s timeout (pool saturation)
 - `roomy_process_starts_total` — process boots, incremented once per process

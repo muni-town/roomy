@@ -110,8 +110,11 @@ describe("createAppserver factory", () => {
       "roomy_pool_worker_pending",
       "roomy_cache_hits_total",
       "roomy_embed_pending",
+      // The stall-flap counter: a rate on it with a flat
+      // `roomy_embed_enriched_ok_total` is the oscillation, and it is why the
+      // sweeper no longer has to be watched through a 1,441-sample range query.
+      "roomy_embed_backlog_stuck_transitions_total",
       "roomy_db_timeouts_total",
-      "roomy_process_starts_total",
     ]) {
       expect(body).toContain(`# TYPE ${name}`);
     }

@@ -42,6 +42,7 @@ import { openSpaceDb } from "../db/db.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
 import type { MessageDto } from "../queries/selectMessages.ts";
 import { log } from "../log.ts";
+import { metrics } from "../metrics.ts";
 import type {
   InvalidationEvent,
   InvalidationRouter,
@@ -71,6 +72,16 @@ const STALL_AGE_MS = Number(process.env.EMBED_STALL_AGE_MS ?? 30 * 60_000);
  * ~ceil(25/8) ≈ 4 fetch round-trips instead of 25). Tunable via env for ops.
  */
 const CONCURRENCY = Number(process.env.EMBED_SWEEPER_CONCURRENCY ?? 8);
+/**
+ * Ceiling (ms) for the loop's idle poll while the backlog is STALLED (a cycle
+ * that selected nothing out of a non-empty, stale backlog). See
+ * {@link sweepIdleDelayMs}: without a bound, an escalating stall poll would
+ * delay noticing an EXPIRED backoff window by the stall's age (hours), since
+ * nothing else wakes the loop at window expiry. Tunable via env.
+ */
+const STALL_POLL_MAX_MS = Number(
+  process.env.EMBED_STALL_POLL_MAX_MS ?? 5 * 60_000,
+);
 
 // ─── Singleton state ────────────────────────────────────────────────────
 
@@ -94,6 +105,22 @@ let statsEnrichedNull = 0;
  */
 let statsEnrichmentDiffs = 0;
 /**
+ * How many times {@link backlogStuck} has CHANGED VALUE since start (both
+ * directions). Distinct from `backlogStuckSkipped` (how many cycles the stall
+ * persisted through): the two together say whether one backlog is stalled, or
+ * whether the gauge is flapping — production showed 957 samples `1`, 484 `0`
+ * and 396 transitions in 24h, which took a 1,441-sample range query to see.
+ * Exposed on /health/embed and as `roomy_embed_backlog_stuck_transitions_total`.
+ */
+let statsBacklogStuckTransitions = 0;
+// Prometheus mirror for the same event. Primed to 0 at module load so the
+// family is present in a scrape from process start (see the counters below).
+const metricBacklogStuckTransitions = metrics.counter(
+  "roomy_embed_backlog_stuck_transitions_total",
+  "Transitions of the embed backlog-stall flag, both directions. A high rate with flat roomy_embed_enriched_ok_total means the stall gauge is flapping.",
+);
+metricBacklogStuckTransitions.inc({}, 0);
+/**
  * Resolved by {@link pokeEmbedSweeper} to wake an idle loop immediately.
  * Null when the loop is busy draining (so extra pokes are cheap no-ops).
  */
@@ -112,9 +139,10 @@ let dbBackoffUntil = 0;
  * backlog is non-empty and its oldest row is older than {@link STALL_AGE_MS}.
  * That is the "the backlog is not draining" state — invisible to
  * `pending`/`inFlight` (both read 0/false in-memory while 5k rows sit in
- * `pending_links`). `since` is when the stall began (ms); `skipped` counts
- * cycles that saw it. Exposed on /health/embed and as a Prometheus gauge so
- * an alert can fire on the stalled backlog.
+ * `pending_links`). `since` is when the stall began (ms); `skipped` counts the
+ * cycles the stall persisted through — selection found nothing, or the work it
+ * selected settled no rows. Exposed on /health/embed and as a Prometheus gauge
+ * so an alert can fire on the stalled backlog.
  *
  * The CAUSE is deliberately not asserted here: {@link stallCause} and
  * {@link lastCycle} carry the measured numbers from the cycle that failed to
@@ -177,6 +205,60 @@ let lastCycle: {
   selected: number;
 } | null = null;
 /**
+ * The stall cause last WRITTEN to the log, or null before the first line.
+ *
+ * The log guard compares against THIS, not against `backlogStuck`-scoped
+ * state: the flag is cleared by any cycle that selects work, so a 1→0→1 flap
+ * used to reset the comparison to `null` and re-log an UNCHANGED cause
+ * (measured 2,081–2,640 warn lines/24h, every one of them this message). The
+ * latch is cleared only by {@link clearStall} — i.e. by genuine recovery — so
+ * a repeated cause is silent and a genuine re-stall is reported again.
+ */
+let loggedStallCause: StallCause | null = null;
+
+/**
+ * Whether {@link transientRetry} has been seeded from the PERSISTED retry
+ * state (see {@link seedTransientRetry}). Reset by stop/reset, because
+ * stopping clears the gate and a later start must rebuild it.
+ */
+let retryStateSeeded = false;
+
+/**
+ * Raise the backlog-stall flag and count the transition. Idempotent while the
+ * flag is already set, so `backlogStuckSkipped` (and the stall's `since`) keep
+ * describing the ONE stall rather than restarting on every cycle.
+ */
+function setStall(): void {
+  if (backlogStuck) return;
+  backlogStuck = true;
+  backlogStuckSince = Date.now();
+  backlogStuckSkipped = 0;
+  statsBacklogStuckTransitions++;
+  metricBacklogStuckTransitions.inc();
+}
+
+/**
+ * Clear the backlog-stall flag and the measurements that describe it.
+ *
+ * Called ONLY on genuine recovery — the backlog drained, or rows SETTLED (left
+ * `pending_links`) — never merely because a cycle selected work: a trickle of
+ * expired backoff windows that fail transiently again selects work and changes
+ * nothing, and clearing on it is the measured 396-transitions/24h flap. The
+ * log latch resets with it, because the next stall is then a NEW stall rather
+ * than a repeat of the one just cleared.
+ */
+function clearStall(): void {
+  if (backlogStuck) {
+    statsBacklogStuckTransitions++;
+    metricBacklogStuckTransitions.inc();
+  }
+  backlogStuck = false;
+  backlogStuckSkipped = 0;
+  stallCause = "unknown";
+  lastCycle = null;
+  loggedStallCause = null;
+}
+/**
  * Priority queue of freshly-detected live link URLs. Drained before the
  * oldest-first backlog so a newly posted link is enriched within seconds
  * instead of waiting behind thousands of historical (backfilled) pending
@@ -193,7 +275,9 @@ const priorityLinks = new Set<string>();
  * `attempts` tracks consecutive transient failures to escalate the backoff.
  * Mirrors the `retry_after`/`attempts` persisted in `comp_embed_link_data`,
  * but lives in-memory here so the global pending scan doesn't have to join
- * every per-space DB. Reset on ok/definitive outcomes and on stop.
+ * every per-space DB. Reset on ok/definitive outcomes and on stop; SEEDED from
+ * those persisted columns at startup (see {@link seedTransientRetry}), so a
+ * restart does not forget the backoff and re-fetch the whole backlog at once.
  */
 const transientRetry = new Map<string, { attempts: number; retryAt: number }>();
 
@@ -244,8 +328,14 @@ export function embedSweeperStats(): {
   backlogStuck: boolean;
   /** Epoch-ms the stall began (0 when not stuck). */
   backlogStuckSince: number;
-  /** Sweep cycles that observed the stall. */
+  /** Sweep cycles the stall persisted through (no rows settled). */
   backlogStuckSkipped: number;
+  /**
+   * Times the flag above has CHANGED VALUE since start, both directions. A
+   * high rate with a flat `enrichedOk` is the flap: the stall gauge
+   * oscillating without the backlog moving.
+   */
+  backlogStuckTransitions: number;
   /**
    * Number of URLs currently inside a transient-retry backoff window
    * (`retryAt` in the future).
@@ -284,6 +374,7 @@ export function embedSweeperStats(): {
     backlogStuck,
     backlogStuckSince,
     backlogStuckSkipped,
+    backlogStuckTransitions: statsBacklogStuckTransitions,
     transientBackoff: activeBackoffSize(),
     lastStallCause: lastCycle === null ? null : stallCause,
     lastCycle,
@@ -303,6 +394,92 @@ function activeBackoffSize(): number {
     if (retry.retryAt > now) n++;
   }
   return n;
+}
+
+/**
+ * Restore the in-memory retry gate from the PERSISTED retry state
+ * (`comp_embed_link_data.retry_after`/`attempts`).
+ *
+ * Why this is needed: the gate is process-local, but the enricher already
+ * WRITES `retry_after`/`attempts` for exactly this purpose and nothing ever
+ * read them. A restart therefore dropped all backoff while `pending_links`
+ * survived, making every parked row selectable at once and re-fetching the
+ * whole backlog — re-paying a ~0.15% success rate instead of remembering it.
+ *
+ * Why the read side lives HERE, and not in the selection query: the retry
+ * state is written per space while the work queue (`pending_links`) is global,
+ * and `findPendingLinks` reads the global DB alone — it cannot join across the
+ * separate per-space DBs. So the map is seeded once, from the spaces that
+ * actually have pending rows (a space with none has nothing to park).
+ *
+ * Only rows whose window has NOT expired are restored: an expired `retry_after`
+ * is selectable now, which is what the gate would say anyway. `attempts` is
+ * carried over so the escalation resumes where the previous process left it
+ * instead of restarting at the 1-minute step.
+ */
+async function seedTransientRetry(globalDb: DbLike): Promise<void> {
+  const now = Date.now();
+  const spaces = await globalDb
+    .query(`select distinct space_did from pending_links`)
+    .all<{ space_did: string }>();
+  let restored = 0;
+  for (const { space_did } of spaces) {
+    try {
+      const rows = await openSpaceDb(space_did)
+        .query(
+          `select entity, attempts, retry_after
+             from comp_embed_link_data
+            where retry_after is not null and retry_after > ?`,
+        )
+        .all<{ entity: string; attempts: number; retry_after: number }>([now]);
+      for (const r of rows) {
+        const existing = transientRetry.get(r.entity);
+        // Never shorten a window this process already recorded.
+        if (existing && existing.retryAt >= r.retry_after) continue;
+        transientRetry.set(r.entity, {
+          attempts: r.attempts,
+          retryAt: r.retry_after,
+        });
+        restored++;
+      }
+    } catch (err) {
+      // One unreadable space DB must not abort the seed — the sweeper
+      // self-heals it on the next fetch. debug, not warn: one line per space
+      // per start, never per cycle.
+      log.debug(`[embed-sweeper] retry-state seed failed for ${space_did}:`, err);
+    }
+  }
+  if (spaces.length > 0) {
+    log.info(
+      `[embed-sweeper] restored ${restored} parked URL(s) from ` +
+        `${spaces.length} space(s) with pending links`,
+    );
+  }
+}
+
+/**
+ * Idle-poll delay the loop uses after a cycle that selected nothing — the
+ * pacing of the STALLED path.
+ *
+ * The empty-selection case is the state production is actually in (`pending`
+ * 8.2k, `selectableRows` 0, `lastStallCause` all-parked). It took the plain
+ * {@link IDLE_POLL_MS} idle branch forever: the batch is never "full", so a
+ * full-batch throttle cannot engage, and every one of those 30-second cycles
+ * ran the stall diagnostic (one aggregate plus one probe, each binding a
+ * parameter per parked URL — 7,477 of them in production) and re-offered the
+ * same log line.
+ *
+ * While the stall persists the poll escalates 30s → 60s → 120s → 240s → 300s
+ * and stops at {@link STALL_POLL_MAX_MS}. Bounded on purpose: nothing wakes the
+ * loop when a parked URL's window EXPIRES, so this poll is what notices, and
+ * keying the escalation on the stall's AGE (hours) would delay the drain by
+ * hours. `waitForWake` is used, so a poke for a freshly-posted link still cuts
+ * any wait short. Healthy cycles keep the plain {@link IDLE_POLL_MS}.
+ */
+export function sweepIdleDelayMs(): number {
+  if (!backlogStuck) return IDLE_POLL_MS;
+  const step = Math.min(backlogStuckSkipped, 4);
+  return Math.min(IDLE_POLL_MS * 2 ** step, STALL_POLL_MAX_MS);
 }
 
 /**
@@ -406,6 +583,19 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
     return false;
   }
 
+  // One-shot: restore the persisted transient-retry state BEFORE the skip set
+  // and the selection that use it. Without this a restart re-fetches every
+  // parked URL at once (see seedTransientRetry). Failure just retries next
+  // cycle — an unseeded gate degrades to the old behaviour, it is not a hole.
+  if (!retryStateSeeded) {
+    try {
+      await seedTransientRetry(globalDb);
+      retryStateSeeded = true;
+    } catch (err) {
+      log.warn("[embed-sweeper] retry-state seed failed (will retry next cycle):", err);
+    }
+  }
+
   let pending: PendingLink[] = [];
 
   // URLs currently parked in a transient-retry backoff window. Computed once
@@ -464,6 +654,11 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
       return !retry || retry.retryAt <= now;
     });
   }
+
+  // Whether this cycle actually REMOVED rows from the backlog (settled them).
+  // A cycle that selected work but settled nothing made no progress, and must
+  // not clear the stall flag (see the hysteresis at the end of the cycle).
+  let cycleSettledRows = false;
 
   if (pending.length > 0) {
     // Group pending rows by URL → the set of spaces it is pending in (a URL
@@ -540,14 +735,20 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
     // drains, so the sweeper never reaches newer real links.
     if (settledUrls.size > 0) {
       try {
+        let deleted = 0;
         for (const p of pending) {
-          if (settledUrls.has(p.url)) {
-            await globalDb.run(
-              `delete from pending_links where space_did = ? and url = ?`,
-              [p.spaceDid, p.url],
-            );
-          }
+          if (!settledUrls.has(p.url)) continue;
+          const res = await globalDb.run(
+            `delete from pending_links where space_did = ? and url = ?`,
+            [p.spaceDid, p.url],
+          );
+          deleted += res.changes;
         }
+        // Rows actually LEFT the backlog — real progress, not churn. Counted
+        // from `changes` rather than the batch's settled URLs: a row can be
+        // gone already (another delete raced this one), and a cycle that
+        // removed nothing has not moved the queue.
+        if (deleted > 0) cycleSettledRows = true;
       } catch (err) {
         if (cycleDbError === null) cycleDbError = err;
       }
@@ -561,6 +762,10 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
   // stale backlog is doing no work, and the obvious in-memory signals stay
   // silent about it (`inFlight` 0, `dbBackoffActive` false). Record it so an
   // operator (or a Grafana alert on `roomy_embed_backlog_stuck`) can see it.
+  // A cycle that selected work but settled NOTHING has made no progress
+  // either — the trickle of expired backoff windows that fail transiently
+  // again leaves the backlog exactly as it was — so it neither clears the
+  // stall nor resets its counters (see `cycleSettledRows` and clearStall).
   //
   // The CAUSE is MEASURED here, never assumed. The previous version asserted
   // "all pending links are in transient-retry backoff" as a fixed string; that
@@ -579,7 +784,14 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
         .query(`select min(created_at) as oldest from pending_links`)
         .get<{ oldest: number | null }>();
       const oldest = row?.oldest;
-      if (oldest != null && Date.now() - oldest > STALL_AGE_MS) {
+      if (oldest == null || Date.now() - oldest <= STALL_AGE_MS) {
+        // Not a stall under this flag's own definition: either nothing is
+        // pending (the backlog drained) or its oldest row is not yet stale.
+        // Clear rather than keep an event that no longer describes the queue —
+        // the previous code cleared in neither case, so `backlogStuckSince`
+        // could outlive the backlog it was describing.
+        if (backlogStuck) clearStall();
+      } else {
         // Count the rows the SAME skip set excluded, via one aggregate.
         // `selectable` is computed over all rows at diagnostic time, so it
         // cannot be attributed to the earlier SELECT — a row inserted between
@@ -593,7 +805,7 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
         const numbers = () =>
           `pendingRows=${total} selectableRows=${selectable} ` +
           `parkedRows=${parked} backoffUrls=${backoffUrls.size} ` +
-          `selected=${pending.length}`;
+          `selected=${pending.length} stuckTransitions=${statsBacklogStuckTransitions}`;
         const age = Math.round((Date.now() - oldest) / 60_000);
 
         // `selectable > 0` says rows exist NOW that the skip set does not
@@ -605,10 +817,6 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
         const cause: StallCause = classifyStallCause(selectable, probe.length);
 
         if (cause !== "unknown") {
-          // A cause CHANGE while stalled (e.g. the parked set drained but the
-          // selection is still broken) must never be silent — record the old
-          // cause before overwriting it.
-          const prevCause = backlogStuck ? stallCause : null;
           stallCause = cause;
           lastCycle = {
             pendingRows: total,
@@ -617,14 +825,19 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
             backoffUrls: backoffUrls.size,
             selected: pending.length,
           };
-          if (!backlogStuck) {
-            backlogStuck = true;
-            backlogStuckSince = Date.now();
-            backlogStuckSkipped = 0;
-          }
-          // Log on first entry into the stall and on any cause CHANGE; stay
-          // quiet on repeats so a 30s idle poll doesn't flood the log.
-          if (prevCause !== cause) {
+          setStall();
+          // Log once per cause TRANSITION, latched independently of the
+          // `backlogStuck` flag's lifetime. The flag is cleared by any cycle
+          // that selects work, so the old guard (which compared against
+          // flag-scoped state) reset on a 1→0→1 flap and re-logged an
+          // UNCHANGED cause 2,081–2,640×/24h while `roomy_embed_backlog_stuck`
+          // saw 396 transitions. The latch is cleared only by a GENUINE
+          // recovery (see clearStall), so a repeated cause is silent and a new
+          // stall after real recovery is reported again;
+          // `backlogStuckTransitions` makes any remaining flap countable
+          // without a 1,441-sample range query.
+          if (cause !== loggedStallCause) {
+            loggedStallCause = cause;
             if (cause === "all-parked") {
               // Every pending row is inside a backoff window, so the empty
               // selection is correct and the backlog drains as windows expire.
@@ -650,10 +863,7 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
           // The probe found selectable rows: the backlog is NOT stalled (the
           // empty selection was a transient race with in-flight inserts).
           // Clear the flag instead of publishing a cause that is not true.
-          backlogStuck = false;
-          backlogStuckSkipped = 0;
-          stallCause = "unknown";
-          lastCycle = null;
+          clearStall();
         }
       }
     } catch (err) {
@@ -661,18 +871,20 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
     }
   }
 
-  // Keep the stall flag current, and count the cycles it persisted for. A
-  // cycle that selects work (pending > 0) proves the queue is moving again —
-  // clear the stall so `backlogStuck` reflects current reality, not history.
+  // Keep the stall flag current, and count the cycles it persisted through.
   if (pending.length > 0) {
-    backlogStuck = false;
-    backlogStuckSkipped = 0;
-    // Clear the measured cause too: it describes the LAST cycle that selected
-    // nothing, and reporting a stale cause after recovery would be the same
-    // class of mistake (a cause that no longer matches reality) this whole
-    // change removes.
-    stallCause = "unknown";
-    lastCycle = null;
+    if (cycleSettledRows) {
+      // Rows left `pending_links` this cycle, so the queue IS draining — the
+      // stall is over. A cycle that selected work but settled NOTHING (the
+      // trickle of expired backoff windows that fail transiently again) has
+      // changed nothing, and clearing the flag on it is exactly the measured
+      // 396-transitions/24h flap that also reset the log latch.
+      clearStall();
+    } else if (backlogStuck) {
+      // Still stalled and this cycle's work changed nothing — count it so the
+      // idle poll can escalate (see {@link sweepIdleDelayMs}).
+      backlogStuckSkipped++;
+    }
   } else if (backlogStuck) {
     backlogStuckSkipped++;
   }
@@ -694,7 +906,7 @@ async function runSweeperLoop(): Promise<void> {
       // Wait for a poke (new links) or the idle poll, whichever comes first.
       // This bounds latency for newly posted links while also self-healing
       // anything we missed (backfill, prior sessions).
-      await waitForWake(IDLE_POLL_MS);
+      await waitForWake(sweepIdleDelayMs());
     } catch (err) {
       // Outer resilience: the inner try/catches handle expected DB/fetch
       // failures, but any *unexpected* throw (a future code path not yet
@@ -911,6 +1123,9 @@ export function _resetEmbedSweeper(): void {
   backlogStuckSkipped = 0;
   stallCause = "unknown";
   lastCycle = null;
+  loggedStallCause = null;
+  retryStateSeeded = false;
+  statsBacklogStuckTransitions = 0;
 }
 
 /**
@@ -928,6 +1143,11 @@ export function stopEmbedSweeper(): Promise<void> {
   w?.(); // wake the loop so it sees `started = false` and exits
   priorityLinks.clear();
   transientRetry.clear();
+  // Stopping clears the gate, so a later start must rebuild it from the
+  // persisted retry state (see seedTransientRetry).
+  retryStateSeeded = false;
+  loggedStallCause = null;
+  statsBacklogStuckTransitions = 0;
   dbErrorCount = 0;
   dbBackoffUntil = 0;
   statsEnrichedOk = 0;
