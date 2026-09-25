@@ -1,26 +1,42 @@
-# Progressive Scope Extension — Implementation Plan
+# Progressive Scope Expansion — Implementation Plan
 
-**Date:** 2026-06-12 (updated 2026-07-02)
+**Date:** 2026-06-12 (updated 2026-07-02; redefined 2026-09-23)
 **Status:** Draft
 **Packages:** `packages/appserver`, `packages/app-lite`, `packages/sdk`
 
 ## Goal
 
-Allow app-lite to start with a minimal permission set at first login, then
-progressively request additional scopes (e.g. Bluesky DMs) on-demand when the
-user accesses a feature that needs them. Today, `OAUTH_SCOPE` is a single
-static string requested upfront.
+Roomy can usefully manage many kinds of data on a user's PDS, and on a
+community PDS via the Arbiter. Requesting all of that access at first login is
+overwhelming and uncomfortable for users who do not yet understand what Roomy
+can do. So:
 
-A critical piece not in the original design: **server-side tracking of
-approved scopes**, so that re-logging in (new browser, cleared storage, expired
-session) yields a session token for the **maximum access the user has already
-consented to** — in one round-trip, with no unnecessary consent re-prompts.
-This is implemented first, as groundwork for the later progressive scope work.
+1. Put **every scope Roomy might ever want** into `oauth-client-metadata.json`
+   (the ceiling), and **dynamically choose the subset actually requested** per
+   user and per action in the app.
+2. **Store each user's PDS access settings on the appserver**, editable from
+   their account settings. A returning user who has already consented to a set
+   of scopes gets them requested on first login — not one consent prompt per
+   feature per session.
+3. When a shipped feature needs a scope an existing session lacks, handle it
+   the same way as progressive expansion: a dialogue that names the action and
+   asks the user to accept or reject, instead of an unfriendly scope error.
 
-The motivating example is Bluesky DMs: Roomy acts as a DM client but must not
-assume all users want to grant that access. A user who previously expanded to
-`withDms` should get DM access back automatically on re-login. Future
-permission sets (calendar, notifications, etc.) follow the same pattern.
+The original motivating example was Bluesky DMs; the first *in-tree* test case
+is now **Semble record management** (see "First extension" below).
+
+## Redefinition 2026-09-23 (Meri)
+
+Meri's current statement of the problem widens the original design in four
+ways. The mechanism below (tiers, server-side grant tracking, re-auth
+round-trip) is unchanged and is still the foundation; these are the additions.
+
+| Addition | Why the draft did not cover it |
+|---|---|
+| **Editable access settings UI** in user account settings | The draft stored the grant and read it at login, but gave the user no surface to see or change it. Meri: "store users' PDS access settings in the app server and make them editable in their user account settings." |
+| **Reactive consent dialogue for newly-shipped features** | The draft's strategy B (`guardedXrpc`) was written as a "later fallback once the exact PDS error shapes are confirmed". Meri wants it in scope: this is the common real case (existing session + a feature that needs a new scope), not an edge case. |
+| **Semble records as the first tier** | The draft's first tier was `withDms`, which is not in the tree. Meri names Semble: the space-collection path via the Arbiter exists, the personal-collection action does not. |
+| **Phase-per-agent dispatch with stacked PRs** | The draft listed five rollout phases with no rule for who implements them or in what order. Meri: "create a plan for this task that splits it into several phases and then dispatch an agent for each phase as soon as the previous step is implemented. We can use stacked PRs if that's available." |
 
 ---
 
@@ -127,15 +143,21 @@ current `OAUTH_SCOPE`. Each additional tier is `base` plus its extras.
 
 ```
 base      ── current OAUTH_SCOPE (core Roomy functionality)
-withDms   ── base + Bluesky chat RPC scopes
+semble    ── base + network.cosmik.* writes to the user's own repo
+withDms   ── base + Bluesky chat RPC scopes   (deferred; not in-tree)
 ```
+
+`semble` is the first tier that will actually be exercised (Phase 6).
+`withDms` stays defined in this plan as the shape a future tier takes, but
+nothing in the tree needs it yet, so it is not a rollout phase.
 
 ### Metadata ceiling (public client)
 
 `oauth-client-metadata.json`'s `scope` field becomes the **union of all tiers**.
 At first login, app-lite requests only `base`. The consent screen shows only
-base permissions. When the user opens the DMs feature, app-lite requests
-`withDms`; the consent screen shows only the DM additions.
+base permissions. When the user first invokes a feature whose scopes are outside
+`base` (Semble, then later DMs), app-lite requests that tier; the consent screen
+shows only that tier's additions.
 
 ### Server-side scope tracking
 
@@ -150,8 +172,7 @@ The stored scope is the **last-granted** scope (most recent consent), not a
 high-water mark. This respects explicit consent narrowing — if the user
 unchecked a scope on the consent screen, the stored value reflects that, and
 the user is not silently re-granted it on next login.
-
-Two new appserver endpoints support this:
+Two new appserver endpoints support this (Phase 4 adds two more — see below):
 
 1. **`space.roomy.auth.getLoginScope`** (query, **unauthenticated**) — takes a
    handle, resolves it to a DID server-side (the appserver already has
@@ -174,9 +195,9 @@ the endpoint to prevent handle-resolution abuse (the existing `rateLimit.ts`
 infrastructure applies).
 
 **Why the raw scope string, not a tier name:** Tiers are a client-side UX
-abstraction; the server shouldn't know about `withDms`. The raw string handles
-consent narrowing correctly and is forward-compatible with new tiers without
-schema changes.
+abstraction; the server shouldn't know about `semble` or `withDms`. The raw
+string handles consent narrowing correctly and is forward-compatible with new
+tiers without schema changes.
 
 **Why `user_did` alone (no client identifier):** There is one app-lite client
 today. If we later have multiple clients (desktop, mobile) with different scope
@@ -211,7 +232,9 @@ packages/appserver/src/
   handlers/
     space.roomy.auth.getLoginScope.ts                ← NEW — unauthenticated query
     space.roomy.auth.recordScopeGrant.ts             ← NEW — authenticated procedure
-  index.ts                                           ← Register both new routes
+    space.roomy.auth.getScopeSettings.ts             ← NEW (Phase 4) — per-tier state
+    space.roomy.auth.setScopeSettings.ts             ← NEW (Phase 4) — record intent
+  index.ts                                           ← Register new routes
 ```
 
 ### App-lite
@@ -222,8 +245,14 @@ packages/app-lite/src/lib/
   config.ts                  ← MODIFIED — drop OAUTH_SCOPE (moved to scopes.ts)
   auth.svelte.ts             ← MODIFIED — grant tracking + expansion flow + server sync
   client.ts                  ← MODIFIED — add pxUnauth() for unauthenticated XRPC
+  scope-guard.ts             ← NEW (Phase 5) — isInsufficientScopeError + guardedXrpc
   components/
     ScopeGate.svelte         ← NEW — reusable "needs more permissions" gate
+    ScopeConsentDialogue.svelte ← NEW (Phase 5) — friendly accept/reject prompt
+  mutations/
+    semble-personal.ts       ← NEW (Phase 6) — write network.cosmik.card to own repo
+packages/app-lite/src/routes/user/settings/
+  scopes/+page.svelte        ← NEW (Phase 4) — user-facing access settings
 packages/app-lite/static/
   oauth-client-metadata.json ← NEW — public client metadata (union ceiling)
 ```
@@ -236,11 +265,13 @@ No change required — `scope` already flows through `login()` → `signIn()` �
 
 ### Lexicons
 
-Two new lexicon JSON files for the new endpoints:
+Four new lexicon JSON files (two per endpoint pair):
 ```
 packages/sdk/src/schemas/lexicons/
   space.roomy.auth.getLoginScope.json
   space.roomy.auth.recordScopeGrant.json
+  space.roomy.auth.getScopeSettings.json        (Phase 4)
+  space.roomy.auth.setScopeSettings.json        (Phase 4)
 ```
 
 ---
@@ -290,7 +321,20 @@ const BASE_SCOPES = [
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
 ] as const;
 
-/** Additional scopes for Bluesky DMs (chat.bsky.convo.* etc.). */
+/**
+ * Additional scopes for Semble cards written to the USER'S OWN repo. The
+ * space-collection path (`createCosmikCard`, sdk/src/atproto/cosmik-card.ts)
+ * goes through the arbiter proxy under `space.roomy.authComplete` and needs
+ * none of these — which is why this tier is the first real test of progressive
+ * expansion: the feature looks similar to one that already works, but this
+ * half genuinely requires new consent.
+ */
+const SEMBLE_SCOPES = [
+  "repo:network.cosmik.card?action=create",
+] as const;
+
+/** Additional scopes for Bluesky DMs (chat.bsky.convo.* etc.). Not needed by
+ *  anything in-tree yet; kept as the shape a future tier takes. */
 const DM_SCOPES = [
   "chat.bsky.actor.deleteAccount",
   "chat.bsky.actor.exportAccountData",
@@ -324,6 +368,7 @@ function buildScope(scopes: readonly string[]): string {
  */
 export const SCOPE_SETS = {
   base: buildScope(BASE_SCOPES),
+  semble: buildScope([...BASE_SCOPES, ...SEMBLE_SCOPES]),
   withDms: buildScope([...BASE_SCOPES, ...DM_SCOPES]),
 } as const;
 
@@ -760,11 +805,11 @@ Usage:
 
 ```svelte
 <ScopeGate
-  tier="withDms"
-  title="Direct Messages"
-  description="Roomy needs permission to read and send Bluesky DMs."
+  tier="semble"
+  title="Your Semble collection"
+  description="Roomy needs permission to add cards to your personal Semble collection."
 >
-  <DmInbox />
+  <PersonalSembleCollection />
 </ScopeGate>
 ```
 
@@ -791,7 +836,11 @@ them.
 
 > The exact `client_id` and `redirect_uris` depend on deployment. The critical
 > field for this feature is `scope` — it must contain every token from every
-> tier. Generate it with `FULL_SCOPE_CEILING` at build time.
+> tier. In production the file is **generated**, not committed:
+> `scripts/build-prod.sh` writes it (plus `oauth-client-native.json`) from a
+> `SCOPE` variable. Phase 2 re-points that variable at `FULL_SCOPE_CEILING`;
+> until then the hand-maintained `SCOPE` is the ceiling and is a superset of
+> `config.ts` by a build-time check.
 
 ---
 
@@ -809,12 +858,12 @@ them.
 7. recordScopeGrant({ scope: grantedScope })                 ← stored on server
 ```
 
-### Re-login (returning user, previously expanded to withDms)
+### Re-login (returning user, previously expanded to semble)
 
 ```
 1. User enters handle (new browser, cleared storage)
 2. login(handle) → getLoginScope(handle)
-     → { did: "...", scope: "atproto rpc:... chat.bsky.convo.* ..." }
+     → { did: "...", scope: "atproto rpc:... repo:network.cosmik.card?action=create ..." }
 3. reconcileScope(stored, base, ceiling)
      → scope = base ∪ stored (already a superset of base)
 4. signIn({ scope: reconciled })                             ← full scope
@@ -824,34 +873,47 @@ them.
 8. recordScopeGrant({ scope: grantedScope })                 ← refreshed
 ```
 
-User gets DM access immediately, no consent prompt.
+The user gets personal-Semble access back immediately, with no consent prompt.
 
-### Scope expansion (existing user, first time accessing DMs)
+### Scope expansion (existing user, first time saving to their Semble collection)
 
 ```
-1. User clicks "Direct Messages" → ScopeGate shows "Grant permission"
-2. requestScopeExpansion("withDms")
-     → sessionStorage.setItem(PENDING_EXPANSION_KEY, "withDms")
-     → signIn({ scope: SCOPE_SETS.withDms })
-3. PDS consent: shows only DM scopes (delta from current grant)
-4. User consents → callback → init()
-5. getTokenInfo() → grantedScope = base + dms
-6. recordScopeGrant({ scope: grantedScope })                 ← stored for next time
-7. hasScopeSet(grantedScope, "withDms") → true               ← gate opens
+1. User invokes "save to my Semble collection"
+2. auth.hasScope("semble") → false → consent dialogue names the capability
+3. User accepts → requestScopeExpansion("semble")
+     → sessionStorage.setItem(PENDING_EXPANSION_KEY, "semble")
+     → signIn({ scope: SCOPE_SETS.semble })
+4. PDS consent: shows only network.cosmik.* repo scopes (delta from grant)
+5. User consents → callback → init()
+6. getTokenInfo() → grantedScope = base + semble
+7. recordScopeGrant({ scope: grantedScope })                 ← stored for next time
+8. hasScopeSet(grantedScope, "semble") → true                ← gate opens
+9. The pending action resumes and the card is written
+```
+
+### Scope error on a newly-shipped feature (existing session, no expansion)
+
+```
+1. User invokes an action whose scope shipped after their session was issued
+2. The XRPC call fails with an insufficient-scope error
+3. guardedXrpc catches it → consent dialogue for the required tier
+4. Accept → step 3 of the expansion flow above; Reject → the call's error
+   surfaces with a message that names the capability, and the app stays usable
 ```
 
 ### User narrowed consent on re-login
 
 ```
-1. User re-logs in, unchecks DM scopes on consent screen
-2. getTokenInfo() → grantedScope = base only (no dms)
+1. User re-logs in, unchecks the Semble scopes on the consent screen
+2. getTokenInfo() → grantedScope = base only (no semble)
 3. recordScopeGrant({ scope: grantedScope })                 ← narrowed record
-4. hasScopeSet("withDms") → false                            ← gate re-shows
+4. hasScopeSet("semble") → false                             ← gate re-shows
 ```
 
 On next re-login, `getLoginScope` returns the narrowed scope. The user is NOT
-silently re-granted DMs. They must re-expand via ScopeGate if they want DMs
-back. This respects explicit user choice.
+silently re-granted Semble. They must re-expand if they want it back. This
+respects explicit user choice, and it is why the stored value is last-granted
+and not a high-water mark (see Open Question 2).
 
 ---
 
@@ -861,37 +923,51 @@ Two complementary approaches for deciding *when* to trigger expansion:
 
 ### A. Proactive (feature-gate check)
 
-Best when the app knows up-front that a route needs extra scopes (e.g. navigating
-to `/messages`):
+Best when the app knows up-front that an action needs extra scopes (e.g. the
+"save to my Semble collection" toolbar action):
 
 ```typescript
-import { goto } from "$app/navigation";
-
-export async function openDms() {
-  if (!auth.hasScope("withDms")) {
-    // ScopeGate component handles the prompt, or call directly:
-    await requestScopeExpansion("withDms");
+export async function saveToPersonalCollection(card: { url: string }) {
+  if (!auth.hasScope("semble")) {
+    // The consent dialogue handles the prompt and the redirect.
+    const accepted = await showScopeConsentDialogue("semble");
+    if (!accepted) return;
+    await requestScopeExpansion("semble");
     return; // browser redirects away; flow resumes in init()
   }
-  goto("/messages");
+  await saveToPersonalSembleCollection(card);
 }
 ```
 
 ### B. Reactive (intercept insufficient-scope errors)
 
-Best as a safety net for when a request fails because the token lacks a scope.
-Bluesky's PDS returns `403` with an `insufficient_scope`-style error when a
-token can't perform an RPC.
+**In scope as a shipped path (Meri 2026-09-23), not a later fallback.** This is
+the common case: a feature ships, users already hold a session without the new
+scope, and the request fails with an error that tells them nothing useful. The
+same dialogue that handles a deliberate expansion must handle this.
+
+The PDS returns a 4xx whose shape depends on the layer — `invalid_scope` from
+the authorization server, `insufficient_scope` from the resource server — and
+the exact shape must be **confirmed against a live PDS and recorded**, not
+guessed (Phase 5, step 1). The predicate below is the placeholder:
 
 ```typescript
 function isInsufficientScopeError(err: unknown): boolean {
-  // @atproto errors carry an `error` field; adjust to actual error shape
+  // @atproto errors carry an `error` field; CONFIRM the real shape in Phase 5
+  // and replace this comment with the measured values.
   return Boolean(
     err && typeof err === "object" &&
-    "error" in err && (err as any).error === "invalid_scope"
+    "error" in err &&
+    ((err as any).error === "invalid_scope" ||
+     (err as any).error === "insufficient_scope")
   );
 }
 
+/**
+ * Run an XRPC call; on an insufficient-scope failure, surface the consent
+ * dialogue for `requiredTier` instead of the raw error. Accepting navigates
+ * away to the PDS; rejecting leaves the action failed and the UI intact.
+ */
 async function guardedXrpc<T>(
   fn: () => Promise<T>,
   requiredTier?: ScopeSetName,
@@ -900,17 +976,20 @@ async function guardedXrpc<T>(
     return await fn();
   } catch (err) {
     if (requiredTier && isInsufficientScopeError(err)) {
+      const accepted = await showScopeConsentDialogue(requiredTier);
+      if (!accepted) throw err; // user declined — fail cleanly
       await requestScopeExpansion(requiredTier);
-      // Browser has navigated away; this line is unreachable in practice.
+      // Unreachable in practice: the browser has navigated to the PDS.
     }
     throw err;
   }
 }
 ```
 
-**Recommendation:** Start with (A) for known feature boundaries. Add (B) later
-as a fallback once the exact PDS error shapes are confirmed against the live
-server.
+The dialogue is a component (not an `alert`) that names the capability and
+consequence — "Roomy needs permission to add cards to your personal Semble
+collection" — with accept/reject. Meri's requirement is that it is *friendly*:
+it explains the action, not the scope token.
 
 ---
 
@@ -927,7 +1006,7 @@ server.
   `false` if the user unchecked a needed scope — the gate re-shows the prompt.
 
 - **Loopback client (dev) scope churn.** Each tier has a different `client_id`
-  (scope is in the query param). Re-authorizing with `withDms` creates a new
+  (scope is in the query param). Re-authorizing with `semble` creates a new
   client; the old `base` session is abandoned in IndexedDB. Acceptable for dev.
   Consider running `session.signOut()` on the old session before expansion to
   avoid stale entries.
@@ -937,21 +1016,27 @@ server.
   re-entry — the user only sees the consent delta, not a full sign-in.
 
 - **Existing sessions in production.** Users who logged in before this change
-  have a `base` grant. The metadata's new union ceiling doesn't retroactively
-  grant them DMs — they still need to expand via `requestScopeExpansion`. This
-  is correct and expected.
+  have a `base` grant. The metadata's new union ceiling does not retroactively
+  grant them Semble — they still need to expand via the consent dialogue. This
+  is correct, expected, and is exactly the case Meri named, so it is the case
+  Phase 5's reactive path is built for.
 
-- **Scope string length.** The union ceiling can get long. For the loopback
-  client, long `client_id` query strings may hit URL limits; the public client
-  (production) uses a URL-based `client_id` with no such limit. Dev loopback
-  should stay on `base` only.
+- **Revoke in the settings UI (Phase 4).** Removing a tier from the stored
+  grant does not remove it from a live token — the PDS has no such endpoint.
+  The UI must say the change applies at next login rather than implying
+  immediate revocation (Open Question 4).
+
+- **Loopback vs public ceiling (unchanged).** The union ceiling can get long.
+  For the loopback client, long `client_id` query strings may hit URL limits;
+  the public client (production) uses a URL-based `client_id` with no such
+  limit. Dev loopback should stay on `base` only.
 
 ### Server-side tracking edge cases
 
-- **Stored scope contains removed scopes.** A future release removes
-  `chat.bsky.convo.deleteAccount` from the DM tier. A returning user's stored
-  scope still contains it. If the client requests it, the PDS rejects with
-  `invalid_scope` (not in the client metadata ceiling). **Fix:**
+- **Stored scope contains removed scopes.** A future release removes a scope
+  from a tier (e.g. a Semble action scope the UI no longer offers). A returning
+  user's stored scope still contains it. If the client requests it, the PDS
+  rejects with `invalid_scope` (not in the client metadata ceiling). **Fix:**
   `reconcileScope()` intersects the stored scope with `FULL_SCOPE_CEILING`
   before requesting. Removed scopes are silently dropped.
 
@@ -984,11 +1069,36 @@ server.
 
 ## Rollout Phases
 
-Server-side scope tracking is implemented first, as groundwork — it provides
-the infrastructure (new endpoints, readstate table, scope reconciliation) that
-the progressive scope tiers build on. Even with only a `base` tier, the
-server-side tracking ensures re-logging users get their previously-approved
-scope (which, at this stage, is always `base` — but the plumbing is in place).
+Server-side scope tracking lands first, as groundwork: it provides the
+infrastructure (new endpoints, readstate table, scope reconciliation) that
+every later tier builds on. Even with only a `base` tier, it makes re-login
+return the user's previously-approved scope.
+
+### Dispatch model (Meri 2026-09-23)
+
+Each phase is one task, dispatched to one worker **as soon as the previous
+phase is implemented** — not all at once. Meri: "create a plan for this task
+that splits it into several phases and then dispatch an agent for each phase as
+soon as the previous step is implemented. We can use stacked PRs if that's
+available."
+
+**Stacked PRs:** yes, available and the intended shape. Phase N branches from
+phase N−1's branch (not from `next`), so a reviewer sees only that phase's
+diff, and the stack rebases and merges bottom-up. Concretely:
+
+```
+next
+ └── feat/progressive-scope-p1        (appserver groundwork)
+      └── feat/progressive-scope-p2   (client scope refactor)
+           └── feat/progressive-scope-p3 (grant tracking + settings UI)
+                └── feat/progressive-scope-p4 (metadata ceiling)
+                     └── feat/progressive-scope-p5 (Semble tier)
+```
+
+Each task's brief states its base branch explicitly, and a phase that finds its
+parent changed must rebase onto the parent head before opening its PR. A phase
+is dispatchable only once its parent has a **merged-or-open-but-green** PR;
+the coordinator verifies the parent head is present before dispatching.
 
 ### Phase 1 — Server-side scope storage (groundwork)
 
@@ -1006,7 +1116,18 @@ scope (which, at this stage, is always `base` — but the plumbing is in place).
 2. Add `reconcileScope()`, `parseScopes()`, `hasScopeSet()` helpers.
 3. Add the two new appserver RPCs to `APPSERVER_RPCS` (so their `rpc:` scopes
    are in `base`).
-4. Verify login/init still work identically. No metadata changes yet.
+4. **Move the ceiling's source of truth.** Today the ceiling is *not* generated
+   from `config.ts`: `packages/app-lite/scripts/build-prod.sh` hand-maintains a
+   `SCOPE` variable (~80 lines of `SCOPE+=" rpc:...?aud=*"`) and then verifies
+   that `config.ts`'s `APPSERVER_RPCS`/`OAUTH_SCOPE` entries are a subset of it
+   (`build-prod.sh:168-215`). That direction is correct for a single static
+   scope and cannot express a union ceiling. `scopes.ts` becomes the single
+   source, and the script derives `SCOPE` from `FULL_SCOPE_CEILING` (imported or
+   extracted the same way it reads `config.ts` today) while the build check is
+   re-pointed at the **ceiling ⊇ every tier's scopes**. Do this in Phase 2 so
+   the refactor is behaviour-preserving: the generated string must be
+   byte-identical to today's `SCOPE` before the ceiling grows in Phase 4.
+5. Verify login/init still work identically. No metadata changes yet.
 
 ### Phase 3 — Client-side grant tracking + server sync
 
@@ -1018,51 +1139,123 @@ scope (which, at this stage, is always `base` — but the plumbing is in place).
 6. Land the `ScopeGate` component (unused, ready).
 7. Still only `base` tier exists — but re-login now uses stored scope.
 
-### Phase 4 — Public client metadata ceiling
+### Phase 4 — Public client metadata ceiling + user-editable access settings
 
-1. Deploy `oauth-client-metadata.json` with `scope` = union ceiling.
-2. Verify `base` login still works against it.
+Two halves, and the second is a Meri 2026-09-23 addition.
 
-### Phase 5 — First extension (`withDms`)
+1. Grow the ceiling: `SCOPE` now derives from `FULL_SCOPE_CEILING` and includes
+   every tier's scopes (`semble`; `withDms` too, since it is defined), while
+   first-login still requests only `base`. Verify `base` login still works
+   against the wider metadata.
+2. **User-facing access settings** (Meri: "store users' PDS access settings in
+   the app server and make them editable in their user account settings"):
+   a. A new authenticated query (e.g. `space.roomy.auth.getScopeSettings`)
+      returns, per grantable tier, whether the user's stored grant covers it,
+      plus the raw stored scope for display.
+   b. A procedure (e.g. `space.roomy.auth.setScopeSettings`) lets the user
+      **request** a tier change. It cannot grant anything by itself — granting
+      requires the PDS consent round-trip — so it records *intent*, and the
+      client drives `requestScopeExpansion()`; the stored grant is updated only
+      after `getTokenInfo()` confirms what the PDS actually returned.
+   c. A settings page (user account settings, alongside the existing
+      `routes/user/settings/*`) listing each capability group with its current
+      state and an enable/revoke action.
+   d. Revoking is honest: the user can narrow the stored grant so the next
+      login requests less, but the live token keeps its scopes until the next
+      re-auth — the UI must say so rather than implying immediate revocation.
 
-1. Add `DM_SCOPES` to `scopes.ts`, define `withDms` tier.
-2. Wire a DMs entry point behind `ScopeGate tier="withDms"`.
-3. Test the re-authorization round-trip against a real PDS.
-4. Verify: expansion → `recordScopeGrant` stores broader scope → re-login gets
-   it back without re-prompting.
+### Phase 5 — Reactive consent dialogue for newly-shipped features
+
+Meri 2026-09-23: a feature shipped to users who already have a session hits a
+scope error that "is not particularly friendly"; handle it the same way as
+progressive expansion.
+
+1. Promote strategy B (`guardedXrpc` + `isInsufficientScopeError`) from
+   "later fallback" to a shipped path — confirm the actual PDS error shape
+   against a live PDS first and record it in the plan's Open Questions as an
+   answered fact.
+2. A dialogue that names the required capability, its consequence, and the
+   scopes, with accept/reject. Accept → `requestScopeExpansion(tier)` (the
+   browser navigates away; the pending action resumes after the callback).
+   Reject → the action fails cleanly with a message, and the UI stays usable.
+3. Wire it at the boundaries of features whose scopes are outside `base`.
+
+### Phase 6 — First extension (`semble`)
+
+Meri 2026-09-23: the first tier is Semble, not DMs, because the space-collection
+half already exists in-tree and the personal half does not — "it can serve as a
+good test case for progressive scope expansion."
+
+**What exists today** (verified on `origin/next` `2d5051dc`):
+`sdk/src/atproto/cosmik-card.ts` `createCosmikCard` writes
+`network.cosmik.card` via the arbiter's `space.roomy.authComplete.arbiter.proxy`
+against a **space's** stewarded repo, and the published
+`space.roomy.authComplete` scope policy admits proxied `network.cosmik.*`
+writes. app-lite wires it from the message toolbar
+(`mutations/space-card.ts`, commit `e1aff94b`). **Nothing writes to a user's
+own PDS, and no `network.cosmik.*` repo scope appears anywhere in `OAUTH_SCOPE`
+or the client metadata.**
+
+1. Add the personal-collection scopes (`repo:network.cosmik.card?action=create`,
+   and whatever `update`/`delete` the UI needs) to the metadata ceiling as a
+   new `semble` tier — deliberately NOT in `base`, so it is the first
+   capability a user meets through the consent dialogue.
+2. Add a "save to my Semble collection" action that writes
+   `network.cosmik.card` to the **user's** repo (direct `putRecord`/
+   `createRecord`, not the arbiter proxy), gated on the `semble` tier.
+3. Verify end-to-end: first attempt → dialogue → accept → consent round-trip →
+   the card lands in the user's collection → re-login returns the wider scope
+   with no prompt.
+
+**Ordering note for the dispatcher:** phases 1–3 are strictly sequential (each
+consumes the previous phase's API). Phase 4 depends on 3. Phase 5 depends on 3
+and 4 (it reuses the settings/procedure plumbing and the ceiling). Phase 6
+depends only on 2 and 5 — it adds a tier and the dialogue is what makes the
+tier reachable, so it can run in parallel with 4 once 3 has landed.
 
 ---
 
 ## Open Questions
 
-1. **Should `getLoginScope` also return the tier name** (e.g. `"withDms"`) so
-   the client can pre-select UI state? Or should the client always derive tier
-   from the scope string via `hasScopeSet`? **Recommendation:** derive from
-   scope string — the server shouldn't know about client-side tier names.
+1. **Should `getLoginScope` also return the tier name** so the client can
+   pre-select UI state? **Recommendation:** no — derive the tier from the scope
+   string via `hasScopeSet`. The server should not know client-side tier names.
+   (Meri 2026-09-23's settings UI does not change this: the settings page is a
+   client-side mapping from tier → capability label, and it renders the raw
+   stored scope for the user to see.)
 
-2. **Should we store a high-water mark** (max ever approved) **or last-granted**
-   (most recent consent)? This design uses last-granted, which respects
-   narrowing. A high-water mark would silently re-grant revoked permissions.
-   **Recommendation:** last-granted, as designed. If we later want "remember
-   that you once had DMs" as a UI hint without auto-granting, add a separate
-   `max_approved_scope` column.
+2. **Should we store a high-water mark (max ever approved) or last-granted
+   (most recent consent)?** This design uses last-granted, which respects
+   narrowing. **Now load-bearing, not optional:** the Phase 4 settings UI lets a
+   user revoke, and a high-water mark would silently re-grant on next login —
+   the exact opposite of what the revoke control promises. Keep last-granted.
+   If a "you once had this" hint is wanted later, add a separate
+   `max_approved_scope` column for display only.
 
-3. **Should the appserver proactively refresh the stored scope** (e.g. after a
-   token refresh that might have narrowed)? No — token refresh doesn't change
-   scope. Only re-authorization (consent flow) changes scope, and that's when
-   we record. A refresh that fails due to revoked scope would trigger
-   re-auth, which records again.
+3. **What is the actual PDS error shape for an insufficient scope?**
+   **UNANSWERED — Phase 5 step 1 must measure it** against a live PDS and
+   replace the placeholder predicate in §Scope Detection Strategies B. Both
+   `invalid_scope` (authorization server) and `insufficient_scope` (resource
+   server) appear in the spec; guessing which one a given failure surfaces as is
+   the defect this question exists to prevent.
 
-4. **Rate limiting for `getLoginScope`**: The endpoint does handle→DID
-   resolution, which hits the PLC directory / DNS. Should be rate-limited per
-   IP. The existing `rateLimit.ts` can handle this. What limit? Suggest
-   matching the login attempt rate limit (whatever that is — currently
-   unbounded, which is a separate issue).
+4. **Revocation semantics for the settings UI.** A user who revokes a tier
+   cannot have it removed from a live token; the PDS has no such endpoint. So
+   the honest behaviour is: narrow the *stored* grant, tell the user the change
+   takes effect at next login, and (optionally) offer "sign out and back in to
+   apply now". **Recommendation:** ship the honest version — do not imply
+   immediate revocation.
 
-5. **`pxUnauth()` implementation**: The exact `DirectXrpcClient` API may need
-   adjustment to support a "no auth" mode. The key requirement is: call
-   `getLoginScope` without a Bearer token. Confirm against the actual
-   `DirectXrpcClient` constructor when implementing Phase 3.
+5. **Rate limiting for `getLoginScope`.** The endpoint does handle→DID
+   resolution, which hits the PLC directory / DNS, so it should be rate-limited
+   per IP. The existing `rateLimit.ts` applies. **Recommendation:** match the
+   login-attempt rate; if that is currently unbounded, treat it as a separate
+   finding rather than a reason to leave this endpoint open.
+
+6. **`pxUnauth()` implementation.** The exact `DirectXrpcClient` API may need
+   adjustment to support a no-auth mode. The requirement is narrow: call
+   `getLoginScope` without a Bearer token. Confirm against the real constructor
+   in Phase 3.
 
 ---
 
@@ -1078,3 +1271,12 @@ scope (which, at this stage, is always `base` — but the plumbing is in place).
 - Existing per-user write pattern: `packages/appserver/src/handlers/space.roomy.room.updateSeen.ts`
 - Handle/DID resolution: `packages/appserver/src/xrpc/auth.ts` (`IdResolver`)
 - Auth verifier (anonymous fallback): `packages/appserver/src/xrpc/auth.ts:70-76`
+- Appserver route registration (existing pattern): `packages/appserver/src/appserver.ts`
+- Semble space-card write helper (the arbiter half that already works):
+  `packages/sdk/src/atproto/cosmik-card.ts` (`COSMIK_CARD_COLLECTION`,
+  `createCosmikCard`), exported from `packages/sdk/src/atproto/index.ts:31`
+- Semble space-card app-lite wiring: `packages/app-lite/src/lib/mutations/space-card.ts`
+  (commit `e1aff94b`, "Add a button for adding a link in a message to a
+  \"Space Card\" for Semble")
+- Existing user-settings routes (where the Phase 4 page lands):
+  `packages/app-lite/src/routes/user/settings/`
