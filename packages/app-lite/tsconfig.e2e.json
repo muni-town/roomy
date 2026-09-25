@@ -1,0 +1,21 @@
+{
+  "//": "Typecheck for the E2E specs. Scoped to the Playwright-facing files (config, fixtures, helpers, specs) and deliberately NOT the launcher/seed/stub: those are Bun-side modules that import appserver sources, so including them would pull appserver types into app-lite's check and surface that package's pre-existing errors here. The launcher is verified by actually running the suite.",
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "target": "esnext",
+    "allowImportingTsExtensions": true,
+    "types": ["bun-types"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "playwright.config.ts",
+    "e2e/fixtures.ts",
+    "e2e/spec-helpers.ts",
+    "e2e/*.spec.ts"
+  ]
+}
