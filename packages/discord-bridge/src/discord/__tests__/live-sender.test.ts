@@ -224,4 +224,32 @@ describe("LiveDiscordSender", () => {
 		const msg = await s.getMessage(CHANNEL, "123");
 		expect(msg?.content).toBe("original content");
 	});
+
+	test("getMessage reports a message Discord no longer has as absent", async () => {
+		const bot = makeBot();
+		// A bridged message deleted in Discord by someone else: discordeno
+		// rethrows every non-2xx as a bare Error with the response as `cause`.
+		bot.helpers.getMessage = async () => {
+			throw new Error("Failed to send request to discord.", {
+				cause: { status: 404, body: "Unknown Message" },
+			});
+		};
+		const s = sender(bot);
+
+		expect(await s.getMessage(CHANNEL, "123")).toBeUndefined();
+	});
+
+	test("getMessage rejects a non-404 failure", async () => {
+		const bot = makeBot();
+		bot.helpers.getMessage = async () => {
+			throw new Error("Failed to send request to discord.", {
+				cause: { status: 403, body: "Missing Permissions" },
+			});
+		};
+		const s = sender(bot);
+
+		expect(s.getMessage(CHANNEL, "123")).rejects.toThrow(
+			"Failed to send request to discord.",
+		);
+	});
 });

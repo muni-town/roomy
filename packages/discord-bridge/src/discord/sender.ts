@@ -82,13 +82,17 @@ export interface DiscordSender {
 	getGuildId(channelId: string): Promise<string | undefined>;
 
 	/**
-	 * Fetch a message's content (used to build faux reply/forward prefixes).
-	 * Returns undefined if the message can't be fetched.
+	 * Fetch a message (used to build faux reply/forward prefixes, and to
+	 * decide whether a delete must go through a webhook). Returns undefined
+	 * when Discord reports the message as nonexistent; any other failure
+	 * rejects. `webhookId` is set when a webhook authored the message — only
+	 * that webhook can edit or delete it without the Manage Messages
+	 * permission.
 	 */
 	getMessage(
 		channelId: string,
 		messageId: string,
-	): Promise<{ content: string } | undefined>;
+	): Promise<{ content: string; webhookId?: string } | undefined>;
 
 	/**
 	 * Create a thread in a Discord channel.

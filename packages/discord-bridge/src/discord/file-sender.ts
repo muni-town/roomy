@@ -54,8 +54,10 @@ export class FileDiscordSender implements DiscordSender {
 	#reactionsRemoved: RemovedReaction[] = [];
 	#parents = new Map<string, string>();
 	#guilds = new Map<string, string>();
-	#messages = new Map<string, string>();
+	#messages = new Map<string, { content: string; webhookId?: string }>();
 	#threads: CreatedThread[] = [];
+	#getMessageError: string | undefined;
+	#botDeleteError: string | undefined;
 
 	async sendMessage(
 		channelId: string,
@@ -81,6 +83,10 @@ export class FileDiscordSender implements DiscordSender {
 		messageId: string,
 		webhook?: { id: string; token: string },
 	): Promise<void> {
+		// The bot can only delete someone else's message with Manage Messages.
+		if (this.#botDeleteError && !webhook) {
+			throw new Error(this.#botDeleteError);
+		}
 		this.#deleted.push({ channelId, messageId, webhook });
 	}
 
@@ -111,10 +117,11 @@ export class FileDiscordSender implements DiscordSender {
 	async getMessage(
 		channelId: string,
 		messageId: string,
-	): Promise<{ content: string } | undefined> {
-		const key = `${channelId}:${messageId}`;
-		const content = this.#messages.get(key);
-		return content !== undefined ? { content } : undefined;
+	): Promise<{ content: string; webhookId?: string } | undefined> {
+		// Models a Discord REST failure when the message is neither absent nor
+		// fetchable — the caller must not read it as "nothing to delete".
+		if (this.#getMessageError) throw new Error(this.#getMessageError);
+		return this.#messages.get(`${channelId}:${messageId}`);
 	}
 
 	async createThread(
@@ -137,9 +144,30 @@ export class FileDiscordSender implements DiscordSender {
 		this.#guilds.set(channelId, guildId);
 	}
 
-	/** Register a message's content (for tests). */
-	setMessage(channelId: string, messageId: string, content: string): void {
-		this.#messages.set(`${channelId}:${messageId}`, content);
+	/**
+	 * Register a message (for tests). `webhookId` models Discord's authorship
+	 * marker: set it for messages the bridge posted via a webhook.
+	 */
+	setMessage(
+		channelId: string,
+		messageId: string,
+		content: string,
+		webhookId?: string,
+	): void {
+		this.#messages.set(`${channelId}:${messageId}`, { content, webhookId });
+	}
+
+	/**
+	 * Make bot deletes (those without a webhook) reject — models the bot
+	 * lacking Manage Messages on a message it doesn't own.
+	 */
+	setBotDeleteError(message: string): void {
+		this.#botDeleteError = message;
+	}
+
+	/** Make message fetches reject — models a Discord REST failure (for tests). */
+	setGetMessageError(message: string): void {
+		this.#getMessageError = message;
 	}
 
 	// ── Test helpers ────────────────────────────────────────────

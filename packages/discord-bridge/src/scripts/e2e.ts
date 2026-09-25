@@ -1,13 +1,20 @@
 /**
- * Scriptable E2E test for the Discord bridge — TASK-64 regressions.
+ * Scriptable E2E test for the Discord bridge — TASK-64 + TASK-206 regressions.
  *
  * Verifies, against a live staging bridge + staging Discord + staging
- * appserver, the two regressions reported in TASK-64:
+ * appserver, the regressions reported in TASK-64 and TASK-206:
  *
  *   1. Roomy → Discord message edits are synced (text/markdown AND
  *      application/vnd.roomy.richtext+json bodies).
  *   2. Discord → Roomy media attachments (image, video, file, and
  *      media-only messages) appear in Roomy with a `media` entry.
+ *   3. Roomy → Discord message deletes are synced, both in a channel and in
+ *      a thread (TASK-206). A thread has no webhook of its own, so a thread
+ *      delete has to go through the parent channel's webhook while targeting
+ *      the thread. Deleting a Discord-authored (non-webhook) message is
+ *      covered by the router unit tests instead: whether the bot can delete
+ *      it depends on its Manage Messages permission, so the outcome against
+ *      a live guild isn't deterministic.
  *
  * The bridge must be running (this script drives it end-to-end; it does not
  * start it). It authenticates as the bridge account and reads the bridge's
@@ -16,7 +23,10 @@
  * CI note: this cannot run in CI today — it needs a real Discord guild with
  * a bridged channel, a staging appserver, and the bridge account's app
  * password. It is written to be CI-adoptable: it takes all inputs from env,
- * exits non-zero on any failure, and cleans up the webhook it creates.
+ * exits non-zero on any failure, and cleans up the webhook and the thread it
+ * creates. The TASK-206 delete checks need the bridge bot to have Create
+ * Threads in that channel (as ordinary thread bridging does) and Manage
+ * Threads to tear the test thread down again.
  *
  * Usage (from packages/discord-bridge, with .env loaded):
  *   export E2E_SPACE_DID=did:plc:...            # bridged space
@@ -129,16 +139,33 @@ async function discordDelete(path: string): Promise<void> {
 	if (!res.ok) throw new Error(`Discord DELETE ${path}: ${res.status} ${await res.text()}`);
 }
 
-/** Read the bridge DB (read-only) to resolve a Roomy message → Discord id. */
-function discordIdForRoomyMessage(roomyMessageId: string): string | undefined {
+/** True once Discord reports the message as gone (404 Unknown Message). */
+async function discordMessageGone(
+	channelId: string,
+	messageId: string,
+): Promise<boolean> {
+	const res = await discordFetch(`/channels/${channelId}/messages/${messageId}`, {
+		headers: discordHeaders(),
+	});
+	if (res.status === 404) return true;
+	if (!res.ok) {
+		throw new Error(
+			`Discord GET /channels/${channelId}/messages/${messageId}: ${res.status}`,
+		);
+	}
+	return false;
+}
+
+/** Read the bridge DB (read-only) to resolve a Roomy id → Discord id. */
+function discordIdForRoomy(kind: string, roomyId: string): string | undefined {
 	const db = new Database(DB_PATH, { readonly: true });
 	try {
 		const row = db
 			.query(
 				`SELECT discord_id FROM id_mappings
-				 WHERE kind = 'message' AND roomy_id = ?`,
+				 WHERE kind = ? AND roomy_id = ?`,
 			)
-			.get(roomyMessageId) as { discord_id: string } | null;
+			.get(kind, roomyId) as { discord_id: string } | null;
 		return row?.discord_id;
 	} finally {
 		db.close();
@@ -178,7 +205,7 @@ function makeRichTextBody(blocks: unknown[]): {
 // ── main ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-	console.log("Discord bridge E2E (TASK-64)");
+	console.log("Discord bridge E2E (TASK-64 + TASK-206)");
 	console.log(`  space: ${SPACE_DID}`);
 	console.log(`  room:  ${ROOM_ULID}`);
 	console.log(`  channel: ${CHANNEL_ID}`);
@@ -211,7 +238,7 @@ async function main(): Promise<void> {
 	console.log(`  sent Roomy message ${roomyMessageId}`);
 
 	const discordMessageId = await poll(
-		async () => discordIdForRoomyMessage(roomyMessageId),
+		async () => discordIdForRoomy("message", roomyMessageId),
 		"bridge mapping for Roomy message",
 	);
 	check("R→D message bridged to Discord", discordMessageId !== undefined);
@@ -393,6 +420,136 @@ async function main(): Promise<void> {
 	// cleanup
 	await discordDelete(`/webhooks/${webhook.id}/${webhook.token}`).catch(() => {});
 	console.log("  (cleaned up E2E webhook)");
+
+	// ── 4. Roomy → Discord: deletes (TASK-206) ──────────────────────────────
+	console.log("== R→D: delete (channel + thread) ==");
+
+	async function sendText(roomId: string, content: string): Promise<string> {
+		const id = newUlid();
+		await xrpc.procedure("space.roomy.space.sendEvents", {
+			spaceId: SPACE_DID,
+			events: [
+				{
+					id,
+					room: roomId,
+					$type: "space.roomy.message.createMessage.v0",
+					body: makeTextBody(content),
+					extensions: {},
+				},
+			],
+		});
+		return id;
+	}
+
+	async function deleteViaRoomy(
+		roomId: string,
+		roomyMessageId: string,
+	): Promise<void> {
+		await xrpc.procedure("space.roomy.space.sendEvents", {
+			spaceId: SPACE_DID,
+			events: [
+				{
+					id: newUlid(),
+					room: roomId,
+					$type: "space.roomy.message.deleteMessage.v0",
+					messageId: roomyMessageId,
+					extensions: {},
+				},
+			],
+		});
+	}
+
+	// A message bridged to a channel must disappear from Discord.
+	const channelDeleteRoomyId = await sendText(
+		ROOM_ULID,
+		`TASK-206 E2E delete ${newUlid()}`,
+	);
+	const channelDeleteDiscordId = await poll(
+		async () => discordIdForRoomy("message", channelDeleteRoomyId),
+		"bridge mapping for the message to delete",
+	);
+	check(
+		"R→D delete: channel fixture bridged",
+		channelDeleteDiscordId !== undefined,
+	);
+	if (channelDeleteDiscordId) {
+		// Guard against a false pass: the message has to exist first.
+		check(
+			"R→D delete: channel fixture exists in Discord",
+			!(await discordMessageGone(CHANNEL_ID, channelDeleteDiscordId)),
+		);
+		await deleteViaRoomy(ROOM_ULID, channelDeleteRoomyId);
+		const channelGone = await poll(
+			async () =>
+				(await discordMessageGone(CHANNEL_ID, channelDeleteDiscordId))
+					? true
+					: undefined,
+			"channel delete to propagate to Discord",
+		);
+		check("R→D delete: channel message removed", channelGone === true);
+	}
+
+	// A message bridged to a thread must disappear too — the TASK-206
+	// regression: the delete must use the parent channel's webhook (threads
+	// can't have webhooks) while targeting the thread itself.
+	const threadId = newUlid();
+	await xrpc.procedure("space.roomy.space.sendEvents", {
+		spaceId: SPACE_DID,
+		events: [
+			{
+				id: threadId,
+				$type: "space.roomy.room.createRoom.v0",
+				kind: "space.roomy.thread",
+				name: `TASK-206 E2E thread ${threadId.slice(-8)}`,
+				defaultAccess: "readwrite",
+				extensions: {},
+			},
+			{
+				id: newUlid(),
+				room: ROOM_ULID,
+				$type: "space.roomy.link.createRoomLink.v0",
+				linkToRoom: threadId,
+				isCreationLink: true,
+			},
+		],
+	});
+	const discordThreadId = await poll(
+		async () => discordIdForRoomy("thread", threadId),
+		"Discord thread for the Roomy thread",
+	);
+	check("R→D delete: thread bridged", discordThreadId !== undefined);
+	if (discordThreadId) {
+		const threadDeleteRoomyId = await sendText(
+			threadId,
+			`TASK-206 E2E thread delete ${newUlid()}`,
+		);
+		const threadDeleteDiscordId = await poll(
+			async () => discordIdForRoomy("message", threadDeleteRoomyId),
+			"bridge mapping for the thread message to delete",
+		);
+		check(
+			"R→D delete: thread fixture bridged",
+			threadDeleteDiscordId !== undefined,
+		);
+		if (threadDeleteDiscordId) {
+			check(
+				"R→D delete: thread fixture exists in Discord",
+				!(await discordMessageGone(discordThreadId, threadDeleteDiscordId)),
+			);
+			await deleteViaRoomy(threadId, threadDeleteRoomyId);
+			const threadGone = await poll(
+				async () =>
+					(await discordMessageGone(discordThreadId, threadDeleteDiscordId))
+						? true
+						: undefined,
+				"thread delete to propagate to Discord",
+			);
+			check("R→D delete: thread message removed", threadGone === true);
+		}
+		// Deleting the Discord thread removes whatever the checks left behind.
+		await discordDelete(`/channels/${discordThreadId}`).catch(() => {});
+		console.log("  (cleaned up E2E thread)");
+	}
 
 	// ── summary ─────────────────────────────────────────────────────────────
 	console.log("");

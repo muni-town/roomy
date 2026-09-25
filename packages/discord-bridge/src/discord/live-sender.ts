@@ -7,6 +7,7 @@
  */
 
 import { ChannelTypes } from "@discordeno/bot";
+import { discordFailureDetail } from "./rest-errors.ts";
 import type { DiscordSender, SendMessageOptions } from "./sender.ts";
 import type { DiscordBot } from "./types.ts";
 
@@ -266,11 +267,21 @@ export class LiveDiscordSender implements DiscordSender {
 	async getMessage(
 		channelId: string,
 		messageId: string,
-	): Promise<{ content: string } | undefined> {
-		const msg = await this.#bot.helpers.getMessage(
-			BigInt(channelId),
-			BigInt(messageId),
-		);
-		return msg ? { content: msg.content ?? "" } : undefined;
+	): Promise<{ content: string; webhookId?: string } | undefined> {
+		try {
+			const msg = await this.#bot.helpers.getMessage(
+				BigInt(channelId),
+				BigInt(messageId),
+			);
+			return msg
+				? { content: msg.content ?? "", webhookId: msg.webhookId?.toString() }
+				: undefined;
+		} catch (err) {
+			// A bridged message can be deleted in Discord by someone else, so a
+			// 404 is an expected answer ("nothing there"), not a failure — the
+			// caller skips work instead of failing the event.
+			if (discordFailureDetail(err).status === 404) return undefined;
+			throw err;
+		}
 	}
 }

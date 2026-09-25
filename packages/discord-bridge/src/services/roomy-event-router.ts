@@ -753,24 +753,79 @@ export class RoomyEventRouter {
 			this.#repo.getDiscordId(spaceDid, "thread", event.room);
 		if (!discordChannelId) return;
 
+		// Threads can't have their own webhooks, so resolve the parent channel's
+		// (as the create and edit paths do); the delete itself targets the thread.
+		const isThread =
+			this.#repo.getDiscordId(spaceDid, "thread", event.room) !== undefined;
+		let webhookChannelId = discordChannelId;
+		if (isThread) {
+			const parentId = await this.#discord.getParentChannelId(discordChannelId);
+			if (!parentId) {
+				log.warn(
+					`Could not find parent channel for thread ${discordChannelId}; skipping delete`,
+				);
+				return;
+			}
+			webhookChannelId = parentId;
+		}
+
+		// Discord lets a webhook delete only the messages it authored, and lets
+		// the bot delete someone else's only with Manage Messages — so fetch the
+		// target to pick the right endpoint. An absent message has nothing left
+		// to delete, so that case is skipped; a failed fetch leaves the authorship
+		// unknown, and the delete is still attempted through the webhook (the
+		// endpoint the bridge used before it could tell them apart) so a REST
+		// hiccup can't silently drop the delete.
+		let target: { content: string; webhookId?: string } | undefined;
+		let fetchFailed = false;
 		try {
-			// Bridged messages are sent via the channel's webhook, so delete
-			// them via the webhook's own endpoint — the bot can't delete
-			// webhook-authored messages without the Manage Messages permission.
-			const webhook = await this.#webhooks.ensureWebhook(discordChannelId);
+			target = await this.#discord.getMessage(
+				discordChannelId,
+				discordMessageId,
+			);
+		} catch (err) {
+			fetchFailed = true;
+			log.warn(
+				`Failed to fetch Discord message ${discordMessageId} in channel ${discordChannelId}; deleting via the webhook`,
+				err,
+			);
+		}
+		if (!fetchFailed && !target) {
+			log.warn(
+				`Discord message ${discordMessageId} not found in channel ${discordChannelId}; skipping delete`,
+			);
+			return;
+		}
+
+		const webhook = await this.#webhooks.ensureWebhook(webhookChannelId);
+		// Bridged messages are sent via the channel's webhook, so delete them via
+		// the webhook's own endpoint — the bot can't delete webhook-authored
+		// messages without the Manage Messages permission.
+		const viaWebhook = fetchFailed || target?.webhookId === webhook.id;
+		try {
 			await this.#discord.deleteMessage(
 				discordChannelId,
 				discordMessageId,
-				webhook,
+				viaWebhook ? webhook : undefined,
 			);
-			this.#repo.unregisterMapping(spaceDid, "message", discordMessageId);
 		} catch (err) {
-			log.error(
-				`Failed to delete Discord message ${discordMessageId} in channel ${discordChannelId}`,
+			if (viaWebhook) {
+				log.error(
+					`Failed to delete Discord message ${discordMessageId} in channel ${discordChannelId}`,
+					err,
+				);
+				throw err;
+			}
+			// A Discord user authored this message, so the bot needs Manage
+			// Messages to delete it. Without it the Roomy delete can't be
+			// mirrored — keep the mapping rather than failing the event.
+			log.warn(
+				`Could not delete user-authored Discord message ${discordMessageId} in channel ${discordChannelId}; keeping the mapping`,
 				err,
 			);
-			throw err;
+			return;
 		}
+		this.#repo.unregisterMapping(spaceDid, "message", discordMessageId);
 	}
 
 	async #handleAddReaction(
