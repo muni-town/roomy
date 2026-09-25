@@ -44,13 +44,13 @@
   import EditRoomModal from "./EditRoomModal.svelte";
   import { editRoomModal } from "./edit-room.svelte";
   import RestoreRoomModal from "./RestoreRoomModal.svelte";
-  import EditableChannelItem from "./EditableChannelItem.svelte";
+  import EditableChannelItem from "@roomy/design/components/sidebars/EditableChannelItem.svelte";
   import InviteModal from "$lib/components/InviteModal.svelte";
   import CreateRoomModal from "@roomy/design/components/modals/CreateRoomModal.svelte";
-  import ChannelIcon from "./ChannelIcon.svelte";
+  import ChannelIcon from "@roomy/design/components/sidebars/ChannelIcon.svelte";
   import { createSpacesQuery } from "$lib/queries/spaces";
   import { toast } from "@foxui/core";
-  import RoomyMark from "$lib/components/RoomyMark.svelte";
+  import RoomyMark from "@roomy/design/components/marketing/RoomyMark.svelte";
 
   type SidebarChannel =
     typeof schemas.queries.getSpaceMetadata.SidebarChannel.infer;

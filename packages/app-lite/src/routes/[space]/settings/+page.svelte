@@ -20,7 +20,7 @@
   import ToggleGroup from "@roomy/design/components/ui/toggle-group/ToggleGroup.svelte";
   import { IconEdit } from "@roomy/design/icons";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
-  import HandleDomainDialog from "$lib/components/settings/HandleDomainDialog.svelte";
+  import HandleDomainDialog from "@roomy/design/components/modals/HandleDomainDialog.svelte";
 
   const spaceId = $derived(page.params.space!);
   const metaQuery = createSpaceMetadataQuery(() => spaceId);

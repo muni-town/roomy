@@ -10,7 +10,7 @@
   import MessageReactions from "./MessageReactions.svelte";
   import MessageToolbar from "./MessageToolbar.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
-  import LinkCard from "./embeds/LinkCard.svelte";
+  import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import ForwardContext from "./ForwardContext.svelte";
   import MessageContent from "./MessageContent.svelte";
   import ChatInput from "./ChatInput.svelte";

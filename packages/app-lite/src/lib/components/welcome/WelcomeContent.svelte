@@ -1,7 +1,7 @@
 <script lang="ts">
-  import FeatureDemoCards from "./FeatureDemoCards.svelte";
+  import FeatureDemoCards from "@roomy/design/components/marketing/FeatureDemoCards.svelte";
   import SpaceCards from "./SpaceCards.svelte";
-  import WelcomeActions from "./WelcomeActions.svelte";
+  import WelcomeActions from "@roomy/design/components/marketing/WelcomeActions.svelte";
   import DiscoverSpacesSection from "./DiscoverSpacesSection.svelte";
   import { auth } from "$lib/auth.svelte";
 

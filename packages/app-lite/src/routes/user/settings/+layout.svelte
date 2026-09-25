@@ -6,7 +6,7 @@
   import ScrollArea from "@roomy/design/components/layout/ScrollArea.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { IconArrowLeft, IconSettings } from "@roomy/design/icons";
-  import RoomyMark from "$lib/components/RoomyMark.svelte";
+  import RoomyMark from "@roomy/design/components/marketing/RoomyMark.svelte";
   import { lastActiveSpaceIdState } from "$lib/components/layout/current-space.svelte";
   import { spaceNavigation } from "$lib/components/layout/last-room.svelte";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";

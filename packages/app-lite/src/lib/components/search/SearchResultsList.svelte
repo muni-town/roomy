@@ -19,7 +19,7 @@
   import ForwardContext from "../chat/ForwardContext.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
   import MediaEmbed from "../chat/embeds/MediaEmbed.svelte";
-  import LinkCard from "../chat/embeds/LinkCard.svelte";
+  import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import { messageContentToPlaintext } from "../chat/messagePreview";
   import { messageHasVisibleContent } from "../chat/message-body";
   import {

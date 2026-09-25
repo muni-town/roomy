@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { createRoomLinksQuery, type Link } from "$lib/queries/links";
-  import LinkCard from "$lib/components/chat/embeds/LinkCard.svelte";
+  import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
 
   let {
     emptyMessage = "No links shared yet",

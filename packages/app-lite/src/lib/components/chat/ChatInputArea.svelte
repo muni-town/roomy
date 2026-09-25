@@ -17,7 +17,7 @@
   import { uploadFile } from "$lib/mutations/upload";
   import { createThread } from "$lib/mutations/thread";
   import MessageContext from "./MessageContext.svelte";
-  import LinkCard from "./embeds/LinkCard.svelte";
+  import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import { extractUrls, fetchEmbedData } from "$lib/embed/embed-service";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { scheduleAutoReload } from "$lib/error-recovery";
