@@ -38,17 +38,41 @@ export const TEST_USER_DISPLAY_NAME = "E2E Tester";
 /** Seeded space. */
 export const SEED_SPACE_ID = "did:plc:e2espace0000000000000000";
 export const SEED_SPACE_NAME = "E2E Test Space";
-/** Sidebar category the seeded channel is placed under. */
+/** Sidebar category the seeded channels are placed under. */
 export const SEED_SIDEBAR_CATEGORY_ID = "01M3C8QTVTHS4EJ1BQFG6JFE6M";
 
 /** Seeded channel. */
 export const SEED_ROOM_ID = "01M3C8QTVSVVMX7GTE7E3E659W";
 export const SEED_ROOM_NAME = "lobby";
 
+/**
+ * Second channel in the same space. A navigation regression needs two rooms in
+ * one space to distinguish "the room route re-ran" from "the sidebar/space
+ * context was re-established".
+ */
+export const SEED_ROOM_2_ID = "01M3C8QTVS0000000000000002";
+export const SEED_ROOM_2_NAME = "general";
+
+/**
+ * Second space, so a cross-space switch is expressible: the space layout is
+ * reused across it and every module-level nav state must be replaced, not
+ * merely left in place.
+ */
+export const SEED_SPACE_2_ID = "did:plc:e2espace2nd00000000000000";
+export const SEED_SPACE_2_NAME = "E2E Second Space";
+export const SEED_SPACE_2_CATEGORY_ID = "01M3C8QTVS0000000000000003";
+export const SEED_SPACE_2_ROOM_ID = "01M3C8QTVS0000000000000004";
+export const SEED_SPACE_2_ROOM_NAME = "second-space-lobby";
+
 /** Seeded message, materialised through the real `sendEvents` write path. */
 export const SEED_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVX1";
 export const SEED_MESSAGE_TEXT = "seeded message from the e2e fixture";
 
+/** Distinctive body for the second channel, so the two rooms are tellable apart. */
+export const SEED_ROOM_2_MESSAGE_TEXT = "seeded message in the general channel";
+/** Distinctive body for the second space's channel. */
+export const SEED_SPACE_2_MESSAGE_TEXT =
+  "seeded message in the second space";
 /**
  * Origin of the Discord bridge REST surface. Nothing listens here: the spec
  * that covers the bridge settings page fulfils these requests itself, and
@@ -61,3 +85,7 @@ export const BRIDGE_ORIGIN = `http://127.0.0.1:${BRIDGE_PORT}`;
 
 /** Path to the seeded channel. */
 export const SEED_ROOM_PATH = `/${SEED_SPACE_ID}/${SEED_ROOM_ID}`;
+/** Path to the second channel in the first space. */
+export const SEED_ROOM_2_PATH = `/${SEED_SPACE_ID}/${SEED_ROOM_2_ID}`;
+/** Path to the second space's channel. */
+export const SEED_SPACE_2_ROOM_PATH = `/${SEED_SPACE_2_ID}/${SEED_SPACE_2_ROOM_ID}`;
