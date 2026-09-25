@@ -1,6 +1,6 @@
 import { mount, unmount } from "svelte";
 import SpaceRoomBadge from "./embeds/SpaceRoomBadge.svelte";
-import { extractInternalLinkTargets, isRichTextDocument, Did, Ulid, type } from "@roomy-space/sdk";
+import { extractInternalLinkTargets, Did, Ulid, type } from "@roomy-space/sdk";
 import type { Block } from "@roomy-space/sdk";
 
 // Known Roomy domains — bare links to these are treated as internal space/room
@@ -11,33 +11,6 @@ const ROOMY_DOMAINS = new Set(["roomy.space", "a.roomy.space", "roomy.chat"]);
 export interface InternalLinkTarget {
   spaceId: string;
   roomId?: string;
-}
-
-/**
- * Parse a new-format message content string into blocks, or `null` when the
- * content isn't a valid richtext document.
- *
- * The appserver's `decodeContent` base64-encodes non-`text/*` mimeTypes, so
- * `message.content` for `application/vnd.roomy.richtext+json` messages is the
- * base64-encoded JSON document — the client must base64-decode before
- * `JSON.parse`. Returns `null` on any parse/validation failure so callers can
- * fall back to the legacy markdown path.
- */
-export function parseRichTextContent(content: string): Block[] | null {
-  try {
-    // The wire document is UTF-8 JSON. atob() returns a binary (Latin-1)
-    // string where each byte is its own code point, so re-decode as UTF-8
-    // before JSON.parse — otherwise non-ASCII text (ae/oe/aa, curly
-    // apostrophes, emoji) comes back as mojibake (e.g. "Ã¦Ã¸Ã¥" for "æøå").
-    const binary = atob(content);
-    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-    const json = new TextDecoder().decode(bytes);
-    const parsed: unknown = JSON.parse(json);
-    if (isRichTextDocument(parsed)) return parsed.blocks;
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 /**

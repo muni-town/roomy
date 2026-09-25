@@ -27,7 +27,7 @@
   import { resolveBlobUrl } from "$lib/utils";
   import { RICHTEXT_MIME, extractFacetUrls } from "@roomy-space/sdk";
   import type { schemas, Block } from "@roomy-space/sdk";
-  import { parseRichTextContent } from "./enrich-internal-links";
+  import { parseRichTextContent, messageHasVisibleContent } from "./message-body";
   import { extractUrls, fetchEmbedData } from "$lib/embed/embed-service";
 
   type LinkEmbedData = typeof schemas.queries.getMessage.LinkEmbedData.infer;
@@ -239,6 +239,15 @@
   const isForward = $derived(!!forwardedFrom);
   /** The embedded original message (denormalised server-side). */
   const original = $derived(forwardedFrom?.message);
+  /**
+   * Whether the forwarder attached a visible note. `message.content` is
+   * truthy for every rich-text body (the encoded empty document is a
+   * non-empty string), so an untouched forward composer would otherwise
+   * render an empty commentary bubble below every bare forward.
+   */
+  const hasCommentary = $derived(
+    messageHasVisibleContent(message.content, message.mimeType),
+  );
   /**
    * True when the message whose content the bubble renders has been edited.
    * `lastEdit` is only present on an edited message (the appserver omits it
@@ -586,7 +595,7 @@
       {/snippet}
     </MessageBubble>
 
-    {#if isForward && message.content}
+    {#if isForward && hasCommentary}
       <!-- The forwarder's own commentary, rendered below the forwarded
            message as if it were a separate message (it's modelled as part of
            the same forward unit). -->

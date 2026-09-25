@@ -15,7 +15,7 @@
   import {
     prefetchInternalLinkSummariesFromBlocks,
   } from "../chat/prefetch-link-summaries";
-  import { parseRichTextContent } from "../chat/enrich-internal-links";
+  import { parseRichTextContent } from "../chat/message-body";
   import { RICHTEXT_MIME } from "@roomy-space/sdk";
   import type { Block } from "@roomy-space/sdk";
   import { auth } from "$lib/auth.svelte";

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { renderMarkdownSanitized } from "@roomy/design/utils";
   import { enrichInternalLinks } from "./enrich-internal-links";
-  import { parseRichTextContent } from "./enrich-internal-links";
+  import { parseRichTextContent } from "./message-body";
   import BlocksRenderer from "./BlocksRenderer.svelte";
   import { RICHTEXT_MIME } from "@roomy-space/sdk";
 

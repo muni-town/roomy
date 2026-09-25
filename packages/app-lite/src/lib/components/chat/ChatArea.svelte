@@ -19,7 +19,8 @@
   import {
     prefetchInternalLinkSummariesFromBlocks,
   } from "./prefetch-link-summaries";
-  import { parseRichTextContent } from "./enrich-internal-links";
+  import { parseRichTextContent } from "./message-body";
+  import { mergeTimeline, type TimelineMessage } from "./timeline";
   import { RICHTEXT_MIME } from "@roomy-space/sdk";
   import type { Block } from "@roomy-space/sdk";
   import { goto } from "$app/navigation";
@@ -78,36 +79,12 @@
   // Lifted state for editing messages
   let editingMessageId = $state<string | undefined>(undefined);
 
-  // Compute chronological order + mergeWithPrevious from the query data
-  let timeline = $derived.by(() => {
-    const data = messagesQuery.data;
-    if (!data) return [];
-
-    // Data arrives oldest-first (ascending) from the appserver and from the
-    // SDK's applyMessageDiff — already chronological, so use it as-is.
-    const chronological = data;
-
-    // Merge keys on the message's own authorDid. Forwards are the
-    // forwarder's message (authorDid = forwarder, no server-side
-    // substitution), so adjacent forwards merge with the forwarder's other
-    // messages — never with the original author's.
-    return chronological.map((message, index) => {
-      const prev = index > 0 ? chronological[index - 1] : null;
-      let mergeWithPrevious = false;
-      if (
-        prev &&
-        message.authorDid &&
-        prev.authorDid === message.authorDid &&
-        !message.replyTo &&
-        new Date(message.timestamp || 0).getTime() -
-          new Date(prev.timestamp || 0).getTime() <
-          1000 * 60 * 5
-      ) {
-        mergeWithPrevious = true;
-      }
-      return { ...message, mergeWithPrevious };
-    });
-  });
+  // Chronological order + mergeWithPrevious from the query data. The rule
+  // (and its forward handling) lives in `timeline.ts` — see there for why a
+  // forward is a hard merge boundary.
+  let timeline = $derived(
+    messagesQuery.data ? mergeTimeline(messagesQuery.data) : [],
+  );
 
   // Warm the badge-summary cache for every internal link in the loaded
   // message set so badges mount with a cache hit instead of each issuing a
@@ -512,7 +489,7 @@
                 getKey={(x) => x.id}
                 onscroll={handleVirtualizerScroll}
               >
-              {#snippet children(message?: Message & { mergeWithPrevious?: boolean })}
+              {#snippet children(message?: TimelineMessage)}
                   {#if message}
                     <ChatMessage
                       {spaceId}

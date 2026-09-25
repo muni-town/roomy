@@ -21,6 +21,7 @@
   import MediaEmbed from "../chat/embeds/MediaEmbed.svelte";
   import LinkCard from "../chat/embeds/LinkCard.svelte";
   import { messageContentToPlaintext } from "../chat/messagePreview";
+  import { messageHasVisibleContent } from "../chat/message-body";
   import {
     IconChevronRight,
     IconNeedleThread,
@@ -296,6 +297,7 @@
               {@const replyPreviewMime =
                 replyPreview?.forwardedFrom?.message?.mimeType ??
                 replyPreview?.mimeType}
+              {@const hasCommentary = isForward && messageHasVisibleContent(m.content, m.mimeType)}
               <li>
                 <!-- Results render with the same MessageBubble the chat
                      area uses. The whole row navigates to the room; inner
@@ -464,7 +466,7 @@
                     {/snippet}
                   </MessageBubble>
 
-                  {#if isForward && m.content}
+                  {#if hasCommentary}
                     <!-- The forwarder's own note, below the forwarded
                          original — same as the chat area. -->
                     <div class="mt-1">
