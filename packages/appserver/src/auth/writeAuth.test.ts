@@ -7,9 +7,12 @@ import { fileURLToPath } from "node:url";
 import type { DbLike } from "../db/types.ts";
 import {
   checkWriteAuth,
+  prewarmWriteAuthAccess,
   ALLOWED_TYPES,
   REJECTED_TYPES,
+  type WriteAuthResult,
 } from "./writeAuth.ts";
+import { createAccessMemo, spaceAccess, type SpaceAccess } from "./access.ts";
 import { newUlid } from "@roomy-space/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -724,16 +727,7 @@ describe("auth/writeAuth — service self-write", () => {
     const { asyncDb: db } = freshDb();
     await seedStrandedSpace(db);
 
-    const result = await checkWriteAuth(
-      db,
-      SPACE,
-      SERVICE,
-      { $type: "space.roomy.role.addMemberRole.v0", id: newUlid(), userDid: USER, roleId: ROLE },
-      undefined,
-      undefined,
-      undefined,
-      SERVICE,
-    );
+    const result = await checkWriteAuth(db, SPACE, SERVICE, { $type: "space.roomy.role.addMemberRole.v0", id: newUlid(), userDid: USER, roleId: ROLE }, { serviceDid: SERVICE });
     expect(result).toBeUndefined();
   });
 
@@ -741,16 +735,7 @@ describe("auth/writeAuth — service self-write", () => {
     const { asyncDb: db } = freshDb();
     await seedStrandedSpace(db);
 
-    const result = await checkWriteAuth(
-      db,
-      SPACE,
-      SERVICE,
-      { $type: "space.roomy.role.removeMemberRole.v0", id: newUlid(), userDid: USER, roleId: ROLE },
-      undefined,
-      undefined,
-      undefined,
-      SERVICE,
-    );
+    const result = await checkWriteAuth(db, SPACE, SERVICE, { $type: "space.roomy.role.removeMemberRole.v0", id: newUlid(), userDid: USER, roleId: ROLE }, { serviceDid: SERVICE });
     expect(result).toBeUndefined();
   });
 
@@ -762,16 +747,7 @@ describe("auth/writeAuth — service self-write", () => {
       SERVICE,
     ]);
 
-    const result = await checkWriteAuth(
-      db,
-      SPACE,
-      SERVICE,
-      { $type: "space.roomy.role.addMemberRole.v0", id: newUlid(), userDid: USER, roleId: ROLE },
-      undefined,
-      undefined,
-      undefined,
-      SERVICE,
-    );
+    const result = await checkWriteAuth(db, SPACE, SERVICE, { $type: "space.roomy.role.addMemberRole.v0", id: newUlid(), userDid: USER, roleId: ROLE }, { serviceDid: SERVICE });
     expect(result).toBeUndefined();
   });
 
@@ -784,16 +760,7 @@ describe("auth/writeAuth — service self-write", () => {
       "space.roomy.space.removeAdmin.v0",
       "space.roomy.space.banAccount.v0",
     ]) {
-      const result = await checkWriteAuth(
-        db,
-        SPACE,
-        SERVICE,
-        { $type, id: newUlid(), userDid: USER },
-        undefined,
-        undefined,
-        undefined,
-        SERVICE,
-      );
+      const result = await checkWriteAuth(db, SPACE, SERVICE, { $type, id: newUlid(), userDid: USER }, { serviceDid: SERVICE });
       expect(result?.status).toBe(403);
     }
   });
@@ -803,16 +770,7 @@ describe("auth/writeAuth — service self-write", () => {
     await seedStrandedSpace(db);
     await seedUser(db, OTHER);
 
-    const result = await checkWriteAuth(
-      db,
-      SPACE,
-      OTHER,
-      { $type: "space.roomy.role.addMemberRole.v0", id: newUlid(), userDid: USER, roleId: ROLE },
-      undefined,
-      undefined,
-      undefined,
-      SERVICE,
-    );
+    const result = await checkWriteAuth(db, SPACE, OTHER, { $type: "space.roomy.role.addMemberRole.v0", id: newUlid(), userDid: USER, roleId: ROLE }, { serviceDid: SERVICE });
     expect(result?.status).toBe(403);
   });
 
@@ -995,5 +953,149 @@ describe("auth/writeAuth — reply targets must be messages", () => {
       },
     });
     expect(result).toBeUndefined();
+  });
+});
+
+// ── Batched authorization (the sendEvents N+1) ────────────────────────────
+
+/**
+ * Wrap a handle so every `query` call is counted. The authorize path only
+ * reads, so counting `query` counts its SQL statements.
+ */
+function countQueries(db: DbLike): { db: DbLike; count: () => number } {
+  let n = 0;
+  const wrapped = new Proxy(db, {
+    get(target, prop, recv) {
+      if (prop !== "query") return Reflect.get(target, prop, recv);
+      return (...args: unknown[]) => {
+        n++;
+        return (Reflect.get(target, prop, recv) as (...a: unknown[]) => unknown).apply(
+          target,
+          args,
+        );
+      };
+    },
+  });
+  return { db: wrapped, count: () => n };
+}
+
+/**
+ * Authorize `events` the way `sendEvents` does — one context, one access memo,
+ * one batched prewarm — against a counting handle, and return the statements
+ * spent. Seeding is deliberately outside the count.
+ */
+async function authorizeBatch(
+  rawDb: DbLike,
+  events: Array<{ id: string; $type: string; room: string; body: unknown; extensions: unknown }>,
+  did: string,
+  access: SpaceAccess,
+): Promise<{ statements: number; denial: WriteAuthResult }> {
+  const { db, count } = countQueries(rawDb);
+  const accessMemo = createAccessMemo();
+  await prewarmWriteAuthAccess(db, events as never, did, accessMemo);
+  let denial: WriteAuthResult;
+  for (const event of events) {
+    denial = await checkWriteAuth(db, SPACE, did, event as never, {
+      access,
+      accessMemo,
+    });
+    if (denial) return { statements: count(), denial };
+  }
+  return { statements: count(), denial: undefined };
+}
+
+describe("auth/writeAuth — batched authorization", () => {
+  /**
+   * The `sendEvents.authorize` N+1: a batch of N messages to one room used to
+   * re-resolve that room (and the caller's space standing) once per event —
+   * ~7 SQL statements each, measured in docs/sendevents-write-path-review.md
+   * as the 11.5 s authorize span under load. Authorizing through one memo
+   * must cost a constant, not N × constant.
+   */
+  test("a batch to one room does not cost a room resolution per event", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
+    const access = await spaceAccess(db, SPACE, USER);
+
+    const small = await authorizeBatch(
+      db,
+      Array.from({ length: 5 }, () => createMessageEvent(CHANNEL)),
+      USER,
+      access,
+    );
+    const big = await authorizeBatch(
+      db,
+      Array.from({ length: 50 }, () => createMessageEvent(CHANNEL)),
+      USER,
+      access,
+    );
+
+    expect(small.denial).toBeUndefined();
+    expect(big.denial).toBeUndefined();
+    // Ten times the events, no meaningful extra SQL. The pre-fix cost was
+    // ~7 statements *per event*, so this assertion fails on the old path by
+    // two orders of magnitude.
+    expect(big.statements - small.statements).toBeLessThanOrEqual(2);
+    expect(big.statements).toBeLessThan(20);
+  });
+
+  test("the batched path denies exactly what the isolated path denies", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "none");
+    await seedUser(db, OTHER);
+    const access = await spaceAccess(db, SPACE, OTHER);
+
+    const batched = await authorizeBatch(
+      db,
+      Array.from({ length: 3 }, () => createMessageEvent(CHANNEL)),
+      OTHER,
+      access,
+    );
+    const isolated = await checkWriteAuth(db, SPACE, OTHER, createMessageEvent(CHANNEL), {
+      access,
+    });
+
+    expect(batched.denial).toEqual(isolated);
+    expect(batched.denial?.status).toBe(403);
+  });
+
+  /**
+   * moveMessages authorizes a *destination* room through `toRoomId`, which is
+   * not the `room` field. The prewarm must collect it too, or that event's
+   * check silently keeps its own round-trips.
+   */
+  test("a moveMessages destination is prewarmed, not resolved on demand", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    const DEST = newUlid();
+    await seedChannel(db, DEST, SPACE, "readwrite");
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, ADMIN, "admin");
+    const access = await spaceAccess(db, SPACE, ADMIN);
+
+    const moveEvents = (n: number) =>
+      Array.from({ length: n }, () => ({
+        id: newUlid(),
+        $type: "space.roomy.message.moveMessages.v0",
+        room: CHANNEL,
+        toRoomId: DEST,
+      }));
+
+    const { db: counting, count } = countQueries(db);
+    const accessMemo = createAccessMemo();
+    const events = moveEvents(20);
+    await prewarmWriteAuthAccess(counting, events as never, ADMIN, accessMemo);
+    const afterPrewarm = count();
+    for (const event of events) {
+      await checkWriteAuth(counting, SPACE, ADMIN, event as never, { access, accessMemo });
+    }
+
+    // Both rooms resolved by the prewarm; the loop adds nothing.
+    expect(count() - afterPrewarm).toBe(0);
   });
 });

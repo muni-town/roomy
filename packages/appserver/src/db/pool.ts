@@ -1,16 +1,20 @@
 /**
  * Worker pool for per-space DBs (Phase 4 of docs/plans/per-space-dbs.md).
  *
- * The per-space DBs are the source of truth for space data, but they all run
- * on a single `Bun.Worker` thread today, serializing every SQLite operation
- * through one `postMessage` queue. This module fans the per-space DBs out
- * across a pool of N workers, hash-routed by `spaceDid`, so different
- * spaces' materialization and reads run on different threads in parallel.
+ * Before Phase 4 every SQLite operation in the process ran on one `Bun.Worker`
+ * thread, serialized through one `postMessage` queue. This module fans the
+ * per-space DBs out across a pool of N workers, hash-routed by `spaceDid`, so
+ * different spaces' materialization and reads run on different threads in
+ * parallel.
  *
  * Topology:
  *   - N "space" workers: open per-space DBs (`data/spaces/<spaceDid>.sqlite`)
  *     lazily, LRU-cached. `hash(spaceDid) % N` pins a space to one worker so
- *     its handle + prepared statements stay warm.
+ *     its handle + prepared statements stay warm. Space-scoped *auth* checks
+ *     (`spaceAccess`/`roomAccess`, which read `edges`/`comp_bans`/`comp_room`
+ *     in the per-space DB) run here too, against the same DB as the reads and
+ *     writes they gate — so they contend with that space's own traffic, not
+ *     with every other space's.
  *   - 1 "global" worker: owns the global DB (`data/global.sqlite`), and can
  *     open per-space DBs for the entity_space backfill.
  *   - 1 "readstate" worker: owns the read-state DB (`data/roomy-readstate.sqlite`).
@@ -18,11 +22,13 @@
  *
  * The three shared DBs each get a DEDICATED worker so a slow query on any one
  * doesn't serialize the other two (previously global, read-state and event-log
- * all shared a single "system" worker thread).
+ * all shared a single "system" worker thread). The global worker is still a
+ * single thread by design: the cross-space lookups that land on it
+ * (`entity_space` resolution, federation grants) are low-frequency.
  *
  * The pool is a drop-in replacement for the single `WorkerLink` behind
  * `openSpaceDb`: `forSpace(spaceDid)` returns an `AsyncDatabase` pinned to the
- * owning worker with the same `{ targetDb: \"space\", spaceDid }` route.
+ * owning worker with the same `{ targetDb: "space", spaceDid }` route.
  */
 
 import { AsyncDatabase, WorkerLink } from "./asyncDatabase.ts";

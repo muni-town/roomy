@@ -240,12 +240,17 @@ open.
 Ordered by value/effort. None of these are the current bottleneck; #1 and #2
 matter as write volume grows.
 
-1. **Batch the authorization N+1.** `sendEvents` calls `checkWriteAuth` per
-   event, and each room-write check calls `roomAccess` — ~3–4 SQL round-trips
-   per room. `roomAccessMany` already exists (`auth/access.ts:453`) and is used
-   by the read handlers; the write path never adopted it. A batch of 50
-   messages to one room re-resolves the same room 50 times. This is the
-   `sendEvents.authorize 11449ms` span shape under load.
+1. **Batch the authorization N+1 — DONE (2026-09-25).** `sendEvents` authorizes
+   every event in a batch through one `WriteAuthContext`
+   (`auth/writeAuth.ts`), which carries a single `AccessMemo` + `FederationMemo`
+   for the request, and calls `prewarmWriteAuthAccess` first so every room the
+   batch touches is resolved in one batched `roomAccessMany` pass. A 50-message
+   batch to one room went from **353 SQL statements to 7** in the authorize
+   phase (measured with a query-counting handle; probe round-trips
+   `1035 → 792` per call). `checkMessageAuthorOrAdmin` shares the memo too.
+   Regression test: `auth/writeAuth.test.ts` ("batched authorization").
+   *Residual:* reply targets are still one `entities` lookup per reply
+   attachment, inside the reply branch.
 2. **Collapse round-trips per event.** ~38/call at batch=1 is a lot for a
    single insert. The per-event `isSpaceRebuilding` probe and the per-event
    `applyBatch` transaction are the obvious targets (both could be one

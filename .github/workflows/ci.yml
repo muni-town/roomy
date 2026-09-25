@@ -133,6 +133,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build SDK (app-lite tests resolve its dist)
+        run: pnpm turbo run build-lib
       - name: Test App-lite
         run: pnpm --filter app-lite test
 

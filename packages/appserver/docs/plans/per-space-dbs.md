@@ -5,7 +5,13 @@
 
 ## Problem
 
-The appserver runs **one `Bun.Worker` thread** that owns all SQLite I/O process-wide. That single worker currently manages **three ATTACHed databases** — materialised views (`data/roomy.sqlite`), read-state (`data/roomy-readstate.sqlite`), and the append-only event log (`data/roomy-events.sqlite`) — accessed through one `AsyncDatabase` proxy over one `postMessage` queue. Every query, materialization batch, auth check, and embed sweep serializes through that queue. The perf review (`docs/.llm.perf-review.md`) documents the impact:
+> **Historical.** This section describes the pre-Phase-1 architecture, which no
+> longer exists. The appserver now runs **N per-space workers** plus three
+> dedicated shared-DB workers (see the Phase 4 status below and
+> `src/db/pool.ts`). Read it as the motivation for the split, not as a
+> description of the current system.
+
+The appserver ran **one `Bun.Worker` thread** that owned all SQLite I/O process-wide. That single worker managed **three ATTACHed databases** — materialised views (`data/roomy.sqlite`), read-state (`data/roomy-readstate.sqlite`), and the append-only event log (`data/roomy-events.sqlite`) — accessed through one `AsyncDatabase` proxy over one `postMessage` queue. Every query, materialization batch, auth check, and embed sweep serialized through that queue. The perf review (`docs/.llm.perf-review.md`) documents the impact:
 
 - 15–25 worker round-trips per materialized event
 - 1.5–2.5M round-trips for a 100k-event space backfill
@@ -24,7 +30,7 @@ Split the materialised-views DB into:
 2. **Global DB** (`data/global.sqlite`) — cross-space data (membership edges)
 3. **Read-state DB** (`data/roomy-readstate.sqlite`) — user-scoped state (read positions, thread activity) — already a separate file, stays as-is
 
-> The **event-log DB** (`data/roomy-events.sqlite`) is a fourth database that is **not split** by this plan. It is the append-only source of truth and is shared across spaces; re-materialization reads it sequentially per stream on boot. It is owned by the same single worker today and stays there — per-space query workers only handle materialised views.
+> The **event-log DB** (`data/roomy-events.sqlite`) is a fourth database that is **not split** by this plan. It is the append-only source of truth and is shared across spaces; re-materialization reads it sequentially per stream on boot. It has its own dedicated worker today (`af3f6501`), separate from the per-space pool — per-space query workers only handle materialised views.
 
 A **worker pool** (N = 4–8, matching CPU cores) handles per-space DB requests. Hash-based routing ensures the same space always hits the same worker, enabling handle caching and prepared-statement reuse.
 
@@ -74,7 +80,7 @@ A **worker pool** (N = 4–8, matching CPU cores) handles per-space DB requests.
 | `read_positions` | Per-user, per-room read position + unread count |
 | `user_thread_activity` | Per-user, per-thread last activity timestamp |
 
-> Today the read-state DB is a **separate file** (`data/roomy-readstate.sqlite`) but is **not** a separate worker — it is opened and `ATTACH`ed into the same single worker as the materialised DB (`worker.ts` `handleInit`). This plan keeps the read-state DB as its own file; whether it also gets a dedicated worker is a separate decision. The split target diagram below shows it on a dedicated worker for clarity of the proposed topology.
+> The read-state DB is a **separate file** (`data/roomy-readstate.sqlite`) on its **own dedicated worker** (`af3f6501`) — it no longer shares a thread with the materialised DB. This plan keeps it as its own file; whether it also gets a pool is a separate decision (`docs/plans/readstate-sharding-review.md` concludes it is not the bottleneck). The split target diagram below shows it on a dedicated worker.
 
 ## Cross-Space Queries (the minority)
 
@@ -684,9 +690,11 @@ Run the full test suite with the monolithic DB in read-only mode. All tests shou
 
 **Goal**: Move the per-space DBs off the single shared worker onto a pool of N workers, so different spaces' materialization and reads run on different threads in parallel. This is the payoff the whole split was designed for — Phases 1–3 only split the *files*; the single worker that serializes all SQLite I/O is still the bottleneck the plan's problem statement identified.
 
-> **Status (2026-08):** Pending. The split is currently file-level only. `src/db/db.ts` creates one `WorkerLink` (one `Bun.Worker`); `AsyncDatabase.forSpace(spaceDid)` routes every space to that same thread. The worker owns the per-space DBs, the global DB, the read-state DB, and the event-log DB. The LRU cache (`spaceDbs`), prepared-statement cache (`preparedStmts`), and the materialization queue all live in that one worker.
+> **Status (2026-09):** Shipped. Phase 4 landed in `c5e66677` ("per-space DBs phase 4 — worker pool + materialization batching"); `af3f6501` split the one shared "system" worker into dedicated global/read-state/event-log workers, and `cca2d482` raised the default per-space pool size to 8. `src/db/pool.ts` owns the pool; `db.ts`'s `openDb()` returns the `PooledDatabase` router over it, so `openSpaceDb(spaceDid)` routes to `hash(spaceDid) % N`. Observable in production as `roomy_pool_size` and the `roomy_pool_worker_pending` series (`space-0`…`space-N`, `global`, `readstate`, `events`) on `/health/pool`.
+>
+> The section below is the pre-implementation analysis and is retained as the design record; its "Current Bottleneck" describes the single-worker state that Phase 4 removed.
 
-### Current Bottleneck
+### Current Bottleneck (pre-Phase 4 — historical)
 
 Every SQLite operation — every per-space read, every materialization batch, every auth check, every embed-sweep write — serializes through one `postMessage` queue into one worker thread. The perf review (`docs/.llm.perf-review.md`) measured 15–25 worker round-trips per materialized event and 1.5–2.5M round-trips for a 100k-event space backfill. Because all spaces share the worker, one busy space's materialization delays every other space's reads and writes.
 
@@ -759,28 +767,26 @@ This is the subtle part. Cross-space queries fan out to many per-space DBs, and 
 
 #### 1. Correctness (must pass regardless of hash distribution)
 
-- **Full suite on a pool.** The existing 466+ appserver tests run against an isolated single worker. Add a pool-aware test harness that boots N=2–4 workers and runs the same suite; every test must pass identically. This catches routing bugs (wrong worker, dropped route, cross-worker state leakage).
-- **Cross-space equivalence.** For a fixed set of spaces, assert `getSpaces`, `getActivityFeed`, `getSpaceUnreadCount`, and `openSpaceDbForEntity` return byte-identical results whether the spaces land on one worker or spread across N. Concretely: run the query with N=1 (all on one worker) and N=4, and diff the outputs. This proves the pool doesn't change semantics — only scheduling.
-- **Hash-collision stress.** Force a pathological case (a user whose spaces all hash to the same worker) and assert the cross-space queries still return correct results — just not faster. This is the "correctness independent of performance" guarantee.
-- **Determinism.** Assert `hash(spaceDid) % N` is stable across two pool instantiations (same space → same worker index), so caches/prepared statements are actually reused.
-- **Failure isolation.** Kill one pool worker mid-request; assert only the spaces pinned to it fail, other spaces' queries succeed, and the failed space recovers on the next request (re-materialize from the event log).
+- **Full suite on a pool.** The appserver suite (1143 pass / 1 skip as of 2026-09) runs against the real pool — `openDb()` returns the `PooledDatabase` router, and the e2e fixtures boot `createAppserver` over it. The pool-specific coverage is `src/db/pool.test.ts`: hash determinism + distribution, per-space pinning/isolation, and router dispatch to the global/read-state workers. A pool-aware harness that re-runs the whole suite at N=2–4 as a separate mode was **not** built — the suite already exercises the pool at the default size, so it would only add hash-distribution variety, not new routing paths.
+- **Determinism.** Asserted in `src/db/pool.test.ts` (`hashSpace` is deterministic across calls; the same space lands on the same worker index), so caches/prepared statements are actually reused.
+- **Failure isolation.** Pool worker crash only affects spaces pinned to it; they recover on next access. `DatabasePool.teardown` behaviour is covered by the TASK-122 tests in `pool.test.ts` (fire-and-forget routed requests around `closeDb()` raise no unhandled rejection).
+- **Not built:** cross-space byte-equivalence at N=1 vs N=4, hash-collision stress, and kill-one-worker mid-request. Correctness here rests on the pool being a pure *scheduling* change (same on-disk files, same routes) plus the routing tests above.
 
 #### 2. Performance (the actual win)
 
-- **Materialization throughput.** Extend `scripts/bench-materialize.ts` to run the same backfill with pool sizes 1, 2, 4, 8 and report events/sec and total wall time. This is the headline metric — the plan's problem statement is about materialization round-trips. Expect the biggest gain here because backfill writes are the round-trip-heavy path.
-- **Cross-space fan-out latency.** Add a bench that seeds a user in N spaces (N = 5, 20, 50) and times `getSpaces` and `getActivityFeed` at pool sizes 1 vs 4. Report p50/p95/p99. This directly measures whether the fan-out parallelizes in practice.
-- **Hash distribution.** Generate a realistic set of space DIDs (real `did:plc:*` values) and assert they distribute within ±20% of uniform across N workers. Flag pathological clustering (e.g. a prefix that collides) before it ships.
-- **Round-trip count.** Instrument the pool to count worker round-trips per query and per materialized event; compare against the single-worker baseline (15–25/event today).
+- **Per-worker pending backlog.** `roomy_pool_worker_pending` (per-worker in-flight gauge, scraped from `/health/pool`) is live in production — that is the signal that showed load genuinely spreading across `space-0`…`space-7` rather than collapsing onto one thread, and it is what caught the system-worker N+1.
+- **Round-trip count.** `perf/probe-sendevents.ts` instruments `WorkerLink.prototype.send` and reports DB round-trips per call/event split by destination DB. `perf/probe-projections.ts` and `perf/probe-getthreads.ts` measure the read paths the same way.
+- **Not built:** the pool-size 1/2/4/8 materialization-throughput sweep and the cross-space fan-out latency bench. The pool size is instead defended empirically (4 → 8 after the two hottest spaces collided; see `DEFAULT_POOL_SIZE` in `src/db/db.ts`).
 
 #### 3. Observability
 
-- **Per-worker stats.** Expose per-worker queue depth, in-flight requests, round-trips, LRU cache hit rate, and evictions. Add a `/health/pool` endpoint (mirroring `/health/embed`, `/health/push`) so production can see whether the pool is actually spreading load or collapsing onto one worker.
-- **Hash→worker map.** Log or expose the `spaceDid → worker` mapping so an operator can reason about why a given space is slow (is it alone on a hot worker?).
+- **Per-worker stats.** `/health/pool` reports pool size and per-worker in-flight counts (`poolStats()`), exported to Prometheus as `roomy_pool_size` + `roomy_pool_worker_pending{worker=...}`. LRU cache hit rate / eviction counters and worker round-trips per query are **not** exposed.
+- **Not built:** the logged `spaceDid → worker` map.
 
 #### 4. Operational
 
-- **Graceful pool-size change.** Changing N re-distributes spaces (caches re-warm). Verify a rolling restart with a different N doesn't corrupt or lose data — space DBs are on disk and independent, so this should be safe; the test is that reads after the change return correct data.
-- **Rollback.** The pool is a pure scheduling change over the same on-disk per-space DBs. Rollback = stop, set N=1 (or revert to the single `WorkerLink`), restart. No data migration. Verify the single-worker path still works as a fallback.
+- **Graceful pool-size change.** Changing `APPSERVER_DB_POOL_SIZE` re-distributes spaces; caches re-warm. Space DBs are on disk and independent, so this is a scheduling change only.
+- **Rollback.** `APPSERVER_DB_POOL_SIZE=1` reverts to a single per-space worker without a data migration. The pool is a pure scheduling change over the same on-disk per-space DBs.
 
 ### Risks
 

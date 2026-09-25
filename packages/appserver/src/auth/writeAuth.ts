@@ -13,12 +13,17 @@ import type { DbLike } from "../db/types.ts";
 import {
   spaceAccess,
   roomAccess,
+  roomAccessMany,
   isAdmin,
   isMember,
   isBanned,
+  type AccessMemo,
   type SpaceAccess,
 } from "./access.ts";
-import { federatedRoomAccess } from "./federation.ts";
+import {
+  type FederationMemo,
+  federatedRoomAccess,
+} from "./federation.ts";
 
 // ── Result type ──────────────────────────────────────────────────────────
 
@@ -264,14 +269,91 @@ function denied(
   return { status, error, message };
 }
 
+// ── Per-request authorization context ────────────────────────────────────
+
+/**
+ * Shared state for authorizing a *batch* of events in one request.
+ *
+ * `sendEvents` authorizes up to `MAX_BATCH_SIZE` (50) events in a loop, and
+ * every check re-derives the same facts: the caller's membership/admin/ban
+ * flags in the target space, the target room's `default_access` + parent
+ * channel, and every room's role grants. Resolved per event, a 50-message
+ * batch to one room issues ~15 SQL round-trips per event for facts that
+ * cannot differ between them (see docs/sendevents-write-path-review.md, the
+ * `sendEvents.authorize 11449ms` span).
+ *
+ * The memos are per-request by construction (created in the handler, never
+ * shared across requests) — access state changes through events, so a
+ * longer-lived cache would be a security bug, exactly as documented on
+ * `AccessMemo`.
+ *
+ * `dbResolver` / `globalDb` are only consulted by the federation checks, and
+ * `serviceDid` by the service self-write rule.
+ */
+export interface WriteAuthContext {
+  /**
+   * The caller's pre-resolved `SpaceAccess` for the target space. The handler
+   * resolves it once (it needs it for the ban gate anyway); passing it here
+   * keeps the space-level checks off the DB entirely.
+   */
+  access?: SpaceAccess;
+  /** Per-request access memo — share room/space decisions across the batch. */
+  accessMemo?: AccessMemo;
+  /** Per-request federation memo — shares the global-DB federation lookups. */
+  federationMemo?: FederationMemo;
+  dbResolver?: (spaceDid: string) => DbLike;
+  globalDb?: DbLike;
+  serviceDid?: string;
+}
+
+/**
+ * Resolve every room a batch's events will check, in one batched pass, into
+ * `memo` — so the per-event `roomAccess` calls in the authorize loop are memo
+ * hits instead of ~7 SQL round-trips each.
+ *
+ * Called before the authorize loop, deliberately: the loop's ordering (and
+ * therefore which denial a mixed batch reports) is unchanged, and this only
+ * reads. Results land in the same memo the loop reads from, so a prewarmed
+ * room and an on-demand one are indistinguishable to callers.
+ *
+ * The ids are taken from the *raw* (unparsed) events so this can run before
+ * validation without changing which error a malformed batch produces:
+ *   - `room` is the write target for every room-write type, and for
+ *     edit/delete;
+ *   - `toRoomId` is `moveMessages`' destination guard.
+ * An id that turns out not to be a room resolves to `exists: false`, which
+ * is what the unbatched path would have computed for it anyway.
+ *
+ * Must stay in parity with `checkWriteAuth`'s dispatch: if a type's auth
+ * reads a room id this does not collect, that room is simply resolved on
+ * demand as before (correct, just not batched).
+ */
+export async function prewarmWriteAuthAccess(
+  db: DbLike,
+  events: Array<Record<string, unknown>>,
+  did: string,
+  memo: AccessMemo,
+): Promise<void> {
+  const roomIds: string[] = [];
+  for (const event of events) {
+    if (typeof event !== "object" || event === null) continue;
+    if (typeof event.room === "string") roomIds.push(event.room);
+    if (typeof event.toRoomId === "string") roomIds.push(event.toRoomId);
+  }
+  if (roomIds.length === 0) return;
+  await roomAccessMany(db, roomIds, did, memo);
+}
+
 // ── Auth check helpers ───────────────────────────────────────────────────
 async function requireSpaceAdminCheck(
   db: DbLike,
   spaceId: string,
   did: string,
-  access?: SpaceAccess,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
-  const admin = access ? access.isAdmin : await isAdmin(db, spaceId, did);
+  const admin = ctx.access
+    ? ctx.access.isAdmin
+    : await isAdmin(db, spaceId, did, ctx.accessMemo);
   if (!admin) {
     return denied(403, "Forbidden", "Caller is not a space admin");
   }
@@ -282,9 +364,9 @@ async function requireMembershipCheck(
   db: DbLike,
   spaceId: string,
   did: string,
-  access?: SpaceAccess,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
-  const a = access ?? await spaceAccess(db, spaceId, did);
+  const a = ctx.access ?? await spaceAccess(db, spaceId, did, ctx.accessMemo);
   if (a.isBanned) {
     return denied(403, "Forbidden", "Caller is banned from this space");
   }
@@ -302,9 +384,11 @@ async function requireNotBannedCheck(
   db: DbLike,
   spaceId: string,
   did: string,
-  access?: SpaceAccess,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
-  const banned = access ? access.isBanned : await isBanned(db, spaceId, did);
+  const banned = ctx.access
+    ? ctx.access.isBanned
+    : await isBanned(db, spaceId, did, ctx.accessMemo);
   if (banned) {
     return denied(403, "Forbidden", "Caller is banned from this space");
   }
@@ -316,10 +400,10 @@ async function requireRoomWriteCheck(
   db: DbLike,
   roomId: string,
   did: string,
-  globalDb?: DbLike,
-  dbResolver?: (spaceDid: string) => DbLike,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
-  const access = await roomAccess(db, roomId, did);
+  const { accessMemo, globalDb, dbResolver } = ctx;
+  const access = await roomAccess(db, roomId, did, accessMemo);
   if (!access.exists) {
     return denied(404, "NotFound", `Room not found: ${roomId}`);
   }
@@ -333,6 +417,8 @@ async function requireRoomWriteCheck(
   if (globalDb && dbResolver) {
     const fed = await federatedRoomAccess(db, globalDb, roomId, did, {
       spaceDbResolver: dbResolver,
+      memo: ctx.federationMemo,
+      accessMemo,
     });
     if (fed && fed.canWrite) return undefined;
   }
@@ -364,16 +450,16 @@ async function checkMoveMessages(
   spaceId: string,
   callerDid: string,
   event: { $type: string; [k: string]: unknown },
-  access?: SpaceAccess,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
-  const adminResult = await requireSpaceAdminCheck(db, spaceId, callerDid, access);
+  const adminResult = await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
   if (adminResult) return adminResult;
 
   const toRoomId = event.toRoomId;
   if (typeof toRoomId !== "string") {
     return denied(400, "InvalidRequest", "Event is missing required 'toRoomId' field");
   }
-  const destination = await roomAccess(db, toRoomId, callerDid);
+  const destination = await roomAccess(db, toRoomId, callerDid, ctx.accessMemo);
   if (!destination.exists) {
     return denied(404, "NotFound", `Destination room not found: ${toRoomId}`);
   }
@@ -472,8 +558,9 @@ async function checkMessageAuthorOrAdmin(
   messageId: string,
   callerDid: string,
   spaceId: string,
+  memo?: AccessMemo,
 ): Promise<WriteAuthResult> {
-  const admin = await isAdmin(db, spaceId, callerDid);
+  const admin = await isAdmin(db, spaceId, callerDid, memo);
   if (admin) return undefined;
 
   const row = await db.query("SELECT tail FROM edges WHERE head = ? AND label = 'author' LIMIT 1").get<{ tail: string }>([messageId]);
@@ -499,10 +586,9 @@ async function checkFederationRequest(
   spaceId: string,
   callerDid: string,
   event: { $type: string; [k: string]: unknown },
-  access?: SpaceAccess,
-  dbResolver?: (spaceDid: string) => DbLike,
-  globalDb?: DbLike,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
+  const { accessMemo, dbResolver, globalDb } = ctx;
   const federatingSpaceDid = event.federatingSpaceDid;
   if (typeof federatingSpaceDid !== "string" || federatingSpaceDid === "") {
     return denied(
@@ -513,7 +599,7 @@ async function checkFederationRequest(
   }
 
   // Caller must be a member (or admin) of the origin space A.
-  const a = access ?? (await spaceAccess(db, spaceId, callerDid));
+  const a = ctx.access ?? (await spaceAccess(db, spaceId, callerDid, accessMemo));
   if (a.isBanned) {
     return denied(403, "Forbidden", "Caller is banned from this space");
   }
@@ -536,7 +622,7 @@ async function checkFederationRequest(
     );
   }
   const bDb = dbResolver(federatingSpaceDid);
-  const b = await spaceAccess(bDb, federatingSpaceDid, callerDid);
+  const b = await spaceAccess(bDb, federatingSpaceDid, callerDid, accessMemo);
   if (!b.isAdmin) {
     return denied(
       403,
@@ -586,18 +672,18 @@ async function checkFederationRemove(
   spaceId: string,
   callerDid: string,
   event: { $type: string; [k: string]: unknown },
-  access?: SpaceAccess,
-  dbResolver?: (spaceDid: string) => DbLike,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
+  const { accessMemo, dbResolver } = ctx;
   // Admin of the origin space A.
-  const a = access ?? (await spaceAccess(db, spaceId, callerDid));
+  const a = ctx.access ?? (await spaceAccess(db, spaceId, callerDid, accessMemo));
   if (a.isAdmin) return undefined;
 
   // Admin of the receiving space B (cross-space).
   const federatingSpaceDid = event.federatingSpaceDid;
   if (typeof federatingSpaceDid === "string" && federatingSpaceDid !== "" && dbResolver) {
     const bDb = dbResolver(federatingSpaceDid);
-    const b = await spaceAccess(bDb, federatingSpaceDid, callerDid);
+    const b = await spaceAccess(bDb, federatingSpaceDid, callerDid, accessMemo);
     if (b.isAdmin) return undefined;
   }
 
@@ -622,11 +708,11 @@ async function checkFederationRespond(
   spaceId: string,
   callerDid: string,
   event: { $type: string; [k: string]: unknown },
-  access?: SpaceAccess,
-  globalDb?: DbLike,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
+  const { accessMemo, globalDb } = ctx;
   // Admin of the origin space A (decisions are A's to make).
-  const a = access ?? (await spaceAccess(db, spaceId, callerDid));
+  const a = ctx.access ?? (await spaceAccess(db, spaceId, callerDid, accessMemo));
   if (!a.isAdmin) {
     return denied(
       403,
@@ -683,11 +769,11 @@ async function checkSetReceiverPermission(
   spaceId: string,
   callerDid: string,
   event: { $type: string; [k: string]: unknown },
-  access?: SpaceAccess,
-  globalDb?: DbLike,
+  ctx: WriteAuthContext,
 ): Promise<WriteAuthResult> {
+  const { globalDb } = ctx;
   // B admin of the receiving space (spaceId === B).
-  const adminResult = await requireSpaceAdminCheck(db, spaceId, callerDid, access);
+  const adminResult = await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
   if (adminResult) return adminResult;
 
   const originSpaceId = event.originSpaceId;
@@ -732,12 +818,19 @@ async function checkSetReceiverPermission(
 /**
  * Check whether the caller is authorized to send a single event.
  *
- * `dbResolver`, when provided, returns the DB handle for another space by
+ * `ctx.dbResolver`, when provided, returns the DB handle for another space by
  * DID — used only for the federation-request cross-space admin-of-B check.
  *
- * `serviceDid` is the appserver's own DID. When the caller matches it and the
- * event is a `SERVICE_SELF_WRITE_TYPES` member, the event is allowed without
- * space membership or admin — see that constant for the rule and its limits.
+ * `ctx.serviceDid` is the appserver's own DID. When the caller matches it and
+ * the event is a `SERVICE_SELF_WRITE_TYPES` member, the event is allowed
+ * without space membership or admin — see that constant for the rule and its
+ * limits.
+ *
+ * `ctx.accessMemo` is the per-request access memo. Authorizing a batch
+ * through one memo is what keeps repeated checks on the same room/space off
+ * the DB — callers authorizing a batch should also call
+ * {@link prewarmWriteAuthAccess} first so the first room check is a batched
+ * read rather than the head of an N+1.
  *
  * @returns `undefined` if allowed, or a denial object.
  */
@@ -746,11 +839,9 @@ export async function checkWriteAuth(
   spaceId: string,
   callerDid: string,
   event: { $type: string; [k: string]: unknown },
-  access?: SpaceAccess,
-  dbResolver?: (spaceDid: string) => DbLike,
-  globalDb?: DbLike,
-  serviceDid?: string,
+  ctx: WriteAuthContext = {},
 ): Promise<WriteAuthResult> {
+  const { access, accessMemo, dbResolver, globalDb, serviceDid } = ctx;
   const { $type } = event;
 
   // Reject banned types
@@ -790,7 +881,7 @@ export async function checkWriteAuth(
     if (typeof roomId !== "string") {
       return denied(400, "InvalidRequest", `Event is missing required 'room' field`);
     }
-    const roomResult = await requireRoomWriteCheck(db, roomId, callerDid, globalDb, dbResolver);
+    const roomResult = await requireRoomWriteCheck(db, roomId, callerDid, ctx);
     if (roomResult) return roomResult;
     return await checkReplyTargets(db, event);
   }
@@ -801,7 +892,7 @@ export async function checkWriteAuth(
     if (typeof roomId !== "string") {
       return denied(400, "InvalidRequest", `Event is missing required 'room' field`);
     }
-    return await checkMoveMessages(db, spaceId, callerDid, event, access);
+    return await checkMoveMessages(db, spaceId, callerDid, event, ctx);
   }
 
   // ── Room write + author check (edit/delete) ──
@@ -810,7 +901,7 @@ export async function checkWriteAuth(
     if (typeof roomId !== "string") {
       return denied(400, "InvalidRequest", `Event is missing required 'room' field`);
     }
-    const roomResult = await requireRoomWriteCheck(db, roomId, callerDid, globalDb, dbResolver);
+    const roomResult = await requireRoomWriteCheck(db, roomId, callerDid, ctx);
     if (roomResult) return roomResult;
 
     // Additional author-or-admin check
@@ -818,7 +909,7 @@ export async function checkWriteAuth(
     if (typeof messageId !== "string") {
       return denied(400, "InvalidRequest", `Event is missing required 'messageId' field`);
     }
-    const authorResult = await checkMessageAuthorOrAdmin(db, messageId, callerDid, spaceId);
+    const authorResult = await checkMessageAuthorOrAdmin(db, messageId, callerDid, spaceId, accessMemo);
     if (authorResult) return authorResult;
     return await checkReplyTargets(db, event);
   }
@@ -832,52 +923,52 @@ export async function checkWriteAuth(
   // require space admin.
   if ($type === "space.roomy.room.createRoom.v0") {
     if (event.kind === "space.roomy.thread") {
-      return await requireMembershipCheck(db, spaceId, callerDid, access);
+      return await requireMembershipCheck(db, spaceId, callerDid, ctx);
     }
-    return await requireSpaceAdminCheck(db, spaceId, callerDid, access);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
   }
 
   // ── Room manage ──
   if (ROOM_MANAGE_TYPES.has($type)) {
-    return await requireSpaceAdminCheck(db, spaceId, callerDid, access);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
   }
 
   // ── Space manage ──
   if (SPACE_MANAGE_TYPES.has($type)) {
-    return await requireSpaceAdminCheck(db, spaceId, callerDid, access);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
   }
 
   // ── Space member ──
   if (SPACE_MEMBER_TYPES.has($type)) {
     // joinSpace only requires "not banned"
     if ($type === "space.roomy.space.joinSpace.v0") {
-      return await requireNotBannedCheck(db, spaceId, callerDid, access);
+      return await requireNotBannedCheck(db, spaceId, callerDid, ctx);
     }
-    return await requireMembershipCheck(db, spaceId, callerDid, access);
+    return await requireMembershipCheck(db, spaceId, callerDid, ctx);
   }
 
   // ── Bridged ──
   if (BRIDGED_TYPES.has($type)) {
-    return await requireSpaceAdminCheck(db, spaceId, callerDid, access);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
   }
 
   // ── Channel federation ──
   if (FEDERATION_TYPES.has($type)) {
     if ($type === "space.roomy.federation.request.v0") {
-      return await checkFederationRequest(db, spaceId, callerDid, event, access, dbResolver, globalDb);
+      return await checkFederationRequest(db, spaceId, callerDid, event, ctx);
     }
     if ($type === "space.roomy.federation.respond.v0") {
-      return await checkFederationRespond(db, spaceId, callerDid, event, access, globalDb);
+      return await checkFederationRespond(db, spaceId, callerDid, event, ctx);
     }
     if ($type === "space.roomy.federation.setReceiverPermission.v0") {
-      return await checkSetReceiverPermission(db, spaceId, callerDid, event, access, globalDb);
+      return await checkSetReceiverPermission(db, spaceId, callerDid, event, ctx);
     }
     // remove may be initiated by an admin of either side (A or B);
     // setRoomPermission targets the origin space (A) and requires an A admin.
     if ($type === "space.roomy.federation.remove.v0") {
-      return await checkFederationRemove(db, spaceId, callerDid, event, access, dbResolver);
+      return await checkFederationRemove(db, spaceId, callerDid, event, ctx);
     }
-    return await requireSpaceAdminCheck(db, spaceId, callerDid, access);
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
   }
 
   // Should be unreachable if ALLOWED_TYPES and the dispatch tables agree

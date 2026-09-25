@@ -12,8 +12,13 @@ import { parseEvent, type Event, StreamDid } from "@roomy-space/sdk";
 import { withSpan } from "../telemetry/tracing.ts";
 import { log } from "../log.ts";
 import { openGlobalDb, openSpaceDb } from "../db/db.ts";
-import { checkWriteAuth } from "../auth/writeAuth.ts";
-import { spaceAccess } from "../auth/access.ts";
+import {
+  checkWriteAuth,
+  prewarmWriteAuthAccess,
+  type WriteAuthContext,
+} from "../auth/writeAuth.ts";
+import { createAccessMemo, spaceAccess } from "../auth/access.ts";
+import { createFederationMemo } from "../auth/federation.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
@@ -117,10 +122,37 @@ async function sendEventsImpl(
   // membership, policy): the dominant cost for a large batch. One span
   // around the loop (rather than N) keeps the trace cheap while still
   // separating "authorize" from "write" when reading the waterfall.
+  //
+  // One context (and therefore one access memo + one federation memo) for
+  // the whole batch: the per-event checks re-derive the same space-level
+  // membership/admin/ban flags and the same room→space→parent→default_access
+  // facts, and neither can differ between events in one request. The rooms
+  // are resolved up front in one batched read (prewarmWriteAuthAccess), so
+  // the loop's room checks are memo hits rather than an N+1 — a 50-message
+  // batch to one room previously re-resolved that room 50 times.
+  const authCtx: WriteAuthContext = {
+    access,
+    accessMemo: createAccessMemo(),
+    federationMemo: createFederationMemo(),
+    dbResolver: openSpaceDb,
+    globalDb: openGlobalDb(),
+    // The service's own DID is allowed to author a narrow set of events
+    // (the Pro members-role sweep) without holding space membership or
+    // admin — see SERVICE_SELF_WRITE_TYPES in auth/writeAuth.ts.
+    serviceDid: streamManager.ownDid,
+  };
   await withSpan(
     "sendEvents.authorize",
     { "roomy.event_count": events.length },
     async (s) => {
+      // Raw events: validation errors are still produced by the loop below,
+      // in batch order, exactly as before.
+      await prewarmWriteAuthAccess(
+        db,
+        events as Array<Record<string, unknown>>,
+        callerDid,
+        authCtx.accessMemo!,
+      );
       for (let i = 0; i < events.length; i++) {
         const raw = events[i];
         if (typeof raw !== "object" || raw === null) {
@@ -144,13 +176,7 @@ async function sendEventsImpl(
           spaceId,
           callerDid,
           event,
-          access,
-          openSpaceDb,
-          openGlobalDb(),
-          // The service's own DID is allowed to author a narrow set of events
-          // (the Pro members-role sweep) without holding space membership or
-          // admin — see SERVICE_SELF_WRITE_TYPES in auth/writeAuth.ts.
-          streamManager.ownDid,
+          authCtx,
         );
         if (denial) {
           throw new XrpcError(

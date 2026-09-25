@@ -108,20 +108,20 @@ async function seedRequestContext(opts: { memberA: string; adminA?: boolean; adm
 describe("auth/writeAuth — federation request", () => {
   test("admin of B who is a member of A can request", async () => {
     const { aDb, bDb } = await seedRequestContext({ memberA: ADMIN_B, adminB: true });
-    const result = await checkWriteAuth(aDb, A, ADMIN_B, requestEvent(B), undefined, () => bDb);
+    const result = await checkWriteAuth(aDb, A, ADMIN_B, requestEvent(B), { dbResolver: () => bDb });
     expect(result).toBeUndefined();
   });
 
   test("admin of B but NOT a member of A is denied", async () => {
     const { aDb, bDb } = await seedRequestContext({ memberA: ADMIN_B });
     // no member edge on A
-    const result = await checkWriteAuth(aDb, A, ADMIN_B, requestEvent(B), undefined, () => bDb);
+    const result = await checkWriteAuth(aDb, A, ADMIN_B, requestEvent(B), { dbResolver: () => bDb });
     expect(result?.status).toBe(403);
   });
 
   test("member of A but not admin of B is denied", async () => {
     const { aDb, bDb } = await seedRequestContext({ memberA: MEMBER_A, adminB: false });
-    const result = await checkWriteAuth(aDb, A, MEMBER_A, requestEvent(B), undefined, () => bDb);
+    const result = await checkWriteAuth(aDb, A, MEMBER_A, requestEvent(B), { dbResolver: () => bDb });
     expect(result?.status).toBe(403);
   });
 
@@ -147,9 +147,7 @@ describe("auth/writeAuth — federation request", () => {
       "insert into space_federations (space_id, federating_space_did, status, requested_by_did) values (?, ?, 'active', ?)",
       [A, B, ADMIN_B],
     );
-    const result = await checkWriteAuth(
-      aDb, A, ADMIN_B, requestEvent(B), undefined, () => bDb, globalDb,
-    );
+    const result = await checkWriteAuth(aDb, A, ADMIN_B, requestEvent(B), { dbResolver: () => bDb, globalDb: globalDb });
     expect(result?.status).toBe(409);
   });
 
@@ -160,9 +158,7 @@ describe("auth/writeAuth — federation request", () => {
       "insert into space_federations (space_id, federating_space_did, status, requested_by_did) values (?, ?, 'pending', ?)",
       [A, B, ADMIN_B],
     );
-    const result = await checkWriteAuth(
-      aDb, A, ADMIN_B, requestEvent(B), undefined, () => bDb, globalDb,
-    );
+    const result = await checkWriteAuth(aDb, A, ADMIN_B, requestEvent(B), { dbResolver: () => bDb, globalDb: globalDb });
     expect(result).toBeUndefined();
   });
 
@@ -173,9 +169,7 @@ describe("auth/writeAuth — federation request", () => {
       "insert into space_federations (space_id, federating_space_did, status, requested_by_did) values (?, ?, 'removed', ?)",
       [A, B, ADMIN_B],
     );
-    const result = await checkWriteAuth(
-      aDb, A, ADMIN_B, requestEvent(B), undefined, () => bDb, globalDb,
-    );
+    const result = await checkWriteAuth(aDb, A, ADMIN_B, requestEvent(B), { dbResolver: () => bDb, globalDb: globalDb });
     expect(result).toBeUndefined();
   });
 
@@ -186,9 +180,7 @@ describe("auth/writeAuth — federation request", () => {
       "insert into space_federations (space_id, federating_space_did, status, requested_by_did) values (?, ?, 'rejected', ?)",
       [A, B, ADMIN_B],
     );
-    const result = await checkWriteAuth(
-      aDb, A, ADMIN_B, requestEvent(B), undefined, () => bDb, globalDb,
-    );
+    const result = await checkWriteAuth(aDb, A, ADMIN_B, requestEvent(B), { dbResolver: () => bDb, globalDb: globalDb });
     expect(result?.status).toBe(409);
   });
 });
@@ -209,7 +201,7 @@ describe("auth/writeAuth — federation respond/remove", () => {
     await seedUser(aDb, ADMIN_A);
     await addEdge(aDb, A, ADMIN_A, "admin");
     const globalDb = freshGlobalDb();
-    const result = await checkWriteAuth(aDb, A, ADMIN_A, respondEvent(B, true), undefined, undefined, globalDb);
+    const result = await checkWriteAuth(aDb, A, ADMIN_A, respondEvent(B, true), { globalDb: globalDb });
     expect(result?.status).toBe(404);
   });
 
@@ -223,7 +215,7 @@ describe("auth/writeAuth — federation respond/remove", () => {
       "insert into space_federations (space_id, federating_space_did, status, requested_by_did) values (?, ?, 'active', ?)",
       [A, B, ADMIN_A],
     );
-    const result = await checkWriteAuth(aDb, A, ADMIN_A, respondEvent(B, true), undefined, undefined, globalDb);
+    const result = await checkWriteAuth(aDb, A, ADMIN_A, respondEvent(B, true), { globalDb: globalDb });
     expect(result?.status).toBe(409);
   });
 
@@ -237,7 +229,7 @@ describe("auth/writeAuth — federation respond/remove", () => {
       "insert into space_federations (space_id, federating_space_did, status, requested_by_did) values (?, ?, 'removed', ?)",
       [A, B, ADMIN_A],
     );
-    const result = await checkWriteAuth(aDb, A, ADMIN_A, respondEvent(B, true), undefined, undefined, globalDb);
+    const result = await checkWriteAuth(aDb, A, ADMIN_A, respondEvent(B, true), { globalDb: globalDb });
     expect(result?.status).toBe(409);
   });
 
@@ -269,7 +261,7 @@ describe("auth/writeAuth — federation respond/remove", () => {
     await seedUser(bDb, ADMIN_B);
     await addEdge(bDb, B, ADMIN_B, "admin");
     // ADMIN_B is not an admin of A, but is an admin of B.
-    const result = await checkWriteAuth(aDb, A, ADMIN_B, removeEvent(B), undefined, () => bDb);
+    const result = await checkWriteAuth(aDb, A, ADMIN_B, removeEvent(B), { dbResolver: () => bDb });
     expect(result).toBeUndefined();
   });
 
@@ -282,7 +274,7 @@ describe("auth/writeAuth — federation respond/remove", () => {
     await seedSpace(bDb, B);
     await seedUser(bDb, MEMBER_A);
     await addEdge(bDb, B, MEMBER_A, "member");
-    const result = await checkWriteAuth(aDb, A, MEMBER_A, removeEvent(B), undefined, () => bDb);
+    const result = await checkWriteAuth(aDb, A, MEMBER_A, removeEvent(B), { dbResolver: () => bDb });
     expect(result?.status).toBe(403);
   });
 
@@ -339,11 +331,7 @@ describe("auth/writeAuth — federation setReceiverPermission", () => {
       "insert into space_federations (space_id, federating_space_did, status, requested_by_did) values (?, ?, 'active', ?)",
       [A, B, ADMIN_B],
     );
-    const result = await checkWriteAuth(
-      bDb, B, ADMIN_B,
-      setReceiverEvent(A, "01CHANNEL00000000000000000", "did:plc:bob", "user", "read"),
-      undefined, undefined, globalDb,
-    );
+    const result = await checkWriteAuth(bDb, B, ADMIN_B, setReceiverEvent(A, "01CHANNEL00000000000000000", "did:plc:bob", "user", "read"), { globalDb: globalDb });
     expect(result?.status).toBe(409);
   });
 
@@ -361,11 +349,7 @@ describe("auth/writeAuth — federation setReceiverPermission", () => {
       "insert into federation_room_permissions (space_id, federating_space_did, room_id, permission) values (?, ?, ?, 'readwrite')",
       [A, B, "01CHANNEL00000000000000000"],
     );
-    const result = await checkWriteAuth(
-      bDb, B, ADMIN_B,
-      setReceiverEvent(A, "01CHANNEL00000000000000000", "did:plc:bob", "user", "read"),
-      undefined, undefined, globalDb,
-    );
+    const result = await checkWriteAuth(bDb, B, ADMIN_B, setReceiverEvent(A, "01CHANNEL00000000000000000", "did:plc:bob", "user", "read"), { globalDb: globalDb });
     expect(result).toBeUndefined();
   });
 
@@ -375,11 +359,7 @@ describe("auth/writeAuth — federation setReceiverPermission", () => {
     await seedUser(bDb, ADMIN_B);
     await addEdge(bDb, B, ADMIN_B, "admin");
     const globalDb = freshGlobalDb();
-    const result = await checkWriteAuth(
-      bDb, B, ADMIN_B,
-      setReceiverEvent(A, "01CHANNEL00000000000000000", "did:plc:bob", "user", null),
-      undefined, undefined, globalDb,
-    );
+    const result = await checkWriteAuth(bDb, B, ADMIN_B, setReceiverEvent(A, "01CHANNEL00000000000000000", "did:plc:bob", "user", null), { globalDb: globalDb });
     expect(result).toBeUndefined();
   });
 });
@@ -414,20 +394,20 @@ describe("auth/writeAuth — federated writes (Phase 3)", () => {
 
   test("B member with readwrite origin + receiver grants can write to a federated channel", async () => {
     const { aDb, bDb, globalDb } = await seedFederatedWriteContext("readwrite");
-    const result = await checkWriteAuth(aDb, A, USER, createMessageEvent(CHANNEL), undefined, () => bDb, globalDb);
+    const result = await checkWriteAuth(aDb, A, USER, createMessageEvent(CHANNEL), { dbResolver: () => bDb, globalDb: globalDb });
     expect(result).toBeUndefined();
   });
 
   test("B member with only a read receiver grant cannot write", async () => {
     const { aDb, bDb, globalDb } = await seedFederatedWriteContext("read");
-    const result = await checkWriteAuth(aDb, A, USER, createMessageEvent(CHANNEL), undefined, () => bDb, globalDb);
+    const result = await checkWriteAuth(aDb, A, USER, createMessageEvent(CHANNEL), { dbResolver: () => bDb, globalDb: globalDb });
     expect(result?.status).toBe(403);
   });
 
   test("B member with no receiver grant cannot write", async () => {
     const { aDb, bDb, globalDb } = await seedFederatedWriteContext("read");
     await globalDb.run("delete from federation_receiver_permissions where room_id = ?", [CHANNEL]);
-    const result = await checkWriteAuth(aDb, A, USER, createMessageEvent(CHANNEL), undefined, () => bDb, globalDb);
+    const result = await checkWriteAuth(aDb, A, USER, createMessageEvent(CHANNEL), { dbResolver: () => bDb, globalDb: globalDb });
     expect(result?.status).toBe(403);
   });
 });
