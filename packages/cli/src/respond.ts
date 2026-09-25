@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { transport, createThread, type Ulid } from "@roomy-space/sdk";
-import { buildPrompt, runOmp, type OmpOptions } from "./omp.js";
+import { buildPrompt, runOmp, type OmpOptions, type OmpReply } from "./omp.js";
 import {
   THINKING_MARKER,
   buildReplyBlocks,
@@ -24,6 +24,14 @@ const IN_ROOM_TRACE_KINDS: Record<string, true> = {
 
 /** URL prefix for linking a trace thread from the answer in the channel. */
 const ROOMY_APP_URL = "https://roomy.space";
+
+/**
+ * Marks a posted notice that the agent's turn FAILED, so it is not mistaken for
+ * an answer. Without this the two are indistinguishable in the room: an agent
+ * whose model provider refused the turn would simply say nothing, which reads
+ * exactly like "nothing to report" (TASK-88's class).
+ */
+const FAILURE_MARKER = "⚠️";
 
 /**
  * One mention event as emitted by the roomy bridge (`roomy-bridge`, a
@@ -387,29 +395,49 @@ async function runMentionJob(
   const thinkingPosts = new PostChain((m) => log(`thinking-chunk ${m}`));
   let streamedThinking = false;
   let lastTraceChunkId: string | undefined;
-  const reply = await runOmp(prompt, { ...opts, resume }, {
-    onThinking: (chunk) => {
-      // Self-triggered ticks post no thinking at all: dropping the callback
-      // here (not just the flags below) is what prevents the chunks, since
-      // omp streams them regardless of the streamThinking/postThinking flags.
-      if (selfTriggered) return;
-      streamedThinking = true;
-      thinkingPosts.push(async () => {
-        if (traceRoomId) {
-          const { messageId } = await sendReply(xrpc, spaceId, traceRoomId, chunk, buildThinkingBlocks(chunk), lastTraceChunkId);
-          lastTraceChunkId = messageId;
-        } else {
-          await sendReply(xrpc, spaceId, roomId, chunk, buildThinkingBlocks(chunk), parent);
-        }
-      });
-    },
-  });
+  let reply: OmpReply;
+  try {
+    reply = await runOmp(prompt, { ...opts, resume }, {
+      onThinking: (chunk) => {
+        // Self-triggered ticks post no thinking at all: dropping the callback
+        // here (not just the flags below) is what prevents the chunks, since
+        // omp streams them regardless of the streamThinking/postThinking flags.
+        if (selfTriggered) return;
+        streamedThinking = true;
+        thinkingPosts.push(async () => {
+          if (traceRoomId) {
+            const { messageId } = await sendReply(xrpc, spaceId, traceRoomId, chunk, buildThinkingBlocks(chunk), lastTraceChunkId);
+            lastTraceChunkId = messageId;
+          } else {
+            await sendReply(xrpc, spaceId, roomId, chunk, buildThinkingBlocks(chunk), parent);
+          }
+        });
+      },
+    });
+  } catch (error) {
+    // The turn failed (provider 429/quota, auth, transport). `runOmp` refuses
+    // to invent an answer, so nothing would be posted and the job would fail
+    // with only a log line — an absence the room cannot distinguish from "no
+    // report" (TASK-88's class: the failure mode that reads as a quiet day).
+    // Post a SHORT, readable notice, then rethrow so the queue records the job
+    // as failed with the real cause.
+    const note = `${FAILURE_MARKER} ${kind} job failed: no answer produced.\n\n\`${truncate(errorText(error), 300)}\``;
+    try {
+      await sendReply(xrpc, spaceId, roomId, note, undefined, parent);
+      log("posted failure notice to the room");
+    } catch (postError) {
+      log(`could not post failure notice: ${errorText(postError)}`);
+    }
+    throw error;
+  }
   // Self-triggered ticks are independent (each is a fresh root id), so
   // persisting an entry per tick would only grow the session file forever.
   if (reply.sessionId && !selfTriggered) {
     sessions?.set(chainKey, { sessionId: reply.sessionId, traceThreadId: traceRoomId });
   }
-  if (!reply || !reply.answer.trim()) {
+  // `runOmp` rejects on a failed turn, so reaching here means a successful turn
+  // that produced no text. Do not post an empty message.
+  if (!reply.answer.trim()) {
     log("empty reply — not posting");
     return;
   }

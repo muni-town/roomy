@@ -9,6 +9,21 @@ export interface OmpReply {
   answer: string;
   /** omp session id for this run — new on the first turn, stable across resumes. */
   sessionId?: string;
+  /**
+   * Set when the last assistant turn FAILED — the model produced no text
+   * because the provider refused it (HTTP 429/quota, auth, transport). `answer`
+   * is then empty, and `runOmp` REJECTS rather than resolving with the raw
+   * stream, so a failed turn can never be posted as if it were an answer.
+   */
+  failure?: OmpFailure;
+}
+
+/** Why an omp turn produced no answer. */
+export interface OmpFailure {
+  /** Machine-readable cause: the assistant turn's `stopReason`. */
+  reason: "error";
+  /** Provider message, first line only — for logs, never posted verbatim. */
+  message: string;
 }
 
 export interface OmpOptions {
@@ -83,6 +98,7 @@ export function createOmpEventSink(): OmpEventSink {
   let thinking: string | undefined;
   let answer = "";
   let sessionId: string | undefined;
+  let failure: OmpFailure | undefined;
   return {
     push(evt: OmpJsonEvent): void {
       if (evt.type === "session" && evt.id) sessionId = evt.id;
@@ -98,12 +114,29 @@ export function createOmpEventSink(): OmpEventSink {
         }
         thinking = thinkingParts.length ? thinkingParts.join("\n\n") : undefined;
         answer = answerParts.join("\n");
+        // A failed turn carries no content and `stopReason: "error"` (provider
+        // 429/quota, auth, transport). Record why, so the caller can log a real
+        // cause instead of salvaging the transcript. Cleared by any later
+        // successful turn.
+        failure =
+          evt.message.stopReason === "error"
+            ? {
+                reason: "error",
+                message: firstLine(evt.message.errorMessage) || "provider returned no answer",
+              }
+            : undefined;
       }
     },
     result(): OmpReply {
-      return { thinking, answer, sessionId };
+      return { thinking, answer, sessionId, ...(failure ? { failure } : {}) };
     },
   };
+}
+
+/** First line of a provider error — these carry embedded newlines. */
+function firstLine(s: string | undefined): string {
+  if (!s) return "";
+  return (s.split("\n", 1)[0] ?? "").trim();
 }
 
 /**
@@ -188,11 +221,22 @@ export function runOmp(
       return;
     }
     const reply = sink.result();
+    if (reply.failure) {
+      // The assistant turn FAILED (provider 429/quota, auth, transport). omp
+      // still wrote a full NDJSON transcript and exited 0, so the old
+      // `outTail` fallback below posted its last 2000 chars — raw JSON error
+      // blobs, escaped newlines and all — into the room as if it were the
+      // answer. From 2026-09-16T16:00Z that silently replaced every scheduled
+      // tick's report with a provider error dump. Refuse instead: the caller
+      // reports the failure and decides what (if anything) to post.
+      reject(new Error(`omp turn failed: ${reply.failure.message}`));
+      return;
+    }
     if (!reply.answer.trim()) {
-      // Nothing in the structured output; fall back to the raw output tail (and
-      // stderr tail) so the user isn't left with a silent failure.
-      const fallback = (outTail.text.trim() || errTail.text.trim() || "").slice(-2000);
-      resolve({ answer: fallback, sessionId: reply.sessionId });
+      // Successful turn, empty text. Resolve as-is (an empty answer); callers
+      // already treat that as "nothing to post". Never resurrect the raw
+      // transcript — it is an event log, not a message.
+      resolve(reply);
       return;
     }
     resolve(reply);
@@ -206,6 +250,9 @@ interface OmpJsonEvent {
   message?: {
     role?: string;
     content?: { type?: string; text?: string; thinking?: string }[];
+    /** "stop" | "error" | …; "error" means the turn produced no text. */
+    stopReason?: string;
+    errorMessage?: string;
   };
   assistantMessageEvent?: {
     type?: string;
