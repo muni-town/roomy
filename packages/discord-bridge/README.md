@@ -220,6 +220,50 @@ docker run -d \
 
 The entrypoint restores the SQLite database from S3 on first start (if no local DB exists) and wraps the Bun process with Litestream for continuous replication.
 
+### How the image is published, and how to compare merged against running
+
+`ghcr.io/meri-leeworthy/roomy-discord-bridge` is built and published by
+[`.github/workflows/discord-bot.yaml`](../../.github/workflows/discord-bot.yaml):
+a push to `main` or `next` (or a `v*` tag) runs its single `build-and-publish`
+job — checkout → `docker/metadata-action` → Buildx → GHCR login → build and
+push from `packages/discord-bridge/Dockerfile`. The metadata action's
+`type=ref,event=branch` publishes the branch tag, so a `next` push produces
+`ghcr.io/meri-leeworthy/roomy-discord-bridge:next`, alongside `sha-<short>`
+tags. The build passes `RAILWAY_GIT_COMMIT_SHA=${{ github.sha }}`, which the
+Dockerfile bakes into `BUILD_ID` as the commit's first 8 characters.
+
+**Nothing in this repo advances a running service.** The workflow ends at the
+registry push — it has no Railway CLI step, no deploy hook, no `RAILWAY_TOKEN`
+and no `railway up` — and the repo carries no service-side config at all (no
+`railway.json`/`railway.toml`, no `nixpacks.toml`, no `Procfile`, no root
+`Dockerfile`). The published tags and the deployed process are therefore
+connected only by configuration that lives outside this repo, and no artifact
+here records when that configuration last changed. Which of the two the service
+consumes — the published image, or a build of this repo — is likewise not
+visible from the repo.
+
+#### The check
+
+The bridge stamps every structured log line with `build_id`: the first 8
+characters of the commit it was built from, whether that build came from CI or
+from the platform, so the running commit is directly comparable with a merge
+([`src/logger.ts`](src/logger.ts) → [`src/telemetry/build.ts`](src/telemetry/build.ts);
+a container built with no git metadata reports `unknown`, which names nothing).
+
+```logql
+# Grafana / Loki — which builds are logging, in the last 6h:
+sum by (build_id) (count_over_time({service_name="discord-bridge"} | json [6h]))
+```
+
+```bash
+# A container you run yourself:
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' <container> | grep BUILD_ID
+```
+
+Because `build_id` is a commit in this repo, `git rev-list --count
+<build_id>..origin/next` reads as "commits behind" — the comparison the deploy
+path cannot otherwise make for you.
+
 ### Local development
 
 ```bash
