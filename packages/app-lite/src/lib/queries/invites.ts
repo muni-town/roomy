@@ -26,5 +26,12 @@ export function createInvitesQuery(
     // default `retry: 3` turns one modal open into four 403s in the appserver
     // log. Transport-level retries (rate limits) live in DirectXrpcClient.
     retry: false,
+    // `retry: false` alone does not stop the request: TanStack's
+    // `shouldLoadOnMount` re-issues a fetch for an errored, data-less query on
+    // every (re)mount unless `retryOnMount` is false. Without it a component
+    // that remounts re-asks a query that has already proven it can never
+    // succeed — the 403 bursts in the appserver log. With both, a
+    // permanently-failing lookup is asked at most once per session.
+    retryOnMount: false,
   }));
 }

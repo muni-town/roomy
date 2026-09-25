@@ -13,10 +13,15 @@ type MessageList = typeof schemas.queries.getMessages.Message.infer[];
  * message is already present, so reply previews don't trigger an extra
  * HTTP fetch when the target is on screen.
  *
- * Two guards keep a *deterministically* failing lookup from being issued:
- * one for the corrupt-reply case (below), and `retry: false` for the rest —
- * a deleted message 404s and a non-message target 400s, and neither becomes
- * true by asking again.
+ * Three guards keep a *deterministically* failing lookup from being issued:
+ * one for the corrupt-reply case (below), `retry: false` for the rest — a
+ * deleted message 404s and a non-message target 400s, and neither becomes
+ * true by asking again — and `retryOnMount: false`, without which TanStack's
+ * `shouldLoadOnMount` re-issues the fetch for an errored, data-less query on
+ * every remount. A bad reply target sits in the message list, so the
+ * virtualizer recycles its row on scroll and each recycle would otherwise be
+ * another request. With `retryOnMount: false` the lookup is asked at most
+ * once per session instead of once per mount.
  */
 export function createMessageQuery(
   messageId: () => string,
@@ -40,6 +45,7 @@ export function createMessageQuery(
       queryFn: () =>
         px().query("space.roomy.message.getMessage", { messageId: target }),
       retry: false,
+      retryOnMount: false,
       initialData: () => {
         if (!room) return undefined;
         const list = queryClient.getQueryData<MessageList>(
