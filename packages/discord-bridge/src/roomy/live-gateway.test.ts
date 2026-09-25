@@ -621,11 +621,20 @@ describe("LiveRoomyGateway", () => {
 			expect(reconnectDelayMs(10, 1000, 5000)).toBe(5000);
 		});
 
-		test("full jitter spreads reconnects (random in [0, cap))", () => {
-			vi.spyOn(Math, "random").mockReturnValue(0);
-			expect(reconnectDelayMs(0, 1000, 100_000)).toBe(0);
+		test("full jitter spreads reconnects (random in [0, cap), floored at 1ms)", () => {
 			vi.spyOn(Math, "random").mockReturnValue(0.999);
 			expect(reconnectDelayMs(0, 1000, 100_000)).toBe(999);
+			expect(reconnectDelayMs(2, 1000, 100_000)).toBe(3996);
+		});
+
+		test("a zero jitter draw never disables reconnect", () => {
+			// Pre-fix this returned 0, which SyncConnection reads as the
+			// "stop reconnecting" signal — a permanent, silent wedge.
+			vi.spyOn(Math, "random").mockReturnValue(0);
+			expect(reconnectDelayMs(0, 1000, 100_000)).toBe(1);
+			expect(reconnectDelayMs(5, 1000, 100_000)).toBe(1);
+			// A non-finite cap (base 0 with an overflowing 2^failures) floors too.
+			expect(reconnectDelayMs(2000, 0, 100_000)).toBe(1);
 		});
 	});
 
