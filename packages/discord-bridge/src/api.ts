@@ -122,7 +122,7 @@ export function buildBackfillProgressPayload(
 	cursor: string | null;
 	/** Thread rows only: Discord id of the parent channel (panel nesting). */
 	parentId: string | null;
-	/** Recent-window size at the phase1→phase2 transition (panel phase-2 label). */
+	/** Recent-window size at the phase1→phase2 transition. */
 	windowSynced: number | null;
 	/** Roomy room id this channel/thread maps to, for sidebar-order joins. */
 	roomyId: string | null;

@@ -61,6 +61,8 @@ export { default as IconForward } from "~icons/ph/arrow-u-down-right-bold";
 // Status
 export { default as IconAlertCircle } from "~icons/ph/warning-circle-bold";
 export { default as IconLoading } from "~icons/ph/spinner-bold";
+export { default as IconHourglassHigh } from "~icons/ph/hourglass-simple-high-bold";
+export { default as IconHourglassMedium } from "~icons/ph/hourglass-simple-medium-bold";
 
 // Layout
 export { default as IconBars } from "~icons/ph/list-bold";

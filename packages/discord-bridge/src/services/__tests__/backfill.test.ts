@@ -209,7 +209,65 @@ function mapChannels(
 	}
 	return mapping;
 }
+/** A DiscordSender whose sends are recorded and can fail on demand. */
+function makeMockDiscordSender() {
+	const sent: Array<{ channelId: string; content: string }> = [];
+	// Resolves on the first completed send — the "notice posted" signal
+	// for the fire-and-forget Phase-2 walk (no wall-clock polling).
+	const { promise: noticePosted, resolve: resolveNotice } =
+		Promise.withResolvers<void>();
+	const mock: DiscordSender & { failSends: boolean } = {
+		async sendMessage(channelId, content) {
+			if (mock.failSends) throw new Error("simulated send failure");
+			sent.push({ channelId, content });
+			resolveNotice();
+			return "9000000000000000001";
+		},
+		async editMessage() {},
+		async deleteMessage() {},
+		async addReaction() {},
+		async removeReaction() {},
+		async getParentChannelId() {
+			return undefined;
+		},
+		async getGuildId() {
+			return GUILD;
+		},
+		async getMessage() {
+			return undefined;
+		},
+		async createThread() {
+			return "9000000000000000002";
+		},
+		failSends: false,
+	};
+	return { sent, mock, noticePosted };
+}
 
+/** Minimal Discord message for the end-to-end runBackfill test. */
+function cnMessage(id: string, channelId: string): DiscordMessageData {
+	return {
+		id,
+		channelId,
+		guildId: GUILD,
+		type: 0,
+		content: `message-${id}`,
+		timestamp: Date.now() - Number(BigInt("1" + id.slice(2))),
+		editedTimestamp: undefined,
+		author: {
+			id: "111111111111111111",
+			name: "tester",
+			discriminator: "0000",
+			globalName: "Tester",
+		},
+		attachments: [],
+		embeds: undefined,
+		reactions: undefined,
+		mentions: undefined,
+		mentionChannelIds: [],
+		stickerItems: undefined,
+	};
+}
 /** Count createMessage events sent to the gateway for a space. */
 function countCreateMessageEvents(
 	roomy: MockRoomyGateway,
@@ -1585,65 +1643,6 @@ describe("backfill enumeration & completion notice", () => {
 		};
 	}
 
-	/** A DiscordSender whose sends are recorded and can fail on demand. */
-	function makeMockDiscordSender() {
-		const sent: Array<{ channelId: string; content: string }> = [];
-		// Resolves on the first completed send — the "notice posted" signal
-		// for the fire-and-forget Phase-2 walk (no wall-clock polling).
-		const { promise: noticePosted, resolve: resolveNotice } =
-			Promise.withResolvers<void>();
-		const mock: DiscordSender & { failSends: boolean } = {
-			async sendMessage(channelId, content) {
-				if (mock.failSends) throw new Error("simulated send failure");
-				sent.push({ channelId, content });
-				resolveNotice();
-				return "9000000000000000001";
-			},
-			async editMessage() {},
-			async deleteMessage() {},
-			async addReaction() {},
-			async removeReaction() {},
-			async getParentChannelId() {
-				return undefined;
-			},
-			async getGuildId() {
-				return GUILD;
-			},
-			async getMessage() {
-				return undefined;
-			},
-			async createThread() {
-				return "9000000000000000002";
-			},
-			failSends: false,
-		};
-		return { sent, mock, noticePosted };
-	}
-
-	/** Minimal Discord message for the end-to-end runBackfill test. */
-	function cnMessage(id: string, channelId: string): DiscordMessageData {
-		return {
-			id,
-			channelId,
-			guildId: GUILD,
-			type: 0,
-			content: `message-${id}`,
-			timestamp: Date.now() - Number(BigInt("1" + id.slice(2))),
-			editedTimestamp: undefined,
-			author: {
-				id: "111111111111111111",
-				name: "tester",
-				discriminator: "0000",
-				globalName: "Tester",
-			},
-			attachments: [],
-			embeds: undefined,
-			reactions: undefined,
-			mentions: undefined,
-			mentionChannelIds: [],
-			stickerItems: undefined,
-		};
-	}
 
 	// ── Enumeration ─────────────────────────────────────────────────────
 
@@ -2035,5 +2034,96 @@ describe("backfill enumeration & completion notice", () => {
 		// creation marks nothing) and no second notice is posted.
 		await runBackfill(discord, repo, roomy);
 		expect(sent).toHaveLength(1);
+	});
+});
+
+/**
+ * The order the space is built in. A viewer opening the space mid-backfill
+ * must see its shape (the sidebar) and its channels' recent history before
+ * any thread's, so it reads as a chat server filling up rather than a pile of
+ * threads. Only the event order is asserted: how long each step takes is not
+ * observable from the events.
+ */
+describe("backfill work order", () => {
+	afterEach(() => {
+		setBackfillNoticeSender(undefined);
+	});
+
+	test("OR01: syncs structure and channel history before active-thread history", async () => {
+		const general: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "help",
+			parentId: general.id,
+			guildId: GUILD,
+		};
+		const generalMessages = Array.from({ length: 8 }, (_, i) =>
+			cnMessage(`2000000000000000${String(i + 10)}`, general.id),
+		);
+		const threadMessages = Array.from({ length: 5 }, (_, i) =>
+			cnMessage(`30000000000000000${i}`, activeThread.id),
+		);
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [general] },
+			channels: [general, activeThread],
+			messages: {
+				[general.id]: generalMessages,
+				[activeThread.id]: threadMessages,
+			},
+			activeThreads: [activeThread],
+		});
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+		const { mock, noticePosted } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+
+		await runBackfill(discord, repo, roomy);
+		// The remainder walk continues in the background; wait for its last
+		// step so the recorded events are complete before they are read.
+		await noticePosted;
+
+		const events = roomy.eventsFor(SPACE);
+		const channelRoom = repo.getRoomyId(SPACE, "channel", general.id);
+		const threadRoom = repo.getRoomyId(SPACE, "thread", activeThread.id);
+		expectToBeDefined(channelRoom);
+		expectToBeDefined(threadRoom);
+
+		const structureAt = events.findIndex(
+			(e) => e.$type === "space.roomy.space.updateSidebar.v1",
+		);
+		const threadRoomAt = events.findIndex(
+			(e) =>
+				e.$type === "space.roomy.room.createRoom.v0" && e.id === threadRoom,
+		);
+		const firstThreadMessageAt = events.findIndex(
+			(e) =>
+				e.$type === "space.roomy.message.createMessage.v0" &&
+				e.room === threadRoom,
+		);
+		const channelMessageIndexes = events
+			.map((e, index) => ({ e, index }))
+			.filter(
+				({ e }) =>
+					e.$type === "space.roomy.message.createMessage.v0" &&
+					e.room === channelRoom,
+			)
+			.map(({ index }) => index);
+
+		// Every marker must exist, or the comparisons below read -1.
+		expect(structureAt).toBeGreaterThanOrEqual(0);
+		expect(threadRoomAt).toBeGreaterThanOrEqual(0);
+		expect(firstThreadMessageAt).toBeGreaterThanOrEqual(0);
+		expect(channelMessageIndexes).toHaveLength(generalMessages.length);
+
+		// Structure first, then the channel's whole history, then the thread.
+		expect(structureAt).toBeLessThan(threadRoomAt);
+		expect(Math.max(...channelMessageIndexes)).toBeLessThan(threadRoomAt);
+		expect(threadRoomAt).toBeLessThan(firstThreadMessageAt);
 	});
 });

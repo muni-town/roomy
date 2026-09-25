@@ -12,6 +12,8 @@
     IconChevronRight,
     IconCopy,
     IconHashtag,
+    IconHourglassHigh,
+    IconHourglassMedium,
     IconNeedleThread,
   } from "@roomy/design/icons";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
@@ -146,7 +148,7 @@
     cursor: string | null;
     // Thread rows only: Discord id of the parent channel (panel nesting).
     parentId: string | null;
-    // Recent-window size at the phase1→phase2 transition (phase-2 label).
+    // Recent-window size at the phase1→phase2 transition (bridge snapshot).
     windowSynced: number | null;
     // Roomy room id this channel/thread maps to, for sidebar-order joins.
     roomyId: string | null;
@@ -158,9 +160,9 @@
 
   // The panel mirrors the space's sidebar: categories (by position) → channels
   // (in order) → active threads nested under their parent, then orphan
-  // channels (+ their threads), then anything the sidebar doesn't know yet in
-  // API order. The bridge's up-front enumeration makes the panel listable
-  // immediately; archived threads appear only once the background walk
+  // channels (+ their threads), then anything the sidebar doesn't know yet —
+  // channels before threads. The bridge's up-front enumeration makes the panel
+  // listable immediately; archived threads appear only once the background walk
   // discovers them and lands at the end.
   const spaceMetaQuery = createSpaceMetadataQuery(() => spaceId, {
     enabled: () => !!spaceId,
@@ -205,10 +207,16 @@
       placed.add(entry.channelId);
     }
     // Everything else (structure not synced yet, archived threads the
-    // background walk just found): API order, threads nested under their
-    // parent entry.
-    for (const entry of backfillChannels) {
-      if (placed.has(entry.channelId)) continue;
+    // background walk just found): channels first, then threads, each group in
+    // API order (newest update first) — a thread never leads the list while a
+    // channel is still pending. Threads nest under their parent entry when it
+    // has one of its own.
+    const rest = backfillChannels.filter((e) => !placed.has(e.channelId));
+    const leftovers = [
+      ...rest.filter((e) => e.kind !== "thread"),
+      ...rest.filter((e) => e.kind === "thread"),
+    ];
+    for (const entry of leftovers) {
       const parent = entry.parentId
         ? backfillChannels.find((e) => e.channelId === entry.parentId)
         : undefined;
@@ -533,32 +541,54 @@
       <span class="text-xs tabular-nums text-base-500 dark:text-base-400">
         {entry.messagesSynced} synced
       </span>
+      <!--
+        Row state is icon-only; the accessible name spells it out. The synced
+        count is the one number that stays.
+          running (phase 1) → spinner / "backfilling recent history"
+          running (phase 2) → spinner / "deep backfill in progress"
+          complete          → check / "complete"
+          deep backfill queued (recent window in or not) → hourglass-high
+          queued, not started yet → hourglass-medium
+      -->
       {#if entry.running}
-        <span class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400">
+        <span
+          class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400"
+          role="img"
+          aria-label={entry.phase === "phase2"
+            ? "deep backfill in progress"
+            : "backfilling recent history"}
+          title={entry.phase === "phase2"
+            ? "deep backfill in progress"
+            : "backfilling recent history"}
+        >
           <LoadingSpinner size={12} />
-          {entry.phase === "phase2"
-            ? "deep backfill in progress…"
-            : "backfilling recent history…"}
         </span>
       {:else if entry.phase === "complete"}
-        <span class="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400">
+        <span
+          class="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400"
+          role="img"
+          aria-label="complete"
+          title="complete"
+        >
           <IconCheck font-size={14} />
-          complete
-        </span>
-      {:else if entry.phase === "phase2" && entry.windowSynced !== null}
-        <span class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400">
-          <LoadingSpinner size={12} />
-          recent history synced ({entry.windowSynced}) — deep backfill queued
         </span>
       {:else if entry.phase === "phase2"}
-        <span class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400">
-          <LoadingSpinner size={12} />
-          deep backfill queued
+        <span
+          class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400"
+          role="img"
+          aria-label="deep backfill queued"
+          title="deep backfill queued"
+        >
+          <IconHourglassHigh font-size={14} />
         </span>
       {:else}
-        <span class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400">
-          <LoadingSpinner size={12} />
-          starting…
+        <span
+          class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400"
+          role="img"
+          aria-label="queued"
+          title="queued"
+        >
+          <IconHourglassMedium font-size={14} />
         </span>
       {/if}
     </span>

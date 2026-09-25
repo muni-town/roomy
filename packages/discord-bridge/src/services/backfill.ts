@@ -140,11 +140,6 @@ export async function runBackfill(
 	} catch (err) {
 		log.error("ensureRoomyRooms failed", err);
 	}
-	try {
-		await ensureRoomyThreads(discord, repo, roomy, configs);
-	} catch (err) {
-		log.error("ensureRoomyThreads failed", err);
-	}
 
 	// One-shot: apply the guild's category structure + channel order to each
 	// bridged space's sidebar. Runs HERE — on the initial-sync path (gateway
@@ -236,6 +231,16 @@ export async function runBackfill(
 		} finally {
 			activeBackfills.delete(key);
 		}
+	}
+
+	// Active threads last: their rooms are nested under a channel and their
+	// Phase-1 window is the same bounded recent window, so the space's shape
+	// and its channels' recent history land first. Thread pairs the bound
+	// truncated are finished by Phase 2's thread pass below.
+	try {
+		await ensureRoomyThreads(discord, repo, roomy, configs);
+	} catch (err) {
+		log.error("ensureRoomyThreads failed", err);
 	}
 
 	// ── Phase 2: the remainder, in the background ────────────────────────
@@ -948,8 +953,8 @@ export async function backfillRecentWindow(
 		return;
 	}
 
-	// Snapshot the window size for the status UI ("recent window done: N
-	// messages, deep backfill queued").
+	// Snapshot the window size at the phase1→phase2 transition (the status
+	// payload's `windowSynced`).
 	flush("phase2", synced);
 	log.info(
 		`Channel ${channelId} → ${spaceDid} Phase 1 reached bound (${PHASE1_MESSAGE_BOUND} messages); remaining history queued for Phase 2`,

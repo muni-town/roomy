@@ -49,5 +49,15 @@ export const SEED_ROOM_NAME = "lobby";
 export const SEED_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVX1";
 export const SEED_MESSAGE_TEXT = "seeded message from the e2e fixture";
 
+/**
+ * Origin of the Discord bridge REST surface. Nothing listens here: the spec
+ * that covers the bridge settings page fulfils these requests itself, and
+ * every other spec never reaches this page. Set on the app-lite dev server by
+ * Playwright's `webServer.env`, because the panel reads it from
+ * `$env/dynamic/public` at runtime.
+ */
+export const BRIDGE_PORT = 9998;
+export const BRIDGE_ORIGIN = `http://127.0.0.1:${BRIDGE_PORT}`;
+
 /** Path to the seeded channel. */
 export const SEED_ROOM_PATH = `/${SEED_SPACE_ID}/${SEED_ROOM_ID}`;

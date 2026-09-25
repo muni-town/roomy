@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { APP_LITE_ORIGIN, APP_LITE_PORT } from "./e2e/fixtures.ts";
+import { APP_LITE_ORIGIN, APP_LITE_PORT, BRIDGE_ORIGIN } from "./e2e/fixtures.ts";
 
 /**
  * Playwright config for app-lite end-to-end tests.
@@ -70,6 +70,10 @@ export default defineConfig({
       APPSERVER_TEST_MODE: "true",
       RATE_LIMIT_DISABLED: "true",
       E2E_APP_LITE_PORT: String(APP_LITE_PORT),
+      // The bridge settings page reads this from `$env/dynamic/public` to
+      // find the bridge REST surface. Nothing listens on the origin: the spec
+      // for that page fulfils the requests itself.
+      PUBLIC_DISCORD_BRIDGE: BRIDGE_ORIGIN,
     },
   },
 });
