@@ -132,6 +132,72 @@ Events carry two extensions:
 - `discordMessageOrigin.v0` — debug breadcrumb (snowflake, channelId, guildId). Never read for sync decisions.
 - `authorOverride.v0` — content-level puppetting so Roomy renders the Discord author's identity.
 
+## Sidebar repair (`/roomy-repair-sidebar`)
+
+The initial structure sync merges into the sidebar the space already had. For a
+space bridged at creation that target is the space's seed sidebar, so the sync
+write is the first admin-facing layout. A space that already had an
+admin-authored layout when it was first bridged can instead come out with:
+
+- a **duplicate header** — a Discord category whose name differs from an
+  existing category only by case, so the by-name match misses and the category
+  is appended as a second header for the same group;
+- a **duplicate placement** — a channel an admin had moved into another
+  category, placed again in its Discord category because placement is decided
+  from the channel alone.
+
+Both show up as growth between the write the sync replaced (the *pre-sync
+write*) and the write it sent: more categories carrying a name than before,
+more placements of a room than before. A category or room the sidebar never had
+is not damage — the sync is supposed to add those.
+
+`src/services/sidebar-recovery.ts` classifies a sidebar-write history with pure
+functions; `src/services/sidebar-repair.ts` reads the history and can undo the
+sync:
+
+```
+/roomy-repair-sidebar                          # inspect every space this guild is bridged to
+/roomy-repair-sidebar space-id:<did>           # inspect one space
+/roomy-repair-sidebar apply:true               # inspect and revert what can be reverted
+```
+
+Run it in a guild whose bridge wrote the damaged sidebar. The reply is
+ephemeral, and the command reports one block per space:
+
+| Status               | Meaning                                                       |
+| -------------------- | ------------------------------------------------------------- |
+| `no-sidebar-history` | the space's log holds no sidebar write                        |
+| `no-sync-write`      | no sidebar write by the bridge account; nothing to undo       |
+| `no-pre-sync-layout` | the bridge's write is the space's first sidebar write         |
+| `edited`             | a member wrote the sidebar after the sync — their layout wins |
+| `already-recovered`  | the bridge's latest write already restores the pre-sync layout|
+| `multi-sync`         | several bridge writes, the latest not a revert — manual review|
+| `no-damage`          | the sync merged without duplicating a header or a placement   |
+| `restorable`         | the sync's write is the latest change and duplicated something|
+
+`apply:true` writes only for a `restorable` space, and only the layout the sync
+replaced: a revert never invents a layout. Every other status is reported and
+left alone, including a space whose members have edited the sidebar since the
+sync.
+
+The history comes from the space's own stream (`STREAM_NSID`, default
+`space.roomy.space.personal.dev`) backfilled over the sync WebSocket as the
+bridge account, so the command needs no admin API and no access to the
+appserver's database — it reads as a member and writes as the bridge. The read
+is confirmed against the space's current sidebar (`getMetadata`) before
+anything is written, and again immediately before the write, so a truncated
+backfill or a concurrent edit fails closed rather than reverting from a partial
+history.
+
+A backfill is not a trustworthy full-log reader on a busy space: the appserver
+can drop whole batches while still reporting the backfill drained, and the
+frames that did arrive carry no trace of the ones that did not. A read
+therefore counts only once a second read of the same space classifies the same
+sidebar writes; a space that cannot be read consistently comes back as an
+error and is left alone. A backfill that stalls is resumed from the last event
+seen, and a read that does not reach the end of the log within two minutes
+fails.
+
 ## Environment variables
 
 ### Required
@@ -183,6 +249,7 @@ All commands require **Administrator** permissions and only work in guilds.
 | `/roomy-bridge-channel add channel:#channel [space-id:<did>]`    | Add a channel to the allowlist (switches bridge to subset mode if currently full) |
 | `/roomy-bridge-channel remove channel:#channel [space-id:<did>]` | Remove a channel from the allowlist. Existing synced messages are preserved.      |
 | `/roomy-bridge-channel list [space-id:<did>]`                    | List channels in the allowlist                                                    |
+| `/roomy-repair-sidebar [space-id:<did>] [apply:<bool>]`          | Inspect a bridged space's sidebar for structure-sync damage, optionally reverting it |
 
 ## Subset mode
 

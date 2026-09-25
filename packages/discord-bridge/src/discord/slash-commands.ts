@@ -21,6 +21,12 @@ import { LiveRoomyGateway } from "../roomy/live-gateway.ts";
 import type { SpaceManager } from "../roomy/space-manager.ts";
 import { backfillSingleChannel, runBackfill } from "../services/backfill.ts";
 import type { RoomyEventRouter } from "../services/roomy-event-router.ts";
+import {
+	type RepairOutcome,
+	applySidebarRestore,
+	formatRepairReport,
+	inspectSidebar,
+} from "../services/sidebar-repair.ts";
 import type { DiscordBot, InteractionProperties } from "./types.ts";
 import { CHANNEL_TYPES, MESSAGE_CHANNEL_TYPES } from "./types.ts";
 
@@ -66,6 +72,12 @@ function getOptionValue(options: unknown, name: string): unknown {
 function getStringOption(options: unknown, name: string): string | undefined {
 	const val = getOptionValue(options, name);
 	return typeof val === "string" ? val : undefined;
+}
+
+/** Typed helper: get a boolean option value, or undefined when unset. */
+function getBooleanOption(options: unknown, name: string): boolean | undefined {
+	const val = getOptionValue(options, name);
+	return typeof val === "boolean" ? val : undefined;
 }
 
 /** Create adapters from live bot + space manager for service calls. */
@@ -334,6 +346,30 @@ export const slashCommands = [
 			},
 		],
 	},
+	{
+		name: "roomy-repair-sidebar",
+		description:
+			"Undo the structure sync's duplicate categories or rooms. Reports before writing.",
+		contexts: [DiscordInteractionContextType.Guild],
+		integrationTypes: [DiscordApplicationIntegrationType.GuildInstall],
+		defaultMemberPermissions: ["ADMINISTRATOR"],
+		options: [
+			{
+				name: "apply",
+				description:
+					"Write the pre-sync layout back. Without it, the command only reports.",
+				type: ApplicationCommandOptionTypes.Boolean,
+				required: false,
+			},
+			{
+				name: "space-id",
+				description:
+					"The bridged space to repair, when this guild bridges more than one.",
+				type: ApplicationCommandOptionTypes.String,
+				required: false,
+			},
+		],
+	},
 ] satisfies CreateApplicationCommand[];
 
 // ─── Registration ─────────────────────────────────────────────────────
@@ -434,6 +470,8 @@ export async function handleInteractionCreate(
 			await handleBridgeChannel(interaction, repo, spaceManager, bot, guildId);
 		} else if (commandName === "roomy-backfill") {
 			await handleBackfill(interaction, repo, spaceManager, bot, guildId);
+		} else if (commandName === "roomy-repair-sidebar") {
+			await handleRepairSidebar(interaction, repo, spaceManager, guildId);
 		}
 		return;
 	}
@@ -1358,4 +1396,96 @@ function collectGuildChannelIds(
 	}
 
 	return channels;
+}
+
+// ─── /roomy-repair-sidebar ────────────────────────────────────────────
+
+/** Discord's ceiling on a message's content length. */
+const MAX_MESSAGE_CHARS = 2000;
+
+/**
+ * Undo sidebar damage the one-shot structure sync left behind.
+ *
+ * Reports the classification of every bridged space of the guild and, with
+ * `apply`, restores the pre-sync layout of the spaces that classify as
+ * restorable. The read and the write both run in this process, against the
+ * appserver the bridge already uses, as the bridge account.
+ */
+async function handleRepairSidebar(
+	interaction: InteractionProperties,
+	repo: BridgeRepository,
+	spaceManager: SpaceManager,
+	guildId: string,
+): Promise<void> {
+	if (!(await safeDefer(interaction, true))) return;
+
+	try {
+		const configs = repo.listBridgeConfigsForGuild(guildId);
+		if (configs.length === 0) {
+			await interaction.edit({
+				content: "The Discord bridge is not connected to any Roomy spaces.",
+			});
+			return;
+		}
+
+		const requested = getStringOption(interaction.data?.options, "space-id");
+		const targets = requested
+			? configs.filter((config) => config.spaceDid === requested)
+			: configs;
+		if (targets.length === 0) {
+			await interaction.edit({
+				content:
+					`\`${requested}\` is not bridged from this guild. Connected: ` +
+					configs.map((config) => `\`${config.spaceDid}\``).join(", "),
+			});
+			return;
+		}
+
+		const apply = getBooleanOption(interaction.data?.options, "apply") === true;
+		const reports: string[] = [];
+		for (const config of targets) {
+			const inspection = await inspectSidebar(
+				spaceManager.xrpc,
+				config.spaceDid,
+			);
+			let outcome: RepairOutcome | undefined;
+			let applyError: string | undefined;
+			if (
+				apply &&
+				inspection.verified &&
+				inspection.analysis?.status === "restorable"
+			) {
+				try {
+					outcome = await applySidebarRestore(
+						spaceManager.xrpc,
+						config.spaceDid,
+						inspection.analysis,
+					);
+				} catch (err) {
+					applyError = err instanceof Error ? err.message : String(err);
+				}
+			}
+			reports.push(
+				formatRepairReport(inspection, outcome, {
+					applyRequested: apply,
+					applyError,
+				}),
+			);
+		}
+
+		const content = reports.join("\n\n");
+		await interaction.edit({
+			content:
+				content.length > MAX_MESSAGE_CHARS
+					? `${content.slice(0, MAX_MESSAGE_CHARS - 1)}…`
+					: content,
+		});
+	} catch (e) {
+		log.error("Error handling roomy-repair-sidebar", e);
+		try {
+			await interaction.edit({
+				content: "An error occurred while repairing the sidebar.",
+			});
+		} catch {}
+	}
 }
