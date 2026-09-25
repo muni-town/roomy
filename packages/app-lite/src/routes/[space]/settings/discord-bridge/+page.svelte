@@ -6,7 +6,15 @@
   import Badge from "@roomy/design/components/ui/badge/Badge.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import InlineMono from "@roomy/design/components/helper/InlineMono.svelte";
-  import { IconCopy } from "@roomy/design/icons";
+  import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
+  import {
+    IconCheck,
+    IconChevronRight,
+    IconCopy,
+    IconHashtag,
+    IconNeedleThread,
+  } from "@roomy/design/icons";
+  import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createMembersQuery } from "$lib/queries/members";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { createMembershipStatusQuery } from "$lib/queries/membership-status";
@@ -136,11 +144,111 @@
     messagesSynced: number;
     messagesSkipped: number;
     cursor: string | null;
+    // Thread rows only: Discord id of the parent channel (panel nesting).
+    parentId: string | null;
+    // Recent-window size at the phase1→phase2 transition (phase-2 label).
+    windowSynced: number | null;
+    // Roomy room id this channel/thread maps to, for sidebar-order joins.
+    roomyId: string | null;
     running: boolean;
     updatedAt: number;
   };
   let backfillChannels = $state<BackfillProgressEntry[]>([]);
   let backfillError = $state(false);
+
+  // The panel mirrors the space's sidebar: categories (by position) → channels
+  // (in order) → active threads nested under their parent, then orphan
+  // channels (+ their threads), then anything the sidebar doesn't know yet in
+  // API order. The bridge's up-front enumeration makes the panel listable
+  // immediately; archived threads appear only once Phase 2 discovers them
+  // and lands at the end.
+  const spaceMetaQuery = createSpaceMetadataQuery(() => spaceId, {
+    enabled: () => !!spaceId,
+  });
+
+  const sidebarSlots = $derived.by(() => {
+    const cats = spaceMetaQuery.data?.sidebar.categories ?? [];
+    const orphans = spaceMetaQuery.data?.sidebar.orphans ?? [];
+    const slots: Array<{ roomyId: string; parentRoomId: string | null }> = [];
+    for (const cat of [...cats].sort((a, b) => a.position - b.position)) {
+      for (const ch of cat.channels) {
+        slots.push({ roomyId: ch.id, parentRoomId: null });
+        for (const thread of ch.activeThreads ?? []) {
+          slots.push({ roomyId: thread.id, parentRoomId: ch.id });
+        }
+      }
+    }
+    for (const ch of orphans) {
+      slots.push({ roomyId: ch.id, parentRoomId: null });
+      for (const thread of ch.activeThreads ?? []) {
+        slots.push({ roomyId: thread.id, parentRoomId: ch.id });
+      }
+    }
+    return slots;
+  });
+
+  const orderedBackfillRows = $derived.by(() => {
+    type Row = {
+      entry: BackfillProgressEntry;
+      parentRoomId: string | null;
+    };
+    const rows: Row[] = [];
+    const roomKey = (e: BackfillProgressEntry) => e.roomyId ?? e.channelId;
+    const entryByRoom = new Map(backfillChannels.map((e) => [roomKey(e), e]));
+    const placed = new Set<string>();
+
+    // Sidebar order first (channels + their active threads).
+    for (const slot of sidebarSlots) {
+      const entry = entryByRoom.get(slot.roomyId);
+      if (!entry) continue;
+      rows.push({ entry, parentRoomId: slot.parentRoomId });
+      placed.add(entry.channelId);
+    }
+    // Everything else (structure not synced yet, archived threads Phase 2
+    // just found): API order, threads nested under their parent entry.
+    for (const entry of backfillChannels) {
+      if (placed.has(entry.channelId)) continue;
+      const parent = entry.parentId
+        ? backfillChannels.find((e) => e.channelId === entry.parentId)
+        : undefined;
+      rows.push({ entry, parentRoomId: parent ? roomKey(parent) : null });
+    }
+    return rows;
+  });
+
+  // Threads nest under the rendered parent channel; a thread whose parent
+  // has no entry of its own stays top-level.
+  const backfillChildren = $derived.by(() => {
+    const map = new Map<string, BackfillProgressEntry[]>();
+    const roomIds = new Set(
+      orderedBackfillRows.map((r) => r.entry.roomyId ?? r.entry.channelId),
+    );
+    for (const row of orderedBackfillRows) {
+      if (!row.parentRoomId || !roomIds.has(row.parentRoomId)) continue;
+      const list = map.get(row.parentRoomId) ?? [];
+      list.push(row.entry);
+      map.set(row.parentRoomId, list);
+    }
+    return map;
+  });
+
+  const topLevelBackfillRows = $derived(
+    orderedBackfillRows.filter((r) => !r.parentRoomId),
+  );
+
+  const backfillSummary = $derived.by(() => {
+    let complete = 0;
+    let pending = 0;
+    let running = 0;
+    for (const e of backfillChannels) {
+      if (e.phase === "complete") complete++;
+      else pending++;
+      if (e.running) running++;
+    }
+    return { complete, pending, running };
+  });
+
+  let backfillOpen = $state(true);
 
   async function updateBackfillProgress() {
     try {
@@ -338,47 +446,122 @@
   <section
     class="rounded-lg border border-base-200 dark:border-base-800 px-4 py-3"
   >
-    <h2 class="text-sm font-semibold text-base-900 dark:text-base-100">
-      Backfill status
-    </h2>
     {#if backfillError}
-      <p class="mt-1 text-sm text-base-600 dark:text-base-400">
+      <p class="text-sm text-base-600 dark:text-base-400">
         Couldn't load backfill progress right now.
       </p>
     {:else if backfillChannels.length === 0}
+      <h2 class="text-sm font-semibold text-base-900 dark:text-base-100">
+        Backfill status
+      </h2>
       <p class="mt-1 text-sm text-base-600 dark:text-base-400">
         No channels backfilled yet — history syncs shortly after bridging.
       </p>
     {:else}
-      <ul class="mt-2 space-y-2">
-        {#each backfillChannels as ch (ch.spaceDid + ch.channelId)}
-          <li class="flex items-center justify-between gap-4 text-sm">
-            <span
-              class="min-w-0 truncate text-base-900 dark:text-base-100">
-              {ch.channelName ?? ch.channelId}
-              {#if ch.kind === "thread"}
-                <span class="text-base-500 dark:text-base-400">(thread)</span>
-              {/if}
+      <!-- Collapsible summary line: overall state up top, detail below. -->
+      <button
+        type="button"
+        class="flex w-full items-center justify-between gap-3 text-left"
+        onclick={() => (backfillOpen = !backfillOpen)}
+        aria-expanded={backfillOpen}
+      >
+        <span class="text-sm font-semibold text-base-900 dark:text-base-100">
+          Backfill status
+        </span>
+        <span class="flex items-center gap-2 text-xs text-base-500 dark:text-base-400">
+          {#if backfillSummary.pending === 0}
+            <span class="font-medium text-green-600 dark:text-green-400">
+              all synced
             </span>
-            <span class="flex shrink-0 items-center gap-2">
-              <span class="text-base-500 dark:text-base-400">
-                {ch.messagesSynced} synced
-              </span>
-              {#if ch.running}
-                <Badge variant="blue">backfilling</Badge>
-              {:else if ch.phase === "complete"}
-                <Badge variant="green">complete</Badge>
-              {:else if ch.phase === "phase2"}
-                <Badge variant="blue">catching up</Badge>
-              {:else}
-                <Badge variant="yellow">starting</Badge>
-              {/if}
+          {:else}
+            <span>
+              {backfillSummary.complete} complete · {backfillSummary.pending}
+              pending
             </span>
-          </li>
-        {/each}
-      </ul>
+            {#if backfillSummary.running > 0}
+              <LoadingSpinner size={12} />
+            {/if}
+          {/if}
+          <IconChevronRight
+            font-size={14}
+            class={backfillOpen
+              ? "rotate-90 text-base-500 dark:text-base-400"
+              : "text-base-500 dark:text-base-400"}
+            style="transition: transform 120ms"
+          />
+        </span>
+      </button>
+
+      {#if backfillOpen}
+        <ul class="mt-2 space-y-1.5">
+          {#each topLevelBackfillRows as row (row.entry.spaceDid + row.entry.channelId)}
+            {@render progressRow(row.entry, false)}
+            {#each backfillChildren.get(row.entry.roomyId ?? row.entry.channelId) ?? [] as child (child.spaceDid + child.channelId)}
+              {@render progressRow(child, true)}
+            {/each}
+          {/each}
+        </ul>
+      {/if}
     {/if}
   </section>
+{/snippet}
+
+{#snippet progressRow(entry: BackfillProgressEntry, nested: boolean)}
+  <li
+    class={nested
+      ? "ms-7 flex items-center justify-between gap-4 text-sm"
+      : "flex items-center justify-between gap-4 text-sm"}
+  >
+    <span class="flex min-w-0 items-center gap-2">
+      {#if entry.kind === "thread"}
+        <IconNeedleThread
+          class="shrink-0 text-base-400 dark:text-base-500"
+          font-size={15}
+        />
+      {:else}
+        <IconHashtag
+          class="shrink-0 text-base-400 dark:text-base-500"
+          font-size={15}
+        />
+      {/if}
+      <span class="truncate text-base-900 dark:text-base-100">
+        {entry.channelName ?? entry.channelId}
+      </span>
+    </span>
+    <span class="flex shrink-0 items-center gap-2 whitespace-nowrap">
+      <span class="text-xs tabular-nums text-base-500 dark:text-base-400">
+        {entry.messagesSynced} synced
+      </span>
+      {#if entry.running}
+        <span class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400">
+          <LoadingSpinner size={12} />
+          {entry.phase === "phase2"
+            ? "deep backfill in progress…"
+            : "backfilling recent history…"}
+        </span>
+      {:else if entry.phase === "complete"}
+        <span class="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400">
+          <IconCheck font-size={14} />
+          complete
+        </span>
+      {:else if entry.phase === "phase2" && entry.windowSynced !== null}
+        <span class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400">
+          <LoadingSpinner size={12} />
+          recent history synced ({entry.windowSynced}) — deep backfill queued
+        </span>
+      {:else if entry.phase === "phase2"}
+        <span class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400">
+          <LoadingSpinner size={12} />
+          deep backfill queued
+        </span>
+      {:else}
+        <span class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400">
+          <LoadingSpinner size={12} />
+          starting…
+        </span>
+      {/if}
+    </span>
+  </li>
 {/snippet}
 
 {#snippet proMembershipPanel()}

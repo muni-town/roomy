@@ -41,7 +41,12 @@ import {
 	backfillRecentWindow,
 	ensureAndBackfillArchivedThreads,
 	ensureRoomyThreads,
+	enumerateBackfillWork,
+	postBackfillCompletionNotices,
+	runBackfill,
+	setBackfillNoticeSender,
 } from "../backfill.ts";
+import type { DiscordSender } from "../../discord/sender.ts";
 import { expectToBeDefined } from "./utils.ts";
 
 // ─── Test constants ─────────────────────────────────────────────────────
@@ -911,6 +916,14 @@ describe("two-phase backfill", () => {
 			expect(entry.running).toBe(false);
 			expect(typeof entry.updatedAt).toBe("number");
 
+			// TASK-193 payload extensions: durable identity + phase snapshot.
+			expect(entry.parentId).toBeNull(); // top-level channel
+			// The Phase-1 window hit the bound before Phase 2 walked the
+			// remainder; the phase1→phase2 snapshot must be preserved.
+			expect(entry.windowSynced).toBe(PHASE1_MESSAGE_BOUND);
+			expect(typeof entry.roomyId).toBe("string");
+			expect((entry.roomyId as string).length).toBeGreaterThan(0);
+
 			// A space with no rows gets an empty list, not an error.
 			const emptyRes = await fetch(
 				"http://127.0.0.1:" +
@@ -1544,5 +1557,483 @@ describe("ensureAndBackfillArchivedThreads", () => {
 		const roomEvents = countThreadRoomEvents(roomy, SPACE);
 		expect(roomEvents).toHaveLength(1);
 		expect(roomEvents[0]?.name).toBe("tb");
+	});
+});
+
+// ─── TASK-193: up-front enumeration & Discord-side completion notice ─────
+
+/**
+ * Enumeration writes every bridged pair + active thread up front (so the
+ * Roomy status panel can list a skeleton); the completion notice posts one
+ * Discord message per space the run actually did work for, only after every
+ * phase (channels, active threads, archived threads) has settled.
+ */
+describe("backfill enumeration & completion notice (TASK-193)", () => {
+	afterEach(() => {
+		setBackfillNoticeSender(undefined);
+		delete process.env.BACKFILL_NOTICE_CHANNEL;
+	});
+
+	/** BridgeConfig for the standard test guild/space. */
+	function noticeConfig(mode: "full" | "subset" = "full") {
+		return {
+			guildId: GUILD,
+			spaceDid: SPACE,
+			mode,
+			createdAt: 0,
+			updatedAt: 0,
+		};
+	}
+
+	/** A DiscordSender whose sends are recorded and can fail on demand. */
+	function makeMockDiscordSender() {
+		const sent: Array<{ channelId: string; content: string }> = [];
+		// Resolves on the first completed send — the "notice posted" signal
+		// for the fire-and-forget Phase-2 walk (no wall-clock polling).
+		const { promise: noticePosted, resolve: resolveNotice } =
+			Promise.withResolvers<void>();
+		const mock: DiscordSender & { failSends: boolean } = {
+			async sendMessage(channelId, content) {
+				if (mock.failSends) throw new Error("simulated send failure");
+				sent.push({ channelId, content });
+				resolveNotice();
+				return "9000000000000000001";
+			},
+			async editMessage() {},
+			async deleteMessage() {},
+			async addReaction() {},
+			async removeReaction() {},
+			async getParentChannelId() {
+				return undefined;
+			},
+			async getGuildId() {
+				return GUILD;
+			},
+			async getMessage() {
+				return undefined;
+			},
+			async createThread() {
+				return "9000000000000000002";
+			},
+			failSends: false,
+		};
+		return { sent, mock, noticePosted };
+	}
+
+	/** Minimal Discord message for the end-to-end runBackfill test. */
+	function cnMessage(id: string, channelId: string): DiscordMessageData {
+		return {
+			id,
+			channelId,
+			guildId: GUILD,
+			type: 0,
+			content: `message-${id}`,
+			timestamp: Date.now() - Number(BigInt("1" + id.slice(2))),
+			editedTimestamp: undefined,
+			author: {
+				id: "111111111111111111",
+				name: "tester",
+				discriminator: "0000",
+				globalName: "Tester",
+			},
+			attachments: [],
+			embeds: undefined,
+			reactions: undefined,
+			mentions: undefined,
+			mentionChannelIds: [],
+			stickerItems: undefined,
+		};
+	}
+
+	// ── Enumeration ─────────────────────────────────────────────────────
+
+	test("EN01: enumerates every bridged channel and active thread up front", async () => {
+		const parentChannel: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const secondChannel: DiscordChannelData = {
+			id: "200000000000000002",
+			type: 0,
+			name: "dev-chat",
+			guildId: GUILD,
+		};
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "dev-help",
+			parentId: secondChannel.id,
+			guildId: GUILD,
+		};
+		// A thread whose parent is not bridged must not be enumerated.
+		const unmappedThread: DiscordChannelData = {
+			id: "300000000000000002",
+			type: 11,
+			name: "ghost",
+			parentId: "999999999999999999",
+			guildId: GUILD,
+		};
+
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [parentChannel, secondChannel] },
+			channels: [parentChannel, secondChannel, activeThread, unmappedThread],
+			activeThreads: [activeThread, unmappedThread],
+		});
+		const repo = setupRepo();
+
+		await enumerateBackfillWork(discord, repo, [noticeConfig()]);
+
+		const rows = repo.listBackfillProgress(SPACE);
+		expect(rows).toHaveLength(3); // 2 channels + 1 bridged active thread
+		const channelRow = rows.find((r) => r.channelId === parentChannel.id);
+		expectToBeDefined(channelRow);
+		expect(channelRow?.kind).toBe("channel");
+		expect(channelRow?.channelName).toBe("general");
+		expect(channelRow?.phase).toBe("phase1");
+		expect(channelRow?.messagesSynced).toBe(0);
+		expect(channelRow?.parentId).toBeNull();
+		const threadRow = rows.find((r) => r.channelId === activeThread.id);
+		expectToBeDefined(threadRow);
+		expect(threadRow?.kind).toBe("thread");
+		expect(threadRow?.channelName).toBe("dev-help");
+		expect(threadRow?.parentId).toBe(secondChannel.id);
+		expect(rows.find((r) => r.channelId === unmappedThread.id)).toBeUndefined();
+	});
+
+	test("EN02: enumeration never overwrites real progress or cursor pairs", async () => {
+		const parentChannel: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const cursorChannel: DiscordChannelData = {
+			id: "200000000000000002",
+			type: 0,
+			name: "cursor-only",
+			guildId: GUILD,
+		};
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [parentChannel, cursorChannel] },
+			channels: [parentChannel, cursorChannel],
+		});
+		const repo = setupRepo();
+		repo.upsertBackfillProgress({
+			spaceDid: SPACE,
+			channelId: parentChannel.id,
+			guildId: GUILD,
+			kind: "channel",
+			channelName: "renamed",
+			phase: "complete",
+			messagesSynced: 42,
+			messagesSkipped: 3,
+			windowBoundary: "x",
+			walkCursor: "y",
+		});
+		// A pair with a cursor but no progress row must not get a fresh
+		// phase1 skeleton either.
+		repo.setChannelCursor(SPACE, cursorChannel.id, "200000000000000099");
+		expect(repo.getBackfillProgress(SPACE, cursorChannel.id)).toBeUndefined();
+
+		await enumerateBackfillWork(discord, repo, [noticeConfig()]);
+
+		const row = repo.getBackfillProgress(SPACE, parentChannel.id);
+		expectToBeDefined(row);
+		expect(row?.phase).toBe("complete");
+		expect(row?.messagesSynced).toBe(42);
+		expect(row?.channelName).toBe("renamed"); // not clobbered back to the live name
+		expect(repo.getBackfillProgress(SPACE, cursorChannel.id)).toBeUndefined();
+	});
+
+	// ── Completion notice (pure-path) ───────────────────────────────────
+
+	test("CN01: posts one notice to the announcement channel with a summary", async () => {
+		const announcement: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 5,
+			name: "announcements",
+			guildId: GUILD,
+		};
+		const general: DiscordChannelData = {
+			id: "200000000000000002",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const pendingChannel: DiscordChannelData = {
+			id: "200000000000000003",
+			type: 0,
+			name: "off-topic",
+			guildId: GUILD,
+		};
+		const doneThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "help",
+			parentId: general.id,
+			guildId: GUILD,
+		};
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [announcement, general, pendingChannel] },
+			channels: [announcement, general, pendingChannel, doneThread],
+			activeThreads: [doneThread],
+		});
+		const repo = setupRepo();
+		repo.upsertBackfillProgress({
+			spaceDid: SPACE,
+			channelId: announcement.id,
+			guildId: GUILD,
+			kind: "channel",
+			phase: "complete",
+			messagesSynced: 10,
+			messagesSkipped: 0,
+		});
+		repo.upsertBackfillProgress({
+			spaceDid: SPACE,
+			channelId: general.id,
+			guildId: GUILD,
+			kind: "channel",
+			phase: "complete",
+			messagesSynced: 20,
+			messagesSkipped: 1,
+		});
+		repo.upsertBackfillProgress({
+			spaceDid: SPACE,
+			channelId: doneThread.id,
+			guildId: GUILD,
+			kind: "thread",
+			phase: "complete",
+			messagesSynced: 5,
+			messagesSkipped: 0,
+			parentId: general.id,
+		});
+		repo.upsertBackfillProgress({
+			spaceDid: SPACE,
+			channelId: pendingChannel.id,
+			guildId: GUILD,
+			kind: "channel",
+			phase: "phase2",
+			messagesSynced: 100,
+			messagesSkipped: 0,
+		});
+
+		const { sent, mock } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+		await postBackfillCompletionNotices(
+			discord,
+			repo,
+			[noticeConfig()],
+			new Set([SPACE]),
+		);
+
+		expect(sent).toHaveLength(1);
+		expect(sent[0]?.channelId).toBe(announcement.id);
+		const text = sent[0]?.content ?? "";
+		expect(text).toContain("Roomy backfill complete");
+		expect(text).toContain("2 channels");
+		expect(text).toContain("1 thread");
+		expect(text).toContain("1 item(s) still pending");
+	});
+
+	test("CN02: notices only spaces the run did work for, one per space", async () => {
+		const announcement: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 5,
+			name: "announcements",
+			guildId: GUILD,
+		};
+		const OTHER_SPACE = "did:web:other-space.example";
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [announcement] },
+			channels: [announcement],
+		});
+		const repo = setupRepo();
+		repo.upsertBridgeConfig(GUILD, OTHER_SPACE, "full");
+		const { sent, mock } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+
+		await postBackfillCompletionNotices(
+			discord,
+			repo,
+			[noticeConfig(), { ...noticeConfig(), spaceDid: OTHER_SPACE }],
+			new Set([SPACE]),
+		);
+
+		// Only SPACE is in the work set; OTHER_SPACE must get no notice.
+		expect(sent).toHaveLength(1);
+		expect(sent[0]?.channelId).toBe(announcement.id);
+	});
+
+	test("CN03: a failed send is swallowed, never thrown", async () => {
+		const announcement: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 5,
+			name: "announcements",
+			guildId: GUILD,
+		};
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [announcement] },
+			channels: [announcement],
+		});
+		const repo = setupRepo();
+		repo.upsertBridgeConfig(GUILD, SPACE, "full");
+		const { sent, mock } = makeMockDiscordSender();
+		mock.failSends = true;
+		setBackfillNoticeSender(mock);
+
+		await expect(
+			postBackfillCompletionNotices(
+				discord,
+				repo,
+				[noticeConfig()],
+				new Set([SPACE]),
+			),
+		).resolves.toBeUndefined();
+		expect(sent).toHaveLength(0);
+	});
+
+	test("CN04: BACKFILL_NOTICE_CHANNEL override wins; invalid override falls back", async () => {
+		const announcement: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 5,
+			name: "announcements",
+			guildId: GUILD,
+		};
+		const general: DiscordChannelData = {
+			id: "200000000000000002",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [announcement, general] },
+			channels: [announcement, general],
+		});
+		const repo = setupRepo();
+		const { sent, mock } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+
+		process.env.BACKFILL_NOTICE_CHANNEL = general.id;
+		await postBackfillCompletionNotices(
+			discord,
+			repo,
+			[noticeConfig()],
+			new Set([SPACE]),
+		);
+		expect(sent[0]?.channelId).toBe(general.id);
+
+		// An override that doesn't resolve to a reachable top-level channel
+		// falls back to the announcement channel.
+		sent.length = 0;
+		process.env.BACKFILL_NOTICE_CHANNEL = "999999999999999999";
+		await postBackfillCompletionNotices(
+			discord,
+			repo,
+			[noticeConfig()],
+			new Set([SPACE]),
+		);
+		expect(sent).toHaveLength(1);
+		expect(sent[0]?.channelId).toBe(announcement.id);
+	});
+
+	test("CN05: subset mode prefers an allowlisted channel", async () => {
+		const general: DiscordChannelData = {
+			id: "200000000000000002",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const dev: DiscordChannelData = {
+			id: "200000000000000003",
+			type: 0,
+			name: "dev",
+			guildId: GUILD,
+		};
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [general, dev] },
+			channels: [general, dev],
+		});
+		const repo = setupRepo();
+		repo.upsertBridgeConfig(GUILD, SPACE, "subset");
+		repo.addToAllowlist(SPACE, dev.id, GUILD);
+		const { sent, mock } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+
+		await postBackfillCompletionNotices(
+			discord,
+			repo,
+			[noticeConfig("subset")],
+			new Set([SPACE]),
+		);
+
+		expect(sent).toHaveLength(1);
+		expect(sent[0]?.channelId).toBe(dev.id);
+	});
+
+	// ── Completion notice (end-to-end, once per completed run) ─────────
+
+	test("CN06: runBackfill posts exactly one notice; a re-run over complete work posts none", async () => {
+		const announcement: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 5,
+			name: "announcements",
+			guildId: GUILD,
+		};
+		const general: DiscordChannelData = {
+			id: "200000000000000002",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const activeThread: DiscordChannelData = {
+			id: "300000000000000001",
+			type: 11,
+			name: "help",
+			parentId: general.id,
+			guildId: GUILD,
+		};
+		const generalMessages = Array.from(
+			{ length: 8 },
+			(_, i) =>
+				cnMessage(
+					`2000000000000000${String(i + 10)}`,
+					general.id,
+				),
+		);
+		const threadMessages = Array.from(
+			{ length: 5 },
+			(_, i) => cnMessage(`30000000000000000${i}`, activeThread.id),
+		);
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [announcement, general] },
+			channels: [announcement, general, activeThread],
+			messages: {
+				[general.id]: generalMessages,
+				[activeThread.id]: threadMessages,
+			},
+			activeThreads: [activeThread],
+		});
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+		const { sent, mock, noticePosted } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+
+		await runBackfill(discord, repo, roomy);
+
+		// The notice is the last step of the fire-and-forget Phase-2 walk;
+		// await the sender signal itself instead of polling the clock.
+		await noticePosted;
+		expect(sent).toHaveLength(1);
+		expect(sent[0]?.channelId).toBe(announcement.id);
+		expect(sent[0]?.content).toContain("Roomy backfill complete");
+		expect(sent[0]?.content).toContain("channels");
+
+		// Second run: everything is already complete, so this run's work set
+		// stays empty — no send can occur (walks skip complete pairs, room
+		// creation marks nothing) and no second notice is posted.
+		await runBackfill(discord, repo, roomy);
+		expect(sent).toHaveLength(1);
 	});
 });

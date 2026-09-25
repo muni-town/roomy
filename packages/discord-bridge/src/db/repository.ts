@@ -54,6 +54,10 @@ export type BackfillProgress = {
 	windowBoundary: string | null;
 	/** Resume position of the Phase 2 walk (id of the newest message the walk has ingested). */
 	walkCursor: string | null;
+	/** Thread rows only: Discord id of the parent channel (for panel nesting). */
+	parentId: string | null;
+	/** Snapshot of messagesSynced at the phase1→phase2 transition (recent-window size). */
+	windowSynced: number | null;
 	updatedAt: number;
 };
 
@@ -69,6 +73,8 @@ export type BackfillProgressUpdate = {
 	messagesSkipped: number;
 	windowBoundary?: string | null;
 	walkCursor?: string | null;
+	parentId?: string | null;
+	windowSynced?: number | null;
 };
 
 export type WebhookToken = {
@@ -459,13 +465,15 @@ export class BridgeRepository {
 					messages_skipped: number;
 					window_boundary: string | null;
 					walk_cursor: string | null;
+					parent_id: string | null;
+					window_synced: number | null;
 					updated_at: number;
 				},
 				[string, string]
 			>(
 				`SELECT space_did, channel_id, guild_id, kind, channel_name, phase,
 				        messages_synced, messages_skipped, window_boundary, walk_cursor,
-				        updated_at
+				        parent_id, window_synced, updated_at
 				 FROM backfill_progress
 				 WHERE space_did = ? AND channel_id = ?`,
 			)
@@ -482,6 +490,8 @@ export class BridgeRepository {
 			messagesSkipped: row.messages_skipped,
 			windowBoundary: row.window_boundary,
 			walkCursor: row.walk_cursor,
+			parentId: row.parent_id,
+			windowSynced: row.window_synced,
 			updatedAt: row.updated_at,
 		};
 	}
@@ -497,12 +507,15 @@ export class BridgeRepository {
 			.prepare(
 				`INSERT INTO backfill_progress
 				   (space_did, channel_id, guild_id, kind, channel_name, phase,
-				    messages_synced, messages_skipped, window_boundary, walk_cursor, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				    messages_synced, messages_skipped, window_boundary, walk_cursor,
+				    parent_id, window_synced, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(space_did, channel_id) DO UPDATE SET
 				   guild_id = COALESCE(excluded.guild_id, backfill_progress.guild_id),
 				   kind = COALESCE(excluded.kind, backfill_progress.kind),
 				   channel_name = COALESCE(excluded.channel_name, backfill_progress.channel_name),
+				   parent_id = COALESCE(excluded.parent_id, backfill_progress.parent_id),
+				   window_synced = COALESCE(excluded.window_synced, backfill_progress.window_synced),
 				   phase = excluded.phase,
 				   messages_synced = excluded.messages_synced,
 				   messages_skipped = excluded.messages_skipped,
@@ -521,6 +534,8 @@ export class BridgeRepository {
 				update.messagesSkipped,
 				update.windowBoundary ?? null,
 				update.walkCursor ?? null,
+				update.parentId ?? null,
+				update.windowSynced ?? null,
 				Date.now(),
 			);
 	}
@@ -541,13 +556,15 @@ export class BridgeRepository {
 							messages_skipped: number;
 							window_boundary: string | null;
 							walk_cursor: string | null;
+							parent_id: string | null;
+							window_synced: number | null;
 							updated_at: number;
 						},
 						[string]
 					>(
 						`SELECT space_did, channel_id, guild_id, kind, channel_name, phase,
 						        messages_synced, messages_skipped, window_boundary, walk_cursor,
-						        updated_at
+						        parent_id, window_synced, updated_at
 						 FROM backfill_progress WHERE space_did = ?
 						 ORDER BY updated_at DESC`,
 					)
@@ -565,12 +582,14 @@ export class BridgeRepository {
 							messages_skipped: number;
 							window_boundary: string | null;
 							walk_cursor: string | null;
+							parent_id: string | null;
+							window_synced: number | null;
 							updated_at: number;
 						},
 						[]
 					>(`SELECT space_did, channel_id, guild_id, kind, channel_name, phase,
 					        messages_synced, messages_skipped, window_boundary, walk_cursor,
-					        updated_at
+					        parent_id, window_synced, updated_at
 					 FROM backfill_progress ORDER BY updated_at DESC`)
 					.all();
 		return rows.map((r) => ({
@@ -584,6 +603,8 @@ export class BridgeRepository {
 			messagesSkipped: r.messages_skipped,
 			windowBoundary: r.window_boundary,
 			walkCursor: r.walk_cursor,
+			parentId: r.parent_id,
+			windowSynced: r.window_synced,
 			updatedAt: r.updated_at,
 		}));
 	}

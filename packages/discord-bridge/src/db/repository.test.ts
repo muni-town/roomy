@@ -15,8 +15,8 @@ describe("migrations", () => {
 	test("apply cleanly on a fresh database", () => {
 		const db = new Database(":memory:");
 		const result = runMigrations(db);
-		expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-		expect(result.current).toBe(8);
+		expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+		expect(result.current).toBe(9);
 	});
 
 	test("are idempotent across re-runs", () => {
@@ -24,7 +24,7 @@ describe("migrations", () => {
 		const first = runMigrations(db);
 		const second = runMigrations(db);
 		expect(second.applied).toEqual([]);
-		expect(second.current).toBe(8);
+		expect(second.current).toBe(9);
 	});
 });
 
@@ -403,5 +403,93 @@ describe("structure_sync", () => {
 		r.releaseStructureSync(GUILD, SPACE_A);
 		expect(r.hasClaimedStructureSync(GUILD, SPACE_A)).toBe(true);
 		expect(r.claimStructureSync(GUILD, SPACE_A)).toBe(false);
+	});
+});
+
+describe("backfill_progress", () => {
+	test("round-trips parentId and windowSynced", () => {
+		const r = repo();
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "thread-1",
+			guildId: GUILD,
+			kind: "thread",
+			channelName: "Help thread",
+			phase: "phase2",
+			messagesSynced: 120,
+			messagesSkipped: 4,
+			windowBoundary: "900",
+			walkCursor: "800",
+			parentId: "channel-1",
+			windowSynced: 120,
+		});
+
+		const row = r.getBackfillProgress(SPACE_A, "thread-1");
+		expect(row?.parentId).toBe("channel-1");
+		expect(row?.windowSynced).toBe(120);
+
+		const listed = r.listBackfillProgress(SPACE_A);
+		expect(listed[0]?.parentId).toBe("channel-1");
+		expect(listed[0]?.windowSynced).toBe(120);
+	});
+
+	test("later writes without parentId/windowSynced never erase them", () => {
+		const r = repo();
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "thread-1",
+			guildId: GUILD,
+			kind: "thread",
+			channelName: "Help thread",
+			phase: "phase2",
+			messagesSynced: 120,
+			messagesSkipped: 4,
+			windowBoundary: "900",
+			walkCursor: "800",
+			parentId: "channel-1",
+			windowSynced: 120,
+		});
+		// A walk upsert that only carries counts/phase (no identity fields).
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "thread-1",
+			phase: "complete",
+			messagesSynced: 200,
+			messagesSkipped: 6,
+			windowBoundary: "900",
+			walkCursor: "700",
+		});
+
+		const row = r.getBackfillProgress(SPACE_A, "thread-1");
+		expect(row?.phase).toBe("complete");
+		expect(row?.messagesSynced).toBe(200);
+		expect(row?.parentId).toBe("channel-1");
+		expect(row?.windowSynced).toBe(120);
+	});
+
+	test("a write without windowSynced preserves the phase-2 snapshot", () => {
+		const r = repo();
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "c1",
+			phase: "phase2",
+			messagesSynced: 50,
+			messagesSkipped: 0,
+			windowBoundary: "900",
+			walkCursor: "800",
+			windowSynced: 50,
+		});
+		// The walk's mid-walk upserts carry no windowSynced (absolute-count
+		// writes only) — they must not erase the phase-1 snapshot.
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "c1",
+			phase: "phase2",
+			messagesSynced: 90,
+			messagesSkipped: 1,
+			windowBoundary: "900",
+			walkCursor: "750",
+		});
+		expect(r.getBackfillProgress(SPACE_A, "c1")?.windowSynced).toBe(50);
 	});
 });

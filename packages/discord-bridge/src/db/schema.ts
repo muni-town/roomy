@@ -208,6 +208,21 @@ export const MIGRATIONS: Migration[] = [
       `);
 		},
 	},
+	{
+		version: 9,
+		name: "backfill_progress_details",
+		up(db) {
+			// parent_id: for thread rows, the Discord id of the parent
+			// channel so the Roomy status panel can nest threads under
+			// channels. window_synced: snapshot of messages_synced at the
+			// phase1→phase2 transition, so the UI can report how much of
+			// the recent window was ingested before the deep walk started.
+			db.run(`
+        ALTER TABLE backfill_progress ADD COLUMN parent_id TEXT;
+        ALTER TABLE backfill_progress ADD COLUMN window_synced INTEGER;
+      `);
+		},
+	},
 ];
 
 export function runMigrations(db: Database): {

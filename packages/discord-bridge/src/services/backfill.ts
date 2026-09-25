@@ -1,9 +1,11 @@
 import { type Event, newUlid, Ulid } from "@roomy-space/sdk";
 import type {
+	BackfillProgress,
 	BridgeConfig,
 	BridgeMode,
 	BridgeRepository,
 } from "../db/repository.ts";
+import type { DiscordSender } from "../discord/sender.ts";
 import {
 	CHANNEL_TYPES,
 	isChannelPublic,
@@ -14,6 +16,7 @@ import {
 } from "../discord/data.ts";
 import type { DiscordDataSource } from "../discord/data-source.ts";
 import { createLogger } from "../logger.ts";
+import { BACKFILL_NOTICE_CHANNEL } from "../env.ts";
 import { getCapacityGate } from "../roomy/capacity.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
@@ -22,6 +25,48 @@ import { ensureRoomyChannel, syncInitialStructure } from "./room-sync.ts";
 const log = createLogger("backfill");
 
 const activeBackfills = new Set<string>();
+
+/**
+ * Sender for the Discord-side backfill-completion notice (TASK-193). Set at
+ * boot by index.ts; left undefined in unit tests unless a test installs a
+ * sender. The notice is best-effort: failures are logged, never thrown, and
+ * never fail the backfill itself.
+ */
+let noticeSender: DiscordSender | undefined;
+
+/** Set the sender used for the Discord-side backfill-completion notice. */
+export function setBackfillNoticeSender(sender: DiscordSender | undefined): void {
+	noticeSender = sender;
+}
+
+/**
+ * Spaces where the CURRENT runBackfill invocation did real work — a
+ * (channel, space) pair crossed into `complete`, or thread rooms were
+ * created. Reset at the start of each run, read once at the end of Phase 2
+ * to decide which spaces get a completion notice. Without it, a restart over
+ * an already-backfilled space would post a spurious "complete" notice.
+ */
+let runWorkSpaces = new Set<string>();
+
+function markRunWork(spaceDid: string): void {
+	runWorkSpaces.add(spaceDid);
+}
+
+/**
+ * Whether a progress row reflects real ingested work — as opposed to a fresh
+ * enumeration row (TASK-193) that only marks the pair as known so the
+ * status UI can list it up front. A row with no counts, no boundary, and no
+ * walk cursor has never been backfilled: Phase 1 must still run its recent
+ * window for it.
+ */
+function hasRealBackfillProgress(progress: BackfillProgress): boolean {
+	return (
+		progress.messagesSynced + progress.messagesSkipped > 0 ||
+		progress.windowBoundary !== null ||
+		progress.walkCursor !== null ||
+		progress.phase === "complete"
+	);
+}
 
 /**
  * Phase-1 bound: the most recent window backfilled first, in batches of
@@ -85,6 +130,10 @@ export async function runBackfill(
 		return;
 	}
 
+	// Reset the completion-notice work set: this run decides which spaces
+	// get a notice once Phase 2 finishes.
+	runWorkSpaces = new Set<string>();
+
 	// Ensure Roomy rooms exist for all bridged channels before backfilling.
 	try {
 		await ensureRoomyRooms(discord, repo, roomy, configs);
@@ -110,6 +159,19 @@ export async function runBackfill(
 		await syncInitialStructure(discord, repo, roomy, configs);
 	} catch (err) {
 		log.error("syncInitialStructure failed", err);
+	}
+
+	// Enumerate the full work set up front (TASK-193): create a progress row
+	// for every bridged (channel, space) pair and active-thread pair so the
+	// Roomy backfill-status panel can list everything immediately instead of
+	// watching rows appear piecemeal as Phase 2 walks along. Rows that
+	// already carry real progress are left untouched. Archived threads are
+	// deliberately NOT enumerated here — they are discovered lazily in
+	// Phase 2's deprioritized sweep.
+	try {
+		await enumerateBackfillWork(discord, repo, configs);
+	} catch (err) {
+		log.error("enumerateBackfillWork failed", err);
 	}
 
 	// Backfill is per (channel, space) — each pair has its own cursor.
@@ -151,7 +213,10 @@ export async function runBackfill(
 		if (activeBackfills.has(key)) continue;
 		const progress = repo.getBackfillProgress(t.spaceDid, t.channelId);
 		const cursor = repo.getChannelCursor(t.spaceDid, t.channelId);
-		if (progress || cursor) continue;
+		if (cursor) continue;
+		// Enumeration rows (zero real work) must still get their Phase-1
+		// window; only rows with real progress are left to Phase 2.
+		if (progress && hasRealBackfillProgress(progress)) continue;
 		activeBackfills.add(key);
 		try {
 			await backfillRecentWindow(
@@ -190,7 +255,12 @@ function schedulePhase2(
 	repo: BridgeRepository,
 	roomy: RoomyGateway,
 	configs: BridgeConfig[],
-	phase1Tasks: Array<{ channelId: string; spaceDid: string; guildId: string }>,
+	phase1Tasks: Array<{
+		channelId: string;
+		spaceDid: string;
+		guildId: string;
+		parentId?: string | null;
+	}>,
 ): void {
 	if (phase2Running) {
 		log.debug("Phase 2 already running; skipping duplicate schedule");
@@ -222,6 +292,7 @@ function schedulePhase2(
 							channelId: thread.id,
 							spaceDid: config.spaceDid,
 							guildId: config.guildId,
+							parentId: thread.parentId ?? null,
 						});
 					}
 				} catch (err) {
@@ -243,6 +314,7 @@ function schedulePhase2(
 						t.channelId,
 						t.spaceDid,
 						t.guildId,
+						t.parentId,
 					);
 					succeeded++;
 				} catch (reason) {
@@ -262,6 +334,21 @@ function schedulePhase2(
 				await ensureAndBackfillArchivedThreads(discord, repo, roomy, configs);
 			} catch (err) {
 				log.error("ensureAndBackfillArchivedThreads failed", err);
+			}
+
+			// Discord-side completion notice (TASK-193): one message per
+			// bridged space this run did work for, posted only now that all
+			// phases (channels, active threads, archived threads) have
+			// settled. Best-effort — never throws, never fails the walk.
+			try {
+				await postBackfillCompletionNotices(
+					discord,
+					repo,
+					configs,
+					runWorkSpaces,
+				);
+			} catch (err) {
+				log.error("backfill completion notice failed", err);
 			}
 		} catch (err) {
 			log.error("Phase-2 backfill failed", err);
@@ -506,6 +593,7 @@ export async function ensureRoomyThreads(
 						spaceDid,
 						guildId,
 						"thread",
+						parentId,
 					);
 				} catch (err) {
 					log.error(
@@ -516,6 +604,7 @@ export async function ensureRoomyThreads(
 			}
 
 			if (created > 0) {
+				markRunWork(spaceDid);
 				log.info(
 					`Created ${created} Roomy threads in ${spaceDid} and backfilled their messages`,
 				);
@@ -556,6 +645,98 @@ async function channelsForConfig(
 	}
 
 	return channels;
+}
+
+/**
+ * Enumerate the backfill work set up front (TASK-193): create a progress row
+ * for every bridged (channel, space) pair and every bridged active-thread
+ * pair so the Roomy backfill-status panel can list the entire set from the
+ * start. Rows that already carry real progress (or a cursor) are left
+ * untouched — enumeration never regresses phase or counts. Archived threads
+ * are deliberately excluded: they are discovered lazily by Phase 2's
+ * deprioritized sweep, per the two-phase design.
+ *
+ * Runs inside runBackfill, before the Phase-1 window; best-effort per
+ * config (a failure here logs and lets the rest of the backfill proceed —
+ * rows will simply appear as Phase 2 walks along).
+ */
+export async function enumerateBackfillWork(
+	discord: DiscordDataSource,
+	repo: BridgeRepository,
+	configs: BridgeConfig[],
+): Promise<void> {
+	for (const config of configs) {
+		try {
+			const { guildId, spaceDid, mode } = config;
+			if (!(await getCapacityGate().isEnabled(guildId, spaceDid))) continue;
+
+			const guild = await discord.getGuild(guildId);
+			if (!guild?.channels) continue;
+			const nameById = new Map(
+				guild.channels.map((ch) => [ch.id, ch.name ?? null]),
+			);
+
+			let channelIds: string[];
+			if (mode === "full") {
+				channelIds = guild.channels
+					.filter((ch) => CHANNEL_TYPES.has(ch.type))
+					.map((ch) => ch.id);
+			} else {
+				const allowlisted = new Set(
+					repo.listAllowlistForBridge(spaceDid).map((e) => e.channelId),
+				);
+				channelIds = guild.channels
+					.filter((ch) => CHANNEL_TYPES.has(ch.type) && allowlisted.has(ch.id))
+					.map((ch) => ch.id);
+			}
+
+			for (const channelId of channelIds) {
+				if (repo.getBackfillProgress(spaceDid, channelId)) continue;
+				if (repo.getChannelCursor(spaceDid, channelId)) continue;
+				repo.upsertBackfillProgress({
+					spaceDid,
+					channelId,
+					guildId,
+					kind: "channel",
+					channelName: nameById.get(channelId) ?? null,
+					phase: "phase1",
+					messagesSynced: 0,
+					messagesSkipped: 0,
+					windowBoundary: null,
+					walkCursor: null,
+					parentId: null,
+					windowSynced: null,
+				});
+			}
+
+			// Active threads under bridged parents (mirrors ensureRoomyThreads).
+			const bridgedParents = new Set(channelIds);
+			const activeThreads = await discord.getActiveThreads(guildId);
+			for (const thread of activeThreads) {
+				if (!thread.parentId || !bridgedParents.has(thread.parentId)) {
+					continue;
+				}
+				if (repo.getBackfillProgress(spaceDid, thread.id)) continue;
+				if (repo.getChannelCursor(spaceDid, thread.id)) continue;
+				repo.upsertBackfillProgress({
+					spaceDid,
+					channelId: thread.id,
+					guildId,
+					kind: "thread",
+					channelName: thread.name ?? null,
+					phase: "phase1",
+					messagesSynced: 0,
+					messagesSkipped: 0,
+					windowBoundary: null,
+					walkCursor: null,
+					parentId: thread.parentId ?? null,
+					windowSynced: null,
+				});
+			}
+		} catch (err) {
+			log.error(`enumerateBackfillWork failed for ${config.spaceDid}`, err);
+		}
+	}
 }
 
 export async function backfillSingleChannel(
@@ -641,6 +822,7 @@ export async function backfillRecentWindow(
 	spaceDid: string,
 	guildId: string,
 	kind: "channel" | "thread" | null,
+	parentId?: string | null,
 ): Promise<void> {
 	const existing = repo.getBackfillProgress(spaceDid, channelId);
 	const channelName =
@@ -656,7 +838,10 @@ export async function backfillRecentWindow(
 	let reachedStart = false;
 	let stalled = false;
 
-	const flush = (phase: "phase1" | "phase2" | "complete") => {
+	const flush = (
+		phase: "phase1" | "phase2" | "complete",
+		windowSynced: number | null = null,
+	) => {
 		repo.upsertBackfillProgress({
 			spaceDid,
 			channelId,
@@ -668,6 +853,8 @@ export async function backfillRecentWindow(
 			messagesSkipped: skipped,
 			windowBoundary: oldestIngested,
 			walkCursor: null,
+			parentId: parentId ?? existing?.parentId ?? null,
+			windowSynced: windowSynced ?? existing?.windowSynced ?? null,
 		});
 	};
 
@@ -743,6 +930,7 @@ export async function backfillRecentWindow(
 	}
 
 	if (reachedStart) {
+		if (existing?.phase !== "complete") markRunWork(spaceDid);
 		flush("complete");
 		log.info(
 			`Channel ${channelId} → ${spaceDid} backfill complete in Phase 1: ${synced} synced, ${skipped} skipped`,
@@ -760,7 +948,9 @@ export async function backfillRecentWindow(
 		return;
 	}
 
-	flush("phase2");
+	// Snapshot the window size for the status UI ("recent window done: N
+	// messages, deep backfill queued").
+	flush("phase2", synced);
 	log.info(
 		`Channel ${channelId} → ${spaceDid} Phase 1 reached bound (${PHASE1_MESSAGE_BOUND} messages); remaining history queued for Phase 2`,
 	);
@@ -773,6 +963,7 @@ export async function backfillChannel(
 	channelId: string,
 	spaceDid: string,
 	guildIdOverride?: string,
+	parentId?: string | null,
 ): Promise<void> {
 	const key = `${channelId}:${spaceDid}`;
 	if (activeBackfills.has(key)) {
@@ -821,9 +1012,11 @@ export async function backfillChannel(
 
 		// Brand-new pair (no progress row and no cursor): run the bounded
 		// recent window first (Phase 1), then walk the remainder below.
-		// Pairs with an existing row or cursor are mid-walk, legacy, or
-		// interrupted — Phase 2 resumes them without re-running the window.
-		if (!progress && !cursor) {
+		// A fresh enumeration row (zero real work) counts as brand-new too —
+		// its window has not run yet. Pairs with a cursor or real progress
+		// are mid-walk, legacy, or interrupted — Phase 2 resumes them
+		// without re-running the window.
+		if (!cursor && (!progress || !hasRealBackfillProgress(progress))) {
 			const cachedChannel = await discord.getChannel(channelId);
 			const kind = cachedChannel ? mappingKindForChannel(cachedChannel) : null;
 			await backfillRecentWindow(
@@ -834,6 +1027,7 @@ export async function backfillChannel(
 				spaceDid,
 				guildId,
 				kind,
+				parentId ?? cachedChannel?.parentId ?? null,
 			);
 		}
 
@@ -879,9 +1073,13 @@ export async function backfillChannel(
 		// (legacy pairs) — existing rows already carry name/kind/guild.
 		let identityKind = progress2?.kind ?? null;
 		let identityName = progress2?.channelName ?? null;
+		let identityParentId = parentId ?? progress2?.parentId ?? null;
 		if (!progress2) {
 			const cachedChannel = await discord.getChannel(channelId);
-			if (cachedChannel) identityKind = mappingKindForChannel(cachedChannel);
+			if (cachedChannel) {
+				identityKind = mappingKindForChannel(cachedChannel);
+				identityParentId = parentId ?? cachedChannel.parentId ?? null;
+			}
 			identityName =
 				(await resolveChannelFieldWithRetry(() =>
 					discord.resolveChannelName(channelId),
@@ -957,6 +1155,8 @@ export async function backfillChannel(
 				messagesSkipped: baseSkipped + totalSkipped,
 				windowBoundary: boundary,
 				walkCursor: afterCursor,
+				parentId: identityParentId,
+				windowSynced: progress2?.windowSynced ?? null,
 			});
 
 			// Newest-ingested cursor is a monotonic max: never regress what
@@ -985,6 +1185,7 @@ export async function backfillChannel(
 		}
 
 		if (!walkStalled) {
+			if (progress2?.phase !== "complete") markRunWork(spaceDid);
 			repo.upsertBackfillProgress({
 				spaceDid,
 				channelId,
@@ -996,6 +1197,8 @@ export async function backfillChannel(
 				messagesSkipped: baseSkipped + totalSkipped,
 				windowBoundary: boundary,
 				walkCursor: afterCursor,
+				parentId: identityParentId,
+				windowSynced: progress2?.windowSynced ?? null,
 			});
 		}
 
@@ -1139,6 +1342,7 @@ export async function ensureAndBackfillArchivedThreads(
 								threadId,
 								spaceDid,
 								guildId,
+								thread.parentId ?? null,
 							);
 
 							await delay(BACKFILL_DELAY_MS);
@@ -1187,4 +1391,131 @@ export async function ensureAndBackfillArchivedThreads(
 	}
 
 	log.info("Archived thread backfill complete");
+}
+
+/**
+ * Post the Discord-side "backfill complete" system message (TASK-193) for
+ * every bridged space that the current run actually did work for.
+ *
+ * Completion point: the NOTICE fires only after ALL phases are done — every
+ * bridged channel, every active thread, and the deprioritized archived-thread
+ * sweep — so "complete" means the entire history of the server is synced, not
+ * just the Phase-1 windows. Archived threads are included rather than
+ * excluded, because the bridge treats them as part of the space's history and
+ * the Roomy-side notice would otherwise under-report on servers with
+ * archived threads.
+ *
+ * Destination channel (first match wins):
+ *  1. BACKFILL_NOTICE_CHANNEL env override, if it names a reachable
+ *     top-level channel;
+ *  2. the guild's first announcement channel (type GUILD_ANNOUNCEMENT) — the
+ *     conventional place for server-wide status messages;
+ *  3. the first bridged top-level text channel of the guild.
+ *
+ * Best-effort by design: a missing guild, unreachable channel, or failed
+ * send is logged and skips — it never throws, and never fails the backfill
+ * run itself.
+ */
+export async function postBackfillCompletionNotices(
+	discord: DiscordDataSource,
+	repo: BridgeRepository,
+	configs: BridgeConfig[],
+	workSpaces: ReadonlySet<string>,
+): Promise<void> {
+	if (!noticeSender) {
+		log.debug("backfill completion notice: no sender installed; skipping");
+		return;
+	}
+	for (const config of configs) {
+		if (!workSpaces.has(config.spaceDid)) continue;
+		try {
+			const channelId = await resolveBackfillNoticeChannel(
+				discord,
+				repo,
+				config,
+			);
+			if (!channelId) {
+				log.warn(
+					`backfill completion notice: no reachable top-level channel in guild ${config.guildId} for ${config.spaceDid}; skipping`,
+				);
+				continue;
+			}
+			const summary = backfillSummary(repo, config);
+			const pending = summary.pending > 0 ? ` ${summary.pending} item(s) still pending` : "";
+			const plural = (n: number, word: string) =>
+				`${n} ${word}${n === 1 ? "" : "s"}`;
+			const text =
+				`Roomy backfill complete: this server's history is synced to Roomy ` +
+				`(${plural(summary.channels, "channel")}, ${plural(summary.threads, "thread")}).` +
+				pending;
+			await noticeSender.sendMessage(channelId, text);
+			log.info(
+				`backfill completion notice posted to ${channelId} for ${config.spaceDid}`,
+			);
+		} catch (err) {
+			log.error(
+				`backfill completion notice failed for ${config.spaceDid}`,
+				err,
+			);
+		}
+	}
+}
+
+/** Pick the destination channel for the completion notice (see postBackfillCompletionNotices). */
+async function resolveBackfillNoticeChannel(
+	discord: DiscordDataSource,
+	repo: BridgeRepository,
+	config: BridgeConfig,
+): Promise<string | undefined> {
+	const override = BACKFILL_NOTICE_CHANNEL();
+	if (override) {
+		const channel = await discord.getChannel(override);
+		if (channel && CHANNEL_TYPES.has(channel.type)) return override;
+		log.warn(
+			`BACKFILL_NOTICE_CHANNEL ${override} is not a reachable top-level channel; falling back to a guild channel`,
+		);
+	}
+
+	const guild = await discord.getGuild(config.guildId);
+	const channels = guild?.channels ?? [];
+
+	const announcement = channels.find((ch) => ch.type === 5);
+	if (announcement) return announcement.id;
+
+	const preferred =
+		config.mode === "full"
+			? channels
+			: (() => {
+					const allowlisted = new Set(
+						repo.listAllowlistForBridge(config.spaceDid).map(
+							(e) => e.channelId,
+						),
+					);
+					return channels.filter(
+						(ch) => CHANNEL_TYPES.has(ch.type) && allowlisted.has(ch.id),
+					);
+				})();
+	const first = preferred.find((ch) => CHANNEL_TYPES.has(ch.type)) ??
+		channels.find((ch) => CHANNEL_TYPES.has(ch.type));
+	return first?.id;
+}
+
+/** Tally the per-space progress rows into a message summary. */
+function backfillSummary(
+	repo: BridgeRepository,
+	config: BridgeConfig,
+): { channels: number; threads: number; pending: number } {
+	let channels = 0;
+	let threads = 0;
+	let pending = 0;
+	for (const p of repo.listBackfillProgress(config.spaceDid)) {
+		if (p.guildId !== null && p.guildId !== config.guildId) continue;
+		if (p.phase === "complete") {
+			if (p.kind === "thread") threads++;
+			else channels++;
+		} else {
+			pending++;
+		}
+	}
+	return { channels, threads, pending };
 }

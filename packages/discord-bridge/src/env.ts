@@ -66,6 +66,14 @@ export const SYSTEM_SPACE = () => optional("SYSTEM_SPACE", "");
 export const SYSTEM_CHANNEL = () => optional("SYSTEM_CHANNEL", "");
 
 /**
+ * Optional override for the Discord channel the bridge posts its
+ * backfill-completion notice into. When unset, the bridge picks the guild's
+ * first announcement channel, else the first bridged top-level text channel.
+ */
+export const BACKFILL_NOTICE_CHANNEL = () =>
+	optional("BACKFILL_NOTICE_CHANNEL", "");
+
+/**
  * Ops kill switch for capacity enforcement. When set to "true"/"1",
  * per-guild capacity checks are disabled globally: every bridged space
  * passes, regardless of member count vs Roomy Pro capacity. Emergency

@@ -50,7 +50,7 @@ import {
 	sendSystemMessage,
 	systemMessagesConfigured,
 } from "./roomy/system-messages.ts";
-import { runBackfill } from "./services/backfill.ts";
+import { runBackfill, setBackfillNoticeSender } from "./services/backfill.ts";
 import {
 	handleMessageDelete,
 	handleMessageEdit,
@@ -248,14 +248,17 @@ async function main() {
 						}
 					}, 5 * 60 * 1000);
 
-					// Create adapters and run backfill
+					// Create adapters and run backfill. The sender is created
+					// first so runBackfill can install it for the
+					// Discord-side completion notice (TASK-193).
 					const discord = new LiveDiscordDataSource(bot);
+					const discordSender = new LiveDiscordSender(bot);
+					setBackfillNoticeSender(discordSender);
 					runBackfill(discord, repo, roomy).catch((err) =>
 						log.error("Backfill failed", err),
 					);
 
 					// Start Roomy→Discord event router
-					const discordSender = new LiveDiscordSender(bot);
 					const webhookManager = new LiveWebhookManager(bot, repo);
 					const profileResolver = new LiveProfileResolver(roomyClient);
 					const router = new RoomyEventRouter(

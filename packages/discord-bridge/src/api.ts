@@ -120,6 +120,12 @@ export function buildBackfillProgressPayload(
 	messagesSynced: number;
 	messagesSkipped: number;
 	cursor: string | null;
+	/** Thread rows only: Discord id of the parent channel (panel nesting). */
+	parentId: string | null;
+	/** Recent-window size at the phase1→phase2 transition (panel phase-2 label). */
+	windowSynced: number | null;
+	/** Roomy room id this channel/thread maps to, for sidebar-order joins. */
+	roomyId: string | null;
 	running: boolean;
 	updatedAt: number;
 }> {
@@ -136,6 +142,9 @@ export function buildBackfillProgressPayload(
 		messagesSynced: p.messagesSynced,
 		messagesSkipped: p.messagesSkipped,
 		cursor: repo.getChannelCursor(p.spaceDid, p.channelId)?.lastMessageId ?? null,
+		parentId: p.parentId,
+		windowSynced: p.windowSynced,
+		roomyId: repo.getRoomyRoomId(p.spaceDid, p.channelId) ?? null,
 		running: isBackfillRunning(p.spaceDid, p.channelId),
 		updatedAt: p.updatedAt,
 	}));
