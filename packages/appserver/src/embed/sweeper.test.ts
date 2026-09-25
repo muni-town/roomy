@@ -12,7 +12,10 @@ import {
   embedSweeperStats,
   classifyStallCause,
   sweepIdleDelayMs,
+  _setSweepWaitForTest,
+  sweepYieldsAfter,
   type EmbedSweeperOpts,
+  type SweepCycleResult,
 } from "./sweeper.ts";
 import { openDb, openGlobalDb, openSpaceDb, closeDb } from "../db/db.ts";
 import type {
@@ -137,6 +140,23 @@ async function flushSweeper(opts: EmbedSweeperOpts): Promise<void> {
   // Run one cycle synchronously, then stop the background loop.
   await sweepCycle(opts.globalDb);
   await stopEmbedSweeper();
+}
+/**
+ * Wait for `done()` to hold, driving the event loop with `setImmediate` turns
+ * rather than a wall-clock sleep. The sweeper loop parks on an injected wait
+ * (see _setSweepWaitForTest) so the condition is reached deterministically;
+ * the turns only give the SQLite worker's round-trips room to resolve.
+ *
+ * Fails loudly on timeout instead of hanging the suite.
+ */
+async function settleUntil(done: () => boolean, maxTurns = 100_000): Promise<void> {
+  for (let i = 0; i < maxTurns; i++) {
+    if (done()) return;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    setImmediate(resolve);
+    await promise;
+  }
+  throw new Error("settleUntil: condition never held within the turn budget");
 }
 
 describe("embed sweeper invalidation room resolution", () => {
@@ -1192,6 +1212,249 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
       expect(embedSweeperStats().backlogStuck).toBe(false);
       expect(sweepIdleDelayMs()).toBe(30_000);
     } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+});
+
+
+describe("embed sweeper cycle pacing (TASK-197)", () => {
+  test("sweepYieldsAfter throttles ONLY a full batch that resolved nothing", () => {
+    // The rule the loop's pacing branches on. The `if (full) continue` fast
+    // path is a deliberate latency optimisation for freshly-posted links, so
+    // it must survive: a full batch that produced an `ok` keeps it. A full
+    // batch with NO ok is the churn — the loop spent a batch of outbound
+    // fetches and resolved nothing — and must yield first.
+    const r = (full: boolean, producedOk: boolean): SweepCycleResult => ({ full, producedOk });
+    expect(sweepYieldsAfter(r(true, false))).toBe(true);
+    expect(sweepYieldsAfter(r(true, true))).toBe(false);
+    // An incomplete batch already waits for the idle poll / a poke; it must
+    // not be throttled twice.
+    expect(sweepYieldsAfter(r(false, false))).toBe(false);
+    expect(sweepYieldsAfter(r(false, true))).toBe(false);
+  });
+
+  test("counters split a definitive no-data outcome from a transient-retry one", async () => {
+    // Regression for TASK-197: one `enrichedNull` counter was incremented for
+    // BOTH classes, so "the backlog churns and resolves nothing" was
+    // indistinguishable from "the backlog is settling dead links" (which
+    // drains: a definitive result DELETES the row). The two must be separate.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const definitiveUrl = "https://example.com/no-og";
+    const transientUrl = "https://example.com/flaky";
+    await seedLinkMessageRoom(spaceDb, globalDb, {
+      room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
+      message: "01KVMMMMMMMMMMMMMMMMMMMMMM",
+      url: definitiveUrl,
+    });
+    await seedLinkMessageRoom(spaceDb, globalDb, {
+      room: "01KVRRRRRRRRRRRRRRRRRRRRR2",
+      message: "01KVNNNNNNNNNNNNNNNNNNNNNN",
+      url: transientUrl,
+    });
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> => {
+      if (String(input).includes("flaky")) {
+        return Promise.resolve(new Response("Service Unavailable", { status: 503 }));
+      }
+      // Page loads fine but carries no OG/oEmbed and NO <title> → definitive
+      // no-data. The <title> matters: `ogToMetadata` falls back to it, so a
+      // page carrying one is a title-only `ok`, not a no-data settlement.
+      return Promise.resolve(
+        new Response("<html><head></head><body>No metadata</body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+      );
+    }) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      await sweepCycle(globalDb);
+
+      const stats = embedSweeperStats();
+      expect(stats.enrichedOk).toBe(0);
+      expect(stats.enrichedDefinitive).toBe(1);
+      expect(stats.enrichedTransient).toBe(1);
+      // `enrichedNull` stays the sum, for the operators/docs that read it.
+      expect(stats.enrichedNull).toBe(2);
+    } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("a definitive no-data batch is not mistaken for churn: it drains the backlog", async () => {
+    // The row count is what separates the two classes — a definitive outcome
+    // deletes the pending row, a transient one leaves it. Pin it, because the
+    // split counters above are only meaningful if this stays true.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const url = "https://example.com/no-og-drain";
+    await seedLinkMessageRoom(spaceDb, globalDb, {
+      room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
+      message: "01KVMMMMMMMMMMMMMMMMMMMMMM",
+      url,
+    });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> =>
+      Promise.resolve(
+        new Response("<html><head></head><body>No metadata</body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+      )) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      await sweepCycle(globalDb);
+      const left = await globalDb
+        .query("select count(*) as n from pending_links")
+        .get<{ n: number }>();
+      expect(left?.n).toBe(0);
+    } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("the loop yields after a full batch that resolved nothing (the churn bound)", async () => {
+    // The mechanism from TASK-197: `if (full) continue;` ran the next backlog
+    // batch back-to-back with NO wait, so with a backlog of links that all fail
+    // transiently the sweeper fetched at whatever rate the fetches allowed
+    // while resolving nothing (production: 360 null/min, enrichedOk flat at 0
+    // across 37 samples). With the bound, one full batch of pure failures is
+    // followed by a yield, so a 200-link backlog cannot be fetched flat out.
+    //
+    // The yield is INJECTED, so there is no wall-clock wait: the loop parks
+    // there and the assertion is exact — precisely ONE batch was fetched, and
+    // most of the backlog is untouched. Without the bound the loop would have
+    // kept selecting batches until all 200 links were fetched.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const BACKLOG = 200; // >> SWEEP_BATCH (25), so every batch is full
+    for (let i = 0; i < BACKLOG; i++) {
+      await seedLinkMessageRoom(spaceDb, globalDb, {
+        room: `01KVROOM${String(i).padStart(18, "0")}`,
+        message: `01KVMSG${String(i).padStart(19, "0")}`,
+        url: `https://example.com/flaky/${i}`,
+      });
+    }
+
+    let fetchCalls = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> => {
+      fetchCalls++;
+      return Promise.resolve(new Response("Service Unavailable", { status: 503 }));
+    }) as typeof globalThis.fetch;
+
+    // Park forever at the yield: the loop must reach it and stop there.
+    const parkState: { at: number | null } = { at: null };
+    const park = Promise.withResolvers<void>();
+    try {
+      await stopEmbedSweeper();
+      _setSweepWaitForTest((ms) => {
+        parkState.at = ms;
+        return park.promise;
+      });
+      startEmbedSweeper({ globalDb, invalidationRouter: router });
+      await settleUntil(() => parkState.at !== null);
+
+      const stats = embedSweeperStats();
+      expect(stats.enrichedOk).toBe(0);
+      // Exactly one batch was fetched, then the loop yielded for NO_OK_YIELD_MS.
+      expect(fetchCalls).toBe(25);
+      expect(stats.enrichedTransient).toBe(25);
+      expect(stats.sweepCycles).toBe(1);
+      expect(stats.sweepThrottled).toBe(1);
+      // The bound is the idle-poll interval, so a no-progress batch runs at
+      // most once per poll at the default settings.
+      expect(parkState.at).toBe(30_000); // IDLE_POLL_MS
+      // A transient failure keeps the row pending, so the backlog is still
+      // intact — the point is that the loop STOPPED fetching it at one batch.
+      const left = await globalDb
+        .query("select count(*) as n from pending_links")
+        .get<{ n: number }>();
+      expect(left?.n).toBe(BACKLOG);
+    } finally {
+      park.resolve();
+      _setSweepWaitForTest(null);
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("a full batch that resolves a link keeps the no-wait path", async () => {
+    // The other half of the rule, wired: a healthy backlog must still drain
+    // flat out, batch after batch with NO wait between them. The injected
+    // wait records every call, so "no wait" is asserted, not assumed: the
+    // loop must reach the idle poll only after the backlog is empty.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const BACKLOG = 200;
+    for (let i = 0; i < BACKLOG; i++) {
+      await seedLinkMessageRoom(spaceDb, globalDb, {
+        room: `01KVROOM${String(i).padStart(18, "0")}`,
+        message: `01KVMSG${String(i).padStart(19, "0")}`,
+        url: `https://example.com/good/${i}`,
+      });
+    }
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> =>
+      Promise.resolve(
+        new Response(
+          '<html><head><meta property="og:title" content="Good" /></head></html>',
+          { status: 200, headers: { "Content-Type": "text/html" } },
+        ),
+      )) as typeof globalThis.fetch;
+
+    const waits: number[] = [];
+    const park = Promise.withResolvers<void>();
+    try {
+      await stopEmbedSweeper();
+      _setSweepWaitForTest((ms) => {
+        waits.push(ms);
+        return park.promise;
+      });
+      startEmbedSweeper({ globalDb, invalidationRouter: router });
+      // Wait for the idle poll: the loop must drain all 8 full batches
+      // back-to-back with no wait, and only then park.
+      await settleUntil(() => waits.length > 0);
+
+      const stats = embedSweeperStats();
+      // Every link was enriched, and nothing was throttled.
+      expect(stats.enrichedOk).toBe(BACKLOG);
+      expect(stats.sweepThrottled).toBe(0);
+      // The ONLY wait the loop took was the idle poll, and it came after the
+      // backlog was empty — every full batch went straight into the next one.
+      expect(waits).toEqual([30_000]);
+      // 8 full batches of 25 drained back-to-back, then the final (empty)
+      // selection parks on the idle poll.
+      expect(stats.sweepCycles).toBe(9);
+    } finally {
+      park.resolve();
+      _setSweepWaitForTest(null);
       globalThis.fetch = realFetch;
       await stopEmbedSweeper();
     }

@@ -57,6 +57,14 @@ describe("Transport-level edge cases", () => {
     expect(body).toHaveProperty("enrichedOk");
     expect(body).toHaveProperty("enrichedNull");
     expect(body).toHaveProperty("pending");
+    // TASK-197: a null outcome is split by CLASS — `definitive` settles the row
+    // (it leaves the backlog), `transient` leaves it pending for a retry. The
+    // sweep-cycle counters are the RATE, so "churning and resolving nothing" is
+    // readable from the endpoint rather than only by sampling it twice.
+    expect(body).toHaveProperty("enrichedDefinitive");
+    expect(body).toHaveProperty("enrichedTransient");
+    expect(body).toHaveProperty("sweepCycles");
+    expect(body).toHaveProperty("sweepThrottled");
   });
 
   test("GET /health/search → 200 with indexer + backfill stats", async () => {

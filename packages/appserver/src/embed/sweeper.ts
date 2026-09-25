@@ -78,6 +78,32 @@ const STALL_POLL_MAX_MS = Number(
   process.env.EMBED_STALL_POLL_MAX_MS ?? 5 * 60_000,
 );
 
+/**
+ * Yield (ms) after a FULL sweep batch that produced NO `ok` outcome, before
+ * the loop runs the next cycle (see {@link sweepYieldsAfter}). Without it, a
+ * batch of links that all fail (or all settle as definitive no-data) is
+ * followed by the next batch IMMEDIATELY — production measured ~360 null
+ * enrichments/min with `enrichedOk` flat at 0 across 37 samples, i.e. the
+ * sweeper spending the box's time and outbound fetches at whatever rate the
+ * fetches themselves allow while resolving nothing.
+ *
+ * Bound = {@link IDLE_POLL_MS}, so a no-progress batch runs at most once per
+ * idle-poll interval — the rate at which the sweeper's OWN self-healing poll
+ * would have picked the backlog up anyway. Measured on this box against a
+ * 20,000-link all-failing backlog: 20,000 fetches/min unbounded (the whole
+ * backlog in 60s), 300/min at a 5s yield (still near production's 360/min
+ * measured churn), and 50/min at this bound — a 400× reduction, with the
+ * modal inter-fetch gap the yield itself. A definitive backlog still drains:
+ * 25 rows SETTLE and are deleted per batch, and each batch lands after one
+ * poll interval at most.
+ *
+ * `waitForWake` is used, not a bare sleep, so a freshly-poked link cuts the
+ * wait short. Tunable via env.
+ */
+const NO_OK_YIELD_MS = Number(
+  process.env.EMBED_SWEEP_NO_OK_YIELD_MS ?? IDLE_POLL_MS,
+);
+
 // ─── Singleton state ────────────────────────────────────────────────────
 
 let sweeperGlobalDb: DbLike | undefined;
@@ -88,10 +114,28 @@ let loopPromise: Promise<void> | undefined;
 
 // ─── Stats (for /health/embed) ─────────────────────────────────────────
 // Lifetime counters incremented in the drain loop. Non-null enrichLink →
-// success; null → a definitive or transient FetchResult (failure/settled).
-// Reset by _resetEmbedSweeper (tests only). Exposed via embedSweeperStats().
+// success; a null outcome is split by CLASS, because the two classes mean
+// opposite things: `definitive` (page loaded with no OG/oEmbed, or a stable
+// 4xx) SETTLES the row and removes it from the backlog, while `transient`
+// (timeout / 5xx / 429 / network) leaves the row pending to be re-selected
+// after a backoff window. Summed into one counter (the previous
+// `enrichedNull`), a backlog churning through failing URLs is
+// indistinguishable from one settling dead ones. Reset by _resetEmbedSweeper
+// (tests only). Exposed via embedSweeperStats().
 let statsEnrichedOk = 0;
-let statsEnrichedNull = 0;
+let statsEnrichedDefinitive = 0;
+let statsEnrichedTransient = 0;
+/**
+ * Sweep cycles that ran a selection (not the DB-backoff bail), and how many
+ * of those the loop throttled — a FULL batch that produced no `ok`, so it
+ * yielded instead of running the next batch back-to-back. Exported as
+ * `roomy_embed_sweep_cycles_total` / `roomy_embed_sweep_throttled_total`, so
+ * the cycle RATE is readable from Grafana without hand-sampling
+ * `/health/embed`: a high `rate(roomy_embed_sweep_cycles_total[5m])` with
+ * `roomy_embed_enriched_ok_total` flat IS the churn.
+ */
+let statsSweepCycles = 0;
+let statsSweepThrottled = 0;
 /**
  * #messageDiff frames the sweeper actually emitted to clients (enrichment
  * completed AND the enriched message was resolved to a real room). Lets
@@ -99,6 +143,42 @@ let statsEnrichedNull = 0;
  * enrichment itself succeeded.
  */
 let statsEnrichmentDiffs = 0;
+
+// Prometheus counters for the same events, incremented where they happen
+// rather than scraped from a snapshot. Primed with a 0 series at module load
+// so every family is present in a scrape from process start — otherwise a
+// missing `roomy_embed_enriched_ok_total` would be indistinguishable from
+// "enrichment has never once succeeded", which is the state this task is
+// about.
+const metricSweepCycles = metrics.counter(
+  "roomy_embed_sweep_cycles_total",
+  "Embed sweep cycles that ran a selection. rate() is the cycle rate; compare against roomy_embed_sweep_throttled_total.",
+);
+const metricSweepThrottled = metrics.counter(
+  "roomy_embed_sweep_throttled_total",
+  "Embed sweep cycles the loop yielded after: a FULL batch that produced no ok outcome (the anti-churn bound).",
+);
+const metricEnrichedOk = metrics.counter(
+  "roomy_embed_enriched_ok_total",
+  "Embed links enriched to a real embed — the success metric. Flat while cycles still run means churn.",
+);
+const metricEnrichedDefinitive = metrics.counter(
+  "roomy_embed_enriched_definitive_total",
+  "Embed links settled as definitive no-data (no OG/oEmbed, or a stable 4xx). These LEAVE the backlog.",
+);
+const metricEnrichedTransient = metrics.counter(
+  "roomy_embed_enriched_transient_total",
+  "Embed links that failed transiently (timeout / 5xx / 429 / network). These STAY pending and re-enter after a backoff window.",
+);
+for (const c of [
+  metricSweepCycles,
+  metricSweepThrottled,
+  metricEnrichedOk,
+  metricEnrichedDefinitive,
+  metricEnrichedTransient,
+]) {
+  c.inc({}, 0);
+}
 /**
  * How many times {@link backlogStuck} has CHANGED VALUE since start (both
  * directions). Distinct from `backlogStuckSkipped` (how many cycles the stall
@@ -308,7 +388,20 @@ export function embedSweeperStats(): {
   priorityQueue: number;
   inFlight: number;
   enrichedOk: number;
+  /** Null outcomes that SETTLED the row — definitive no-data / stable 4xx. */
+  enrichedDefinitive: number;
+  /** Null outcomes that left the row PENDING — transient (timeout/5xx/429/network). */
+  enrichedTransient: number;
+  /**
+   * `enrichedDefinitive + enrichedTransient`. Kept because operators and the
+   * readstate review doc read this name; the two components are the
+   * actionable signal.
+   */
   enrichedNull: number;
+  /** Sweep cycles that ran a selection since start (the cycle RATE). */
+  sweepCycles: number;
+  /** Of those, the cycles the loop yielded after (full batch, no ok). */
+  sweepThrottled: number;
   enrichmentDiffs: number;
   dbErrorCount: number;
   dbBackoffActive: boolean;
@@ -361,7 +454,11 @@ export function embedSweeperStats(): {
     priorityQueue: priorityLinks.size,
     inFlight: inFlightCount(),
     enrichedOk: statsEnrichedOk,
-    enrichedNull: statsEnrichedNull,
+    enrichedDefinitive: statsEnrichedDefinitive,
+    enrichedTransient: statsEnrichedTransient,
+    enrichedNull: statsEnrichedDefinitive + statsEnrichedTransient,
+    sweepCycles: statsSweepCycles,
+    sweepThrottled: statsSweepThrottled,
     enrichmentDiffs: statsEnrichmentDiffs,
     dbErrorCount,
     dbBackoffActive: Date.now() < dbBackoffUntil,
@@ -554,27 +651,42 @@ function markDbOk(): void {
 // ─── Loop ───────────────────────────────────────────────────────────────
 
 /**
+ * What one sweep cycle did, in the two terms the loop's pacing needs.
+ */
+export interface SweepCycleResult {
+  /** The batch was full ({@link SWEEP_BATCH} links) — more pending likely remain. */
+  full: boolean;
+  /** At least one link resolved to an ok embed this cycle. */
+  producedOk: boolean;
+}
+
+/**
  * Run one sweep cycle: pull a priority + backlog batch, drain it with
  * bounded concurrency, and emit per-URL invalidations for successes. Returns
- * true when the batch was full (more pending likely remain → loop without
- * waiting); false when the loop should wait for a poke / idle poll.
+ * a {@link SweepCycleResult}: whether the batch was FULL (more pending likely
+ * remain) and whether it produced any `ok` outcome. The loop uses that pair —
+ * see {@link sweepYieldsAfter} — to choose between the no-wait path and the
+ * anti-churn yield.
  *
  * Expected DB/fetch failures are caught inline (and drive the DB backoff via
  * `markDbError`). Any *unexpected* throw bubbles to {@link runSweeperLoop}'s
  * outer guard so the loop self-heals instead of dying.
  */
-export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
+export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
   // Bail out early if the sweeper has been stopped (e.g. during test teardown).
-  if (!started) return false;
+  if (!started) return { full: false, producedOk: false };
   // If the DB has been erroring, wait out the backoff before touching it
   // again — don't fetch links only to fail every write (wastes embed-service
   // calls and spams logs). A poke can still wake us early, but we re-check
   // the backoff at the top of the next cycle.
   const now = Date.now();
   if (now < dbBackoffUntil) {
-    await waitForWake(dbBackoffUntil - now);
-    return false;
+    await sweepWait(dbBackoffUntil - now);
+    return { full: false, producedOk: false };
   }
+
+  statsSweepCycles++;
+  metricSweepCycles.inc();
 
   // One-shot: restore the persisted transient-retry state BEFORE the skip set
   // and the selection that use it. Without this a restart re-fetches every
@@ -648,6 +760,11 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
     });
   }
 
+  // Did this cycle resolve anything, and did it REMOVE rows from the backlog?
+  // Both are reported to the loop: `producedOk` bounds the no-progress batch
+  // rate (see {@link sweepYieldsAfter}), and `cycleSettledRows` is what proves
+  // the queue is draining (see the hysteresis at the end of the cycle).
+  let cycleProducedOk = false;
   // Whether this cycle actually REMOVED rows from the backlog (settled them).
   // A cycle that selected work but settled nothing made no progress, and must
   // not clear the stall flag (see the hysteresis at the end of the cycle).
@@ -696,6 +813,8 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
       }
       if (outcome?.status === "ok") {
         statsEnrichedOk++;
+        metricEnrichedOk.inc();
+        cycleProducedOk = true;
         enrichedUrls.add(url);
         settledUrls.add(url);
         transientRetry.delete(url);
@@ -707,14 +826,16 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
         // Settled no-data (page loaded but no OG/oEmbed, or a stable 4xx).
         // Drop from the pending set — re-fetching it every sweep would keep
         // the backlog pinned on dead links forever and starve real ones.
-        statsEnrichedNull++;
+        statsEnrichedDefinitive++;
+        metricEnrichedDefinitive.inc();
         settledUrls.add(url);
         transientRetry.delete(url);
       } else {
         // Transient (timeout / 5xx / 429 / network) — keep pending so it is
         // retried later, but skip it for an exponential backoff window so the
         // sweeper doesn't re-fetch the same down links every cycle.
-        statsEnrichedNull++;
+        statsEnrichedTransient++;
+        metricEnrichedTransient.inc();
         const prev = transientRetry.get(url);
         const attempts = (prev?.attempts ?? 0) + 1;
         transientRetry.set(url, { attempts, retryAt: Date.now() + backoffMs(attempts) });
@@ -878,9 +999,13 @@ export async function sweepCycle(globalDb: DbLike): Promise<boolean> {
     backlogStuckSkipped++;
   }
 
-  // A full batch means there may be more pending — signal the loop to run
-  // again without waiting.
-  return pending.length >= SWEEP_BATCH;
+  // A full batch means there may be more pending; `producedOk` tells the loop
+  // whether running the next batch immediately is progress or churn (see
+  // sweepYieldsAfter).
+  return {
+    full: pending.length >= SWEEP_BATCH,
+    producedOk: cycleProducedOk,
+  };
 }
 
 async function runSweeperLoop(): Promise<void> {
@@ -890,12 +1015,28 @@ async function runSweeperLoop(): Promise<void> {
   for (;;) {
     if (!started) return; // allow clean exit via stopEmbedSweeper
     try {
-      const full = await sweepCycle(globalDb);
-      if (full) continue;
-      // Wait for a poke (new links) or the idle poll, whichever comes first.
-      // This bounds latency for newly posted links while also self-healing
-      // anything we missed (backfill, prior sessions).
-      await waitForWake(sweepIdleDelayMs());
+      const result = await sweepCycle(globalDb);
+      if (!result.full) {
+        // Wait for a poke (new links) or the idle poll, whichever comes first.
+        // This bounds latency for newly posted links while also self-healing
+        // anything we missed (backfill, prior sessions). The delay escalates
+        // while the backlog is stalled (see {@link sweepIdleDelayMs}).
+        await sweepWait(sweepIdleDelayMs());
+        continue;
+      }
+      // Full batch: more pending remain, so running the next batch immediately
+      // is the deliberate latency optimisation for freshly-posted links — but
+      // ONLY when this batch actually resolved something. A full batch that
+      // produced no `ok` is churn (see sweepYieldsAfter): everything in it
+      // either failed transiently (row stays pending) or settled as definitive
+      // no-data, and the previous code ran the next batch back-to-back with no
+      // wait at all, so the fetch rate was bounded only by the fetches
+      // themselves. Yield first — on the same wait a poke uses, so a
+      // freshly-posted link still cuts the wait short.
+      if (!sweepYieldsAfter(result)) continue;
+      statsSweepThrottled++;
+      metricSweepThrottled.inc();
+      await sweepWait(NO_OK_YIELD_MS);
     } catch (err) {
       // Outer resilience: the inner try/catches handle expected DB/fetch
       // failures, but any *unexpected* throw (a future code path not yet
@@ -904,9 +1045,26 @@ async function runSweeperLoop(): Promise<void> {
       // until restart. Log, pause briefly to avoid a tight crash loop, and
       // continue.
       log.error("[embed-sweeper] sweep cycle threw (continuing):", err);
-      await waitForWake(IDLE_POLL_MS);
+      await sweepWait(IDLE_POLL_MS);
     }
   }
+}
+
+/**
+ * Whether the loop must YIELD after a cycle instead of running the next one
+ * back-to-back. Only a FULL batch that produced no `ok` outcome is throttled:
+ *
+ * - a full batch WITH an ok keeps the no-wait path — that is the deliberate
+ *   latency optimisation for freshly-posted links, and a batch that is
+ *   resolving real links should drain as fast as the fetches allow;
+ * - a full batch with NO ok resolved nothing: running the next batch
+ *   immediately only spends more of the box's time and more outbound requests
+ *   producing the same result.
+ *
+ * Pure, so the rule is testable without starting the loop.
+ */
+export function sweepYieldsAfter(result: SweepCycleResult): boolean {
+  return result.full && !result.producedOk;
 }
 
 /** Remove and return up to `limit` URLs from the priority queue. */
@@ -956,7 +1114,9 @@ async function mapWithConcurrency<T>(
   await Promise.all(workers);
 }
 
-/** Resolve after `ms`, or immediately when {@link pokeEmbedSweeper} fires. */
+/**
+ * Resolve after `ms`, or immediately when {@link pokeEmbedSweeper} fires.
+ */
 function waitForWake(ms: number): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
@@ -969,6 +1129,16 @@ function waitForWake(ms: number): Promise<void> {
     };
   });
 }
+
+/**
+ * The loop's wait — the real {@link waitForWake} unless a test injects its
+ * own via {@link _setSweepWaitForTest}. Indirection exists so a test can
+ * drive the loop's pacing deterministically: fake timers cannot, because Bun
+ * fakes `setImmediate`/`process.nextTick` too, which the SQLite worker's
+ * round-trips need to progress, so a fake-timer test deadlocks the DB instead
+ * of advancing the loop.
+ */
+let sweepWait: (ms: number) => Promise<void> = waitForWake;
 
 // ─── Invalidation ───────────────────────────────────────────────────────
 
@@ -1074,6 +1244,15 @@ async function emitEnrichmentInvalidation(
 }
 
 // ─── Test helpers ───────────────────────────────────────────────────────
+/**
+ * Replace the loop's wait, for tests that need to control pacing without
+ * wall-clock delays. Pass `null` to restore the real `waitForWake`. The
+ * injected function MUST resolve eventually (`stopEmbedSweeper` cannot wake a
+ * wait that ignores {@link pokeEmbedSweeper}), or the loop stays parked.
+ */
+export function _setSweepWaitForTest(fn: ((ms: number) => Promise<void>) | null): void {
+  sweepWait = fn ?? waitForWake;
+}
 
 /**
  * Mark the sweeper as started WITHOUT launching the background loop. Tests
@@ -1105,8 +1284,11 @@ export function _resetEmbedSweeper(): void {
   dbErrorCount = 0;
   dbBackoffUntil = 0;
   statsEnrichedOk = 0;
-  statsEnrichedNull = 0;
+  statsEnrichedDefinitive = 0;
+  statsEnrichedTransient = 0;
   statsEnrichmentDiffs = 0;
+  statsSweepCycles = 0;
+  statsSweepThrottled = 0;
   backlogStuck = false;
   backlogStuckSince = 0;
   backlogStuckSkipped = 0;
@@ -1115,6 +1297,9 @@ export function _resetEmbedSweeper(): void {
   loggedStallCause = null;
   retryStateSeeded = false;
   statsBacklogStuckTransitions = 0;
+  // A test that injected a wait must not leak it into the next test — a wait
+  // that never resolves would park that test's loop forever.
+  sweepWait = waitForWake;
 }
 
 /**
@@ -1140,8 +1325,11 @@ export function stopEmbedSweeper(): Promise<void> {
   dbErrorCount = 0;
   dbBackoffUntil = 0;
   statsEnrichedOk = 0;
-  statsEnrichedNull = 0;
+  statsEnrichedDefinitive = 0;
+  statsEnrichedTransient = 0;
   statsEnrichmentDiffs = 0;
+  statsSweepCycles = 0;
+  statsSweepThrottled = 0;
   const timeout = Promise.withResolvers<void>();
   setTimeout(timeout.resolve, 50);
   return Promise.race([loopPromise ?? Promise.resolve(), timeout.promise]);

@@ -618,9 +618,13 @@ export async function createAppserver(
           // rows were actually selectable, and `lastStallCause` for why a
           // stalled cycle selected nothing.
           pending,
-          priorityQueue: embed.priorityQueue ?? 0,
           inFlight: embed.inFlight ?? 0,
+          enrichedOk: embed.enrichedOk ?? 0,
+          enrichedDefinitive: embed.enrichedDefinitive ?? 0,
+          enrichedTransient: embed.enrichedTransient ?? 0,
           enrichedNull: embed.enrichedNull ?? 0,
+          sweepCycles: embed.sweepCycles ?? 0,
+          sweepThrottled: embed.sweepThrottled ?? 0,
           dbBackoff: embed.dbBackoffActive ?? false,
           transientBackoff: embed.transientBackoff ?? 0,
           backlogStuck: embed.backlogStuck ?? false,
@@ -773,7 +777,13 @@ export async function createAppserver(
     "Freshly-detected embed URLs waiting in the in-memory priority queue (NOT the DB backlog).",
   );
   const embedInFlight = metrics.gauge("roomy_embed_in_flight", "Embed enrichments currently in flight.");
-  const embedEnrichedNull = metrics.gauge("roomy_embed_enriched_null", "Embed links enriched to null (no card).");
+  // The null outcome is split by CLASS (see the sweeper counters):
+  // `definitive` settles the row and removes it from the backlog, `transient`
+  // leaves it pending for a retry. Their sum keeps the old series meaningful.
+  const embedEnrichedNull = metrics.gauge(
+    "roomy_embed_enriched_null",
+    "Embed links enriched to null (definitive + transient). Prefer the split series below.",
+  );
   const embedDbBackoff = metrics.gauge("roomy_embed_db_backoff", "1 when the embed sweeper is in DB backoff.");
   const embedTransientBackoff = metrics.gauge(
     "roomy_embed_transient_backoff",

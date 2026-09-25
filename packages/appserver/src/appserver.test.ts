@@ -115,8 +115,30 @@ describe("createAppserver factory", () => {
       // alerted on directly rather than through a range query.
       "roomy_embed_backlog_stuck_transitions_total",
       "roomy_db_timeouts_total",
+      // The sweep-cycle RATE and the success metric. Primed with a 0 series at
+      // module load, so a process that has never succeeded still exposes
+      // `roomy_embed_enriched_ok_total` — a MISSING series would be
+      // indistinguishable from "has never succeeded", which is the state those
+      // counters exist to make visible.
+      "roomy_embed_sweep_cycles_total",
+      "roomy_embed_sweep_throttled_total",
+      "roomy_embed_enriched_ok_total",
+      "roomy_embed_enriched_definitive_total",
+      "roomy_embed_enriched_transient_total",
     ]) {
       expect(body).toContain(`# TYPE ${name}`);
+    }
+    // The TASK-197 families carry no labels, so their primed 0 series renders
+    // with a value — the guarantee that a never-succeeded sweeper is still
+    // observable as `0` rather than a missing series.
+    for (const name of [
+      "roomy_embed_sweep_cycles_total",
+      "roomy_embed_sweep_throttled_total",
+      "roomy_embed_enriched_ok_total",
+      "roomy_embed_enriched_definitive_total",
+      "roomy_embed_enriched_transient_total",
+    ]) {
+      expect(body).toMatch(new RegExp(`^${name} \\d+$`, "m"));
     }
     // The /health hit should have been recorded as a request.
     expect(body).toContain('endpoint="/health"');

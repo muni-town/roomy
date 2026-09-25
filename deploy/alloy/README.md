@@ -103,6 +103,28 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
     means the flag is flapping without the backlog moving. Read
     `lastStallCause` / `lastCycle` on `/health/embed`
     for the measured cause and row counts of the last stalled cycle.
+- `roomy_embed_enriched_ok_total` / `roomy_embed_enriched_definitive_total` /
+  `roomy_embed_enriched_transient_total` / `roomy_embed_sweep_cycles_total` /
+  `roomy_embed_sweep_throttled_total` — the enrich RATE and its outcome mix
+  (counters, primed with a 0 series at startup so they are always present).
+  - `roomy_embed_enriched_ok_total` is the success metric: **flat while
+    `roomy_embed_sweep_cycles_total` still climbs IS churn** — the sweeper
+    spending time and outbound requests resolving nothing. The single
+    `roomy_embed_enriched_null` gauge sums a *definitive* no-data settlement
+    (the row is deleted, the backlog drains) with a *transient* failure (the
+    row stays pending), so "churning and resolving nothing" cannot be told
+    apart from "settling dead links" on that series alone.
+  - `roomy_embed_enriched_definitive_total` vs
+    `roomy_embed_enriched_transient_total` is that split.
+  - `roomy_embed_sweep_throttled_total` counts cycles the loop **yielded**
+    after: a full batch that produced no `ok`. The loop runs a full batch
+    back-to-back only when it resolved something (the latency optimisation for
+    freshly-posted links); otherwise it waits one idle-poll interval, so a
+    backlog of links that all fail cannot be fetched flat out. Measured
+    against a 20,000-link all-failing backlog: 20,000 fetches/min unbounded,
+    50/min bounded.
+  - **Alert:** `rate(roomy_embed_sweep_cycles_total[5m]) > 0` with
+    `rate(roomy_embed_enriched_ok_total[5m]) == 0` for 15m.
 - `roomy_search_indexer_queue` / `roomy_search_backfilled` / `roomy_push_queued`
 - `roomy_db_timeouts_total` — DB requests that hit the 30s timeout (pool saturation)
 - `roomy_process_starts_total` — process boots, incremented once per process
