@@ -104,8 +104,8 @@ function route(
  * without walking the full history — the payload deliberately omits any
  * denominator. Per-channel state comes from the durable `backfill_progress`
  * rows (survive restarts); `running` reflects the in-process registry only,
- * so after a restart nothing is reported as running until the boot backfill
- * re-schedules it.
+ * re-schedules it. A `blocked` row is terminal — the bridge cannot read that
+ * channel — and its `blockedReason` says why.
  */
 export function buildBackfillProgressPayload(
 	repo: BridgeRepository,
@@ -116,7 +116,7 @@ export function buildBackfillProgressPayload(
 	guildId: string | null;
 	kind: "channel" | "thread" | null;
 	channelName: string | null;
-	phase: "phase1" | "phase2" | "complete";
+	phase: "phase1" | "phase2" | "complete" | "blocked";
 	messagesSynced: number;
 	messagesSkipped: number;
 	cursor: string | null;
@@ -124,6 +124,8 @@ export function buildBackfillProgressPayload(
 	parentId: string | null;
 	/** Recent-window size at the phase1→phase2 transition. */
 	windowSynced: number | null;
+	/** `blocked` rows only: why the bridge cannot read the channel. */
+	blockedReason: string | null;
 	/** Roomy room id this channel/thread maps to, for sidebar-order joins. */
 	roomyId: string | null;
 	running: boolean;
@@ -144,6 +146,7 @@ export function buildBackfillProgressPayload(
 		cursor: repo.getChannelCursor(p.spaceDid, p.channelId)?.lastMessageId ?? null,
 		parentId: p.parentId,
 		windowSynced: p.windowSynced,
+		blockedReason: p.blockedReason,
 		roomyId: repo.getRoomyRoomId(p.spaceDid, p.channelId) ?? null,
 		running: isBackfillRunning(p.spaceDid, p.channelId),
 		updatedAt: p.updatedAt,

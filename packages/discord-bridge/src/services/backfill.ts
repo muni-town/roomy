@@ -1,6 +1,7 @@
 import { type Event, newUlid, Ulid } from "@roomy-space/sdk";
 import type {
 	BackfillProgress,
+	BackfillProgressUpdate,
 	BridgeConfig,
 	BridgeMode,
 	BridgeRepository,
@@ -8,6 +9,7 @@ import type {
 import type { DiscordSender } from "../discord/sender.ts";
 import {
 	CHANNEL_TYPES,
+	type DiscordMessageData,
 	isChannelPublic,
 	mappingKindForChannel,
 	MESSAGE_CHANNEL_TYPES,
@@ -15,6 +17,10 @@ import {
 	THREAD_TYPES,
 } from "../discord/data.ts";
 import type { DiscordDataSource } from "../discord/data-source.ts";
+import {
+	channelReadDenial,
+	discordFailureMessage,
+} from "../discord/rest-errors.ts";
 import { createLogger } from "../logger.ts";
 import { BACKFILL_NOTICE_CHANNEL } from "../env.ts";
 import { getCapacityGate } from "../roomy/capacity.ts";
@@ -68,7 +74,10 @@ function hasRealBackfillProgress(progress: BackfillProgress): boolean {
 		progress.messagesSynced + progress.messagesSkipped > 0 ||
 		progress.windowBoundary !== null ||
 		progress.walkCursor !== null ||
-		progress.phase === "complete"
+		// `complete` and `blocked` are terminal: neither may be re-run by a
+		// later pass, because the work is either done or impossible.
+		progress.phase === "complete" ||
+		progress.phase === "blocked"
 	);
 }
 
@@ -116,6 +125,62 @@ let phase2Running = false;
 /** True when a backfill (window or walk) is in flight for this pair. */
 export function isBackfillRunning(spaceDid: string, channelId: string): boolean {
 	return activeBackfills.has(`${channelId}:${spaceDid}`);
+}
+
+/**
+ * Why a channel read failed permanently, or null when the failure is
+ * transient (worth retrying on a later run).
+ *
+ * A pair whose channel the bot cannot read can never be backfilled, so it
+ * must leave `phase1`/`phase2` for a terminal state instead of being
+ * re-attempted — and re-logged — on every run. A 5xx, 429, or network
+ * failure is NOT terminal: the pair stays resumable.
+ */
+function backfillBlockedReason(err: unknown): string | null {
+	const denial = channelReadDenial(err);
+	if (!denial) return null;
+	const message = discordFailureMessage(err);
+	const detail = message ? `: ${message}` : "";
+	return denial === "missing_access"
+		? `the bridge can't read this channel (Discord 403${detail})`
+		: `this channel no longer exists in Discord (404${detail})`;
+}
+
+/**
+ * Record a pair as terminally unreadable. The durable row is the marker the
+ * status panel and the completion notice read; `blockedReason` names the cause.
+ */
+function recordBlockedBackfill(
+	repo: BridgeRepository,
+	update: BackfillProgressUpdate & { phase: "blocked"; blockedReason: string },
+): void {
+	repo.upsertBackfillProgress(update);
+	log.warn(
+		`Backfill blocked for ${update.channelId} → ${update.spaceDid}: ${update.blockedReason}; the pair stays terminal until /roomy-backfill re-runs it`,
+	);
+}
+/**
+ * Detect the second, silent form of an unreadable channel.
+ *
+ * Discord does not error when the bot has VIEW_CHANNEL but not
+ * READ_MESSAGE_HISTORY — it answers with an EMPTY page. An empty channel is
+ * indistinguishable from that by the page alone, so the discriminator is the
+ * channel's own metadata: `lastMessageId` is set when the channel HAS history,
+ * and the bridge still read zero messages. A genuinely empty channel reports
+ * no last message, so it stays on the normal path (and completes).
+ */
+async function unreadableEmptyChannelReason(
+	discord: DiscordDataSource,
+	channelId: string,
+): Promise<string | null> {
+	// No metadata (channel deleted, or the lookup failed): nothing to compare
+	// against, so the page stands as the answer — the empty channel completes.
+	const channel = await discord.getChannel(channelId);
+	if (!channel?.lastMessageId) return null;
+	return (
+		"the bridge can't read this channel's history (Discord returns no " +
+		"messages without the Read Message History permission)"
+	);
 }
 
 /** Sleep for a given number of milliseconds. */
@@ -884,6 +949,16 @@ export async function backfillRecentWindow(
 	workSpaces?: RunWorkSpaces,
 ): Promise<void> {
 	const existing = repo.getBackfillProgress(spaceDid, channelId);
+	// `complete` and `blocked` are terminal. A background sweep that reaches
+	// this function directly (active/archived threads) must not resurrect such
+	// a pair, so it no-ops the same way backfillChannel does.
+	if (existing?.phase === "complete" || existing?.phase === "blocked") {
+		log.info(
+			`Channel ${channelId} → ${spaceDid} already ${existing.phase}; skipping the recent window`,
+		);
+		return;
+	}
+
 	const channelName =
 		existing?.channelName ??
 		// Display-only: a transiently unresolvable name costs one call, not
@@ -920,11 +995,64 @@ export async function backfillRecentWindow(
 	flush("phase1");
 
 	for (;;) {
-		const page = await discord.getMessages(channelId, {
-			before,
-			limit: PHASE1_PAGE_SIZE,
-		});
+		let page: DiscordMessageData[];
+		try {
+			page = await discord.getMessages(channelId, {
+				before,
+				limit: PHASE1_PAGE_SIZE,
+			});
+		} catch (err) {
+			// A deterministic read denial (403 Missing Access / 404 Unknown
+			// Channel) can never succeed, so the pair leaves the pending
+			// phases here instead of being re-attempted on every run. A
+			// transient failure keeps the pair in `phase1`, resumable.
+			const reason = backfillBlockedReason(err);
+			if (reason) {
+				recordBlockedBackfill(repo, {
+					spaceDid,
+					channelId,
+					guildId,
+					kind,
+					channelName,
+					phase: "blocked",
+					messagesSynced: synced,
+					messagesSkipped: skipped,
+					windowBoundary: oldestIngested,
+					walkCursor: null,
+					parentId: parentId ?? existing?.parentId ?? null,
+					windowSynced: existing?.windowSynced ?? null,
+					blockedReason: reason,
+				});
+				return;
+			}
+			throw err;
+		}
 		if (page.length === 0) {
+			// A channel the bridge could not read at all (Discord answers an
+			// empty page when READ_MESSAGE_HISTORY is missing) is terminal,
+			// not empty. Only when nothing has been ingested yet: after a
+			// successful page, an empty page genuinely means the start.
+			if (synced + skipped === 0) {
+				const reason = await unreadableEmptyChannelReason(discord, channelId);
+				if (reason) {
+					recordBlockedBackfill(repo, {
+						spaceDid,
+						channelId,
+						guildId,
+						kind,
+						channelName,
+						phase: "blocked",
+						messagesSynced: 0,
+						messagesSkipped: 0,
+						windowBoundary: null,
+						walkCursor: null,
+						parentId: parentId ?? existing?.parentId ?? null,
+						windowSynced: existing?.windowSynced ?? null,
+						blockedReason: reason,
+					});
+					return;
+				}
+			}
 			reachedStart = true;
 			break;
 		}
@@ -989,7 +1117,10 @@ export async function backfillRecentWindow(
 	}
 
 	if (reachedStart) {
-		if (existing?.phase !== "complete") markRunWork(workSpaces, spaceDid);
+		// Terminal pairs (`complete`/`blocked`) are guarded out at the top of
+		// this function, so reaching the start here means the window did real
+		// work: the space earned its completion notice.
+		markRunWork(workSpaces, spaceDid);
 		flush("complete");
 		log.info(
 			`Channel ${channelId} → ${spaceDid} backfill complete in Phase 1: ${synced} synced, ${skipped} skipped`,
@@ -1062,13 +1193,15 @@ export async function backfillChannel(
 		}
 
 		const progress = repo.getBackfillProgress(spaceDid, channelId);
-		if (progress?.phase === "complete") {
+		// `complete` and `blocked` are terminal: this pass must not redo the
+		// walk or re-log a channel the bridge cannot read. Only an explicit
+		// /roomy-backfill (which resets the row) puts the pair back in play.
+		if (progress?.phase === "complete" || progress?.phase === "blocked") {
 			log.info(
-				`Channel ${channelId} → ${spaceDid} already backfilled (complete)`,
+				`Channel ${channelId} → ${spaceDid} already ${progress.phase}; skipping`,
 			);
 			return;
 		}
-
 		// No durable progress yet (no row, or a fresh enumeration row with
 		// zero real work): run the bounded recent window first (Phase 1),
 		// then walk the remainder below. A channel cursor does not make the
@@ -1093,10 +1226,18 @@ export async function backfillChannel(
 		}
 
 		// The window covered the whole history (it ended on a short/empty
-		// page) → the pair is complete; nothing left to walk.
-		if (repo.getBackfillProgress(spaceDid, channelId)?.phase === "complete") {
+		// page) → the pair is complete; nothing left to walk. It may also
+		// have just been marked blocked (unreadable channel) — terminal too.
+		const afterWindow = repo.getBackfillProgress(spaceDid, channelId);
+		if (afterWindow?.phase === "complete") {
 			log.info(
 				`Channel ${channelId} → ${spaceDid} fully backfilled by the Phase-1 window`,
+			);
+			return;
+		}
+		if (afterWindow?.phase === "blocked") {
+			log.info(
+				`Channel ${channelId} → ${spaceDid} is blocked; skipping the Phase-2 walk`,
 			);
 			return;
 		}
@@ -1148,10 +1289,38 @@ export async function backfillChannel(
 		const identityGuildId = progress2?.guildId ?? guildId;
 
 		while (true) {
-			const messages = await discord.getMessages(channelId, {
-				after: afterCursor,
-				limit: 100,
-			});
+			let messages: DiscordMessageData[];
+			try {
+				messages = await discord.getMessages(channelId, {
+					after: afterCursor,
+					limit: 100,
+				});
+			} catch (err) {
+				// Deterministic read denial: the walk can never make progress,
+				// so record the pair as terminal (keeping what it ingested)
+				// instead of leaving it pending for the next run. A transient
+				// failure keeps the pair resumable from `walkCursor`.
+				const reason = backfillBlockedReason(err);
+				if (reason) {
+					recordBlockedBackfill(repo, {
+						spaceDid,
+						channelId,
+						guildId: identityGuildId,
+						kind: identityKind,
+						channelName: identityName,
+						phase: "blocked",
+						messagesSynced: baseSynced + totalSynced,
+						messagesSkipped: baseSkipped + totalSkipped,
+						windowBoundary: boundary,
+						walkCursor: progress2?.walkCursor ?? null,
+						parentId: identityParentId,
+						windowSynced: progress2?.windowSynced ?? null,
+						blockedReason: reason,
+					});
+					return;
+				}
+				throw err;
+			}
 
 			if (messages.length === 0) break;
 
@@ -1503,13 +1672,22 @@ export async function postBackfillCompletionNotices(
 				continue;
 			}
 			const summary = backfillSummary(repo, config);
-			const pending = summary.pending > 0 ? ` ${summary.pending} item(s) still pending` : "";
 			const plural = (n: number, word: string) =>
 				`${n} ${word}${n === 1 ? "" : "s"}`;
+			const pending =
+				summary.pending > 0 ? ` ${summary.pending} item(s) still pending` : "";
+			// A blocked channel is not pending work: no run will ever backfill
+			// it. Report it as its own outcome so the notice doesn't imply the
+			// bridge is still catching up.
+			const blocked =
+				summary.blocked > 0
+					? ` ${plural(summary.blocked, "channel")} could not be backfilled — the bridge can't read them`
+					: "";
 			const text =
 				`Roomy backfill complete: this server's history is synced to Roomy ` +
 				`(${plural(summary.channels, "channel")}, ${plural(summary.threads, "thread")}).` +
-				pending;
+				pending +
+				blocked;
 			await noticeSender.sendMessage(channelId, text);
 			log.info(
 				`backfill completion notice posted to ${channelId} for ${config.spaceDid}`,
@@ -1566,18 +1744,22 @@ async function resolveBackfillNoticeChannel(
 function backfillSummary(
 	repo: BridgeRepository,
 	config: BridgeConfig,
-): { channels: number; threads: number; pending: number } {
+): { channels: number; threads: number; pending: number; blocked: number } {
 	let channels = 0;
 	let threads = 0;
 	let pending = 0;
+	let blocked = 0;
 	for (const p of repo.listBackfillProgress(config.spaceDid)) {
 		if (p.guildId !== null && p.guildId !== config.guildId) continue;
 		if (p.phase === "complete") {
 			if (p.kind === "thread") threads++;
 			else channels++;
+		} else if (p.phase === "blocked") {
+			// The bridge cannot read this channel — not work in flight.
+			blocked++;
 		} else {
 			pending++;
 		}
 	}
-	return { channels, threads, pending };
+	return { channels, threads, pending, blocked };
 }

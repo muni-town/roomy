@@ -158,4 +158,96 @@ test.describe("discord bridge settings", () => {
       },
     ]);
   });
+
+  /**
+   * The bridge can never read a private channel or one missing
+   * READ_MESSAGE_HISTORY. Such a pair is terminal: the panel must state it
+   * with its own affordance and name the cause, never leave it spinning as
+   * pending, and the summary must not count it as unfinished work.
+   */
+  test("a channel the bridge can't read renders terminal, not spinning", async ({
+    page,
+  }) => {
+    const blockedId = "200000000000000004";
+    const channels = [
+      row({
+        channelId: blockedId,
+        channelName: "private-staff",
+        phase: "blocked",
+        messagesSynced: 0,
+        blockedReason:
+          "the bridge can't read this channel (Discord 403: Missing Access)",
+        // A blocked row is never in flight; the stub asserts the panel
+        // ignores `running` for it rather than trusting the flag.
+        running: true,
+      }),
+      row({
+        channelId: LOBBY_DISCORD_ID,
+        channelName: "lobby",
+        phase: "complete",
+        messagesSynced: 12,
+        roomyId: SEED_ROOM_ID,
+      }),
+      row({
+        channelId: DEV_DISCORD_ID,
+        channelName: "dev-chat",
+        phase: "phase1",
+        messagesSynced: 0,
+      }),
+    ];
+
+    await page.route(`${BRIDGE_ORIGIN}/**`, async (route) => {
+      const url = new URL(route.request().url());
+      let status = 200;
+      let body: unknown;
+      switch (url.pathname) {
+        case "/info":
+          body = {
+            discordAppId: "123456789012345678",
+            bridgeDid: "did:plc:bridge",
+          };
+          break;
+        case "/get-guild-id":
+          body = { guildId: GUILD_ID };
+          break;
+        case "/backfill/progress":
+          body = { channels };
+          break;
+        default:
+          status = 404;
+          body = { error: "not stubbed" };
+      }
+      await route.fulfill({
+        status,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify(body),
+      });
+    });
+
+    await page.goto(`/${SEED_SPACE_ID}/settings/discord-bridge`);
+    await waitForAuthenticated(page);
+
+    const blockedRow = page.locator("section li", { hasText: "private-staff" });
+    await expect(blockedRow).toHaveCount(1);
+
+    // Terminal affordance naming the cause — an alert, not a spinner and not
+    // an hourglass.
+    const label =
+      await blockedRow
+        .locator("[role=img]")
+        .getAttribute("aria-label");
+    expect(label).toContain("can't backfill");
+    expect(label).toContain("Missing Access");
+    await expect(blockedRow.locator(".animate-spin")).toHaveCount(0);
+
+    // The summary separates the blocked channel from pending work and does
+    // not claim everything synced.
+    const summary = page.locator("section button").first();
+    await expect(summary).toContainText("1 complete");
+    await expect(summary).toContainText("1 pending");
+    await expect(summary).toContainText("1 unreadable");
+    await expect(summary).not.toContainText("all synced");
+    await expect(summary).not.toContainText("2 pending");
+  });
 });

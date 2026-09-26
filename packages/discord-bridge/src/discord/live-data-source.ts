@@ -19,7 +19,10 @@ import type {
 	ThreadPage,
 } from "./data-source.ts";
 import { normalizeChannel, normalizeMessage } from "./normalizers.ts";
-import { discordFailureDetail } from "./rest-errors.ts";
+import {
+	discordFailureDetail,
+	isRetryableDiscordStatus,
+} from "./rest-errors.ts";
 import type { DiscordBot } from "./types.ts";
 
 const log = createLogger("live-discord");
@@ -71,12 +74,6 @@ const THREAD_PAGE_RETRY_BASE_DELAY_MS = 500;
 
 /** Max chars of a Discord error body to inline into a log line. */
 const MAX_BODY_CHARS = 200;
-
-/** True when retrying can plausibly succeed (transient status or unknown). */
-function isRetryableDiscordStatus(status: number | undefined): boolean {
-	if (status === undefined) return true;
-	return status === 429 || status === 999 || status >= 500;
-}
 
 export class LiveDiscordDataSource implements DiscordDataSource {
 	#bot: DiscordBot;

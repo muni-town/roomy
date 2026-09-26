@@ -37,9 +37,13 @@ export type ChannelCursor = {
 /**
  * Backfill phases. `phase1` = the bounded recent window is running (or was
  * interrupted mid-window); `phase2` = window done, remainder walk in
- * progress (or pending resume); `complete` = full history ingested.
+ * progress (or pending resume); `complete` = full history ingested;
+ * `blocked` = the bridge cannot read the channel at all (deleted channel, or
+ * the bot lacks VIEW_CHANNEL / READ_MESSAGE_HISTORY), so no run will ever
+ * ingest it. `blocked` is terminal: backfill skips it like `complete` until
+ * the user re-runs `/roomy-backfill`, which resets the pair.
  */
-export type BackfillPhase = "phase1" | "phase2" | "complete";
+export type BackfillPhase = "phase1" | "phase2" | "complete" | "blocked";
 
 export type BackfillProgress = {
 	spaceDid: string;
@@ -58,6 +62,8 @@ export type BackfillProgress = {
 	parentId: string | null;
 	/** Snapshot of messagesSynced at the phase1→phase2 transition (recent-window size). */
 	windowSynced: number | null;
+	/** `blocked` rows only: why the bridge cannot read the channel. */
+	blockedReason: string | null;
 	updatedAt: number;
 };
 
@@ -75,6 +81,7 @@ export type BackfillProgressUpdate = {
 	walkCursor?: string | null;
 	parentId?: string | null;
 	windowSynced?: number | null;
+	blockedReason?: string | null;
 };
 
 export type WebhookToken = {
@@ -467,8 +474,9 @@ export class BridgeRepository {
 				)
 				.run(spaceDid, channelId);
 			// Re-backfill starts from scratch, so the durable progress record
-			// (phase, window boundary, walk cursor) must be dropped with the
-			// cursor — keeping it would leave a stale phase and boundary.
+			// (phase, window boundary, walk cursor, blocked reason) must be
+			// dropped with the cursor — keeping it would leave a stale phase
+			// (a `blocked` pair would never be retried) and boundary.
 			this.db
 				.prepare(
 					"DELETE FROM backfill_progress WHERE space_did = ? AND channel_id = ?",
@@ -505,13 +513,14 @@ export class BridgeRepository {
 					walk_cursor: string | null;
 					parent_id: string | null;
 					window_synced: number | null;
+					blocked_reason: string | null;
 					updated_at: number;
 				},
 				[string, string]
 			>(
 				`SELECT space_did, channel_id, guild_id, kind, channel_name, phase,
 				        messages_synced, messages_skipped, window_boundary, walk_cursor,
-				        parent_id, window_synced, updated_at
+				        parent_id, window_synced, blocked_reason, updated_at
 				 FROM backfill_progress
 				 WHERE space_did = ? AND channel_id = ?`,
 			)
@@ -530,6 +539,7 @@ export class BridgeRepository {
 			walkCursor: row.walk_cursor,
 			parentId: row.parent_id,
 			windowSynced: row.window_synced,
+			blockedReason: row.blocked_reason,
 			updatedAt: row.updated_at,
 		};
 	}
@@ -546,8 +556,8 @@ export class BridgeRepository {
 				`INSERT INTO backfill_progress
 				   (space_did, channel_id, guild_id, kind, channel_name, phase,
 				    messages_synced, messages_skipped, window_boundary, walk_cursor,
-				    parent_id, window_synced, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				    parent_id, window_synced, blocked_reason, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(space_did, channel_id) DO UPDATE SET
 				   guild_id = COALESCE(excluded.guild_id, backfill_progress.guild_id),
 				   kind = COALESCE(excluded.kind, backfill_progress.kind),
@@ -559,6 +569,7 @@ export class BridgeRepository {
 				   messages_skipped = excluded.messages_skipped,
 				   window_boundary = excluded.window_boundary,
 				   walk_cursor = excluded.walk_cursor,
+				   blocked_reason = excluded.blocked_reason,
 				   updated_at = excluded.updated_at`,
 			)
 			.run(
@@ -574,6 +585,7 @@ export class BridgeRepository {
 				update.walkCursor ?? null,
 				update.parentId ?? null,
 				update.windowSynced ?? null,
+				update.blockedReason ?? null,
 				Date.now(),
 			);
 	}
@@ -592,17 +604,18 @@ export class BridgeRepository {
 							phase: BackfillPhase;
 							messages_synced: number;
 							messages_skipped: number;
-							window_boundary: string | null;
 							walk_cursor: string | null;
+							window_boundary: string | null;
 							parent_id: string | null;
 							window_synced: number | null;
+							blocked_reason: string | null;
 							updated_at: number;
 						},
 						[string]
 					>(
 						`SELECT space_did, channel_id, guild_id, kind, channel_name, phase,
 						        messages_synced, messages_skipped, window_boundary, walk_cursor,
-						        parent_id, window_synced, updated_at
+						        parent_id, window_synced, blocked_reason, updated_at
 						 FROM backfill_progress WHERE space_did = ?
 						 ORDER BY updated_at DESC`,
 					)
@@ -622,12 +635,13 @@ export class BridgeRepository {
 							walk_cursor: string | null;
 							parent_id: string | null;
 							window_synced: number | null;
+							blocked_reason: string | null;
 							updated_at: number;
 						},
 						[]
 					>(`SELECT space_did, channel_id, guild_id, kind, channel_name, phase,
 					        messages_synced, messages_skipped, window_boundary, walk_cursor,
-					        parent_id, window_synced, updated_at
+					        parent_id, window_synced, blocked_reason, updated_at
 					 FROM backfill_progress ORDER BY updated_at DESC`)
 					.all();
 		return rows.map((r) => ({
@@ -643,6 +657,7 @@ export class BridgeRepository {
 			walkCursor: r.walk_cursor,
 			parentId: r.parent_id,
 			windowSynced: r.window_synced,
+			blockedReason: r.blocked_reason,
 			updatedAt: r.updated_at,
 		}));
 	}

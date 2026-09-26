@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { BridgeRepository } from "./repository.ts";
-import { runMigrations } from "./schema.ts";
+import { MIGRATIONS, runMigrations } from "./schema.ts";
 
 const SPACE_A = "did:web:space-a.example";
 const SPACE_B = "did:web:space-b.example";
@@ -15,8 +15,8 @@ describe("migrations", () => {
 	test("apply cleanly on a fresh database", () => {
 		const db = new Database(":memory:");
 		const result = runMigrations(db);
-		expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-		expect(result.current).toBe(9);
+		expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+		expect(result.current).toBe(10);
 	});
 
 	test("are idempotent across re-runs", () => {
@@ -24,7 +24,78 @@ describe("migrations", () => {
 		const first = runMigrations(db);
 		const second = runMigrations(db);
 		expect(second.applied).toEqual([]);
-		expect(second.current).toBe(9);
+		expect(second.current).toBe(10);
+	});
+
+	/**
+	 * Migration 10 widens the `phase` CHECK, which SQLite can only express by
+	 * rebuilding the table. The rebuild must preserve every existing row and
+	 * every column added by earlier migrations, on a DB that already has data.
+	 */
+	test("widening the phase CHECK preserves existing rows", () => {
+		const db = new Database(":memory:");
+		// Bring the DB to the pre-migration schema, then write real rows.
+		for (const migration of MIGRATIONS) {
+			if (migration.version > 9) break;
+			migration.up(db);
+		}
+		db.run("CREATE TABLE schema_version (version INTEGER PRIMARY KEY)");
+		db.run("INSERT INTO schema_version (version) VALUES (9)");
+		db.run(
+			`INSERT INTO backfill_progress
+			   (space_did, channel_id, guild_id, kind, channel_name, phase,
+			    messages_synced, messages_skipped, window_boundary, walk_cursor,
+			    parent_id, window_synced, updated_at)
+			 VALUES ('${SPACE_A}', 'c1', '${GUILD}', 'channel', 'general', 'phase2',
+			         120, 4, '900', '800', NULL, 100, 1700000000000)`,
+		);
+		db.run(
+			`INSERT INTO backfill_progress
+			   (space_did, channel_id, guild_id, kind, channel_name, phase,
+			    messages_synced, messages_skipped, window_boundary, walk_cursor,
+			    parent_id, window_synced, updated_at)
+			 VALUES ('${SPACE_A}', 't1', '${GUILD}', 'thread', 'help', 'complete',
+			         50, 0, '500', NULL, 'c1', 50, 1700000000001)`,
+		);
+
+		const result = runMigrations(db);
+		expect(result.applied).toEqual([10]);
+
+		const row = db
+			.query<
+				{
+					phase: string;
+					messages_synced: number;
+					walk_cursor: string | null;
+					parent_id: string | null;
+					window_synced: number | null;
+					blocked_reason: string | null;
+				},
+				[string]
+			>(
+				"SELECT phase, messages_synced, walk_cursor, parent_id, window_synced, blocked_reason FROM backfill_progress WHERE channel_id = ?",
+			)
+			.get("c1");
+		expect(row?.phase).toBe("phase2");
+		expect(row?.messages_synced).toBe(120);
+		expect(row?.walk_cursor).toBe("800");
+		expect(row?.window_synced).toBe(100);
+		expect(row?.blocked_reason).toBeNull();
+
+		const threadRow = db
+			.query<{ phase: string; parent_id: string | null }, [string]>(
+				"SELECT phase, parent_id FROM backfill_progress WHERE channel_id = ?",
+			)
+			.get("t1");
+		expect(threadRow?.phase).toBe("complete");
+		expect(threadRow?.parent_id).toBe("c1");
+
+		// The widened CHECK admits `blocked`.
+		db.run(
+			`INSERT INTO backfill_progress
+			   (space_did, channel_id, phase, messages_synced, messages_skipped, updated_at)
+			 VALUES ('${SPACE_A}', 'c2', 'blocked', 0, 0, 1700000000002)`,
+		);
 	});
 });
 
@@ -558,5 +629,69 @@ describe("backfill_progress", () => {
 			walkCursor: "750",
 		});
 		expect(r.getBackfillProgress(SPACE_A, "c1")?.windowSynced).toBe(50);
+	});
+
+	test("round-trips the blocked phase and its reason", () => {
+		const r = repo();
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "private-1",
+			guildId: GUILD,
+			kind: "channel",
+			channelName: "private",
+			phase: "blocked",
+			messagesSynced: 0,
+			messagesSkipped: 0,
+			blockedReason: "the bridge can't read this channel",
+		});
+
+		const row = r.getBackfillProgress(SPACE_A, "private-1");
+		expect(row?.phase).toBe("blocked");
+		expect(row?.blockedReason).toBe("the bridge can't read this channel");
+		expect(r.listBackfillProgress(SPACE_A)[0]?.blockedReason).toBe(
+			"the bridge can't read this channel",
+		);
+	});
+
+	test("a later non-blocked write clears the stale blocked reason", () => {
+		const r = repo();
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "c1",
+			phase: "blocked",
+			messagesSynced: 0,
+			messagesSkipped: 0,
+			blockedReason: "the bridge can't read this channel",
+		});
+		// The re-backfill the user triggered: the reason must not survive it.
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "c1",
+			phase: "complete",
+			messagesSynced: 10,
+			messagesSkipped: 0,
+		});
+
+		const row = r.getBackfillProgress(SPACE_A, "c1");
+		expect(row?.phase).toBe("complete");
+		expect(row?.blockedReason).toBeNull();
+	});
+
+	test("resetChannelCursor drops a blocked row so /roomy-backfill retries it", () => {
+		const r = repo();
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "private-1",
+			phase: "blocked",
+			messagesSynced: 0,
+			messagesSkipped: 0,
+			blockedReason: "the bridge can't read this channel",
+		});
+		r.setChannelCursor(SPACE_A, "private-1", "42");
+
+		r.resetChannelCursor("private-1", SPACE_A);
+
+		expect(r.getBackfillProgress(SPACE_A, "private-1")).toBeUndefined();
+		expect(r.getChannelCursor(SPACE_A, "private-1")).toBeUndefined();
 	});
 });

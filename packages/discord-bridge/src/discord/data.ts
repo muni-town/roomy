@@ -145,6 +145,12 @@ export const DiscordChannelData = type({
 	"topic?": "string | null",
 	"ownerId?": "string",
 	"position?": "number",
+	/**
+	 * Newest message id in the channel. Set by Discord whenever the channel
+	 * has history — the discriminator for a channel whose history the bot
+	 * cannot read (Discord answers an empty page rather than an error).
+	 */
+	"lastMessageId?": "string | null",
 	"permissionOverwrites?": permissionOverwriteSchema.array(),
 });
 export type DiscordChannelData = typeof DiscordChannelData.infer;

@@ -28,7 +28,10 @@ import type {
 	DiscordMessageData,
 	DiscordUserData,
 } from "../../discord/data.ts";
-import type { DiscordDataSource } from "../../discord/data-source.ts";
+import type {
+	DiscordDataSource,
+	PaginationOpts,
+} from "../../discord/data-source.ts";
 import { FileDiscordDataSource } from "../../discord/file-data-source.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import {
@@ -2340,6 +2343,7 @@ describe("live cursor is not backfill progress", () => {
 		faker.seed(42);
 	});
 
+
 	afterEach(() => {
 		setBackfillNoticeSender(undefined);
 	});
@@ -2523,5 +2527,289 @@ describe("live cursor is not backfill progress", () => {
 		expect(progress?.kind).toBe("thread");
 		expect(progress?.phase).toBe("complete");
 		expect(progress?.messagesSynced).toBeGreaterThanOrEqual(1200 - 120);
+	});
+});
+
+/**
+ * A bridged channel the bridge cannot read must end in a terminal state, not
+ * spin as pending forever. Two shapes of the failure have to be told apart:
+ * Discord refuses a read it will never allow (403 Missing Access / 404 Unknown
+ * Channel), and it answers an EMPTY page when READ_MESSAGE_HISTORY is missing.
+ * A transient 5xx must stay resumable.
+ */
+describe("backfill of unreadable channels", () => {
+
+	afterEach(() => {
+		setBackfillNoticeSender(undefined);
+	});
+
+	/** Wrap a source, overriding only `getMessages`. */
+	function withGetMessages(
+		source: DiscordDataSource,
+		handler: (
+			channelId: string,
+			opts: PaginationOpts,
+		) => Promise<DiscordMessageData[]>,
+	): DiscordDataSource {
+		return {
+			getMessages: handler,
+			getChannel: (id) => source.getChannel(id),
+			getChannels: (id) => source.getChannels(id),
+			getGuild: (id) => source.getGuild(id),
+			getPublicArchivedThreads: (id, opts) =>
+				source.getPublicArchivedThreads(id, opts),
+			resolveChannelName: (id) => source.resolveChannelName(id),
+			resolveChannelType: (id) => source.resolveChannelType(id),
+			resolveGuildIdForChannel: (id) => source.resolveGuildIdForChannel(id),
+			getActiveThreads: (id) => source.getActiveThreads(id),
+		};
+	}
+
+	/** A discordeno-shaped REST failure: status + body live on `error.cause`. */
+	function discordError(status: number, body: string): Error {
+		const err = new Error("Failed to send request to discord.");
+		Object.assign(err, { cause: { ok: false, status, body } });
+		return err;
+	}
+
+	const PRIVATE = "200000000000000010";
+	const TRANSIENT = "200000000000000011";
+	const EMPTY_READABLE = "200000000000000012";
+	const NO_HISTORY = "200000000000000013";
+
+	function channel(id: string, name: string): DiscordChannelData {
+		return { id, type: 0, name, guildId: GUILD };
+	}
+
+	/**
+	 * BK01: a channel whose history the bot cannot read (403 Missing Access)
+	 * ends `blocked` with a reason, and a second pass does not re-attempt it —
+	 * the pair is terminal until /roomy-backfill resets it.
+	 */
+	test("BK01: a 403 records a terminal blocked row and is not retried", async () => {
+		const accessible = channel("200000000000000009", "general");
+		const unreadable = channel(PRIVATE, "private");
+		const base = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [accessible, unreadable] },
+			channels: [accessible, unreadable],
+			messages: {
+				[accessible.id]: [cnMessage("200000000000000099", accessible.id)],
+			},
+		});
+		let reads = 0;
+		const discord = withGetMessages(base, async (channelId, opts) => {
+			if (channelId === PRIVATE) {
+				reads++;
+				throw discordError(403, '{"message": "Missing Access", "code": 50001}');
+			}
+			return base.getMessages(channelId, opts);
+		});
+		const repo = setupRepo();
+		mapChannels(repo, [accessible, unreadable]);
+		const roomy = new MockRoomyGateway();
+
+		// Accessible channel: normal completion.
+		await backfillChannel(discord, repo, roomy, accessible.id, SPACE, GUILD);
+		expect(repo.getBackfillProgress(SPACE, accessible.id)?.phase).toBe(
+			"complete",
+		);
+
+		// Unreadable channel: terminal, with the cause recorded.
+		await backfillChannel(discord, repo, roomy, PRIVATE, SPACE, GUILD);
+		const blocked = repo.getBackfillProgress(SPACE, PRIVATE);
+		expect(blocked?.phase).toBe("blocked");
+		expect(blocked?.blockedReason).toContain("can't read this channel");
+		expect(blocked?.blockedReason).toContain("Missing Access");
+		expect(reads).toBe(1);
+
+		// A later pass must skip it — no second read, no repeated log line.
+		await backfillChannel(discord, repo, roomy, PRIVATE, SPACE, GUILD);
+		expect(reads).toBe(1);
+		expect(repo.getBackfillProgress(SPACE, PRIVATE)?.phase).toBe("blocked");
+	});
+
+	/**
+	 * BK02: a transient failure (5xx) is NOT terminal — the pair stays
+	 * resumable and the next run completes it.
+	 */
+	test("BK02: a 5xx leaves the pair resumable and the next run completes it", async () => {
+		const flaky = channel(TRANSIENT, "flaky");
+		const base = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [flaky] },
+			channels: [flaky],
+			messages: {
+				[flaky.id]: [cnMessage("200000000000000099", flaky.id)],
+			},
+		});
+		let fail = true;
+		const discord = withGetMessages(base, async (channelId, opts) => {
+			if (channelId === TRANSIENT && fail) {
+				throw discordError(503, '{"message": "Service Unavailable"}');
+			}
+			return base.getMessages(channelId, opts);
+		});
+		const repo = setupRepo();
+		mapChannels(repo, [flaky]);
+		const roomy = new MockRoomyGateway();
+
+		await expect(
+			backfillChannel(discord, repo, roomy, TRANSIENT, SPACE, GUILD),
+		).rejects.toThrow();
+		const afterFailure = repo.getBackfillProgress(SPACE, TRANSIENT);
+		expect(afterFailure?.phase).not.toBe("blocked");
+		expect(afterFailure?.blockedReason ?? null).toBeNull();
+
+		// The source recovers; the next run ingests the history.
+		fail = false;
+		await backfillChannel(discord, repo, roomy, TRANSIENT, SPACE, GUILD);
+		expect(repo.getBackfillProgress(SPACE, TRANSIENT)?.phase).toBe("complete");
+	});
+
+	/**
+	 * BK03: Discord answers an EMPTY page when READ_MESSAGE_HISTORY is missing
+	 * — not an error — so the pair would complete as "an empty channel". The
+	 * channel's own `lastMessageId` is what tells the two apart.
+	 */
+	test("BK03: an empty page on a channel with history is blocked; a truly empty channel completes", async () => {
+		const unreadableHistory: DiscordChannelData = {
+			...channel(EMPTY_READABLE, "hidden-history"),
+			lastMessageId: "200000000000000099",
+		};
+		const genuinelyEmpty = channel(NO_HISTORY, "brand-new");
+		const base = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [unreadableHistory, genuinelyEmpty] },
+			channels: [unreadableHistory, genuinelyEmpty],
+		});
+		const discord = withGetMessages(base, async () => []);
+		const repo = setupRepo();
+		mapChannels(repo, [unreadableHistory, genuinelyEmpty]);
+		const roomy = new MockRoomyGateway();
+
+		await backfillChannel(
+			discord,
+			repo,
+			roomy,
+			unreadableHistory.id,
+			SPACE,
+			GUILD,
+		);
+		const blocked = repo.getBackfillProgress(SPACE, unreadableHistory.id);
+		expect(blocked?.phase).toBe("blocked");
+		expect(blocked?.blockedReason).toContain("history");
+
+		await backfillChannel(
+			discord,
+			repo,
+			roomy,
+			genuinelyEmpty.id,
+			SPACE,
+			GUILD,
+		);
+		expect(repo.getBackfillProgress(SPACE, genuinelyEmpty.id)?.phase).toBe(
+			"complete",
+		);
+	});
+
+	/**
+	 * BK04: the completion notice reports an unreadable channel as its own
+	 * outcome — not folded into "still pending", which would imply the bridge
+	 * is still catching up.
+	 */
+	test("BK04: the notice separates blocked channels from pending ones", async () => {
+		const announcement: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 5,
+			name: "announcements",
+			guildId: GUILD,
+		};
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [announcement] },
+			channels: [announcement],
+		});
+		const repo = setupRepo();
+		repo.upsertBackfillProgress({
+			spaceDid: SPACE,
+			channelId: "200000000000000002",
+			guildId: GUILD,
+			kind: "channel",
+			phase: "complete",
+			messagesSynced: 10,
+			messagesSkipped: 0,
+		});
+		repo.upsertBackfillProgress({
+			spaceDid: SPACE,
+			channelId: "200000000000000003",
+			guildId: GUILD,
+			kind: "channel",
+			phase: "phase2",
+			messagesSynced: 5,
+			messagesSkipped: 0,
+		});
+		repo.upsertBackfillProgress({
+			spaceDid: SPACE,
+			channelId: PRIVATE,
+			guildId: GUILD,
+			kind: "channel",
+			phase: "blocked",
+			messagesSynced: 0,
+			messagesSkipped: 0,
+			blockedReason: "the bridge can't read this channel",
+		});
+
+		const { sent, mock } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+		await postBackfillCompletionNotices(
+			discord,
+			repo,
+			[
+				{
+					guildId: GUILD,
+					spaceDid: SPACE,
+					mode: "full",
+					createdAt: 0,
+					updatedAt: 0,
+				},
+			],
+			new Set([SPACE]),
+		);
+
+		const text = sent[0]?.content ?? "";
+		expect(text).toContain("1 channel could not be backfilled");
+		expect(text).toContain("1 item(s) still pending");
+		// The blocked channel must not be counted as pending too.
+		expect(text).not.toContain("2 item(s) still pending");
+	});
+
+	/**
+	 * BK05: runBackfill enumerates the work set up front, then skips a pair
+	 * already recorded blocked — a repeated run over an unreadable channel
+	 * must not re-log the same failure.
+	 */
+	test("BK05: runBackfill does not re-attempt a blocked pair", async () => {
+		const unreadable = channel(PRIVATE, "private");
+		const base = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [unreadable] },
+			channels: [unreadable],
+		});
+		let reads = 0;
+		const discord = withGetMessages(base, async () => {
+			reads++;
+			throw discordError(403, '{"message": "Missing Access", "code": 50001}');
+		});
+		const repo = setupRepo();
+		mapChannels(repo, [unreadable]);
+		const roomy = new MockRoomyGateway();
+
+		await runBackfill(discord, repo, roomy);
+		expect(repo.getBackfillProgress(SPACE, PRIVATE)?.phase).toBe("blocked");
+		expect(reads).toBe(1);
+
+		// A second boot/enumeration must leave the terminal row alone — the
+		// blocked pair is skipped like a completed one, so no second read.
+		await runBackfill(discord, repo, roomy);
+		const row = repo.getBackfillProgress(SPACE, PRIVATE);
+		expect(row?.phase).toBe("blocked");
+		expect(row?.blockedReason).toContain("can't read this channel");
+		expect(reads).toBe(1);
 	});
 });

@@ -8,6 +8,7 @@
   import InlineMono from "@roomy/design/components/helper/InlineMono.svelte";
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
   import {
+    IconAlertCircle,
     IconCheck,
     IconChevronRight,
     IconCopy,
@@ -142,7 +143,7 @@
     guildId: string | null;
     kind: "channel" | "thread" | null;
     channelName: string | null;
-    phase: "phase1" | "phase2" | "complete";
+    phase: "phase1" | "phase2" | "complete" | "blocked";
     messagesSynced: number;
     messagesSkipped: number;
     cursor: string | null;
@@ -150,7 +151,8 @@
     parentId: string | null;
     // Recent-window size at the phase1→phase2 transition (bridge snapshot).
     windowSynced: number | null;
-    // Roomy room id this channel/thread maps to, for sidebar-order joins.
+    // Blocked rows only: why the bridge can't read this channel.
+    blockedReason: string | null;
     roomyId: string | null;
     running: boolean;
     updatedAt: number;
@@ -249,12 +251,16 @@
     let complete = 0;
     let pending = 0;
     let running = 0;
+    let blocked = 0;
     for (const e of backfillChannels) {
       if (e.phase === "complete") complete++;
+      // A blocked channel isn't work in flight — the bridge can't read it —
+      // so it never counts as pending.
+      else if (e.phase === "blocked") blocked++;
       else pending++;
       if (e.running) running++;
     }
-    return { complete, pending, running };
+    return { complete, pending, running, blocked };
   });
 
   let backfillOpen = $state(true);
@@ -478,14 +484,21 @@
           Backfill status
         </span>
         <span class="flex items-center gap-2 text-xs text-base-500 dark:text-base-400">
-          {#if backfillSummary.pending === 0}
+          {#if backfillSummary.pending === 0 && backfillSummary.blocked === 0}
             <span class="font-medium text-green-600 dark:text-green-400">
               all synced
             </span>
           {:else}
-            <span>
-              {backfillSummary.complete} complete · {backfillSummary.pending}
-              pending
+            <span class="flex items-center gap-1">
+              <span>{backfillSummary.complete} complete</span>
+              {#if backfillSummary.pending > 0}
+                <span>· {backfillSummary.pending} pending</span>
+              {/if}
+              {#if backfillSummary.blocked > 0}
+                <span class="text-red-600 dark:text-red-400">
+                  · {backfillSummary.blocked} unreadable
+                </span>
+              {/if}
             </span>
             {#if backfillSummary.running > 0}
               <LoadingSpinner size={12} />
@@ -544,13 +557,28 @@
       <!--
         Row state is icon-only; the accessible name spells it out. The synced
         count is the one number that stays.
+          blocked           → alert / "can't backfill: <reason>"
           running (phase 1) → spinner / "backfilling recent history"
           running (phase 2) → spinner / "deep backfill in progress"
           complete          → check / "complete"
           deep backfill queued (recent window in or not) → hourglass-high
           queued, not started yet → hourglass-medium
+
+        `blocked` is terminal and outranks `running`: the pair is never in
+        flight once the bridge has recorded that it cannot read the channel.
       -->
-      {#if entry.running}
+      {#if entry.phase === "blocked"}
+        <span
+          class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400"
+          role="img"
+          aria-label={entry.blockedReason
+            ? `can't backfill: ${entry.blockedReason}`
+            : "can't backfill: the bridge can't read this channel"}
+          title={entry.blockedReason ?? "the bridge can't read this channel"}
+        >
+          <IconAlertCircle font-size={14} />
+        </span>
+      {:else if entry.running}
         <span
           class="flex items-center gap-1.5 text-xs text-base-500 dark:text-base-400"
           role="img"
