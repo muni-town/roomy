@@ -13,6 +13,8 @@ export interface MessageInfo {
   content: string;
   timestamp: string;
   mimeType?: string;
+  /** Target message id when this message is a reply (raw `reply` edge). */
+  replyTo?: string;
 }
 
 /**
@@ -210,24 +212,105 @@ export async function sendReply(
 }
 
 /**
- * Read messages from a room.
+ * Hard bound on a single `space.roomy.room.getMessages` request: the appserver
+ * validates `limit` with `max: 100` and answers 400 above that. Callers asking
+ * for more must page — see `readMessages`, which never exceeds this per call.
+ */
+export const MAX_PAGE_LIMIT = 100;
+
+/** One page of room history, as returned by a single `getMessages` request. */
+export interface MessagePage {
+  /** The page's messages, oldest → newest. */
+  messages: MessageInfo[];
+  /**
+   * Cursor continuing the walk strictly older than the last message returned.
+   * Absent when the room's history is exhausted.
+   */
+  cursor?: string;
+}
+
+export interface ReadMessagesOptions {
+  /** Total messages to collect across pages. Default 20. */
+  limit?: number;
+  /** Start from messages older than this id (a previous read's cursor). */
+  cursor?: string;
+}
+
+/**
+ * Fetch one page of messages older than `cursor`, never asking for more than
+ * `MAX_PAGE_LIMIT` (a larger request is a 400 from the appserver).
+ */
+export async function readMessagePage(
+  xrpc: DirectXrpcClient,
+  roomId: string,
+  opts: { limit?: number; cursor?: string } = {},
+): Promise<MessagePage> {
+  const limit = Math.min(
+    Math.max(1, Math.floor(opts.limit ?? MAX_PAGE_LIMIT)),
+    MAX_PAGE_LIMIT,
+  );
+  const result = await xrpc.query("space.roomy.room.getMessages", {
+    roomId,
+    limit: String(limit),
+    ...(opts.cursor ? { cursor: opts.cursor } : {}),
+  });
+
+  return {
+    messages: result.messages.map((m) => ({
+      id: m.id,
+      authorDid: m.authorDid,
+      authorName: m.authorName,
+      content: decodeMessageText(m.content, m.mimeType),
+      timestamp: m.timestamp,
+      mimeType: m.mimeType,
+      replyTo: m.replyTo,
+    })),
+    cursor: result.cursor,
+  };
+}
+
+/**
+ * Read up to `limit` messages from a room, walking the server's cursor across
+ * as many bounded requests as it takes, so `readMessages(..., { limit: 250 })`
+ * returns 250 messages instead of a 400.
+ *
+ * The returned `cursor` continues past the last message collected, which is
+ * what makes deep history addressable: pass it back to resume without
+ * re-reading the newest messages. It is absent only when the room has no
+ * older messages left (the server returns a cursor exactly when it filled the
+ * page, so a short page means the history is exhausted).
  */
 export async function readMessages(
   xrpc: DirectXrpcClient,
   roomId: string,
-  limit: number = 20,
-): Promise<MessageInfo[]> {
-  const result = await xrpc.query("space.roomy.room.getMessages", {
-    roomId,
-    ...(limit !== 20 ? { limit: String(limit) } : {}),
-  });
+  { limit = 20, cursor }: ReadMessagesOptions = {},
+): Promise<MessagePage> {
+  const target = Math.max(1, Math.floor(limit));
+  const pages: MessageInfo[][] = [];
+  let collected = 0;
+  let next = cursor;
 
-  return result.messages.map((m) => ({
-    id: m.id,
-    authorDid: m.authorDid,
-    authorName: m.authorName,
-    content: decodeMessageText(m.content, m.mimeType),
-    timestamp: m.timestamp,
-    mimeType: m.mimeType,
-  }));
+  while (collected < target) {
+    const page = await readMessagePage(xrpc, roomId, {
+      limit: Math.min(target - collected, MAX_PAGE_LIMIT),
+      cursor: next,
+    });
+    pages.push(page.messages);
+    collected += page.messages.length;
+
+    // No cursor (short page) or a cursor that failed to advance = the room has
+    // no older messages left; the cursor ends here rather than pointing at
+    // messages the caller already has.
+    if (!page.cursor || page.cursor === next) {
+      next = undefined;
+      break;
+    }
+    next = page.cursor;
+  }
+
+  // Every page is ascending and each subsequent page is strictly older, so
+  // reversing the page order (without touching order within a page) yields the
+  // window oldest → newest — matching what a single-page read returns.
+  const messages = pages.reverse().flat();
+  return { messages, cursor: next };
 }

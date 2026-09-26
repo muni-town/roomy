@@ -108,6 +108,23 @@ roomy-cli read --room <room-id> [--limit 20]
 roomy-cli read --space <space-did> [--limit 20]   # → lobby
 ```
 
+`--limit` has no ceiling: the server caps a single request at 100, so a larger
+`--limit` is fetched as several cursor-paged requests (`--limit 250` returns 250
+messages). The continuing cursor is printed to stderr, so it can't pollute a
+piped transcript:
+
+```bash
+# 250 newest messages, oldest → newest
+roomy-cli read --room <room-id> --limit 250
+
+# Deep history: start from the cursor a previous read printed, instead of
+# walking forward from the newest message.
+roomy-cli read --room <room-id> --limit 100 --cursor <message-id>
+```
+
+A read reports a cursor unless the room has no older messages left, so
+`--cursor` chains indefinitely: pass each read's printed cursor to the next.
+
 
 ### `respond`
 
@@ -138,7 +155,7 @@ Options:
 - `--no-stream-thinking` — bundle thinking with the answer instead of streaming chunks.
 - `--thinking-chunk <n>` — char threshold for streamed thinking chunks (default 2000).
 - `--system-prompt-file <path>` — file appended to omp's system prompt (default `$OMP_SYSTEM_PROMPT_FILE`).
-- `--recent <n>` — recent room messages loaded into context when mentioned (default 20; 0 disables).
+- `--recent <n>` — recent room messages loaded into context when mentioned (default 20; 0 disables; values above 100 are paged).
 
 Mention detection is **server-side and DID-authoritative** in the bridge: the
 appserver emits a `#mention` frame for messages whose `#didMention` facets (or

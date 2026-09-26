@@ -209,6 +209,33 @@ jobs:
       - name: Test Discord Bridge
         run: bun test --cwd packages/discord-bridge
 
+  test-cli:
+    name: Test CLI
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.16.1
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build SDK (cli imports its dist)
+        run: pnpm turbo run build-lib
+      - name: Test CLI
+        run: bun test --cwd packages/cli --isolate
+
   check-appserver:
     name: Typecheck Appserver
     needs: install

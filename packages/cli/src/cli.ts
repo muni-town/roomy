@@ -216,8 +216,9 @@ program
   .description("Read messages from a room (defaults to the lobby)")
   .option("--space <id>", "Space ID (required if --room is omitted)")
   .option("--room <id>", "Room ID (defaults to the lobby)")
-  .option("--limit <n>", "Max messages", "20")
-  .action(async (options: { space?: string; room?: string; limit: string }) => {
+  .option("--limit <n>", "Max messages; values above 100 are paged automatically", "20")
+  .option("--cursor <id>", "Read messages older than this message id (page deeper into history)")
+  .action(async (options: { space?: string; room?: string; limit: string; cursor?: string }) => {
     try {
       const config = loadConfig();
       const { xrpc } = await authenticate(config);
@@ -228,16 +229,38 @@ program
         if (!lobby) throw new Error(`No rooms found in space ${options.space}`);
         roomId = lobby.id;
       }
-      const messages = await readMessages(xrpc, roomId, Number(options.limit));
+      const limit = parseLimit(options.limit);
+      const { messages, cursor } = await readMessages(xrpc, roomId, {
+        limit,
+        cursor: options.cursor,
+      });
       for (const m of messages) {
         const ts = formatTimestamp(m.timestamp);
         console.log(`[${ts}] ${m.authorName || m.authorDid}: ${m.content}`);
+      }
+      // Continuing cursor goes to stderr so stdout stays a clean, pipeable
+      // transcript of the messages themselves.
+      if (cursor) {
+        console.error(`--cursor ${cursor}  (${messages.length} of ${limit} messages)`);
       }
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
   });
+
+/**
+ * Parse `--limit`. Anything that isn't a positive integer is rejected here
+ * rather than silently truncated — an unparseable limit (e.g. a stale
+ * `--limit=` with no value) must not quietly become a different read.
+ */
+function parseLimit(raw: string): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error(`--limit must be a positive integer, got: ${raw}`);
+  }
+  return n;
+}
 
 /**
  * Format a message timestamp for display. System events (e.g. "joined the
@@ -312,7 +335,7 @@ program
   .option("--no-stream-thinking", "Don't stream thinking chunks; bundle thinking with the final answer")
   .option("--thinking-chunk <n>", "Approx char threshold for each streamed thinking chunk (default 2000)", "2000")
   .option("--system-prompt-file <path>", "File appended to omp's system prompt (default: $OMP_SYSTEM_PROMPT_FILE)")
-  .option("--recent <n>", "Recent room messages to load into context when mentioned (default 20; 0 disables)", "20")
+  .option("--recent <n>", "Recent room messages to load into context when mentioned (default 20; 0 disables; values above 100 are paged)", "20")
   .option("--queue-file <path>", "Path for the durable job queue (default ~/.roomy/queue.json)")
   .option("--lock-file <path>", "Path for the queue processing lock (default <queue-file>.lock)")
   .option("--lock-ttl-ms <n>", "Lock heartbeat TTL in ms (default 120000)", "120000")

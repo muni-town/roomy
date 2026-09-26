@@ -9,6 +9,7 @@ import {
   buildReplyBlocks,
   buildThinkingBlocks,
   plaintextOf,
+  readMessages,
   sendReply,
   type MessageInfo,
 } from "./messages.js";
@@ -119,16 +120,6 @@ interface ChainWalk {
   context: string;
   /** Name of the room the agent was prompted in (best-effort). */
   roomName?: string;
-}
-
-/** A fetched message row (the server-side MessageDto surface we read). */
-interface MessageDto {
-  id: string;
-  replyTo?: string;
-  authorDid: string;
-  authorName?: string;
-  content: string;
-  mimeType?: string;
 }
 
 interface StoredSession {
@@ -513,17 +504,17 @@ async function walkChain(
     return { rootId: msgId, parent: msgId, context: "" };
   }
   try {
-    const res = await xrpc.query("space.roomy.room.getMessages", {
-      roomId,
-      limit: String(limit),
-    });
-    const byId = new Map<string, MessageDto>();
-    for (const m of res.messages) byId.set(m.id, m);
+    // `limit` is user-controlled (`--recent`) and the server caps a single
+    // request at 100; the paged reader walks the cursor so a larger window is
+    // several bounded requests instead of a 400.
+    const { messages } = await readMessages(xrpc, roomId, { limit });
+    const byId = new Map<string, MessageInfo>();
+    for (const m of messages) byId.set(m.id, m);
     const meta = await xrpc.query("space.roomy.room.getMetadata", { roomId });
 
     // Walk the chain: triggering message → its replyTo → … → root.
-    const chain: MessageDto[] = [];
-    let cur: MessageDto | undefined = byId.get(msgId);
+    const chain: MessageInfo[] = [];
+    let cur: MessageInfo | undefined = byId.get(msgId);
     let rootId = msgId;
     while (cur) {
       chain.push(cur);
@@ -547,7 +538,8 @@ async function walkChain(
     for (const m of chain.slice(1).reverse()) {
       if (m.authorDid === agentDid) continue;
       const from = m.authorName ?? m.authorDid ?? "?";
-      const content = plaintextOf(m);
+      // `readMessages` already decoded the body to plaintext.
+      const content = m.content;
       if (!content) continue;
       if (content.startsWith(THINKING_MARKER)) continue;
       lines.push(`[${from}]: ${content}`);
