@@ -1230,7 +1230,7 @@ async function emitEnrichmentInvalidation(
   for (const [roomId, ops] of opsByRoom) {
     signals.push({
       kind: "messageDiff",
-      signal: { roomId: roomId as Ulid, seq: 0, ops },
+      signal: { roomId: roomId as Ulid, ops },
     });
     // Enrichment just populated this room's cards — the room link index's
     // enriched data changed.

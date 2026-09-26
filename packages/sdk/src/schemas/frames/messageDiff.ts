@@ -20,6 +20,12 @@ export const Op = type({
 
 export const Body = type({
   roomId: "string",
+  /**
+   * Per-connection monotonic counter, assigned by the server when the frame
+   * is delivered (not when the change is emitted). Delivery is selective, so
+   * stamping at delivery is what makes the seqs a connection receives
+   * contiguous — the client reads a gap as "I missed frames".
+   */
   seq: "number",
   ops: Op.array(),
 });

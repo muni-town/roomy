@@ -61,7 +61,7 @@ phase can be dispatched without re-deriving the surface.
 
 ---
 
-## 2. Covered now (21 tests)
+## 2. Covered now (27 tests)
 
 Every test below states the observable behaviour it defends.
 
@@ -97,6 +97,19 @@ Every test below states the observable behaviour it defends.
 | shows no channel section for an absent term | The results section is genuinely result-driven, not always-rendered. |
 | the space search bar is scoped to that space | The route resolved the space (its name is the placeholder). |
 
+### `navigation-consistency.spec.ts` — the shell and the content agree
+| Test | Defends |
+|---|---|
+| switching channels in one space moves navbar, sidebar and chat together | Channel → channel inside one space: every room-scoped surface is replaced, not left mounted. |
+| switching spaces replaces the sidebar contents and the space header | Cross-space: the destination's channels replace the origin's rather than sitting alongside them. |
+| a space is remembered only once visited, and its sidebar replaces the old one | The remembered-room return lands in a room whose whole shell describes it; the other space's channels are gone. |
+| the space index clears the room surfaces instead of keeping the old room | `/[space]` is not a room, so the breadcrumb drops and only the index row is highlighted. |
+
+### `discord-bridge-settings.spec.ts` — backfill panel
+| Test | Defends |
+|---|---|
+| backfill panel lists channels before threads and states each row by icon | Rows read channel-first (sidebar order, then remaining channels, then threads) and each row's state is icon-only, with the synced count as the only text. |
+
 ### `settings.spec.ts` — settings pages
 | Test | Defends |
 |---|---|
@@ -105,6 +118,11 @@ Every test below states the observable behaviour it defends.
 | the members page lists the space's members | The members route + `getMembers` render. |
 | user settings renders its sections | `/user/settings` renders Theme and Left Spaces. |
 | the space index route renders instead of the settings panel | `/[space]` is the board, not a redirect into settings. |
+
+### `sync-selective-delivery.spec.ts` — the sync layer's delivery contract
+| Test | Defends |
+|---|---|
+| activity in another room does not refetch the open room's messages | Diffs are stamped with a **per-connection** seq, so a connection's frames are contiguous even though delivery is selective. With a process-global seq, traffic in any room the viewer is not subscribed to read as a missed frame and refetched the visible room (~20 refetches for 20 messages; asserted ≤ 1). |
 
 ### Deliberate-break evidence (acceptance criterion 2)
 
@@ -123,8 +141,13 @@ Demonstrated, not asserted, on 2026-09-25:
    → `entering the channel renders its messages and composer` and the 404-guard
    test still **passed** (direct room navigation does not go through the space
    list).
+3. **Restored the process-global diff seq** (assignment back to the router,
+   removed from the per-connection counter).
+   → `activity in another room does not refetch the open room's messages`
+   **failed** with 19 refetches of the open room for 20 messages posted to a
+   room the page was not viewing — one per frame, which is the reported freeze.
 
-Both breaks were reverted; the suite is green.
+All breaks were reverted; the suite is green.
 
 ---
 

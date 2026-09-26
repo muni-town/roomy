@@ -110,44 +110,32 @@ describe("Router", () => {
     );
   });
 
-  it("assigns monotonically increasing seq to message diffs", async () => {
-    // Both createMessage events share the same event id (see `makeEvent`),
-    // so one materialized message row covers both.
+  it("passes message diffs through without an emission-time seq", async () => {
+    // The gap-detection cursor is assigned per connection at delivery, not at
+    // emission: delivery is selective, so a global counter would leave every
+    // connection's seq sparse. A signal must therefore carry no seq at all.
     await seedMessageDb("01EVENT123");
 
     const router = new Router();
-    const seqs: number[] = [];
+    const diffs: InvalidationEvent[] = [];
 
     router.subscribe((events) => {
-      for (const e of events) {
-        if (e.kind === "messageDiff") {
-          seqs.push(e.signal.seq);
-        }
-      }
+      for (const e of events) if (e.kind === "messageDiff") diffs.push(e);
     });
 
     await router.onEventsApplied(
       STREAM_DID,
-      [
-        makeEvent("space.roomy.message.createMessage.v0", {
-          roomId: "01ROOM1AAAAAAAAAAAAAA000" as Ulid,
-        }),
-      ],
+      [makeEvent("space.roomy.message.createMessage.v0", { roomId: "01ROOM1AAAAAAAAAAAAAA000" as Ulid })],
       { isBackfill: false },
     );
-
     await router.onEventsApplied(
       STREAM_DID,
-      [
-        makeEvent("space.roomy.message.createMessage.v0", {
-          roomId: "01ROOM2AAAAAAAAAAAAAA000" as Ulid,
-        }),
-      ],
+      [makeEvent("space.roomy.message.createMessage.v0", { roomId: "01ROOM2AAAAAAAAAAAAAA000" as Ulid })],
       { isBackfill: false },
     );
 
-    expect(seqs).toHaveLength(2);
-    expect(seqs[1]!).toBeGreaterThan(seqs[0]!);
+    expect(diffs).toHaveLength(2);
+    for (const d of diffs) expect("seq" in d.signal).toBe(false);
   });
 
   it("batch-fetches message snapshots once for a batch of message events", async () => {
@@ -562,29 +550,22 @@ describe("Router", () => {
     expect(events).toHaveLength(0);
   });
 
-  it("emit stamps a monotonic seq on messageDiff signals (embed sweeper path)", () => {
-    // Signals emitted via `emit` (e.g. the embed sweeper's enrichment diffs)
-    // must not carry seq 0 — the client reads a zero seq as a server seq reset,
-    // which triggers a spurious refetch on every card-enrichment diff.
+  it("emit preserves message diffs for delivery (no emission-time seq)", () => {
     const router = new Router();
     const { events, listener } = collect();
     router.subscribe(listener);
 
     const diff = (): InvalidationEvent => ({
       kind: "messageDiff",
-      signal: { roomId: "01ROOM" as Ulid, seq: 0, ops: [] },
+      signal: { roomId: "01ROOM" as Ulid, ops: [] },
     });
 
     router.emit([diff()]);
     router.emit([diff()]);
 
     expect(events).toHaveLength(2);
-    const seqs = events.map(
-      (e) => (e[0]!.kind === "messageDiff" ? e[0]!.signal.seq : -1),
-    );
-    // seq must be positive, strictly increasing, and shared across emits.
-    expect(seqs[0]).toBeGreaterThan(0);
-    expect(seqs[1]!).toBe(seqs[0]! + 1);
+    expect(events[0]![0]!.kind).toBe("messageDiff");
+    expect(events[1]![0]!.kind).toBe("messageDiff");
   });
 });
 

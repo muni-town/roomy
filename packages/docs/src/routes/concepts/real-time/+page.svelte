@@ -80,7 +80,7 @@
 
   <h3>#messageDiff</h3>
 
-  <p>Applied directly to the TanStack Query cache via <code>setQueryData()</code>. No HTTP round-trip. Each diff carries a <code>seq</code> from a single global, monotonically increasing counter (shared with <code>#roomMetadataDiff</code>); the client detects missed frames via seq gaps and forces a refetch of the active room.</p>
+  <p>Applied directly to the TanStack Query cache via <code>setQueryData()</code>. No HTTP round-trip. Each diff carries a <code>seq</code> from a monotonic counter <strong>per connection</strong>, stamped when the frame is delivered (shared with <code>#roomMetadataDiff</code>); the client detects missed frames via seq gaps and forces a refetch of the active room. Stamping at delivery is what makes the seqs a connection sees contiguous: delivery is selective (a connection receives only the rooms it is subscribed to, and per-user frames only for itself), so a process-global counter would advance for frames this connection never received and every gap would look like a missed frame.</p>
 
   <pre><code>// Header: &#123; op: 1, t: "#messageDiff" &#125;
 // Body:

@@ -139,8 +139,8 @@ export function createSyncContext(deps: {
         log(
           `[roomMetadataDiff] spaceId=${body.spaceId} roomId=${body.roomId} delta=${body.delta} seq=${body.seq}`,
         );
-        // The seq shares the same global counter as #messageDiff, so feed
-        // it into the same gap-detection path.
+        // `#roomMetadataDiff` carries the same per-connection counter as
+        // `#messageDiff`, so feed it into the same gap-detection path.
         if (typeof body.roomId === "string" && typeof body.seq === "number") {
           onMessageDiff?.(body.roomId, body.seq);
         }
@@ -227,9 +227,10 @@ const { queryKey } = cache;
 const GET_MESSAGES_NSID = "space.roomy.room.getMessages" as const;
 
 /**
- * Highest `#messageDiff` seq observed on this connection. The appserver
- * stamps every diff with a single global, monotonically increasing seq
- * (InvalidationRouter.#seq), so this is one number across all rooms.
+ * Highest diff seq observed on this connection. The appserver stamps each
+ * connection's diff frames with its own counter, assigned when the frame is
+ * sent (`ConnectionState.seq`), so the seqs this connection sees are
+ * contiguous — a gap really does mean a missed frame.
  */
 let lastSeq: number | null = null;
 /** Timestamp the tab was last hidden, or null while visible. */

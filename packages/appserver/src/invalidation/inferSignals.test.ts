@@ -188,9 +188,9 @@ describe("inferSignals: message events", () => {
         const validated = schemas.queries.getMessages.Message(op.message);
         expect(validated instanceof type.errors).toBe(false);
       }
-      // seq is 0 here — it's only assigned by the Router when dispatching.
-      // inferSignals returns the raw signal without seq assignment.
-      expect(diff!.signal.seq).toBe(0);
+      // No `seq`: the gap-detection cursor is stamped per connection at
+      // delivery, never at emission (see SyncManager).
+      expect("seq" in diff!.signal).toBe(false);
     }
 
     // roomMetadataDiff carries the delta and the affected user set. The

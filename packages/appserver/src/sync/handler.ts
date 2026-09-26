@@ -119,6 +119,19 @@ interface ConnectionState {
   topics: Set<Topic>;
   /** Per-stream subscription state (keyed by stream DID). */
   streams: Map<string, StreamSubscription>;
+  /**
+   * Monotonic counter for the diff frames this connection receives.
+   *
+   * Delivery is selective — a connection gets a diff only for the rooms and
+   * mentions it is subscribed to, and a per-user frame only for itself — so a
+   * process-global counter would advance for frames this connection never
+   * sees. The client reads a gap as "I missed frames" and refetches the room
+   * it is viewing, which turns another room's traffic into a refetch storm.
+   * Stamping at delivery, per connection, keeps the delivered diffs
+   * contiguous, which is what the gap detector needs (`#messageDiff` and
+   * `#roomMetadataDiff` share this one counter).
+   */
+  seq: number;
   /** Authenticated DID of the connected user. */
   did: string;
   /** Whether the connection is still open. */
@@ -225,6 +238,7 @@ export class SyncManager {
       connId,
       topics: new Set(),
       streams: new Map(),
+      seq: 0,
       did: socket.did,
       isOpen: true,
       send: (frame) => {
@@ -494,7 +508,6 @@ export class SyncManager {
   #routeMessageDiff(
     signal: InvalidationEvent["signal"] & {
       roomId: string;
-      seq: number;
       ops: unknown[];
     },
   ): void {
@@ -502,19 +515,19 @@ export class SyncManager {
     const connIds = this.#topicIndex.get(topic);
     if (!connIds) return;
 
-    const frame = messageFrame("#messageDiff", {
-      roomId: signal.roomId,
-      seq: signal.seq,
-      ops: signal.ops,
-    });
-
     // Delivery-time re-check: a connection may only receive content frames
     // for rooms it can still read. Sub-time checks alone leave a window — a
     // user banned/removed mid-connection would keep receiving message content
     // until they reconnect. The access decision is memoized with a short TTL
     // (see #canReceiveRoomContent) so the hot path doesn't do a DB round-trip
     // per frame per connection.
-    void this.#deliverRoomFrame(signal.roomId, connIds, frame);
+    void this.#deliverRoomFrame(signal.roomId, connIds, (conn) =>
+      messageFrame("#messageDiff", {
+        roomId: signal.roomId,
+        seq: ++conn.seq,
+        ops: signal.ops,
+      }),
+    );
   }
 
   /**
@@ -522,17 +535,22 @@ export class SyncManager {
    * the room. Shared by `#messageDiff` (message bodies) and
    * `#roomActivityDiff` (message previews) — both carry message content, so
    * both need the same delivery-time re-check.
+   *
+   * `buildFrame` is called per connection because `#messageDiff` carries that
+   * connection's seq for gap detection (see `ConnectionState.seq`); a frame
+   * with no per-connection field (e.g. `#roomActivityDiff`) just returns a
+   * shared instance.
    */
   async #deliverRoomFrame(
     roomId: string,
     connIds: Set<number>,
-    frame: Frame,
+    buildFrame: (conn: ConnectionState) => Frame,
   ): Promise<void> {
     for (const connId of connIds) {
       const conn = this.#connections.get(connId);
       if (!conn?.isOpen) continue;
       if (!(await this.#canReceiveRoomContent(roomId, conn.did))) continue;
-      conn.send(frame);
+      conn.send(buildFrame(conn));
     }
   }
 
@@ -562,6 +580,9 @@ export class SyncManager {
     }
     if (connIds.size === 0) return;
 
+    // No `seq` on this frame, so it is identical for every connection and the
+    // one instance is shared (only `#messageDiff`/`#mention`/
+    // `#roomMetadataDiff` carry a connection's counter).
     const frame = messageFrame("#roomActivityDiff", {
       spaceId: signal.spaceId,
       roomId: signal.roomId,
@@ -575,7 +596,7 @@ export class SyncManager {
         : {}),
       activity: signal.activity,
     });
-    void this.#deliverRoomFrame(signal.roomId, connIds, frame);
+    void this.#deliverRoomFrame(signal.roomId, connIds, () => frame);
   }
 
   #routeMentionDiff(
@@ -583,7 +604,6 @@ export class SyncManager {
       did: string;
       spaceId: string;
       roomId: string;
-      seq: number;
       ops: unknown[];
     },
   ): void {
@@ -591,18 +611,18 @@ export class SyncManager {
     const connIds = this.#topicIndex.get(topic);
     if (!connIds) return;
 
-    const frame = messageFrame("#mention", {
-      did: signal.did,
-      spaceId: signal.spaceId,
-      roomId: signal.roomId,
-      seq: signal.seq,
-      ops: signal.ops,
-    });
-
     for (const connId of connIds) {
       const conn = this.#connections.get(connId);
       if (conn?.isOpen) {
-        conn.send(frame);
+        conn.send(
+          messageFrame("#mention", {
+            did: signal.did,
+            spaceId: signal.spaceId,
+            roomId: signal.roomId,
+            seq: ++conn.seq,
+            ops: signal.ops,
+          }),
+        );
       }
     }
   }
@@ -611,7 +631,6 @@ export class SyncManager {
     signal: InvalidationEvent["signal"] & {
       spaceId: string;
       roomId: string;
-      seq: number;
       delta: number;
       users: ReadonlyArray<string>;
       parentChannelId?: string;
@@ -624,23 +643,24 @@ export class SyncManager {
     // users with a read_positions row for this room should see the unread
     // bump. A user may have multiple connections open (multiple tabs).
     for (const user of signal.users) {
-      const frame = messageFrame("#roomMetadataDiff", {
-        spaceId: signal.spaceId,
-        roomId: signal.roomId,
-        delta: signal.delta,
-        seq: signal.seq,
-        ...(signal.parentChannelId ? { parentChannelId: signal.parentChannelId } : {}),
-        ...(signal.roomUnreadDeltas?.get(user)
-          ? { roomUnreadDelta: signal.roomUnreadDeltas.get(user) }
-          : {}),
-        ...(signal.threadUnreadDeltas?.get(user)
-          ? { threadUnreadDelta: signal.threadUnreadDeltas.get(user) }
-          : {}),
-      });
       for (const conn of this.#connections.values()) {
         if (!conn.isOpen) continue;
         if (conn.did !== user) continue;
-        conn.send(frame);
+        conn.send(
+          messageFrame("#roomMetadataDiff", {
+            spaceId: signal.spaceId,
+            roomId: signal.roomId,
+            delta: signal.delta,
+            seq: ++conn.seq,
+            ...(signal.parentChannelId ? { parentChannelId: signal.parentChannelId } : {}),
+            ...(signal.roomUnreadDeltas?.get(user)
+              ? { roomUnreadDelta: signal.roomUnreadDeltas.get(user) }
+              : {}),
+            ...(signal.threadUnreadDeltas?.get(user)
+              ? { threadUnreadDelta: signal.threadUnreadDeltas.get(user) }
+              : {}),
+          }),
+        );
       }
     }
   }

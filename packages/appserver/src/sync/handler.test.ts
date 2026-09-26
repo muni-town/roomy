@@ -382,12 +382,11 @@ function queryInvalidation(
   };
 }
 
-function messageDiff(roomId: Ulid, seq: number): InvalidationEvent {
+function messageDiff(roomId: Ulid): InvalidationEvent {
   return {
     kind: "messageDiff",
     signal: {
       roomId,
-      seq,
       ops: [
         {
           op: "add",
@@ -409,14 +408,13 @@ function messageDiff(roomId: Ulid, seq: number): InvalidationEvent {
   };
 }
 
-function mentionDiff(did: UserDid, seq: number): InvalidationEvent {
+function mentionDiff(did: UserDid): InvalidationEvent {
   return {
     kind: "mentionDiff",
     signal: {
       did,
       spaceId: SPACE_ID,
       roomId: ROOM_ID,
-      seq,
       ops: [
         {
           op: "add",
@@ -462,13 +460,13 @@ describe("SyncManager", () => {
     socket.sentFrames.length = 0;
 
     // Emit a message diff for that room.
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
-
     expect(socket.sentFrames.length).toBe(1);
     const body = decodeFrameBody(socket.sentFrames[0]!);
     expect(body).toEqual({
       roomId: ROOM_ID,
+      // Delivery-time per-connection cursor (ConnectionState.seq), starting at 1.
       seq: 1,
       ops: expect.any(Array),
     });
@@ -488,8 +486,7 @@ describe("SyncManager", () => {
     socket.receive({ type: "sub", topic: "mentions", id: USER_B });
     socket.sentFrames.length = 0;
 
-    router.emitSignals([mentionDiff(USER_B, 1)]);
-
+    router.emitSignals([mentionDiff(USER_B)]);
     expect(socket.sentFrames.length).toBe(1);
     const body = decodeFrameBody(socket.sentFrames[0]!);
     expect(body).toEqual({
@@ -514,8 +511,7 @@ describe("SyncManager", () => {
     // Subscribed to USER_B's mentions, but the signal is for USER_A.
     socket.receive({ type: "sub", topic: "mentions", id: USER_B });
     socket.sentFrames.length = 0;
-
-    router.emitSignals([mentionDiff(USER_A, 1)]);
+    router.emitSignals([mentionDiff(USER_A)]);
 
     expect(socket.sentFrames.length).toBe(0);
 
@@ -531,9 +527,8 @@ describe("SyncManager", () => {
 
     // USER_B tries to subscribe to USER_A's mentions — must be ignored.
     socket.receive({ type: "sub", topic: "mentions", id: USER_A });
-    socket.sentFrames.length = 0;
-
-    router.emitSignals([mentionDiff(USER_A, 1)]);
+    router.emitSignals([mentionDiff(USER_A)]);
+    router.emitSignals([mentionDiff(USER_A)]);
 
     expect(socket.sentFrames.length).toBe(0);
 
@@ -556,7 +551,7 @@ describe("SyncManager", () => {
     socket.sentFrames.length = 0;
 
     // Emit a message diff for ROOM_ID.
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
 
     expect(socket.sentFrames.length).toBe(0);
@@ -657,7 +652,7 @@ describe("SyncManager", () => {
     // assertion captures only the post-unsub emit below.
     socket.sentFrames.length = 0;
 
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
 
     expect(socket.sentFrames.length).toBe(0);
@@ -681,7 +676,7 @@ describe("SyncManager", () => {
     socket.sentFrames.length = 0;
 
     // Emit after close — should not error.
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
     expect(socket.sentFrames.length).toBe(0);
     expect(manager.connectionCount).toBe(0);
@@ -851,7 +846,7 @@ describe("SyncManager", () => {
     manager.destroy();
 
     // Emit after destroy — socket should NOT receive anything.
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
     expect(socket.sentFrames.length).toBe(0);
   });
@@ -993,7 +988,7 @@ describe("SyncManager", () => {
     socket.sentFrames.length = 0;
 
     router.emitSignals([
-      messageDiff(ROOM_ID, 1),
+      messageDiff(ROOM_ID),
       queryInvalidation("space.roomy.room.getMetadata", { roomId: ROOM_ID }),
     ]);
     await flush();
@@ -1029,7 +1024,7 @@ describe("SyncManager — topic authorization", () => {
     expect(socket.sentFrames.length).toBe(0);
 
     // A message diff for that room must NOT reach the non-member.
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
     expect(socket.sentFrames.length).toBe(0);
 
@@ -1046,7 +1041,7 @@ describe("SyncManager — topic authorization", () => {
     await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     socket.sentFrames.length = 0;
 
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
 
     expect(socket.sentFrames.length).toBe(1);
@@ -1076,7 +1071,7 @@ describe("SyncManager — topic authorization", () => {
     await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
     socket.sentFrames.length = 0;
 
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
 
     expect(socket.sentFrames.length).toBe(1);
@@ -1102,7 +1097,7 @@ describe("SyncManager — topic authorization", () => {
     expect(socket.sentFrames.length).toBe(0);
 
     // No content frames either way.
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
     expect(socket.sentFrames.length).toBe(0);
 
@@ -1235,7 +1230,7 @@ describe("SyncManager — topic authorization", () => {
     socket.sentFrames.length = 0;
 
     // First diff arrives while USER_A is still a member.
-    router.emitSignals([messageDiff(ROOM_ID, 1)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
     expect(socket.sentFrames.length).toBe(1);
 
@@ -1243,7 +1238,7 @@ describe("SyncManager — topic authorization", () => {
     // (delivery-time re-check), even though the topic is still registered.
     db.seedBan(SPACE_ID, USER_A);
     socket.sentFrames.length = 0;
-    router.emitSignals([messageDiff(ROOM_ID, 2)]);
+    router.emitSignals([messageDiff(ROOM_ID)]);
     await flush();
     expect(socket.sentFrames.length).toBe(0);
 

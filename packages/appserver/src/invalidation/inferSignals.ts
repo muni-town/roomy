@@ -123,7 +123,6 @@ async function federatedReceiversInvalidation(
   spaceId: StreamDid,
   roomId: Ulid,
   signal: {
-    seq: number;
     delta: number;
     users: ReadonlyArray<UserDid>;
     roomUnreadDeltas: ReadonlyMap<UserDid, number>;
@@ -152,7 +151,6 @@ async function federatedReceiversInvalidation(
       signal: {
         spaceId: r.home as StreamDid,
         roomId,
-        seq: signal.seq,
         delta: signal.delta,
         users: [...signal.users],
         roomUnreadDeltas: signal.roomUnreadDeltas,
@@ -212,7 +210,6 @@ function mentionDiffs(
         did: did as UserDid,
         spaceId: event.streamDid,
         roomId,
-        seq: 0,
         ops: [{ ...op, kind }],
       },
     });
@@ -243,7 +240,6 @@ function replyDiff(
         did: replyAuthor,
         spaceId: event.streamDid,
         roomId,
-        seq: 0,
         ops: [{ ...op, kind: "reply" }],
       },
     },
@@ -302,7 +298,6 @@ async function handleCreateMessage(
       kind: "messageDiff",
       signal: {
         roomId,
-        seq: (details.seq as number) ?? 0,
         ops: [{ op: "add", key: event.id, message }],
       },
     });
@@ -378,7 +373,6 @@ async function handleCreateMessage(
       signal: {
         spaceId,
         roomId,
-        seq: 0,
         delta: 1,
         users,
         ...(parentChannelId ? { parentChannelId } : {}),
@@ -414,7 +408,6 @@ async function handleCreateMessage(
           spaceId,
           roomId,
           {
-            seq: 0, // stamped by the Router
             delta: 1,
             users,
             roomUnreadDeltas: new Map(
@@ -504,7 +497,6 @@ async function handleEditMessage(
       kind: "messageDiff",
       signal: {
         roomId,
-        seq: (details.seq as number) ?? 0,
         ops: [{ op: "update", key: messageId, message }],
       },
     });
@@ -561,7 +553,6 @@ async function handleDeleteMessage(
       kind: "messageDiff",
       signal: {
         roomId,
-        seq: (details.seq as number) ?? 0,
         ops: [{ op: "remove", key: messageId }],
       },
     },
@@ -589,7 +580,6 @@ async function handleDeleteMessage(
           did,
           spaceId: event.streamDid,
           roomId,
-          seq: 0,
           ops: [{ op: "remove", key: messageId }],
         },
       });
@@ -644,7 +634,6 @@ async function handleMoveMessages(
       kind: "messageDiff",
       signal: {
         roomId: sourceRoomId,
-        seq: (details.seq as number) ?? 0,
         ops: [{ op: "remove", key: messageId }],
       },
     });
@@ -664,7 +653,6 @@ async function handleMoveMessages(
       kind: "messageDiff",
       signal: {
         roomId: toRoomId,
-        seq: 0,
         ops: [{ op: "add", key: messageId, message }],
       },
     });

@@ -88,7 +88,7 @@ describe("attachCacheEvictionListener", () => {
     router.emit([
       {
         kind: "messageDiff",
-        signal: { roomId: "01ROOM" as Ulid, seq: 1, ops: [] },
+        signal: { roomId: "01ROOM" as Ulid, ops: [] },
       },
     ]);
 

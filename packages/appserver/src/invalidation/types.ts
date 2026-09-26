@@ -73,11 +73,16 @@ export interface QueryInvalidation {
   cacheEvictionOnly?: boolean;
 }
 
-/** A message-level add/update/remove within a room. */
+/**
+ * A message-level add/update/remove within a room.
+ *
+ * Carries no `seq`: the gap-detection cursor is assigned per connection when
+ * the frame is delivered (see `SyncManager`), because delivery is selective —
+ * a connection receives only the diffs for the rooms and mentions it is
+ * subscribed to, so an emission-time counter would be sparse per connection.
+ */
 export interface MessageDiff {
   roomId: Ulid;
-  /** Monotonically increasing sequence number for cursor replay. */
-  seq: number;
   ops: MessageDiffOp[];
 }
 
@@ -116,8 +121,6 @@ export type MessageSnapshot = MessageDto;
 export interface RoomMetadataDiff {
   spaceId: StreamDid;
   roomId: Ulid;
-  /** Monotonically increasing sequence number for cursor replay. */
-  seq: number;
   /**
    * The unread-count increment (always `+1` per createMessage event). The
    * client adds this to the cached `unreadCount` of each patched entry.
@@ -163,8 +166,6 @@ export interface MentionDiff {
   did: UserDid;
   spaceId: StreamDid;
   roomId: Ulid;
-  /** Monotonically increasing sequence number for cursor replay. */
-  seq: number;
   /** Reuse the message snapshot shape from MessageDiff. */
   ops: MessageDiffOp[];
 }

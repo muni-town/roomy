@@ -28,6 +28,7 @@ export const Body = type({
   did: "string",
   spaceId: "string",
   roomId: "string",
+  /** Per-connection counter, assigned at delivery — see `#messageDiff.seq`. */
   seq: "number",
   ops: Op.array(),
 });
