@@ -134,6 +134,24 @@ export class BridgeRepository {
 			.run(guildId, spaceDid, mode, now, now);
 	}
 
+	/**
+	 * Disconnect a (guild, space) bridge: the config, its allowlist, and all
+	 * the durable state that says how far this pair's backfill has got — the
+	 * per-(space, channel) cursors, the progress rows, and the one-shot
+	 * structure marker. A reconnect therefore backfills the pair from
+	 * scratch, which is the only way history posted while disconnected is
+	 * ever ingested.
+	 *
+	 * `id_mappings` is deliberately NOT dropped. Message mappings are the
+	 * dedup record: keeping them means the re-run re-ingests only what the
+	 * space is missing rather than duplicating what it already has. Channel
+	 * and thread mappings are Roomy room ids, and those rooms outlive the
+	 * bridge config — dropping them would create a second room per channel on
+	 * reconnect, orphaning the first, and the Roomy→Discord routes to the
+	 * already-bridged rooms would go with it. The cost of keeping them is
+	 * that a reconnect reuses the existing rooms instead of re-creating them,
+	 * which is exactly what a reconnect should do.
+	 */
 	removeBridgeConfig(guildId: string, spaceDid: string): void {
 		this.db.transaction(() => {
 			this.db
@@ -142,6 +160,25 @@ export class BridgeRepository {
 			this.db
 				.prepare(
 					"DELETE FROM bridge_config WHERE guild_id = ? AND space_did = ?",
+				)
+				.run(guildId, spaceDid);
+			// Backfill bookkeeping, dropped so a reconnect starts the pair
+			// from scratch: a surviving cursor makes Phase 1 skip the pair as
+			// already done, and a surviving `complete` row makes the Phase-2
+			// walk return early — the two together mean a reconnect ingests
+			// nothing, including whatever was posted while disconnected.
+			this.db
+				.prepare("DELETE FROM channel_cursors WHERE space_did = ?")
+				.run(spaceDid);
+			this.db
+				.prepare("DELETE FROM backfill_progress WHERE space_did = ?")
+				.run(spaceDid);
+			// The one-shot structure marker goes too: the space's sidebar
+			// structure is applied once per (guild, space), and a reconnect is
+			// a new claim on it.
+			this.db
+				.prepare(
+					"DELETE FROM structure_sync WHERE guild_id = ? AND space_did = ?",
 				)
 				.run(guildId, spaceDid);
 		})();

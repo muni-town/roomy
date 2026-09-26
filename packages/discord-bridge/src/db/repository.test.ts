@@ -67,6 +67,73 @@ describe("bridge_config", () => {
 		expect(r.isAllowlisted(SPACE_A, "c1")).toBe(false);
 	});
 
+	test("removeBridgeConfig cascades to the backfill bookkeeping", () => {
+		const r = repo();
+		r.upsertBridgeConfig(GUILD, SPACE_A, "full");
+		r.setChannelCursor(SPACE_A, "c1", "msg-100");
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_A,
+			channelId: "c1",
+			guildId: GUILD,
+			kind: "channel",
+			channelName: "general",
+			phase: "complete",
+			messagesSynced: 500,
+			messagesSkipped: 0,
+			windowBoundary: "msg-100",
+			walkCursor: "msg-1",
+		});
+		r.claimStructureSync(GUILD, SPACE_A);
+		r.markStructureSyncApplied(GUILD, SPACE_A);
+
+		// A second bridge must keep its own rows: the cascade is per
+		// (guild, space).
+		r.upsertBridgeConfig(GUILD, SPACE_B, "full");
+		r.setChannelCursor(SPACE_B, "c1", "msg-200");
+		r.upsertBackfillProgress({
+			spaceDid: SPACE_B,
+			channelId: "c1",
+			guildId: GUILD,
+			kind: "channel",
+			channelName: "general",
+			phase: "complete",
+			messagesSynced: 700,
+			messagesSkipped: 0,
+			windowBoundary: "msg-200",
+			walkCursor: "msg-1",
+		});
+		r.claimStructureSync(GUILD, SPACE_B);
+
+		r.removeBridgeConfig(GUILD, SPACE_A);
+
+		// Nothing about the pair's progress survives, so a reconnect
+		// backfills the space from scratch instead of skipping it as done.
+		expect(r.getChannelCursor(SPACE_A, "c1")).toBeUndefined();
+		expect(r.getBackfillProgress(SPACE_A, "c1")).toBeUndefined();
+		expect(r.listBackfillProgress(SPACE_A)).toEqual([]);
+		expect(r.hasClaimedStructureSync(GUILD, SPACE_A)).toBe(false);
+		// A reconnect is a new claim on the one-shot structure sync.
+		expect(r.claimStructureSync(GUILD, SPACE_A)).toBe(true);
+
+		expect(r.getChannelCursor(SPACE_B, "c1")?.lastMessageId).toBe("msg-200");
+		expect(r.getBackfillProgress(SPACE_B, "c1")?.phase).toBe("complete");
+		expect(r.hasClaimedStructureSync(GUILD, SPACE_B)).toBe(true);
+	});
+
+	test("removeBridgeConfig keeps id_mappings", () => {
+		const r = repo();
+		r.upsertBridgeConfig(GUILD, SPACE_A, "full");
+		r.registerMapping(SPACE_A, "channel", "c1", "room-1");
+		r.registerMapping(SPACE_A, "message", "m1", "event-1");
+
+		r.removeBridgeConfig(GUILD, SPACE_A);
+
+		// Message mappings are the dedup record, and channel mappings are the
+		// Roomy room ids the reconnect reuses rather than re-creating.
+		expect(r.getRoomyId(SPACE_A, "message", "m1")).toBe("event-1");
+		expect(r.getRoomyRoomId(SPACE_A, "c1")).toBe("room-1");
+	});
+
 	test("listAllBridgeConfigs returns every bridge", () => {
 		const r = repo();
 		r.upsertBridgeConfig(GUILD, SPACE_A, "full");

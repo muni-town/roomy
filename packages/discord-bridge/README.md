@@ -23,7 +23,7 @@ Discord Gateway ──► Bot event handlers
 - **Unidirectional**: Discord → Roomy only. No events flow back to Discord.
 - **SQLite-backed**: All sync state (ID mappings, cursors, allowlists, profile hashes) lives in a single `bridge.sqlite` file. No LevelDB, no extensions-based dedup.
 - **No Discord-side writes**: The bot never sends messages, creates webhooks, edits channel topics, or manages roles. It only reads.
-- **Backfill on connect/reconnect**: On every gateway READY event, walks Discord history forward from saved per-channel cursors for each bridged channel.
+- **Backfill on connect/reconnect**: On every gateway READY event, walks Discord history forward from saved per-channel cursors for each bridged channel. A disconnect drops that bookkeeping, so a reconnect re-walks the pair from scratch and recovers anything posted while it was disconnected.
 - **Shared ingestion**: Live messages and backfill use the same `ingestDiscordMessage()` path — identical dedup, room resolution, and event dispatch.
 
 ### Directory structure
@@ -92,9 +92,12 @@ bridge's own SQLite DB (`structure_sync`, migration 7), keyed by
 `(guild_id, space_did)`:
 
 - `claimStructureSync` inserts the row and returns whether the caller created
-  it. Only that caller writes structure; every later call — a reconnect, a
-  second backfill, a re-run of the slash command, a process restart — gets
-  `false` and sends nothing.
+  it. Only that caller writes structure; every later call — a second backfill,
+  a re-run of the slash command, a process restart — gets `false` and sends
+  nothing. A reconnect is the exception: `/disconnect-roomy-space` drops the
+  marker along with the rest of the pair's backfill bookkeeping, so the
+  reconnected space claims the sync afresh and its sidebar structure is
+  re-applied.
 - The claim is written **before** any event is sent, so the sync is
   at-most-once by construction: a crash between claim and write cannot re-apply
   the structure on the next run.
@@ -250,6 +253,23 @@ All commands require **Administrator** permissions and only work in guilds.
 | `/roomy-bridge-channel remove channel:#channel [space-id:<did>]` | Remove a channel from the allowlist. Existing synced messages are preserved.      |
 | `/roomy-bridge-channel list [space-id:<did>]`                    | List channels in the allowlist                                                    |
 | `/roomy-repair-sidebar [space-id:<did>] [apply:<bool>]`          | Inspect a bridged space's sidebar for structure-sync damage, optionally reverting it |
+
+## Disconnect and reconnect
+
+`/disconnect-roomy-space` drops the bridge config, its allowlist, and all the
+durable state that says how far the pair's backfill has got: the
+per-`(space, channel)` cursors, the `backfill_progress` rows, and the one-shot
+`structure_sync` marker. Without that, a reconnect would read each pair as
+already done and ingest nothing — including everything posted while the space
+was disconnected.
+
+`id_mappings` deliberately survives. Message mappings are the dedup record, so
+the re-walk re-ingests only what the space is missing instead of duplicating
+its history; channel and thread mappings are the Roomy room ids, which
+outlive the bridge config and are reused rather than re-created (re-creating
+them would orphan the existing rooms). Reconnecting therefore re-walks the
+history, re-applies the sidebar structure, and lands the missing messages in
+the rooms the space already has.
 
 ## Subset mode
 

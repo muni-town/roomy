@@ -217,11 +217,26 @@ function makeMockDiscordSender() {
 	// for the fire-and-forget Phase-2 walk (no wall-clock polling).
 	const { promise: noticePosted, resolve: resolveNotice } =
 		Promise.withResolvers<void>();
+	// Waiter per requested send count, so a test expecting N notices (one per
+	// space a run did work for) awaits the Nth send instead of guessing.
+	const noticeWaiters: Array<{ count: number; resolve: () => void }> = [];
+	const waitForNoticeCount = (count: number): Promise<void> => {
+		if (sent.length >= count) return Promise.resolve();
+		const { promise, resolve } = Promise.withResolvers<void>();
+		noticeWaiters.push({ count, resolve });
+		return promise;
+	};
 	const mock: DiscordSender & { failSends: boolean } = {
 		async sendMessage(channelId, content) {
 			if (mock.failSends) throw new Error("simulated send failure");
 			sent.push({ channelId, content });
 			resolveNotice();
+			for (let i = noticeWaiters.length - 1; i >= 0; i--) {
+				const waiter = noticeWaiters[i];
+				if (!waiter || sent.length < waiter.count) continue;
+				noticeWaiters.splice(i, 1);
+				waiter.resolve();
+			}
 			return "9000000000000000001";
 		},
 		async editMessage() {},
@@ -242,7 +257,7 @@ function makeMockDiscordSender() {
 		},
 		failSends: false,
 	};
-	return { sent, mock, noticePosted };
+	return { sent, mock, noticePosted, waitForNoticeCount };
 }
 
 /** Minimal Discord message for the end-to-end runBackfill test. */
@@ -277,6 +292,15 @@ function countCreateMessageEvents(
 	return roomy
 		.eventsFor(spaceDid)
 		.filter((e) => e.$type === "space.roomy.message.createMessage.v0").length;
+}
+
+/** One message of a channel's ordered history: same-width ids, so BigInt order matches string order. */
+function seqMessage(
+	prefix: string,
+	index: number,
+	channelId: string,
+): DiscordMessageData {
+	return cnMessage(`${prefix}${String(index).padStart(6, "0")}`, channelId);
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────
@@ -2035,6 +2059,178 @@ describe("backfill enumeration & completion notice", () => {
 		// creation marks nothing) and no second notice is posted.
 		await runBackfill(discord, repo, roomy);
 		expect(sent).toHaveLength(1);
+	});
+});
+
+/**
+ * Disconnect then reconnect. The backfill bookkeeping is what decides whether
+ * a pair still needs work, so a reconnect can only backfill anything if the
+ * disconnect dropped it — otherwise the pair reads as done forever and the
+ * history posted while disconnected is never recovered.
+ */
+describe("backfill after a disconnect/reconnect", () => {
+	afterEach(() => {
+		setBackfillNoticeSender(undefined);
+	});
+
+	/**
+	 * The reported defect: bridge a channel, backfill it, disconnect, reconnect
+	 * — and the messages posted while disconnected must be ingested.
+	 */
+	test("RC01: a reconnect backfills a message posted while disconnected", async () => {
+		const general: DiscordChannelData = {
+			id: "200000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const messages: DiscordMessageData[] = Array.from({ length: 8 }, (_, i) =>
+			seqMessage("20000000000000", i + 1, general.id),
+		);
+		const discord = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [general] },
+			channels: [general],
+			messages: { [general.id]: messages },
+		});
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+		const { mock, waitForNoticeCount } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+
+		await runBackfill(discord, repo, roomy);
+		await waitForNoticeCount(1);
+		expect(countCreateMessageEvents(roomy, SPACE)).toBe(8);
+		expect(repo.getBackfillProgress(SPACE, general.id)?.phase).toBe("complete");
+		const sidebarEventsBefore = roomy
+			.eventsFor(SPACE)
+			.filter((e) => e.$type === "space.roomy.space.updateSidebar.v1").length;
+		expect(sidebarEventsBefore).toBe(1);
+
+		// Posted while the bridge was disconnected — the only copy of it the
+		// bridge will ever see is this REST fetch.
+		messages.push(seqMessage("20000000000000", 9, general.id));
+
+		repo.removeBridgeConfig(GUILD, SPACE);
+		repo.upsertBridgeConfig(GUILD, SPACE, "full");
+
+		await runBackfill(discord, repo, roomy);
+		await waitForNoticeCount(2);
+
+		// Exactly the one missing message, and no re-ingest of the eight the
+		// space already has (message mappings survive the disconnect).
+		expect(countCreateMessageEvents(roomy, SPACE)).toBe(9);
+		const after = repo.getBackfillProgress(SPACE, general.id);
+		expectToBeDefined(after);
+		expect(after?.phase).toBe("complete");
+		// The re-run walks the whole channel again; dedup means only the new
+		// message is ingested and the other eight are skipped.
+		expect(after?.messagesSynced).toBe(1);
+		expect(after?.messagesSkipped).toBe(8);
+
+		// The reconnect is a new claim on the one-shot structure sync, so the
+		// space's sidebar structure is re-applied rather than left as the
+		// disconnect left it.
+		expect(
+			roomy
+				.eventsFor(SPACE)
+				.filter((e) => e.$type === "space.roomy.space.updateSidebar.v1").length,
+		).toBe(2);
+		expect(repo.hasClaimedStructureSync(GUILD, SPACE)).toBe(true);
+	});
+
+	/**
+	 * The second defect: a Phase-2 walk starting while another is already
+	 * running must be queued, not dropped. Dropped work leaves that space's
+	 * pairs parked in `phase2` with nothing walking them — the same "does not
+	 * backfill at all" symptom as the reconnect defect.
+	 */
+	test("RC02: a second space's walk runs while another walk is in flight", async () => {
+		const SPACE_B = "did:web:test-space-b.example";
+		const GUILD_B = "111111111111111111";
+		const channelA = "200000000000000001";
+		const channelB = "400000000000000001";
+
+		// Both channels exceed the Phase-1 bound, so neither reaches `complete`
+		// in its window: each needs its own Phase-2 walk.
+		const messagesA = Array.from({ length: 1050 }, (_, i) =>
+			seqMessage("20000000000000", i + 1, channelA),
+		);
+		const messagesB = Array.from({ length: 1050 }, (_, i) =>
+			seqMessage("40000000000000", i + 1, channelB),
+		);
+		const discordA = FileDiscordDataSource.fromData({
+			guild: {
+				id: GUILD,
+				channels: [{ id: channelA, type: 0, name: "general", guildId: GUILD }],
+			},
+			channels: [{ id: channelA, type: 0, name: "general", guildId: GUILD }],
+			messages: { [channelA]: messagesA },
+		});
+		const discordB = FileDiscordDataSource.fromData({
+			guild: {
+				id: GUILD_B,
+				channels: [{ id: channelB, type: 0, name: "general", guildId: GUILD_B }],
+			},
+			channels: [{ id: channelB, type: 0, name: "general", guildId: GUILD_B }],
+			messages: { [channelB]: messagesB },
+		});
+
+		const repo = BridgeRepository.open(":memory:");
+		repo.upsertBridgeConfig(GUILD, SPACE, "full");
+		repo.upsertBridgeConfig(GUILD_B, SPACE_B, "full");
+		const roomy = new MockRoomyGateway();
+		const { mock, waitForNoticeCount } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+
+		// Hold space A's walk on its first page so it is provably in flight
+		// when the second space's run starts. The signal is the walk reaching
+		// the gate, not elapsed time.
+		const gate = Promise.withResolvers<void>();
+		const walkReachedGate = Promise.withResolvers<void>();
+		let gateHeld = false;
+		const gatedA = new Proxy(discordA, {
+			get(target, prop, _receiver) {
+				if (prop === "getMessages") {
+					return async (
+						channelId: string,
+						opts: { after?: string; before?: string; limit?: number },
+					) => {
+						if (opts.after && !gateHeld) {
+							gateHeld = true;
+							walkReachedGate.resolve();
+							await gate.promise;
+						}
+						return target.getMessages(channelId, opts);
+					};
+				}
+				// Keep `this` bound to the target so private fields resolve.
+				const value = Reflect.get(target, prop, target);
+				return typeof value === "function" ? value.bind(target) : value;
+			},
+		});
+
+		// Run 1: space A's window completes and its walk starts, then blocks.
+		await runBackfill(gatedA, repo, roomy);
+		await walkReachedGate.promise;
+		expect(repo.getBackfillProgress(SPACE, channelA)?.phase).toBe("phase2");
+
+		// Run 2 starts while A's walk is in flight. With a global guard its
+		// walk would be dropped here.
+		await runBackfill(discordB, repo, roomy);
+
+		// Release A and let both walks run to completion; each run posts its
+		// own completion notice when its walk settles.
+		gate.resolve();
+		await waitForNoticeCount(2);
+
+		const progressA = repo.getBackfillProgress(SPACE, channelA);
+		const progressB = repo.getBackfillProgress(SPACE_B, channelB);
+		expectToBeDefined(progressA);
+		expectToBeDefined(progressB);
+		expect(progressA?.phase).toBe("complete");
+		expect(progressB?.phase).toBe("complete");
+		expect(progressA?.messagesSynced).toBe(1050);
+		expect(progressB?.messagesSynced).toBe(1050);
 	});
 });
 

@@ -40,16 +40,20 @@ export function setBackfillNoticeSender(sender: DiscordSender | undefined): void
 }
 
 /**
- * Spaces where the CURRENT runBackfill invocation did real work — a
- * (channel, space) pair crossed into `complete`, or thread rooms were
- * created. Reset at the start of each run, read once at the end of Phase 2
- * to decide which spaces get a completion notice. Without it, a restart over
- * an already-backfilled space would post a spurious "complete" notice.
+ * Spaces where ONE runBackfill invocation did real work — a (channel, space)
+ * pair crossed into `complete`, or thread rooms were created. Owned by the
+ * run (not the module) and read once at the end of that run's Phase 2 to
+ * decide which spaces get a completion notice. Without it, a restart over an
+ * already-backfilled space would post a spurious "complete" notice; with it
+ * per run, two runs overlapping on different spaces each get their own.
  */
-let runWorkSpaces = new Set<string>();
+type RunWorkSpaces = Set<string>;
 
-function markRunWork(spaceDid: string): void {
-	runWorkSpaces.add(spaceDid);
+function markRunWork(
+	workSpaces: RunWorkSpaces | undefined,
+	spaceDid: string,
+): void {
+	workSpaces?.add(spaceDid);
 }
 
 /**
@@ -80,7 +84,33 @@ function hasRealBackfillProgress(progress: BackfillProgress): boolean {
 export const PHASE1_MESSAGE_BOUND = 1_000;
 const PHASE1_PAGE_SIZE = 100;
 
-/** True while the Phase-2 remainder walk is running in the background. */
+/**
+ * Phase-2 work waiting for, or owned by, the single Phase-2 runner. Walks are
+ * serial — one at a time, in scheduling order — because they share the
+ * Discord REST budget and the Roomy gateway. A schedule that arrives while a
+ * walk is running is QUEUED behind it, never dropped: dropping it would leave
+ * that run's pairs parked in `phase2` with nothing walking them, which looks
+ * exactly like a bridge that does not backfill at all.
+ */
+type Phase2Task = {
+	channelId: string;
+	spaceDid: string;
+	guildId: string;
+	parentId?: string | null;
+};
+
+type Phase2Request = {
+	discord: DiscordDataSource;
+	repo: BridgeRepository;
+	roomy: RoomyGateway;
+	configs: BridgeConfig[];
+	phase1Tasks: Phase2Task[];
+	workSpaces: RunWorkSpaces;
+};
+
+const phase2Queue: Phase2Request[] = [];
+
+/** True while the Phase-2 runner is draining `phase2Queue`. */
 let phase2Running = false;
 
 /** True when a backfill (window or walk) is in flight for this pair. */
@@ -132,7 +162,7 @@ export async function runBackfill(
 
 	// Reset the completion-notice work set: this run decides which spaces
 	// get a notice once Phase 2 finishes.
-	runWorkSpaces = new Set<string>();
+	const workSpaces: RunWorkSpaces = new Set<string>();
 
 	// Ensure Roomy rooms exist for all bridged channels before backfilling.
 	try {
@@ -222,6 +252,8 @@ export async function runBackfill(
 				t.spaceDid,
 				t.guildId,
 				"channel",
+				null,
+				workSpaces,
 			);
 		} catch (reason) {
 			log.error(
@@ -238,7 +270,7 @@ export async function runBackfill(
 	// and its channels' recent history land first. Thread pairs the bound
 	// truncated are finished by Phase 2's thread pass below.
 	try {
-		await ensureRoomyThreads(discord, repo, roomy, configs);
+		await ensureRoomyThreads(discord, repo, roomy, configs, workSpaces);
 	} catch (err) {
 		log.error("ensureRoomyThreads failed", err);
 	}
@@ -246,121 +278,140 @@ export async function runBackfill(
 	// ── Phase 2: the remainder, in the background ────────────────────────
 	// Resumable from the durable walk cursor, so a restart doesn't redo the
 	// window or the already-walked pages.
-	schedulePhase2(discord, repo, roomy, configs, tasks);
+	schedulePhase2(discord, repo, roomy, configs, tasks, workSpaces);
 }
 
 /**
- * Kick off the Phase-2 remainder walk in the background. Serial (one
- * (channel, space) pair at a time); after the top-level channels,
- * sweeps active threads the window may have truncated, then the
- * deprioritized archived-thread sweep.
+ * Queue the Phase-2 remainder work for one backfill run. Walks are serial —
+ * one (channel, space) pair at a time — but the queue is not a gate: work
+ * that arrives while a walk is running waits behind it and runs afterwards.
+ * A second `/connect-roomy-space`, or a reconnect, therefore still gets its
+ * own walk over its own pairs instead of being silently dropped. After the
+ * top-level channels, each request sweeps the active threads its window may
+ * have truncated, then the deprioritized archived-thread sweep.
  */
 function schedulePhase2(
 	discord: DiscordDataSource,
 	repo: BridgeRepository,
 	roomy: RoomyGateway,
 	configs: BridgeConfig[],
-	phase1Tasks: Array<{
-		channelId: string;
-		spaceDid: string;
-		guildId: string;
-		parentId?: string | null;
-	}>,
+	phase1Tasks: Phase2Task[],
+	workSpaces: RunWorkSpaces,
 ): void {
+	phase2Queue.push({
+		discord,
+		repo,
+		roomy,
+		configs,
+		phase1Tasks,
+		workSpaces,
+	});
 	if (phase2Running) {
-		log.debug("Phase 2 already running; skipping duplicate schedule");
+		log.info(
+			`Phase 2 already running; ${phase2Queue.length} request(s) queued behind it`,
+		);
 		return;
 	}
 	phase2Running = true;
 	void (async () => {
 		try {
-			// Top-level channels (same enumeration as Phase 1), plus active
-			// threads that are bridged — their recent window may have been
-			// truncated at the bound too.
-			const tasks = [...phase1Tasks];
-			for (const config of configs) {
-				if (
-					!(await getCapacityGate().isEnabled(
-						config.guildId,
-						config.spaceDid,
-					))
-				) {
-					continue;
-				}
+			while (phase2Queue.length > 0) {
+				const request = phase2Queue.shift();
+				if (!request) break;
 				try {
-					const threads = await discord.getActiveThreads(config.guildId);
-					for (const thread of threads) {
-						if (!repo.getRoomyId(config.spaceDid, "thread", thread.id)) {
-							continue;
-						}
-						tasks.push({
-							channelId: thread.id,
-							spaceDid: config.spaceDid,
-							guildId: config.guildId,
-							parentId: thread.parentId ?? null,
-						});
-					}
+					await runPhase2(request);
 				} catch (err) {
-					log.error(
-						`Phase 2: failed to list active threads for ${config.spaceDid}`,
-						err,
-					);
+					log.error("Phase-2 backfill failed", err);
 				}
 			}
-
-			let succeeded = 0;
-			let failed = 0;
-			for (const t of tasks) {
-				try {
-					await backfillChannel(
-						discord,
-						repo,
-						roomy,
-						t.channelId,
-						t.spaceDid,
-						t.guildId,
-						t.parentId,
-					);
-					succeeded++;
-				} catch (reason) {
-					failed++;
-					log.error(
-						`Phase-2 backfill failed for ${t.channelId} → ${t.spaceDid}`,
-						reason,
-					);
-				}
-			}
-			log.info(
-				`Phase-2 backfill complete: ${succeeded} succeeded, ${failed} failed`,
-			);
-
-			// Deprioritized: fetch public archived threads and backfill.
-			try {
-				await ensureAndBackfillArchivedThreads(discord, repo, roomy, configs);
-			} catch (err) {
-				log.error("ensureAndBackfillArchivedThreads failed", err);
-			}
-
-			// Discord-side completion notice: one message per
-			// bridged space this run did work for, posted only now that all
-			// phases (channels, active threads, archived threads) have
-			// settled. Best-effort — never throws, never fails the walk.
-			try {
-				await postBackfillCompletionNotices(
-					discord,
-					repo,
-					configs,
-					runWorkSpaces,
-				);
-			} catch (err) {
-				log.error("backfill completion notice failed", err);
-			}
-		} catch (err) {
-			log.error("Phase-2 backfill failed", err);
 		} finally {
 			phase2Running = false;
 		}
 	})();
+}
+
+/** Run one queued Phase-2 request to completion. */
+async function runPhase2(request: Phase2Request): Promise<void> {
+	const { discord, repo, roomy, configs, phase1Tasks, workSpaces } = request;
+
+	// Top-level channels (same enumeration as Phase 1), plus active
+	// threads that are bridged — their recent window may have been
+	// truncated at the bound too.
+	const tasks: Phase2Task[] = [...phase1Tasks];
+	for (const config of configs) {
+		if (
+			!(await getCapacityGate().isEnabled(config.guildId, config.spaceDid))
+		) {
+			continue;
+		}
+		try {
+			const threads = await discord.getActiveThreads(config.guildId);
+			for (const thread of threads) {
+				if (!repo.getRoomyId(config.spaceDid, "thread", thread.id)) {
+					continue;
+				}
+				tasks.push({
+					channelId: thread.id,
+					spaceDid: config.spaceDid,
+					guildId: config.guildId,
+					parentId: thread.parentId ?? null,
+				});
+			}
+		} catch (err) {
+			log.error(
+				`Phase 2: failed to list active threads for ${config.spaceDid}`,
+				err,
+			);
+		}
+	}
+
+	let succeeded = 0;
+	let failed = 0;
+	for (const t of tasks) {
+		try {
+			await backfillChannel(
+				discord,
+				repo,
+				roomy,
+				t.channelId,
+				t.spaceDid,
+				t.guildId,
+				t.parentId,
+				workSpaces,
+			);
+			succeeded++;
+		} catch (reason) {
+			failed++;
+			log.error(
+				`Phase-2 backfill failed for ${t.channelId} → ${t.spaceDid}`,
+				reason,
+			);
+		}
+	}
+	log.info(`Phase-2 backfill complete: ${succeeded} succeeded, ${failed} failed`);
+
+	// Deprioritized: fetch public archived threads and backfill.
+	try {
+		await ensureAndBackfillArchivedThreads(
+			discord,
+			repo,
+			roomy,
+			configs,
+			workSpaces,
+		);
+	} catch (err) {
+		log.error("ensureAndBackfillArchivedThreads failed", err);
+	}
+
+	// Discord-side completion notice: one message per
+	// bridged space this run did work for, posted only now that all
+	// phases (channels, active threads, archived threads) have
+	// settled. Best-effort — never throws, never fails the walk.
+	try {
+		await postBackfillCompletionNotices(discord, repo, configs, workSpaces);
+	} catch (err) {
+		log.error("backfill completion notice failed", err);
+	}
 }
 
 async function ensureRoomyRooms(
@@ -486,6 +537,7 @@ export async function ensureRoomyThreads(
 	repo: BridgeRepository,
 	roomy: RoomyGateway,
 	configs: BridgeConfig[],
+	workSpaces?: RunWorkSpaces,
 ): Promise<void> {
 	for (const config of configs) {
 		try {
@@ -599,6 +651,7 @@ export async function ensureRoomyThreads(
 						guildId,
 						"thread",
 						parentId,
+						workSpaces,
 					);
 				} catch (err) {
 					log.error(
@@ -609,7 +662,7 @@ export async function ensureRoomyThreads(
 			}
 
 			if (created > 0) {
-				markRunWork(spaceDid);
+				markRunWork(workSpaces, spaceDid);
 				log.info(
 					`Created ${created} Roomy threads in ${spaceDid} and backfilled their messages`,
 				);
@@ -828,6 +881,7 @@ export async function backfillRecentWindow(
 	guildId: string,
 	kind: "channel" | "thread" | null,
 	parentId?: string | null,
+	workSpaces?: RunWorkSpaces,
 ): Promise<void> {
 	const existing = repo.getBackfillProgress(spaceDid, channelId);
 	const channelName =
@@ -935,7 +989,7 @@ export async function backfillRecentWindow(
 	}
 
 	if (reachedStart) {
-		if (existing?.phase !== "complete") markRunWork(spaceDid);
+		if (existing?.phase !== "complete") markRunWork(workSpaces, spaceDid);
 		flush("complete");
 		log.info(
 			`Channel ${channelId} → ${spaceDid} backfill complete in Phase 1: ${synced} synced, ${skipped} skipped`,
@@ -969,6 +1023,7 @@ export async function backfillChannel(
 	spaceDid: string,
 	guildIdOverride?: string,
 	parentId?: string | null,
+	workSpaces?: RunWorkSpaces,
 ): Promise<void> {
 	const key = `${channelId}:${spaceDid}`;
 	if (activeBackfills.has(key)) {
@@ -1033,6 +1088,7 @@ export async function backfillChannel(
 				guildId,
 				kind,
 				parentId ?? cachedChannel?.parentId ?? null,
+				workSpaces,
 			);
 		}
 
@@ -1189,7 +1245,7 @@ export async function backfillChannel(
 		}
 
 		if (!walkStalled) {
-			if (progress2?.phase !== "complete") markRunWork(spaceDid);
+			if (progress2?.phase !== "complete") markRunWork(workSpaces, spaceDid);
 			repo.upsertBackfillProgress({
 				spaceDid,
 				channelId,
@@ -1231,6 +1287,7 @@ export async function ensureAndBackfillArchivedThreads(
 	repo: BridgeRepository,
 	roomy: RoomyGateway,
 	configs: BridgeConfig[],
+	workSpaces?: RunWorkSpaces,
 ): Promise<void> {
 	log.info("Starting archived thread backfill...");
 
@@ -1347,6 +1404,7 @@ export async function ensureAndBackfillArchivedThreads(
 								spaceDid,
 								guildId,
 								thread.parentId ?? null,
+								workSpaces,
 							);
 
 							await delay(BACKFILL_DELAY_MS);
