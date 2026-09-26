@@ -49,13 +49,28 @@ export interface QueueJob {
   error?: string;
 }
 
+/**
+ * A finished job as retained in `done[]`. Status visibility only needs the
+ * job's identity and timing — the payload (a mention event carries the whole
+ * message body) is dead weight at ~18 KB per entry, so `done[]` drops it.
+ */
+export interface QueueJobSummary {
+  id: string;
+  kind: "mention" | "cron";
+  status: QueueJobStatus;
+  enqueuedAt: number;
+  startedAt?: number;
+  finishedAt?: number;
+  error?: string;
+}
+
 export interface QueueState {
   version: 1;
   /** Monotonic job counter — stable ordering key for readers. */
   jobSeq: number;
   enqueued: QueueJob[];
   active: QueueJob | null;
-  done: QueueJob[];
+  done: QueueJobSummary[];
   updatedAt: number;
 }
 
@@ -66,6 +81,19 @@ export interface LockInfo {
   heartbeatAt?: number;
   stale: boolean;
 }
+
+/**
+ * A done entry read back from a file written before `done[]` carried
+ * summaries may still hold the full job payload. Drop it: the entry parses,
+ * and the next write persists the summary form (that write is the migration —
+ * no schema-version bump).
+ */
+const toDoneSummary = (entry: QueueJobSummary): QueueJobSummary => {
+  const { payload: _legacyPayload, ...summary } = entry as QueueJobSummary & {
+    payload?: QueueJobPayload;
+  };
+  return summary;
+};
 
 const EMPTY_STATE = (): QueueState => ({
   version: 1,
@@ -156,14 +184,14 @@ export class QueueStore {
     const state = this.#read();
     if (!state.active || state.active.id !== id) return;
     const now = Date.now();
-    const job: QueueJob = {
+    const { payload: _unretained, ...summary } = {
       ...state.active,
       status,
       finishedAt: now,
       ...(error !== undefined ? { error } : {}),
     };
     state.active = null;
-    state.done.push(job);
+    state.done.push(summary);
     if (state.done.length > DONE_CAP) state.done.splice(0, state.done.length - DONE_CAP);
     state.updatedAt = now;
     this.#write(state);
@@ -199,7 +227,7 @@ export class QueueStore {
         jobSeq: typeof parsed.jobSeq === "number" ? parsed.jobSeq : 0,
         enqueued: Array.isArray(parsed.enqueued) ? parsed.enqueued : [],
         active: parsed.active ?? null,
-        done: Array.isArray(parsed.done) ? parsed.done : [],
+        done: Array.isArray(parsed.done) ? parsed.done.map(toDoneSummary) : [],
         updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
       };
     } catch {
