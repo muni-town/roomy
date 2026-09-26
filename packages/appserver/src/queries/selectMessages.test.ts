@@ -362,14 +362,13 @@ describe("selectMessages nested forwards", () => {
 });
 
 describe("selectMessages room ordering", () => {
-  test("orders by sort_idx, not entity id (so SQLite can use idx_entities_room_sort)", async () => {
+  test("orders by sort_idx, not entity id", async () => {
     const db = freshSpaceDb();
     const roomId = newUlid();
 
     // Insert three messages whose ids are in the OPPOSITE order to their
-    // sort_idx. Ordering by id (or coalesce(sort_idx, id) with a NULL
-    // sort_idx) would return them wrong; ordering by sort_idx directly uses
-    // the index and follows the canonical timestamp, not the event id.
+    // sort_idx. Ordering by id would return them wrong; ordering by sort_idx
+    // follows the canonical timestamp, not the event id.
     const mk = (id: string, sortIdx: string, body: string) => ({
       id,
       sortIdx,

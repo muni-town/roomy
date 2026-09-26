@@ -51,6 +51,17 @@ create index if not exists idx_entities_room on entities (room, id desc);
 -- aggregates scan every entity in the room. Purely additive/idempotent.
 create index if not exists idx_entities_room_sort on entities (room, sort_idx);
 
+-- The room timeline's page key: `selectMessages` orders a room's messages by
+-- `coalesce(sort_idx, id)` descending and seeks the next page on that same
+-- expression, tie-broken by id. It needs an index matching the ORDER BY
+-- expression exactly — `idx_entities_room_sort` cannot serve it, so ordering by
+-- the expression without this index degrades to a temp-B-tree sort of every
+-- entity in the room. `coalesce` is stored because the expression must match:
+-- `sort_idx` alone is not the key, and rows the materialiser never sorted fall
+-- back to their id.
+create index if not exists idx_entities_room_sort_key
+  on entities (room, coalesce(sort_idx, id), id);
+
 create table if not exists edges (
     head text not null, -- did or ulid
     tail text not null, -- did or ulid

@@ -142,6 +142,25 @@ interface BaseRow {
   forward_target_room_name: string | null;
 }
 
+/**
+ * The timeline key a cursor names: the message's `sort_idx`, or its id when the
+ * message was never sorted (system messages such as `joinSpace` and
+ * `createRoomLink` materialise without one).
+ *
+ * A client pages backward by sending the id of the oldest message it holds —
+ * ids are what a message object carries, so the cursor is an id and the key is
+ * derived here rather than being carried on the wire. A cursor naming no
+ * materialised row falls back to the cursor itself, which is the key such a
+ * message would have had; an unresolvable cursor pages as if it were a sorted
+ * key instead of silently restarting from the newest page.
+ */
+async function resolveCursorKey(db: DbLike, cursorId: string): Promise<string> {
+  const row = await db
+    .query("select coalesce(sort_idx, id) as key from entities where id = ?")
+    .get<{ key: string }>(cursorId);
+  return row?.key ?? cursorId;
+}
+
 export async function selectMessages(
   db: DbLike,
   scope: SelectScope,
@@ -150,6 +169,21 @@ export async function selectMessages(
   // ── Step 1: pull the base rows ────────────────────────────────────────
   let baseRows: BaseRow[];
   if (scope.kind === "room") {
+    // Order and filter on the SAME key. The cursor a client sends is a message
+    // id, but the page is ordered by the timeline key `coalesce(sort_idx, id)`:
+    // `sort_idx` is the canonical message time (a bridge-supplied
+    // `timestampOverride` puts the Discord send time there) while the id is the
+    // ingest ULID, so the two orders run opposite each other for bridged
+    // backfill and an id-only filter drops and repeats rows. The cursor is
+    // resolved to its own timeline key first, then compared as a keyset with
+    // `id` as the tie-break — without the tie-break a page boundary inside a run
+    // of equal keys is unstable.
+    //
+    // This needs `idx_entities_room_sort_key (room, coalesce(sort_idx, id), id)`
+    // to walk the index and stop after the limit. Ordering by a plain expression
+    // without that index falls back to a temp-B-tree sort of every entity in the
+    // room, which is catastrophic on a large bridged channel.
+    const cursorKey = scope.cursor ? await resolveCursorKey(db, scope.cursor) : null;
     const sql = `
       select
         e.id as id,
@@ -184,19 +218,16 @@ export async function selectMessages(
         on forward_target_room_info.entity = forward_target_entity.room
       where e.room = ?1
         and (cc.entity is not null or forward_e.tail is not null)
-        ${scope.cursor ? "and e.id < ?2" : ""}
-      -- Order by sort_idx directly (not coalesce(sort_idx, id)) so SQLite can
-      -- use idx_entities_room_sort and stop after the limit. Messages always
-      -- have sort_idx set by the materializer, so the coalesce fallback to id
-      -- never applies to the rows this filter keeps; the coalesce instead
-      -- forces a full temp-B-tree sort of every entity in the room, which is
-      -- catastrophic on a large bridged channel.
-      order by e.sort_idx desc
+        ${cursorKey !== null
+          ? `and (coalesce(e.sort_idx, e.id) < ?2
+                  or (coalesce(e.sort_idx, e.id) = ?2 and e.id < ?3))`
+          : ""}
+      order by coalesce(e.sort_idx, e.id) desc, e.id desc
       limit ${Math.max(1, Math.min(scope.limit, 100))}
     `;
     const stmt = db.query(sql);
-    baseRows = scope.cursor
-      ? await stmt.all([scope.roomId, scope.cursor])
+    baseRows = cursorKey !== null
+      ? await stmt.all([scope.roomId, cursorKey, scope.cursor])
       : await stmt.all([scope.roomId]);
   } else {
     if (scope.ids.length === 0) {
@@ -556,12 +587,13 @@ export async function selectMessages(
   await resolveSystemMessageNames(messages);
 
   // Sort ascending so callers get oldest → newest (matches spec example).
-  // sort_idx is set by the materializer for messages (using the canonical
-  // timestamp from the ULID or timestampOverride extension). Fall back to
-  // entity id (ULID-encoded timestamp) for entities without sort_idx.
-  messages.sort((a, b) =>
-    (a.sort_idx ?? a.id).localeCompare(b.sort_idx ?? b.id),
-  );
+  // This is the reverse of the SQL page order, and it must agree with it
+  // exactly: a page boundary that falls inside a run of equal keys is only
+  // stable if both orders break the tie by id.
+  messages.sort((a, b) => {
+    const byKey = (a.sort_idx ?? a.id).localeCompare(b.sort_idx ?? b.id);
+    return byKey !== 0 ? byKey : a.id.localeCompare(b.id);
+  });
 
   // Pagination cursor: only meaningful for room scope.
   let nextCursor: string | null = null;

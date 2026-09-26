@@ -16,6 +16,7 @@ import {
   startAppserver,
   materializeSpace,
   seedJoinedSpace,
+  seedMembership,
   seedSpace,
   type E2eContext,
 } from "./helpers.ts";
@@ -441,4 +442,170 @@ describe("room-scoped endpoints 404 for an unknown room", () => {
     const res = await get(ctx, `space.roomy.room.getMessages?roomId=${newUlid()}`);
     expect(res.status).toBe(404);
   });
+});
+
+/**
+ * Pagination over a room whose page order and entity-id order disagree.
+ *
+ * `getMessages` pages one message at a time by feeding the endpoint's own
+ * `cursor` back in (the client sends the oldest id it holds), so a full walk is
+ * the contract that matters: every message exactly once, nothing skipped.
+ *
+ * The cursor is an entity id, but the page is ordered by `sort_idx`. The two
+ * coincide for ordinary messages (both derive from the event ULID) and diverge
+ * for the two shapes the Discord bridge produces:
+ *
+ *   - a `timestampOverride` extension puts the Discord send time in `sort_idx`
+ *     while the id stays the ingest ULID, and backfill ingests newest-first, so
+ *     the two orders run opposite each other;
+ *   - a bulk import gives many rows the same `sort_idx`, so the tie-break
+ *     decides the page boundary.
+ *
+ * System messages (`joinSpace`, `createRoomLink`) carry no `sort_idx` at all,
+ * so the walk also covers a room containing rows the materialiser never sorted.
+ */
+describe("getMessages paging walks the whole room", () => {
+  const PAGED_SPACE = "did:web:space-paging.example";
+  /** Enough messages to need several pages at the endpoint's 50-row limit. */
+  const SEEDED = 120;
+
+  /**
+   * Materialise a channel plus `count` messages, each stamped with an explicit
+   * `sortIdx`. `sortIdxFor` returns the `sort_idx` a message should carry, or
+   * null to leave it unset (an unsorted row).
+   */
+  async function seedChannel(
+    ctx: E2eContext,
+    count: number,
+    sortIdxFor: (index: number) => number | null,
+  ): Promise<{ roomId: string; ids: string[] }> {
+    seedSpace(ctx.db, PAGED_SPACE, USER, { allowPublicJoin: 1 });
+    seedJoinedSpace(ctx.db, USER, PAGED_SPACE);
+    seedMembership(ctx.db, PAGED_SPACE, USER, "admin");
+
+    const roomId = newUlid();
+    await sendEvents(ctx, [
+      { id: roomId, $type: "space.roomy.room.createRoom.v0", kind: "space.roomy.channel", name: "general" },
+    ]);
+
+    // One batch per 50 events — the endpoint's own MAX_BATCH_SIZE.
+    const ids: string[] = [];
+    for (let start = 0; start < count; start += 50) {
+      const batch = [];
+      for (let i = start; i < Math.min(start + 50, count); i++) {
+        const ts = sortIdxFor(i);
+        const id = newUlid();
+        ids.push(id);
+        batch.push({
+          id,
+          $type: "space.roomy.message.createMessage.v0",
+          room: roomId,
+          body: { mimeType: "text/plain", data: { $bytes: Buffer.from(`m${i}`).toString("base64") } },
+          extensions:
+            ts === null
+              ? {}
+              : {
+                  "space.roomy.extension.timestampOverride.v0": {
+                    $type: "space.roomy.extension.timestampOverride.v0",
+                    timestamp: ts,
+                  },
+                },
+        });
+      }
+      await sendEvents(ctx, batch);
+    }
+    return { roomId, ids };
+  }
+
+  async function sendEvents(ctx: E2eContext, events: unknown[]): Promise<void> {
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
+      { method: "POST", body: JSON.stringify({ spaceId: PAGED_SPACE, events }) },
+    );
+    if (res.status !== 200) throw new Error(`sendEvents failed ${res.status}: ${await res.text()}`);
+  }
+
+  /** Walk the room with the endpoint's own cursor until it stops returning. */
+  async function walk(ctx: E2eContext, roomId: string): Promise<string[]> {
+    const walked: string[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 50; page++) {
+      const params = new URLSearchParams({ roomId, limit: "50" });
+      if (cursor) params.set("cursor", cursor);
+      const res = await get(ctx, `space.roomy.room.getMessages?${params}`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { messages: Array<{ id: string }>; cursor?: string };
+      if (body.messages.length === 0) break;
+      walked.push(...body.messages.map((m) => m.id));
+      // The client pages from the oldest id it holds, which is what the
+      // response's own cursor names as well.
+      cursor = body.messages[0]!.id;
+      if (!body.cursor) break;
+    }
+    return walked;
+  }
+
+  test("returns every message exactly once when sort order opposes id order", async () => {
+    const ctx = await startAppserver();
+    // Newest send time gets the lowest index, so the ingest order (ids ascend
+    // with index) runs opposite the page order — the bridged-backfill shape.
+    const base = Date.UTC(2024, 0, 1);
+    const { roomId, ids } = await seedChannel(ctx, SEEDED, (i) => base + (SEEDED - i) * 1000);
+
+    const walked = await walk(ctx, roomId);
+    expect(new Set(walked).size).toBe(ids.length);
+    expect(walked.length).toBe(ids.length);
+  }, 60000);
+
+  test("returns every message exactly once when many share one sort key", async () => {
+    const ctx = await startAppserver();
+    // A bulk import: every message carries the same canonical timestamp, so the
+    // page boundary falls inside one run of equal keys.
+    const { roomId, ids } = await seedChannel(ctx, SEEDED, () => Date.UTC(2024, 5, 1));
+
+    const walked = await walk(ctx, roomId);
+    expect(new Set(walked).size).toBe(ids.length);
+    expect(walked.length).toBe(ids.length);
+  }, 60000);
+
+  test("returns every message exactly once when some rows have no sort key", async () => {
+    const ctx = await startAppserver();
+    const base = Date.UTC(2024, 0, 1);
+    // Every seventh message sorts by nothing (an unsorted row), the rest page in
+    // the opposite order to their ids.
+    const { roomId, ids } = await seedChannel(ctx, SEEDED, (i) =>
+      i % 7 === 3 ? null : base + (SEEDED - i) * 1000,
+    );
+
+    const walked = await walk(ctx, roomId);
+    expect(new Set(walked).size).toBe(ids.length);
+    expect(walked.length).toBe(ids.length);
+  }, 60000);
+
+  test("includes a system message that carries no sort key", async () => {
+    const ctx = await startAppserver();
+    const base = Date.UTC(2024, 0, 1);
+    // The ordinary messages page in the order opposite their ids, so the walk
+    // has to cross page boundaries to reach the unsorted system message.
+    const { roomId, ids } = await seedChannel(ctx, SEEDED, (i) => base + (SEEDED - i) * 1000);
+
+    // A member joining posts a system message into the channel's room with no
+    // `sort_idx` — the shape `seedChannel` cannot produce.
+    const joinRes = await ctx.authedFetch(OTHER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          spaceId: PAGED_SPACE,
+          events: [{ id: newUlid(), $type: "space.roomy.space.joinSpace.v0" }],
+        }),
+      },
+    );
+    expect(joinRes.status).toBe(200);
+
+    const walked = await walk(ctx, roomId);
+    // The join system message is a message in this room and must be reachable.
+    expect(new Set(walked).size).toBe(ids.length + 1);
+    expect(walked.length).toBe(ids.length + 1);
+  }, 60000);
 });
