@@ -82,7 +82,7 @@ jobs:
           pnpm -w add @tauri-apps/cli@2.11
           pnpm turbo run build-lib
           cd ./packages/app-lite
-          pnpm tauri icon ./src-tauri/icon.manifest.json 
+          pnpm tauri icon ./src-tauri/icons.manifest.json 
           pnpm build
 
       - name: Init android
@@ -91,7 +91,7 @@ jobs:
           cd ./packages/app-lite
           pnpm tauri android init
           # run generate icons again to overwrite default tauri icon
-          pnpm tauri icon ./src-tauri/icon.manifest.json
+          pnpm tauri icon ./src-tauri/icons.manifest.json
           ./scripts/copy-android-assets.sh
           cd ./src-tauri/gen/android
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
@@ -383,6 +383,55 @@ jobs:
             exit 1
           fi
           echo "Pinned xcode-script to the driver CLI."
+
+      - name: Generate app icons into the Xcode catalog
+        run: |
+          cd ./packages/app-lite
+          # `ios init` synthesises Assets.xcassets/AppIcon.appiconset from the
+          # CLI's own vendored template icon, NOT from this repo's artwork, so
+          # the app ships Tauri's placeholder artwork unless it is overwritten
+          # here. `tauri icon` writes into that same catalog once it exists
+          # (icon.rs prefers `gen/apple/Assets.xcassets/AppIcon.appiconset` and
+          # only falls back to `icons/ios`), which is why this must run AFTER
+          # `ios init`.
+          #
+          # The manifest is `icons.manifest.json`. The desktop step's
+          # `icon.manifest.json` is not a real path — it has never existed in
+          # this repo — so that invocation only ever errored out.
+          ICON=src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+          [ -f "$ICON" ] || { echo "::error::No AppIcon set at $ICON; ios init output changed."; exit 1; }
+          before="$(shasum -a 256 "$ICON" | cut -d' ' -f1)"
+          pnpm dlx @tauri-apps/cli@2.12.0 icon ./src-tauri/icons.manifest.json
+          after="$(shasum -a 256 "$ICON" | cut -d' ' -f1)"
+          # Guard the exact failure this step exists to fix: if the command
+          # no-ops, the catalog still holds the template icon `ios init` wrote.
+          if [ "$before" = "$after" ]; then
+            echo "::error::AppIcon unchanged after 'tauri icon' — brand icon not applied."
+            exit 1
+          fi
+
+          # ── Drop the alpha channel ───────────────────────────────────────
+          # `tauri icon` always encodes 8-bit RGBA (the `image` crate writes
+          # the Rgba8 buffer it builds), even though the source PNG has no
+          # alpha and the iOS entries are composited onto an opaque
+          # background. actool does not strip it, so the channel would reach
+          # the .app — and App Store Connect rejects an app icon that "can't
+          # be transparent nor contain an alpha channel".
+          #
+          # The artwork is fully opaque, so this is a pure format change.
+          # Done in stdlib Python because the runner has no image library
+          # that preserves colour (sips cannot drop alpha at all; pngcrush
+          # rewrites pixel data).
+          python3 scripts/flatten-png-alpha.py \
+            src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/*.png
+          # Fail if any entry still carries alpha, rather than uploading a
+          # build that Apple will reject late.
+          if sips -g hasAlpha src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/*.png 2>/dev/null \
+               | grep -q 'hasAlpha: yes'; then
+            echo "::error::AppIcon entries still contain an alpha channel."
+            exit 1
+          fi
+          echo "App icon generated from icons.manifest.json (alpha stripped)."
 
       - name: Build iOS archive and IPA
         env:
