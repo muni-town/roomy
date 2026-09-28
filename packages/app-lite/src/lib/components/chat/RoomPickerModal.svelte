@@ -8,7 +8,8 @@
   } from "@roomy/design/components/modals/RoomPickerModal.svelte";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createSearchRoomsQuery } from "$lib/queries/search-rooms";
-  import { forwardMessage, moveMessages } from "$lib/mutations/message";
+  import { forwardMessages, moveMessages } from "$lib/mutations/message";
+  import type { Message } from "$lib/queries/messages";
   import ChatInput from "./ChatInput.svelte";
   import { messagingState } from "./messaging-state.svelte";
   import { createMentionSearch } from "$lib/tiptap/mentions";
@@ -22,7 +23,7 @@
     mode = "forward",
     spaceId,
     fromRoomId,
-    messageIds,
+    messages,
   }: {
     open: boolean;
     /** `forward` cross-posts as new forward messages (with commentary);
@@ -31,8 +32,10 @@
     spaceId: string;
     /** The room the forwarded/moved messages currently live in. */
     fromRoomId: string;
-    /** The message(s) to forward or move. */
-    messageIds: string[];
+    /** The messages to forward or move. Kept in full (not just their ids):
+     *  forwarding has to order them by the source room's timeline key, which
+     *  is the `sort_idx` the server returned with each message. */
+    messages: Message[];
   } = $props();
 
   // Composer body, bound from ChatInput. `body`/`bodyBlocks` mirror the
@@ -181,17 +184,17 @@
     // empty (or only-pasted) commentary would otherwise take the legacy
     // markdown branch.
     const blocks = composerRef?.getBlocks() ?? bodyBlocks ?? [];
+    // One destination room, one ordered batch. Sending the destinations in
+    // parallel is fine — they are independent rooms — but the messages within
+    // a room must stay in source-timeline order, which `forwardMessages`
+    // enforces (it sorts the targets and stamps increasing canonical times).
     await Promise.all(
       roomIds.map((roomId) =>
-        Promise.all(
-          messageIds.map((messageId) =>
-            forwardMessage(spaceId, fromRoomId, messageId, roomId, { blocks }),
-          ),
-        ),
+        forwardMessages(spaceId, fromRoomId, roomId, messages, { blocks }),
       ),
     );
     toast.success(
-      `Forwarded ${messageIds.length} message${messageIds.length > 1 ? "s" : ""} to ${roomIds.length} room${roomIds.length > 1 ? "s" : ""}`,
+      `Forwarded ${messages.length} message${messages.length > 1 ? "s" : ""} to ${roomIds.length} room${roomIds.length > 1 ? "s" : ""}`,
     );
     consumeSelection();
   }
@@ -199,9 +202,14 @@
   async function handleMove(roomIds: string[]) {
     const toRoomId = roomIds[0];
     if (!toRoomId) return;
-    await moveMessages(spaceId, fromRoomId, messageIds, toRoomId);
+    await moveMessages(
+      spaceId,
+      fromRoomId,
+      messages.map((m) => m.id),
+      toRoomId,
+    );
     toast.success(
-      `Moved ${messageIds.length} message${messageIds.length > 1 ? "s" : ""}`,
+      `Moved ${messages.length} message${messages.length > 1 ? "s" : ""}`,
     );
     consumeSelection();
   }

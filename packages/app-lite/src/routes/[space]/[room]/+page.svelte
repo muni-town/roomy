@@ -414,7 +414,7 @@
       bind:open={isForwardModalOpen}
       spaceId={effectiveSpaceId}
       fromRoomId={forwardSourceRoom}
-      messageIds={forwardMessages.map((m) => m.id)}
+      messages={forwardMessages}
     />
   {/if}
 
@@ -424,7 +424,7 @@
       mode="move"
       spaceId={effectiveSpaceId}
       fromRoomId={moveSourceRoom}
-      messageIds={moveTargets.map((m) => m.id)}
+      messages={moveTargets}
     />
   {/if}
 

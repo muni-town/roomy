@@ -442,7 +442,9 @@
     if (creatingThread) return;
 
     const name = state.name;
-    const selectedIds = state.selectedMessages.map((m) => m.id);
+    // The whole message objects, not just their ids: `createThread` orders the
+    // forwards by the timeline key the room returned with each message.
+    const selected = state.selectedMessages;
 
     creatingThread = true;
     try {
@@ -450,7 +452,7 @@
         spaceId,
         parentRoomId: roomId,
         threadName: name,
-        messageIds: selectedIds,
+        messages: selected,
       });
 
       messagingState.set({ kind: "normal", input: "", files: [], blocks: [], previewImages: [] });

@@ -8,6 +8,11 @@ import {
   startPendingSend,
 } from "./pending-sends.svelte";
 import { sendEvents } from "./send-events";
+import {
+  buildForwardEvents,
+  MAX_EVENTS_PER_SEND,
+  type ForwardTarget,
+} from "./forward";
 
 /** Base64 of a message body, matching the appserver's `decodeContent` (which
  *  base64-encodes every non-`text/*` body for the wire). */
@@ -301,43 +306,34 @@ export async function moveMessages(
 }
 
 /**
- * Forward a message into another room as an embed, with an optional
- * blocks+facets commentary body.
+ * Forward messages into another room as embeds, in the order they appear in
+ * the source room's timeline.
  *
- * Like {@link sendMessage}, the commentary is always blocks+facets — an
- * empty `blocks` array means "forward with no commentary".
+ * Each destination room gets ONE `sendEvents` call carrying every forward, in
+ * source order and with distinct increasing canonical timestamps — see
+ * `forward.ts` for why both are required. A selection larger than the
+ * endpoint's batch cap is split across calls; the timestamps keep increasing
+ * across the split, so the destination order is the same either way.
  */
-export async function forwardMessage(
+export async function forwardMessages(
   spaceId: string,
   fromRoomId: string,
-  messageId: string,
   toRoomId: string,
+  targets: readonly ForwardTarget[],
   opts: {
     /** Blocks+facets commentary body. Omit/empty for a bare forward. */
     blocks: Block[];
   },
-): Promise<string> {
-  const id = newUlid();
-  const serialized = serializeBlocks(opts.blocks);
-  const event: Record<string, unknown> = {
-    id,
-    room: toRoomId,
-    $type: "space.roomy.message.createMessage.v0",
-    body: { mimeType: serialized.mimeType, data: toBytes(serialized.data) },
-    extensions: {
-      "space.roomy.extension.attachments.v0": {
-        $type: "space.roomy.extension.attachments.v0",
-        attachments: [
-          {
-            $type: "space.roomy.attachment.forward.v0",
-            target: messageId,
-            fromRoomId,
-          },
-        ],
-      },
-    },
-  };
-
-  await sendEvents(spaceId, [event]);
-  return id;
+): Promise<void> {
+  if (targets.length === 0) return;
+  const events = buildForwardEvents(
+    fromRoomId,
+    toRoomId,
+    targets,
+    opts.blocks,
+    Date.now(),
+  );
+  for (let i = 0; i < events.length; i += MAX_EVENTS_PER_SEND) {
+    await sendEvents(spaceId, events.slice(i, i + MAX_EVENTS_PER_SEND));
+  }
 }
