@@ -6,6 +6,11 @@
   import { createPushPreferencesQuery } from "$lib/queries/push-preferences";
   import { setDefaultPushLevel, type PushLevel } from "$lib/mutations/push-preferences";
   import { ensurePushSubscription, clearPushSubscription, pushOutcomeMessage } from "$lib/push.svelte";
+  import {
+    PUSH_UNAVAILABLE_MESSAGES,
+    classifyPushUnavailable,
+    readIosStandaloneCapabilities,
+  } from "$lib/push-support";
   import { queryClient } from "$lib/client";
   import { toast } from "@foxui/core";
 
@@ -23,6 +28,13 @@
 
   // ── Push capability + permission state (browser-side, not on the server) ──
   let pushSupported = $state(false);
+  // Why push is unavailable, when it is: the two iOS states need the install
+  // (or iOS-update) step, everything else gets the browser advice. Derived, so
+  // the first paint already carries the right advice instead of flashing the
+  // generic sentence until `refreshStatus` resolves.
+  let unavailableReason = $derived(
+    pushSupported ? null : classifyPushUnavailable(readIosStandaloneCapabilities()),
+  );
   let permission = $state<NotificationPermission>("default");
   let endpoint = $state<string | null>(null); // registered PushSubscription endpoint
   let enabling = $state(false);
@@ -116,9 +128,7 @@
   <section>
     {#if !pushSupported}
       <p class="text-sm text-base-400">
-        Web push isn't supported in this browser. Use a supported browser
-        (Firefox, Chrome, Edge, Brave, or Safari 16.1+) to receive
-        notifications.
+        {PUSH_UNAVAILABLE_MESSAGES[unavailableReason ?? "browser-unsupported"]}
       </p>
     {:else}
       <div class="flex flex-col gap-3">
