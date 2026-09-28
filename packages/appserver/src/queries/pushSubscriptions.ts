@@ -8,13 +8,37 @@
 
 import type { DbLike } from "../db/types.ts";
 
-export interface PushSubscriptionRow {
+export type PushSubscriptionRow = {
   userDid: string;
+  /** WebPush: push service URL | FCM: token | APNs: device token */
   endpoint: string;
-  p256dh: string;
-  auth: string;
-  expirationTime: number | null;
+  createdAt: number;
+  lastUsedAt: number | null;
+  transport: "webPush" | "sse" | "fcm" | "apn";
+} & (
+    | { transport: 'fcm'; data: null; }
+    | { transport: 'sse'; data: null; }
+    | {
+      transport: 'webPush';
+      data: { p256dh: string; auth: string; expirationTime: number; }
+    }
+    | {
+      transport: 'apn';
+      data: { bundleId: string, environment: "sandbox" | "production" | null; }
+    }
+  )
+
+export type PushSubscriptionRowRaw = {
+  userDid: string;
+  /** WebPush: push service URL | FCM: token | APNs: device token */
+  endpoint: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+  transport: string
+  keys: string | null
+  meta: string | null
 }
+
 
 /** Upsert a subscription for `(userDid, endpoint)`. Idempotent on endpoint. */
 export async function upsertSubscription(
