@@ -96,6 +96,22 @@
         (retry / discard). Only rendered when `deliveryState` is `failed`. */
     deliveryActions?: Snippet;
   } = $props();
+
+  /**
+   * Classes for the sticky anchor that carries the toolbar (see the markup).
+   *
+   * `-mx-2` widens the anchor to the root's padding box, which is the box the
+   * toolbar's `right-0` was measured against before it moved inside the anchor;
+   * `-mt-*`/`mb-*` re-align its top edge with the root's padding box, cancelling
+   * the root's `pt-*` without contributing any height, so nothing on the row
+   * moves. The `top-*` values are the toolbar's own `-top-4` / `-top-9` offset
+   * plus 8px, so a stuck toolbar's top edge lands 8px below the chat area's top.
+   */
+  let toolbarAnchorClass = $derived(
+    `sticky ${mergeWithPrevious ? "top-11" : "top-6"} z-30 h-0 -mx-2 ${
+      mergeWithPrevious ? "" : compact ? "-mt-0.5 mb-0.5" : "-mt-1 mb-1"
+    }`,
+  );
 </script>
 
 {#snippet timestampLabel(date: Date)}
@@ -126,6 +142,28 @@
     mergeWithPrevious ? "mt-1" : compact ? "mt-1.5 pt-0.5" : "mt-5 pt-1",
   ]}
 >
+  <!-- The message toolbar's sticky anchor, deliberately the root's first child
+       and always mounted (the toolbar inside it still mounts only when shown).
+
+       The chat list is virtualized, so each message is an absolutely
+       positioned row of a fixed-height container and the scroll container
+       (`ChatArea`'s viewport) is not an ancestor of the row's content box for
+       sticky purposes. A sticky element therefore travels inside its own row,
+       which only carries this message: the toolbar rides down the message as
+       you scroll into it and stops at the chat area's top edge — it does not
+       follow the whole timeline. That is the intended scope: the actions stay
+       reachable while you read *this* message, and release when the next
+       message's row takes over.
+
+       `h-0` with a margin pair that cancels the root's `pt-*` means the anchor
+       contributes no height and leaves the message's layout exactly where it
+       was; the toolbar keeps its own absolute placement inside it. -->
+  <div class={toolbarAnchorClass}>
+    {#if showToolbar && toolbar}
+      {@render toolbar()}
+    {/if}
+  </div>
+
   {#if deliveryState === "failed"}
     <!-- A rejected send: the marker sits above the message so it is visible
          without hover (unlike the message toolbar), carrying the retry /
@@ -302,10 +340,6 @@
       </div>
     {/if}
   </div>
-
-  {#if showToolbar && toolbar}
-    {@render toolbar()}
-  {/if}
 
   {#if reactions}
     {@render reactions()}

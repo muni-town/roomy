@@ -1,8 +1,7 @@
 # app-lite E2E UI coverage — plan
 
-**Status:** phase 1 landed (harness + first coverage). Phase 2 dispatchable from
-this document.
-**Updated:** 2026-09-25 (TASK-207)
+**Status:** phase 1 landed (harness + first coverage); phase 2 in progress.
+**Updated:** 2026-09-27
 **Suite:** `packages/app-lite/e2e/` · run with `pnpm --filter app-lite test:e2e`
 
 Meri's goal: "set up playwright and begin testing of app-lite behaviours, with a
@@ -22,6 +21,18 @@ phase can be dispatched without re-deriving the surface.
 | Seeder | `e2e/seed.ts` | Seeds user/space/membership directly; creates the room + message through the **real** `sendEvents` write path. |
 | Fixtures | `e2e/fixtures.ts` | Fixed IDs, ports, origins — shared by the Bun launcher and the Node specs. |
 | Spec helpers | `e2e/spec-helpers.ts` | Injects `X-Test-Did` on appserver requests; `waitForAuthenticated`; composer/message-list locators. |
+
+### The seeded world
+
+Three spaces, chosen so the permission surfaces are all expressible. The test
+user is an **admin** of the first two and a plain **member** of the third, where
+the messages are authored by a second account that administers it:
+
+| Space | Fixture | Why it exists |
+|---|---|---|
+| `E2E Test Space` | `SEED_SPACE_ID` | Two channels (`lobby`, `general`), so same-space navigation is expressible. The viewer is an admin and the author, so every toolbar action is offered. |
+| `E2E Second Space` | `SEED_SPACE_2_ID` | A second space, so cross-space navigation is expressible. |
+| `E2E Third Space` | `SEED_SPACE_3_ID` | The viewer is a member, not an admin, and the message is someone else's (`OTHER_USER_DID`), so author-or-admin surfaces are genuinely *absent* rather than merely untested. |
 
 ### Why this shape
 
@@ -58,10 +69,24 @@ phase can be dispatched without re-deriving the surface.
     `data-message-id` to the row would make reply/edit/delete/react assertions
     precise rather than text-scraping.
   - The composer is reachable only via `#chat-input [contenteditable="true"]`.
+- **A sticky element in the message list travels inside its own row.** virtua
+  absolutely-positions every row inside a fixed-height container, and the
+  scroll container is not an ancestor of the row's content box, so a row's
+  sticky child stops at the chat area's top edge with *that message* rather
+  than following the timeline. The message toolbar is built on this: the scope
+  is "stay reachable while reading this message", not "stay floating over the
+  whole chat". Anything needing timeline-wide stickiness cannot use a sticky
+  child of the row.
+- **The viewport is `[data-scroll-area-viewport]`** (bits-ui's `ScrollArea`),
+  not melt-ui's `data-melt-scroll-area-viewport` — app-lite imports ScrollArea
+  from `bits-ui` directly. A popover's portalled content carries
+  `[data-popover-content]`, which is the hook for the emoji picker (it has no
+  role or accessible name, and its search input only renders inside its Search
+  group).
 
 ---
 
-## 2. Covered now (27 tests)
+## 2. Covered now (38 tests)
 
 Every test below states the observable behaviour it defends.
 
@@ -124,6 +149,40 @@ Every test below states the observable behaviour it defends.
 |---|---|
 | activity in another room does not refetch the open room's messages | Diffs are stamped with a **per-connection** seq, so a connection's frames are contiguous even though delivery is selective. With a process-global seq, traffic in any room the viewer is not subscribed to read as a missed frame and refetched the visible room (~20 refetches for 20 messages; asserted ≤ 1). |
 
+### `badge-summary-refetch.spec.ts` — a doomed lookup is asked once
+| Test | Defends |
+|---|---|
+| a failed space/room summary is requested exactly once per session | `retryOnMount: false` is what stops a badge in a virtualized row from re-asking a query that has already failed deterministically, on every recycle. The bound is request count, not the UI. |
+
+### `delete-freeze.spec.ts` — the toolbar delete must not strand the body lock
+| Test | Defends |
+|---|---|
+| cancelling the confirm dialog leaves the page clickable | A dialog raised from the toolbar's open menu must not strand `pointer-events: none` on `<body>`, which swallowed every later click. |
+| confirming the delete leaves the room clickable | The same contract for the confirmed path, which also removes the row. |
+
+### `write-refusal.spec.ts` — a send the appserver refuses
+| Test | Defends |
+|---|---|
+| replaces the composer with the permission notice, refusing once | A caller whose write access is revoked while the app is open takes the `canWrite === false` composer notice rather than an opaque delivery failure, and the unchanged grant is not pressed into repeated refusals. |
+
+### `sticky-toolbar.spec.ts` — the toolbar while reading a tall message
+| Test | Defends |
+|---|---|
+| stays at the top of the chat area, and stays usable, once scrolled into the body | A message taller than the chat area keeps its toolbar on screen instead of carrying it off with the header. Asserts geometry (the toolbar's box against the chat viewport's box), not CSS visibility — `toBeVisible` is satisfied by an element thousands of pixels off-screen. |
+| keeps tracking the top of the chat area as the reader scrolls on | The toolbar is pinned rather than merely somewhere on screen: its offset from the chat area's top edge does not drift with the content it is pinned over. |
+
+### `message-toolbar-menu.spec.ts` — the "More actions" menu
+| Test | Defends |
+|---|---|
+| lists Delete last among the other actions | The full item set and its order, for a viewer entitled to every item. |
+| omits Delete, keeping every other item in order, when it may not delete | The `canDelete` gate still suppresses Delete and leaves the other items in order. Uses the third seeded space, where the viewer is a plain member and the message is someone else's — the one fixture where `canDelete` is false for a message the viewer can still act on. |
+
+### `toolbar-popover-keep-open.spec.ts` — popovers outlive the hover
+| Test | Defends |
+|---|---|
+| the actions menu stays open once the pointer leaves the row | The toolbar holds itself open for the lifetime of its menu, which portals to `body` — without it, the row's `mouseleave` unmounts the toolbar and takes the menu with it. |
+| the emoji picker stays open once the pointer leaves the row | The same contract for the emoji popover. |
+
 ### Deliberate-break evidence (acceptance criterion 2)
 
 Demonstrated, not asserted, on 2026-09-25:
@@ -147,6 +206,25 @@ Demonstrated, not asserted, on 2026-09-25:
    **failed** with 19 refetches of the open room for 20 messages posted to a
    room the page was not viewing — one per frame, which is the reported freeze.
 
+4. **Reverted the toolbar's sticky anchor** (`MessageBubble.svelte`, keeping
+   the specs and fixtures). Demonstrated 2026-09-27:
+   → both `sticky-toolbar.spec.ts` tests **failed**, with the toolbar measured
+   at −4105px from the chat area's top edge — the header's position, thousands
+   of pixels off-screen.
+   → `message-toolbar-menu.spec.ts`'s order test **passed**, so the failure is
+   attributable to the sticky change alone.
+   With the anchor restored the same tests measure **+11px**: on screen and
+   pinned. This is the discriminating pair the spec's geometry assertion exists
+   to produce; a visibility-only assertion passes in both states.
+
+5. **Reverted the Delete reorder** (`ToolbarShell.svelte`), keeping the specs.
+   Demonstrated 2026-09-27:
+   → `lists Delete last among the other actions` **failed**, receiving
+   `Edit, Delete, Forward, Move, Create Thread, Select`.
+   → `omits Delete, keeping every other item in order, when it may not delete`
+   **passed** — it only observes the `canDelete` gate, which that reorder does
+   not touch. Two specs, two distinct contracts.
+
 All breaks were reverted; the suite is green.
 
 ---
@@ -157,6 +235,8 @@ Ordered by value-per-effort. "Blocked by" names what must exist first.
 
 ### A. Message lifecycle (highest value — this is what the app *is*)
 Requires the `data-message-id` hook noted above for precise addressing.
+The third seeded space (member, other author) already supplies the permission
+half of these — it is what the toolbar-menu gating test uses.
 - Edit a message → edited body renders, `edited` marker shows. — *blocked by: row hook*
 - Delete a message (author + admin paths) → row disappears, survives reload. — *blocked by: row hook*
 - Reply to a message → reply context renders on the new row. — *blocked by: row hook*

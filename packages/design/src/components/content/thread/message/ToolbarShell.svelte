@@ -173,12 +173,6 @@
           Edit
         </ContextMenuItem>
       {/if}
-      {#if canDelete}
-        <ContextMenuItem variant="danger" onclick={onDelete}>
-          <IconTrash class="size-4" />
-          Delete
-        </ContextMenuItem>
-      {/if}
       <ContextMenuItem onclick={onForward}>
         <IconForward class="size-4" />
         Forward
@@ -203,6 +197,15 @@
         <IconCheckSquare class="size-4" />
         Select
       </ContextMenuItem>
+      {#if canDelete}
+        <!-- Last, deliberately: Delete is the one destructive item, so it sits
+             apart from the others at the end of the menu rather than between
+             Edit and Forward, where a mis-aimed click reaches it. -->
+        <ContextMenuItem variant="danger" onclick={onDelete}>
+          <IconTrash class="size-4" />
+          Delete
+        </ContextMenuItem>
+      {/if}
     </ContextMenu>
   </Toolbar.Root>
 </BitsTooltip.Provider>

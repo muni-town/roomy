@@ -36,6 +36,9 @@ import {
   spaceDb,
 } from "../../appserver/src/e2e/helpers.ts";
 import {
+  OTHER_USER_DID,
+  OTHER_USER_DISPLAY_NAME,
+  OTHER_USER_HANDLE,
   SEED_MESSAGE_ID,
   SEED_MESSAGE_TEXT,
   SEED_ROOM_2_ID,
@@ -50,6 +53,12 @@ import {
   SEED_SPACE_2_NAME,
   SEED_SPACE_2_ROOM_ID,
   SEED_SPACE_2_ROOM_NAME,
+  SEED_SPACE_3_CATEGORY_ID,
+  SEED_SPACE_3_ID,
+  SEED_SPACE_3_MESSAGE_TEXT,
+  SEED_SPACE_3_NAME,
+  SEED_SPACE_3_ROOM_ID,
+  SEED_SPACE_3_ROOM_NAME,
   SEED_SPACE_ID,
   SEED_SPACE_NAME,
   TEST_USER_DID,
@@ -74,17 +83,18 @@ function sidebarConfig(categoryId: string, roomIds: string[]): string {
   });
 }
 
-/** POST one event batch to `sendEvents` as the test user. */
+/** POST one event batch to `sendEvents` as `callerDid`. */
 async function sendEvents(
   origin: string,
   spaceId: string,
   events: Record<string, unknown>[],
+  callerDid: string = TEST_USER_DID,
 ): Promise<void> {
   const resp = await fetch(`${origin}/xrpc/space.roomy.space.sendEvents`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Test-Did": TEST_USER_DID,
+      "X-Test-Did": callerDid,
     },
     body: JSON.stringify({ spaceId, events }),
   });
@@ -101,15 +111,21 @@ async function createRoom(
   spaceId: string,
   roomId: string,
   name: string,
+  callerDid: string = TEST_USER_DID,
 ): Promise<void> {
-  await sendEvents(origin, spaceId, [
-    {
-      id: roomId,
-      $type: "space.roomy.room.createRoom.v0",
-      kind: "space.roomy.channel",
-      name,
-    },
-  ]);
+  await sendEvents(
+    origin,
+    spaceId,
+    [
+      {
+        id: roomId,
+        $type: "space.roomy.room.createRoom.v0",
+        kind: "space.roomy.channel",
+        name,
+      },
+    ],
+    callerDid,
+  );
 }
 
 /** Post one message into an existing channel through the real write path. */
@@ -119,22 +135,28 @@ async function createMessage(
   messageId: string,
   roomId: string,
   text: string,
+  callerDid: string = TEST_USER_DID,
 ): Promise<void> {
   const serialized = serializeBlocks([
     { $type: "space.roomy.richtext.blocks#text", text },
   ]);
-  await sendEvents(origin, spaceId, [
-    {
-      id: messageId,
-      room: roomId,
-      $type: "space.roomy.message.createMessage.v0",
-      body: {
-        mimeType: serialized.mimeType,
-        data: { $bytes: Buffer.from(serialized.data).toString("base64") },
+  await sendEvents(
+    origin,
+    spaceId,
+    [
+      {
+        id: messageId,
+        room: roomId,
+        $type: "space.roomy.message.createMessage.v0",
+        body: {
+          mimeType: serialized.mimeType,
+          data: { $bytes: Buffer.from(serialized.data).toString("base64") },
+        },
+        extensions: {},
       },
-      extensions: {},
-    },
-  ]);
+    ],
+    callerDid,
+  );
 }
 
 /**
@@ -152,46 +174,62 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
   // The handle matters: `getProfile` only falls through to a live Bluesky
   // fetch when the row has no usable handle.
   seedUser(db, TEST_USER_DID, TEST_USER_HANDLE);
+  seedUser(db, OTHER_USER_DID, OTHER_USER_HANDLE);
 
   // ── Spaces + memberships ─────────────────────────────────────────────
   for (const [spaceId, spaceName] of [
     [SEED_SPACE_ID, SEED_SPACE_NAME],
     [SEED_SPACE_2_ID, SEED_SPACE_2_NAME],
+    [SEED_SPACE_3_ID, SEED_SPACE_3_NAME],
   ] as const) {
     seedSpace(db, spaceId, TEST_USER_DID, { allowPublicJoin: 0 });
     // `getSpaces` reads `user_space_membership`; the joinedSpace edge is the
     // global-DB bookkeeping the federation path reads.
     seedJoinedSpace(db, TEST_USER_DID, spaceId);
-    // Admin, so the settings pages render their admin branches.
-    seedMembership(db, spaceId, TEST_USER_DID, "admin");
+
+    // Admin everywhere except the third space, so it is the one place the test
+    // user's moderation powers are absent (the seeded `member` edge from
+    // `seedSpace` is what they hold there).
+    if (spaceId !== SEED_SPACE_3_ID) {
+      seedMembership(db, spaceId, TEST_USER_DID, "admin");
+    }
 
     const space = spaceDb(db, spaceId);
     await space.run(
       "update comp_info set name = ?, description = ? where entity = ?",
       [spaceName, "A space seeded for end-to-end UI tests.", spaceId],
     );
+    // Author display name, which `selectMessages` reads from comp_info.
+    await space.run("update comp_info set name = ? where entity = ?", [
+      TEST_USER_DISPLAY_NAME,
+      TEST_USER_DID,
+    ]);
   }
+
+  // The third space's admin — the author of its seeded message, and therefore
+  // the reason that message is not the test user's to delete.
+  seedMembership(db, SEED_SPACE_3_ID, OTHER_USER_DID, "admin");
+  await spaceDb(db, SEED_SPACE_3_ID).run(
+    "update comp_info set name = ? where entity = ?",
+    [OTHER_USER_DISPLAY_NAME, OTHER_USER_DID],
+  );
 
   const space1 = spaceDb(db, SEED_SPACE_ID);
   await space1.run(
     "update comp_space set sidebar_config = ? where entity = ?",
     [sidebarConfig(SEED_SIDEBAR_CATEGORY_ID, [SEED_ROOM_ID, SEED_ROOM_2_ID]), SEED_SPACE_ID],
   );
-  // Author display name, which `selectMessages` reads from comp_info.
-  await space1.run("update comp_info set name = ? where entity = ?", [
-    TEST_USER_DISPLAY_NAME,
-    TEST_USER_DID,
-  ]);
 
   const space2 = spaceDb(db, SEED_SPACE_2_ID);
   await space2.run(
     "update comp_space set sidebar_config = ? where entity = ?",
     [sidebarConfig(SEED_SPACE_2_CATEGORY_ID, [SEED_SPACE_2_ROOM_ID]), SEED_SPACE_2_ID],
   );
-  await space2.run("update comp_info set name = ? where entity = ?", [
-    TEST_USER_DISPLAY_NAME,
-    TEST_USER_DID,
-  ]);
+
+  await spaceDb(db, SEED_SPACE_3_ID).run(
+    "update comp_space set sidebar_config = ? where entity = ?",
+    [sidebarConfig(SEED_SPACE_3_CATEGORY_ID, [SEED_SPACE_3_ROOM_ID]), SEED_SPACE_3_ID],
+  );
 
   // ── Rooms + messages, through the real write path ────────────────────
   // Two batches: a room created in the same batch as its message is rejected
@@ -227,6 +265,24 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     SEED_SPACE_2_MESSAGE_TEXT,
   );
 
+  // The third space's room and message are authored by its admin, so the
+  // message is one the test user may read but not delete.
+  await createRoom(
+    appserverOrigin,
+    SEED_SPACE_3_ID,
+    SEED_SPACE_3_ROOM_ID,
+    SEED_SPACE_3_ROOM_NAME,
+    OTHER_USER_DID,
+  );
+  await createMessage(
+    appserverOrigin,
+    SEED_SPACE_3_ID,
+    "01M3C8QTVSG74JEG1QBM3STVX4",
+    SEED_SPACE_3_ROOM_ID,
+    SEED_SPACE_3_MESSAGE_TEXT,
+    OTHER_USER_DID,
+  );
+
   // ── Feature flags ────────────────────────────────────────────────────
   // `search` gates the navbar search UI and the search routes; every flag
   // defaults to off in the appserver.
@@ -246,7 +302,7 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
 
   // Fail loudly here rather than as a confusing empty sidebar in a spec: the
   // spaces must resolve for this user.
-  for (const spaceId of [SEED_SPACE_ID, SEED_SPACE_2_ID]) {
+  for (const spaceId of [SEED_SPACE_ID, SEED_SPACE_2_ID, SEED_SPACE_3_ID]) {
     const membership = await readStateDb(db)
       .query(
         "select count(*) as n from user_space_membership where user_did = ? and space_did = ? and state = 'joined'",

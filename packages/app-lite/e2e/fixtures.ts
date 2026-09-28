@@ -64,6 +64,26 @@ export const SEED_SPACE_2_CATEGORY_ID = "01M3C8QTVS0000000000000003";
 export const SEED_SPACE_2_ROOM_ID = "01M3C8QTVS0000000000000004";
 export const SEED_SPACE_2_ROOM_NAME = "second-space-lobby";
 
+/**
+ * Third space, where the test user is a plain member and another account is
+ * the admin. Moderation surfaces are gated on author-or-admin, so expressing
+ * "a message this viewer may not delete" needs a message authored by someone
+ * else in a space the viewer does not administer — neither is expressible in
+ * the two spaces above, where the test user is an admin and the only author.
+ */
+export const SEED_SPACE_3_ID = "did:plc:e2espace3rd00000000000000";
+export const SEED_SPACE_3_NAME = "E2E Third Space";
+export const SEED_SPACE_3_CATEGORY_ID = "01M3C8QTVS0000000000000005";
+export const SEED_SPACE_3_ROOM_ID = "01M3C8QTVS0000000000000006";
+export const SEED_SPACE_3_ROOM_NAME = "third-space-lobby";
+/** The other account's message there, which the test user may not delete. */
+export const SEED_SPACE_3_MESSAGE_TEXT = "another account's message";
+
+/** The admin of the third space, and the author of its seeded message. */
+export const OTHER_USER_DID = "did:plc:e2eotheruser000000000000";
+export const OTHER_USER_HANDLE = "e2e.other.roomy.test";
+export const OTHER_USER_DISPLAY_NAME = "E2E Other User";
+
 /** Seeded message, materialised through the real `sendEvents` write path. */
 export const SEED_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVX1";
 export const SEED_MESSAGE_TEXT = "seeded message from the e2e fixture";
@@ -89,3 +109,5 @@ export const SEED_ROOM_PATH = `/${SEED_SPACE_ID}/${SEED_ROOM_ID}`;
 export const SEED_ROOM_2_PATH = `/${SEED_SPACE_ID}/${SEED_ROOM_2_ID}`;
 /** Path to the second space's channel. */
 export const SEED_SPACE_2_ROOM_PATH = `/${SEED_SPACE_2_ID}/${SEED_SPACE_2_ROOM_ID}`;
+/** Path to the third space's channel, where the viewer is a plain member. */
+export const SEED_SPACE_3_ROOM_PATH = `/${SEED_SPACE_3_ID}/${SEED_SPACE_3_ROOM_ID}`;
