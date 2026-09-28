@@ -13,6 +13,7 @@
   "permissions": [
     "deep-link:default",
     "updater:default",
-    "process:default"
+    "process:default",
+    "notification:default"
   ]
 }

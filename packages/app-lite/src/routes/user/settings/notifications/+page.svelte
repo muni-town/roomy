@@ -4,8 +4,15 @@
   import UpdateRhythmChooser from "@roomy/design/components/user/UpdateRhythmChooser.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import { createPushPreferencesQuery } from "$lib/queries/push-preferences";
-  import { setDefaultPushLevel, type PushLevel } from "$lib/mutations/push-preferences";
-  import { ensurePushSubscription, clearPushSubscription, pushOutcomeMessage } from "$lib/push.svelte";
+  import {
+    setDefaultPushLevel,
+    type PushLevel,
+  } from "$lib/mutations/push-preferences";
+  import {
+    ensurePushSubscription,
+    clearPushSubscription,
+    pushOutcomeMessage,
+  } from "$lib/push.svelte";
   import { queryClient } from "$lib/client";
   import { toast } from "@foxui/core";
 
@@ -21,6 +28,17 @@
     }
   });
 
+  type OsType = "linux" | "windows" | "macos" | "ios" | "android";
+  const PLATFORM = !("__TAURI__" in window)
+    ? "web"
+    : ["linux", "windows", "macos"].includes(
+          (
+            window.__TAURI__ as unknown as { os: { platform: () => OsType } }
+          ).os.platform(),
+        )
+      ? "desktop"
+      : "mobile";
+
   // ── Push capability + permission state (browser-side, not on the server) ──
   let pushSupported = $state(false);
   let permission = $state<NotificationPermission>("default");
@@ -31,21 +49,45 @@
 
   async function refreshStatus(): Promise<void> {
     pushSupported =
-      typeof navigator !== "undefined" &&
-      "serviceWorker" in navigator &&
-      "PushManager" in window &&
-      typeof Notification !== "undefined";
-    if (typeof Notification !== "undefined") {
-      permission = Notification.permission;
-    }
-    if (pushSupported) {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        endpoint = sub?.endpoint ?? null;
-      } catch {
-        endpoint = null;
-      }
+      PLATFORM !== "web" ||
+      (typeof navigator !== "undefined" &&
+        "serviceWorker" in navigator &&
+        "PushManager" in window &&
+        typeof Notification !== "undefined");
+
+    switch (PLATFORM) {
+      case "web":
+        {
+          if (typeof Notification !== "undefined") {
+            permission = Notification.permission;
+          }
+
+          if (pushSupported) {
+            try {
+              const reg = await navigator.serviceWorker.ready;
+              const sub = await reg.pushManager.getSubscription();
+              endpoint = sub?.endpoint ?? null;
+            } catch {
+              endpoint = null;
+            }
+          }
+        }
+        break;
+      case "desktop":
+        {
+          const { isPermissionGranted } =
+            await import("@tauri-apps/plugin-notification");
+
+          let permissionGranted = await isPermissionGranted();
+          permission = permissionGranted ? "granted" : "denied";
+          endpoint = " ";
+        }
+        break;
+      case "mobile":
+        {
+          permission = "denied";
+        }
+        break;
     }
   }
 
@@ -57,10 +99,53 @@
    * (e.g. vanilla Chromium without Google FCM keys) get visible feedback
    * instead of a silent console error.
    */
+  const platformRequestPermission = {
+    web: async () => {
+      const outcome = await ensurePushSubscription();
+      return outcome;
+    },
+    desktop: async () => {
+      const { requestPermission } =
+        await import("@tauri-apps/plugin-notification");
+      const granted = await requestPermission();
+      if (granted === "default") {
+        console.log("API CURSED. try something else");
+      }
+      endpoint = " ";
+      return { status: granted === "granted" ? "ok" : "denied" } as const;
+    },
+    mobile: async () => {
+      const { requestPermission, getToken } =
+        await import("tauri-plugin-mobile-push-api");
+      const { granted } = await requestPermission();
+
+      if (granted)
+        getToken().then(async (token) => {
+          endpoint = " ";
+      // TODO: https://github.com/yanqianglu/tauri-plugin-mobile-push#complete-registration-flow
+          /*
+        await fetch("https://roomy.space", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      token,
+                      platform: (
+                        window.__TAURI__ as unknown as {
+                          os: { platform: () => OsType };
+                        }
+                      ).os.platform(),
+                    }),
+                  });
+        */
+        });
+
+      return { status: granted ? "ok" : "denied" } as const;
+    },
+  };
+
   async function enableNotifications(): Promise<void> {
     enabling = true;
     try {
-      const outcome = await ensurePushSubscription();
+      const outcome = await platformRequestPermission[PLATFORM]();
       if (outcome.status === "ok") {
         toast.success("Notifications enabled");
         // Suppress the enable-notifications banner on other pages
@@ -70,7 +155,6 @@
         enableError = msg;
         toast.error(msg);
       }
-      await refreshStatus();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       enableError = msg;
@@ -81,22 +165,32 @@
   }
 
   /** Disable notifications for this device: unregister + unsubscribe. */
-  async function disableNotifications(): Promise<void> {
-    disabling = true;
-    try {
-      const outcome = await clearPushSubscription();
-      if (outcome.status === "ok") {
-        toast.success("Notifications disabled on this device");
-      } else if (outcome.status !== "unsupported") {
-        toast.error(pushOutcomeMessage(outcome));
+  const disableNotifications: Record<typeof PLATFORM, () => Promise<void>> = {
+    web: async (): Promise<void> => {
+      disabling = true;
+      try {
+        const outcome = await clearPushSubscription();
+        if (outcome.status === "ok") {
+          toast.success("Notifications disabled on this device");
+        } else if (outcome.status !== "unsupported") {
+          toast.error(pushOutcomeMessage(outcome));
+        }
+        await refreshStatus();
+      } catch (e) {
+        enableError = e instanceof Error ? e.message : String(e);
+      } finally {
+        disabling = false;
       }
-      await refreshStatus();
-    } catch (e) {
-      enableError = e instanceof Error ? e.message : String(e);
-    } finally {
-      disabling = false;
-    }
-  }
+    },
+    desktop: async () => {
+      disabling = true;
+      try {
+      } finally {
+        disabling = false;
+      }
+    },
+    mobile: async () => {},
+  };
 
   async function onChangeDefault(level: PushLevel): Promise<void> {
     defaultLevel = level;
@@ -132,7 +226,7 @@
             <Button
               size="sm"
               variant="secondary"
-              onclick={disableNotifications}
+              onclick={() => disableNotifications[PLATFORM]}
               disabled={disabling}
             >
               {disabling ? "Disabling…" : "Disable on this device"}
@@ -170,7 +264,10 @@
       {#if prefsQuery.isPending}
         <p class="text-sm text-base-400">Loading preferences…</p>
       {:else if prefsQuery.isError}
-        <ErrorMessage message="Error: {prefsQuery.error.message}" class="py-4" />
+        <ErrorMessage
+          message="Error: {prefsQuery.error.message}"
+          class="py-4"
+        />
       {:else if prefsQuery.data}
         <UpdateRhythmChooser
           value={defaultLevel}
