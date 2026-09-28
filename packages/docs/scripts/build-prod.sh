@@ -4,9 +4,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-pnpm build
-
 target_url=${OAUTH_HOST:?"OAUTH_HOST must be set (e.g. https://docs.roomy.space)"}
+export VITE_OAUTH_CLIENT_ID="${target_url}/oauth-client-metadata.json"
+
+pnpm build
 
 echo "Generating OAuth client configuration..."
 echo "OAuth Host URL: $target_url"

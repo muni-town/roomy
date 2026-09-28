@@ -3,7 +3,6 @@ import {
   initSession,
   login as sdkLogin,
   logout as sdkLogout,
-  saveAppserverDid,
   type OAuthSession,
 } from "@roomy-space/sdk/browser";
 import { transport } from "@roomy-space/sdk";
@@ -218,8 +217,6 @@ export async function init() {
   // watchdog can fire without aborting the (possibly still-in-flight) exchange,
   // and so a successful-but-slow result can recover afterwards.
   const doInit = async () => {
-    saveAppserverDid(CONFIG.appserverDid);
-
     // Test mode: if app-password credentials are baked into the build env,
     // auto-login via app password instead of attempting OAuth session restore.
     // This bypasses the OAuth round-trip entirely, enabling headless E2E
@@ -233,10 +230,13 @@ export async function init() {
       return;
     }
 
-    const result = await initSession(CONFIG.appserverDid, {
+    const result = await initSession({
+      happyviewEndpoint: CONFIG.happyviewEndpoint,
+      clientKey: CONFIG.happyviewClientKey,
+      clientId: CONFIG.oauthClientId,
       port: CONFIG.port,
+      handleResolverUrl: CONFIG.handleResolverUrl,
       scope: SCOPE_SETS.base,
-      usePublicClient: CONFIG.usePublicClient,
     });
     if (result) {
       session = result.session;
@@ -340,7 +340,6 @@ export async function init() {
 
 export async function login(handle: string) {
   currentHandle = handle;
-  saveAppserverDid(CONFIG.appserverDid);
 
   // Before kicking off OAuth, ask the appserver what scope this user last
   // consented to (unauthenticated `getLoginScope` — no token yet). A returning
@@ -365,10 +364,13 @@ export async function login(handle: string) {
   // Remember the page the user was on so `init()` can send them back here
   // after the PDS redirects to the fixed OAuth redirect URI (the homepage).
   const returnUrl = currentReturnUrl();
-  const result = await sdkLogin(CONFIG.appserverDid, handle, {
+  const result = await sdkLogin(handle, {
+    happyviewEndpoint: CONFIG.happyviewEndpoint,
+    clientKey: CONFIG.happyviewClientKey,
+    clientId: CONFIG.oauthClientId,
     port: CONFIG.port,
+    handleResolverUrl: CONFIG.handleResolverUrl,
     scope: reconcile,
-    usePublicClient: CONFIG.usePublicClient,
     state: returnUrl,
   });
 
@@ -432,10 +434,13 @@ export async function requestScopeExpansion(tier: ScopeSetName): Promise<void> {
   // tier's additions) for an already-granted base. On return `init()`'s
   // `trackGrant` records what the PDS actually granted.
   const returnUrl = currentReturnUrl();
-  const result = await sdkLogin(CONFIG.appserverDid, currentHandle, {
+  const result = await sdkLogin(currentHandle, {
+    happyviewEndpoint: CONFIG.happyviewEndpoint,
+    clientKey: CONFIG.happyviewClientKey,
+    clientId: CONFIG.oauthClientId,
+    handleResolverUrl: CONFIG.handleResolverUrl,
     port: CONFIG.port,
     scope: SCOPE_SETS[tier],
-    usePublicClient: CONFIG.usePublicClient,
     state: returnUrl,
   });
   if (result) {

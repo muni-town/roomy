@@ -3,8 +3,6 @@ import {
   initSession,
   login as sdkLogin,
   logout as sdkLogout,
-  saveAppserverDid,
-  loadAppserverDid,
 } from "@roomy-space/sdk/browser";
 import type { OAuthSession } from "@roomy-space/sdk/browser";
 import { ADMIN_DIDS, CONFIG } from "./config";
@@ -52,10 +50,12 @@ export async function init() {
   authError = null;
 
   try {
-    const appserverDid = loadAppserverDid();
-    const res = await initSession(appserverDid, {
+    const res = await initSession({
+      happyviewEndpoint: CONFIG.happyviewEndpoint,
+      clientKey: CONFIG.happyviewClientKey,
+      clientId: CONFIG.oauthClientId,
+      handleResolverUrl: CONFIG.handleResolverUrl,
       port: CONFIG.port,
-      usePublicClient: CONFIG.usePublicClient,
     });
     if (res) {
       // Anyone with a valid ATProto identity can use the docs site. Admin
@@ -73,11 +73,12 @@ export async function init() {
 
 export async function login(handle: string) {
   authError = null;
-  const appserverDid = loadAppserverDid();
-  saveAppserverDid(appserverDid);
-  await sdkLogin(appserverDid, handle, {
+  await sdkLogin(handle, {
+    happyviewEndpoint: CONFIG.happyviewEndpoint,
+    clientKey: CONFIG.happyviewClientKey,
+    clientId: CONFIG.oauthClientId,
     port: CONFIG.port,
-    usePublicClient: CONFIG.usePublicClient,
+    handleResolverUrl: CONFIG.handleResolverUrl,
   });
 }
 

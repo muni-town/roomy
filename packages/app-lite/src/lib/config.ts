@@ -40,7 +40,34 @@ export const CONFIG = {
   publicWebOrigin: import.meta.env.VITE_PUBLIC_WEB_ORIGIN || "https://roomy.space",
   publicWebOriginMarker: dynamicEnv.PUBLIC_WEB_ORIGIN || null,
   port: Number(import.meta.env.VITE_PORT) || 5180,
-  usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
+  /**
+   * HappyView instance that custodies the user's ATProto OAuth session. The
+   * browser holds only a HappyView DPoP session (access token + shared key);
+   * the PDS tokens — including the long-lived refresh token of the
+   * confidential client — live server-side at HappyView, encrypted.
+   */
+  happyviewEndpoint: import.meta.env.VITE_HAPPYVIEW_ENDPOINT || null,
+  /** HappyView API client key (`hvc_…`). Public identity + rate-limit bucket;
+   *  safe to bundle. The `hvs_…` secret must never reach the browser. */
+  happyviewClientKey: import.meta.env.VITE_HAPPYVIEW_CLIENT_KEY || null,
+  /**
+   * URL of the served OAuth client metadata document (the OAuth client_id).
+   * Governs both modes — legacy mode fetches and parses it; HappyView mode
+   * passes it through. Required for deployed web builds (baked from
+   * OAUTH_HOST by scripts/build-prod.sh); unset in dev → dev loopback
+   * client id; Tauri uses the native document unless set. Confidential
+   * fields (`jwks_uri`, `token_endpoint_auth_method`) live in the document
+   * itself.
+   */
+  oauthClientId: import.meta.env.VITE_OAUTH_CLIENT_ID || null,
+  /**
+   * Handle→DID resolver used at sign-in. Defaults to Roomy's resolver
+   * (resolver.roomy.chat/xrpc/com.atproto.identity.resolveHandle — the standard
+   * atproto NSID; distinct from the Leaf handle endpoint the space-handle
+   * settings page verifies), replacing DNS/DoH resolution so no login traffic
+   * goes to dns.google.
+   */
+  handleResolverUrl: import.meta.env.VITE_HANDLE_RESOLVER_URL || null,
   profileSpaceNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
   /** Test-mode app-password credentials (bake into env for headless E2E). */

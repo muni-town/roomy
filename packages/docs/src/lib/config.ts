@@ -23,5 +23,19 @@ export const CONFIG = {
       .replace(/^ws(s?):\/\//, "http$1://")
       .replace(/\/+$/, "") || null,
   port: Number(import.meta.env.VITE_PORT) || 5300,
-  usePublicClient: import.meta.env.VITE_OAUTH_PUBLIC_CLIENT === "true",
+  /**
+   * HappyView instance that custodies the user's ATProto OAuth session
+   * (see @roomy-space/sdk/browser). Same env vars as app-lite.
+   */
+  happyviewEndpoint: import.meta.env.VITE_HAPPYVIEW_ENDPOINT || null,
+  happyviewClientKey: import.meta.env.VITE_HAPPYVIEW_CLIENT_KEY || null,
+  oauthClientId: import.meta.env.VITE_OAUTH_CLIENT_ID || null,
+  /**
+   * Handle→DID resolver used at sign-in. Defaults to Roomy's resolver
+   * (resolver.roomy.chat/xrpc/com.atproto.identity.resolveHandle — the standard
+   * atproto NSID; distinct from the Leaf handle endpoint the space-handle
+   * settings page verifies), replacing DNS/DoH resolution so no login traffic
+   * goes to dns.google.
+   */
+  handleResolverUrl: import.meta.env.VITE_HANDLE_RESOLVER_URL || null,
 };

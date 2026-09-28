@@ -532,7 +532,10 @@ importers:
         version: 0.5.13
       '@atproto/oauth-client-browser':
         specifier: ^0.3.39
-        version: 0.3.39
+        version: 0.3.42
+      '@happyview/oauth-client-browser':
+        specifier: ^1.4.4
+        version: 1.4.4
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -648,14 +651,23 @@ packages:
   '@atproto-labs/did-resolver@0.2.5':
     resolution: {integrity: sha512-he7EC6OMSifNs01a4RT9mta/yYitoKDzlK9ty2TFV5Uj/+HpB4vYMRdIDFrRW0Hcsehy90E2t/dw0t7361MEKQ==}
 
+  '@atproto-labs/did-resolver@0.2.6':
+    resolution: {integrity: sha512-2K1bC04nI2fmgNcvof+yA28IhGlpWn2JKYlPa7To9JTKI45FINCGkQSGiL2nyXlyzDJJ34fZ1aq6/IRFIOIiqg==}
+
   '@atproto-labs/fetch@0.2.3':
     resolution: {integrity: sha512-NZtbJOCbxKUFRFKMpamT38PUQMY0hX0p7TG5AEYOPhZKZEP7dHZ1K2s1aB8MdVH0qxmqX7nQleNrrvLf09Zfdw==}
 
   '@atproto-labs/handle-resolver@0.3.5':
     resolution: {integrity: sha512-r3b+plCh/0arN535Aool9gL6yTSbAPDOyReURbA2TWAaeW4vrSJPwR6yYUx0k0vmVPjkZPIdUVd63bG/+VG5MA==}
 
+  '@atproto-labs/handle-resolver@0.3.6':
+    resolution: {integrity: sha512-qnSTXvOBNj1EHhp2qTWSX8MS5q3AwYU5LKlt5fBvSbCjgmTr2j0URHCv+ydrwO55KvsojIkTMgeMOh4YuY4fCA==}
+
   '@atproto-labs/identity-resolver@0.3.5':
     resolution: {integrity: sha512-kSxnreUSPhKL77doUbSl/9I6Y9qpkpD7MMJoYFQVU/WG0PB90tzfIb6DNuWsjbU2I5Q91Nzc4Tm4VJMV+OPKGQ==}
+
+  '@atproto-labs/identity-resolver@0.3.6':
+    resolution: {integrity: sha512-qoWqBDRobln0NR8L8dQjSp79E0chGkBhibEgxQa2f9WD+JbJdjQ0YvwwO5yeQn05pJoJmAwmI2wyJ45zjU7aWg==}
 
   '@atproto-labs/pipe@0.1.1':
     resolution: {integrity: sha512-hdNw2oUs2B6BN1lp+32pF7cp8EMKuIN5Qok2Vvv/aOpG/3tNSJ9YkvfI0k6Zd188LeDDYRUpYpxcoFIcGH/FNg==}
@@ -692,6 +704,9 @@ packages:
   '@atproto/did@0.2.4':
     resolution: {integrity: sha512-nxNiCgXeo7pfjojq9fpfZxCO0X0xUipNVKW+AHNZwQKiUDt6zYL0VXEfm8HBUwQOCmKvj2pRRSM1Cur+tUWk3g==}
 
+  '@atproto/did@0.3.0':
+    resolution: {integrity: sha512-raUPzUGegtW/6OxwCmM8bhZvuIMzxG5t9oWsth6Tp91Kb5fTnHV2h/KKNF1C82doeA4BdXCErTyg7ISwLbQkzA==}
+
   '@atproto/identity@0.4.12':
     resolution: {integrity: sha512-P+Jn0HvKhIh1tps5n3xGrCxt+XiFWzp4kdgloyFhFmVLwjDU547DQkWx4r5Vhuiah7fRZGVSlk39R4U6SPrACg==}
     engines: {node: '>=18.7.0'}
@@ -726,14 +741,20 @@ packages:
   '@atproto/lexicon@0.6.2':
     resolution: {integrity: sha512-p3Ly6hinVZW0ETuAXZMeUGwuMm3g8HvQMQ41yyEE6AL0hAkfeKFaZKos6BdBrr6CjkpbrDZqE8M+5+QOceysMw==}
 
-  '@atproto/oauth-client-browser@0.3.39':
-    resolution: {integrity: sha512-71TWoPzshfAo7qFdwjE8yYQwUyvVoSFFcyFKChz1wM623GdOW0CSELmQ8JJLQrcCT74GWQUImt9gSmU/bjQ1YA==}
+  '@atproto/oauth-client-browser@0.3.42':
+    resolution: {integrity: sha512-YRNMnZNid+ipBndpKbqZ+1uzb51Ci7Pit56iF2+hBljZkE6MAW/gkGwywJigVPlhkVKCO80PaXt8CHuON5kS8w==}
 
   '@atproto/oauth-client@0.5.13':
     resolution: {integrity: sha512-FLbqHkC7BAVZ90LHVzSxQf+s8ZNIQI4TsDuhYDyzi7lYtktFHDbgd88KuM2ClJFOtGCsSS17yR1Joy925tDSaA==}
 
+  '@atproto/oauth-client@0.6.1':
+    resolution: {integrity: sha512-QTLbEFyv7EJuwJf4A8IZnsylK5wwrzrSsxy0INcZf9zktPVQvgckWhSvbfK8alp60M+rwWfQQAlodcCF4WB78A==}
+
   '@atproto/oauth-types@0.6.1':
     resolution: {integrity: sha512-3z92GN/6zCq9E2GTTfZM27tWEbvi1qwFSA7KoS5+wqBC4kSsLvnLxmbKH402Z40DfWS4YWqw0DkHsgP0LNFDEA==}
+
+  '@atproto/oauth-types@0.6.3':
+    resolution: {integrity: sha512-jdKuoPknJuh/WjI+mYk7agSbx9mNVMbS6Dr3k1z2YMY2oRiCQjxYBuo4MLKATbxj05nMQaZRWlHRUazoAu5Cng==}
 
   '@atproto/syntax@0.4.1':
     resolution: {integrity: sha512-CJdImtLAiFO+0z3BWTtxwk6aY5w4t8orHTMVJgkf++QRJWTxPbIFko/0hrkADB7n2EruDxDSeAgfUGehpH6ngw==}
@@ -1358,6 +1379,12 @@ packages:
 
   '@grafana/faro-web-sdk@2.11.0':
     resolution: {integrity: sha512-oGwdqlFJkIrK6V45wDlPaggNXOJCcXRFobho0PBQvohAB4Y4UTyMH18Sr1Tznp3z6POr/zh7RUtB0L/iN2X+HA==}
+
+  '@happyview/oauth-client-browser@1.4.4':
+    resolution: {integrity: sha512-1N9Lj3JYuGnrOc2CtI4OwnaSnN4hTZapKJc+pYOZ5kFXAc9Ik5QoqVkvpwa3qCWs+ItImeXbUq4owpI7s4OqOw==}
+
+  '@happyview/oauth-client@1.4.2':
+    resolution: {integrity: sha512-bqJ5K40r7vapJjYcyJcFmL8SoY+rmkfFJOWwKIktY5BCMR6PbxTlMpUz9BJGakGPPJSwLbjcCyf0stqVUST4og==}
 
   '@iconify-json/heroicons@1.2.3':
     resolution: {integrity: sha512-n+vmCEgTesRsOpp5AB5ILB6srsgsYK+bieoQBNlafvoEhjVXLq8nIGN4B0v/s4DUfa0dOrjwE/cKJgIKdJXOEg==}
@@ -4756,6 +4783,15 @@ snapshots:
       '@atproto/did': 0.2.4
       zod: 3.25.76
 
+  '@atproto-labs/did-resolver@0.2.6':
+    dependencies:
+      '@atproto-labs/fetch': 0.2.3
+      '@atproto-labs/pipe': 0.1.1
+      '@atproto-labs/simple-store': 0.3.0
+      '@atproto-labs/simple-store-memory': 0.1.4
+      '@atproto/did': 0.3.0
+      zod: 3.25.76
+
   '@atproto-labs/fetch@0.2.3':
     dependencies:
       '@atproto-labs/pipe': 0.1.1
@@ -4767,10 +4803,22 @@ snapshots:
       '@atproto/did': 0.2.4
       zod: 3.25.76
 
+  '@atproto-labs/handle-resolver@0.3.6':
+    dependencies:
+      '@atproto-labs/simple-store': 0.3.0
+      '@atproto-labs/simple-store-memory': 0.1.4
+      '@atproto/did': 0.3.0
+      zod: 3.25.76
+
   '@atproto-labs/identity-resolver@0.3.5':
     dependencies:
       '@atproto-labs/did-resolver': 0.2.5
       '@atproto-labs/handle-resolver': 0.3.5
+
+  '@atproto-labs/identity-resolver@0.3.6':
+    dependencies:
+      '@atproto-labs/did-resolver': 0.2.6
+      '@atproto-labs/handle-resolver': 0.3.6
 
   '@atproto-labs/pipe@0.1.1': {}
 
@@ -4836,6 +4884,10 @@ snapshots:
       uint8arrays: 3.0.0
 
   '@atproto/did@0.2.4':
+    dependencies:
+      zod: 3.25.76
+
+  '@atproto/did@0.3.0':
     dependencies:
       zod: 3.25.76
 
@@ -4908,16 +4960,16 @@ snapshots:
       multiformats: 9.9.0
       zod: 3.25.76
 
-  '@atproto/oauth-client-browser@0.3.39':
+  '@atproto/oauth-client-browser@0.3.42':
     dependencies:
-      '@atproto-labs/did-resolver': 0.2.5
-      '@atproto-labs/handle-resolver': 0.3.5
+      '@atproto-labs/did-resolver': 0.2.6
+      '@atproto-labs/handle-resolver': 0.3.6
       '@atproto-labs/simple-store': 0.3.0
-      '@atproto/did': 0.2.4
+      '@atproto/did': 0.3.0
       '@atproto/jwk': 0.6.0
       '@atproto/jwk-webcrypto': 0.2.0
-      '@atproto/oauth-client': 0.5.13
-      '@atproto/oauth-types': 0.6.1
+      '@atproto/oauth-client': 0.6.1
+      '@atproto/oauth-types': 0.6.3
       core-js: 3.45.1
 
   '@atproto/oauth-client@0.5.13':
@@ -4936,9 +4988,31 @@ snapshots:
       multiformats: 9.9.0
       zod: 3.25.76
 
+  '@atproto/oauth-client@0.6.1':
+    dependencies:
+      '@atproto-labs/did-resolver': 0.2.6
+      '@atproto-labs/fetch': 0.2.3
+      '@atproto-labs/handle-resolver': 0.3.6
+      '@atproto-labs/identity-resolver': 0.3.6
+      '@atproto-labs/simple-store': 0.3.0
+      '@atproto-labs/simple-store-memory': 0.1.4
+      '@atproto/did': 0.3.0
+      '@atproto/jwk': 0.6.0
+      '@atproto/oauth-types': 0.6.3
+      '@atproto/xrpc': 0.7.7
+      core-js: 3.45.1
+      multiformats: 9.9.0
+      zod: 3.25.76
+
   '@atproto/oauth-types@0.6.1':
     dependencies:
       '@atproto/did': 0.2.4
+      '@atproto/jwk': 0.6.0
+      zod: 3.25.76
+
+  '@atproto/oauth-types@0.6.3':
+    dependencies:
+      '@atproto/did': 0.3.0
       '@atproto/jwk': 0.6.0
       zod: 3.25.76
 
@@ -5551,6 +5625,18 @@ snapshots:
       '@grafana/faro-core': 2.11.0
       ua-parser-js: 1.0.41
       web-vitals: 6.2.1
+
+  '@happyview/oauth-client-browser@1.4.4':
+    dependencies:
+      '@atproto-labs/did-resolver': 0.2.6
+      '@atproto-labs/handle-resolver': 0.3.6
+      '@atproto/did': 0.3.0
+      '@happyview/oauth-client': 1.4.2
+
+  '@happyview/oauth-client@1.4.2':
+    dependencies:
+      '@atproto/jwk': 0.6.0
+      '@atproto/jwk-webcrypto': 0.2.0
 
   '@iconify-json/heroicons@1.2.3':
     dependencies:
@@ -6659,7 +6745,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@25.9.1)(@vitest/ui@2.1.9)(lightningcss@1.32.0)
+      vitest: 2.1.9(@types/node@26.4.0)(@vitest/ui@2.1.9)(lightningcss@1.32.0)
 
   '@vitest/utils@2.1.9':
     dependencies:

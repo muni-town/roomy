@@ -14,8 +14,8 @@
 # commit 47d283e4).
 #
 # Nothing needs to be publicly exposed: app-lite calls the appserver directly,
-# and the PDS callback redirects to localhost (VITE_OAUTH_PUBLIC_CLIENT=true
-# bypasses the loopback redirect metadata so OAuth init works on 127.0.0.1).
+# and dev OAuth uses the standard atproto loopback client id whose only
+# redirect is http://127.0.0.1:<app-port>/ — no extra env needed.
 #
 # Usage:
 #   ./scripts/dev-local                # start everything (foreground, Ctrl-C stops all)
@@ -154,7 +154,6 @@ fi
 env "${TEST_ENV[@]}" \
 VITE_APPSERVER_DID=did:web:localhost \
 VITE_APPSERVER_WS_ORIGIN=ws://127.0.0.1:$APPSERVER_PORT \
-VITE_OAUTH_PUBLIC_CLIENT=true \
 PUBLIC_WEB_ORIGIN=http://127.0.0.1:$APP_LITE_PORT \
 VITE_PUBLIC_WEB_ORIGIN=http://127.0.0.1:$APP_LITE_PORT \
 VITE_PORT=$APP_LITE_PORT \

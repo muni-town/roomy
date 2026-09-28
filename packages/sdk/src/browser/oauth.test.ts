@@ -37,14 +37,13 @@ vi.mock("@atproto/oauth-client-browser", () => {
 
 import { login } from "./oauth";
 
-const APPSERVER_DID = "did:web:appserver.test";
 const HANDLE = "alice.example";
 const BASE = "atproto rpc:space.roomy.space.getSpaces?aud=*";
 
 /**
  * Minimal browser-ish globals `createOAuthClient`/`login` read. `fetch` is
- * stubbed for the `usePublicClient` path, which fetches the deployed
- * `oauth-client-metadata.json` — a bare relative URL Node's `fetch` rejects.
+ * stubbed for the deployed-metadata path (`clientId`), which fetches the served
+ * `oauth-client-metadata.json`.
  */
 function stubGlobals(opts: { tauri?: boolean } = {}) {
   const store = new Map<string, string>();
@@ -93,7 +92,7 @@ describe("login() scope forwarding", () => {
 
   it("forwards the requested scope to signIn (web path)", async () => {
     stubGlobals();
-    await login(APPSERVER_DID, HANDLE, { scope: BASE, usePublicClient: true });
+    await login(HANDLE, { scope: BASE });
 
     expect(signIn).toHaveBeenCalledTimes(1);
     expect(signIn).toHaveBeenCalledWith(HANDLE, { scope: BASE });
@@ -101,10 +100,9 @@ describe("login() scope forwarding", () => {
 
   it("forwards state AND scope together when both are supplied", async () => {
     stubGlobals();
-    await login(APPSERVER_DID, HANDLE, {
+    await login(HANDLE, {
       scope: BASE,
       state: "/some/room",
-      usePublicClient: true,
     });
 
     expect(signIn).toHaveBeenCalledWith(HANDLE, {
@@ -117,7 +115,7 @@ describe("login() scope forwarding", () => {
     // Preserves the prior behaviour: no per-request override, so the client
     // uses its metadata ceiling (the SDK default path for non-app-lite callers).
     stubGlobals();
-    await login(APPSERVER_DID, HANDLE, { usePublicClient: true });
+    await login(HANDLE, {});
 
     expect(signIn).toHaveBeenCalledWith(HANDLE, undefined);
   });
@@ -128,7 +126,7 @@ describe("login() scope forwarding", () => {
     // The Tauri path blocks on the deep-link callback, which never arrives
     // here, so race it against a very short timeout — the assertion is on the
     // `authorize` call already made before the wait.
-    await login(APPSERVER_DID, HANDLE, {
+    await login(HANDLE, {
       scope: BASE,
       loginTimeoutMs: 50,
     }).catch(() => {});

@@ -30,9 +30,13 @@ if [ -z "${BUILD_ID:-}" ]; then
   echo "         /build.json will report commit \"unknown\" for this build." >&2
 fi
 
+# The web build needs its client_id URL baked in — used by BOTH OAuth modes
+# (legacy mode fetches + parses it; HappyView mode passes it through).
+target_url=${OAUTH_HOST:?"OAUTH_HOST must be set (e.g. https://app-lite.roomy.chat)"}
+export VITE_OAUTH_CLIENT_ID="${target_url}/oauth-client-metadata.json"
+
 pnpm build
 
-target_url=${OAUTH_HOST:?"OAUTH_HOST must be set (e.g. https://app-lite.roomy.chat)"}
 
 echo "Generating OAuth client configuration..."
 echo "OAuth Host URL: $target_url"
@@ -51,6 +55,25 @@ SCOPE="$(
   node --experimental-strip-types -e 'import("./src/lib/scopes.ts").then((m) => process.stdout.write(m.FULL_SCOPE_CEILING))'
 )"
 
+# ── Confidential client (session duration) ───────────────────────────────
+# When HAPPYVIEW_JWKS_URI is set (the JWKS HappyView publishes for this
+# client's delegated signing key — provision it with
+# POST /admin/api-clients/{id}/auth-key), the metadata declares
+# `private_key_jwt`: the PDS then treats Roomy as a confidential client and
+# grants ~2-year refresh tokens instead of ~2-week public ones. HappyView
+# holds the signing key and mints the PAR/token-exchange client assertions
+# on demand. Unset → the client stays public (PKCE only).
+if [ -n "${HAPPYVIEW_JWKS_URI:-}" ]; then
+  auth_method_fields=$(
+    cat <<EOF
+  "token_endpoint_auth_method": "private_key_jwt",
+  "jwks_uri": "${HAPPYVIEW_JWKS_URI}",
+EOF
+  )
+else
+  auth_method_fields='  "token_endpoint_auth_method": "none",'
+fi
+
 # Build the OAuth client metadata JSON
 oauth_shared=$(
   cat <<EOF
@@ -60,7 +83,6 @@ oauth_shared=$(
   "scope": "${SCOPE}",
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
-  "token_endpoint_auth_method": "none",
   "dpop_bound_access_tokens": true
 EOF
 )
@@ -71,17 +93,23 @@ oauth_web_config=$(
   "client_id": "$target_url/oauth-client-metadata.json",
   "redirect_uris": ["$target_url/"],
   "application_type": "web",
+  ${auth_method_fields}
   ${oauth_shared}
 }
 EOF
 )
 
+# The Tauri desktop client keeps the tested public direct-PDS flow — the native
+# metadata stays public ("token_endpoint_auth_method": "none") regardless of
+# HAPPYVIEW_JWKS_URI: private_key_jwt would break desktop login until the
+# desktop HappyView flow ships.
 oauth_native_config=$(
   cat <<EOF
 {
   "client_id": "$target_url/oauth-client-native.json",
   "redirect_uris": ["space.roomy:/","$target_url/"],
   "application_type": "native",
+  "token_endpoint_auth_method": "none",
   ${oauth_shared}
 }
 EOF

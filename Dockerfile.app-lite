@@ -40,8 +40,26 @@ ENV PUBLIC_FARO_API_KEY=$PUBLIC_FARO_API_KEY
 ARG OAUTH_HOST
 ENV OAUTH_HOST=$OAUTH_HOST
 
-ARG VITE_OAUTH_PUBLIC_CLIENT=true
-ENV VITE_OAUTH_PUBLIC_CLIENT=$VITE_OAUTH_PUBLIC_CLIENT
+# HappyView instance that custodies the user's ATProto OAuth session. The
+# browser holds only a HappyView DPoP session; PDS tokens live server-side at
+# HappyView (encrypted). Unset → legacy direct-PDS OAuth.
+ARG VITE_HAPPYVIEW_ENDPOINT
+ENV VITE_HAPPYVIEW_ENDPOINT=$VITE_HAPPYVIEW_ENDPOINT
+
+# HappyView client key paired with the endpoint above.
+ARG VITE_HAPPYVIEW_CLIENT_KEY
+ENV VITE_HAPPYVIEW_CLIENT_KEY=$VITE_HAPPYVIEW_CLIENT_KEY
+
+# Handle→DID resolver for sign-in. Defaults to Roomy's resolver, replacing
+# DNS/DoH resolution — no login traffic goes to dns.google.
+ARG VITE_HANDLE_RESOLVER_URL
+ENV VITE_HANDLE_RESOLVER_URL=$VITE_HANDLE_RESOLVER_URL
+
+# JWKS HappyView publishes for this client's delegated signing key. When set
+# the web OAuth metadata declares private_key_jwt (confidential client);
+# unset → public PKCE client.
+ARG HAPPYVIEW_JWKS_URI
+ENV HAPPYVIEW_JWKS_URI=$HAPPYVIEW_JWKS_URI
 
 # Public web deployment, read via $env/dynamic/public and inlined at build time
 # for adapter-static. Two roles: PUBLIC_WEB_ORIGIN marks this build as a web
