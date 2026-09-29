@@ -1,57 +1,5 @@
 import { env as dynamicEnv } from "$env/dynamic/public";
 
-const APPSERVER_RPCS = [
-  "space.roomy.space.getSpaces",
-  "space.roomy.space.getMetadata",
-  "space.roomy.space.getSpaceSummary",
-  "space.roomy.space.getThreads",
-  "space.roomy.space.getLinks",
-  "space.roomy.space.getRoles",
-  "space.roomy.space.getMembers",
-  "space.roomy.space.getInvites",
-  "space.roomy.room.getMetadata",
-  "space.roomy.room.getRoomSummary",
-  "space.roomy.room.getMessages",
-  "space.roomy.room.getThreads",
-  "space.roomy.room.getLinks",
-  "space.roomy.message.getMessage",
-  "space.roomy.message.getReactions",
-  "space.roomy.user.getProfile",
-  "space.roomy.user.getMembershipStatus",
-  "space.roomy.embed.getLinkMetadata",
-  "space.roomy.auth.getConnectionTicket",
-  "space.roomy.getFlags",
-  "space.roomy.room.updateSeen",
-  "space.roomy.space.sendEvents",
-  "space.roomy.space.createSpace",
-  "space.roomy.space.joinSpace",
-  "space.roomy.space.leaveSpace",
-  "space.roomy.space.reorderSpaces",
-  "space.roomy.space.setHandle",
-  "space.roomy.space.updatePolicy",
-  "space.roomy.space.getCalendarLink",
-  "space.roomy.space.getCalendarEvents",
-  "space.roomy.space.getActivityFeed",
-  "space.roomy.search.messages",
-  "space.roomy.search.rooms",
-  // Channel federation
-  "space.roomy.federation.getRequests",
-  "space.roomy.federation.getIncoming",
-  "space.roomy.federation.getOutgoing",
-  "space.roomy.federation.getGrants",
-  // Web push notification endpoints
-  "space.roomy.push.getVapidPublicKey",
-  "space.roomy.push.getPreferences",
-  "space.roomy.push.registerSubscription",
-  "space.roomy.push.unregisterSubscription",
-  "space.roomy.push.setPreferences",
-  "space.roomy.pro.createCheckout",
-  // Roomy Pro bridge tokens
-  "space.roomy.space.getBridgeTokens",
-  "space.roomy.space.grantBridgeToken",
-  "space.roomy.space.revokeBridgeToken",
-];
-
 export const CONFIG = {
   appserverDid:
     import.meta.env.VITE_APPSERVER_DID || "did:web:api.roomy.space",
@@ -130,27 +78,3 @@ export const CONFIG = {
  * space's bridge settings.
  */
 export const FREE_BRIDGE_MEMBER_LIMIT = 50;
-
-export const OAUTH_SCOPE = [
-  "atproto",
-  // Profile reads are public data; allow any appview (Bluesky, Blacksky,
-  // Eurosky, etc.) so users whose PDS routes to a non-Bluesky appview can
-  // still fetch profiles. lxm is pinned to the specific NSID, so this only
-  // grants read access to these two endpoints — not a blanket appview grant.
-  "rpc:app.bsky.actor.getProfiles?aud=*",
-  "rpc:app.bsky.actor.getProfile?aud=*",
-  "blob:*/*",
-  "repo:space.roomy.upload.v0", // Grant all actions (create, update, delete)
-  `repo:space.roomy.user.profile`,
-  "include:space.roomy.authComplete",
-  `repo:${CONFIG.profileSpaceNsid}`,
-  // Allow calling getServiceAuth on the appserver's PDS to obtain
-  // service auth tokens for direct (non-proxied) XRPC calls.
-  `rpc:com.atproto.server.getServiceAuth?aud=${CONFIG.appserverDid}`,
-  // Allow obtaining serviceAuth tokens targeted at any arbiter server (the
-  // arbiter DID is discovered per space from its service record), so the
-  // client can call `space.roomy.authComplete.arbiter.proxy` directly (acting on a space's
-  // stewarded account). aud=* because the arbiter DID is per-space.
-  `rpc:com.atproto.server.getServiceAuth?aud=*`,
-  ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
-].join(" ");

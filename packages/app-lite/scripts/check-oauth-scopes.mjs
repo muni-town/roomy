@@ -2,71 +2,60 @@
 /**
  * OAuth scope drift check (CI-runnable).
  *
- * Verifies that every RPC scope declared in src/lib/config.ts
- * (APPSERVER_RPCS, plus quoted rpc:/repo: entries in OAUTH_SCOPE) is
- * present in the SCOPE assembly in scripts/build-prod.sh. This is the
- * same drift the build-time verification in build-prod.sh catches — but
- * against the assembly, so it runs without a build or OAuth metadata.
+ * Verifies:
+ *   1. Every tier's scopes (src/lib/scopes.ts SCOPE_SETS) are a subset of the
+ *      metadata ceiling (FULL_SCOPE_CEILING) — so any scope a tier requests is
+ *      always declared in the OAuth metadata the PDS enforces against.
+ *   2. scripts/build-prod.sh still derives its SCOPE assembly from
+ *      FULL_SCOPE_CEILING (its single source of truth), so what ships can't
+ *      drift from the ceiling.
  *
- * Run: node scripts/check-oauth-scopes.mjs
+ * Before the client-scope refactor this compared a hand-maintained SCOPE
+ * assembly against config.ts; scopes.ts is now the single source of truth and
+ * build-prod.sh imports the ceiling directly.
+ *
+ * Run: node --experimental-strip-types scripts/check-oauth-scopes.mjs
  */
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SCOPE_SETS, FULL_SCOPE_CEILING, parseScopes } from "../src/lib/scopes.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const configSrc = readFileSync(join(root, "src/lib/config.ts"), "utf-8");
 const buildScript = readFileSync(join(root, "scripts/build-prod.sh"), "utf-8");
-
-// Assemble the scope string exactly as build-prod.sh does: every
-// `SCOPE+="..."` line, concatenated. Template literals (${...}) are kept
-// verbatim — the checks below only need static prefixes.
-const scope = [...buildScript.matchAll(/SCOPE\+=("[^"]*")/g)]
-  .map((m) => JSON.parse(m[1]))
-  .join(" ");
 
 let hasErrors = false;
 
-// Check APPSERVER_RPCS
-const rpcMatch = configSrc.match(/const APPSERVER_RPCS\s*=\s*\[([\s\S]*?)\]/);
-if (rpcMatch) {
-  const items = rpcMatch[1].split(/['"]/).filter((_, i) => i % 2 === 1);
-  const missing = items.filter((nsid) => !scope.includes("rpc:" + nsid));
-  if (missing.length) {
-    console.log("MISSING RPC SCOPES (from APPSERVER_RPCS):");
-    missing.forEach((n) => console.log("  " + n));
-    hasErrors = true;
+// Every tier scope must be declared in the ceiling.
+const ceilingScopes = parseScopes(FULL_SCOPE_CEILING);
+for (const [tier, tierScope] of Object.entries(SCOPE_SETS)) {
+  for (const s of parseScopes(tierScope)) {
+    if (!ceilingScopes.has(s)) {
+      console.log(`MISSING SCOPE (tier ${tier} not in ceiling): ${s}`);
+      hasErrors = true;
+    }
   }
 }
 
-// Check OAUTH_SCOPE for rpc: and repo: entries (quoted strings only;
-// template-literal entries are checked separately below).
-const scopeMatch = configSrc.match(/export const OAUTH_SCOPE\s*=\s*\[([\s\S]*?)\]/);
-if (scopeMatch) {
-  const items = scopeMatch[1].split(/['"]/).filter((_, i) => i % 2 === 1);
-  const missingScopes = items
-    .filter((s) => s.startsWith("repo:") || s.startsWith("rpc:"))
-    .filter((s) => !scope.includes(s));
-  if (missingScopes.length) {
-    console.log("MISSING SCOPES (from OAUTH_SCOPE):");
-    missingScopes.forEach((n) => console.log("  " + n));
-    hasErrors = true;
-  }
-}
-
-// getServiceAuth scope (template literal in config.ts with a dynamic aud=)
-// must be present by its static prefix.
-if (!scope.includes("rpc:com.atproto.server.getServiceAuth?aud=")) {
-  console.log("MISSING SCOPES (from OAUTH_SCOPE):");
-  console.log("  rpc:com.atproto.server.getServiceAuth?aud=...");
+// build-prod.sh must derive its SCOPE from FULL_SCOPE_CEILING — importing the
+// constant, not re-assembling a scope string by hand. This is the mechanism
+// that keeps whatever ships byte-identical to the single source of truth.
+if (
+  !buildScript.includes("FULL_SCOPE_CEILING") ||
+  !buildScript.includes("import('./src/lib/scopes.ts')")
+) {
+  console.log("MISMATCH: build-prod.sh no longer derives SCOPE from FULL_SCOPE_CEILING");
   hasErrors = true;
 }
 
 if (hasErrors) {
-  console.error("ERROR: Scopes from config.ts are missing from the OAuth scope.");
-  console.error("Add them to the SCOPE assembly in build-prod.sh");
+  console.error(
+    "ERROR: A tier scope is missing from the ceiling, or build-prod.sh no longer",
+  );
+  console.error("derives its SCOPE from src/lib/scopes.ts FULL_SCOPE_CEILING.");
+  console.error("Fix the tier/ceiling definitions in src/lib/scopes.ts.");
   process.exit(1);
 }
 
-console.log("All appserver RPC scopes and repo scopes present — verification passed");
+console.log("All tier scopes present in ceiling, build-prod derives SCOPE from ceiling — verification passed");

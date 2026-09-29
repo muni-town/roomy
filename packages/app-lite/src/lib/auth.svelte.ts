@@ -8,7 +8,8 @@ import {
 } from "@roomy-space/sdk/browser";
 import { transport } from "@roomy-space/sdk";
 import { goto } from "$app/navigation";
-import { CONFIG, OAUTH_SCOPE } from "./config";
+import { CONFIG } from "./config";
+import { SCOPE_SETS } from "./scopes";
 import { scheduleAutoReload } from "./error-recovery";
 import { setAppserverOrigin } from "./appserver-origin";
 import { subscribeIfAlreadyPermitted, clearPushSubscription } from "./push.svelte";
@@ -165,7 +166,7 @@ export async function init() {
 
     const result = await initSession(CONFIG.appserverDid, {
       port: CONFIG.port,
-      scope: OAUTH_SCOPE,
+      scope: SCOPE_SETS.base,
       usePublicClient: CONFIG.usePublicClient,
     });
     if (result) {
@@ -256,7 +257,7 @@ export async function login(handle: string) {
   const returnUrl = currentReturnUrl();
   const result = await sdkLogin(CONFIG.appserverDid, handle, {
     port: CONFIG.port,
-    scope: OAUTH_SCOPE,
+    scope: SCOPE_SETS.base,
     usePublicClient: CONFIG.usePublicClient,
     state: returnUrl,
   });

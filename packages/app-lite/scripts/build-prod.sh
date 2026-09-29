@@ -39,86 +39,17 @@ echo "OAuth Host URL: $target_url"
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  SCOPE STRING                                                              ║
-# ║  IMPORTANT: Keep this in sync with src/lib/config.ts:                       ║
-# ║    - APPSERVER_RPCS → rpc:<nsid>?aud=*                                     ║
-# ║    - OAUTH_SCOPE rpc:/repo: quoted entries → verbatim                       ║
-# ║    - OAUTH_SCOPE template literals (getServiceAuth) → env-var-backed      ║
-# ║      defaults below                                                         ║
+# ║  The scope ceiling is defined ONCE in src/lib/scopes.ts                     ║
+# ║  (FULL_SCOPE_CEILING). This script derives SCOPE from it. The only         ║
+# ║  env-dependent tokens (stream-handle NSID, appserver DID) are read by      ║
+# ║  scopes.ts itself from VITE_STREAM_HANDLE_NSID / VITE_APPSERVER_DID — so    ║
+# ║  the metadata always carries the environment's values, byte-identical to   ║
+# ║  what config.ts's OAUTH_SCOPE would request.                               ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-SCOPE="atproto"
-SCOPE+=" rpc:app.bsky.actor.getProfiles?aud=*"
-SCOPE+=" rpc:app.bsky.actor.getProfile?aud=*"
-SCOPE+=" blob:*/*"
-
-# ── Repo Scopes (blob uploads + handle writes) ───────────────────────────
-SCOPE+=" repo:space.roomy.upload.v0"
-SCOPE+=" repo:${VITE_STREAM_HANDLE_NSID:-space.roomy.space.handle.dev}"
-SCOPE+=" repo:space.roomy.user.profile"
-
-# ── Service auth (for direct/non-proxied XRPC calls) ───────────────────
-SCOPE+=" rpc:com.atproto.server.getServiceAuth?aud=${VITE_APPSERVER_DID:-did:web:api.roomy.space}"
-# getServiceAuth for ANY aud (arbiter DID is discovered per space and unknown
-# at build time) — matches OAUTH_SCOPE in config.ts.
-SCOPE+=" rpc:com.atproto.server.getServiceAuth?aud=*"
-# The proxied method the arbiter token is minted for; aud=* because the arbiter
-# DID is discovered per space.
-SCOPE+=" rpc:space.roomy.authComplete.arbiter.proxy?aud=*"
-SCOPE+=" include:space.roomy.authComplete"
-
-# ── Appserver RPCs (must match APPSERVER_RPCS in config.ts) ──────────────
-SCOPE+=" rpc:space.roomy.space.getSpaces?aud=*"
-SCOPE+=" rpc:space.roomy.space.getMetadata?aud=*"
-SCOPE+=" rpc:space.roomy.space.getSpaceSummary?aud=*"
-SCOPE+=" rpc:space.roomy.space.getThreads?aud=*"
-SCOPE+=" rpc:space.roomy.space.getRoles?aud=*"
-SCOPE+=" rpc:space.roomy.space.getMembers?aud=*"
-SCOPE+=" rpc:space.roomy.space.getInvites?aud=*"
-SCOPE+=" rpc:space.roomy.room.getMetadata?aud=*"
-SCOPE+=" rpc:space.roomy.room.getRoomSummary?aud=*"
-SCOPE+=" rpc:space.roomy.room.getMessages?aud=*"
-SCOPE+=" rpc:space.roomy.room.getThreads?aud=*"
-SCOPE+=" rpc:space.roomy.message.getMessage?aud=*"
-SCOPE+=" rpc:space.roomy.message.getReactions?aud=*"
-SCOPE+=" rpc:space.roomy.auth.getConnectionTicket?aud=*"
-SCOPE+=" rpc:space.roomy.getFlags?aud=*"
-SCOPE+=" rpc:space.roomy.room.updateSeen?aud=*"
-SCOPE+=" rpc:space.roomy.space.sendEvents?aud=*"
-SCOPE+=" rpc:space.roomy.space.createSpace?aud=*"
-SCOPE+=" rpc:space.roomy.space.joinSpace?aud=*"
-SCOPE+=" rpc:space.roomy.space.leaveSpace?aud=*"
-SCOPE+=" rpc:space.roomy.space.reorderSpaces?aud=*"
-SCOPE+=" rpc:space.roomy.space.setHandle?aud=*"
-SCOPE+=" rpc:space.roomy.space.updatePolicy?aud=*"
-SCOPE+=" rpc:space.roomy.space.getCalendarLink?aud=*"
-SCOPE+=" rpc:space.roomy.space.getCalendarEvents?aud=*"
-SCOPE+=" rpc:space.roomy.space.getActivityFeed?aud=*"
-SCOPE+=" rpc:space.roomy.search.messages?aud=*"
-SCOPE+=" rpc:space.roomy.search.rooms?aud=*"
-SCOPE+=" rpc:space.roomy.user.getProfile?aud=*"
-SCOPE+=" rpc:space.roomy.user.getMembershipStatus?aud=*"
-SCOPE+=" rpc:space.roomy.embed.getLinkMetadata?aud=*"
-SCOPE+=" rpc:space.roomy.space.getLinks?aud=*"
-SCOPE+=" rpc:space.roomy.room.getLinks?aud=*"
-
-# ── Channel federation ───────────────────────────────────────────────────
-SCOPE+=" rpc:space.roomy.federation.getRequests?aud=*"
-SCOPE+=" rpc:space.roomy.federation.getIncoming?aud=*"
-SCOPE+=" rpc:space.roomy.federation.getOutgoing?aud=*"
-SCOPE+=" rpc:space.roomy.federation.getGrants?aud=*"
-
-# ── Web push notification endpoints ──────────────────────────────────────
-SCOPE+=" rpc:space.roomy.push.getVapidPublicKey?aud=*"
-SCOPE+=" rpc:space.roomy.push.getPreferences?aud=*"
-SCOPE+=" rpc:space.roomy.pro.createCheckout?aud=*"
-SCOPE+=" rpc:space.roomy.push.registerSubscription?aud=*"
-SCOPE+=" rpc:space.roomy.push.unregisterSubscription?aud=*"
-SCOPE+=" rpc:space.roomy.push.setPreferences?aud=*"
-
-# ── Roomy Pro bridge tokens ──────────────────────────────────────────────
-SCOPE+=" rpc:space.roomy.space.getBridgeTokens?aud=*"
-SCOPE+=" rpc:space.roomy.space.grantBridgeToken?aud=*"
-SCOPE+=" rpc:space.roomy.space.revokeBridgeToken?aud=*"
+SCOPE="$(
+  node --experimental-strip-types -e 'import("./src/lib/scopes.ts").then((m) => process.stdout.write(m.FULL_SCOPE_CEILING))'
+)"
 
 # Build the OAuth client metadata JSON
 oauth_shared=$(
@@ -163,65 +94,45 @@ echo "$oauth_native_config" > build-staging/oauth-client-native.json
 echo "Scope: ${SCOPE:0:120}..."
 
 # ── Build-time verification ──────────────────────────────────────────────
-# Ensure every scope entry in config.ts (both RPC and repo) is present in
-# the built OAuth metadata. This catches drift at build time instead of at
-# the PDS consent screen. It reads the already-written
+# Ensure every tier's scopes are a subset of the metadata ceiling, and the
+# shipped metadata's scope is exactly the ceiling. The ceiling (and the tiers)
+# are now the single source of truth in src/lib/scopes.ts, so this catches any
+# drift where a tier gained a scope the metadata no longer declares (which
+# would make the PDS reject it with invalid_scope). It reads the already-written
 # oauth-client-metadata.json so we test the actual deployed artifact.
-node -e "
-const fs = require('fs');
-const src = fs.readFileSync('src/lib/config.ts', 'utf-8');
-const meta = fs.readFileSync('build-staging/oauth-client-metadata.json', 'utf-8');
-const parsed = JSON.parse(meta);
-const scope = parsed.scope || '';
-let hasErrors = false;
+node --experimental-strip-types -e "
+import { readFileSync } from 'node:fs';
+import('./src/lib/scopes.ts').then((m) => {
+  const meta = JSON.parse(readFileSync('build-staging/oauth-client-metadata.json', 'utf-8'));
+  const scope = meta.scope || '';
+  let hasErrors = false;
 
-// Check APPSERVER_RPCS
-const rpcMatch = src.match(/const APPSERVER_RPCS\s*=\s*\[([\s\S]*?)\]/);
-if (rpcMatch) {
-  const items = rpcMatch[1].split(/['\"]/).filter((_, i) => i % 2 === 1);
-  const missing = items.filter((nsid) => !scope.includes('rpc:' + nsid));
-  if (missing.length) {
-    console.log('MISSING RPC SCOPES (from APPSERVER_RPCS):');
-    missing.forEach(n => console.log('  ' + n));
+  const ceilingScopes = m.parseScopes(m.FULL_SCOPE_CEILING);
+  for (const [tier, tierScope] of Object.entries(m.SCOPE_SETS)) {
+    for (const s of m.parseScopes(tierScope)) {
+      if (!ceilingScopes.has(s)) {
+        console.log('MISSING SCOPE (tier ' + tier + ' not in ceiling): ' + s);
+        hasErrors = true;
+      }
+    }
+  }
+
+  // The shipped metadata scope must be exactly the ceiling (byte-identical).
+  if (scope !== m.FULL_SCOPE_CEILING) {
+    console.log('MISMATCH: shipped metadata scope != FULL_SCOPE_CEILING');
     hasErrors = true;
   }
-}
 
-// Check OAUTH_SCOPE for rpc: and repo: entries (quoted strings only;
-// template-literal entries like `repo:${CONFIG...}` are checked separately).
-const scopeMatch = src.match(/export const OAUTH_SCOPE\s*=\s*\[([\s\S]*?)\]/);
-if (scopeMatch) {
-  const items = scopeMatch[1].split(/['\"]/).filter((_, i) => i % 2 === 1);
-  const missingScopes = items
-    .filter((s) => s.startsWith('repo:') || s.startsWith('rpc:'))
-    .filter((s) => !scope.includes(s));
-  if (missingScopes.length) {
-    console.log('MISSING SCOPES (from OAUTH_SCOPE):');
-    missingScopes.forEach(n => console.log('  ' + n));
-    hasErrors = true;
-  }
-}
-
-// Check that the getServiceAuth scope (a template literal in config.ts with a
-// dynamic aud= value) is present by its static prefix. Without this scope
-// the DirectXrpcClient cannot obtain service auth tokens.
-if (!scope.includes('rpc:com.atproto.server.getServiceAuth?aud=')) {
-  console.log('MISSING SCOPES (from OAUTH_SCOPE):');
-  console.log('  rpc:com.atproto.server.getServiceAuth?aud=...');
-  hasErrors = true;
-}
-
-if (hasErrors) {
-  process.exit(1);
-}
+  if (hasErrors) process.exit(1);
+  console.log('All tier scopes present in ceiling, metadata scope == ceiling — verification passed');
+}).catch((e) => { console.error(e); process.exit(1); });
 "
 if [ $? -ne 0 ]; then
-  echo "ERROR: Scopes from config.ts are missing from the OAuth scope." >&2
-  echo "Add them to the SCOPE assembly in build-prod.sh" >&2
+  echo "ERROR: A tier scope is missing from the metadata ceiling, or the" >&2
+  echo "shipped scope drifts from src/lib/scopes.ts FULL_SCOPE_CEILING." >&2
+  echo "Fix the tier/ceiling definitions in src/lib/scopes.ts." >&2
   exit 1
 fi
-
-echo "All appserver RPC scopes and repo scopes present — verification passed"
 
 # ── Build-identity verification ─────────────────────────────────────────
 # The service is only nameable if the artifact says which commit it is. A
