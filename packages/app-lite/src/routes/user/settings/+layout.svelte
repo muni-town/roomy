@@ -30,6 +30,8 @@
         return "Notifications";
       case "subscription":
         return "Subscription";
+      case "scopes":
+        return "Access";
       default:
         return "Settings";
     }
@@ -120,6 +122,14 @@
           Subscription
         </Button>
       {/if}
+      <Button
+        variant="ghost"
+        class="w-full justify-start"
+        href="/user/settings/scopes"
+        data-current={page.url.pathname === "/user/settings/scopes"}
+      >
+        Access
+      </Button>
     </div>
   </div>
 {/snippet}

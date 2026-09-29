@@ -71,6 +71,8 @@ const APPSERVER_RPCS = [
   "space.roomy.auth.getConnectionTicket",
   "space.roomy.auth.getLoginScope",
   "space.roomy.auth.recordScopeGrant",
+  "space.roomy.auth.getScopeSettings",
+  "space.roomy.auth.setScopeSettings",
   "space.roomy.getFlags",
   "space.roomy.room.updateSeen",
   "space.roomy.space.sendEvents",
@@ -135,11 +137,61 @@ const BASE_SCOPES = [
 ] as const;
 
 /**
+ * Additional scopes for Semble cards written to the USER'S OWN repo. The
+ * space-collection path (`createCosmikCard`, sdk/src/atproto/cosmik-card.ts)
+ * goes through the arbiter proxy under `space.roomy.authComplete` and needs
+ * none of these — which is why this tier is the first real test of progressive
+ * expansion: the feature looks similar to one that already works, but this
+ * half genuinely requires new consent. Phase 6 wires the personal
+ * collection action to this tier.
+ */
+const SEMBLE_SCOPES = [
+  "repo:network.cosmik.card?action=create",
+] as const;
+
+/**
+ * Additional scopes for Bluesky DMs (chat.bsky.convo.* etc.). Not needed by
+ * anything in-tree yet; kept as the shape a future tier takes so the
+ * metadata ceiling already declares them (a scope must be in the client
+ * metadata before it can ever be requested).
+ */
+const DM_NSIDS = [
+  "chat.bsky.actor.deleteAccount",
+  "chat.bsky.actor.exportAccountData",
+  "chat.bsky.convo.acceptConvo",
+  "chat.bsky.convo.deleteMessageForSelf",
+  "chat.bsky.convo.getConvoAvailability",
+  "chat.bsky.convo.getConvoForMembers",
+  "chat.bsky.convo.getConvo",
+  "chat.bsky.convo.getLog",
+  "chat.bsky.convo.leaveConvo",
+  "chat.bsky.convo.listConvos",
+  "chat.bsky.convo.muteConvo",
+  "chat.bsky.convo.removeReaction",
+  "chat.bsky.convo.sendMessageBatch",
+  "chat.bsky.convo.unmuteConvo",
+  "chat.bsky.convo.addReaction",
+  "chat.bsky.convo.updateAllRead",
+  "chat.bsky.convo.updateRead",
+  "chat.bsky.moderation.getActorMetadata",
+  "chat.bsky.moderation.getMessageContext",
+  "chat.bsky.moderation.updateActorAccess",
+] as const;
+/** The Bluesky chat appview's DID, as the DM rpc scopes' `aud`. */
+const CHAT_APPVIEW_AUD = "did:web:api.bsky.chat%23bsky_chat";
+const DM_SCOPES = DM_NSIDS.map((nsid) => `rpc:${nsid}?aud=${CHAT_APPVIEW_AUD}`);
+
+/**
  * Named scope tiers. Each tier is a superset of the previous. The `base` tier
- * is what we request at first login.
+ * is what we request at first login. The later tiers exist so a returning
+ * user who has already consented to them gets them requested back on relogin
+ * (via the stored grant) with no re-prompt, and so the metadata ceiling can
+ * declare every scope the app might ever want.
  */
 export const SCOPE_SETS = {
   base: BASE_SCOPES.join(" "),
+  semble: [...BASE_SCOPES, ...SEMBLE_SCOPES].join(" "),
+  withDms: [...BASE_SCOPES, ...DM_SCOPES].join(" "),
 } as const;
 
 export type ScopeSetName = keyof typeof SCOPE_SETS;
@@ -152,6 +204,11 @@ export type ScopeSetName = keyof typeof SCOPE_SETS;
  * and the build-time env-var-backed repo/aud tokens. It reproduces, byte for
  * byte, the `SCOPE` assembly that scripts/build-prod.sh historically
  * hand-maintained — the PDS enforces that a requested scope must exist here.
+ *
+ * The ceiling legitimately grows in Phase 4: every tier's scopes (Semble's
+ * `repo:network.cosmik.card` write, the deferred DM rpc scopes) are now
+ * declared so the consent round-trip can request them — while first login
+ * still requests only `base`.
  */
 export const FULL_SCOPE_CEILING = [
   "atproto",
@@ -166,6 +223,8 @@ export const FULL_SCOPE_CEILING = [
   "rpc:space.roomy.authComplete.arbiter.proxy?aud=*",
   "include:space.roomy.authComplete",
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
+  "repo:network.cosmik.card?action=create",
+  ...DM_SCOPES,
 ].join(" ");
 
 /** Parse a scope string into a Set of individual scope tokens. */

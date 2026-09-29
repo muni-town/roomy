@@ -145,6 +145,10 @@ export const QUERY_SCHEMAS = {
     params: queries.getLoginScope.Params,
     response: queries.getLoginScope.Response,
   },
+  "space.roomy.auth.getScopeSettings": {
+    params: queries.getScopeSettings.Params,
+    response: queries.getScopeSettings.Response,
+  },
 } as const;
 
 export const PROCEDURE_SCHEMAS = {
@@ -211,6 +215,10 @@ export const PROCEDURE_SCHEMAS = {
   "space.roomy.auth.recordScopeGrant": {
     input: procedures.recordScopeGrant.Input,
     output: procedures.recordScopeGrant.Output,
+  },
+  "space.roomy.auth.setScopeSettings": {
+    input: procedures.setScopeSettings.Input,
+    output: procedures.setScopeSettings.Output,
   },
 } as const;
 

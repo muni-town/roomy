@@ -133,6 +133,8 @@ export const READSTATE_MIGRATIONS = {
       }
     },
   },
+  // Pending OAuth scope-expansion intents — user_scope_intents in readStateSchema.sql.
+  "13": { kind: "structural" },
 } as const satisfies Record<string, ReadStateMigrationEntry>;
 
 /**

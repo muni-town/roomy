@@ -86,6 +86,49 @@ export const prose: Record<string, EndpointProse> = {
       "Stores the RAW scope string: tiers (`semble`, `withDms`) are a client-side UX abstraction the server must not know about.",
       "LAST-GRANTED, not a high-water mark: a high-water mark would silently re-grant scopes a user revoked. Phase 4's user-editable access settings depend on this.",
       "Fire-and-forget on the client — a failure is non-fatal and self-heals on the next login.",
+      "Clears any pending expansion intent (`user_scope_intents`) once the confirmed grant is stored — the grant becomes the source of truth so a stale requested scope does not resurface.",
+    ],
+  },
+  "space.roomy.auth.getScopeSettings": {
+    description:
+      "Returns the calling user's stored OAuth scope settings: the raw last-granted scope string (the same value `getLoginScope` returns at login) plus any pending expansion intent recorded by `setScopeSettings`. The settings page derives per-tier coverage from the raw scope client-side via `hasScopeSet`; the server stores opaque strings and never tier names.",
+    auth: "Authenticated. Returns 401 (`AuthRequired`) when `auth.did` is null.",
+    outputSchema: {
+      type: "object",
+      properties: {
+        scope: {
+          type: "string",
+          description:
+            "Raw last-granted scope string from `getTokenInfo()`, or null when the user has never recorded a grant.",
+          optional: true,
+        },
+        requestedScope: {
+          type: "string",
+          description:
+            "Wider scope the user has requested via `setScopeSettings` but the PDS has not yet confirmed (a strict superset of `scope`), or null when no expansion is pending.",
+          optional: true,
+        },
+      },
+    },
+    notes: [
+      "Reads `user_oauth_grants` and `user_scope_intents` in the read-state DB (schemas v11/v12).",
+      "'Per grantable tier, whether the store covers it' is deliberately NOT computed here — tier names are a client-side abstraction; the client maps tier → capability and derives coverage from the raw scope.",
+    ],
+  },
+  "space.roomy.auth.setScopeSettings": {
+    description:
+      "Lets the user *request* a change to the scope their OAuth grant covers by recording the desired raw scope string. It cannot grant anything by itself — granting a wider scope needs the client-driven PDS consent round-trip (via the app's `requestScopeExpansion()`), so an expansion request records a pending intent the client later realises; `recordScopeGrant` writes the confirmed grant after `getTokenInfo()` reports what the PDS actually returned. A narrowing/revoke request clears any pending intent.",
+    auth: "Authenticated. Returns 401 (`AuthRequired`) when `auth.did` is null; 400 when `scope` is missing/empty.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        scope: { type: "string", description: "Desired raw scope string (a full tier computed client-side)." },
+      },
+    },
+    notes: [
+      "Expansion (desired is a strict superset of the user's effective scope — grant ∪ prior intent) stores the pending intent in `user_scope_intents`.",
+      "Narrowing / no-op clears the pending intent; narrowing the stored grant itself is the client's job via `recordScopeGrant` (no consent needed — next login just requests less, while the live token keeps its scopes until re-auth).",
+      "Re-requesting the same pending expansion is idempotent.",
     ],
   },
 

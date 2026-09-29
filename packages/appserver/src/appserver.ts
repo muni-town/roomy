@@ -27,6 +27,8 @@ import { ACTIVE_WINDOW_MS, purgeStaleThreadActivity } from "./queries/userActive
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { getLoginScopeHandler } from "./handlers/space.roomy.auth.getLoginScope.ts";
 import { recordScopeGrantHandler } from "./handlers/space.roomy.auth.recordScopeGrant.ts";
+import { getScopeSettingsHandler } from "./handlers/space.roomy.auth.getScopeSettings.ts";
+import { setScopeSettingsHandler } from "./handlers/space.roomy.auth.setScopeSettings.ts";
 import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
 import { getEventsHandler } from "./handlers/space.roomy.sync.getEvents.ts";
@@ -210,6 +212,17 @@ export function buildRouter(
     .procedure("space.roomy.auth.recordScopeGrant", {
       handler: recordScopeGrantHandler,
       inputSchema: schemas.procedures.recordScopeGrant.Input,
+      // No outputSchema: void return; short-circuits to 200 with empty body.
+    })
+    // ── Progressive scope expansion (Phase 4): user-editable settings ────
+    .query("space.roomy.auth.getScopeSettings", {
+      handler: getScopeSettingsHandler,
+      paramsSchema: schemas.queries.getScopeSettings.Params,
+      outputSchema: schemas.queries.getScopeSettings.Response,
+    })
+    .procedure("space.roomy.auth.setScopeSettings", {
+      handler: setScopeSettingsHandler,
+      inputSchema: schemas.procedures.setScopeSettings.Input,
       // No outputSchema: void return; short-circuits to 200 with empty body.
     })
     .procedure("space.roomy.room.updateSeen", {

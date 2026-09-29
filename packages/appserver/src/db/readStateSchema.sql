@@ -234,3 +234,20 @@ create table if not exists user_oauth_grants (
   granted_scope  text not null,
   updated_at     integer not null default (unixepoch() * 1000)
 ) strict;
+
+-- ── Pending OAuth scope-expansion intents (schema v13) ────────────────────
+-- The desired raw scope string a user has *requested* via setScopeSettings
+-- but the PDS has not yet confirmed. Granting a wider scope needs the client-
+-- driven PDS consent round-trip, so this records the request the user made in
+-- the app settings; the actual last-granted scope is only updated by
+-- recordScopeGrant once getTokenInfo() confirms what the PDS returned.
+--
+-- A user_scope_intents row holds at most one pending expansion (a strict
+-- superset of the stored grant). A narrowing request clears it. Like
+-- user_oauth_grants, this state lives in the read-state DB (not the
+-- materialisation DB) so it survives materialisation resets.
+create table if not exists user_scope_intents (
+  user_did       text primary key,
+  requested_scope text not null,
+  updated_at     integer not null default (unixepoch() * 1000)
+) strict;

@@ -20,6 +20,7 @@
 
 import { openReadStateDb } from "../db/db.ts";
 import { upsertGrantedScope } from "../queries/userOauthGrants.ts";
+import { clearRequestedScope } from "../queries/userScopeIntents.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import type { AuthCtx, ProcedureHandler, QueryParams } from "../xrpc/types.ts";
@@ -45,5 +46,10 @@ export const recordScopeGrantHandler: ProcedureHandler<
     );
   }
 
-  await upsertGrantedScope(openReadStateDb(), userDid, body.scope);
+  const db = openReadStateDb();
+  await upsertGrantedScope(db, userDid, body.scope);
+  // Once a grant is recorded it becomes the source of truth; clear any pending
+  // expansion intent (userScopeIntents.ts contract) so a stale "pending
+  // request" does not resurface on a later getScopeSettings.
+  await clearRequestedScope(db, userDid);
 };

@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("read-state schema", () => {
   test("READSTATE_SCHEMA_VERSION is exported", () => {
-    expect(READSTATE_SCHEMA_VERSION).toBe("12");
+    expect(READSTATE_SCHEMA_VERSION).toBe("13");
   });
 
   test("schema applies cleanly on a fresh database", () => {
@@ -65,6 +65,7 @@ describe("read-state schema", () => {
     expect(tables).toContain("read_positions");
     expect(tables).toContain("user_oauth_grants");
     expect(tables).toContain("user_thread_activity");
+    expect(tables).toContain("user_scope_intents");
   });
 
   /**
@@ -121,6 +122,68 @@ describe("read-state schema", () => {
     } finally {
       pool.close();
     }
+  });
+
+  /**
+   * Progressive scope expansion: `user_scope_intents` arrives as schema v13 —
+   * a purely structural bump (the table is a plain `create table if not
+   * exists` in readStateSchema.sql, so no `up` and no async task). A DB
+   * stamped at the previous version must reach v13 on open — and, because the
+   * walk continues to the current version, past v12's `push_subscriptions`
+   * ALTER as well — and carry the table.
+   */
+  test("upgrades a v12 database to v13 and gains user_scope_intents", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "roomy-readstate-scope-"));
+    cleanup.push(dir);
+    const path = join(dir, "roomy-readstate.sqlite");
+    const old = new Database(path, { create: true });
+    old.exec(readFileSync(SCHEMA_PATH, "utf8"));
+    // Simulate a deployed pre-v13 DB: the intents table does not exist yet.
+    old.exec("drop table if exists user_scope_intents");
+    old.run("update readstate_schema_version set version = '12' where id = 1");
+    old.close();
+
+    const pool = new DatabasePool(1, join(THIS_DIR, "worker.ts"));
+    try {
+      await pool.init({
+        readStateDbPath: path,
+        eventsDbPath: ":memory:",
+        spacesDir: ":memory:",
+        globalDbPath: ":memory:",
+        readStateSchemaVersion: READSTATE_SCHEMA_VERSION,
+        spaceSchemaVersion: SPACE_SCHEMA_VERSION,
+        globalSchemaVersion: GLOBAL_SCHEMA_VERSION,
+      });
+      const readState = pool.readState();
+
+      const version = await readState
+        .query("select version from readstate_schema_version where id = 1")
+        .get<{ version: string }>();
+      expect(version?.version).toBe(READSTATE_SCHEMA_VERSION);
+
+      const tables = await readState
+        .query("select name from sqlite_master where type = 'table' order by name")
+        .all<{ name: string }>();
+      expect(tables.map((t) => t.name)).toContain("user_scope_intents");
+
+      // The table is usable: its PK + columns match the store's statements.
+      await readState.run(
+        "insert into user_scope_intents (user_did, requested_scope) values (?, ?)",
+        ["did:plc:migrated-user", "atproto"],
+      );
+      const row = await readState
+        .query("select requested_scope from user_scope_intents where user_did = ?")
+        .get<{ requested_scope: string }>("did:plc:migrated-user");
+      expect(row?.requested_scope).toBe("atproto");
+    } finally {
+      pool.close();
+    }
+  });
+
+  test("structural v13 bump registers no async migration marker", () => {
+    const entry = readStateMigrationEntry("13");
+    expect(entry?.kind).toBe("structural");
+    expect(entry?.up).toBeUndefined();
   });
 
   test("structural v11 bump registers no async migration marker", () => {

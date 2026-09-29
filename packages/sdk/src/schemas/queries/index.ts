@@ -38,3 +38,4 @@ export * as getFederationGrants from "./getFederationGrants";
 export * as getUserAccess from "./getUserAccess";
 export * as getBridgeTokens from "./getBridgeTokens";
 export * as getLoginScope from "./getLoginScope";
+export * as getScopeSettings from "./getScopeSettings";

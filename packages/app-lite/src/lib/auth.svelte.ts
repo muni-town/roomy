@@ -9,7 +9,7 @@ import {
 import { transport } from "@roomy-space/sdk";
 import { goto } from "$app/navigation";
 import { CONFIG } from "./config";
-import { SCOPE_SETS, hasScopeSet } from "./scopes";
+import { SCOPE_SETS, hasScopeSet, type ScopeSetName } from "./scopes";
 import { APP_PASSWORD_GRANTED_SCOPE, decideLoginScope } from "./scope-grant";
 import { scheduleAutoReload } from "./error-recovery";
 import { pxUnauth } from "./client";
@@ -36,6 +36,8 @@ let initError = $state<string | null>(null);
  * there is no PDS grant to record).
  */
 let grantedScope = $state<string | null>(null);
+/** The handle the current auth flow/expansion is keyed to (for re-auth). */
+let currentHandle = $state<string>("");
 export function isAuthenticated(): boolean {
   return authenticated;
 }
@@ -247,6 +249,20 @@ export async function init() {
       // branch returns above and has no real grant.
       void trackGrant(result.session);
 
+      // Verify a pending scope expansion (set before navigating to the PDS
+      // consent screen in requestScopeExpansion) actually took. If the user
+      // refused or the PDS narrowed, clear the flag so it doesn't linger — the
+      // settings page reads the actual `grantedScope` for true state.
+      const pending = isScopeExpansionPending();
+      if (pending) {
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.removeItem(PENDING_EXPANSION_KEY);
+        }
+        if (grantedScope === null || !hasScopeSet(grantedScope, pending)) {
+          console.warn(`Scope expansion to "${pending}" was not granted`);
+        }
+      }
+
       // After an OAuth callback the browser lands on the fixed redirect URI
       // (the homepage). If we round-tripped the original URL through the
       // `state` parameter in `login()`, navigate back to it now. On a plain
@@ -323,6 +339,7 @@ export async function init() {
 }
 
 export async function login(handle: string) {
+  currentHandle = handle;
   saveAppserverDid(CONFIG.appserverDid);
 
   // Before kicking off OAuth, ask the appserver what scope this user last
@@ -367,6 +384,114 @@ export async function login(handle: string) {
     if (target && target !== currentReturnUrl()) {
       goto(target, { replaceState: true });
     }
+  }
+}
+
+/** The sessionStorage key the pending scope-expansion tier is persisted under. */
+const PENDING_EXPANSION_KEY = "pending-scope-expansion";
+
+export function isScopeExpansionPending(): ScopeSetName | null {
+  if (typeof sessionStorage === "undefined") return null;
+  const pending = sessionStorage.getItem(PENDING_EXPANSION_KEY);
+  return pending && pending in SCOPE_SETS ? (pending as ScopeSetName) : null;
+}
+
+/**
+ * Ask the PDS to grant a wider scope tier and, on return, surface the result.
+ *
+ * The user asked to enable a capability (e.g. in the Phase 4 settings page).
+ * This re-runs the OAuth flow with the wider tier's scope:
+ *
+ *   1. Record the desired tier in `sessionStorage` (survives the redirect —
+ *      the browser navigates to the PDS and back, so in-memory state is lost).
+ *   2. Record the intent on the appserver via `setScopeSettings`, then drive
+ *      the PDS consent round-trip with the wider tier's scope.
+ *   3. On return, `init()`'s `trackGrant` reads the actually-granted scope and
+ *      fires `recordScopeGrant`; the settings page derives real state from
+ *      the granted scope (whether the expansion took or was refused/narrowed).
+ */
+export async function requestScopeExpansion(tier: ScopeSetName): Promise<void> {
+  // App-password (test-mode) has no OAuth redirect to drive; the granted
+  // scope is the requested tier already, so there is nothing to expand.
+  if (appPasswordAgent) return;
+  // The pending tier must survive the redirect; record it before navigating.
+  if (typeof sessionStorage !== "undefined") {
+    sessionStorage.setItem(PENDING_EXPANSION_KEY, tier);
+  }
+  // Record intent appserver-side first (fire-and-forget; a failure must not
+  // block the round-trip).
+  await requestScopeSettings(tier);
+  if (!currentHandle) {
+    // No authenticated handle to re-authorize (e.g. signed-out settings
+    // page). The intent is recorded; a future login will request it.
+    return;
+  }
+  // Drive the PDS consent round-trip with the WIDER tier's scope request —
+  // not `login()`'s stored-grant reconcile, which would request the old
+  // (unexpanded) scope. The PDS consent screen shows only the delta (the
+  // tier's additions) for an already-granted base. On return `init()`'s
+  // `trackGrant` records what the PDS actually granted.
+  const returnUrl = currentReturnUrl();
+  const result = await sdkLogin(CONFIG.appserverDid, currentHandle, {
+    port: CONFIG.port,
+    scope: SCOPE_SETS[tier],
+    usePublicClient: CONFIG.usePublicClient,
+    state: returnUrl,
+  });
+  if (result) {
+    // Tauri: sdkLogin resolves in-place (no page navigation). Wire up the
+    // session like login() does so the app is usable immediately; init()'s
+    // trackGrant path is not invoked here, so record the grant directly.
+    session = result.session;
+    agent = result.agent;
+    await setupDirectXrpc(result.agent);
+    authenticated = true;
+    void trackGrant(result.session);
+  }
+}
+
+/**
+ * Record the user's requested scope tier on the appserver (Phase 4).
+ *
+ * `space.roomy.auth.setScopeSettings` cannot grant anything by itself —
+ * granting needs the PDS consent round-trip. It records *intent*; the actual
+ * stored grant updates only after `getTokenInfo()` confirms (via trackGrant →
+ * `recordScopeGrant`). App-password (test) mode has no PDS grant and no
+ * OAuth round-trip, so this is a no-op there.
+ */
+export async function requestScopeSettings(tier: ScopeSetName): Promise<void> {
+  if (appPasswordAgent) return; // no PDS grant to request in test mode
+  try {
+    await px().procedure("space.roomy.auth.setScopeSettings", {
+      scope: SCOPE_SETS[tier],
+    });
+  } catch (err) {
+    // Non-fatal: the client still drives the consent round-trip; a failed
+    // intent record self-heals on the next login via getLoginScope.
+    console.warn("Failed to record scope settings:", err);
+  }
+}
+
+/**
+ * Narrow the stored grant to `base` (revoke every extra tier).
+ *
+ * Recording the narrower scope via `recordScopeGrant` makes the next login
+ * request less — no PDS round-trip because narrowing needs no consent. The
+ * LIVE token keeps its scopes until the next re-auth; the UI must say so
+ * rather than implying immediate revocation. App-password (test) mode has no
+ * real grant to narrow.
+ */
+export async function revokeScopeSettings(): Promise<void> {
+  if (appPasswordAgent) return; // no PDS grant in test mode
+  try {
+    // Record the intent (clears any pending expansion) …
+    await requestScopeSettings("base");
+    // … and narrow the stored grant so a future login requests only base.
+    await px().procedure("space.roomy.auth.recordScopeGrant", {
+      scope: SCOPE_SETS.base,
+    });
+  } catch (err) {
+    console.warn("Failed to revoke scope settings:", err);
   }
 }
 

@@ -15,6 +15,16 @@
     "group": "Auth"
   },
   {
+    "nsid": "space.roomy.auth.getScopeSettings",
+    "kind": "query",
+    "group": "Auth"
+  },
+  {
+    "nsid": "space.roomy.auth.setScopeSettings",
+    "kind": "procedure",
+    "group": "Auth"
+  },
+  {
     "nsid": "space.roomy.room.updateSeen",
     "kind": "procedure",
     "group": "Rooms"
