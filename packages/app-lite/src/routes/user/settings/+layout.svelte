@@ -19,6 +19,12 @@
     flagsQuery.data?.flags.includes("pro-subscription") ?? false,
   );
 
+  // The Access settings page is gated behind the access-settings flag while
+  // progressive scope expansion is being iterated on. All flags default false.
+  const accessSettingsEnabled = $derived(
+    flagsQuery.data?.flags.includes("access-settings") ?? false,
+  );
+
   // Derive the active settings page name from the route so the navbar shows
   // "General" or "Notifications" instead of a static "User settings".
   const settingsPageName = $derived.by(() => {
@@ -122,14 +128,16 @@
           Subscription
         </Button>
       {/if}
-      <Button
-        variant="ghost"
-        class="w-full justify-start"
-        href="/user/settings/scopes"
-        data-current={page.url.pathname === "/user/settings/scopes"}
-      >
-        Access
-      </Button>
+      {#if accessSettingsEnabled}
+        <Button
+          variant="ghost"
+          class="w-full justify-start"
+          href="/user/settings/scopes"
+          data-current={page.url.pathname === "/user/settings/scopes"}
+        >
+          Access
+        </Button>
+      {/if}
     </div>
   </div>
 {/snippet}

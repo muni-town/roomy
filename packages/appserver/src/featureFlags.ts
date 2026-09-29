@@ -44,6 +44,11 @@ export const FEATURE_FLAGS: readonly FeatureFlagDef[] = [
     description:
       "Semble integration: create network.cosmik.card space cards from chat message links",
   },
+  {
+    key: "access-settings",
+    description:
+      "User account access settings page: view and change which PDS OAuth scopes Roomy is granted",
+  },
 ];
 export const FEATURE_FLAG_KEYS: ReadonlySet<string> = new Set(
   FEATURE_FLAGS.map((f) => f.key),

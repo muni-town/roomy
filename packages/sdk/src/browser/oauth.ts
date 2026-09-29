@@ -16,6 +16,7 @@ import {
 } from "@atproto/oauth-client-browser";
 import { Agent } from "@atproto/api";
 import type { OAuthSession } from "@atproto/oauth-client-browser";
+import { authorizeRequestOptions } from "./oauth-options";
 
 // Declares necessary parts of tauri JS API exposed through `window.__TAURI__`. 
 // (available when `withGlobalTauri` is enabled in config.tauri.json)
@@ -410,9 +411,10 @@ export async function login(
     ])
   }
 
-  // Forward `state` so the app can round-trip a return URL through the PDS.
-  // The value comes back unchanged via `initSession()`'s `state` field.
-  await client.signIn(handle, opts.state ? { state: opts.state } : undefined);
+  // Forward `state` (round-trip the return URL) and `scope` — the *subset*
+  // the caller chose. Passing no `scope` makes the client fall back to
+  // `clientMetadata.scope`, the full ceiling; see `authorizeRequestOptions`.
+  await client.signIn(handle, authorizeRequestOptions(opts));
 }
 
 async function tauriLogin(
@@ -421,7 +423,7 @@ async function tauriLogin(
   opts: InitSessionOptions,
   tauri: NonNullable<Window["__TAURI__"]>,
 ): Promise<LoginResult> {
-  const url = await client.authorize(handle, opts.state ? { state: opts.state } : undefined);
+  const url = await client.authorize(handle, authorizeRequestOptions(opts));
 
   // Fire-and-forget. Promise may never settle on some platforms
   tauri.opener.openUrl(url);

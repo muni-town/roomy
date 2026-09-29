@@ -348,10 +348,12 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
   );
 
   // ── Feature flags ────────────────────────────────────────────────────
-  // `search` gates the navbar search UI and the search routes; every flag
-  // defaults to off in the appserver.
+  // `search` gates the navbar search UI and the search routes; `access-settings`
+  // gates the user Access settings page and its sidebar entry. Every flag
+  // defaults to off in the appserver, so the specs that cover a flagged surface
+  // enable it here and the flag-off behaviour is asserted by toggling.
   await readStateDb(db).run(
-    "insert into feature_flags (key, global_enabled) values ('search', 1) on conflict(key) do update set global_enabled = 1",
+    "insert into feature_flags (key, global_enabled) values ('search', 1), ('access-settings', 1) on conflict(key) do update set global_enabled = 1",
   );
 
   // ── Global profile row ───────────────────────────────────────────────

@@ -4,10 +4,20 @@
   import { toast } from "@foxui/core";
   import { auth, requestScopeExpansion, revokeScopeSettings } from "$lib/auth.svelte";
   import { createScopeSettingsQuery } from "$lib/queries/scope-settings";
+  import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { hasScopeSet, type ScopeSetName } from "$lib/scopes";
   import { queryClient } from "$lib/client";
 
-  const settingsQuery = createScopeSettingsQuery();
+  // The Access settings page is gated behind the access-settings flag while
+  // progressive scope expansion is being iterated on. Direct navigation still
+  // lands here (the sidebar entry is hidden), so gate the body too. All flags
+  // default false.
+  const flagsQuery = createFeatureFlagsQuery();
+  const accessSettingsEnabled = $derived(
+    flagsQuery.data?.flags.includes("access-settings") ?? false,
+  );
+
+  const settingsQuery = createScopeSettingsQuery(() => accessSettingsEnabled);
   const queryKey = ["space.roomy.auth.getScopeSettings"];
 
   // The granted scope is what the live token actually holds. The server's
@@ -42,6 +52,7 @@
   }
 </script>
 
+{#if accessSettingsEnabled}
 <div class="flex flex-col gap-10">
   <section>
     <h2 class="text-base font-semibold mb-1 text-base-900 dark:text-base-100">
@@ -120,3 +131,10 @@
     {/if}
   {/if}
 </div>
+{:else}
+  <div class="flex flex-col items-center gap-4 py-12">
+    <p class="text-sm text-base-500 dark:text-base-400">
+      Access settings are not enabled for your account yet.
+    </p>
+  </div>
+{/if}

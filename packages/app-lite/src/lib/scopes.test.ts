@@ -147,4 +147,19 @@ describe("tier/ceiling invariants", () => {
       seen.add(s);
     }
   });
+
+  test("base tier requests no chat.bsky scopes (Chat access is opt-in)", () => {
+    // The `withDms` tier holds the Bluesky DM rpc scopes. First login must
+    // request only `base`, so no chat scope may leak into it — otherwise the
+    // consent screen asks for Chat access up front. The chat scopes must
+    // still exist in the ceiling so a later opt-in can request them.
+    const chatScopes = [...parseScopes(SCOPE_SETS.withDms)].filter((s) =>
+      s.includes("chat.bsky."),
+    );
+    assert.ok(chatScopes.length > 0, "withDms should carry chat.bsky scopes");
+    const baseSet = parseScopes(SCOPE_SETS.base);
+    for (const s of chatScopes) {
+      assert.equal(baseSet.has(s), false, `chat scope leaked into base: ${s}`);
+    }
+  });
 });

@@ -259,9 +259,20 @@ packages/app-lite/static/
 
 ### SDK
 
-No change required — `scope` already flows through `login()` → `signIn()` →
-`authorize()`. The server-side integration is entirely in app-lite's
-`auth.svelte.ts` and the new appserver endpoints.
+**One change required (corrected 2026-09-29).** The original claim — "no change
+required, `scope` already flows through `login()` → `signIn()` → `authorize()`"
+— was wrong, and its failure was silent. `login()` forwarded only `state` to
+`client.signIn()`/`authorize()`; the `scope` option was dropped. The atproto
+client resolves `options?.scope ?? clientMetadata.scope`, so a dropped `scope`
+does not default to the caller's request — it defaults to the client metadata's
+**ceiling**, the union of every tier. On the production public-client path a
+first login therefore requested all 20 `chat.bsky.*` DM scopes (and Semble's
+`repo:network.cosmik.card?action=create`), directly contradicting "request only
+`base` at first login". Fixed in `packages/sdk/src/browser/oauth.ts`: both the
+web (`signIn`) and Tauri (`authorize`) paths now forward the per-login `scope`
+via `authorizeRequestOptions()` (`src/browser/oauth-options.ts`), pinned by
+`src/browser/oauth.test.ts` and `oauth-options.test.ts`. Everything else is
+app-lite's `auth.svelte.ts` and the appserver endpoints.
 
 ### Lexicons
 
