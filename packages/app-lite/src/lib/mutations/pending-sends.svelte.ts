@@ -30,6 +30,7 @@ import { SvelteMap } from "svelte/reactivity";
 import { newUlid } from "@roomy-space/sdk";
 import { messagesKey, type Message } from "$lib/queries/messages";
 import { queryClient } from "$lib/client";
+import { recoverFromWriteRefusal } from "$lib/write-refusal.svelte";
 import { sendEvents } from "./send-events";
 
 export type DeliveryState = "pending" | "failed";
@@ -107,6 +108,9 @@ export async function retryPendingSend(id: string): Promise<void> {
     confirmPendingSend(id);
   } catch (e) {
     failPendingSend(id);
+    // A resend is refused for the same reason the original was: record it so
+    // the room's composer and this row's retry both stand down.
+    recoverFromWriteRefusal(e, entry.roomId, queryClient);
     throw e;
   }
 }

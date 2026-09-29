@@ -39,12 +39,20 @@
     </DropdownMenu.Trigger>
   {/if}
 
+  <!--
+    A dropdown menu is non-modal, like bits-ui's own popover/select/tooltip
+    menus, so it must not lock the body scroll. `@foxui/core`'s Modal carries a
+    second bits-ui copy whose body-scroll lock restores its own snapshot of an
+    already-locked body, stranding `pointer-events: none` on <body> — so any
+    dialog opened from this menu left the app unable to receive clicks.
+  -->
   <DropdownMenu.Portal>
     <DropdownMenu.Content
       {side}
       {align}
       {sideOffset}
       {alignOffset}
+      preventScroll={false}
       class={cn(
         "z-50 min-w-[180px] overflow-hidden rounded-xl border border-base-200 dark:border-base-800",
         "bg-base-50/90 dark:bg-base-900/20 backdrop-blur-xl",

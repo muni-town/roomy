@@ -25,6 +25,10 @@ playwright-browserstack-sdk.config.temp.json
 browserstackSetupConfig.json
 **/*.spec.ts-snapshots
 
+# A literal `:memory:` directory is the SQLite sentinel escaping to the
+# filesystem — never a real data dir.
+**/:memory:/
+
 # Logs
 local.log
 **/log

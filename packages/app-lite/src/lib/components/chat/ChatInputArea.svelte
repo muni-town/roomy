@@ -21,6 +21,8 @@
   import { extractUrls, fetchEmbedData } from "$lib/embed/embed-service";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { scheduleAutoReload } from "$lib/error-recovery";
+  import { recoverFromWriteRefusal } from "$lib/write-refusal.svelte";
+  import { queryClient } from "$lib/client";
   import { toast } from "@foxui/core";
   import { IconX } from "@roomy/design/icons";
 
@@ -406,18 +408,26 @@
       });
     } catch (e: unknown) {
       console.error("Failed to send message:", e);
-      // Route through the shared recovery: a dead ATProto session (e.g. the
-      // OAuth client's `TokenRefreshError`) is exactly the class of failure
-      // this reloads for, and sends are not Tanstack mutations, so the
-      // QueryClient's onError hook never sees them. Without this the composer
-      // silently swallowed the error and the user was left "unable to send
-      // messages" with no recovery and no explanation.
-      scheduleAutoReload(e);
-      toast.error(
-        e instanceof Error
-          ? `Message not sent: ${e.message}`
-          : "Message not sent. Check your connection and try again.",
-      );
+      // A refusal is the access decision the composer already renders, not a
+      // delivery failure: mark the room and re-read the metadata behind
+      // `canWrite`, so the permission notice replaces the composer instead of
+      // a toast that leaves Send offered and nothing changed. The message
+      // itself stays on the timeline as a failed send — the composer was
+      // already cleared when it queued, so the row is all that is left of it.
+      if (!recoverFromWriteRefusal(e, roomId, queryClient)) {
+        // Route through the shared recovery: a dead ATProto session (e.g. the
+        // OAuth client's `TokenRefreshError`) is exactly the class of failure
+        // this reloads for, and sends are not Tanstack mutations, so the
+        // QueryClient's onError hook never sees them. Without this the composer
+        // silently swallowed the error and the user was left "unable to send
+        // messages" with no recovery and no explanation.
+        scheduleAutoReload(e);
+        toast.error(
+          e instanceof Error
+            ? `Message not sent: ${e.message}`
+            : "Message not sent. Check your connection and try again.",
+        );
+      }
     } finally {
       // A message that never reached the queue (an upload failed) leaves the
       // draft intact so the user can retry without rewriting it. Once queued,

@@ -32,3 +32,13 @@ export function spacesDir(): string {
   const dir = dataDir();
   return dir === ":memory:" ? ":memory:" : join(dir, "spaces");
 }
+
+/**
+ * Resolve the appserver signing-key file. `DATA_DIR=:memory:` ⇒ null: the
+ * sentinel means "no filesystem", so the key is ephemeral, not written under a
+ * literal `:memory:` directory.
+ */
+export function signingKeyPath(): string | null {
+  const dir = dataDir();
+  return dir === ":memory:" ? null : join(dir, "appserver-signing-key.hex");
+}

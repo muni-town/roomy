@@ -12,6 +12,9 @@
 
 import { describe, expect, test, beforeEach } from "bun:test";
 import { verifySignature } from "@atproto/crypto";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   mintServiceAuth,
   appserverSigningKeyDid,
@@ -89,5 +92,43 @@ describe("mintServiceAuth", () => {
     expect(multibase.startsWith("z")).toBe(true);
     // Reconstruct the did:key and confirm it matches the keypair's did().
     expect(`did:key:${multibase}`).toBe(await appserverSigningKeyDid());
+  });
+});
+
+describe("appserver signing key persistence", () => {
+  test("DATA_DIR=:memory: mints a key without touching the filesystem", async () => {
+    const prev = process.env.DATA_DIR;
+    process.env.DATA_DIR = ":memory:";
+    _resetAppserverSigningKey();
+    try {
+      const did = await appserverSigningKeyDid();
+      expect(did.startsWith("did:key:")).toBe(true);
+      // `:memory:` is the no-filesystem sentinel (as for the DBs): a literal
+      // `:memory:/` directory in the working tree would be swept into commits.
+      expect(existsSync(join(process.cwd(), ":memory:"))).toBe(false);
+    } finally {
+      process.env.DATA_DIR = prev;
+      _resetAppserverSigningKey();
+    }
+  });
+
+  test("DATA_DIR=<dir> persists the key to the data dir", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "appserver-key-"));
+    const prev = process.env.DATA_DIR;
+    process.env.DATA_DIR = dir;
+    _resetAppserverSigningKey();
+    try {
+      const did = await appserverSigningKeyDid();
+      const keyPath = join(dir, "appserver-signing-key.hex");
+      expect(existsSync(keyPath)).toBe(true);
+
+      // The persisted key is the one that was loaded.
+      _resetAppserverSigningKey();
+      expect(await appserverSigningKeyDid()).toBe(did);
+    } finally {
+      process.env.DATA_DIR = prev;
+      _resetAppserverSigningKey();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

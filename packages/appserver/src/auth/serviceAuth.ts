@@ -22,8 +22,8 @@
 import { Secp256k1Keypair } from "@atproto/crypto";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { dataDir } from "../db/paths.ts";
+import { dirname } from "node:path";
+import { signingKeyPath } from "../db/paths.ts";
 
 /** Token lifetime in seconds. The arbiter rejects tokens older than 5 minutes. */
 const TOKEN_TTL_SEC = 60;
@@ -37,8 +37,8 @@ let cachedKey: Secp256k1Keypair | null = null;
  *
  * Precedence:
  *   1. `APPSERVER_SIGNING_KEY` env var (hex-encoded 32-byte private key).
- *   2. A persisted key file at `DATA_DIR/appserver-signing-key.hex`.
- *   3. Generate a fresh key and persist it to the key file.
+ *   2. A persisted key file at `DATA_DIR/appserver-signing-key.hex` (unless
+ *      `DATA_DIR=:memory:`, which means no filesystem).
  *
  * The key is cached process-wide after first load.
  */
@@ -48,12 +48,12 @@ export async function loadAppserverSigningKey(): Promise<Secp256k1Keypair> {
   const envKey = process.env.APPSERVER_SIGNING_KEY;
   // Resolve lazily at call time so tests that set `DATA_DIR` in `beforeEach`
   // redirect the key file (a module-level const would pin the path at load).
-  const keyPath = join(dataDir(), "appserver-signing-key.hex");
+  const keyPath = signingKeyPath();
 
   let hex: string | null = null;
   if (envKey) {
     hex = envKey;
-  } else if (existsSync(keyPath)) {
+  } else if (keyPath && existsSync(keyPath)) {
     hex = readFileSync(keyPath, "utf-8").trim();
   }
 
@@ -62,9 +62,11 @@ export async function loadAppserverSigningKey(): Promise<Secp256k1Keypair> {
     key = await Secp256k1Keypair.import(hex, { exportable: true });
   } else {
     key = await Secp256k1Keypair.create({ exportable: true });
-    const exported = await key.export();
-    mkdirSync(dirname(keyPath), { recursive: true });
-    writeFileSync(keyPath, Buffer.from(exported).toString("hex"), { mode: 0o600 });
+    if (keyPath) {
+      const exported = await key.export();
+      mkdirSync(dirname(keyPath), { recursive: true });
+      writeFileSync(keyPath, Buffer.from(exported).toString("hex"), { mode: 0o600 });
+    }
   }
 
   cachedKey = key;

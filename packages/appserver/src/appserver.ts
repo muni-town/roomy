@@ -629,6 +629,8 @@ export async function createAppserver(
           transientBackoff: embed.transientBackoff ?? 0,
           backlogStuck: embed.backlogStuck ?? false,
           backlogStuckTransitions: embed.backlogStuckTransitions ?? 0,
+          stallBaselineRows: embed.stallBaselineRows ?? 0,
+          stallDrainTarget: embed.stallDrainTarget ?? 0,
           lastStallCause: embed.lastStallCause ?? null,
           lastCycle: embed.lastCycle ?? null,
         },
@@ -801,6 +803,18 @@ export async function createAppserver(
     "roomy_embed_backlog_stuck_since_seconds",
     "Unix timestamp when the embed backlog stall began (0 when not stuck).",
   );
+  // The drain measurement: `roomy_embed_pending` sits above
+  // `backlog_stuck_baseline - drain_target` while the stall holds, and the
+  // stall clears once it falls to that line. A backlog that never reaches it is
+  // settling dead links without draining — the stall is real, not a flap.
+  const embedBacklogStuckBaseline = metrics.gauge(
+    "roomy_embed_backlog_stuck_baseline",
+    "Rows in pending_links when the current backlog stall was raised (0 when not stuck).",
+  );
+  const embedBacklogStuckDrainTarget = metrics.gauge(
+    "roomy_embed_backlog_stuck_drain_target",
+    "Rows the pending_links backlog must fall by before the current stall clears.",
+  );
   const searchQueue = metrics.gauge("roomy_search_indexer_queue", "Search indexer queue length.");
   const searchBackfilled = metrics.gauge("roomy_search_backfilled", "Search backfill progress.");
   const pushQueued = metrics.gauge("roomy_push_queued", "Push dispatcher queued messages.");
@@ -942,6 +956,8 @@ export async function createAppserver(
           {},
           embed.backlogStuck ? Math.floor(embed.backlogStuckSince / 1000) : 0,
         );
+        embedBacklogStuckBaseline.set({}, embed.stallBaselineRows);
+        embedBacklogStuckDrainTarget.set({}, embed.stallDrainTarget);
         // Published only while stalled (0 otherwise): a stale non-zero value
         // after recovery would misreport selectable rows for a healthy queue.
         embedSelectableRows.set({}, embed.lastCycle?.selectableRows ?? 0);

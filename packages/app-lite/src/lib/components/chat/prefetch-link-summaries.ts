@@ -15,6 +15,14 @@
  * query key. When the badges mount they hit the cache instead of issuing
  * cold fetches. Subsequent scroll-recycles are free.
  *
+ * A target the appserver has no materialised row for (a stale internal link)
+ * 404s deterministically, and `ensureQueryData` fetches whenever the cached
+ * data is `undefined` — which is also the state a failed fetch leaves behind.
+ * {@link prefetchSummary} therefore skips a key that already holds an error,
+ * so a prefetch pass cannot re-ask what the badges themselves no longer ask
+ * (`retryOnMount: false`) — the request a doomed lookup would otherwise be
+ * issued once per pass.
+ *
  * Only the lightweight summary queries are prefetched (not `getMetadata`),
  * matching what {@link SpaceRoomBadge} actually reads.
  */
@@ -31,6 +39,25 @@ const { queryKey } = cache;
 
 const SPACE_SUMMARY = "space.roomy.space.getSpaceSummary";
 const ROOM_SUMMARY = "space.roomy.room.getRoomSummary";
+
+/**
+ * Warm one summary query, unless it has already failed.
+ *
+ * See the module doc: an errored entry is skipped so a permanently-failing
+ * lookup (a link to a space or room the appserver has no row for) is asked at
+ * most once per session rather than once per prefetch pass. A successful
+ * fetch is a cache hit under `staleTime: Infinity`, so only errors are
+ * filtered.
+ */
+function prefetchSummary(
+  key: readonly unknown[],
+  queryFn: () => Promise<unknown>,
+): void {
+  if (queryClient.getQueryState(key)?.status === "error") return;
+  // `retry: false` states the pass's intent — a "not found" never becomes
+  // true by asking again. (`ensureQueryData` already defaults to no retry.)
+  void queryClient.ensureQueryData({ queryKey: key, queryFn, retry: false });
+}
 
 /**
  * Extract the unique internal-link targets from a set of markdown strings.
@@ -105,19 +132,13 @@ export function prefetchInternalLinkSummaries(
   for (const { spaceId, roomId } of targets) {
     // Space summary is always needed (the badge shows the space avatar+name
     // unless this is the current space, which the badge itself decides).
-    void queryClient.ensureQueryData({
-      queryKey: queryKey(SPACE_SUMMARY, { spaceId }),
-      queryFn: () => pxClient.query(SPACE_SUMMARY, { spaceId }),
-      // A "Space not found" 404 will never succeed on retry; don't turn one
-      // miss into the default four appserver requests.
-      retry: false,
-    });
+    prefetchSummary(queryKey(SPACE_SUMMARY, { spaceId }), () =>
+      pxClient.query(SPACE_SUMMARY, { spaceId }),
+    );
     if (roomId) {
-      void queryClient.ensureQueryData({
-        queryKey: queryKey(ROOM_SUMMARY, { roomId }),
-        queryFn: () => pxClient.query(ROOM_SUMMARY, { roomId }),
-        retry: false,
-      });
+      prefetchSummary(queryKey(ROOM_SUMMARY, { roomId }), () =>
+        pxClient.query(ROOM_SUMMARY, { roomId }),
+      );
     }
   }
 }
@@ -147,19 +168,13 @@ export function prefetchInternalLinkSummariesFromBlocks(
 
   const pxClient = px();
   for (const { spaceId, roomId } of targets) {
-    void queryClient.ensureQueryData({
-      queryKey: queryKey(SPACE_SUMMARY, { spaceId }),
-      queryFn: () => pxClient.query(SPACE_SUMMARY, { spaceId }),
-      // A "Space not found" 404 will never succeed on retry; don't turn one
-      // miss into the default four appserver requests.
-      retry: false,
-    });
+    prefetchSummary(queryKey(SPACE_SUMMARY, { spaceId }), () =>
+      pxClient.query(SPACE_SUMMARY, { spaceId }),
+    );
     if (roomId) {
-      void queryClient.ensureQueryData({
-        queryKey: queryKey(ROOM_SUMMARY, { roomId }),
-        queryFn: () => pxClient.query(ROOM_SUMMARY, { roomId }),
-        retry: false,
-      });
+      prefetchSummary(queryKey(ROOM_SUMMARY, { roomId }), () =>
+        pxClient.query(ROOM_SUMMARY, { roomId }),
+      );
     }
   }
 }

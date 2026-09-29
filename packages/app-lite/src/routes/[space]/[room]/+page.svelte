@@ -23,6 +23,7 @@
   import ChannelBoardView from "$lib/components/thread/ChannelBoardView.svelte";
   import LinksView from "$lib/components/thread/LinksView.svelte";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
+  import { composerCanWrite, refreshWriteRefusal } from "$lib/write-refusal.svelte";
   import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
   import { resolveBlobUrl } from "$lib/utils";
 
@@ -233,9 +234,24 @@
   const roomKind = $derived(
     sidebarRoomInfo?.kind ?? roomQuery.data?.kind,
   );
-  const roomCanWrite = $derived(
+  /** The server's own answer for this room, before any refusal is applied. */
+  const roomServerCanWrite = $derived(
     sidebarRoomInfo?.canWrite ?? roomQuery.data?.canWrite,
   );
+  const roomCanWrite = $derived(
+    composerCanWrite(roomId, roomServerCanWrite),
+  );
+
+  // Which of the two queries supplies the value above: the sidebar entry when
+  // this room is in it, else the room's own metadata. Both the timestamp and
+  // the value must come from the same one — the other's says nothing about what
+  // the composer is reading.
+  const canWriteUpdatedAt = $derived(
+    sidebarRoomInfo ? spaceMetaQuery.dataUpdatedAt : roomQuery.dataUpdatedAt,
+  );
+  $effect(() => {
+    refreshWriteRefusal(roomId, canWriteUpdatedAt, roomServerCanWrite);
+  });
 
   // Private (invite-only) spaces don't yet support private media uploads —
   // gate the composer's upload UI until PDS-side access control lands.

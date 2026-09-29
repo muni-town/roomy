@@ -39,11 +39,18 @@
         px().query("space.roomy.space.getSpaceSummary", {
           spaceId,
         }),
-      // A "Space not found" 404 (e.g. a stale internal link) will never
-      // succeed on retry; TanStack's default `retry: 3` turns one miss into
-      // four appserver requests. Transport-level retries live in
-      // DirectXrpcClient. Matches invites/bridge-tokens.
+      // A "Space not found" 404 (e.g. a stale internal link to a space the
+      // appserver holds no materialised row for) will never succeed on retry;
+      // TanStack's default `retry: 3` turns one miss into four appserver
+      // requests. Transport-level retries live in DirectXrpcClient.
       retry: false,
+      // `retry: false` alone does not stop the request: TanStack's
+      // `shouldLoadOnMount` re-issues a fetch for an errored, data-less query
+      // on every (re)mount unless `retryOnMount` is false. A badge sits in a
+      // message row of the virtualized list, so scrolling recycles the row and
+      // re-asks a query that has already proven it can never succeed. With
+      // both, a permanently-failing lookup is asked at most once per session.
+      retryOnMount: false,
     }),
     () => queryClient,
   );
@@ -54,7 +61,10 @@
       queryFn: () =>
         px().query("space.roomy.room.getRoomSummary", { roomId: roomId ?? "" }),
       enabled: !!roomId,
+      // Same guard as `spaceQuery`: a "Room not found" 404 for a stale link
+      // target is otherwise re-asked once per mount.
       retry: false,
+      retryOnMount: false,
     }),
     () => queryClient,
   );

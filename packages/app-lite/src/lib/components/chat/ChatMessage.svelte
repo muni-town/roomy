@@ -25,6 +25,7 @@
   } from "$lib/mutations/pending-sends.svelte";
   import type { Message } from "$lib/queries/messages";
   import { resolveBlobUrl } from "$lib/utils";
+  import { writeRefused } from "$lib/write-refusal.svelte";
   import { RICHTEXT_MIME, extractFacetUrls } from "@roomy-space/sdk";
   import type { schemas, Block } from "@roomy-space/sdk";
   import { parseRichTextContent, messageHasVisibleContent } from "./message-body";
@@ -509,18 +510,20 @@
       {/snippet}
 
       {#snippet deliveryActions()}
-        <Button
-          variant="ghost"
-          size="sm"
-          class="font-medium"
-          disabled={retrying}
-          aria-label="Retry sending"
-          title="Retry sending"
-          onclick={handleRetry}
-        >
-          <IconRetry />
-          Retry
-        </Button>
+        {#if !writeRefused(roomId)}
+          <Button
+            variant="ghost"
+            size="sm"
+            class="font-medium"
+            disabled={retrying}
+            aria-label="Retry sending"
+            title="Retry sending"
+            onclick={handleRetry}
+          >
+            <IconRetry />
+            Retry
+          </Button>
+        {/if}
         <Button
           variant="ghost"
           size="sm"

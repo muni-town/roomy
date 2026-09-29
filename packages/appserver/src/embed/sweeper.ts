@@ -30,6 +30,7 @@ import {
   inFlightCount,
   backoffMs,
   classifyPendingLinks,
+  countPendingLinks,
   type EnrichOutcome,
   type PendingLink,
 } from "./enricher.ts";
@@ -60,6 +61,17 @@ const IDLE_POLL_MS = 30_000;
  * hours at a time and never drains. Tunable via env.
  */
 const STALL_AGE_MS = Number(process.env.EMBED_STALL_AGE_MS ?? 30 * 60_000);
+/**
+ * Share of the stalled backlog that must DRAIN (leave `pending_links`) before
+ * the stall counts as recovered. A stalled backlog still settles rows — dead
+ * links and pages with no OG/oEmbed leave a definitive outcome and are deleted
+ * — so "a row settled" is the normal state of a stuck queue, not recovery. The
+ * stall therefore clears only once the backlog has fallen this far below the
+ * size it was found at. Tunable via env.
+ */
+const STALL_DRAIN_FRACTION = Number(
+  process.env.EMBED_STALL_DRAIN_FRACTION ?? 0.1,
+);
 /**
  * Max concurrent outbound embed-service fetches per sweep batch. Bounded so
  * a large pending batch can't flood the embed service, while still draining
@@ -196,6 +208,16 @@ const metricBacklogStuckTransitions = metrics.counter(
 );
 metricBacklogStuckTransitions.inc({}, 0);
 /**
+ * The row count `pending_links` held when the current stall was raised, and
+ * how far the backlog must fall below it to clear —
+ * `stallBaselineRows * STALL_DRAIN_FRACTION`, at least 1. Both are latched by
+ * {@link setStall} and never re-measured while the stall holds, so the bar is
+ * the size the queue was demonstrably stuck at rather than one that drifts
+ * with it. Zero when no stall is latched.
+ */
+let stallBaselineRows = 0;
+let stallDrainTarget = 0;
+/**
  * Resolved by {@link pokeEmbedSweeper} to wake an idle loop immediately.
  * Null when the loop is busy draining (so extra pokes are cheap no-ops).
  */
@@ -218,6 +240,12 @@ let dbBackoffUntil = 0;
  * cycles the stall persisted through — selection found nothing, or the work it
  * selected settled no rows. Exposed on /health/embed and as a Prometheus gauge
  * so an alert can fire on the stalled backlog.
+ *
+ * Cleared only on GENUINE recovery: the backlog fell
+ * {@link STALL_DRAIN_FRACTION} below the size the stall was raised on. Settling
+ * rows is necessary but not sufficient — a stalled backlog settles a few rows
+ * per cycle forever without draining, and clearing on those is what made the
+ * stall gauge flap.
  *
  * The CAUSE is deliberately not asserted here: {@link stallCause} and
  * {@link lastCycle} carry the measured numbers from the cycle that failed to
@@ -281,12 +309,10 @@ let lastCycle: {
 /**
  * The stall cause last WRITTEN to the log, or null before the first line.
  *
- * The log guard compares against THIS, not against `backlogStuck`-scoped
- * state: the flag is cleared by any cycle that selects work, so comparing
- * against it would reset the comparison to `null` and re-log an UNCHANGED
- * cause whenever selection flaps.
- * The latch is cleared only by {@link clearStall} — i.e. by genuine recovery —
- * so a repeated cause is silent and a genuine re-stall is reported again.
+ * A repeated cause must stay silent while the backlog stays stalled, and a
+ * cause after genuine recovery must be reported again, so the guard tracks the
+ * last cause WRITTEN rather than the current one. Only {@link clearStall}
+ * resets it — see {@link stallRecovered} for what counts as recovery.
  */
 let loggedStallCause: StallCause | null = null;
 
@@ -298,15 +324,33 @@ let loggedStallCause: StallCause | null = null;
 let retryStateSeeded = false;
 
 /**
+ * Reset the drain measurement once a stall clears, so the next stall is
+ * measured from its own backlog size.
+ */
+function resetDrainWindow(): void {
+  stallBaselineRows = 0;
+  stallDrainTarget = 0;
+}
+
+/**
  * Raise the backlog-stall flag and count the transition. Idempotent while the
  * flag is already set, so `backlogStuckSkipped` (and the stall's `since`) keep
  * describing the ONE stall rather than restarting on every cycle.
+ *
+ * The first flag-raise of a run also latches the drain threshold from the
+ * backlog size the cycle measured, so recovery is judged against the size the
+ * stall was found at — not against a size that has drifted since.
  */
-function setStall(): void {
+function setStall(rows: number): void {
   if (backlogStuck) return;
   backlogStuck = true;
   backlogStuckSince = Date.now();
   backlogStuckSkipped = 0;
+  // Recovery is judged against this backlog, and the bar stays put while the
+  // stall holds: re-measuring it as the queue moves would let a backlog that
+  // grew and then fell part-way back clear on the smaller number.
+  stallBaselineRows = rows;
+  stallDrainTarget = Math.max(1, Math.ceil(rows * STALL_DRAIN_FRACTION));
   statsBacklogStuckTransitions++;
   metricBacklogStuckTransitions.inc();
 }
@@ -314,12 +358,13 @@ function setStall(): void {
 /**
  * Clear the backlog-stall flag and the measurements that describe it.
  *
- * Called ONLY on genuine recovery — the backlog drained, or rows SETTLED (left
- * `pending_links`) — never merely because a cycle selected work: a trickle of
- * expired backoff windows that fail transiently again selects work and changes
- * nothing, and clearing on it flaps the stall flag. The log latch resets
- * with it, because the next stall is then a NEW stall rather than a repeat of
- * the one just cleared.
+ * Called ONLY on genuine recovery: the backlog emptied, or it fell
+ * {@link stallDrainTarget} below the size the stall was raised on. Selection
+ * alone never clears it (a trickle of expired backoff windows that fail again
+ * selects work and changes nothing), and neither does settling a row — a
+ * stalled backlog settles dead links every cycle without draining. The log
+ * latch resets with it, because the next stall is then a NEW stall rather than
+ * a repeat of the one just cleared.
  */
 function clearStall(): void {
   if (backlogStuck) {
@@ -331,7 +376,9 @@ function clearStall(): void {
   stallCause = "unknown";
   lastCycle = null;
   loggedStallCause = null;
+  resetDrainWindow();
 }
+
 /**
  * Priority queue of freshly-detected live link URLs. Drained before the
  * oldest-first backlog so a newly posted link is enriched within seconds
@@ -415,7 +462,7 @@ export function embedSweeperStats(): {
   backlogStuck: boolean;
   /** Epoch-ms the stall began (0 when not stuck). */
   backlogStuckSince: number;
-  /** Sweep cycles the stall persisted through (no rows settled). */
+  /** Sweep cycles the stall persisted through (no material progress). */
   backlogStuckSkipped: number;
   /**
    * Times the flag above has CHANGED VALUE since start, both directions. A
@@ -423,6 +470,14 @@ export function embedSweeperStats(): {
    * oscillating without the backlog moving.
    */
   backlogStuckTransitions: number;
+  /**
+   * The backlog size the current stall was raised against, and how far it must
+   * fall (`stallBaselineRows - stallDrainTarget`) before the stall clears. Read
+   * against `pending` they say whether the backlog is actually draining. Zero
+   * when no stall is latched.
+   */
+  stallBaselineRows: number;
+  stallDrainTarget: number;
   /**
    * Number of URLs currently inside a transient-retry backoff window
    * (`retryAt` in the future).
@@ -466,6 +521,8 @@ export function embedSweeperStats(): {
     backlogStuckSince,
     backlogStuckSkipped,
     backlogStuckTransitions: statsBacklogStuckTransitions,
+    stallBaselineRows,
+    stallDrainTarget,
     transientBackoff: activeBackoffSize(),
     lastStallCause: lastCycle === null ? null : stallCause,
     lastCycle,
@@ -762,13 +819,9 @@ export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
 
   // Did this cycle resolve anything, and did it REMOVE rows from the backlog?
   // Both are reported to the loop: `producedOk` bounds the no-progress batch
-  // rate (see {@link sweepYieldsAfter}), and `cycleSettledRows` is what proves
-  // the queue is draining (see the hysteresis at the end of the cycle).
+  // rate (see {@link sweepYieldsAfter}). The backlog's own size is what proves
+  // the queue is draining (see the stall check at the end of the cycle).
   let cycleProducedOk = false;
-  // Whether this cycle actually REMOVED rows from the backlog (settled them).
-  // A cycle that selected work but settled nothing made no progress, and must
-  // not clear the stall flag (see the hysteresis at the end of the cycle).
-  let cycleSettledRows = false;
 
   if (pending.length > 0) {
     // Group pending rows by URL → the set of spaces it is pending in (a URL
@@ -849,20 +902,13 @@ export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
     // drains, so the sweeper never reaches newer real links.
     if (settledUrls.size > 0) {
       try {
-        let deleted = 0;
         for (const p of pending) {
           if (!settledUrls.has(p.url)) continue;
-          const res = await globalDb.run(
+          await globalDb.run(
             `delete from pending_links where space_did = ? and url = ?`,
             [p.spaceDid, p.url],
           );
-          deleted += res.changes;
         }
-        // Rows actually LEFT the backlog — real progress, not churn. Counted
-        // from `changes` rather than the batch's settled URLs: a row can be
-        // gone already (another delete raced this one), and a cycle that
-        // removed nothing has not moved the queue.
-        if (deleted > 0) cycleSettledRows = true;
       } catch (err) {
         if (cycleDbError === null) cycleDbError = err;
       }
@@ -879,7 +925,8 @@ export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
   // A cycle that selected work but settled NOTHING has made no progress
   // either — the trickle of expired backoff windows that fail transiently
   // again leaves the backlog exactly as it was — so it neither clears the
-  // stall nor resets its counters (see `cycleSettledRows` and clearStall).
+  // stall nor resets its counters (see the stall check at the end of the
+  // cycle).
   //
   // The CAUSE is MEASURED here, never assumed. A fixed cause string of "all
   // pending links are in transient-retry backoff" is false whenever a parked
@@ -938,14 +985,14 @@ export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
             backoffUrls: backoffUrls.size,
             selected: pending.length,
           };
-          setStall();
+          setStall(total);
           // Log once per cause TRANSITION, latched independently of the
-          // `backlogStuck` flag's lifetime. The flag is cleared by any cycle
-          // that selects work, so a guard comparing against flag-scoped state
-          // resets on a 1→0→1 flap and re-logs an UNCHANGED cause. The latch is
-          // cleared only by a GENUINE recovery (see clearStall), so a repeated
-          // cause is silent and a new stall after real recovery is reported
-          // again; `backlogStuckTransitions` makes any remaining flap countable.
+          // `backlogStuck` flag's lifetime: the flag's `lastCycle`/`stallCause`
+          // are refreshed by every stalled cycle, so a guard reading them would
+          // re-log an unchanged cause. The latch is cleared only by a GENUINE
+          // recovery (see clearStall), so a repeated cause is silent and a new
+          // stall after real recovery is reported again;
+          // `backlogStuckTransitions` makes any remaining flap countable.
           if (cause !== loggedStallCause) {
             loggedStallCause = cause;
             if (cause === "all-parked") {
@@ -982,21 +1029,31 @@ export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
   }
 
   // Keep the stall flag current, and count the cycles it persisted through.
-  if (pending.length > 0) {
-    if (cycleSettledRows) {
-      // Rows left `pending_links` this cycle, so the queue IS draining — the
-      // stall is over. A cycle that selected work but settled NOTHING (the
-      // trickle of expired backoff windows that fail transiently again) has
-      // changed nothing, and clearing the flag on it flaps the stall gauge and
-      // resets the log latch.
-      clearStall();
-    } else if (backlogStuck) {
-      // Still stalled and this cycle's work changed nothing — count it so the
-      // idle poll can escalate (see {@link sweepIdleDelayMs}).
-      backlogStuckSkipped++;
+  //
+  // Recovery is judged from the BACKLOG SIZE, not from whether a cycle settled
+  // anything. A stalled backlog still settles rows — dead links and pages with
+  // no OG/oEmbed leave a definitive outcome and are deleted — so "a row left"
+  // is the normal state of a stuck queue. The stall clears only once the
+  // backlog has fallen {@link STALL_DRAIN_FRACTION} below the size
+  // {@link setStall} latched: the point at which the queue is demonstrably
+  // draining rather than trickling.
+  //
+  // The count runs only while stalled. A stall is raised by a cycle that
+  // selected nothing, and that is the steady state it then holds: cycles are
+  // paced by {@link sweepIdleDelayMs}, so this is one indexed `count(*)` per
+  // escalated idle poll and nothing at all while healthy.
+  if (backlogStuck) {
+    let rows: number;
+    try {
+      rows = await countPendingLinks(globalDb);
+    } catch (err) {
+      // A failed read says nothing about the backlog. Keep the stall rather
+      // than clear it on an error.
+      log.debug("[embed-sweeper] backlog count failed:", err);
+      rows = -1;
     }
-  } else if (backlogStuck) {
-    backlogStuckSkipped++;
+    if (rows >= 0 && rows <= stallBaselineRows - stallDrainTarget) clearStall();
+    else backlogStuckSkipped++;
   }
 
   // A full batch means there may be more pending; `producedOk` tells the loop
@@ -1297,6 +1354,7 @@ export function _resetEmbedSweeper(): void {
   loggedStallCause = null;
   retryStateSeeded = false;
   statsBacklogStuckTransitions = 0;
+  resetDrainWindow();
   // A test that injected a wait must not leak it into the next test — a wait
   // that never resolves would park that test's loop forever.
   sweepWait = waitForWake;
@@ -1322,6 +1380,7 @@ export function stopEmbedSweeper(): Promise<void> {
   retryStateSeeded = false;
   loggedStallCause = null;
   statsBacklogStuckTransitions = 0;
+  resetDrainWindow();
   dbErrorCount = 0;
   dbBackoffUntil = 0;
   statsEnrichedOk = 0;

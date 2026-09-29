@@ -89,6 +89,7 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
     is parked and nothing is being enriched — the DB backlog and the in-memory
     gauge disagree.
 - `roomy_embed_backlog_stuck` / `roomy_embed_backlog_stuck_since_seconds` /
+  `roomy_embed_backlog_stuck_baseline` / `roomy_embed_backlog_stuck_drain_target` /
   `roomy_embed_backlog_stuck_transitions_total`
   - `roomy_embed_backlog_stuck` is 1 when the backlog is non-empty but the
     sweeper is making no progress: it selected nothing (every pending link is
@@ -97,12 +98,19 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
     state, so those two gauges cannot express it. **Alert:**
     `roomy_embed_backlog_stuck == 1` for 15m — the backlog is not draining and
     needs intervention.
-  - The flag is set/cleared only on a real change of state, and
-    `roomy_embed_backlog_stuck_transitions_total` counts those changes in both
-    directions. A rising rate there with a flat `roomy_embed_enriched_ok_total`
-    means the flag is flapping without the backlog moving. Read
-    `lastStallCause` / `lastCycle` on `/health/embed`
-    for the measured cause and row counts of the last stalled cycle.
+  - The flag clears only on a genuine drain: `roomy_embed_pending` must fall to
+    `roomy_embed_backlog_stuck_baseline - roomy_embed_backlog_stuck_drain_target`
+    — a tenth of the backlog the stall was raised on, read once when the flag
+    goes up and never re-measured. A stalled backlog still settles dead links
+    every cycle, so "a row left `pending_links`" is the normal state of a stuck
+    queue and cannot clear the flag: a backlog that holds at or above that line
+    stays stalled, however many rows trickle out of it.
+  - `roomy_embed_backlog_stuck_transitions_total` counts changes of the flag in
+    both directions. A rising rate there with a flat
+    `roomy_embed_enriched_ok_total` means the flag is flapping without the
+    backlog moving. Read `lastStallCause` / `lastCycle` / `stallBaselineRows` /
+    `stallDrainTarget` on `/health/embed` for the measured cause, row counts
+    and drain bar of the last stalled cycle.
 - `roomy_embed_enriched_ok_total` / `roomy_embed_enriched_definitive_total` /
   `roomy_embed_enriched_transient_total` / `roomy_embed_sweep_cycles_total` /
   `roomy_embed_sweep_throttled_total` — the enrich RATE and its outcome mix
