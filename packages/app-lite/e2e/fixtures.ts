@@ -84,6 +84,31 @@ export const OTHER_USER_DID = "did:plc:e2eotheruser000000000000";
 export const OTHER_USER_HANDLE = "e2e.other.roomy.test";
 export const OTHER_USER_DISPLAY_NAME = "E2E Other User";
 
+/**
+ * Fourth space, where the seeded user is a plain member and member-created
+ * invites are disabled — the configuration the appserver refuses `getInvites`
+ * for. Its own DID (rather than an extra membership in an existing space) so
+ * the seeded user's admin status elsewhere cannot leak into it.
+ */
+export const SEED_MEMBER_SPACE_ID = "did:plc:e2ememberspace0000000000";
+export const SEED_MEMBER_SPACE_NAME = "E2E Member Space";
+export const SEED_MEMBER_SPACE_CATEGORY_ID = "01M3C8QTVS0000000000000007";
+export const SEED_MEMBER_SPACE_ROOM_ID = "01M3C8QTVS0000000000000008";
+export const SEED_MEMBER_SPACE_ROOM_NAME = "member-space-lobby";
+export const SEED_MEMBER_SPACE_MESSAGE_TEXT =
+  "seeded message in the member space";
+/**
+ * Second DID with membership in the member space, granted admin there. The
+ * spec's request interceptor authenticates as it to prove the admin branch
+ * still reads invites and still creates them.
+ */
+export const TEST_ADMIN_DID = "did:plc:e2etestadmin000000000000";
+/**
+ * Valid DID with no membership anywhere in the seeded world — the caller the
+ * appserver refuses a write from. Used to drive a genuinely refused press.
+ */
+export const TEST_NON_MEMBER_DID = "did:plc:e2enonmember000000000000";
+
 /** Seeded message, materialised through the real `sendEvents` write path. */
 export const SEED_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVX1";
 export const SEED_MESSAGE_TEXT = "seeded message from the e2e fixture";
@@ -111,3 +136,5 @@ export const SEED_ROOM_2_PATH = `/${SEED_SPACE_ID}/${SEED_ROOM_2_ID}`;
 export const SEED_SPACE_2_ROOM_PATH = `/${SEED_SPACE_2_ID}/${SEED_SPACE_2_ROOM_ID}`;
 /** Path to the third space's channel, where the viewer is a plain member. */
 export const SEED_SPACE_3_ROOM_PATH = `/${SEED_SPACE_3_ID}/${SEED_SPACE_3_ROOM_ID}`;
+/** Path to the member space's channel. */
+export const SEED_MEMBER_SPACE_ROOM_PATH = `/${SEED_MEMBER_SPACE_ID}/${SEED_MEMBER_SPACE_ROOM_ID}`;

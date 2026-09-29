@@ -2,6 +2,7 @@
   import { page } from "$app/state";
   import InviteManager from "@roomy/design/components/modals/InviteManager.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import { toast } from "@foxui/core";
   import { createInvitesQuery } from "$lib/queries/invites";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createInvite, revokeInvite } from "$lib/mutations/invite";
@@ -39,6 +40,12 @@
     creating = true;
     try {
       await createInvite(spaceId);
+    } catch (e) {
+      // The press was refused: surface the reason the server gave instead of
+      // leaving the page unchanged and the button silent.
+      toast.error(
+        e instanceof Error ? e.message : "Couldn't create an invite link.",
+      );
     } finally {
       creating = false;
     }
@@ -95,4 +102,9 @@
   {onCreate}
   {onRevoke}
   {onCopy}
+  invitesPermission={metaQuery.isPending
+    ? "checking"
+    : canViewInvites
+      ? "allowed"
+      : "denied"}
 />

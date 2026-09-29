@@ -39,6 +39,12 @@ import {
   OTHER_USER_DID,
   OTHER_USER_DISPLAY_NAME,
   OTHER_USER_HANDLE,
+  SEED_MEMBER_SPACE_CATEGORY_ID,
+  SEED_MEMBER_SPACE_ID,
+  SEED_MEMBER_SPACE_MESSAGE_TEXT,
+  SEED_MEMBER_SPACE_NAME,
+  SEED_MEMBER_SPACE_ROOM_ID,
+  SEED_MEMBER_SPACE_ROOM_NAME,
   SEED_MESSAGE_ID,
   SEED_MESSAGE_TEXT,
   SEED_ROOM_2_ID,
@@ -61,6 +67,7 @@ import {
   SEED_SPACE_3_ROOM_NAME,
   SEED_SPACE_ID,
   SEED_SPACE_NAME,
+  TEST_ADMIN_DID,
   TEST_USER_DID,
   TEST_USER_DISPLAY_NAME,
   TEST_USER_HANDLE,
@@ -83,7 +90,13 @@ function sidebarConfig(categoryId: string, roomIds: string[]): string {
   });
 }
 
-/** POST one event batch to `sendEvents` as `callerDid`. */
+/**
+ * POST one event batch to `sendEvents` as `callerDid`, defaulting to the
+ * seeded user. The member space's rows are written as its admin identity
+ * instead: channel creation requires a space admin, and the seeded user is
+ * only a member there. Same `sendEvents` path, a different caller — exactly
+ * the distinction the appserver's own auth draws.
+ */
 async function sendEvents(
   origin: string,
   spaceId: string,
@@ -214,6 +227,42 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     [OTHER_USER_DISPLAY_NAME, OTHER_USER_DID],
   );
 
+  // ── Member space ─────────────────────────────────────────────────────
+  // The caller is a plain member here, and member-created invites are off —
+  // the configuration `getInvites` and `createInvite` refuse a non-admin in.
+  // A separate space so no admin edge from the other two can apply.
+  seedUser(db, TEST_ADMIN_DID);
+  seedSpace(db, SEED_MEMBER_SPACE_ID, TEST_USER_DID, { allowPublicJoin: 0 });
+  seedJoinedSpace(db, TEST_USER_DID, SEED_MEMBER_SPACE_ID);
+  seedMembership(db, SEED_MEMBER_SPACE_ID, TEST_USER_DID, "member");
+  // A second identity with admin here, so a spec can authenticate as it and
+  // observe the branch that still works. It carries a `member` edge as well
+  // as `admin`: an admin edge alone leaves `isMember` false, and the sidebar
+  // hides the Invite button (and the Invites settings tab) for a non-member.
+  // It is seeded joined for the same reason — the sidebar's space entry comes
+  // from `getSpaces`, which reads `user_space_membership` for whichever DID
+  // the request authenticates as.
+  seedJoinedSpace(db, TEST_ADMIN_DID, SEED_MEMBER_SPACE_ID);
+  seedMembership(db, SEED_MEMBER_SPACE_ID, TEST_ADMIN_DID, "member");
+  seedMembership(db, SEED_MEMBER_SPACE_ID, TEST_ADMIN_DID, "admin");
+  const memberSpace = spaceDb(db, SEED_MEMBER_SPACE_ID);
+  await memberSpace.run(
+    "update comp_space set allow_member_invites = 0, sidebar_config = ? where entity = ?",
+    [sidebarConfig(SEED_MEMBER_SPACE_CATEGORY_ID, [SEED_MEMBER_SPACE_ROOM_ID]), SEED_MEMBER_SPACE_ID],
+  );
+  await memberSpace.run(
+    "update comp_info set name = ?, description = ? where entity = ?",
+    [
+      SEED_MEMBER_SPACE_NAME,
+      "A space seeded for end-to-end UI tests.",
+      SEED_MEMBER_SPACE_ID,
+    ],
+  );
+  await memberSpace.run("update comp_info set name = ? where entity = ?", [
+    TEST_USER_DISPLAY_NAME,
+    TEST_USER_DID,
+  ]);
+
   const space1 = spaceDb(db, SEED_SPACE_ID);
   await space1.run(
     "update comp_space set sidebar_config = ? where entity = ?",
@@ -264,6 +313,21 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     SEED_SPACE_2_ROOM_ID,
     SEED_SPACE_2_MESSAGE_TEXT,
   );
+  await createRoom(
+    appserverOrigin,
+    SEED_MEMBER_SPACE_ID,
+    SEED_MEMBER_SPACE_ROOM_ID,
+    SEED_MEMBER_SPACE_ROOM_NAME,
+    TEST_ADMIN_DID,
+  );
+  await createMessage(
+    appserverOrigin,
+    SEED_MEMBER_SPACE_ID,
+    "01M3C8QTVSG74JEG1QBM3STVX4",
+    SEED_MEMBER_SPACE_ROOM_ID,
+    SEED_MEMBER_SPACE_MESSAGE_TEXT,
+    TEST_ADMIN_DID,
+  );
 
   // The third space's room and message are authored by its admin, so the
   // message is one the test user may read but not delete.
@@ -277,7 +341,7 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
   await createMessage(
     appserverOrigin,
     SEED_SPACE_3_ID,
-    "01M3C8QTVSG74JEG1QBM3STVX4",
+    "01M3C8QTVSG74JEG1QBM3STVX5",
     SEED_SPACE_3_ROOM_ID,
     SEED_SPACE_3_MESSAGE_TEXT,
     OTHER_USER_DID,
@@ -302,7 +366,12 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
 
   // Fail loudly here rather than as a confusing empty sidebar in a spec: the
   // spaces must resolve for this user.
-  for (const spaceId of [SEED_SPACE_ID, SEED_SPACE_2_ID, SEED_SPACE_3_ID]) {
+  for (const spaceId of [
+    SEED_SPACE_ID,
+    SEED_SPACE_2_ID,
+    SEED_SPACE_3_ID,
+    SEED_MEMBER_SPACE_ID,
+  ]) {
     const membership = await readStateDb(db)
       .query(
         "select count(*) as n from user_space_membership where user_did = ? and space_did = ? and state = 'joined'",
