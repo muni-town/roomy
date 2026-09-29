@@ -69,6 +69,8 @@ const APPSERVER_RPCS = [
   "space.roomy.message.getMessage",
   "space.roomy.message.getReactions",
   "space.roomy.auth.getConnectionTicket",
+  "space.roomy.auth.getLoginScope",
+  "space.roomy.auth.recordScopeGrant",
   "space.roomy.getFlags",
   "space.roomy.room.updateSeen",
   "space.roomy.space.sendEvents",

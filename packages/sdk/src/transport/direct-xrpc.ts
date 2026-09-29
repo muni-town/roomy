@@ -12,6 +12,12 @@
  * Token caching and auto-refresh are handled transparently by the
  * `ServiceAuthClient` — callers never need to think about token lifecycle.
  *
+ * The `serviceAuth` argument is optional. When omitted, the client makes
+ * **unauthenticated** XRPC calls — no `Authorization` header at all. This
+ * powers endpoints that must be reachable before a user has a token (e.g.
+ * `space.roomy.auth.getLoginScope`, which the app calls to decide which scope
+ * to request at login).
+ *
  * Usage:
  * ```ts
  * const auth = new ServiceAuthClient(agent);
@@ -60,7 +66,13 @@ export interface DirectXrpcClientOptions {
 export class DirectXrpcClient {
   readonly #appserverUrl: string;
   readonly #appserverDid: string;
-  readonly #serviceAuth: ServiceAuthClient;
+  /**
+   * Present when this client is authenticated (mints service-auth JWTs for
+   * each call). Omit it for unauthenticated XRPC calls — the Authorization
+   * header is then omitted entirely. This powers `getLoginScope`, which the
+   * app must be able to call before the user has a token.
+   */
+  readonly #serviceAuth: ServiceAuthClient | null;
   /**
    * Retry/backoff policy applied on HTTP 429. Overridable per-instance so
    * tests can inject a synchronous sleep and callers can tune limits.
@@ -71,13 +83,13 @@ export class DirectXrpcClient {
   constructor(
     appserverUrl: string,
     appserverDid: string,
-    serviceAuth: ServiceAuthClient,
+    serviceAuth?: ServiceAuthClient,
     opts: DirectXrpcClientOptions = {},
   ) {
     // Strip trailing slash so callers can safely append paths like /xrpc/...
     this.#appserverUrl = appserverUrl.replace(/\/+$/, "");
     this.#appserverDid = appserverDid;
-    this.#serviceAuth = serviceAuth;
+    this.#serviceAuth = serviceAuth ?? null;
     this.#requestTimeoutMs =
       opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
@@ -105,18 +117,20 @@ export class DirectXrpcClient {
     const stringParams = stringifyParams(params as Record<string, unknown>);
 
     return this.#runWithDeadline(nsid, async (signal) => {
-      const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
+      const token = this.#serviceAuth
+        ? await this.#serviceAuth.getToken(this.#appserverDid, nsid)
+        : undefined;
 
       const url = new URL(`${this.#appserverUrl}/xrpc/${nsid}`);
       for (const [k, v] of Object.entries(stringParams)) {
         url.searchParams.set(k, v);
       }
 
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
       const resp = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+        headers,
         signal,
       });
 
@@ -149,16 +163,19 @@ export class DirectXrpcClient {
     const entry = PROCEDURE_SCHEMAS[nsid];
 
     return this.#runWithDeadline(nsid, async (signal) => {
-      const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
+      const token = this.#serviceAuth
+        ? await this.#serviceAuth.getToken(this.#appserverDid, nsid)
+        : undefined;
 
       const url = `${this.#appserverUrl}/xrpc/${nsid}`;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const resp = await fetch(url, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+        headers,
         body: JSON.stringify(input),
         signal,
       });
@@ -208,18 +225,21 @@ export class DirectXrpcClient {
     body?: Record<string, unknown>,
   ): Promise<{ data: unknown }> {
     return this.#runWithDeadline(nsid, async (signal) => {
-      const token = await this.#serviceAuth.getToken(this.#appserverDid, nsid);
+      const token = this.#serviceAuth
+        ? await this.#serviceAuth.getToken(this.#appserverDid, nsid)
+        : undefined;
 
       if (body !== undefined) {
         // Procedure (POST)
         const url = `${this.#appserverUrl}/xrpc/${nsid}`;
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
         const resp = await fetch(url, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
+          headers,
           body: JSON.stringify(body),
           signal,
         });
@@ -235,11 +255,10 @@ export class DirectXrpcClient {
       for (const [k, v] of Object.entries(params)) {
         url.searchParams.set(k, v);
       }
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const resp = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+        headers,
         signal,
       });
       if (!resp.ok) {
