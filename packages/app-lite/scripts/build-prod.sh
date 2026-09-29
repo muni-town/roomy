@@ -64,9 +64,15 @@ SCOPE="$(
 # holds the signing key and mints the PAR/token-exchange client assertions
 # on demand. Unset → the client stays public (PKCE only).
 if [ -n "${HAPPYVIEW_JWKS_URI:-}" ]; then
+  # private_key_jwt REQUIRES token_endpoint_auth_signing_alg on the atproto PDS:
+  # without it the AS rejects the metadata outright (invalid_client_metadata:
+  # "Missing token_endpoint_auth_signing_alg client metadata"). HappyView
+  # mints ES256 client assertions from the provisioned key (the only alg
+  # atproto allows for client auth).
   auth_method_fields=$(
     cat <<EOF
   "token_endpoint_auth_method": "private_key_jwt",
+  "token_endpoint_auth_signing_alg": "ES256",
   "jwks_uri": "${HAPPYVIEW_JWKS_URI}",
 EOF
   )
