@@ -49,10 +49,14 @@ export function createMessagesQuery(roomId: () => string, limit = 50) {
         const fetchedIds = new Set(fetched.map((m) => m.id));
         const extra = cached.filter((m) => !fetchedIds.has(m.id));
         if (extra.length > 0) {
-          return [...fetched, ...extra].sort(
-            (a, b) =>
-              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-          );
+          // Same key the appserver pages and `applyMessageDiff` orders by:
+          // `sort_idx`, id as fallback and tie-break. Never `timestamp` — that
+          // is the sender's own claim about the time, which is exactly what
+          // the server-side ordering key exists to stop mattering.
+          return [...fetched, ...extra].sort((a, b) => {
+            const byKey = (a.sort_idx ?? a.id).localeCompare(b.sort_idx ?? b.id);
+            return byKey !== 0 ? byKey : a.id.localeCompare(b.id);
+          });
         }
       }
       return fetched;

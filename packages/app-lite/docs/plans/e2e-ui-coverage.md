@@ -1,7 +1,7 @@
 # app-lite E2E UI coverage — plan
 
 **Status:** phase 1 landed (harness + first coverage); phase 2 in progress.
-**Updated:** 2026-09-27
+**Updated:** 2026-09-28
 **Suite:** `packages/app-lite/e2e/` · run with `pnpm --filter app-lite test:e2e`
 
 Meri's goal: "set up playwright and begin testing of app-lite behaviours, with a
@@ -86,7 +86,7 @@ the messages are authored by a second account that administers it:
 
 ---
 
-## 2. Covered now (38 tests)
+## 2. Covered now (36 tests)
 
 Every test below states the observable behaviour it defends.
 
@@ -183,6 +183,11 @@ Every test below states the observable behaviour it defends.
 | the actions menu stays open once the pointer leaves the row | The toolbar holds itself open for the lifetime of its menu, which portals to `body` — without it, the row's `mouseleave` unmounts the toolbar and takes the menu with it. |
 | the emoji picker stays open once the pointer leaves the row | The same contract for the emoji popover. |
 
+### `timeline-order-live-diff.spec.ts` — the live view keeps the page's order
+| Test | Defends |
+|---|---|
+| a message moved into the open room lands where the server keys it | A live `#messageDiff` merge must order by the server's timeline key (`sort_idx`, id as fallback), not by `timestamp`. A move rewrites `sort_idx` to the move time while the body still claims its original send time, so a client-side re-sort on `timestamp` renders the row somewhere the server's page never puts it. The spec stalls `room.getMessages` so the diff is the only writer, then samples the rendered order every 50 ms across the change and asserts the sampled sequence is exactly the correct order — a wrong order that a later refetch repaired still fails, because the assertion is over the sequence, not the end state. |
+
 ### Deliberate-break evidence (acceptance criterion 2)
 
 Demonstrated, not asserted, on 2026-09-25:
@@ -224,6 +229,16 @@ Demonstrated, not asserted, on 2026-09-25:
    → `omits Delete, keeping every other item in order, when it may not delete`
    **passed** — it only observes the `canDelete` gate, which that reorder does
    not touch. Two specs, two distinct contracts.
+
+6. **Ran `timeline-order-live-diff.spec.ts` against the pre-fix client order**
+   (`origin/next`, 122ce5f4, whose SDK sorts the cached timeline by
+   `timestamp`). Demonstrated 2026-09-28:
+   → the test **failed** in 7/7 runs, receiving `5,0,1,2,3,4` for
+   `1,2,3,4,5` on every attempt: the moved row rendered FIRST instead of last,
+   which is the moved message's original send time placing it 30 days early.
+   → against the fixed order the same spec **passed** in 18/18 runs. The failure
+   is a stable, single-state difference, not a race the assertion happened to
+   catch.
 
 All breaks were reverted; the suite is green.
 

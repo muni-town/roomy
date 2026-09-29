@@ -15,6 +15,18 @@ import { Op as OpSchema } from "../schemas/frames/messageDiff";
 export type Message = typeof MessageSchema.infer;
 export type MessageDiffOp = typeof OpSchema.infer;
 
+/**
+ * The key the timeline is ordered by, matching `selectMessages` exactly:
+ * `sort_idx` with the id as the fallback and tie-break.
+ *
+ * `sort_idx` is the server's ordering key. `timestamp` is NOT a substitute —
+ * it is the time the message body claims, which for a `createMessage` is
+ * whatever the sending device's clock said, the very thing the key exists to
+ * stop mattering. Sorting a diff by it re-orders live arrivals against the
+ * page the server returned and puts a skewed client's message wherever its
+ * clock claims. A message the server has not sorted (a system message) has no
+ * `sort_idx`, and falls back to its id exactly as the server does.
+ */
 export function applyMessageDiff(
   prev: Message[] | undefined,
   ops: readonly MessageDiffOp[],
@@ -32,8 +44,8 @@ export function applyMessageDiff(
       map.delete(op.key);
     }
   }
-  return [...map.values()].sort(
-    (a, b) =>
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-  );
+  return [...map.values()].sort((a, b) => {
+    const byKey = (a.sort_idx ?? a.id).localeCompare(b.sort_idx ?? b.id);
+    return byKey !== 0 ? byKey : a.id.localeCompare(b.id);
+  });
 }

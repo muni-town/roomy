@@ -161,30 +161,28 @@ async function resolveCursorKey(db: DbLike, cursorId: string): Promise<string> {
   return row?.key ?? cursorId;
 }
 
-export async function selectMessages(
-  db: DbLike,
-  scope: SelectScope,
-  viewerDid?: string,
-): Promise<{ messages: MessageDto[]; nextCursor: string | null }> {
-  // ── Step 1: pull the base rows ────────────────────────────────────────
-  let baseRows: BaseRow[];
-  if (scope.kind === "room") {
-    // Order and filter on the SAME key. The cursor a client sends is a message
-    // id, but the page is ordered by the timeline key `coalesce(sort_idx, id)`:
-    // `sort_idx` is the canonical message time (a bridge-supplied
-    // `timestampOverride` puts the Discord send time there) while the id is the
-    // ingest ULID, so the two orders run opposite each other for bridged
-    // backfill and an id-only filter drops and repeats rows. The cursor is
-    // resolved to its own timeline key first, then compared as a keyset with
-    // `id` as the tie-break — without the tie-break a page boundary inside a run
-    // of equal keys is unstable.
-    //
-    // This needs `idx_entities_room_sort_key (room, coalesce(sort_idx, id), id)`
-    // to walk the index and stop after the limit. Ordering by a plain expression
-    // without that index falls back to a temp-B-tree sort of every entity in the
-    // room, which is catastrophic on a large bridged channel.
-    const cursorKey = scope.cursor ? await resolveCursorKey(db, scope.cursor) : null;
-    const sql = `
+/**
+ * The room timeline's page query.
+ *
+ * Order and filter on the SAME key. The cursor a client sends is a message
+ * id, but the page is ordered by the timeline key `coalesce(sort_idx, id)`:
+ * `sort_idx` is the message's ordering key (the server's arrival time, or a
+ * bridge-supplied `timestampOverride`) while the id is the minting ULID, so
+ * the two orders run opposite each other for bridged backfill and an id-only
+ * filter drops and repeats rows. The cursor is resolved to its own timeline
+ * key first, then compared as a keyset with `id` as the tie-break — without
+ * the tie-break a page boundary inside a run of equal keys is unstable.
+ *
+ * `hasCursor` interpolates the keyset predicate and the `limit` is inlined,
+ * so this needs `idx_entities_room_sort_key (room, coalesce(sort_idx, id),
+ * id)` to walk the index and stop after the limit. Ordering by a plain
+ * expression without that index falls back to a temp-B-tree sort of every
+ * entity in the room, which is catastrophic on a large bridged channel.
+ * Exported so `selectMessages.test.ts` can assert the plan on the SQL the
+ * read path actually runs, in both the first-page and cursor forms.
+ */
+export function roomPageSql(hasCursor: boolean, limit: number): string {
+  return `
       select
         e.id as id,
         e.stream_id as stream_id,
@@ -218,14 +216,25 @@ export async function selectMessages(
         on forward_target_room_info.entity = forward_target_entity.room
       where e.room = ?1
         and (cc.entity is not null or forward_e.tail is not null)
-        ${cursorKey !== null
+        ${hasCursor
           ? `and (coalesce(e.sort_idx, e.id) < ?2
                   or (coalesce(e.sort_idx, e.id) = ?2 and e.id < ?3))`
           : ""}
       order by coalesce(e.sort_idx, e.id) desc, e.id desc
-      limit ${Math.max(1, Math.min(scope.limit, 100))}
+      limit ${Math.max(1, Math.min(limit, 100))}
     `;
-    const stmt = db.query(sql);
+}
+
+export async function selectMessages(
+  db: DbLike,
+  scope: SelectScope,
+  viewerDid?: string,
+): Promise<{ messages: MessageDto[]; nextCursor: string | null }> {
+  // ── Step 1: pull the base rows ────────────────────────────────────────
+  let baseRows: BaseRow[];
+  if (scope.kind === "room") {
+    const cursorKey = scope.cursor ? await resolveCursorKey(db, scope.cursor) : null;
+    const stmt = db.query(roomPageSql(cursorKey !== null, scope.limit));
     baseRows = cursorKey !== null
       ? await stmt.all([scope.roomId, cursorKey, scope.cursor])
       : await stmt.all([scope.roomId]);
@@ -521,8 +530,7 @@ export async function selectMessages(
       // comp_content, so cc.timestamp is NULL. Fall back to the forward
       // event's own ULID time — the entity id IS the forward event's ULID —
       // so the forwarder's timestamp is real (the client renders it in the
-      // forward context line and sorts diffs by it; an empty string rendered
-      // as "Invalid Date" and NaN-sorted to the end of the cache).
+      // forward context line; an empty string rendered as "Invalid Date").
       timestamp:
         ts != null
           ? new Date(ts).toISOString()

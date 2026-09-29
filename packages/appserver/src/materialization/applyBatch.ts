@@ -209,7 +209,16 @@ export async function applyBatch(
 
       // sort_idx: inline the UPDATE (no SELECT needed)
       if (e.event.$type === "space.roomy.message.createMessage.v0") {
-        const sortIdx = ulid(canonicalMessageTimestamp(e.event)) as Ulid;
+        // A live createMessage is keyed by the SERVER's clock, not the
+        // client-minted ULID: the id is minted on the sender's device, so a
+        // skewed clock would write an ordering key in the past and bury the
+        // message mid-history for every other client — durably, since the
+        // wrong sort_idx is written once. Backfill replays an existing log,
+        // where the id is the only time the events carry (a client is not
+        // involved), so it keeps the ULID-derived key.
+        const sortIdx = ulid(
+          canonicalMessageTimestamp(e.event, opts.isBackfill ? "event" : "arrival"),
+        ) as Ulid;
         chunkSteps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",

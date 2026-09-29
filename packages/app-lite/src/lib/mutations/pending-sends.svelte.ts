@@ -175,16 +175,19 @@ function sendIdentity(event: Record<string, unknown>): string {
  * message with `staleTime: Infinity` — its history would never load. The
  * composer only renders alongside `ChatArea` for the same room, which always
  * creates the entry.
+ *
+ * Ordered by the server's key (`sort_idx`, id as fallback), not by
+ * `timestamp`: the placeholder is the one row whose `timestamp` is this
+ * device's clock, so sorting by it would let the same skew the server ignores
+ * reorder the local timeline. The placeholder has no `sort_idx` of its own —
+ * it is pinned to the end because that is where the server will key it, and
+ * `applyMessageDiff` re-sorts the row in place when the real one arrives.
  */
 function writePlaceholder(entry: PendingSend): void {
   const key = messagesKey(entry.roomId) as unknown[];
   if (!queryClient.getQueryState(key)) return;
-  queryClient.setQueryData<Message[]>(key, (prev) => {
-    const rest = (prev ?? []).filter((m) => m.id !== entry.message.id);
-    // Oldest-first, matching the appserver and `applyMessageDiff`.
-    return [...rest, entry.message].sort(
-      (a, b) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-    );
-  });
+  queryClient.setQueryData<Message[]>(key, (prev) => [
+    ...(prev ?? []).filter((m) => m.id !== entry.message.id),
+    entry.message,
+  ]);
 }

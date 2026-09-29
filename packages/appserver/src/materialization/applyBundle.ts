@@ -138,7 +138,13 @@ async function applyBundleInner(
       await runStatementForTargets(db, globalDb, statement);
     }
 
-    await setMessageSortIdxByTimestamp(db, bundle.event);
+    await setMessageSortIdxByTimestamp(
+      db,
+      bundle.event,
+      // A live createMessage is keyed by the server's arrival time, not the
+      // client-minted ULID — see `TimestampSource`. Replay keeps the ULID.
+      opts.isBackfill ? "event" : "arrival",
+    );
     await setMessageSortIdxByReorder(db, opts.streamId, bundle.event);
     await setMessageSortIdxByForward(db, bundle.event);
 

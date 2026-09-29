@@ -12,23 +12,25 @@ import type { Event, StreamDid, Ulid } from "@roomy-space/sdk";
 import { log } from "../log.ts";
 
 /**
- * Set `entities.sort_idx` for a freshly-created message based on its canonical
- * timestamp. For Discord-bridged messages we honour the timestampOverride
- * extension; otherwise we use the message's own ULID timestamp.
+ * Set `entities.sort_idx` for a freshly-created message, keyed by
+ * `canonicalMessageTimestamp`: the `timestampOverride` extension when
+ * present, otherwise `source`.
+ *
+ * `source` is `"arrival"` for a live `createMessage` — the message the sender
+ * is composing now — and `"event"` for a replay, where the log's own ULIDs
+ * are all the time the events carry. See `TimestampSource`.
  *
  * No-op if the entity row is missing (materialiser failed earlier in the
  * batch) or if a sort_idx is already set.
  */
-export async function setMessageSortIdxByTimestamp(db: DbLike, event: Event): Promise<void> {
+export async function setMessageSortIdxByTimestamp(
+  db: DbLike,
+  event: Event,
+  source: TimestampSource = "event",
+): Promise<void> {
   if (event.$type !== "space.roomy.message.createMessage.v0") return;
 
-  const overrideExt =
-    event.extensions?.["space.roomy.extension.timestampOverride.v0"];
-  const timestamp = overrideExt
-    ? Number(overrideExt.timestamp)
-    : decodeTime(event.id);
-
-  const sortIdx = ulid(timestamp);
+  const sortIdx = ulid(canonicalMessageTimestamp(event, source));
   // No SELECT needed: the entity was just created by ensureEntity in the same
   // savepoint with sort_idx = NULL. If the row is missing or sort_idx is
   // already set, this UPDATE is a no-op.
@@ -82,8 +84,9 @@ export async function setMessageSortIdxByForward(db: DbLike, event: Event): Prom
  *
  * `comp_content.timestamp` is deliberately NOT rewritten: the message's
  * original send time is its identity, and the client renders timestamps from
- * `timestamp` (the timeline is ordered by cache order, which the diff
- * re-sorts by `timestamp` — see the SDK's `applyMessageDiff`).
+ * `timestamp`. Ordering does not depend on it — the client re-sorts the
+ * timeline by `sort_idx` (see the SDK's `applyMessageDiff`), which is the same
+ * key this write changes.
  *
  * Only messages that actually exist are touched (a move of an unmaterialised
  * id is a no-op), and the update is unconditional: unlike create/forward,
@@ -199,21 +202,51 @@ function midpointUlid(earlier: Ulid, later?: Ulid): string {
 }
 
 /**
+ * How the timestamp of a message that carries no `timestampOverride` is
+ * derived.
+ *
+ * - `"event"` — the event ULID's own time. Used everywhere the event is the
+ *   only clock available (an existing log being replayed, an edit/reaction
+ *   event with no ordering role of its own).
+ * - `"arrival"` — the server's clock at materialisation. `entities.sort_idx`
+ *   is the timeline's page key, and a `createMessage` arrives as an event a
+ *   *client* minted, so the ULID encodes the sender's clock. A device whose
+ *   clock is behind would otherwise key its message behind history, for every
+ *   other client, durably — the key is written once and never repaired.
+ */
+export type TimestampSource = "event" | "arrival";
+
+/**
  * Canonical timestamp (ms since epoch) for a message event: the
  * `timestampOverride` extension when present (Discord-bridged messages carry
- * the original Discord send time), otherwise the event ULID's own time.
+ * the original Discord send time), otherwise the event's own clock according
+ * to `source`.
  *
- * This is the same rule the SDK materialiser uses for `comp_content.timestamp`
- * and `setMessageSortIdxByTimestamp` uses for `entities.sort_idx`. Consumers
- * that derive a timestamp from the message ULID alone (e.g. the activity
- * feed) mis-order bridged messages, whose ULIDs encode bridge-ingestion time
- * rather than the original Discord time.
+ * The override always wins, and deliberately so: it is set by a producer
+ * translating another system's timeline (the Discord bridge stamps the
+ * original Discord send time), where the true order is known and the local
+ * arrival order is not the one users saw.
+ *
+ * `source: "arrival"` is what `entities.sort_idx` uses for a live
+ * `createMessage` — see `setMessageSortIdxByTimestamp` and its caller in
+ * `applyBatch`. Passing it here rather than choosing a timestamp at each call
+ * site keeps the ordering key and the activity/feed timestamps on one rule.
+ *
+ * This is also the rule the SDK materialiser applies to
+ * `comp_content.timestamp`. Consumers that derive a timestamp from the
+ * message ULID alone (e.g. the activity feed) mis-order bridged messages,
+ * whose ULIDs encode bridge-ingestion time rather than the original Discord
+ * time.
  */
-export function canonicalMessageTimestamp(event: Event): number {
+export function canonicalMessageTimestamp(
+  event: Event,
+  source: TimestampSource = "event",
+): number {
   if (event.$type !== "space.roomy.message.createMessage.v0") {
     return decodeTime(event.id);
   }
   const overrideExt =
     event.extensions?.["space.roomy.extension.timestampOverride.v0"];
-  return overrideExt ? Number(overrideExt.timestamp) : decodeTime(event.id);
+  if (overrideExt) return Number(overrideExt.timestamp);
+  return source === "arrival" ? Date.now() : decodeTime(event.id);
 }

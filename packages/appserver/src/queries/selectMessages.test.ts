@@ -7,7 +7,7 @@ import { StreamDid, UserDid, newUlid } from "@roomy-space/sdk";
 import type { DbLike } from "../db/types.ts";
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import { closeDb, openDb, openGlobalDb } from "../db/db.ts";
-import { selectMessages } from "./selectMessages.ts";
+import { selectMessages, roomPageSql } from "./selectMessages.ts";
 import { _profileHydrationInFlight, _resetProfileStoreCache, _setTestGetProfiles } from "./profileStore.ts";
 import { _resetProfileNegativeCache } from "../materialization/profiles.ts";
 
@@ -631,6 +631,36 @@ describe("selectMessages missing-author hydration", () => {
     } finally {
       gate.resolve();
       _setTestGetProfiles(null);
+    }
+  });
+});
+
+describe("selectMessages room page plan", () => {
+  /**
+   * The room page is ordered by `coalesce(sort_idx, id)` and seeks the next
+   * page on that same expression. The index `idx_entities_room_sort_key`
+   * exists to serve exactly that ORDER BY — without it SQLite sorts every
+   * entity in the room into a temp B-tree on each fetch, which is where a
+   * large bridged channel spends its read time. Asserted on the SQL the read
+   * path runs, in both call forms, because a cursor page is a different
+   * statement from a first page.
+   */
+  test("the room page walks idx_entities_room_sort_key, with and without a cursor", () => {
+    const db = new Database(":memory:");
+    db.exec("pragma foreign_keys = on");
+    db.exec(readFileSync(SCHEMA_PATH, "utf8"));
+
+    for (const hasCursor of [false, true]) {
+      const plan = db
+        .query<{ detail: string }, []>(
+          `explain query plan ${roomPageSql(hasCursor, 50)}`,
+        )
+        .all()
+        .map((r) => r.detail)
+        .join(" | ");
+
+      expect(plan).not.toMatch(/TEMP B-TREE/);
+      expect(plan).toContain("idx_entities_room_sort_key");
     }
   });
 });
