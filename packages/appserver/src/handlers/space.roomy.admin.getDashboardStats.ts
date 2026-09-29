@@ -28,7 +28,7 @@
 import { openDb, openReadStateDb } from "../db/db.ts";
 import { requireAdmin } from "../admin.ts";
 import { getSyncManager } from "../sync/handler.ts";
-import { isPushConfigured } from "../push/webpush.ts";
+import { isPushConfigured } from "../push/transports/webPush.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 export interface DashboardStatsResult {

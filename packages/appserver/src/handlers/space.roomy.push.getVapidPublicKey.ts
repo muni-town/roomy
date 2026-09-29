@@ -8,7 +8,7 @@
  * should treat a falsy/empty key as "push unavailable".
  */
 
-import { getVapidPublicKey } from "../push/webpush.ts";
+import { getVapidPublicKey } from "../push/transports/webPush.ts";
 import type { QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface GetVapidPublicKeyResult {

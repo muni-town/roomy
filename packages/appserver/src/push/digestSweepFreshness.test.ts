@@ -42,8 +42,10 @@ function freshDb(): DbLike {
     primary key (user_did, room_id)
   ) strict;`);
   raw.exec(`create table push_subscriptions (
-    user_did text not null, endpoint text not null, p256dh text not null,
-    auth text not null, expiration_time integer,
+    user_did text not null, endpoint text not null,
+    kind text not null default 'webpush',
+    p256dh text not null, auth text not null,
+    expiration_time integer,
     created_at integer not null default (unixepoch() * 1000),
     updated_at integer not null default (unixepoch() * 1000),
     primary key (user_did, endpoint)

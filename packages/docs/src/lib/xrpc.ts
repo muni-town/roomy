@@ -220,6 +220,7 @@ export interface PushStats {
     queueDepth: number;
     dispatched: number;
     deliveredOk: number;
+    skipped: number;
     gone: number;
     failed: number;
     digestsFired: number;
@@ -238,6 +239,7 @@ export interface PushTestResult {
   pushService: string;
   status: number | null;
   gone: boolean;
+  skipped: boolean;
   error: string | null;
 }
 

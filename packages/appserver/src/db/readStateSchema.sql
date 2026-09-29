@@ -98,11 +98,18 @@ create index if not exists idx_user_thread_activity_user
 -- initializeReadStateSchema (worker.ts).
 
 -- ── Web push (schema v3) ────────────────────────────────────────────────
--- A device/browser subscription for a user. A user may have many (one per
--- browser). Idempotent on endpoint — re-registering updates keys/expiry.
+-- A delivery destination for a user. A user may have many (one per browser or
+-- device). Idempotent on endpoint — re-registering updates its keys/expiry.
+--
+-- `kind` names the transport that can reach the row (see
+-- `push/transports/types.ts`).
+-- Web Push rows carry the push-service URL plus the RFC 8291 `p256dh`/`auth`
+-- keys; a native transport's row will carry its device token in `endpoint` and
+-- leave the keys unused.
 create table if not exists push_subscriptions (
   user_did        text not null,
-  endpoint        text not null,          -- push service URL; unique per subscription
+  endpoint        text not null,          -- push service URL / device token; unique per subscription
+  kind            text not null default 'webpush',
   p256dh          text not null,
   auth            text not null,
   expiration_time integer,                -- epoch ms, nullable

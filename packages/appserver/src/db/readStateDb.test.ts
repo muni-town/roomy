@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("read-state schema", () => {
   test("READSTATE_SCHEMA_VERSION is exported", () => {
-    expect(READSTATE_SCHEMA_VERSION).toBe("11");
+    expect(READSTATE_SCHEMA_VERSION).toBe("12");
   });
 
   test("schema applies cleanly on a fresh database", () => {
@@ -71,10 +71,11 @@ describe("read-state schema", () => {
    * Progressive scope expansion (Phase 1): `user_oauth_grants` arrives as
    * schema v11 — a purely structural bump (the table is a plain
    * `create table if not exists` in readStateSchema.sql, so no `up` and no
-   * async task). A DB stamped at the previous version must reach v11 on open
-   * and carry the table.
+   * async task). A DB stamped at the previous version must reach v11 on open —
+   * and, because the walk continues to the current version, whatever version
+   * has landed above it — and carry the table.
    */
-  test("upgrades a v10 database to v11 and gains user_oauth_grants", async () => {
+  test("upgrades a v10 database and gains user_oauth_grants", async () => {
     const dir = mkdtempSync(join(tmpdir(), "roomy-readstate-scope-"));
     cleanup.push(dir);
     const path = join(dir, "roomy-readstate.sqlite");
@@ -101,7 +102,7 @@ describe("read-state schema", () => {
       const version = await readState
         .query("select version from readstate_schema_version where id = 1")
         .get<{ version: string }>();
-      expect(version?.version).toBe("11");
+      expect(version?.version).toBe(READSTATE_SCHEMA_VERSION);
 
       const tables = await readState
         .query("select name from sqlite_master where type = 'table' order by name")
@@ -192,6 +193,54 @@ describe("read-state schema", () => {
       )
       .all("u", "s");
     expect(rows).toHaveLength(1);
+  });
+
+  test("push_subscriptions gains kind on a pre-v12 DB, existing rows default to webpush", () => {
+    const db = new Database(":memory:");
+    db.exec("pragma foreign_keys = on");
+
+    // Simulate a v11 DB: push_subscriptions WITHOUT `kind`, version row = 11.
+    db.exec(`
+      create table readstate_schema_version (
+        id integer primary key check (id = 1),
+        version text not null
+      ) strict;
+      insert into readstate_schema_version (id, version) values (1, '11');
+
+      create table push_subscriptions (
+        user_did        text not null,
+        endpoint        text not null,
+        p256dh          text not null,
+        auth            text not null,
+        expiration_time integer,
+        created_at      integer not null default (unixepoch() * 1000),
+        updated_at      integer not null default (unixepoch() * 1000),
+        primary key (user_did, endpoint)
+      ) strict;
+      insert into push_subscriptions (user_did, endpoint, p256dh, auth)
+        values ('did:plc:existing', 'https://push.example/old', 'k', 'a');
+    `);
+
+    // The schema exec runs on every open, then the manifest walk applies v12's
+    // structural `up`. A pre-v12 table is untouched by the `create table if not
+    // exists`, so the ALTER is the only thing that adds the column.
+    db.exec(readFileSync(SCHEMA_PATH, "utf8"));
+    const entry = readStateMigrationEntry("12");
+    expect(entry?.kind).toBe("structural");
+    expect(() => entry?.up?.(db)).not.toThrow();
+
+    // The pre-existing browser subscription defaults to the Web Push
+    // transport, so routing is unchanged for every stored row.
+    const row = db
+      .query<{ kind: string }, []>(
+        "select kind from push_subscriptions where endpoint = 'https://push.example/old'",
+      )
+      .get();
+    expect(row?.kind).toBe("webpush");
+
+    // Re-running the ALTER on an already-migrated table is a no-op, matching
+    // the migration walk on a partially-upgraded DB.
+    expect(() => entry?.up?.(db)).not.toThrow();
   });
 
   test("migration runs from v1 schema to current version", () => {

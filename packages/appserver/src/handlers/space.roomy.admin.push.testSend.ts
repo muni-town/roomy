@@ -3,10 +3,10 @@
  *
  * Sends a test push payload to ALL of a user's stored subscription endpoints
  * and returns the per-endpoint delivery result: HTTP status, error message,
- * `gone` flag, and the push service domain. This is the primary diagnostic
- * for "why isn't this user getting notifications on Chrome" — it bypasses the
- * evaluation/enumeration pipeline and tests the raw delivery path, showing
- * exactly what each push service (FCM, Mozilla, Apple) returns.
+ * `gone` flag, `skipped` flag, and the push service domain. This is the primary
+ * diagnostic for "why isn't this user getting notifications on Chrome" — it
+ * bypasses the evaluation/enumeration pipeline and tests the raw delivery path,
+ * showing exactly what each push service (FCM, Mozilla, Apple) returns.
  *
  * The payload is a real `message`-type push (identical structure to what the
  * dispatcher sends) so the browser shows a real notification if delivery
@@ -17,7 +17,9 @@
 
 import { openReadStateDb } from "../db/db.ts";
 import { requireAdmin } from "../admin.ts";
-import { sendPush } from "../push/webpush.ts";
+// Side effect: registers the Web Push transport in `PUSH_TRANSPORTS`.
+import "../push/transports/webPush.ts";
+import { PUSH_TRANSPORTS } from "../push/transports/types.ts";
 import { selectSubscriptions } from "../queries/pushSubscriptions.ts";
 import { pruneSubscriptionByEndpoint } from "../queries/pushSubscriptions.ts";
 import { XrpcError } from "../xrpc/errors.ts";
@@ -37,6 +39,13 @@ interface EndpointResult {
   status: number | null;
   /** True if the push service indicated the subscription is gone (404/410). */
   gone: boolean;
+  /**
+   * True if no transport attempted delivery: the row's transport isn't
+   * registered in this build, or it declined (Web Push with VAPID unset).
+   * Distinct from a delivery, so an unconfigured pipeline is not reported as
+   * one that works.
+   */
+  skipped: boolean;
   /** Error message if delivery threw (429/5xx/network), null on success. */
   error: string | null;
 }
@@ -93,21 +102,36 @@ export const adminTestSendHandler: ProcedureHandler<
     try {
       pushService = new URL(sub.endpoint).hostname;
     } catch {
-      // leave as "unknown"
+      // Non-URL endpoint (a native device token, say) — leave "unknown".
+    }
+
+    const transport = PUSH_TRANSPORTS[sub.kind];
+    if (!transport) {
+      results.push({
+        endpoint: sub.endpoint,
+        pushService,
+        status: null,
+        gone: false,
+        skipped: false,
+        error: `No transport registered for kind '${sub.kind}'`,
+      });
+      continue;
     }
 
     try {
-      const res = await sendPush(
+      const res = await transport.deliver(
         {
+          kind: sub.kind,
           endpoint: sub.endpoint,
-          keys: { p256dh: sub.p256dh, auth: sub.auth },
+          p256dh: sub.p256dh,
+          auth: sub.auth,
           expirationTime: sub.expirationTime,
         },
         payload,
         { urgency: "normal" },
       );
 
-      if (res.gone) {
+      if (res.outcome === "gone") {
         // Prune the dead subscription (same as the dispatcher does).
         await pruneSubscriptionByEndpoint(db, sub.endpoint);
       }
@@ -116,16 +140,26 @@ export const adminTestSendHandler: ProcedureHandler<
         endpoint: sub.endpoint,
         pushService,
         status: res.status,
-        gone: res.gone,
-        error: null,
+        gone: res.outcome === "gone",
+        skipped: res.outcome === "skipped",
+        error:
+          res.outcome === "retry"
+            ? res.error instanceof Error
+              ? res.error.message
+              : String(res.error)
+            : res.outcome === "skipped"
+              ? "No transport attempted delivery for this subscription"
+              : null,
       });
     } catch (err) {
+      // A transport must not throw; report it like any other failure.
       const message = err instanceof Error ? err.message : String(err);
       results.push({
         endpoint: sub.endpoint,
         pushService,
         status: null,
         gone: false,
+        skipped: false,
         error: message,
       });
     }

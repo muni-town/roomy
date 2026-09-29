@@ -13,6 +13,7 @@
 import { describe, expect, test } from "bun:test";
 import { startAppserver, seedSpace, seedJoinedSpace, readStateDb } from "./helpers.ts";
 import { _setAdminDids } from "../admin.ts";
+import { PUSH_TRANSPORTS } from "../push/transports/types.ts";
 
 const USER = "did:plc:e2e-user";
 const ADMIN = "did:plc:e2e-admin";
@@ -111,6 +112,62 @@ describe("space.roomy.admin.push.testSend", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body.results)).toBe(true);
+  });
+
+  test("a subscription whose transport can't send is reported skipped, not delivered", async () => {
+    const ctx = await startAppserver();
+    // A skip is a transport declining to attempt delivery. Web Push declines
+    // only while VAPID is unset, and this suite boots with a keypair, so the
+    // declining transport is installed directly.
+    const realWebPush = PUSH_TRANSPORTS.webpush;
+    PUSH_TRANSPORTS.webpush = {
+      kind: "webpush",
+      isConfigured: () => false,
+      async deliver() {
+        return { outcome: "skipped", status: null };
+      },
+    };
+    readStateDb(ctx.db).run(
+      "insert into push_subscriptions (user_did, endpoint, kind, p256dh, auth, expiration_time) values (?, ?, 'webpush', '', '', null)",
+      [USER, "https://push.example/e2e-skip"],
+    );
+
+    try {
+      const res = await ctx.authedFetch(ADMIN)(`${ctx.baseUrl}/xrpc/space.roomy.admin.push.testSend`, {
+        method: "POST",
+        body: JSON.stringify({ did: USER }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const result = body.results.find((r: { endpoint: string }) => r.endpoint.endsWith("e2e-skip"));
+      expect(result.status).toBeNull();
+      // An unconfigured pipeline attempted nothing; reporting it as a delivery
+      // is what makes this diagnostic lie about why a user sees no notifications.
+      expect(result.skipped).toBe(true);
+      expect(result.gone).toBe(false);
+    } finally {
+      PUSH_TRANSPORTS.webpush = realWebPush!;
+    }
+  });
+
+  test("a subscription naming a transport this build doesn't know is reported as an error", async () => {
+    const ctx = await startAppserver();
+    readStateDb(ctx.db).run(
+      "insert into push_subscriptions (user_did, endpoint, kind, p256dh, auth, expiration_time) values (?, ?, 'windows-wns', '', '', null)",
+      [USER, "device-token-e2e-absent"],
+    );
+
+    const res = await ctx.authedFetch(ADMIN)(`${ctx.baseUrl}/xrpc/space.roomy.admin.push.testSend`, {
+      method: "POST",
+      body: JSON.stringify({ did: USER }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const result = body.results.find(
+      (r: { endpoint: string }) => r.endpoint === "device-token-e2e-absent",
+    );
+    expect(result.error).toContain("No transport registered");
+    expect(result.skipped).toBe(false);
   });
 
   test("non-admin → 403", async () => {

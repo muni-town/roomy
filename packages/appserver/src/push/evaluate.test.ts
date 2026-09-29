@@ -54,7 +54,7 @@ function freshDb(): DbLike {
     "create table if not exists readstate_schema_version (id integer primary key check (id = 1), version text not null) strict",
   );
   db.exec(
-    "create table if not exists readstate.push_subscriptions (user_did text not null, endpoint text not null, p256dh text not null, auth text not null, expiration_time integer, created_at integer not null default (unixepoch() * 1000), updated_at integer not null default (unixepoch() * 1000), primary key (user_did, endpoint)) strict",
+    "create table if not exists readstate.push_subscriptions (user_did text not null, endpoint text not null, kind text not null default 'webpush', p256dh text not null, auth text not null, expiration_time integer, created_at integer not null default (unixepoch() * 1000), updated_at integer not null default (unixepoch() * 1000), primary key (user_did, endpoint)) strict",
   );
   db.exec(
     "create table if not exists readstate.push_user_default (user_did text primary key, level text not null check(level in ('silent','quiet','engaged','busy')) default 'engaged', updated_at integer not null default (unixepoch() * 1000)) strict",

@@ -112,6 +112,27 @@ export const READSTATE_MIGRATIONS = {
   "10": { kind: "structural" },
   // Per-user OAuth scope grants — user_oauth_grants in readStateSchema.sql.
   "11": { kind: "structural" },
+  // push_subscriptions.kind — the transport that can reach a subscription
+  // (push/transports/types.ts). Declared in readStateSchema.sql for fresh DBs;
+  // an ALTER here for existing ones, because `create table if not exists` leaves
+  // a pre-v12 push_subscriptions without the column. Existing rows are all
+  // browser subscriptions, which is exactly the default.
+  "12": {
+    kind: "structural",
+    up(db: Database) {
+      const cols = db
+        .query<{ name: string }, []>(
+          "select name from pragma_table_info('push_subscriptions')",
+        )
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes("kind")) {
+        db.exec(
+          "alter table push_subscriptions add column kind text not null default 'webpush'",
+        );
+      }
+    },
+  },
 } as const satisfies Record<string, ReadStateMigrationEntry>;
 
 /**

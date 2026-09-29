@@ -584,6 +584,12 @@
                 </p>
               </div>
               <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Skipped</p>
+                <p class="text-sm font-medium" class:text-amber-600={pushStats.stats.skipped > 0} class:text-base-500={pushStats.stats.skipped === 0}>
+                  {pushStats.stats.skipped}
+                </p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
                 <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Failed</p>
                 <p class="text-sm font-medium" class:text-red-500={pushStats.stats.failed > 0} class:text-base-500={pushStats.stats.failed === 0}>
                   {pushStats.stats.failed}
@@ -645,7 +651,7 @@
             <h4 class="text-xs font-medium text-base-500 mb-1">Test Send Results</h4>
             <div class="space-y-2">
               {#each pushTestResults as r}
-                <div class="border rounded-xl p-3 text-sm {r.gone ? 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30' : r.error ? 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30' : 'border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30'}">
+                <div class="border rounded-xl p-3 text-sm {r.gone ? 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30' : r.error || r.skipped ? 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30' : 'border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30'}">
                   <div class="flex items-center gap-2 mb-1">
                     <span class="font-mono text-xs px-2 py-0.5 rounded bg-base-100 dark:bg-base-800 text-base-600 dark:text-base-400">{r.pushService}</span>
                     {#if r.status !== null}
@@ -653,6 +659,9 @@
                     {/if}
                     {#if r.gone}
                       <span class="text-xs text-red-500 font-medium">GONE (pruned)</span>
+                    {/if}
+                    {#if r.skipped}
+                      <span class="text-xs text-amber-600 font-medium">NOT SENT</span>
                     {/if}
                   </div>
                   {#if r.error}
