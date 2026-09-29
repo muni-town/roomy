@@ -259,6 +259,7 @@ export async function callAdminTestSend(
 
 export interface DashboardStats {
   activity: {
+    totalUsers: number;
     activeSpaces: number;
     totalEvents: number;
     eventsToday: number;

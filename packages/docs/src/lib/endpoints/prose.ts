@@ -820,12 +820,12 @@ export const prose: Record<string, EndpointProse> = {
   // ── Admin ───────────────────────────────────────────────────────────────
   "space.roomy.admin.getDashboardStats": {
     description:
-      "Returns aggregate counters + system health for the admin dashboard overview. Includes activity stats (activeSpaces, totalEvents, eventsToday, connectedUsers) and system stats (uptime, appserverDid, dbSizeBytes, pushVapidConfigured, pushTotalSubscriptions).",
+      "Returns aggregate counters + system health for the admin dashboard overview. Includes activity stats (totalUsers, activeSpaces, totalEvents, eventsToday, connectedUsers) and system stats (uptime, appserverDid, dbSizeBytes, pushVapidConfigured, pushTotalSubscriptions).",
     auth: "Admin allowlist (APPSERVER_ADMIN_DIDS).",
     outputSchema: {
       type: "object",
       properties: {
-        activity: { type: "object", description: "activeSpaces, totalEvents, eventsToday, connectedUsers." },
+        activity: { type: "object", description: "totalUsers, activeSpaces, totalEvents, eventsToday, connectedUsers." },
         system: { type: "object", description: "uptime, appserverDid, dbSizeBytes, pushVapidConfigured, pushTotalSubscriptions." },
       },
     },

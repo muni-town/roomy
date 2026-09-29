@@ -11,6 +11,7 @@ import {
   startAppserver,
   seedSpace,
   seedUser,
+  seedMembershipIntent,
   type E2eContext,
 } from "./helpers.ts";
 import { _setAdminDids } from "../admin.ts";
@@ -133,6 +134,8 @@ describe("space.roomy.admin.getDashboardStats", () => {
     expect(body.activity.eventsToday).toBe(2);
     expect(body.activity.activeSpaces).toBe(1);
     expect(body.activity.connectedUsers).toBeTypeOf("number");
+    // No membership edges seeded → nobody has ever joined.
+    expect(body.activity.totalUsers).toBe(0);
 
     expect(body.system).toBeDefined();
     expect(body.system.appserverDid).toBeTypeOf("string");
@@ -159,9 +162,29 @@ describe("space.roomy.admin.getDashboardStats", () => {
     );
     expect(res.status).toBe(403);
   });
+
+  test("counts each user once across their spaces, including departed ones", async () => {
+    const ctx = await startAppserver();
+
+    // USER_A holds memberships in two spaces; USER_B joined one and left it.
+    // A count that ignored the 'left' state — or that read a distinct count
+    // over (user, space) pairs rather than over users — would report 3 or 1
+    // here instead of 2.
+    seedMembershipIntent(ctx.db, USER_A, "did:web:s1.example", "joined");
+    seedMembershipIntent(ctx.db, USER_A, "did:web:s2.example", "joined");
+    seedMembershipIntent(ctx.db, USER_B, "did:web:s1.example", "left");
+
+    const res = await ctx.authedFetch(ADMIN)(
+      `${ctx.baseUrl}/xrpc/space.roomy.admin.getDashboardStats`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    // USER_A twice-over is still one user; USER_B counts despite leaving.
+    expect(body.activity.totalUsers).toBe(2);
+  });
 });
 
-// ─── space.roomy.admin.listSpaces ────────────────────────────────────────
 
 describe("space.roomy.admin.listSpaces", () => {
   test("sorted by member count desc, includes breakdown", async () => {

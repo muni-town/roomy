@@ -23,6 +23,7 @@
     IconLogOut,
     IconSquaresPlus,
     IconHashtag,
+    IconUsers,
   } from "@roomy/design/icons";
 
   let handle = $state("");
@@ -140,6 +141,13 @@
   // ── Activity stat card config ───────────────────────────────────────────
 
   const activityCards = [
+    {
+      label: "Total Users",
+      get value() { return stats ? fmtCount(stats.activity.totalUsers) : "—"; },
+      icon: IconUsers,
+      bgClass: "bg-violet-100 dark:bg-violet-900/30",
+      iconClass: "text-violet-600 dark:text-violet-400",
+    },
     {
       label: "Active Spaces",
       get value() { return stats ? fmtCount(stats.activity.activeSpaces) : "—"; },

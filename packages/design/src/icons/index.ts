@@ -29,6 +29,7 @@ export { default as IconSmileyXEyes } from "~icons/ph/smiley-x-eyes-bold";
 export { default as IconTrash } from "~icons/ph/trash-bold";
 export { default as IconArchive } from "~icons/ph/archive-bold";
 export { default as IconUserPlus } from "~icons/ph/user-plus-bold";
+export { default as IconUsers } from "~icons/ph/users-bold";
 export { default as IconArrowUturnLeft } from "~icons/ph/arrow-u-up-left-bold";
 export { default as IconCopy } from "~icons/ph/clipboard-bold";
 export { default as IconMove } from "~icons/ph/arrows-left-right-bold";

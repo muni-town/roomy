@@ -10,6 +10,7 @@
  * Response shape:
  * {
  *   activity: {
+ *     totalUsers: number,         // distinct DIDs that have joined a space
  *     activeSpaces: number,       // distinct streams with events in last 1h
  *     totalEvents: number,        // all-time events processed
  *     eventsToday: number,        // events in last 24h (since UTC midnight)
@@ -33,6 +34,7 @@ import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 export interface DashboardStatsResult {
   activity: {
+    totalUsers: number;
     activeSpaces: number;
     totalEvents: number;
     eventsToday: number;
@@ -103,6 +105,29 @@ export const adminGetDashboardStatsHandler: QueryHandler<
     .get<{ n: number }>(oneHourAgo);
   const activeSpaces = activeRow?.n ?? 0;
 
+  // ── User count ──────────────────────────────────────────────────────────
+  //
+  // Distinct DIDs in `user_space_membership`, the read-state DB's durable
+  // membership intent — the authoritative record during the transition to
+  // ATProto permission records. The global `edges` table is deliberately NOT
+  // used: its v6 repair derived active memberships from per-space `member`
+  // edges and so resurrected spaces users had left, which is exactly the
+  // drift `user_space_membership` replaced it with.
+  //
+  // Both states count. A row exists for every (user, space) pair either way,
+  // so a user who left every space still counts — they were still a user.
+  //
+  // The read is a covering-index scan of the whole table (no index can serve
+  // a distinct count over it), so unlike the event-log queries above it does
+  // grow with the table. That table holds one row per (user, space) pair
+  // (~5k on the reference dataset, measured 0.4ms), orders of magnitude
+  // below the 4M-row event log, and the handler opens the read-state DB
+  // anyway for the push counters.
+  const usersRow = await openReadStateDb()
+    .query("SELECT count(DISTINCT user_did) AS n FROM user_space_membership")
+    .get<{ n: number }>();
+  const totalUsers = usersRow?.n ?? 0;
+
   let connectedUsers = 0;
   try {
     const sync = getSyncManager();
@@ -134,6 +159,7 @@ export const adminGetDashboardStatsHandler: QueryHandler<
 
   return {
     activity: {
+      totalUsers,
       activeSpaces,
       totalEvents,
       eventsToday,

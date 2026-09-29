@@ -236,6 +236,29 @@ export function seedJoinedSpace(
 }
 
 /**
+ * Seed durable membership intent in the read-state DB (what
+ * `user_space_membership` records on join/leave). `state` is 'joined' or
+ * 'left'; a user who left every space still counts as a user.
+ */
+export function seedMembershipIntent(
+  db: Database,
+  userDid: string,
+  spaceId: string,
+  state: "joined" | "left",
+): void {
+  readStateDb(db).run(
+    `insert into user_space_membership
+       (user_did, space_did, state, source, source_event_id)
+     values (?, ?, ?, 'seed', ?)
+     on conflict(user_did, space_did) do update set
+       state = excluded.state,
+       source = excluded.source,
+       source_event_id = excluded.source_event_id`,
+    [userDid, spaceId, state, `01SEED${spaceId}`],
+  );
+}
+
+/**
  * Seed a room entity + comp_room row in the room's per-space DB, plus the
  * global `entity_space` index entry so `openSpaceDbForEntity`
  * can resolve the room to its owning space.
