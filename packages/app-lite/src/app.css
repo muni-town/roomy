@@ -53,10 +53,8 @@
  */
 @utility shadow-lift {
   @apply translate-y-px hover:translate-y-0;
-  @apply transition-[box-shadow,translate] ease-in duration-75;
-  @apply hover:shadow-[0_2px_0_0_var(--shadow-button-color,var(--color-base-500))];
-  @apply [--shadow-button-color:var(--color-base-300)] dark:[--shadow-button-color:var(--color-base-800)];
-  @apply data-current:[--shadow-button-color:var(--color-accent-300)] data-current:dark:[--shadow-button-color:var(--color-accent-800)];
+  @apply hover:shadow-[0_2px_0_0_var(--shadow-button-color)];
+  @apply active:translate-y-px active:shadow-none;
 }
 
 @layer base {
