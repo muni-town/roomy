@@ -25,6 +25,8 @@ import { openDb, openGlobalDb, openReadStateDb, openSpaceDb, openSpaceDbForEntit
 import { StreamManager, setStreamManager, _resetStreamManager } from "./streams/StreamManager.ts";
 import { ACTIVE_WINDOW_MS, purgeStaleThreadActivity } from "./queries/userActiveThreads.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
+import { getLoginScopeHandler } from "./handlers/space.roomy.auth.getLoginScope.ts";
+import { recordScopeGrantHandler } from "./handlers/space.roomy.auth.recordScopeGrant.ts";
 import { createSyncSubscribeHandler } from "./handlers/space.roomy.sync.subscribe.ts";
 import { connectSpaceHandler } from "./handlers/space.roomy.admin.connectSpace.ts";
 import { getEventsHandler } from "./handlers/space.roomy.sync.getEvents.ts";
@@ -194,6 +196,21 @@ export function buildRouter(
       handler: getConnectionTicketHandler,
       inputSchema: schemas.procedures.getConnectionTicket.Input,
       outputSchema: schemas.procedures.getConnectionTicket.Output,
+    })
+    // ── Progressive scope expansion (Phase 1) ─────────────────────────────
+    // getLoginScope is intentionally unauthenticated: the client calls it
+    // before it has a token, to decide which scope to request at login. It
+    // carries a tighter per-endpoint rate limit (see ENDPOINT_RATE_LIMITS in
+    // xrpc/rateLimit.ts) because it resolves an attacker-chosen handle.
+    .query("space.roomy.auth.getLoginScope", {
+      handler: getLoginScopeHandler,
+      paramsSchema: schemas.queries.getLoginScope.Params,
+      outputSchema: schemas.queries.getLoginScope.Response,
+    })
+    .procedure("space.roomy.auth.recordScopeGrant", {
+      handler: recordScopeGrantHandler,
+      inputSchema: schemas.procedures.recordScopeGrant.Input,
+      // No outputSchema: void return; short-circuits to 200 with empty body.
     })
     .procedure("space.roomy.room.updateSeen", {
       handler: updateSeenHandler,

@@ -110,6 +110,8 @@ export const READSTATE_MIGRATIONS = {
   "9": { kind: "structural" },
   // Roomy Pro members-area role grants — pro_role_grants in readStateSchema.sql.
   "10": { kind: "structural" },
+  // Per-user OAuth scope grants — user_oauth_grants in readStateSchema.sql.
+  "11": { kind: "structural" },
 } as const satisfies Record<string, ReadStateMigrationEntry>;
 
 /**

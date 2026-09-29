@@ -56,6 +56,8 @@ export const DEFAULT_APPSERVER_DID = "did:web:appserver.roomy.chat";
 // that have no arktype schema are defined inline below.
 
 import lexGetConnectionTicket from "../schemas/lexicons/space.roomy.auth.getConnectionTicket.json";
+import lexGetLoginScope from "../schemas/lexicons/space.roomy.auth.getLoginScope.json";
+import lexRecordScopeGrant from "../schemas/lexicons/space.roomy.auth.recordScopeGrant.json";
 import lexGetMessage from "../schemas/lexicons/space.roomy.message.getMessage.json";
 import lexGetMessages from "../schemas/lexicons/space.roomy.room.getMessages.json";
 import lexGetRoomMetadata from "../schemas/lexicons/space.roomy.room.getMetadata.json";
@@ -201,6 +203,8 @@ const ADMIN_LEXICONS = [
 /** All Roomy lexicons, used by `makeProxiedAgent` to register on the atproto Agent. */
 const LEXICONS = [
   lexGetConnectionTicket,
+  lexGetLoginScope,
+  lexRecordScopeGrant,
   lexGetMessage,
   lexGetMessages,
   lexGetRoomMetadata,

@@ -210,3 +210,20 @@ create table if not exists pro_role_grants (
   did         text primary key,
   granted_at  integer not null default (unixepoch() * 1000)
 ) strict;
+
+-- ── OAuth scope grants (schema v11) ─────────────────────────────────────
+-- The raw OAuth scope string each user last consented to, as returned by
+-- the PDS's `getTokenInfo().scope`. Written by the recordScopeGrant
+-- procedure (the client calls it after every login/expansion) and read by
+-- the unauthenticated getLoginScope query, so a returning user gets the
+-- scope they already approved back in one round-trip, with no re-prompt.
+--
+-- LAST-GRANTED, not a high-water mark: a user who narrows consent on the
+-- PDS consent screen must not be silently re-granted the removed scopes on
+-- next login. Tiers (`semble`, `withDms`) are a client-side UX abstraction —
+-- the server stores the opaque string from `getTokenInfo()` verbatim.
+create table if not exists user_oauth_grants (
+  user_did       text primary key,
+  granted_scope  text not null,
+  updated_at     integer not null default (unixepoch() * 1000)
+) strict;

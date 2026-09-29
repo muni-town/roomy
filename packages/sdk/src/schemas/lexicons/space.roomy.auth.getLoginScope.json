@@ -1,0 +1,40 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.auth.getLoginScope",
+  "defs": {
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "handle"
+        ],
+        "properties": {
+          "handle": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "did"
+          ],
+          "nullable": [
+            "scope"
+          ],
+          "properties": {
+            "did": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

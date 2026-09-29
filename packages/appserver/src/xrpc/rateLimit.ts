@@ -70,6 +70,7 @@ export function _resetRateLimit(): void {
     duration: DURATION,
     blockDuration: BLOCK_DURATION,
   });
+  endpointLimiters = buildEndpointLimiters();
 }
 
 // ─── Key extraction ─────────────────────────────────────────────────────
@@ -158,4 +159,76 @@ export function rateLimitResponse(retryAfterMs: number): Response {
       },
     },
   );
+}
+
+// ─── Per-endpoint limits ────────────────────────────────────────────────
+
+/**
+ * Limits for endpoints that cost more than a normal request — currently only
+ * the unauthenticated handle→DID resolution query
+ * (`space.roomy.auth.getLoginScope`). It is reachable without a token, so the
+ * global IP limiter (100/60s) is too loose: every call fans out to DNS + HTTP
+ * resolution against an attacker-chosen domain, which is a
+ * resolution-amplification vector. 10/min/IP still comfortably covers a
+ * legitimate client (one call per login attempt, plus retries behind a shared
+ * NAT), while capping the amplification at 10 lookups/min/IP.
+ *
+ * `RATE_LIMIT_DISABLED=true` disables these too, matching the global limiter.
+ */
+interface EndpointLimit {
+  points: number;
+  durationSec: number;
+}
+
+export const ENDPOINT_RATE_LIMITS: Readonly<Record<string, EndpointLimit>> = {
+  "space.roomy.auth.getLoginScope": {
+    points: envInt("RATE_LIMIT_GETLOGINSCOPE_POINTS", 10),
+    durationSec: envInt("RATE_LIMIT_GETLOGINSCOPE_DURATION", 60),
+  },
+};
+
+let endpointLimiters = buildEndpointLimiters();
+
+function buildEndpointLimiters(): Record<string, RateLimiterMemory> {
+  const limiters: Record<string, RateLimiterMemory> = {};
+  for (const [nsid, limit] of Object.entries(ENDPOINT_RATE_LIMITS)) {
+    limiters[nsid] = new RateLimiterMemory({
+      keyPrefix: `rl:${nsid}`,
+      points: limit.points,
+      duration: limit.durationSec,
+      blockDuration: BLOCK_DURATION,
+    });
+  }
+  return limiters;
+}
+
+/**
+ * Check the per-endpoint limit for `nsid`. Returns an allow result for any
+ * NSID without a configured limit, so callers can invoke this unconditionally.
+ */
+export async function checkEndpointRateLimit(
+  nsid: string,
+  req: Request,
+  directIp: string,
+): Promise<RateLimitResult> {
+  const endpointLimiter = endpointLimiters[nsid];
+  if (DISABLED || !endpointLimiter) {
+    return { allowed: true, retryAfterMs: 0, remaining: Infinity };
+  }
+
+  try {
+    const res = await endpointLimiter.consume(clientKey(req, directIp), 1);
+    return {
+      allowed: true,
+      retryAfterMs: res.msBeforeNext,
+      remaining: res.remainingPoints,
+    };
+  } catch (rej: unknown) {
+    const res = rej as { msBeforeNext?: number; remainingPoints?: number };
+    return {
+      allowed: false,
+      retryAfterMs: res.msBeforeNext ?? BLOCK_DURATION * 1000,
+      remaining: res.remainingPoints ?? 0,
+    };
+  }
 }

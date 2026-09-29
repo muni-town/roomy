@@ -5,6 +5,16 @@
     "group": "Auth"
   },
   {
+    "nsid": "space.roomy.auth.getLoginScope",
+    "kind": "query",
+    "group": "Auth"
+  },
+  {
+    "nsid": "space.roomy.auth.recordScopeGrant",
+    "kind": "procedure",
+    "group": "Auth"
+  },
+  {
     "nsid": "space.roomy.room.updateSeen",
     "kind": "procedure",
     "group": "Rooms"

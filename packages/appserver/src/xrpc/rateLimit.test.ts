@@ -1,5 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { checkRateLimit, rateLimitResponse } from "./rateLimit.ts";
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
+  ENDPOINT_RATE_LIMITS,
+  _resetRateLimit,
+  checkEndpointRateLimit,
+  checkRateLimit,
+  rateLimitResponse,
+} from "./rateLimit.ts";
 
 function req(url = "http://x/xrpc/test"): Request {
   return new Request(url);
@@ -69,5 +75,69 @@ describe("rateLimitResponse", () => {
   test("rounds up retry-after", () => {
     const res = rateLimitResponse(100);
     expect(res.headers.get("Retry-After")).toBe("1");
+  });
+});
+
+describe("checkEndpointRateLimit", () => {
+  const NSID = "space.roomy.auth.getLoginScope";
+
+  beforeEach(() => {
+    _resetRateLimit();
+  });
+
+  test("is a no-op for NSIDs with no configured limit", async () => {
+    const result = await checkEndpointRateLimit(
+      "space.roomy.space.getSpaces",
+      req(),
+      "10.1.1.1",
+    );
+    expect(result.allowed).toBe(true);
+    expect(result.remaining).toBe(Infinity);
+  });
+
+  test("allows requests under the limit and blocks over it", async () => {
+    const points = ENDPOINT_RATE_LIMITS[NSID]!.points;
+    const ip = "10.2.2.2";
+
+    for (let i = 0; i < points; i++) {
+      const r = await checkEndpointRateLimit(NSID, req(), ip);
+      expect(r.allowed).toBe(true);
+    }
+
+    const blocked = await checkEndpointRateLimit(NSID, req(), ip);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.retryAfterMs).toBeGreaterThan(0);
+  });
+
+  test("different IPs get independent counters", async () => {
+    const points = ENDPOINT_RATE_LIMITS[NSID]!.points;
+    const exhausted = "10.3.3.3";
+    for (let i = 0; i < points; i++) {
+      await checkEndpointRateLimit(NSID, req(), exhausted);
+    }
+    expect((await checkEndpointRateLimit(NSID, req(), exhausted)).allowed).toBe(
+      false,
+    );
+
+    const other = await checkEndpointRateLimit(NSID, req(), "10.3.3.4");
+    expect(other.allowed).toBe(true);
+  });
+
+  test("the endpoint limit is tighter than the global IP limit", async () => {
+    // The point of a separate limiter: exhausting the endpoint budget must
+    // not block ordinary traffic from the same IP (and vice versa). This is
+    // the resolution-amplification guard for the unauthenticated
+    // handle→DID query.
+    const points = ENDPOINT_RATE_LIMITS[NSID]!.points;
+    const ip = "10.4.4.4";
+    for (let i = 0; i < points; i++) {
+      await checkEndpointRateLimit(NSID, req(), ip);
+    }
+    expect((await checkEndpointRateLimit(NSID, req(), ip)).allowed).toBe(false);
+
+    // Global budget untouched by the endpoint budget.
+    const global = await checkRateLimit(req(), ip);
+    expect(global.allowed).toBe(true);
+    expect(global.remaining).toBeGreaterThan(0);
   });
 });

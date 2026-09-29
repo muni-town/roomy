@@ -12,6 +12,7 @@ import { encodeFrame, errorFrame } from "./frame.ts";
 import { XrpcError, toErrorResponse } from "./errors.ts";
 import { type } from "arktype";
 import {
+  checkEndpointRateLimit,
   checkRateLimit,
   rateLimitResponse,
 } from "./rateLimit.ts";
@@ -147,6 +148,13 @@ export class XrpcRouter {
           { status: 404 },
         );
       }
+
+      // ── Per-endpoint limit (tighter than the global IP limit) ───────
+      // Endpoints that do expensive work for anonymous callers (currently
+      // only the unauthenticated handle→DID resolution in getLoginScope)
+      // carry their own limit. A no-op for any NSID without one.
+      const epRl = await checkEndpointRateLimit(nsid, req, directIp);
+      if (!epRl.allowed) return rateLimitResponse(epRl.retryAfterMs);
 
       const rawParams: QueryParams = {};
       for (const [k, v] of url.searchParams.entries()) {

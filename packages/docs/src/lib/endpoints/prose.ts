@@ -50,6 +50,44 @@ export const prose: Record<string, EndpointProse> = {
       "Consumed once on WebSocket upgrade; subsequent calls to the same ticket fail.",
     ],
   },
+  "space.roomy.auth.getLoginScope": {
+    description:
+      "Resolves a handle to a DID and returns the raw OAuth scope string that user last consented to, or null when the appserver has no stored grant. Called before login so a returning user's `signIn()` can request the scope they already approved — one round-trip, no re-prompting for permissions already granted. The `did` in the response saves the client a separate handle resolution.",
+    auth:
+      "UNAUTHENTICATED. The whole point is that the client calls this before it has a token (chicken-and-egg: a token is needed for authenticated endpoints, but the scope is needed to get a token). The stored scope is not sensitive — it is a list of public permission token strings already declared in the client metadata. Because it resolves an attacker-chosen handle against DNS/HTTP without auth, it carries a tighter per-endpoint rate limit (10/min/IP).",
+    params: [
+      { name: "handle", type: "string", required: true, description: "Handle (e.g. `alice.bsky.social`) to resolve and look up." },
+    ],
+    outputSchema: {
+      type: "object",
+      properties: {
+        did: { type: "string", description: "The DID the handle resolved to." },
+        scope: { type: "string", description: "Raw scope string from `getTokenInfo()`, or null when no grant is stored.", optional: true },
+      },
+    },
+    notes: [
+      "400 when `handle` is missing or empty; 404 when the handle does not resolve.",
+      "The stored grant is LAST-GRANTED, not a high-water mark — a user who narrowed consent on the PDS consent screen is not silently re-granted the removed scopes.",
+      "Reads `user_oauth_grants` in the read-state DB (schema v11).",
+    ],
+  },
+  "space.roomy.auth.recordScopeGrant": {
+    description:
+      "Upserts the caller's OAuth scope grant: the raw scope string the PDS actually returned from `getTokenInfo()`. The client calls this after every login and after each scope expansion, so it must be idempotent.",
+    auth: "Authenticated. Returns 401 (`AuthRequired`) when `auth.did` is null.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        scope: { type: "string", description: "Raw scope string from `getTokenInfo()` — never a tier name." },
+      },
+    },
+    notes: [
+      "Upsert, not insert — repeated calls for the same user overwrite the stored value.",
+      "Stores the RAW scope string: tiers (`semble`, `withDms`) are a client-side UX abstraction the server must not know about.",
+      "LAST-GRANTED, not a high-water mark: a high-water mark would silently re-grant scopes a user revoked. Phase 4's user-editable access settings depend on this.",
+      "Fire-and-forget on the client — a failure is non-fatal and self-heals on the next login.",
+    ],
+  },
 
   // ── Spaces ──────────────────────────────────────────────────────────────
   "space.roomy.space.getSpaces": {

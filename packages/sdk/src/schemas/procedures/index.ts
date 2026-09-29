@@ -16,3 +16,4 @@ export * as setPreferences from "./setPreferences";
 export * as grantBridgeToken from "./grantBridgeToken";
 export * as revokeBridgeToken from "./revokeBridgeToken";
 export * as createProCheckout from "./createProCheckout";
+export * as recordScopeGrant from "./recordScopeGrant";

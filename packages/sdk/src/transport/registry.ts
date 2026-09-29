@@ -141,6 +141,10 @@ export const QUERY_SCHEMAS = {
     params: queries.getBridgeTokens.Params,
     response: queries.getBridgeTokens.Response,
   },
+  "space.roomy.auth.getLoginScope": {
+    params: queries.getLoginScope.Params,
+    response: queries.getLoginScope.Response,
+  },
 } as const;
 
 export const PROCEDURE_SCHEMAS = {
@@ -203,6 +207,10 @@ export const PROCEDURE_SCHEMAS = {
   "space.roomy.pro.createCheckout": {
     input: procedures.createProCheckout.Input,
     output: procedures.createProCheckout.Output,
+  },
+  "space.roomy.auth.recordScopeGrant": {
+    input: procedures.recordScopeGrant.Input,
+    output: procedures.recordScopeGrant.Output,
   },
 } as const;
 
