@@ -17,6 +17,8 @@
   import { createMentionSearch } from "$lib/tiptap/mentions";
   import { editMessage, removeLinkEmbed } from "$lib/mutations/message";
   import { createSpaceCard } from "$lib/mutations/space-card";
+  import { guardedXrpc } from "$lib/scope-guard";
+  import { showScopeConsentDialogue } from "$lib/scope-consent-dialogue";
   import { toast } from "@foxui/core";
   import {
     discardPendingSend,
@@ -280,10 +282,22 @@
   async function handleCreateCard() {
     if (!singleLink) return;
     try {
-      await createSpaceCard(spaceId, singleLink);
+      await guardedXrpc(
+        () => createSpaceCard(spaceId, singleLink),
+        {
+          requiredTier: "base",
+          prompt: (tier) =>
+            showScopeConsentDialogue(tier, {
+              title: "Create Space cards",
+              description:
+                "Creating a card in this Space writes through the Space's " +
+                "arbiter. Roomy needs your permission for this action — the " +
+                "consent screen will show the exact access it requests.",
+            }),
+        },
+      );
       toast.success("Space card created.");
     } catch (e) {
-      console.error("createSpaceCard failed:", e);
       toast.error(e instanceof Error ? e.message : "Failed to create space card.");
     }
   }

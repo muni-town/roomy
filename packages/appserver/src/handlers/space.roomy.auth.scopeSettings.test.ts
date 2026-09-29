@@ -56,6 +56,16 @@ describe("isStrictScopeExpansion", () => {
     expect(isStrictScopeExpansion(SEMBLE_SCOPE, BASE_SCOPE)).toBe(true);
   });
 
+  test("true for a grown base over an older, smaller base (trap b)", () => {
+    // A user whose STORED grant predates the base's growth holds an old,
+    // smaller base. Re-requesting today's (larger) BASE_SCOPE is a real
+    // expansion — the PDS must show the consent delta, not treat it as a
+    // no-op. This is the production case: an admin with an old base hits a
+    // feature that needs the newly-added base token.
+    const OLD_BASE = "atproto rpc:space.roomy.space.getSpaces";
+    expect(isStrictScopeExpansion(BASE_SCOPE, OLD_BASE)).toBe(true);
+  });
+
   test("false for a proper subset (revoke)", () => {
     expect(isStrictScopeExpansion(NARROWED_SCOPE, BASE_SCOPE)).toBe(false);
   });

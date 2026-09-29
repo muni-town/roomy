@@ -1214,6 +1214,60 @@ depends only on 2 and 5 — it adds a tier and the dialogue is what makes the
 tier reachable, so it can run in parallel with 4 once 3 has landed.
 
 ---
+### Phase 5 results (shipped) — supersede the placeholders above
+
+Phase 5 shipped the reactive path and answered the two placeholders #274 left
+open: Strategy B's predicate, and Open Question 3. Both are recorded here; the
+text above stays as written so the record of what was open survives.
+
+**Open Question 3 — the PDS error shape: ANSWERED, source-verified.** A stale
+session's mid-request failure is the *resource server's* scope-miss, not the
+authorization server's. `@atproto/oauth-scopes` defines that error as an `Error`
+subclass carrying the name `ScopeMissingError`, status 403, `expose = true`, and
+a message of the form `Missing required scope "<scope>"`; `@atproto/xrpc-server`
+surfaces it through `XRPCError.fromError`'s `isHttpError` branch, preserving
+name, status and message onto the `XRPCError`. The client therefore observes a
+403 whose error field is `ScopeMissingError`.
+
+This is deliberately narrower than the placeholder, which accepted either
+`invalid_scope` or `insufficient_scope`. `invalid_scope` belongs to the
+authorization-server (authorize) path — e.g. asking for a token the metadata
+ceiling does not declare — so it is a different failure, and a stale session
+never produces it mid-request; `insufficient_scope` does not occur on this path
+at all.
+
+Honest limit, recorded because it changes how the answer should be read: no live
+scope-missing OAuth session could be minted to observe the wire bytes
+(app-password and test sessions are not scope-limited), so this shape is
+source-verified against the atproto code that ships this PDS rather than
+captured off the wire. That is why the shipped predicate stays narrow instead of
+tolerant.
+
+**Strategy B predicate: REPLACED by the shipped one.** The placeholder in
+§Scope Detection Strategies B gave way to the `isInsufficientScopeError` export
+in `packages/app-lite/src/lib/scope-guard.ts`. Its 403 requirement is
+load-bearing, and `scope-guard.test.ts` pins both directions: the measured shape
+matches, while a 500 carrying the same error name, a plain `Error`, and a
+request-time `invalid_scope` do not.
+
+```ts
+export function isInsufficientScopeError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as Record<string, unknown>;
+
+  const status = typeof e.status === "number" ? e.status : undefined;
+  if (status !== 403) return false;              // the 403 is load-bearing
+
+  const errorName = typeof e.error === "string" ? e.error : undefined;
+  if (errorName !== undefined) {
+    return SCOPE_MISSING_ERROR_NAMES[errorName] === true;
+  }
+
+  // No `error` field (some transports drop it): fall back to the message.
+  const message = typeof e.message === "string" ? e.message : undefined;
+  return message !== undefined && /^Missing required scope/.test(message);
+}
+```
 
 ## Open Questions
 

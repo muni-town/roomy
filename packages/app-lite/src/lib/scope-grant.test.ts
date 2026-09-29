@@ -40,6 +40,23 @@ describe("decideLoginScope", () => {
     }
   });
 
+  test("re-login with a stale stored base requests the CURRENT (grown) base", () => {
+    // Trap (b): a user whose stored grant predates the base tier's growth.
+    // decideLoginScope must return today's full base (which the PDS shows as
+    // a consent delta against the old grant), never the stale smaller set.
+    // The stored grant here simulates an old base lacking the authComplete
+    // umbrella token the arbiter-proxy feature needs — the same growth that
+    // left an admin holding a base that no longer covers their create-card
+    // action.
+    const staleStored = SCOPE_SETS.base
+      .split(" ")
+      .filter((s) => s !== "include:space.roomy.authComplete")
+      .join(" ");
+    const out = decideLoginScope(staleStored);
+    assert.equal(out, SCOPE_SETS.base); // full, current base — not the stale one
+    assert.ok(out.split(" ").includes("include:space.roomy.authComplete"));
+  });
+
   test("reconciles a stored scope that includes base extras", () => {
     // base retains the minimum; anything stored still within the ceiling is
     // kept, so a returning user keeps their previously-granted accesses.

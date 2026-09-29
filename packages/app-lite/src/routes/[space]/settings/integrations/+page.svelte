@@ -6,6 +6,7 @@
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { getBlueskyProfile, upsertBlueskyProfile } from "$lib/mutations/bluesky-profile";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
+  import ScopeGate from "$lib/components/ScopeGate.svelte";
 
   const spaceId = $derived(page.params.space!);
 
@@ -76,37 +77,43 @@
     {:else if metaQuery.isError}
       <ErrorMessage message={metaQuery.error.message} class="py-8" />
     {:else if meta}
-      <div class="flex flex-col gap-6">
-        <div>
-          <h2 class="text-lg font-semibold text-base-900 dark:text-base-100 mb-1">
-            Bluesky
-          </h2>
-          <p class="text-sm text-base-500 dark:text-base-400">
-            Publish this space's name and description as a Bluesky profile under
-            the space's own account.
-          </p>
-        </div>
+      <ScopeGate
+        tier="base"
+        title="Manage this Space's bluesky profile"
+        description="Publishing this Space's profile writes through the Space's arbiter. A session from before this capability shipped needs to re-confirm its access — the consent screen will show the exact permission it requests."
+      >
+        <div class="flex flex-col gap-6">
+          <div>
+            <h2 class="text-lg font-semibold text-base-900 dark:text-base-100 mb-1">
+              Bluesky
+            </h2>
+            <p class="text-sm text-base-500 dark:text-base-400">
+              Publish this space's name and description as a Bluesky profile under
+              the space's own account.
+            </p>
+          </div>
 
-        {#if profileLoading}
-          <p class="text-sm text-base-400">Checking for an existing profile…</p>
-        {:else if profileError}
-          <ErrorMessage message={profileError} class="py-4" />
-        {:else}
-          <Button
-            variant="secondary"
-            size="sm"
-            onclick={onToggleProfile}
-            asyncState={saving ? { status: "loading" } : { status: "idle" }}
-          >
-            {hasProfile ? "Update Bluesky Profile" : "Create Bluesky Profile"}
-          </Button>
-          <p class="text-sm text-base-500 dark:text-base-400">
-            {hasProfile
-              ? "This space already has a Bluesky profile. Updating it will refresh the name and description from this space's settings."
-              : "This will create a Bluesky profile for the space using its current name and description."}
-          </p>
-        {/if}
-      </div>
+          {#if profileLoading}
+            <p class="text-sm text-base-400">Checking for an existing profile…</p>
+          {:else if profileError}
+            <ErrorMessage message={profileError} class="py-4" />
+          {:else}
+            <Button
+              variant="secondary"
+              size="sm"
+              onclick={onToggleProfile}
+              asyncState={saving ? { status: "loading" } : { status: "idle" }}
+            >
+              {hasProfile ? "Update Bluesky Profile" : "Create Bluesky Profile"}
+            </Button>
+            <p class="text-sm text-base-500 dark:text-base-400">
+              {hasProfile
+                ? "This space already has a Bluesky profile. Updating it will refresh the name and description from this space's settings."
+                : "This will create a Bluesky profile for the space using its current name and description."}
+            </p>
+          {/if}
+        </div>
+      </ScopeGate>
     {/if}
   {:else}
     <div class="flex flex-col items-center gap-4 py-12">
