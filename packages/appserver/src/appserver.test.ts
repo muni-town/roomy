@@ -195,6 +195,55 @@ describe("createAppserver factory", () => {
     expect(metrics).toMatch(/^roomy_embed_priority_queue 0$/m);
   });
 
+  test("DB request attribution resolves wait and queue depth to a named worker", async () => {
+    // The pool exposes `pending`, but that is a scrape-time gauge: it reads 0
+    // whenever requests are spaced wider than they take, which is exactly the
+    // regime where whole routes still run for seconds. These two histograms are
+    // sampled at the request boundary instead, so a slow DB path is attributable
+    // after the fact — to the worker that served it, and to whether it waited
+    // behind other requests (high depth) or was alone on a blocked worker.
+    handle = await createAppserver({
+      port: ephemeralPort(),
+      authVerifier: testAuthVerifier,
+      dbPath: ":memory:",
+      readStateDbPath: ":memory:",
+      quiet: true,
+      ownDid: "did:web:test.example",
+      serviceEndpoint: "http://test.example",
+      disableBackgroundWorkers: true,
+    });
+    const base = `http://localhost:${handle.port}`;
+
+    // Drive a real round-trip: /health/embed counts the pending_links backlog
+    // on the global worker.
+    await fetch(`${base}/health/embed`);
+    const body = await (await fetch(`${base}/metrics`)).text();
+
+    // Wait: labeled by request type and worker, with a bound in the band the
+    // regression occupies rather than an open-ended last bucket.
+    expect(body).toContain("# TYPE roomy_db_wait_seconds histogram");
+    expect(body).toMatch(
+      /^roomy_db_wait_seconds_count\{type="query",worker="global"\} \d+$/m,
+    );
+    const waitCount = Number(
+      body.match(
+        /^roomy_db_wait_seconds_count\{type="query",worker="global"\} (\d+)$/m,
+      )![1],
+    );
+    expect(waitCount).toBeGreaterThan(0);
+    expect(body).toContain(
+      'roomy_db_wait_seconds_bucket{type="query",worker="global",le="10"}',
+    );
+
+    // Depth: recorded when the request is enqueued, so the very first request
+    // on a worker lands in the le="0" bucket — the baseline that makes a later
+    // queue-collapse visible.
+    expect(body).toContain("# TYPE roomy_db_queue_depth histogram");
+    expect(body).toMatch(
+      /^roomy_db_queue_depth_bucket\{type="query",worker="global",le="0"\} [1-9]\d*$/m,
+    );
+  });
+
   test("getConnectionTicket works with test auth header", async () => {
     handle = await createAppserver({
       port: ephemeralPort(),

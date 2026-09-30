@@ -106,6 +106,10 @@ interface PendingEntry {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  /** Request type, for the wait histogram's label. */
+  type: string;
+  /** `performance.now()` when the request was enqueued. */
+  startedAt: number;
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -119,6 +123,44 @@ const dbTimeouts = metrics.counter(
   ["type"],
 );
 
+// ─── Request attribution ──────────────────────────────────────────────────
+//
+// A slow request has two possible shapes, and they have opposite fixes:
+// it waited in the queue behind other work (`depth` was high on arrival), or
+// it was alone on the worker and the worker itself took seconds. `pending`
+// cannot tell them apart — it is a point-in-time gauge that reads 0 whenever
+// requests are spaced wider than they take, which a few seconds of latency
+// under a ~1 req/s arrival rate is. These two histograms are sampled at the
+// request boundary, so they attribute a slow path to queueing or to service
+// after the fact rather than requiring the scrape to coincide with the
+// stall.
+//
+// `worker` is an index into the pool: 0..N-1 are per-space workers, then
+// global, readstate, events. The index pins a slow space route to the worker
+// that served it, so a hash collision that concentrates spaces on one worker
+// is visible as that worker's depth and wait rising together.
+//
+// Buckets are tuned to the observed magnitude — healthy DB round-trips are
+// sub-millisecond while an affected one runs to seconds — so the 0.5–10s
+// band that carries the regression is resolved rather than collapsed into
+// the histogram's last bucket.
+const DB_WAIT_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+const DB_DEPTH_BUCKETS = [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
+
+const dbWait = metrics.histogram(
+  "roomy_db_wait_seconds",
+  "Time a DB request waited on its worker link before the worker replied, by request type and worker. Rises with queueing or with a worker blocked inside a request.",
+  ["type", "worker"],
+  DB_WAIT_BUCKETS,
+);
+
+const dbQueueDepth = metrics.histogram(
+  "roomy_db_queue_depth",
+  "Requests already in flight on the target worker when a DB request was enqueued, by request type and worker. Separates a slow request that waited behind others from one that was alone on a blocked worker.",
+  ["type", "worker"],
+  DB_DEPTH_BUCKETS,
+);
+
 /**
  * Owns one Bun.Worker thread and the request/response correlation for it.
  * Multiple `AsyncDatabase` handles can share one link; each handle stamps a
@@ -129,9 +171,12 @@ export class WorkerLink {
   #pending = new Map<string, PendingEntry>();
   #nextId = 0;
   #closed = false;
+  /** Label for this link's series, e.g. `space-3`, `global`, `readstate`. */
+  #name: string;
 
-  constructor(workerPath: string) {
+  constructor(workerPath: string, name = "unlabelled") {
     this.#worker = new Worker(workerPath);
+    this.#name = name;
 
     this.#worker.onmessage = (event: MessageEvent) => {
       const data = event.data as WorkerResponse;
@@ -140,6 +185,14 @@ export class WorkerLink {
       if (!entry) return;
       this.#pending.delete(id);
       clearTimeout(entry.timeout);
+      // Service time as the caller observes it: enqueue to reply, so it
+      // includes any time the worker spent on earlier requests in its queue.
+      // Paired with the depth recorded at enqueue, that splits a slow request
+      // into "waited behind N others" and "was alone and still slow".
+      dbWait.observe(
+        { type: entry.type, worker: this.#name },
+        (performance.now() - entry.startedAt) / 1000,
+      );
       if (error) {
         entry.reject(new Error(error));
       } else {
@@ -177,7 +230,20 @@ export class WorkerLink {
       dbTimeouts.inc({ type: req.type });
       reject(new Error(`Request timed out: ${req.type}`));
     }, REQUEST_TIMEOUT_MS);
-    this.#pending.set(id, { resolve, reject, timeout });
+    // Depth BEFORE this request joins the queue: the number of requests the
+    // worker already owes a reply to. Recorded here rather than sampled from
+    // the scrape, so it survives a stall the scrape never lands inside.
+    dbQueueDepth.observe(
+      { type: req.type, worker: this.#name },
+      this.#pending.size,
+    );
+    this.#pending.set(id, {
+      resolve,
+      reject,
+      timeout,
+      type: req.type,
+      startedAt: performance.now(),
+    });
     this.#worker.postMessage({ ...req, ...route, id });
     // Some callers fire-and-forget DB requests (background loops, teardown
     // races). When the worker is terminated mid-request, `terminate()`

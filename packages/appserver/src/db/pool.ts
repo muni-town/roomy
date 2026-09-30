@@ -73,11 +73,11 @@ export class DatabasePool {
     this.#size = Math.max(1, size);
     this.#poolLinks = Array.from(
       { length: this.#size },
-      () => new WorkerLink(workerPath),
+      (_, i) => new WorkerLink(workerPath, `space-${i}`),
     );
-    this.#globalLink = new WorkerLink(workerPath);
-    this.#readStateLink = new WorkerLink(workerPath);
-    this.#eventsLink = new WorkerLink(workerPath);
+    this.#globalLink = new WorkerLink(workerPath, "global");
+    this.#readStateLink = new WorkerLink(workerPath, "readstate");
+    this.#eventsLink = new WorkerLink(workerPath, "events");
   }
 
   get size(): number {
