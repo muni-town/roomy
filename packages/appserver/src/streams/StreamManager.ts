@@ -29,6 +29,7 @@ import { createStreamDid } from "./did.ts";
 import { provisionSpace } from "../arbiter/provision.ts";
 import type { ArbiterConfig } from "../arbiter/config.ts";
 import { log } from "../log.ts";
+import { withSpan } from "../telemetry/tracing.ts";
 
 /**
  * Singleton StreamManager — writes events directly to the events DB,
@@ -251,11 +252,16 @@ export class StreamManager {
 
       // 6a. Emit invalidation signals for live events.
       if (this.#invalidationRouter) {
-        await this.#invalidationRouter.onEventsApplied(
-          streamDid,
-          appliedEvents,
-          { isBackfill: false },
-          this.#db,
+        await withSpan(
+          "sendEvents.invalidation",
+          { "roomy.event_count": appliedEvents.length },
+          async () =>
+            this.#invalidationRouter!.onEventsApplied(
+              streamDid,
+              appliedEvents,
+              { isBackfill: false },
+              this.#db,
+            ),
         );
       }
 
@@ -286,9 +292,11 @@ export class StreamManager {
         // edges: push stays a background loop off the write path.
         const spaceDb = this.#db.forSpace?.(streamDid);
         const replyToAuthors = spaceDb
-          ? await resolveReplyToAuthors(
-              spaceDb,
-              createMessageEvents.map((e) => e.id),
+          ? await withSpan("sendEvents.replyToAuthors", {}, () =>
+              resolveReplyToAuthors(
+                spaceDb,
+                createMessageEvents.map((e) => e.id),
+              ),
             )
           : undefined;
         // Freshness gate. `sendEvents` is the LIVE write path, but "live
@@ -342,16 +350,24 @@ export class StreamManager {
       }
 
       // 8. Notify live-event listeners (e.g. sync stream subscriptions).
+      //    Synchronous: it cannot be the await, but a listener whose body
+      //    blocks shows up here as span time rather than inside a DB call.
       if (this.#streamListeners.size > 0) {
-        for (const listener of this.#streamListeners) {
-          try {
-            listener(streamDid, decodedEvents);
-          } catch (err) {
-            log.error(
-              `StreamEventListener threw for ${streamDid}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        }
+        await withSpan(
+          "sendEvents.streamListeners",
+          { "roomy.listener_count": this.#streamListeners.size },
+          async () => {
+            for (const listener of this.#streamListeners) {
+              try {
+                listener(streamDid, decodedEvents);
+              } catch (err) {
+                log.error(
+                  `StreamEventListener threw for ${streamDid}: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            }
+          },
+        );
       }
     });
   }

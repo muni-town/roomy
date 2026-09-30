@@ -153,6 +153,66 @@ just index presence — an unused index would leave the scan) for all three
 room-scoped statements, and that an already-current database gains the index on
 open.
 
+## Instrumentation
+
+`sendEvents` is bracketed in production by four log lines (`sendEvents` →
+`writing to events DB` → `[materialize] done` → `sendEvents done`), which
+localise a slow request but do not name the await. Spans close that gap: each
+section below is emitted inside the request's trace, so a slow write is
+attributed to one of them rather than to the request as a whole.
+
+| Span | Covers |
+|---|---|
+| `sendEvents.access` / `.authorize` | the handler's own pre-write phases |
+| `sendEvents.write` | the StreamManager call plus the handler tail |
+| `sendEvents.write.streamManager` | `StreamManager.sendEvents` alone |
+| `sendEvents.invalidation` | step 6a — the whole `onEventsApplied` call |
+| `router.fetchMessageSnapshots` | the batched `selectMessages` for the diff |
+| `router.resolveReplyToAuthors` | step 6a's reply-edge read |
+| `router.syncMentionsIndex` | the global mentions-index write |
+| `router.inferSignals` | the per-event signal loop |
+| `sendEvents.replyToAuthors` | step 6b's own reply-edge read |
+| `sendEvents.streamListeners` | step 8's fan-out |
+
+`resolveReplyToAuthors` is called twice per write — once in step 6a and once in
+step 6b — and the two are separate spans for exactly that reason: they are
+separate `spaceDb.query` round-trips, memoised against each other only by
+construction, not by a shared cache. A space whose `edges` table is large pays
+both.
+
+The spans are no-ops when tracing is unconfigured (see `telemetry/tracing.ts`),
+so they cost nothing on a deployment without a collector.
+
+### Localising a slow write
+
+`perf/probe-sendevents-bisect.ts` reproduces the section split locally and
+reports per-section percentiles:
+
+```bash
+bun run packages/appserver/perf/probe-sendevents-bisect.ts --solo
+bun run packages/appserver/perf/probe-sendevents-bisect.ts --concurrent 8
+bun run packages/appserver/perf/probe-sendevents-bisect.ts --cross 8 \
+  --read-state-rooms 200 --read-state-readers 200
+```
+
+The three shapes separate the explanations:
+
+- `--solo` is the control. A section that is fast solo and slow in production
+  is not a per-request code path.
+- `--concurrent` overlaps requests for **one** space. Only the post-insert
+  section serializes per stream, so a queue wait shows up on the outer
+  `sendEvents` total while the inner sections stay flat.
+- `--cross` overlaps requests over **different** spaces. Nothing serializes
+  across streams, so a section that slows here is contending for a shared
+  resource — the global or read-state worker, or a process-wide loop.
+- `--read-state-rooms/--read-state-readers` seed a production-shaped
+  `read_positions`, without which the write path's read-state lookups are
+  trivially fast and their cost is invisible (see "Read-state indexing").
+
+`--background` leaves the embed sweeper / search indexer / push dispatcher
+running, which is the only way to see a background loop sharing a worker with
+the write path.
+
 ## Open follow-ups
 
 Ordered by value/effort. None is the current bottleneck; #1 and #2 matter as

@@ -197,10 +197,15 @@ async function sendEventsImpl(
   log.info("sendEvents", "writing to events DB", { spaceId, count: parsedEvents.length });
   const streamDid = StreamDid.assert(spaceId);
   // The write + inline materialization: where a space-local bottleneck
-  // (pool saturation, SQLite writer contention) actually shows up.
+  // (pool saturation, SQLite writer contention) actually shows up. Split into
+  // the StreamManager call and the handler's own tail so a slow request is
+  // attributable to `sendEvents` returning late versus the handler resuming
+  // late after the microtask hop that `await` implies.
   await withSpan("sendEvents.write", {}, async () => {
     try {
-      await streamManager.sendEvents(streamDid, parsedEvents, callerDid);
+      await withSpan("sendEvents.write.streamManager", {}, () =>
+        streamManager.sendEvents(streamDid, parsedEvents, callerDid),
+      );
     } catch (err) {
       // Blue-green: a write to a space that is currently being
       // rebuilt is rejected before it lands in the event log. Surface it as a
