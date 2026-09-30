@@ -32,10 +32,19 @@ import { AsyncDatabase, WorkerLink } from "./asyncDatabase.ts";
 import type { DbLike } from "./types.ts";
 
 /**
- * Stable string hash (FNV-1a 32-bit) over the space DID. Deterministic across
- * restarts so a space always lands on the same worker (keeps its LRU handle +
- * prepared statements warm). Changing the pool size re-distributes spaces,
- * which is safe — caches just re-warm.
+ * Stable string hash over the space DID. Deterministic across restarts so a
+ * space always lands on the same worker (keeps its LRU handle + prepared
+ * statements warm). Changing the pool size re-distributes spaces, which is
+ * safe — caches just re-warm.
+ *
+ * FNV-1a feeds into the `lowbias32` integer finalizer (Chris Wellons, "Prospecting
+ * for Hash Functions", https://nullprogram.com/blog/2018/07/31/). FNV alone is
+ * unusable here: `forSpace` pins a space with `hashSpace(did) % N`, which reads
+ * only the low bits, and FNV-1a's low bits are close to linear in the input —
+ * flipping one input bit flips output bit 0 with a probability near 0.5 / 2^k
+ * instead of 0.5. Two high-traffic DIDs then collided on one worker. The
+ * finalizer has no seed and no per-process state, so the routing stays stable
+ * across restarts.
  */
 export function hashSpace(spaceDid: string): number {
   let h = 0x811c9dc5;
@@ -43,6 +52,12 @@ export function hashSpace(spaceDid: string): number {
     h ^= spaceDid.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
+  // lowbias32 finalizer: every input bit diffuses into every output bit.
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x7feb352d);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x846ca68b);
+  h ^= h >>> 16;
   return h >>> 0;
 }
 

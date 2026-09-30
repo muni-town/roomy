@@ -8,18 +8,96 @@ describe("hashSpace", () => {
     expect(hashSpace(did)).toBe(hashSpace(did));
   });
 
-  test("distributes a realistic set of DIDs across a pool", () => {
-    const n = 4;
-    const counts = new Array(n).fill(0);
-    for (let i = 0; i < 200; i++) {
-      const did = `did:plc:test${i.toString().padStart(4, "0")}`;
-      counts[hashSpace(did) % n]!++;
+  test("a space always lands on the same worker for a given pool size", () => {
+    const did = "did:plc:drzgt2m6lmcel62gfbzjeap3";
+    const n = 8;
+    expect(hashSpace(did) % n).toBe(hashSpace(did) % n);
+  });
+
+  test("the two highest-traffic spaces occupy different workers at size 8", () => {
+    // Sharing a worker serializes both spaces' reads and materialization on
+    // one thread, so the two busiest spaces must land on different workers.
+    const meri = "did:plc:drzgt2m6lmcel62gfbzjeap3";
+    const other = "did:plc:qzie4v7qwnv3mzaflihrf56f";
+    expect(hashSpace(meri) % 8).not.toBe(hashSpace(other) % 8);
+  });
+
+  test("distributes a corpus of DIDs without a grossly outsized share", () => {
+    // Synthetic `did:plc:` DIDs: 24 base32 chars after the prefix, the shape
+    // real PLC DIDs have. A xorshift PRNG keeps the corpus deterministic and
+    // the test free of a flaky random seed.
+    const base32 = "abcdefghijklmnopqrstuvwxyz234567";
+    let state = 0x9e3779b1;
+    const next = () => {
+      state ^= state << 13;
+      state >>>= 0;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      state >>>= 0;
+      return state;
+    };
+    const dids: string[] = [];
+    for (let i = 0; i < 512; i++) {
+      let did = "did:plc:";
+      for (let j = 0; j < 24; j++) did += base32[(next() >>> 8) % 32];
+      dids.push(did);
     }
-    // Within ±40% of uniform (200/4 = 50) — a loose bound that catches
-    // pathological clustering without being flaky.
-    for (const c of counts) {
-      expect(c).toBeGreaterThan(30);
-      expect(c).toBeLessThan(70);
+
+    for (const n of [4, 8]) {
+      const counts = new Array(n).fill(0);
+      for (const did of dids) counts[hashSpace(did) % n]!++;
+      const expected = dids.length / n;
+      // Within 50% of an even share: loose enough not to trip on sampling
+      // noise, tight enough to catch gross clustering (one worker at 2x).
+      for (const c of counts) {
+        expect(c).toBeGreaterThan(expected * 0.5);
+        expect(c).toBeLessThan(expected * 1.5);
+      }
+    }
+  });
+
+  test("every low hash bit reacts to a single-bit change in the DID", () => {
+    // Routing reads only the low bits of the hash (`% N`), so each low bit must
+    // flip ~50% of the time when a single input bit in the DID flips.
+    const base32 = "abcdefghijklmnopqrstuvwxyz234567";
+    let state = 0x12345678;
+    const next = () => {
+      state ^= state << 13;
+      state >>>= 0;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      state >>>= 0;
+      return state;
+    };
+    const dids: string[] = [];
+    for (let i = 0; i < 256; i++) {
+      let did = "did:plc:";
+      for (let j = 0; j < 24; j++) did += base32[(next() >>> 8) % 32];
+      dids.push(did);
+    }
+
+    const flips = [0, 0, 0];
+    let trials = 0;
+    for (const did of dids) {
+      const base = hashSpace(did);
+      for (let i = 8; i < did.length; i++) {
+        for (let bit = 0; bit < 5; bit++) {
+          const mutated = did.slice(0, i) +
+            String.fromCharCode(did.charCodeAt(i) ^ (1 << bit)) +
+            did.slice(i + 1);
+          const h = hashSpace(mutated);
+          for (let k = 0; k < 3; k++) {
+            if (((base >>> k) & 1) !== ((h >>> k) & 1)) flips[k]!++;
+          }
+          trials++;
+        }
+      }
+    }
+
+    for (const f of flips) {
+      const rate = f / trials;
+      expect(rate).toBeGreaterThan(0.4);
+      expect(rate).toBeLessThan(0.6);
     }
   });
 });

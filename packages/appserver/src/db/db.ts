@@ -44,11 +44,12 @@ export { GLOBAL_SCHEMA_VERSION };
 /**
  * Default pool size (per-space workers). Override via `APPSERVER_DB_POOL_SIZE`.
  *
- * Spaces are pinned to a worker by `hashSpace(spaceDid) % size`. At size 4 the
- * appserver's two highest-traffic spaces collided, so all their reads + bridge
- * materialization serialized on one thread — the space-worker saturation that
- * drove the system-worker-split diagnosis (see per-space-dbs.md). 8 spreads the
- * hot spaces onto distinct workers. Raise/lower via `APPSERVER_DB_POOL_SIZE`.
+ * Spaces are pinned to a worker by `hashSpace(spaceDid) % size`. The pool size
+ * is a scheduling knob, not a collision fix: `% size` reads only the low
+ * `log2(size)` bits of the hash, so two spaces still share a worker whenever
+ * those bits agree — at any size. `hashSpace` finalizes FNV-1a with `lowbias32`
+ * so those low bits are well mixed, which is what keeps a pair from colliding
+ * systematically rather than by luck. See `hashSpace` in pool.ts.
  */
 const DEFAULT_POOL_SIZE = 8;
 
