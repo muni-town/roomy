@@ -1,0 +1,37 @@
+# Netlify build for app-lite, the SvelteKit thin client.
+#
+# Every pull request gets a deploy preview, and every branch a branch deploy.
+# Each such deployment builds against the staging appserver and points its own
+# OAuth client metadata at its own URL — see scripts/netlify_build.sh for how
+# those are derived. The Netlify site itself needs no build settings in the
+# UI: this file carries the command, the publish directory, and the redirects.
+
+[build]
+  command = "bash scripts/netlify_build.sh"
+  publish = "packages/app-lite/build"
+
+[build.environment]
+  # The root package.json requires ^22.15.0; Netlify's default is older.
+  NODE_VERSION = "22.15.0"
+
+# adapter-static (see packages/app-lite/svelte.config.js) emits a single-page
+# app with an index.html fallback: every unknown path is a client route and
+# must serve the app shell with a 200, so deep links such as invite links
+# resolve. Files that exist win over these rules — the rules only decide what
+# happens when nothing is on disk at the requested path.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Content-hashed assets must never fall back to the shell. Serving index.html
+# (200 text/html) under a .js/.css URL is a module-load failure in every
+# browser — "Failed to fetch dynamically imported module", "doesn't provide an
+# export named" — and because the fallback is a cacheable 200 a CDN stores the
+# bad body and keeps serving it after the deploy that caused it. Nothing under
+# /_app/ is a client route, so an asset the build did not emit is a miss, not
+# a route.
+[[redirects]]
+  from = "/_app/*"
+  to = "/index.html"
+  status = 404
