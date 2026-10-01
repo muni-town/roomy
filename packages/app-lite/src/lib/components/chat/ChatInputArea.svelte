@@ -22,8 +22,6 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { scheduleAutoReload } from "$lib/error-recovery";
   import { recoverFromWriteRefusal } from "$lib/write-refusal.svelte";
-  import { guardedXrpc } from "$lib/scope-guard";
-  import { showScopeConsentDialogue } from "$lib/scope-consent-dialogue";
   import { queryClient } from "$lib/client";
   import { toast } from "@foxui/core";
   import { IconX } from "@roomy/design/icons";
@@ -390,24 +388,8 @@
       // Upload media files. Tag by MIME kind so the materializer routes
       // images → comp_embed_image and videos → comp_embed_video (a file.v0
       // tag would land them in comp_embed_file with no image metadata).
-      //
-      // Uploads write to the user's own PDS through an `atproto-proxy` call,
-      // which the resource server authorizes as an rpc to that PDS — a scope a
-      // session created before the call was declared cannot hold. Guarded so
-      // that miss offers the consent round-trip instead of a dead-end toast;
-      // a decline rethrows and falls through to the failure path below.
       for (const file of filesToUpload) {
-        const uploaded = await guardedXrpc(() => uploadFile(file), {
-          requiredTier: "base",
-          prompt: (tier) =>
-            showScopeConsentDialogue(tier, {
-              title: "Send an attachment",
-              description:
-                "Attaching a file stores it in your own ATProto account. " +
-                "Roomy needs your permission for this action — the consent " +
-                "screen will show the exact access it requests.",
-            }),
-        });
+        const uploaded = await uploadFile(file);
         const base = { uri: uploaded.uri, mimeType: uploaded.mimeType, size: uploaded.size };
         if (file.type.startsWith("image/")) {
           attachments.push({ $type: "space.roomy.attachment.image.v0", ...base });

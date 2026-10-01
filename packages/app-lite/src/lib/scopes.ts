@@ -108,27 +108,6 @@ const APPSERVER_RPCS = [
 ] as const;
 
 /**
- * `com.atproto.repo.*` calls the client sends with an `atproto-proxy` header
- * naming the user's own PDS.
- *
- * A proxy header makes the request an RPC to that audience, so the resource
- * server gates it on `rpc:<nsid>?aud=<did>#atproto_pds` — not on the `repo:`
- * grant that authorizes the same write sent directly. Both are needed: the
- * `repo:` scopes below authorize the record write, these authorize the
- * proxied call that carries it. Without them an image send, a profile save
- * and a space-handle write all fail with a scope-miss on the user's own PDS.
- *
- * `aud=*` because the audience is the caller's own DID, which is per-user and
- * so cannot be baked into a shipped ceiling.
- */
-const PROXIED_REPO_RPCS = [
-  "com.atproto.repo.putRecord",
-  "com.atproto.repo.deleteRecord",
-  "com.atproto.repo.uploadBlob",
-  "com.atproto.repo.getRecord",
-] as const;
-
-/**
  * Scopes required by all Roomy core functionality. Reproduces, byte for byte,
  * the historical `OAUTH_SCOPE` from config.ts — the per-login request.
  */
@@ -155,7 +134,6 @@ const BASE_SCOPES = [
   // per-space.
   `rpc:com.atproto.server.getServiceAuth?aud=*`,
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
-  ...PROXIED_REPO_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
 ] as const;
 
 /**
@@ -245,7 +223,6 @@ export const FULL_SCOPE_CEILING = [
   "rpc:space.roomy.authComplete.arbiter.proxy?aud=*",
   "include:space.roomy.authComplete",
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
-  ...PROXIED_REPO_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
   "repo:network.cosmik.card?action=create",
   ...DM_SCOPES,
 ].join(" ");

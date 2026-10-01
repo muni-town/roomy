@@ -17,9 +17,6 @@
   import { createProfileQuery } from "$lib/queries/profile";
   import { queryClient } from "$lib/client";
   import { cache } from "@roomy-space/sdk";
-  import { guardedXrpc } from "$lib/scope-guard";
-  import type { ScopeSetName } from "$lib/scopes";
-  import { showScopeConsentDialogue } from "$lib/scope-consent-dialogue";
 
   const actorParam = $derived(page.params.user ?? "");
   const profileQuery = createProfileQuery(() => actorParam);
@@ -50,20 +47,6 @@
   let saveError = $state<string | null>(null);
   let avatarInput = $state<HTMLInputElement | null>(null);
   let bannerInput = $state<HTMLInputElement | null>(null);
-
-  /**
-   * Consent prompt for a scope-miss while saving the profile. Every call the
-   * save makes that can miss is the same capability — writing the user's own
-   * ATProto records — so all three share one prompt.
-   */
-  const saveProfilePrompt = (tier: ScopeSetName) =>
-    showScopeConsentDialogue(tier, {
-      title: "Save your profile",
-      description:
-        "Saving your profile writes to your own ATProto account. Roomy " +
-        "needs your permission for this action — the consent screen will " +
-        "show the exact access it requests.",
-    });
 
   function clearAvatarSelection() {
     avatarFile = null;
@@ -131,11 +114,9 @@
 
       if (avatarFile) {
         const bytes = await avatarFile.arrayBuffer();
-        const mimetype = avatarFile.type;
-        const { blob } = await guardedXrpc(
-          () => uploadBlob(agent, bytes, { mimetype }),
-          { requiredTier: "base", prompt: saveProfilePrompt },
-        );
+        const { blob } = await uploadBlob(agent, bytes, {
+          mimetype: avatarFile.type,
+        });
         record.avatar = blob;
       } else if (profile?.avatar) {
         // Reuse the existing avatar blob ref from the current Roomy profile
@@ -166,11 +147,9 @@
 
       if (bannerFile) {
         const bytes = await bannerFile.arrayBuffer();
-        const mimetype = bannerFile.type;
-        const { blob } = await guardedXrpc(
-          () => uploadBlob(agent, bytes, { mimetype }),
-          { requiredTier: "base", prompt: saveProfilePrompt },
-        );
+        const { blob } = await uploadBlob(agent, bytes, {
+          mimetype: bannerFile.type,
+        });
         record.banner = blob;
       } else if (profile?.banner) {
         // Reuse the existing banner blob ref, same logic as avatar above.
@@ -195,22 +174,18 @@
         }
       }
 
-      await guardedXrpc(
-        () =>
-          agent.com.atproto.repo.putRecord(
-            {
-              collection: "space.roomy.user.profile",
-              repo: agent.assertDid,
-              rkey: "self",
-              record,
-            },
-            {
-              headers: {
-                "atproto-proxy": `${agent.assertDid}#atproto_pds`,
-              },
-            },
-          ),
-        { requiredTier: "base", prompt: saveProfilePrompt },
+      await agent.com.atproto.repo.putRecord(
+        {
+          collection: "space.roomy.user.profile",
+          repo: agent.assertDid,
+          rkey: "self",
+          record,
+        },
+        {
+          headers: {
+            "atproto-proxy": `${agent.assertDid}#atproto_pds`,
+          },
+        },
       );
 
       // Invalidate the appserver profile queries so they re-fetch.
