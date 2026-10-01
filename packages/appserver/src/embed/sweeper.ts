@@ -29,6 +29,7 @@ import {
   filterPendingUrls,
   inFlightCount,
   backoffMs,
+  maxTransientAttempts,
   classifyPendingLinks,
   countPendingLinks,
   type EnrichOutcome,
@@ -138,6 +139,13 @@ let statsEnrichedOk = 0;
 let statsEnrichedDefinitive = 0;
 let statsEnrichedTransient = 0;
 /**
+ * Transient failures that hit the attempt ceiling and SETTLED the row. Split
+ * out of `enrichedTransient` because the two mean opposite things: an
+ * unceilinged transient leaves the row pending (a retry), while an abandoned
+ * one is how a permanently-dead host leaves the backlog for good.
+ */
+let statsEnrichedAbandoned = 0;
+/**
  * Sweep cycles that ran a selection (not the DB-backoff bail), and how many
  * of those the loop throttled — a FULL batch that produced no `ok`, so it
  * yielded instead of running the next batch back-to-back. Exported as
@@ -182,12 +190,17 @@ const metricEnrichedTransient = metrics.counter(
   "roomy_embed_enriched_transient_total",
   "Embed links that failed transiently (timeout / 5xx / 429 / network). These STAY pending and re-enter after a backoff window.",
 );
+const metricEnrichedAbandoned = metrics.counter(
+  "roomy_embed_enriched_abandoned_total",
+  `Embed links settled by the attempt ceiling (${maxTransientAttempts()} consecutive transient failures). These LEAVE the backlog: the host is treated as gone rather than retried forever.`,
+);
 for (const c of [
   metricSweepCycles,
   metricSweepThrottled,
   metricEnrichedOk,
   metricEnrichedDefinitive,
   metricEnrichedTransient,
+  metricEnrichedAbandoned,
 ]) {
   c.inc({}, 0);
 }
@@ -402,6 +415,52 @@ const priorityLinks = new Set<string>();
  */
 const transientRetry = new Map<string, { attempts: number; retryAt: number }>();
 
+/**
+ * Shape of the set of URLs currently PARKED in a backoff window (the
+ * `retryAt`-in-the-future subset of {@link transientRetry}), measured in one
+ * pass so every field describes the same instant.
+ *
+ * `transientBackoff` alone is one undifferentiated number, so 7,600 URLs
+ * parked on their first failure (a slow host — retrying is right) and 7,600
+ * parked on their fifth (a host that is gone) read identically. This is what
+ * makes "all-parked" attributable to a SET rather than to the queue:
+ *
+ * - `histogram`: the distribution itself, ascending by attempt count.
+ * - `finalAttempt`: parked URLs one transient failure short of the ceiling —
+ *   the dead set as it arrives. In steady state this is how much of the parked
+ *   population is a permanently-dead host being worked off.
+ * - `overCeiling`: parked URLs already at or past the ceiling. The drain path
+ *   can never produce one (it settles on the attempt that reaches the
+ *   ceiling), so a non-zero value is persisted state from a build without a
+ *   ceiling. They are settled on their next transient failure, so the number
+ *   is expected to fall to zero: it is the read of the inherited dead set
+ *   leaving the backlog.
+ */
+export function parkedAttemptStats(): {
+  histogram: Array<{ attempts: number; urls: number }>;
+  finalAttempt: number;
+  overCeiling: number;
+} {
+  const now = Date.now();
+  const ceiling = maxTransientAttempts();
+  const counts = new Map<number, number>();
+  let finalAttempt = 0;
+  let overCeiling = 0;
+  for (const retry of transientRetry.values()) {
+    if (retry.retryAt <= now) continue;
+    counts.set(retry.attempts, (counts.get(retry.attempts) ?? 0) + 1);
+    if (retry.attempts >= ceiling) overCeiling++;
+    else if (retry.attempts === ceiling - 1) finalAttempt++;
+  }
+  return {
+    histogram: [...counts.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([attempts, urls]) => ({ attempts, urls })),
+    finalAttempt,
+    overCeiling,
+  };
+}
+
 export interface EmbedSweeperOpts {
   /** Global DB — the `pending_links` index lives here. */
   globalDb: DbLike;
@@ -439,6 +498,12 @@ export function embedSweeperStats(): {
   enrichedDefinitive: number;
   /** Null outcomes that left the row PENDING — transient (timeout/5xx/429/network). */
   enrichedTransient: number;
+  /**
+   * Transient failures that reached the attempt ceiling and SETTLED the row,
+   * so the URL left the backlog for good. A subset of what `enrichedTransient`
+   * used to carry alone; the two now say opposite things (retried vs gone).
+   */
+  enrichedAbandoned: number;
   /**
    * `enrichedDefinitive + enrichedTransient`. Kept because operators and the
    * readstate review doc read this name; the two components are the
@@ -490,6 +555,26 @@ export function embedSweeperStats(): {
    */
   transientBackoff: number;
   /**
+   * Attempt-count distribution of the parked URLs above, ascending by
+   * `attempts` (see {@link parkedAttemptStats}). Zero rows before any URL is
+   * parked. This is the field that separates a queue of slow hosts (parked at
+   * low attempt counts, will be retried through their schedule) from a dead
+   * set (parked at the ceiling), which `transientBackoff` alone cannot express.
+   */
+  parkedAttemptHistogram: Array<{ attempts: number; urls: number }>;
+  /**
+   * Parked URLs one transient failure short of the ceiling — the dead set as
+   * it ARRIVES. In steady state, the share of the parked population that is a
+   * permanently-dead host about to be settled rather than retried.
+   */
+  parkedFinalAttempt: number;
+  /**
+   * Parked URLs already at or past the ceiling, i.e. persisted attempts from a
+   * build with no ceiling. Settled on their next transient failure, so this
+   * counts down to zero as the inherited dead set leaves the backlog.
+   */
+  parkedOverCeiling: number;
+  /**
    * Measured reason the last cycle that selected nothing did so. `null` until
    * such a cycle has run. `"all-parked"` means every pending ROW was inside a
    * backoff window; `"selectable-but-absent"` means selectable rows existed
@@ -505,12 +590,14 @@ export function embedSweeperStats(): {
     selected: number;
   } | null;
 } {
+  const parked = parkedAttemptStats();
   return {
     priorityQueue: priorityLinks.size,
     inFlight: inFlightCount(),
     enrichedOk: statsEnrichedOk,
     enrichedDefinitive: statsEnrichedDefinitive,
     enrichedTransient: statsEnrichedTransient,
+    enrichedAbandoned: statsEnrichedAbandoned,
     enrichedNull: statsEnrichedDefinitive + statsEnrichedTransient,
     sweepCycles: statsSweepCycles,
     sweepThrottled: statsSweepThrottled,
@@ -524,6 +611,9 @@ export function embedSweeperStats(): {
     stallBaselineRows,
     stallDrainTarget,
     transientBackoff: activeBackoffSize(),
+    parkedAttemptHistogram: parked.histogram,
+    parkedFinalAttempt: parked.finalAttempt,
+    parkedOverCeiling: parked.overCeiling,
     lastStallCause: lastCycle === null ? null : stallCause,
     lastCycle,
   };
@@ -881,6 +971,16 @@ export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
         // the backlog pinned on dead links forever and starve real ones.
         statsEnrichedDefinitive++;
         metricEnrichedDefinitive.inc();
+        settledUrls.add(url);
+        transientRetry.delete(url);
+      } else if (outcome?.status === "abandoned") {
+        // Transient failures hit the attempt ceiling: the host has failed
+        // every try the retry schedule allows, so it is settled here rather
+        // than parked for a retry that has no reason to succeed. Drop the row
+        // from the backlog (the enricher already cleared its retry state) —
+        // this is the only path by which a permanently-dead host leaves.
+        statsEnrichedAbandoned++;
+        metricEnrichedAbandoned.inc();
         settledUrls.add(url);
         transientRetry.delete(url);
       } else {
@@ -1343,6 +1443,7 @@ export function _resetEmbedSweeper(): void {
   statsEnrichedOk = 0;
   statsEnrichedDefinitive = 0;
   statsEnrichedTransient = 0;
+  statsEnrichedAbandoned = 0;
   statsEnrichmentDiffs = 0;
   statsSweepCycles = 0;
   statsSweepThrottled = 0;
@@ -1386,6 +1487,7 @@ export function stopEmbedSweeper(): Promise<void> {
   statsEnrichedOk = 0;
   statsEnrichedDefinitive = 0;
   statsEnrichedTransient = 0;
+  statsEnrichedAbandoned = 0;
   statsEnrichmentDiffs = 0;
   statsSweepCycles = 0;
   statsSweepThrottled = 0;

@@ -657,6 +657,13 @@ export async function createAppserver(
           sweepThrottled: embed.sweepThrottled ?? 0,
           dbBackoff: embed.dbBackoffActive ?? false,
           transientBackoff: embed.transientBackoff ?? 0,
+          // The parked set's shape: low attempt counts are slow hosts still
+          // being retried; `parkedOverCeiling` is the inherited dead set (from
+          // a build with no ceiling) counting down as it is settled. Both are
+          // needed to read what `backlogStuck` is describing.
+          parkedOverCeiling: embed.parkedOverCeiling ?? 0,
+          parkedFinalAttempt: embed.parkedFinalAttempt ?? 0,
+          parkedAttemptHistogram: embed.parkedAttemptHistogram ?? [],
           backlogStuck: embed.backlogStuck ?? false,
           backlogStuckTransitions: embed.backlogStuckTransitions ?? 0,
           stallBaselineRows: embed.stallBaselineRows ?? 0,
@@ -825,6 +832,25 @@ export async function createAppserver(
     "roomy_embed_selectable_rows",
     "Pending_links ROWS selectable by the sweeper's last stalled cycle (rows the URL backoff skip-set did not exclude).",
   );
+  // The parked set's shape: `roomy_embed_transient_backoff` is one number for
+  // both a queue of slow hosts and a queue of dead ones, so the attempt count
+  // is published per bucket. The last two separate the dead set out of it —
+  // `final_attempt` is how much of the parked population is a host one failure
+  // short of the ceiling, `over_ceiling` is the persisted dead set (from a
+  // build with no ceiling) counting down as it is settled.
+  const embedParkedAttempts = metrics.gauge(
+    "roomy_embed_parked_attempts",
+    "Embed URLs parked in a transient-retry backoff window, by consecutive-failure count. Separate slow hosts (low attempts) from dead ones (at the ceiling).",
+    ["attempts"],
+  );
+  const embedParkedFinalAttempt = metrics.gauge(
+    "roomy_embed_parked_final_attempt",
+    "Embed URLs parked one transient failure short of the attempt ceiling — the dead set as it arrives.",
+  );
+  const embedParkedOverCeiling = metrics.gauge(
+    "roomy_embed_parked_over_ceiling",
+    "Embed URLs parked at or past the attempt ceiling (persisted attempts from a build with no ceiling); settled on their next failure.",
+  );
   const embedBacklogStuck = metrics.gauge(
     "roomy_embed_backlog_stuck",
     "1 when the embed backlog is non-empty but the sweeper selected nothing and the oldest row is stale.",
@@ -981,6 +1007,11 @@ export async function createAppserver(
         embedEnrichedNull.set({}, embed.enrichedNull ?? 0);
         embedDbBackoff.set({}, embed.dbBackoffActive ? 1 : 0);
         embedTransientBackoff.set({}, embed.transientBackoff ?? 0);
+        for (const bucket of embed.parkedAttemptHistogram) {
+          embedParkedAttempts.set({ attempts: String(bucket.attempts) }, bucket.urls);
+        }
+        embedParkedFinalAttempt.set({}, embed.parkedFinalAttempt);
+        embedParkedOverCeiling.set({}, embed.parkedOverCeiling);
         embedBacklogStuck.set({}, embed.backlogStuck ? 1 : 0);
         embedBacklogStuckSince.set(
           {},

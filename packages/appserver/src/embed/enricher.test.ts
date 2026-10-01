@@ -12,6 +12,7 @@ import {
   fetchEmbedData,
   countPendingLinks,
   classifyPendingLinks,
+  maxTransientAttempts,
   type PendingLink,
 } from "./enricher.ts";
 import type { DbLike } from "../db/types.ts";
@@ -104,6 +105,30 @@ describe("embed retry-with-backoff (per-space storeEmbedData)", () => {
     expect(row.attempts).toBe(2);
     expect((row.retry_after ?? 0) > firstRetry).toBe(true);
   });
+  test("a URL that keeps failing transiently is settled at the attempt ceiling", async () => {
+    const { db, asyncDb } = freshDb();
+    const url = "https://dead.example";
+    seedLink(db, url);
+    const ceiling = maxTransientAttempts();
+
+    // Every attempt before the ceiling schedules a retry and leaves the row
+    // pending: a host that is merely slow must survive a transient outage.
+    for (let i = 1; i < ceiling; i++) {
+      expect(await storeEmbedData(asyncDb, url, { status: "transient" })).toBe(false);
+      const row = dataRow(db, url)!;
+      expect(row.attempts).toBe(i);
+      expect(row.retry_after).not.toBeNull();
+    }
+
+    // The ceiling attempt settles the row exactly like a definitive failure,
+    // so the sweeper drops it instead of re-fetching a host that is gone.
+    expect(await storeEmbedData(asyncDb, url, { status: "transient" })).toBe(true);
+    const settled = dataRow(db, url)!;
+    expect(settled.attempts).toBe(ceiling);
+    expect(settled.embed_json).toBeNull();
+    expect(settled.retry_after).toBeNull();
+  });
+
   test("definitive failure (404 / no-data) settles with no retry", async () => {
     const { db, asyncDb } = freshDb();
     seedLink(db, "https://c.example");
@@ -301,5 +326,50 @@ describe("fetchEmbedData status classification", () => {
   test("non-http URL is definitive (no network)", async () => {
     const result = await fetchEmbedData("not-a-url");
     expect(result).toEqual({ status: "definitive" });
+  });
+});
+
+describe("embed attempt ceiling", () => {
+  test("a URL that keeps failing transiently is settled at the ceiling", async () => {
+    const { db, asyncDb } = freshDb();
+    const url = "https://dead.example";
+    seedLink(db, url);
+    const ceiling = maxTransientAttempts();
+
+    // Every attempt before the ceiling schedules a retry and leaves the row
+    // pending: a host that is merely slow must survive a transient outage.
+    for (let i = 1; i < ceiling; i++) {
+      expect(await storeEmbedData(asyncDb, url, { status: "transient" })).toBe(false);
+      const row = dataRow(db, url)!;
+      expect(row.attempts).toBe(i);
+      expect(row.retry_after).not.toBeNull();
+    }
+
+    // The ceiling attempt settles the row exactly like a definitive failure,
+    // so the sweeper drops it instead of re-fetching a host that is gone.
+    expect(await storeEmbedData(asyncDb, url, { status: "transient" })).toBe(true);
+    const settled = dataRow(db, url)!;
+    expect(settled.attempts).toBe(ceiling);
+    expect(settled.embed_json).toBeNull();
+    expect(settled.retry_after).toBeNull();
+  });
+
+  test("a URL persisted without a ceiling is settled on its next transient failure", async () => {
+    // Attempts recorded by a build that had no ceiling exceed the new one.
+    // The row must settle rather than be retried forever, or the inherited
+    // dead set keeps re-entering the backlog under the new code.
+    const { db, asyncDb } = freshDb();
+    const url = "https://inherited.example";
+    seedLink(db, url);
+    db.run(
+      `insert into comp_embed_link_data (entity, embed_json, attempts, retry_after)
+       values (?, null, 40, ?)`,
+      [url, Date.now() + 60 * 60_000],
+    );
+
+    expect(await storeEmbedData(asyncDb, url, { status: "transient" })).toBe(true);
+    const row = dataRow(db, url)!;
+    expect(row.attempts).toBeGreaterThanOrEqual(maxTransientAttempts());
+    expect(row.retry_after).toBeNull();
   });
 });

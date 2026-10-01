@@ -216,11 +216,41 @@ export async function findPendingLinksForUrls(
  * Exponential backoff (ms) before retrying a transient failure, so a
  * persistently-dead URL is re-tried less and less often instead of every
  * sweep. Schedule: 1m, 5m, 30m, 2h, then capped at 6h. Tunable via env.
+ *
+ * The schedule has no terminal step — it is only ever consulted for attempts
+ * below {@link maxTransientAttempts}, which settles the URL instead of
+ * retrying it. So the cap applies to at most the one retry before the ceiling.
  */
 export function backoffMs(attempts: number): number {
   const schedule = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000];
   const cap = Number(process.env.EMBED_RETRY_CAP_MS ?? 6 * 60 * 60_000);
   return attempts <= schedule.length ? schedule[attempts - 1]! : cap;
+}
+
+/** Consecutive transient failures after which a URL is settled as abandoned. */
+const MAX_TRANSIENT_ATTEMPTS_DEFAULT = 6;
+
+/**
+ * Consecutive transient failures a URL is allowed before it is settled as
+ * {@link EnrichOutcome} `"abandoned"` and leaves the pending backlog.
+ *
+ * Without a ceiling, a host that is permanently gone but answers with a
+ * timeout or a 5xx can never classify as `definitive`, so backoff parks it at
+ * the 6h cap and re-fetches it forever: production held ~7.6k such URLs,
+ * generating ~250 transient fetches an hour against hosts that had already
+ * failed hundreds of times, while the backlog never drained.
+ *
+ * The value is set from the retry schedule's own shape. Retrying a URL that is
+ * merely SLOW — not dead — has to survive a transient outage, and the
+ * escalating schedule is what makes that affordable: a URL is re-tried at 1m,
+ * 5m, 30m, 2h and 6h before the sixth consecutive failure, i.e. after ~8.6h of
+ * continuously failing. A six-sample run of failures spread over that window is
+ * a host that is not coming back, while a genuinely recovering host is still
+ * caught by one of the five earlier retries. Tunable via env (minimum 1).
+ */
+export function maxTransientAttempts(): number {
+  const n = Number(process.env.EMBED_MAX_ATTEMPTS ?? MAX_TRANSIENT_ATTEMPTS_DEFAULT);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : MAX_TRANSIENT_ATTEMPTS_DEFAULT;
 }
 
 /**
@@ -233,15 +263,24 @@ export function backoffMs(attempts: number): number {
  *   to now + exponential backoff so the sweeper re-queues it later rather
  *   than abandoning it (or hammering the service immediately).
  *
+ * A transient failure that reaches {@link maxTransientAttempts} is the
+ * exception to the last rule: the URL is settled here exactly like a
+ * definitive failure (null embed, retry state cleared) so it leaves the
+ * pending set, and `true` is returned so the caller can report it as an
+ * abandoned host rather than a no-data page. Retrying such a URL again is
+ * what a permanently-dead host would otherwise do forever.
+ *
  * Uses UPSERT (`on conflict do update`) so `created_at` is preserved across
  * re-fetches. The transient path reads the existing attempt count first
  * (safe: `enrichLink` dedups per-URL so there is no concurrent writer).
+ *
+ * Returns whether the row was settled by the attempt ceiling.
  */
 export async function storeEmbedData(
   db: DbLike,
   url: string,
   result: FetchResult,
-): Promise<void> {
+): Promise<boolean> {
   if (result.status === "transient") {
     const row = await db
       .query(
@@ -249,6 +288,12 @@ export async function storeEmbedData(
       )
       .get<{ attempts: number }>([url]);
     const attempts = (row?.attempts ?? 0) + 1;
+    if (attempts >= maxTransientAttempts()) {
+      // The ceiling: settle it like a definitive failure. `attempts` is kept
+      // (rather than reset) so the row records how many tries the host got.
+      await writeSettled(db, url, null, attempts);
+      return true;
+    }
     await db.run(
       `insert into comp_embed_link_data
          (entity, embed_json, attempts, retry_after, fetched_at, updated_at)
@@ -261,20 +306,36 @@ export async function storeEmbedData(
          updated_at = excluded.updated_at`,
       [url, attempts, Date.now() + backoffMs(attempts)],
     );
-    return;
+    return false;
   }
   // Success or definitive failure — settled, no retry.
+  await writeSettled(
+    db,
+    url,
+    result.status === "ok" ? JSON.stringify(result.embed) : null,
+    0,
+  );
+  return false;
+}
+
+/** Write a settled row (embed or null) with no pending retry. */
+async function writeSettled(
+  db: DbLike,
+  url: string,
+  embedJson: string | null,
+  attempts: number,
+): Promise<void> {
   await db.run(
     `insert into comp_embed_link_data
        (entity, embed_json, attempts, retry_after, fetched_at, updated_at)
-     values (?, ?, 0, null, (unixepoch() * 1000), (unixepoch() * 1000))
+     values (?, ?, ?, null, (unixepoch() * 1000), (unixepoch() * 1000))
      on conflict(entity) do update set
        embed_json = excluded.embed_json,
-       attempts = 0,
+       attempts = excluded.attempts,
        retry_after = null,
        fetched_at = excluded.fetched_at,
        updated_at = excluded.updated_at`,
-    [url, result.status === "ok" ? JSON.stringify(result.embed) : null],
+    [url, embedJson, attempts],
   );
 }
 
@@ -307,8 +368,11 @@ export async function enrichLink(
   const promise = (async () => {
     try {
       const result = await fetchEmbedData(url, signal);
-      await storeEmbedData(db, url, result);
+      const abandoned = await storeEmbedData(db, url, result);
       if (result.status === "ok") return { status: "ok" as const, embed: result.embed };
+      // A transient failure that hit the attempt ceiling is settled for good;
+      // report it as abandoned so the caller doesn't keep the link pending.
+      if (abandoned) return { status: "abandoned" as const, embed: null };
       return { status: result.status, embed: null };
     } catch (err) {
       // fetchEmbedData handles its own network errors (returns a
@@ -334,15 +398,18 @@ export async function enrichLink(
  *
  * Returns the fetch outcome — `{ status, embed }` where `status` is
  * `"ok"` (embed stored), `"definitive"` (settled: no data / stable 4xx — the
- * caller should drop the link from the pending set), or `"transient"`
+ * caller should drop the link from the pending set), `"transient"`
  * (timeout / 5xx / 429 / network — the caller should keep it pending and
- * retry later). `embed` is non-null only on `"ok"`. A DB write failure (e.g.
+ * retry later), or `"abandoned"` (transient failures hit the attempt ceiling,
+ * so the link is settled for good and the caller should drop it too).
+ * `embed` is non-null only on `"ok"`. A DB write failure (e.g.
  * `storeEmbedData` throwing) is RE-THROWN so the sweeper can detect a failing
  * DB and back off.
  */
 export type EnrichOutcome =
   | { status: "ok"; embed: Embed }
   | { status: "definitive"; embed: null }
+  | { status: "abandoned"; embed: null }
   | { status: "transient"; embed: null };
 
 export async function enrichLinkAcrossSpaces(
@@ -356,10 +423,12 @@ export async function enrichLinkAcrossSpaces(
   const promise = (async () => {
     try {
       const result = await fetchEmbedData(url, signal);
+      let abandoned = false;
       for (const spaceDid of spaces) {
-        await storeEmbedData(openSpaceDb(spaceDid), url, result);
+        abandoned = (await storeEmbedData(openSpaceDb(spaceDid), url, result)) || abandoned;
       }
       if (result.status === "ok") return { status: "ok" as const, embed: result.embed };
+      if (abandoned) return { status: "abandoned" as const, embed: null };
       return { status: result.status, embed: null };
     } finally {
       inFlightLinks.delete(url);

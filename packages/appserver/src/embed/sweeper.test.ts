@@ -1539,3 +1539,160 @@ describe("embed sweeper cycle pacing (TASK-197)", () => {
     _resetEmbedSweeper();
   });
 });
+
+describe("embed attempt ceiling (TASK-227)", () => {
+  /**
+   * Seed a pending link whose persisted retry state puts it at `attempts`
+   * consecutive transient failures, optionally inside an open backoff window.
+   */
+  async function seedParked(
+    spaceDb: DbLike,
+    globalDb: DbLike,
+    index: number,
+    attempts: number,
+    retryAfter: number | null,
+  ): Promise<string> {
+    const url = `https://dead.example/${index}`;
+    await seedLinkMessageRoom(
+      spaceDb,
+      globalDb,
+      {
+        room: `01KVROOMDEAD${String(index).padStart(14, "0")}`,
+        message: `01KVMSGDEAD${String(index).padStart(15, "0")}`,
+        url,
+      },
+      Date.now() - 60 * 60_000,
+    );
+    await spaceDb.run(
+      `insert into comp_embed_link_data (entity, embed_json, attempts, retry_after)
+       values (?, null, ?, ?)`,
+      [url, attempts, retryAfter],
+    );
+    return url;
+  }
+
+  test("a host that keeps failing transiently leaves pending_links instead of being retried forever", async () => {
+    // The defect: a host that is permanently gone but answers with a 5xx can
+    // never classify as definitive, so backoff parks it at the 6h cap and
+    // re-fetches it forever while the backlog never drains. A URL whose
+    // attempt count has run past any ceiling must be SETTLED (leave
+    // `pending_links`) rather than re-queued at an unchanged cap.
+    //
+    // Seeded past the ceiling rather than on it, so this is exactly the
+    // inherited dead set: attempts persisted by a build that had no ceiling.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const url = await seedParked(spaceDb, globalDb, 0, 40, Date.now() - 60_000);
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> =>
+      Promise.resolve(new Response("Service Unavailable", { status: 503 }))) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      await sweepCycle(globalDb);
+
+      // The dead host is out of the backlog — the whole point.
+      expect(await countPendingLinks(globalDb)).toBe(0);
+
+      // It is reported as an abandoned host, not as a retry.
+      const stats = embedSweeperStats();
+      expect(stats.enrichedAbandoned).toBe(1);
+      expect(stats.enrichedTransient).toBe(0);
+      // And its persisted row carries no retry schedule, so nothing re-queues
+      // it if the link is seen again.
+      const row = await spaceDb
+        .query("select retry_after from comp_embed_link_data where entity = ?")
+        .get<{ retry_after: number | null }>(url);
+      expect(row?.retry_after).toBeNull();
+    } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("a host below the ceiling is still retried, not abandoned", async () => {
+    // The other half: the ceiling must not settle a merely slow host. A URL
+    // with attempts left must stay pending with a retry scheduled.
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const url = await seedParked(spaceDb, globalDb, 0, 1, Date.now() - 60_000);
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> =>
+      Promise.resolve(new Response("Service Unavailable", { status: 503 }))) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      await sweepCycle(globalDb);
+
+      expect(await countPendingLinks(globalDb)).toBe(1);
+      const stats = embedSweeperStats();
+      expect(stats.enrichedAbandoned).toBe(0);
+      expect(stats.enrichedTransient).toBe(1);
+      const row = await spaceDb
+        .query("select attempts, retry_after from comp_embed_link_data where entity = ?")
+        .get<{ attempts: number; retry_after: number | null }>(url);
+      expect(row?.attempts).toBe(2);
+      expect(row?.retry_after).not.toBeNull();
+    } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+
+  test("the parked set is reported by attempt count, with the dead set separable", async () => {
+    // `transientBackoff` is one number for a queue of slow hosts and a queue of
+    // dead ones. These fields are what make an "all-parked" backlog
+    // attributable to a SET: the distribution says where the parked URLs sit on
+    // the schedule, and `parkedOverCeiling` isolates the inherited dead set (a
+    // build with no ceiling persisted attempts past the new one).
+    const { globalDb, spaceDb } = freshWorker();
+    const { router } = captureRouter();
+    const open = Date.now() + 30 * 60_000;
+    // Parked at 1, at 2 (twice), and at 40 — an attempt count no sane ceiling
+    // admits, so it is past the ceiling whatever the ceiling is configured to.
+    for (const [i, attempts] of [1, 2, 2, 40].entries()) {
+      await seedParked(spaceDb, globalDb, i, attempts!, open);
+    }
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> =>
+      Promise.resolve(new Response("", { status: 200, headers: { "Content-Type": "text/html" } }))) as typeof globalThis.fetch;
+
+    try {
+      await stopEmbedSweeper();
+      _startSweeperNoLoop({ globalDb, invalidationRouter: router });
+      // Every row is parked, so this cycle selects nothing.
+      await sweepCycle(globalDb);
+
+      const stats = embedSweeperStats();
+      expect(stats.transientBackoff).toBe(4);
+      expect(stats.parkedAttemptHistogram).toEqual([
+        { attempts: 1, urls: 1 },
+        { attempts: 2, urls: 2 },
+        { attempts: 40, urls: 1 },
+      ]);
+      // The inherited dead set is separable from the slow hosts in one read.
+      expect(stats.parkedFinalAttempt).toBe(0);
+      expect(stats.parkedOverCeiling).toBe(1);
+    } finally {
+      globalThis.fetch = realFetch;
+      await stopEmbedSweeper();
+    }
+    _resetEmbedSweeper();
+  });
+});
