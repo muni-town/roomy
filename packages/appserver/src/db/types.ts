@@ -6,20 +6,6 @@
  * it natively.
  */
 export interface DbLike {
-  /**
-   * Set to `"sqlite"` by an IN-PROCESS handle — `toAsyncDb`, the adapter over
-   * a `bun:sqlite` `Database` — where every statement runs on the calling
-   * thread and a query costs its SQL and nothing else.
-   *
-   * Left unset by the IPC handles (`AsyncDatabase`, `PooledDatabase`) and by
-   * test doubles, where each statement is a `postMessage` round-trip and the
-   * bytes it returns are structured-cloned across the thread boundary. Absence
-   * means "assume the boundary is there", so a handle that does not declare
-   * itself pays the IPC-shaped path and stays correct either way — which is
-   * why read paths that can answer a question with one wide statement or with
-   * several narrowed ones must branch on `=== "sqlite"`, never on `!==`.
-   */
-  readonly backend?: "sqlite";
   query(sql: string): {
     all<T = Record<string, unknown>>(...params: unknown[]): Promise<T[]>;
     get<T = Record<string, unknown>>(...params: unknown[]): Promise<T | null>;

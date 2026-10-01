@@ -98,12 +98,11 @@ const STAGES: Array<{ name: string; match: RegExp }> = [
   // --- room_activity projection: read, warm, or the scan fallback ---
   { name: "b.projection_read", match: /select room_id, latest_message_id, latest_at, recent_authors/ },
   { name: "b.projection_warm", match: /insert into room_activity/ },
-  { name: "b.scan.latest_ts", match: /max\(coalesce\(cc\.timestamp, fwd_cc\.timestamp\)\) as ts/ },
-  { name: "b.scan.participants", match: /group by msg\.room, coalesce\(author_e\.tail, fwd_author_e\.tail\)/ },
-  { name: "b.scan.latest_winner", match: /coalesce\(cc\.timestamp, fwd_cc\.timestamp\) as timestamp/ },
-  { name: "b.scan.latest_content", match: /author_info\.name as author_name/ },
-  { name: "b.scan.room_shape", match: /select cr\.entity as room_id, cr\.label as label, ci\.name as name[\s\S]*where cr\.entity in/ },
-  { name: "b.scan.parent_edges", match: /select tail, head from edges[\s\S]*canonical_parent/ },
+  // The scan reduces in SQL: one statement for the board rows, one for the
+  // author names it renders. Both are per-room payloads; anything here that
+  // returns a row per message is the regression this probe exists to catch.
+  { name: "b.scan.reduced_board", match: /with rooms as \(select distinct cr\.entity as id/ },
+  { name: "b.scan.board_profiles", match: /select ci\.entity as did, ci\.name as name, ci\.avatar as avatar[\s\S]*json_each/ },
   { name: "b.projected.board_shape", match: /coalesce\(a\.tail, fa\.tail\) as author_did/ },
   { name: "b.projected.member_info", match: /select entity, name, avatar from comp_info/ },
 

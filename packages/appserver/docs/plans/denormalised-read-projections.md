@@ -2,8 +2,9 @@
 
 **Date:** 2026-09-21
 **Status:** R1 merged (`room_access` projection); R2 merged (`#roomActivityDiff`);
-R3 merged (`room_activity` projection); R6 merged (profile fetch off the read path)
-**Task:** TASK-173 (R1), TASK-174 (R2), TASK-175 (R3), TASK-199 (R6)
+R3 merged (`room_activity` projection); R6 merged (profile fetch off the read path);
+R7 merged (board scan reduces in SQL)
+**Task:** TASK-173 (R1), TASK-174 (R2), TASK-175 (R3), TASK-199 (R6), TASK-254 (R7)
 
 ## Summary
 
@@ -1141,3 +1142,102 @@ New coverage, all mutation-checked (reverting each change fails the test):
 - `materialization/profileFetchBounds.test.ts` (4) — the same against each
   real call site, so a future profile fetch that bypasses `fetchWithTimeout` is
   caught.
+
+## R7 — the board scan reduces in SQL, not in JS (TASK-254)
+
+R5 cut the payload of the scan's *latest-message* statement by picking the
+winner's ordering columns first and fetching its body second. That fixed the
+bytes; it left the rows. The statement still returned one row per message in
+scope for the JS fold to reduce to one row per room, and on the space the R5
+probe measures (434 rooms, 123,225 messages, and **no projection tables** —
+those DBs are stamped `space_schema_version = 1` against a current `2`) a
+50-room board page read **1724 rows to keep 50**.
+
+`scanRoomActivityInProcess` already expressed that reduction in SQL — a
+`row_number() over (partition by room …) = 1` window for the latest message and
+a per-`(room, author)` `max(ts)` capped at 3 — and it had been asserted
+equivalent to the IPC fold by a dedicated parity suite since R3. It was reachable
+only when `db.backend === "sqlite"`, which is set by exactly one thing:
+`toAsyncDb`, the adapter over an in-process `bun:sqlite` handle that **only tests
+construct**. The appserver's handles are `AsyncDatabase`/`PooledDatabase`, which
+set no marker. So the fast path was test-only, and every production board read
+took the fold it was written to replace.
+
+This round makes that reducer the scan. One statement returns one row per room;
+a second returns the author names it renders. The `backend` marker and the
+`toAsyncDb` field that set it are gone, so the branch that let the two drift
+apart cannot be reintroduced.
+
+### Read cost
+
+`perf/probe-getthreads.ts` against the real 2.6 GB data directory, `limit = 50`,
+5 measured requests, profiles stubbed, query cache disabled:
+
+| | before | after |
+|---|---:|---:|
+| wall p50 / p95 | 93.3 / 124.2 ms | **32.2 / 68.2 ms** |
+| first (unwarmed) request | 485.1 ms | **97.8 ms** |
+| DB round-trips | 24 | **20** |
+| rows returned per request | **2337** | **327** |
+| kB returned per request | 193.0 | **46.8** |
+
+The round-trip count barely moves — 24 → 20 — and that is the point of the
+round: the cost was never the number of statements but the rows they returned,
+which is what the projection had been built to remove and could not on this
+deployment. Per request the fold carried:
+
+| statement | rows | kB |
+|---|---:|---:|
+| `b.scan.latest_winner` (every message, to keep 50) | 1724 | 126.3 |
+| `b.scan.latest_ts` | 206 | 24.9 |
+| `b.scan.latest_content` | 50 | 17.6 |
+| everything else (18 statements) | 357 | 24.2 |
+
+After, `b.scan.reduced_board` returns **50 rows / 27.2 kB** — one per room, the
+body included for the one the board previews.
+
+The cursor walk over the same board (3 pages × 50 rooms, minimum of 2 runs)
+goes **267 ms → 137 ms**. That measure is noisy on this 2-vCPU VM — the R5
+section documents ±100 ms swings from unrelated stalls, and the per-page minimum
+does not move monotonically (`24.0 / 30.9 / 82.0` after) — so read it as
+direction, not as a per-page figure. The row counts are the stable instrument.
+
+### What this is not
+
+It is not a fix for the cold-projection problem R5 ends on: these space DBs
+still have no `room_activity` table, so the scan still runs on every page. It
+makes that scan stop scaling with the space's message count, which is the half
+of the cost that grows. Removing the rest is still the backfill that the
+rematerialisation invariant rules out, or the deployment question of the stale
+`schema_version = 1` stamp.
+
+It also does not touch `room_access`. Measured on the same dataset, the
+`room_access` N+1 does not come back cold: its miss path is batched
+(`c.room_access.fallback_rooms` returns 50 rows for 50 rooms in one statement),
+so a page pays one batched read whether the projection is warm or not. The
+saving it was built for shows up as rows, not round-trips, on this path.
+
+### Tests
+
+`bun test --cwd packages/appserver`: **0 fail, 0 errors**; `tsc --noEmit`: 0
+errors. The scan's behaviour tests are unchanged and still pass against the
+reducer, which is the strongest evidence available that the two implementations
+agreed — they were already asserted equal clause-for-clause, and the surviving
+one now satisfies both suites.
+
+The `scanRoomActivity parity: in-process vs IPC` suite is deleted with the
+branch it exercised; comparing one implementation to itself defends nothing. In
+its place `queries/threadActivity.test.ts` gains **"the scan returns one row per
+room, not one per message"**, which counts rows returned per statement rather
+than bytes — the body was already off the boundary, so a byte-based assertion
+would have passed on the old fold. Mutation-checked: disabling the reduction
+(`rn = 1` → `rn >= 1`) fails it with `Received: 20` rows for a 2-room,
+20-message fixture.
+
+`perf/probe-getthreads.ts`'s stage classifier was rewritten to match the SQL
+that exists: it listed the three deleted scan statements, and its
+`b.scan.parent_edges` pattern (`select tail, head from edges … canonical_parent`)
+matched a statement that is no longer part of the scan at all. Replaced by
+`b.scan.reduced_board`, `b.scan.board_profiles`, and — so the misattribution
+does not persist — the `c.room_access.parent_links` pattern, which is what the
+scan does issue.

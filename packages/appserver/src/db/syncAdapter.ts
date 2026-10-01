@@ -23,7 +23,6 @@ function normaliseRowid(
  */
 export function toAsyncDb(db: Database): DbLike {
   return {
-    backend: "sqlite",
     query(sql: string) {
       const stmt = db.query(sql);
       return {
