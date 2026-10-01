@@ -11,6 +11,11 @@
  * through the SAME rate-limited path as the ATProto trigger, so the budget still
  * bounds it across page loads.
  *
+ * A second contract lives here too: `isRecoverableAtprotoError` decides which
+ * errors qualify at all. An appserver XRPC failure carries an `nsid` and is
+ * per-resource authorization, not a dead session, so it must not reload — even
+ * when its message ("Authentication required") reads like an OAuth-client one.
+ *
  * Deliberate limits of this coverage:
  *
  * 1. The failure is synthetic — a hand-dispatched event, not real deploy skew.
@@ -30,6 +35,8 @@
 
 import { afterEach, beforeEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
+
+import { isRecoverableAtprotoError } from "./error-recovery.ts";
 import type {
   installGlobalErrorRecovery,
   noteSuccessfulNavigation,
@@ -388,5 +395,46 @@ describe("vite:preloadError recovery", () => {
     );
     assert.ok(Array.isArray(recorded));
     assert.equal(recorded.length, 1);
+  });
+});
+
+/**
+ * The appserver error shape built by `DirectXrpcClient`'s `toXrpcError`: the
+ * message comes from the response body, and `nsid` records the XRPC call that
+ * produced it.
+ */
+function appserverUnauthorized(): Error {
+  return Object.assign(
+    new Error(
+      "XRPC space.roomy.getFlags failed (401): Authentication required",
+    ),
+    { status: 401, errorType: "AuthRequired", nsid: "space.roomy.getFlags" },
+  );
+}
+
+/** A dead OAuth session, as the OAuth client reports it. */
+function tokenRefreshFailed(): Error {
+  return Object.assign(new Error("could not renew session credentials"), {
+    name: "TokenRefreshError",
+  });
+}
+
+/** A PDS-level 401 (service-auth fetch) — no `nsid`, so no XRPC provenance. */
+function pdsUnauthorized(): Error {
+  return Object.assign(new Error("getServiceAuth failed (401)"), {
+    status: 401,
+  });
+}
+
+describe("isRecoverableAtprotoError", () => {
+  test("an appserver XRPC 401 is not recoverable, session failures are", () => {
+    // A reload discards scroll position and in-progress composer state, so the
+    // bar for reloading is "a reload could fix it". A per-resource 401 carrying
+    // an `nsid` fails that bar even when its message reads like an OAuth one.
+    assert.equal(isRecoverableAtprotoError(appserverUnauthorized()), false);
+
+    // The other two directions: these are why the trigger exists at all.
+    assert.equal(isRecoverableAtprotoError(tokenRefreshFailed()), true);
+    assert.equal(isRecoverableAtprotoError(pdsUnauthorized()), true);
   });
 });

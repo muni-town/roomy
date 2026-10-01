@@ -93,6 +93,11 @@ export function isRecoverableAtprotoError(err: unknown): boolean {
   if (status === 401 && !nsid) return true;
   if (errorType === "AuthRequired" && !nsid) return true;
 
+  // Everything below classifies by message text alone, which a per-resource
+  // appserver failure shares with the OAuth classes above ("Authentication
+  // required"). An `nsid` marks that provenance, so such errors stop here.
+  if (nsid) return false;
+
   // Message fallbacks (for plain `Error` throws and mangled class names).
   const patterns = [
     /token.*(refresh|revok|invalid|expired)/i,
