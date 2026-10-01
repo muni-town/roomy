@@ -38,6 +38,7 @@
     "virtua": "^0.43.2"
   },
   "devDependencies": {
+    "@atproto/oauth-scopes": "0.5.13",
     "@iconify-json/heroicons": "^1.2.3",
     "@iconify-json/lucide": "^1.2.68",
     "@iconify-json/mdi": "^1.2.3",

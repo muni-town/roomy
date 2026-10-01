@@ -64,6 +64,49 @@ describe("isInsufficientScopeError", () => {
     }
   });
 
+  test("matches HappyView's 403 shape — the check the web client actually hits", () => {
+    // The client's XRPC calls proxy through HappyView, whose forward-time
+    // scope check answers a miss with 403 and the whole sentence in the
+    // `error` field (`xrpc/scope_check.rs`; there is no `message`). That is
+    // not "ScopeMissingError", so an error-name-only predicate would miss the
+    // shape real users see.
+    assert.equal(
+      isInsufficientScopeError({
+        status: 403,
+        error:
+          "this session is not authorized for com.atproto.repo.putRecord: it needs " +
+          "rpc:com.atproto.repo.putRecord?aud=did:plc:mmyj7mk7kh3jqhw6zs4prbuk#atproto_pds. " +
+          "Scopes are fixed when a session is created, so this needs a new " +
+          "authorization with the scope included.",
+      }),
+      true,
+    );
+  });
+
+  test("does NOT match a generic 403 whose error name is unrelated", () => {
+    // A name is authoritative when present: only matching prose in `message`
+    // while the `error` name says something else would report an unrelated
+    // 403 as a scope-miss.
+    assert.equal(
+      isInsufficientScopeError({
+        status: 403,
+        error: "RepoNotFound",
+        message: "this session is not authorized for x: it needs y",
+      }),
+      false,
+    );
+  });
+
+  test("does NOT match HappyView's wording without a 403", () => {
+    assert.equal(
+      isInsufficientScopeError({
+        status: 500,
+        error: "this session is not authorized for x: it needs y",
+      }),
+      false,
+    );
+  });
+
   test("does NOT match invalid_scope — that is the AUTHORIZATION-server shape, not a mid-request scope miss", () => {
     assert.equal(isInsufficientScopeError(measuredShape("invalid_scope")), false);
   });
@@ -167,6 +210,31 @@ describe("guardedXrpc", () => {
       }),
     );
     assert.equal(prompted, false);
+  });
+
+  test("invokes the prompt for HappyView's shape — the path a web send takes", async () => {
+    // End-to-end through the guard: this is the error an image send actually
+    // gets, so it must reach the consent dialogue rather than the raw toast.
+    let prompted: ScopeSetName | undefined;
+    const err: unknown = {
+      status: 403,
+      error:
+        "this session is not authorized for com.atproto.repo.uploadBlob: it needs " +
+        "rpc:com.atproto.repo.uploadBlob?aud=did:plc:abc#atproto_pds. Scopes are " +
+        "fixed when a session is created, so this needs a new authorization with " +
+        "the scope included.",
+    };
+    await assert.rejects(
+      guardedXrpc(() => Promise.reject(err), {
+        requiredTier: "base",
+        prompt: (tier) => {
+          prompted = tier;
+          return Promise.resolve(true);
+        },
+      }),
+      (e) => e === err,
+    );
+    assert.equal(prompted, "base");
   });
 
   test("does NOT invoke the prompt when no prompt is injected", async () => {

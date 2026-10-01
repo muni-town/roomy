@@ -123,6 +123,9 @@ importers:
         specifier: ^0.43.2
         version: 0.43.2(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)
     devDependencies:
+      '@atproto/oauth-scopes':
+        specifier: 0.5.13
+        version: 0.5.13
       '@iconify-json/heroicons':
         specifier: ^1.2.3
         version: 1.2.3
@@ -707,6 +710,10 @@ packages:
   '@atproto/did@0.3.0':
     resolution: {integrity: sha512-raUPzUGegtW/6OxwCmM8bhZvuIMzxG5t9oWsth6Tp91Kb5fTnHV2h/KKNF1C82doeA4BdXCErTyg7ISwLbQkzA==}
 
+  '@atproto/did@0.5.6':
+    resolution: {integrity: sha512-8bLfOnaoWBmg9S8naqzk5mG8zYAXfSKT4odB5OHcCAd1o7p6RFb0Rk9WGobEgboKtxP2CIeul6mzI5PUT4v6Gg==}
+    engines: {node: '>=22'}
+
   '@atproto/identity@0.4.12':
     resolution: {integrity: sha512-P+Jn0HvKhIh1tps5n3xGrCxt+XiFWzp4kdgloyFhFmVLwjDU547DQkWx4r5Vhuiah7fRZGVSlk39R4U6SPrACg==}
     engines: {node: '>=18.7.0'}
@@ -750,6 +757,10 @@ packages:
   '@atproto/oauth-client@0.6.1':
     resolution: {integrity: sha512-QTLbEFyv7EJuwJf4A8IZnsylK5wwrzrSsxy0INcZf9zktPVQvgckWhSvbfK8alp60M+rwWfQQAlodcCF4WB78A==}
 
+  '@atproto/oauth-scopes@0.5.13':
+    resolution: {integrity: sha512-eXb4c3kfd1nNNEnnLeqL81TybQvLRobKFy89VxexAtAruwf8r9nhaSBQnbstZTedgVr22mmraTX5P7L5SvWfKQ==}
+    engines: {node: '>=22'}
+
   '@atproto/oauth-types@0.6.1':
     resolution: {integrity: sha512-3z92GN/6zCq9E2GTTfZM27tWEbvi1qwFSA7KoS5+wqBC4kSsLvnLxmbKH402Z40DfWS4YWqw0DkHsgP0LNFDEA==}
 
@@ -764,6 +775,10 @@ packages:
 
   '@atproto/syntax@0.5.4':
     resolution: {integrity: sha512-9XJOpMAgsGFxMEIp8nJ8AIWv+krrY1xQMj+wULbbXhQztQV+9aZ0TbG9Jtn3Op2or8Kr6OqyWR4ga9Z189kKDw==}
+
+  '@atproto/syntax@0.7.6':
+    resolution: {integrity: sha512-luKQTcWw1H1jLmYvX34ldBqNjz2orF082njmcF9fxbWTqVhsO+TpY0FHRKVPoV7dwL0Y3L16DNz1ma0LFGH25g==}
+    engines: {node: '>=22'}
 
   '@atproto/ws-client@0.0.4':
     resolution: {integrity: sha512-dox1XIymuC7/ZRhUqKezIGgooZS45C6vHCfu0PnWjfvsLCK2kAlnvX4IBkA/WpcoijDhQ9ejChnFbo/sLmgvAg==}
@@ -4891,6 +4906,10 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
+  '@atproto/did@0.5.6':
+    dependencies:
+      zod: 3.25.76
+
   '@atproto/identity@0.4.12':
     dependencies:
       '@atproto/common-web': 0.4.21
@@ -5004,6 +5023,11 @@ snapshots:
       multiformats: 9.9.0
       zod: 3.25.76
 
+  '@atproto/oauth-scopes@0.5.13':
+    dependencies:
+      '@atproto/did': 0.5.6
+      '@atproto/syntax': 0.7.6
+
   '@atproto/oauth-types@0.6.1':
     dependencies:
       '@atproto/did': 0.2.4
@@ -5022,6 +5046,11 @@ snapshots:
 
   '@atproto/syntax@0.5.4':
     dependencies:
+      tslib: 2.8.1
+
+  '@atproto/syntax@0.7.6':
+    dependencies:
+      iso-datestring-validator: 2.2.2
       tslib: 2.8.1
 
   '@atproto/ws-client@0.0.4':
@@ -6745,7 +6774,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@26.4.0)(@vitest/ui@2.1.9)(lightningcss@1.32.0)
+      vitest: 2.1.9(@types/node@25.9.1)(@vitest/ui@2.1.9)(lightningcss@1.32.0)
 
   '@vitest/utils@2.1.9':
     dependencies:

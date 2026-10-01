@@ -45,15 +45,24 @@ const SCOPE_MISSING_STATUS = 403;
  * offer to fix — not a request-time `invalid_scope`, not a server 500, not a
  * 403 with a different error name, not a plain Error.
  *
- * Matches both shapes this PDS surfaces for the same failure:
- *   - full: `error === "ScopeMissingError"` with `status === 403`
- *   - message-only: no `error` field, but the message starts with
- *     `Missing required scope` and the status is 403 (some transports drop the
- *     error name).
+ * Two resource servers can refuse the same call, and they name the failure
+ * differently: a PDS reports `ScopeMissingError`; HappyView — which the web
+ * client routes through — reports a generic `Forbidden` and puts the
+ * explanation in the message. So the error name decides when one is present,
+ * and the message decides only when it is not.
  *
- * The 403 requirement is load-bearing: a bare `error === "ScopeMissingError"`
- * with a 500 (or any non-403) is NOT a scope-miss and must not trigger the
- * dialogue.
+ * That ordering is what keeps the predicate narrow. Keying off message text
+ * alone would match a 403 from anything that happened to describe itself the
+ * same way, which is the failure this predicate exists to avoid.
+ *
+ *   - named: `error` is one of the scope-miss names, and the status is 403;
+ *   - unnamed: no `error` field, status 403, and the message carries one of
+ *     the two servers' signatures — the PDS's `Missing required scope`, or
+ *     HappyView's `is not authorized for <method>: it needs <scope>`.
+ *
+ * The 403 requirement is load-bearing in both branches: a bare
+ * `error === "ScopeMissingError"` with a 500 (or any non-403) is NOT a
+ * scope-miss and must not trigger the dialogue.
  */
 export function isInsufficientScopeError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
@@ -62,15 +71,26 @@ export function isInsufficientScopeError(err: unknown): boolean {
   const status = typeof e.status === "number" ? e.status : undefined;
   if (status !== SCOPE_MISSING_STATUS) return false;
 
+  // HappyView — a resource server the web client routes through — reports a
+  // miss with no name: the descriptive sentence is the `error` value itself
+  // (`xrpc/scope_check.rs`). Match it by that sentence, so a genuinely
+  // unrelated name (a 403 "AuthRequired", say) is still rejected instead of
+  // being read as prose.
+  const describesMissingScope = (text: string): boolean =>
+    /^Missing required scope/.test(text) ||
+    (text.includes("is not authorized for") && text.includes("it needs"));
+
   const errorName = typeof e.error === "string" ? e.error : undefined;
   if (errorName !== undefined) {
-    return SCOPE_MISSING_ERROR_NAMES[errorName] === true;
+    return (
+      SCOPE_MISSING_ERROR_NAMES[errorName] === true ||
+      describesMissingScope(errorName)
+    );
   }
 
-  // No `error` field: fall back to the message signature. Only meaningful for
-  // a 403 (already required above).
-  const message = typeof e.message === "string" ? e.message : undefined;
-  return message !== undefined && /^Missing required scope/.test(message);
+  // No `error` field at all: the message is the only signal left. Some
+  // transports drop the error name, leaving only the PDS's wording.
+  return typeof e.message === "string" && describesMissingScope(e.message);
 }
 
 /** The user's accept/reject decision for a proposed tier expansion. */
