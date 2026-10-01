@@ -15,6 +15,11 @@
   import SearchBar from "./SearchBar.svelte";
   import ServerBar from "$lib/components/sidebar/ServerBar.svelte";
   import EnableNotificationsBanner from "./EnableNotificationsBanner.svelte";
+  import {
+    isSoftKeyboardOpen,
+    mayStartSidebarSwipe,
+    shouldIgnoreSwipeStart,
+  } from "$lib/swipe-gesture";
   import { page } from "$app/state";
   let searchExpanded = $state(false);
 
@@ -51,7 +56,26 @@
 
   function handleTouchStart(e: TouchEvent) {
     const touch = e.touches[0];
-    if (!touch) return;
+    // A touch inside the composer — or any touch while a field holds focus,
+    // or while a soft keyboard is up — is text manipulation, not a panel
+    // swipe. Decided here, on the start target, because a selection drag and
+    // a swipe are the same shape once they are moving (see swipe-gesture.ts).
+    if (
+      !touch ||
+      !mayStartSidebarSwipe({
+        textEntryActive: shouldIgnoreSwipeStart(
+          e.target instanceof Element ? e.target : null,
+          document.activeElement,
+        ),
+        keyboardOpen: isSoftKeyboardOpen(
+          window.innerHeight,
+          window.visualViewport,
+        ),
+      })
+    ) {
+      touchActive = false;
+      return;
+    }
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
     touchActive = true;
