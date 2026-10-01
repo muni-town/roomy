@@ -30,6 +30,7 @@ import {
   inFlightCount,
   backoffMs,
   maxTransientAttempts,
+  settleOverCeiling,
   classifyPendingLinks,
   countPendingLinks,
   type EnrichOutcome,
@@ -192,7 +193,7 @@ const metricEnrichedTransient = metrics.counter(
 );
 const metricEnrichedAbandoned = metrics.counter(
   "roomy_embed_enriched_abandoned_total",
-  `Embed links settled by the attempt ceiling (${maxTransientAttempts()} consecutive transient failures). These LEAVE the backlog: the host is treated as gone rather than retried forever.`,
+  `Embed links settled by the attempt ceiling (${maxTransientAttempts()} consecutive transient failures), whether a failure reached it or the sweeper found the row already past it. These LEAVE the backlog: the host is treated as gone rather than retried forever.`,
 );
 for (const c of [
   metricSweepCycles,
@@ -432,9 +433,9 @@ const transientRetry = new Map<string, { attempts: number; retryAt: number }>();
  * - `overCeiling`: parked URLs already at or past the ceiling. The drain path
  *   can never produce one (it settles on the attempt that reaches the
  *   ceiling), so a non-zero value is persisted state from a build without a
- *   ceiling. They are settled on their next transient failure, so the number
- *   is expected to fall to zero: it is the read of the inherited dead set
- *   leaving the backlog.
+ *   ceiling. The classification pass settles them without a fetch (see
+ *   {@link settlePastCeiling}), so this reads zero from the first cycle
+ *   onwards; it exists to size the inherited set as it arrives.
  */
 export function parkedAttemptStats(): {
   histogram: Array<{ attempts: number; urls: number }>;
@@ -459,6 +460,114 @@ export function parkedAttemptStats(): {
     finalAttempt,
     overCeiling,
   };
+}
+
+/** Max URLs per `pending_links` delete statement (two binds each). */
+const SETTLE_DELETE_CHUNK = 200;
+
+/**
+ * Max URLs per `pending_links` lookup. The set being resolved is the inherited
+ * dead set, whose size is whatever the backlog grew to — not a constant — so it
+ * is resolved in chunks rather than bound as one `in (...)` list, whose
+ * variable limit is a compile-time property of the SQLite build.
+ */
+const SETTLE_LOOKUP_CHUNK = 500;
+
+/**
+ * Settle every URL whose recorded attempt count is already at or past the
+ * ceiling, WITHOUT fetching it, and drop its rows from `pending_links`.
+ *
+ * The set the drain path can never produce: the attempt that REACHES the
+ * ceiling settles the row, so a URL found at or past it is persisted retry
+ * state inherited from a build without a ceiling. Such a URL is skipped by the
+ * backlog query while its window is open, so left alone the only thing that
+ * settles it is the window expiring and the row being fetched again from a
+ * host already measured as gone — thousands of rows, one 6h window each, to
+ * reach the branch that discards them. There is no retry left to spend, so the
+ * row is settled here from the recorded state instead.
+ *
+ * The window is deliberately IGNORED: it is a retry schedule, and there is no
+ * retry left for it to schedule.
+ *
+ * The per-space write is the settled row the ceiling branch of
+ * `storeEmbedData` writes, so the dead set leaves the backlog with the same
+ * accounting — `enrichedAbandoned` rises by the set — and the read path sees
+ * exactly the null embed it would have seen after the doomed fetch.
+ *
+ * A URL can be pending in several spaces: the gate is URL-keyed while the
+ * backlog is row-keyed, so the spaces are resolved from `pending_links` rather
+ * than assumed, or rows in the other spaces would be orphaned.
+ *
+ * Writes go one statement per (space, chunk) so the first run — a backlog of
+ * thousands inherited from a build without a ceiling — settles in a handful of
+ * round-trips instead of one per row.
+ */
+async function settlePastCeiling(globalDb: DbLike): Promise<void> {
+  const ceiling = maxTransientAttempts();
+  const over = new Map<string, number>();
+  for (const [url, retry] of transientRetry) {
+    if (retry.attempts >= ceiling) over.set(url, retry.attempts);
+  }
+  if (over.size === 0) return;
+
+  const overUrls = [...over.keys()];
+  const rows: PendingLink[] = [];
+  for (let i = 0; i < overUrls.length; i += SETTLE_LOOKUP_CHUNK) {
+    rows.push(
+      ...(await findPendingLinksForUrls(
+        globalDb,
+        overUrls.slice(i, i + SETTLE_LOOKUP_CHUNK),
+      )),
+    );
+  }
+  if (rows.length === 0) {
+    // Nothing to settle, but the gate entries are stale either way — drop them
+    // so the parked-attempt readout stops counting URLs that are not pending.
+    for (const url of over.keys()) transientRetry.delete(url);
+    return;
+  }
+
+  const spacesByUrl = new Map<string, string[]>();
+  for (const r of rows) {
+    const spaces = spacesByUrl.get(r.url) ?? [];
+    spaces.push(r.spaceDid);
+    spacesByUrl.set(r.url, spaces);
+  }
+
+  const bySpace = new Map<string, Array<{ url: string; attempts: number }>>();
+  const toSettle = new Set<string>();
+  for (const url of over.keys()) {
+    const spaces = spacesByUrl.get(url);
+    if (!spaces) {
+      transientRetry.delete(url);
+      continue;
+    }
+    toSettle.add(url);
+    for (const spaceDid of spaces) {
+      const arr = bySpace.get(spaceDid) ?? [];
+      arr.push({ url, attempts: over.get(url)! });
+      bySpace.set(spaceDid, arr);
+    }
+  }
+
+  for (const [spaceDid, entries] of bySpace) {
+    await settleOverCeiling(openSpaceDb(spaceDid), entries);
+    for (let i = 0; i < entries.length; i += SETTLE_DELETE_CHUNK) {
+      const chunk = entries.slice(i, i + SETTLE_DELETE_CHUNK);
+      const valuesPh = chunk.map(() => "(?, ?)").join(", ");
+      await globalDb.run(
+        `delete from pending_links where (space_did, url) in (values ${valuesPh})`,
+        chunk.flatMap((e) => [spaceDid, e.url]),
+      );
+    }
+  }
+
+  // Only now retire the gate entries: a throw above leaves every URL parked
+  // and pending, so a later cycle retries the whole settle rather than losing
+  // rows the DB never recorded.
+  for (const url of toSettle) transientRetry.delete(url);
+  statsEnrichedAbandoned += toSettle.size;
+  metricEnrichedAbandoned.inc({}, toSettle.size);
 }
 
 export interface EmbedSweeperOpts {
@@ -499,9 +608,15 @@ export function embedSweeperStats(): {
   /** Null outcomes that left the row PENDING — transient (timeout/5xx/429/network). */
   enrichedTransient: number;
   /**
-   * Transient failures that reached the attempt ceiling and SETTLED the row,
-   * so the URL left the backlog for good. A subset of what `enrichedTransient`
-   * used to carry alone; the two now say opposite things (retried vs gone).
+   * Links settled by the attempt ceiling: they had no retry left to spend, so
+   * the row was settled (null embed, retry state cleared) rather than retried.
+   * A subset of what `enrichedTransient` used to carry alone; the two now say
+   * opposite things (retried vs gone).
+   *
+   * Counted on both paths that can settle such a row — a transient failure
+   * reaching the ceiling, and the classification pass settling a set inherited
+   * from a build without one — so this is the whole dead set, however it was
+   * discovered.
    */
   enrichedAbandoned: number;
   /**
@@ -850,10 +965,27 @@ export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
 
   let pending: PendingLink[] = [];
 
+  // 0. Settle the inherited dead set BEFORE selecting work. URLs already at
+  //    or past the attempt ceiling are parked, so the backlog query skips them;
+  //    left alone they are settled only by a window expiry followed by another
+  //    fetch of a host already measured as gone. They have no retry left to
+  //    spend, so settle them now, from the recorded state, with no outbound
+  //    request. This is not part of the batch — it neither consumes SWEEP_BATCH
+  //    slots nor counts as selected work, so the link a poke just queued still
+  //    gets the whole batch.
+  try {
+    await settlePastCeiling(globalDb);
+  } catch (err) {
+    log.warn("[embed-sweeper] past-ceiling settle failed:", err);
+    markDbError(err);
+  }
+
   // URLs currently parked in a transient-retry backoff window. Computed once
   // per cycle (from the `now` above) and reused by BOTH the backlog query and
   // the stall diagnostic below, so the diagnostic measures against the exact
-  // skip set the selection used — never a re-derived approximation.
+  // skip set the selection used — never a re-derived approximation. Taken
+  // AFTER step 0 so a URL the settle just retired is not still reported as
+  // parked.
   const backoffUrls = new Set<string>();
   for (const [url, retry] of transientRetry) {
     if (retry.retryAt > now) backoffUrls.add(url);

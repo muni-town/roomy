@@ -339,6 +339,60 @@ async function writeSettled(
   );
 }
 
+/** Max URLs per settle statement — stays well inside SQLite's bind limit. */
+const SETTLE_CHUNK = 200;
+
+/**
+ * Settle URLs that are already at or past {@link maxTransientAttempts}, WITHOUT
+ * fetching them.
+ *
+ * Such a URL has no retry left to spend: the next attempt would take the
+ * `storeEmbedData` ceiling branch and settle the row anyway. Fetching it first
+ * buys nothing and costs an outbound request to a host already measured as
+ * gone, so the sweeper settles the row directly from the recorded retry state
+ * and drops it from `pending_links`.
+ *
+ * Each written row is what the ceiling branch of {@link storeEmbedData}
+ * produces for the same URL — null embed, `retry_after` cleared — so an
+ * operator cannot tell from the DB whether a dead row was settled by a fetch
+ * or by this path, and the read side (which keys off `embed_json`) is
+ * unaffected. `attempts` is written back UNCHANGED rather than incremented:
+ * no attempt is being made.
+ *
+ * Batched one statement per chunk of URLs, because the set this drains is
+ * thousands of rows on first run and a per-URL round-trip would hold the sweep
+ * cycle for seconds.
+ *
+ * The caller must not have these URLs in flight: {@link inFlightLinks} dedups
+ * fetches, and settling a URL mid-fetch would race the result write. The
+ * ceiling is what makes that safe here — a fetch that is genuinely in flight
+ * cannot belong to a URL already at or past it, because the attempt that
+ * reached the ceiling settled the row in the same breath. The sweeper is the
+ * sole caller, and it runs this before selecting its batch.
+ */
+export async function settleOverCeiling(
+  db: DbLike,
+  entries: ReadonlyArray<{ url: string; attempts: number }>,
+): Promise<void> {
+  for (let i = 0; i < entries.length; i += SETTLE_CHUNK) {
+    const chunk = entries.slice(i, i + SETTLE_CHUNK);
+    const valuesPh = chunk.map(() => "(?, null, ?, null, (unixepoch() * 1000), (unixepoch() * 1000))").join(", ");
+    const params = chunk.flatMap((e) => [e.url, e.attempts]);
+    await db.run(
+      `insert into comp_embed_link_data
+         (entity, embed_json, attempts, retry_after, fetched_at, updated_at)
+       values ${valuesPh}
+       on conflict(entity) do update set
+         embed_json = excluded.embed_json,
+         attempts = excluded.attempts,
+         retry_after = null,
+         fetched_at = excluded.fetched_at,
+         updated_at = excluded.updated_at`,
+      params,
+    );
+  }
+}
+
 /**
  * Enrich a single URL: fetch embed data and store in the database.
  *
