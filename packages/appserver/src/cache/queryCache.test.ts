@@ -188,6 +188,103 @@ describe("QueryCache.evictMatching", () => {
   });
 });
 
+/**
+ * `evictActivityFeed` is the coverage rule, not the subset rule: the feed's
+ * `spaceId` param is a filter, so a signal naming a space means "the pages
+ * that INCLUDE this space", which is the opposite direction from every other
+ * cached query. See `cache/activityFeedCoverage.ts`.
+ */
+describe("QueryCache.evictActivityFeed", () => {
+  const FEED = "space.roomy.space.getActivityFeed";
+
+  it("evicts pages covering the signalled space, including space-filtered ones", () => {
+    const cache = new QueryCache();
+    cache.set(FEED, { spaceId: "a" }, "did:plc:1", "a-page");
+    cache.set(FEED, { spaceId: "a", limit: "20" }, "did:plc:1", "a-page-20");
+    cache.set(FEED, { spaceId: "b" }, "did:plc:1", "b-page");
+    cache.set(FEED, {}, "did:plc:1", "all-page");
+
+    cache.evictActivityFeed("a");
+
+    expect(cache.get(FEED, { spaceId: "a" }, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, { spaceId: "a", limit: "20" }, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, {}, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, { spaceId: "b" }, "did:plc:1")).toEqual({ value: "b-page" });
+  });
+
+  it("a null signal space evicts every page", () => {
+    const cache = new QueryCache();
+    cache.set(FEED, { spaceId: "a" }, "did:plc:1", "a-page");
+    cache.set(FEED, {}, "did:plc:2", "all-page");
+
+    cache.evictActivityFeed(null);
+
+    expect(cache.size).toBe(0);
+  });
+
+  it("scopes to affectedUser when set", () => {
+    const cache = new QueryCache();
+    cache.set(FEED, { spaceId: "a" }, "did:plc:1", "u1");
+    cache.set(FEED, { spaceId: "a" }, "did:plc:2", "u2");
+
+    cache.evictActivityFeed("a", "did:plc:1");
+
+    expect(cache.get(FEED, { spaceId: "a" }, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, { spaceId: "a" }, "did:plc:2")).toEqual({ value: "u2" });
+  });
+
+  it("only touches the activity feed", () => {
+    const cache = new QueryCache();
+    cache.set(FEED, { spaceId: "a" }, "did:plc:1", "feed");
+    cache.set("space.roomy.space.getThreads", { spaceId: "a" }, "did:plc:1", "threads");
+
+    cache.evictActivityFeed("a");
+
+    expect(cache.get("space.roomy.space.getThreads", { spaceId: "a" }, "did:plc:1")).toEqual({
+      value: "threads",
+    });
+  });
+});
+
+/**
+ * The aggregate counters cannot separate "the cache is too small" (LRU
+ * evictions spread over NSIDs) from "one endpoint is flushed by every write"
+ * (evictions concentrated on one NSID). Those are fixed differently, so the
+ * split has to be observable.
+ */
+describe("QueryCache per-NSID stats", () => {
+  it("attributes hits, misses and evictions to their NSID", () => {
+    const cache = new QueryCache({ maxEntries: 1 });
+    cache.set("nsid.a", { id: "1" }, "did:plc:1", "a1");
+    cache.get("nsid.a", { id: "1" }, "did:plc:1");
+    cache.get("nsid.b", { id: "1" }, "did:plc:1");
+    // Inserting b at capacity LRU-evicts a.
+    cache.set("nsid.b", { id: "1" }, "did:plc:1", "b1");
+
+    expect(cache.stats.byNsid["nsid.a"]).toEqual({ hits: 1, misses: 0, evictions: 1 });
+    expect(cache.stats.byNsid["nsid.b"]).toEqual({ hits: 0, misses: 1, evictions: 0 });
+    expect(cache.stats.hits).toBe(1);
+    expect(cache.stats.misses).toBe(1);
+    expect(cache.stats.evictions).toBe(1);
+  });
+
+  it("counts an invalidation eviction against the NSID it evicts", () => {
+    const cache = new QueryCache();
+    cache.set("nsid.a", { id: "1" }, "did:plc:1", "a1");
+    cache.set("nsid.b", { id: "1" }, "did:plc:1", "b1");
+
+    cache.evictMatching("nsid.a", {});
+
+    expect(cache.stats.byNsid["nsid.a"]?.evictions).toBe(1);
+    // nsid.b was never evicted, so it has no row at all.
+    expect(cache.stats.byNsid["nsid.b"]).toBeUndefined();
+  });
+
+  it("reports an empty breakdown before any traffic", () => {
+    expect(new QueryCache().stats.byNsid).toEqual({});
+  });
+});
+
 describe("queryCacheKey", () => {
   it("anon is used when userDid is null", () => {
     expect(queryCacheKey("nsid", {}, null)).toBe("nsid:{}:anon");

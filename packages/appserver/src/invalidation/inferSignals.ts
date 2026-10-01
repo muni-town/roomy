@@ -452,9 +452,12 @@ async function handleCreateMessage(
   // A new message is a new activity-feed item (and bumps the feed's unread
   // counts for every subscriber). The feed hydrates full message media/link
   // embeds per item, which the activity diff does not carry, so it stays a
-  // broadcast invalidation. The activity feed is a global per-user query, so
-  // invalidate with no params — broadcast to all users.
-  signals.push(invalidate("space.roomy.space.getActivityFeed", {}));
+  // broadcast invalidation. The signal carries the space the message landed
+  // in: a feed page spans every space the CALLER joined, so only pages whose
+  // coverage includes this space are stale — the eviction listener reads the
+  // space as coverage, not as a param to subset-match (see
+  // `cache/activityFeedCoverage.ts`).
+  signals.push(invalidate("space.roomy.space.getActivityFeed", { spaceId }));
 
   // A message in a thread may update the author's `activeThreads` in the
   // space sidebar. The `roomMetadataDiff` only patches `unreadCount`, not
@@ -530,7 +533,7 @@ async function handleEditMessage(
   signals.push(invalidate("space.roomy.room.getLinks", { roomId }));
   signals.push(invalidate("space.roomy.space.getLinks", { spaceId: event.streamDid }));
   // An edited message may change the activity feed's rendered item.
-  signals.push(invalidate("space.roomy.space.getActivityFeed", {}));
+  signals.push(invalidate("space.roomy.space.getActivityFeed", { spaceId: event.streamDid }));
 
   return signals;
 }
@@ -563,7 +566,7 @@ async function handleDeleteMessage(
     // The deleted message may have been the only share of a link.
     invalidate("space.roomy.space.getLinks", { spaceId: event.streamDid }),
     // A deleted message may remove an activity-feed item.
-    invalidate("space.roomy.space.getActivityFeed", {}),
+    invalidate("space.roomy.space.getActivityFeed", { spaceId: event.streamDid }),
   ];
 
   // Emit `remove` mention ops for every DID the deleted message mentioned,
@@ -676,7 +679,7 @@ async function handleMoveMessages(
   signals.push(invalidate("space.roomy.room.getMessages", { roomId: toRoomId }));
   signals.push(invalidate("space.roomy.space.getThreads", { spaceId }));
   signals.push(invalidate("space.roomy.space.getLinks", { spaceId }));
-  signals.push(invalidate("space.roomy.space.getActivityFeed", {}));
+  signals.push(invalidate("space.roomy.space.getActivityFeed", { spaceId }));
 
   return signals;
 }
@@ -693,12 +696,10 @@ function handleReactionChange(event: AppliedEvent): InvalidationEvent[] {
   const signals: InvalidationEvent[] = [
     invalidate("space.roomy.room.getMessages", { roomId }),
     // A reaction on (or removing one from) a room's latest message changes
-    // that feed item's rendered reactions. The activity feed is a global
-    // per-user query (like getSpaces), so invalidate with no params — the
-    // client prefix-matches every activity-feed query key (any space/limit).
-    // Per the "over-invalidate" principle this broadcasts to all users;
-    // a reaction on a non-latest message triggers a harmless no-op refetch.
-    invalidate("space.roomy.space.getActivityFeed", {}),
+    // that feed item's rendered reactions. Scoped to the reacting message's
+    // space: the feed is per-caller and spans spaces, so only pages covering
+    // this space are stale.
+    invalidate("space.roomy.space.getActivityFeed", { spaceId }),
     // A reaction on a room's latest message changes the space index board's
     // `latestMembers` (recent participants) for that room — broadcast.
     invalidate("space.roomy.space.getThreads", { spaceId }),
@@ -769,8 +770,9 @@ function handleDeleteRoom(event: AppliedEvent): InvalidationEvent[] {
 
   const signals: InvalidationEvent[] = [
     ...invalidateSpace(spaceId),
-    // Deleting a room removes its activity items from every feed.
-    invalidate("space.roomy.space.getActivityFeed", {}),
+    // Deleting a room removes its activity items from every feed that covers
+    // this space.
+    invalidate("space.roomy.space.getActivityFeed", { spaceId }),
   ];
   if (roomId) {
     signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));

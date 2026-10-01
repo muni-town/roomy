@@ -20,6 +20,7 @@
 import type { InvalidationRouter } from "../invalidation/types.ts";
 import type { QueryInvalidation } from "../invalidation/types.ts";
 import type { QueryCache } from "./queryCache.ts";
+import { activityFeedCoverage } from "./activityFeedCoverage.ts";
 
 /**
  * Attach a cache eviction listener to the invalidation router.
@@ -35,6 +36,10 @@ export function attachCacheEvictionListener(
     for (const e of events) {
       if (e.kind !== "queryInvalidation") continue;
       const { nsid, params, affectedUser } = e.signal as QueryInvalidation;
+      if (nsid === "space.roomy.space.getActivityFeed") {
+        cache.evictActivityFeed(activityFeedCoverage(params), affectedUser);
+        continue;
+      }
       cache.evictMatching(nsid, params, affectedUser);
     }
   });

@@ -74,6 +74,15 @@ const ITERATIONS = numArg("iterations", 50);
 const WARMUP = numArg("warmup", 10);
 const LABEL = argv.includes("--label") ? String(argv[argv.indexOf("--label") + 1]) : "run";
 const KEEP = argv.includes("--keep");
+/**
+ * `--cache` keeps the response cache on for the read pass.
+ *
+ * Off by default: with it on, a repeat read of the same page is served from
+ * memory and the handler cost the projection numbers exist to measure
+ * disappears. On, it measures the cache instead — including the per-NSID
+ * eviction rate, which is what says whether a cached page survives a write.
+ */
+const USE_CACHE = argv.includes("--cache");
 
 const USER = "did:plc:probe-projections-user";
 const SPACE = "did:plc:probe-projections-space";
@@ -124,10 +133,11 @@ const handle = await createAppserver({
   disableBackgroundWorkers: true,
   happyView: null,
   getProfiles: async () => [],
-  // The response cache would mask the handler cost this probe is measuring.
-  // Projections are a *different* mechanism (durable, per-space, survives
-  // restart) and must be measurable on their own.
-  disableQueryCache: true,
+  // Off by default: the response cache would mask the handler cost this probe
+  // exists to measure — projections are a *different* mechanism (durable,
+  // per-space, survives restart) and must be measurable on their own.
+  // `--cache` flips it on to measure the cache instead.
+  disableQueryCache: !USE_CACHE,
 });
 const baseUrl = `http://localhost:${handle.port}`;
 
@@ -259,6 +269,52 @@ await readStateDb.run(
   Date.now(),
 );
 
+
+// A SECOND space the caller has also joined, with its own room and message.
+// It exists so the cache pass can measure what a write to one space does to
+// the OTHER space's cached pages: the feed is per-caller and spans both, so a
+// write reaching only one of them is the case where over-eviction shows up.
+const SPACE2 = "did:plc:probe-projections-space-2";
+const space2Db = openSpaceDb(SPACE2);
+await globalDb.run("insert or ignore into entity_space (entity_id, space_did) values (?, ?)", [SPACE2, SPACE2]);
+await space2Db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [SPACE2, SPACE2]);
+await space2Db.run(
+  `insert or ignore into comp_space (entity, handle, allow_public_join, allow_member_invites)
+   values (?, ?, ?, ?)`,
+  [SPACE2, null, 1, 1],
+);
+await space2Db.run("insert or ignore into comp_info (entity, name) values (?, ?)", [SPACE2, "Projection Probe Space 2"]);
+// Each per-space DB carries its own entity table, so the caller's rows have to
+// exist there too (the space-1 DB seeded them for space 1 only).
+await space2Db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [USER, USER]);
+await space2Db.run("insert or ignore into comp_user (did, handle) values (?, ?)", [USER, null]);
+await space2Db.run("insert or ignore into edges (head, tail, label) values (?, ?, 'admin')", [SPACE2, USER]);
+const room2 = { $type: "space.roomy.room.createRoom.v0", id: newUlid(), kind: "space.roomy.channel", name: "other-general" };
+const res2 = await fetch(`${baseUrl}/xrpc/space.roomy.space.sendEvents`, {
+  method: "POST",
+  headers: { "X-Test-Did": USER, "Content-Type": "application/json" },
+  body: JSON.stringify({ spaceId: SPACE2, events: [room2] }),
+});
+if (!res2.ok) throw new Error(`space2 createRoom ${res2.status}: ${await res2.text()}`);
+const HOT2 = room2.id;
+{
+  const res = await fetch(`${baseUrl}/xrpc/space.roomy.space.sendEvents`, {
+    method: "POST",
+    headers: { "X-Test-Did": USER, "Content-Type": "application/json" },
+    body: JSON.stringify({ spaceId: SPACE2, events: messageEvents(HOT2, 5) }),
+  });
+  if (!res.ok) throw new Error(`space2 messages ${res.status}: ${await res.text()}`);
+}
+await readStateDb.run(
+  `insert or replace into user_space_membership
+     (user_did, space_did, state, source, source_event_id, updated_at)
+   values (?, ?, 'joined', 'probe', ?, ?)`,
+  USER,
+  SPACE2,
+  newUlid(),
+  Date.now(),
+);
+
 console.log(
   `seeded ${ROOMS} rooms (${MESSAGES} msgs in the hot room, ${FILLER} in each of ${ROOMS - 1} others) + ${MEMBERS} readers in ${((performance.now() - seedStart) / 1000).toFixed(1)}s`,
 );
@@ -327,6 +383,76 @@ for (const ep of ENDPOINTS) {
   console.log(
     `  ${ep.name.padEnd(22)}${s.p50.toFixed(2).padStart(8)}${s.p95.toFixed(2).padStart(8)}${s.p99.toFixed(2).padStart(8)}${s.max.toFixed(2).padStart(9)}${String(s.rtt).padStart(8)}  ${dests}  [${status}]`,
   );
+}
+
+// ─── Cache pass (--cache only) ────────────────────────────────────────────
+//
+// A hit rate on its own does not say whether the cache is doing its job: a
+// page that is inserted and evicted before the next read still counts as a
+// miss, and the reader still pays the handler. So this pass measures three
+// things per NSID: the hit rate, the miss-vs-hit latency, and — the one that
+// explains a bad ratio — whether a write evicts pages it did not stale.
+if (USE_CACHE) {
+  const cache = handle.queryCache;
+  if (cache) {
+    const feedPath = (space: string) =>
+      `/xrpc/space.roomy.space.getActivityFeed?spaceId=${encodeURIComponent(space)}`;
+    const threadsPath = `/xrpc/space.roomy.space.getThreads?spaceId=${encodeURIComponent(SPACE)}`;
+    const write = () => post(messageEvents(HOT, 1));
+
+    console.log(`\n=== ${LABEL} — response cache ===`);
+    const missMs: number[] = [];
+    const hitMs: number[] = [];
+    for (let i = 0; i < ITERATIONS; i++) {
+      // A write into the space is what a real reader races: it makes the
+      // cached page stale, so the next read pays the handler.
+      await write();
+      missMs.push((await hit(feedPath(SPACE))).ms);
+      hitMs.push((await hit(feedPath(SPACE))).ms);
+      await write();
+      missMs.push((await hit(threadsPath)).ms);
+      hitMs.push((await hit(threadsPath)).ms);
+    }
+    console.log(
+      `  cache MISS (handler runs): p50 ${pct(missMs, 50).toFixed(2)}ms  p95 ${pct(missMs, 95).toFixed(2)}ms`,
+    );
+    console.log(
+      `  cache HIT  (served from memory): p50 ${pct(hitMs, 50).toFixed(2)}ms  p95 ${pct(hitMs, 95).toFixed(2)}ms`,
+    );
+
+    // Cross-space survival. Both spaces' filtered pages are warmed, then a
+    // write lands in SPACE only. SPACE2's page shares no rows with it, so any
+    // eviction of SPACE2 is work thrown away: the next reader of SPACE2 pays
+    // the handler for a page nothing changed.
+    const ROUNDS = 20;
+    const survived: Record<string, number> = { [SPACE]: 0, [SPACE2]: 0 };
+    for (let i = 0; i < ROUNDS; i++) {
+      for (const space of [SPACE, SPACE2]) await hit(feedPath(space));
+      await write();
+      for (const space of [SPACE, SPACE2]) {
+        const hitsBefore = cache.stats.hits;
+        await hit(feedPath(space));
+        if (cache.stats.hits > hitsBefore) survived[space]!++;
+      }
+    }
+    console.log(
+      `  after a write into space 1: space1 page cached ${survived[SPACE]}/${ROUNDS}, space2 page cached ${survived[SPACE2]}/${ROUNDS}`,
+    );
+
+    const s = cache.stats;
+    console.log(`  totals: hits=${s.hits} misses=${s.misses} evictions=${s.evictions} size=${s.size}`);
+    // `byNsid` is absent when the probe runs against a build that predates the
+    // per-NSID counters; skip the breakdown rather than crash the run.
+    for (const [nsid, n] of Object.entries<{ hits: number; misses: number; evictions: number }>(
+      s.byNsid ?? {},
+    ).sort((a, b) => b[1].evictions - a[1].evictions)) {
+      const total = n.hits + n.misses;
+      const rate = total > 0 ? ((n.hits / total) * 100).toFixed(1) : "0.0";
+      console.log(
+        `    ${nsid.padEnd(42)} hits=${String(n.hits).padStart(4)} misses=${String(n.misses).padStart(4)} evictions=${String(n.evictions).padStart(4)} hit-rate=${rate}%`,
+      );
+    }
+  }
 }
 
 // ─── Fanout measurement ───────────────────────────────────────────────────

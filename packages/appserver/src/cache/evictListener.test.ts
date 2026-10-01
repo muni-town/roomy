@@ -185,3 +185,113 @@ describe("attachCacheEvictionListener", () => {
     unsub();
   });
 });
+
+/**
+ * `space.getActivityFeed` is the one cached query whose params do NOT name the
+ * thing the signal names. Its params key a space as a *filter*
+ * (`{ spaceId: "X" }` = only X's rooms) while a signal's `spaceId` names the
+ * space a write touched, so the subset rule would read `{ spaceId: "X" }` as a
+ * superset of nothing and evict every page. These two tests pin both
+ * directions of the replacement rule.
+ */
+describe("attachCacheEvictionListener: getActivityFeed is evicted by coverage", () => {
+  const FEED = "space.roomy.space.getActivityFeed" as QueryNsid;
+
+  it("a scoped write evicts only pages covering that space", () => {
+    const cache = new QueryCache();
+    const router = new Router();
+    attachCacheEvictionListener(router, cache);
+
+    cache.set(FEED, { spaceId: "x" }, "did:plc:1", "feed-x");
+    cache.set(FEED, { spaceId: "x", limit: "20" }, "did:plc:1", "feed-x-20");
+    cache.set(FEED, { spaceId: "y" }, "did:plc:1", "feed-y");
+    cache.set(FEED, {}, "did:plc:1", "feed-all");
+    cache.set(FEED, { limit: "20" }, "did:plc:2", "feed-all-20");
+
+    // A write in space x.
+    router.emit([qInvalidation(FEED, { spaceId: "x" })]);
+
+    // x's pages are stale: a bare signal must reach the same space with extra
+    // params (the client caches `{ spaceId, limit }`), and every user's copy.
+    expect(cache.get(FEED, { spaceId: "x" }, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, { spaceId: "x", limit: "20" }, "did:plc:1")).toBeUndefined();
+    // A page covering every space holds x's rooms, so it is stale too.
+    expect(cache.get(FEED, {}, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, { limit: "20" }, "did:plc:2")).toBeUndefined();
+    // y's page never showed x's rooms — it must survive.
+    expect(cache.get(FEED, { spaceId: "y" }, "did:plc:1")).toEqual({ value: "feed-y" });
+  });
+
+  it("a write in one space leaves other spaces' pages cached", () => {
+    const cache = new QueryCache();
+    const router = new Router();
+    attachCacheEvictionListener(router, cache);
+
+    for (const space of ["a", "b", "c"]) {
+      cache.set(FEED, { spaceId: space }, "did:plc:1", `feed-${space}`);
+    }
+
+    router.emit([qInvalidation(FEED, { spaceId: "a" })]);
+
+    expect(cache.get(FEED, { spaceId: "a" }, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, { spaceId: "b" }, "did:plc:1")).toEqual({ value: "feed-b" });
+    expect(cache.get(FEED, { spaceId: "c" }, "did:plc:1")).toEqual({ value: "feed-c" });
+    expect(cache.stats.evictions).toBe(1);
+  });
+
+  it("an unscoped signal still evicts every page, including space-filtered ones", () => {
+    // Joining or leaving a space restates the whole feed for that caller:
+    // which spaces are in it changes, so even a `{ spaceId }` page's contents
+    // are no longer trustworthy.
+    const cache = new QueryCache();
+    const router = new Router();
+    attachCacheEvictionListener(router, cache);
+
+    for (const space of ["a", "b"]) {
+      cache.set(FEED, { spaceId: space }, "did:plc:1", `feed-${space}`);
+    }
+    cache.set(FEED, {}, "did:plc:1", "feed-all");
+    cache.set(FEED, { spaceId: "a" }, "did:plc:2", "feed-other-user");
+
+    // The joining/leaving user's own feed, broadcast on an empty param set.
+    router.emit([qInvalidation(FEED, {}, "did:plc:1" as UserDid)]);
+
+    expect(cache.get(FEED, {}, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, { spaceId: "a" }, "did:plc:1")).toBeUndefined();
+    expect(cache.get(FEED, { spaceId: "b" }, "did:plc:1")).toBeUndefined();
+    // Another user's page is untouched — the change was caller-scoped.
+    expect(cache.get(FEED, { spaceId: "a" }, "did:plc:2")).toEqual({
+      value: "feed-other-user",
+    });
+  });
+
+  it("a broadcast unscoped signal evicts every user's every page", () => {
+    const cache = new QueryCache();
+    const router = new Router();
+    attachCacheEvictionListener(router, cache);
+
+    cache.set(FEED, {}, "did:plc:1", "u1-all");
+    cache.set(FEED, { spaceId: "a" }, "did:plc:1", "u1-a");
+    cache.set(FEED, { spaceId: "b" }, "did:plc:2", "u2-b");
+
+    router.emit([qInvalidation(FEED, {})]);
+
+    expect(cache.stats.size).toBe(0);
+  });
+
+  it("leaves other NSIDs' entries alone", () => {
+    const cache = new QueryCache();
+    const router = new Router();
+    attachCacheEvictionListener(router, cache);
+
+    cache.set(FEED, { spaceId: "a" }, "did:plc:1", "feed-a");
+    cache.set("space.roomy.space.getMetadata", { spaceId: "a" }, "did:plc:1", "meta-a");
+
+    router.emit([qInvalidation(FEED, { spaceId: "b" })]);
+
+    expect(cache.get(FEED, { spaceId: "a" }, "did:plc:1")).toEqual({ value: "feed-a" });
+    expect(cache.get("space.roomy.space.getMetadata", { spaceId: "a" }, "did:plc:1")).toEqual({
+      value: "meta-a",
+    });
+  });
+});

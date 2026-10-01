@@ -60,6 +60,19 @@ function invalidatedNsids(signals: InvalidationEvent[]): QueryNsid[] {
     .map((s) => s.signal.nsid);
 }
 
+/** The single `getActivityFeed` invalidation, with its params. */
+function findFeedInvalidation(
+  signals: InvalidationEvent[],
+): QueryInvalidation | undefined {
+  return signals
+    .filter(
+      (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
+        s.kind === "queryInvalidation",
+    )
+    .map((s) => s.signal)
+    .find((s) => s.nsid === "space.roomy.space.getActivityFeed");
+}
+
 function findMessageDiff(signals: InvalidationEvent[]) {
   return signals.find((s) => s.kind === "messageDiff");
 }
@@ -941,21 +954,14 @@ describe("inferSignals: reaction events", () => {
     expect(nsids).toContain("space.roomy.room.getMessages");
     expect(nsids).toContain("space.roomy.message.getMessage");
     // A reaction on a room's latest message must refresh the activity feed
-    // (the feed renders reactions on the latest message). Emitted with no
-    // params so the client prefix-matches every activity-feed query key.
+    // (the feed renders reactions on the latest message). The feed is a
+    // per-caller query spanning spaces, so the signal carries the space the
+    // reaction landed in — that is what the cache eviction matches on, and
+    // the WS handler renders it to the client as the unfiltered key.
     expect(nsids).toContain("space.roomy.space.getActivityFeed");
-    const feedSignal = signals.find(
-      (s) =>
-        s.kind === "queryInvalidation" &&
-        s.signal.nsid === "space.roomy.space.getActivityFeed",
-    );
+    const feedSignal = findFeedInvalidation(signals);
     expect(feedSignal).toBeDefined();
-    expect(
-      feedSignal &&
-        Object.keys(
-          (feedSignal as { signal: { params: Record<string, string> } }).signal.params,
-        ).length,
-    ).toBe(0);
+    expect(feedSignal!.params).toEqual({ spaceId: STREAM_DID });
   });
 
   it("removeReaction does the same", async () => {

@@ -27,6 +27,7 @@ import {
   normalizeParams,
   paramsSubset,
 } from "./queryCacheKey.ts";
+import { activityFeedCoverage } from "./activityFeedCoverage.ts";
 
 export interface QueryCacheOptions {
   /** Max entries before LRU eviction. Default 4096. */
@@ -35,11 +36,24 @@ export interface QueryCacheOptions {
   ttlMs?: number;
 }
 
+export interface QueryCacheNsidStats {
+  hits: number;
+  misses: number;
+  evictions: number;
+}
+
 export interface QueryCacheStats {
   hits: number;
   misses: number;
   evictions: number;
   size: number;
+  /**
+   * The same counters attributed to the NSID they belong to. The aggregate
+   * numbers cannot distinguish "the cache is too small" from "one endpoint is
+   * evicted on every write", which are fixed differently — this breakdown is
+   * what makes that distinction observable.
+   */
+  byNsid: Record<string, QueryCacheNsidStats>;
 }
 
 interface CacheEntry {
@@ -56,6 +70,7 @@ export class QueryCache {
   readonly #store = new Map<string, CacheEntry>();
   readonly #maxEntries: number;
   readonly #ttlMs: number;
+  readonly #byNsid = new Map<string, QueryCacheNsidStats>();
   #hits = 0;
   #misses = 0;
   #evictions = 0;
@@ -63,6 +78,13 @@ export class QueryCache {
   constructor(opts: QueryCacheOptions = {}) {
     this.#maxEntries = opts.maxEntries ?? 4096;
     this.#ttlMs = opts.ttlMs ?? 60_000;
+  }
+
+  /** Increment one per-NSID counter, creating the row on first use. */
+  #count(nsid: string, field: keyof QueryCacheNsidStats): void {
+    const row = this.#byNsid.get(nsid) ?? { hits: 0, misses: 0, evictions: 0 };
+    row[field]++;
+    this.#byNsid.set(nsid, row);
   }
 
   /**
@@ -79,17 +101,20 @@ export class QueryCache {
     const entry = this.#store.get(key);
     if (entry === undefined) {
       this.#misses++;
+      this.#count(nsid, "misses");
       return undefined;
     }
     if (Date.now() >= entry.expiresAt) {
       this.#store.delete(key);
       this.#misses++;
+      this.#count(nsid, "misses");
       return undefined;
     }
     // LRU: move to end (most recent position).
     this.#store.delete(key);
     this.#store.set(key, entry);
     this.#hits++;
+    this.#count(nsid, "hits");
     return { value: entry.value };
   }
 
@@ -114,8 +139,10 @@ export class QueryCache {
     } else if (this.#store.size >= this.#maxEntries) {
       const oldest = this.#store.keys().next().value;
       if (oldest !== undefined) {
+        const evicted = this.#store.get(oldest);
         this.#store.delete(oldest);
         this.#evictions++;
+        if (evicted) this.#count(evicted.nsid, "evictions");
       }
     }
 
@@ -158,14 +185,51 @@ export class QueryCache {
       }
       this.#store.delete(key);
       this.#evictions++;
+      this.#count(nsid, "evictions");
     }
   }
 
+  /**
+   * Evict `space.getActivityFeed` entries by *feed coverage* rather than by
+   * param subset.
+   *
+   * The feed's params carry a space as a filter (`{ spaceId: "X" }` = only X's
+   * rooms) or nothing at all (`{}` = every joined space). Both describe the
+   * same query family, so the subset rule in {@link evictMatching} cannot be
+   * used: `{ spaceId: "X" }` is a subset of *no* entry's params, including the
+   * global one it genuinely stales. See `activityFeedCoverage`.
+   *
+   * @param signalSpace the space the signal stales, or `null` for a signal
+   *   that reaches every space (a caller-scoped one, e.g. joining a space).
+   *   `null` evicts every page including the space-filtered ones, because a
+   *   change to which spaces a caller belongs restates the whole feed.
+   */
+  evictActivityFeed(signalSpace: string | null, affectedUser?: string): void {
+    for (const [key, entry] of this.#store) {
+      if (entry.nsid !== "space.roomy.space.getActivityFeed") continue;
+      // A page with no `spaceId` spans every space, so it holds this one's
+      // rooms too and goes stale with it.
+      const entrySpace = activityFeedCoverage(entry.params);
+      if (signalSpace !== null && entrySpace !== null && entrySpace !== signalSpace) {
+        continue;
+      }
+      if (affectedUser !== undefined) {
+        if (entry.userDid !== affectedUser && entry.userDid !== "anon") continue;
+      }
+      this.#store.delete(key);
+      this.#evictions++;
+      this.#count(entry.nsid, "evictions");
+    }
+  }
+
+
   /** Evict a single entry by its exact key. Primarily for testing. */
   evict(key: string): void {
-    if (this.#store.delete(key)) {
-      this.#evictions++;
-    }
+    const entry = this.#store.get(key);
+    if (entry === undefined) return;
+    this.#store.delete(key);
+    this.#evictions++;
+    this.#count(entry.nsid, "evictions");
   }
 
   /** Clear all entries. Called on appserver close. */
@@ -183,6 +247,9 @@ export class QueryCache {
       misses: this.#misses,
       evictions: this.#evictions,
       size: this.#store.size,
+      byNsid: Object.fromEntries(
+        [...this.#byNsid].map(([nsid, s]) => [nsid, { ...s }]),
+      ),
     };
   }
 }

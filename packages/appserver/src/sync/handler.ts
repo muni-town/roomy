@@ -490,6 +490,14 @@ export class SyncManager {
 
   // ─── Signal routing ────────────────────────────────────────────────
   #onSignals(events: readonly InvalidationEvent[]): void {
+    // `getActivityFeed` signals carry the space that changed for the server
+    // cache's benefit, but every one of them renders to the same client frame
+    // (the unfiltered key — see #routeQueryInvalidation). A batch touching two
+    // spaces therefore holds two signals that mean one frame to the client, so
+    // collapse them here rather than sending identical bytes twice. The key
+    // matches `dedupeSignals`' identity: a different `affectedUser` is a
+    // different frame for a different set of connections.
+    const routedFeedFrames = new Set<string>();
     for (const event of events) {
       if (event.kind === "messageDiff") {
         this.#routeMessageDiff(event.signal);
@@ -500,6 +508,11 @@ export class SyncManager {
       } else if (event.kind === "roomActivityDiff") {
         this.#routeRoomActivityDiff(event.signal);
       } else if (event.kind === "queryInvalidation") {
+        if (event.signal.nsid === "space.roomy.space.getActivityFeed") {
+          const key = event.signal.affectedUser ?? "";
+          if (routedFeedFrames.has(key)) continue;
+          routedFeedFrames.add(key);
+        }
         this.#routeQueryInvalidation(event.signal);
       }
     }
@@ -687,15 +700,22 @@ export class SyncManager {
     // the connection is currently subscribed to (e.g. the user may be
     // on /new or / with no space topic, but still needs their space
     // list to update when a space is created or joined).
-    // getActivityFeed is likewise a global per-user query — a reaction
-    // on any room's latest message must refresh every viewer's feed.
+    //
+    // getActivityFeed is likewise a per-caller query spanning every space
+    // the caller joined, and relevant to every connection. Its signal
+    // carries the space that changed for the SERVER CACHE's benefit (see
+    // `cache/activityFeedCoverage.ts`); the client's query keys are the
+    // params it queried with, so the frame it understands is the unfiltered
+    // `{}` — a `queryKey(nsid, {})` prefix-matches every feed page the
+    // client holds, including the global one a `{ spaceId }` frame would
+    // leave stale.
     if (
       signal.nsid === "space.roomy.space.getSpaces" ||
       signal.nsid === "space.roomy.space.getActivityFeed"
     ) {
       const frame = messageFrame("#invalidate", {
         nsid: signal.nsid,
-        params: signal.params,
+        params: {},
       });
       for (const conn of this.#connections.values()) {
         if (!conn.isOpen) continue;

@@ -621,7 +621,7 @@ export async function createAppserver(
     // can't turn a metrics snapshot into an unhandled rejection.
     void (async () => {
       const pool = poolStats();
-      const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0 };
+      const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0, byNsid: {} };
       const embed = embedSweeperStats();
       const search = searchIndexerStats();
       const backfill = searchBackfillStats();
@@ -801,6 +801,24 @@ export async function createAppserver(
   const cacheMisses = metrics.gauge("roomy_cache_misses_total", "Query response cache misses.");
   const cacheEvictions = metrics.gauge("roomy_cache_evictions_total", "Query response cache evictions.");
   const cacheSize = metrics.gauge("roomy_cache_size", "Query response cache entries.");
+  // Per-NSID breakdown. The aggregate hit rate cannot distinguish "the cache
+  // is too small" from "one endpoint is evicted on every write" — those are
+  // fixed differently, so the split has to be observable.
+  const cacheNsidHits = metrics.gauge(
+    "roomy_cache_nsid_hits",
+    "Query response cache hits, by NSID.",
+    ["nsid"],
+  );
+  const cacheNsidMisses = metrics.gauge(
+    "roomy_cache_nsid_misses",
+    "Query response cache misses, by NSID.",
+    ["nsid"],
+  );
+  const cacheNsidEvictions = metrics.gauge(
+    "roomy_cache_nsid_evictions",
+    "Query response cache evictions, by NSID.",
+    ["nsid"],
+  );
   // `roomy_embed_pending` carries the DB BACKLOG — the count /health/embed
   // reports — by re-reading it in this scrape handler (see below). It must
   // NOT come from `embedSweeperStats().priorityQueue`: that is the in-memory
@@ -951,6 +969,7 @@ export async function createAppserver(
           misses: 0,
           evictions: 0,
           size: 0,
+          byNsid: {},
         };
         return new Response(
           JSON.stringify({
@@ -985,11 +1004,16 @@ export async function createAppserver(
           poolWorkerPending.set({ worker: "readstate" }, pool.readStateWorker.pending);
           poolWorkerPending.set({ worker: "events" }, pool.eventsWorker.pending);
         }
-        const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0 };
+        const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0, byNsid: {} };
         cacheHits.set({}, cache.hits);
         cacheMisses.set({}, cache.misses);
         cacheEvictions.set({}, cache.evictions);
         cacheSize.set({}, cache.size);
+        for (const [nsid, s] of Object.entries(cache.byNsid)) {
+          cacheNsidHits.set({ nsid }, s.hits);
+          cacheNsidMisses.set({ nsid }, s.misses);
+          cacheNsidEvictions.set({ nsid }, s.evictions);
+        }
         const embed = embedSweeperStats();
         // `roomy_embed_pending` is the DB backlog, not the in-memory priority
         // queue (see the gauge's definition above). Re-read the count on each

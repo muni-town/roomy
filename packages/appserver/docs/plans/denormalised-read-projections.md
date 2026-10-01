@@ -700,6 +700,91 @@ the membership edge user→space, while `isAdmin`/`isMember` read space→user, 
 caller seeded as an admin was denied by every check that actually ran. Nothing
 depended on the old direction; the helper is corrected rather than worked around.
 
+## Results — R7: the response cache was evicting itself
+
+### The symptom, measured
+
+Production, `/health/cache` and `/metrics` over a 22-minute live sample
+(33 scrapes, 2026-10-01T03:02–03:24Z):
+
+| quantity | value |
+|---|---|
+| `roomy_cache_hits_total` | ~1,590 (rising ~2 / 40 s) |
+| `roomy_cache_misses_total` | ~5,940 (rising ~14 / 40 s) |
+| `roomy_cache_evictions_total` | ~4,440 (rising ~3 / 40 s) |
+| `roomy_cache_size` | 124–129 |
+| evictions per `sendEvents` write | **0.55** |
+| hit rate | **21 %** |
+
+`roomy_cache_size` sits at ~125 against `APPSERVER_QUERY_CACHE_MAX_ENTRIES`
+(4096), so **none** of the 4,440 evictions can be LRU capacity: every one is an
+invalidation. The cache was inserted into and thrown away at the same rate,
+which is why it never moved the p95 it was extended to cover
+(`getActivityFeed` 3,125 ms, `space.getThreads` 3,439 ms).
+
+Measured on the probe fixture (cold DB, `--cache`), hit-vs-miss latency on the
+*same* page is **2.65 ms (miss — the handler runs) against 0.15 ms (hit)**.
+The ratio therefore controls how many readers pay the handler.
+
+### The mechanism: the feed's params and its signals name different things
+
+`space.getActivityFeed` is a per-CALLER query spanning every space the caller
+joined; its `spaceId` param is a *filter*, not an identity. Every signal that
+staled it was emitted with **empty params** (`inferSignals.ts`, eight sites:
+create/edit/delete/move message, reaction, delete room, join/leave), and
+`paramsSubset` (`cache/queryCacheKey.ts:74`) reads an empty signal as a subset
+of every entry — so **one write anywhere flushed every reader's every page for
+that NSID.**
+
+Confirmed end-to-end before changing anything (three spaces, cache enabled):
+
+| step | hits / misses / evictions |
+|---|---|
+| warm 3 spaces' pages | 0 / 3 / 0 |
+| re-read them | **3** / 3 / 0 |
+| one write into space A | 3 / 3 / **3** |
+
+All three spaces' pages went; only one had changed. On the probe fixture
+(two spaces, 20 rounds) a write into space 1 left **0/20** of space 2's pages
+cached.
+
+`space.getThreads` is **not** affected by this: its pages are keyed by
+`spaceId` and its signals carry the same `spaceId`, so subset matching evicts
+exactly the pages that changed. The evictions it does take are the fixture's
+write-then-read loop doing what it says; the fix leaves its behaviour
+unchanged.
+
+### The fix
+
+The signal now carries the space the write touched, and the cache matches it by
+**feed coverage** — which spaces a page includes — instead of by param subset
+(`cache/activityFeedCoverage.ts`, `QueryCache.evictActivityFeed`). An
+un-scoped signal (join/leave, which restates the whole feed for one caller)
+still evicts every page, scoped to `affectedUser` when set, so the
+no-stale-reads direction is unchanged.
+
+The client-facing `#invalidate` frame is unaffected: `sync/handler.ts` renders
+every `getActivityFeed` signal as the unfiltered `{}` key, which is what the
+client's own query keys prefix-match. Signals that differ only by `spaceId` now
+collapse to one client frame per emission scope, so a batch spanning two spaces
+does not put identical bytes on the wire twice.
+
+### Result
+
+Probe fixture, `--cache`, 20 rounds, identical seed:
+
+| | before | after |
+|---|---|---|
+| space 1's page cached after a write into space 1 | 0/20 | 0/20 (correctly stale) |
+| **space 2's page cached after a write into space 1** | **0/20** | **20/20** |
+| run totals (hits / misses) | 215 / 145 | 235 / 125 |
+| run evictions | 103 | 83 |
+
+Per-NSID counters were added (`roomy_cache_nsid_{hits,misses,evictions}`,
+`/health/cache`'s `byNsid`) because the aggregate ratio cannot distinguish "the
+cache is too small" from "one endpoint is flushed by every write". This fix was
+diagnosed through the second, and the first stays invisible without it.
+
 ## Assessment: decoupling the `sendEvents` 200 from materialisation
 
 Meri's observation 1 is correct in principle — `StreamManager.sendEvents`

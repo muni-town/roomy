@@ -717,6 +717,69 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
+  test("getActivityFeed's server-cache space param is sent to clients as an unfiltered key", async () => {
+    // The signal carries a space because the server cache matches on feed
+    // COVERAGE (which space a page includes). The client's query keys are the
+    // params it queried with, and a `{ spaceId }` key prefix-matches only that
+    // one page — leaving the client's unfiltered page stale, which is the page
+    // it holds on the home feed. The frame must therefore be the empty key.
+    const router = new MockRouter();
+    const db = new MockDb();
+    db.seedMembership(SPACE_ID, USER_B, "member");
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager, db);
+
+    const socketA = new MockSocket(USER_A);
+    const socketB = new MockSocket(USER_B);
+    manager.register(socketA as unknown as SyncSocket);
+    manager.register(socketB as unknown as SyncSocket);
+
+    await sub(socketA, { type: "sub", topic: "space", id: SPACE_ID });
+    await sub(socketB, { type: "sub", topic: "room", id: ROOM_ID });
+    socketA.sentFrames.length = 0;
+    socketB.sentFrames.length = 0;
+
+    router.emitSignals([
+      queryInvalidation("space.roomy.space.getActivityFeed", { spaceId: SPACE_ID }),
+    ]);
+
+    for (const socket of [socketA, socketB]) {
+      expect(socket.sentFrames.length).toBe(1);
+      expect(socket.sentFrames[0]!.header.t).toBe("#invalidate");
+      expect(decodeFrameBody(socket.sentFrames[0]!)).toEqual({
+        nsid: "space.roomy.space.getActivityFeed",
+        params: {},
+      });
+    }
+
+    manager.destroy();
+  });
+
+  test("a batch spanning two spaces sends ONE getActivityFeed frame", async () => {
+    // Each space's signal carries a different `spaceId` (so neither dedupes
+    // against the other at the router) but both render to the same unfiltered
+    // client key. Sending it twice is the refetch storm the signal dedup
+    // exists to prevent.
+    const router = new MockRouter();
+    const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager);
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+    await sub(socket, { type: "sub", topic: "space", id: SPACE_ID });
+    socket.sentFrames.length = 0;
+
+    router.emitSignals([
+      queryInvalidation("space.roomy.space.getActivityFeed", { spaceId: SPACE_ID }),
+      queryInvalidation("space.roomy.space.getActivityFeed", { spaceId: "did:web:other.space" }),
+    ]);
+
+    expect(socket.sentFrames.length).toBe(1);
+    expect(decodeFrameBody(socket.sentFrames[0]!)).toEqual({
+      nsid: "space.roomy.space.getActivityFeed",
+      params: {},
+    });
+
+    manager.destroy();
+  });
+
   test("getSpaces invalidation with affectedUser only reaches that user", async () => {
     const router = new MockRouter();
     const db = new MockDb();

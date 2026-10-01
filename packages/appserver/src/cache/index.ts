@@ -15,7 +15,11 @@ import { QueryCache } from "./queryCache.ts";
 import type { QueryNsid } from "../invalidation/types.ts";
 
 export { QueryCache } from "./queryCache.ts";
-export type { QueryCacheOptions, QueryCacheStats } from "./queryCache.ts";
+export type {
+  QueryCacheOptions,
+  QueryCacheStats,
+  QueryCacheNsidStats,
+} from "./queryCache.ts";
 export {
   queryCacheKey,
   canonicalParamsJson,
@@ -37,13 +41,17 @@ export const CACHEABLE_NSIDS: ReadonlySet<QueryNsid> = new Set<QueryNsid>([
   "space.roomy.space.getMetadata",
   "space.roomy.room.getMetadata",
   "space.roomy.space.getSpaces",
-  // The space index board and the activity feed are the two slowest read
-  // endpoints (metrics: 13s / 14s p50 under load). Both are fully covered by
-  // invalidation signals (see inferSignals.ts) — getThreads on room/message/
-  // reaction/role events, getActivityFeed on message/reaction/read events —
-  // so caching them short-circuits the expensive read-state + per-space
-  // fan-out. Cursor-paginated, so a page is evicted wholesale on any change
-  // to the space (coarse but correct); the TTL is the safety net.
+  // The space index board and the activity feed.
+  //
+  // getThreads is keyed by `spaceId` and its signal names the same param, so
+  // the ordinary subset rule evicts exactly the pages that went stale.
+  //
+  // getActivityFeed is not: it spans every space the CALLER joined and its
+  // `spaceId` param is a filter, not an identity. Its signal names the space
+  // that changed and is matched by feed coverage instead — see
+  // `activityFeedCoverage.ts` for the table of param → coverage. Without that
+  // rule the signal's space reads as "every page", which is what left the
+  // cache unable to hold a hot page.
   "space.roomy.space.getThreads",
   "space.roomy.space.getActivityFeed",
 ]);
