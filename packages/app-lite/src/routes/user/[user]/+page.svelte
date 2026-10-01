@@ -174,19 +174,17 @@
         }
       }
 
-      await agent.com.atproto.repo.putRecord(
-        {
-          collection: "space.roomy.user.profile",
-          repo: agent.assertDid,
-          rkey: "self",
-          record,
-        },
-        {
-          headers: {
-            "atproto-proxy": `${agent.assertDid}#atproto_pds`,
-          },
-        },
-      );
+      // No `atproto-proxy` header: this writes the caller's own repo, and
+      // naming their own PDS is a self-relay that HappyView's forward-time
+      // scope check reads as an `rpc:com.atproto.repo.putRecord` call the
+      // session is not registered for. Unproxied, the write needs only
+      // `repo:space.roomy.user.profile`, which the base scope grants.
+      await agent.com.atproto.repo.putRecord({
+        collection: "space.roomy.user.profile",
+        repo: agent.assertDid,
+        rkey: "self",
+        record,
+      });
 
       // Invalidate the appserver profile queries so they re-fetch.
       // The profile page's query is keyed on the ROUTE PARAM (the URL's

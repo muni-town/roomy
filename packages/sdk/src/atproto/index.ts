@@ -11,6 +11,7 @@ export {
   removeProfileSpaceRecord,
   uploadBlob,
   type StreamHandleConfig,
+  type BlobRefJson,
 } from "./records";
 
 export {
