@@ -24,6 +24,12 @@ export function messagesKey(roomId: string): readonly unknown[] {
 export function createMessagesQuery(roomId: () => string, limit = 50) {
   return createQuery<Message[]>(() => ({
     queryKey: messagesKey(roomId()),
+    // A room the appserver holds no row for (a stale link target) 404s
+    // deterministically; TanStack's default `retry: 3` re-issues it, turning
+    // one failing `getMessages` into three lines in the appserver log. Same
+    // guard as the sibling room/space metadata queries. Transport-level retries
+    // (rate limits) live in DirectXrpcClient.
+    retry: false,
     queryFn: async () => {
       const res = await px().query(GET_MESSAGES_NSID, {
         roomId: roomId(),

@@ -67,4 +67,35 @@ test.describe("space list and room navigation", () => {
       page.getByText('No space at "not-a-space-id"'),
     ).toBeVisible();
   });
+
+  test("a deep link to a room slug issues no id-expecting XRPC call", async ({
+    page,
+  }) => {
+    // `[room]/+layout.ts` rejects a second segment that is not a ULID. Without
+    // it the room subtree mounts and passes the segment straight into
+    // `getMessages` / `getMetadata` / `updateSeen`, each of which takes a room
+    // id — the requests that answered `404 Room not found: radial` in
+    // production (75 in one 36-minute window). Counting at the network is the
+    // point: the DOM alone cannot show that no request was issued.
+    //
+    // Scoped to the room-scoped NSIDs the route owns; the shell's own
+    // auth/profile/space-list traffic is unaffected by this route and would
+    // otherwise make the assertion a statement about the whole app.
+    const roomXrpc: string[] = [];
+    page.on("request", (req) => {
+      if (req.url().includes("/xrpc/space.roomy.room.")) roomXrpc.push(req.url());
+    });
+
+    await page.goto(`/${SEED_SPACE_ID}/radial`);
+
+    // 30s, matching `waitForAuthenticated`: the first navigation in a run pays
+    // Vite's cold dev transform of the whole route graph, which is well past
+    // the 15s default.
+    await expect(page.getByRole("heading", { name: "404" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText('No room at "radial"')).toBeVisible();
+
+    expect(roomXrpc).toEqual([]);
+  });
 });

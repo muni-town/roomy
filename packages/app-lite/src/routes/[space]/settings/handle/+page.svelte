@@ -6,6 +6,7 @@
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { sendEvents } from "$lib/mutations/send-events";
   import { createProfileSpaceRecord, removeProfileSpaceRecord, newUlid, type StreamDid } from "@roomy-space/sdk";
+  import { resolveSpaceHandle } from "$lib/space-ref";
   import Alert from "@roomy/design/components/ui/alert/Alert.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
@@ -72,12 +73,9 @@
     }
     isVerifyingHandle = true;
     handleResolvesToSpace = undefined;
-    fetch(
-      `https://resolver.roomy.chat/xrpc/town.muni.leaf.resolveHandle?handle=${encodeURIComponent(handle)}`,
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        handleResolvesToSpace = data.did === spaceId;
+    resolveSpaceHandle(handle)
+      .then((did) => {
+        handleResolvesToSpace = did === spaceId;
       })
       .catch(() => {
         handleResolvesToSpace = false;

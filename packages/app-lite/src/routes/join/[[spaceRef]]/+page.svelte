@@ -14,12 +14,23 @@
   import { setSpacePushLevel } from "$lib/mutations/push-preferences";
   import { onMount } from "svelte";
   import { getPushSubscriptionEndpoint } from "$lib/push.svelte";
+  import { resolveSpaceRef } from "$lib/space-ref";
 
   const { queryKey } = cache;
 
-  const spaceId = $derived(page.url.searchParams.get("space") ?? "");
+  // Either shape of join link: the path form (`/join/<ref>`) or the query form
+  // built by `inviteUrl` (`/join?space=<ref>&invite=<token>`).
+  const spaceRef = $derived(
+    page.params.spaceRef ?? page.url.searchParams.get("space") ?? "",
+  );
   const inviteToken = $derived(page.url.searchParams.get("invite") ?? undefined);
 
+  // The space to act on: the ref resolved to a DID. A join link's `space` is
+  // often a handle (`roomy.space/join?space=home`), and every XRPC param on
+  // this page is id-expecting, so the raw URL value must never reach one —
+  // doing so logs `Space not found: home` for a space the appserver was never
+  // able to answer for. Null until resolution completes.
+  let spaceId = $state<string | null>(null);
   let resolveState = $state<JoinResolveState>({ status: "loading" });
   let joinState = $state<JoinState>({ status: "idle" });
   let pushEnabled = $state(false);
@@ -55,10 +66,13 @@
   }
 
   $effect(() => {
-    if (!spaceId) {
+    const ref = spaceRef;
+    if (!ref) {
+      spaceId = null;
       resolveState = { status: "error", message: "Missing space ID in URL." };
       return;
     }
+    const notFound = `No space found for "${ref}". Check the link, or ask for a new invite.`;
     // Wait for the OAuth session to be restored before fetching metadata.
     // px() throws "Not authenticated" until the session is ready; unlike the
     // reactive createQuery used on space pages, this one-shot fetchQuery
@@ -66,38 +80,69 @@
     // modal. Reading `auth.authenticated` re-runs this effect once auth
     // completes, so the metadata fetch is retried at the right time.
     if (!auth.authenticated) return;
+
+    let cancelled = false;
+    spaceId = null;
     resolveState = { status: "loading" };
-    queryClient
-      .fetchQuery({
-        queryKey: queryKey("space.roomy.space.getMetadata", { spaceId }),
-        queryFn: () => px().query("space.roomy.space.getMetadata", { spaceId }),
-      })
-      .then((meta) => {
+
+    (async () => {
+      // Resolve the URL's space reference (handle or DID) to a space id before
+      // any id-expecting request. A ref that names no resolvable space is
+      // reported here, never sent onward.
+      const id = await resolveSpaceRef(ref);
+      if (cancelled) return;
+      if (id === null) {
+        resolveState = { status: "error", message: notFound };
+        return;
+      }
+      spaceId = id;
+
+      try {
+        const meta = await queryClient.fetchQuery({
+          queryKey: queryKey("space.roomy.space.getMetadata", { spaceId: id }),
+          queryFn: () => px().query("space.roomy.space.getMetadata", { spaceId: id }),
+        });
+        if (cancelled) return;
         if (meta.isMember) {
-          goto(`/${spaceId}`);
+          goto(`/${id}`);
           return;
         }
         resolveState = {
           status: "success",
           data: {
-            name: meta.name ?? spaceId,
+            name: meta.name ?? id,
             allowPublicJoin: meta.joinPolicy.allowPublicJoin,
           },
         };
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
+        if (cancelled) return;
+        // A space that no longer exists is a not-found, not a failure — the
+        // appserver's 404 is the correct answer and the user needs to read it
+        // as one.
+        const status = (err as { status?: number } | null)?.status;
         resolveState = {
           status: "error",
-          message: err instanceof Error ? err.message : String(err),
+          message:
+            status === 404
+              ? notFound
+              : err instanceof Error
+                ? err.message
+                : String(err),
         };
-      });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   });
 
   async function onJoin(level: RhythmLevel) {
-    if (!spaceId) return;
+    const id = spaceId;
+    if (!id) return;
     joinState = { status: "loading" };
     try {
-      await joinSpace(spaceId, inviteToken);
+      await joinSpace(id, inviteToken);
       // Invalidate cached queries for this space so stale pre-join responses
       // (e.g. getMetadata with isMember=false, room metadata canWrite=false)
       // are cleared before we navigate into the space. The appserver also
@@ -113,7 +158,7 @@
             params != null &&
             typeof params === "object" &&
             !Array.isArray(params) &&
-            (params as Record<string, unknown>).spaceId === spaceId
+            (params as Record<string, unknown>).spaceId === id
           ) {
             return true;
           }
@@ -127,7 +172,7 @@
       // failure here must not block the join — the level just defaults to the
       // appserver default ("engaged") until the user changes it in settings.
       try {
-        await setSpacePushLevel(spaceId, level);
+        await setSpacePushLevel(id, level);
         await queryClient.invalidateQueries({
           queryKey: cache.queryKey("space.roomy.push.getPreferences"),
         });
@@ -135,7 +180,7 @@
         console.warn("[join] could not save notification rhythm:", err);
       }
       joinState = { status: "success" };
-      goto(`/${spaceId}`);
+      goto(`/${id}`);
     } catch (err) {
       console.error("[join] joinSpace failed", err);
       joinState = {

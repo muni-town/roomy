@@ -28,6 +28,7 @@ import {
 } from "./registry";
 import { XrpcResponseValidationError } from "./errors";
 import { withRateLimitRetry } from "./retry";
+import { stringifyParams } from "./params";
 
 
 export async function agentQuery<N extends QueryNsid>(
@@ -37,8 +38,10 @@ export async function agentQuery<N extends QueryNsid>(
 ): Promise<QueryResponse<N>> {
   const entry = QUERY_SCHEMAS[nsid];
   // params validation is informational here; the appserver re-validates.
-  // Stringify all values for XRPC query string semantics.
-  const stringParams = stringifyParams(params as Record<string, unknown>);
+  // Stringify all values for XRPC query string semantics — a non-scalar value
+  // throws instead of being coerced into an id-shaped string (see
+  // `./params`).
+  const stringParams = stringifyParams(nsid, params as Record<string, unknown>);
   const response = await withRateLimitRetry(() => agent.call(nsid, stringParams));
   const parsed = entry.response(response.data);
   if (parsed instanceof type.errors) {
@@ -67,15 +70,4 @@ export async function agentProcedure<N extends ProcedureNsid>(
     throw new XrpcResponseValidationError(nsid, parsed);
   }
   return parsed as ProcedureOutput<N>;
-}
-
-function stringifyParams(
-  params: Record<string, unknown>,
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null) continue;
-    out[k] = typeof v === "string" ? v : String(v);
-  }
-  return out;
 }
