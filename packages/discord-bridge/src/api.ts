@@ -129,8 +129,8 @@ function route(
  * without walking the full history — the payload deliberately omits any
  * denominator. Per-channel state comes from the durable `backfill_progress`
  * rows (survive restarts); `running` reflects the in-process registry only,
- * re-schedules it. A `blocked` row is terminal — the bridge cannot read that
- * channel — and its `blockedReason` says why.
+ * re-schedules it. A `blocked` row is terminal — no run will ever backfill
+ * that pair — and its `blockedReason` says why.
  */
 export function buildBackfillProgressPayload(
 	repo: BridgeRepository,
@@ -149,7 +149,7 @@ export function buildBackfillProgressPayload(
 	parentId: string | null;
 	/** Recent-window size at the phase1→phase2 transition. */
 	windowSynced: number | null;
-	/** `blocked` rows only: why the bridge cannot read the channel. */
+	/** `blocked` rows only: why no run will ever backfill this pair. */
 	blockedReason: string | null;
 	/** Roomy room id this channel/thread maps to, for sidebar-order joins. */
 	roomyId: string | null;

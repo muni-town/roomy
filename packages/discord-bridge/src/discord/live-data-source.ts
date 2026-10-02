@@ -14,12 +14,16 @@ import type {
 	DiscordMessageData,
 } from "./data.ts";
 import type {
+	ChannelNameOutcome,
+	ChannelReadOutcome,
 	DiscordDataSource,
 	PaginationOpts,
 	ThreadPage,
 } from "./data-source.ts";
 import { normalizeChannel, normalizeMessage } from "./normalizers.ts";
 import {
+	CHANNEL_UNREADABLE_REASON,
+	channelReadFailureReason,
 	discordFailureDetail,
 	isRetryableDiscordStatus,
 } from "./rest-errors.ts";
@@ -102,14 +106,24 @@ export class LiveDiscordDataSource implements DiscordDataSource {
 		}
 	}
 
-	async getChannel(channelId: string): Promise<DiscordChannelData | undefined> {
+	async readChannel(channelId: string): Promise<ChannelReadOutcome> {
 		try {
 			const raw = await this.#bot.helpers.getChannel(BigInt(channelId));
 			return normalizeChannel(raw);
 		} catch (err) {
+			const reason = channelReadFailureReason(err);
+			// Permanent (403/404): a channel the bridge can never read. The
+			// caller records it terminally instead of re-deriving it each run.
+			if (reason) return null;
+			// Transient: the caller may retry, so it keeps the cause.
 			log.warn(`getChannel failed for channel ${channelId}`, err);
-			return undefined;
+			return { reason: null, error: err };
 		}
+	}
+
+	async getChannel(channelId: string): Promise<DiscordChannelData | undefined> {
+		const read = await this.readChannel(channelId);
+		return read !== null && "reason" in read ? undefined : (read ?? undefined);
 	}
 
 	async getChannels(guildId: string): Promise<DiscordChannelData[]> {
@@ -218,9 +232,24 @@ export class LiveDiscordDataSource implements DiscordDataSource {
 		throw lastError;
 	}
 
+	async resolveChannelNameOutcome(
+		channelId: string,
+	): Promise<ChannelNameOutcome> {
+		const read = await this.readChannel(channelId);
+		if (read === null) {
+			// Unreadable now and forever: the name is not the obstacle, the
+			// read is — say so instead of reporting a nameless channel.
+			return {
+				name: undefined,
+				blockedReason: CHANNEL_UNREADABLE_REASON,
+			};
+		}
+		if ("reason" in read) return { name: undefined, blockedReason: null };
+		return { name: read.name, blockedReason: null };
+	}
+
 	async resolveChannelName(channelId: string): Promise<string | undefined> {
-		const ch = await this.getChannel(channelId);
-		return ch?.name;
+		return (await this.resolveChannelNameOutcome(channelId)).name;
 	}
 
 	async resolveChannelType(channelId: string): Promise<number | undefined> {

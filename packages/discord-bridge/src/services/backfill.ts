@@ -6,23 +6,20 @@ import type {
 	BridgeMode,
 	BridgeRepository,
 } from "../db/repository.ts";
-import type { DiscordSender } from "../discord/sender.ts";
 import {
 	CHANNEL_TYPES,
 	type DiscordMessageData,
 	isChannelPublic,
-	mappingKindForChannel,
 	MESSAGE_CHANNEL_TYPES,
+	mappingKindForChannel,
 	PRIVATE_THREAD,
 	THREAD_TYPES,
 } from "../discord/data.ts";
 import type { DiscordDataSource } from "../discord/data-source.ts";
-import {
-	channelReadDenial,
-	discordFailureMessage,
-} from "../discord/rest-errors.ts";
-import { createLogger } from "../logger.ts";
+import { channelReadFailureReason } from "../discord/rest-errors.ts";
+import type { DiscordSender } from "../discord/sender.ts";
 import { BACKFILL_NOTICE_CHANNEL } from "../env.ts";
+import { createLogger } from "../logger.ts";
 import { getCapacityGate } from "../roomy/capacity.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
 import { ingestDiscordMessage } from "./message-ingestion.ts";
@@ -41,7 +38,9 @@ const activeBackfills = new Set<string>();
 let noticeSender: DiscordSender | undefined;
 
 /** Set the sender used for the Discord-side backfill-completion notice. */
-export function setBackfillNoticeSender(sender: DiscordSender | undefined): void {
+export function setBackfillNoticeSender(
+	sender: DiscordSender | undefined,
+): void {
 	noticeSender = sender;
 }
 
@@ -123,27 +122,11 @@ const phase2Queue: Phase2Request[] = [];
 let phase2Running = false;
 
 /** True when a backfill (window or walk) is in flight for this pair. */
-export function isBackfillRunning(spaceDid: string, channelId: string): boolean {
+export function isBackfillRunning(
+	spaceDid: string,
+	channelId: string,
+): boolean {
 	return activeBackfills.has(`${channelId}:${spaceDid}`);
-}
-
-/**
- * Why a channel read failed permanently, or null when the failure is
- * transient (worth retrying on a later run).
- *
- * A pair whose channel the bot cannot read can never be backfilled, so it
- * must leave `phase1`/`phase2` for a terminal state instead of being
- * re-attempted — and re-logged — on every run. A 5xx, 429, or network
- * failure is NOT terminal: the pair stays resumable.
- */
-function backfillBlockedReason(err: unknown): string | null {
-	const denial = channelReadDenial(err);
-	if (!denial) return null;
-	const message = discordFailureMessage(err);
-	const detail = message ? `: ${message}` : "";
-	return denial === "missing_access"
-		? `the bridge can't read this channel (Discord 403${detail})`
-		: `this channel no longer exists in Discord (404${detail})`;
 }
 
 /**
@@ -159,6 +142,45 @@ function recordBlockedBackfill(
 		`Backfill blocked for ${update.channelId} → ${update.spaceDid}: ${update.blockedReason}; the pair stays terminal until /roomy-backfill re-runs it`,
 	);
 }
+
+/**
+ * Record a pair blocked before it can be walked.
+ *
+ * A thread pair is enumerated with the identity the status panel nests by —
+ * `kind: "thread"`, its Discord parent, its name — and an unbridged parent is
+ * never enumerated at all. The caller therefore supplies what it knows and the
+ * durable row supplies the rest, so a blocked thread keeps the shape a later
+ * run's panel expects instead of appearing as a nameless top-level row.
+ */
+function recordWalkBlocked(
+	repo: BridgeRepository,
+	spaceDid: string,
+	channelId: string,
+	identity: {
+		kind: "channel" | "thread" | null;
+		channelName?: string | null;
+		parentId?: string | null;
+	},
+	blockedReason: string,
+): void {
+	const existing = repo.getBackfillProgress(spaceDid, channelId);
+	recordBlockedBackfill(repo, {
+		spaceDid,
+		channelId,
+		guildId: existing?.guildId ?? null,
+		kind: identity.kind,
+		channelName: identity.channelName ?? existing?.channelName ?? null,
+		phase: "blocked",
+		messagesSynced: existing?.messagesSynced ?? 0,
+		messagesSkipped: existing?.messagesSkipped ?? 0,
+		windowBoundary: existing?.windowBoundary ?? null,
+		walkCursor: existing?.walkCursor ?? null,
+		parentId: identity.parentId ?? existing?.parentId ?? null,
+		windowSynced: existing?.windowSynced ?? null,
+		blockedReason,
+	});
+}
+
 /**
  * Detect the second, silent form of an unreadable channel.
  *
@@ -279,7 +301,11 @@ export async function runBackfill(
 		}
 		const channelIds = await channelsForConfig(discord, repo, config);
 		for (const channelId of channelIds) {
-			tasks.push({ channelId, spaceDid: config.spaceDid, guildId: config.guildId });
+			tasks.push({
+				channelId,
+				spaceDid: config.spaceDid,
+				guildId: config.guildId,
+			});
 		}
 	}
 
@@ -404,9 +430,7 @@ async function runPhase2(request: Phase2Request): Promise<void> {
 	// truncated at the bound too.
 	const tasks: Phase2Task[] = [...phase1Tasks];
 	for (const config of configs) {
-		if (
-			!(await getCapacityGate().isEnabled(config.guildId, config.spaceDid))
-		) {
+		if (!(await getCapacityGate().isEnabled(config.guildId, config.spaceDid))) {
 			continue;
 		}
 		try {
@@ -453,7 +477,9 @@ async function runPhase2(request: Phase2Request): Promise<void> {
 			);
 		}
 	}
-	log.info(`Phase-2 backfill complete: ${succeeded} succeeded, ${failed} failed`);
+	log.info(
+		`Phase-2 backfill complete: ${succeeded} succeeded, ${failed} failed`,
+	);
 
 	// Deprioritized: fetch public archived threads and backfill.
 	try {
@@ -538,18 +564,42 @@ async function ensureRoomyRooms(
 
 			for (const channelId of channelIds) {
 				try {
+					// A channel the bridge cannot read can never gain a room,
+					// so the durable row is the answer: without this, every
+					// run spends the resolution budget on it and re-logs the
+					// same failure.
+					if (
+						repo.getBackfillProgress(spaceDid, channelId)?.phase === "blocked"
+					) {
+						continue;
+					}
 					if (repo.getRoomyId(spaceDid, "channel", channelId)) continue;
 
-					const channelName = await resolveChannelFieldWithRetry(() =>
-						discord.resolveChannelName(channelId),
+					const nameOutcome = await resolveChannelFieldWithRetry(() =>
+						discord.resolveChannelNameOutcome(channelId),
 					);
-					if (!channelName) {
+					if (!nameOutcome?.name) {
 						skippedNameResolution++;
+						// A channel the bridge cannot read (403/404) can never
+						// gain a room, so record the pair terminal — otherwise
+						// every run retries the budget and re-logs the same
+						// failure. A transient read failure stays retryable.
+						if (nameOutcome?.blockedReason) {
+							recordWalkBlocked(
+								repo,
+								spaceDid,
+								channelId,
+								{ kind: "channel" },
+								nameOutcome.blockedReason,
+							);
+							continue;
+						}
 						log.error(
 							`Cannot resolve name for Discord channel ${channelId} in guild ${guildId} after ${RESOLUTION_RETRY_ATTEMPTS} attempts; skipping room creation`,
 						);
 						continue;
 					}
+					const channelName = nameOutcome.name;
 
 					const roomUlid = newUlid();
 
@@ -621,23 +671,11 @@ export async function ensureRoomyThreads(
 			const guild = await discord.getGuild(guildId);
 			if (!guild?.channels) continue;
 
-			// Discover which parent channels are bridged.
-			const bridgedChannelIds: Set<string> =
-				mode === "full"
-					? new Set(
-							guild.channels
-								.filter((ch) => CHANNEL_TYPES.has(ch.type))
-								.map((ch) => ch.id),
-						)
-					: new Set(
-							repo.listAllowlistForBridge(spaceDid).map((e) => e.channelId),
-						);
-
-			// Fetch active threads from the guild-level endpoint.
-			const activeThreads = await discord.getActiveThreads(guildId);
-			const threads = activeThreads.filter(
-				(ch) => ch.parentId && bridgedChannelIds.has(ch.parentId),
-			);
+			// Fetch active threads from the guild-level endpoint. Threads whose
+			// parent has no Roomy room are decided below, where the durable
+			// record for them is written — filtering them out here would skip
+			// the row that records the outcome.
+			const threads = await discord.getActiveThreads(guildId);
 
 			if (threads.length === 0) continue;
 
@@ -652,8 +690,30 @@ export async function ensureRoomyThreads(
 					if (!parentId) continue;
 					const parentRoomyId = repo.getRoomyId(spaceDid, "channel", parentId);
 					if (!parentRoomyId) {
-						log.warn(
-							`Parent channel ${parentId} not bridged in ${spaceDid}; skipping thread ${threadId}`,
+						// Terminal: this thread's parent has no Roomy room, so
+						// the thread can never be linked or walked. The row that
+						// records that is the marker, not the check above — once
+						// it exists, later runs skip the pair on the record
+						// instead of re-deriving the same answer and re-logging
+						// it for every thread under the parent.
+						// `ensureRoomyRooms` runs before this and creates every
+						// room it can, so a parent still unmapped here is one
+						// the bridge cannot room at all.
+						if (
+							repo.getBackfillProgress(spaceDid, threadId)?.phase === "blocked"
+						) {
+							continue;
+						}
+						recordWalkBlocked(
+							repo,
+							spaceDid,
+							threadId,
+							{
+								kind: "thread",
+								channelName: thread.name ?? null,
+								parentId,
+							},
+							`its parent channel ${parentId} has no Roomy room in this space`,
 						);
 						continue;
 					}
@@ -811,8 +871,17 @@ export async function enumerateBackfillWork(
 				channelIds = guild.channels
 					.filter((ch) => CHANNEL_TYPES.has(ch.type) && allowlisted.has(ch.id))
 					.map((ch) => ch.id);
+				// A subset bridge allowlists channels directly, and one the
+				// guild listing no longer carries still has a work row to show:
+				// resolve its type so it is tracked like any other bridged pair
+				// rather than silently missing from the panel.
+				for (const entry of repo.listAllowlistForBridge(spaceDid)) {
+					if (nameById.has(entry.channelId)) continue;
+					const type = await discord.resolveChannelType(entry.channelId);
+					if (type === undefined || !CHANNEL_TYPES.has(type)) continue;
+					channelIds.push(entry.channelId);
+				}
 			}
-
 			for (const channelId of channelIds) {
 				if (repo.getBackfillProgress(spaceDid, channelId)) continue;
 				if (repo.getChannelCursor(spaceDid, channelId)) continue;
@@ -963,7 +1032,8 @@ export async function backfillRecentWindow(
 		existing?.channelName ??
 		// Display-only: a transiently unresolvable name costs one call, not
 		// the retry backoff budget (the row simply carries null).
-		((await discord.resolveChannelName(channelId)) ?? null);
+		(await discord.resolveChannelNameOutcome(channelId)).name ??
+		null;
 
 	let synced = existing?.messagesSynced ?? 0;
 	let skipped = existing?.messagesSkipped ?? 0;
@@ -1006,7 +1076,7 @@ export async function backfillRecentWindow(
 			// Channel) can never succeed, so the pair leaves the pending
 			// phases here instead of being re-attempted on every run. A
 			// transient failure keeps the pair in `phase1`, resumable.
-			const reason = backfillBlockedReason(err);
+			const reason = channelReadFailureReason(err);
 			if (reason) {
 				recordBlockedBackfill(repo, {
 					spaceDid,
@@ -1300,7 +1370,7 @@ export async function backfillChannel(
 				// so record the pair as terminal (keeping what it ingested)
 				// instead of leaving it pending for the next run. A transient
 				// failure keeps the pair resumable from `walkCursor`.
-				const reason = backfillBlockedReason(err);
+				const reason = channelReadFailureReason(err);
 				if (reason) {
 					recordBlockedBackfill(repo, {
 						spaceDid,
@@ -1390,8 +1460,10 @@ export async function backfillChannel(
 
 			// Newest-ingested cursor is a monotonic max: never regress what
 			// the Phase-1 window / live path already wrote.
-			const prevCursor = repo.getChannelCursor(spaceDid, channelId)
-				?.lastMessageId;
+			const prevCursor = repo.getChannelCursor(
+				spaceDid,
+				channelId,
+			)?.lastMessageId;
 			if (
 				prevCursor === null ||
 				prevCursor === undefined ||
@@ -1500,6 +1572,9 @@ export async function ensureAndBackfillArchivedThreads(
 			for (const parentChannel of bridgedParentChannels) {
 				try {
 					const parentChannelId = parentChannel.id;
+					// A parent with no Roomy room has no thread history to
+					// walk, and no thread row is created here — the sweep only
+					// visits channels it can already link threads under.
 					const parentRoomyId = repo.getRoomyId(
 						spaceDid,
 						"channel",
@@ -1676,18 +1751,25 @@ export async function postBackfillCompletionNotices(
 				`${n} ${word}${n === 1 ? "" : "s"}`;
 			const pending =
 				summary.pending > 0 ? ` ${summary.pending} item(s) still pending` : "";
-			// A blocked channel is not pending work: no run will ever backfill
+			// A blocked pair is not pending work: no run will ever backfill
 			// it. Report it as its own outcome so the notice doesn't imply the
-			// bridge is still catching up.
-			const blocked =
-				summary.blocked > 0
-					? ` ${plural(summary.blocked, "channel")} could not be backfilled — the bridge can't read them`
+			// bridge is still catching up. Threads are named separately —
+			// they are blocked by their parent, not by being unreadable.
+			const blockedChannels = summary.blocked - summary.blockedThreads;
+			const blockedChannelText =
+				blockedChannels > 0
+					? ` ${plural(blockedChannels, "channel")} could not be backfilled — the bridge can't read them`
+					: "";
+			const blockedThreadText =
+				summary.blockedThreads > 0
+					? ` ${plural(summary.blockedThreads, "thread")} could not be backfilled — their parent channel has no Roomy room`
 					: "";
 			const text =
 				`Roomy backfill complete: this server's history is synced to Roomy ` +
 				`(${plural(summary.channels, "channel")}, ${plural(summary.threads, "thread")}).` +
 				pending +
-				blocked;
+				blockedChannelText +
+				blockedThreadText;
 			await noticeSender.sendMessage(channelId, text);
 			log.info(
 				`backfill completion notice posted to ${channelId} for ${config.spaceDid}`,
@@ -1727,15 +1809,16 @@ async function resolveBackfillNoticeChannel(
 			? channels
 			: (() => {
 					const allowlisted = new Set(
-						repo.listAllowlistForBridge(config.spaceDid).map(
-							(e) => e.channelId,
-						),
+						repo
+							.listAllowlistForBridge(config.spaceDid)
+							.map((e) => e.channelId),
 					);
 					return channels.filter(
 						(ch) => CHANNEL_TYPES.has(ch.type) && allowlisted.has(ch.id),
 					);
 				})();
-	const first = preferred.find((ch) => CHANNEL_TYPES.has(ch.type)) ??
+	const first =
+		preferred.find((ch) => CHANNEL_TYPES.has(ch.type)) ??
 		channels.find((ch) => CHANNEL_TYPES.has(ch.type));
 	return first?.id;
 }
@@ -1744,22 +1827,32 @@ async function resolveBackfillNoticeChannel(
 function backfillSummary(
 	repo: BridgeRepository,
 	config: BridgeConfig,
-): { channels: number; threads: number; pending: number; blocked: number } {
+): {
+	channels: number;
+	threads: number;
+	pending: number;
+	blocked: number;
+	blockedThreads: number;
+} {
 	let channels = 0;
 	let threads = 0;
 	let pending = 0;
 	let blocked = 0;
+	let blockedThreads = 0;
 	for (const p of repo.listBackfillProgress(config.spaceDid)) {
 		if (p.guildId !== null && p.guildId !== config.guildId) continue;
 		if (p.phase === "complete") {
 			if (p.kind === "thread") threads++;
 			else channels++;
 		} else if (p.phase === "blocked") {
-			// The bridge cannot read this channel — not work in flight.
+			// Not work in flight: no run will ever walk this pair. Counted by
+			// kind so the notice can name the channels it could not read
+			// without implying the threads under them were backfilled.
 			blocked++;
+			if (p.kind === "thread") blockedThreads++;
 		} else {
 			pending++;
 		}
 	}
-	return { channels, threads, pending, blocked };
+	return { channels, threads, pending, blocked, blockedThreads };
 }

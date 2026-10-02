@@ -23,6 +23,8 @@ import type {
 	DiscordMessageData,
 } from "./data.ts";
 import type {
+	ChannelNameOutcome,
+	ChannelReadOutcome,
 	DiscordDataSource,
 	PaginationOpts,
 	ThreadPage,
@@ -165,6 +167,12 @@ export class FileDiscordDataSource implements DiscordDataSource {
 		);
 	}
 
+	async readChannel(channelId: string): Promise<ChannelReadOutcome> {
+		// A file export is a fixed snapshot: a channel absent from it is
+		// unreadable, and no later read will change that.
+		return this.#channels.get(channelId) ?? null;
+	}
+
 	async getChannel(channelId: string): Promise<DiscordChannelData | undefined> {
 		return this.#channels.get(channelId);
 	}
@@ -185,6 +193,12 @@ export class FileDiscordDataSource implements DiscordDataSource {
 	): Promise<ThreadPage> {
 		// File exports don't separate archived threads; they're all in messages/
 		return { threads: [], hasMore: false };
+	}
+
+	async resolveChannelNameOutcome(
+		channelId: string,
+	): Promise<ChannelNameOutcome> {
+		return { name: this.#channels.get(channelId)?.name, blockedReason: null };
 	}
 
 	async resolveChannelName(channelId: string): Promise<string | undefined> {

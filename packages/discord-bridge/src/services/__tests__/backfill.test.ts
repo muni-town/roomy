@@ -50,6 +50,8 @@ import {
 	setBackfillNoticeSender,
 } from "../backfill.ts";
 import { ingestDiscordMessage } from "../message-ingestion.ts";
+import { _setLokiSink } from "../../logger.ts";
+import { CHANNEL_UNREADABLE_REASON } from "../../discord/rest-errors.ts";
 import type { DiscordSender } from "../../discord/sender.ts";
 import { expectToBeDefined } from "./utils.ts";
 
@@ -1432,6 +1434,10 @@ function makeArchivedThreadsSource(
 		async getMessages() {
 			return [];
 		},
+		async readChannel(channelId) {
+			const p = channelById.get(channelId);
+			return p ? { id: p.id, type: 0, name: p.name, guildId: GUILD } : null;
+		},
 		async getChannel(channelId) {
 			const p = channelById.get(channelId);
 			return p
@@ -1485,6 +1491,9 @@ function makeArchivedThreadsSource(
 				})),
 				hasMore: pages.length > 0,
 			};
+		},
+		async resolveChannelNameOutcome(channelId) {
+			return { name: channelById.get(channelId)?.name, blockedReason: null };
 		},
 		async resolveChannelName(channelId) {
 			return channelById.get(channelId)?.name;
@@ -2553,11 +2562,13 @@ describe("backfill of unreadable channels", () => {
 	): DiscordDataSource {
 		return {
 			getMessages: handler,
+			readChannel: (id) => source.readChannel(id),
 			getChannel: (id) => source.getChannel(id),
 			getChannels: (id) => source.getChannels(id),
 			getGuild: (id) => source.getGuild(id),
 			getPublicArchivedThreads: (id, opts) =>
 				source.getPublicArchivedThreads(id, opts),
+			resolveChannelNameOutcome: (id) => source.resolveChannelNameOutcome(id),
 			resolveChannelName: (id) => source.resolveChannelName(id),
 			resolveChannelType: (id) => source.resolveChannelType(id),
 			resolveGuildIdForChannel: (id) => source.resolveGuildIdForChannel(id),
@@ -2810,6 +2821,210 @@ describe("backfill of unreadable channels", () => {
 		const row = repo.getBackfillProgress(SPACE, PRIVATE);
 		expect(row?.phase).toBe("blocked");
 		expect(row?.blockedReason).toContain("can't read this channel");
+		expect(reads).toBe(1);
+	});
+});
+/**
+ * A backfill decides some pairs terminally: a thread whose parent channel has
+ * no Roomy room can never be linked or walked, and a channel whose Discord
+ * read is refused (403/404) can never gain one. Each used to be re-derived and
+ * re-logged on every run — one warning per thread, per run, forever.
+ */
+describe("terminal outcomes are recorded, not re-derived", () => {
+	afterEach(() => {
+		setBackfillNoticeSender(undefined);
+	});
+
+	/** Count the warn-severity records a run emits, whatever the scope. */
+	function makeWarnRecorder() {
+		const warns: string[] = [];
+		_setLokiSink({
+			push(record) {
+				if (JSON.parse(record.line).level === "warn") warns.push(record.line);
+			},
+			async flush() {},
+			stop() {},
+			stats: () => ({ queued: 0, sent: 0, dropped: 0, failed: 0 }),
+		});
+		return warns;
+	}
+
+	const UNROOMED_PARENT = "900000000000000001";
+	const ROOMED_PARENT = "900000000000000002";
+
+	/**
+	 * Two active threads under a parent the bridge never gets a Roomy room
+	 * for, alongside one channel it can room — the shape that produced a
+	 * warning per thread, per run.
+	 */
+	function threadsUnderUnroomedParent(): DiscordDataSource {
+		const roomed: DiscordChannelData = {
+			id: ROOMED_PARENT,
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		return FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [roomed] },
+			channels: [roomed],
+			messages: { [roomed.id]: [] },
+			activeThreads: [
+				{
+					id: "910000000000000001",
+					type: 11,
+					name: "orphan-a",
+					parentId: UNROOMED_PARENT,
+					guildId: GUILD,
+				},
+				{
+					id: "910000000000000002",
+					type: 11,
+					name: "orphan-b",
+					parentId: UNROOMED_PARENT,
+					guildId: GUILD,
+				},
+			],
+		});
+	}
+
+	/**
+	 * TT01: a thread whose parent has no Roomy room is recorded blocked — with
+	 * the identity the status panel nests by — and the second run reports it
+	 * from the durable record instead of warning about it again.
+	 */
+	test("TT01: an unroomed parent's thread is recorded blocked and not re-derived", async () => {
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+		const discord = threadsUnderUnroomedParent();
+		const warns = makeWarnRecorder();
+
+		try {
+			// Rooms and active threads settle inside runBackfill, before it
+			// schedules the Phase-2 walk — the decisions under test are made.
+			await runBackfill(discord, repo, roomy);
+
+			const first = repo.getBackfillProgress(SPACE, "910000000000000001");
+			expect(first?.phase).toBe("blocked");
+			expect(first?.kind).toBe("thread");
+			expect(first?.parentId).toBe(UNROOMED_PARENT);
+			expect(first?.channelName).toBe("orphan-a");
+			expect(first?.blockedReason).toContain(UNROOMED_PARENT);
+
+			const blockedWarns = warns.filter((line) =>
+				line.includes("910000000000000001"),
+			).length;
+			expect(blockedWarns).toBe(1);
+
+			// The second run must answer from the durable rows: no further
+			// warning per thread, which is the 172-lines-a-day shape.
+			await runBackfill(discord, repo, roomy);
+
+			expect(
+				warns.filter((line) => line.includes("910000000000000001")).length,
+			).toBe(1);
+			expect(
+				warns.filter((line) => line.includes("910000000000000002")).length,
+			).toBe(1);
+			expect(
+				repo.listBackfillProgress(SPACE).filter((r) => r.phase === "blocked"),
+			).toHaveLength(2);
+		} finally {
+			_setLokiSink(null);
+		}
+	});
+
+	/**
+	 * TT02: the blocked threads read as one outcome in the completion notice —
+	 * counted, and not claimed as backfilled history.
+	 */
+	test("TT02: the notice reports blocked threads as their own outcome", async () => {
+		const repo = setupRepo();
+		const roomy = new MockRoomyGateway();
+		const discord = threadsUnderUnroomedParent();
+
+		await runBackfill(discord, repo, roomy);
+
+		const { sent, mock } = makeMockDiscordSender();
+		setBackfillNoticeSender(mock);
+		await postBackfillCompletionNotices(
+			discord,
+			repo,
+			[
+				{
+					guildId: GUILD,
+					spaceDid: SPACE,
+					mode: "full",
+					createdAt: 0,
+					updatedAt: 0,
+				},
+			],
+			new Set([SPACE]),
+		);
+
+		const text = sent[0]?.content ?? "";
+		expect(text).toContain("2 threads could not be backfilled");
+		// Not pending work: the bridge will never walk them.
+		expect(text).not.toContain("pending");
+	});
+
+	/**
+	 * TT03: a channel the bridge cannot read is recorded blocked during room
+	 * creation, and the next pass does not spend the retry budget on it again.
+	 */
+	test("TT03: an unreadable channel is recorded blocked instead of retried each run", async () => {
+		const readable: DiscordChannelData = {
+			id: "920000000000000001",
+			type: 0,
+			name: "general",
+			guildId: GUILD,
+		};
+		const unreadable: DiscordChannelData = {
+			id: "920000000000000002",
+			type: 0,
+			name: "staff",
+			guildId: GUILD,
+		};
+		const base = FileDiscordDataSource.fromData({
+			guild: { id: GUILD, channels: [readable] },
+			channels: [readable],
+			messages: { [readable.id]: [] },
+		});
+		let reads = 0;
+		// The guild listing omits the unreadable channel, and reading it is
+		// refused — the shape that produced the repeated name-resolution lines.
+		const discord: DiscordDataSource = {
+			getMessages: (id, opts) => base.getMessages(id, opts),
+			readChannel: (id) => base.readChannel(id),
+			getChannel: (id) => base.getChannel(id),
+			getChannels: (id) => base.getChannels(id),
+			getGuild: (id) => base.getGuild(id),
+			getPublicArchivedThreads: (id, opts) =>
+				base.getPublicArchivedThreads(id, opts),
+			resolveChannelNameOutcome: async (id) => {
+				if (id !== unreadable.id) return base.resolveChannelNameOutcome(id);
+				reads++;
+				return { name: undefined, blockedReason: CHANNEL_UNREADABLE_REASON };
+			},
+			resolveChannelName: (id) => base.resolveChannelName(id),
+			resolveChannelType: async (id) =>
+				id === unreadable.id ? 0 : base.resolveChannelType(id),
+			resolveGuildIdForChannel: (id) => base.resolveGuildIdForChannel(id),
+			getActiveThreads: (id) => base.getActiveThreads(id),
+		};
+
+		const repo = BridgeRepository.open(":memory:");
+		repo.upsertBridgeConfig(GUILD, SPACE, "subset");
+		repo.addToAllowlist(SPACE, unreadable.id, GUILD);
+		const roomy = new MockRoomyGateway();
+
+		await runBackfill(discord, repo, roomy);
+		const blocked = repo.getBackfillProgress(SPACE, unreadable.id);
+		expect(blocked?.phase).toBe("blocked");
+		expect(blocked?.blockedReason).toBe(CHANNEL_UNREADABLE_REASON);
+		expect(reads).toBe(1);
+
+		// A later pass reads the durable answer, not Discord.
+		await runBackfill(discord, repo, roomy);
 		expect(reads).toBe(1);
 	});
 });

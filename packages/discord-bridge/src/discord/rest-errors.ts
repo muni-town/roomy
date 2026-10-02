@@ -70,6 +70,31 @@ export function channelReadDenial(
 	return null;
 }
 
+/**
+ * Why the bridge cannot read a channel at all, or null when the failure is
+ * transient (worth retrying on a later run) or carries no HTTP status.
+ *
+ * The text is durable — it lands in `backfill_progress.blocked_reason` and is
+ * what the status panel shows the operator — so it names the channel-read
+ * failure rather than the caller that hit it.
+ */
+export function channelReadFailureReason(err: unknown): string | null {
+	const denial = channelReadDenial(err);
+	if (!denial) return null;
+	const message = discordFailureMessage(err);
+	const detail = message ? `: ${message}` : "";
+	return denial === "missing_access"
+		? `the bridge can't read this channel (Discord 403${detail})`
+		: `this channel no longer exists in Discord (404${detail})`;
+}
+
+/**
+ * Blocked reason for a channel the bridge cannot read when the failing status
+ * is no longer available to name. `channelReadFailureReason` carries the exact
+ * 403/404 text when the error is still in hand.
+ */
+export const CHANNEL_UNREADABLE_REASON = "the bridge can't read this channel";
+
 /** Discord's own message for a failed read, truncated for durable storage. */
 export function discordFailureMessage(err: unknown): string | undefined {
 	const { body } = discordFailureDetail(err);

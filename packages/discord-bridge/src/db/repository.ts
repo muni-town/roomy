@@ -51,10 +51,11 @@ export type ChannelCursor = {
  * Backfill phases. `phase1` = the bounded recent window is running (or was
  * interrupted mid-window); `phase2` = window done, remainder walk in
  * progress (or pending resume); `complete` = full history ingested;
- * `blocked` = the bridge cannot read the channel at all (deleted channel, or
- * the bot lacks VIEW_CHANNEL / READ_MESSAGE_HISTORY), so no run will ever
- * ingest it. `blocked` is terminal: backfill skips it like `complete` until
- * the user re-runs `/roomy-backfill`, which resets the pair.
+ * `blocked` = no run will ever ingest this pair — the bridge cannot read the
+ * channel (deleted, or missing VIEW_CHANNEL / READ_MESSAGE_HISTORY), or a
+ * thread's parent channel has no Roomy room to link it under. `blocked` is
+ * terminal: backfill skips it like `complete` until the user re-runs
+ * `/roomy-backfill`, which resets the pair.
  */
 export type BackfillPhase = "phase1" | "phase2" | "complete" | "blocked";
 
@@ -75,7 +76,7 @@ export type BackfillProgress = {
 	parentId: string | null;
 	/** Snapshot of messagesSynced at the phase1→phase2 transition (recent-window size). */
 	windowSynced: number | null;
-	/** `blocked` rows only: why the bridge cannot read the channel. */
+	/** `blocked` rows only: why no run will ever backfill this pair. */
 	blockedReason: string | null;
 	updatedAt: number;
 };
