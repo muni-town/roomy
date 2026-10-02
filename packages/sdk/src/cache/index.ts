@@ -27,5 +27,6 @@ export {
 } from "./persister";
 export { MemoryPersister } from "./memory";
 export { withFallback } from "./fallback";
+export { validateRestoredEntries } from "./restore";
 export type { CacheAdapter, CachePatcher, QueryKey } from "./adapter";
 export { queryKey } from "./query-key";

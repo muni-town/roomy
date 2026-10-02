@@ -3,7 +3,7 @@
   import { onMount, untrack } from "svelte";
   import { afterNavigate, onNavigate } from "$app/navigation";
   import { QueryClientProvider } from "@tanstack/svelte-query";
-  import { queryClient } from "$lib/client";
+  import { queryClient, restoreCache } from "$lib/client";
   import { auth, init, updateProfile } from "$lib/auth.svelte";
   import { loadLastLogin } from "$lib/last-login.svelte";
   import { installNativePushListeners } from "$lib/native-push";
@@ -14,8 +14,8 @@
     installNotificationNavigateListener,
     installPushSubscriptionChangeListener,
   } from "$lib/push.svelte";
-  import { startSync, stopSync } from "$lib/sync.svelte";
   import { restoreScrollPositionsFromStorage, saveScrollPositionsToStorage } from "$lib/components/chat/scroll-position.svelte";
+  import { startSync, stopSync } from "$lib/sync.svelte";
   import {
     installGlobalErrorRecovery,
     noteSuccessfulNavigation,
@@ -161,8 +161,24 @@
     }
   });
 
+  // Restore the persisted cache before the sync connection starts and before
+  // the route queries reconcile: a `#messageDiff` frame that patched an absent
+  // entry would create one the restore could no longer overwrite, and the
+  // restore's own invalidation is what makes the mounted room refetch. The
+  // restore is account-scoped (the snapshot carries the DID it was written
+  // for), so it runs only once a DID is known, and never throws.
+  let cacheRestored = $state(false);
   $effect(() => {
-    if (auth.authenticated) {
+    if (auth.authenticated && !cacheRestored) {
+      const did = auth.userDid;
+      void (did ? restoreCache(did) : Promise.resolve()).finally(() => {
+        cacheRestored = true;
+      });
+    }
+  });
+
+  $effect(() => {
+    if (auth.authenticated && cacheRestored) {
       untrack(() => startSync());
       return () => untrack(() => stopSync());
     }

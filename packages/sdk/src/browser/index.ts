@@ -26,3 +26,24 @@ export {
 } from "./oauth";
 
 export { createTanstackCacheAdapter } from "./tanstack";
+export { createCachePersistence } from "./persistence";
+export type {
+  CachePersistence,
+  CreateCachePersistenceOptions,
+} from "./persistence";
+// The seam contracts the browser adaptors are built on. Re-exported so a
+// consumer can name the persister and policy it passes without reaching into
+// the core namespace for a type.
+export type {
+  CachePersister,
+  Diagnostic,
+  PersistedEntry,
+  SnapshotPolicy,
+} from "../cache/persister";
+export { IndexedDbPersister } from "./indexeddb-persister";
+export type { IndexedDbPersisterOptions } from "./indexeddb-persister";
+export { LocalStoragePersister } from "./localstorage-persister";
+export type {
+  LocalStoragePersisterOptions,
+  StorageLike,
+} from "./localstorage-persister";

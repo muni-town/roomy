@@ -18,6 +18,7 @@ import {
 import { APP_PASSWORD_GRANTED_SCOPE, decideLoginScope } from "./scope-grant";
 import { scheduleAutoReload } from "./error-recovery";
 import { pxUnauth } from "./client";
+import { clearPersistedCache } from "./client";
 import { setAppserverOrigin } from "./appserver-origin";
 import { subscribeIfAlreadyPermitted, clearPushSubscription } from "./push.svelte";
 import { saveLastLogin } from "./last-login.svelte";
@@ -552,6 +553,11 @@ export async function updateProfile() {
 }
 
 export async function logout() {
+  // The cache store is per-origin, not per-account, and this reloads the page
+  // without a fresh session — so the snapshot must go first or the next
+  // account's first load restores the previous account's rooms. Best-effort:
+  // the account-scope check on load is the second line of defence.
+  await clearPersistedCache();
   // Stop delivering push to this device while signed out. Best-effort: a
   // failure here must not block logout. clearPushSubscription returns an
   // outcome (never throws) — just log on non-ok.

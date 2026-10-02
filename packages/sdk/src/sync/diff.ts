@@ -26,7 +26,17 @@ export type MessageDiffOp = typeof OpSchema.infer;
  * page the server returned and puts a skewed client's message wherever its
  * clock claims. A message the server has not sorted (a system message) has no
  * `sort_idx`, and falls back to its id exactly as the server does.
+ *
+ * Ascending, both terms. The cache holds a timeline oldest-first, so this is
+ * the order every writer of a `getMessages` list must agree on: the diff
+ * applicator below, the room read path's merge (`queries/messages.ts`), and
+ * the restore validator (`cache/restore.ts`), which re-sorts what it loads
+ * with this same function rather than trusting the order it was given.
  */
+export function compareTimelineOrder(a: Message, b: Message): number {
+  const byKey = (a.sort_idx ?? a.id).localeCompare(b.sort_idx ?? b.id);
+  return byKey !== 0 ? byKey : a.id.localeCompare(b.id);
+}
 export function applyMessageDiff(
   prev: Message[] | undefined,
   ops: readonly MessageDiffOp[],
@@ -44,8 +54,5 @@ export function applyMessageDiff(
       map.delete(op.key);
     }
   }
-  return [...map.values()].sort((a, b) => {
-    const byKey = (a.sort_idx ?? a.id).localeCompare(b.sort_idx ?? b.id);
-    return byKey !== 0 ? byKey : a.id.localeCompare(b.id);
-  });
+  return [...map.values()].sort(compareTimelineOrder);
 }

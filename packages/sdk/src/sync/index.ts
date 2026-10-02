@@ -25,7 +25,12 @@ export {
 // Invalidation router + refcounted topic subscriptions.
 export { SyncRouter, type SyncRouterOptions } from "./router";
 export { TopicManager } from "./topics";
-export { applyMessageDiff, type Message, type MessageDiffOp } from "./diff";
+export {
+  applyMessageDiff,
+  compareTimelineOrder,
+  type Message,
+  type MessageDiffOp,
+} from "./diff";
 export {
   patchRoomMetadata,
   patchSpaces,
