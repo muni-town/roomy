@@ -5,7 +5,7 @@
   import { auth, requestScopeExpansion, revokeScopeSettings } from "$lib/auth.svelte";
   import { createScopeSettingsQuery } from "$lib/queries/scope-settings";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
-  import { hasScopeSet, type ScopeSetName } from "$lib/scopes";
+  import { hasScopeSet, type RequestableScopeSetName } from "$lib/scopes";
   import { queryClient } from "$lib/client";
 
   // The Access settings page is gated behind the access-settings flag while
@@ -24,14 +24,14 @@
   // stored `scope`/`requestedScope` drive display of the raw strings.
   const grantedScope = $derived(auth.grantedScope);
 
-  let busy = $state<ScopeSetName | null>(null);
+  let busy = $state<RequestableScopeSetName | null>(null);
 
   async function refresh(): Promise<void> {
     await queryClient.invalidateQueries({ queryKey });
   }
 
   /** Toggle an extra capability tier. */
-  async function toggle(tier: ScopeSetName, enabled: boolean): Promise<void> {
+  async function toggle(tier: RequestableScopeSetName, enabled: boolean): Promise<void> {
     busy = tier;
     try {
       if (enabled) {
@@ -71,7 +71,7 @@
   {:else if settingsQuery.isError}
     <ErrorMessage message="Error: {settingsQuery.error.message}" class="py-4" />
   {:else if settingsQuery.data}
-    {#snippet capabilityRow(name: string, desc: string, tier: ScopeSetName)}
+    {#snippet capabilityRow(name: string, desc: string, tier: RequestableScopeSetName)}
       {@const granted = grantedScope !== null && hasScopeSet(grantedScope, tier)}
       <div class="flex items-start justify-between gap-4 py-4 border-t border-base-200 dark:border-base-800">
         <div class="min-w-0">

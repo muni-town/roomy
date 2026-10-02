@@ -20,7 +20,9 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SCOPE_SETS,
+  REQUESTABLE_SCOPE_SETS,
   FULL_SCOPE_CEILING,
+  UNREGISTERED_SCOPES,
   CLIENT_ID_SCOPE,
   parseScopes,
   hasScopeSet,
@@ -164,21 +166,49 @@ describe("tier/ceiling invariants", () => {
     }
   });
 
-  test("base tier requests no voice rpc scopes (deferred until the client allows them)", () => {
-    // A requestable scope must be registered on the HappyView API client. The
-    // deployed client does not list the voice rpcs, so requesting them makes
-    // HappyView reject the whole grant at POST /oauth/sessions ("scope ... is
-    // not allowed for this client"), surfaced to the user as
-    // OAuthCallbackError: Failed to register session — blocking all sign-in.
-    // The voice rpcs stay in the ceiling (and their own tier) but must never
-    // enter base.
-    const voiceScopes = [...parseScopes(SCOPE_SETS.voice)].filter((s) =>
-      s.includes("voice."),
-    );
-    assert.ok(voiceScopes.length > 0, "voice tier should carry voice rpcs");
-    const baseSet = parseScopes(SCOPE_SETS.base);
-    for (const s of voiceScopes) {
-      assert.equal(baseSet.has(s), false, `voice scope leaked into base: ${s}`);
+  test("no requestable tier asks for a scope the HappyView client does not allow", () => {
+    // This is the invariant that a sign-in outage is made of. A requestable
+    // tier's scope goes out as the authorization request; after the user
+    // consents, the client hands the granted set to HappyView at
+    // POST /oauth/sessions. HappyView validates it against the API client's
+    // registered scope allowlist and rejects the WHOLE set if any one token is
+    // missing — after consent, before any session exists:
+    //
+    //   400 {"error":"scope '<token>' is not allowed for this client"}
+    //
+    // The user sees OAuthCallbackError: Failed to register session, and since
+    // registration is what makes an account usable, a token in `base` that the
+    // deployed client does not list breaks sign-in for every user at once.
+    // UNREGISTERED_SCOPES is the repo's record of that out-of-band list.
+    const unregistered: Record<string, true> = {};
+    for (const s of UNREGISTERED_SCOPES) unregistered[s] = true;
+    for (const [tier, scope] of Object.entries(REQUESTABLE_SCOPE_SETS)) {
+      for (const s of parseScopes(scope)) {
+        assert.ok(
+          !unregistered[s],
+          `tier ${tier} requests a scope the HappyView client does not allow: ${s}`,
+        );
+      }
+    }
+  });
+
+  test("ceiling-only scopes stay declared but unrequestable", () => {
+    // A deferred scope must still be in the ceiling (so registering it on the
+    // client later needs no metadata rebuild) while appearing in no requestable
+    // tier. Asserted as set membership rather than by naming the tokens, so
+    // this holds for whatever the next deferred feature is.
+    assert.ok(UNREGISTERED_SCOPES.length > 0, "expected a deferred scope to exist");
+    const ceilingSet = parseScopes(FULL_SCOPE_CEILING);
+    const requestable: Record<string, true> = {};
+    for (const scope of Object.values(REQUESTABLE_SCOPE_SETS)) {
+      for (const s of parseScopes(scope)) requestable[s] = true;
+    }
+    for (const s of UNREGISTERED_SCOPES) {
+      assert.ok(ceilingSet.has(s), `deferred scope missing from ceiling: ${s}`);
+      assert.ok(
+        !requestable[s],
+        `deferred scope leaked into a requestable tier: ${s}`,
+      );
     }
   });
 

@@ -185,10 +185,15 @@ test.describe("blocking an account", () => {
    * whole base tier, and a real scope-miss needs a narrower token than any
    * test account has.
    *
-   * Two things are load-bearing and both are asserted: the user is offered the
-   * consent dialogue naming the capability (not shown a raw scope token), and
-   * the write is attempted exactly once — a silent retry can never succeed
-   * against a token that simply does not carry the scope.
+   * No consent dialogue is offered. The block scope is not yet registered on
+   * the HappyView API client, so a re-authorization carrying it would be
+   * refused at session registration and leave the user unable to sign in at
+   * all — the dialogue is withheld until the scope becomes requestable
+   * (`scopes.ts` UNREGISTERED_SCOPES).
+   *
+   * Two things are load-bearing and both are asserted: the write is attempted
+   * exactly once — a silent retry can never succeed against a token that
+   * simply does not carry the scope — and the affordance survives the failure.
    */
   test("a stale session gets a clear message, and the write is not retried", async ({
     page,
@@ -214,20 +219,13 @@ test.describe("blocking an account", () => {
 
     await blockButton(page).click();
 
-    // The consent dialogue names the capability and its consequence.
-    const dialogue = page.getByRole("dialog");
-    await expect(dialogue).toBeVisible();
-    await expect(dialogue).toContainText("Manage your blocks");
-    // The raw scope token is never shown to the user.
-    await expect(dialogue).not.toContainText("repo:space.roomy.user.block");
-
-    // Declining fails the action cleanly — with the message that says what to
-    // do about it — rather than looping on a request that cannot succeed.
-    await dialogue.getByRole("button", { name: "Not now" }).click();
-
+    // The action fails with the message that says what to do about it, rather
+    // than looping on a request that cannot succeed.
     await expect(
       page.getByText(/Sign in again to grant it/),
     ).toBeVisible();
+    // The raw scope token is never shown to the user.
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(attempts).toBe(1);
     // The affordance is intact: the button is still there, still offering
     // Block rather than a stuck "Blocked".

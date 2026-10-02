@@ -26,7 +26,7 @@
  *     where `requestScopeExpansion` is a no-op.
  */
 
-import type { ScopeSetName } from "./scopes.ts";
+import type { RequestableScopeSetName } from "./scopes.ts";
 
 /** The resource-server error name `ScopeMissingError` surfaces under. */
 export const SCOPE_MISSING_ERROR_NAME = "ScopeMissingError";
@@ -74,7 +74,9 @@ export function isInsufficientScopeError(err: unknown): boolean {
 }
 
 /** The user's accept/reject decision for a proposed tier expansion. */
-export type ScopeExpansionPrompt = (tier: ScopeSetName) => Promise<boolean>;
+export type ScopeExpansionPrompt = (
+  tier: RequestableScopeSetName,
+) => Promise<boolean>;
 
 export interface GuardedXrpcOptions {
   /**
@@ -84,8 +86,13 @@ export interface GuardedXrpcOptions {
    * a boundary genuinely cannot be expressed as a tier, the caller must NOT
    * invent a parallel vocabulary; leave tier undefined and the error surfaces
    * raw.
+   *
+   * Only a *requestable* tier is accepted: a ceiling-only tier's scopes are not
+   * registered on the HappyView API client, so asking for one turns a
+   * recoverable scope-miss into a sign-in failure for every user. A feature
+   * whose scopes are not yet registered must not reach the consent dialogue.
    */
-  requiredTier?: ScopeSetName;
+  requiredTier?: RequestableScopeSetName;
   /**
    * Prompt the user to consent to expanding to `requiredTier`. Resolves `true`
    * on accept. The prompt (not `guardedXrpc`) drives `requestScopeExpansion`:

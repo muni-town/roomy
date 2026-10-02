@@ -15,7 +15,7 @@
  */
 import { mount, unmount } from "svelte";
 import ScopeConsentDialogue from "$lib/components/ScopeConsentDialogue.svelte";
-import type { ScopeSetName } from "$lib/scopes";
+import type { RequestableScopeSetName } from "$lib/scopes";
 
 export interface ScopeConsentOptions {
   /** Short capability name, e.g. "Create Space cards". */
@@ -26,7 +26,7 @@ export interface ScopeConsentOptions {
 
 /** Show the consent dialogue for `tier` and resolve with the user's decision. */
 export function showScopeConsentDialogue(
-  tier: ScopeSetName,
+  tier: RequestableScopeSetName,
   opts: ScopeConsentOptions,
 ): Promise<boolean> {
   const { promise, resolve } = Promise.withResolvers<boolean>();

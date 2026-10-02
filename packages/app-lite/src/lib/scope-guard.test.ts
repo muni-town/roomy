@@ -25,7 +25,7 @@ import {
   guardedXrpc,
   type ScopeExpansionPrompt,
 } from "./scope-guard.ts";
-import type { ScopeSetName } from "./scopes.ts";
+import type { RequestableScopeSetName } from "./scopes.ts";
 
 /** The measured/source-verified wire shape: a 403 with `error === "ScopeMissingError"`. */
 function measuredShape(error = SCOPE_MISSING_ERROR_NAME, status = 403) {
@@ -126,7 +126,7 @@ describe("guardedXrpc", () => {
   });
 
   test("invokes the prompt on a recognised scope-miss and rethrows the error", async () => {
-    let prompted: ScopeSetName | undefined;
+    let prompted: RequestableScopeSetName | undefined;
     const err: unknown = measuredShape();
     await assert.rejects(
       guardedXrpc(() => Promise.reject(err), {

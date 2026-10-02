@@ -17,7 +17,7 @@
    */
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { requestScopeExpansion } from "$lib/auth.svelte";
-  import type { ScopeSetName } from "$lib/scopes";
+  import type { RequestableScopeSetName } from "$lib/scopes";
 
   let {
     tier,
@@ -26,7 +26,7 @@
     onAccept,
     onReject,
   }: {
-    tier: ScopeSetName;
+    tier: RequestableScopeSetName;
     /** Short capability name, e.g. "Create Space cards". */
     title: string;
     /** The consequence of granting, e.g. "…so Roomy can create cards." */

@@ -8,7 +8,13 @@ import {
 import { transport } from "@roomy-space/sdk";
 import { goto } from "$app/navigation";
 import { CONFIG } from "./config";
-import { CLIENT_ID_SCOPE, SCOPE_SETS, hasScopeSet, type ScopeSetName } from "./scopes";
+import {
+  CLIENT_ID_SCOPE,
+  SCOPE_SETS,
+  hasScopeSet,
+  type RequestableScopeSetName,
+  type ScopeSetName,
+} from "./scopes";
 import { APP_PASSWORD_GRANTED_SCOPE, decideLoginScope } from "./scope-grant";
 import { scheduleAutoReload } from "./error-recovery";
 import { pxUnauth } from "./client";
@@ -418,7 +424,9 @@ export function isScopeExpansionPending(): ScopeSetName | null {
  *      fires `recordScopeGrant`; the settings page derives real state from
  *      the granted scope (whether the expansion took or was refused/narrowed).
  */
-export async function requestScopeExpansion(tier: ScopeSetName): Promise<void> {
+export async function requestScopeExpansion(
+  tier: RequestableScopeSetName,
+): Promise<void> {
   // App-password (test-mode) has no OAuth redirect to drive; the granted
   // scope is the requested tier already, so there is nothing to expand.
   if (appPasswordAgent) return;
@@ -471,7 +479,9 @@ export async function requestScopeExpansion(tier: ScopeSetName): Promise<void> {
  * `recordScopeGrant`). App-password (test) mode has no PDS grant and no
  * OAuth round-trip, so this is a no-op there.
  */
-export async function requestScopeSettings(tier: ScopeSetName): Promise<void> {
+export async function requestScopeSettings(
+  tier: RequestableScopeSetName,
+): Promise<void> {
   if (appPasswordAgent) return; // no PDS grant to request in test mode
   try {
     await px().procedure("space.roomy.auth.setScopeSettings", {

@@ -275,6 +275,22 @@ PUBLIC_TEST_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 
 Both paths set `auth.authenticated = true` and populate `auth.agent`. Use `auth.userDid` (not `auth.session?.did`) to get the current user's DID — it works for both auth modes (OAuth exposes `session.did`; app-password only has `agent.did`).
 
+### Adding an OAuth scope (two gates, and the process)
+
+A requested scope must be allowed by **two independently-deployed lists**. Missing the second one breaks sign-in for every user, so treat this as a deploy-time procedure, not an edit:
+
+1. **The PDS metadata ceiling** — `FULL_SCOPE_CEILING` in `packages/app-lite/src/lib/scopes.ts`, served as `oauth-client-metadata.json`. Rebuilt from that file on every deploy, so a token added there is live after the next build. A request for a token missing from it fails authorization with `invalid_scope`.
+
+2. **The HappyView API client's scope allowlist** — provisioned on the HappyView instance (`PUT /admin/api-clients/{id}`, `{"scopes": "…"}`), read from its database per request. HappyView custodies the granted session: after the user consents at their PDS, the client posts the granted set to `POST /oauth/sessions`, and HappyView rejects the **whole** set if any one token is absent:
+
+   ```
+   400 {"error":"scope '<token>' is not allowed for this client"}
+   ```
+
+   The browser surfaces that as `OAuthCallbackError: Failed to register session`. Since registration is what makes an account usable, one unregistered token in `base` blocks **every** login.
+
+The order that works: add the scope to the ceiling → register it on the HappyView client → move it out of `UNREGISTERED_SCOPES` and into a tier in `REQUESTABLE_SCOPE_SETS`. `packages/app-lite/scripts/check-oauth-scopes.mjs` (CI) fails the build if a requestable tier asks for a token still listed in `UNREGISTERED_SCOPES`, so the middle step cannot be skipped silently.
+
 ## Testing & E2E Verification
 
 ### Local Dev Stack (`pnpm dev:local`)

@@ -20,7 +20,7 @@
   import { blockErrorMessage, blockUser, unblockUser, type BlockRecord } from "$lib/mutations/blocks";
   import { guardedXrpc } from "$lib/scope-guard";
   import { showScopeConsentDialogue } from "$lib/scope-consent-dialogue";
-  import type { ScopeSetName } from "$lib/scopes";
+  import type { RequestableScopeSetName } from "$lib/scopes";
   import { queryClient } from "$lib/client";
   import { cache } from "@roomy-space/sdk";
 
@@ -62,13 +62,16 @@
     });
   }
 
-  // The repo scope for blocks arrived with this feature, so a session from
-  // before it fails the write with a scope-miss. `guardedXrpc` recognises that
-  // shape and offers the consent dialogue; accepting it re-authorises (and
-  // navigates away), declining rethrows — and either way it is never retried.
-  // When the dialogue cannot be shown (a non-browser/headless surface), the
-  // error falls through to the message below, so the phase works without it.
-  const consentPrompt = (tier: ScopeSetName) =>
+  // The blocks scope arrived with this feature, so a session authorised before
+  // it fails the write with a scope-miss.
+  //
+  // No tier is passed to `guardedXrpc`: `blocks` is ceiling-only for now. Its
+  // scope is not yet registered on the HappyView API client, so no login may
+  // request it (`scopes.ts` UNREGISTERED_SCOPES) and no consent round-trip
+  // could grant it. A feature whose scope cannot be requested reports the
+  // failure rather than offering consent that would be refused; the dialogue
+  // arrives with the tier, once the scope is registered.
+  const consentPrompt = (tier: RequestableScopeSetName) =>
     showScopeConsentDialogue(tier, {
       title: "Manage your blocks",
       description:
@@ -84,7 +87,6 @@
     blockError = null;
     try {
       await guardedXrpc(() => blockUser(subject), {
-        requiredTier: "base",
         prompt: consentPrompt,
       });
       await refreshBlock();
@@ -103,7 +105,6 @@
     blockError = null;
     try {
       await guardedXrpc(() => unblockUser(block.rkey), {
-        requiredTier: "base",
         prompt: consentPrompt,
       });
       await refreshBlock();

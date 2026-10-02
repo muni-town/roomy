@@ -18,7 +18,7 @@
 <script lang="ts">
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import { auth, requestScopeExpansion } from "$lib/auth.svelte";
-  import type { ScopeSetName } from "$lib/scopes";
+  import type { RequestableScopeSetName } from "$lib/scopes";
 
   let {
     tier,
@@ -28,7 +28,7 @@
     denied = undefined,
   }: {
     /** The tier the gated content requires (e.g. "base"; later "semble"). */
-    tier: ScopeSetName;
+    tier: RequestableScopeSetName;
     /** Shown in the default "Grant permission" panel when the tier is missing. */
     title: string;
     /** The consequence of granting, shown under the title. */

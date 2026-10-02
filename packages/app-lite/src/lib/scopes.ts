@@ -1,16 +1,43 @@
 /**
- * OAuth scope definitions — the single source of truth for every scope string
+ * Scope definitions — the single source of truth for every OAuth scope string
  * the app produces:
  *
- *   - `SCOPE_SETS.base`  → the per-login authorization `scope` (auth.svelte.ts)
- *   - `FULL_SCOPE_CEILING` → the `scope` field in the OAuth client metadata
- *                            (built by scripts/build-prod.sh)
+ *   - `SCOPE_SETS[tier]`    → the per-login authorization `scope` (auth.svelte.ts)
+ *   - `FULL_SCOPE_CEILING`  → the `scope` field in the OAuth client metadata
+ *                             (built by scripts/build-prod.sh)
  *
- * The ceiling is the union of every tier (today that is just `base` plus the
- * extra tokens only the metadata may carry — e.g. the arbiter proxy RPC the
- * client never mints directly, and the build-time env-var-backed tokens). The
- * PDS enforces that every requested scope exists in the metadata ceiling, and
- * the consent screen only ever shows the requested subset, never the ceiling.
+ * ## Two gates, not one
+ *
+ * A requested scope has to be allowed by *two* independently-deployed lists,
+ * and the second one is easy to forget:
+ *
+ *  1. **The PDS metadata ceiling** (`FULL_SCOPE_CEILING`, served as
+ *     `oauth-client-metadata.json`). Rebuilt from this file on every deploy.
+ *     A request for a token that is not in it fails the *authorization* with
+ *     `invalid_scope` — "Scope \"…\" is not declared in the client metadata".
+ *
+ *  2. **The HappyView API client's scope allowlist.** Provisioned out of band
+ *     (dashboard, or `PUT /admin/api-clients/{id}`) and read from HappyView's
+ *     database on every request. Roomy asks HappyView to custody the granted
+ *     session at `POST /oauth/sessions`, and HappyView rejects the *whole*
+ *     granted set when any one token is missing from the allowlist — after the
+ *     user has already consented at their PDS:
+ *
+ *         400 {"error":"scope '<token>' is not allowed for this client"}
+ *
+ *     The client surfaces that as `OAuthCallbackError: Failed to register
+ *     session`. Registration is what makes an account usable, so one
+ *     unregistered token in `base` breaks sign-in for **every** user — not
+ *     just the one who consented.
+ *
+ * A scope therefore moves through three states: declared in the ceiling, then
+ * registered on the HappyView API client, then — only once both hold —
+ * requested. The middle state is tracked here as {@link UNREGISTERED_SCOPES},
+ * and `scripts/check-oauth-scopes.mjs` fails the build if a requestable tier
+ * contains any token from it.
+ *
+ * That check is the whole point: the HappyView list cannot be derived from this
+ * repo, so the only safe failure is a build that refuses to ship.
  *
  * This module is deliberately free of `config.ts` and `$env` imports:
  * `config.ts` pulls in SvelteKit's `$env/dynamic` and Vite's `import.meta.env`,
@@ -108,17 +135,11 @@ const APPSERVER_RPCS = [
 ] as const;
 
 /**
- * Voice RPCs. A voice room is a follow-on client feature (voice chat Phase 1
- * shipped the server core only — see appserver/src/voice/); nothing in
- * app-lite calls these yet. They deliberately live OUTSIDE `base`: a scope the
- * login requests must be registered on the HappyView API client, and the
- * deployed client — like the PDS metadata — is provisioned independently of
- * this file. Requesting an unregistered `rpc:` scope makes HappyView reject
- * the whole granted set at `POST /oauth/sessions` with
- * `400 scope '<nsid>' is not allowed for this client`, which surfaces to the
- * user as `OAuthCallbackError: Failed to register session` and blocks ALL
- * sign-in. Kept in the ceiling so a future tier (or HappyView client update)
- * can request them without a metadata rebuild.
+ * Voice RPCs. Voice Phase 1 shipped the server core only (see
+ * `appserver/src/voice/`); nothing in app-lite calls these yet, and they are
+ * not registered on the deployed HappyView API client. They are therefore
+ * ceiling-only: declared so a future tier can request them without a metadata
+ * rebuild, but listed in `UNREGISTERED_SCOPES` until the client allows them.
  */
 const VOICE_NSIDS = [
   "space.roomy.voice.getToken",
@@ -127,6 +148,34 @@ const VOICE_NSIDS = [
   "space.roomy.voice.join",
   "space.roomy.voice.leave",
 ] as const;
+const VOICE_SCOPES = VOICE_NSIDS.map((nsid) => `rpc:${nsid}?aud=*`);
+
+/**
+ * Blocks (`space.roomy.user.block`) are written to the blocker's own repo, so
+ * blocking needs a `repo:` scope of its own.
+ */
+const BLOCK_SCOPES = ["repo:space.roomy.user.block"] as const;
+
+/**
+ * Scopes that are declared in the ceiling but NOT yet registered on the
+ * deployed HappyView API client — requesting one of these fails.
+ *
+ * The drift check (`scripts/check-oauth-scopes.mjs`) fails the build if any
+ * requestable tier contains a token from this list. That is what makes the
+ * registration step impossible to skip: moving a feature's scopes into `base`
+ * before the client lists them breaks CI rather than production sign-in.
+ *
+ * Remove a scope from here only after registering it on the client:
+ *
+ *   GET  /admin/api-clients                      # find the client id
+ *   PUT  /admin/api-clients/{id}                 # {"scopes": "<existing scopes> <new>"}
+ *
+ * then move its tier from `DEFERRED_SCOPE_SETS` to `REQUESTABLE_SCOPE_SETS`.
+ */
+export const UNREGISTERED_SCOPES: readonly string[] = [
+  ...BLOCK_SCOPES,
+  ...VOICE_SCOPES,
+];
 
 /**
  * Scopes required by all Roomy core functionality. Reproduces, byte for byte,
@@ -143,7 +192,6 @@ const BASE_SCOPES = [
   "blob:*/*",
   "repo:space.roomy.upload.v0", // Grant all actions (create, update, delete)
   "repo:space.roomy.user.profile",
-  "repo:space.roomy.user.block",
   "include:space.roomy.authComplete",
   `repo:${profileSpaceNsid}`,
   // Allow calling getServiceAuth on the appserver's PDS to obtain
@@ -204,23 +252,46 @@ const CHAT_APPVIEW_AUD = "did:web:api.bsky.chat%23bsky_chat";
 const DM_SCOPES = DM_NSIDS.map((nsid) => `rpc:${nsid}?aud=${CHAT_APPVIEW_AUD}`);
 
 /**
- * Named scope tiers. Each tier is a superset of the previous. The `base` tier
- * is what we request at first login. The later tiers exist so a returning
- * user who has already consented to them gets them requested back on relogin
- * (via the stored grant) with no re-prompt, and so the metadata ceiling can
- * declare every scope the app might ever want.
+ * Tiers that may actually be requested in an authorization round-trip, because
+ * every scope in them is registered on the deployed HappyView API client.
+ *
+ * This is the list the PDS is asked to grant, so it is also the list that must
+ * stay inside the HappyView client's scope allowlist. A tier built from
+ * anything else belongs in `DEFERRED_SCOPE_SETS`.
  */
-export const SCOPE_SETS = {
+export const REQUESTABLE_SCOPE_SETS = {
   base: BASE_SCOPES.join(" "),
   semble: [...BASE_SCOPES, ...SEMBLE_SCOPES].join(" "),
   withDms: [...BASE_SCOPES, ...DM_SCOPES].join(" "),
-  // Voice is deferred behind the HappyView client's scope registration (see
-  // VOICE_NSIDS). The tier exists so the expansion flow can request it once
-  // the deployed client allows it; it is NOT in base.
-  voice: [...BASE_SCOPES, ...VOICE_NSIDS.map((nsid) => `rpc:${nsid}?aud=*`)].join(" "),
+} as const;
+
+/** Ceiling-only tiers: declared, but not yet registered on the client. */
+const DEFERRED_SCOPE_SETS = {
+  blocks: [...BASE_SCOPES, ...BLOCK_SCOPES].join(" "),
+  voice: [...BASE_SCOPES, ...VOICE_SCOPES].join(" "),
+} as const;
+
+/**
+ * The scope the blocks feature needs, by tier, for the profile page's consent
+ * prompt. `blocks` is ceiling-only until its scope is registered on the
+ * HappyView API client (see {@link UNREGISTERED_SCOPES}); this names it in one
+ * place so the prompt and the gate cannot disagree.
+ */
+export const BLOCKS_SCOPE = BLOCK_SCOPES[0];
+
+/**
+ * Named scope tiers. Each tier is a superset of `base`. The later tiers exist
+ * so a returning user who has already consented to them gets them requested
+ * back on relogin (via the stored grant) with no re-prompt, and so the
+ * metadata ceiling can declare every scope the app might ever want.
+ */
+export const SCOPE_SETS = {
+  ...REQUESTABLE_SCOPE_SETS,
+  ...DEFERRED_SCOPE_SETS,
 } as const;
 
 export type ScopeSetName = keyof typeof SCOPE_SETS;
+export type RequestableScopeSetName = keyof typeof REQUESTABLE_SCOPE_SETS;
 
 /**
  * Every token the OAuth client metadata may carry, in the exact order it ships.
@@ -231,10 +302,10 @@ export type ScopeSetName = keyof typeof SCOPE_SETS;
  * byte, the `SCOPE` assembly that scripts/build-prod.sh historically
  * hand-maintained — the PDS enforces that a requested scope must exist here.
  *
- * The ceiling legitimately grows in Phase 4: every tier's scopes (Semble's
- * `repo:network.cosmik.card` write, the deferred DM rpc scopes) are now
- * declared so the consent round-trip can request them — while first login
- * still requests only `base`.
+ * The ceiling is the *PDS* gate: a requested token must appear here or the
+ * authorization server refuses with `invalid_scope`. It is deliberately wider
+ * than `REQUESTABLE_SCOPE_SETS`, which is the *HappyView* gate — see the
+ * deferred-scopes note above.
  */
 export const FULL_SCOPE_CEILING = [
   "atproto",
@@ -250,7 +321,7 @@ export const FULL_SCOPE_CEILING = [
   "rpc:space.roomy.authComplete.arbiter.proxy?aud=*",
   "include:space.roomy.authComplete",
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
-  ...VOICE_NSIDS.map((nsid) => `rpc:${nsid}?aud=*`),
+  ...VOICE_SCOPES,
   "repo:network.cosmik.card?action=create",
   ...DM_SCOPES,
 ].join(" ");
