@@ -1,0 +1,28 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.user.block",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A user's block of another account, written to the blocking user's own repo. A block hides both ways: it hides the blocked account's messages from the blocker, and the blocker's messages from the blocked account. The record is public: atproto repositories are world-readable, and app.bsky.graph.block — the source of the Bluesky bootstrap — is public for the same reason.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["subject", "createdAt"],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the blocked account. May be an atproto DID or a bridged did:discord:<snowflake>."
+          },
+          "revealInSpaces": {
+            "type": "array",
+            "description": "Spaces where the blocker permits an admin of that space to reveal their own blocked messages. Absent or empty means no reveal anywhere — the field fails closed, and a record written before this field existed reveals nothing. Only blocks the blocker placed themselves are ever revealable; the value is a promise the client keeps, not one the server can verify.",
+            "items": { "type": "string", "format": "did" }
+          },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}

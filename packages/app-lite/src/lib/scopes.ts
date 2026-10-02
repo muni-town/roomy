@@ -143,6 +143,7 @@ const BASE_SCOPES = [
   "blob:*/*",
   "repo:space.roomy.upload.v0", // Grant all actions (create, update, delete)
   "repo:space.roomy.user.profile",
+  "repo:space.roomy.user.block",
   "include:space.roomy.authComplete",
   `repo:${profileSpaceNsid}`,
   // Allow calling getServiceAuth on the appserver's PDS to obtain
@@ -243,6 +244,7 @@ export const FULL_SCOPE_CEILING = [
   "repo:space.roomy.upload.v0",
   `repo:${profileSpaceNsid}`,
   "repo:space.roomy.user.profile",
+  "repo:space.roomy.user.block",
   `rpc:com.atproto.server.getServiceAuth?aud=${appserverDid}`,
   "rpc:com.atproto.server.getServiceAuth?aud=*",
   "rpc:space.roomy.authComplete.arbiter.proxy?aud=*",

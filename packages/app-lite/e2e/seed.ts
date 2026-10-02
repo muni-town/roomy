@@ -349,11 +349,12 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
 
   // ── Feature flags ────────────────────────────────────────────────────
   // `search` gates the navbar search UI and the search routes; `access-settings`
-  // gates the user Access settings page and its sidebar entry. Every flag
-  // defaults to off in the appserver, so the specs that cover a flagged surface
-  // enable it here and the flag-off behaviour is asserted by toggling.
+  // gates the user Access settings page and its sidebar entry; `user-blocks`
+  // gates the Block action on a profile. Every flag defaults to off in the
+  // appserver, so the specs that cover a flagged surface enable it here and the
+  // flag-off behaviour is asserted by toggling.
   await readStateDb(db).run(
-    "insert into feature_flags (key, global_enabled) values ('search', 1), ('access-settings', 1) on conflict(key) do update set global_enabled = 1",
+    "insert into feature_flags (key, global_enabled) values ('search', 1), ('access-settings', 1), ('user-blocks', 1) on conflict(key) do update set global_enabled = 1",
   );
 
   // ── Global profile row ───────────────────────────────────────────────
@@ -364,6 +365,12 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
   await router.global().run("update profiles set name = ? where did = ?", [
     TEST_USER_DISPLAY_NAME,
     TEST_USER_DID,
+  ]);
+  // The other account's row too: its profile page is where a spec drives the
+  // Block action, and without a name the page renders the handle instead.
+  await router.global().run("update profiles set name = ? where did = ?", [
+    OTHER_USER_DISPLAY_NAME,
+    OTHER_USER_DID,
   ]);
 
   // Fail loudly here rather than as a confusing empty sidebar in a spec: the

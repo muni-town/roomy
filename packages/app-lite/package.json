@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@atproto/api": "^0.14.22",
+    "@atproto/common-web": "^0.4.21",
     "@foxui/core": "^0.9.1",
     "@foxui/social": "^0.8.10",
     "@grafana/faro-web-sdk": "^2.11.0",

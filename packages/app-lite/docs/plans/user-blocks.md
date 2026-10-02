@@ -255,12 +255,27 @@ record-visibility one.
 
 For another app to resolve `space.roomy.user.block`, the lexicon must be
 published on the network as a `com.atproto.lexicon.schema` record with the rkey
-set to the NSID, in the repo of the NSID authority. The authority for
-`space.roomy.user.block` is `space.roomy` → domain `roomy.space`, and that
-authority is already wired: `dig +short TXT _lexicon.roomy.space` returns
-`"did=did:plc:cyqufxsezk33hqulcilckna6"` (measured 2026-09-26). No DNS work is
-needed; publishing is one `putRecord` to that DID's repo, done out-of-band like
-the HappyView lexicon uploads.
+set to the NSID, in the repo of the NSID authority. The authority is derived
+from the NSID — drop the name segment, reverse the rest, look up
+`_lexicon.<that domain>` — and resolution is not hierarchical, so a resolver
+never falls back to a parent domain. For `space.roomy.user.block` that is
+`_lexicon.user.roomy.space`, which is **absent** (measured 2026-10-02). The
+`_lexicon.roomy.space` record that does exist
+(`did=did:plc:cyqufxsezk33hqulcilckna6`, the `roomy.space` account) governs
+`space.roomy.authComplete` and does not apply here.
+
+Two steps are therefore outstanding, both out-of-band and neither in this
+phase's scope:
+
+1. Create `_lexicon.user.roomy.space` in the Cloudflare zone for `roomy.space`,
+   pointing at a DID that has a PDS repo — `did:plc:cyqufxsezk33hqulcilckna6` is
+   the natural choice, since it already has one.
+2. `putRecord` the lexicon into that repo.
+
+The appserver's own `did:web:api.roomy.space` cannot serve here: its DID
+document has no `#atproto_pds` service, so there is no repo to publish into.
+Until both steps are done the lexicon does not resolve for third parties;
+nothing in the build or deploy depends on it.
 
 ### 1.4 SDK and docs touch points
 
@@ -1261,9 +1276,13 @@ without the enforcement behind it.
 **Base:** `next`. **Depends on:** nothing.
 
 1. Add `packages/appserver/lexicons/space/roomy/user/block.json` (§1.1).
-2. Publish the lexicon on the network as a `com.atproto.lexicon.schema` record
-   in the repo of `did:plc:cyqufxsezk33hqulcilckna6` (the `_lexicon.roomy.space`
-   authority) — out-of-band, documented in the package README.
+2. (Optional, nothing depends on it) Publish the lexicon on the network as a
+   `com.atproto.lexicon.schema` record — out-of-band, documented in the package
+   README. This needs one DNS record first: the authority for
+   `space.roomy.user.block` is `_lexicon.user.roomy.space`, which does not exist
+   (§1.3). Nothing in this phase reads the published record — the appserver
+   writes the collection name as a literal and does not resolve the lexicon —
+   so the record is for third-party resolution, not for the feature.
 3. Add `repo:space.roomy.user.block` to `packages/app-lite/src/lib/config.ts`
    (beside `:144`) **and** the matching `SCOPE+=` line in
    `packages/app-lite/scripts/build-prod.sh` (beside `:57`). Run the build to

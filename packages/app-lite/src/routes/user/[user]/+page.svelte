@@ -12,9 +12,15 @@
   import { setWideSidebar } from "$lib/components/layout/wide-sidebar.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
-  import { IconPencil, IconEdit, IconCheck, IconX } from "@roomy/design/icons";
+  import { IconPencil, IconEdit, IconCheck, IconX, IconProhibit } from "@roomy/design/icons";
   import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
   import { createProfileQuery } from "$lib/queries/profile";
+  import { createBlockQuery } from "$lib/queries/blocks";
+  import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
+  import { blockErrorMessage, blockUser, unblockUser, type BlockRecord } from "$lib/mutations/blocks";
+  import { guardedXrpc } from "$lib/scope-guard";
+  import { showScopeConsentDialogue } from "$lib/scope-consent-dialogue";
+  import type { ScopeSetName } from "$lib/scopes";
   import { queryClient } from "$lib/client";
   import { cache } from "@roomy-space/sdk";
 
@@ -32,6 +38,82 @@
   const isOwnProfile = $derived(
     !!(profile?.did && auth.userDid && profile.did === auth.userDid),
   );
+
+  // ── Block state ─────────────────────────────────────────────────────────
+  // Gated behind the `user-blocks` flag. Phase 1 ships the affordance and the
+  // write path only: nothing is hidden yet, so a block is recorded but the
+  // blocked account's messages still render.
+  const flagsQuery = createFeatureFlagsQuery();
+  const blocksEnabled = $derived(
+    flagsQuery.data?.flags.includes("user-blocks") ?? false,
+  );
+  const blockQuery = createBlockQuery(
+    () => profile?.did,
+    () => blocksEnabled && !isOwnProfile,
+  );
+  const existingBlock = $derived<BlockRecord | null>(blockQuery.data ?? null);
+  const blocked = $derived(existingBlock !== null);
+  let blockBusy = $state(false);
+  let blockError = $state<string | null>(null);
+
+  async function refreshBlock(): Promise<void> {
+    await queryClient.invalidateQueries({
+      queryKey: ["space.roomy.user.block", { actor: profile?.did }],
+    });
+  }
+
+  // The repo scope for blocks arrived with this feature, so a session from
+  // before it fails the write with a scope-miss. `guardedXrpc` recognises that
+  // shape and offers the consent dialogue; accepting it re-authorises (and
+  // navigates away), declining rethrows — and either way it is never retried.
+  // When the dialogue cannot be shown (a non-browser/headless surface), the
+  // error falls through to the message below, so the phase works without it.
+  const consentPrompt = (tier: ScopeSetName) =>
+    showScopeConsentDialogue(tier, {
+      title: "Manage your blocks",
+      description:
+        "Blocking writes a block record to your own account. Roomy needs " +
+        "your permission for this action — the consent screen will show the " +
+        "exact access it requests.",
+    });
+
+  async function blockThisUser() {
+    const subject = profile?.did;
+    if (!subject) return;
+    blockBusy = true;
+    blockError = null;
+    try {
+      await guardedXrpc(() => blockUser(subject), {
+        requiredTier: "base",
+        prompt: consentPrompt,
+      });
+      await refreshBlock();
+    } catch (e) {
+      blockError = blockErrorMessage(e, "block this user");
+      console.error("blockUser error", e);
+    } finally {
+      blockBusy = false;
+    }
+  }
+
+  async function unblockThisUser() {
+    const block = existingBlock;
+    if (!block) return;
+    blockBusy = true;
+    blockError = null;
+    try {
+      await guardedXrpc(() => unblockUser(block.rkey), {
+        requiredTier: "base",
+        prompt: consentPrompt,
+      });
+      await refreshBlock();
+    } catch (e) {
+      blockError = blockErrorMessage(e, "unblock this user");
+      console.error("unblockUser error", e);
+    } finally {
+      blockBusy = false;
+    }
+  }
 
   // ── Edit state ──────────────────────────────────────────────────────────
   let editing = $state(false);
@@ -391,6 +473,26 @@
             </Button>
           {/snippet}
           <UserProfile profile={displayProfile} actions={editButton} />
+        {:else if blocksEnabled}
+          <div class="flex flex-col items-end gap-2">
+            {#snippet blockButton()}
+              <Button
+                variant="secondary"
+                size="sm"
+                class="rounded-full"
+                onclick={blocked ? unblockThisUser : blockThisUser}
+                disabled={blockBusy || (blockQuery.isPending && !blockQuery.isError)}
+                aria-label={blocked ? "Unblock this user" : "Block this user"}
+              >
+                <IconProhibit class="size-4" />
+                {blocked ? "Blocked" : "Block"}
+              </Button>
+            {/snippet}
+            <UserProfile profile={displayProfile} actions={blockButton} />
+            {#if blockError}
+              <p class="text-sm text-red-600 text-right max-w-md">{blockError}</p>
+            {/if}
+          </div>
         {:else}
           <UserProfile profile={displayProfile} />
         {/if}

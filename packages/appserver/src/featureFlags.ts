@@ -49,6 +49,11 @@ export const FEATURE_FLAGS: readonly FeatureFlagDef[] = [
     description:
       "User account access settings page: view and change which PDS OAuth scopes Roomy is granted",
   },
+  {
+    key: "user-blocks",
+    description:
+      "Per-user blocking: the Block action on a profile, behind enforcement on the read path",
+  },
 ];
 export const FEATURE_FLAG_KEYS: ReadonlySet<string> = new Set(
   FEATURE_FLAGS.map((f) => f.key),
