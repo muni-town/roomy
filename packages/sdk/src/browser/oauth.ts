@@ -523,6 +523,24 @@ async function createHappyViewClient(
     handleResolver: HandleResolverLike;
   };
   writableClient.handleResolver = createRoomyHandleResolver(opts);
+
+  // Never let the HappyView client retire a superseded session by contacting
+  // its PDS. `registerSession` ends by calling `retirePreviousSession`, which
+  // restores the previously stored session and issues a DELETE through its
+  // `fetchHandler`; a dead stored refresh token makes that refresh throw
+  // *synchronously*, which the client's bare `catch {}` around the call does
+  // NOT cover — so it escapes `registerSession` and the user sees
+  // "OAuthCallbackError: Failed to register session: …" after a re-login that
+  // otherwise succeeded. The HappyView instance already revokes the previous
+  // session in its own store, so the client-side retire is redundant. The
+  // `patches/@happyview__oauth-client.patch` patch makes the same change in
+  // the dependency; this guard also covers an unpatched install.
+  const retire = (client as unknown as { retirePreviousSession?: unknown })
+    .retirePreviousSession;
+  if (typeof retire === "function") {
+    (client as unknown as { retirePreviousSession: () => Promise<void> }).
+      retirePreviousSession = async () => {};
+  }
   return client;
 }
 

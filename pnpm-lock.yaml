@@ -8,6 +8,9 @@ patchedDependencies:
   '@discordeno/gateway':
     hash: ccf7825a231b51e26f5898f83b2029c8bfa99fec1fcbb843f2393a07b893da9e
     path: patches/@discordeno__gateway.patch
+  '@happyview/oauth-client':
+    hash: 5396352390684845e8af47c0951b9aff414aad9787d27f54254ce4b8813e1850
+    path: patches/@happyview__oauth-client.patch
 
 importers:
 
@@ -5642,9 +5645,9 @@ snapshots:
       '@atproto-labs/did-resolver': 0.2.6
       '@atproto-labs/handle-resolver': 0.3.6
       '@atproto/did': 0.3.0
-      '@happyview/oauth-client': 1.4.2
+      '@happyview/oauth-client': 1.4.2(patch_hash=5396352390684845e8af47c0951b9aff414aad9787d27f54254ce4b8813e1850)
 
-  '@happyview/oauth-client@1.4.2':
+  '@happyview/oauth-client@1.4.2(patch_hash=5396352390684845e8af47c0951b9aff414aad9787d27f54254ce4b8813e1850)':
     dependencies:
       '@atproto/jwk': 0.6.0
       '@atproto/jwk-webcrypto': 0.2.0
@@ -6756,7 +6759,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@26.4.0)(@vitest/ui@2.1.9)(lightningcss@1.32.0)
+      vitest: 2.1.9(@types/node@25.9.1)(@vitest/ui@2.1.9)(lightningcss@1.32.0)
 
   '@vitest/utils@2.1.9':
     dependencies:

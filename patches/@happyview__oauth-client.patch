@@ -1,0 +1,36 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 458b15a6422704d01851ac8b4ba31b5c8f540806..8c1f0e4a1b2c3d4e5f60718293a4b5c6d7e8f901 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -449,6 +449,13 @@ var HappyViewOAuthClient = class {
+       const raw = await this.storage.get(`${STORAGE_PREFIX}${did}`);
+       if (!raw) return;
+       const previous = JSON.parse(raw);
++      // Roomy: never contact the previous session's PDS. Its stored refresh
++      // token may already be dead, and a failed refresh there throws
++      // synchronously out of `fetchHandler` — which the bare `catch {}` below
++      // does NOT cover, so it escapes `registerSession` and surfaces as
++      // "OAuthCallbackError: Failed to register session: …". The server already
++      // revoked the superseded session in its own store, so skipping is safe.
++      if (previous.pdsUrl !== void 0) return;
+       if (typeof newDpopKey.x === "string" && previous.dpopKey?.x === newDpopKey.x && previous.dpopKey?.y === newDpopKey.y) {
+         return;
+       }
+diff --git a/dist/index.js b/dist/index.js
+index 76a4fd114bd225b8a45895631b1e70a2b673d6ca..9d2e1f5b3c4d5e6f708192a3b4c5d6e7f8091a02 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -407,6 +407,13 @@ var HappyViewOAuthClient = class {
+       const raw = await this.storage.get(`${STORAGE_PREFIX}${did}`);
+       if (!raw) return;
+       const previous = JSON.parse(raw);
++      // Roomy: never contact the previous session's PDS. Its stored refresh
++      // token may already be dead, and a failed refresh there throws
++      // synchronously out of `fetchHandler` — which the bare `catch {}` below
++      // does NOT cover, so it escapes `registerSession` and surfaces as
++      // "OAuthCallbackError: Failed to register session: …". The server already
++      // revoked the superseded session in its own store, so skipping is safe.
++      if (previous.pdsUrl !== void 0) return;
+       if (typeof newDpopKey.x === "string" && previous.dpopKey?.x === newDpopKey.x && previous.dpopKey?.y === newDpopKey.y) {
+         return;
+       }
