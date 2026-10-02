@@ -3,6 +3,7 @@
 **Date:** 2026-09-28
 **Status:** Implemented — APNs, FCM, registration contract, Tauri wiring
 **Related:** `web-push-plan.md` (the Web Push pipeline this extends)
+**See also:** `native-push-upstream-edits.md` — plugin distribution/fork mechanics, upstream defects, desktop scope, and the APNs credential/provisioning rollout.
 
 ## Problem
 
@@ -74,13 +75,21 @@ endpoint that diagnoses a browser.
 | Kind | Platform | Service endpoint | Credential |
 |------|----------|------------------|------------|
 | `webpush` | Browsers (Chrome/Firefox/Edge/Safari) | per-subscription push-service URL | VAPID keypair + `p256dh`/`auth` (RFC 8291) |
-| `apns` | iOS / iPadOS / macOS | `api.push.apple.com` (or `api.sandbox.push.apple.com`) | APNs auth key (`.p8`, ES256) + key/team id, per-app topic |
+| `apns` | iOS / iPadOS | `api.push.apple.com` (or `api.sandbox.push.apple.com`) | APNs auth key (`.p8`, ES256) + key/team id, per-app topic |
 | `fcm` | Android | `fcm.googleapis.com` | Service-account JSON (HTTP v1 OAuth) |
 | `sse` | — | — | draft; not built |
 
 A stored row naming a kind with no registered transport is counted as a failure
 (`statsFailed`) and logged, and the row is left in place — a rollout gap is
 visible rather than a silently dropped push.
+
+Desktop is **not** covered by the `apns` row. The plugin is registered only under
+`#[cfg(mobile)]` (`packages/app-lite/src-tauri/src/lib.rs:16-25`), its crate is
+dependency-gated to android/iOS, and upstream's `src/desktop.rs` is an empty stub
+whose own comment says commands "return stub values on desktop (push
+notifications are mobile-only)". macOS would need a real AppKit APNs
+implementation plus its own entitlement/signing work — see
+`native-push-upstream-edits.md` §4.
 
 ### APNs (`src/push/transports/apn.ts`)
 
@@ -194,8 +203,8 @@ evaluates it. A registered token is remembered in localStorage
   be delivered to.
 - The three event listeners (`onTokenRefresh`, `onNotificationReceived`,
   `onNotificationTapped`) are **non-functional in 0.1.4 on both platforms**:
-  `register_listener` is shadowed by the same Rust no-op on Android, and on iOS
-  the plugin's own README states `trigger()` cannot reach the webview. They are
+  `register_listener` is a Rust no-op registered on every target, and on iOS the
+  plugin's own README states `trigger()` cannot reach the webview. They are
   installed (they register cleanly and will start working if upstream fixes
   this) but nothing may depend on tap-through. Tapping a native notification is
   therefore not routed by this plugin version.
@@ -204,8 +213,12 @@ evaluates it. A registered token is remembered in localStorage
   with `kind: "apns"`.
 
 Replacing the plugin, or upgrading past a release that fixes Android dispatch,
-changes only `native-push.ts`: the registration contract and the appserver
-transports do not.
+does not touch the registration contract or the appserver transports — but it is
+not only `native-push.ts`: it also changes the `Cargo.toml` dependency line, and
+`Cargo.lock` must be regenerated (it currently records no `tauri-plugin-mobile-push`
+entry at all). Consuming a fork additionally means a git dependency pinned to a
+`rev`, and `capabilities/mobile.json`'s platform gate if the dependency is ever made
+unconditional — see `native-push-upstream-edits.md` §2.
 
 Preferences, digests and recipient selection are untouched: they live in
 `evaluate.ts`/`dispatcher.ts` and are already transport-agnostic, so a native
