@@ -1,14 +1,21 @@
 <script lang="ts">
   /**
-   * LinkViewItem — a single full-width link row.
+   * LinkViewItem — a single link preview card in the links grid.
    *
-   * Column structure mirrors BoardViewItem: an optional leading visual column
-   * (the thumbnail), a flexible text column (heading, description, mobile meta
-   * row), then fixed-width trailing columns on desktop (site, open-in-new).
-   * Breakpoints are container queries, so the row reflows with the view width
-   * exactly like a board row.
+   * The link analogue of a board row, but shaped as a card: the visuals the
+   * embed already carries (`imgs` / `thumb` / `vid`) lead, because a shared
+   * link is an object with a face, not a string. Column contract per card:
+   * a 16:9 media band, a text well (source, title, description), and a
+   * footer rule carrying the share date and the open-in-new affordance.
+   *
+   * Cards are passive content, so they stay flat and warm — a hairline stone
+   * border, no backdrop-blur (DESIGN.md's Frosted-Not-Glass rule reserves
+   * blur for interactive elements). Interaction warms the border toward the
+   * accent and lifts the card 2px; the lift is disabled under
+   * `prefers-reduced-motion`.
    */
-  import { IconArrowUpRight } from "../../../../icons/index";
+  import { IconArrowUpRight, IconLink, IconPlay } from "../../../../icons/index";
+  import { formatDate, formatRelativeTime } from "../../../../utils/date.js";
   import type { LinkInfo } from "./types";
 
   let { link }: { link: LinkInfo } = $props();
@@ -19,16 +26,21 @@
   const videoUrl = $derived(embed?.video);
   const thumbnailUrl = $derived(embed?.thumbnail);
   const imageUrl = $derived(embed?.image);
-  /** The still used wherever the row shows a picture (poster for videos). */
+  /** The still used wherever the card shows a picture (poster for videos). */
   const stillUrl = $derived(imageUrl ?? thumbnailUrl);
   /** Any visual to show — a video, or an image/thumbnail like LinkCard's fallback. */
   const mediaUrl = $derived(videoUrl ?? stillUrl);
 
-  /** Hostname, shown as the heading fallback and in the meta line. */
+  /** oEmbed provider — author, matching the message-link card's sub-line. */
+  const subtitle = $derived(
+    [embed?.provider, embed?.author].filter(Boolean).join(" — "),
+  );
+
+  /** Hostname, shown as the heading fallback and as the source line. */
   const hostname = $derived(
     (() => {
       try {
-        return new URL(link.url).hostname;
+        return new URL(link.url).hostname.replace(/^www\./, "");
       } catch {
         return link.url;
       }
@@ -37,19 +49,32 @@
 
   /** Primary heading; falls back to the hostname when the enricher found nothing. */
   const heading = $derived(title ?? hostname);
-  /** oEmbed provider — author, matching the message-link card's sub-line. */
-  const subtitle = $derived(
-    [embed?.provider, embed?.author].filter(Boolean).join(" — "),
-  );
+
   /**
-   * Desktop site column: the provider/author when known, else the hostname —
-   * but only when the heading isn't already the hostname (no title found), so
-   * the row never shows the same string twice.
+   * Source line: the provider/author when known, else the hostname — but only
+   * when the heading isn't already the hostname (no title found), so a card
+   * never shows the same string twice.
    */
-  const siteCell = $derived(subtitle || (title ? hostname : ""));
-  /** Mobile meta line: hostname then provider, hostname omitted when it's the heading. */
-  const meta = $derived(
-    [title ? hostname : null, subtitle].filter(Boolean).join(" · "),
+  const sourceLine = $derived(subtitle || (title ? hostname : ""));
+
+  /**
+   * Share date. Rendered relative while it is recent (that is the question a
+   * reader actually has: "is this fresh?") and as an absolute date once it
+   * ages past a week, matching the point where `formatRelativeTime` stops
+   * being more legible than a calendar date. The full timestamp is always in
+   * the `title` attribute for hover.
+   */
+  const sharedAt = $derived(
+    (() => {
+      if (!link.timestamp) return null;
+      const d = new Date(link.timestamp);
+      if (Number.isNaN(d.getTime())) return null;
+      const ageDays = (Date.now() - d.getTime()) / 86_400_000;
+      return {
+        label: ageDays < 7 ? formatRelativeTime(d) : formatDate(d),
+        exact: d.toLocaleString(),
+      };
+    })(),
   );
 </script>
 
@@ -57,82 +82,88 @@
   href={link.url}
   target="_blank"
   rel="noopener noreferrer"
-  class="group flex flex-row items-stretch border-b border-base-200/70 dark:border-base-800/70 transition-colors hover:bg-base-50 dark:hover:bg-base-800/30"
+  class="group relative flex flex-col overflow-hidden rounded-2xl border border-base-300/70 bg-base-100/60 transition-[transform,border-color,background-color,box-shadow] duration-300 ease-out hover:-translate-y-0.5 hover:border-accent-400/70 hover:bg-accent-500/[0.04] hover:shadow-[0_6px_16px_-8px_var(--color-accent-700)] focus-visible:border-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-base-50 motion-reduce:transition-colors motion-reduce:hover:translate-y-0 dark:border-base-800 dark:bg-base-900/40 dark:hover:border-accent-700/70 dark:hover:bg-accent-500/[0.06] dark:focus-visible:ring-offset-base-950"
 >
-  <!-- Thumbnail column (desktop only) -->
-  {#if mediaUrl}
-    <div class="hidden @[40rem]:flex w-36 shrink-0 items-center py-2.5 pl-4">
-      <div
-        class="relative aspect-video w-full overflow-hidden rounded-md border border-base-200 dark:border-base-800 bg-base-100 dark:bg-base-900"
-      >
-        {#if videoUrl}
-          <!-- svelte-ignore a11y_media_has_caption -->
-          <video
-            muted
-            preload="metadata"
-            class="h-full w-full object-cover"
-            poster={thumbnailUrl}
-            src={videoUrl}
-          ></video>
-        {:else if stillUrl}
-          <img alt="" class="h-full w-full object-cover" src={stillUrl} />
-        {/if}
+  <!-- Media band: a real preview when the enricher found one, else a quiet
+       accent plate so an unenriched link reads as intentional absence rather
+       than a failed image load. -->
+  <div class="relative aspect-video w-full overflow-hidden bg-base-200/60 dark:bg-base-800/50">
+    {#if videoUrl}
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video
+        muted
+        preload="metadata"
+        playsinline
+        class="h-full w-full object-cover"
+        poster={thumbnailUrl}
+        src={videoUrl}
+      ></video>
+      <div class="absolute inset-0 flex items-center justify-center">
+        <span
+          class="flex size-11 items-center justify-center rounded-full bg-base-950/55 text-base-50 backdrop-blur-sm transition-transform duration-300 ease-out group-hover:scale-110 motion-reduce:transition-none"
+        >
+          <IconPlay class="size-6" />
+        </span>
       </div>
-    </div>
-  {/if}
-
-  <div class="flex flex-row items-center gap-3 py-3 pl-4 sm:pl-3 pr-3 flex-1 min-w-0">
-    <!-- Text column: heading + description + mobile meta row -->
-    <div class="flex flex-col flex-1 min-w-0">
+    {:else if stillUrl}
+      <img
+        alt=""
+        loading="lazy"
+        class="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+        src={stillUrl}
+      />
+    {:else}
       <div
-        class="flex-1 min-w-0 flex items-baseline gap-2 text-base font-light text-base-900 dark:text-base-100"
+        class="flex h-full w-full items-center justify-center bg-gradient-to-br from-accent-500/[0.09] to-accent-500/[0.02] text-accent-600/70 dark:text-accent-400/60"
       >
-        <span class="font-normal truncate">{heading}</span>
-      </div>
-
-      {#if description}
-        <div
-          class="min-w-0 truncate text-xs text-base-500 dark:text-base-400 mt-0.5"
-        >
-          {description}
-        </div>
-      {/if}
-
-      <!-- Mobile meta row: hostname + provider (hidden on desktop) -->
-      {#if meta}
-        <div
-          class="flex @[40rem]:hidden items-center gap-2 text-xs mt-0.5 text-base-400 dark:text-base-500"
-        >
-          <span class="truncate">{meta}</span>
-        </div>
-      {/if}
-    </div>
-
-    <!-- Mobile thumbnail (vertically centered, hidden on desktop) -->
-    {#if stillUrl}
-      <div class="flex items-center shrink-0 @[40rem]:hidden">
-        <div
-          class="relative size-12 overflow-hidden rounded-md border border-base-200 dark:border-base-800 bg-base-100 dark:bg-base-900"
-        >
-          <img alt="" class="h-full w-full object-cover" src={stillUrl} />
-        </div>
+        <IconLink class="size-8" />
       </div>
     {/if}
+  </div>
 
-    <!-- Desktop site column (hidden on mobile) -->
-    <div
-      class="hidden @[40rem]:flex w-[5.5rem] shrink-0 text-sm items-center overflow-hidden text-base-500 dark:text-base-500"
-    >
-      <span class="min-w-0 truncate whitespace-nowrap">{siteCell}</span>
-    </div>
+  <!-- Text well -->
+  <div class="flex flex-1 flex-col gap-1 p-3">
+    {#if sourceLine}
+      <span class="truncate text-xs font-medium text-base-500 dark:text-base-400">
+        {sourceLine}
+      </span>
+    {/if}
 
-    <!-- Desktop open-in-new column (hidden on mobile) -->
-    <div
-      class="hidden @[40rem]:flex w-[4.5rem] shrink-0 items-center justify-start text-base-400 dark:text-base-600"
+    <span
+      class="line-clamp-2 text-sm font-semibold leading-snug text-base-900 dark:text-base-100"
     >
-      <IconArrowUpRight
-        class="size-4 transition-colors group-hover:text-accent-600 dark:group-hover:text-accent-400"
-      />
-    </div>
+      {heading}
+    </span>
+
+    {#if description}
+      <p class="line-clamp-2 text-xs leading-relaxed text-base-500 dark:text-base-400">
+        {description}
+      </p>
+    {/if}
+  </div>
+
+  <!-- Footer rule: share date + the open affordance, which is the card's
+       whole point and so stays visible rather than appearing on hover. -->
+  <div
+    class="mt-auto flex items-center justify-between gap-2 border-t border-base-200/70 px-3 py-2 dark:border-base-800/70"
+  >
+    {#if sharedAt}
+      <time
+        datetime={link.timestamp}
+        title={sharedAt.exact}
+        class="truncate text-xs text-base-500 dark:text-base-400"
+      >
+        {sharedAt.label}
+      </time>
+    {:else}
+      <span class="truncate text-xs text-base-500 dark:text-base-400">{hostname}</span>
+    {/if}
+
+    <span
+      class="flex shrink-0 items-center text-base-500 transition-colors duration-300 group-hover:text-accent-600 dark:text-base-400 dark:group-hover:text-accent-300 motion-reduce:transition-none"
+      aria-hidden="true"
+    >
+      <IconArrowUpRight class="size-4" />
+    </span>
   </div>
 </a>

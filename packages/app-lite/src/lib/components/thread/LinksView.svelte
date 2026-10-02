@@ -25,9 +25,10 @@
 
   function mapLink(l: Link): LinkInfo {
     const embed = l.embed;
-    if (!embed) return { url: l.url };
+    const base = { url: l.url, timestamp: l.timestamp };
+    if (!embed) return base;
     return {
-      url: l.url,
+      ...base,
       embed: {
         title: embed.t,
         description: embed.d,
@@ -41,11 +42,7 @@
   }
 </script>
 
-{#if linksQuery.isPending && !linksQuery.data}
-  <div class="h-full w-full flex items-center justify-center">
-    <div class="text-sm text-base-400 p-2">Loading links…</div>
-  </div>
-{:else if linksQuery.isError && !linksQuery.data}
+{#if linksQuery.isError && !linksQuery.data}
   <ErrorMessage
     message={linksQuery.error.message}
     class="h-full w-full justify-center"
@@ -53,7 +50,13 @@
 {:else}
   <div class="flex flex-col h-full min-h-0">
     <div class="flex-1 min-h-0">
-      <LinkViewShell {links} {emptyMessage} {loadMore} {hasMore} />
+      <LinkViewShell
+        {links}
+        {emptyMessage}
+        {loadMore}
+        {hasMore}
+        loading={linksQuery.isPending && !linksQuery.data}
+      />
     </div>
   </div>
 {/if}

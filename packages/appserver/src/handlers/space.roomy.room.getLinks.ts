@@ -9,14 +9,15 @@
  * Each link returns its room id (the real room, not the message id — the
  * two-hop join the embed sweeper's invalidation uses is the same here), the
  * message that shared it, and its enriched card (null-safe — absent when the
- * embed service had no data).
+ * embed service had no data). Each link also carries `timestamp` — when it was
+ * shared, derived from the ordering key (absent when not derivable).
  *
  * Supports cursor-based pagination via `limit` and `cursor` params.
  */
 
 import { createAccessMemo, roomAccess } from "../auth/access.ts";
 import { openSpaceDbForEntity } from "../db/db.ts";
-import { cursorForRow, dedupeLinks, listLinks } from "../queries/links.ts";
+import { cursorForRow, dedupeLinks, linkTimestamp, listLinks } from "../queries/links.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { optionalInt, optionalString, requireString } from "../xrpc/params.ts";
@@ -28,6 +29,8 @@ interface LinkRow {
   url: string;
   roomId: string;
   messageId: string;
+  /** When the link was shared (ISO 8601 UTC), absent when not derivable. */
+  timestamp?: string;
   /** Enriched card data (EmbedV1 JSON), absent when the enricher had no data. */
   embed?: Record<string, unknown>;
 }
@@ -83,6 +86,8 @@ export const getRoomLinksHandler: QueryHandler<
           roomId: r.room_id,
           messageId: r.message_id,
         };
+        const timestamp = linkTimestamp(r.sort_key);
+        if (timestamp !== undefined) link.timestamp = timestamp;
         if (r.embed_json !== null) {
           link.embed = JSON.parse(r.embed_json) as Record<string, unknown>;
         }

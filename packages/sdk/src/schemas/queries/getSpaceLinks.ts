@@ -33,6 +33,8 @@ export const Link = type({
   roomId: "string",
   /** The message that shared the link. */
   messageId: "string",
+  /** When the link was shared (ISO 8601 UTC), absent when not derivable. */
+  "timestamp?": "string",
   /** Enriched card data (EmbedV1), absent when the enricher had no data. */
   "embed?": LinkEmbedData,
 });

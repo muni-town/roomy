@@ -159,6 +159,9 @@
         "embed": {
           "type": "ref",
           "ref": "#embed"
+        },
+        "timestamp": {
+          "type": "string"
         }
       }
     },

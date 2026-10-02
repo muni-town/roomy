@@ -50,6 +50,7 @@
  * not check permissions.
  */
 
+import { decodeTime } from "ulidx";
 import type { DbLike } from "../db/types.ts";
 
 export interface LinkDto {
@@ -179,6 +180,31 @@ export function canonicalUrl(url: string): string {
 export function cursorForRow(row: RawLinkRow | undefined): string | null {
   if (!row) return null;
   return `${row.sort_key}::${row.url}`;
+}
+
+/**
+ * Derive a link's display timestamp from its canonical ordering key
+ * (`coalesce(msg.sort_idx, msg.id)`).
+ *
+ * That key IS the timeline position the server orders by — arrival-aware,
+ * bridge-override-correct and move-aware (see "Ordering key" above) — so
+ * decoding it yields the time the user associates with the message that
+ * shared the link. The message's `created_at` and its content timestamp both
+ * diverge from this for live/bridged messages; the ordering key does not.
+ *
+ * Guarded: `decodeTime` reads only the first 10 Crockford-base32 chars, which
+ * are always valid for these keys, but a malformed key must degrade to "no
+ * date" rather than emit NaN / an Invalid Date — so a throw or non-finite
+ * result yields `undefined`.
+ */
+export function linkTimestamp(sortKey: string): string | undefined {
+  try {
+    const ms = decodeTime(sortKey);
+    if (!Number.isFinite(ms)) return undefined;
+    return new Date(ms).toISOString();
+  } catch {
+    return undefined;
+  }
 }
 
 /**

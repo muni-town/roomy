@@ -1,19 +1,25 @@
 /**
- * Presentation model for the links board (`LinkView`).
+ * Presentation model for the links view (`LinkView`).
  *
  * Mirrors the wire `Link` from `space.roomy.room.getLinks` /
- * `space.roomy.space.getLinks`, reduced to what a row renders. `url` is the
+ * `space.roomy.space.getLinks`, reduced to what a card renders. `url` is the
  * record identity (the server index is URL-deduped); `roomId` / `messageId`
- * are not carried because a row opens the link itself, not the message that
+ * are not carried because a card opens the link itself, not the message that
  * shared it.
  */
 export type LinkInfo = {
   url: string;
+  /**
+   * When the containing message was posted, as an ISO 8601 string — the
+   * ordering key the server sorts the index by. Absent on older servers (or
+   * an undecodable key), in which case the card simply shows no date.
+   */
+  timestamp?: string;
   /** Enriched card from the embed service; absent when it had no data. */
   embed?: LinkEmbedInfo;
 };
 
-/** The oEmbed/OpenGraph fields the row knows how to render. */
+/** The oEmbed/OpenGraph fields the card knows how to render. */
 export type LinkEmbedInfo = {
   /** oEmbed title, else OG `og:title` / `<title>`. */
   title?: string;

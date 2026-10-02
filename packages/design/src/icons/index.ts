@@ -50,6 +50,7 @@ export { default as IconHashtag } from "~icons/ph/hash-bold";
 export { default as IconHashtagStraight } from "~icons/ph/hash-straight-bold";
 export { default as IconImage } from "~icons/ph/image-bold";
 export { default as IconImageOff } from "~icons/ph/image-broken-bold";
+export { default as IconPlay } from "~icons/ph/play-circle-bold";
 
 // Messaging
 export { default as IconChatBubble } from "~icons/ph/chat-centered-dots-bold";

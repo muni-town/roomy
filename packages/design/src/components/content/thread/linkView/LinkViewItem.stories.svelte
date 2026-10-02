@@ -8,8 +8,13 @@
     component: LinkViewItem,
   });
 
+  /** Fixed timestamps so the stories render deterministically. */
+  const now = Date.parse("2026-10-02T12:00:00.000Z");
+  const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString();
+
   const rich: LinkInfo = {
     url: "https://svelte.dev/blog/runes",
+    timestamp: hoursAgo(2),
     embed: {
       title: "Introducing runes",
       description:
@@ -21,6 +26,7 @@
 
   const video: LinkInfo = {
     url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    timestamp: hoursAgo(9),
     embed: {
       title: "A video worth watching",
       description: "Two minutes, best served with sound.",
@@ -31,9 +37,27 @@
     },
   };
 
-  const bare: LinkInfo = { url: "https://example.com/plain-url-with-no-embed-data" };
+  const bare: LinkInfo = {
+    url: "https://example.com/plain-url-with-no-embed-data",
+    timestamp: hoursAgo(26),
+  };
 
+  /** A thumbnail but no landscape image — the media band still gets a face. */
   const thumbnailOnly: LinkInfo = {
+    url: "https://github.com/muni-town/roomy",
+    timestamp: hoursAgo(30),
+    embed: {
+      title: "muni-town/roomy",
+      description:
+        "A distributed, community-first chat platform built on AT Protocol.",
+      thumbnail: "https://placehold.co/400x400/181717/ffffff?text=gh",
+      provider: "GitHub",
+      author: "muni-town",
+    },
+  };
+
+  /** An older server omits `timestamp` — the footer falls back to the host. */
+  const undated: LinkInfo = {
     url: "https://github.com/muni-town/roomy",
     embed: {
       title: "muni-town/roomy",
@@ -44,10 +68,31 @@
       author: "muni-town",
     },
   };
+
+  /** An unparseable `timestamp` must degrade to the host, never "Invalid Date". */
+  const badDate: LinkInfo = {
+    url: "https://example.com/garbage-timestamp",
+    timestamp: "not-a-date",
+    embed: { title: "A link with a broken timestamp", provider: "Example" },
+  };
+
+  /** Absolute dates past a week, and clamping on both text lines. */
+  const long: LinkInfo = {
+    url: "https://www.are.na/some/longer-title-that-needs-two-lines-to-fit-in-a-card",
+    timestamp: new Date(now - 40 * 86_400_000).toISOString(),
+    embed: {
+      title:
+        "A deliberately long link title that has to clamp to two lines inside a narrow card",
+      description:
+        "And a description long enough to also need clamping, so the story exercises the line-clamp behaviour rather than the short-copy happy path.",
+      image: "https://placehold.co/640x360/64748b/ffffff?text=are.na",
+      provider: "Are.na",
+    },
+  };
 </script>
 
 {#snippet template(args: { link: LinkInfo })}
-  <div class="w-full @container">
+  <div class="w-[19rem] @container">
     <LinkViewItem link={args.link} />
   </div>
 {/snippet}
@@ -56,3 +101,6 @@
 <Story name="With video" args={{ link: video }} {template} />
 <Story name="Thumbnail only" args={{ link: thumbnailOnly }} {template} />
 <Story name="No embed data" args={{ link: bare }} {template} />
+<Story name="No timestamp" args={{ link: undated }} {template} />
+<Story name="Broken timestamp" args={{ link: badDate }} {template} />
+<Story name="Long copy" args={{ link: long }} {template} />

@@ -8,16 +8,17 @@
  * access to the space itself.
  *
  * Each link returns its room id, the message that shared it, and its enriched
- * card (null-safe — absent when the embed service had no data). A URL shared
- * in two readable rooms appears once (the newest occurrence), so the space
- * index shows each URL a single time.
+ * card (null-safe — absent when the embed service had no data). Each link also
+ * carries `timestamp` — when it was shared, derived from the ordering key
+ * (absent when not derivable). A URL shared in two readable rooms appears once
+ * (the newest occurrence), so the space index shows each URL a single time.
  *
  * Supports cursor-based pagination via `limit` and `cursor` params.
  */
 
 import { createAccessMemo, roomAccessMany } from "../auth/access.ts";
 import { openSpaceDb } from "../db/db.ts";
-import { cursorForRow, dedupeLinks, listLinks } from "../queries/links.ts";
+import { cursorForRow, dedupeLinks, linkTimestamp, listLinks } from "../queries/links.ts";
 import { parseUserDid, requireSpaceRead } from "../xrpc/authGuards.ts";
 import { optionalInt, optionalString, requireString } from "../xrpc/params.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
@@ -28,6 +29,8 @@ interface LinkRow {
   url: string;
   roomId: string;
   messageId: string;
+  /** When the link was shared (ISO 8601 UTC), absent when not derivable. */
+  timestamp?: string;
   /** Enriched card data (EmbedV1 JSON), absent when the enricher had no data. */
   embed?: Record<string, unknown>;
 }
@@ -91,6 +94,8 @@ export const getSpaceLinksHandler: QueryHandler<
           roomId: r.room_id,
           messageId: r.message_id,
         };
+        const timestamp = linkTimestamp(r.sort_key);
+        if (timestamp !== undefined) link.timestamp = timestamp;
         if (r.embed_json !== null) {
           link.embed = JSON.parse(r.embed_json) as Record<string, unknown>;
         }

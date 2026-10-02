@@ -15,7 +15,8 @@ import { fileURLToPath } from "node:url";
 import { Database } from "bun:sqlite";
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import type { DbLike } from "../db/types.ts";
-import { dedupeLinks, listLinks, cursorForRow } from "./links.ts";
+import { ulid } from "ulidx";
+import { dedupeLinks, linkTimestamp, listLinks, cursorForRow } from "./links.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -86,6 +87,7 @@ describe("listLinks", () => {
     expect(links[0]!.message_id).toBe(msgId);
     expect(links[0]!.url).toBe("https://a.example/1");
     expect(hasMore).toBe(false);
+    expect(links[0]!.sort_key).toBe(msgId);
   });
 
   test("room scope returns only that room's links", async () => {
@@ -221,5 +223,21 @@ describe("cursorForRow", () => {
       embed_json: null,
     };
     expect(cursorForRow(row)).toBe(`${row.sort_key}::${row.url}`);
+  });
+});
+
+describe("linkTimestamp", () => {
+  test("decodes a real ULID sort key to the expected ISO string", () => {
+    // Deterministic instant; ulid() is a real ULID so decodeTime round-trips.
+    const ts = 1_800_000_000_000;
+    expect(linkTimestamp(ulid(ts))).toBe("2027-01-15T08:00:00.000Z");
+  });
+
+  test("a malformed sort key returns undefined", () => {
+    expect(linkTimestamp("not-a-ulid")).toBeUndefined();
+  });
+
+  test("an empty sort key returns undefined", () => {
+    expect(linkTimestamp("")).toBeUndefined();
   });
 });
