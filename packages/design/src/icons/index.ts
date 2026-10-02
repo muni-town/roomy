@@ -34,6 +34,7 @@ export { default as IconArrowUturnLeft } from "~icons/ph/arrow-u-up-left-bold";
 export { default as IconCopy } from "~icons/ph/clipboard-bold";
 export { default as IconMove } from "~icons/ph/arrows-left-right-bold";
 export { default as IconLink } from "~icons/ph/link-simple-bold";
+export { default as IconArrowUpRight } from "~icons/ph/arrow-up-right-bold";
 export { default as IconCheckSquare } from "~icons/ph/check-square-bold";
 
 // Close / Remove

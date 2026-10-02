@@ -1,7 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { createRoomLinksQuery, type Link } from "$lib/queries/links";
-  import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
+  import LinkViewShell from "@roomy/design/components/content/thread/linkView/LinkView.svelte";
+  import type { LinkInfo } from "@roomy/design/components/content/thread/linkView/types.ts";
+  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
 
   let {
     emptyMessage = "No links shared yet",
@@ -11,12 +13,31 @@
 
   const linksQuery = createRoomLinksQuery(() => roomId);
 
-  let links = $derived<Link[]>(linksQuery.data?.pages.flatMap((p) => p.links) ?? []);
+  let links = $derived<LinkInfo[]>(
+    (linksQuery.data?.pages.flatMap((p) => p.links) ?? []).map(mapLink),
+  );
 
   let hasMore = $derived(linksQuery.hasNextPage ?? false);
 
   function loadMore() {
     linksQuery.fetchNextPage();
+  }
+
+  function mapLink(l: Link): LinkInfo {
+    const embed = l.embed;
+    if (!embed) return { url: l.url };
+    return {
+      url: l.url,
+      embed: {
+        title: embed.t,
+        description: embed.d,
+        image: embed.imgs?.[0]?.u ?? embed.thumb?.u,
+        video: embed.vid?.u,
+        thumbnail: embed.thumb?.u,
+        provider: embed.p?.n,
+        author: embed.au?.n,
+      },
+    };
   }
 </script>
 
@@ -25,30 +46,14 @@
     <div class="text-sm text-base-400 p-2">Loading links…</div>
   </div>
 {:else if linksQuery.isError && !linksQuery.data}
-  <div class="h-full w-full flex items-center justify-center">
-    <div class="text-sm text-red-600 p-2">{linksQuery.error.message}</div>
-  </div>
-{:else if links.length === 0}
-  <div class="h-full w-full flex items-center justify-center">
-    <div class="text-sm text-base-400 p-2">{emptyMessage}</div>
-  </div>
+  <ErrorMessage
+    message={linksQuery.error.message}
+    class="h-full w-full justify-center"
+  />
 {:else}
-  <div class="h-full min-h-0 overflow-y-auto">
-    <div class="flex flex-col gap-3 p-3">
-      {#each links as link (link.url)}
-        <LinkCard url={link.url} embed={link.embed} />
-      {/each}
-      {#if hasMore}
-        <div class="flex justify-center py-2">
-          <button
-            type="button"
-            class="text-sm text-accent-600 dark:text-accent-400 hover:underline"
-            onclick={loadMore}
-          >
-            Load more
-          </button>
-        </div>
-      {/if}
+  <div class="flex flex-col h-full min-h-0">
+    <div class="flex-1 min-h-0">
+      <LinkViewShell {links} {emptyMessage} {loadMore} {hasMore} />
     </div>
   </div>
 {/if}
