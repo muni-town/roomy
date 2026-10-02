@@ -8,6 +8,7 @@ import { iconBigintToHash } from "../utils/hash.ts";
 import type {
 	DiscordAttachmentData,
 	DiscordChannelData,
+	DiscordEmbedData,
 	DiscordMessageData,
 	DiscordMessageReference,
 	DiscordMessageSnapshotData,
@@ -32,7 +33,7 @@ export function normalizeMessage(msg: MessageProperties): DiscordMessageData {
 		webhookId: msg.webhookId?.toString(),
 		author: normalizeUser(msg.author),
 		attachments: (msg.attachments ?? []).map(normalizeAttachment),
-		embeds: [], // services don't use embed content today
+		embeds: (msg.embeds ?? []).map(normalizeEmbed),
 		reactions: (msg.reactions ?? []).map(normalizeReaction),
 		mentions: (msg.mentions ?? []).map(normalizeUser),
 		mentionChannelIds: msg.mentionedChannelIds?.map(String),
@@ -222,4 +223,21 @@ function normalizeSticker(s: {
 
 // ─── Embeds ────────────────────────────────────────────────────────────────
 
-// Not needed — services don't inspect embed contents.
+/**
+ * Embeds are Discord's own rich-card shape; the bridge carries the fields it
+ * uses (a `url` becomes a link attachment, see `buildAttachments`) and keeps
+ * the title/description/color alongside.
+ */
+function normalizeEmbed(embed: {
+	title?: string;
+	url?: string;
+	description?: string;
+	color?: number;
+}): DiscordEmbedData {
+	return {
+		title: embed.title,
+		url: embed.url,
+		description: embed.description,
+		color: embed.color,
+	};
+}

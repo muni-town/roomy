@@ -2,7 +2,8 @@
  * Unit tests for message-ingestion.ts
  *
  * Covers: MI01–MI16 — basic sync, fan-out, dedup, system messages,
- * thread starters, mentions, attachments, backfill restriction, subset mode.
+ * thread starters, mentions, attachments, embeds, backfill restriction,
+ * subset mode.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -332,6 +333,111 @@ describe("ingestDiscordMessage — stickers", () => {
 		const result = await ingestDiscordMessage(msg, repo, roomy);
 		expect(result).toEqual({ synced: 0, skipped: 1 });
 		expect(createMessageEvent(roomy, SPACE_A)).toBeUndefined();
+	});
+});
+
+describe("ingestDiscordMessage — embeds", () => {
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
+
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+		mapChannel(repo);
+	});
+
+	// EC05: Services post a message whose only payload is an embed. Empty
+	// content and no attachments must not drop it.
+	test("EC05: syncs a message whose only content is an embed", async () => {
+		const msg = makeMessage({
+			id: MSG_ID,
+			content: "",
+			embeds: [
+				{
+					url: "https://example.com/article",
+					title: "An article",
+					description: "What it says",
+					color: 5814783,
+				},
+			],
+		});
+
+		const result = await ingestDiscordMessage(msg, repo, roomy);
+		expect(result).toEqual({ synced: 1, skipped: 0 });
+
+		const event = createMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
+		expectToBe(event.$type, "space.roomy.message.createMessage.v0");
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(attExt);
+		const attachments = attExt.attachments;
+		expect(attachments).toHaveLength(1);
+		expectToBe(attachments[0]?.$type, "space.roomy.attachment.link.v0");
+		expect(attachments[0].uri).toBe("https://example.com/article");
+		expect(attachments[0].showPreview).toBe(true);
+	});
+
+	// EC06: An embed without a url (e.g. a bot's image-only card) has no link
+	// to attach, but the message itself is still a message.
+	test("EC06: syncs an embed without a url, with no attachments", async () => {
+		const msg = makeMessage({
+			id: MSG_ID,
+			content: "",
+			embeds: [{ title: "An article" }],
+		});
+
+		const result = await ingestDiscordMessage(msg, repo, roomy);
+		expect(result).toEqual({ synced: 1, skipped: 0 });
+
+		const event = createMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
+		expect(
+			event.extensions?.["space.roomy.extension.attachments.v0"],
+		).toBeUndefined();
+	});
+
+	// EC07: A link unfurl whose url is already in the content — the body
+	// yields the link row, so an attachment would render the card twice.
+	test("EC07: does not attach a link already present in the content", async () => {
+		const msg = makeMessage({
+			id: MSG_ID,
+			content: "worth reading https://example.com/article",
+			embeds: [{ url: "https://example.com/article" }],
+		});
+
+		const result = await ingestDiscordMessage(msg, repo, roomy);
+		expect(result).toEqual({ synced: 1, skipped: 0 });
+		expect(
+			createMessageEvent(roomy, SPACE_A)?.extensions?.[
+				"space.roomy.extension.attachments.v0"
+			],
+		).toBeUndefined();
+	});
+
+	// EC08: Distinct urls each get their own card; a repeated url does not.
+	test("EC08: attaches one link per distinct embed url", async () => {
+		const msg = makeMessage({
+			id: MSG_ID,
+			content: "",
+			embeds: [
+				{ url: "https://example.com/one" },
+				{ url: "https://example.com/two" },
+				{ url: "https://example.com/one" },
+			],
+		});
+
+		await ingestDiscordMessage(msg, repo, roomy);
+
+		const event = createMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(attExt);
+		const attachments = attExt.attachments;
+		expect(attachments).toHaveLength(2);
+		expectToBe(attachments[0]?.$type, "space.roomy.attachment.link.v0");
+		expectToBe(attachments[1]?.$type, "space.roomy.attachment.link.v0");
+		expect(attachments[0].uri).toBe("https://example.com/one");
+		expect(attachments[1].uri).toBe("https://example.com/two");
 	});
 });
 

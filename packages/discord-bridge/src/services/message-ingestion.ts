@@ -232,8 +232,14 @@ export async function ingestDiscordMessage(
 		// Sync author profile before sending the message.
 		await syncUserProfile(message.author, [spaceDid], repo, roomy, guildId);
 
-		// Skip messages with no content and no attachments
-		if (!message.content && attachments.length === 0) {
+		// Skip messages with no content, no attachments, and no embeds. An
+		// embed-only message is a message: Discord bots and link unfurls post
+		// them with empty content, and dropping them loses the message.
+		if (
+			!message.content &&
+			attachments.length === 0 &&
+			(message.embeds?.length ?? 0) === 0
+		) {
 			log.warn(
 				`Skipping message ${messageId} in ${spaceDid}: no content and no attachments`,
 			);
@@ -397,6 +403,23 @@ function buildAttachments(
 				mimeType: "image/png",
 			});
 		}
+	}
+
+	// Embed links. An embed carrying a url is a link the author posted (or a
+	// service unfurled): the link attachment gives the message a body and the
+	// client a preview card. A url already present in the content is skipped —
+	// the body itself yields a link row, and the attachment would render the
+	// same card twice.
+	const linkedUrls = new Set<string>();
+	for (const embed of message.embeds || []) {
+		const url = embed.url;
+		if (!url || message.content.includes(url) || linkedUrls.has(url)) continue;
+		linkedUrls.add(url);
+		attachments.push({
+			$type: "space.roomy.attachment.link.v0",
+			uri: url,
+			showPreview: true,
+		});
 	}
 
 	return attachments;

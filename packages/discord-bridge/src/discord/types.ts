@@ -20,6 +20,7 @@ export const desiredProperties = createDesiredPropertiesObject({
 		webhookId: true,
 		editedTimestamp: true,
 		attachments: true,
+		embeds: true,
 		messageReference: true,
 		type: true,
 		reactions: true,
