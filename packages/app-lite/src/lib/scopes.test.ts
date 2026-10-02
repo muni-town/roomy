@@ -164,6 +164,24 @@ describe("tier/ceiling invariants", () => {
     }
   });
 
+  test("base tier requests no voice rpc scopes (deferred until the client allows them)", () => {
+    // A requestable scope must be registered on the HappyView API client. The
+    // deployed client does not list the voice rpcs, so requesting them makes
+    // HappyView reject the whole grant at POST /oauth/sessions ("scope ... is
+    // not allowed for this client"), surfaced to the user as
+    // OAuthCallbackError: Failed to register session — blocking all sign-in.
+    // The voice rpcs stay in the ceiling (and their own tier) but must never
+    // enter base.
+    const voiceScopes = [...parseScopes(SCOPE_SETS.voice)].filter((s) =>
+      s.includes("voice."),
+    );
+    assert.ok(voiceScopes.length > 0, "voice tier should carry voice rpcs");
+    const baseSet = parseScopes(SCOPE_SETS.base);
+    for (const s of voiceScopes) {
+      assert.equal(baseSet.has(s), false, `voice scope leaked into base: ${s}`);
+    }
+  });
+
   test("CLIENT_ID_SCOPE is the ceiling — a stable superset of every tier", () => {
     // The dev loopback client id embeds this scope; the PDS records the client
     // id with the authorization request and rejects a differing one at token

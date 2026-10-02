@@ -105,6 +105,22 @@ const APPSERVER_RPCS = [
   "space.roomy.space.getBridgeTokens",
   "space.roomy.space.grantBridgeToken",
   "space.roomy.space.revokeBridgeToken",
+] as const;
+
+/**
+ * Voice RPCs. A voice room is a follow-on client feature (voice chat Phase 1
+ * shipped the server core only — see appserver/src/voice/); nothing in
+ * app-lite calls these yet. They deliberately live OUTSIDE `base`: a scope the
+ * login requests must be registered on the HappyView API client, and the
+ * deployed client — like the PDS metadata — is provisioned independently of
+ * this file. Requesting an unregistered `rpc:` scope makes HappyView reject
+ * the whole granted set at `POST /oauth/sessions` with
+ * `400 scope '<nsid>' is not allowed for this client`, which surfaces to the
+ * user as `OAuthCallbackError: Failed to register session` and blocks ALL
+ * sign-in. Kept in the ceiling so a future tier (or HappyView client update)
+ * can request them without a metadata rebuild.
+ */
+const VOICE_NSIDS = [
   "space.roomy.voice.getToken",
   "space.roomy.voice.getParticipants",
   "space.roomy.voice.getActiveCalls",
@@ -197,6 +213,10 @@ export const SCOPE_SETS = {
   base: BASE_SCOPES.join(" "),
   semble: [...BASE_SCOPES, ...SEMBLE_SCOPES].join(" "),
   withDms: [...BASE_SCOPES, ...DM_SCOPES].join(" "),
+  // Voice is deferred behind the HappyView client's scope registration (see
+  // VOICE_NSIDS). The tier exists so the expansion flow can request it once
+  // the deployed client allows it; it is NOT in base.
+  voice: [...BASE_SCOPES, ...VOICE_NSIDS.map((nsid) => `rpc:${nsid}?aud=*`)].join(" "),
 } as const;
 
 export type ScopeSetName = keyof typeof SCOPE_SETS;
@@ -228,6 +248,7 @@ export const FULL_SCOPE_CEILING = [
   "rpc:space.roomy.authComplete.arbiter.proxy?aud=*",
   "include:space.roomy.authComplete",
   ...APPSERVER_RPCS.map((nsid) => `rpc:${nsid}?aud=*`),
+  ...VOICE_NSIDS.map((nsid) => `rpc:${nsid}?aud=*`),
   "repo:network.cosmik.card?action=create",
   ...DM_SCOPES,
 ].join(" ");
