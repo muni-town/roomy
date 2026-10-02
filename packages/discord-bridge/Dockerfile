@@ -17,7 +17,11 @@ RUN pnpm --filter @roomy-space/sdk build
 RUN npm install -g bun@1.3.14
 
 WORKDIR /build/packages/discord-bridge
-RUN bun build src/index.ts --target=bun --outdir=dist --minify
+
+# The migration script is a second entry point so it ships in the runtime
+# image: the deployed container has no sqlite3 CLI, and this is the only way
+# to rewrite forward-dedup rows there. See README "Data migrations".
+RUN bun build src/index.ts src/scripts/migrate-forward-mappings.ts --target=bun --outdir=dist --minify
 
 FROM oven/bun:1.3.14
 

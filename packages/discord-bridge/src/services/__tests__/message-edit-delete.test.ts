@@ -12,9 +12,12 @@ import {
 	handleMessageDelete,
 	handleMessageEdit,
 } from "../message-edit-delete.ts";
+import { ingestDiscordMessage } from "../message-ingestion.ts";
 import {
 	CHANNEL,
+	CHANNEL_2,
 	GUILD,
+	makeForwardMessage,
 	makeMessage,
 	makeUser,
 	ROOMY_CHANNEL_ULID,
@@ -226,6 +229,36 @@ describe("handleMessageEdit", () => {
 		expect(editMessageEvent(roomy, SPACE_A)).toBeDefined();
 		expect(editMessageEvent(roomy, SPACE_B)).toBeDefined();
 	});
+
+	// ED12: A bridged forward is stored under the message kind (its own Roomy
+	// message) as well as the forward kind (the router's dedup key), so
+	// editing it produces an editMessage for the forward event's message.
+	test("ED12: edits a bridged forward", async () => {
+		const originalId = "7777777771";
+		repo.registerMapping(SPACE_A, "message", originalId, ROOMY_MESSAGE_ULID);
+		repo.registerMapping(SPACE_A, "channel", CHANNEL_2, ROOMY_CHANNEL_ULID);
+
+		const forward = makeForwardMessage(originalId, CHANNEL, CHANNEL_2);
+		await ingestDiscordMessage(forward, repo, roomy);
+		const forwardEvent = roomy.findEvent(
+			SPACE_A,
+			"space.roomy.message.forwardMessages.v0",
+		);
+		expectToBeDefined(forwardEvent);
+
+		const edit = makeMessage({
+			id: forward.id,
+			channelId: CHANNEL,
+			content: "edited forward",
+			editedTimestamp: Date.now(),
+		});
+		await handleMessageEdit(edit, repo, roomy);
+
+		const event = editMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
+		expectToBe(event.messageId, forwardEvent.id);
+	});
+
 });
 
 describe("handleMessageDelete", () => {
@@ -319,4 +352,32 @@ describe("handleMessageDelete", () => {
 
 		expect(deleteMessageEvent(roomy, SPACE_A)).toBeUndefined();
 	});
+
+	// ED13: Deleting a bridged forward resolves the forward's Roomy message.
+	test("ED13: deletes a bridged forward", async () => {
+		const originalId = "7777777772";
+		repo.registerMapping(SPACE_A, "message", originalId, ROOMY_MESSAGE_ULID);
+		repo.registerMapping(SPACE_A, "channel", CHANNEL_2, ROOMY_CHANNEL_ULID);
+
+		const forward = makeForwardMessage(originalId, CHANNEL, CHANNEL_2);
+		await ingestDiscordMessage(forward, repo, roomy);
+		const forwardEvent = roomy.findEvent(
+			SPACE_A,
+			"space.roomy.message.forwardMessages.v0",
+		);
+		expectToBeDefined(forwardEvent);
+
+		await handleMessageDelete(
+			BigInt(forward.id),
+			BigInt(CHANNEL),
+			BigInt(GUILD),
+			repo,
+			roomy,
+		);
+
+		const event = deleteMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
+		expectToBe(event.messageId, forwardEvent.id);
+	});
+
 });

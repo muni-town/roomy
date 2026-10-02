@@ -537,11 +537,14 @@ async function handleThreadStarterMessage(
 		try {
 			await roomy.sendEvent(spaceDid, forwardEvent);
 
-			// Store with a composite key so the Roomy→Discord router can dedupe
-			// this forward event against its per-message forward key.
+			// The Discord forward becomes a Roomy message of its own (the
+			// forward event), so replies/edits/deletes/reactions on it resolve
+			// to that ULID. The composite key the Roomy→Discord router dedupes
+			// against lives under its own kind, keeping this column ULID-only.
+			repo.registerMapping(spaceDid, "message", messageId, forwardUlid);
 			repo.registerMapping(
 				spaceDid,
-				"message",
+				"forward",
 				messageId,
 				`${forwardUlid}:${originalRoomyId}`,
 			);
@@ -679,11 +682,14 @@ async function handleForwardMessage(
 		try {
 			await roomy.sendEvent(spaceDid, forwardEvent);
 
-			// Store with a composite key so the Roomy→Discord router can dedupe
-			// this forward event against its per-message forward key.
+			// The Discord forward becomes a Roomy message of its own (the
+			// forward event), so replies/edits/deletes/reactions on it resolve
+			// to that ULID. The composite key the Roomy→Discord router dedupes
+			// against lives under its own kind, keeping this column ULID-only.
+			repo.registerMapping(spaceDid, "message", messageId, forwardUlid);
 			repo.registerMapping(
 				spaceDid,
-				"message",
+				"forward",
 				messageId,
 				`${forwardUlid}:${originalRoomyId}`,
 			);

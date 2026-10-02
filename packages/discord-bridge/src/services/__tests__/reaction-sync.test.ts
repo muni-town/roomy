@@ -11,9 +11,12 @@ import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import { reactionKey } from "../../utils/emoji.ts";
 import { handleReactionAdd, handleReactionRemove } from "../reaction-sync.ts";
+import { ingestDiscordMessage } from "../message-ingestion.ts";
 import {
 	CHANNEL,
+	CHANNEL_2,
 	GUILD,
+	makeForwardMessage,
 	ROOMY_CHANNEL_ULID,
 	ROOMY_MESSAGE_ULID,
 	SPACE_A,
@@ -224,6 +227,36 @@ bunTest.describe("handleReactionAdd", () => {
 		const event = reactionAddEvent(roomy, SPACE_A);
 		expectToBe(event?.$type, "space.roomy.reaction.addBridgedReaction.v0");
 		expectToBe(event.reaction, "<a:party:987654321>");
+	});
+
+	// RS10: A bridged forward's snowflake resolves to the Roomy forward
+	// message, so reacting to it produces an addBridgedReaction.
+	bunTest.test("RS10: reacts to a bridged forward", async () => {
+		const originalId = "7777777773";
+		repo.registerMapping(SPACE_A, "message", originalId, ROOMY_MESSAGE_ULID);
+		repo.registerMapping(SPACE_A, "channel", CHANNEL_2, ROOMY_CHANNEL_ULID);
+
+		const forward = makeForwardMessage(originalId, CHANNEL, CHANNEL_2);
+		await ingestDiscordMessage(forward, repo, roomy);
+		const forwardEvent = roomy.findEvent(
+			SPACE_A,
+			"space.roomy.message.forwardMessages.v0",
+		);
+		expectToBeDefined(forwardEvent);
+
+		await handleReactionAdd(
+			BigInt(forward.id),
+			CHANNEL_ID,
+			USER_ID,
+			THUMBS_UP,
+			GUILD_ID,
+			repo,
+			roomy,
+		);
+
+		const event = reactionAddEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
+		expectToBe(event.reactionTo, forwardEvent.id);
 	});
 });
 

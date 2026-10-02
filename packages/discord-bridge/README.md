@@ -51,6 +51,7 @@ src/
 │   ├── profile-sync.ts        # Discord user profile → updateProfile events
 │   ├── room-sync.ts           # Room/sidebar/thread creation + thread handling
 │   └── backfill.ts            # History backfill on READY
+├── scripts/                   # Ops + dev scripts
 └── utils/
     ├── hash.ts                # SHA-256 fingerprinting for profile dedup
     └── emoji.ts               # Emoji parsing (unicode + custom)
@@ -306,6 +307,27 @@ docker run -d \
 ```
 
 The entrypoint restores the SQLite database from S3 on first start (if no local DB exists) and wraps the Bun process with Litestream for continuous replication.
+
+### Data migrations
+
+Scripts that rewrite rows in an existing database are bundled into the runtime
+image as extra entry points (`bun build` writes them under `dist/`), so they
+can be run inside the deployed container. The container ships no `sqlite3`
+CLI; this is how a data migration is applied there.
+
+```bash
+# inside the container (BRIDGE_DB_PATH is already set to /data/bridge.sqlite)
+bun run /app/dist/scripts/migrate-forward-mappings.js --dry-run
+bun run /app/dist/scripts/migrate-forward-mappings.js
+```
+
+| script | rewrites |
+| ------ | -------- |
+| `migrate-forward-mappings.js` | Rows written before the forward-dedup key got its own mapping kind: moves `<forwardUlid>:<originalRoomyId>` values from `message` to `forward`, and re-points `message` at the forward's Roomy ULID. Idempotent, and safe against a running bridge (one `BEGIN IMMEDIATE` transaction). |
+
+`--dry-run` reports the row counts and rolls back. The script exits non-zero if
+the database path does not exist or the file is not a bridge database; locally,
+`bun run migrate:forward-mappings -- --dry-run`.
 
 ### How the image is published, and how to compare merged against running
 

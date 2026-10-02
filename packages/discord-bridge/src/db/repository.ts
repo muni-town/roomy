@@ -8,7 +8,8 @@ export type MappingKind =
 	| "channel"
 	| "thread"
 	| "user"
-	| "reaction";
+	| "reaction"
+	| "forward";
 
 const MAPPING_KINDS: Record<MappingKind, true> = {
 	message: true,

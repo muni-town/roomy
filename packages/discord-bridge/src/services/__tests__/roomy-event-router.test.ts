@@ -36,6 +36,8 @@ import {
 	USER_ID,
 } from "./helpers/test-data.ts";
 
+import { expectToBeDefined } from "./utils.ts";
+
 const DISCORD_MESSAGE_ID = newUlid();
 const DISCORD_CHANNEL_ID = "800000000000000001";
 const DISCORD_THREAD_ID = "800000000000000002";
@@ -823,13 +825,20 @@ describe("RoomyEventRouter", () => {
 		expect(sent?.options?.username).toBe("Bridged User - @bridged.bsky.social");
 		expect(sent?.options?.avatarUrl).toBe("https://example.com/avatar.png");
 
-		// Mapping registered so Discord→Roomy dedup catches the echo
-		const mappedDiscordId = repo.getDiscordId(
-			SPACE_A,
-			"message",
-			`${forwardEvent.id}:${ROOMY_MESSAGE_ULID}`,
+		// Dedup key recorded under its own kind, and the Discord message maps
+		// to the Roomy forward message it represents.
+		expect(
+			repo.getDiscordId(
+				SPACE_A,
+				"forward",
+				`${forwardEvent.id}:${ROOMY_MESSAGE_ULID}`,
+			),
+		).toBe(sent?.messageId);
+		const sentMessageId = sent?.messageId;
+		expectToBeDefined(sentMessageId);
+		expect(repo.getRoomyId(SPACE_A, "message", sentMessageId)).toBe(
+			forwardEvent.id,
 		);
-		expect(mappedDiscordId).toBe(sent?.messageId);
 	});
 
 	/**
@@ -888,7 +897,7 @@ describe("RoomyEventRouter", () => {
 		const forwardId = newUlid();
 		repo.registerMapping(
 			SPACE_A,
-			"message",
+			"forward",
 			"already-forwarded",
 			`${forwardId}:${ROOMY_MESSAGE_ULID}`,
 		);
@@ -943,13 +952,20 @@ describe("RoomyEventRouter", () => {
 		await router.subscribeToSpace(SPACE_A);
 
 		const forwardEvent = makeForwardMessagesEvent({});
-		// Simulate the mapping created by Discord→Roomy ingestion, which uses
-		// a composite roomy id of `${forwardEvent.id}:${originalMessageId}`.
+		// Simulate the mappings created by Discord→Roomy ingestion: the
+		// composite dedup key under its own kind, plus the message mapping
+		// from the Discord snowflake to the Roomy forward message.
+		repo.registerMapping(
+			SPACE_A,
+			"forward",
+			"discord-forwarded-msg",
+			`${forwardEvent.id}:${ROOMY_MESSAGE_ULID}`,
+		);
 		repo.registerMapping(
 			SPACE_A,
 			"message",
 			"discord-forwarded-msg",
-			`${forwardEvent.id}:${ROOMY_MESSAGE_ULID}`,
+			forwardEvent.id,
 		);
 
 		await roomy.fireEvent(SPACE_A, forwardEvent);
@@ -1024,13 +1040,20 @@ describe("RoomyEventRouter", () => {
 		// Original Discord message is NOT deleted
 		expect(discord.deleted).toHaveLength(0);
 
-		// Mapping registered so Discord→Roomy dedup catches the echo
-		const mappedDiscordId = repo.getDiscordId(
-			SPACE_A,
-			"message",
-			`${moveEvent.id}:${ROOMY_MESSAGE_ULID}`,
+		// Dedup key recorded under its own kind; the Discord message maps to
+		// the Roomy move message it represents.
+		expect(
+			repo.getDiscordId(
+				SPACE_A,
+				"forward",
+				`${moveEvent.id}:${ROOMY_MESSAGE_ULID}`,
+			),
+		).toBe(sent?.messageId);
+		const movedMessageId = sent?.messageId;
+		expectToBeDefined(movedMessageId);
+		expect(repo.getRoomyId(SPACE_A, "message", movedMessageId)).toBe(
+			moveEvent.id,
 		);
-		expect(mappedDiscordId).toBe(sent?.messageId);
 	});
 
 	/**
@@ -1159,15 +1182,26 @@ describe("RoomyEventRouter", () => {
 			DISCORD_MESSAGE_ID,
 			ROOMY_MESSAGE_ULID,
 		);
+		// Without a guild id the send path bails before dedup, making the
+		// assertion below pass vacuously.
+		discord.setGuildId(destChannelId, GUILD);
 		await router.subscribeToSpace(SPACE_A);
 
 		const moveEvent = makeMoveMessagesEvent({ toRoomId: destRoomId });
-		// Simulate the mapping created by Discord→Roomy ingestion
+		// Simulate the mappings created by Discord→Roomy ingestion: the
+		// composite dedup key under its own kind, plus the message mapping
+		// from the Discord snowflake to the Roomy move message.
+		repo.registerMapping(
+			SPACE_A,
+			"forward",
+			"discord-moved-msg",
+			`${moveEvent.id}:${ROOMY_MESSAGE_ULID}`,
+		);
 		repo.registerMapping(
 			SPACE_A,
 			"message",
 			"discord-moved-msg",
-			`${moveEvent.id}:${ROOMY_MESSAGE_ULID}`,
+			moveEvent.id,
 		);
 
 		await roomy.fireEvent(SPACE_A, moveEvent);

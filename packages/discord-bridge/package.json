@@ -19,7 +19,8 @@
 		"typecheck": "tsc --noEmit",
 		"generate:fake-data": "bun run src/scripts/generate-fake-data.ts",
 		"generate:fake-data:quick": "bun run src/scripts/generate-fake-data.ts --quick",
-		"generate:fake-data:large": "bun run src/scripts/generate-fake-data.ts --channels 15 --threads 250"
+		"generate:fake-data:large": "bun run src/scripts/generate-fake-data.ts --channels 15 --threads 250",
+		"migrate:forward-mappings": "bun run src/scripts/migrate-forward-mappings.ts"
 	},
 	"dependencies": {
 		"@atcute/cbor": "^2.2.8",

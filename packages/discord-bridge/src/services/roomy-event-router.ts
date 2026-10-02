@@ -1100,7 +1100,7 @@ export class RoomyEventRouter {
 			// allows partial retries — if some messages failed on a previous
 			// attempt, only the un-processed ones will be retried.
 			const compositeKey = `${event.id}:${messageId}`;
-			if (this.#repo.getDiscordId(spaceDid, "message", compositeKey)) {
+			if (this.#repo.getDiscordId(spaceDid, "forward", compositeKey)) {
 				continue;
 			}
 
@@ -1145,13 +1145,22 @@ export class RoomyEventRouter {
 					{ username, avatarUrl, webhook, threadId },
 				);
 
-				// Register a mapping so the Discord→Roomy ingestion dedup
-				// skips this forwarded message when the gateway event arrives.
+				// The composite key is a dedup key, not a message id: it is
+				// recorded under its own kind so `(space, "message", discordId)`
+				// only ever holds a ULID. The Discord message also maps to the
+				// Roomy forward message it represents, so a reply/edit/delete/
+				// reaction on it resolves to that ULID.
+				this.#repo.registerMapping(
+					spaceDid,
+					"forward",
+					newDiscordMessageId,
+					compositeKey,
+				);
 				this.#repo.registerMapping(
 					spaceDid,
 					"message",
 					newDiscordMessageId,
-					compositeKey,
+					event.id,
 				);
 
 				count++;

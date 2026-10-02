@@ -565,11 +565,12 @@ describe("ingestDiscordMessage — threadStarterMessage", () => {
 		expect(event.messageIds).toEqual([ROOMY_MESSAGE_ULID]);
 		expect(event.fromRoomId).toBe(ROOMY_CHANNEL_ULID);
 
-		// Mapping is stored on the thread starter message snowflake with a
-		// composite key so the Roomy→Discord router can dedupe the echo when
-		// the forward event is delivered back to us.
-		const mappedRoomyId = repo.getRoomyId(SPACE_A, "message", msg.id);
-		expect(mappedRoomyId).toBe(`${event.id}:${ROOMY_MESSAGE_ULID}`);
+		// The thread starter's snowflake maps to the Roomy message the forward
+		// created; the router's composite dedup key lives under its own kind.
+		expect(repo.getRoomyId(SPACE_A, "message", msg.id)).toBe(event.id);
+		expect(repo.getRoomyId(SPACE_A, "forward", msg.id)).toBe(
+			`${event.id}:${ROOMY_MESSAGE_ULID}`,
+		);
 	});
 
 	// MI13: ThreadStarterMessage skips if original not synced
@@ -788,9 +789,12 @@ describe("ingestDiscordMessage — forwarded messages (HAS_SNAPSHOT flag)", () =
 		expect(event.messageIds).toEqual([ROOMY_MESSAGE_ULID]);
 		expect(event.fromRoomId).toBe(sourceRoomUlid);
 
-		// Composite mapping so the Roomy→Discord router can dedupe the echo.
-		const mappedRoomyId = repo.getRoomyId(SPACE_A, "message", msg.id);
-		expect(mappedRoomyId).toBe(`${event.id}:${ROOMY_MESSAGE_ULID}`);
+		// The forward's snowflake maps to the Roomy message the forward
+		// created; the router's composite dedup key lives under its own kind.
+		expect(repo.getRoomyId(SPACE_A, "message", msg.id)).toBe(event.id);
+		expect(repo.getRoomyId(SPACE_A, "forward", msg.id)).toBe(
+			`${event.id}:${ROOMY_MESSAGE_ULID}`,
+		);
 	});
 
 	// FW02: Forward is skipped when the original message was never synced to
@@ -869,6 +873,43 @@ describe("ingestDiscordMessage — forwarded messages (HAS_SNAPSHOT flag)", () =
 		expect(forwardMessageEvent(roomy, SPACE_A)).toBeUndefined();
 		expect(result).toEqual({ synced: 1, skipped: 0 });
 		expect(createMessageEvent(roomy, SPACE_A)).toBeDefined();
+	});
+
+	// FW06: A reply to a bridged forward resolves to the Roomy message the
+	// forward created — the forward event's own ULID, never a composite key.
+	test("FW06: reply to a bridged forward targets the forward's Roomy message", async () => {
+		const originalId = "6666666668";
+		const sourceChannelId = CHANNEL_2;
+		const sourceRoomUlid = newUlid();
+		mapMessage(repo, originalId, ROOMY_MESSAGE_ULID);
+		repo.registerMapping(SPACE_A, "channel", sourceChannelId, sourceRoomUlid);
+
+		const forward = makeForwardMessage(originalId, CHANNEL, sourceChannelId);
+		await ingestDiscordMessage(forward, repo, roomy);
+		const fwdEvent = forwardMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(fwdEvent);
+		const fwdEventId = fwdEvent.id;
+
+		const reply = makeMessage({
+			id: "6666666669",
+			channelId: CHANNEL,
+			content: "replying to the forward",
+			messageReference: {
+				messageId: forward.id,
+				channelId: CHANNEL,
+				guildId: GUILD,
+			},
+		});
+		const result = await ingestDiscordMessage(reply, repo, roomy);
+
+		expect(result).toEqual({ synced: 1, skipped: 0 });
+		const event = createMessageEvent(roomy, SPACE_A);
+		expectToBeDefined(event);
+		const attExt = event.extensions?.["space.roomy.extension.attachments.v0"];
+		expectToBeDefined(attExt);
+		expect(attExt.attachments).toEqual([
+			{ $type: "space.roomy.attachment.reply.v0", target: fwdEventId },
+		]);
 	});
 });
 
