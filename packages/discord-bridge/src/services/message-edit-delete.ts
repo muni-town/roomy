@@ -17,6 +17,7 @@ import {
 } from "./mention-resolver.ts";
 import { buildRoomyRoomIds } from "./message-ingestion.ts";
 import { syncUserProfile } from "./profile-sync.ts";
+import { sendEventOrQueue } from "./send-retry.ts";
 
 const log = createLogger("edit-delete");
 
@@ -151,15 +152,16 @@ export async function handleMessageEdit(
 			extensions,
 		};
 
-		try {
-			await roomy.sendEvent(spaceDid, event);
+		const landed = await sendEventOrQueue(repo, roomy, {
+			spaceDid,
+			op: "message_edit",
+			discordId: messageId,
+			event,
+			mapping: null,
+		});
+		if (landed) {
 			log.info(
 				`Synced edit for message ${messageId} → ${roomyMessageId} in ${spaceDid}`,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to sync edit for message ${messageId} to ${spaceDid}`,
-				err,
 			);
 		}
 	}
@@ -216,16 +218,17 @@ export async function handleMessageDelete(
 			extensions,
 		};
 
-		try {
-			await roomy.sendEvent(spaceDid, event);
+		const landed = await sendEventOrQueue(repo, roomy, {
+			spaceDid,
+			op: "message_delete",
+			discordId: messageIdStr,
+			event,
+			mapping: null,
+		});
+		if (landed) {
 			// Keep mapping row — delete is recorded; future edit attempts skip naturally
 			log.info(
 				`Synced delete for message ${messageIdStr} → ${roomyMessageId} in ${spaceDid}`,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to sync delete for message ${messageIdStr} to ${spaceDid}`,
-				err,
 			);
 		}
 	}

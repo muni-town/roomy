@@ -10,6 +10,19 @@ export type MappingKind =
 	| "user"
 	| "reaction";
 
+const MAPPING_KINDS: Record<MappingKind, true> = {
+	message: true,
+	channel: true,
+	thread: true,
+	user: true,
+	reaction: true,
+};
+
+/** Read a mapping kind back out of the database. */
+function isMappingKind(value: string | null): value is MappingKind {
+	return value !== null && value in MAPPING_KINDS;
+}
+
 export type BridgeMode = "full" | "subset";
 
 export type BridgeConfig = {
@@ -98,6 +111,75 @@ export type EventError = {
 	errorMessage: string;
 	occurredAt: number;
 };
+
+/**
+ * An event send the bridge owes a space after its inline retries were
+ * exhausted. Persisted because nothing else revisits the work: the Discord
+ * gateway offers a message once, and the channel cursor only gates backfill.
+ * Re-offered by the periodic sweep in services/send-retry.ts.
+ */
+export type FailedSend = {
+	id: number;
+	spaceDid: string;
+	/** Which send this is; part of the queue key so a create, its edit and its delete queue separately. */
+	op: string;
+	/** Discord snowflake the send belongs to (message id). */
+	discordId: string;
+	/** Mapping registered once the event lands, or null for pure mutations. */
+	mappingKind: MappingKind | null;
+	mappingValue: string | null;
+	/** The exact event that failed — re-sent unchanged so its ULID stays stable. */
+	eventJson: string;
+	/** Delivery attempts so far, including the attempt that queued it. */
+	attempts: number;
+	lastError: string | null;
+	firstFailedAt: number;
+	lastFailedAt: number;
+	/** When the next re-offer is due; null once the entry is terminal. */
+	nextRetryAt: number | null;
+	/** Terminal entries are kept so the drop stays countable, never re-offered. */
+	terminal: boolean;
+};
+
+type FailedSendRow = {
+	id: number;
+	space_did: string;
+	op: string;
+	discord_id: string;
+	mapping_kind: string | null;
+	mapping_value: string | null;
+	event_json: string;
+	attempts: number;
+	last_error: string | null;
+	first_failed_at: number;
+	last_failed_at: number;
+	next_retry_at: number | null;
+	terminal: number;
+};
+
+const FAILED_SEND_COLUMNS = `id, space_did, op, discord_id, mapping_kind, mapping_value,
+  event_json, attempts, last_error, first_failed_at, last_failed_at, next_retry_at,
+  terminal`;
+
+/** Row → domain mapping shared by every failed_sends query, so the column
+ *  list and the object shape cannot drift apart. */
+function toFailedSend(row: FailedSendRow): FailedSend {
+	return {
+		id: row.id,
+		spaceDid: row.space_did,
+		op: row.op,
+		discordId: row.discord_id,
+		mappingKind: isMappingKind(row.mapping_kind) ? row.mapping_kind : null,
+		mappingValue: row.mapping_value,
+		eventJson: row.event_json,
+		attempts: row.attempts,
+		lastError: row.last_error,
+		firstFailedAt: row.first_failed_at,
+		lastFailedAt: row.last_failed_at,
+		nextRetryAt: row.next_retry_at,
+		terminal: row.terminal === 1,
+	};
+}
 
 export class BridgeRepository {
 	private constructor(private readonly db: Database) {}
@@ -1028,6 +1110,123 @@ export class BridgeRepository {
 				"DELETE FROM profile_sync_queue WHERE space_did = ? AND discord_user_id = ?",
 			)
 			.run(spaceDid, discordUserId);
+	}
+
+	// === Failed send queue (retry queue) ===
+
+	/**
+	 * Queue an event send the bridge owes a space — or re-queue one already
+	 * present for the same (space, op, Discord id), bumping its attempt count.
+	 * `attempts` seeds the first insert; `nextRetryAt` is when the re-offer
+	 * sweep may pick the entry up.
+	 */
+	enqueueFailedSend(entry: {
+		spaceDid: string;
+		op: string;
+		discordId: string;
+		mappingKind: MappingKind | null;
+		mappingValue: string | null;
+		eventJson: string;
+		error: string;
+		attempts: number;
+		nextRetryAt: number;
+	}): void {
+		const now = Date.now();
+		this.db
+			.prepare(
+				`INSERT INTO failed_sends
+           (space_did, op, discord_id, mapping_kind, mapping_value, event_json,
+            attempts, last_error, first_failed_at, last_failed_at, next_retry_at, terminal)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+         ON CONFLICT (space_did, op, discord_id) DO UPDATE SET
+           mapping_kind = excluded.mapping_kind,
+           mapping_value = excluded.mapping_value,
+           event_json = excluded.event_json,
+           attempts = failed_sends.attempts + 1,
+           last_error = excluded.last_error,
+           last_failed_at = excluded.last_failed_at,
+           next_retry_at = excluded.next_retry_at,
+           terminal = 0`,
+			)
+			.run(
+				entry.spaceDid,
+				entry.op,
+				entry.discordId,
+				entry.mappingKind,
+				entry.mappingValue,
+				entry.eventJson,
+				entry.attempts,
+				entry.error,
+				now,
+				now,
+				entry.nextRetryAt,
+			);
+	}
+
+	/** Entries whose re-offer is due, oldest first. Terminal entries excluded. */
+	getStaleFailedSends(now: number, limit: number): FailedSend[] {
+		return this.db
+			.query<FailedSendRow, [number, number]>(
+				`SELECT ${FAILED_SEND_COLUMNS} FROM failed_sends
+         WHERE terminal = 0 AND next_retry_at <= ?
+         ORDER BY next_retry_at ASC LIMIT ?`,
+			)
+			.all(now, limit)
+			.map(toFailedSend);
+	}
+
+	/** Record a failed re-offer and schedule the next one. */
+	bumpFailedSendAttempt(id: number, error: string, nextRetryAt: number): void {
+		this.db
+			.prepare(
+				`UPDATE failed_sends SET
+           attempts = attempts + 1, last_error = ?, last_failed_at = ?, next_retry_at = ?
+         WHERE id = ?`,
+			)
+			.run(error, Date.now(), nextRetryAt, id);
+	}
+
+	/** Stop re-offering an entry; the row stays so the drop remains countable. */
+	markFailedSendTerminal(id: number, error: string): void {
+		this.db
+			.prepare(
+				`UPDATE failed_sends SET
+           terminal = 1, attempts = attempts + 1, last_error = ?, last_failed_at = ?,
+           next_retry_at = NULL
+         WHERE id = ?`,
+			)
+			.run(error, Date.now(), id);
+	}
+
+	/** Remove an entry once its event has landed. */
+	deleteFailedSend(id: number): void {
+		this.db.prepare("DELETE FROM failed_sends WHERE id = ?").run(id);
+	}
+
+	/** Entries newest failure first, optionally scoped to one space. */
+	listFailedSends(limit = 50, spaceDid?: string): FailedSend[] {
+		const params: (string | number)[] = spaceDid ? [spaceDid, limit] : [limit];
+		return this.db
+			.query<FailedSendRow, (string | number)[]>(
+				`SELECT ${FAILED_SEND_COLUMNS} FROM failed_sends
+         ${spaceDid ? "WHERE space_did = ?" : ""}
+         ORDER BY last_failed_at DESC, id DESC LIMIT ?`,
+			)
+			.all(...params)
+			.map(toFailedSend);
+	}
+
+	/** Queue depth, split by whether the entry is still being re-offered. */
+	countFailedSends(spaceDid?: string): { pending: number; terminal: number } {
+		const row = this.db
+			.query<{ pending: number; terminal: number }, (string | number)[]>(
+				`SELECT
+           coalesce(sum(case when terminal = 0 then 1 else 0 end), 0) AS pending,
+           coalesce(sum(case when terminal = 1 then 1 else 0 end), 0) AS terminal
+         FROM failed_sends ${spaceDid ? "WHERE space_did = ?" : ""}`,
+			)
+			.get(...(spaceDid ? [spaceDid] : []));
+		return { pending: row?.pending ?? 0, terminal: row?.terminal ?? 0 };
 	}
 }
 

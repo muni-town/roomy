@@ -5,10 +5,13 @@ import { isBackfillRunning } from "./services/backfill.ts";
 
 const log = createLogger("api");
 
+/** A running status API server, as returned by `startApi`. */
+export type ApiServer = Bun.Server<undefined>;
+
 export function startApi(
 	repo: BridgeRepository,
 	getAppId: () => string | undefined,
-) {
+): ApiServer {
 	const server = Bun.serve({
 		port: PORT(),
 		async fetch(req) {
@@ -89,6 +92,28 @@ function route(
 				guildId: guildId ?? undefined,
 			});
 			return jsonResponse({ channels });
+		}
+
+		// Sends the bridge owes a space after their retries were exhausted.
+		// `pending` entries are still being re-offered; `terminal` ones are
+		// counted drops. Event payloads are omitted — callers only need to see
+		// that something is stuck, not its content.
+		case "/sends/failed": {
+			const spaceDid = url.searchParams.get("spaceDid") ?? undefined;
+			return jsonResponse({
+				...repo.countFailedSends(spaceDid),
+				sends: repo.listFailedSends(50, spaceDid).map((send) => ({
+					spaceDid: send.spaceDid,
+					op: send.op,
+					discordId: send.discordId,
+					attempts: send.attempts,
+					lastError: send.lastError,
+					firstFailedAt: send.firstFailedAt,
+					lastFailedAt: send.lastFailedAt,
+					nextRetryAt: send.nextRetryAt,
+					terminal: send.terminal,
+				})),
+			});
 		}
 
 		default:

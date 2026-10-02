@@ -269,6 +269,37 @@ export const MIGRATIONS: Migration[] = [
       `);
 		},
 	},
+	{
+		version: 11,
+		name: "failed_sends",
+		up(db) {
+			// An event send the bridge owes a space after its inline retries
+			// were exhausted. The gateway offers a Discord message once and the
+			// channel cursor only gates backfill, so without a durable record
+			// the drop is both invisible and permanent. Rows are re-offered by
+			// the sweep in services/send-retry.ts; an entry that keeps failing
+			// goes terminal and is kept so the loss stays countable.
+			db.run(`
+        CREATE TABLE failed_sends (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          space_did       TEXT NOT NULL,
+          op              TEXT NOT NULL,
+          discord_id      TEXT NOT NULL,
+          mapping_kind    TEXT,
+          mapping_value   TEXT,
+          event_json      TEXT NOT NULL,
+          attempts        INTEGER NOT NULL DEFAULT 0,
+          last_error      TEXT,
+          first_failed_at INTEGER NOT NULL,
+          last_failed_at  INTEGER NOT NULL,
+          next_retry_at   INTEGER,
+          terminal        INTEGER NOT NULL DEFAULT 0,
+          UNIQUE (space_did, op, discord_id)
+        );
+        CREATE INDEX idx_failed_sends_due ON failed_sends (terminal, next_retry_at);
+      `);
+		},
+	},
 ];
 
 export function runMigrations(db: Database): {

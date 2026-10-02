@@ -19,6 +19,7 @@ import {
 	resolveMentionsToBlocks,
 } from "./mention-resolver.ts";
 import { syncUserProfile } from "./profile-sync.ts";
+import { sendEventOrQueue } from "./send-retry.ts";
 
 const log = createLogger("ingest");
 
@@ -303,23 +304,28 @@ export async function ingestDiscordMessage(
 			extensions,
 		};
 
-		try {
-			await roomy.sendEvent(spaceDid, event);
-
-			// Register mapping
-			repo.registerMapping(spaceDid, "message", messageId, eventUlid);
-
-			// Advance cursor only during live ingestion, not during backfill
-			if (!backfill) {
-				repo.setChannelCursor(spaceDid, channelId, messageId);
-			}
-
-			// log.info(`Synced message ${messageId} → ${eventUlid} in ${spaceDid}`);
-			synced++;
-		} catch (err) {
-			log.error(`Failed to send message ${messageId} to ${spaceDid}`, err);
+		const landed = await sendEventOrQueue(repo, roomy, {
+			spaceDid,
+			op: "message_create",
+			discordId: messageId,
+			event,
+			mapping: { kind: "message", value: eventUlid },
+		});
+		if (!landed) {
+			// The event is queued in the repository and re-offered by the send
+			// sweep; the JSONL record keeps the skip ledger complete.
 			writeSkipRecord("send_failed", message, spaceDid);
+			continue;
 		}
+		repo.registerMapping(spaceDid, "message", messageId, eventUlid);
+
+		// Advance cursor only during live ingestion, not during backfill
+		if (!backfill) {
+			repo.setChannelCursor(spaceDid, channelId, messageId);
+		}
+
+		// log.info(`Synced message ${messageId} → ${eventUlid} in ${spaceDid}`);
+		synced++;
 	}
 
 	return { synced, skipped: targetSpaces.length - synced };

@@ -71,6 +71,7 @@ import {
 	handleThreadCreate,
 } from "./services/room-sync.ts";
 import { RoomyEventRouter } from "./services/roomy-event-router.ts";
+import { retryQueuedSends } from "./services/send-retry.ts";
 
 const log = createLogger("bridge");
 let appId: string | undefined;
@@ -303,6 +304,17 @@ async function main() {
 						},
 						5 * 60 * 1000,
 					);
+
+					// Periodic send re-offer: every minute, re-send queued
+					// Discord→Roomy events whose backoff has elapsed. Ticks
+					// are cheap — the query is indexed and usually empty.
+					setInterval(async () => {
+						try {
+							await retryQueuedSends(repo, roomy);
+						} catch (err) {
+							log.error("Send retry sweep failed", err);
+						}
+					}, 60 * 1000);
 				},
 
 				async messageCreate(message: MessageProperties) {

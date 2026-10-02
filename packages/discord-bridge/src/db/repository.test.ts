@@ -7,6 +7,9 @@ const SPACE_A = "did:web:space-a.example";
 const SPACE_B = "did:web:space-b.example";
 const GUILD = "guild-1";
 
+/** Every known migration version, in application order. */
+const VERSIONS = MIGRATIONS.map((migration) => migration.version);
+
 function repo(): BridgeRepository {
 	return BridgeRepository.open(":memory:");
 }
@@ -15,8 +18,8 @@ describe("migrations", () => {
 	test("apply cleanly on a fresh database", () => {
 		const db = new Database(":memory:");
 		const result = runMigrations(db);
-		expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-		expect(result.current).toBe(10);
+		expect(result.applied).toEqual(VERSIONS);
+		expect(VERSIONS.at(-1)).toBe(result.current);
 	});
 
 	test("are idempotent across re-runs", () => {
@@ -24,7 +27,7 @@ describe("migrations", () => {
 		const first = runMigrations(db);
 		const second = runMigrations(db);
 		expect(second.applied).toEqual([]);
-		expect(second.current).toBe(10);
+		expect(VERSIONS.at(-1)).toBe(second.current);
 	});
 
 	/**
@@ -59,8 +62,12 @@ describe("migrations", () => {
 		);
 
 		const result = runMigrations(db);
-		expect(result.applied).toEqual([10]);
-
+		// Every migration after the seeded version runs, in order.
+		expect(result.applied).toEqual(
+			MIGRATIONS.filter((migration) => migration.version > 9).map(
+				(migration) => migration.version,
+			),
+		);
 		const row = db
 			.query<
 				{
