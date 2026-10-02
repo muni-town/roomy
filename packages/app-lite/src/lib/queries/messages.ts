@@ -21,6 +21,24 @@ export function messagesKey(roomId: string): readonly unknown[] {
   return queryKey(GET_MESSAGES_NSID, { roomId });
 }
 
+/**
+ * The room a `getMessages` key addresses.
+ *
+ * A read is addressed by its key, never by the live `roomId` prop: a room
+ * switch while the read is in flight would otherwise point its cache merge at
+ * the room the reader landed in, writing one room's messages into another's
+ * cache. Failing loudly on a key without a room keeps a malformed key from
+ * silently addressing the wrong one.
+ */
+function messagesKeyRoom(key: readonly unknown[]): string {
+  const params = key[1] as { roomId?: unknown } | undefined;
+  const roomId = params?.roomId;
+  if (typeof roomId !== "string" || roomId === "") {
+    throw new Error(`getMessages key names no room: ${JSON.stringify(key)}`);
+  }
+  return roomId;
+}
+
 export function createMessagesQuery(roomId: () => string, limit = 50) {
   return createQuery<Message[]>(() => ({
     queryKey: messagesKey(roomId()),
@@ -30,9 +48,10 @@ export function createMessagesQuery(roomId: () => string, limit = 50) {
     // guard as the sibling room/space metadata queries. Transport-level retries
     // (rate limits) live in DirectXrpcClient.
     retry: false,
-    queryFn: async () => {
+    queryFn: async ({ queryKey: key }) => {
+      const room = messagesKeyRoom(key);
       const res = await px().query(GET_MESSAGES_NSID, {
-        roomId: roomId(),
+        roomId: room,
         limit: String(limit),
       });
       const fetched = res.messages;
@@ -49,7 +68,7 @@ export function createMessagesQuery(roomId: () => string, limit = 50) {
       // seen here; a patch landing after this synchronous read is applied on top
       // of the returned value and wins anyway.
       const cached = queryClient.getQueryData<Message[]>(
-        messagesKey(roomId()) as unknown[],
+        messagesKey(room) as unknown[],
       );
       if (cached && cached.length > 0) {
         const fetchedIds = new Set(fetched.map((m) => m.id));

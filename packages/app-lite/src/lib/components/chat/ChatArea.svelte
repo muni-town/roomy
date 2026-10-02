@@ -7,11 +7,10 @@
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import ChatMessageSkeleton from "@roomy/design/components/content/thread/message/ChatMessageSkeleton.svelte";
-  import { createMessagesQuery, type Message } from "$lib/queries/messages";
+  import { createMessagesQuery, messagesKey, type Message } from "$lib/queries/messages";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { auth } from "$lib/auth.svelte";
-  import { cache } from "@roomy-space/sdk";
   import { queryClient } from "$lib/client";
   import { px } from "$lib/auth.svelte";
   import { scrollPositionState } from "./scroll-position.svelte";
@@ -24,7 +23,6 @@
   import { RICHTEXT_MIME } from "@roomy-space/sdk";
   import type { Block } from "@roomy-space/sdk";
   import { goto } from "$app/navigation";
-  const { queryKey } = cache;
 
   type Props = {
     spaceId: string;
@@ -125,6 +123,13 @@
     const data = messagesQuery.data;
     if (!data || data.length === 0) return;
 
+    // The room this page belongs to. `roomId` is a live prop, so the request
+    // and the cache write below both address the room the call started in;
+    // re-reading it after the await would land the page in whichever room the
+    // reader navigated to meanwhile.
+    const room = roomId;
+    const key = messagesKey(room);
+
     isLoadingOlder = true;
     isShifting = true;
 
@@ -134,7 +139,7 @@
       const res = await px().query(
         "space.roomy.room.getMessages",
         {
-          roomId,
+          roomId: room,
           limit: "50",
           cursor: oldestId,
         },
@@ -149,7 +154,6 @@
         // Prepend older messages to the TanStack cache. The cache is
         // oldest-first, and `olderMessages` (also oldest-first) are all
         // older than the current window, so they go at the front.
-        const key = queryKey("space.roomy.room.getMessages", { roomId });
         queryClient.setQueryData<Message[]>(key, (existing) => {
           if (!existing) return olderMessages;
           const existingIds = new Set(existing.map((m) => m.id));

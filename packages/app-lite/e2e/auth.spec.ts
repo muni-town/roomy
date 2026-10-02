@@ -31,8 +31,12 @@ test.describe("app shell and authentication", () => {
 
     // The user card shows the profile the appserver returned for this DID —
     // proving the appserver resolved the caller from the injected header and
-    // the profile query round-tripped, not merely that the app rendered.
-    await expect(page.getByText(TEST_USER_DISPLAY_NAME)).toBeVisible();
+    // the profile query round-tripped, not merely that the app rendered. The
+    // home route greets the same name in a heading, so match the card's link
+    // rather than the bare text.
+    await expect(
+      page.getByRole("link", { name: TEST_USER_DISPLAY_NAME }).first(),
+    ).toBeVisible();
   });
 
   test("loads a space's channel and exposes the composer", async ({ page }) => {
@@ -68,7 +72,10 @@ test.describe("app shell and authentication", () => {
     await waitForAuthenticated(page);
 
     // Same DID after a reload: the session survived, rather than the app
-    // silently falling back to a logged-out shell.
-    await expect(page.locator(`a[href="/user/${TEST_USER_DID}"]`)).toBeVisible();
+    // silently falling back to a logged-out shell. `.first()`: several
+    // elements link to the user (the sidebar card, a message author).
+    await expect(
+      page.locator(`a[href="/user/${TEST_USER_DID}"]`).first(),
+    ).toBeVisible();
   });
 });

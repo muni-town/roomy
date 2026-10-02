@@ -31,13 +31,17 @@ export { expect };
  * Authenticated page: every request to the local appserver carries
  * `X-Test-Did`, so the appserver resolves the caller as the seeded user.
  */
+export async function installTestAuth(page: Page): Promise<void> {
+  await page.route(`${APPSERVER_HTTP_ORIGIN}/**`, async (route) => {
+    await route.continue({
+      headers: { ...route.request().headers(), "X-Test-Did": TEST_USER_DID },
+    });
+  });
+}
+
 export const test = base.extend<{ page: Page }>({
   page: async ({ page }, use) => {
-    await page.route(`${APPSERVER_HTTP_ORIGIN}/**`, async (route) => {
-      await route.continue({
-        headers: { ...route.request().headers(), "X-Test-Did": TEST_USER_DID },
-      });
-    });
+    await installTestAuth(page);
     await use(page);
   },
 });
@@ -50,13 +54,16 @@ export const test = base.extend<{ page: Page }>({
  * Waiting on it also covers the appserver round-trip that follows login,
  * since the card's text comes from the profile query.
  */
-export async function waitForAuthenticated(page: Page): Promise<void> {
+export async function waitForAuthenticated(
+  page: Page,
+  timeoutMs = 30_000,
+): Promise<void> {
   // `.first()`: several elements link to the user (the sidebar card, the
   // profile links inside a message author, a member row), so an unqualified
   // locator is a strict-mode violation, not a visibility check.
   await expect(
     page.locator(`a[href="/user/${TEST_USER_DID}"]`).first(),
-  ).toBeVisible({ timeout: 30_000 });
+  ).toBeVisible({ timeout: timeoutMs });
 }
 
 /**
