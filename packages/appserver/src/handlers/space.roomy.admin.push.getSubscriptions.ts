@@ -1,13 +1,13 @@
 /**
  * XRPC: space.roomy.admin.push.getSubscriptions (query).
  *
- * Returns all push subscriptions stored for a user, including the endpoint
- * URL (which reveals the push service — fcm.googleapis.com for Chrome,
- * updates.push.services.mozilla.com for Firefox, api.push.apple for Safari),
- * whether the keys are present, expiration time, and created/updated
- * timestamps. Used to diagnose why notifications aren't reaching a specific
- * browser — the endpoint domain immediately shows which push service the
- * subscription routes through.
+ * Returns all push subscriptions stored for a user: the transport that reaches
+ * each one (`kind`), the endpoint, whether keys are present, expiration time,
+ * and created/updated timestamps. Used to diagnose why notifications aren't
+ * reaching a device. `pushService` is the endpoint's hostname when it is a
+ * URL, which immediately shows which browser push service a Web Push row
+ * routes through; a native row's endpoint is a device token rather than a URL,
+ * so `kind` — not the hostname — is what identifies it.
  *
  * Authorisation: admin allowlist (`APPSERVER_ADMIN_DIDS`).
  */
@@ -19,7 +19,9 @@ import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
 interface SubscriptionResult {
   endpoint: string;
-  /** Push service domain extracted from the endpoint URL. */
+  /** The transport that reaches this device: `webpush`, `apns`, `fcm`, `sse`. */
+  kind: string;
+  /** Push service domain extracted from the endpoint URL, for Web Push rows. */
   pushService: string;
   p256dh: string;
   auth: string;
@@ -46,9 +48,10 @@ export const adminGetSubscriptionsHandler: QueryHandler<
 
   const db = openReadStateDb();
   const rows = await db.query(
-    "select endpoint, p256dh, auth, expiration_time, created_at, updated_at from push_subscriptions where user_did = ? order by updated_at desc",
+    "select endpoint, kind, p256dh, auth, expiration_time, created_at, updated_at from push_subscriptions where user_did = ? order by updated_at desc",
   ).all<{
     endpoint: string;
+    kind: string;
     p256dh: string;
     auth: string;
     expiration_time: number | null;
@@ -67,6 +70,7 @@ export const adminGetSubscriptionsHandler: QueryHandler<
       }
       return {
         endpoint: r.endpoint,
+        kind: r.kind,
         pushService,
         p256dh: r.p256dh,
         auth: r.auth,

@@ -18,13 +18,40 @@
  */
 
 /**
- * The transports a stored subscription can name. `webpush` is implemented
- * (`transports/webPush.ts` registers it); `apns`, `fcm` and `sse` have draft
- * registrations that decline delivery, so a row naming one is counted rather
- * than silently dropped.
+ * The transports a stored subscription can name. `webpush`, `apns` and `fcm`
+ * are implemented (`transports/webPush.ts`, `transports/apn.ts`,
+ * `transports/fcm.ts`); `sse` has a draft registration that declines delivery,
+ * so a row naming it is counted rather than silently dropped.
  */
 export type PushTransportKind = "webpush" | "apns" | "fcm" | "sse";
 
+/**
+ * The same set as a runtime value, for validating a registration's `kind`
+ * before the row is stored. Kept beside {@link PushTransportKind} because the
+ * two are one list: a kind accepted here but missing from the type (or the
+ * reverse) is exactly the drift this pairing prevents.
+ */
+export const PUSH_TRANSPORT_KINDS: readonly PushTransportKind[] = [
+  "webpush",
+  "apns",
+  "fcm",
+  "sse",
+];
+
+/**
+ * Whether an untrusted value names a transport this build knows. A type guard
+ * rather than a bare `includes` so a registration's `kind` narrows to
+ * {@link PushTransportKind} after the check and the stored row's discriminator
+ * is typed at every read.
+ */
+export function isPushTransportKind(
+  value: unknown,
+): value is PushTransportKind {
+  return (
+    typeof value === "string" &&
+    (PUSH_TRANSPORT_KINDS as readonly string[]).includes(value)
+  );
+}
 /**
  * A stored subscription as a transport sees it. `endpoint` is the opaque
  * destination — the push-service URL for Web Push, the device token for a

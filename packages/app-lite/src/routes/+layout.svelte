@@ -6,6 +6,7 @@
   import { queryClient } from "$lib/client";
   import { auth, init, updateProfile } from "$lib/auth.svelte";
   import { loadLastLogin } from "$lib/last-login.svelte";
+  import { installNativePushListeners } from "$lib/native-push";
   import { installPushDebug } from "$lib/push-debug";
   import { preloadSpaceSidebars } from "$lib/preload";
   import { initFaro } from "$lib/telemetry/faro";
@@ -72,6 +73,9 @@
     installPushDebug();
     installPushSubscriptionChangeListener();
     installNotificationNavigateListener();
+    // Native (iOS/Android) push: token rotation + notification tap routing.
+    // A no-op on the web, and best-effort in the shell — see native-push.ts.
+    const disposeNativePushListeners = installNativePushListeners();
     restoreScrollPositionsFromStorage();
 
     // Background data preloading: once auth settles, prefetch the sidebar
@@ -102,6 +106,7 @@
     },  86_400_000 );
 
     return () => {
+      disposeNativePushListeners();
       window.removeEventListener('beforeunload', handleBeforeUnload);
       clearInterval(saveInterval);
       clearInterval(preloadTimer);

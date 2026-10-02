@@ -13,6 +13,16 @@ pub fn run() {
            .set_focus();
         }));
     }
+    #[cfg(mobile)]
+    {
+        builder = builder.plugin(
+            tauri_plugin_mobile_push::Builder::new()
+                .ios_foreground_presentation(
+                    tauri_plugin_mobile_push::ForegroundPresentationOptions::silent(),
+                )
+                .build(),
+        );
+    }
     builder
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())

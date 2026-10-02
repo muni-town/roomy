@@ -1,12 +1,19 @@
 /**
- * Web push subscription orchestrator (client side).
+ * Push subscription orchestrator (client side).
  *
- * On login (`ensurePushSubscription`) we: fetch the appserver's VAPID public
- * key → ask for notification permission → subscribe the service worker's push
- * manager → register the resulting `PushSubscription` with the appserver
- * (keyed by endpoint, idempotent). On logout (`clearPushSubscription`) we
- * unregister the endpoint from the appserver and unsubscribe the browser so
- * this device stops receiving pushes while signed out.
+ * Two backends sit behind this facade:
+ *
+ *  - **Web** (this file's own implementation): on login
+ *    (`ensurePushSubscription`) we fetch the appserver's VAPID public key →
+ *    ask for notification permission → subscribe the service worker's push
+ *    manager → register the resulting `PushSubscription` with the appserver
+ *    (keyed by endpoint, idempotent). On logout (`clearPushSubscription`) we
+ *    unregister the endpoint from the appserver and unsubscribe the browser so
+ *    this device stops receiving pushes while signed out.
+ *  - **Native** (`$lib/native-push`): in a Tauri mobile shell there is no
+ *    `PushManager`, so the same three entry points delegate to the push
+ *    plugin's device token instead (see that module). The public signatures
+ *    are unchanged, and the web path is untouched.
  *
  * The appserver never stores message content in the payload (only counts +
  * room/sender names — see `packages/appserver/src/push/types.ts`), and the
@@ -19,9 +26,17 @@
  * silently skip — never breaking login.
  */
 
-import { px } from "$lib/auth.svelte";
 import { goto } from "$app/navigation";
+import { px } from "$lib/auth.svelte";
 import { registerPushSubscription, unregisterPushSubscription } from "$lib/mutations/push-subscription";
+import {
+  type NativePushOutcome,
+  clearNativeSubscription,
+  ensureNativeSubscription,
+  lastNativeToken,
+  nativePushSupported,
+  registerNativeToken,
+} from "$lib/native-push";
 
 /** localStorage key for the last endpoint we registered (idempotency hint). */
 const LAST_ENDPOINT_KEY = "roomy.push.lastEndpoint";
@@ -45,6 +60,24 @@ export type PushOutcome =
   | { status: "no-key" }
   | { status: "timeout" }
   | { status: "failed"; message: string };
+
+/**
+ * Map a native outcome onto the facade's {@link PushOutcome}. Native has no
+ * `no-key`/`timeout` states (there is no VAPID key or browser push service on
+ * that path), so those never appear here.
+ */
+function fromNative(outcome: NativePushOutcome): PushOutcome {
+  switch (outcome.status) {
+    case "ok":
+      return { status: "ok" };
+    case "denied":
+      return { status: "denied" };
+    case "unsupported":
+      return { status: "unsupported" };
+    case "failed":
+      return { status: "failed", message: outcome.message };
+  }
+}
 
 export function pushOutcomeMessage(o: PushOutcome): string {
   switch (o.status) {
@@ -75,8 +108,13 @@ function supportsPush(): boolean {
  * Returns this device's active push subscription endpoint, or `null` if push
  * is unsupported, permission isn't granted, or no subscription exists. Used
  * by the join flow to decide whether to show the `UpdateRhythmChooser`.
+ *
+ * In a native shell the remembered device token stands in for the browser's
+ * subscription endpoint, so the same callers (join flow, settings) keep
+ * working without knowing which backend is in use.
  */
 export async function getPushSubscriptionEndpoint(): Promise<string | null> {
+  if (nativePushSupported()) return lastNativeToken();
   if (!supportsPush()) return null;
   if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
     return null;
@@ -103,13 +141,17 @@ export function base64UrlToUint8Array(base64Url: string): Uint8Array {
 /**
  * Subscribe (or re-confirm) this device for push, prompted by an explicit user
  * gesture (the "Enable notifications" button in settings). Safari only allows
- * `Notification.requestPermission()` from within a user gesture, so the
- * permission request MUST be the first async step here — before any network
- * `await`, which would end the gesture's task. Safe to call repeatedly:
+ * `Notification.requestPermission()` from within a user gesture, so on the web
+ * the permission request MUST be the first async step here — before any
+ * network `await`, which would end the gesture's task. Safe to call repeatedly:
  * re-running with permission already granted re-registers the subscription.
  * Returns a {@link PushOutcome} so the caller can toast appropriately.
+ *
+ * In a native shell this delegates to the push plugin, which prompts through
+ * the platform's own permission dialog.
  */
 export async function ensurePushSubscription(): Promise<PushOutcome> {
+  if (nativePushSupported()) return fromNative(await ensureNativeSubscription());
   if (!supportsPush()) return { status: "unsupported" };
 
   // Request permission FIRST, synchronously within the gesture (no prior
@@ -129,14 +171,32 @@ export async function ensurePushSubscription(): Promise<PushOutcome> {
 }
 
 /**
- * Re-subscribe on login ONLY if the user has already granted notification
- * permission. Never prompts — there's no user gesture at login time, and
- * prompting unprompted on page load is poor UX (and blocked on Safari). The
- * settings page's "Enable notifications" button is the one place we prompt.
- * Outcome is logged but not surfaced (no toast at login).
+ * Re-register on login. Never prompts — there's no user gesture at login time,
+ * and prompting unprompted on page load is poor UX (and blocked on Safari).
+ * The settings page's "Enable notifications" button is the one place we
+ * prompt. Outcome is logged but not surfaced (no toast at login).
+ *
+ * Web: only when notification permission was already granted. Native: only
+ * when a token was registered before, re-registered in case the platform
+ * rotated it while we were signed out.
  */
 export async function subscribeIfAlreadyPermitted(): Promise<void> {
   console.debug("[push:login] subscribeIfAlreadyPermitted starting");
+  if (nativePushSupported()) {
+    const token = lastNativeToken();
+    if (token === null) {
+      console.debug("[push:login] no remembered native token, skipping");
+      return;
+    }
+    try {
+      await registerNativeToken(token);
+      console.info("[push:login] re-registered native device token");
+    } catch (e) {
+      // The login-time re-register is best-effort; the next login retries.
+      console.warn("[push:login] native re-register failed:", e);
+    }
+    return;
+  }
   if (!supportsPush()) {
     console.debug("[push:login] push not supported, skipping");
     return;
@@ -221,8 +281,12 @@ async function subscribeAndRegister(): Promise<PushOutcome> {
  * appserver stops delivering to it. Best-effort: a network failure here must
  * not block logout. Returns a {@link PushOutcome} so the settings page can
  * toast on the Disable button.
+ *
+ * In a native shell this drops the registered device token instead of the
+ * browser subscription.
  */
 export async function clearPushSubscription(): Promise<PushOutcome> {
+  if (nativePushSupported()) return fromNative(await clearNativeSubscription());
   if (!supportsPush()) return { status: "unsupported" };
   try {
     const reg = await navigator.serviceWorker.ready;

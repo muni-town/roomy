@@ -6,7 +6,7 @@
 declare let self: ServiceWorkerGlobalScope;
 
 import { build, files, version } from "$service-worker";
-import { notificationText, type PushNotificationView } from "./lib/notificationText";
+import { notificationText, type PushNotificationView } from "@roomy-space/sdk/push";
 
 // Create a unique cache name for this deployment
 const CACHE = `cache-${version}`;
@@ -175,7 +175,7 @@ async function handlePush(event: PushEvent): Promise<void> {
     // would otherwise be silently dropped / flagged by the browser).
     payload = null;
   }
-  // Title/body come from the shared renderer (see lib/notificationText.ts):
+  // Title/body come from the shared renderer (`@roomy-space/sdk/push`):
   // authorName when resolved, else the author DID — "New message" only when
   // the payload has no author at all.
   const { title, body } = notificationText(payload ?? {});

@@ -24,8 +24,7 @@
         "schema": {
           "type": "object",
           "required": [
-            "endpoint",
-            "keys"
+            "endpoint"
           ],
           "nullable": [
             "expirationTime"
@@ -34,12 +33,21 @@
             "endpoint": {
               "type": "string"
             },
+            "expirationTime": {
+              "type": "integer"
+            },
             "keys": {
               "type": "ref",
               "ref": "#keys"
             },
-            "expirationTime": {
-              "type": "integer"
+            "kind": {
+              "type": "string",
+              "knownValues": [
+                "apns",
+                "fcm",
+                "sse",
+                "webpush"
+              ]
             }
           }
         }

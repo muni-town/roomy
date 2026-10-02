@@ -1,19 +1,18 @@
-import { describe, expect, test } from "bun:test";
-// The visible-notification renderer lives in app-lite (it's what the
-// service worker runs on every decrypted push); the contract test lives here
-// with the rest of the push-payload tests because app-lite has no test
-// suite (see AGENTS.md) and this is exactly the server↔client payload
-// contract the appserver owns. It renders synthetic payloads the way the
-// service worker does, including the payload shape the server must never
-// emit: authorName absent but authorDid known must still render the author,
-// never "New message".
-import { notificationText } from "../../../app-lite/src/lib/notificationText";
+import { describe, expect, it } from "vitest";
+// The visible-notification renderer. It lives in the SDK because the appserver
+// (which renders the APNs `aps.alert` and FCM `notification` text at send time)
+// and the browser service worker (which renders a decrypted web push) must
+// agree: the same payload has to read the same way whichever transport carried
+// it. The test covers the shape of every payload the server builds, including
+// one it must never emit — authorName absent but authorDid known, which must
+// still name the author rather than reading "New message".
+import { notificationText } from "../../src/push/notificationText";
 
 const DID = "did:plc:abcdef";
 const ROOM = "general";
 
 describe("push/notificationText — visible notification render", () => {
-  test("message push renders the author in the title", () => {
+  it("message push renders the author in the title", () => {
     const { title, body } = notificationText({
       type: "message",
       roomName: ROOM,
@@ -24,7 +23,7 @@ describe("push/notificationText — visible notification render", () => {
     expect(body).toBe("hello world");
   });
 
-  test("message push body names the author when there is no content", () => {
+  it("message push body names the author when there is no content", () => {
     const { title, body } = notificationText({
       type: "message",
       roomName: ROOM,
@@ -34,7 +33,7 @@ describe("push/notificationText — visible notification render", () => {
     expect(body).toBe("Alice sent a message");
   });
 
-  test("authorName absent but authorDid known renders the DID, not 'New message'", () => {
+  it("authorName absent but authorDid known renders the DID, not 'New message'", () => {
     // Legacy/synthetic payload: the server always resolves a name now, but a
     // payload missing authorName must still name the author by DID.
     const { title, body } = notificationText({
@@ -48,7 +47,7 @@ describe("push/notificationText — visible notification render", () => {
     expect(body).not.toBe("New message");
   });
 
-  test("no author at all still falls back to 'New message' (no DID to name)", () => {
+  it("no author at all still falls back to 'New message' (no DID to name)", () => {
     const { title, body } = notificationText({
       type: "message",
       roomName: ROOM,
@@ -57,7 +56,7 @@ describe("push/notificationText — visible notification render", () => {
     expect(body).toBe("New message");
   });
 
-  test("digest push renders the author in the title", () => {
+  it("digest push renders the author in the title", () => {
     const { title, body } = notificationText({
       type: "digest",
       roomName: ROOM,
@@ -68,7 +67,7 @@ describe("push/notificationText — visible notification render", () => {
     expect(body).toBe("5 new messages");
   });
 
-  test("digest with authorDid only still names the author", () => {
+  it("digest with authorDid only still names the author", () => {
     const { title } = notificationText({
       type: "digest",
       roomName: ROOM,
@@ -78,7 +77,7 @@ describe("push/notificationText — visible notification render", () => {
     expect(title).toBe(`${DID} in general`);
   });
 
-  test("digest without any author keeps the count-based title (legacy payloads)", () => {
+  it("digest without any author keeps the count-based title (legacy payloads)", () => {
     const { title, body } = notificationText({
       type: "digest",
       roomName: ROOM,
@@ -88,7 +87,7 @@ describe("push/notificationText — visible notification render", () => {
     expect(body).toBe("5 new messages");
   });
 
-  test("empty payload (malformed push) renders the generic fallback", () => {
+  it("empty payload (malformed push) renders the generic fallback", () => {
     const { title, body } = notificationText({});
     expect(title).toBe("New message in a room");
     expect(body).toBe("New message");

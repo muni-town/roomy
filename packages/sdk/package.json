@@ -54,6 +54,11 @@
       "development": "./src/operations/reaction.ts",
       "import": "./dist/operations/reaction.js"
     },
+    "./push": {
+      "development": "./src/push/index.ts",
+      "import": "./dist/push/index.js",
+      "types": "./dist/push/index.d.ts"
+    },
     "./svelte": {
       "svelte": "./src/svelte/index.svelte.ts",
       "default": "./src/svelte/index.svelte.ts"

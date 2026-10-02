@@ -94,4 +94,50 @@ describe("space.roomy.push.registerSubscription / unregisterSubscription", () =>
     );
     expect(res.status).toBe(400);
   });
+
+  test("a webpush registration without keys → 400", async () => {
+    // Delivery cannot proceed without the RFC 8291 keypair, so storing the row
+    // would promise a push that can never be encrypted.
+    const ctx = await startAppserver();
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.push.registerSubscription`,
+      { method: "POST", body: JSON.stringify({ endpoint: "https://push.example/no-keys" }) },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test("a native registration carries a token and no keys", async () => {
+    const ctx = await startAppserver();
+    const endpoint = "apns-device-token-0123456789abcdef";
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.push.registerSubscription`,
+      { method: "POST", body: JSON.stringify({ endpoint, kind: "apns" }) },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  test("an unknown kind → 400 rather than a stored, undeliverable row", async () => {
+    // A row naming a transport this build doesn't run is counted as a failure
+    // on every delivery, which hides a typo behind a runtime symptom.
+    const ctx = await startAppserver();
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.push.registerSubscription`,
+      { method: "POST", body: JSON.stringify({ endpoint: "token", kind: "windows-wns" }) },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test("a browser client that predates `kind` still registers", async () => {
+    // The field is optional so an already-deployed client keeps working
+    // unchanged; omitting it must mean `webpush`, not a rejected request.
+    const ctx = await startAppserver();
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.push.registerSubscription`,
+      {
+        method: "POST",
+        body: JSON.stringify(sub("https://push.example/legacy-client")),
+      },
+    );
+    expect(res.status).toBe(200);
+  });
 });

@@ -1,7 +1,7 @@
 # Native Push Transports Plan
 
 **Date:** 2026-09-28
-**Status:** Seam implemented; native transports not built
+**Status:** Implemented — APNs, FCM, registration contract, Tauri wiring
 **Related:** `web-push-plan.md` (the Web Push pipeline this extends)
 
 ## Problem
@@ -53,11 +53,11 @@ module load. `deliverPayload` (`src/push/dispatcher.ts`) looks up
 `PUSH_TRANSPORTS[sub.kind]` and keeps every policy decision: it prunes on
 `gone`, counts on `delivered`/`skipped`/`retry`, and logs per transport.
 
-`apn.ts`, `fcm.ts` and `sse.ts` are draft registrations: they answer `skipped`
-for every row, so a device stored against a transport that has not shipped is
-counted and left in place. They must not answer `gone` — that prunes the row,
-and an unbuilt transport would then unregister a device for a reason unrelated
-to the device.
+`apn.ts` and `fcm.ts` are implemented; `sse.ts` remains a draft registration
+that answers `skipped` for every row, so a device stored against a transport
+that has not shipped is counted and left in place. A draft must not answer
+`gone` — that prunes the row, and an unbuilt transport would then unregister a
+device for a reason unrelated to the device.
 
 The stored discriminator is `push_subscriptions.kind`
 (`src/db/readStateSchema.sql`, read-state schema v12 in
@@ -69,41 +69,72 @@ row routing is unchanged. `upsertSubscription`/`selectSubscriptions`
 also delivers through the seam, so a native device is diagnosable by the same
 endpoint that diagnoses a browser.
 
-## Transports to build
+## Transports
 
 | Kind | Platform | Service endpoint | Credential |
 |------|----------|------------------|------------|
 | `webpush` | Browsers (Chrome/Firefox/Edge/Safari) | per-subscription push-service URL | VAPID keypair + `p256dh`/`auth` (RFC 8291) |
-| `apns` | iOS / iPadOS / macOS | `api.push.apple.com` | APNs auth key (`.p8`, ES256) + team/key id, per-app topic |
-| `fcm` | Android (and Chrome, if not going through Web Push) | `fcm.googleapis.com` | Service-account JSON (HTTP v1 OAuth) |
+| `apns` | iOS / iPadOS / macOS | `api.push.apple.com` (or `api.sandbox.push.apple.com`) | APNs auth key (`.p8`, ES256) + key/team id, per-app topic |
+| `fcm` | Android | `fcm.googleapis.com` | Service-account JSON (HTTP v1 OAuth) |
+| `sse` | — | — | draft; not built |
 
-APNs and FCM are named in `PushTransportKind` already. A stored row that names a
-kind with no registered transport is counted as a failure (`statsFailed`) and
-logged, and the row is left in place — a rollout gap is visible rather than a
-silently dropped push.
+A stored row naming a kind with no registered transport is counted as a failure
+(`statsFailed`) and logged, and the row is left in place — a rollout gap is
+visible rather than a silently dropped push.
 
-### APNs
+### APNs (`src/push/transports/apn.ts`)
 
-APNs wants an HTTP/2 POST to `/3/device/<token>` with a provider JWT
-(`Authorization: bearer <jwt>`, signed ES256 with the `.p8` key),
-`apns-topic` = the app bundle id, `apns-push-type` (`alert`/`background`),
-`apns-priority`, and `apns-collapse-id` for coalescing — which is where
-`PushDeliveryOptions.topic` maps. A `{"type":"message","spaceId":…,"roomId":…}`
-payload identical to the Web Push body can be sent as an APS dictionary, so the
-client's notification-decoding logic is shared. `410 Unregistered` and
-`400 BadDeviceToken` map to `gone` (prune); `429`/`5xx`/network map to `retry`.
+An HTTP/2 POST to `/3/device/<token>` with a provider JWT
+(`authorization: bearer <jwt>`, ES256 over the `.p8` key, `kid`/`iss` for the
+key and team id), `apns-topic` = the app bundle id, `apns-push-type: alert`,
+`apns-priority: 10`, and `apns-collapse-id` from
+`PushDeliveryOptions.topic`. The session and the provider token are both cached
+— Apple rate-limits token refreshes to one per 20 minutes — and a refused
+token is dropped so the next attempt mints a fresh one.
 
-### FCM
+The alert text is built at send time rather than left to the client: iOS
+displays `aps.alert` with no app running, so a payload carrying only ids would
+arrive blank. `notificationText` (`@roomy-space/sdk/push`, the renderer the
+service worker also uses) supplies the same title/body a browser push shows,
+and the raw payload rides along as a top-level `roomy` key for deep-linking.
+That key is a JSON **string**, not a nested object — see "Payload shape" below.
 
-FCM HTTP v1 POSTs to `https://fcm.googleapis.com/v1/projects/<project>/messages:send`
-with an OAuth2 bearer token from a service-account JSON. `collapse_key` maps
-from `topic`; the same JSON body is carried in the `data` field. `UNREGISTERED`
-/ `NOT_FOUND` map to `gone`; `UNAVAILABLE`/`INTERNAL` map to `retry`.
+`410` (any reason) and `400 BadDeviceToken`/`DeviceTokenNotForTopic` map to
+`gone` (prune). `429`/`5xx`/network map to `retry`. A `400` the transport
+caused itself is also `retry`, never `gone`: pruning a healthy device would
+silently unsubscribe a user because we built a bad request.
 
-Both native transports share the JSON payload contract already defined by
-`PushPayload` (`src/push/types.ts`) — the seam passes `body` as a string, so a
-native transport forwards the same bytes. No wire payload change is required to
-add them.
+### FCM (`src/push/transports/fcm.ts`)
+
+An HTTP v1 POST to
+`https://fcm.googleapis.com/v1/projects/<project>/messages:send` with an OAuth2
+bearer token: an RS256 assertion to Google's token endpoint (scope
+`…/auth/firebase.messaging`, no `sub` — that is reserved for domain-wide
+delegation), cached until just before it expires. `collapse_key` carries
+`topic`, in the Android config rather than `data` (a reserved key there is
+overridden). `UNREGISTERED`/`NOT_FOUND` map to `gone`;
+`QUOTA_EXCEEDED`/`UNAVAILABLE`/`INTERNAL` (429/503/500) map to `retry`; a
+refused bearer token is dropped so the next attempt re-exchanges.
+
+FCM carries the visible text in `notification` for the same reason APNs does —
+Android does not display a data-only message unless the app is running to
+handle it — with the same JSON payload string under `data.roomy`.
+
+Both transports take their configuration as a constructed argument
+(`createApnsTransport`/`createFcmTransport`) rather than reading
+`process.env` at import, so a test drives them against a local server and
+asserts the wire request. Each maps a hint (`PushDeliveryOptions.topic`,
+`urgency`, `ttl`) onto its own controls; no delivery policy is duplicated.
+
+### Payload shape
+
+Both native transports forward the same `PushPayload`
+(`src/push/types.ts`) the Web Push transport sends, as a JSON string, and add
+the visible title/body. The payload is a string rather than a nested object
+because the client plugin projects a native notification to JS by copying only
+String and NSNumber values — a dictionary is dropped before the webview sees
+it. On APNs a custom key must also be a peer of `aps`, never a child: Apple
+ignores unknown keys inside `aps`.
 
 ## Device-token registration
 
@@ -134,26 +165,47 @@ options, in preference order:
    typed, at the cost of a second registration path and a second lexicon to
    maintain.
 
-Option 1 is preferred: the row is the same concept, and the handler already
-owns per-field validation. This is a client-visible wire change, so it belongs
-in its own change, not with the seam.
+Option 1 was taken: the row is the same concept, and the handler already owns
+per-field validation. The schema stays one flat object with an optional `kind`
+and an optional `keys` (rather than a kind-discriminated union) because the
+lexicon generator converts a single object shape, and the wire contract has to
+stay expressible as an atproto lexicon; the pairing is enforced in the handler.
 
 ### Client side (`packages/app-lite`)
 
-`src/lib/push.svelte.ts` drives the browser's `PushManager`, which an installed
-native app does not have. The Tauri shell (`src-tauri/tauri.conf.json`,
-`src-tauri/Cargo.toml`) has no push plugin today, and Tauri's official
-`notification` plugin only posts *local* notifications — it does not obtain an
-APNs/FCM registration token. Remote push needs a plugin that bridges to the
-platform APIs (`registerForRemoteNotifications` / `FirebaseMessaging`, e.g. a
-community `tauri-plugin-*` push plugin, or a small in-repo Rust command) and
-surfaces the token to web code; a native client then registers that token
-through the same XRPC call with `kind: "apns"`/`"fcm"`. The subscription
-lifecycle (register on login, unregister on logout, re-register on token
-rotation) mirrors the existing `ensurePushSubscription`/`clearPushSubscription`
-and the `push-subscription-changed` handler in `push.svelte.ts` — token rotation
-is the native analogue of endpoint rotation, which
-`installPushSubscriptionChangeListener` already handles for browsers.
+`src/lib/native-push.ts` is the native equivalent of `push.svelte.ts`'s Web
+Push path, over `tauri-plugin-mobile-push` (Rust) +
+`tauri-plugin-mobile-push-api` (JS). `push.svelte.ts` stays the single entry
+point the rest of the app calls — `ensurePushSubscription`,
+`subscribeIfAlreadyPermitted`, `clearPushSubscription` — and dispatches to the
+native path when `window.__TAURI__.os.platform()` reports `ios`/`android`, so
+callers do not branch. Every plugin import is dynamic, so the web bundle never
+evaluates it. A registered token is remembered in localStorage
+(`roomy.push.lastNativeToken`), the native analogue of the browser's endpoint.
+
+**The plugin's 0.1.4 limitations are load-bearing here:**
+
+- On **Android**, `requestPermission()` and `getToken()` cannot work: the crate
+  registers Rust `#[tauri::command]` handlers, and Tauri dispatches those
+  before the native Kotlin plugin, so the non-iOS stub arms always win
+  (`{granted: false}`, `""`). `ensureNativeSubscription` therefore requires an
+  explicit `granted === true` and rejects an empty token with a message naming
+  Android as unsupported, rather than registering an endpoint that could never
+  be delivered to.
+- The three event listeners (`onTokenRefresh`, `onNotificationReceived`,
+  `onNotificationTapped`) are **non-functional in 0.1.4 on both platforms**:
+  `register_listener` is shadowed by the same Rust no-op on Android, and on iOS
+  the plugin's own README states `trigger()` cannot reach the webview. They are
+  installed (they register cleanly and will start working if upstream fixes
+  this) but nothing may depend on tap-through. Tapping a native notification is
+  therefore not routed by this plugin version.
+- **iOS** `requestPermission()`/`getToken()` do work (direct `@_cdecl` FFI), so
+  the iOS registration path is real: the hex APNs device token is registered
+  with `kind: "apns"`.
+
+Replacing the plugin, or upgrading past a release that fixes Android dispatch,
+changes only `native-push.ts`: the registration contract and the appserver
+transports do not.
 
 Preferences, digests and recipient selection are untouched: they live in
 `evaluate.ts`/`dispatcher.ts` and are already transport-agnostic, so a native
@@ -175,22 +227,41 @@ None of these learn about a transport; they see a `PushTarget` and a
 
 ## Secrets & configuration
 
-Web Push reads VAPID keys from env in `src/push/transports/webPush.ts`. APNs/FCM read
-their own credentials the same way (an APNs `.p8` + key/team id, an FCM
-service-account JSON), each transport owning its own configuration. The
-appserver must boot with any subset configured; a transport whose credentials
-are absent delivers nothing, exactly as `sendPush` skips when VAPID is unset.
+Web Push reads VAPID keys from env in `src/push/transports/webPush.ts`. APNs
+reads `APNS_AUTH_KEY` (the `.p8`, PEM or base64-encoded PEM), `APNS_KEY_ID`,
+`APNS_TEAM_ID`, `APNS_TOPIC` and `APNS_ENVIRONMENT`; FCM reads
+`FCM_SERVICE_ACCOUNT` (the service-account JSON as one line). Each transport
+owns its own configuration and reports whether it is usable via
+`isConfigured()`, surfaced in `space.roomy.admin.push.getStats`. The appserver
+boots with any subset configured: a transport whose credentials are absent
+reports every delivery as `skipped` rather than failing, exactly as `sendPush`
+does when VAPID is unset.
+
+The Android build additionally needs `google-services.json`, supplied in CI
+from the `GOOGLE_SERVICES_JSON` repository secret. The iOS build needs the
+`aps-environment` entitlement written into the generated Xcode project (the
+Tauri CLI emits that file empty, and has no config field for iOS
+entitlements), which the release workflow does after `ios init`; the App ID
+must have Push Notifications enabled and the provisioning profile regenerated
+so the entitlement is in its allowlist.
 
 ## Open questions
 
-- **Which native targets, and which first?** iOS forces APNs; if the native
-  client is Android-first, FCM is the smaller first transport.
+- **Android dispatch in the plugin.** 0.1.4's Android commands are shadowed by
+  the crate's own Rust stubs (see "Client side"), so no Android device can
+  obtain a token. Either upstream fixes the dispatch order, or the Android
+  token path moves into this repo's own Tauri command.
+- **Notification tap-through.** No native notification routes into a room
+  today, for the same reason. The client's routing code exists and is inert.
 - **Per-transport rate/coalescing budgets.** Native services have their own
   quotas; the dispatcher's single `CONCURRENCY` may need a per-transport
   ceiling.
 - **Notification-service extensions.** iOS needs a Notification Service
-  Extension to decrypt/reshape content; the payload must stay within APNs'
-  size limits (4 KB), which the existing `PushPayload` already respects.
+  Extension to decrypt/reshape content. The alert text is built server-side
+  today (see "Payload shape"), and the payload stays within APNs' 4 KB limit,
+  which `PushPayload` already respects.
 - **Token validity windows.** APNs tokens can be invalidated on reinstall;
-  `410` pruning covers it, but a periodic token-revalidation sweep may be
-  warranted.
+  `410`/`BadDeviceToken` pruning covers it, but a periodic token-revalidation
+  sweep may be warranted.
+- **Badge counts.** APNs `aps.badge` needs per-user unread totals from the
+  read-state DB; the payload carries a `count` but no badge is sent.

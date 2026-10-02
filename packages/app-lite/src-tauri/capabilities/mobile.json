@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/capabilities.json",
+  "identifier": "mobile-capabilities",
+  "description": "Enables the mobile push permissions. Platform-gated on purpose: the mobile-push plugin is a mobile-only dependency, and tauri-build skips a capability whose `platforms` exclude the current target before it validates that the named permissions exist. That skip is what keeps the desktop build from failing on the unknown `mobile-push:default` permission, so dropping this field (or making the dependency unconditional) breaks desktop/CI.",
+  "windows": ["main"],
+  "platforms": ["android", "iOS"],
+  "permissions": ["mobile-push:default"]
+}

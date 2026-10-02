@@ -93,6 +93,17 @@ jobs:
           # run generate icons again to overwrite default tauri icon
           pnpm tauri icon ./src-tauri/icons.manifest.json
           ./scripts/copy-android-assets.sh
+          # Maintainer prerequisite: the GOOGLE_SERVICES_JSON repository
+          # secret, holding `base64 -i google-services.json` for the Firebase
+          # Android app whose package name is `space.roomy`. The file itself
+          # is a maintainer secret and is NOT committed; without it the
+          # google-services Gradle plugin has no config and Android push
+          # cannot build, so this fails loudly instead.
+          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo "::error::Missing the GOOGLE_SERVICES_JSON repository secret (base64 of the Firebase Android google-services.json). Android push cannot build without it."
+            exit 1
+          fi
+          base64 -d <<< "${{ secrets.GOOGLE_SERVICES_JSON }}" > ./src-tauri/gen/android/app/google-services.json
           cd ./src-tauri/gen/android
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
           echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
@@ -383,6 +394,37 @@ jobs:
             exit 1
           fi
           echo "Pinned xcode-script to the driver CLI."
+
+      # Maintainer prerequisite for APNs: the App ID `space.roomy` must have
+      # the Push Notifications capability enabled in the Apple Developer
+      # portal, and the provisioning profile (APPLE_MOBILE_PROVISION) must
+      # have been regenerated afterwards so that `aps-environment` is in its
+      # entitlement allowlist. Granting the entitlement in this file is only
+      # the *claim*; the profile is what authorises it, so signing fails at
+      # export with "doesn't include the aps-environment entitlement" until
+      # both are true.
+      #
+      # `ios init` renders the entitlements file empty (project.yml declares
+      # only `entitlements.path`, with no properties), so claiming
+      # `aps-environment` here — right after init, before anything signs — is
+      # what lets the app register with APNs at all. It is set to
+      # `production` because this job builds and exports with
+      # `--export-method app-store-connect`; a `development` value would be
+      # wrong for a TestFlight/App Store build.
+      - name: Add the APNs entitlement
+        run: |
+          set -euo pipefail
+          cd ./packages/app-lite
+          ENT=src-tauri/gen/apple/app_iOS/app_iOS.entitlements
+          if [ ! -f "$ENT" ]; then
+            echo "::error::No entitlements file at $ENT; ios init output changed."
+            exit 1
+          fi
+          /usr/libexec/PlistBuddy -c "Delete :aps-environment" "$ENT" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :aps-environment string production" "$ENT"
+          /usr/libexec/PlistBuddy -c "Print :aps-environment" "$ENT" | grep -qx production \
+            || { echo "::error::aps-environment was not written"; exit 1; }
+          echo "APNs entitlement set."
 
       - name: Generate app icons into the Xcode catalog
         run: |

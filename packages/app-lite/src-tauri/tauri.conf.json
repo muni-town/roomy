@@ -22,7 +22,8 @@
       "csp": null,
       "capabilities": [
         "desktop-capabilities",
-        "shared-capabilities"
+        "shared-capabilities",
+        "mobile-capabilities"
       ]
     }
   },

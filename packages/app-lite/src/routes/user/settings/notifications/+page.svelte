@@ -11,6 +11,7 @@
     classifyPushUnavailable,
     readIosStandaloneCapabilities,
   } from "$lib/push-support";
+  import { lastNativeToken, nativePushSupported } from "$lib/native-push";
   import { queryClient } from "$lib/client";
   import { toast } from "@foxui/core";
 
@@ -26,8 +27,15 @@
     }
   });
 
-  // ── Push capability + permission state (browser-side, not on the server) ──
-  let pushSupported = $state(false);
+  // ── Push capability + permission state (device-side, not on the server) ──
+  //
+  // A native mobile shell has no `PushManager`/`Notification`, so the web
+  // capability probe below would wrongly report "unsupported browser". There
+  // the device token is the whole state: present once enabled.
+  const isNative = nativePushSupported();
+  // Starts true in a native shell so the first paint never flashes the web
+  // "unsupported browser" copy while `refreshStatus` resolves.
+  let pushSupported = $state(isNative);
   // Why push is unavailable, when it is: the two iOS states need the install
   // (or iOS-update) step, everything else gets the browser advice. Derived, so
   // the first paint already carries the right advice instead of flashing the
@@ -36,12 +44,17 @@
     pushSupported ? null : classifyPushUnavailable(readIosStandaloneCapabilities()),
   );
   let permission = $state<NotificationPermission>("default");
-  let endpoint = $state<string | null>(null); // registered PushSubscription endpoint
+  let endpoint = $state<string | null>(null); // registered subscription endpoint / device token
   let enabling = $state(false);
   let disabling = $state(false);
   let enableError = $state<string | null>(null);
 
   async function refreshStatus(): Promise<void> {
+    if (isNative) {
+      pushSupported = true;
+      endpoint = lastNativeToken();
+      return;
+    }
     pushSupported =
       typeof navigator !== "undefined" &&
       "serviceWorker" in navigator &&
