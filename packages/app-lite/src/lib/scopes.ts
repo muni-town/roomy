@@ -232,6 +232,28 @@ export const FULL_SCOPE_CEILING = [
   ...DM_SCOPES,
 ].join(" ");
 
+/**
+ * The scope declared in the dev *loopback* OAuth client id
+ * (`http://localhost?redirect_uri=…&scope=…`).
+ *
+ * The PDS derives the loopback client's metadata — including its scope
+ * ceiling — from the client id, records that exact client id with the
+ * authorization request, and requires every later token exchange/refresh to
+ * present it unchanged (else `invalid_grant: Token was not issued to this
+ * client`). Because the client id embeds its scope, that scope must be
+ * identical on the `login()` that starts the flow, the `init()` that processes
+ * the callback, and every session restore/refresh — all of which build their
+ * OAuth client independently. It therefore cannot be a per-login value like
+ * `reconcileScope(stored)` or `SCOPE_SETS[tier]`; it is the app's full,
+ * constant ceiling, a superset of every scope any login may request.
+ *
+ * Only meaningful for the loopback client (local dev, no deployed metadata);
+ * deployed/HappyView builds use the metadata document URL as the client id and
+ * never read this. The per-request `scope` still selects the subset shown on
+ * the consent screen.
+ */
+export const CLIENT_ID_SCOPE = FULL_SCOPE_CEILING;
+
 /** Parse a scope string into a Set of individual scope tokens. */
 export function parseScopes(scope: string): Set<string> {
   return new Set(scope.split(" ").filter(Boolean));

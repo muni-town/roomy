@@ -19,6 +19,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const signIn = vi.fn(async () => undefined);
 const authorize = vi.fn(async () => new URL("https://pds.example/oauth/authorize"));
+/**
+ * `client_id` of every `BrowserOAuthClient` the code under test builds. A
+ * `vi.mock` factory cannot close over imports, so the shape is declared here
+ * as the exact slice the loopback path writes and the test reads.
+ */
+type CapturedClientOpts = {
+  clientMetadata?: { client_id?: string; scope?: string };
+};
+const clientOpts: CapturedClientOpts[] = [];
 
 vi.mock("@atproto/oauth-client-browser", () => {
   class BrowserOAuthClient {
@@ -26,7 +35,9 @@ vi.mock("@atproto/oauth-client-browser", () => {
     clientMetadata = BrowserOAuthClient.clientMetadata;
     signIn = signIn;
     authorize = authorize;
-    constructor(_opts: unknown) {}
+    constructor(opts: CapturedClientOpts) {
+      clientOpts.push(opts);
+    }
   }
   return {
     BrowserOAuthClient,
@@ -88,6 +99,7 @@ describe("login() scope forwarding", () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    clientOpts.length = 0;
   });
 
   it("forwards the requested scope to signIn (web path)", async () => {
@@ -133,5 +145,55 @@ describe("login() scope forwarding", () => {
 
     expect(authorize).toHaveBeenCalledTimes(1);
     expect(authorize).toHaveBeenCalledWith(HANDLE, { scope: BASE });
+  });
+
+  it("builds the dev loopback client_id from clientIdScope, not the per-login scope", async () => {
+    // Regression: the dev loopback client id embeds its scope. The PDS records
+    // that exact client id with the authorization request and rejects a
+    // differing one at token exchange/refresh with
+    // `invalid_grant: Token was not issued to this client`. So the id must be
+    // backed by the STABLE `clientIdScope` (the app's ceiling), never the
+    // per-login `scope` (which login()/init() compute independently and may
+    // disagree on).
+    stubGlobals();
+    const CEILING = "atproto rpc:a?aud=* rpc:b?aud=*";
+    await login(HANDLE, { scope: BASE, clientIdScope: CEILING });
+
+    expect(clientOpts).toHaveLength(1);
+    const { client_id, scope } = clientOpts[0]?.clientMetadata ?? {};
+    expect(client_id).toContain(`scope=${encodeURIComponent(CEILING)}`);
+    expect(client_id).not.toContain(`scope=${encodeURIComponent(BASE)}`);
+    // The local metadata declares the same stable scope the id embeds.
+    expect(scope).toBe(CEILING);
+  });
+
+  it("keeps the dev loopback client_id invariant across differing per-login scopes", async () => {
+    // This is the exact failure mode: login() requests
+    // reconcileScope(stored) while init()/restore request SCOPE_SETS.base. When
+    // the client id is derived from the per-login scope those two produce
+    // DIFFERENT client ids, and the callback's token exchange fails with
+    // `invalid_grant: Token was not issued to this client`. With a shared
+    // clientIdScope both requests must yield the identical client id.
+    stubGlobals();
+    const CEILING = "atproto rpc:a?aud=* rpc:b?aud=*";
+    await login(HANDLE, { scope: "atproto rpc:a?aud=*", clientIdScope: CEILING });
+    await login(HANDLE, { scope: BASE, clientIdScope: CEILING });
+
+    expect(clientOpts).toHaveLength(2);
+    const first = clientOpts[0]?.clientMetadata?.client_id;
+    const second = clientOpts[1]?.clientMetadata?.client_id;
+    expect(first).toBeTruthy();
+    expect(second).toBe(first);
+  });
+
+  it("falls back to the per-login scope for clientIdScope when none is given", async () => {
+    // SDK consumers that only ever request one scope need no explicit ceiling.
+    stubGlobals();
+    await login(HANDLE, { scope: BASE });
+
+    expect(clientOpts).toHaveLength(1);
+    const { client_id, scope } = clientOpts[0]?.clientMetadata ?? {};
+    expect(client_id).toContain(`scope=${encodeURIComponent(BASE)}`);
+    expect(scope).toBe(BASE);
   });
 });

@@ -8,7 +8,7 @@ import {
 import { transport } from "@roomy-space/sdk";
 import { goto } from "$app/navigation";
 import { CONFIG } from "./config";
-import { SCOPE_SETS, hasScopeSet, type ScopeSetName } from "./scopes";
+import { CLIENT_ID_SCOPE, SCOPE_SETS, hasScopeSet, type ScopeSetName } from "./scopes";
 import { APP_PASSWORD_GRANTED_SCOPE, decideLoginScope } from "./scope-grant";
 import { scheduleAutoReload } from "./error-recovery";
 import { pxUnauth } from "./client";
@@ -237,6 +237,11 @@ export async function init() {
       port: CONFIG.port,
       handleResolverUrl: CONFIG.handleResolverUrl,
       scope: SCOPE_SETS.base,
+      // Stable dev-loopback client-id scope (see CLIENT_ID_SCOPE): the PDS
+      // records the client id with the authorization request, so the callback
+      // must rebuild the identical one. The per-login `scope` above selects
+      // the subset shown on the consent screen.
+      clientIdScope: CLIENT_ID_SCOPE,
     });
     if (result) {
       session = result.session;
@@ -371,6 +376,7 @@ export async function login(handle: string) {
     port: CONFIG.port,
     handleResolverUrl: CONFIG.handleResolverUrl,
     scope: reconcile,
+    clientIdScope: CLIENT_ID_SCOPE,
     state: returnUrl,
   });
 
@@ -441,6 +447,7 @@ export async function requestScopeExpansion(tier: ScopeSetName): Promise<void> {
     handleResolverUrl: CONFIG.handleResolverUrl,
     port: CONFIG.port,
     scope: SCOPE_SETS[tier],
+    clientIdScope: CLIENT_ID_SCOPE,
     state: returnUrl,
   });
   if (result) {

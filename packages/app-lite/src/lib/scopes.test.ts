@@ -21,6 +21,7 @@ import assert from "node:assert/strict";
 import {
   SCOPE_SETS,
   FULL_SCOPE_CEILING,
+  CLIENT_ID_SCOPE,
   parseScopes,
   hasScopeSet,
   reconcileScope,
@@ -160,6 +161,25 @@ describe("tier/ceiling invariants", () => {
     const baseSet = parseScopes(SCOPE_SETS.base);
     for (const s of chatScopes) {
       assert.equal(baseSet.has(s), false, `chat scope leaked into base: ${s}`);
+    }
+  });
+
+  test("CLIENT_ID_SCOPE is the ceiling — a stable superset of every tier", () => {
+    // The dev loopback client id embeds this scope; the PDS records the client
+    // id with the authorization request and rejects a differing one at token
+    // exchange/refresh ("Token was not issued to this client"). So it must be
+    // (a) constant — the same for every login/init/restore — and (b) a superset
+    // of every per-login scope we may request, or the PDS would reject a
+    // requested scope the client id's metadata does not declare.
+    assert.equal(CLIENT_ID_SCOPE, FULL_SCOPE_CEILING);
+    const clientIdSet = parseScopes(CLIENT_ID_SCOPE);
+    for (const [tier, scope] of Object.entries(SCOPE_SETS)) {
+      for (const s of parseScopes(scope)) {
+        assert.ok(
+          clientIdSet.has(s),
+          `tier ${tier} scope not covered by CLIENT_ID_SCOPE: ${s}`,
+        );
+      }
     }
   });
 });

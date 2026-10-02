@@ -392,10 +392,29 @@ export interface CreateOAuthClientOptions extends HappyViewClientOptions {
   /** The port the local app listens on (for the dev loopback redirect URI). */
   port?: number;
   /**
-   * OAuth scope string. If omitted, defaults to `atproto transition:generic`.
-   * Callers that need explicit `rpc:` scopes (e.g. app-lite) pass them here.
+   * OAuth scope string requested per login. If omitted, defaults to
+   * `atproto transition:generic`. Callers that need explicit `rpc:` scopes
+   * (e.g. app-lite) pass them here. This is only the *requested* scope — a
+   * subset of the client's declared ceiling.
    */
   scope?: string;
+  /**
+   * The scope declared in the *dev loopback* client id
+   * (`http://localhost?redirect_uri=…&scope=…`). The PDS derives the client's
+   * metadata (including its scope ceiling) from the client id and records the
+   * exact client-id string with the authorization request; the token exchange
+   * and every later refresh must present the SAME client id or the PDS rejects
+   * it with `invalid_grant: Token was not issued to this client`.
+   *
+   * Because the loopback client id embeds its scope, that scope MUST be stable
+   * across the authorize call, the OAuth callback, and session restore — so it
+   * is the app's full ceiling (a superset of every `scope` a login may
+   * request), NOT the per-login scope. Defaults to `scope` for SDK consumers
+   * that only ever request one scope. Ignored when an explicit `clientId` is
+   * given (deployed/HappyView), where the client id is the metadata document
+   * URL and is already stable.
+   */
+  clientIdScope?: string;
 }
 
 /** Default scope for SDK consumers that don't pass an explicit scope. */
@@ -444,6 +463,10 @@ async function createHappyViewClient(
   }
 
   const scope = opts.scope ?? DEFAULT_SCOPE;
+  // Dev loopback client id scope: stable across authorize/callback/restore
+  // (see `clientIdScope`). Defaults to the per-login scope for callers that
+  // never vary it.
+  const clientIdScope = opts.clientIdScope ?? scope;
   const tauri = window.__TAURI__;
 
   let clientId = opts.clientId;
@@ -457,13 +480,15 @@ async function createHappyViewClient(
     } else {
       // Development: loopback client. The scope is embedded in the client id
       // per the atproto loopback convention (the AS derives the metadata from
-      // the client id's query parameters — it never fetches localhost).
+      // the client id's query parameters — it never fetches localhost). It is
+      // the STABLE `clientIdScope`, not the per-login `scope`: the PDS records
+      // this exact client id and the callback must present it unchanged.
       const port = opts.port ?? 5199;
       const baseUrl = new URL(`http://127.0.0.1:${port}`);
       baseUrl.hash = "";
       baseUrl.pathname = "/";
       redirectUri = baseUrl.href;
-      clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
+      clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(clientIdScope)}`;
     }
   }
   if (!redirectUri) {
@@ -510,6 +535,12 @@ async function createLegacyClient(
   opts: CreateOAuthClientOptions,
 ): Promise<BrowserOAuthClient> {
   const scope = opts.scope ?? DEFAULT_SCOPE;
+  // Dev loopback client: its scope lives in the client id, so the SAME scope
+  // must back the id, the local metadata, and every callback/restore — use the
+  // stable ceiling (`clientIdScope`), not the per-login `scope` (see that
+  // option for why). Deployed/HappyView paths use a metadata URL as the client
+  // id and ignore this.
+  const clientIdScope = opts.clientIdScope ?? scope;
   const tauri = window.__TAURI__;
 
   // Desktop always uses the native deep-link document regardless of clientId overrides.
@@ -538,20 +569,25 @@ async function createLegacyClient(
     });
   }
 
-  // Development: loopback client
+  // Development: loopback client. The PDS derives this client's metadata
+  // (including its scope ceiling) from the client id's query parameters and
+  // records the exact client id with the authorization request; the token
+  // exchange and later refreshes must present it unchanged. The declared
+  // `scope` must therefore equal the scope embedded in the id, and be a
+  // superset of any per-login `scope` requested.
   const port = opts.port ?? 5199;
   const baseUrl = new URL(`http://127.0.0.1:${port}`);
   baseUrl.hash = "";
   baseUrl.pathname = "/";
   const redirectUri = baseUrl.href;
 
-  const clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
+  const clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(clientIdScope)}`;
 
   return new BrowserOAuthClient({
     clientMetadata: {
       ...atprotoLoopbackClientMetadata(buildLoopbackClientId(baseUrl)),
       redirect_uris: [redirectUri],
-      scope,
+      scope: clientIdScope,
       client_id: clientId,
     },
     handleResolver: createRoomyHandleResolver(opts),
