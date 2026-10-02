@@ -12,7 +12,13 @@
  * `inferSignals`). The `InvalidationRouter` wraps it in a typed pub/sub bus.
  */
 
-import type { EventType, StreamDid, UserDid, Ulid } from "@roomy-space/sdk";
+import type {
+  CallFactSource,
+  EventType,
+  StreamDid,
+  UserDid,
+  Ulid,
+} from "@roomy-space/sdk";
 import type { MessageDto } from "../queries/selectMessages.ts";
 import type { DbLike } from "../db/types.ts";
 
@@ -38,6 +44,8 @@ export type QueryNsid =
   | "space.roomy.federation.getOutgoing"
   | "space.roomy.federation.getGrants"
   | "space.roomy.sync.getEvents"
+  | "space.roomy.voice.getParticipants"
+  | "space.roomy.voice.getActiveCalls"
 
 // ─── Signals ────────────────────────────────────────────────────────────
 
@@ -228,13 +236,45 @@ export interface RoomActivityDiffActivity {
   };
 }
 
+/**
+ * A participant joined or left a room's call, or the call ended.
+ *
+ * Carries the call generation so a client holding a stale `callId` can tell a
+ * transition it should patch from one it must refetch: the suffix of a LiveKit
+ * room name exists for the same reason.
+ */
+export interface VoicePresenceDiff {
+  roomId: Ulid;
+  /** The space owning the room — the sidebar's active-call list is per space. */
+  spaceId: StreamDid;
+  callId: string;
+  op: "join" | "leave" | "callEnded";
+  /** Absent for `callEnded`: no single participant is its subject. */
+  did?: string;
+  source?: CallFactSource;
+}
+
+/**
+ * A participant's mute/deafen flags changed. Ephemeral: broadcast, never
+ * persisted, and not replayable — a reconnecting client re-sends its own state
+ * when it re-joins rather than reading a stored value.
+ */
+export interface VoiceStateDiff {
+  roomId: Ulid;
+  did: string;
+  muted: boolean;
+  deafened: boolean;
+}
+
 /** The union of what the invalidation system can emit. */
 export type InvalidationEvent =
   | { kind: "queryInvalidation"; signal: QueryInvalidation }
   | { kind: "messageDiff"; signal: MessageDiff }
   | { kind: "roomMetadataDiff"; signal: RoomMetadataDiff }
   | { kind: "roomActivityDiff"; signal: RoomActivityDiff }
-  | { kind: "mentionDiff"; signal: MentionDiff };
+  | { kind: "mentionDiff"; signal: MentionDiff }
+  | { kind: "voicePresenceDiff"; signal: VoicePresenceDiff }
+  | { kind: "voiceStateDiff"; signal: VoiceStateDiff };
 
 
 // ─── Router ─────────────────────────────────────────────────────────────

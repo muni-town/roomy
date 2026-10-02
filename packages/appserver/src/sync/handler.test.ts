@@ -884,7 +884,8 @@ describe("SyncManager", () => {
     expect(nsids).toContain("space.roomy.room.getMetadata");
     expect(nsids).toContain("space.roomy.room.getThreads");
     expect(nsids).toContain("space.roomy.room.getLinks");
-    expect(socket.sentFrames.length).toBe(4);
+    expect(nsids).toContain("space.roomy.voice.getParticipants");
+    expect(socket.sentFrames.length).toBe(5);
     for (const f of socket.sentFrames) {
       expect(f.header.t).toBe("#invalidate");
       expect(decodeFrameBody(f).params).toEqual({ roomId: ROOM_ID });
@@ -1649,6 +1650,200 @@ describe("SyncManager — stream topic", () => {
     const events = frames[0]!.body["events"] as Array<{ idx: number }>;
     expect(events.map((e) => e.idx)).toEqual([3, 4, 5]);
     expect(frames[0]!.body["cursor"]).toBe(5);
+
+    manager.destroy();
+  });
+});
+
+// ─── Voice ───────────────────────────────────────────────────────────────
+
+const CALL_ID = "01KR32FDQCCCEB8FEK76SQST9Z";
+
+function voicePresence(
+  roomId: Ulid,
+  op: "join" | "leave" | "callEnded",
+  did?: UserDid,
+): InvalidationEvent {
+  return {
+    kind: "voicePresenceDiff",
+    signal: {
+      roomId,
+      spaceId: SPACE_ID,
+      callId: CALL_ID,
+      op,
+      ...(did ? { did } : {}),
+      source: "livekit" as const,
+    },
+  };
+}
+
+function voiceState(roomId: Ulid, did: UserDid): InvalidationEvent {
+  return {
+    kind: "voiceStateDiff",
+    signal: { roomId, did, muted: true, deafened: false },
+  };
+}
+
+describe("SyncManager — voice presence", () => {
+  test("a presence diff reaches the room's subscribers, and only them", async () => {
+    const router = new MockRouter();
+    const { manager, db } = makeManager(router as unknown as InvalidationRouter);
+    db.seedMembership(SPACE_ID, USER_B, "member");
+
+    const subscribed = new MockSocket(USER_A);
+    manager.register(subscribed as unknown as SyncSocket);
+    await sub(subscribed, { type: "sub", topic: "room", id: ROOM_ID });
+    subscribed.sentFrames.length = 0;
+
+    const other = new MockSocket(USER_B);
+    manager.register(other as unknown as SyncSocket);
+    other.sentFrames.length = 0;
+
+    router.emitSignals([voicePresence(ROOM_ID, "join", USER_B)]);
+    await flush();
+
+    expect(subscribed.sentFrames).toHaveLength(1);
+    expect(subscribed.sentFrames[0]!.header.t).toBe("#voicePresenceDiff");
+    expect(subscribed.sentFrames[0]!.body).toEqual({
+      roomId: ROOM_ID,
+      callId: CALL_ID,
+      op: "join",
+      did: USER_B,
+      source: "livekit",
+    });
+    expect(other.sentFrames).toHaveLength(0);
+
+    manager.destroy();
+  });
+
+  test("a callEnded diff carries no participant", async () => {
+    const router = new MockRouter();
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
+    socket.sentFrames.length = 0;
+
+    router.emitSignals([voicePresence(ROOM_ID, "callEnded")]);
+    await flush();
+    expect(socket.sentFrames[0]!.body).toEqual({
+      roomId: ROOM_ID,
+      callId: CALL_ID,
+      op: "callEnded",
+      source: "livekit",
+    });
+
+    manager.destroy();
+  });
+
+  test("a voice_state message broadcasts to the room's subscribers", async () => {
+    const router = new MockRouter();
+    const { manager, db } = makeManager(router as unknown as InvalidationRouter);
+    db.seedMembership(SPACE_ID, USER_B, "member");
+
+    const speaker = new MockSocket(USER_A);
+    manager.register(speaker as unknown as SyncSocket);
+    await sub(speaker, { type: "sub", topic: "room", id: ROOM_ID });
+
+    const listener = new MockSocket(USER_B);
+    manager.register(listener as unknown as SyncSocket);
+    await sub(listener, { type: "sub", topic: "room", id: ROOM_ID });
+
+    speaker.sentFrames.length = 0;
+    listener.sentFrames.length = 0;
+
+    speaker.receive({
+      type: "voice_state",
+      roomId: ROOM_ID,
+      muted: true,
+      deafened: false,
+    });
+    await flush();
+
+    // Both subscribers see it, including the sender, so its own UI reflects
+    // the state the server accepted rather than only the optimistic local one.
+    for (const socket of [speaker, listener]) {
+      expect(socket.sentFrames).toHaveLength(1);
+      expect(socket.sentFrames[0]!.header.t).toBe("#voiceStateDiff");
+      expect(socket.sentFrames[0]!.body).toEqual({
+        roomId: ROOM_ID,
+        did: USER_A,
+        muted: true,
+        deafened: false,
+      });
+    }
+
+    manager.destroy();
+  });
+
+  test("a voice_state message for an unsubscribed room is ignored", async () => {
+    const router = new MockRouter();
+    const { manager, db } = makeManager(router as unknown as InvalidationRouter);
+    db.seedMembership(SPACE_ID, USER_B, "member");
+
+    const speaker = new MockSocket(USER_A);
+    manager.register(speaker as unknown as SyncSocket);
+    // Subscribed to the SPACE, not the room: the server must not speak for a
+    // room this connection is not watching.
+    await sub(speaker, { type: "sub", topic: "space", id: SPACE_ID });
+
+    const listener = new MockSocket(USER_B);
+    manager.register(listener as unknown as SyncSocket);
+    await sub(listener, { type: "sub", topic: "room", id: ROOM_ID });
+    listener.sentFrames.length = 0;
+
+    speaker.receive({
+      type: "voice_state",
+      roomId: ROOM_ID,
+      muted: true,
+      deafened: false,
+    });
+    await flush();
+
+    expect(listener.sentFrames).toHaveLength(0);
+
+    manager.destroy();
+  });
+
+  test("a state diff reaches the room's subscribers", async () => {
+    const router = new MockRouter();
+    const { manager } = makeManager(router as unknown as InvalidationRouter);
+
+    const socket = new MockSocket(USER_B);
+    manager.register(socket as unknown as SyncSocket);
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
+    socket.sentFrames.length = 0;
+
+    router.emitSignals([voiceState(ROOM_ID, USER_A)]);
+    await flush();
+
+    expect(socket.sentFrames[0]!.header.t).toBe("#voiceStateDiff");
+    expect(socket.sentFrames[0]!.body).toEqual({
+      roomId: ROOM_ID,
+      did: USER_A,
+      muted: true,
+      deafened: false,
+    });
+
+    manager.destroy();
+  });
+
+  test("voice presence stops when delivery-time access is revoked", async () => {
+    const router = new MockRouter();
+    const { manager, db } = makeManager(router as unknown as InvalidationRouter);
+
+    const socket = new MockSocket(USER_A);
+    manager.register(socket as unknown as SyncSocket);
+    await sub(socket, { type: "sub", topic: "room", id: ROOM_ID });
+    socket.sentFrames.length = 0;
+    // USER_A loses read access mid-connection (banned).
+    db.seedBan(SPACE_ID, USER_A);
+
+    router.emitSignals([voicePresence(ROOM_ID, "join", USER_B)]);
+    await flush();
+
+    expect(socket.sentFrames).toHaveLength(0);
 
     manager.destroy();
   });

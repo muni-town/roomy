@@ -149,6 +149,18 @@ export const QUERY_SCHEMAS = {
     params: queries.getScopeSettings.Params,
     response: queries.getScopeSettings.Response,
   },
+  "space.roomy.voice.getToken": {
+    params: queries.getVoiceToken.Params,
+    response: queries.getVoiceToken.Response,
+  },
+  "space.roomy.voice.getParticipants": {
+    params: queries.getVoiceParticipants.Params,
+    response: queries.getVoiceParticipants.Response,
+  },
+  "space.roomy.voice.getActiveCalls": {
+    params: queries.getVoiceActiveCalls.Params,
+    response: queries.getVoiceActiveCalls.Response,
+  },
 } as const;
 
 export const PROCEDURE_SCHEMAS = {
@@ -219,6 +231,14 @@ export const PROCEDURE_SCHEMAS = {
   "space.roomy.auth.setScopeSettings": {
     input: procedures.setScopeSettings.Input,
     output: procedures.setScopeSettings.Output,
+  },
+  "space.roomy.voice.join": {
+    input: procedures.voiceJoin.Input,
+    output: procedures.voiceJoin.Output,
+  },
+  "space.roomy.voice.leave": {
+    input: procedures.voiceLeave.Input,
+    output: procedures.voiceLeave.Output,
   },
 } as const;
 

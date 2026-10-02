@@ -105,6 +105,11 @@ const APPSERVER_RPCS = [
   "space.roomy.space.getBridgeTokens",
   "space.roomy.space.grantBridgeToken",
   "space.roomy.space.revokeBridgeToken",
+  "space.roomy.voice.getToken",
+  "space.roomy.voice.getParticipants",
+  "space.roomy.voice.getActiveCalls",
+  "space.roomy.voice.join",
+  "space.roomy.voice.leave",
 ] as const;
 
 /**

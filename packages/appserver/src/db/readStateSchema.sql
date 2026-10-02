@@ -251,3 +251,18 @@ create table if not exists user_scope_intents (
   requested_scope text not null,
   updated_at     integer not null default (unixepoch() * 1000)
 ) strict;
+
+-- ── Per-call E2EE keys ──────────────────────────────────────────────────
+-- The LiveKit E2EE key for one call generation, created on first join and
+-- deleted when the call ends.
+--
+-- Deliberately NOT an event: the event store is replayed, replicated, and
+-- readable by anyone who can read the stream, so a key written there would be
+-- a key published. This DB is appserver-owned and survives materialisation
+-- resets, which is what makes shredding meaningful — media captured from a
+-- call is unreadable once its key is gone.
+create table if not exists voice_call_keys (
+  call_id    text primary key,
+  key        text not null,
+  created_at integer not null default (unixepoch() * 1000)
+) strict;

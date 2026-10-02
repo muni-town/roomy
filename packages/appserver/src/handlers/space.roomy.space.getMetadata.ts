@@ -72,6 +72,10 @@ interface GetMetadataResult {
   unreadRoomCount: number;
   /** Number of engaged threads with unread messages. */
   unreadThreadCount: number;
+  /** Voice rooms the caller can read. Not part of `sidebar.categories` —
+   *  a voice room has no message timeline, so the client places it by id and
+   *  renders it with a call control instead of an unread badge. */
+  voiceRooms: SidebarChannel[];
   sidebar: { categories: SidebarCategory[]; orphans: SidebarChannel[] };
   deletedRooms?: DeletedRoom[];
 }
@@ -160,6 +164,7 @@ export const getMetadataHandler: QueryHandler<
   // channels in the space, so we can compute orphans).
   let categories: SidebarCategory[] = [];
   let orphans: SidebarChannel[] = [];
+  let voiceRooms: SidebarChannel[] = [];
 
   // Sidebar requires a logged-in user — anonymous callers can't get member
   // or admin status, so isMember/isAdmin is always false for them.
@@ -176,12 +181,17 @@ export const getMetadataHandler: QueryHandler<
     unreadRoomCount = data.unreadRoomCount;
     unreadThreadCount = data.unreadThreadCount;
 
-    const channelById = new Map(data.channels.map((c) => [c.id, c]));
+    // Channels and voice rooms share the `comp_room` shape, so one lookup map
+    // serves both; only channels appear in the sidebar tree below.
+    const roomById = new Map(
+      [...data.channels, ...data.voiceRooms].map((c) => [c.id, c]),
+    );
+
     const readPositions = data.readPositions;
     const channelAccess = data.access;
 
     const buildChannel = async (id: string): Promise<SidebarChannel | null> => {
-      const row = channelById.get(id);
+      const row = roomById.get(id);
       if (!row) return null;
       const acc = channelAccess.get(id);
       if (!acc || !acc.canRead) return null;
@@ -196,6 +206,13 @@ export const getMetadataHandler: QueryHandler<
         lastRead: pos?.lastRead ?? null,
       }) as SidebarChannel;
     };
+
+    // Voice rooms are built like channels (id/name/access) but are neither
+    // category children nor orphans: they are returned in their own list.
+    for (const row of data.voiceRooms) {
+      const ch = await buildChannel(row.id);
+      if (ch) voiceRooms.push(ch);
+    }
 
     // ── Federated channels ───────────────────────────────────────────
     // Channels of OTHER spaces (origins) that are federated INTO this space
@@ -216,7 +233,7 @@ export const getMetadataHandler: QueryHandler<
         referencedIds.add(childId);
         // Native channel → build from this space's DB; federated channel →
         // reuse the access-checked federated entry; unknown ID → drop.
-        const ch = channelById.has(childId)
+        const ch = roomById.has(childId)
           ? await buildChannel(childId)
           : (federatedById.get(childId) ?? null);
         if (ch) channels.push(ch);
@@ -340,6 +357,7 @@ export const getMetadataHandler: QueryHandler<
     unreadRoomCount,
     unreadThreadCount,
     sidebar: { categories, orphans },
+    voiceRooms,
     ...(deletedRooms !== undefined ? { deletedRooms } : {}),
   }) as GetMetadataResult;
 };

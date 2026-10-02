@@ -39,6 +39,7 @@ const GROUP_BY_CATEGORY: Record<string, string> = {
   mention: "Mentions",
   search: "Search",
   embed: "Embeds",
+  voice: "Voice",
 };
 
 export interface GeneratedNsid {

@@ -205,3 +205,43 @@ create table if not exists space_stats (
   updated_at    integer not null default (unixepoch() * 1000)
 ) strict;
 create index if not exists idx_space_stats_members on space_stats(member_count desc, space_did);
+
+-- Voice: the calls the reconciler must verify against LiveKit, one row per
+-- active call across every space. Maintained by the `callStarted`/`callEnded`
+-- materialisers, which are the only writers — the reconciler reads this table
+-- instead of opening every per-space DB on each 30 s pass.
+--
+-- Derived data: deleting it is safe, since the next `callStarted` replay (or
+-- a per-space DB read) restores the row. Purely additive: this file is exec'd
+-- on every open, so existing global DBs gain the table with no version bump.
+create table if not exists voice_projected_calls (
+  room_id    text primary key,
+  space_id   text not null,
+  call_id    text not null,
+  started_at integer not null,
+  created_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create index if not exists idx_voice_projected_calls_space on voice_projected_calls(space_id);
+
+-- Single-leader lease for the voice reconciler. One row per lease name; the
+-- holder is whoever last acquired it and has not yet passed `expires_at`. The
+-- 30 s loop takes this before listing LiveKit, so N appserver replicas produce
+-- one listing pass per interval rather than N.
+create table if not exists voice_reconciler_lease (
+  name       text primary key,
+  holder     text not null,
+  expires_at integer not null,
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
+-- Consecutive LiveKit list failures, counted across replicas so a lease
+-- handover does not reset the threshold. A successful pass deletes the row.
+-- Three consecutive failures end every projected call: recovery over false
+-- liveness, because a list that keeps failing says nothing about whether the
+-- calls it would have listed are still alive.
+create table if not exists voice_reconciler_failures (
+  id              integer primary key check (id = 1),
+  consecutive     integer not null,
+  last_failure_at integer not null
+) strict;

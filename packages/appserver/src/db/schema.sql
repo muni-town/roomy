@@ -386,3 +386,28 @@ create table if not exists room_activity (
   latest_at         integer,
   recent_authors    text not null default '[]'
 ) strict;
+
+-- Voice call facts projection. Declared here as well as in schema-space.sql
+-- because this file is the in-memory schema unit tests use (toAsyncDb), and
+-- those tests exercise the projection queries directly.
+create table if not exists active_calls (
+  room_id    text primary key,
+  call_id    text not null,
+  started_at integer not null,
+  source     text not null,
+  created_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create table if not exists call_participants (
+  room_id   text not null,
+  did       text not null,
+  call_id   text not null,
+  joined_at integer not null,
+  source    text not null,
+  primary key (room_id, did)
+) strict;
+
+create index if not exists idx_call_participants_call on call_participants(call_id);
+
+create index if not exists idx_active_calls_call on active_calls(call_id);
+create index if not exists idx_call_participants_did on call_participants(did);

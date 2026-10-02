@@ -330,6 +330,31 @@
     "group": "Push Notifications"
   },
   {
+    "nsid": "space.roomy.voice.getToken",
+    "kind": "query",
+    "group": "Voice"
+  },
+  {
+    "nsid": "space.roomy.voice.getParticipants",
+    "kind": "query",
+    "group": "Voice"
+  },
+  {
+    "nsid": "space.roomy.voice.getActiveCalls",
+    "kind": "query",
+    "group": "Voice"
+  },
+  {
+    "nsid": "space.roomy.voice.join",
+    "kind": "procedure",
+    "group": "Voice"
+  },
+  {
+    "nsid": "space.roomy.voice.leave",
+    "kind": "procedure",
+    "group": "Voice"
+  },
+  {
     "nsid": "space.roomy.sync.subscribe",
     "kind": "sync",
     "group": "Sync"

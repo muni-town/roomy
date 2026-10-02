@@ -19,7 +19,12 @@
  * expires it (default 60s).
  */
 
-import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
+import type {
+  CallFactSource,
+  StreamDid,
+  Ulid,
+  UserDid,
+} from "@roomy-space/sdk";
 import type { AppliedEvent, InvalidationEvent, MessageDiffOp, QueryNsid } from "./types.ts";
 import type { DbLike } from "../db/types.ts";
 import { openReadStateDb, openSpaceDb, tryOpenGlobalDb } from "../db/db.ts";
@@ -1067,6 +1072,85 @@ function handleSetReceiverPermission(event: AppliedEvent): InvalidationEvent[] {
   ];
 }
 
+// ─── Voice calls ────────────────────────────────────────────────────────
+
+/**
+ * A participant joined a call.
+ *
+ * The presence diff carries the transition to clients subscribed to the room,
+ * so a connected client patches its participant list instead of refetching it.
+ * The invalidations cover what a frame cannot: a client that was disconnected
+ * during the transition, and the sidebar's per-space active-call list, which
+ * is not room-scoped.
+ */
+function handleCallJoined(event: AppliedEvent): InvalidationEvent[] {
+  const signals = callSignals(event);
+  if (!signals) return [];
+  signals.push(voicePresence(event, "join"));
+  return signals;
+}
+
+/**
+ * A participant left. When they were the last one, `recordLeave` writes a
+ * `callEnded` alongside the leave, so the client sees both — the row goes and
+ * the call goes — without this handler having to infer the call is over.
+ */
+function handleCallLeft(event: AppliedEvent): InvalidationEvent[] {
+  const signals = callSignals(event);
+  if (!signals) return [];
+  signals.push(voicePresence(event, "leave"));
+  return signals;
+}
+
+/** A call started, or ended outright (the SFU reported the room finished). */
+function handleCallStarted(event: AppliedEvent): InvalidationEvent[] {
+  return callSignals(event) ?? [];
+}
+
+function handleCallEnded(event: AppliedEvent): InvalidationEvent[] {
+  const signals = callSignals(event);
+  if (!signals) return [];
+  signals.push(voicePresence(event, "callEnded"));
+  return signals;
+}
+
+/**
+ * The invalidations every call event implies, or null when it carries no room
+ * (a malformed fact, which must not invalidate every room in the space).
+ */
+function callSignals(event: AppliedEvent): InvalidationEvent[] | null {
+  const roomId = event.roomId;
+  if (!roomId) return null;
+  const spaceId = event.streamDid;
+  return [
+    invalidate("space.roomy.voice.getParticipants", { roomId }),
+    invalidate("space.roomy.voice.getActiveCalls", { spaceId }),
+    // A room with a live call is marked in the sidebar.
+    invalidate("space.roomy.space.getMetadata", { spaceId }),
+  ];
+}
+
+function voicePresence(
+  event: AppliedEvent,
+  op: "join" | "leave" | "callEnded",
+): InvalidationEvent {
+  const details = event.details ?? {};
+  const callId = typeof details.callId === "string" ? details.callId : "";
+  const userDid = typeof details.userDid === "string" ? details.userDid : undefined;
+  const source = details.source as CallFactSource | undefined;
+  return {
+    kind: "voicePresenceDiff",
+    signal: {
+      roomId: event.roomId as Ulid,
+      spaceId: event.streamDid,
+      callId,
+      op,
+      ...(op !== "callEnded" && userDid ? { did: userDid } : {}),
+      ...(source ? { source } : {}),
+    },
+  };
+}
+
 // ─── Dispatch table ─────────────────────────────────────────────────────
 
 const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike, messageSnapshots?: ReadonlyMap<Ulid, MessageDto>, replyToAuthors?: ReadonlyMap<Ulid, UserDid>) => InvalidationEvent[] | Promise<InvalidationEvent[]>> = {
@@ -1130,6 +1214,12 @@ const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike, messageSnapsho
   "space.roomy.federation.remove.v0": handleFederationRemove,
   "space.roomy.federation.setRoomPermission.v0": handleSetRoomPermission,
   "space.roomy.federation.setReceiverPermission.v0": handleSetReceiverPermission,
+
+  // Voice calls
+  "space.roomy.voice.callStarted.v0": handleCallStarted,
+  "space.roomy.voice.callJoined.v0": handleCallJoined,
+  "space.roomy.voice.callLeft.v0": handleCallLeft,
+  "space.roomy.voice.callEnded.v0": handleCallEnded,
 
   // Calendar — no XRPC endpoints yet
   "space.roomy.openmeet.configure.v0": () => [],

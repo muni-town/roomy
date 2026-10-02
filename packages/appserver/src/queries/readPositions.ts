@@ -228,6 +228,10 @@ export async function getSpaceUnreadStats(
 export interface SpaceSidebarData {
   /** Non-deleted channels in the space (id, name, default_access). */
   channels: Array<{ id: string; name: string | null; defaultAccess: string | null }>;
+  /** Voice rooms in the space. Kept apart from `channels` because a voice
+   *  room has no message timeline: it is not unread-bearing, and the sidebar
+   *  renders it with a call control rather than an unread badge. */
+  voiceRooms: Array<{ id: string; name: string | null; defaultAccess: string | null }>;
   /** Read-access decisions for every channel + engaged thread (roomId → decision). */
   access: Map<string, RoomAccess>;
   /** Read positions (unreadCount) for every channel + engaged thread. */
@@ -251,25 +255,43 @@ export async function getSpaceSidebarData(
   memo?: AccessMemo,
   options: { includeReadPositions?: boolean } = {},
 ): Promise<SpaceSidebarData> {
-  // Fetch all non-deleted channels in the space (per-space DB), WITH names +
-  // default_access. The sidebar assembly in getMetadata reuses these rows
-  // directly instead of re-querying channels after the unread computation.
-  const allChannelRows = await spaceDb
+  // Fetch the space's non-deleted rooms, WITH names + default_access. The
+  // sidebar assembly in getMetadata reuses these rows directly instead of
+  // re-querying after the unread computation.
+  // One scan for channels, pages, and voice rooms: pages are dropped below
+  // (they are not sidebar entries) but read here so the unread pass skips
+  // them, as it always has.
+  const allRoomRows = await spaceDb
     .query(
-      `select e.id as id, ci.name as name, cr.default_access as default_access
+      `select e.id as id, ci.name as name, cr.default_access as default_access,
+              cr.label as label
          from entities e
          join comp_room cr on cr.entity = e.id
          left join comp_info ci on ci.entity = e.id
         where e.stream_id = ?
-          and cr.label = 'space.roomy.channel'
+          and cr.label in ('space.roomy.channel', 'space.roomy.voice', 'space.roomy.page')
           and coalesce(cr.deleted, 0) = 0`,
     )
-    .all<{ id: string; name: string | null; default_access: string | null }>(spaceId);
-  const channels = allChannelRows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    defaultAccess: r.default_access,
-  }));
+    .all<{
+      id: string;
+      name: string | null;
+      default_access: string | null;
+      label: string | null;
+    }>(spaceId);
+  const channels = allRoomRows
+    .filter((r) => r.label === "space.roomy.channel")
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      defaultAccess: r.default_access,
+    }));
+  const voiceRooms = allRoomRows
+    .filter((r) => r.label === "space.roomy.voice")
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      defaultAccess: r.default_access,
+    }));
 
   // Filter to channels the user can read, then ensure read_positions rows exist.
   // All channels share the same parent space, so a single memo collapses the
@@ -277,7 +299,7 @@ export async function getSpaceSidebarData(
   const m = memo ?? createAccessMemo();
   const channelAccess = await roomAccessMany(
     spaceDb,
-    channels.map((c) => c.id),
+    [...channels, ...voiceRooms].map((c) => c.id),
     userDid,
     m,
   );
@@ -398,6 +420,7 @@ export async function getSpaceSidebarData(
 
   return {
     channels,
+    voiceRooms,
     access: channelAccess,
     readPositions,
     accessibleIds: accessible,

@@ -1,0 +1,71 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.voice.getParticipants",
+  "defs": {
+    "participants": {
+      "type": "object",
+      "required": [
+        "did",
+        "source"
+      ],
+      "properties": {
+        "did": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "knownValues": [
+            "livekit",
+            "reconciliation",
+            "user"
+          ]
+        },
+        "joinedAt": {
+          "type": "integer"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "roomId"
+        ],
+        "properties": {
+          "roomId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "participants",
+            "roomId"
+          ],
+          "nullable": [
+            "callId"
+          ],
+          "properties": {
+            "callId": {
+              "type": "string"
+            },
+            "participants": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#participants"
+              }
+            },
+            "roomId": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

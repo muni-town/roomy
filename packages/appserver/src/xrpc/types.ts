@@ -68,7 +68,13 @@ export type ClientMessage =
   | { type: "unsub"; topic: "space" | "room" | "mentions"; id: string }
   | { type: "sub"; topic: "stream"; id: string; cursor: number }
   | { type: "unsub"; topic: "stream"; id: string }
-  | { type: "cursor"; seq: number };
+  | { type: "cursor"; seq: number }
+  | {
+      type: "voice_state";
+      roomId: string;
+      muted: boolean;
+      deafened: boolean;
+    };
 
 /**
  * Abstraction over a single WS connection, passed to the SyncHandler.

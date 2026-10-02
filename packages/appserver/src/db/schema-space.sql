@@ -407,3 +407,36 @@ create table if not exists room_activity (
   -- newest message. The board takes the first 3.
   recent_authors    text not null default '[]'
 ) strict;
+
+-- Voice call facts, projected from the durable `space.roomy.voice.call*`
+-- events. A room has at most one active call; `call_id` identifies the
+-- generation, so a `callJoined`/`callLeft` carrying a superseded id matches no
+-- row and is a no-op rather than corrupting the current call's participants.
+--
+-- Purely additive and idempotent, like room_access/room_activity above: this
+-- file is exec'd on every open, so existing per-space DBs gain the tables with
+-- no SPACE_SCHEMA_VERSION bump and no forced rebuild.
+create table if not exists active_calls (
+  room_id    text primary key,
+  call_id    text not null,
+  -- Canonical start time (the ULID's timestamp), not the row's write time.
+  started_at integer not null,
+  source     text not null,
+  created_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create table if not exists call_participants (
+  room_id   text not null,
+  did       text not null,
+  call_id   text not null,
+  joined_at integer not null,
+  source    text not null,
+  primary key (room_id, did)
+) strict;
+
+create index if not exists idx_call_participants_call on call_participants(call_id);
+
+-- The reconciler and `getActiveCalls` filter by call generation, and a
+-- participant's own rows are looked up by did when their membership ends.
+create index if not exists idx_active_calls_call on active_calls(call_id);
+create index if not exists idx_call_participants_did on call_participants(did);

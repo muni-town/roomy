@@ -91,6 +91,16 @@ import { getPreferencesHandler } from "./handlers/space.roomy.push.getPreference
 import { registerSubscriptionHandler } from "./handlers/space.roomy.push.registerSubscription.ts";
 import { unregisterSubscriptionHandler } from "./handlers/space.roomy.push.unregisterSubscription.ts";
 import { setPreferencesHandler } from "./handlers/space.roomy.push.setPreferences.ts";
+import { getVoiceTokenHandler } from "./handlers/space.roomy.voice.getToken.ts";
+import { getVoiceParticipantsHandler } from "./handlers/space.roomy.voice.getParticipants.ts";
+import { getVoiceActiveCallsHandler } from "./handlers/space.roomy.voice.getActiveCalls.ts";
+import { voiceJoinHandler } from "./handlers/space.roomy.voice.join.ts";
+import { voiceLeaveHandler } from "./handlers/space.roomy.voice.leave.ts";
+import { initLiveKit, setLiveKit, type LiveKitConfig } from "./voice/livekit.ts";
+import { createLiveKitRoomLister } from "./voice/livekitClient.ts";
+import { startVoiceReconciler } from "./voice/reconciler.ts";
+import { processLiveKitWebhook } from "./voice/webhook.ts";
+import { processTestWebhook } from "./voice/testWebhook.ts";
 import { startPushDispatcher, pushDispatcherStats, _resetPushDispatcher } from "./push/dispatcher.ts";
 import { startSearchIndexer, stopSearchIndexer, searchIndexerStats } from "./search/indexer.ts";
 import { startSearchBackfill, stopSearchBackfill, searchBackfillStats } from "./search/backfill.ts";
@@ -162,6 +172,10 @@ export interface AppserverOptions {
    *  `ARBITER_DID`). When `null`, the arbiter is disabled and new spaces are
    *  self-provisioned (legacy did:plc path). */
   arbiter?: ArbiterConfig | null;
+  /** LiveKit config. When unset, reads from env (`LIVEKIT_URL` /
+   *  `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`). When `null`, voice is
+   *  disabled: every voice RPC degrades to empty/null and no reconciler runs. */
+  liveKit?: LiveKitConfig | null;
 }
 
 
@@ -501,6 +515,32 @@ export function buildRouter(
       handler: setPreferencesHandler,
       inputSchema: schemas.procedures.setPreferences.Input,
     })
+    // ── Voice ─────────────────────────────────────────────────────────────
+    .query("space.roomy.voice.getToken", {
+      handler: getVoiceTokenHandler,
+      paramsSchema: schemas.queries.getVoiceToken.Params,
+      outputSchema: schemas.queries.getVoiceToken.Response,
+    })
+    .query("space.roomy.voice.getParticipants", {
+      handler: getVoiceParticipantsHandler,
+      paramsSchema: schemas.queries.getVoiceParticipants.Params,
+      outputSchema: schemas.queries.getVoiceParticipants.Response,
+    })
+    .query("space.roomy.voice.getActiveCalls", {
+      handler: getVoiceActiveCallsHandler,
+      paramsSchema: schemas.queries.getVoiceActiveCalls.Params,
+      outputSchema: schemas.queries.getVoiceActiveCalls.Response,
+    })
+    .procedure("space.roomy.voice.join", {
+      handler: voiceJoinHandler,
+      inputSchema: schemas.procedures.voiceJoin.Input,
+      // No outputSchema: void return; short-circuits to 200 with empty body.
+    })
+    .procedure("space.roomy.voice.leave", {
+      handler: voiceLeaveHandler,
+      inputSchema: schemas.procedures.voiceLeave.Input,
+      // No outputSchema: void return; short-circuits to 200 with empty body.
+    })
     .sync("space.roomy.sync.subscribe", {
       handler: syncHandler,
     });
@@ -545,6 +585,17 @@ export async function createAppserver(
   const happyView = opts.happyView === undefined
     ? initHappyView()
     : (opts.happyView as HappyViewConfig | null);
+
+  // ─── LiveKit config ─────────────────────────────────────────────────
+  // Process-wide singleton, like HappyView. Unconfigured is a supported
+  // deployment: every voice path degrades to empty/null rather than failing.
+  const liveKitConfig =
+    opts.liveKit === undefined
+      ? initLiveKit()
+      : (setLiveKit(opts.liveKit), opts.liveKit);
+  if (liveKitConfig) {
+    log.info(`[voice] LiveKit configured (${liveKitConfig.url})`);
+  }
 
   // ─── Qdrant config ──────────────────────────────────────────────────
   // Initialize the process-wide singleton from env (`QDRANT_URL` /
@@ -740,6 +791,21 @@ export async function createAppserver(
       });
     }, PRO_MEMBERS_RECONCILE_INTERVAL_MS);
     proMembersTimer.unref();
+  }
+  // ─── Voice reconciler ─────────────────────────────────────────────────
+  // The webhook path is push-based and lossy, so this loop corrects the
+  // projection against LiveKit every 30 s. Leadership is a lease in the
+  // global DB, so every replica may tick and one does the listing. Disabled
+  // in tests via `disableBackgroundWorkers`; a no-op when LiveKit is
+  // unconfigured, since there is nothing to list.
+  let stopVoiceReconciler: (() => void) | undefined;
+  if (backgroundWorkers) {
+    stopVoiceReconciler = startVoiceReconciler({
+      lister: createLiveKitRoomLister(),
+      openSpaceDb,
+      serviceDid: ownDid,
+      holder: `${ownDid}#${process.pid}`,
+    });
   }
 
   // ─── XRPC routes ──────────────────────────────────────────────────────
@@ -990,6 +1056,41 @@ export async function createAppserver(
         );
       }
 
+      // ─── LiveKit webhook ──────────────────────────────────────────────
+      // HMAC-validated before the body is parsed: a forged payload must never
+      // reach the call-fact pipeline. LiveKit retries on 5xx, which is what a
+      // failed fact write returns — the write is idempotent, so a retry is
+      // safe and a dropped fact is not.
+      if (url.pathname === "/webhooks/livekit" && req.method === "POST") {
+        const outcome = await processLiveKitWebhook({
+          authorization: req.headers.get("authorization"),
+          body: Buffer.from(await req.arrayBuffer()),
+        });
+        return Response.json(
+          outcome.status === 200 ? { ok: true } : { error: outcome.error },
+          { status: outcome.status, headers: corsHeaders },
+        );
+      }
+
+      // Test-mode webhook endpoints: the same core handler the real webhook
+      // calls, with the HMAC step skipped. Structurally absent unless test
+      // mode is on — a production process has no route here at all, so there
+      // is nothing to accidentally leave enabled.
+      if (
+        process.env.APPSERVER_TEST_MODE === "true" &&
+        url.pathname.startsWith("/webhooks/test/") &&
+        req.method === "POST"
+      ) {
+        const testOutcome = await processTestWebhook(
+          url.pathname.slice("/webhooks/test/".length),
+          await req.json().catch(() => null),
+        );
+        return Response.json(
+          testOutcome.status === 200 ? { ok: true } : { error: testOutcome.error },
+          { status: testOutcome.status, headers: corsHeaders },
+        );
+      }
+
       if (url.pathname === "/metrics") {
         // Prometheus text exposition for the observability stack (Alloy
         // scrapes this and remote-writes to Grafana Cloud Mimir). Pulls the
@@ -1136,6 +1237,13 @@ export async function createAppserver(
           _resetStreamManager();
         } catch (e) {
           log.error("appserver close: _resetStreamManager failed", e);
+        }
+        // Stop the voice reconciler before the DBs close: a pass in flight
+        // would otherwise resume against a closed handle.
+        try {
+          stopVoiceReconciler?.();
+        } catch (e) {
+          log.error("appserver close: stopVoiceReconciler failed", e);
         }
         try {
           _resetPushDispatcher();

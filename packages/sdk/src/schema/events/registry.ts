@@ -50,6 +50,13 @@ import {
   SetReceiverPermission,
 } from "./federation";
 
+import {
+  CallStarted,
+  CallJoined,
+  CallLeft,
+  CallEnded,
+} from "./voice";
+
 /** Registry of all defined events by their $type */
 export const eventRegistry = {
   "space.roomy.message.createMessage.v0": CreateMessage,
@@ -95,6 +102,10 @@ export const eventRegistry = {
   "space.roomy.federation.remove.v0": FederationRemove,
   "space.roomy.federation.setRoomPermission.v0": SetRoomPermission,
   "space.roomy.federation.setReceiverPermission.v0": SetReceiverPermission,
+  "space.roomy.voice.callStarted.v0": CallStarted,
+  "space.roomy.voice.callJoined.v0": CallJoined,
+  "space.roomy.voice.callLeft.v0": CallLeft,
+  "space.roomy.voice.callEnded.v0": CallEnded,
 } as const satisfies Record<EventType, DefinedEvent<any, boolean>>;
 
 /** Get the causal dependencies for an event */

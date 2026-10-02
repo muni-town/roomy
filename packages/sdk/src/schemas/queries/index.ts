@@ -39,3 +39,6 @@ export * as getUserAccess from "./getUserAccess";
 export * as getBridgeTokens from "./getBridgeTokens";
 export * as getLoginScope from "./getLoginScope";
 export * as getScopeSettings from "./getScopeSettings";
+export * as getVoiceToken from "./getVoiceToken";
+export * as getVoiceParticipants from "./getVoiceParticipants";
+export * as getVoiceActiveCalls from "./getVoiceActiveCalls";

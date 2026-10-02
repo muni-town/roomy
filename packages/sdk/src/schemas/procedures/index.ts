@@ -18,3 +18,5 @@ export * as revokeBridgeToken from "./revokeBridgeToken";
 export * as createProCheckout from "./createProCheckout";
 export * as recordScopeGrant from "./recordScopeGrant";
 export * as setScopeSettings from "./setScopeSettings";
+export * as voiceJoin from "./voiceJoin";
+export * as voiceLeave from "./voiceLeave";

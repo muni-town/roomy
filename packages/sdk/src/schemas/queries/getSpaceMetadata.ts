@@ -77,6 +77,8 @@ export const Response = type({
   unreadRoomCount: "number",
   /** Number of engaged threads with unread messages. */
   unreadThreadCount: "number",
+  /** Voice rooms the caller can read — placed by id, not by category. */
+  voiceRooms: SidebarChannel.array(),
   sidebar: {
     categories: SidebarCategory.array(),
     orphans: SidebarChannel.array(),

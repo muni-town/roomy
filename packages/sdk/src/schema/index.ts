@@ -63,3 +63,13 @@ export * from "./extensions/room";
 export * from "./extensions/user";
 
 export * from "./events/room";
+
+// Voice call facts + their source enum.
+export {
+  CallStarted,
+  CallJoined,
+  CallLeft,
+  CallEnded,
+  VoiceEventVariant,
+  type CallFactSource,
+} from "./events/voice";

@@ -869,6 +869,27 @@ export class SyncConnection {
     return [...this.#topics.values()];
   }
 
+  /**
+   * Send the caller's ephemeral voice state for a room's call.
+   *
+   * Fire-and-forget and not tracked: unlike a topic subscription there is
+   * nothing to replay on reconnect — the state is re-sent when the client
+   * re-joins, and the server keeps no record of it. Sending while
+   * disconnected is a no-op rather than an error, so callers do not have to
+   * gate on connection state.
+   */
+  sendVoiceState(roomId: string, muted: boolean, deafened: boolean): void {
+    const ws = this.#ws;
+    if (!ws || ws.readyState !== this.#WS.OPEN) return;
+    try {
+      ws.send(JSON.stringify({ type: "voice_state", roomId, muted, deafened }));
+      this.#log(`→ voice_state ${shortId(roomId)}`);
+    } catch (err) {
+      this.#log(`send(voice_state) failed: ${describeError(err)}`);
+      this.#emitError(err);
+    }
+  }
+
   #buildUrl(ticket: string): string {
     const sep = this.#opts.wsUrl.includes("?") ? "&" : "?";
     return `${this.#opts.wsUrl}${sep}ticket=${encodeURIComponent(ticket)}`;

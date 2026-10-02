@@ -20,6 +20,7 @@ export { InviteEventVariant } from "./invite";
 export { StateEventVariant } from "./state";
 export { FederationEventVariant } from "./federation";
 
+export { VoiceEventVariant } from "./voice";
 // Export synthetic events
 export {
   syntheticEventRegistry,
@@ -76,6 +77,9 @@ export {
   SetRoleRoomPermission,
   RoleEventVariant,
 } from "./roles";
+
+export { CallStarted, CallJoined, CallLeft, CallEnded } from "./voice";
+export type { CallFactSource } from "./voice";
 
 export {
   type MaterializeContext,

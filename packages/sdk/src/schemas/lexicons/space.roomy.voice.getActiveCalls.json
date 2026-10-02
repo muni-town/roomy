@@ -1,0 +1,61 @@
+{
+  "lexicon": 1,
+  "id": "space.roomy.voice.getActiveCalls",
+  "defs": {
+    "calls": {
+      "type": "object",
+      "required": [
+        "callId",
+        "participantCount",
+        "roomId",
+        "startedAt"
+      ],
+      "properties": {
+        "callId": {
+          "type": "string"
+        },
+        "participantCount": {
+          "type": "integer"
+        },
+        "roomId": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "integer"
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "spaceId"
+        ],
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "calls"
+          ],
+          "properties": {
+            "calls": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#calls"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

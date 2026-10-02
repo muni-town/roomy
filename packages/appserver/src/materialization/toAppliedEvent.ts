@@ -162,6 +162,24 @@ function extractDetails(
         roomId: event["roomId"],
       };
 
+    // Voice calls: the fields the presence diff carries. `callId` identifies
+    // the generation a frame describes, and `userDid` the participant — absent
+    // for callStarted/callEnded, which are about the call rather than a person.
+    // `recordLeave` emits `callEnded` in the same batch when the last
+    // participant leaves, so the op is the event kind and nothing has to be
+    // re-derived from the participant count.
+    case "space.roomy.voice.callStarted.v0":
+    case "space.roomy.voice.callEnded.v0":
+      return { callId: event["callId"], source: event["source"] };
+
+    case "space.roomy.voice.callJoined.v0":
+    case "space.roomy.voice.callLeft.v0":
+      return {
+        callId: event["callId"],
+        userDid: event["userDid"],
+        source: event["source"],
+      };
+
     default:
       return undefined;
   }

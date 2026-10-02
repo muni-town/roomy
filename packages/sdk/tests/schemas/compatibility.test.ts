@@ -64,6 +64,16 @@ describe("schemas/queries", () => {
         ],
         orphans: [],
       },
+      voiceRooms: [
+        {
+          id: "01V000000000000000000000XX",
+          name: "Voice",
+          defaultAccess: "readwrite",
+          canRead: true,
+          canWrite: true,
+          unreadCount: 0,
+        },
+      ],
     };
     const parsed = queries.getSpaceMetadata.Response(ex);
     assertOk(parsed);
@@ -385,5 +395,118 @@ describe("schemas/frames", () => {
     assertOk(unsub);
     const cursor = frames.clientMessage.ClientMessage({ type: "cursor", seq: 0 });
     assertOk(cursor);
+  });
+
+  it("voicePresenceDiff parses every op, with and without a participant", () => {
+    const join = frames.voicePresenceDiff.Body({
+      roomId: "01CH0000000000000000000000",
+      callId: "01M000000000000000000000XX",
+      op: "join",
+      did: "did:plc:abcdef",
+      source: "livekit",
+    });
+    assertOk(join);
+    expect(join.op).toBe("join");
+
+    // callEnded has no participant: the call it names has none left.
+    const ended = frames.voicePresenceDiff.Body({
+      roomId: "01CH0000000000000000000000",
+      callId: "01M000000000000000000000XX",
+      op: "callEnded",
+    });
+    assertOk(ended);
+    expect(ended.did).toBeUndefined();
+  });
+
+  it("voiceStateDiff parses a mute/deafen change", () => {
+    const parsed = frames.voiceStateDiff.Body({
+      roomId: "01CH0000000000000000000000",
+      did: "did:plc:abcdef",
+      muted: true,
+      deafened: false,
+    });
+    assertOk(parsed);
+    expect(parsed.muted).toBe(true);
+  });
+
+  it("clientMessage parses voice_state", () => {
+    const parsed = frames.clientMessage.ClientMessage({
+      type: "voice_state",
+      roomId: "01CH0000000000000000000000",
+      muted: false,
+      deafened: true,
+    });
+    assertOk(parsed);
+    expect(parsed.type).toBe("voice_state");
+  });
+});
+
+describe("schemas/queries: voice", () => {
+  it("getToken parses a configured response", () => {
+    const parsed = queries.getVoiceToken.Response({
+      token: "eyJhbGciOiJIUzI1NiJ9.e30.sig",
+      callId: "01M000000000000000000000XX",
+      livekitUrl: "wss://livekit.example.com",
+      e2eeKey: "AAAA",
+      ttl: 300,
+    });
+    assertOk(parsed);
+    expect(parsed.ttl).toBe(300);
+  });
+
+  it("getToken parses the unconfigured response — every field null", () => {
+    const parsed = queries.getVoiceToken.Response({
+      token: null,
+      callId: null,
+      livekitUrl: null,
+      e2eeKey: null,
+      ttl: null,
+    });
+    assertOk(parsed);
+    expect(parsed.token).toBeNull();
+  });
+
+  it("getParticipants parses an empty call and a populated one", () => {
+    const empty = queries.getVoiceParticipants.Response({
+      roomId: "01CH0000000000000000000000",
+      callId: null,
+      participants: [],
+    });
+    assertOk(empty);
+
+    const populated = queries.getVoiceParticipants.Response({
+      roomId: "01CH0000000000000000000000",
+      callId: "01M000000000000000000000XX",
+      participants: [
+        { did: "did:plc:abcdef", joinedAt: 1, source: "user" },
+        { did: "did:plc:ghijkl", joinedAt: 2, source: "livekit" },
+      ],
+    });
+    assertOk(populated);
+    expect(populated.participants).toHaveLength(2);
+  });
+
+  it("getActiveCalls parses a list", () => {
+    const parsed = queries.getVoiceActiveCalls.Response({
+      calls: [
+        {
+          roomId: "01CH0000000000000000000000",
+          callId: "01M000000000000000000000XX",
+          startedAt: 1_700_000_000_000,
+          participantCount: 3,
+        },
+      ],
+    });
+    assertOk(parsed);
+    expect(parsed.calls[0]?.participantCount).toBe(3);
+  });
+});
+
+describe("schemas/procedures: voice", () => {
+  it("join and leave parse their input and void output", () => {
+    for (const proc of [procedures.voiceJoin, procedures.voiceLeave]) {
+      assertOk(proc.Input({ roomId: "01CH0000000000000000000000" }));
+      assertOk(proc.Output({}));
+    }
   });
 });

@@ -1006,4 +1006,100 @@ export const prose: Record<string, EndpointProse> = {
       "Best-effort: a URL that can't be fetched (bot-blocked, offline, non-http) returns a minimal result rather than an error.",
     ],
   },
+
+  // ── Voice ───────────────────────────────────────────────────────────────
+  "space.roomy.voice.getToken": {
+    description:
+      "Mints the caller's LiveKit access token and the call's E2EE key, so the client can connect to the SFU directly. Also the first-join path: it starts the call when the room has none. The token is a plain JWT — no LiveKit request is made — and is short-lived by design, since the client re-mints it on reconnect.",
+    auth: "Caller must be a member of the room's space with read access to the room.",
+    params: [
+      { name: "roomId", type: "string", required: true, description: "ULID of the voice room entity." },
+    ],
+    outputSchema: {
+      type: "object",
+      properties: {
+        token: { type: "string | null", description: "LiveKit access token. Null when LiveKit is unconfigured." },
+        callId: { type: "string | null", description: "The call generation this token belongs to." },
+        livekitUrl: { type: "string | null", description: "SFU origin the client should connect to." },
+        e2eeKey: { type: "string | null", description: "Base64 256-bit key for this call's end-to-end encryption." },
+        ttl: { type: "number | null", description: "Token lifetime in seconds." },
+      },
+    },
+    notes: [
+      "Every field is null when LIVEKIT_URL/LIVEKIT_API_KEY/LIVEKIT_API_SECRET are unset — the client renders no call UI rather than failing.",
+      "The E2EE key is stored outside the event store (read-state DB, keyed by callId) so a replayed call never republishes it, and it is shredded when the call ends.",
+      "The token's metadata carries the caller's DID, handle, display name and avatar so the client renders participant cards without a profile round-trip.",
+    ],
+    invalidation: ["Call lifecycle facts (callStarted/callEnded)"],
+  },
+  "space.roomy.voice.getParticipants": {
+    description:
+      "Returns who is in a room's active call, from the projection. This is the source of truth for the participant list: a client re-reads it on reconnect and after any #voicePresenceDiff, treating the snapshot as authoritative over whatever it accumulated from frames.",
+    auth: "Caller must have read access to the room.",
+    params: [
+      { name: "roomId", type: "string", required: true, description: "ULID of the voice room entity." },
+    ],
+    outputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string", description: "The room queried." },
+        callId: { type: "string | null", description: "The call generation the list belongs to; null when there is no active call." },
+        participants: { type: "Array<Participant>", description: "Each with did, joinedAt, and source ('user' | 'livekit' | 'reconciliation')." },
+      },
+    },
+    notes: [
+      "A callId that differs from the one a client holds means the call it was in ended and has been replaced.",
+      "Empty list when the room has no call, or when the projection is unavailable.",
+    ],
+    invalidation: ["Call lifecycle facts (callStarted/callJoined/callLeft/callEnded)"],
+  },
+  "space.roomy.voice.getActiveCalls": {
+    description:
+      "Lists the rooms in a space that currently have a call, so the sidebar can mark them. Space-scoped rather than global because access is resolved per space.",
+    auth: "Caller must be a member or admin of the space.",
+    params: [
+      { name: "spaceId", type: "string", required: true, description: "DID of the space." },
+    ],
+    outputSchema: {
+      type: "object",
+      properties: {
+        calls: { type: "Array<ActiveCall>", description: "Each with roomId, callId, startedAt (ms since epoch) and participantCount." },
+      },
+    },
+    notes: [
+      "Returns an empty list when LiveKit is unconfigured — nothing can have started a call in that state.",
+    ],
+    invalidation: ["Call lifecycle facts (callStarted/callJoined/callLeft/callEnded)"],
+  },
+  "space.roomy.voice.join": {
+    description:
+      "Records the caller's join intent as a durable call fact, before the client connects to LiveKit, so the participant list is optimistic and survives a failed media connection. The LiveKit webhook later confirms the same transition; the duplicate is collapsed rather than appended twice.",
+    auth: "Caller must be a member of the room's space with read access to the room.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string", description: "ULID of the voice room entity." },
+      },
+    },
+    notes: [
+      "Returns no body; the resulting presence change reaches clients as a #voicePresenceDiff over the sync socket.",
+    ],
+    invalidation: ["space.roomy.voice.getParticipants", "space.roomy.voice.getActiveCalls"],
+  },
+  "space.roomy.voice.leave": {
+    description:
+      "Records the caller's leave intent. When the departing participant is the last one, the call ends — the same rule the LiveKit webhook applies, so the projection does not depend on which path observed the empty room first.",
+    auth: "Caller must be a member of the room's space with read access to the room.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        roomId: { type: "string", description: "ULID of the voice room entity." },
+      },
+    },
+    notes: [
+      "Uses read access plus membership rather than a write gate: a participant whose write access was revoked mid-call must still be able to leave it.",
+      "Returns no body; the resulting presence change reaches clients as a #voicePresenceDiff over the sync socket.",
+    ],
+    invalidation: ["space.roomy.voice.getParticipants", "space.roomy.voice.getActiveCalls"],
+  },
 };

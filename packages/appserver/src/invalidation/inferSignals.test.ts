@@ -1334,3 +1334,98 @@ describe("inferSignals: edge cases", () => {
     expect(signals).toHaveLength(0);
   });
 });
+
+describe("inferSignals: voice calls", () => {
+  const CALL_ID = "01HXSXKBQ4TESTCALL00000000001";
+
+  function findVoicePresence(signals: InvalidationEvent[]) {
+    return signals.find((s) => s.kind === "voicePresenceDiff");
+  }
+
+  it("a join invalidates the voice queries and the sidebar", async () => {
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.voice.callJoined.v0",
+        roomId: ROOM_ID,
+        details: { callId: CALL_ID, userDid: USER_DID, source: "user" },
+      }),
+    );
+
+    expect(invalidatedNsids(signals)).toContain(
+      "space.roomy.voice.getParticipants",
+    );
+    expect(invalidatedNsids(signals)).toContain(
+      "space.roomy.voice.getActiveCalls",
+    );
+    expect(invalidatedNsids(signals)).toContain("space.roomy.space.getMetadata");
+
+    // The room-scoped query carries the room; the space-scoped one the space.
+    const participants = signals.find(
+      (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
+        s.kind === "queryInvalidation" &&
+        s.signal.nsid === "space.roomy.voice.getParticipants",
+    );
+    expect(participants?.signal.params).toEqual({ roomId: ROOM_ID });
+  });
+
+  it("a join carries the participant and the call generation", async () => {
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.voice.callJoined.v0",
+        roomId: ROOM_ID,
+        details: { callId: CALL_ID, userDid: USER_DID, source: "livekit" },
+      }),
+    );
+
+    expect(findVoicePresence(signals)?.signal).toEqual({
+      roomId: ROOM_ID,
+      spaceId: STREAM_DID,
+      callId: CALL_ID,
+      op: "join",
+      did: USER_DID,
+      source: "livekit",
+    });
+  });
+
+  it("a leave carries the leave op", async () => {
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.voice.callLeft.v0",
+        roomId: ROOM_ID,
+        details: { callId: CALL_ID, userDid: USER_DID, source: "user" },
+      }),
+    );
+
+    expect(findVoicePresence(signals)?.signal.op).toBe("leave");
+  });
+
+  it("an ended call carries no participant", async () => {
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.voice.callEnded.v0",
+        roomId: ROOM_ID,
+        details: { callId: CALL_ID, source: "reconciliation" },
+      }),
+    );
+
+    const presence = findVoicePresence(signals)?.signal as {
+      op: string;
+      did?: string;
+    };
+    expect(presence.op).toBe("callEnded");
+    expect(presence.did).toBeUndefined();
+  });
+
+  it("a call event with no room produces no signals", async () => {
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.voice.callEnded.v0",
+        details: { callId: CALL_ID, source: "livekit" },
+      }),
+    );
+
+    // No room to target: invalidating every room in the space would turn a
+    // malformed fact into a broadcast.
+    expect(signals).toHaveLength(0);
+  });
+});

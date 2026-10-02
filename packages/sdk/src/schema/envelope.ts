@@ -19,6 +19,7 @@ import {
   StateEventVariant,
   RoleEventVariant,
   FederationEventVariant,
+  VoiceEventVariant,
 } from "./events";
 
 /** Any event variant that is sent in a room */
@@ -27,6 +28,7 @@ export const RoomEventVariantUnion = type.or(
   ReactionEventVariant,
   PageEventVariant,
   LinkEventVariant,
+  VoiceEventVariant,
 );
 export type RoomEventVariantUnion = typeof RoomEventVariantUnion.infer;
 

@@ -8,8 +8,10 @@ import { defineEvent, ensureEntity } from "./utils";
 import { sql } from "../../utils";
 
 export const RoomKind = type(
-  "'space.roomy.channel' | 'space.roomy.category' | 'space.roomy.thread' | 'space.roomy.page'",
-).describe("A kind of room, such as a channel, thread, or page.");
+  "'space.roomy.channel' | 'space.roomy.category' | 'space.roomy.thread' | 'space.roomy.page' | 'space.roomy.voice'",
+).describe(
+  "A kind of room, such as a channel, thread, page, or voice call room.",
+);
 export type RoomKind = typeof RoomKind.infer;
 
 // Access level for room members

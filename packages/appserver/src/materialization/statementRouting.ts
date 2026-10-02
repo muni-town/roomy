@@ -25,7 +25,10 @@ export function isGlobalDbStatement(sql: string): boolean {
   if (
     sql.includes("space_federations") ||
     sql.includes("federation_room_permissions") ||
-    sql.includes("federation_receiver_permissions")
+    sql.includes("federation_receiver_permissions") ||
+    // The reconciler enumerates live calls from one cross-space table instead
+    // of opening every per-space DB, so its rows live in the global DB.
+    sql.includes("voice_projected_calls")
   ) {
     return true;
   }

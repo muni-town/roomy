@@ -24,6 +24,8 @@ import type {
   InvalidationRouter,
   QueryNsid,
   RoomActivityDiff,
+  VoicePresenceDiff,
+  VoiceStateDiff,
 } from "../invalidation/types.ts";
 import { allowsPublicJoin, roomAccess, spaceAccess } from "../auth/access.ts";
 import { federatedRoomAccess } from "../auth/federation.ts";
@@ -70,10 +72,15 @@ function topicsForSignal(signal: InvalidationEvent["signal"]): Topic[] {
         return qi.params["spaceId"]
           ? [topicKey("space", qi.params["spaceId"])]
           : [];
+      case "space.roomy.voice.getActiveCalls":
+        return qi.params["spaceId"]
+          ? [topicKey("space", qi.params["spaceId"])]
+          : [];
       case "space.roomy.room.getMetadata":
       case "space.roomy.room.getMessages":
       case "space.roomy.room.getThreads":
       case "space.roomy.room.getLinks":
+      case "space.roomy.voice.getParticipants":
         return qi.params["roomId"]
           ? [topicKey("room", qi.params["roomId"])]
           : [];
@@ -290,6 +297,8 @@ export class SyncManager {
         const topic = topicKey(msg.topic, msg.id);
         state.topics.delete(topic);
         this.#topicIndex.get(topic)?.delete(connId);
+      } else if (msg.type === "voice_state") {
+        this.#broadcastVoiceState(state, msg.roomId, msg.muted, msg.deafened);
       } else if (msg.type === "cursor") {
         // Cursor replay is a future concern (ring buffer for missed diffs).
         // For now, send a broad invalidation for all currently subscribed
@@ -514,6 +523,10 @@ export class SyncManager {
           routedFeedFrames.add(key);
         }
         this.#routeQueryInvalidation(event.signal);
+      } else if (event.kind === "voicePresenceDiff") {
+        this.#routeVoicePresenceDiff(event.signal);
+      } else if (event.kind === "voiceStateDiff") {
+        this.#routeVoiceStateDiff(event.signal);
       }
     }
   }
@@ -749,6 +762,76 @@ export class SyncManager {
     }
   }
 
+  // ─── Voice ─────────────────────────────────────────────────────────
+
+  /**
+   * Deliver a call-presence transition to the room's subscribers.
+   *
+   * Gated on room read access at delivery, like `#messageDiff`: a connection
+   * that loses access mid-stream must stop receiving the room's presence, and
+   * the same short-TTL memo keeps the check off the hot path.
+   */
+  #routeVoicePresenceDiff(signal: VoicePresenceDiff): void {
+    const connIds = this.#topicIndex.get(topicKey("room", signal.roomId));
+    if (!connIds) return;
+
+    void this.#deliverRoomFrame(signal.roomId, connIds, () =>
+      messageFrame("#voicePresenceDiff", {
+        roomId: signal.roomId,
+        callId: signal.callId,
+        op: signal.op,
+        ...(signal.did != null ? { did: signal.did } : {}),
+        ...(signal.source != null ? { source: signal.source } : {}),
+      }),
+    );
+  }
+
+  /** Deliver one participant's mute/deafen change to the room's subscribers. */
+  #routeVoiceStateDiff(signal: VoiceStateDiff): void {
+    const connIds = this.#topicIndex.get(topicKey("room", signal.roomId));
+    if (!connIds) return;
+
+    void this.#deliverRoomFrame(signal.roomId, connIds, () =>
+      messageFrame("#voiceStateDiff", {
+        roomId: signal.roomId,
+        did: signal.did,
+        muted: signal.muted,
+        deafened: signal.deafened,
+      }),
+    );
+  }
+
+  /**
+   * Broadcast a client's ephemeral mute/deafen state to the room.
+   *
+   * Scoped to the room the caller is subscribed to, and only to that room: an
+   * unsubscribed connection naming a room it cannot read would otherwise have
+   * the server speak for it. Nothing is persisted — the state is re-sent when
+   * the client re-joins.
+   */
+  #broadcastVoiceState(
+    state: ConnectionState,
+    roomId: string,
+    muted: boolean,
+    deafened: boolean,
+  ): void {
+    if (!state.isOpen) return;
+    const topic = topicKey("room", roomId);
+    if (!state.topics.has(topic)) return;
+
+    const connIds = this.#topicIndex.get(topic);
+    if (!connIds) return;
+
+    void this.#deliverRoomFrame(roomId, connIds, () =>
+      messageFrame("#voiceStateDiff", {
+        roomId,
+        did: state.did,
+        muted,
+        deafened,
+      }),
+    );
+  }
+
   // ─── Cursor / reconnect ────────────────────────────────────────────
 
   /** Send #invalidate for all subscribed queries (full re-fetch). */
@@ -834,13 +917,14 @@ export class SyncManager {
    * unsubscribed.
    */
   #sendRoomInvalidation(state: ConnectionState, roomId: string): void {
-    const roomNsids: Array<{ nsid: QueryNsid }> = [
-      { nsid: "space.roomy.room.getMessages" },
-      { nsid: "space.roomy.room.getMetadata" },
-      { nsid: "space.roomy.room.getThreads" },
-      { nsid: "space.roomy.room.getLinks" },
+    const roomNsids: QueryNsid[] = [
+      "space.roomy.room.getMessages",
+      "space.roomy.room.getMetadata",
+      "space.roomy.room.getThreads",
+      "space.roomy.room.getLinks",
+      "space.roomy.voice.getParticipants",
     ];
-    for (const { nsid } of roomNsids) {
+    for (const nsid of roomNsids) {
       state.send(
         messageFrame("#invalidate", {
           nsid,
