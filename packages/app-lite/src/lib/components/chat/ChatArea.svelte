@@ -86,15 +86,37 @@
 
   // Warm the badge-summary cache for every internal link in the loaded
   // message set so badges mount with a cache hit instead of each issuing a
-  // cold getSpaceSummary/getRoomSummary fetch. Runs once per timeline change
-  // (initial load + each infinite-scroll page) — not per render, not per
-  // virtualizer recycle. See prefetch-link-summaries.ts for rationale.
+  // cold getSpaceSummary/getRoomSummary fetch.
+  //
+  // Only messages not already scanned are looked at. The prefetch is a
+  // once-per-message concern — a summary stays fresh under `staleTime:
+  // Infinity`, and a message carrying no internal link never needs scanning
+  // again — so rescanning the whole loaded window on every change buys
+  // nothing and costs O(loaded rows) per incoming message. With a few
+  // thousand rows restored from the persisted cache that is a long task on
+  // every frame.
+  let scannedLinkMessageIds = new Set<string>();
+  let scannedLinkRoomId: string | null = null;
   $effect(() => {
+    // Reading `roomId` here is what re-runs this on a room change, where the
+    // loaded window belongs to a different room and nothing has been scanned.
+    if (roomId !== scannedLinkRoomId) {
+      scannedLinkMessageIds = new Set();
+      scannedLinkRoomId = roomId;
+    }
+
     const msgs = timeline;
-    if (msgs.length === 0) return;
+    const fresh: TimelineMessage[] = [];
+    for (const m of msgs) {
+      if (scannedLinkMessageIds.has(m.id)) continue;
+      scannedLinkMessageIds.add(m.id);
+      fresh.push(m);
+    }
+    if (fresh.length === 0) return;
+
     const markdowns: string[] = [];
     const blocksList: Block[][] = [];
-    for (const m of msgs) {
+    for (const m of fresh) {
       if (m.mimeType === RICHTEXT_MIME) {
         const blocks = parseRichTextContent(m.content);
         if (blocks) blocksList.push(blocks);
