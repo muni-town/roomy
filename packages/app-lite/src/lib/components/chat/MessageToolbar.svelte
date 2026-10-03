@@ -22,6 +22,9 @@
     onMove: (messages: Message[]) => void;
     /** Create a space card from this message's single link (undefined hides the action). */
     onCreateCard?: () => void;
+    /** Save this message's single link to the user's own Semble collection
+     *  (undefined hides the action). */
+    onSaveToCollection?: () => void;
   };
 
   let {
@@ -38,6 +41,7 @@
     onRequestDelete,
     onMove,
     onCreateCard,
+    onSaveToCollection,
   }: Props = $props();
 
   function onToggleReaction(emoji: string) {
@@ -80,4 +84,5 @@
   onForward={() => onForward([message])}
   onMove={() => onMove([message])}
   onCreateCard={onCreateCard}
+  onSaveToCollection={onSaveToCollection}
 />

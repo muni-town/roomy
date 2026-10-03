@@ -43,18 +43,21 @@ export interface CreatedCard {
   cid: string;
 }
 
+/** A URL card to write: the bookmarked link plus optional page metadata. */
+export interface CosmikUrlCard {
+  url: string;
+  metadata?: CosmikCardMetadata | null;
+}
+
 /**
- * Create a URL card (`network.cosmik.card`) on the space's stewarded account
- * via the arbiter proxy: only the link and its metadata are recorded.
+ * Build the `network.cosmik.card` record body for a URL card.
  *
- * The record key is assigned by the PDS (the lexicon's `key: tid`), so
- * creating a card for the same URL twice yields two distinct cards.
+ * Shared by both write paths — the space's stewarded account through the
+ * arbiter, and the user's own repo — so a card is the same record wherever it
+ * lands. Only the link and its metadata are recorded: no note text, no
+ * surrounding chat-message content.
  */
-export async function createCosmikCard(
-  arbiter: ArbiterClient,
-  spaceDid: string,
-  card: { url: string; metadata?: CosmikCardMetadata | null },
-): Promise<CreatedCard> {
+export function buildCosmikCardRecord(card: CosmikUrlCard): Record<string, unknown> {
   // Drop unset metadata fields (undefined values don't survive the JSON wire
   // anyway, but an all-undefined metadata object should be omitted entirely).
   const metadataEntries = card.metadata
@@ -68,7 +71,7 @@ export async function createCosmikCard(
         }
       : undefined;
 
-  const record: Record<string, unknown> = {
+  return {
     $type: COSMIK_CARD_COLLECTION,
     type: "URL",
     content: {
@@ -78,6 +81,21 @@ export async function createCosmikCard(
     },
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Create a URL card (`network.cosmik.card`) on the space's stewarded account
+ * via the arbiter proxy: only the link and its metadata are recorded.
+ *
+ * The record key is assigned by the PDS (the lexicon's `key: tid`), so
+ * creating a card for the same URL twice yields two distinct cards.
+ */
+export async function createCosmikCard(
+  arbiter: ArbiterClient,
+  spaceDid: string,
+  card: CosmikUrlCard,
+): Promise<CreatedCard> {
+  const record = buildCosmikCardRecord(card);
 
   const resp = await arbiter.proxy(spaceDid, {
     nsid: "com.atproto.repo.createRecord",

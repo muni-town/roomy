@@ -113,6 +113,15 @@ export const TEST_NON_MEMBER_DID = "did:plc:e2enonmember000000000000";
 export const SEED_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVX1";
 export const SEED_MESSAGE_TEXT = "seeded message from the e2e fixture";
 
+/**
+ * Seeded message carrying exactly one link, so the toolbar's Semble actions
+ * are offered for it. The URL's host is a `.invalid` TLD (RFC 2606): the
+ * appserver materialises the link, but no preview enrichment can ever reach
+ * the host, so the fixture adds no network dependency.
+ */
+export const SEED_LINK_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVX6";
+export const SEED_LINK_MESSAGE_URL = "https://semble-card.invalid/article";
+
 /** Distinctive body for the second channel, so the two rooms are tellable apart. */
 export const SEED_ROOM_2_MESSAGE_TEXT = "seeded message in the general channel";
 /** Distinctive body for the second space's channel. */

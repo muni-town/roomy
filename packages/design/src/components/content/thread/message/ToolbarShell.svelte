@@ -16,6 +16,7 @@
     IconCheckSquare,
     IconMove,
     IconLink,
+    IconArchive,
   } from "../../../../icons/index";
 
   let {
@@ -34,6 +35,9 @@
     onMove,
     /** Space admin + single-link message only — shows the Create Space Card action. */
     onCreateCard,
+    /** Single-link message only — saves the link to the viewer's own Semble
+     *  collection. Not admin-gated: it writes to the viewer's own repo. */
+    onSaveToCollection,
   }: {
     /** Author-only — shows the Edit button. */
     canEdit: boolean;
@@ -55,6 +59,7 @@
     onForward: () => void;
     onMove: () => void;
     onCreateCard?: () => void;
+    onSaveToCollection?: () => void;
   } = $props();
 
   let isEmojiToolbarPickerOpen = $state(false);
@@ -187,6 +192,12 @@
         <ContextMenuItem onclick={onCreateCard}>
           <IconLink class="size-4" />
           Create Space Card
+        </ContextMenuItem>
+      {/if}
+      {#if onSaveToCollection}
+        <ContextMenuItem onclick={onSaveToCollection}>
+          <IconArchive class="size-4" />
+          Save to my Semble collection
         </ContextMenuItem>
       {/if}
       <ContextMenuItem onclick={onStartThreading}>

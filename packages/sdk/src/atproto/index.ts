@@ -29,8 +29,10 @@ export {
 
 export {
   COSMIK_CARD_COLLECTION,
+  buildCosmikCardRecord,
   createCosmikCard,
   type CosmikCardMetadata,
+  type CosmikUrlCard,
   type CreatedCard,
 } from "./cosmik-card";
 

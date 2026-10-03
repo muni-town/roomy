@@ -47,6 +47,8 @@ import {
   SEED_MEMBER_SPACE_ROOM_NAME,
   SEED_MESSAGE_ID,
   SEED_MESSAGE_TEXT,
+  SEED_LINK_MESSAGE_ID,
+  SEED_LINK_MESSAGE_URL,
   SEED_ROOM_2_ID,
   SEED_ROOM_2_MESSAGE_TEXT,
   SEED_ROOM_2_NAME,
@@ -152,6 +154,57 @@ async function createMessage(
 ): Promise<void> {
   const serialized = serializeBlocks([
     { $type: "space.roomy.richtext.blocks#text", text },
+  ]);
+  await sendEvents(
+    origin,
+    spaceId,
+    [
+      {
+        id: messageId,
+        room: roomId,
+        $type: "space.roomy.message.createMessage.v0",
+        body: {
+          mimeType: serialized.mimeType,
+          data: { $bytes: Buffer.from(serialized.data).toString("base64") },
+        },
+        extensions: {},
+      },
+    ],
+    callerDid,
+  );
+}
+
+/**
+ * Post one message carrying a single link into an existing channel, through
+ * the real write path.
+ *
+ * The link is delivered the same way the composer delivers one: as a
+ * `#link` facet on the message's rich-text body (not a bare URL in markdown),
+ * so the appserver materialises it with `detectAndStoreLinksFromUrls` — the
+ * production path. The URL is a `.invalid` host: RFC 2606 reserves it, so
+ * link-preview enrichment can never reach it, and the message keeps exactly
+ * the one link the specs address without a network dependency.
+ */
+async function createLinkMessage(
+  origin: string,
+  spaceId: string,
+  messageId: string,
+  roomId: string,
+  url: string,
+  callerDid: string = TEST_USER_DID,
+): Promise<void> {
+  const text = "worth saving";
+  const serialized = serializeBlocks([
+    {
+      $type: "space.roomy.richtext.blocks#text",
+      text,
+      facets: [
+        {
+          index: { byteStart: 0, byteEnd: text.length },
+          features: [{ $type: "space.roomy.richtext.facet#link", uri: url }],
+        },
+      ],
+    },
   ]);
   await sendEvents(
     origin,
@@ -299,6 +352,15 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     SEED_ROOM_2_ID,
     SEED_ROOM_2_MESSAGE_TEXT,
   );
+  // The message both Semble actions act on: exactly one link, so the toolbar
+  // offers them (`singleLink` requires precisely one).
+  await createLinkMessage(
+    appserverOrigin,
+    SEED_SPACE_ID,
+    SEED_LINK_MESSAGE_ID,
+    SEED_ROOM_ID,
+    SEED_LINK_MESSAGE_URL,
+  );
 
   await createRoom(
     appserverOrigin,
@@ -348,13 +410,15 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
   );
 
   // ── Feature flags ────────────────────────────────────────────────────
-  // `search` gates the navbar search UI and the search routes; `access-settings`
-  // gates the user Access settings page and its sidebar entry; `user-blocks`
-  // gates the Block action on a profile. Every flag defaults to off in the
-  // appserver, so the specs that cover a flagged surface enable it here and the
-  // flag-off behaviour is asserted by toggling.
+  // `search` gates the navbar search UI and the search routes;
+  // `access-settings` gates the user Access settings page and its sidebar
+  // entry; `user-blocks` gates the Block action on a profile;
+  // `semble-integration` gates both Semble card actions in the message
+  // toolbar. Every flag defaults to off in the appserver, so the specs that
+  // cover a flagged surface enable it here and the flag-off behaviour is
+  // asserted by toggling.
   await readStateDb(db).run(
-    "insert into feature_flags (key, global_enabled) values ('search', 1), ('access-settings', 1), ('user-blocks', 1) on conflict(key) do update set global_enabled = 1",
+    "insert into feature_flags (key, global_enabled) values ('search', 1), ('access-settings', 1), ('user-blocks', 1), ('semble-integration', 1) on conflict(key) do update set global_enabled = 1",
   );
 
   // ── Global profile row ───────────────────────────────────────────────

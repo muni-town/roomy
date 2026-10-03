@@ -17,6 +17,7 @@
   import { createMentionSearch } from "$lib/tiptap/mentions";
   import { editMessage, removeLinkEmbed } from "$lib/mutations/message";
   import { createSpaceCard } from "$lib/mutations/space-card";
+  import { saveToPersonalCollection } from "$lib/mutations/semble-personal";
   import { guardedXrpc } from "$lib/scope-guard";
   import { showScopeConsentDialogue } from "$lib/scope-consent-dialogue";
   import { toast } from "@foxui/core";
@@ -47,6 +48,10 @@
     /** Space admin + "semble-integration" feature flag — enables the
      *  space-card toolbar action. */
     canCreateSpaceCard?: boolean;
+    /** "semble-integration" feature flag — enables the personal-collection
+     *  action. Open to every member, not just admins: it writes to the
+     *  caller's own repo under the `semble` scope tier. */
+    canSaveToCollection?: boolean;
     editingMessageId: string | undefined;
     onStartEdit: (messageId: string) => void;
     onCancelEdit: () => void;
@@ -69,6 +74,7 @@
     currentUserDid,
     isAdmin,
     canCreateSpaceCard = false,
+    canSaveToCollection = false,
     editingMessageId,
     onStartEdit,
     onCancelEdit,
@@ -299,6 +305,42 @@
       toast.success("Space card created.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create space card.");
+    }
+  }
+
+  /**
+   * Save this message's link to the user's own Semble collection.
+   *
+   * Unlike the space-card action, the write goes to the caller's own repo, so
+   * it needs `repo:network.cosmik.card?action=create` — the `semble` tier,
+   * deliberately absent from the base scope every session starts with. The
+   * first attempt therefore fails the PDS scope check, and `guardedXrpc` turns
+   * that failure into the consent dialogue: accepting drives the OAuth
+   * round-trip, refusing rethrows so the action fails cleanly.
+   */
+  async function handleSaveToCollection() {
+    if (!singleLink) return;
+    try {
+      await guardedXrpc(
+        () => saveToPersonalCollection(singleLink),
+        {
+          requiredTier: "semble",
+          prompt: (tier) =>
+            showScopeConsentDialogue(tier, {
+              title: "Save to your Semble collection",
+              description:
+                "Saving this link writes a card to your own Semble " +
+                "collection, in your own ATProto account. Roomy needs your " +
+                "permission for this action — the consent screen will show " +
+                "the exact access it requests.",
+            }),
+        },
+      );
+      toast.success("Saved to your Semble collection.");
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Failed to save to your collection.",
+      );
     }
   }
 
@@ -595,6 +637,11 @@
           onMove={() => onMove([message])}
           onCreateCard={
             canCreateSpaceCard && singleLink ? () => handleCreateCard() : undefined
+          }
+          onSaveToCollection={
+            canSaveToCollection && singleLink
+              ? () => handleSaveToCollection()
+              : undefined
           }
         />
       {/snippet}

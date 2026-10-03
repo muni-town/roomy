@@ -4,6 +4,7 @@ import {
   type schemas,
 } from "@roomy-space/sdk";
 import { createArbiterClient } from "$lib/arbiter";
+import { cosmikMetadataFromEmbed } from "./semble-card-metadata";
 
 type LinkEmbedData = typeof schemas.queries.getMessage.LinkEmbedData.infer;
 
@@ -19,27 +20,17 @@ type LinkEmbedData = typeof schemas.queries.getMessage.LinkEmbedData.infer;
  * pipeline grants its Roomy admins.
  *
  * Only the link and its enriched metadata are recorded — the message text is
- * never copied into the card.
+ * never copied into the card. The record body itself comes from the SDK
+ * (`buildCosmikCardRecord`, shared with the personal-collection write); this
+ * module supplies only the space's authority and the message's embed data.
  */
 export async function createSpaceCard(
   spaceId: string,
   link: { url: string; embed?: LinkEmbedData | null },
 ): Promise<CreatedCard> {
-  const embed = link.embed;
-  // Same image preference the LinkCard renderer uses: first embed image, else
-  // the thumbnail.
-  const imageUrl =
-    embed?.imgs && embed.imgs.length > 0 ? embed.imgs[0]?.u : embed?.thumb?.u;
-  const metadata = embed
-    ? {
-        title: embed.t,
-        description: embed.d,
-        author: embed.au?.n,
-        siteName: embed.p?.n,
-        imageUrl,
-        retrievedAt: new Date().toISOString(),
-      }
-    : null;
   const arbiter = createArbiterClient();
-  return createCosmikCard(arbiter, spaceId, { url: link.url, metadata });
+  return createCosmikCard(arbiter, spaceId, {
+    url: link.url,
+    metadata: cosmikMetadataFromEmbed(link.embed),
+  });
 }

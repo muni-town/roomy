@@ -1225,6 +1225,67 @@ depends only on 2 and 5 — it adds a tier and the dialogue is what makes the
 tier reachable, so it can run in parallel with 4 once 3 has landed.
 
 ---
+### Phase 6 results (shipped)
+
+The tier's declaration (`SEMBLE_SCOPES`, `SCOPE_SETS.semble`, the ceiling
+token) already existed, as did the reactive path from Phase 5. Phase 6 added
+the half that was missing — the personal write — and wired it to the dialogue.
+
+**The write.** `app-lite/src/lib/mutations/semble-personal.ts` writes
+`network.cosmik.card` to the caller's own repo: `agent.com.atproto.repo.createRecord`
+with `repo: agent.assertDid`, as the caller, with no arbiter and no proxy
+header. The record body is **not** duplicated from the space path — the SDK now
+exposes `buildCosmikCardRecord`, and both paths use it (the space path through
+`createCosmikCard`, the personal path directly), so a card is the same record
+wherever it lands. The two paths differ only in whose repo and whose authority.
+
+**The surface.** The message toolbar's "..." menu, beside the existing
+"Create Space Card" item: **"Save to my Semble collection"**. It is offered for
+a message carrying exactly one link — the same `singleLink` predicate the
+space-card action uses — and gated on the `semble-integration` flag. Unlike the
+space-card action it is **not** admin-gated: it writes to the viewer's own repo,
+so the flag alone opens it to every member.
+
+**The gate.** The action runs through `guardedXrpc` with
+`requiredTier: "semble"`, so the first attempt a user ever makes is the one that
+meets `ScopeConsentDialogue`: the PDS refuses the write for want of
+`repo:network.cosmik.card?action=create`, `isInsufficientScopeError` recognises
+the 403 `ScopeMissingError`, and the dialogue names the capability before the
+OAuth round-trip. This is the first tier actually reached through the dialogue,
+which is the point of the phase.
+
+**End-to-end evidence** (`e2e/semble-personal.spec.ts`, 3 tests, all passing):
+the action appears for a link message and not for a linkless one; the first
+attempt is refused by the session's base grant, the dialogue appears, accepting
+does not retry the call (measured at the network edge: exactly one attempt, no
+loop, no record written), and the page stays usable; with the tier granted the
+same action writes the card, read back over the PDS's own `listRecords` in the
+**user's** repo — asserted against the record, not the toast.
+
+The PDS stub now enforces the session's granted scope and stores records
+(`pds-stub.ts`), because neither the refusal nor a write to the user's own repo
+can be observed otherwise; a `.invalid`-host link message is seeded so the
+fixture needs no network.
+
+**What the E2E run does not exercise, stated plainly.** The OAuth consent
+round-trip itself: app-password (test-mode) sessions hold no OAuth token, so
+`requestScopeExpansion` is a deliberate no-op — there is no authorize endpoint
+to redirect to and no token to re-issue. The redirect → consent → callback leg
+is covered by the `scope-grant`/`scope-guard` unit suites and the
+`access-settings` page; the record landing in the user's repo is proven here
+with the grant the round-trip would have set.
+
+**One finding worth carrying forward.** `e5a8ec2b` reverted #329 on this
+branch. That revert's message records why the proxy-header problem it was
+originally fixing still exists: the four `rpc:com.atproto.repo.*?aud=*` tokens
+are absent from the HappyView API client's registered allowlist, and HappyView
+rejects the whole OAuth callback (`400 scope … is not allowed for this client`)
+rather than just the proxied write — so adding them to the ceiling breaks
+login outright. This phase's write is **direct** (no proxy header), so it needs
+no `rpc:` token and is unaffected; but the media-upload scope problem the revert
+left open is still open, and cannot be fixed from `scopes.ts` alone.
+
+---
 ### Phase 5 results (shipped) — supersede the placeholders above
 
 Phase 5 shipped the reactive path and answered the two placeholders #274 left

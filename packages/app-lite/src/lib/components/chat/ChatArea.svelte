@@ -51,14 +51,19 @@
   // `getSpaceMetadata` is shared with the sidebar via the Tanstack cache.
   const spaceMetaQuery = createSpaceMetadataQuery(() => spaceId);
   const isAdmin = $derived(spaceMetaQuery.data?.isAdmin ?? false);
-  // The Semble space-card action is rollout-gated: hidden unless the
+  // The Semble actions are rollout-gated: hidden unless the
   // "semble-integration" flag is enabled (via the admin flag endpoints).
   // All flags default false.
   const flagsQuery = createFeatureFlagsQuery();
   const sembleIntegrationEnabled = $derived(
     flagsQuery.data?.flags.includes("semble-integration") ?? false,
   );
+  // The space card writes through the space's arbiter, which the space's
+  // policy pipeline grants its Roomy admins.
   const canCreateSpaceCard = $derived(isAdmin && sembleIntegrationEnabled);
+  // Saving to the viewer's own collection is not an admin power — it writes to
+  // their own repo — so the flag alone opens it to every member.
+  const canSaveToCollection = $derived(sembleIntegrationEnabled);
   const currentUserDid = $derived(auth.userDid);
 
   let virtualizer: VirtualizerHandle = $state(null!);
@@ -524,6 +529,7 @@
                       currentUserDid={currentUserDid}
                       {isAdmin}
                       canCreateSpaceCard={canCreateSpaceCard}
+                      {canSaveToCollection}
                       editingMessageId={editingMessageId}
                       onStartEdit={(id) => (editingMessageId = id)}
                       onCancelEdit={() => (editingMessageId = undefined)}
