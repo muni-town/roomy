@@ -192,33 +192,35 @@ callers do not branch. Every plugin import is dynamic, so the web bundle never
 evaluates it. A registered token is remembered in localStorage
 (`roomy.push.lastNativeToken`), the native analogue of the browser's endpoint.
 
-**The plugin's 0.1.4 limitations are load-bearing here:**
+**The plugin fork (`muni-town/tauri-plugin-mobile-push`) is load-bearing here.**
+Upstream 0.1.4 has two defects that make the native path unusable; the fork at
+`native-push-upstream-edits.md` fixes both, and `src-tauri/Cargo.toml` pins it
+by `rev`.
 
-- On **Android**, `requestPermission()` and `getToken()` cannot work: the crate
-  registers Rust `#[tauri::command]` handlers, and Tauri dispatches those
-  before the native Kotlin plugin, so the non-iOS stub arms always win
-  (`{granted: false}`, `""`). `ensureNativeSubscription` therefore requires an
-  explicit `granted === true` and rejects an empty token with a message naming
-  Android as unsupported, rather than registering an endpoint that could never
-  be delivered to.
-- The three event listeners (`onTokenRefresh`, `onNotificationReceived`,
-  `onNotificationTapped`) are **non-functional in 0.1.4 on both platforms**:
-  `register_listener` is a Rust no-op registered on every target, and on iOS the
-  plugin's own README states `trigger()` cannot reach the webview. They are
-  installed (they register cleanly and will start working if upstream fixes
-  this) but nothing may depend on tap-through. Tapping a native notification is
-  therefore not routed by this plugin version.
-- **iOS** `requestPermission()`/`getToken()` do work (direct `@_cdecl` FFI), so
-  the iOS registration path is real: the hex APNs device token is registered
-  with `kind: "apns"`.
+- **Android commands reached Rust stubs.** The crate registers
+  `request_permission`/`get_token` in Rust on every target, and Tauri runs a
+  plugin's Rust handlers before native plugin dispatch — so the non-iOS arms
+  answered `{granted: false}` / `""` and the Kotlin implementation was never
+  reached. The fork forwards those commands to the Kotlin plugin.
+- **Events reached no webview on either platform.** `Plugin::trigger` sends to
+  listeners held by the plugin object Tauri's dispatch instantiated, which this
+  plugin bypasses on iOS, and `register_listener` was a Rust no-op on Android.
+  The fork keeps the listener registry in Rust and has both platforms emit into
+  it, so `onTokenRefresh`/`onNotificationReceived`/`onNotificationTapped` fire.
 
-Replacing the plugin, or upgrading past a release that fixes Android dispatch,
-does not touch the registration contract or the appserver transports — but it is
-not only `native-push.ts`: it also changes the `Cargo.toml` dependency line, and
-`Cargo.lock` must be regenerated (it currently records no `tauri-plugin-mobile-push`
-entry at all). Consuming a fork additionally means a git dependency pinned to a
-`rev`, and `capabilities/mobile.json`'s platform gate if the dependency is ever made
-unconditional — see `native-push-upstream-edits.md` §2.
+`ensureNativeSubscription` still requires an explicit `granted === true` and
+rejects an empty token rather than registering an endpoint that could never be
+delivered to — but an empty token now means the platform failed to answer, not
+that the platform is unsupported. Taps are routed, including the one that
+launched the app: the fork holds a `notification-tapped` that arrives before
+any JavaScript has run and replays it to the first listener registered, which
+`+layout.svelte` installs during startup.
+
+Consuming the fork changed the `Cargo.toml` dependency line (crates.io →
+`git` + `rev`) and regenerated `Cargo.lock`, which had recorded no
+`tauri-plugin-mobile-push` entry at all. The npm side stays on upstream: the
+JS surface the app calls is unchanged. See `native-push-upstream-edits.md` §2
+for the fork mechanics and §3 for the defects.
 
 Preferences, digests and recipient selection are untouched: they live in
 `evaluate.ts`/`dispatcher.ts` and are already transport-agnostic, so a native
@@ -260,12 +262,9 @@ so the entitlement is in its allowlist.
 
 ## Open questions
 
-- **Android dispatch in the plugin.** 0.1.4's Android commands are shadowed by
-  the crate's own Rust stubs (see "Client side"), so no Android device can
-  obtain a token. Either upstream fixes the dispatch order, or the Android
-  token path moves into this repo's own Tauri command.
-- **Notification tap-through.** No native notification routes into a room
-  today, for the same reason. The client's routing code exists and is inert.
+- **Upstreaming the plugin fixes.** The fork's changes are general (they are
+  not Roomy-specific), so they can be offered to `yanqianglu/tauri-plugin-mobile-push`
+  and the fork dropped; the `rev` pin makes that a one-line change.
 - **Per-transport rate/coalescing budgets.** Native services have their own
   quotas; the dispatcher's single `CONCURRENCY` may need a per-transport
   ceiling.
@@ -276,5 +275,9 @@ so the entitlement is in its allowlist.
 - **Token validity windows.** APNs tokens can be invalidated on reinstall;
   `410`/`BadDeviceToken` pruning covers it, but a periodic token-revalidation
   sweep may be warranted.
+- **Notification-only pushes.** Android routing reads the tap intent, which
+  carries only the sender's `data`. The appserver sends both a `notification`
+  block and the `roomy` data key, so taps carry the route; a sender that omits
+  `data` would open the app with nothing to route.
 - **Badge counts.** APNs `aps.badge` needs per-user unread totals from the
   read-state DB; the payload carries a `count` but no badge is sent.

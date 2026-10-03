@@ -1,7 +1,7 @@
 # Native Push — Plugin Distribution, Upstream Edits, and Rollout
 
 **Date:** 2026-10-01
-**Status:** Research notes — no code changed. Action required before Android push or any fork.
+**Status:** Defects A and B fixed in the fork; C/D and the rollout steps below stand.
 **Related:** `native-push-plan.md` (the implemented transports and client wiring this follows on from), `web-push-plan.md`.
 **Audience:** the agent (or human) planning the upstream/plugin edits and the production rollout.
 
@@ -20,7 +20,7 @@ Two artifacts, from one upstream repo — `github.com/yanqianglu/tauri-plugin-mo
 
 | Artifact | Registry | Pinned in this repo | Consumed at |
 |---|---|---|---|
-| Rust crate `tauri-plugin-mobile-push` | crates.io (0.1.0, 0.1.3, **0.1.4** — 2026-04-18) | `"0.1"` | `packages/app-lite/src-tauri/Cargo.toml:38` |
+| Rust crate `tauri-plugin-mobile-push` | crates.io (0.1.0, 0.1.3, 0.1.4 — 2026-04-18) | fork, `git` + `rev` | `packages/app-lite/src-tauri/Cargo.toml:38` |
 | JS `tauri-plugin-mobile-push-api` | npm | `^0.1.4` | `packages/app-lite/package.json:38` |
 
 **The load-bearing property:** the native code ships *inside the crate source
@@ -49,27 +49,22 @@ ios-src = "ios"
 
 ---
 
-## 2. Fork mechanics (decision: fork under `muni-town`, consume via `git` + `rev`)
+## 2. Fork mechanics (fork: `muni-town/tauri-plugin-mobile-push`, consumed via `git` + `rev`)
 
 ### Fork target
 
-Fork to **`muni-town/tauri-plugin-mobile-push`**, not a personal account:
-
-- This is a load-bearing dependency of a shipped iOS app; the upcoming edit is
-  Kotlin/Rust in the crate. Org ownership survives staff changes.
-- Org CI secrets are already in play for this build (`muni-town/roomy` repo
-  secrets), so the fork lives where the build does.
-- No muni-town fork exists yet (org repo search for "push" → 0 results). The only
-  current fork is `TurannLabs/tauri-plugin-mobile-push` (created 2026-08,
-  untouched) — do not depend on it.
+The fork is **`muni-town/tauri-plugin-mobile-push`** — org ownership rather than
+a personal account, since this is a load-bearing dependency of a shipped app and
+the fork belongs where the build does. The `rev` pin makes any later move a
+one-line dependency change.
 
 ### Consuming it — no crates.io publish
 
-Replace `packages/app-lite/src-tauri/Cargo.toml:38` with:
+`packages/app-lite/src-tauri/Cargo.toml:38` is:
 
 ```toml
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-tauri-plugin-mobile-push = { git = "https://github.com/muni-town/tauri-plugin-mobile-push", rev = "<full-sha>" }
+tauri-plugin-mobile-push = { git = "https://github.com/muni-town/tauri-plugin-mobile-push", rev = "6ac0683c7b0b45794a392452bc2d8e7db73042cd" }
 ```
 
 - **Pin `rev`, not `branch`.** A git dependency carries no semver, so `rev` is the
@@ -98,51 +93,33 @@ rebuild and commit `dist` or the import resolves to stale output.
 
 **Net effect: one dependency swapped, not two.**
 
-### `Cargo.lock` is stale and must be regenerated
+### `Cargo.lock` recorded no entry, and has been regenerated
 
 `packages/app-lite/src-tauri/Cargo.lock` is tracked in git, last touched by
-`2279a7b2d` (the desktop-updater PR) — i.e. **before** the push PR. It contains
+`2279a7b2d` (the desktop-updater PR) — i.e. **before** the push PR. It contained
 **zero** occurrences of `tauri-plugin-mobile-push`, and the
-`[[package]] name = "app"` dependency list in it omits the crate entirely.
+`[[package]] name = "app"` dependency list omitted the crate entirely.
 
 That the lock *does* record target-gated dependencies is proven by android-only
-`jni` (present, twice) and macOS-only `objc2` — so the absence is not a
-host-target artifact; the lock simply predates the dependency.
+`jni` (present, twice) and macOS-only `objc2` — so the absence was not a
+host-target artifact; the lock simply predated the dependency.
 
-- **Verified, not inferred:** `cargo metadata --locked` in
-  `packages/app-lite/src-tauri` fails outright —
+It is now regenerated and committed alongside the dependency change:
+`cargo metadata --locked` in `packages/app-lite/src-tauri` succeeds, where it
+previously failed with
 
-  ```
-  error: cannot update the lock file .../Cargo.lock because --locked was passed to prevent this
-  ```
-
-  So `--locked`/`--frozen` on a mobile target breaks today. Regenerate and commit
-  the lock alongside the dependency change (see the toolchain note below).
-- CI passes no `--locked`/`--frozen` to cargo (only pnpm uses
-  `--frozen-lockfile`), and `pnpm tauri android build --apk` /
-  `pnpm dlx @tauri-apps/cli@2.12.0 ios build` run cargo unlocked — so CI
-  self-heals today. Do not rely on that after the fork swap.
-
-#### Toolchain for regenerating the lock
-
-`cargo` is not on the default `PATH` in this container, but a working toolchain
-is installed under `/workspace/.toolchain` (Rust 1.98.0 + Android targets; see
-`/workspace/.toolchain/BUILD-NOTES.md`):
-
-```bash
-export RUSTUP_HOME=/workspace/.toolchain/rustup CARGO_HOME=/workspace/.toolchain/cargo
-export PATH="$CARGO_HOME/bin:$PATH"
-cd packages/app-lite/src-tauri
-cargo metadata --format-version 1 >/dev/null   # or `cargo generate-lockfile`
+```
+error: cannot update the lock file .../Cargo.lock because --locked was passed to prevent this
 ```
 
-The container has network access to crates.io (the index updated during the check
-above), so the regeneration can run here and the resulting lock be committed from
-this workspace.
+CI passes no `--locked`/`--frozen` to cargo (only pnpm uses
+`--frozen-lockfile`), and `pnpm tauri android build --apk` /
+`pnpm dlx @tauri-apps/cli@2.12.0 ios build` run cargo unlocked — but the
+committed lock is what makes the mobile build reproducible.
 
 ---
 
-## 3. What is broken in 0.1.4, and exactly where to fix it
+## 3. What was broken in 0.1.4, and where it was fixed
 
 Upstream `src/commands.rs` (verified by reading the file on `main`):
 
@@ -174,13 +151,13 @@ Confirmed by the Kotlin side
 `FirebaseMessaging.getInstance().token` and `requestPermissions` via
 `requestPermissionForAlias` — none of which is ever reached.
 
-**Fix direction:** make the Rust commands defer to the native plugin on Android
-(`run_mobile_plugin`) instead of short-circuiting, i.e. narrow the stub arms to
-`#[cfg(desktop)]` and let Android fall through to Kotlin. `[INFERENCE]` — note also
-that the Kotlin command is `requestPermissions` (plural, the framework's
-permission-override name) while the JS/Rust name is `request_permission`; if the
-Rust handler is removed without renaming, the invoke may not resolve at all.
-Confirm the dispatch/name mapping against the Tauri v2 plugin dispatch before coding.
+**Fixed** (fork `6ac0683`): both commands forward to the Kotlin plugin with
+`run_mobile_plugin_async`, and only the `#[cfg(desktop)]` arm short-circuits.
+The name mismatch the original note flagged is real — the Kotlin command is
+`requestPermissions` (plural, the framework's permission-override name) — so the
+forward uses that name while the JS-facing command stays `request_permission`.
+On Android the Kotlin plugin also handles the below-API-33 case by resolving
+`granted: true` directly, since there is no runtime permission to request.
 
 ### Defect B — event listeners never fire (both platforms)
 
@@ -188,21 +165,39 @@ Confirm the dispatch/name mapping against the Tauri v2 plugin dispatch before co
   comment states events are "not yet delivered through this path".
 - iOS: the plugin's own README states `trigger()` cannot reach the webview.
 
-The client already documents this at `packages/app-lite/src/lib/native-push.ts:18-36`
-and installs the listeners best-effort
-(`installNativePushListeners`, `native-push.ts:354-405`). Nothing may depend on
-tap-through.
+The cause is the same on both: `Plugin::trigger` sends to listeners held by the
+plugin object Tauri's dispatch instantiated, and this plugin bypasses that
+dispatch on iOS. `AppHandle.emit` is not a substitute either — `addPluginListener`
+subscribes a `Channel`, not a Tauri event, so the payloads would not reach it.
 
-**Fix direction:** implement `register_listener` so it actually bridges native
-events to the webview on both platforms, then rely on the routing code that
-already exists (`routeFromEvent`/`navigateFromEvent`, `native-push.ts:288-333`).
+**Fixed** (fork `6ac0683`): the listener registry lives in Rust
+(`src/events.rs`). `register_listener` stores the channel Tauri deserialized
+from the `__CHANNEL__:<id>` string, `remove_listener` drops it, and each platform
+emits into it:
+
+- iOS calls `mobile_push_emit_event` (declared `@_silgen_name`, defined in
+  `src/ios.rs`) from the notification-center delegate and the APNs token callback.
+- Android calls its `emitEvent` native method, resolving to the JNI symbol
+  `Java_app_tauri_mobilepush_MobilePushPlugin_emitEvent` in `src/commands.rs`.
+
+Both platforms emit the same names and shape — `notification-received`,
+`notification-tapped`, `token-received`, each `{ title?, body?, data }` — so the
+client's existing `routeFromEvent`/`navigateFromEvent` read one contract.
+
+A `notification-tapped` that arrives before any listener has registered (a cold
+start from the tap) is held and replayed to the first listener, so the routing
+code installed during startup still sees the notification that launched the app.
+Android's tap payload comes from the activity lifecycle — the FCM SDK copies the
+message `data` onto the launch intent — with `load` covering the cold start and
+`onNewIntent` the running app; the extras are cleared so a re-delivered intent
+emits once.
 
 ### Defect C — no desktop/macOS implementation at all
 
 Upstream `src/lib.rs` selects `#[cfg(desktop)] mod desktop` — and
 `src/desktop.rs` is an empty stub whose own comment says commands "return stub
 values on desktop (push notifications are mobile-only)". The README's platform
-table lists Desktop as "No-op (stub values)".
+table lists Desktop as "No-op".
 
 So macOS is **not** a matter of flipping cfg flags; there is no APNs
 implementation for macOS to enable. See §4.
@@ -353,9 +348,9 @@ See `native-push-plan.md` → "Open questions" for the remaining follow-ups
 ```bash
 # What the provider JWT actually contains (no network). Runs the same jwt.ts the
 # transport uses; compare `kid` to the .p8 filename and `iss` to Membership details.
-cd /workspace
+cd packages/appserver
 APNS_AUTH_KEY='...' APNS_KEY_ID='...' APNS_TEAM_ID='...' bun -e '
-import { importSigningKey, pemToDer, signJwt } from "./packages/appserver/src/push/transports/jwt.ts";
+import { importSigningKey, pemToDer, signJwt } from "./src/push/transports/jwt.ts";
 const raw = process.env.APNS_AUTH_KEY;
 const pem = raw.includes("\\n") ? raw.replace(/\\n/g, "\n") : raw;
 const der = pemToDer(pem.includes("-----BEGIN") ? pem : Buffer.from(pem, "base64").toString("utf8"));
@@ -382,17 +377,16 @@ prunes on `gone`).
 
 ---
 
-## 7. Decisions to make
+## 7. Decisions
 
-1. **Fork location:** `muni-town/tauri-plugin-mobile-push` — assumed here; confirm
-   with the maintainers before creating.
-2. **Android fix ownership:** fix upstream (in the fork) vs. moving the token path
-   into this repo's own Tauri command (the alternative named in
-   `native-push-plan.md` → "Open questions"). A fork is required either way for the
-   upstream route; only the in-repo command avoids the fork, and it would still
-   need the plugin registered.
-3. **npm fork:** only if the JS surface changes (§2).
-4. **Upstream the fixes?** If the fixes are generally useful, contribute them back
-   to `yanqianglu/tauri-plugin-mobile-push` and drop the fork later; the `rev` pin
-   makes that a one-line change.
-5. **macOS:** defer (§4) unless a real AppKit APNs implementation is in scope.
+1. **Fork location:** `muni-town/tauri-plugin-mobile-push`, consumed via `git` +
+   `rev` (§2). Work lands on a personal fork first and is pushed to the org fork
+   by hand; the `rev` pin is what makes moving the dependency on that boundary a
+   one-line change.
+2. **Android fix ownership:** fixed in the fork (the upstream route), not by
+   moving the token path into this repo. The fork was required either way.
+3. **npm fork:** not needed — the JS surface is unchanged (§2).
+4. **Upstream the fixes?** Still open. They are general, not Roomy-specific, so
+   offering them back to `yanqianglu/tauri-plugin-mobile-push` and dropping the
+   fork is reasonable; the `rev` pin makes that a one-line change.
+5. **macOS:** deferred (§4) — there is no AppKit APNs implementation to enable.

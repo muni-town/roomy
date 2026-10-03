@@ -15,25 +15,23 @@
  * Android). Native tokens carry no `keys` — the appserver requires those for
  * `webpush` only.
  *
- * ## Plugin caveats (tauri-plugin-mobile-push 0.1.4)
+ * ## Plugin behaviour (tauri-plugin-mobile-push 0.2)
  *
- * - **Android is not functional in this plugin build.** The crate registers
- *   Rust `#[tauri::command]` handlers for `request_permission`/`get_token`
- *   via `generate_handler!`, and Tauri runs `extend_api` before native plugin
- *   dispatch, so those Rust stubs always win over the Kotlin ones and resolve
- *   `{ granted: false }` / `{ token: "" }`.
- *   {@link ensureNativeSubscription} therefore treats an empty token as a
- *   failure instead of registering an empty endpoint, which the appserver
- *   would store and then fail to deliver to forever.
- * - **The event listeners are non-functional on both platforms.**
- *   `register_listener` is shadowed by a Rust no-op on Android, and on iOS the
- *   plugin's `trigger()` cannot reach the webview. {@link installNativePushListeners}
- *   is therefore best-effort: it registers cleanly and starts working if
- *   upstream fixes the plugin, but tap-through navigation MUST NOT be relied
- *   on, and a failure to install is swallowed.
- * - **iOS `requestPermission()` and `getToken()` do work** (they go through
- *   the plugin's direct `@_cdecl` FFI): the token is the lowercase-hex APNs
- *   device token, registered with `kind: "apns"`.
+ * - **Both platforms issue tokens.** Android's commands reach the Kotlin
+ *   plugin (the crate forwards to it) and iOS's go through the plugin's direct
+ *   `@_cdecl` FFI. An empty token is therefore an error, not a platform gap:
+ *   registering one would store an endpoint the appserver could never deliver
+ *   to, so {@link ensureNativeSubscription} fails loudly instead.
+ * - **The event listeners deliver on both platforms.** `register_listener`
+ *   stores the channel in the plugin's own registry, and each platform emits
+ *   into it — so token rotation, foreground notifications and taps all reach
+ *   {@link installNativePushListeners}. A tap that arrives before the app has
+ *   run any JavaScript (a cold start from the notification) is held by the
+ *   plugin and replayed to the first listener, which is why installing the
+ *   listeners during startup is enough to route it.
+ * - **A tap on a killed app needs a data message.** The Android tap payload
+ *   comes from the notification intent, which carries the sender's `data`; a
+ *   notification-only push opens the app with nothing to route.
  */
 
 import type { PluginListener } from "@tauri-apps/api/core";
@@ -212,14 +210,12 @@ export async function ensureNativeSubscription(): Promise<NativePushOutcome> {
     return { status: "failed", message: errorDetail(e) };
   }
 
-  // 0.1.4's Android commands are shadowed by Rust stubs that always resolve
-  // the empty string. Registering that would store an endpoint the appserver
-  // can never deliver to, so fail loudly instead.
+  // An empty token means the platform could not issue one (permission was
+  // granted but APNs/FCM did not answer, or the plugin is misconfigured).
+  // Registering it would store an endpoint the appserver can never deliver
+  // to, so fail loudly instead.
   if (typeof token !== "string" || token.trim() === "") {
-    const message =
-      platform === "android"
-        ? "Android push is not supported by this plugin build (no device token is issued)."
-        : "The push plugin returned an empty device token.";
+    const message = "The push plugin returned an empty device token.";
     console.warn("[push:native] empty device token:", message);
     return { status: "failed", message };
   }
@@ -270,20 +266,17 @@ interface NativePushRoute {
 /**
  * The `spaceId`/`roomId`/`messageId` an event carries, read defensively.
  *
- * The payload shape differs per platform and per notification type, and does
- * not match the plugin's `.d.ts`:
- *  - Android `notification-tapped` puts the FCM `data` keys at the top level.
- *  - Android `notification-received` nests them under `data`.
- *  - iOS delivers what the sender put in the APNs payload — our appserver
- *    sends the Roomy payload as a JSON string under `roomy` (see
- *    `packages/appserver/src/push/transports/apn.ts`).
+ * Every event the plugin emits is `{ title?, body?, data }`, where `data` is
+ * what the sender put in the push: on iOS the APNs payload's non-`aps` keys,
+ * on Android the FCM data map. The appserver sends its own payload as a JSON
+ * string under `roomy` (see `packages/appserver/src/push/transports/apn.ts`
+ * and `fcm.ts`), so the route is inside that string.
  *
  * Every candidate that might carry the route is collected first — the event
  * value itself, its `data`, and the parsed `roomy` JSON string from either of
- * those (iOS flattens the APNs `userInfo` onto the event; Android nests the
- * FCM data map under `data`) — then the first one holding a usable
- * `spaceId`/`roomId` pair wins. Every read is guarded, so a payload of an
- * unexpected shape yields "no route" rather than a throw.
+ * those — then the first one holding a usable `spaceId`/`roomId` pair wins.
+ * Every read is guarded, so a payload of an unexpected shape yields "no
+ * route" rather than a throw.
  */
 function routeFromEvent(event: unknown): NativePushRoute | null {
   const data =
@@ -345,10 +338,11 @@ async function disposeOne(listener: PluginListener): Promise<void> {
  * Install the native push listeners: token rotation → re-register with the
  * appserver, and notification received/tapped → deep-link into the room.
  *
- * Best-effort by design, and never throws: as noted at the top of this file,
- * the plugin's `register_listener` is shadowed by a Rust no-op on Android and
- * `trigger()` cannot reach the webview on iOS, so in 0.1.4 these callbacks may
- * never fire. Nothing else in the app may depend on tap-through working.
+ * Best-effort, and never throws: push is a progressive enhancement, so a
+ * listener that fails to install degrades to "no tap handling" rather than
+ * breaking startup. The plugin holds a tap that arrives before these register
+ * (a cold start from the notification) and replays it to the first listener,
+ * so installing them here is enough to route the tap that launched the app.
  * Returns a disposer that unregisters whatever was installed (no-op on web).
  */
 export function installNativePushListeners(): () => void {

@@ -76,6 +76,7 @@ dependencies = [
  "tauri-plugin-deep-link",
  "tauri-plugin-http",
  "tauri-plugin-log",
+ "tauri-plugin-mobile-push",
  "tauri-plugin-opener",
  "tauri-plugin-os",
  "tauri-plugin-process",
@@ -4229,6 +4230,21 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.19",
  "time",
+]
+
+[[package]]
+name = "tauri-plugin-mobile-push"
+version = "0.2.0"
+source = "git+https://github.com/muni-town/tauri-plugin-mobile-push?rev=6ac0683c7b0b45794a392452bc2d8e7db73042cd#6ac0683c7b0b45794a392452bc2d8e7db73042cd"
+dependencies = [
+ "jni 0.21.1",
+ "log",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
