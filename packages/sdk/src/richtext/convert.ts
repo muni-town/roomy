@@ -636,7 +636,7 @@ export function blocksToProseMirrorDoc(blocks: Block[]): ProseMirrorDoc {
  * field). Pushing that straight into the joined output would coerce
  * `undefined` to the literal "undefined" and corrupt the derived plaintext.
  */
-function blockText(block: { text?: unknown }): string {
+export function blockText(block: { text?: unknown }): string {
   return typeof block.text === "string" ? block.text : "";
 }
 
@@ -660,7 +660,7 @@ function listItemTexts(block: { items?: unknown }): string[] {
 }
 
 /** Facets of a single block, or `[]` when malformed. */
-function blockFacets(block: { facets?: unknown }): Facet[] {
+export function blockFacets(block: { facets?: unknown }): Facet[] {
   return Array.isArray(block.facets) ? (block.facets as Facet[]) : [];
 }
 

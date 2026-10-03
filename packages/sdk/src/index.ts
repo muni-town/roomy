@@ -2,6 +2,8 @@ export * from "./schema";
 // Rich text (blocks + facets) types and converters.
 export * from "./schema/richtext";
 export * from "./richtext/convert";
+// Roomy → Bluesky post export (pure).
+export * from "./bluesky/post";
 export type {
   DecodedStreamEvent,
   EventCallback,
