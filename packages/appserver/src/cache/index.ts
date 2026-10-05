@@ -27,6 +27,8 @@ export {
   paramsSubset,
 } from "./queryCacheKey.ts";
 export { attachCacheEvictionListener } from "./evictListener.ts";
+export { activityFeedCoverage } from "./activityFeedCoverage.ts";
+export { spacesCoverSpace } from "./spaceListCoverage.ts";
 
 /**
  * NSIDs eligible for response caching. These three are:

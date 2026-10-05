@@ -722,6 +722,11 @@ export class SyncManager {
     // `{}` — a `queryKey(nsid, {})` prefix-matches every feed page the
     // client holds, including the global one a `{ spaceId }` frame would
     // leave stale.
+    //
+    // getSpaces is the same shape: its signal names the space (and room) that
+    // changed so the server cache can check which callers' lists contain it
+    // (see `cache/spaceListCoverage.ts`), while the client frame stays the
+    // unfiltered `{}` its query key was built from.
     if (
       signal.nsid === "space.roomy.space.getSpaces" ||
       signal.nsid === "space.roomy.space.getActivityFeed"

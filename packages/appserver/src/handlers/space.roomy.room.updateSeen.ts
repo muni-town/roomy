@@ -157,6 +157,8 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
           affectedUser: userDid,
         },
       },
+      // Reading a room zeroes its unread count, which moves the READER's own
+      // list totals; no other caller's list is touched.
       {
         kind: "queryInvalidation",
         signal: {
@@ -194,6 +196,7 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
           affectedUser: userDid,
         },
       });
+      // The federated room's unread row moved in this reader's list only.
       signals.push({
         kind: "queryInvalidation",
         signal: {

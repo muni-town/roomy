@@ -20,6 +20,12 @@
  *   signal with `{ spaceId }` correctly evicts entries cached with
  *   `{ spaceId, includeDeleted }`. This is critical because invalidation
  *   signals omit optional params that request URLs may include.
+ * - **Coverage eviction.** Two NSIDs cannot use that rule, because their
+ *   params are filters over a per-caller result rather than an identity:
+ *   `getActivityFeed` (`evictActivityFeed`) and `getSpaces`
+ *   (`evictSpaceList`). `{ spaceId, roomId }` is a subset of no entry's
+ *   params, so subset matching would match nothing and leave stale entries;
+ *   both match against what the cached body contains instead.
  */
 
 import {
@@ -28,6 +34,7 @@ import {
   paramsSubset,
 } from "./queryCacheKey.ts";
 import { activityFeedCoverage } from "./activityFeedCoverage.ts";
+import { spacesCoverSpace } from "./spaceListCoverage.ts";
 
 export interface QueryCacheOptions {
   /** Max entries before LRU eviction. Default 4096. */
@@ -222,6 +229,31 @@ export class QueryCache {
     }
   }
 
+
+  /**
+   * Evict `space.getSpaces` entries whose cached body lists `signalSpace`.
+   *
+   * The list is per-caller and its params name no space, so — exactly as for
+   * the activity feed above — a room-shaped change cannot be matched by param
+   * subset: `{ spaceId, roomId }` is a subset of no entry's params, and the
+   * callers who must drop their list are the ones whose list CONTAINS the
+   * space. `spacesCoverSpace` reads that off the cached body.
+   *
+   * A caller with no row for the space is unaffected: nothing a room in that
+   * space can do moves any number their list reports.
+   */
+  evictSpaceList(signalSpace: string, affectedUser?: string): void {
+    for (const [key, entry] of this.#store) {
+      if (entry.nsid !== "space.roomy.space.getSpaces") continue;
+      if (!spacesCoverSpace(entry.value, signalSpace)) continue;
+      if (affectedUser !== undefined) {
+        if (entry.userDid !== affectedUser && entry.userDid !== "anon") continue;
+      }
+      this.#store.delete(key);
+      this.#evictions++;
+      this.#count(entry.nsid, "evictions");
+    }
+  }
 
   /** Evict a single entry by its exact key. Primarily for testing. */
   evict(key: string): void {
