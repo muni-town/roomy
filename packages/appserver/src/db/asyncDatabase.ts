@@ -2,6 +2,7 @@
 
 import type { WorkerRequest, WorkerResponse } from "./types.ts";
 import { metrics } from "../metrics.ts";
+import { log } from "../log.ts";
 
 // ─── Error types ──────────────────────────────────────────────────────────
 
@@ -110,6 +111,8 @@ interface PendingEntry {
   type: string;
   /** `performance.now()` when the request was enqueued. */
   startedAt: number;
+  /** The request itself, so a slow-request line can name its SQL and target. */
+  req: Omit<WorkerRequest, "id">;
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -180,7 +183,7 @@ export class WorkerLink {
 
     this.#worker.onmessage = (event: MessageEvent) => {
       const data = event.data as WorkerResponse;
-      const { id, result, error } = data;
+      const { id, result, error, slowMs } = data;
       const entry = this.#pending.get(id);
       if (!entry) return;
       this.#pending.delete(id);
@@ -193,6 +196,26 @@ export class WorkerLink {
         { type: entry.type, worker: this.#name },
         (performance.now() - entry.startedAt) / 1000,
       );
+      // The worker times its own handler and hands back anything slow. Logged
+      // HERE because the worker thread cannot reach the log sink (see
+      // `slowMs` on WorkerResponse): without this the worker's own service
+      // time is unobservable, and `roomy_db_wait_seconds` cannot say whether
+      // the request ahead was slow or the queue was long.
+      if (slowMs !== undefined) {
+        log.warn("[db-slow] request", {
+          worker: this.#name,
+          type: entry.type,
+          targetDb: entry.req.targetDb ?? "events",
+          spaceDid: entry.req.spaceDid,
+          sql: entry.req.sql ?? entry.req.steps?.[0]?.sql,
+          steps: entry.req.steps?.length,
+          // Time the worker spent executing, versus `totalMs` (enqueue to
+          // reply, the span `dbWait` observes): the difference is time this
+          // request sat in the queue behind earlier work.
+          selfMs: slowMs,
+          totalMs: Math.round(performance.now() - entry.startedAt),
+        });
+      }
       if (error) {
         entry.reject(new Error(error));
       } else {
@@ -243,6 +266,7 @@ export class WorkerLink {
       timeout,
       type: req.type,
       startedAt: performance.now(),
+      req,
     });
     this.#worker.postMessage({ ...req, ...route, id });
     // Some callers fire-and-forget DB requests (background loops, teardown

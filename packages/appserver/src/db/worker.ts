@@ -91,6 +91,27 @@ let role:
   | "readstate"
   | "events" = "system";
 
+/**
+ * Service-time reporting for the worker's own request loop.
+ *
+ * `roomy_db_wait_seconds` is observed on the MAIN thread when a worker replies,
+ * so a request that waited behind another collapses into one bucket with no way
+ * to tell WHICH request held the thread. The loop below times each request
+ * inside the worker and reports the offenders on its worker messages, which is
+ * the only channel that reaches the app's log sink: a worker thread has no
+ * access to it (`ALLOY_URL` is read by the main thread's sink, and stdout from
+ * a worker is not collected in production), so a slow request that stays silent
+ * inside the worker is invisible no matter how long it runs.
+ *
+ * Worker `onmessage` handlers are serialized, so a queued request's timer
+ * starts only once the request ahead of it has finished — its wait lives in the
+ * message queue and is not visible here. That is the point: the main thread
+ * already measures the victims' wait, and this measures the offender's service
+ * time. A handler blocked inside SQLite on a busy lock still counts, because
+ * the call does not return until the lock frees.
+ */
+const SLOW_REQUEST_MS = 50;
+
 // ─── Schema paths ─────────────────────────────────────────────────────────
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -649,32 +670,32 @@ function dbForRequest(req: WorkerRequest): Database {
 
 self.onmessage = (event: MessageEvent) => {
   const req = event.data as WorkerRequest;
-  try {
-    if (closed) {
-      const response: WorkerResponse = {
-        id: req.id,
-        error: "Worker is closed",
-        errorCode: "WORKER_CLOSED",
-      };
-      self.postMessage(response);
-      return;
+  // Time inside this handler — the worker thread executing SQL. The main
+  // thread separately measures how long the caller waited, which is this plus
+  // any time spent queued behind an earlier request.
+  const start = performance.now();
+  let response: WorkerResponse;
+  if (closed) {
+    response = { id: req.id, error: "Worker is closed", errorCode: "WORKER_CLOSED" };
+  } else {
+    try {
+      response = { id: req.id, result: handleRequest(req) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const errorCode =
+        err instanceof SchemaVersionMismatchError
+          ? "SCHEMA_MISMATCH"
+          : "INTERNAL_ERROR";
+      response = { id: req.id, error: message, errorCode };
     }
-    const result = handleRequest(req);
-    const response: WorkerResponse = { id: req.id, result };
-    self.postMessage(response);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const errorCode =
-      err instanceof SchemaVersionMismatchError
-        ? "SCHEMA_MISMATCH"
-        : "INTERNAL_ERROR";
-    const response: WorkerResponse = {
-      id: req.id,
-      error: message,
-      errorCode,
-    };
-    self.postMessage(response);
   }
+  const selfMs = performance.now() - start;
+  // Carried on the response rather than logged here: only the main thread's
+  // sink reaches Loki (see SLOW_REQUEST_MS). Rounded to keep the message
+  // small; the threshold sits far above a healthy sub-millisecond
+  // round-trip, so this only ever carries a stall.
+  if (selfMs >= SLOW_REQUEST_MS) response.slowMs = Math.round(selfMs);
+  self.postMessage(response);
 };
 
 /** Require a spaceDid on a worker request, throwing a clear error if absent. */

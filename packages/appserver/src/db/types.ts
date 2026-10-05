@@ -172,4 +172,11 @@ export interface WorkerResponse {
   error?: string;
   /** Error code for structured error handling. */
   errorCode?: string;
+  /**
+   * Milliseconds the worker spent inside the handler, set only when that
+   * exceeded the slow-request threshold. Reported rather than logged in the
+   * worker so the main thread's log sink — the only one that reaches Loki —
+   * carries the line. Absent on healthy requests.
+   */
+  slowMs?: number;
 }
