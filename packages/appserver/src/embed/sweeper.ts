@@ -125,6 +125,18 @@ let sweeperRouter: InvalidationRouter | undefined;
 let started = false;
 /** Resolved when the background loop exits. Used by stopEmbedSweeper. */
 let loopPromise: Promise<void> | undefined;
+/**
+ * Count of sweep cycles currently running, with the promise that settles when
+ * the last one finishes. A cycle's caller can abandon it (a test timing out
+ * mid-cycle) while it is still awaiting a DB reply; teardown that closed the
+ * pool next would reject that reply with no frame left to observe it, and bun
+ * charges the rejection to whatever runs next. `stopEmbedSweeper` awaits this
+ * so the cycle has finished before its caller disposes of the DB.
+ */
+let cyclesInFlight = 0;
+let cyclesSettled: Promise<void> = Promise.resolve();
+let settleCycles: (() => void) | undefined;
+
 
 // ─── Stats (for /health/embed) ─────────────────────────────────────────
 // Lifetime counters incremented in the drain loop. Non-null enrichLink →
@@ -931,12 +943,44 @@ export interface SweepCycleResult {
  * anti-churn yield.
  *
  * Expected DB/fetch failures are caught inline (and drive the DB backoff via
- * `markDbError`). Any *unexpected* throw bubbles to {@link runSweeperLoop}'s
- * outer guard so the loop self-heals instead of dying.
+ * `markDbError`). An *unexpected* throw is logged here and returned as an
+ * empty result rather than propagated: callers may abandon this promise
+ * mid-flight (a test timing out, a teardown resetting state), and a rejection
+ * left without an observer is charged to whatever runs next.
  */
-export async function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
+export function sweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
   // Bail out early if the sweeper has been stopped (e.g. during test teardown).
-  if (!started) return { full: false, producedOk: false };
+  if (!started) return Promise.resolve({ full: false, producedOk: false });
+  armCycles();
+  const result = runSweepCycle(globalDb).catch((err) => {
+    log.error("[embed-sweeper] sweep cycle threw (continuing):", err);
+    return { full: false, producedOk: false };
+  });
+  void result.then(finishCycle, finishCycle);
+  return result;
+}
+
+/**
+ * Mark a cycle as running, arming {@link cyclesSettled} when this is the first
+ * one so `stopEmbedSweeper` has something to await.
+ */
+function armCycles(): void {
+  if (cyclesInFlight === 0) {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    cyclesSettled = promise;
+    settleCycles = resolve;
+  }
+  cyclesInFlight++;
+}
+
+/** Record that one cycle has finished, settling {@link cyclesSettled} at zero. */
+function finishCycle(): void {
+  cyclesInFlight--;
+  if (cyclesInFlight === 0) settleCycles?.();
+}
+
+/** The body of one sweep cycle. See {@link sweepCycle} for the contract. */
+async function runSweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
   // If the DB has been erroring, wait out the backoff before touching it
   // again — don't fetch links only to fail every write (wastes embed-service
   // calls and spams logs). A poke can still wake us early, but we re-check
@@ -1327,13 +1371,12 @@ async function runSweeperLoop(): Promise<void> {
       metricSweepThrottled.inc();
       await sweepWait(NO_OK_YIELD_MS);
     } catch (err) {
-      // Outer resilience: the inner try/catches handle expected DB/fetch
-      // failures, but any *unexpected* throw (a future code path not yet
-      // guarded) must NOT permanently kill the process-wide loop — without
-      // this, a single unhandled rejection would stop all embed enrichment
-      // until restart. Log, pause briefly to avoid a tight crash loop, and
-      // continue.
-      log.error("[embed-sweeper] sweep cycle threw (continuing):", err);
+      // A cycle never rejects (see {@link sweepCycle}), so this guards the
+      // waits: an unexpected throw must NOT permanently kill the process-wide
+      // loop — without this, a single unhandled rejection would stop all embed
+      // enrichment until restart. Log, pause briefly to avoid a tight crash
+      // loop, and continue.
+      log.error("[embed-sweeper] sweep loop iteration threw (continuing):", err);
       await sweepWait(IDLE_POLL_MS);
     }
   }
@@ -1594,10 +1637,17 @@ export function _resetEmbedSweeper(): void {
 }
 
 /**
- * Stop the background sweeper loop. Idempotent. Used by tests to prevent
- * the loop from running after the DB is closed. Signals the loop to exit
- * and returns a promise that resolves once the loop has finished (with a
- * short timeout as a safety net).
+ * Stop the background sweeper loop. Idempotent. Used by tests to prevent the
+ * loop from running after the DB is closed. Signals the loop to exit and
+ * resolves once the loop has finished AND every sweep cycle already running has
+ * returned.
+ *
+ * Waiting for the cycles matters because the caller's next step is usually
+ * `closeDb()`: a cycle still awaiting a DB reply would have that reply rejected
+ * by the termination, and a caller that abandoned the cycle (a test timing out)
+ * leaves no frame to observe it. The wait is bounded — a cycle only blocks on
+ * DB round-trips (which time out) and on {@link sweepWait}, which `wake()`
+ * above releases.
  */
 export function stopEmbedSweeper(): Promise<void> {
   started = false;
@@ -1625,5 +1675,7 @@ export function stopEmbedSweeper(): Promise<void> {
   statsSweepThrottled = 0;
   const timeout = Promise.withResolvers<void>();
   setTimeout(timeout.resolve, 50);
-  return Promise.race([loopPromise ?? Promise.resolve(), timeout.promise]);
+  return Promise.race([loopPromise ?? Promise.resolve(), timeout.promise]).then(
+    () => cyclesSettled,
+  );
 }

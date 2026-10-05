@@ -51,9 +51,14 @@ beforeAll(() => {
       }),
     )) as typeof globalThis.fetch;
 });
-afterAll(() => {
+afterAll(async () => {
   globalThis.fetch = realFetch;
-  stopEmbedSweeper();
+  // A test that timed out mid-cycle or mid-seed leaves DB requests in flight
+  // with no frame left to observe their rejection. Let them settle against the
+  // still-open pool before closing it — terminating the worker under them would
+  // surface the rejection as an unhandled error outside any test.
+  await stopEmbedSweeper();
+  await drainSeedWrites();
   closeDb();
 });
 
@@ -77,62 +82,177 @@ function captureRouter(): {
 const SPACE_DID = "did:web:test.example";
 
 /**
- * Stop any running sweeper, tear down the previous worker, and open a fresh
- * in-memory worker with routed global + per-space handles. Each test gets an
- * isolated set of in-memory DBs.
+ * Seed writes issued by a test and not yet settled. A test that times out
+ * mid-seed has no frame left to await them, so {@link drainSeedWrites} lets
+ * the next teardown wait for them to finish against the still-open pool before
+ * closing it. Terminating the worker under an in-flight write would reject it,
+ * and bun charges a rejection from an abandoned test frame to whatever runs
+ * next.
  */
-function freshWorker(): { globalDb: DbLike; spaceDb: DbLike } {
-  stopEmbedSweeper();
+const inFlightSeedWrites = new Set<Promise<unknown>>();
+
+/**
+ * Bumped by every {@link freshWorker}. A test body severed by its own timeout
+ * keeps running after the timeout has been reported (bun cannot abort it), and
+ * its later `expect()` calls would surface as an unhandled error charged
+ * between tests. A body that captured the generation can notice teardown has
+ * moved on and return instead of asserting against the next test's state.
+ */
+let workerGeneration = 0;
+
+/**
+ * Stop any running sweeper, drain seed writes a timed-out test left in flight,
+ * tear down the previous worker, and open a fresh in-memory worker with routed
+ * global + per-space handles. Each test gets an isolated set of in-memory DBs.
+ */
+async function freshWorker(): Promise<{ globalDb: DbLike; spaceDb: DbLike }> {
+  workerGeneration++;
+  await stopEmbedSweeper();
+  await drainSeedWrites();
   closeDb();
   openDb();
   return { globalDb: openGlobalDb(), spaceDb: openSpaceDb(SPACE_DID) };
 }
 
-/**
- * Seed the minimum entity rows for a link-in-a-message-in-a-room scenario in
- * the per-space DB, plus the matching global `pending_links` row.
- */
-async function seedLinkMessageRoom(
-  spaceDb: DbLike,
-  globalDb: DbLike,
-  ids: { room: string; message: string; url: string },
-  createdAt?: number,
-  spaceDid: string = SPACE_DID,
-): Promise<void> {
-  // Room entity (its own room column is null — rooms don't belong to rooms).
-  await spaceDb.run("insert into entities (id, stream_id) values (?, ?)", [
-    ids.room,
-    spaceDid,
-  ]);
-  // Message entity — room column holds the REAL room id.
-  await spaceDb.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
-    ids.message,
-    spaceDid,
-    ids.room,
-  ]);
-  // Link entity — room column holds the MESSAGE id (not the room id!).
-  await spaceDb.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
-    ids.url,
-    spaceDid,
-    ids.message,
-  ]);
-  await spaceDb.run(
-    "insert into comp_embed_link (entity, show_preview) values (?, 1)",
-    [ids.url],
-  );
-  // Global pending-links index row (the sweeper's work queue).
-  // `createdAt` defaults to now; tests that exercise backlog-stall detection
-  // seed an older timestamp to simulate a backlog that has sat untouched.
-  await globalDb.run(
-    "insert into pending_links (space_did, message_id, url, created_at) values (?, ?, ?, ?)",
-    [spaceDid, ids.message, ids.url, createdAt ?? Date.now()],
-  );
+/** The rows that make up one link-in-a-message-in-a-room scenario. */
+interface SeedLinkMessageRoom {
+  room: string;
+  message: string;
+  url: string;
 }
 
 /**
- * Seed a pending link whose persisted retry state puts it at `attempts`
- * consecutive transient failures, optionally inside an open backoff window.
+ * Seed the minimum entity rows for each link-in-a-message-in-a-room scenario
+ * in the per-space DB, plus the matching global `pending_links` rows. Writes
+ * are issued together: a backlog of several hundred links is routine here, and
+ * awaiting each link's round-trips in turn would make the seed, not the code
+ * under test, the test's dominant cost.
  */
+async function seedLinkMessageRooms(
+  spaceDb: DbLike,
+  globalDb: DbLike,
+  ids: SeedLinkMessageRoom[],
+  createdAt?: number,
+  spaceDid: string = SPACE_DID,
+): Promise<void> {
+  const writes = ids.flatMap((id) => [
+    // Room entity (its own room column is null — rooms don't belong to rooms).
+    spaceDb.run("insert into entities (id, stream_id) values (?, ?)", [
+      id.room,
+      spaceDid,
+    ]),
+    // Message entity — room column holds the REAL room id.
+    spaceDb.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      id.message,
+      spaceDid,
+      id.room,
+    ]),
+    // Link entity — room column holds the MESSAGE id (not the room id!).
+    spaceDb.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      id.url,
+      spaceDid,
+      id.message,
+    ]),
+    spaceDb.run(
+      "insert into comp_embed_link (entity, show_preview) values (?, 1)",
+      [id.url],
+    ),
+    // Global pending-links index row (the sweeper's work queue).
+    // `createdAt` defaults to now; tests that exercise backlog-stall detection
+    // seed an older timestamp to simulate a backlog that has sat untouched.
+    globalDb.run(
+      "insert into pending_links (space_did, message_id, url, created_at) values (?, ?, ?, ?)",
+      [spaceDid, id.message, id.url, createdAt ?? Date.now()],
+    ),
+  ]);
+  await trackSeedWrites(writes);
+}
+
+/** {@link seedLinkMessageRooms} for a single scenario. */
+async function seedLinkMessageRoom(
+  spaceDb: DbLike,
+  globalDb: DbLike,
+  ids: SeedLinkMessageRoom,
+  createdAt?: number,
+  spaceDid: string = SPACE_DID,
+): Promise<void> {
+  await seedLinkMessageRooms(spaceDb, globalDb, [ids], createdAt, spaceDid);
+}
+
+/**
+ * Remember seed writes until they settle, so {@link drainSeedWrites} can wait
+ * for the ones a timed-out test abandoned.
+ */
+async function trackSeedWrites(writes: Promise<unknown>[]): Promise<void> {
+  for (const w of writes) {
+    inFlightSeedWrites.add(w);
+    void w.then(
+      () => inFlightSeedWrites.delete(w),
+      () => inFlightSeedWrites.delete(w),
+    );
+  }
+  await settleSeedWrites(writes);
+}
+
+/** Wait for every seed write still in flight to settle against the open pool. */
+async function drainSeedWrites(): Promise<void> {
+  while (inFlightSeedWrites.size > 0) {
+    await Promise.allSettled([...inFlightSeedWrites]);
+  }
+}
+
+/**
+ * A past-ceiling (or selectable) pending link at `index`, with the persisted
+ * retry state that puts it at `attempts` consecutive transient failures and
+ * optionally inside an open backoff window. Builds only the row identifiers —
+ * see {@link seedParkedLinks} for the write.
+ */
+function parkedLinkSeed(
+  index: number,
+  attempts: number,
+  retryAfter: number | null,
+): { seed: SeedLinkMessageRoom; attempts: number; retryAfter: number | null } {
+  return {
+    seed: {
+      room: `01KVROOMDEAD${String(index).padStart(14, "0")}`,
+      message: `01KVMSGDEAD${String(index).padStart(15, "0")}`,
+      url: `https://dead.example/${index}`,
+    },
+    attempts,
+    retryAfter,
+  };
+}
+
+/**
+ * Seed parked links and their retry state in one pass. Returns the URLs in
+ * the order given.
+ */
+async function seedParkedLinks(
+  spaceDb: DbLike,
+  globalDb: DbLike,
+  links: Array<{ seed: SeedLinkMessageRoom; attempts: number; retryAfter: number | null }>,
+  spaceDid: string = SPACE_DID,
+): Promise<string[]> {
+  await seedLinkMessageRooms(
+    spaceDb,
+    globalDb,
+    links.map((l) => l.seed),
+    Date.now() - 60 * 60_000,
+    spaceDid,
+  );
+  await trackSeedWrites(
+    links.map((l) =>
+      spaceDb.run(
+        `insert into comp_embed_link_data (entity, embed_json, attempts, retry_after)
+         values (?, null, ?, ?)`,
+        [l.seed.url, l.attempts, l.retryAfter],
+      ),
+    ),
+  );
+  return links.map((l) => l.seed.url);
+}
+
+/** {@link seedParkedLinks} for a single parked link. */
 async function seedParked(
   spaceDb: DbLike,
   globalDb: DbLike,
@@ -141,24 +261,41 @@ async function seedParked(
   retryAfter: number | null,
   spaceDid: string = SPACE_DID,
 ): Promise<string> {
-  const url = `https://dead.example/${index}`;
-  await seedLinkMessageRoom(
+  const [url] = await seedParkedLinks(
     spaceDb,
     globalDb,
-    {
-      room: `01KVROOMDEAD${String(index).padStart(14, "0")}`,
-      message: `01KVMSGDEAD${String(index).padStart(15, "0")}`,
-      url,
-    },
-    Date.now() - 60 * 60_000,
+    [parkedLinkSeed(index, attempts, retryAfter)],
     spaceDid,
   );
-  await spaceDb.run(
-    `insert into comp_embed_link_data (entity, embed_json, attempts, retry_after)
-     values (?, null, ?, ?)`,
-    [url, attempts, retryAfter],
+  return url!;
+}
+
+/**
+ * A rejection caused by the pool being torn down under an in-flight write —
+ * the message the worker's terminate path and the already-closed link both use.
+ */
+function isTeardownRace(reason: unknown): boolean {
+  return /Database is? closed/.test(String(reason));
+}
+
+/**
+ * Await seed writes without letting a teardown race escape. Every awaited
+ * promise must be non-rejecting, not merely observed: a frame abandoned by a
+ * timeout has nothing left to catch with, and bun reports a rejection that
+ * passes through it as an unhandled error charged to the next test. Each
+ * rejection is converted to a value here, and a genuine write failure is
+ * re-raised after the await.
+ */
+async function settleSeedWrites(writes: Promise<unknown>[]): Promise<void> {
+  const failures: unknown[] = [];
+  await Promise.all(
+    writes.map((w) =>
+      w.catch((err) => {
+        if (!isTeardownRace(err)) failures.push(err);
+      }),
+    ),
   );
-  return url;
+  if (failures.length > 0) throw failures[0];
 }
 
 /**
@@ -174,6 +311,7 @@ async function flushSweeper(opts: EmbedSweeperOpts): Promise<void> {
   await sweepCycle(opts.globalDb);
   await stopEmbedSweeper();
 }
+
 /**
  * Wait for `done()` to hold, driving the event loop with `setImmediate` turns
  * rather than a wall-clock sleep. The sweeper loop parks on an injected wait
@@ -194,7 +332,7 @@ async function settleUntil(done: () => boolean, maxTurns = 100_000): Promise<voi
 
 describe("embed sweeper invalidation room resolution", () => {
   test("emits a #messageDiff update with the real room id, not the message id", async () => {
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router, signals } = captureRouter();
     const ids = {
       room: "01KVQQQQQQQQQQQQQQQQQQQQQQ",
@@ -253,7 +391,7 @@ describe("embed sweeper invalidation room resolution", () => {
   }, { timeout: 20000 });
 
   test("does not emit when no pending links exist", async () => {
-    const { globalDb } = freshWorker();
+    const { globalDb } = await freshWorker();
     const { router, signals } = captureRouter();
 
     await flushSweeper({ globalDb, invalidationRouter: router });
@@ -270,7 +408,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // backfill, never write-poked) would otherwise sit behind the entire
     // backlog. The read handler calls prioritiseLinksForRead so they jump the
     // queue.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router, signals } = captureRouter();
     const ids = {
       room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
@@ -310,7 +448,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // pressure) inside filterPendingUrls must be swallowed so getMessages /
     // getMessage never 500 due to embed prioritisation. Embeds are best-effort;
     // messages are the product. A closed DB makes the query throw reliably.
-    const { spaceDb } = freshWorker();
+    const { spaceDb } = await freshWorker();
     closeDb(); // terminate the worker so every subsequent DB call throws
     await prioritiseLinksForRead(spaceDb, [
       { linkEmbeds: [{ url: "https://example.com/x" }] },
@@ -321,7 +459,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // Simulates a failing DB (IOERR_VNODE): seed a pending link, then close
     // the DB so every read/write throws. The loop must back off rather than
     // tight-loop fetch-and-fail, and must emit nothing (no enrichments landed).
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router, signals } = captureRouter();
     await seedLinkMessageRoom(spaceDb, globalDb, {
       room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
@@ -344,7 +482,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // loaded but no OG/oEmbed, or a stable 4xx) pending forever, re-fetched
     // on every sweep — pinning the backlog on dead links and starving real
     // ones.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/no-og";
     await seedLinkMessageRoom(spaceDb, globalDb, {
@@ -388,7 +526,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // consumed all the concurrency and starved real ones. The sweeper now
     // parks a transient URL for an exponential backoff window, so a second
     // cycle immediately after should NOT re-fetch it.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/flaky";
     await seedLinkMessageRoom(spaceDb, globalDb, {
@@ -441,7 +579,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // newer live links behind them. findPendingLinks now excludes backoff URLs
     // in the query, so a newer link is enriched even while an older one is
     // parked.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const oldUrl = "https://example.com/old-flaky";
     const newUrl = "https://example.com/new-live";
@@ -503,7 +641,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // `dbBackoffActive` is false, so the obvious in-memory signals look idle
     // while the backlog goes nowhere. The stall flag must be set, and the
     // oldest row must be old enough.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/stuck";
     // Seed the row as OLD so it exceeds the stall age threshold.
@@ -560,7 +698,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // one is the normal state of a stuck queue, not recovery. Only a backlog
     // that actually SHRANK past the drain threshold counts, and the log latch
     // must stay silent for the unchanged cause while it has not.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const old = Date.now() - 60 * 60_000;
     // Enough parked rows that the drain threshold is more than the trickle of
@@ -656,7 +794,7 @@ describe("embed sweeper invalidation room resolution", () => {
     // saw the backlog reach 10 and fall to 7 has not drained, yet 7 is below a
     // fresh tenth-of-peak bar. The bar stays at the size the stall was raised
     // on, so the trickle off a GROWN queue cannot clear it either.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const old = Date.now() - 60 * 60_000;
     const url = (i: number): string => `https://example.com/baseline-${i}`;
@@ -735,7 +873,7 @@ describe("embed sweeper stall reporting", () => {
     // pending links are in transient-retry backoff") or publish no numbers.
     // It reports what it measured: the row/URL counts, and a cause derived
     // from them.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/parked";
     await seedLinkMessageRoom(
@@ -795,7 +933,7 @@ describe("embed sweeper stall reporting", () => {
     // Parking that one URL parks BOTH rows, so `pending - transientBackoff`
     // (= 2 - 1 = 1) falsely reports a selectable row. The measured split must
     // say selectableRows=0 and blame parking — not a phantom selection bug.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/dup";
     await seedLinkMessageRoom(
@@ -861,7 +999,7 @@ describe("embed sweeper stall reporting", () => {
     // "selectable rows exist, the query returns none" signature. The stall
     // must be reported as selectable-but-absent (console.error), NOT
     // all-parked.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const parkedUrl = "https://example.com/parked-ghost";
     const selectableUrl = "https://example.com/selectable-ghost";
@@ -966,7 +1104,7 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
     // row becomes selectable at once and the whole backlog is re-fetched. A
     // first cycle after "restart" must select NOTHING when every parked row's
     // window is still open.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/persisted-park";
     await seedLinkMessageRoom(
@@ -1027,7 +1165,7 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
   test("only the expired row is selected — an open retry_after in the future is skipped", async () => {
     // The acceptance case: two rows, one with a future `retry_after`, one
     // expired/null. Only the second may be fetched.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const futureUrl = "https://example.com/still-parked";
     const expiredUrl = "https://example.com/expired-park";
@@ -1094,7 +1232,7 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
     // fields are refreshed by every stalled cycle, so a guard reading them
     // would re-log an UNCHANGED cause. A run of cycles whose cause never
     // changes must produce ONE line.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const flakyUrl = "https://example.com/flaky-flap";
     await seedLinkMessageRoom(
@@ -1142,7 +1280,7 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
     // The flap driver: when a parked window EXPIRES the link is selected
     // again, fails transiently again, and the backlog is unchanged. Clearing
     // the stall flag on that selection flaps the gauge.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/eternally-flaky";
     await seedLinkMessageRoom(
@@ -1196,7 +1334,7 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
     // real recovery is reported again rather than suppressed. Recovery is the
     // backlog DRAINING — a backlog that only settles a row without shrinking is
     // still stalled (see the trickle test).
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const flakyUrl = "https://example.com/flaky-park";
     await seedLinkMessageRoom(
@@ -1267,7 +1405,7 @@ describe("embed sweeper retry-state persistence and stall pacing", () => {
     // the loop would take the plain 30s idle branch forever. The stalled
     // poll must back off instead, bounded so an EXPIRING window is still
     // noticed promptly.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const parkedUrl = "https://example.com/poll-parked";
     await seedLinkMessageRoom(
@@ -1351,7 +1489,7 @@ describe("embed sweeper cycle pacing (TASK-197)", () => {
     // BOTH classes, so "the backlog churns and resolves nothing" was
     // indistinguishable from "the backlog is settling dead links" (which
     // drains: a definitive result DELETES the row). The two must be separate.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const definitiveUrl = "https://example.com/no-og";
     const transientUrl = "https://example.com/flaky";
@@ -1407,7 +1545,7 @@ describe("embed sweeper cycle pacing (TASK-197)", () => {
     // The row count is what separates the two classes — a definitive outcome
     // deletes the pending row, a transient one leaves it. Pin it, because the
     // split counters above are only meaningful if this stays true.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = "https://example.com/no-og-drain";
     await seedLinkMessageRoom(spaceDb, globalDb, {
@@ -1454,7 +1592,7 @@ describe("embed sweeper cycle pacing (TASK-197)", () => {
     // there and the assertion is exact — precisely ONE batch was fetched, and
     // most of the backlog is untouched. Without the bound the loop would have
     // kept selecting batches until all 200 links were fetched.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const BACKLOG = 200; // >> SWEEP_BATCH (25), so every batch is full
     for (let i = 0; i < BACKLOG; i++) {
@@ -1517,7 +1655,7 @@ describe("embed sweeper cycle pacing (TASK-197)", () => {
     // flat out, batch after batch with NO wait between them. The injected
     // wait records every call, so "no wait" is asserted, not assumed: the
     // loop must reach the idle poll only after the backlog is empty.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const BACKLOG = 200;
     for (let i = 0; i < BACKLOG; i++) {
@@ -1585,7 +1723,7 @@ describe("settling rows already past the attempt ceiling (TASK-257)", () => {
     // assertion passes on the old drain too, because the re-fetch settles the
     // row in the end. Counting fetches is what distinguishes "settled now"
     // from "settled after one more doomed round-trip".
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = await seedParked(spaceDb, globalDb, 0, 40, Date.now() + 6 * 60 * 60_000);
 
@@ -1626,7 +1764,7 @@ describe("settling rows already past the attempt ceiling (TASK-257)", () => {
   test("a below-ceiling row is left parked and fetched by nobody", async () => {
     // The other half: the settle must not touch a URL that still has retries
     // to spend. It stays in the backlog, in its window, and is not fetched.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     await seedParked(spaceDb, globalDb, 0, 2, Date.now() + 6 * 60 * 60_000);
 
@@ -1660,13 +1798,31 @@ describe("settling rows already past the attempt ceiling (TASK-257)", () => {
     // set spanning multiple settle chunks, plus a selectable live link, must
     // leave the backlog in one pass — with the live link still fetched and
     // enriched, i.e. the settle does not consume the batch or starve real work.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
+    // Captured after this test's own `freshWorker()`; a later bump means a
+    // subsequent test has already torn this one's worker down.
+    const generation = workerGeneration;
     const { router } = captureRouter();
-    const dead: string[] = [];
-    for (let i = 0; i < 450; i++) {
-      dead.push(await seedParked(spaceDb, globalDb, i, 40, Date.now() + 6 * 60 * 60_000));
-    }
-    const live = await seedParked(spaceDb, globalDb, 9999, 0, null);
+    // 450 past-ceiling rows — enough to span many settle chunks — plus one
+    // selectable live link, seeded in one pass. The past-ceiling rows carry the
+    // attempt count that parks them; the live link starts at zero attempts and
+    // is selectable.
+    const DEAD = 450;
+    const dead = await seedParkedLinks(
+      spaceDb,
+      globalDb,
+      [
+        ...Array.from({ length: DEAD }, (_, i) =>
+          parkedLinkSeed(i, 40, Date.now() + 6 * 60 * 60_000),
+        ),
+        parkedLinkSeed(9999, 0, null),
+      ],
+      SPACE_DID,
+    );
+    // A timeout would have severed this body during the seed; the assertions
+    // below would then read the NEXT test's worker. Stop here instead.
+    if (workerGeneration !== generation) return;
+    const live = dead.pop()!;
 
     const realFetch = globalThis.fetch;
     let fetches = 0;
@@ -1685,12 +1841,13 @@ describe("settling rows already past the attempt ceiling (TASK-257)", () => {
       await stopEmbedSweeper();
       _startSweeperNoLoop({ globalDb, invalidationRouter: router });
       await sweepCycle(globalDb);
-
-      // Only the live link was fetched — none of the 450 dead rows.
+      // Same guard: a timeout may have severed this body inside the cycle.
+      if (workerGeneration !== generation) return;
+      // Only the live link was fetched — none of the past-ceiling rows.
       expect(fetches).toBe(1);
       expect(await countPendingLinks(globalDb)).toBe(0);
       const stats = embedSweeperStats();
-      expect(stats.enrichedAbandoned).toBe(450);
+      expect(stats.enrichedAbandoned).toBe(DEAD);
       expect(stats.enrichedOk).toBe(1);
       expect(stats.enrichedTransient).toBe(0);
       expect(stats.parkedOverCeiling).toBe(0);
@@ -1701,21 +1858,20 @@ describe("settling rows already past the attempt ceiling (TASK-257)", () => {
             where retry_after is null and embed_json is null`,
         )
         .get<{ n: number }>();
-      expect(settled?.n).toBe(450);
-      expect(dead.length).toBe(450);
+      expect(settled?.n).toBe(DEAD);
+      expect(dead.length).toBe(DEAD);
     } finally {
       globalThis.fetch = realFetch;
       await stopEmbedSweeper();
     }
-    _resetEmbedSweeper();
-  });
+  }, 15000);
 
   test("a past-ceiling URL pending in two spaces settles both spaces' rows", async () => {
     // The gate is URL-keyed while the backlog is row-keyed. Settling only the
     // space the URL was first seen in would orphan the other space's row in
     // `pending_links` forever, since the gate entry that made it selectable is
     // gone.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const OTHER = "did:web:other.example";
     const otherSpaceDb = openSpaceDb(OTHER);
@@ -1779,7 +1935,7 @@ describe("embed attempt ceiling (TASK-227)", () => {
     //
     // Seeded past the ceiling rather than on it, so this is exactly the
     // inherited dead set: attempts persisted by a build that had no ceiling.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = await seedParked(spaceDb, globalDb, 0, 40, Date.now() - 60_000);
 
@@ -1818,7 +1974,7 @@ describe("embed attempt ceiling (TASK-227)", () => {
   test("a host below the ceiling is still retried, not abandoned", async () => {
     // The other half: the ceiling must not settle a merely slow host. A URL
     // with attempts left must stay pending with a retry scheduled.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const url = await seedParked(spaceDb, globalDb, 0, 1, Date.now() - 60_000);
 
@@ -1860,7 +2016,7 @@ describe("embed attempt ceiling (TASK-227)", () => {
     // The classification pass settles that inherited set, so a cycle reports it
     // as `enrichedAbandoned` — read against `parkedOverCeiling`, the pair says
     // how much of the parked population was dead rather than slow.
-    const { globalDb, spaceDb } = freshWorker();
+    const { globalDb, spaceDb } = await freshWorker();
     const { router } = captureRouter();
     const open = Date.now() + 30 * 60_000;
     // Parked at 1, at 2 (twice), and at 40 — an attempt count no sane ceiling
