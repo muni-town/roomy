@@ -8,7 +8,7 @@
   });
 </script>
 
-{#snippet template(args: { authorName: string; isBridged: boolean; isSystem: boolean; mergeWithPrevious: boolean; deliveryState?: "pending" | "failed" })}
+{#snippet template(args: { authorName: string; isBridged: boolean; isSystem: boolean; mergeWithPrevious: boolean; deliveryState?: "pending" | "failed" | "queued"; queuedLabel?: string })}
   <div class="w-full max-w-2xl p-4">
     <MessageBubble
       authorDid="did:plc:test"
@@ -20,6 +20,7 @@
       isSystem={args.isSystem}
       mergeWithPrevious={args.mergeWithPrevious}
       deliveryState={args.deliveryState}
+      queuedLabel={args.queuedLabel}
       onAvatarClick={() => {}}
     >
       {#snippet content()}
@@ -124,6 +125,22 @@
     isSystem: false,
     mergeWithPrevious: false,
     deliveryState: "failed",
+  }}
+  {template}
+/>
+
+<!-- A send held back while the space it targets is set up: dimmed like a
+     queued send, but marked as waiting rather than as a rejection, with the
+     same retry and discard controls. -->
+<Story
+  name="Held back (space rematerialising)"
+  args={{
+    authorName: "Alice",
+    isBridged: false,
+    isSystem: false,
+    mergeWithPrevious: false,
+    deliveryState: "queued",
+    queuedLabel: "Waiting",
   }}
   {template}
 />

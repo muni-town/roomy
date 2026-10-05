@@ -165,6 +165,15 @@ Every test below states the observable behaviour it defends.
 |---|---|
 | replaces the composer with the permission notice, refusing once | A caller whose write access is revoked while the app is open takes the `canWrite === false` composer notice rather than an opaque delivery failure, and the unchanged grant is not pressed into repeated refusals. |
 
+### `write-rematerialising.spec.ts` — a send held back while a space is set up
+| Test | Defends |
+|---|---|
+| reads as a wait, not as a failed send | A write refused with `409 SpaceRematerializing` while a space's per-space database is mid rebuild keeps its row retryable, is labelled as waiting rather than as the access-refusal "Not sent", and is reported to the user in the client's own words — the appserver's sentence names the space DID and an internal step. |
+
+The 409 is fulfilled by the spec: the condition is a mid-rebuild state the
+hermetic stack cannot enter on demand. Everything else — auth, queries, the
+sync socket — still runs through the real appserver.
+
 ### `sticky-toolbar.spec.ts` — the toolbar while reading a tall message
 | Test | Defends |
 |---|---|

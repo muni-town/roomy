@@ -22,6 +22,14 @@
  *
  * Kept free of the QueryClient and of Svelte components so the rule stays
  * unit-testable; the invalidation is passed in (see `recoverFromWriteRefusal`).
+ *
+ * The same catch path meets a second refusal, which is not about access at
+ * all: a write to a space whose per-space database is mid blue-green rebuild is
+ * answered `409 SpaceRematerializing` before the event reaches the log.
+ * Nothing applied and the event is safe to resent, so it is classified
+ * separately ({@link isRematerialising}) and rendered as a wait rather than a
+ * failure — the server's own message names the space DID and an internal term,
+ * and says nothing about what the user can do next.
  */
 
 import { cache } from "@roomy-space/sdk";
@@ -34,15 +42,24 @@ const SPACE_METADATA_NSID = "space.roomy.space.getMetadata";
 /** Rooms that refused a write, valued by when they refused it. */
 const refusedAt = new SvelteMap<string, number>();
 
-/** The `status`/`nsid` fields `DirectXrpcClient` attaches to a failed XRPC call. */
+/** The `status`/`errorType`/`nsid` fields `DirectXrpcClient` attaches to a
+ *  failed XRPC call. */
 function xrpcFailure(
   err: unknown,
-): { status: number; nsid: string | undefined } | undefined {
+): {
+  status: number;
+  nsid: string | undefined;
+  errorType: string | undefined;
+} | undefined {
   if (typeof err !== "object" || err === null) return undefined;
   if (!("status" in err) || typeof err.status !== "number") return undefined;
   return {
     status: err.status,
     nsid: "nsid" in err && typeof err.nsid === "string" ? err.nsid : undefined,
+    errorType:
+      "errorType" in err && typeof err.errorType === "string"
+        ? err.errorType
+        : undefined,
   };
 }
 
@@ -63,6 +80,35 @@ export function isWriteRefusal(err: unknown): boolean {
     failure.status === 403
   );
 }
+
+/**
+ * True when `err` is the appserver holding a write off because the space's
+ * per-space database is mid blue-green rebuild — `sendEvents` answered 409
+ * `SpaceRematerializing`.
+ *
+ * Transient and, unlike a refusal, not about the caller: the event never
+ * reached the log, so the write is safe to resend unchanged. Matched on the
+ * NSID the transport attaches plus the body's `error` field, or a bare 409
+ * from the same procedure — never on the prose, which names the space DID and
+ * an internal term. A 409 that names some *other* condition is that condition,
+ * and is left to the generic path.
+ */
+export function isRematerialising(err: unknown): boolean {
+  const failure = xrpcFailure(err);
+  if (failure === undefined || failure.nsid !== SEND_EVENTS_NSID) return false;
+  if (failure.errorType === "SpaceRematerializing") return true;
+  return failure.status === 409 && failure.errorType === undefined;
+}
+
+/**
+ * What the user is told while a send waits on a rebuild.
+ *
+ * The client owns this copy: the appserver's message is addressed to an
+ * operator, and the condition is expected rather than something to fix, so it
+ * has to read as temporary.
+ */
+export const REMATERIALISING_MESSAGE =
+  "Roomy is still setting up this space. Your message will send in a moment.";
 
 /**
  * Whether `roomId` is refusing writes. Reactive: `SvelteMap` membership is a

@@ -3,7 +3,11 @@
   import UserAvatar from "../../../user/UserAvatar.svelte";
   import { formatMessageTimestamp } from "../../../../utils/date.js";
   import Badge from "../../../ui/badge/Badge.svelte";
-  import { IconAlertCircle, IconLoading } from "../../../../icons/index";
+  import {
+    IconAlertCircle,
+    IconHourglassMedium,
+    IconLoading,
+  } from "../../../../icons/index";
 
   /**
    * Presentational message bubble shell.
@@ -47,8 +51,8 @@
     forwardEmbed,
     toolbar,
     reactions,
-    actions,
     deliveryActions,
+    queuedLabel,
   }: {
     authorDid: string | null;
     authorName?: string;
@@ -72,10 +76,12 @@
      * acknowledges it. `pending` dims the body and puts a spinner in the
      * avatar slot — it gets no status line of its own, so the row never
      * shifts when it resolves; `failed` shows a "Not sent" marker above the
-     * message with the `deliveryActions` slot (retry / discard). Messages
-     * delivered by the server leave this unset.
+     * message with the `deliveryActions` slot (retry / discard); `queued`
+     * dims the body the same way and shows `queuedLabel` instead, for a send
+     * that was held back rather than rejected. Messages delivered by the
+     * server leave this unset.
      */
-    deliveryState?: "pending" | "failed";
+    deliveryState?: "pending" | "failed" | "queued";
     /** Pre-resolved avatar URL (e.g. after CDN rewriting). Falls back to authorAvatarUrl. */
     avatarSrc?: string;
     onAvatarClick?: (e: MouseEvent) => void;
@@ -92,9 +98,12 @@
         centered across the whole message (avatar + header + body) — e.g. the
         save/cancel controls shown while editing. Only rendered while editing. */
     actions?: Snippet;
-    /** Controls rendered beside the failure marker of an unsent message
-        (retry / discard). Only rendered when `deliveryState` is `failed`. */
+    /** Controls rendered beside the marker of an unsent message (retry /
+        discard). Rendered for both the `failed` and the `queued` state. */
     deliveryActions?: Snippet;
+    /** Text of the marker a `queued` send gets instead of the "Not sent" line.
+        Absent, a `queued` message falls back to the failure marker. */
+    queuedLabel?: string;
   } = $props();
 
   /**
@@ -181,6 +190,23 @@
         </span>
       {/if}
     </div>
+  {:else if deliveryState === "queued" && queuedLabel}
+    <!-- A send the appserver is holding off while the space it targets is set
+         up: nothing is wrong with the message, so this reads as a wait rather
+         than as the rejection above. It carries the same retry / discard
+         controls and resends the same event under the same ULID. -->
+    <div
+      class="flex items-center gap-1.5 pl-12 text-[11px] font-medium text-amber-700 dark:text-amber-400"
+      data-testid="queued-delivery"
+    >
+      <IconHourglassMedium class="size-3 shrink-0" />
+      {queuedLabel}
+      {#if deliveryActions}
+        <span class="flex items-center gap-1">
+          {@render deliveryActions()}
+        </span>
+      {/if}
+    </div>
   {/if}
 
   <div class={mergeWithPrevious ? "pl-12" : ""}>
@@ -235,7 +261,7 @@
     <div
       class:justify-center={isSystem}
       class:items-center={isSystem}
-      class:opacity-60={deliveryState === "pending"}
+      class:opacity-60={deliveryState === "pending" || deliveryState === "queued"}
       class="flex flex-col flex-1 min-w-0"
     >
       <!-- Username, timestamp (system notices render a small centred timestamp instead) -->

@@ -20,20 +20,25 @@
  * `ChatInputArea.handleSend`). A queued message is therefore already the
  * room's, and the user is free to compose the next one.
  *
- * On failure the placeholder stays in the timeline marked `failed` and the
- * event is retained, so a retry resends the identical payload — same ULID,
- * hence the same reconciliation. Nothing here survives a reload: this is
- * in-place optimistic UI, not an outbox.
+ * On failure the placeholder stays in the timeline marked `failed`, or
+ * `queued` when the appserver is holding the write off (a space mid rebuild)
+ * rather than rejecting it, and the event is retained either way, so a retry
+ * resends the identical payload — same ULID, hence the same reconciliation.
+ * Nothing here survives a reload: this is in-place optimistic UI, not an
+ * outbox.
  */
 
 import { SvelteMap } from "svelte/reactivity";
 import { newUlid } from "@roomy-space/sdk";
 import { messagesKey, type Message } from "$lib/queries/messages";
 import { queryClient } from "$lib/client";
-import { recoverFromWriteRefusal } from "$lib/write-refusal.svelte";
+import {
+  isRematerialising,
+  recoverFromWriteRefusal,
+} from "$lib/write-refusal.svelte";
 import { sendEvents } from "./send-events";
 
-export type DeliveryState = "pending" | "failed";
+export type DeliveryState = "pending" | "failed" | "queued";
 
 interface PendingSend {
   spaceId: string;
@@ -92,13 +97,20 @@ export function confirmPendingSend(id: string): void {
   states.delete(id);
 }
 
-/** The send failed: keep the placeholder (and its event) so it can be retried. */
-export function failPendingSend(id: string): void {
+/** The send did not reach the log: keep the placeholder (and its event) so it
+ *  can be retried. `queued` is the same retention with a different reading —
+ *  the appserver is holding the write off (a space mid rebuild) and the retry
+ *  is expected to succeed, so the row reads as waiting rather than as a
+ *  failure. Either way nothing was applied and the event is resent verbatim. */
+export function failPendingSend(
+  id: string,
+  state: "failed" | "queued" = "failed",
+): void {
   if (!sends.has(id)) return;
-  states.set(id, "failed");
+  states.set(id, state);
 }
 
-/** Resend a pending or failed message under its original ULID. */
+/** Resend a pending, failed, or held-back message under its original ULID. */
 export async function retryPendingSend(id: string): Promise<void> {
   const entry = sends.get(id);
   if (!entry) return;
@@ -107,9 +119,10 @@ export async function retryPendingSend(id: string): Promise<void> {
     await sendEvents(entry.spaceId, [entry.event]);
     confirmPendingSend(id);
   } catch (e) {
-    failPendingSend(id);
-    // A resend is refused for the same reason the original was: record it so
-    // the room's composer and this row's retry both stand down.
+    // A resend fails for the same reason the original did. A space still
+    // rebuilding holds the row in the waiting state; a refusal records itself
+    // so the room's composer and this row's retry both stand down.
+    failPendingSend(id, isRematerialising(e) ? "queued" : "failed");
     recoverFromWriteRefusal(e, entry.roomId, queryClient);
     throw e;
   }
@@ -129,14 +142,15 @@ export function discardPendingSend(id: string): void {
 }
 
 /**
- * The ULID of a failed send in this room carrying the same message, if any.
+ * The ULID of an unacknowledged send in this room carrying the same message,
+ * if any.
  *
  * Identity is the serialized body plus the reply target — not the full event.
- * A failed send keeps its attachments in the composer, and re-uploading them
- * yields fresh blob URIs, so an exact event match would miss precisely the
- * case this guards: the user pressing Send again on a failed media message
- * must retry it, not leave a second bubble beside the one already marked
- * "Not sent".
+ * A held-back send keeps its attachments in the composer, and re-uploading
+ * them yields fresh blob URIs, so an exact event match would miss precisely
+ * the case this guards: the user pressing Send again on a message that did not
+ * go through must retry it, not leave a second bubble beside it. Both the
+ * failed and the held-back state are retained sends, so both are reused.
  */
 function reuseFailedSend(
   roomId: string,
@@ -145,11 +159,10 @@ function reuseFailedSend(
   const key = sendIdentity(draft);
   for (const [id, entry] of sends) {
     if (entry.roomId !== roomId) continue;
-    if (states.get(id) !== "failed") continue;
+    if (states.get(id) === "pending") continue;
     if (sendIdentity(entry.event) !== key) continue;
     return id;
   }
-  return undefined;
 }
 
 function sendIdentity(event: Record<string, unknown>): string {

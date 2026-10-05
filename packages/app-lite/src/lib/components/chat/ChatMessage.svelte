@@ -28,7 +28,11 @@
   } from "$lib/mutations/pending-sends.svelte";
   import type { Message } from "$lib/queries/messages";
   import { resolveBlobUrl } from "$lib/utils";
-  import { writeRefused } from "$lib/write-refusal.svelte";
+  import {
+    REMATERIALISING_MESSAGE,
+    isRematerialising,
+    writeRefused,
+  } from "$lib/write-refusal.svelte";
   import { RICHTEXT_MIME, extractFacetUrls } from "@roomy-space/sdk";
   import type { schemas, Block } from "@roomy-space/sdk";
   import { parseRichTextContent, messageHasVisibleContent } from "./message-body";
@@ -413,9 +417,13 @@
     try {
       await retryPendingSend(message.id);
     } catch (e) {
-      // Still failed — the row stays marked, so the user can try again. The
-      // marker itself is the feedback; log for the console trail.
+      // Still not acknowledged — the row keeps whatever state the failure left
+      // it in, so the user can try again, and the marker is the feedback. The
+      // one exception is a space still being set up: the server's own words
+      // name an internal step and say nothing the user can act on, so the
+      // client supplies the copy.
       console.error("Failed to resend message:", e);
+      if (isRematerialising(e)) toast.info(REMATERIALISING_MESSAGE);
     } finally {
       retrying = false;
     }
@@ -454,6 +462,7 @@
       {isEditing}
       {showToolbar}
       {deliveryState}
+      queuedLabel="Waiting"
     >
       {#snippet replyContext()}
         {#if message.forwardedFrom}

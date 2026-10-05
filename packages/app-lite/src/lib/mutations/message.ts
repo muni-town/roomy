@@ -8,6 +8,7 @@ import {
   startPendingSend,
 } from "./pending-sends.svelte";
 import { sendEvents } from "./send-events";
+import { isRematerialising } from "$lib/write-refusal.svelte";
 import {
   buildForwardEvents,
   MAX_EVENTS_PER_SEND,
@@ -140,7 +141,10 @@ export async function sendMessage(
     await sendEvents(spaceId, [event]);
     confirmPendingSend(id);
   } catch (e) {
-    failPendingSend(id);
+    // Held off, not rejected: a write to a space mid rebuild never reached the
+    // log, so the placeholder is retained as waiting — Retry resends this same
+    // event under the same ULID.
+    failPendingSend(id, isRematerialising(e) ? "queued" : "failed");
     throw e;
   }
   return id;

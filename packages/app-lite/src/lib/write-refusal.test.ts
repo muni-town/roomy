@@ -21,7 +21,9 @@ import { beforeEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { cache } from "@roomy-space/sdk";
 import {
+  REMATERIALISING_MESSAGE,
   composerCanWrite,
+  isRematerialising,
   isWriteRefusal,
   recoverFromWriteRefusal,
   refreshWriteRefusal,
@@ -30,6 +32,9 @@ import {
 
 const ROOM = "01M3FNAH67FWM3BGP8G289PTX9";
 const OTHER_ROOM = "01M2QW5A6Q3QQ8PWP07FZH3KRV";
+
+/** The space the room belongs to; only the appserver's own prose names it. */
+const SPACE = "did:plc:drzgt2m6lmcel62gfbzjeap3";
 
 /** The refusal the appserver returns for a room the caller cannot write to. */
 function writeRefusedError(): Error {
@@ -44,11 +49,30 @@ function writeRefusedError(): Error {
 }
 
 /** The fields `DirectXrpcClient`'s `toXrpcError` attaches to any XRPC failure. */
-function xrpcError(nsid: string, status: number): Error {
+function xrpcError(nsid: string, status: number, errorType?: string): Error {
   return Object.assign(new Error(`XRPC ${nsid} failed (${status})`), {
     status,
+    errorType,
     nsid,
   });
+}
+
+/**
+ * The answer a space mid blue-green rebuild produces: `sendEvents` refuses the
+ * write before it reaches the log, in words addressed to an operator.
+ */
+function rematerialisingError(): Error {
+  return Object.assign(
+    new Error(
+      "XRPC space.roomy.space.sendEvents failed (409): " +
+        `Space ${SPACE} is being rematerialized; retry the write shortly`,
+    ),
+    {
+      status: 409,
+      errorType: "SpaceRematerializing",
+      nsid: "space.roomy.space.sendEvents",
+    },
+  );
 }
 
 /** Collect the keys an invalidation was requested for. */
@@ -101,6 +125,61 @@ describe("isWriteRefusal", () => {
     assert.equal(isWriteRefusal(undefined), false);
     assert.equal(isWriteRefusal(null), false);
     assert.equal(isWriteRefusal("XRPC ... failed (403)"), false);
+  });
+});
+
+describe("isRematerialising", () => {
+  test("recognises the 409 the appserver holds a write off with", () => {
+    assert.equal(isRematerialising(rematerialisingError()), true);
+  });
+
+  test("matches a bare 409 on the same procedure", () => {
+    // The classification reads the field the transport attaches, never the
+    // prose: an appserver answering 409 with no `error` field is still holding
+    // the same write off.
+    assert.equal(
+      isRematerialising(xrpcError("space.roomy.space.sendEvents", 409)),
+      true,
+    );
+  });
+
+  test("does not match the 403 write refusal", () => {
+    // The two share an NSID and a catch path but nothing else: a refusal is
+    // durable and about the caller, and must keep the permission notice.
+    assert.equal(isRematerialising(writeRefusedError()), false);
+  });
+
+  test("does not match a 409 naming another condition", () => {
+    // A named conflict is that conflict. Only the unnamed 409, and the one the
+    // server calls rematerialising, are a hold-off.
+    assert.equal(
+      isRematerialising(
+        xrpcError("space.roomy.space.sendEvents", 409, "EventConflict"),
+      ),
+      false,
+    );
+  });
+
+  test("does not match another procedure answering 409", () => {
+    assert.equal(
+      isRematerialising(
+        xrpcError("space.roomy.room.getMetadata", 409, "SpaceRematerializing"),
+      ),
+      false,
+    );
+  });
+
+  test("does not match a failure carrying no XRPC fields", () => {
+    assert.equal(isRematerialising(new Error("Network request failed")), false);
+    assert.equal(isRematerialising(undefined), false);
+    assert.equal(isRematerialising(null), false);
+  });
+
+  test("the message names no space DID and reads as temporary", () => {
+    // The appserver's own sentence carries the DID and an internal term. The
+    // copy the user sees comes from here instead.
+    assert.ok(!REMATERIALISING_MESSAGE.includes("did:"));
+    assert.match(REMATERIALISING_MESSAGE, /in a moment/);
   });
 });
 
