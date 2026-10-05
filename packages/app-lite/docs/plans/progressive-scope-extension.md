@@ -1,7 +1,18 @@
 # Progressive Scope Expansion — Implementation Plan
 
 **Date:** 2026-06-12 (updated 2026-07-02; redefined 2026-09-23)
-**Status:** Draft
+**Status:** Implemented — all six phases shipped. P1 (server-side scope
+storage) #253 (`41b7ae56`), P2 (client scope refactor) #259 (`00200a1d`), P3
+(client grant tracking + server sync) #260 (`84f2e008`), P4 (metadata ceiling +
+user-editable access settings) #263 (`32060f13`), P5 (reactive consent dialogue)
+#265 (`89863b76`), P6 (the Semble personal collection — the first tier reached
+through the dialogue) #342 (`1c4247a2`). This document is a record of what
+shipped, not a proposal.
+**Next:** No phase remains in this plan. Later scope work is tracked elsewhere:
+the user-blocks feature (record + write path shipped as #317 `9731537c`)
+continues through its own phases in
+`packages/app-lite/docs/plans/user-blocks.md`. Recommend keeping this document
+as the design record and closing it as an active plan.
 **Packages:** `packages/appserver`, `packages/app-lite`, `packages/sdk`
 
 ## Goal
@@ -1342,6 +1353,11 @@ export function isInsufficientScopeError(err: unknown): boolean {
 ```
 
 ## Open Questions
+Every question below is either settled by the shipped code or a standing
+recommendation. Q3 (the PDS scope-miss error shape) is answered in full in
+§Phase 5 results; Q5 (rate limiting) shipped as `ENDPOINT_RATE_LIMITS` in
+`xrpc/rateLimit.ts`; Q6 (`pxUnauth`) shipped as `client.ts` `pxUnauth`. Q1, Q2
+and Q4 are design positions the shipped code follows, recorded for reference.
 
 1. **Should `getLoginScope` also return the tier name** so the client can
    pre-select UI state? **Recommendation:** no — derive the tier from the scope

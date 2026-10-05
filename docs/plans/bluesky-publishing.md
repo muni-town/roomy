@@ -1,7 +1,13 @@
 # Publishing to Bluesky as the Space Account — Plan
 
 **Date:** 2026-09-16 (scope corrected by Meri 2026-09-29; revised 2026-10-01)
-**Status:** Draft for review. **No implementation.** This document changes no production code.
+**Status:** Phase 1 shipped; Phases 2–3 not started. Phase 0's decisions (§6)
+remain open and block Phases 2–3. The §3 exporter shipped as #341 (`fb936a74`)
+— `roomyMessageToBskyPost` in `packages/sdk/src/bluesky/post.ts`. No code
+publishes or reads a post yet.
+**Next:** Phase 2 — feature 1, sharing an own message (the share affordance,
+the composer, the appserver post procedure, and the message↔post mapping).
+Blocked on §6.1 (which write path) and §6.2 (who may share). Not dispatched.
 **Verified against:** `origin/next` @ `2dbf7d8a`. §0.3, §0.4, §1.4, §2.5 and §4 were re-read there; §3's `convert.ts` citations too. Other `file:line` citations date from the original pass and shift with `next`.
 **Slots into:** `packages/appserver/docs/plans/arbiter-integration.md` (Phases 0–4) — read that first. This plan is a *new* phase that consumes that plan's shipped machinery; it does not replace or restate it. Its account of the arbiter is itself partly stale (§4.1 says where).
 
@@ -56,10 +62,18 @@ What survives is the part that is genuinely load-bearing:
 
 **Absent, and required by this plan:**
 
-- **Any code that publishes a post.** `git grep -n "app\.bsky\.feed\.post"` returns three hits: two prose (`docs/plans/richtext-migration-plan.md:160`, `docs/rich-text-representation-research.md:136`) and one **negative** fixture (`packages/appserver/src/arbiter/provision.test.ts:203`, asserting the scoped route denies it).
+- **Post-publishing code.** Only the exporter exists:
+  `packages/sdk/src/bluesky/post.ts` (`roomyMessageToBskyPost`, shipped as
+  #341). Nothing writes an `app.bsky.feed.post`: the only reference to one in
+  production code is the **negative** fixture at
+  `packages/appserver/src/arbiter/provision.test.ts:203`, asserting the scoped
+  route denies `putRecord` of it.
 - **Any Bluesky *read* path.** `git grep -n "app\.bsky\.feed"` over `packages/` finds only that same fixture — no `getAuthorFeed`, no feed or thread fetch anywhere. The repo's only Bluesky reads are profile/handle lookups against `api.bsky.app` (`packages/app-lite/src/lib/components/auth/HandleTypeahead.svelte:50`, `packages/app-lite/src/lib/last-login.ts:41`). Feature 2's client is new work.
 - **No message ↔ post mapping** of any kind, and no retraction path.
-- **No message-length limit**: no `maxGraphemes`/`maxLength` on any message schema, and `Intl.Segmenter` appears nowhere in the repo (the only grapheme constraints are on *profile* fields).
+- **No message-length limit on the message schema**: no `maxGraphemes`/`maxLength`
+  on any message schema. The exporter enforces Bluesky's own 300-grapheme
+  ceiling (`packages/sdk/src/bluesky/post.ts`, `BSKY_POST_MAX_GRAPHEMES`); the
+  composer of §1.2 does not exist yet.
 
 ### 0.4 Arbiter review, 2026-09-29 — the one finding that shapes this plan
 
@@ -291,13 +305,14 @@ The appserver authenticates as *itself* (`mintServiceAuth` sets `iss = sub = own
 
 ## 5. Phases
 
-Each phase states an **observable completion criterion**. Nothing here is implemented yet.
+Each phase states an **observable completion criterion**. Phase 1 is shipped;
+Phases 2–3 are not implemented.
 
 ### Phase 0 — Decisions (this document; no code)
 
 **Completion criterion:** §6's open questions have answers recorded here. §6.1 (the route) and §6.2 (who may share) block Phases 2–3.
 
-### Phase 1 — The exporter (no network)
+### Phase 1 — The exporter (no network) — shipped (#341, `fb936a74`)
 
 **Deliverables**
 

@@ -1,7 +1,18 @@
 # Query Response Cache Plan
 
 **Date:** 2026-07-21
-**Status:** Plan
+**Status:** Implemented — Phases 1–4 shipped. The cache primitive, router
+integration and eviction listener shipped in `2340ab58`, with `getThreads` /
+`getActivityFeed` added in `27cf043f`; the activity-feed eviction scope fix
+shipped as #330 (`2d7dcf9f`); the `getSpaces` eviction scope fix shipped as
+#357 (`604ac613`). Phase 4's metrics shipped in `d2e64d24`; its env config was
+part of `2340ab58`. This document is a record of what shipped, not a proposal.
+**Next:** No phase remains. One item from Phase 4 is outstanding but is not a
+phase: the observability check (a >90% cache hit rate on the badge fan-out) has
+no automated assertion, and a later report finds `getSpaces` still evicting on
+broadcast signals that #357 did not remove. That is a finding to re-measure, not
+work dispatchable from this document. Recommend keeping this as the design
+record and closing it as an active plan.
 **Parent doc:** `appserver-architecture.md`
 
 ## Problem

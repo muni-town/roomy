@@ -1,9 +1,15 @@
 # Persistent Client Caches — Plan
 
 **Date:** 2026-09-29
-**Status:** Draft for review. §2–§5 are the near-term design (SWR persistence behind
-a pluggable adaptor). §6 is a **later, unconfirmed, unscheduled** phase recorded
-so the proposal and the objections to it are not lost — it is not a commitment.
+**Status:** P1 and P2 shipped. P1 (the `CachePersister` seam) merged as #333
+(`c2ad8a1e`); P2 (the real storages, restore-on-load, and the §5.3 restore
+validator) merged as #343 (`ba73c0db`). §2–§5 are the design those phases
+implement. §6 is a **later, unconfirmed, unscheduled** phase recorded so the
+proposal and the objections to it are not lost — it is not a commitment.
+**Next:** P3 — `TauriStorePersister` (the storage plugin, its capability, and
+`CONFIG`-driven selection in the shell; also the iOS default per §4.1). Not
+implemented and not dispatched; no open task tracks it. P3 is the last phase in
+§7, and the §6 log stays unscheduled.
 **Packages:** `packages/sdk`, `packages/app-lite`
 
 ## Goal
@@ -625,19 +631,23 @@ depth the page refetch cannot reach.
 
 Format follows the other plans in this directory. Each phase is reviewable on
 its own; none of this is dispatched from this document.
-| Phase | Scope | Base |
-|---|---|---|
-| P1 | The `CachePersister` interface, the in-memory impl, and the key-set / version / account-scope rules in the SDK. No storage yet; the app is unchanged. | `next` |
-| P2 | `IndexedDbPersister` + `LocalStoragePersister`, restore-on-load and invalidate-on-restore in `client.ts`, `gcTime` raised for the persisted subset, `logout()` clears — **and the restore validator of §5.3**. The validator is part of this phase, not a follow-up: P2 without it restores rows nothing has checked. | P1 |
-| P3 | `TauriStorePersister`: the storage plugin, its capability, and `CONFIG`-driven selection in the shell. Also the iOS default, per §4.1. | P2 |
-| — | The log (§6) | not scheduled |
+| Phase | Scope | Base | Status |
+|---|---|---|---|
+| P1 | The `CachePersister` interface, the in-memory impl, and the key-set / version / account-scope rules in the SDK. No storage yet; the app is unchanged. | `next` | Merged #333 (`c2ad8a1e`) |
+| P2 | `IndexedDbPersister` + `LocalStoragePersister`, restore-on-load and invalidate-on-restore in `client.ts`, `gcTime` raised for the persisted subset, `logout()` clears — **and the restore validator of §5.3**. The validator is part of this phase, not a follow-up: P2 without it restores rows nothing has checked. | P1 | Merged #343 (`ba73c0db`) |
+| P3 | `TauriStorePersister`: the storage plugin, its capability, and `CONFIG`-driven selection in the shell. Also the iOS default, per §4.1. | P2 | Not started — dispatchable |
+| — | The log (§6) | not scheduled | — |
 
 ---
 
 ## 8. Open questions for Meri
 
-Decision-shaped, with the plan's recommendation where it has one. The first four
-are the ones a reviewer has to settle before P1 is worth dispatching.
+Decision-shaped, with the plan's recommendation where it has one. Questions
+1–4 and 6 were settled by the P1/P2 implementations — persistence is always on,
+`maxAge` is 24 h, the budget is a count cap, the snapshot version is derived
+from the build id, and the persisted set is the SDK's `isPersistableQuery` rule
+(queries, success, non-error, not `gcTime: 0`) rather than a hardcoded list.
+Question 5 (the §6 log phase) remains the one open decision.
 
 1. **Is persistence opt-in, or always on?** A user-visible setting ("keep the
    last messages on this device") makes the storage failure modes of §4 the

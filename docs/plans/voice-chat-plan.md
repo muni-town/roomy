@@ -1,7 +1,13 @@
 # Voice Chat in Roomy — Implementation Plan
 
 **Date:** 2026-08-28
-**Status:** Draft for review
+**Status:** Phase 1 shipped; Phases 2–5 not started. The server half (voice
+room kind, call facts, LiveKit token/webhook/reconcile, sync-socket presence,
+`space.roomy.voice.*` RPCs) merged as #318 (`d1dfb73d`) and is deployed. The
+client half (call UI and sync wiring) is PR #344
+(`redcurrant/voice-phase1-client`), open in review.
+**Next:** Phase 2 — call UX polish, after PR #344 merges. Phase 2 is not
+dispatched; it depends on the Phase 1 client half landing.
 **Author:** Chanterelle
 **References researched:** `chattocorp/chatto` (main, 2026-08-28) and `colibri-social/colibri.social` + `colibri-social/appview` (main, 2026-08-25).
 
@@ -184,13 +190,19 @@ When `APPSERVER_TEST_MODE=true`, register `/webhooks/test/call-join` and `/webho
 
 ## 7. Milestones
 
-- **Phase 1 — Signaling + presence (v1 core):** voice room kind, join/leave/getToken/getParticipants/getActiveCalls RPCs, durable call facts + materialisation + invalidation, LiveKit webhook handler, test webhook endpoints, sync-socket presence, sidebar icon + observer panel. Mic connect works end to end.
+- **Phase 1 — Signaling + presence (v1 core) — shipped (#318 server, `d1dfb73d`; client half = PR #344):** voice room kind, join/leave/getToken/getParticipants/getActiveCalls RPCs, durable call facts + materialisation + invalidation, LiveKit webhook handler, test webhook endpoints, sync-socket presence, sidebar icon + observer panel. Mic connect works end to end.
 - **Phase 2 — Call UX polish:** participant cards + speaking indicators + audio-level cache, mute/deafen, join/leave sound cues, timeline call rows, reconnect/coalescing hardening, E2EE key lifecycle hardening.
 - **Phase 3 — Moderation & hardening:** `voice.moderate` (server mute/deafen/disconnect, role-gated), membership-change cleanup (leave room/kick/ban/delete → auto-leave + media teardown), reconciliation failure thresholds tuned for production.
 - **Phase 4 — Video & screen share:** camera tiles, screen share (browser picker), simulcast/dynacast settings; optional native companion later.
 - **Phase 5 — Ops:** LiveKit deployment docs (self-hosted + managed), TURN for restrictive networks, `LIVEKIT_*` env wiring in Railway, monitoring (call quality metrics).
 
 ## 8. Open questions for Meri
+Phase 1 shipped answers four of these in code: Q1 (the room model is a room
+labelled `space.roomy.voice`, so membership, roles and read access are
+inherited), Q2 (E2EE is always-on per-call key management, not DTLS-only), Q4
+(presence is voice-specific, over the existing sync socket), and Q5 (join is
+gated on room membership, not a separate `voice.join` permission). Q3 (LiveKit
+hosting) remains a deployment decision for a later phase.
 
 1. **Voice room model**: new `space.roomy.voice` room kind vs a `voice` flag on channel rooms? (Recommendation: room kind — simpler, matches Chatto.)
 2. **E2EE scope for v1**: always-on per-call E2EE (Chatto) vs DTLS-only initially (Colibri)? E2EE adds key-management work but matches Roomy's privacy posture. (Recommendation: E2EE from the start — Chatto proves it, and retrofitting E2EE later breaks media compatibility.)
