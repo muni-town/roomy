@@ -255,6 +255,19 @@ All commands require **Administrator** permissions and only work in guilds.
 | `/roomy-bridge-channel list [space-id:<did>]`                    | List channels in the allowlist                                                    |
 | `/roomy-repair-sidebar [space-id:<did>] [apply:<bool>]`          | Inspect a bridged space's sidebar for structure-sync damage, optionally reverting it |
 
+## Subscription retry
+
+Roomy→Discord routing needs one live sync subscription per bridged space. A
+subscription that fails — a connection ticket the appserver refuses while it is
+still coming up, a dropped handshake — is retried by the router, per space,
+with exponential backoff capped by `BRIDGE_RECONNECT_MAX_MS`. A space whose
+initial subscribe fails at boot therefore starts routing on its own once the
+appserver recovers; no restart is needed. Success clears the space's backoff,
+and a space that is unbridged while it is failing stops being retried. Retry
+and recovery are logged under the stable lines "Roomy subscription retry
+scheduled" and "Roomy subscription recovered" (the space id rides in the
+fields, not the message, so the series stays groupable).
+
 ## Disconnect and reconnect
 
 `/disconnect-roomy-space` drops the bridge config, its allowlist, and all the

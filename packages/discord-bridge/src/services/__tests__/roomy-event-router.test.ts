@@ -8,7 +8,7 @@
  * pending thread metadata.
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
 import {
 	Did,
 	type Event,
@@ -36,7 +36,7 @@ import {
 	USER_ID,
 } from "./helpers/test-data.ts";
 
-import { expectToBeDefined } from "./utils.ts";
+import { expectToBe, expectToBeDefined } from "./utils.ts";
 
 const DISCORD_MESSAGE_ID = newUlid();
 const DISCORD_CHANNEL_ID = "800000000000000001";
@@ -1900,6 +1900,219 @@ test("RER50: a failed fetch still deletes via the webhook", async () => {
 	expect(
 		repo.getDiscordId(SPACE_A, "message", ROOMY_MESSAGE_ULID),
 	).toBeUndefined();
+});
+
+/**
+ * Subscription retry: a space whose subscribe() fails at startup must be
+ * retried until it succeeds, without a process restart — a transient
+ * appserver failure at boot otherwise leaves that space's Roomy→Discord
+ * direction dead until someone restarts the bridge.
+ */
+describe("RoomyEventRouter subscription retry", () => {
+	let infoSpy: ReturnType<typeof vi.spyOn>;
+	let warnSpy: ReturnType<typeof vi.spyOn>;
+
+	beforeEach(() => {
+		process.env.BRIDGE_RECONNECT_BASE_MS = "1000";
+		process.env.BRIDGE_RECONNECT_MAX_MS = "100000";
+		// Deterministic full-jitter draws: 0.5 of the (exponentially growing,
+		// capped) window.
+		vi.spyOn(Math, "random").mockReturnValue(0.5);
+		infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+		warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+		delete process.env.BRIDGE_RECONNECT_BASE_MS;
+		delete process.env.BRIDGE_RECONNECT_MAX_MS;
+	});
+
+	/** Drain the microtask queue so a fired retry timer settles. */
+	async function flush(): Promise<void> {
+		for (let i = 0; i < 30; i++) await Promise.resolve();
+	}
+
+	/** Fields of the router's structured log lines. */
+	function routerLines(spy: ReturnType<typeof vi.spyOn>): Array<{
+		msg?: string;
+		spaceDid?: string;
+		attempt?: number;
+		delayMs?: number;
+	}> {
+		return spy.mock.calls.map((call: unknown[]) => {
+			try {
+				const rec = JSON.parse(String(call[0])) as Record<string, unknown>;
+				return {
+					msg: typeof rec.msg === "string" ? rec.msg : undefined,
+					spaceDid: typeof rec.spaceDid === "string" ? rec.spaceDid : undefined,
+					attempt: typeof rec.attempt === "number" ? rec.attempt : undefined,
+					delayMs: typeof rec.delayMs === "number" ? rec.delayMs : undefined,
+				};
+			} catch {
+				return {};
+			}
+		});
+	}
+
+	/** Delays of every retry the router has scheduled, oldest first. */
+	function scheduledDelays(): number[] {
+		return routerLines(infoSpy)
+			.filter((line) => line.msg === "Roomy subscription retry scheduled")
+			.map((line) => line.delayMs ?? -1);
+	}
+
+	// RER51
+	test("RER51: a subscribe failure at startup is retried until it succeeds", async () => {
+		const { roomy, discord, router } = setup();
+		roomy.failSubscribes({ count: 1 });
+
+		await router.start();
+		expect(roomy.subscribeAttempts).toBe(1);
+
+		// Nothing routes while the space is unsubscribed...
+		await roomy.fireEvent(
+			SPACE_A,
+			makeCreateMessageEvent({ content: "during the outage" }),
+		);
+		expect(discord.sent).toHaveLength(0);
+
+		// ...and the scheduled retry restores it without a restart.
+		vi.advanceTimersByTime(500);
+		await flush();
+
+		expect(roomy.subscribeAttempts).toBe(2);
+		await roomy.fireEvent(
+			SPACE_A,
+			makeCreateMessageEvent({ content: "after recovery" }),
+		);
+		expect(discord.sent).toHaveLength(1);
+		expect(discord.sent[0]?.content).toBe("after recovery");
+		expect(
+			routerLines(infoSpy).some(
+				(line) => line.msg === "Roomy subscription recovered",
+			),
+		).toBe(true);
+	});
+
+	// RER52
+	test("RER52: a permanently failing subscription backs off, capped, and never spins", async () => {
+		const { roomy, router } = setup();
+		roomy.failSubscribes();
+
+		await router.start();
+		expect(roomy.subscribeAttempts).toBe(1);
+
+		// Walk ten retries, waiting exactly the delay each one schedules, and
+		// read that delay. Ten steps cover the growth past the cap.
+		for (let i = 0; i < 10; i++) {
+			const next = scheduledDelays().at(-1);
+			expectToBeDefined(next);
+			vi.advanceTimersByTime(next + 1);
+			await flush();
+		}
+
+		// Doubling from the base, then pinned at the cap (100000ms cap × the
+		// 0.5 jitter draw — a bounded, capped schedule, not a spin).
+		// 11 schedules: the one start() made, then one per retry the ten
+		// stepped windows ran. Doubling from the base, then pinned at the cap
+		// (100000ms cap × the 0.5 jitter draw).
+		expect(scheduledDelays()).toEqual([
+			500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 50_000, 50_000, 50_000,
+			50_000,
+		]);
+		for (const delay of scheduledDelays()) {
+			expect(delay).toBeLessThanOrEqual(50_000);
+		}
+		// Each window runs at most one retry per space, so the attempt count
+		// stays bounded rather than running away.
+		expect(roomy.subscribeAttempts).toBeLessThanOrEqual(11);
+	});
+
+	// RER53
+	test("RER53: a successful retry resets the backoff", async () => {
+		const { roomy, router } = setup();
+		roomy.failSubscribes({ count: 2 });
+
+		await router.start();
+		vi.advanceTimersByTime(500);
+		await flush();
+		vi.advanceTimersByTime(1_000);
+		await flush();
+		expect(roomy.subscribeAttempts).toBe(3);
+		expect(scheduledDelays()).toEqual([500, 1_000]);
+
+		// A later failure for the same space starts from the base delay again,
+		// not from the count that accumulated before the recovery.
+		await roomy.unsubscribe(SPACE_A);
+		roomy.failSubscribes({ count: 1 });
+		await expect(router.subscribeToSpace(SPACE_A)).rejects.toThrow(
+			"getConnectionTicket",
+		);
+		expect(scheduledDelays()).toEqual([500, 1_000, 500]);
+	});
+
+	// RER54
+	test("RER54: a space unbridged during the outage stops being retried", async () => {
+		const { roomy, router, repo, discord } = setup();
+		roomy.failSubscribes();
+
+		await router.start();
+		expect(roomy.subscribeAttempts).toBe(1);
+
+		// The bridge is removed while the space is still failing.
+		repo.removeBridgeConfig(GUILD, SPACE_A);
+
+		vi.advanceTimersByTime(500);
+		await flush();
+		expect(
+			routerLines(infoSpy).some(
+				(line) =>
+					line.msg ===
+					"Roomy subscription retry stopped: space no longer bridged",
+			),
+		).toBe(true);
+
+		// No further attempts, however long the process runs.
+		const attemptsAfterStop = roomy.subscribeAttempts;
+		vi.advanceTimersByTime(60 * 60_000);
+		await flush();
+		expect(roomy.subscribeAttempts).toBe(attemptsAfterStop);
+		expect(discord.sent).toHaveLength(0);
+	});
+
+	// RER55
+	test("RER55: retries are logged under a stable message line", async () => {
+		const { roomy, router } = setup();
+		roomy.failSubscribes();
+
+		await router.start();
+		vi.advanceTimersByTime(500);
+		await flush();
+
+		const retryLine = routerLines(infoSpy).find(
+			(line) => line.msg === "Roomy subscription retry scheduled",
+		);
+		expectToBeDefined(retryLine);
+		// Identifiers ride in fields: a per-space message line would give every
+		// retrying space its own log series and hide an outage that hit all of
+		// them at once.
+		expect(retryLine.msg).not.toContain(SPACE_A);
+		expectToBe(retryLine.spaceDid, SPACE_A);
+		expectToBe(retryLine.attempt, 1);
+
+		// The failed retry that follows is one warn line under a stable
+		// signature too — same reason.
+		const retryFailed = routerLines(warnSpy).find(
+			(line) => line.msg === "Roomy subscription retry failed; will retry",
+		);
+		expectToBeDefined(retryFailed);
+		expect(retryFailed.msg).not.toContain(SPACE_A);
+		expectToBe(retryFailed.spaceDid, SPACE_A);
+	});
 });
 
 describe("resolveAttachmentUrl", () => {

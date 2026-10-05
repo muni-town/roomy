@@ -4,7 +4,6 @@ Post-merge improvements and known issues for `packages/discord-bridge/`.
 
 ## Subscription / Connection
 
-- **Retry failed subscriptions (H3):** `services/roomy-event-router.ts:100-116` — `start()` uses `Promise.allSettled`. A transient network error during `subscribe()` logs the error but the space remains permanently unmonitored. A code TODO exists at line 117; implement retry with backoff.
 - **disconnectAll doesn't await in-flight (M7):** `roomy/live-gateway.ts:247-255` — `disconnectAll()` clears `#processing` map without awaiting in-flight promises. Callbacks may fire after disconnect returns.
 - **Stale-cursor reconnect duplicate window (M):** `roomy/live-gateway.ts:102,115-124` — on reconnect, the SDK replays the tracked topic before firing `onOpen`, causing a brief window of duplicate event delivery. Currently harmless (router dedup via `getDiscordId`), but should be documented or fixed.
 

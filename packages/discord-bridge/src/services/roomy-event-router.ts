@@ -33,12 +33,19 @@ import { deserializeBody, fromBytes, RICHTEXT_MIME } from "@roomy-space/sdk";
 import type { BridgeRepository } from "../db/repository.ts";
 import type { DiscordSender } from "../discord/sender.ts";
 import type { WebhookManager } from "../discord/webhook-manager.ts";
+import { BRIDGE_RECONNECT_BASE_MS, BRIDGE_RECONNECT_MAX_MS } from "../env.ts";
 import { createLogger } from "../logger.ts";
-import type { RoomyGateway } from "../roomy/gateway.ts";
+import type { RoomyEventCallback, RoomyGateway } from "../roomy/gateway.ts";
 import type { ProfileResolver } from "../roomy/profile-resolver.ts";
+import { reconnectDelayMs } from "../utils/backoff.ts";
 import { blocksToDiscordMarkdown } from "./blocks-to-discord.ts";
 
 const log = createLogger("roomy-router");
+
+/** Render an unknown thrown value for a structured log field. */
+function describeError(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
 
 /**
  * Resolve an attachment URI to a fetchable HTTP URL.
@@ -187,6 +194,14 @@ export class RoomyEventRouter {
 	) => Promise<
 		{ authorDid: string; authorName: string; authorHandle?: string } | undefined
 	>;
+	/**
+	 * One pending retry timer per space whose subscribe failed, and the
+	 * consecutive-failure count that drives its backoff. Both are per-space:
+	 * a broken appserver fails every space at once, and independent jittered
+	 * schedules keep the ten retries from landing together.
+	 */
+	#retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	#retryFailures = new Map<string, number>();
 
 	constructor(
 		roomy: RoomyGateway,
@@ -235,11 +250,7 @@ export class RoomyEventRouter {
 		// Subscribe to all spaces in parallel so startup isn't blocked
 		// by sequential backfill.
 		const results = await Promise.allSettled(
-			[...uniqueSpaces].map((spaceDid) =>
-				this.#roomy.subscribe(spaceDid, (event, meta) => {
-					return this.#handleEvent(spaceDid, event, meta);
-				}),
-			),
+			[...uniqueSpaces].map((spaceDid) => this.#subscribeWithRetry(spaceDid)),
 		);
 
 		for (const [index, result] of results.entries()) {
@@ -251,20 +262,121 @@ export class RoomyEventRouter {
 				);
 			}
 		}
-		// TODO: Retry failed subscriptions with backoff. A transient network error
-		// during startup permanently disables Roomy→Discord routing for that space
-		// until the process is restarted. The gateway's subscribe() catch block
-		// cleans up the failed subscription so a later retry can re-subscribe,
-		// but nothing currently triggers that retry.
 	}
 
 	/**
 	 * Subscribe to a single space (called when a new bridge is created at runtime).
 	 */
 	async subscribeToSpace(spaceDid: string): Promise<void> {
-		await this.#roomy.subscribe(spaceDid, (event, meta) => {
-			return this.#handleEvent(spaceDid, event, meta);
+		await this.#subscribeWithRetry(spaceDid);
+	}
+
+	/** The event callback a space's subscription routes through. */
+	#callbackFor(spaceDid: string): RoomyEventCallback {
+		return (event, meta) => this.#handleEvent(spaceDid, event, meta);
+	}
+
+	/**
+	 * Subscribe to a space, arranging a retry if this attempt fails.
+	 *
+	 * The gateway drops the failed subscription, so the space is left with no
+	 * route from Roomy at all; a failed attempt therefore schedules a backoff
+	 * retry instead of being awaited and forgotten. The error is still
+	 * rethrown, so each caller keeps its own logging.
+	 */
+	async #subscribeWithRetry(spaceDid: string): Promise<void> {
+		try {
+			await this.#roomy.subscribe(spaceDid, this.#callbackFor(spaceDid));
+			this.#clearSubscribeRetry(spaceDid);
+		} catch (err) {
+			this.#scheduleSubscribeRetry(spaceDid);
+			throw err;
+		}
+	}
+
+	/**
+	 * Drop a space's pending retry and its failure count. Called when the
+	 * space is subscribed, so a retry scheduled by an earlier failure cannot
+	 * fire on top of a live subscription.
+	 */
+	#clearSubscribeRetry(spaceDid: string): void {
+		const timer = this.#retryTimers.get(spaceDid);
+		if (timer !== undefined) {
+			clearTimeout(timer);
+			this.#retryTimers.delete(spaceDid);
+		}
+		this.#retryFailures.delete(spaceDid);
+	}
+
+	/**
+	 * Schedule the next subscribe attempt for a space, at a delay that doubles
+	 * per consecutive failure and is capped. Each space keeps its own counter
+	 * and draws its own jittered delay: an appserver that is down fails every
+	 * space at once, and independent schedules keep the retries from landing
+	 * together as a burst.
+	 */
+	#scheduleSubscribeRetry(spaceDid: string): void {
+		if (this.#retryTimers.has(spaceDid)) return;
+
+		const failures = this.#retryFailures.get(spaceDid) ?? 0;
+		this.#retryFailures.set(spaceDid, failures + 1);
+		const delayMs = reconnectDelayMs(
+			failures,
+			BRIDGE_RECONNECT_BASE_MS(),
+			BRIDGE_RECONNECT_MAX_MS(),
+		);
+
+		const timer = setTimeout(() => {
+			this.#retryTimers.delete(spaceDid);
+			void this.#retrySubscribe(spaceDid);
+		}, delayMs);
+		// A pending retry must not keep the process alive by itself.
+		timer.unref();
+		this.#retryTimers.set(spaceDid, timer);
+
+		// Stable text on purpose: the log pipeline groups series by the message
+		// line, so interpolating the space id here would give every retrying
+		// space its own series and hide a whole-appserver outage. The space
+		// rides in the fields.
+		log.info("Roomy subscription retry scheduled", {
+			spaceDid,
+			attempt: failures + 1,
+			delayMs,
 		});
+	}
+
+	async #retrySubscribe(spaceDid: string): Promise<void> {
+		// A retry exists to restore routing for a bridged space. One that was
+		// unbridged while it was failing has nothing to resume, so it stops
+		// here rather than retrying a space nobody bridges any more.
+		if (!this.#isBridged(spaceDid)) {
+			this.#retryFailures.delete(spaceDid);
+			log.info("Roomy subscription retry stopped: space no longer bridged", {
+				spaceDid,
+			});
+			return;
+		}
+
+		const attempts = this.#retryFailures.get(spaceDid) ?? 0;
+		try {
+			await this.#roomy.subscribe(spaceDid, this.#callbackFor(spaceDid));
+			this.#clearSubscribeRetry(spaceDid);
+			log.info("Roomy subscription recovered", { spaceDid, attempts });
+		} catch (err) {
+			this.#scheduleSubscribeRetry(spaceDid);
+			log.warn("Roomy subscription retry failed; will retry", {
+				spaceDid,
+				attempts,
+				error: describeError(err),
+			});
+		}
+	}
+
+	/** Whether any bridge config still covers the space. */
+	#isBridged(spaceDid: string): boolean {
+		return this.#repo
+			.listAllBridgeConfigs()
+			.some((config) => config.spaceDid === spaceDid);
 	}
 
 	async #handleEvent(

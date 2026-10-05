@@ -11,7 +11,8 @@ import { encode } from "@atcute/cbor";
 import { beforeEach, describe, expect, test, vi, afterEach, type Mock } from "bun:test";
 import { type Event, newUlid, transport } from "@roomy-space/sdk";
 import { BridgeRepository } from "../db/repository.ts";
-import { LiveRoomyGateway, reconnectDelayMs } from "./live-gateway.ts";
+import { reconnectDelayMs } from "../utils/backoff.ts";
+import { LiveRoomyGateway } from "./live-gateway.ts";
 import type { RoomyEventCallback } from "./gateway.ts";
 import type { SpaceManager } from "./space-manager.ts";
 

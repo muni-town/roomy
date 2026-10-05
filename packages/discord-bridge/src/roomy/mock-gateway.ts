@@ -25,6 +25,8 @@ export class MockRoomyGateway implements RoomyGateway {
 		$type: Event["$type"] | null;
 		error: Error;
 	} | null = null;
+	#subscribeFailure: { count: number; error: Error } | null = null;
+	#subscribeAttempts = 0;
 
 	/**
 	 * Make `sendEvent` reject, as a degraded appserver does when an XRPC send
@@ -73,10 +75,37 @@ export class MockRoomyGateway implements RoomyGateway {
 		return this.#sidebars.get(spaceDid) ?? { categories: [] };
 	}
 
+	/**
+	 * Make `subscribe` reject for the next `count` attempts (every later call
+	 * unless `count` is given), as an unreachable appserver does when the
+	 * connection-ticket fetch fails.
+	 */
+	failSubscribes(opts: { count?: number; error?: Error } = {}): void {
+		this.#subscribeFailure = {
+			count: opts.count ?? Number.POSITIVE_INFINITY,
+			error:
+				opts.error ??
+				new Error(
+					"XRPC space.roomy.auth.getConnectionTicket failed (404): Application not found",
+				),
+		};
+	}
+
+	/** Total subscribe attempts, successful or not. */
+	get subscribeAttempts(): number {
+		return this.#subscribeAttempts;
+	}
+
 	async subscribe(
 		spaceDid: string,
 		callback: RoomyEventCallback,
 	): Promise<void> {
+		this.#subscribeAttempts++;
+		const failure = this.#subscribeFailure;
+		if (failure && failure.count > 0) {
+			failure.count--;
+			throw failure.error;
+		}
 		if (this.#subscriptions.has(spaceDid)) {
 			throw new Error(`Already subscribed to ${spaceDid}`);
 		}
