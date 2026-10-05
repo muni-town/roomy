@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Block, Facet, FacetFeature } from "@roomy-space/sdk";
-  import { enrichInternalLinks, parseInternalLinkHref } from "./enrich-internal-links";
+  import { parseInternalLinkHref } from "@roomy-space/sdk";
+  import { enrichInternalLinks, internalLinkOrigins } from "./enrich-internal-links";
 
   let {
     blocks,
@@ -136,7 +137,7 @@
           // upgrade them to a SpaceRoomBadge — the same treatment a hand-typed
           // room link gets on the legacy markdown path.
           const isInternalLink =
-            parseInternalLinkHref(href) !== null
+            parseInternalLinkHref(href, internalLinkOrigins) !== null
               ? ' data-roomy-internal-link="true"'
               : "";
           inner = `<a href="${href}"${isInternalLink} oncontextmenu="event.stopPropagation()" class="mention !no-underline">${inner}</a>`;

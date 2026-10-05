@@ -89,19 +89,78 @@ function roomRefFeature(spaceId: string, roomId?: string): FacetFeature {
 }
 
 /**
+ * The web origin each hosted appserver serves, keyed by appserver host.
+ *
+ * A space reference only means something on the appserver that materialises
+ * it, so the origin a link may be rooted at depends on which appserver the
+ * client talks to: production's world is served at `roomy.space`, staging's
+ * at `next.roomy.space`. Any other deployment serves its own web origin,
+ * which only the document itself knows.
+ */
+export const APPSERVER_WEB_ORIGINS: Readonly<Record<string, string>> = {
+  "api.roomy.space": "https://roomy.space",
+  "api-staging.roomy.space": "https://next.roomy.space",
+};
+
+/**
+ * The web origin the given appserver serves, or `null` when it is not a
+ * hosted Roomy deployment — a self-hosted or local appserver serves the
+ * origin the document itself is on.
+ *
+ * Accepts the appserver's DID (`did:web:api.roomy.space`) or its HTTP(S) /
+ * WS(S) origin.
+ */
+export function webOriginForAppserver(appserver: string): string | null {
+  // A `did:web` host may carry a port and a path, percent-encoded.
+  const host = appserver.startsWith("did:web:")
+    ? (decodeURIComponent(appserver.slice("did:web:".length))
+        .split("/")[0]
+        ?.split(":")[0] ?? null)
+    : (() => {
+        try {
+          return new URL(appserver).hostname;
+        } catch {
+          return null;
+        }
+      })();
+  return host === null ? null : (APPSERVER_WEB_ORIGINS[host] ?? null);
+}
+
+/**
  * Parse an internal Roomy link href into `{ spaceId, roomId? }`, or `null`.
- * Accepts root-relative paths (`/did:plc:…/roomId`) and absolute URLs on any
- * host whose path has the same shape. `/user/…` and other non-space routes
- * are rejected.
+ *
+ * Accepts root-relative paths (`/did:plc:…/roomId` — the app's own origin,
+ * which is the caller's to know) and absolute URLs rooted at one of
+ * `internalOrigins`. A caller passes the origin the document is served from,
+ * plus the origin of the appserver it talks to
+ * ({@link webOriginForAppserver}): a `/did:…` path on any other host is a
+ * page on that site, not a space this appserver can look up. `/user/…` and
+ * other non-space routes are rejected.
  */
 export function parseInternalLinkHref(
   href: string,
+  internalOrigins: readonly string[] = [],
 ): { spaceId: string; roomId?: string } | null {
   let path: string;
-  try {
-    path = new URL(href, "https://roomy.space").pathname;
-  } catch {
-    return null;
+  // A `/did:…` path on someone else's site is that site's page, not a space
+  // in this appserver's world — the DID is whatever that site put there.
+  // Treating it as a space reference both fabricates a lookup that 404s and
+  // persists the fabrication into the message body, where every later reader
+  // repeats it.
+  if (href.startsWith("/") && !href.startsWith("//")) {
+    path = href;
+    // Root-relative hrefs carry query/fragment; only the path is a reference.
+    const suffix = path.search(/[?#]/);
+    if (suffix !== -1) path = path.slice(0, suffix);
+  } else {
+    let url: URL;
+    try {
+      url = new URL(href);
+    } catch {
+      return null;
+    }
+    if (!internalOrigins.includes(url.origin)) return null;
+    path = url.pathname;
   }
   const parts = path.split("/").filter(Boolean);
   const spaceId = parts[0];
@@ -160,6 +219,7 @@ function flattenInline(node: ProseMirrorNode): TextRun[] {
 function marksToFeatures(
   marks: ProseMirrorMark[],
   text: string,
+  internalOrigins: readonly string[],
 ): FacetFeature[] | null {
   const features: FacetFeature[] = [];
   for (const mark of marks) {
@@ -183,7 +243,7 @@ function marksToFeatures(
         const href = mark.attrs?.href;
         if (typeof href === "string" && href) {
           features.push(linkFeature(href));
-          const internal = parseInternalLinkHref(href);
+          const internal = parseInternalLinkHref(href, internalOrigins);
           if (internal) {
             features.push(roomRefFeature(internal.spaceId, internal.roomId));
           }
@@ -234,13 +294,14 @@ function textBlockFromInline(
   node: ProseMirrorNode,
   blockType: "space.roomy.richtext.blocks#text" | "space.roomy.richtext.blocks#header" | "space.roomy.richtext.blocks#blockquote" | "space.roomy.richtext.blocks#small",
   extra: Record<string, unknown> = {},
+  internalOrigins: readonly string[] = [],
 ): Block {
   const runs = flattenInline(node);
   const text = runs.map((r) => r.text).join("");
   const facets: Facet[] = [];
   let utf16Offset = 0;
   for (const run of runs) {
-    const features = marksToFeatures(run.marks, run.text);
+    const features = marksToFeatures(run.marks, run.text, internalOrigins);
     if (features && run.text.length > 0) {
       const start = utf16ToUtf8ByteOffset(text, utf16Offset);
       const end = utf16ToUtf8ByteOffset(text, utf16Offset + run.text.length);
@@ -257,6 +318,7 @@ function textBlockFromInline(
 function listBlockFromNode(
   node: ProseMirrorNode,
   blockType: "space.roomy.richtext.blocks#orderedList" | "space.roomy.richtext.blocks#unorderedList",
+  internalOrigins: readonly string[] = [],
 ): Block {
   const items: { text: string; facets?: Facet[] }[] = [];
   for (const listItem of node.content ?? []) {
@@ -270,7 +332,7 @@ function listBlockFromNode(
     const facets: Facet[] = [];
     let utf16Offset = 0;
     for (const run of runs) {
-      const features = marksToFeatures(run.marks, run.text);
+      const features = marksToFeatures(run.marks, run.text, internalOrigins);
       if (features && run.text.length > 0) {
         const start = utf16ToUtf8ByteOffset(text, utf16Offset);
         const end = utf16ToUtf8ByteOffset(text, utf16Offset + run.text.length);
@@ -301,19 +363,22 @@ function listBlockFromNode(
  * blocks+facets. Unknown node types are dropped (their text is lost unless
  * the node carries inline content — see `flattenInline`).
  */
-export function proseMirrorDocToBlocks(doc: ProseMirrorDoc): Block[] {
+export function proseMirrorDocToBlocks(
+  doc: ProseMirrorDoc,
+  internalOrigins: readonly string[] = [],
+): Block[] {
   const blocks: Block[] = [];
   for (const node of doc.content ?? []) {
     switch (node.type) {
       case "paragraph":
-        blocks.push(textBlockFromInline(node, "space.roomy.richtext.blocks#text"));
+        blocks.push(textBlockFromInline(node, "space.roomy.richtext.blocks#text", {}, internalOrigins));
         break;
       case "heading": {
         const level = Number(node.attrs?.level ?? 1);
         blocks.push(
           textBlockFromInline(node, "space.roomy.richtext.blocks#header", {
             level: Number.isInteger(level) && level >= 1 && level <= 6 ? level : 1,
-          }),
+          }, internalOrigins),
         );
         break;
       }
@@ -331,6 +396,8 @@ export function proseMirrorDocToBlocks(doc: ProseMirrorDoc): Block[] {
         const block = textBlockFromInline(
           inner,
           "space.roomy.richtext.blocks#blockquote",
+          {},
+          internalOrigins,
         );
         blocks.push(
           depth > 1
@@ -340,7 +407,7 @@ export function proseMirrorDocToBlocks(doc: ProseMirrorDoc): Block[] {
         break;
       }
       case "smallText":
-        blocks.push(textBlockFromInline(node, "space.roomy.richtext.blocks#small"));
+        blocks.push(textBlockFromInline(node, "space.roomy.richtext.blocks#small", {}, internalOrigins));
         break;
       case "codeBlock": {
         const text = (node.content ?? [])
@@ -355,10 +422,10 @@ export function proseMirrorDocToBlocks(doc: ProseMirrorDoc): Block[] {
         break;
       }
       case "bulletList":
-        blocks.push(listBlockFromNode(node, "space.roomy.richtext.blocks#unorderedList"));
+        blocks.push(listBlockFromNode(node, "space.roomy.richtext.blocks#unorderedList", internalOrigins));
         break;
       case "orderedList":
-        blocks.push(listBlockFromNode(node, "space.roomy.richtext.blocks#orderedList"));
+        blocks.push(listBlockFromNode(node, "space.roomy.richtext.blocks#orderedList", internalOrigins));
         break;
       case "horizontalRule":
         blocks.push({ $type: "space.roomy.richtext.blocks#horizontalRule" });
@@ -835,7 +902,10 @@ interface MdLine {
  * formatting. Mentions (`@handle`) are left as plain text — resolving them
  * to DIDs requires context the converter doesn't have.
  */
-export function markdownToBlocks(md: string): Block[] {
+export function markdownToBlocks(
+  md: string,
+  internalOrigins: readonly string[] = [],
+): Block[] {
   const lines = md.replace(/\r\n/g, "\n").split("\n");
   const blocks: Block[] = [];
   let i = 0;
@@ -845,7 +915,7 @@ export function markdownToBlocks(md: string): Block[] {
     blockType: "space.roomy.richtext.blocks#text" | "space.roomy.richtext.blocks#header" | "space.roomy.richtext.blocks#blockquote" | "space.roomy.richtext.blocks#small",
     extra: Record<string, unknown> = {},
   ): Block => {
-    const { text: plain, facets } = parseInline(text);
+    const { text: plain, facets } = parseInline(text, internalOrigins);
     const base: Record<string, unknown> = { $type: blockType, text: plain };
     if (facets.length > 0) base.facets = facets;
     return { ...base, ...extra } as Block;
@@ -966,7 +1036,7 @@ export function markdownToBlocks(md: string): Block[] {
       while (i < lines.length) {
         const m = /^([-*+])\s+(.*)$/.exec(lines[i]!.trim());
         if (!m) break;
-        const { text, facets } = parseInline(m[2]!);
+        const { text, facets } = parseInline(m[2]!, internalOrigins);
         items.push(facets.length > 0 ? { text, facets } : { text });
         i++;
       }
@@ -982,7 +1052,7 @@ export function markdownToBlocks(md: string): Block[] {
       while (i < lines.length) {
         const m = /^(\d+)[.)]\s+(.*)$/.exec(lines[i]!.trim());
         if (!m) break;
-        const { text, facets } = parseInline(m[2]!);
+        const { text, facets } = parseInline(m[2]!, internalOrigins);
         items.push(facets.length > 0 ? { text, facets } : { text });
         i++;
       }
@@ -1037,7 +1107,10 @@ export function markdownToBlocks(md: string): Block[] {
  * inline code, strikethrough, and links. Facet byte offsets are computed
  * over the final plain text.
  */
-function parseInline(input: string): { text: string; facets: Facet[] } {
+function parseInline(
+  input: string,
+  internalOrigins: readonly string[] = [],
+): { text: string; facets: Facet[] } {
   // Tokenize: links, code spans, bold, italic, strike.
   const tokens: { kind: "text" | "link" | "code" | "bold" | "italic" | "strike"; text: string; href?: string }[] = [];
   let rest = input;
@@ -1091,7 +1164,7 @@ function parseInline(input: string): { text: string; facets: Facet[] } {
       case "link":
         if (token.href) {
           features.push(linkFeature(token.href));
-          const internal = parseInternalLinkHref(token.href);
+          const internal = parseInternalLinkHref(token.href, internalOrigins);
           if (internal) {
             features.push(roomRefFeature(internal.spaceId, internal.roomId));
           }

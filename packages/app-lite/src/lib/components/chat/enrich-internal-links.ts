@@ -1,17 +1,30 @@
 import { mount, unmount } from "svelte";
 import SpaceRoomBadge from "./embeds/SpaceRoomBadge.svelte";
-import { extractInternalLinkTargets, Did, Ulid, type } from "@roomy-space/sdk";
+import { extractInternalLinkTargets, parseInternalLinkHref } from "@roomy-space/sdk";
+import { setInternalLinkOrigins } from "@roomy/design/utils";
+import { CONFIG } from "$lib/config";
+import { internalOriginsFor } from "$lib/internal-link-origins";
 import type { Block } from "@roomy-space/sdk";
-
-// Known Roomy domains — bare links to these are treated as internal space/room
-// references. Must stay in sync with packages/design/src/utils/markdown.ts
-// (ROOMY_DOMAINS) so the extractor sees the same links the renderer marks.
-const ROOMY_DOMAINS = new Set(["roomy.space", "a.roomy.space", "roomy.chat"]);
 
 export interface InternalLinkTarget {
   spaceId: string;
   roomId?: string;
 }
+
+/**
+ * The origins an absolute link may be rooted at to name a space this client
+ * can look up — this document's own origin and the web origin of the
+ * appserver it talks to. See `internal-link-origins.ts`.
+ */
+export const internalLinkOrigins = internalOriginsFor(
+  CONFIG.appserverDid,
+  typeof location !== "undefined" ? location.origin : "",
+);
+
+// The design-system markdown renderer marks internal links as it renders, so
+// it needs the same origins before the first message is rendered. Importing
+// this module (which every render path does) is what configures it.
+setInternalLinkOrigins(internalLinkOrigins);
 
 /**
  * Extract the unique internal-link targets from a blocks+facets body.
@@ -26,66 +39,20 @@ export function enrichInternalLinksFromBlocks(
 }
 
 /**
- * Parse a single href into an internal link target, or `null` if it isn't a
- * Roomy space/room reference.
- *
- * Mirrors the path-parsing logic in {@link enrichInternalLinks} and the
- * internal-link marking in `packages/design/src/utils/markdown.ts`:
- *   - relative links starting with `/`
- *   - absolute URLs whose host is a known Roomy domain (roomy.space, …)
- *   - absolute URLs whose host is the app's own origin (the renderer can't
- *     know the origin at build time, so the action marks these; the extractor
- *     accepts them too so prefetch covers every link the action would enrich)
- *
- * `/user/<did>` and other non-space routes are skipped (matches the action).
- * `appOrigin` is optional so the function stays pure and testable; the action
- * and prefetcher pass `location.origin`.
- */
-export function parseInternalLinkHref(
-  href: string,
-  appOrigin?: string,
-): InternalLinkTarget | null {
-  let path: string;
-  if (href.startsWith("/")) {
-    path = href;
-  } else {
-    try {
-      const url = new URL(href);
-      const isRoomyDomain = ROOMY_DOMAINS.has(url.hostname);
-      const isAppOrigin = appOrigin !== undefined && url.origin === appOrigin;
-      if (!isRoomyDomain && !isAppOrigin) return null;
-      path = url.pathname;
-    } catch {
-      return null;
-    }
-  }
-
-  const parts = path.slice(1).split("/");
-  const spaceId = parts[0];
-  if (!spaceId || spaceId === "user") return null;
-  // Space IDs are DIDs (did:plc:… / did:web:…); room IDs are ULIDs. Reject
-  // anything else so non-space links (app routes like /watch, /blog, /profile,
-  // user handles, room names) are never treated as space/room references —
-  // otherwise the internal-link prefetch fires 404 summary queries for them.
-  if (Did(spaceId) instanceof type.errors) return null;
-  const roomId = parts[1];
-  if (roomId && Ulid(roomId) instanceof type.errors) return null;
-  return roomId ? { spaceId, roomId } : { spaceId };
-}
-
-/**
  * Svelte action: after the markdown HTML is rendered inside `el`, find internal
  * links and replace them with SpaceRoomBadge components.
  *
- * Handles both relative links (/did:plc:xxx) and absolute URLs
- * (https://roomy.space/did:plc:xxx).
+ * Handles both relative links (/did:plc:xxx) and absolute URLs rooted at an
+ * internal origin (https://roomy.space/did:plc:xxx).
  */
 export function enrichInternalLinks(el: HTMLElement) {
-  // Also mark links to the app's own origin as internal (the markdown
-  // renderer can't know the app's origin at build time).
-  const appOrigin = location.origin;
-  for (const a of el.querySelectorAll<HTMLAnchorElement>(`a[href^="${appOrigin}/"]`)) {
-    a.setAttribute("data-roomy-internal-link", "true");
+  // The markdown renderer marks absolute links under the origins it was
+  // configured with; mark anything the runtime considers internal too, so a
+  // link written as an absolute URL to this deployment still becomes a badge.
+  for (const origin of internalLinkOrigins) {
+    for (const a of el.querySelectorAll<HTMLAnchorElement>(`a[href^="${origin}/"]`)) {
+      a.setAttribute("data-roomy-internal-link", "true");
+    }
   }
 
   const links = el.querySelectorAll<HTMLAnchorElement>('a[data-roomy-internal-link="true"]');
@@ -97,7 +64,7 @@ export function enrichInternalLinks(el: HTMLElement) {
     const href = link.getAttribute("href");
     if (!href) continue;
 
-    const target = parseInternalLinkHref(href, appOrigin);
+    const target = parseInternalLinkHref(href, internalLinkOrigins);
     if (!target) continue;
 
     // Only treat as explicit link text if it differs from the href (bare

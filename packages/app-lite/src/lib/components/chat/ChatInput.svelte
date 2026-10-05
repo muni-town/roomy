@@ -25,6 +25,7 @@
   import { cn } from "@roomy/design/utils";
   import { Markdown } from "tiptap-markdown";
   import { blocksToProseMirrorDoc, proseMirrorDocToBlocks } from "@roomy-space/sdk";
+  import { internalLinkOrigins } from "$lib/components/chat/enrich-internal-links";
   import type { Block, ProseMirrorDoc, ProseMirrorMark, ProseMirrorNode } from "@roomy-space/sdk";
 
   type Props = {
@@ -121,7 +122,7 @@
   async function wrappedOnEnter() {
     const boundary = flushTrailingAutolink();
     const mentions = tiptap ? extractMentionDids(tiptap) : [];
-    const currentBlocks = tiptap ? proseMirrorDocToBlocks(tiptap.getJSON()) : (blocks ?? []);
+    const currentBlocks = tiptap ? proseMirrorDocToBlocks(tiptap.getJSON(), internalLinkOrigins) : (blocks ?? []);
     if (boundary !== undefined) {
       tiptap?.commands.deleteRange({ from: boundary, to: boundary + 1 });
     }
@@ -153,7 +154,7 @@
    */
   export function getBlocks(): Block[] {
     flushTrailingAutolink();
-    return tiptap ? proseMirrorDocToBlocks(tiptap.getJSON()) : (blocks ?? []);
+    return tiptap ? proseMirrorDocToBlocks(tiptap.getJSON(), internalLinkOrigins) : (blocks ?? []);
   }
 
   /**
@@ -280,13 +281,13 @@
       },
       onUpdate: (ctx) => {
         content = ctx.editor.storage.markdown.getMarkdown();
-        blocks = proseMirrorDocToBlocks(ctx.editor.getJSON());
+        blocks = proseMirrorDocToBlocks(ctx.editor.getJSON(), internalLinkOrigins);
         mentions = extractMentionDids(ctx.editor);
       },
     });
     if (initialDoc) {
       content = tiptap.storage.markdown.getMarkdown();
-      blocks = proseMirrorDocToBlocks(tiptap.getJSON());
+      blocks = proseMirrorDocToBlocks(tiptap.getJSON(), internalLinkOrigins);
       mentions = extractMentionDids(tiptap);
     }
     // Only the composer registers as the module-level editor that

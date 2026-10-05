@@ -2,22 +2,35 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { Did, Ulid, type } from "@roomy-space/sdk";
 
-// Known Roomy domains — bare links to these are treated as internal space/room
-// references and replaced with rich badge components. Static membership table.
-const ROOMY_DOMAINS: Record<string, true> = {
-  "roomy.space": true,
-  "a.roomy.space": true,
-  "roomy.chat": true,
-};
+/**
+ * Origins an absolute link may be rooted at to still name a space/room: the
+ * origin this document is served from, plus the web origin of the appserver
+ * it talks to. Set at boot by the app (`setInternalLinkOrigins`), because
+ * neither is knowable here.
+ */
+let internalLinkOrigins: readonly string[] = [];
 
 /**
- * A bare relative path or Roomy-domain URL is an internal space/room link
- * only when it carries a valid (DID, ULID?) pair on its path — `/did:plc:…`
- * or `/did:plc:…/01ABC…`. This rejects app routes (`/watch`, `/profile`,
- * `/blog`, …) and non-DID path segments (`roomy.space/muni-town`) so they're
- * never marked internal, which is what would otherwise make the badge
- * prefetch fire 404 `getSpaceSummary` queries. Mirrors the guard in
- * `parseInternalLinkHref` (app-lite).
+ * Declare the origins internal space/room links may be rooted at — the
+ * document's own origin and the appserver's web origin. Every rendered
+ * markdown string is re-rendered afterwards, so a later call cannot leave
+ * HTML behind that was marked under the previous origins.
+ */
+export function setInternalLinkOrigins(origins: readonly string[]): void {
+  internalLinkOrigins = origins;
+  htmlCache.clear();
+  plaintextCache.clear();
+}
+
+/**
+ * A relative path or an absolute link rooted at an internal origin is a
+ * space/room link only when it carries a valid (DID, ULID?) pair on its path
+ * — `/did:plc:…` or `/did:plc:…/01ABC…`. This rejects app routes (`/watch`,
+ * `/profile`, `/blog`, …), non-DID path segments (`roomy.space/muni-town`),
+ * and `/did:…` paths on hosts this app does not own
+ * (`twinkl.social/did:plc:…`) so they're never marked internal, which is what
+ * would otherwise make the badge prefetch fire 404 `getSpaceSummary` queries.
+ * Mirrors the guard in `parseInternalLinkHref` (SDK).
  */
 function isSpaceRoomPath(pathname: string): boolean {
   const parts = pathname.split("/").filter(Boolean);
@@ -46,14 +59,15 @@ marked.use({
       const isInternalLink = !isExternal && href?.startsWith("/") && isSpaceRoomPath(href ?? "");
       const internalAttr = isInternalLink ? ' data-roomy-internal-link="true"' : "";
 
-      // Also mark bare links to known Roomy domains (roomy.space, roomy.chat)
-      // so they get the same badge treatment — again only for valid
-      // space/room paths, never app routes or non-DID segments.
+      // Also mark absolute links rooted at an origin this app considers its
+      // own (the document's, or the appserver's web origin) so they get the
+      // same badge treatment — again only for valid space/room paths, never
+      // app routes or non-DID segments.
       let roomyDomainAttr = "";
       if (isExternal && href) {
         try {
           const url = new URL(href);
-          if (url.hostname in ROOMY_DOMAINS && isSpaceRoomPath(url.pathname)) {
+          if (internalLinkOrigins.includes(url.origin) && isSpaceRoomPath(url.pathname)) {
             roomyDomainAttr = ' data-roomy-internal-link="true"';
           }
         } catch {

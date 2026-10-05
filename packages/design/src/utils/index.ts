@@ -9,7 +9,7 @@ export {
   writeThemeMode,
 } from "./theme.js";
 export type { ThemeMode } from "./theme.js";
-export { renderMarkdownSanitized, renderMarkdownPlaintext, renderInlineMarkdown } from "./markdown.js";
+export { renderMarkdownSanitized, renderMarkdownPlaintext, renderInlineMarkdown, setInternalLinkOrigins } from "./markdown.js";
 export {
   formatRelativeTime,
   formatDate,

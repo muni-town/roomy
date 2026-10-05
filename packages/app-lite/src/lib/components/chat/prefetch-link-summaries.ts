@@ -31,8 +31,8 @@ import { cache } from "@roomy-space/sdk";
 import { renderMarkdownSanitized } from "@roomy/design/utils";
 import { queryClient } from "$lib/client";
 import { px } from "$lib/auth.svelte";
-import { parseInternalLinkHref } from "./enrich-internal-links";
-import { enrichInternalLinksFromBlocks } from "./enrich-internal-links";
+import { parseInternalLinkHref } from "@roomy-space/sdk";
+import { enrichInternalLinksFromBlocks, internalLinkOrigins } from "./enrich-internal-links";
 import type { Block } from "@roomy-space/sdk";
 
 const { queryKey } = cache;
@@ -69,12 +69,12 @@ function prefetchSummary(
  * {@link enrichInternalLinks} action: the prefetcher sees exactly the links
  * that will be enriched.
  *
- * `appOrigin` is `location.origin` at the call site; passed in so the function
- * is pure and testable.
+ * `origins` defaults to the runtime's {@link internalLinkOrigins}; passed in
+ * so the function stays pure and testable.
  */
 export function extractInternalLinkTargets(
   markdowns: Iterable<string>,
-  appOrigin: string,
+  origins: readonly string[] = internalLinkOrigins,
 ): { spaceId: string; roomId?: string }[] {
   const seen = new Set<string>();
   const targets: { spaceId: string; roomId?: string }[] = [];
@@ -91,7 +91,7 @@ export function extractInternalLinkTargets(
     for (const a of anchors) {
       const href = a.getAttribute("href");
       if (!href) continue;
-      const target = parseInternalLinkHref(href, appOrigin);
+      const target = parseInternalLinkHref(href, origins);
       if (!target) continue;
       // Dedupe by `${spaceId}/${roomId ?? ""}`. Two links to the same room
       // share one cache entry — that's the whole point.
@@ -122,10 +122,10 @@ export function extractInternalLinkTargets(
  */
 export function prefetchInternalLinkSummaries(
   markdowns: Iterable<string>,
-  appOrigin: string = typeof location !== "undefined" ? location.origin : "",
+  origins: readonly string[] = internalLinkOrigins,
 ): void {
-  if (!appOrigin) return; // SSR / non-browser — nothing to prefetch.
-  const targets = extractInternalLinkTargets(markdowns, appOrigin);
+  if (origins.length === 0) return; // SSR / non-browser — nothing to prefetch.
+  const targets = extractInternalLinkTargets(markdowns, origins);
   if (targets.length === 0) return;
 
   const pxClient = px();

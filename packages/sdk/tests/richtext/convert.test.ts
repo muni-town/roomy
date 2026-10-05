@@ -22,6 +22,7 @@ import {
   parseInternalLinkHref,
   proseMirrorDocToBlocks,
   serializeBlocks,
+  webOriginForAppserver,
   type ProseMirrorDoc,
 } from "../../src/richtext/convert";
 
@@ -74,7 +75,7 @@ const mentionDoc: ProseMirrorDoc = {
 
 describe("proseMirrorDocToBlocks", () => {
   test("emits didMention and link+roomRef facets with byte offsets", () => {
-    const blocks = proseMirrorDocToBlocks(mentionDoc);
+    const blocks = proseMirrorDocToBlocks(mentionDoc, ["https://roomy.space"]);
     expect(blocks).toHaveLength(2);
     const text = blocks[0] as { text: string; facets?: unknown[] };
     expect(text.text).toBe("Hey @alice check this");
@@ -227,7 +228,7 @@ describe("derivations", () => {
   });
 
   test("extractInternalLinkTargets collects roomRef facets", () => {
-    const blocks = proseMirrorDocToBlocks(mentionDoc);
+    const blocks = proseMirrorDocToBlocks(mentionDoc, ["https://roomy.space"]);
     expect(extractInternalLinkTargets(blocks)).toEqual([
       { spaceId: "did:plc:space", roomId: "01KZBRQMEP2FTE079YRVDFKGTA" },
     ]);
@@ -323,6 +324,20 @@ describe("derivations", () => {
     });
   });
 
+  test("parseInternalLinkHref reads a relative path past its query and hash", () => {
+    // A relative href is the app's own origin; the path is the reference, and
+    // a query or fragment on it is not part of the space/room ids.
+    expect(
+      parseInternalLinkHref("/did:plc:space/01KZBRQMEP2FTE079YRVDFKGTA?thread=x#msg"),
+    ).toEqual({
+      spaceId: "did:plc:space",
+      roomId: "01KZBRQMEP2FTE079YRVDFKGTA",
+    });
+    expect(parseInternalLinkHref("/did:plc:space?ref=share")).toEqual({
+      spaceId: "did:plc:space",
+    });
+  });
+
   test("parseInternalLinkHref rejects non-space links", () => {
     // App routes / handles / room names are not space references — they must
     // not be treated as internal links (which would fire 404 summary queries).
@@ -334,6 +349,129 @@ describe("derivations", () => {
     expect(parseInternalLinkHref("/user/did:plc:alice")).toBeNull();
     // DID space but non-ULID room is not a valid room reference.
     expect(parseInternalLinkHref("/did:plc:space/oauth-improvements")).toBeNull();
+  });
+
+  test("webOriginForAppserver maps a hosted appserver to its web origin", () => {
+    // Production's appserver serves roomy.space; staging's serves
+    // next.roomy.space. Both DID and origin spellings name the same server.
+    expect(webOriginForAppserver("did:web:api.roomy.space")).toBe("https://roomy.space");
+    expect(webOriginForAppserver("https://api.roomy.space")).toBe("https://roomy.space");
+    expect(webOriginForAppserver("did:web:api-staging.roomy.space")).toBe("https://next.roomy.space");
+    expect(webOriginForAppserver("wss://api-staging.roomy.space")).toBe("https://next.roomy.space");
+    // A `did:web` host may carry a percent-encoded port.
+    expect(webOriginForAppserver("did:web:localhost%3A8080")).toBeNull();
+    // An unhosted appserver has no web origin of its own.
+    expect(webOriginForAppserver("did:web:chat.example.com")).toBeNull();
+    expect(webOriginForAppserver("http://127.0.0.1:8080")).toBeNull();
+  });
+
+  test("parseInternalLinkHref accepts only the given internal origins", () => {
+    // The origin is the caller's to name: an appserver's world is only
+    // reachable at the origin that serves it, so a `/did:…` path anywhere
+    // else is that site's page.
+    expect(
+      parseInternalLinkHref("https://roomy.space/did:plc:space", ["https://roomy.space"]),
+    ).toEqual({ spaceId: "did:plc:space" });
+    expect(
+      parseInternalLinkHref("https://next.roomy.space/did:plc:space", ["https://next.roomy.space"]),
+    ).toEqual({ spaceId: "did:plc:space" });
+    // A staging deployment does not accept production's host, and vice versa.
+    expect(
+      parseInternalLinkHref("https://roomy.space/did:plc:space", ["https://next.roomy.space"]),
+    ).toBeNull();
+    // With no origins given, only relative links parse.
+    expect(parseInternalLinkHref("https://roomy.space/did:plc:space")).toBeNull();
+    expect(parseInternalLinkHref("/did:plc:space")).toEqual({ spaceId: "did:plc:space" });
+  });
+
+  test("parseInternalLinkHref rejects a DID path on a foreign host", () => {
+    // Any site can put a `did:plc:…` segment on its own path. That is a page
+    // on that site, not a space this appserver can resolve, and writing it
+    // into a `#roomRef` facet makes every later reader ask for its summary
+    // forever. Only the app's own origins (which are the caller's to name,
+    // not knowable here) can carry a space reference.
+    const origins = ["https://roomy.space", "https://next.roomy.space"];
+    expect(
+      parseInternalLinkHref("https://twinkl.social/did:plc:rqbqpaaluty5v47jwciowpik", origins),
+    ).toBeNull();
+    expect(
+      parseInternalLinkHref("https://example.com/did:plc:space/01KZBRQMEP2FTE079YRVDFKGTA", origins),
+    ).toBeNull();
+    // A Roomy host this deployment does not serve is someone else's page too.
+    expect(parseInternalLinkHref("https://a.roomy.space/did:plc:space", origins)).toBeNull();
+    expect(parseInternalLinkHref("https://roomy.chat/did:plc:space", origins)).toBeNull();
+    // The same paths on an internal origin still parse.
+    expect(parseInternalLinkHref("https://roomy.space/did:plc:space", origins)).toEqual({
+      spaceId: "did:plc:space",
+    });
+    expect(
+      parseInternalLinkHref(
+        "https://next.roomy.space/did:plc:space/01KZBRQMEP2FTE079YRVDFKGTA",
+        origins,
+      ),
+    ).toEqual({
+      spaceId: "did:plc:space",
+      roomId: "01KZBRQMEP2FTE079YRVDFKGTA",
+    });
+  });
+
+  test("a foreign-host link body carries no roomRef facet to persist", () => {
+    // The write path is the fix: what the composer/converter emits is what
+    // lands in the message, and what every later reader's prefetch trusts.
+    const origins = ["https://roomy.space"];
+    const foreign = proseMirrorDocToBlocks({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "https://twinkl.social/did:plc:rqbqpaaluty5v47jwciowpik",
+              marks: [
+                {
+                  type: "link",
+                  attrs: { href: "https://twinkl.social/did:plc:rqbqpaaluty5v47jwciowpik" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }, origins);
+    expect(extractInternalLinkTargets(foreign)).toEqual([]);
+    // The `#link` facet survives — only the space reference is dropped, so
+    // the URL still renders as a link.
+    expect(
+      foreign.flatMap((b) =>
+        "facets" in b && Array.isArray(b.facets)
+          ? b.facets.flatMap((f) => f.features.map((x) => x.$type))
+          : [],
+      ),
+    ).toEqual(["space.roomy.richtext.facet#link"]);
+
+    // The markdown path (backfill, bridge transition) agrees.
+    expect(extractInternalLinkTargets(markdownToBlocks(
+      "[x](https://twinkl.social/did:plc:rqbqpaaluty5v47jwciowpik)",
+      origins,
+    ))).toEqual([]);
+
+    // A link to an origin this deployment serves still produces the facet.
+    expect(extractInternalLinkTargets(proseMirrorDocToBlocks({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "https://roomy.space/did:plc:space",
+              marks: [{ type: "link", attrs: { href: "https://roomy.space/did:plc:space" } }],
+            },
+          ],
+        },
+      ],
+    }, origins))).toEqual([{ spaceId: "did:plc:space" }]);
   });
 });
 
