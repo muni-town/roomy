@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as os from "node:os";
 import * as path from "node:path";
+import * as fs from "node:fs/promises";
 import { Command } from "commander";
 import { loadConfig } from "./config.js";
 import { authenticate } from "./auth.js";
@@ -10,6 +11,7 @@ import { sendMessage, readMessages, buildMentionBlocks } from "./messages.js";
 import { setProfile } from "./profile.js";
 import { respond } from "./respond.js";
 import { FileLock, QueueStore, type CronJobPayload, type QueueJob } from "./queue.js";
+import { collectExport, defaultOutPath, encodeCsv, encodeJson } from "./export.js";
 
 const program = new Command();
 export { program };
@@ -242,6 +244,65 @@ program
       // transcript of the messages themselves.
       if (cursor) {
         console.error(`--cursor ${cursor}  (${messages.length} of ${limit} messages)`);
+      }
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+// ── export ────────────────────────────────────────────────────────────────
+
+program
+  .command("export")
+  .description(
+    "Download a room's or a whole space's message history to JSON or CSV",
+  )
+  .requiredOption("--space <id>", "Space ID")
+  .option("--room <id>", "One room; omit to export every channel and thread in the space")
+  .option("--format <format>", "Output format: json|csv (default json)", "json")
+  .option("--out <path>", "Output file (default ./roomy-export-<space>-<timestamp>.<ext>)")
+  .option("--cache-dir <path>", "Directory holding the message cache (default: $ROOMY_CACHE_DIR)")
+  .option("--refresh", "Ignore the cache and refetch every room")
+  .option("--limit <n>", "Max messages per room (default: all)")
+  .action(async (options: {
+    space: string;
+    room?: string;
+    format: string;
+    out?: string;
+    cacheDir?: string;
+    refresh?: boolean;
+    limit?: string;
+  }) => {
+    try {
+      if (options.format !== "json" && options.format !== "csv") {
+        throw new Error(`--format must be json or csv, got: ${options.format}`);
+      }
+      const config = loadConfig();
+      const { agent, xrpc } = await authenticate(config);
+      const limit = options.limit === undefined ? undefined : parseLimit(options.limit);
+      const result = await collectExport(xrpc, {
+        spaceId: options.space,
+        roomId: options.room,
+        refresh: options.refresh,
+        limit,
+        account: agent.did ?? "",
+        cacheDir: options.cacheDir ?? config.cacheDir,
+        onProgress: (line) => console.error(line),
+      });
+      const out = options.out ?? defaultOutPath(options.space, options.format);
+      const body = options.format === "csv" ? encodeCsv(result.rows) : encodeJson(result.rows);
+      const tmp = `${out}.tmp-${process.pid}`;
+      await fs.writeFile(tmp, body);
+      await fs.rename(tmp, out);
+
+      console.log(`${result.rows.length} messages → ${out}`);
+      console.error(
+        `rooms: ${result.rooms.length - result.failed.length}/${result.rooms.length}` +
+          `  fetched: ${result.fetched}  from cache: ${result.cached}`,
+      );
+      if (result.failed.length > 0) {
+        console.error(`skipped: ${result.failed.map((r) => r.id).join(", ")}`);
       }
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);

@@ -125,6 +125,46 @@ roomy-cli read --room <room-id> --limit 100 --cursor <message-id>
 A read reports a cursor unless the room has no older messages left, so
 `--cursor` chains indefinitely: pass each read's printed cursor to the next.
 
+### `export`
+
+Download a room's — or a whole space's — message history to JSON or CSV, for
+local analysis, NER, embeddings, or any other program that reads a file.
+
+```bash
+# One room, JSON (default)
+roomy-cli export --space <space-did> --room <room-id>
+
+# Every channel and thread of the space, as CSV
+roomy-cli export --space <space-did> --format csv --out ./forest.csv
+```
+
+| Option | Meaning |
+|---|---|
+| `--space <id>` | Space to export (required) |
+| `--room <id>` | One room. Omit to export every channel and thread in the space |
+| `--format json\|csv` | Output format (default `json`) |
+| `--out <path>` | Output file (default `./roomy-export-<space>-<timestamp>.<ext>`) |
+| `--cache-dir <path>` | Message cache directory (default `$ROOMY_CACHE_DIR`, i.e. `~/.roomy/cache`) |
+| `--refresh` | Ignore the cache and refetch everything |
+| `--limit <n>` | Max messages per room, newest first (default: all) |
+
+**JSON** is an array of message objects. **CSV** has the stable header
+`id,timestamp,authorDid,authorName,roomId,roomName,replyTo,text`; the text field
+is RFC 4180-quoted, so embedded commas, quotes and newlines survive a standard
+CSV reader.
+
+Exports go through a filesystem cache under `--cache-dir` (one directory per
+space, one file per room, written atomically). A re-run fetches only what is
+new: for each room it walks from the newest message and stops at the first
+message already cached, so an unchanged room costs one request — or, when the
+cached history is complete and its newest message is the room's newest, no
+request at all. Progress and the fetch/store counts are printed to stderr;
+stdout stays free for the output path.
+
+`--limit` caps the exported rows per room and is **not** a cache of the room:
+a capped run stores only the newest rows, marks them incomplete, and a later
+uncapped run walks the room in full rather than mistaking the tail for the
+whole history.
 
 ### `respond`
 

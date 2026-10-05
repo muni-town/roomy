@@ -14,8 +14,10 @@ export interface Config {
   appPassword: string;
   /** Path to session cache file */
   sessionFile: string;
-  /** Path to room map file */
+  /** Path to the room map file */
   roomMapFile: string;
+  /** Root directory of the message cache (one directory per space). */
+  cacheDir: string;
 }
 
 export function loadConfig(): Config {
@@ -36,5 +38,6 @@ export function loadConfig(): Config {
     appPassword,
     sessionFile: process.env.ROOMY_SESSION_FILE || path.join(roomyDir, "session.json"),
     roomMapFile: process.env.ROOMY_ROOM_MAP_FILE || path.join(roomyDir, "rooms.json"),
+    cacheDir: process.env.ROOMY_CACHE_DIR || path.join(roomyDir, "cache"),
   };
 }

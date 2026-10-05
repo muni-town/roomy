@@ -28,6 +28,17 @@ export * as sync from "./sync";
 // (e.g. `@roomy-space/sdk/browser`) so library-specific deps stay
 // out of non-consuming bundles.
 export * as cache from "./cache";
+// The seam's types, named at the root: `export * as cache` yields a value
+// namespace, so a consumer that implements `CachePersister` (the Node CLI's
+// filesystem store) has no way to name the contract it implements. The
+// browser subpath re-exports the same set for browser adaptors.
+export type {
+  CachePersister,
+  Diagnostic,
+  PersistedEntry,
+  PersistedSnapshot,
+  SnapshotPolicy,
+} from "./cache";
 
 // Arktype schemas and validated XRPC transport.
 export * as schemas from "./schemas/index";
