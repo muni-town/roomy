@@ -216,13 +216,13 @@ export async function evaluatePush(
 ): Promise<PushDelivery[]> {
   const { spaceId, roomId, authorDid, messageId, timestamp, mentions, repliedToDids } = job;
   const facts = await resolveMessageFacts(spaceDb, roomId, authorDid, messageId);
-  log.info(`[push-evaluate] messageContent for ${messageId}: ${facts.messageContent ? facts.messageContent.slice(0, 60) + "…" : "null"}`);
+  log.debug(`[push-evaluate] messageContent for ${messageId}: ${facts.messageContent === null ? "null" : "present"}`);
 
   // Icon is recipient-independent → resolve once per message. Both message and
   // on-event digest pushes use the sender avatar → space avatar.
   const icon = await resolveMessageIcon(spaceDb, authorDid, spaceId);
   if (icon) {
-    log.info(`[push-evaluate] icon resolved for ${messageId}: ${icon}`);
+    log.debug(`[push-evaluate] icon resolved for ${messageId}`);
   } else {
     log.debug(`[push-evaluate] no icon for ${messageId} (author=${authorDid.slice(0, 30)}… space=${spaceId.slice(0, 30)}…)`);
   }
@@ -265,7 +265,7 @@ export async function evaluatePush(
     // Immediate push paths: busy always, quiet+mentioned/repliedTo,
     // engaged+mentioned/repliedTo.
     if (level === "busy" || (level === "quiet" && flagged) || (level === "engaged" && flagged)) {
-      log.info(`[push-evaluate] deliver ${level}${mentioned ? "+mentioned" : ""}${repliedTo ? "+repliedTo" : ""} → ${did.slice(0, 20)}… (${subs.length} subscription(s))`);
+      log.debug(`[push-evaluate] deliver ${level}${mentioned ? "+mentioned" : ""}${repliedTo ? "+repliedTo" : ""} → ${did.slice(0, 20)}… (${subs.length} subscription(s))`);
       deliveries.push({ userDid: did, payload: buildMessagePayload(job, facts, icon) });
       continue;
     }
