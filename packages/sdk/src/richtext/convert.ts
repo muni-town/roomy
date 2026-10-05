@@ -565,16 +565,29 @@ function textNodesWithFacets(
   return splitNewlines(nodes);
 }
 
-/** Convert a UTF-8 byte offset into a string to a UTF-16 code-unit index. */
-function utf8ToUtf16Index(s: string, byteOffset: number): number {
+/** Convert a UTF-8 byte offset into a string to a UTF-16 code-unit index.
+ *  Inverse of {@link utf16ToUtf8ByteOffset}. Walks the string accumulating
+ *  each code unit's UTF-8 byte length and stops when the cumulative length
+ *  reaches `byteOffset`. */
+export function utf8ToUtf16Index(s: string, byteOffset: number): number {
   const bytes = new TextEncoder().encode(s);
   if (byteOffset <= 0) return 0;
   if (byteOffset >= bytes.length) return s.length;
-  // Walk UTF-16 code units, tracking byte position.
   let bytePos = 0;
   for (let i = 0; i < s.length; i++) {
     const code = s.charCodeAt(i);
-    bytePos += code >= 0x80 ? (code >= 0x800 ? 3 : 2) : 1;
+    // UTF-8 byte length of the char:
+    //   < 0x80       → 1
+    //   < 0x800      → 2
+    //   U+0800..FFFF → 3
+    // An astral char is a UTF-16 surrogate pair (U+D800..U+DFFF each half):
+    // 4 bytes total, 2 per half — not 3. A half is a single UTF-16 code
+    // unit whose charCode is >= 0x800, so it must be special-cased or the
+    // pair is charged 6 bytes and every facet after the char lands one
+    // UTF-16 index early per pair (e.g. a link mark swallowing the space
+    // before it). Surrogate non-pair values here are invalid UTF-16, but the
+    // table degrades them to 2 rather than throwing.
+    bytePos += code < 0x80 ? 1 : code >= 0x10000 ? 4 : code >= 0xD800 && code <= 0xDFFF ? 2 : code >= 0x800 ? 3 : 2;
     if (bytePos >= byteOffset) return i + 1;
   }
   return s.length;

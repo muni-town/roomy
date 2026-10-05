@@ -22,7 +22,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { RICHTEXT_MIME, serializeBlocks } from "@roomy-space/sdk";
-import { messageHasVisibleContent, parseRichTextContent } from "./message-body.ts";
+import type { Block } from "@roomy-space/sdk";
+import { messageHasVisibleContent, parseRichTextContent, richTextBlocksEqual } from "./message-body.ts";
 
 /** The wire `content` for a rich-text body: base64 of the encoded document. */
 function wire(content: string): string {
@@ -112,5 +113,54 @@ describe("parseRichTextContent", () => {
 
   test("returns null for a legacy markdown body", () => {
     assert.equal(parseRichTextContent(wire(JSON.stringify({ not: "a doc" }))), null);
+  });
+});
+
+describe("richTextBlocksEqual", () => {
+  test("blocks built by different serializer paths compare equal", () => {
+    // The edit guard compares the editor's round-trip blocks (facets emitted
+    // by `proseMirrorDocToBlocks`) against the stored wire blocks — same
+    // shape, possibly different property order.
+    const stored: Block[] = [
+      {
+        $type: "space.roomy.richtext.blocks#text",
+        text: "seeded message",
+        facets: [
+          {
+            index: { byteStart: 0, byteEnd: 14 },
+            features: [
+              { $type: "space.roomy.richtext.facet#link", uri: "https://x" },
+            ],
+          },
+        ],
+      },
+    ];
+    // Same blocks with facet object keys in the reverse order.
+    const roundTripped: Block[] = [
+      {
+        $type: "space.roomy.richtext.blocks#text",
+        facets: [
+          {
+            features: [
+              { uri: "https://x", $type: "space.roomy.richtext.facet#link" },
+            ],
+            index: { byteEnd: 14, byteStart: 0 },
+          },
+        ],
+        text: "seeded message",
+      },
+    ];
+    assert.equal(richTextBlocksEqual(stored, roundTripped), true);
+  });
+
+  test("a changed block is not equal", () => {
+    const a: Block[] = [{ $type: "space.roomy.richtext.blocks#text", text: "a" }];
+    const b: Block[] = [{ $type: "space.roomy.richtext.blocks#text", text: "b" }];
+    assert.equal(richTextBlocksEqual(a, b), false);
+  });
+
+  test("a missing block is not equal", () => {
+    const one: Block[] = [{ $type: "space.roomy.richtext.blocks#text", text: "a" }];
+    assert.equal(richTextBlocksEqual(one, []), false);
   });
 });

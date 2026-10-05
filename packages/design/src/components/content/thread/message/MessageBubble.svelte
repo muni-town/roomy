@@ -51,6 +51,7 @@
     forwardEmbed,
     toolbar,
     reactions,
+    actions,
     deliveryActions,
     queuedLabel,
   }: {

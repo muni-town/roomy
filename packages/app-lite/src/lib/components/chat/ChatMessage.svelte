@@ -35,7 +35,7 @@
   } from "$lib/write-refusal.svelte";
   import { RICHTEXT_MIME, extractFacetUrls } from "@roomy-space/sdk";
   import type { schemas, Block } from "@roomy-space/sdk";
-  import { parseRichTextContent, messageHasVisibleContent } from "./message-body";
+  import { parseRichTextContent, messageHasVisibleContent, richTextBlocksEqual } from "./message-body";
   import { extractUrls, fetchEmbedData } from "$lib/embed/embed-service";
 
   type LinkEmbedData = typeof schemas.queries.getMessage.LinkEmbedData.infer;
@@ -371,7 +371,12 @@
     }));
     // Save when the content changed OR any link preview state changed (e.g.
     // the author dismissed/re-added a preview without touching the text).
-    const contentUnchanged = !isRichText && newContent === message.content;
+    // Rich-text content cannot be compared as strings: the editor produces
+    // markdown while `message.content` is the base64-encoded wire document,
+    // so compare the round-tripped blocks against the stored ones instead.
+    const contentUnchanged = isRichText
+      ? richTextBlocksEqual(submittedBlocks, parseRichTextContent(message.content) ?? [])
+      : newContent === message.content;
     const shownUrls = new Set((message.linkEmbeds ?? []).map((l) => l.url));
     const linksChanged = linkAttachments.some((a) => a.showPreview !== shownUrls.has(a.uri));
     if (contentUnchanged && !linksChanged) {

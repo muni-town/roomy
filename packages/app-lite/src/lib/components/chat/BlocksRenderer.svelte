@@ -1,32 +1,13 @@
 <script lang="ts">
+  import { parseInternalLinkHref, utf8ToUtf16Index } from "@roomy-space/sdk";
   import type { Block, Facet, FacetFeature } from "@roomy-space/sdk";
-  import { parseInternalLinkHref } from "@roomy-space/sdk";
   import { enrichInternalLinks, internalLinkOrigins } from "./enrich-internal-links";
-
   let {
     blocks,
   }: {
     /** Blocks+facets message body to render (new format). */
     blocks: Block[];
   } = $props();
-
-  /**
-   * Facet byte offsets are UTF-8; JS string slicing is UTF-16. Convert a
-   * UTF-8 byte offset into a UTF-16 code-unit index by walking the string
-   * and accumulating each code unit's UTF-8 byte length.
-   */
-  function utf8ToUtf16Index(s: string, byteOffset: number): number {
-    const bytes = new TextEncoder().encode(s);
-    if (byteOffset <= 0) return 0;
-    if (byteOffset >= bytes.length) return s.length;
-    let bytePos = 0;
-    for (let i = 0; i < s.length; i++) {
-      const code = s.charCodeAt(i);
-      bytePos += code >= 0x80 ? (code >= 0x800 ? 3 : 2) : 1;
-      if (bytePos >= byteOffset) return i + 1;
-    }
-    return s.length;
-  }
 
   /** Clamp a facet's byte range to the text, then convert to UTF-16 indices. */
   function facetRange(text: string, facet: Facet): [number, number] {

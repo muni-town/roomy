@@ -68,3 +68,29 @@ export function messageHasVisibleContent(
   // Legacy markdown: blank/whitespace-only bodies render nothing.
   return content.trim() !== "";
 }
+
+/**
+ * Canonical JSON with object keys sorted, so two structures built by
+ * different serializer paths (the stored wire blocks vs the editor's
+ * round-trip) compare by shape, not by property order.
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "";
+  if (Array.isArray(value))
+    return `[${value.map(canonicalJson).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys
+    .map((k) => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`)
+    .join(",")}}`;
+}
+
+/**
+ * Structural equality of two blocks+facets bodies, order-insensitive on
+ * object keys. Used by the edit save path to decide "nothing changed", where
+ * the submitted blocks come from the editor's round-trip
+ * (`blocksToProseMirrorDoc` → `proseMirrorDocToBlocks`) while the stored ones
+ * are the wire document — equal in content, not necessarily in key order.
+ */
+export function richTextBlocksEqual(a: Block[], b: Block[]): boolean {
+  return canonicalJson(a) === canonicalJson(b);
+}

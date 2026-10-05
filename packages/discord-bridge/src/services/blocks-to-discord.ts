@@ -9,24 +9,11 @@
  * which Discord auto-links).
  *
  * Facet indices are UTF-8 byte offsets into the block `text`. This module
- * centralises the byte→UTF-16 conversion needed to slice JS strings.
- */
-
+ * centralises the byte→UTF-16 conversion by importing the SDK's shared
+ * `utf8ToUtf16Index` (astral chars are surrogate PAIRS — the pre-3.0 copy
+ * here charged each half 3 bytes, slicing emoji-preceded spans wrong). */
+import { utf8ToUtf16Index } from "@roomy-space/sdk";
 import type { Block, Facet, FacetFeature } from "@roomy-space/sdk";
-
-/** Convert a UTF-8 byte offset into a JS string to a UTF-16 code-unit index. */
-function utf8ToUtf16(s: string, byteOffset: number): number {
-	const bytes = new TextEncoder().encode(s);
-	if (byteOffset <= 0) return 0;
-	if (byteOffset >= bytes.length) return s.length;
-	let bytePos = 0;
-	for (let i = 0; i < s.length; i++) {
-		const c = s.charCodeAt(i);
-		bytePos += c >= 0x800 ? 3 : c >= 0x80 ? 2 : 1;
-		if (bytePos >= byteOffset) return i + 1;
-	}
-	return s.length;
-}
 
 /**
  * Render one inline segment, wrapping it in Discord markdown for the facet
@@ -86,8 +73,8 @@ function renderInline(text: string, facets: Facet[] | undefined): string {
 	);
 	const boundaries = new Set<number>([0, text.length]);
 	for (const f of sorted) {
-		boundaries.add(utf8ToUtf16(text, f.index.byteStart));
-		boundaries.add(utf8ToUtf16(text, f.index.byteEnd));
+		boundaries.add(utf8ToUtf16Index(text, f.index.byteStart));
+		boundaries.add(utf8ToUtf16Index(text, f.index.byteEnd));
 	}
 	const points = [...boundaries].sort((a, b) => a - b);
 
@@ -100,8 +87,8 @@ function renderInline(text: string, facets: Facet[] | undefined): string {
 		if (!segment) continue;
 		const features: FacetFeature[] = [];
 		for (const f of sorted) {
-			const fStart = utf8ToUtf16(text, f.index.byteStart);
-			const fEnd = utf8ToUtf16(text, f.index.byteEnd);
+			const fStart = utf8ToUtf16Index(text, f.index.byteStart);
+			const fEnd = utf8ToUtf16Index(text, f.index.byteEnd);
 			if (start >= fStart && end <= fEnd) {
 				features.push(...f.features);
 			}
