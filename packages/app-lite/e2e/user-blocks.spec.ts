@@ -17,6 +17,8 @@
  * access-settings spec does, so it needs no admin allowlist.
  */
 
+import type { Page } from "@playwright/test";
+import { SCOPE_SETS } from "../src/lib/scopes.ts";
 import { expect, test, waitForAuthenticated } from "./spec-helpers.ts";
 import {
   APPSERVER_HTTP_ORIGIN,
@@ -25,7 +27,6 @@ import {
   PDS_ORIGIN,
   TEST_USER_DID,
 } from "./fixtures.ts";
-import type { Page } from "@playwright/test";
 
 const BLOCK_COLLECTION = "space.roomy.user.block";
 const OTHER_USER_PROFILE_PATH = `/user/${OTHER_USER_DID}`;
@@ -119,6 +120,23 @@ async function withoutUserBlocksFlag(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Set the scope the stub PDS authorizes repo writes against — the session's
+ * grant, which a real consent round-trip would have set.
+ *
+ * Test-mode sessions hold whatever tier they requested, and `blocks` is not in
+ * it: the block scope is still ceiling-only, so a write of
+ * `space.roomy.user.block` is refused until a spec says otherwise. This test is
+ * about the write, not the gate, so it states the grant it assumes. Each test
+ * sets its own, so the file is order-independent.
+ */
+async function setGrantedScope(page: Page, scope: string): Promise<void> {
+  const res = await page.request.post(`${PDS_ORIGIN}/__e2e/granted-scope`, {
+    data: { scope },
+  });
+  expect(res.ok()).toBe(true);
+}
+
 const blockButton = (page: Page) =>
   page.getByRole("button", { name: "Block this user" });
 const unblockButton = (page: Page) =>
@@ -135,6 +153,11 @@ test.describe("blocking an account", () => {
     // The action sits on the other user's profile, and starts unblocked.
     await expect(blockButton(page)).toBeVisible();
     await expect(await listBlocks(page, TEST_USER_DID)).toHaveLength(0);
+
+    // This test covers the write, so the session is given the grant it needs
+    // first. Without it the stub PDS refuses the write — the same scope-miss
+    // the stale-session test below asserts deliberately.
+    await setGrantedScope(page, SCOPE_SETS.blocks);
 
     await blockButton(page).click();
 
