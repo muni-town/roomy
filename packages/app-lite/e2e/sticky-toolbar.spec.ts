@@ -70,6 +70,34 @@ const PINNED_TOP_MAX = 32;
  *  `bits-ui`'s ScrollArea.Viewport carries this attribute. */
 const VIEWPORT_SELECTOR = "[data-scroll-area-viewport]";
 
+/** The message hover toolbar's actions button, by its accessible name. */
+const ACTIONS_LABEL = "More actions";
+
+/**
+ * Ceiling on any single wait for the toolbar — the mounted assertion, a box
+ * read, the click.
+ *
+ * The toolbar mounts only while its message row is hovered, and the list is
+ * virtualized, so any of these can be waiting on a row the browser has not
+ * rendered or has just unmounted. Unbounded, such a wait runs out the whole
+ * test budget and reports only `Test timeout of 60000ms exceeded`, which names
+ * neither the toolbar nor the reason.
+ */
+const TOOLBAR_TIMEOUT = 5_000;
+
+/**
+ * The toolbar's box, or `null` if it has no visible box.
+ *
+ * The mounted count is asserted immediately before the read. The toolbar is
+ * unmounted whenever its row is not hovered, so "the toolbar was not there" is
+ * the failure worth reporting; a read failing on its own reports the read.
+ */
+async function actionsBox(page: Page) {
+  const actions = page.getByLabel(ACTIONS_LABEL);
+  await expect(actions).toHaveCount(1, { timeout: TOOLBAR_TIMEOUT });
+  return await actions.boundingBox({ timeout: TOOLBAR_TIMEOUT });
+}
+
 /** POST one message through the real write path, as the test user. */
 async function sendTallMessage(text: string): Promise<void> {
   const serialized = serializeBlocks([
@@ -171,7 +199,7 @@ async function scrollIntoBodyAndHover(page: Page): Promise<void> {
     )
     .toBeLessThan(8);
 
-  const box = await viewport.boundingBox();
+  const box = await viewport.boundingBox({ timeout: TOOLBAR_TIMEOUT });
   if (!box) throw new Error("chat viewport has no box");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 }
@@ -182,8 +210,10 @@ async function scrollIntoBodyAndHover(page: Page): Promise<void> {
  * pre-fix behaviour for a tall message.
  */
 async function toolbarTopOffset(page: Page): Promise<number> {
-  const box = await page.getByLabel("More actions").first().boundingBox();
-  const viewport = await page.locator(VIEWPORT_SELECTOR).boundingBox();
+  const box = await actionsBox(page);
+  const viewport = await page
+    .locator(VIEWPORT_SELECTOR)
+    .boundingBox({ timeout: TOOLBAR_TIMEOUT });
   if (!box || !viewport) throw new Error("toolbar or viewport has no box");
   return box.y - viewport.y;
 }
@@ -198,8 +228,7 @@ test.describe("the message toolbar while reading a tall message", () => {
     await waitForAuthenticated(page);
     await scrollIntoBodyAndHover(page);
 
-    const actions = page.getByLabel("More actions");
-    await expect(actions).toHaveCount(1);
+    const actions = page.getByLabel(ACTIONS_LABEL);
 
     // The load-bearing assertion: pinned to the top of the chat area rather
     // than carried off-screen by the message header.
@@ -208,14 +237,17 @@ test.describe("the message toolbar while reading a tall message", () => {
     expect(offset).toBeLessThan(PINNED_TOP_MAX);
 
     // Wholly on screen, so the actions are reachable, not merely positioned.
-    const viewport = await page.locator(VIEWPORT_SELECTOR).boundingBox();
-    const box = await actions.first().boundingBox();
+    const box = await actionsBox(page);
+    const viewport = await page
+      .locator(VIEWPORT_SELECTOR)
+      .boundingBox({ timeout: TOOLBAR_TIMEOUT });
     if (!viewport || !box) throw new Error("toolbar or viewport has no box");
     expect(box.y + box.height).toBeLessThanOrEqual(viewport.y + viewport.height);
 
     // …and usable: opening the menu is what "reachable without scrolling back"
     // means to a reader.
-    await actions.first().click();
+    await expect(actions).toHaveCount(1, { timeout: TOOLBAR_TIMEOUT });
+    await actions.click({ timeout: TOOLBAR_TIMEOUT });
     await expect(page.locator('[role="menu"]')).toBeVisible();
   });
 
@@ -227,9 +259,6 @@ test.describe("the message toolbar while reading a tall message", () => {
     await page.goto(SEED_ROOM_2_PATH);
     await waitForAuthenticated(page);
     await scrollIntoBodyAndHover(page);
-
-    const actions = page.getByLabel("More actions");
-    await expect(actions).toHaveCount(1);
 
     const viewport = page.locator(VIEWPORT_SELECTOR);
     const near = await toolbarTopOffset(page);

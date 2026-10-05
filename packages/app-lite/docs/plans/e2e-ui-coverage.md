@@ -240,6 +240,17 @@ Demonstrated, not asserted, on 2026-09-25:
    is a stable, single-state difference, not a race the assertion happened to
    catch.
 
+7. **Made the message toolbar never mount** (`ChatMessage.svelte`'s
+   `showToolbar` derived forced to `false`, keeping the specs).
+   Demonstrated 2026-10-02:
+   → both `sticky-toolbar.spec.ts` tests **failed** in 5s each, with
+   `Expected: 1, Received: 0` on `getByLabel('More actions')`.
+   → Before the bound was added, the same condition failed with
+   `locator.boundingBox: Test timeout of 60000ms exceeded` after the full 60s
+   test budget (the same call at `e2e/sticky-toolbar.spec.ts:185`), which names
+   neither the toolbar nor the reason. Every wait on the toolbar — the mounted
+   count, the box read, the click — now carries a 5s ceiling.
+
 All breaks were reverted; the suite is green.
 
 ---
