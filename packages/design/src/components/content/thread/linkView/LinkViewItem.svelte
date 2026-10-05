@@ -9,10 +9,12 @@
    * footer rule carrying the share date and the open-in-new affordance.
    *
    * Cards are passive content, so they stay flat and warm — a hairline stone
-   * border, no backdrop-blur (DESIGN.md's Frosted-Not-Glass rule reserves
-   * blur for interactive elements). Interaction warms the border toward the
-   * accent and lifts the card 2px; the lift is disabled under
-   * `prefers-reduced-motion`.
+   * border, no backdrop-blur. Interaction uses the shared shadow-lift idiom
+   * (DESIGN.md §4): the card rests 2px low and rises on hover/focus to reveal
+   * a hard offset shadow underneath, pressing flat again on `active`. The
+   * transition is the snap-fast 75ms used by `shadow-lift` and the buttons.
+   * Under `prefers-reduced-motion` the transition is limited to colour, so the
+   * lift still marks hover but no longer animates.
    */
   import { IconArrowUpRight, IconLink, IconPlay } from "../../../../icons/index";
   import { formatDate, formatRelativeTime } from "../../../../utils/date.js";
@@ -82,7 +84,7 @@
   href={link.url}
   target="_blank"
   rel="noopener noreferrer"
-  class="group relative flex flex-col overflow-hidden rounded-2xl border border-base-300/70 bg-base-100/60 transition-[transform,border-color,background-color,box-shadow] duration-300 ease-out hover:-translate-y-0.5 hover:border-accent-400/70 hover:bg-accent-500/[0.04] hover:shadow-[0_6px_16px_-8px_var(--color-accent-700)] focus-visible:border-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-base-50 motion-reduce:transition-colors motion-reduce:hover:translate-y-0 dark:border-base-800 dark:bg-base-900/40 dark:hover:border-accent-700/70 dark:hover:bg-accent-500/[0.06] dark:focus-visible:ring-offset-base-950"
+  class="group relative flex flex-col overflow-hidden rounded-2xl border border-base-300/70 bg-base-100/60 translate-y-[2px] transition-all duration-75 ease-out hover:translate-y-0 hover:border-accent-400/70 hover:bg-accent-500/[0.04] hover:shadow-[0_4px_0_0_var(--shadow-button-color)] active:translate-y-[2px] active:shadow-none focus-visible:translate-y-0 focus-visible:border-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-base-50 motion-reduce:transition-colors dark:border-base-800 dark:bg-base-900/40 dark:hover:border-accent-700/70 dark:hover:bg-accent-500/[0.06] dark:focus-visible:ring-offset-base-950 [--shadow-button-color:var(--color-base-300)] dark:[--shadow-button-color:var(--color-base-800)]"
 >
   <!-- Media band: a real preview when the enricher found one, else a quiet
        accent plate so an unenriched link reads as intentional absence rather
@@ -100,7 +102,7 @@
       ></video>
       <div class="absolute inset-0 flex items-center justify-center">
         <span
-          class="flex size-11 items-center justify-center rounded-full bg-base-950/55 text-base-50 backdrop-blur-sm transition-transform duration-300 ease-out group-hover:scale-110 motion-reduce:transition-none"
+          class="flex size-11 items-center justify-center rounded-full bg-base-950/60 text-base-50 transition-transform duration-150 ease-out group-hover:scale-110 motion-reduce:transition-none"
         >
           <IconPlay class="size-6" />
         </span>
@@ -109,7 +111,7 @@
       <img
         alt=""
         loading="lazy"
-        class="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+        class="h-full w-full object-cover transition-transform duration-150 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
         src={stillUrl}
       />
     {:else}
@@ -160,7 +162,7 @@
     {/if}
 
     <span
-      class="flex shrink-0 items-center text-base-500 transition-colors duration-300 group-hover:text-accent-600 dark:text-base-400 dark:group-hover:text-accent-300 motion-reduce:transition-none"
+      class="flex shrink-0 items-center text-base-500 transition-colors duration-75 group-hover:text-accent-600 dark:text-base-400 dark:group-hover:text-accent-300 motion-reduce:transition-none"
       aria-hidden="true"
     >
       <IconArrowUpRight class="size-4" />

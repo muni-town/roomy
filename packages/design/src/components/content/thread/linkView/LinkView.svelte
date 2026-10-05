@@ -100,7 +100,7 @@
       {#if hasMore}
         <div
           bind:this={sentinel}
-          class="flex items-center justify-center gap-2 py-6 text-sm text-base-400"
+          class="flex items-center justify-center gap-2 py-6 text-sm text-base-500 dark:text-base-400"
         >
           <span
             class="size-3.5 animate-spin rounded-full border-2 border-base-300 border-t-accent-500 dark:border-base-700 dark:border-t-accent-500"
