@@ -23,10 +23,11 @@ import { decodeContent, decodeRichTextBody } from "../db/content.ts";
 import { RICHTEXT_MIME, blocksToPlaintext } from "@roomy-space/sdk";
 import { hydrateProfiles } from "./profileStore.ts";
 import {
-  readRoomActivityProjection,
+  readRoomActivityProjectionRows,
   rebuildRoomActivity,
   warnProjectionUnavailable,
   type RoomActivityAuthor,
+  type RoomActivitySummary,
 } from "./roomActivityProjection.ts";
 
 export interface ThreadMember {
@@ -499,18 +500,48 @@ function decodeBoardPreview(
  * caller needs (kind, name, canonical parent, and the latest message's decoded
  * content).
  *
- * Returns `null` when the projection cannot answer the whole page — the table is
- * missing, or at least one requested room has no row — which sends the caller to
- * the live scan. A partially-projected answer is deliberately not assembled; see
- * `readRoomActivityProjection`.
+ * On a partial hit the missing rooms are warmed first and the page is then
+ * served entirely from the projection. Warming only those rooms costs their
+ * messages and populates the rows, so the next read is fully projected; the
+ * live scan — which reads every message on the page — is left for the one case
+ * it is needed: a DB with no projection table (a schema predating it, or a read
+ * error).
+ *
+ * A partial hit is the ordinary case on a rebuilt DB and on a board whose quiet
+ * rooms have never had a message to project: the table is fine, a few rooms
+ * simply have no row.
+ *
+ * Best-effort: if the warm or the re-read fails, return `null` so the caller
+ * falls back to the scan, which cannot fail this way.
  */
 async function fetchProjectedRoomActivity(
   db: DbLike,
   roomIds: string[],
 ): Promise<Map<string, ThreadActivity> | null> {
-  const projected = await readRoomActivityProjection(db, roomIds);
-  if (!projected) return null;
+  const read = await readRoomActivityProjectionRows(db, roomIds);
+  if (read === null) return null;
+  if (read.missing.length > 0) {
+    try {
+      await rebuildRoomActivity(db, read.missing);
+    } catch (err) {
+      warnProjectionUnavailable(err);
+      return null;
+    }
+    const reread = await readRoomActivityProjectionRows(db, roomIds);
+    if (reread === null || reread.missing.length > 0) return null;
+    return projectRoomActivity(db, roomIds, reread.rows);
+  }
+  return projectRoomActivity(db, roomIds, read.rows);
+}
 
+/**
+ * Render the board rows for a page entirely covered by `projected`.
+ */
+async function projectRoomActivity(
+  db: DbLike,
+  roomIds: string[],
+  projected: Map<string, RoomActivitySummary>,
+): Promise<Map<string, ThreadActivity> | null> {
   const ph = roomIds.map(() => "?").join(",");
 
   // Room shape + latest-message content, one row per room. The content columns

@@ -655,7 +655,7 @@ describe("room_activity projection parity", () => {
     expect(projected.get(THREAD_A)!.latestMembers.map((m) => m.did)).toEqual([ALICE]);
   });
 
-  test("a partially projected page falls back and warms every room it read", async () => {
+  test("a partially projected page is completed by warming only the missing rooms", async () => {
     const { db, asyncDb } = freshDb();
     seed(db);
 
@@ -664,13 +664,68 @@ describe("room_activity projection parity", () => {
     // Only one of the two rooms is projected.
     await rebuildRoomActivity(asyncDb, [THREAD_A]);
 
-    const result = await fetchRoomActivity(asyncDb, [THREAD_A, THREAD_C]);
+    // Count the rows each statement returns: the point of the partial warm is
+    // that the room WITH a row is never re-read. A scan of the page would
+    // return a row per message for both rooms; warming the missing one returns
+    // rows for that room only.
+    const seen: Array<{ sql: string; rows: number }> = [];
+    const counting: DbLike = {
+      ...asyncDb,
+      query(sql: string) {
+        const inner = asyncDb.query(sql);
+        return {
+          async all<T>(...params: unknown[]): Promise<T[]> {
+            const rows = await inner.all<T>(...params);
+            seen.push({ sql, rows: rows.length });
+            return rows;
+          },
+          async get<T>(...params: unknown[]): Promise<T | null> {
+            const row = await inner.get<T>(...params);
+            seen.push({ sql, rows: row == null ? 0 : 1 });
+            return row;
+          },
+        };
+      },
+    };
+
+    const result = await fetchRoomActivity(counting, [THREAD_A, THREAD_C]);
+    expect(result.get(THREAD_A)!.latestMessage!.content).toBe("a");
     expect(result.get(THREAD_C)!.latestMessage!.content).toBe("c");
 
-    // The fallback warmed the room it had to read, so the whole page is
+    // `fetchRoomActivity`'s own scan reports the rooms it reads by returning a
+    // row per room; the message-level scan returns one per message. Neither may
+    // appear: the page was answered from the projection plus a warm of the one
+    // room that had no row.
+    const scanLike = seen.filter(
+      (s) => /left join comp_content fcc/.test(s.sql) && s.rows > 1,
+    );
+    expect(scanLike).toEqual([]);
+
+    // The fallback warmed the row it had to read, so the whole page is
     // projected from the next read on — this is what stops a single quiet room
     // from pinning a board to the scan forever.
     expect(await readRoomActivityProjection(asyncDb, [THREAD_A, THREAD_C])).not.toBeNull();
+  });
+
+  test("a page the projection cannot answer at all is served by the scan", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+    postMessage(db, THREAD_A, ALICE, 1000, "a");
+
+    // No projection table: the one case that still needs the live scan, because
+    // there is nowhere to warm to.
+    const noProjection = new Database(":memory:");
+    noProjection.exec("pragma foreign_keys = on");
+    noProjection.exec(
+      readFileSync(SCHEMA_PATH, "utf8").replace(
+        /create table if not exists room_activity[\s\S]*?\) strict;/,
+        "",
+      ),
+    );
+    seed(noProjection);
+    postMessage(noProjection, THREAD_A, ALICE, 1000, "a");
+    const result = await fetchRoomActivity(toAsyncDb(noProjection), [THREAD_A]);
+    expect(result.get(THREAD_A)!.latestMessage!.content).toBe("a");
   });
 });
 

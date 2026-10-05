@@ -19,6 +19,7 @@ import type { DbLike } from "../db/types.ts";
 import {
   maintainRoomActivity,
   readRoomActivityProjection,
+  readRoomActivityProjectionRows,
   rebuildRoomActivity,
 } from "./roomActivityProjection.ts";
 
@@ -179,5 +180,56 @@ describe("room_activity projection maintenance", () => {
     expect(
       maintainRoomActivity({ $type: "space.roomy.message.deleteMessage.v0" }, false),
     ).toBeNull();
+  });
+});
+
+describe("reading a page the projection only partly covers", () => {
+  test("reports which rooms it has no row for, and answers the rest", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+    postMessage(db, "01MSG000000000000000000001", ROOM_A, 1000, ALICE);
+    await rebuildRoomActivity(asyncDb, [ROOM_A]);
+
+    // A partial hit is the ordinary state, not a failure: ROOM_A has a row from
+    // a message event, ROOM_B is quiet, so nothing has ever created one. The
+    // read has to say WHICH rooms are missing, because that is the set a caller
+    // can complete cheaply; an all-or-nothing read leaves it no choice but to
+    // re-read every message on the page.
+    const read = (await readRoomActivityProjectionRows(asyncDb, [ROOM_A, ROOM_B]))!;
+    expect(read.rows.size).toBe(1);
+    expect(read.rows.get(ROOM_A)?.latestAt).toBe(1000);
+    expect(read.missing).toEqual([ROOM_B]);
+
+    // The all-or-nothing form keeps its old contract.
+    expect(await readRoomActivityProjection(asyncDb, [ROOM_A, ROOM_B])).toBeNull();
+    expect(await readRoomActivityProjection(asyncDb, [ROOM_A])).not.toBeNull();
+  });
+
+  test("warming only the missing rooms resolves the whole page", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+    postMessage(db, "01MSG000000000000000000001", ROOM_A, 1000, ALICE);
+    postMessage(db, "01MSG000000000000000000002", ROOM_B, 2000, BOB);
+
+    const first = (await readRoomActivityProjectionRows(asyncDb, [ROOM_A, ROOM_B]))!;
+    expect(first.missing).toEqual([ROOM_A, ROOM_B]);
+
+    await rebuildRoomActivity(asyncDb, first.missing);
+
+    const second = (await readRoomActivityProjectionRows(asyncDb, [ROOM_A, ROOM_B]))!;
+    expect(second.missing).toEqual([]);
+    expect(second.rows.get(ROOM_B)?.latestAt).toBe(2000);
+    expect(await readRoomActivityProjection(asyncDb, [ROOM_A, ROOM_B])).not.toBeNull();
+  });
+
+  test("a projection that cannot be read at all reports no rows, not an empty page", async () => {
+    // `null` is the only answer that means "use the live scan": it is the table
+    // being unusable. Returning `{rows: empty, missing: all}` would be
+    // indistinguishable from a healthy table whose rooms are all quiet, and a
+    // caller would warm rows into a table it cannot read.
+    const db = new Database(":memory:");
+    const asyncDb = toAsyncDb(db);
+    expect(await readRoomActivityProjectionRows(asyncDb, [ROOM_A])).toBeNull();
+    expect(await readRoomActivityProjection(asyncDb, [ROOM_A])).toBeNull();
   });
 });

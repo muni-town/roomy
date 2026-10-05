@@ -386,25 +386,36 @@ function parseRecentAuthors(raw: string): RoomActivityAuthor[] {
 }
 
 /**
- * Read the projection for `roomIds`.
+ * One read of the projection, keeping "no row here" apart from "no projection".
  *
- * `null` means "no projection to read" — the table is absent (a sync adapter
- * whose schema predates it), or it holds no row for at least one requested room
- * (a blue-green rebuild, or a room whose row was just invalidated). Both are
- * indistinguishable to the caller and mean the same thing: fall back to the live
- * scan.
+ * `null` is the table being unreadable — absent (a sync adapter whose schema
+ * predates it) or erroring. That is the only case where a caller has no choice
+ * but the live scan, which reads every message on the page.
  *
- * A partially-hit page is deliberately NOT accepted. Mixing projected and
- * scanned rooms on one page would leave two code paths producing the same
- * response, which cannot be kept honest; requiring every room present makes "the
- * projection answered this page" a page-level fact the tests can assert against
- * the fallback for exact equality.
+ * `missing` is the ordinary partial hit: the table answered, but holds no row
+ * for these rooms. A row is created by a message event or by a read-path warm,
+ * never by rematerialisation, so a quiet room, a room whose row a delete or
+ * move just invalidated, and a freshly rebuilt DB are all missing rows while
+ * the table itself is perfectly healthy. The caller completes those rooms with
+ * `rebuildRoomActivity` and re-reads, which is proportional to the messages in
+ * the missing rooms; falling back to the scan instead would re-read every
+ * message on the page for the sake of the few that were missing.
  */
-export async function readRoomActivityProjection(
+export interface RoomActivityProjectionRead {
+  /** Rows found, keyed by room id. */
+  rows: Map<string, RoomActivitySummary>;
+  /** Requested rooms with no row, in the order requested. */
+  missing: string[];
+}
+
+/**
+ * Read the projection per row, reporting which rooms it could not answer for.
+ */
+export async function readRoomActivityProjectionRows(
   db: DbLike,
   roomIds: readonly string[],
-): Promise<Map<string, RoomActivitySummary> | null> {
-  if (roomIds.length === 0) return null;
+): Promise<RoomActivityProjectionRead | null> {
+  if (roomIds.length === 0) return { rows: new Map(), missing: [] };
   const ph = roomIds.map(() => "?").join(", ");
   let rows: Array<{
     room_id: string;
@@ -432,8 +443,28 @@ export async function readRoomActivityProjection(
       authors: parseRecentAuthors(row.recent_authors),
     });
   }
-  if (out.size !== roomIds.length) return null;
-  return out;
+  const missing = roomIds.filter((id) => !out.has(id));
+  return { rows: out, missing };
+}
+
+/**
+ * Read the projection for `roomIds`, or `null` when it cannot answer the whole
+ * page — either at all, or for some of its rooms (`readRoomActivityProjectionRows`
+ * carries that distinction for callers that want to complete the page).
+ *
+ * A partially-hit page is not returned as a map. Mixing projected and scanned
+ * rooms in one response would leave two code paths producing the same answer,
+ * which cannot be kept honest; requiring every room present makes "the
+ * projection answered this page" a page-level fact the tests can assert against
+ * the fallback for exact equality.
+ */
+export async function readRoomActivityProjection(
+  db: DbLike,
+  roomIds: readonly string[],
+): Promise<Map<string, RoomActivitySummary> | null> {
+  const read = await readRoomActivityProjectionRows(db, roomIds);
+  if (read === null || read.missing.length > 0) return null;
+  return read.rows;
 }
 
 let warnedUnavailable = false;
