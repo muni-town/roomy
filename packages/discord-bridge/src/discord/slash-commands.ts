@@ -331,7 +331,7 @@ export const slashCommands = [
 	{
 		name: "roomy-backfill",
 		description:
-			"Re-backfill from Discord history. Resets cursors so gaps are caught; dedup prevents duplicates.",
+			"Re-backfill missing history in both directions. Dedup prevents duplicates.",
 		contexts: [DiscordInteractionContextType.Guild],
 		integrationTypes: [DiscordApplicationIntegrationType.GuildInstall],
 		defaultMemberPermissions: ["ADMINISTRATOR"],
@@ -467,9 +467,23 @@ export async function handleInteractionCreate(
 		} else if (commandName === "disconnect-roomy-space") {
 			await handleDisconnect(interaction, repo, spaceManager, guildId);
 		} else if (commandName === "roomy-bridge-channel") {
-			await handleBridgeChannel(interaction, repo, spaceManager, bot, guildId);
+			await handleBridgeChannel(
+				interaction,
+				repo,
+				spaceManager,
+				bot,
+				guildId,
+				roomyRouter,
+			);
 		} else if (commandName === "roomy-backfill") {
-			await handleBackfill(interaction, repo, spaceManager, bot, guildId);
+			await handleBackfill(
+				interaction,
+				repo,
+				spaceManager,
+				bot,
+				guildId,
+				roomyRouter,
+			);
 		} else if (commandName === "roomy-repair-sidebar") {
 			await handleRepairSidebar(interaction, repo, spaceManager, guildId);
 		}
@@ -1118,6 +1132,7 @@ async function handleBridgeChannel(
 	spaceManager: SpaceManager,
 	bot: DiscordBotWithCache,
 	guildId: string,
+	roomyRouter: RoomyEventRouter,
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
@@ -1138,6 +1153,7 @@ async function handleBridgeChannel(
 				guildId,
 				configs,
 				getSubOption,
+				roomyRouter,
 			);
 		} else if (subcommand.name === "remove") {
 			await handleChannelRemove(
@@ -1174,6 +1190,7 @@ async function handleChannelAdd(
 	guildId: string,
 	configs: BridgeConfig[],
 	getOption: (name: string) => string | undefined,
+	roomyRouter: RoomyEventRouter,
 ): Promise<void> {
 	const channelId = getOption("channel");
 	if (!channelId) {
@@ -1213,9 +1230,17 @@ async function handleChannelAdd(
 		createAdapters(bot, spaceManager, repo).roomy,
 		channelId,
 		guildId,
-	).catch((err) => {
-		log.error(`Backfill failed for channel ${channelId}`, err);
-	});
+	)
+		.then(() => {
+			// The walk above imports Discord history into the room; replaying the
+			// room's Roomy history right after closes the other gap — messages
+			// written in Roomy before this channel was bridged. The imports are
+			// already mapped, so the replay skips them.
+			return backfillRoomyHistory(roomyRouter, repo, guildId, [channelId]);
+		})
+		.catch((err) => {
+			log.error(`Backfill failed for channel ${channelId}`, err);
+		});
 }
 
 async function handleChannelRemove(
@@ -1300,6 +1325,7 @@ async function handleBackfill(
 	spaceManager: SpaceManager,
 	bot: DiscordBotWithCache,
 	guildId: string,
+	roomyRouter: RoomyEventRouter,
 ): Promise<void> {
 	if (!(await safeDefer(interaction, true))) return;
 
@@ -1314,6 +1340,23 @@ async function handleBackfill(
 		}
 
 		const channelOption = getStringOption(interaction.data?.options, "channel");
+		const channels = channelOption
+			? new Set([channelOption.toString()])
+			: collectGuildChannelIds(bot, repo, configs);
+		if (channels.size === 0) {
+			await interaction.edit({
+				content: "No bridged channels found to backfill.",
+			});
+			return;
+		}
+
+		// Roomy→Discord leg. The Discord-side walk started below copies Discord
+		// history into Roomy; it cannot recover messages written in Roomy before
+		// their room was bridged, because those events were never delivered to a
+		// subscription. Replay each mapped room's Roomy history into its Discord
+		// channel to close that gap. Detached: the reply is already sent, and a
+		// room that fails is logged and retried on the next run.
+		void backfillRoomyHistory(roomyRouter, repo, guildId, channels);
 
 		if (channelOption) {
 			const channelStr = channelOption.toString();
@@ -1334,14 +1377,6 @@ async function handleBackfill(
 				log.error(`Re-backfill failed for channel ${channelStr}`, err);
 			});
 		} else {
-			const channels = collectGuildChannelIds(bot, repo, configs);
-			if (channels.size === 0) {
-				await interaction.edit({
-					content: "No bridged channels found to backfill.",
-				});
-				return;
-			}
-
 			for (const channelId of channels) {
 				repo.resetChannelCursor(channelId);
 			}
@@ -1368,6 +1403,34 @@ async function handleBackfill(
 				content: "An error occurred while triggering re-backfill.",
 			});
 		} catch {}
+	}
+}
+
+/**
+ * Replay the Roomy history of every room behind `channels` into its Discord
+ * channel, one room at a time so the bridges' Discord rate limit is shared
+ * rather than raced. A room whose replay fails is logged and left for the next
+ * run: messages only become mapped after a successful Discord send.
+ */
+async function backfillRoomyHistory(
+	roomyRouter: RoomyEventRouter,
+	repo: BridgeRepository,
+	guildId: string,
+	channels: Iterable<string>,
+): Promise<void> {
+	for (const channelId of channels) {
+		for (const spaceDid of repo.getTargetSpacesForChannel(guildId, channelId)) {
+			const roomId = repo.getRoomyRoomId(spaceDid, channelId);
+			if (!roomId) continue;
+			try {
+				await roomyRouter.backfillRoomToDiscord(spaceDid, roomId);
+			} catch (err) {
+				log.error(
+					`Roomy→Discord backfill failed for room ${roomId} in ${spaceDid}`,
+					err,
+				);
+			}
+		}
 	}
 }
 

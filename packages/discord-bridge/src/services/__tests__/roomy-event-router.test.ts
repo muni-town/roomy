@@ -6,6 +6,8 @@
  * Covers: Roomy thread creation → Discord thread creation, echo prevention
  * for Discord-originated threads, message forwarding, and restart-resilient
  * pending thread metadata.
+ * Covers: RB01–RB10 — replaying a room's Roomy history into its Discord
+ * channel or thread.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
@@ -13,6 +15,7 @@ import {
 	Did,
 	type Event,
 	newUlid,
+	RICHTEXT_MIME,
 	serializeBlocks,
 	toBytes,
 	Ulid,
@@ -20,6 +23,8 @@ import {
 import { BridgeRepository } from "../../db/repository.ts";
 import { FileDiscordSender } from "../../discord/file-sender.ts";
 import { FileWebhookManager } from "../../discord/file-webhook-manager.ts";
+import type { SendMessageOptions } from "../../discord/sender.ts";
+import type { RoomyRoomMessage } from "../../roomy/gateway.ts";
 import { FileProfileResolver } from "../../roomy/file-profile-resolver.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import {
@@ -30,6 +35,7 @@ import {
 	GUILD,
 	ROOMY_CHANNEL_ULID,
 	ROOMY_MESSAGE_ULID,
+	ROOMY_MESSAGE_ULID_2,
 	ROOMY_THREAD_ULID,
 	SPACE_A,
 	SPACE_B,
@@ -187,7 +193,7 @@ function makeDeleteMessageEvent(options: {
 	} satisfies Event;
 }
 
-function setup(): {
+function setup(overrides: { discord?: FileDiscordSender } = {}): {
 	repo: BridgeRepository;
 	roomy: MockRoomyGateway;
 	discord: FileDiscordSender;
@@ -205,7 +211,7 @@ function setup(): {
 	);
 
 	const roomy = new MockRoomyGateway();
-	const discord = new FileDiscordSender();
+	const discord = overrides.discord ?? new FileDiscordSender();
 	// Faux reply/forward prefixes need the guild + original message content.
 	// The message carries a webhook id because bridged messages are authored
 	// by the channel's webhook, not the bot — which the delete path checks.
@@ -2132,5 +2138,274 @@ describe("resolveAttachmentUrl", () => {
 				"https://api.roomy.space",
 			),
 		).toBe("https://cdn.example.com/a.png");
+	});
+});
+
+// ─── Roomy → Discord history backfill ──────────────────────────────
+
+/** A room-history message fixture, as `space.roomy.room.getMessages` returns one. */
+function roomMessage(overrides: Partial<RoomyRoomMessage> = {}): RoomyRoomMessage {
+	return {
+		id: newUlid(),
+		content: "history message",
+		authorDid: "did:plc:history-author",
+		authorName: "History Author",
+		authorHandle: "history.bsky.social",
+		timestamp: "2026-01-01T00:00:00.000Z",
+		media: [],
+		...overrides,
+	};
+}
+
+/** Fails the send whose content contains `failOn`; every other send succeeds. */
+class FlakyDiscordSender extends FileDiscordSender {
+	#failOn: string;
+
+	constructor(failOn: string) {
+		super();
+		this.#failOn = failOn;
+	}
+
+	override async sendMessage(
+		channelId: string,
+		content: string,
+		options?: SendMessageOptions,
+	): Promise<string> {
+		if (content.includes(this.#failOn)) throw new Error("discord 500");
+		return super.sendMessage(channelId, content, options);
+	}
+}
+
+describe("RoomyEventRouter Roomy→Discord history backfill", () => {
+	/**
+	 * RB01: a room bridged after messages were written has those messages
+	 * replayed into its Discord channel, oldest first so a reply or forward
+	 * always points at a message that already exists.
+	 */
+	test("RB01: replays a room's history into its bridged channel", async () => {
+		const { repo, roomy, discord, router } = setup();
+		const older = roomMessage({ id: ROOMY_MESSAGE_ULID, content: "older" });
+		const newer = roomMessage({ id: ROOMY_MESSAGE_ULID_2, content: "newer" });
+		// getRoomMessages returns newest first.
+		roomy.seedRoomMessages(ROOMY_CHANNEL_ULID, [newer, older]);
+
+		const result = await router.backfillRoomToDiscord(
+			SPACE_A,
+			ROOMY_CHANNEL_ULID,
+		);
+
+		expectToBe(result.posted, 2);
+		expectToBe(result.skipped, 0);
+		expectToBe(result.failed, 0);
+		expect(discord.sent.map((m) => m.content)).toEqual(["older", "newer"]);
+		expectToBe(
+			discord.sent[0]?.options?.username,
+			"History Author - @history.bsky.social",
+		);
+		expectToBeDefined(discord.sent[0]?.options?.webhook);
+		// Mapped after the send, so the live router and later runs both dedupe.
+		expectToBe(
+			repo.getDiscordId(SPACE_A, "message", ROOMY_MESSAGE_ULID),
+			discord.sent[0]?.messageId,
+		);
+		expectToBe(
+			repo.getDiscordId(SPACE_A, "message", ROOMY_MESSAGE_ULID_2),
+			discord.sent[1]?.messageId,
+		);
+	});
+
+	/**
+	 * RB02: a message already mapped — bridged live, or posted by an earlier
+	 * run — is skipped rather than posted a second time.
+	 */
+	test("RB02: skips messages already mapped to a Discord message", async () => {
+		const { repo, roomy, discord, router } = setup();
+		repo.registerMapping(SPACE_A, "message", "900", ROOMY_MESSAGE_ULID);
+		roomy.seedRoomMessages(ROOMY_CHANNEL_ULID, [
+			roomMessage({ id: ROOMY_MESSAGE_ULID }),
+		]);
+
+		const result = await router.backfillRoomToDiscord(
+			SPACE_A,
+			ROOMY_CHANNEL_ULID,
+		);
+
+		expectToBe(result.posted, 0);
+		expectToBe(result.skipped, 1);
+		expect(discord.sent).toHaveLength(0);
+	});
+
+	/** RB03: a room with no Discord channel or thread is a no-op. */
+	test("RB03: an unbridged room posts nothing", async () => {
+		const { roomy, discord, router } = setup();
+		const roomId = "01NOSUCHROOM00000000000000";
+		roomy.seedRoomMessages(roomId, [roomMessage()]);
+
+		const result = await router.backfillRoomToDiscord(SPACE_A, roomId);
+
+		expectToBe(result.posted, 0);
+		expectToBe(result.skipped, 0);
+		expectToBe(result.failed, 0);
+		expect(discord.sent).toHaveLength(0);
+	});
+
+	/** RB04: rich text bodies are decoded and attachments uploaded. */
+	test("RB04: renders a rich text body and uploads its media", async () => {
+		const { roomy, discord, router } = setup();
+		const body = serializeBlocks([
+			{ $type: "space.roomy.richtext.blocks#text", text: "Hello from history" },
+		]);
+		roomy.seedRoomMessages(ROOMY_CHANNEL_ULID, [
+			roomMessage({
+				id: ROOMY_MESSAGE_ULID,
+				mimeType: body.mimeType,
+				content: Buffer.from(body.data).toString("base64"),
+				media: [
+					{
+						url: "atblob://did:plc:abc/cid1",
+						type: "image/png",
+						name: "pic.png",
+					},
+				],
+			}),
+		]);
+
+		await router.backfillRoomToDiscord(SPACE_A, ROOMY_CHANNEL_ULID);
+
+		expectToBe(discord.sent.length, 1);
+		expectToBe(discord.sent[0]?.content, "Hello from history");
+		expectToBe(discord.sent[0]?.options?.files?.[0]?.filename, "pic.png");
+	});
+
+	/** RB05: the replay pages over history up to the window bound. */
+	test("RB05: pages through history up to the window bound", async () => {
+		const { roomy, discord, router } = setup();
+		const messages = Array.from({ length: 150 }, (_, i) =>
+			roomMessage({ content: `m${i}` }),
+		);
+		roomy.seedRoomMessages(ROOMY_CHANNEL_ULID, messages);
+
+		const result = await router.backfillRoomToDiscord(
+			SPACE_A,
+			ROOMY_CHANNEL_ULID,
+			{ maxMessages: 150 },
+		);
+
+		// A single page would cap at 100 and lose the oldest 50. History is
+		// seeded newest first, so m149 posts first and m0 last.
+		expectToBe(result.posted, 150);
+		expectToBe(discord.sent.length, 150);
+		expectToBe(discord.sent[0]?.content, "m149");
+		expectToBe(discord.sent[149]?.content, "m0");
+	});
+
+	/** RB06: the replay stops at `maxMessages`, keeping the newest. */
+	test("RB06: replays only the newest maxMessages", async () => {
+		const { roomy, discord, router } = setup();
+		roomy.seedRoomMessages(
+			ROOMY_CHANNEL_ULID,
+			Array.from({ length: 5 }, (_, i) => roomMessage({ content: `m${i}` })),
+		);
+
+		const result = await router.backfillRoomToDiscord(
+			SPACE_A,
+			ROOMY_CHANNEL_ULID,
+			{ maxMessages: 3 },
+		);
+
+		expectToBe(result.posted, 3);
+		// m0..m2 are the newest three; posted oldest of those first.
+		expect(discord.sent.map((m) => m.content)).toEqual(["m2", "m1", "m0"]);
+	});
+
+	/** RB07: a reply to a mapped message renders the faux reply prefix. */
+	test("RB07: renders a reply prefix for a mapped target", async () => {
+		const { repo, roomy, discord, router } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID_2,
+		);
+		roomy.seedRoomMessages(ROOMY_CHANNEL_ULID, [
+			roomMessage({ id: ROOMY_MESSAGE_ULID, replyTo: ROOMY_MESSAGE_ULID_2 }),
+		]);
+
+		await router.backfillRoomToDiscord(SPACE_A, ROOMY_CHANNEL_ULID);
+
+		expectToBe(
+			discord.sent[0]?.content,
+			`-# ↪ https://discord.com/channels/${GUILD}/${DISCORD_CHANNEL_ID}/${DISCORD_MESSAGE_ID} original content\nhistory message`,
+		);
+	});
+
+	/** RB08: a forward renders the faux forward block with the original author. */
+	test("RB08: renders a forward block for a mapped original", async () => {
+		const { repo, roomy, discord, router } = setup();
+		repo.registerMapping(
+			SPACE_A,
+			"message",
+			DISCORD_MESSAGE_ID,
+			ROOMY_MESSAGE_ULID_2,
+		);
+		roomy.seedRoomMessages(ROOMY_CHANNEL_ULID, [
+			roomMessage({
+				id: ROOMY_MESSAGE_ULID,
+				content: "commentary",
+				forwardedFrom: {
+					messageId: ROOMY_MESSAGE_ULID_2,
+					roomId: ROOMY_CHANNEL_ULID,
+					name: "general",
+					message: roomMessage({
+						authorName: "Original Author",
+						authorHandle: "original.bsky.social",
+					}),
+				},
+			}),
+		]);
+
+		await router.backfillRoomToDiscord(SPACE_A, ROOMY_CHANNEL_ULID);
+
+		expectToBe(
+			discord.sent[0]?.content,
+			`commentary\n-# ↪ Forwarded from https://discord.com/channels/${GUILD}/${DISCORD_CHANNEL_ID}/${DISCORD_MESSAGE_ID} by Original Author\noriginal content`,
+		);
+	});
+
+	/** RB09: a thread room posts through its parent channel's webhook. */
+	test("RB09: posts a thread's history into the thread", async () => {
+		const { repo, roomy, discord, router } = setup();
+		repo.registerMapping(SPACE_A, "thread", DISCORD_THREAD_ID, ROOMY_THREAD_ULID);
+		discord.setParentChannelId(DISCORD_THREAD_ID, DISCORD_CHANNEL_ID);
+		roomy.seedRoomMessages(ROOMY_THREAD_ULID, [roomMessage()]);
+
+		const result = await router.backfillRoomToDiscord(SPACE_A, ROOMY_THREAD_ULID);
+
+		expectToBe(result.posted, 1);
+		// Webhooks live on the parent channel; a thread cannot own one.
+		expectToBe(
+			discord.sent[0]?.options?.webhook?.id,
+			`wh_${DISCORD_CHANNEL_ID}`,
+		);
+	});
+
+	/** RB10: one failed send leaves the rest of the window posted. */
+	test("RB10: one failed send does not abandon the rest", async () => {
+		const { roomy, discord, router } = setup({
+			discord: new FlakyDiscordSender("boom"),
+		});
+		roomy.seedRoomMessages(ROOMY_CHANNEL_ULID, [
+			roomMessage({ content: "boom" }),
+			roomMessage({ content: "fine" }),
+		]);
+
+		const result = await router.backfillRoomToDiscord(
+			SPACE_A,
+			ROOMY_CHANNEL_ULID,
+		);
+
+		expectToBe(result.posted, 1);
+		expectToBe(result.failed, 1);
+		expect(discord.sent.map((m) => m.content)).toEqual(["fine"]);
 	});
 });

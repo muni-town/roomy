@@ -14,12 +14,16 @@ import type {
 	BridgeSidebarCategory,
 	RoomyEventCallback,
 	RoomyGateway,
+	RoomyRoomMessage,
+	RoomyRoomMessagePage,
 } from "./gateway.ts";
 
 export class MockRoomyGateway implements RoomyGateway {
 	#events = new Map<string, Event[]>();
 	#subscriptions = new Map<string, RoomyEventCallback>();
 	#sidebars = new Map<string, BridgeSidebar>();
+	/** Room history as `getRoomMessages` sees it: newest message first. */
+	#roomMessages = new Map<string, RoomyRoomMessage[]>();
 	#failure: {
 		count: number;
 		$type: Event["$type"] | null;
@@ -69,6 +73,36 @@ export class MockRoomyGateway implements RoomyGateway {
 	/** Seed the sidebar a space will report from `getSidebar`. */
 	setSidebar(spaceDid: string, categories: BridgeSidebarCategory[]): void {
 		this.#sidebars.set(spaceDid, { categories });
+	}
+
+	/** Seed the history `getRoomMessages` pages over, newest message first. */
+	seedRoomMessages(roomId: string, messages: RoomyRoomMessage[]): void {
+		this.#roomMessages.set(roomId, messages);
+	}
+
+	/**
+	 * Page over the seeded history. The cursor is the id of the oldest
+	 * message of the previous page — opaque to callers, like the appserver's.
+	 */
+	async getRoomMessages(
+		roomId: string,
+		opts: { limit?: number; cursor?: string } = {},
+	): Promise<RoomyRoomMessagePage> {
+		const all = this.#roomMessages.get(roomId) ?? [];
+		const limit = Math.max(1, Math.floor(opts.limit ?? 100));
+		let start = 0;
+		if (opts.cursor !== undefined) {
+			const idx = all.findIndex((m) => m.id === opts.cursor);
+			start = idx === -1 ? all.length : idx + 1;
+		}
+		const messages = all.slice(start, start + limit);
+		const last = messages.at(-1);
+		return {
+			messages,
+			...(last !== undefined && start + messages.length < all.length
+				? { cursor: last.id }
+				: {}),
+		};
 	}
 
 	async getSidebar(spaceDid: string): Promise<BridgeSidebar> {

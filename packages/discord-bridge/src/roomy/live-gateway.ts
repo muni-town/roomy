@@ -18,6 +18,7 @@ import type {
 	BridgeSidebarCategory,
 	RoomyEventCallback,
 	RoomyGateway,
+	RoomyRoomMessagePage,
 } from "./gateway.ts";
 import type { SpaceManager } from "./space-manager.ts";
 
@@ -107,6 +108,24 @@ export class LiveRoomyGateway implements RoomyGateway {
 			}),
 		);
 		return { categories };
+	}
+
+	/**
+	 * Read a page of a room's history via `space.roomy.room.getMessages`.
+	 * The appserver rejects a page larger than 100, so the request is clamped
+	 * here rather than leaving the limit to every caller.
+	 */
+	async getRoomMessages(
+		roomId: string,
+		opts: { limit?: number; cursor?: string } = {},
+	): Promise<RoomyRoomMessagePage> {
+		const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 100)), 100);
+		const result = await this.#xrpc.query("space.roomy.room.getMessages", {
+			roomId,
+			limit: String(limit),
+			...(opts.cursor ? { cursor: opts.cursor } : {}),
+		});
+		return { messages: result.messages, cursor: result.cursor };
 	}
 
 	async subscribe(

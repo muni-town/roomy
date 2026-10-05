@@ -35,12 +35,27 @@ import type { DiscordSender } from "../discord/sender.ts";
 import type { WebhookManager } from "../discord/webhook-manager.ts";
 import { BRIDGE_RECONNECT_BASE_MS, BRIDGE_RECONNECT_MAX_MS } from "../env.ts";
 import { createLogger } from "../logger.ts";
-import type { RoomyEventCallback, RoomyGateway } from "../roomy/gateway.ts";
+import type {
+	RoomyEventCallback,
+	RoomyGateway,
+	RoomyRoomMessage,
+} from "../roomy/gateway.ts";
 import type { ProfileResolver } from "../roomy/profile-resolver.ts";
 import { reconnectDelayMs } from "../utils/backoff.ts";
 import { blocksToDiscordMarkdown } from "./blocks-to-discord.ts";
 
 const log = createLogger("roomy-router");
+
+/**
+ * How many of a room's newest messages a Roomy→Discord backfill replays, and
+ * how many per page it asks for while walking. The budget matches the
+ * Discord→Roomy side's Phase-1 window: the live subscription covers everything
+ * written after a room was bridged, so the replay only has to cover the gap
+ * for rooms bridged late, not the whole history.
+ */
+const ROOMY_BACKFILL_MESSAGE_BOUND = 1_000;
+/** The appserver rejects a `space.roomy.room.getMessages` page larger than this. */
+const ROOMY_BACKFILL_PAGE_SIZE = 100;
 
 /** Render an unknown thrown value for a structured log field. */
 function describeError(err: unknown): string {
@@ -182,6 +197,46 @@ function decodeBody(body: {
 	}
 }
 
+/**
+ * Decode a room-history message body into a Discord-renderable string.
+ *
+ * The wire `content` field is raw text for legacy `text/*` bodies and
+ * base64-encoded blocks JSON for richtext ones (the appserver base64s every
+ * non-text MIME type). Same two encodings `decodeBody` reads off a live
+ * `createMessage` event, so a replayed message renders identically.
+ */
+function decodeRoomMessageBody(msg: RoomyRoomMessage): string | undefined {
+	const mime = msg.mimeType ?? "text/markdown";
+	if (mime === RICHTEXT_MIME) {
+		let blocks: unknown;
+		try {
+			blocks = deserializeBody(
+				mime,
+				new Uint8Array(Buffer.from(msg.content, "base64")),
+			);
+		} catch {
+			return undefined;
+		}
+		return Array.isArray(blocks) ? blocksToDiscordMarkdown(blocks) : undefined;
+	}
+	if (mime !== "text/markdown" && mime !== "text/plain") return undefined;
+	return stripHtmlTags(msg.content).replace(/<(https?:\/\/[^\s<>]+)>/g, "$1");
+}
+
+/**
+ * Attribution line for the original of a forward. `#queryMessage` and a
+ * room-history message both carry this shape; the original may be unreadable.
+ */
+function forwardedAuthorName(
+	original: { authorName: string; authorHandle?: string } | undefined,
+): string {
+	if (!original) return "someone";
+	return (
+		original.authorName ||
+		(original.authorHandle ? `@${original.authorHandle}` : "someone")
+	);
+}
+
 export class RoomyEventRouter {
 	#roomy: RoomyGateway;
 	#discord: DiscordSender;
@@ -269,6 +324,203 @@ export class RoomyEventRouter {
 	 */
 	async subscribeToSpace(spaceDid: string): Promise<void> {
 		await this.#subscribeWithRetry(spaceDid);
+	}
+
+	/**
+	 * Replay a room's Roomy history into the Discord channel or thread it is
+	 * bridged to.
+	 *
+	 * The live subscription only routes events that arrive after a room is
+	 * bridged, so a room bridged late has no Discord copy of what was written
+	 * before. This walks `space.roomy.room.getMessages` over the newest
+	 * `maxMessages` messages and renders each one exactly as
+	 * `#handleCreateMessage` renders a live one.
+	 *
+	 * Idempotent: a message whose Roomy id is already mapped under
+	 * `id_mappings(space, "message", …)` was bridged before — by the live
+	 * subscription, or by an earlier run of this method — and is skipped. The
+	 * mapping is registered after a successful Discord send, so a message that
+	 * fails here stays unmapped and is picked up by the next run.
+	 */
+	async backfillRoomToDiscord(
+		spaceDid: string,
+		roomId: string,
+		opts: { maxMessages?: number } = {},
+	): Promise<{ posted: number; skipped: number; failed: number }> {
+		const discordChannelId =
+			this.#repo.getDiscordId(spaceDid, "channel", roomId) ??
+			this.#repo.getDiscordId(spaceDid, "thread", roomId);
+		if (!discordChannelId) return { posted: 0, skipped: 0, failed: 0 };
+
+		const maxMessages = opts.maxMessages ?? ROOMY_BACKFILL_MESSAGE_BOUND;
+		const messages: RoomyRoomMessage[] = [];
+		let cursor: string | undefined;
+		while (messages.length < maxMessages) {
+			const page = await this.#roomy.getRoomMessages(roomId, {
+				limit: Math.min(ROOMY_BACKFILL_PAGE_SIZE, maxMessages - messages.length),
+				cursor,
+			});
+			if (page.messages.length === 0) break;
+			messages.push(...page.messages);
+			if (!page.cursor) break;
+			cursor = page.cursor;
+		}
+
+		// History comes back newest first; post oldest first so a reply or a
+		// forward points at a Discord message that already exists.
+		let posted = 0;
+		let skipped = 0;
+		let failed = 0;
+		for (const msg of [...messages].reverse()) {
+			if (this.#repo.getDiscordId(spaceDid, "message", msg.id)) {
+				skipped++;
+				continue;
+			}
+			try {
+				const sent = await this.#sendRoomMessage(
+					spaceDid,
+					roomId,
+					discordChannelId,
+					msg,
+				);
+				if (sent) posted++;
+				else skipped++;
+			} catch (err) {
+				// One unwritable message must not abandon the rest of the page;
+				// it stays unmapped, so a later run retries it.
+				failed++;
+				log.error(
+					`Failed to backfill Roomy message ${msg.id} to Discord channel ${discordChannelId}`,
+					err,
+				);
+			}
+		}
+		log.info(
+			`Roomy→Discord backfill of room ${roomId} → channel ${discordChannelId}: ${posted} posted, ${skipped} skipped, ${failed} failed`,
+		);
+		return { posted, skipped, failed };
+	}
+
+	/**
+	 * Render one room-history message to Discord. Returns false when there is
+	 * nothing renderable (unsupported body, empty content, no attachments),
+	 * mirroring the skips in `#handleCreateMessage`.
+	 */
+	async #sendRoomMessage(
+		spaceDid: string,
+		roomId: string,
+		discordChannelId: string,
+		msg: RoomyRoomMessage,
+	): Promise<boolean> {
+		// Threads can't have their own webhooks — use the parent channel's
+		// webhook and pass threadId so the message lands in the thread.
+		let webhookChannelId = discordChannelId;
+		let threadId: string | undefined;
+		if (this.#repo.getDiscordId(spaceDid, "thread", roomId) !== undefined) {
+			const parentId = await this.#discord.getParentChannelId(discordChannelId);
+			if (!parentId) {
+				log.warn(
+					`Could not find parent channel for thread ${discordChannelId}; skipping history message ${msg.id}`,
+				);
+				return false;
+			}
+			webhookChannelId = parentId;
+			threadId = discordChannelId;
+		}
+
+		const content = decodeRoomMessageBody(msg);
+		const files = await this.#fetchRoomMessageMedia(msg);
+		if (content === undefined && files.length === 0 && !msg.forwardedFrom) {
+			return false;
+		}
+		let sendContent = content ?? "";
+
+		// Faux reply / faux forward: same grey "↪" blocks the live path builds.
+		if (msg.replyTo) {
+			const target = this.#repo.getDiscordId(spaceDid, "message", msg.replyTo);
+			if (target) {
+				const replyPrefix = await this.#buildReplyPrefix(
+					discordChannelId,
+					target,
+				);
+				if (replyPrefix) sendContent = `${replyPrefix}\n${sendContent}`;
+			}
+		}
+		if (msg.forwardedFrom) {
+			const discordMessageId = this.#repo.getDiscordId(
+				spaceDid,
+				"message",
+				msg.forwardedFrom.messageId,
+			);
+			const sourceChannelId =
+				this.#repo.getDiscordId(spaceDid, "channel", msg.forwardedFrom.roomId) ??
+				this.#repo.getDiscordId(spaceDid, "thread", msg.forwardedFrom.roomId);
+			if (discordMessageId && sourceChannelId) {
+				const forwardBlock = await this.#buildForwardContent(
+					discordChannelId,
+					sourceChannelId,
+					discordMessageId,
+					forwardedAuthorName(msg.forwardedFrom.message),
+				);
+				if (forwardBlock) {
+					sendContent = sendContent
+						? `${sendContent}\n${forwardBlock}`
+						: forwardBlock;
+				}
+			}
+		}
+		if (sendContent === "" && files.length === 0) return false;
+
+		const webhook = await this.#webhooks.ensureWebhook(webhookChannelId);
+		const discordMessageId = await this.#discord.sendMessage(
+			discordChannelId,
+			sendContent,
+			{
+				username:
+					msg.authorName && msg.authorHandle && msg.authorName !== msg.authorHandle
+						? `${msg.authorName} - @${msg.authorHandle}`
+						: msg.authorName ||
+							(msg.authorHandle ? `@${msg.authorHandle}` : "Roomy"),
+				avatarUrl: msg.authorAvatar,
+				webhook,
+				threadId,
+				files,
+			},
+		);
+		this.#repo.registerMapping(spaceDid, "message", discordMessageId, msg.id);
+		return true;
+	}
+
+	/**
+	 * Fetch a history message's media for a multipart webhook upload.
+	 * Unfetchable attachments are skipped with a warning rather than failing
+	 * the whole message, like `#extractAttachments`.
+	 */
+	async #fetchRoomMessageMedia(msg: RoomyRoomMessage): Promise<
+		{
+			filename: string;
+			contentType: string;
+			data: Uint8Array<ArrayBuffer>;
+		}[]
+	> {
+		const files: {
+			filename: string;
+			contentType: string;
+			data: Uint8Array<ArrayBuffer>;
+		}[] = [];
+		for (const media of msg.media) {
+			const filename = media.name ?? filenameFromUri(media.url, media.type);
+			try {
+				const data = await this.#fetchAttachment(media.url);
+				files.push({ filename, contentType: media.type, data });
+			} catch (err) {
+				log.warn(
+					`Failed to fetch media ${media.url} for message ${msg.id}; skipping file`,
+					err,
+				);
+			}
+		}
+		return files;
 	}
 
 	/** The event callback a space's subscription routes through. */
@@ -513,10 +765,7 @@ export class RoomyEventRouter {
 		// The message's own body (commentary) stays above the forward block.
 		for (const fwd of forwardTargets) {
 			const original = await this.#queryMessage(fwd.targetMessageId);
-			const originalAuthorName = original
-				? original.authorName ||
-					(original.authorHandle ? `@${original.authorHandle}` : "someone")
-				: "someone";
+			const originalAuthorName = forwardedAuthorName(original);
 			const forwardBlock = await this.#buildForwardContent(
 				discordChannelId,
 				fwd.sourceChannelId,
@@ -1234,10 +1483,7 @@ export class RoomyEventRouter {
 				// <original author>" prefix via the webhook, attributed to the
 				// user who did the forward.
 				const original = await this.#queryMessage(messageId);
-				const originalAuthorName = original
-					? original.authorName ||
-						(original.authorHandle ? `@${original.authorHandle}` : "someone")
-					: "someone";
+				const originalAuthorName = forwardedAuthorName(original);
 				const forwardContent = await this.#buildForwardContent(
 					targetChannelId,
 					sourceChannelId,

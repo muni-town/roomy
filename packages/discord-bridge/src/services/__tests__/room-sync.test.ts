@@ -983,6 +983,7 @@ describe("syncInitialStructure", () => {
 			},
 			sendEvents: async () => {},
 			getSidebar: async () => ({ categories: [] }),
+			getRoomMessages: async () => ({ messages: [] }),
 			subscribe: async () => {},
 			unsubscribe: async () => {},
 			disconnectAll: async () => {},

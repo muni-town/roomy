@@ -28,8 +28,66 @@ export interface BridgeSidebarCategory {
 export interface BridgeSidebar {
 	categories: BridgeSidebarCategory[];
 }
+/** A media attachment on a room-history message. */
+export interface RoomyRoomMessageMedia {
+	/** Attachment URI: `atblob://…` (resolve via the appserver blob proxy) or http(s). */
+	url: string;
+	/** MIME type, e.g. `image/png`. */
+	type: string;
+	/** Original filename, when the sender supplied one. */
+	name?: string;
+}
+
+/** Where a forwarded message came from, plus the original itself. */
+export interface RoomyForwardedFrom {
+	/** Roomy message id of the forwarded original. */
+	messageId: string;
+	/** Roomy room id the original lives in. */
+	roomId: string;
+	/** Name of the source room at forward time. */
+	name: string;
+	/** The denormalised original, absent when it was deleted or unreadable. */
+	message?: RoomyRoomMessage;
+}
+
+/**
+ * A message from a room's history, as `space.roomy.room.getMessages` returns
+ * it: the message body (raw text or base64 richtext, per `mimeType`), the
+ * author, and the reply/forward/media attachments already resolved into
+ * fields. `RoomyEventRouter` renders these into Discord the same way it
+ * renders the equivalent `createMessage` event.
+ */
+export interface RoomyRoomMessage {
+	id: string;
+	content: string;
+	/** Absent for legacy bodies, which are `text/markdown`. */
+	mimeType?: string;
+	authorDid: string;
+	authorName: string;
+	authorHandle?: string;
+	authorAvatar?: string;
+	/** The space authored this message itself (join notices etc.). */
+	system?: boolean;
+	/** ISO 8601. */
+	timestamp: string;
+	/** Roomy message id this message replies to. */
+	replyTo?: string;
+	forwardedFrom?: RoomyForwardedFrom;
+	media: RoomyRoomMessageMedia[];
+}
+
+/** One page of a room's history, newest message first. */
+export interface RoomyRoomMessagePage {
+	messages: RoomyRoomMessage[];
+	/**
+	 * Cursor continuing the walk strictly older than the last message
+	 * returned. Absent when the room's history is exhausted.
+	 */
+	cursor?: string;
+}
 
 export interface RoomyGateway {
+
 	/** Send a single event to a space. */
 	sendEvent(spaceDid: string, event: Event): Promise<void>;
 
@@ -42,6 +100,19 @@ export interface RoomyGateway {
 	 * categories into the sidebar instead of overwriting it.
 	 */
 	getSidebar(spaceDid: string): Promise<BridgeSidebar>;
+
+	/**
+	 * Read one page of a room's message history, newest first
+	 * (`space.roomy.room.getMessages`). `cursor` continues past the oldest
+	 * message of the previous page; the returned `cursor` is absent once the
+	 * history is exhausted. Used to replay history into Discord for messages
+	 * the live subscription never delivered (e.g. a room bridged after the
+	 * messages were written).
+	 */
+	getRoomMessages(
+		roomId: string,
+		opts?: { limit?: number; cursor?: string },
+	): Promise<RoomyRoomMessagePage>;
 
 	/** Subscribe to events from a space. Callback receives decoded events. */
 	subscribe(spaceDid: string, callback: RoomyEventCallback): Promise<void>;
