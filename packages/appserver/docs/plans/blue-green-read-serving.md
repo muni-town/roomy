@@ -1,7 +1,7 @@
 # Blue-Green Read Serving Before Materialisation
 
-**Date:** 2026-07-29
-**Status:** Implemented (shipped in the `blue-green-read-serving` PR — L1/L2/L3 test layers + the live `reMaterializeFromLocalEvents` begin/replay/commit path). This document is the design record; the implementation status is tracked in §7.
+**Status:** Implemented; the rebuild is now the fallback path when an in-place
+per-space migration cannot be applied (see §2 Q3).
 **Owner:** appserver
 
 ## 1. Problem
@@ -45,6 +45,14 @@ wipes on schema mismatch at all**. A stale-schema space simply serves its old
 data (P1) until an explicit rebuild path (`spaceRebuildBegin` → replay → commit)
 replaces it. This is strictly safer than today's wipe, and it is the default for
 both `forSpace()` reads and the incremental catch-up path.
+
+**Q3 — Is the rebuild the only way a stale DB is brought forward?** No. A schema
+bump first upgrades each space **in place** (`per-space-migration` machinery:
+`db/spaceVersions.ts`, `db/spaceMigrations.ts`), and the rebuild here is the
+fallback for a DB whose version this build cannot start from, or a migration
+that declines or fails. The two paths share the same write gate and the same
+"never wipe a DB you cannot upgrade" rule; see §6a of
+`pure-materialisation.md` for the migration side.
 
 ## 3. Invariants we must prove
 

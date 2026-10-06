@@ -26,7 +26,7 @@
  * open savepoint at a time.
  */
 import type { DbLike } from "../db/types.ts";
-import type { StreamDid, Ulid, UserDid } from "@roomy-space/sdk";
+import type { StreamDid, StreamIndex, Ulid, UserDid } from "@roomy-space/sdk";
 import {
   canonicalMessageTimestamp,
   setMessageSortIdxByForward,
@@ -91,6 +91,10 @@ export interface ApplyBundleOpts {
   /** True for backfill events — skips the unread-counter increment. */
   isBackfill: boolean;
   streamId: StreamDid;
+  /** This event's log position — the sort key's tie-break. */
+  idx: StreamIndex;
+  /** `stream_events.received_at`: the server's receipt instant. See `sortIdx.ts`. */
+  receivedAt?: number;
 }
 
 export async function applyBundle(
@@ -141,12 +145,11 @@ async function applyBundleInner(
     await setMessageSortIdxByTimestamp(
       db,
       bundle.event,
-      // A live createMessage is keyed by the server's arrival time, not the
-      // client-minted ULID — see `TimestampSource`. Replay keeps the ULID.
-      opts.isBackfill ? "event" : "arrival",
+      opts.idx,
+      opts.receivedAt,
     );
     await setMessageSortIdxByReorder(db, opts.streamId, bundle.event);
-    await setMessageSortIdxByForward(db, bundle.event);
+    await setMessageSortIdxByForward(db, bundle.event, opts.idx, opts.receivedAt);
 
     // Activity feed: upsert the activity item for every createMessage event
     // (including backfill, so existing rooms get populated). The timestamp is
@@ -288,6 +291,8 @@ async function applyBundleInner(
       await applyMoveSideEffects(db, {
         streamId: opts.streamId,
         event: bundle.event,
+        idx: opts.idx,
+        receivedAt: opts.receivedAt,
         readStateDb,
         isBackfill: opts.isBackfill,
       });

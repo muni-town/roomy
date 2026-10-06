@@ -61,6 +61,23 @@ export interface DbLike {
    */
   spaceRebuildAbort?(spaceDid: string): Promise<{ aborted: boolean }>;
   /**
+   * Optional (in-place per-space upgrade): open a write gate for `spaceDid`
+   * for the duration of its migrations, so a write is rejected (and retried by
+   * the caller) rather than racing the pass. Also forces the worker to open the
+   * space DB, which is what applies the structural `up`s. Idempotent per space.
+   */
+  spaceMigrationBegin?(spaceDid: string): Promise<{ ok: boolean }>;
+  /**
+   * Optional: close the migration gate opened by `spaceMigrationBegin`. Safe
+   * to call when no gate is open.
+   */
+  spaceMigrationEnd?(spaceDid: string): Promise<{ ended: boolean }>;
+  /**
+   * Optional: whether `spaceDid` has its in-place migration gate open. Read by
+   * the single write gate, alongside `isSpaceRebuilding`.
+   */
+  isSpaceMigrating?(spaceDid: string): Promise<boolean>;
+  /**
    * Optional (blue-green): whether the canonical per-space DB for `spaceDid`
    * is on the current schema version. Used by rematerialisation to decide
    * begin→replay→commit vs incremental catch-up.
@@ -117,6 +134,9 @@ export interface WorkerRequest {
     | "spaceRebuildCommit"
     | "spaceRebuildAbort"
     | "isSpaceRebuilding"
+    | "spaceMigrationBegin"
+    | "spaceMigrationEnd"
+    | "isSpaceMigrating"
     | "checkSpaceSchema";
   /** SQL string (for query/run/exec/prepare). */
   sql?: string;

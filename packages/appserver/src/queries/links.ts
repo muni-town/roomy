@@ -33,15 +33,16 @@
  *
  * ## Ordering key
  *
- * Rows are ordered by the containing message's `sort_idx` (a ULID of the
- * message's canonical time, falling back to the message id when `sort_idx`
- * is null) descending, tie-broken by URL. This matches the timeline ordering
- * used by `selectMessages` and `activity_item`, so "newest shared link first"
- * agrees with the message the user actually sees. `sort_idx` is preferred
- * over the message entity's `created_at` because it is the canonical,
- * move-aware timeline key (a moved message is re-keyed by its move event,
- * and edits preserve it), whereas `created_at` is the row-creation wallclock
- * that a batch materialisation skews.
+ * Rows are ordered by the containing message's `sort_idx` (the message's
+ * ordering key — its receipt time, or a bridge-supplied `timestampOverride` —
+ * falling back to the message id when `sort_idx` is null) descending,
+ * tie-broken by URL. This matches the timeline ordering used by
+ * `selectMessages` and `activity_item`, so "newest shared link first" agrees
+ * with the message the user actually sees. `sort_idx` is preferred over the
+ * message entity's `created_at` because it is the timeline key the read path
+ * pages on (a moved message is re-keyed by its move event, and edits preserve
+ * it), whereas `created_at` is the row-creation wallclock that a batch
+ * materialisation skews.
  *
  * Cursor format: `"<sort_key>::<url>"` (URLs are compared verbatim; cursor
  * ties use the URL as the second key).

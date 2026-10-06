@@ -23,11 +23,17 @@ import { READSTATE_SCHEMA_VERSION } from "./readStateDb.ts";
 import { dbPath, spacesDir } from "./paths.ts";
 
 /**
- * Per-space DB schema version (`data/spaces/*.sqlite`). Bump whenever
- * schema-space.sql changes — a bump wipes and re-derives every per-space DB
- * (from the event log via re-materialisation).
+ * Per-space DB schema version (`data/spaces/*.sqlite`) — re-exported from the
+ * version manifest (`./spaceVersions.ts`). Bump by adding a version to
+ * `SPACE_MIGRATIONS`; the constant and the async-task key type both follow.
+ *
+ * A bump upgrades each existing space DB in place (the worker applies the
+ * version's structural `up`, the boot runner runs its data task). It is not a
+ * rematerialisation trigger: `streams/reMaterialize.ts` rebuilds a space only
+ * when the upgrade cannot be applied or fails.
  */
-export const SPACE_SCHEMA_VERSION = "2";
+import { SPACE_SCHEMA_VERSION } from "./spaceVersions.ts";
+export { SPACE_SCHEMA_VERSION };
 
 /**
  * Global DB schema version (`data/global.sqlite`) — re-exported from the

@@ -32,6 +32,7 @@ import {
   GLOBAL_MIGRATIONS,
   globalMigrationEntry,
 } from "./globalVersions.ts";
+import { SPACE_MIGRATIONS, spaceMigrationEntry } from "./spaceVersions.ts";
 import { dbPath, spacesDir as resolveSpacesDir } from "./paths.ts";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -60,10 +61,16 @@ let closed = false;
 /** Per-space DBs, opened lazily and LRU-evicted. Keyed by spaceDid. */
 const spaceDbs = new Map<string, { db: Database; lastUsed: number }>();
 /**
+ * Spaces with their in-place migration gate open (`spaceMigrationBegin`).
+ * A space in this set is mid-upgrade: the write gate in `StreamManager`
+ * rejects writes to it, and reads keep serving the DB being upgraded.
+ * Distinct from `spaceRebuilds`, which swaps a whole new file in.
+ */
+const spaceMigrating = new Set<string>();
+/**
  * Blue-green rebuild state, keyed by spaceDid. While a rebuild is in flight the
- * canonical (old-schema) DB keeps serving reads and the temp rebuild DB at
- * `data/spaces/<spaceDid>.sqlite.new` is materialised in the background; commit
- * atomically swaps them. Keyed per space so it lands on the owning worker.
+ * canonical (old-schema) DB keeps serving reads and a fresh DB is materialised
+ * beside it. The entry pins both handles so LRU cannot evict either mid-rebuild.
  */
 const spaceRebuilds = new Map<
   string,
@@ -129,52 +136,6 @@ class SchemaVersionMismatchError extends Error {
     );
     this.name = "SchemaVersionMismatchError";
   }
-}
-
-/**
- * Schema-version tracking for a DB that keeps its own version table.
- *
- * Blue-green: reads the on-disk version FIRST and only applies the schema
- * DDL to a fresh/current DB. It must never exec the *new* schema onto a stale
- * DB before deciding it is a mismatch — that would mutate the data the rebuild
- * is meant to keep serving unchanged. A stale DB is reported via
- * `SchemaVersionMismatchError` with the file left byte-for-byte untouched.
- */
-function initializeVersionedSchema(
-  db: Database,
-  schemaPath: string,
-  versionTable: string,
-  expectedVersion: string,
-): void {
-  let row: { version: string } | null;
-  try {
-    row = db
-      .query<{ version: string }, []>(
-        `select version from ${versionTable} where id = 1`,
-      )
-      .get();
-  } catch {
-    // No version table yet — a fresh DB. Fall through to apply schema.
-    row = null;
-  }
-
-  if (!row) {
-    const schema = readFileSync(schemaPath, "utf-8");
-    db.exec(schema);
-    db.exec(
-      `insert into ${versionTable} (id, version) values (1, '${expectedVersion}')`,
-    );
-    return;
-  }
-
-  if (row.version !== expectedVersion) {
-    throw new SchemaVersionMismatchError(expectedVersion, row.version);
-  }
-
-  // Current version: ensure the schema DDL is present (idempotent) so a DB
-  // stamped as current but missing a table added in the same version heals.
-  const schema = readFileSync(schemaPath, "utf-8");
-  db.exec(schema);
 }
 
 /**
@@ -334,12 +295,99 @@ function initializeReadStateSchema(
   }
 }
 
+// The per-space version list lives in spaceVersions.ts (shared with the
+// main-thread migration runner, which types its task map against it).
+const SPACE_VERSION_KEYS = Object.keys(SPACE_MIGRATIONS).sort(
+  (a, b) => Number(a) - Number(b),
+);
+
+/**
+ * The on-disk version is read FIRST and the schema DDL is only exec'd when the
+ * DB is fresh, current, or genuinely upgradable — never on an un-upgradable
+ * one, which must be left byte-for-byte untouched for the rebuild to keep
+ * serving it.
+ *
+ * An older numeric version takes every version in `(actual, expected]` in
+ * order — its structural `up`, then a null marker for its data task — inside one
+ * transaction that also advances the version row, so a crash leaves the DB on
+ * the old version with the migration still owed. A version the manifest does
+ * not know (higher than this build, unparseable, or below the manifest's first
+ * version) is a `SchemaVersionMismatchError`: the caller serves the old DB as-is
+ * and the boot runner rebuilds it from the log.
+ */
+function initializeSpaceSchema(db: Database, expectedVersion: string): void {
+  let row: { version: string } | null;
+  try {
+    row = db
+      .query<{ version: string }, []>(
+        "select version from space_schema_version where id = 1",
+      )
+      .get();
+  } catch {
+    // No version table yet — a fresh DB. Fall through to apply the schema.
+    row = null;
+  }
+
+  if (!row) {
+    // Fresh DB: the schema file already creates every table, and a space with
+    // no DB has no materialised state to migrate. Nothing is owed.
+    db.exec(readFileSync(SPACE_SCHEMA_PATH, "utf-8"));
+    db.exec(
+      `insert into space_schema_version (id, version) values (1, '${expectedVersion}')`,
+    );
+    return;
+  }
+
+  if (row.version === expectedVersion) {
+    // Current version: re-apply the schema (idempotent) so a DB stamped as
+    // current but missing a table added in the same version heals. A DB that
+    // reached this version already has its migrations, so none is scheduled.
+    db.exec(readFileSync(SPACE_SCHEMA_PATH, "utf-8"));
+    return;
+  }
+
+  const actual = Number.parseInt(row.version, 10);
+  const expected = Number.parseInt(expectedVersion, 10);
+  const minimum = Number.parseInt(SPACE_VERSION_KEYS[0] ?? "", 10);
+  if (
+    !Number.isFinite(actual) ||
+    !Number.isFinite(expected) ||
+    actual >= expected ||
+    actual < minimum
+  ) {
+    throw new SchemaVersionMismatchError(expectedVersion, row.version);
+  }
+
+  db.transaction(() => {
+    db.exec(readFileSync(SPACE_SCHEMA_PATH, "utf-8"));
+    for (const version of SPACE_VERSION_KEYS) {
+      const num = parseInt(version, 10);
+      if (num <= actual || num > expected) continue;
+      spaceMigrationEntry(version)?.up?.(db);
+      scheduleSpaceDataMigration(db, version);
+    }
+    db.query("update space_schema_version set version = ? where id = 1").run(
+      expectedVersion,
+    );
+  })();
+}
+
+/** Mark `version`'s async task as owed by this space (no-op for structural). */
+function scheduleSpaceDataMigration(db: Database, version: string): void {
+  if (spaceMigrationEntry(version)?.kind === "data") {
+    db.query(
+      "insert or ignore into space_schema_migrations (version, completed_at) values (?, null)",
+    ).run(version);
+  }
+}
+
 // ─── Per-space DB management ──────────────────────────────────────────────
 
 /**
  * Open (or return from the LRU cache) the per-space DB for `spaceDid`.
- * On first open: create the file and apply the per-space schema. The DB is
- * populated by re-materialising the stream from the event log.
+ * On first open: create the file, apply the per-space schema, and upgrade an
+ * older DB to the current version in place. The DB is populated by
+ * re-materialising the stream from the event log.
  */
 function openSpaceDb(spaceDid: string): Database {
   if (!spacesDir) throw new Error("Per-space DBs not initialized (no init)");
@@ -351,20 +399,15 @@ function openSpaceDb(spaceDid: string): Database {
 
   let db = openSpaceDbFile(spaceDid);
   try {
-    initializeVersionedSchema(
-      db,
-      SPACE_SCHEMA_PATH,
-      "space_schema_version",
-      spaceSchemaVersion ?? "",
-    );
-
+    initializeSpaceSchema(db, spaceSchemaVersion ?? "");
   } catch (err) {
     if (err instanceof SchemaVersionMismatchError) {
-      // Blue-green: the on-disk schema is stale. Do NOT wipe it — serve
+      // The on-disk version is not one this build can upgrade from (unknown,
+      // higher, or below the manifest's first version). Do NOT wipe it — serve
       // the OLD DB as-is so reads keep returning the existing data until an
       // explicit rebuild (spaceRebuildBegin → replay → commit) swaps it. The
       // rebuild is driven by reMaterializeFromLocalEvents, never by a read. The
-      // file is left untouched (initializeVersionedSchema checks version first).
+      // file is left untouched.
     } else {
       // The space DB must never be left half-initialised: a partial file
       // (schema applied but init failed, or worse) reads back as
@@ -467,14 +510,9 @@ function openSpaceDbRebuild(spaceDid: string): Database {
     rebuild = new Database(tmpPath, { create: true });
     applySpacePragmas(rebuild);
   }
-  // Fresh new-schema DB (no version row → initializeVersionedSchema applies
-  // the current schema and stamps the version).
-  initializeVersionedSchema(
-    rebuild,
-    SPACE_SCHEMA_PATH,
-    "space_schema_version",
-    spaceSchemaVersion ?? "",
-  );
+  // Fresh new-schema DB (no version row → initializeSpaceSchema applies the
+  // current schema and stamps the version).
+  initializeSpaceSchema(rebuild, spaceSchemaVersion ?? "");
 
   // Pin the canonical handle too so LRU can't evict it mid-rebuild.
   const canonical = openSpaceDb(spaceDid);
@@ -568,6 +606,34 @@ function handleSpaceRebuildAbort(spaceDid: string): { aborted: boolean } {
   }
   spaceRebuilds.delete(spaceDid);
   return { aborted: true };
+}
+
+/**
+ * Open the in-place migration gate for `spaceDid`: flag the space as
+ * migrating (the write gate rejects writes to it) and open the DB, which is
+ * what applies the structural version upgrades. Idempotent.
+ */
+function handleSpaceMigrationBegin(spaceDid: string): { ok: boolean } {
+  spaceMigrating.add(spaceDid);
+  try {
+    openSpaceDb(spaceDid);
+  } catch (err) {
+    // The gate must not outlive a failed open, or the space would reject
+    // writes forever with no migration in flight.
+    spaceMigrating.delete(spaceDid);
+    throw err;
+  }
+  return { ok: true };
+}
+
+/** Close the migration gate for `spaceDid`. No-op when none is open. */
+function handleSpaceMigrationEnd(spaceDid: string): { ended: boolean } {
+  return { ended: spaceMigrating.delete(spaceDid) };
+}
+
+/** Whether `spaceDid` has its in-place migration gate open. */
+function handleIsSpaceMigrating(spaceDid: string): boolean {
+  return spaceMigrating.has(spaceDid);
 }
 
 /** Whether `spaceDid` is currently rebuilding. */
@@ -742,6 +808,12 @@ function handleRequest(req: WorkerRequest): unknown {
       return handleIsSpaceRebuilding(requireSpaceDid(req));
     case "checkSpaceSchema":
       return handleCheckSpaceSchema(requireSpaceDid(req));
+    case "spaceMigrationBegin":
+      return handleSpaceMigrationBegin(requireSpaceDid(req));
+    case "spaceMigrationEnd":
+      return handleSpaceMigrationEnd(requireSpaceDid(req));
+    case "isSpaceMigrating":
+      return handleIsSpaceMigrating(requireSpaceDid(req));
     default:
       throw new Error(`Unknown request type: ${req.type}`);
   }
@@ -876,6 +948,17 @@ function handleInit(req: WorkerRequest): {
     }
     if (!existingColumns.has("created_at")) {
       eventsDb.exec("alter table stream_events add column created_at integer");
+    }
+    if (!existingColumns.has("received_at")) {
+      eventsDb.exec("alter table stream_events add column received_at integer");
+      // Backfill from the ingest clock the log already recorded. Without this
+      // every pre-existing message would fall back to its sender-minted ULID
+      // time on the next rebuild — silently re-sorting history by client
+      // clocks, which is the defect `received_at` exists to prevent. Only
+      // rows with no receipt time are touched, so re-running is a no-op.
+      eventsDb.exec(
+        "update stream_events set received_at = created_at where received_at is null and created_at is not null",
+      );
     }
   }
 

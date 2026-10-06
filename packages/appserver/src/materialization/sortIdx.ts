@@ -1,36 +1,139 @@
 /**
  * Sort-index materialisation for messages.
  *
- * Kept *outside* the SDK materialisers, which are kept
- * backfill-agnostic and free of
- * extension-aware ordering logic.
+ * `entities.sort_idx` is the server's timeline key: `selectMessages` pages by
+ * it, and the client re-sorts a room by it. It is a 26-character ULID-shaped
+ * string, so `decodeTime` still reads its time component and every
+ * `sort_idx > ?` comparison keeps working.
+ *
+ * The key is `time + log position`: the first 10 characters encode the
+ * message's ORDERING TIME, the last 16 encode the index of the event that
+ * wrote it. Two properties follow, and both are load-bearing:
+ *
+ *  - ORDERING TIME is the message's canonical time — a `timestampOverride`
+ *    extension when a producer translating another timeline set one (the
+ *    Discord bridge), otherwise the instant this server accepted the event
+ *    (`stream_events.received_at`, recorded once at append). A `createMessage`
+ *    id is a ULID the sender's device minted, so keying the timeline on it
+ *    would let one skewed clock bury a message mid-history for every other
+ *    client, durably — the key is written once and never repaired.
+ *  - LOG POSITION is the tie-break, replacing a random ULID suffix. Messages
+ *    that share an ordering time (a burst inside one millisecond, a replayed
+ *    batch) then order identically in every derivation of the same log.
+ *
+ * Together they make the key a pure function of the log: the same events
+ * materialised twice, at different times or on different processes, produce
+ * the same key. Kept *outside* the SDK materialisers, which are kept
+ * backfill-agnostic and free of extension-aware ordering logic.
  */
 
 import type { DbLike } from "../db/types.ts";
-import { decodeTime, ulid } from "ulidx";
-import type { Event, StreamDid, Ulid } from "@roomy-space/sdk";
+import { decodeTime, encodeTime } from "ulidx";
+import type { Event, StreamDid, StreamIndex, Ulid } from "@roomy-space/sdk";
 import { log } from "../log.ts";
 
+/** Characters of a sort key spent on the time component (a ULID's time width). */
+const TIME_LEN = 10;
+/** Characters of a sort key spent on the log position (a ULID's random width). */
+const POSITION_LEN = 16;
+/** Crockford base32, the encoding both halves of a sort key use. */
+const B32_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
 /**
- * Set `entities.sort_idx` for a freshly-created message, keyed by
- * `canonicalMessageTimestamp`: the `timestampOverride` extension when
- * present, otherwise `source`.
+ * Base32 of a non-negative integer, left-padded to `len` characters. Fixed
+ * width, so lexicographic order is numeric order.
+ */
+function encodeBase32(value: number, len: number): string {
+  let out = "";
+  for (let i = 0; i < len; i++) {
+    out = B32_ALPHABET[value % 32]! + out;
+    value = Math.floor(value / 32);
+  }
+  return out;
+}
+
+/**
+ * A sort key whose position half lies strictly between the two given halves,
+ * without decoding either. Each prefix is the upper bound its suffix must stay
+ * below, so the first character the two disagree on decides it: take the lower
+ * key's prefix including that character and append zeros, which is greater
+ * than the lower key (a longer nonzero tail) and less than the upper (a smaller
+ * character at the deciding position).
  *
- * `source` is `"arrival"` for a live `createMessage` — the message the sender
- * is composing now — and `"event"` for a replay, where the log's own ULIDs
- * are all the time the events carry. See `TimestampSource`.
+ * Callers only reach here with keys that differ, and the two keys are the
+ * bounds of a gap, so a deciding character always exists.
+ */
+function betweenBase32(lower: string, upper: string): string {
+  for (let i = 0; i < lower.length; i++) {
+    if (lower[i] !== upper[i]) {
+      return lower.slice(0, i + 1) + "0".repeat(lower.length - i - 1);
+    }
+  }
+  throw new Error(`Sort keys are equal: ${lower}`);
+}
+
+/**
+ * Build a sort key from an ordering time and the index of the event that
+ * produced it.
+ */
+export function orderKey(timeMs: number, idx: number): Ulid {
+  return (encodeTime(timeMs, TIME_LEN) + encodeBase32(idx, POSITION_LEN)) as Ulid;
+}
+
+/**
+ * The instant a message is ordered by when nothing more specific is known:
+ * a `timestampOverride` (the true order of another system's timeline) wins,
+ * then the server's recorded receipt of the event, then — for events logged
+ * before `received_at` existed, which a rebuild has no other clock for — the
+ * event's own ULID time.
+ *
+ * `receivedAt` is what keeps a skewed sender clock from burying a message: it
+ * is the server's observation, not the sender's claim. Recording it in the
+ * event log rather than reading the wall clock at materialisation is what lets
+ * a rebuild reproduce the same key.
+ */
+export function messageOrderTime(event: Event, receivedAt?: number): number {
+  if (event.$type === "space.roomy.message.createMessage.v0") {
+    const override =
+      event.extensions?.["space.roomy.extension.timestampOverride.v0"];
+    if (override) return Number(override.timestamp);
+  }
+  return receivedAt ?? decodeTime(event.id);
+}
+
+/**
+ * The sort key a message event's entity should carry: its ordering time,
+ * tie-broken by the event's log position.
+ *
+ * `idx` is what makes a same-millisecond burst deterministic. Without it two
+ * messages stamped with one timestamp would sort by a random suffix — a
+ * different order in every derivation, and an unstable one across the page
+ * boundary the cursor walks.
+ */
+export function messageSortIdxKey(
+  event: Event,
+  idx: StreamIndex | number,
+  receivedAt?: number,
+): Ulid {
+  return orderKey(messageOrderTime(event, receivedAt), idx);
+}
+
+/**
+ * Set `entities.sort_idx` for a freshly-created message.
  *
  * No-op if the entity row is missing (materialiser failed earlier in the
- * batch) or if a sort_idx is already set.
+ * batch) or if a sort_idx is already set — a message is keyed once, by the
+ * event that created it.
  */
 export async function setMessageSortIdxByTimestamp(
   db: DbLike,
   event: Event,
-  source: TimestampSource = "event",
+  idx: StreamIndex | number,
+  receivedAt?: number,
 ): Promise<void> {
   if (event.$type !== "space.roomy.message.createMessage.v0") return;
 
-  const sortIdx = ulid(canonicalMessageTimestamp(event, source));
+  const sortIdx = messageSortIdxKey(event, idx, receivedAt);
   // No SELECT needed: the entity was just created by ensureEntity in the same
   // savepoint with sort_idx = NULL. If the row is missing or sort_idx is
   // already set, this UPDATE is a no-op.
@@ -39,26 +142,29 @@ export async function setMessageSortIdxByTimestamp(
 
 /**
  * Set `entities.sort_idx` for a forward-reference entity created by a
- * `forwardMessages` event, using the forward event's own ULID time.
+ * `forwardMessages` event, using the forward's receipt time — it is new
+ * content arriving now, so it belongs at the top of the destination.
  *
- * The forward-reference entity has no comp_content of its own, so without
- * this its sort_idx stays NULL and selectMessages falls back to ordering by
- * the entity id — which is the forward event's ULID anyway, so the fallback
- * would place it correctly. This explicit write keeps the sort_idx column
- * populated (consistent with every other message) and makes the forward
- * appear at the top of the destination room's timeline, matching the
- * forward-as-embed representation (createMessage + forward attachment).
+ * The forwarded original stays where it is; the forward-reference entity is a
+ * new row in the destination room, so it is ordered like a new message — at
+ * the top of that room's timeline, matching the forward-as-embed
+ * representation (createMessage + forward attachment). Copying the original
+ * message's sort_idx here instead would place a forward of an old message deep
+ * in history — outside the first getMessages page — so it would flash in via
+ * the WS diff and vanish on the next refetch.
  *
- * Copying the original message's sort_idx here instead would place a
- * forward of an old message deep in history — outside the first getMessages
- * page — so it would flash in via the WS diff and vanish on the next refetch.
  * No-op if the entity row is missing (materialiser failed earlier in the
  * batch) or if a sort_idx is already set.
  */
-export async function setMessageSortIdxByForward(db: DbLike, event: Event): Promise<void> {
+export async function setMessageSortIdxByForward(
+  db: DbLike,
+  event: Event,
+  idx: StreamIndex | number,
+  receivedAt?: number,
+): Promise<void> {
   if (event.$type !== "space.roomy.message.forwardMessages.v0") return;
 
-  const sortIdx = ulid(decodeTime(event.id)) as Ulid;
+  const sortIdx = orderKey(messageOrderTime(event, receivedAt), idx);
   await db.run(
     "update entities set sort_idx = ? where id = ? and sort_idx is null",
     sortIdx,
@@ -70,17 +176,14 @@ export async function setMessageSortIdxByForward(db: DbLike, event: Event): Prom
  * Set `entities.sort_idx` for messages moved by a `moveMessages` event.
  *
  * Ordering policy — a moved message sorts at the TOP of the destination
- * room's timeline, keyed by the MOVE event's own ULID time.
- *
- * Why: `sort_idx` is the server's page-selection key (`selectMessages` orders
- * by it and takes the newest `limit` rows — room.getMessages.ts). A moved
- * message that kept its original `sort_idx` would be buried according to its
- * ORIGINAL send time, so moving an old message into a busy channel would put
- * it outside the newest-50 page: it would flash into connected clients via
- * the WS `add` diff and vanish on the next refetch. Keying by the move
- * event's time makes the move immediately visible and consistent between the
- * diff and a refetch, which is the same reasoning `setMessageSortIdxByForward`
- * above applies to a forward of an old message.
+ * room's timeline, keyed by the move's receipt time. Why: `sort_idx` is the
+ * server's page-selection key (`selectMessages` orders by it and takes the
+ * newest `limit` rows — room.getMessages.ts). A moved message that kept its
+ * original `sort_idx` would be buried according to its ORIGINAL send time, so
+ * moving an old message into a busy channel would put it outside the
+ * newest-50 page: it would flash into connected clients via the WS `add` diff
+ * and vanish on the next refetch. That is the same reasoning
+ * `setMessageSortIdxByForward` above applies to a forward of an old message.
  *
  * `comp_content.timestamp` is deliberately NOT rewritten: the message's
  * original send time is its identity, and the client renders timestamps from
@@ -90,16 +193,18 @@ export async function setMessageSortIdxByForward(db: DbLike, event: Event): Prom
  *
  * Only messages that actually exist are touched (a move of an unmaterialised
  * id is a no-op), and the update is unconditional: unlike create/forward,
- * which use `and sort_idx is null`, a moved message already HAS a sort_idx
- * and the move must overwrite it.
+ * which use `and sort_idx is null`, a moved message already HAS a sort_idx and
+ * the move must overwrite it.
  */
 export async function setMessageSortIdxByMove(
   db: DbLike,
   event: Event,
+  idx: StreamIndex | number,
+  receivedAt?: number,
 ): Promise<void> {
   if (event.$type !== "space.roomy.message.moveMessages.v0") return;
 
-  const sortIdx = ulid(decodeTime(event.id)) as Ulid;
+  const sortIdx = orderKey(messageOrderTime(event, receivedAt), idx);
   for (const messageId of event.messageIds) {
     await db.run(
       "update entities set sort_idx = ? where id = ? and room = ?",
@@ -166,7 +271,7 @@ export async function setMessageSortIdxByReorder(
 
   let sortIdx: string;
   try {
-    sortIdx = midpointUlid(
+    sortIdx = midpointSortKey(
       before.sort_idx as Ulid,
       next?.sort_idx as Ulid | undefined,
     );
@@ -182,71 +287,40 @@ export async function setMessageSortIdxByReorder(
 }
 
 /**
- * Lexicographic midpoint between two ULIDs. If `later` is missing we sort the
- * new entry 10 ms after `earlier`.
+ * A sort key lexicographically between two others — deterministic, so
+ * replaying a reorder lands the message where it landed live.
+ *
+ * Between two keys in different milliseconds the time halves average and the
+ * position half is zeroed (nothing in the gap needs a tie-break). Within one
+ * millisecond the time halves are equal and the position halves are split.
+ * When `later` is missing the entry sorts 10 ms after `earlier`.
  */
-function midpointUlid(earlier: Ulid, later?: Ulid): string {
-  if (!later) {
-    return ulid(decodeTime(earlier) + 10);
-  }
+function midpointSortKey(earlier: Ulid, later?: Ulid): string {
   const e = decodeTime(earlier);
+  if (!later) return orderKey(e + 10, 0);
+
   const l = decodeTime(later);
-  if (e === l) {
-    // Same millisecond — use the midpoint of the random suffixes.
-    const eStr = earlier as string;
-    const lStr = later as string;
-    const mid = eStr.slice(0, 10) + (BigInt("0x" + eStr.slice(10)) + BigInt("0x" + lStr.slice(10))) / 2n;
-    return mid as Ulid;
-  }
-  return ulid(Math.floor((e + l) / 2));
+  if (e !== l) return orderKey(Math.floor((e + l) / 2), 0);
+
+  const eStr = earlier as string;
+  const lStr = later as string;
+  const ePos = eStr.slice(TIME_LEN);
+  const lPos = lStr.slice(TIME_LEN);
+  if (ePos === lPos) throw new Error(`Sort keys are equal: ${earlier}`);
+  return eStr.slice(0, TIME_LEN) + betweenBase32(ePos, lPos);
 }
 
 /**
- * How the timestamp of a message that carries no `timestampOverride` is
- * derived.
+ * Canonical time (ms since epoch) of a message event: the `timestampOverride`
+ * extension when present (Discord-bridged messages carry the original Discord
+ * send time), else the event's own ULID time.
  *
- * - `"event"` — the event ULID's own time. Used everywhere the event is the
- *   only clock available (an existing log being replayed, an edit/reaction
- *   event with no ordering role of its own).
- * - `"arrival"` — the server's clock at materialisation. `entities.sort_idx`
- *   is the timeline's page key, and a `createMessage` arrives as an event a
- *   *client* minted, so the ULID encodes the sender's clock. A device whose
- *   clock is behind would otherwise key its message behind history, for every
- *   other client, durably — the key is written once and never repaired.
+ * Callers use this as a DISPLAY/identity timestamp — the activity feed's
+ * ordering, the push freshness gate — not as the timeline key; that is
+ * `messageOrderTime`, which prefers the server's receipt over the sender's
+ * ULID. The two differ for a live message, whose ULID encodes the sender's
+ * clock while its place in the timeline follows this server's receipt.
  */
-export type TimestampSource = "event" | "arrival";
-
-/**
- * Canonical timestamp (ms since epoch) for a message event: the
- * `timestampOverride` extension when present (Discord-bridged messages carry
- * the original Discord send time), otherwise the event's own clock according
- * to `source`.
- *
- * The override always wins, and deliberately so: it is set by a producer
- * translating another system's timeline (the Discord bridge stamps the
- * original Discord send time), where the true order is known and the local
- * arrival order is not the one users saw.
- *
- * `source: "arrival"` is what `entities.sort_idx` uses for a live
- * `createMessage` — see `setMessageSortIdxByTimestamp` and its caller in
- * `applyBatch`. Passing it here rather than choosing a timestamp at each call
- * site keeps the ordering key and the activity/feed timestamps on one rule.
- *
- * This is also the rule the SDK materialiser applies to
- * `comp_content.timestamp`. Consumers that derive a timestamp from the
- * message ULID alone (e.g. the activity feed) mis-order bridged messages,
- * whose ULIDs encode bridge-ingestion time rather than the original Discord
- * time.
- */
-export function canonicalMessageTimestamp(
-  event: Event,
-  source: TimestampSource = "event",
-): number {
-  if (event.$type !== "space.roomy.message.createMessage.v0") {
-    return decodeTime(event.id);
-  }
-  const overrideExt =
-    event.extensions?.["space.roomy.extension.timestampOverride.v0"];
-  if (overrideExt) return Number(overrideExt.timestamp);
-  return source === "arrival" ? Date.now() : decodeTime(event.id);
+export function canonicalMessageTimestamp(event: Event): number {
+  return messageOrderTime(event);
 }

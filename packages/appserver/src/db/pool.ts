@@ -143,6 +143,20 @@ export class DatabasePool {
   checkSpaceSchema(spaceDid: string): Promise<{ current: boolean }> {
     return this.forSpace(spaceDid).checkSpaceSchema(spaceDid);
   }
+  /** Open the in-place migration gate for `spaceDid` (idempotent). */
+  spaceMigrationBegin(spaceDid: string): Promise<{ ok: boolean }> {
+    return this.forSpace(spaceDid).spaceMigrationBegin(spaceDid);
+  }
+
+  /** Close the in-place migration gate for `spaceDid`. */
+  spaceMigrationEnd(spaceDid: string): Promise<{ ended: boolean }> {
+    return this.forSpace(spaceDid).spaceMigrationEnd(spaceDid);
+  }
+
+  /** Whether `spaceDid` has its in-place migration gate open. */
+  isSpaceMigrating(spaceDid: string): Promise<boolean> {
+    return this.forSpace(spaceDid).isSpaceMigrating(spaceDid);
+  }
 
   /** A handle to the global DB's dedicated worker. */
   global(): AsyncDatabase {
@@ -300,6 +314,15 @@ export class PooledDatabase implements DbLike {
   }
   spaceRebuildBegin(spaceDid: string): Promise<{ ok: boolean }> {
     return this.#pool.spaceRebuildBegin(spaceDid);
+  }
+  spaceMigrationBegin(spaceDid: string): Promise<{ ok: boolean }> {
+    return this.#pool.spaceMigrationBegin(spaceDid);
+  }
+  spaceMigrationEnd(spaceDid: string): Promise<{ ended: boolean }> {
+    return this.#pool.spaceMigrationEnd(spaceDid);
+  }
+  isSpaceMigrating(spaceDid: string): Promise<boolean> {
+    return this.#pool.isSpaceMigrating(spaceDid);
   }
   spaceRebuildCommit(spaceDid: string): Promise<{ committed: boolean }> {
     return this.#pool.spaceRebuildCommit(spaceDid);

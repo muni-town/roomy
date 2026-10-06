@@ -166,12 +166,13 @@ async function resolveCursorKey(db: DbLike, cursorId: string): Promise<string> {
  *
  * Order and filter on the SAME key. The cursor a client sends is a message
  * id, but the page is ordered by the timeline key `coalesce(sort_idx, id)`:
- * `sort_idx` is the message's ordering key (the server's arrival time, or a
- * bridge-supplied `timestampOverride`) while the id is the minting ULID, so
- * the two orders run opposite each other for bridged backfill and an id-only
- * filter drops and repeats rows. The cursor is resolved to its own timeline
- * key first, then compared as a keyset with `id` as the tie-break — without
- * the tie-break a page boundary inside a run of equal keys is unstable.
+ * `sort_idx` is the message's ordering key (the receipt time this server
+ * recorded for the event, or a bridge-supplied `timestampOverride`) while the
+ * id is the minting ULID, so the two orders run opposite each other for
+ * bridged backfill and an id-only filter drops and repeats rows. The cursor
+ * is resolved to its own timeline key first, then compared as a keyset with
+ * `id` as the tie-break — without the tie-break a page boundary inside a run
+ * of equal keys is unstable.
  *
  * `hasCursor` interpolates the keyset predicate and the `limit` is inlined,
  * so this needs `idx_entities_room_sort_key (room, coalesce(sort_idx, id),

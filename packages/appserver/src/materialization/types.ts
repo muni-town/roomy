@@ -7,6 +7,7 @@
  */
 
 import type {
+  DecodedStreamEvent,
   Event,
   SqlStatement,
   StreamDid,
@@ -42,6 +43,22 @@ export type ApplyOutcome =
   | { result: "applied"; eventId: Ulid }
   | { result: "stashed"; eventId: Ulid; dependsOn: Ulid[] }
   | { result: "error"; eventId: Ulid; error: string };
+
+/**
+ * A decoded event plus the receipt time the event log recorded for it.
+ *
+ * `receivedAt` is `stream_events.received_at`: the instant the server accepted
+ * the event, which is the ordering key's time component for a message the
+ * sender's own clock cannot be trusted to place (see `sortIdx.ts`). It is
+ * server-side materialisation metadata, so it is carried here rather than on
+ * the SDK's `DecodedStreamEvent`, which is also the shape handed to clients.
+ *
+ * Optional because an event logged before the column existed has no receipt
+ * time; the ordering key then falls back to the event's own ULID time.
+ */
+export interface LoggedEvent extends DecodedStreamEvent {
+  receivedAt?: number;
+}
 
 /** Context for materialiser invocations. */
 export interface MaterializeOpts {

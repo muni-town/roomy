@@ -8,10 +8,9 @@
  * `applyBundle`'s createMessage path for the DESTINATION and unwind it for
  * the SOURCE:
  *
- *   - `sort_idx`           → the move event's own ULID time (see
+ *   - `sort_idx`           → the move's receipt time (see
  *                            `setMessageSortIdxByMove`) so a moved message is
  *                            visible at the top of the destination timeline
- *                            instead of buried at its original send time.
  *   - `activity_item`      → destination window gains the message; source
  *                            window is rebuilt from the room's remaining
  *                            newest 5 (the moved message may have been one of
@@ -30,12 +29,11 @@
  *                            they have no other messages left there.
  *
  * The global mentions index (`mentions.room_id`) is NOT touched here — it is
- * owned by `syncMentionsIndex`, which the invalidation router drives for the
  * same event (see `MoveMessages` there).
  */
 
 import type { DbLike } from "../db/types.ts";
-import type { Event, StreamDid, Ulid } from "@roomy-space/sdk";
+import type { Event, StreamDid, StreamIndex, Ulid } from "@roomy-space/sdk";
 import { decodeTime, ulid } from "ulidx";
 import { upsertActivityItem } from "./activityItem.ts";
 import {
@@ -43,7 +41,7 @@ import {
   rebuildActivityWindow,
 } from "./roomDerivedState.ts";
 import { rebuildRoomActivity } from "../queries/roomActivityProjection.ts";
-import { setMessageSortIdxByMove } from "./sortIdx.ts";
+import { messageOrderTime, setMessageSortIdxByMove } from "./sortIdx.ts";
 import { isThread, refreshThreadActivityOnMessage } from "../queries/userActiveThreads.ts";
 import { upsertUserRoomParticipation } from "../queries/userRoomParticipation.ts";
 import { log } from "../log.ts";
@@ -77,6 +75,10 @@ export async function applyMoveSideEffects(
   opts: {
     streamId: StreamDid;
     event: Event;
+    /** The move event's log position — the sort key's tie-break. */
+    idx: StreamIndex;
+    /** `stream_events.received_at`: the server's receipt instant. */
+    receivedAt?: number;
     readStateDb?: DbLike;
     /** True for backfill/replay — skips the read-state mutations. */
     isBackfill: boolean;
@@ -88,18 +90,17 @@ export async function applyMoveSideEffects(
   if (!event.room || !event.toRoomId) return;
 
   const spaceId = opts.streamId;
-  // Activity timestamps use the move event's own time, matching the
-  // `sort_idx` the message now carries — otherwise the feed's window order
-  // and the timeline order would disagree.
-  const movedAt = decodeTime(event.id);
+  // The move's canonical instant: the server's receipt of the event, with the
+  // event's own ULID time as the fallback for a row logged before receipt
+  // times existed. This is the same rule `setMessageSortIdxByMove` keys the
+  // ordering by, so the timeline order and the feed's window order use one
+  // instant and cannot drift apart.
+  const movedAt = messageOrderTime(opts.event, opts.receivedAt);
 
-  // Ordering: the moved message takes the move event's time so it lands at
-  // the top of the destination timeline instead of being buried at its
-  // original send time (see `setMessageSortIdxByMove`). It lives in this
-  // helper — not in `applyBundle`'s sort_idx block — so the ordering and the
-  // activity timestamps below are computed from the same instant and can
-  // never drift apart.
-  await setMessageSortIdxByMove(db, opts.event);
+  // Ordering: the moved message takes the move's instant so it lands at the
+  // top of the destination timeline instead of being buried at its original
+  // send time (see `setMessageSortIdxByMove`).
+  await setMessageSortIdxByMove(db, opts.event, opts.idx, opts.receivedAt);
 
   const moved = await readMovedMessages(db, event.messageIds);
   if (moved.length === 0) return;

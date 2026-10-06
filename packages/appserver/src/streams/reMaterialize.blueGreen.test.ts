@@ -28,10 +28,12 @@ import { Database } from "bun:sqlite";
 import { encode } from "@atcute/cbor";
 import {
   newUlid,
+  parseEvent,
   StreamDid,
   UserDid,
   type Event,
 } from "@roomy-space/sdk";
+import { decodeTime, ulid } from "ulidx";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -301,4 +303,74 @@ describe("blue-green rematerialization", () => {
     expect(await router.isSpaceRebuilding!(streamDid)).toBe(false);
     expect(existsSync(`${canonicalPath}.new`)).toBe(false);
   });
+
+  test(
+    "a rebuild reproduces the ordering keys a live write produced",
+    async () => {
+      const author = UserDid.assert("did:plc:bluegreen-rebuild-keys");
+
+      const sm = new StreamManager(router, {
+        appserverUrl: "https://appserver.example",
+        getProfiles: (async () => []) as never,
+      });
+
+      // Live write: a room and two messages posted in one batch, so both
+      // messages share a receipt instant and are ordered only by their log
+      // positions. Their ids are skewed into the past the way a client with a
+      // behind clock mints them, so a ULID-derived key would sort them wrong.
+      const roomId = newUlid();
+      const skewedAt = Date.now() - 6 * 60 * 60 * 1000;
+      const message = (): Event => {
+        const parsed = parseEvent({
+          id: ulid(skewedAt),
+          $type: "space.roomy.message.createMessage.v0",
+          room: roomId,
+          body: {
+            mimeType: "text/plain",
+            data: { $bytes: Buffer.from("hi").toString("base64") },
+          },
+          extensions: {},
+        });
+        if (!parsed.success) throw new Error(parsed.error);
+        return parsed.data;
+      };
+      await sm.sendEvents(streamDid, [
+        {
+          id: roomId,
+          $type: "space.roomy.room.createRoom.v0",
+          kind: "space.roomy.channel",
+          name: "general",
+        },
+      ], author);
+      await sm.sendEvents(streamDid, [message(), message()], author);
+
+      const readKeys = async (): Promise<Array<{ id: string; sort_idx: string }>> =>
+        router
+          .forSpace!(streamDid)
+          .query(
+            "select id, sort_idx from entities where sort_idx is not null order by id",
+          )
+          .all<{ id: string; sort_idx: string }>();
+
+      const live = await readKeys();
+      expect(live).toHaveLength(2);
+
+      // Mark the canonical DB stale so the next pass takes the rebuild path,
+      // which re-derives the space from the log into a fresh DB and swaps it
+      // in. This is the schema bump's migration, so it is exactly the second
+      // derivation the plan's invariant is about.
+      const sdb = new Database(canonicalPath);
+      sdb.run("update space_schema_version set version = '0' where id = 1");
+      sdb.close();
+
+      await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+
+      // Same keys, from the log alone.
+      expect(await readKeys()).toEqual(live);
+      // ...and they still follow the server's receipt, not the skewed ids.
+      for (const row of live) {
+        expect(decodeTime(row.sort_idx)).toBeGreaterThan(skewedAt);
+      }
+    },
+  );
 });

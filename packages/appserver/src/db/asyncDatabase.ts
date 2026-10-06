@@ -373,6 +373,24 @@ export class AsyncDatabase {
       current: boolean;
     }>;
   }
+  /** Open the in-place migration gate for `spaceDid` (idempotent). */
+  spaceMigrationBegin(spaceDid: string): Promise<{ ok: boolean }> {
+    return this.#link.send({ type: "spaceMigrationBegin", spaceDid }) as Promise<{
+      ok: boolean;
+    }>;
+  }
+
+  /** Close the in-place migration gate for `spaceDid`. */
+  spaceMigrationEnd(spaceDid: string): Promise<{ ended: boolean }> {
+    return this.#link.send({ type: "spaceMigrationEnd", spaceDid }) as Promise<{
+      ended: boolean;
+    }>;
+  }
+
+  /** Whether `spaceDid` has its in-place migration gate open. */
+  isSpaceMigrating(spaceDid: string): Promise<boolean> {
+    return this.#link.send({ type: "isSpaceMigrating", spaceDid }) as Promise<boolean>;
+  }
 
   /** A handle that routes requests to the global DB. */
   global(): AsyncDatabase {

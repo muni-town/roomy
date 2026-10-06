@@ -14,7 +14,7 @@
  */
 
 import { decode } from "@atcute/cbor";
-import { type DecodedStreamEvent, type Event, type StreamDid, type StreamIndex, type UserDid } from "@roomy-space/sdk";
+import { type Event, type StreamDid, type StreamIndex, type UserDid } from "@roomy-space/sdk";
 import type { DbLike } from "../db/types.ts";
 import { applyBatch } from "../materialization/applyBatch.ts";
 import {
@@ -26,11 +26,14 @@ import type { HappyViewConfig } from "../happyview.ts";
 import { log } from "../log.ts";
 import { runPendingGlobalMigrations } from "../db/globalMigrations.ts";
 import { refreshSpaceStats } from "../queries/spaceStats.ts";
+import { upgradeSpaceInPlace } from "../db/spaceMigrations.ts";
+import type { LoggedEvent } from "../materialization/types.ts";
 
 interface RawEvent {
   idx: number;
   user: string;
   payload: Uint8Array;
+  received_at: number | null;
 }
 
 /** Default number of streams re-materialized concurrently (matches the pool default). */
@@ -57,6 +60,34 @@ export const DEFAULT_REMATERIALIZE_CONCURRENCY = 4;
  * do not abort the overall process — a failed stream will be re-materialized
  * on demand when first accessed.
  */
+
+/**
+ * Whether `streamDid`'s space DB owes an in-place data migration.
+ *
+ * The space DB's own `space_schema_migrations` rows carry the null markers; a
+ * sync adapter (`:memory:` tests) has no space handle, so it reports nothing
+ * pending. A missing table means the DB has never been opened by this build,
+ * which the caller's upgrade pass will handle.
+ */
+async function hasPendingSpaceMigrations(
+  db: DbLike,
+  streamDid: string,
+): Promise<boolean> {
+  if (!db.forSpace) return false;
+  try {
+    const row = await db
+      .forSpace(streamDid as StreamDid)
+      .query(
+        "select count(*) as n from space_schema_migrations where completed_at is null",
+      )
+      .get<{ n: number }>();
+    return (row?.n ?? 0) > 0;
+  } catch {
+    // Table absent (never opened, or an adapter without it): nothing to prove.
+    return false;
+  }
+}
+
 export async function reMaterializeFromLocalEvents(
   db: DbLike,
   getProfiles: GetProfilesFn | undefined = undefined,
@@ -87,18 +118,24 @@ export async function reMaterializeFromLocalEvents(
     return;
   }
 
-  // Partition streams into blue-green rebuilds and incremental catch-ups.
+  // Partition streams into in-place upgrades, blue-green rebuilds, and
+  // incremental catch-ups.
   //
-  // A stream whose canonical per-space DB is on a STALE schema is rebuilt from
-  // the event log into a temp `.sqlite.new` DB (fresh, current schema) and
-  // atomically swapped over the canonical file. Reads keep serving the old DB
-  // until the swap, so a schema bump never makes a space appear empty. On any
-  // failure the temp DB is aborted and the old DB keeps serving.
+  // A stream whose canonical per-space DB is on a STALE schema is upgraded in
+  // place: the data migrations run against the existing DB, which keeps serving
+  // reads throughout and is far cheaper than replaying the whole log. Only when
+  // the upgrade cannot be applied (a version this build cannot start from) or
+  // fails does the stream fall back to the blue-green rebuild — a full replay
+  // into a temp `.sqlite.new` DB, atomically swapped over the canonical file.
+  // Reads keep serving the old DB until the swap, so a schema bump never makes
+  // a space appear empty. On any failure the temp DB is aborted and the old DB
+  // keeps serving.
   //
   // A stream whose canonical DB is on the CURRENT schema uses the existing
   // incremental catch-up path unchanged (skip if caught up, else replay the
   // un-materialized gap from cursor + 1).
   let skipped = 0;
+  const upgrades: string[] = [];
   const toReplay: Array<{
     streamId: string;
     fromIdx: number;
@@ -107,18 +144,21 @@ export async function reMaterializeFromLocalEvents(
   }> = [];
 
   for (const { stream_id } of streams) {
-    // Blue-green decision point: is the canonical per-space DB on the current
+    // Upgrade decision point: is the canonical per-space DB on the current
     // schema? When `checkSpaceSchema` is absent (sync adapters in tests that
-    // don't exercise the rebuild), default to current so behavior is unchanged.
+    // don't exercise the upgrade), default to current so behavior is unchanged.
     const { current } =
       (await db.checkSpaceSchema?.(stream_id)) ?? { current: true };
 
-    if (!current) {
-      // Stale schema ⇒ full rebuild. Replay the entire stream (idx from 0)
-      // into the temp rebuild DB, then commit the swap. `applyBatch` writes
-      // entity_space + materialization_cursor into the new DB, so no backfill
-      // of the old DB is needed.
-      toReplay.push({ streamId: stream_id, fromIdx: 0, rebuild: true });
+    // A stale DB needs the full upgrade; a current one may still owe a data
+    // task from a pass that was interrupted after the version row advanced
+    // (the two are committed separately: the version bumps at open, the task
+    // runs later in the boot runner). Either way the upgrade pass below runs
+    // it, and falls back to a rebuild for this stream if it cannot.
+    const pending =
+      !current || (await hasPendingSpaceMigrations(db, stream_id));
+    if (pending) {
+      upgrades.push(stream_id);
       continue;
     }
 
@@ -183,6 +223,67 @@ export async function reMaterializeFromLocalEvents(
     });
   }
 
+  // Upgrade stale-schema spaces in place. A stream the migration declines or
+  // fails on is queued for a rebuild instead.
+  for (const streamId of upgrades) {
+    try {
+      await upgradeSpaceInPlace(db, streamId as StreamDid);
+      // The upgrade replayed no events, so the cursor is unchanged; the space
+      // is now current-schema and any un-materialized gap is caught up by the
+      // incremental pass below.
+      const cursorRow = await db
+        .forSpace!(streamId as StreamDid)
+        .query("SELECT materialized_to FROM materialization_cursor WHERE stream_id = ?")
+        .get<{ materialized_to: number }>(streamId);
+      const materializedTo = cursorRow?.materialized_to ?? -1;
+      const latestRow = await db
+        .query(
+          "SELECT coalesce(max(idx), -1) AS latest FROM stream_events WHERE stream_id = ?",
+        )
+        .get<{ latest: number }>(streamId);
+      const latest = latestRow?.latest ?? -1;
+
+      try {
+        await db.backfillEntitySpace?.(streamId);
+      } catch (err) {
+        log.warn(
+          "startup",
+          `entity_space backfill failed for ${streamId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      try {
+        await refreshSpaceStats(db, streamId as StreamDid);
+      } catch (err) {
+        log.warn(
+          "startup",
+          `space_stats refresh failed for ${streamId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      log.info("startup", `upgraded ${streamId} in place`);
+      if (materializedTo >= latest) {
+        skipped++;
+      } else {
+        toReplay.push({
+          streamId,
+          fromIdx: materializedTo + 1,
+          rebuild: false,
+        });
+      }
+    } catch (err) {
+      // The in-place upgrade could not run (or failed). Re-derive the space
+      // from the log instead: replay the entire stream (idx from 0) into the
+      // temp rebuild DB, then commit the swap. `applyBatch` writes entity_space
+      // + materialization_cursor into the new DB, so no backfill of the old DB
+      // is needed.
+      log.warn(
+        "startup",
+        `in-place migration for ${streamId} fell back to a rebuild: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      toReplay.push({ streamId, fromIdx: 0, rebuild: true });
+    }
+  }
+
   if (toReplay.length === 0) {
     await finishGlobalMigrations();
     log.info(
@@ -233,16 +334,17 @@ export async function reMaterializeFromLocalEvents(
 
         const rawEvents = await db
           .query(
-            "SELECT idx, user, payload FROM stream_events WHERE stream_id = ? AND idx >= ? ORDER BY idx",
+            "SELECT idx, user, payload, received_at FROM stream_events WHERE stream_id = ? AND idx >= ? ORDER BY idx",
           )
           .all<RawEvent>(streamDid, fromIdx);
 
         if (rawEvents.length > 0) {
-          const decodedEvents: DecodedStreamEvent[] = rawEvents.map(
-            (e): DecodedStreamEvent => ({
+          const decodedEvents: LoggedEvent[] = rawEvents.map(
+            (e): LoggedEvent => ({
               idx: e.idx as StreamIndex,
               event: decode(e.payload) as Event,
               user: e.user as UserDid,
+              receivedAt: e.received_at ?? undefined,
             }),
           );
 

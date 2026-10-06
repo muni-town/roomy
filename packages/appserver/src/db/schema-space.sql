@@ -16,14 +16,32 @@
 -- must stay in sync with, so the per-space shape mirrors them exactly for the
 -- tables that remain.
 --
--- IMPORTANT: keep the per-space version constant in sync whenever this file
--- changes (see src/db/db.ts, SPACE_SCHEMA_VERSION).
+-- IMPORTANT: when this file changes, add a version to SPACE_MIGRATIONS
+-- (src/db/spaceVersions.ts) describing how existing DBs reach the new shape.
+-- A bump no longer forces a rematerialisation: the worker applies each
+-- version's structural `up` in place, and the boot runner runs the data tasks
+-- (src/db/spaceMigrations.ts). A migration that fails still falls back to the
+-- blue-green rebuild.
+--
+-- An ALTER that `create table if not exists` cannot express must be declared
+-- in that version's `up`, not at the top level here: this file is exec'd on
+-- every open, including against a pre-ALTER DB, where a top-level column would
+-- throw before the migration could run.
 
 pragma foreign_keys = on;
 
 create table if not exists space_schema_version (
   id integer primary key check (id = 1),
   version text not null
+) strict;
+
+-- Per-version completion markers for the in-place data migrations. A null
+-- `completed_at` is a task the boot runner still owes this space; the row is
+-- stamped only after the task succeeds in full, so a crash mid-task retries on
+-- the next boot. Mirrors global_schema_migrations / readstate_schema_migrations.
+create table if not exists space_schema_migrations (
+  version text primary key,
+  completed_at integer
 ) strict;
 
 create table if not exists entities (

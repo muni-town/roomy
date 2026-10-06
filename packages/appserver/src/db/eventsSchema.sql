@@ -7,9 +7,19 @@ create table if not exists stream_events (
     payload blob not null,
     signature blob not null default x'',
     event_type text,          -- denormalized $type for dashboard stats
-    created_at integer,       -- epoch ms, set at insert time
+    created_at integer,       -- epoch ms at insert time; the admin dashboard's window key
+    received_at integer,      -- epoch ms the server accepted the event; see below
     primary key (stream_id, idx)
 ) strict;
+
+-- `received_at` is the materialisation ordering key's time component
+-- (`materialization/sortIdx.ts`). A `createMessage` id is a ULID minted on the
+-- sender's device, so keying the timeline on it would let one skewed clock bury
+-- a message durably; stamping the server clock at materialisation instead made
+-- the key unreproducible from the log. Recording the instant here, once, at
+-- append, makes the key a pure function of the log: a rebuild reads this column
+-- rather than re-deciding. Nullable only for rows written before the column
+-- existed, which fall back to the event's own ULID time.
 
 -- Supports "events in the last N hours/day" counts (admin dashboard). Without
 -- it those are full table scans of the whole event log.

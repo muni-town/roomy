@@ -1,7 +1,8 @@
 # Pure Materialisation
 
 **Date:** 2026-10-02
-**Status:** Plan — no code changes yet
+**Status:** Step 1 landed; steps 2–5 not started. Per-space schema changes now
+migrate in place before falling back to a rebuild (§6a).
 **Owner:** appserver
 
 ## 1. Problem
@@ -60,26 +61,26 @@ makes a replica correct. Property 1 is what makes the two agree.
 Buckets: **D** breaks determinism, **I** breaks idempotence, **C** breaks closure.
 An item can be more than one.
 
-### 3.1 `entities.sort_idx` carries the ingesting clock (D, I)
+### 3.1 `entities.sort_idx` carries the ingesting clock (D, I) — resolved by Step 1
 
-| Site | Behaviour |
+| Site | Old behaviour |
 |---|---|
 | `applyBatch.ts:219-222` | Live `createMessage`: `ulid(canonicalMessageTimestamp(event, "arrival"))`. `"arrival"` is `Date.now()`. |
 | `sortIdx.ts:26-40`, `:217-244` | `setMessageSortIdxByTimestamp` and `canonicalMessageTimestamp`; `TimestampSource = "event" \| "arrival"`. The write is guarded `where sort_idx is null`, so it is apply-once. |
 | `sortIdx.ts:96` | `setMessageSortIdxByMove` — a moved message is keyed by the move event's own ULID time. |
 | `sortIdx.ts:121` | `setMessageSortIdxByReorder` — reads neighbouring rows' `sort_idx` and writes a midpoint: an ambient read of the current table. |
 
-Two distinct defects:
+Two distinct defects, both addressed by Step 1:
 
-- **The clock.** The `"arrival"` branch exists deliberately: the message id is
+- **The clock.** The `"arrival"` branch existed deliberately: the message id is
   minted on the sender's device, so a skewed client clock would durably bury a
-  message mid-history. That concern is real and must be preserved. What must
-  change is that the *value chosen at ingest* has to be recorded in the log, so
-  replay reproduces it instead of substituting a different rule.
+  message mid-history. That concern is real and is preserved. What changed is
+  that the *value chosen at ingest* is now recorded in the log, so replay
+  reproduces it instead of substituting a different rule.
 - **The random suffix.** `ulid()` emits a 10-char time prefix plus 16 characters
-  from a CSPRNG. Even the pure replay branch is not byte-reproducible, and two
-  messages created in the same millisecond sort by a random tie-break that
-  differs between derivations. The tie-break needs to be the log position.
+  from a CSPRNG. Even the pure replay branch was not byte-reproducible, and two
+  messages created in the same millisecond sorted by a random tie-break that
+  differed between derivations. The tie-break is now the log position.
 
 ### 3.2 Unread counters are increments (I, C)
 
@@ -184,35 +185,45 @@ Ordered so each step is independently shippable and independently useful. Steps
 1 and 2 are prerequisites for replication; steps 3–5 are cleanups that the
 modelling work makes possible.
 
-### Step 1 — Deterministic ordering keys
+### Step 1 — Deterministic ordering keys — **landed**
 
-**Change.** Make the ingest-time ordering timestamp an explicit part of the
-event, so replay reproduces it rather than substituting a different rule.
+**Change.** The ordering key is now `time + log position`: the 10-character
+time prefix is the message's canonical ordering time and the 16-character
+suffix is the index of the event that wrote it (`sortIdx.ts`).
 
-- Record the ingest timestamp on the event at append time (an extension field or
-  a column on `stream_events`), and have `setMessageSortIdxByTimestamp` read it on
-  both the live and replay paths. The `isBackfill ? "event" : "arrival"` branch
-  (`applyBatch.ts:219-222`) disappears; the choice is made once, at ingest, and
-  is then data.
-- Replace the random tie-break in `ulid()` with the log position (`idx`) so equal
-  timestamps order identically across derivations.
-- Apply the same treatment to `setMessageSortIdxByMove` (`sortIdx.ts:96`) and
-  `setMessageSortIdxByReorder` (`sortIdx.ts:121`), which currently read
-  neighbouring rows to compute a midpoint.
+- `stream_events.received_at` records the instant the server accepted the
+  event, written once at append
+  (`StreamManager.sendEvents`). Both the live path and
+  `reMaterializeFromLocalEvents` read it, so the key is data rather than a rule
+  re-decided per derivation; the `isBackfill ? "event" : "arrival"` branch is
+  gone. Existing log rows are backfilled from `created_at` on first open after
+  the column is added (`db/worker.ts`).
+- The tie-break is the event's log position, replacing `ulid()`'s random
+  suffix. Equal timestamps now order identically in every derivation, and a
+  run of equal keys no longer shuffles across the page boundary the cursor
+  walks.
+- `setMessageSortIdxByMove` and `setMessageSortIdxByForward` take the same
+  receipt-time rule. `setMessageSortIdxByReorder` keeps reading its neighbours
+  — a reorder is defined relative to them — but its midpoint arithmetic is now
+  exact per half over a decoded position rather than re-encoding an averaged
+  ULID, and is deterministic.
+- A `timestampOverride` still wins over the receipt time, unchanged: it is the
+  true order of another system's timeline (the Discord bridge), which the
+  server's own clock cannot supply.
 
-**Why first.** It is the only item that changes what is written at ingest, so it
-needs to land before anything starts relying on replica equivalence. It also
-removes a latent bug: a space rebuilt today can order differently from the
-original.
+**Acceptance.** `reMaterialize.blueGreen.test.ts` writes a space live, marks
+its DB stale, and re-derives it from the log into a fresh DB: `entities.sort_idx`
+is identical for every message, and follows receipt rather than a skewed
+sender clock. `applyBatch.test.ts` pins the same log materialised twice
+yielding identical keys, equal timestamps ordering by `idx`, the
+`timestampOverride` precedence, and the pre-`received_at` ULID fallback.
 
-**Acceptance.** Materialise the same log twice — once live, once via
-`reMaterializeFromLocalEvents` — and assert `entities.sort_idx` is identical for
-every message. Assert equal-timestamp messages order by `idx`.
-
-**Migration.** Existing per-space DBs hold clock-derived keys. A
-`SPACE_SCHEMA_VERSION` bump forces a blue-green rebuild, which recomputes them
-from the log through the existing begin → replay → commit path. No bespoke
-migration.
+**Migration.** `SPACE_SCHEMA_VERSION` is bumped to `3`. Per-space DBs upgrade
+in place (§6): the worker advances the version and schedules the v3 task, which
+recomputes `entities.sort_idx` from the log against the existing DB. A space
+with a `reorderMessage` event in its log declines the in-place path — a reorder
+is defined relative to its neighbours' keys, which an in-place replay over a
+fully-populated DB cannot reproduce — and takes the rebuild instead.
 
 ### Step 2 — Remove the non-log writers
 
@@ -287,8 +298,8 @@ failing the test on `fetch`). Background loops run on exactly one owner.
 
 | # | Invariant | Where proven |
 |---|---|---|
-| P1 | Two derivations of the same log produce identical `sort_idx` for every message | Step 1 |
-| P2 | Equal-timestamp messages order by log position, not randomly | Step 1 |
+| P1 | Two derivations of the same log produce identical `sort_idx` for every message | **Step 1** — `reMaterialize.blueGreen.test.ts` (live write vs rebuild), `applyBatch.test.ts` (same log twice) |
+| P2 | Equal-timestamp messages order by log position, not randomly | **Step 1** — `applyBatch.test.ts` |
 | P3 | For every per-space table, rebuild-from-log equals live state | Step 2 |
 | P4 | Applying a batch twice leaves read-state unchanged | Step 3 |
 | P5 | Materialisation performs no outbound network I/O | Step 5 |
@@ -299,16 +310,62 @@ The general form of P3/P7 is worth automating: a harness that materialises a log
 into `:memory:`, snapshots every table, rebuilds, and diffs. That test fails today
 for `comp_embed_link_data`, and would have caught `setHandle`.
 
+## 6a. Per-space schema migration
+
+A per-space schema bump upgrades each space DB **in place**; the blue-green
+rebuild is the fallback, not the default.
+
+The machinery mirrors the global and read-state DBs, which have migrated in
+place for as long as they have existed:
+
+- `db/spaceVersions.ts` is the manifest. Each version is `structural` (the
+  worker applies an `up` when it opens the DB) or `data` (the boot runner runs a
+  task). `SPACE_SCHEMA_VERSION` is derived from it, and `SpaceAsyncVersion`
+  makes a `data` version without a task a type error.
+- `db/worker.ts` `initializeSpaceSchema` reads the on-disk version **first** and
+  only execs the schema on a DB that is fresh, current, or genuinely upgradable.
+  An older version runs every version in `(actual, expected]` in one transaction
+  that also advances the version row; a version this build cannot start from
+  throws `SchemaVersionMismatchError` and the DB is served untouched.
+- `db/spaceMigrations.ts` runs the `data` tasks under the write gate. Completion
+  is stamped per space in `space_schema_migrations` (inside the space DB), so a
+  crash mid-task leaves the marker null and the next boot retries.
+- `streams/reMaterialize.ts` takes the upgrade path for a stale DB **and** for a
+  current-schema DB that still owes a task marker (a pass interrupted between
+  the version bump and the task). Anything the migration declines or fails on is
+  queued for a rebuild.
+
+A `data` task may read the event log, so it runs on the main thread rather than
+in the worker. That is why the two steps are separate: the version advances at
+open, the task runs at boot, and only the marker ties them together.
+
+The write gate covers both windows: `StreamManager.sendEvents` rejects a write
+while the space is migrating or rebuilding, so a request cannot race the pass.
+
+Cost: a bump is now a per-space scan of the log for the versions that need one
+(v3 replays ordering events only) instead of a full replay of every event in
+every space. It remains proportional to the space's log, so a migration that
+does need the whole log is still O(space).
+
+Not every change can migrate. A version whose new derived value depends on the
+order rows are *visited* rather than only on the log cannot be reproduced by an
+in-place replay over a DB that already holds every row. `reorderMessage` is the
+existing instance (§7), and such a task throws `SpaceMigrationNeedsRebuildError`
+so the space falls back.
+
 ## 7. Risks and open questions
 
 - **Ordering is user-visible.** Changing `sort_idx` derivation re-sorts existing
-  spaces on the next rebuild. The schema bump makes that a deliberate, one-time
-  event rather than a silent drift, but it should be a known consequence.
+  spaces on the next migration or rebuild. The schema bump makes that a
+  deliberate, one-time event rather than a silent drift, but it should be a
+  known consequence.
 - **`reorderMessage` is genuinely order-dependent.** A reorder is defined relative
   to its neighbours, so it cannot be a pure function of the single event — it
   needs the surrounding order, which *is* log-derived, but the midpoint arithmetic
   must be pinned so that the same neighbourhood yields the same key. Fractional
-  indexing with a deterministic tie-break is the likely answer.
+  indexing with a deterministic tie-break is the likely answer. Until then it is
+  also the one event an in-place migration cannot replay (§6a), so a space that
+  contains one takes the rebuild path on a bump.
 - **Step 3 changes read behaviour.** If `unread_count` becomes derived, every
   reader of that column changes. The `read_positions` table is read by the sidebar,
   the activity feed, the push digest gate and the room metadata endpoint; the

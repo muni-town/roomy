@@ -52,9 +52,9 @@ export async function rebuildActivityWindow(db: DbLike, roomId: string): Promise
     return;
   }
 
-  // `sort_idx` is a ULID of the canonical send time, so its time component is
-  // the entry timestamp the feed orders the window by — no second read of
-  // comp_content needed.
+  // A sort key's time component is the message's ORDERING time, so the feed
+  // orders this window by the same instant the timeline does — no second read
+  // of comp_content needed.
   const entries = rows.map((r) => ({
     id: r.id,
     ts: decodeTime((r.sort_idx ?? r.id) as Ulid),

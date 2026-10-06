@@ -3,7 +3,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
 import { Database } from "bun:sqlite";
-import { ulid } from "ulidx";
+import { decodeTime, ulid } from "ulidx";
 import {
   StreamDid,
   StreamIndex,
@@ -19,8 +19,9 @@ import { toAsyncDb } from "../db/syncAdapter.ts";
 import { closeDb, openDb, openReadStateDb } from "../db/db.ts";
 import { applyBatch } from "./applyBatch.ts";
 import { applyBundle } from "./applyBundle.ts";
-import type { StatementBundleSuccess } from "./types.ts";
+import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
+import { messageSortIdxKey, orderKey } from "./sortIdx.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,8 +77,8 @@ function seedSpace(db: Database, streamDid: StreamDid): void {
   db.run("insert into comp_space (entity) values (?)", [streamDid]);
 }
 
-function decoded(event: Event, idx: number): DecodedStreamEvent {
-  return { event, idx: idx as StreamIndex, user: USER };
+function decoded(event: Event, idx: number, receivedAt?: number): LoggedEvent {
+  return { event, idx: idx as StreamIndex, user: USER, receivedAt };
 }
 
 function createRoomEvent(name: string): Event {
@@ -914,8 +915,8 @@ describe("applyBundle concurrency", () => {
     };
 
     const results = await Promise.allSettled([
-      applyBundle(asyncDb, bundleA, { isBackfill: true, streamId: STREAM }),
-      applyBundle(asyncDb, bundleB, { isBackfill: true, streamId: STREAM }),
+      applyBundle(asyncDb, bundleA, { isBackfill: true, streamId: STREAM, idx: 1 as StreamIndex }),
+      applyBundle(asyncDb, bundleB, { isBackfill: true, streamId: STREAM, idx: 2 as StreamIndex }),
     ]);
 
     // Both must succeed — no "no such savepoint" errors.
@@ -1662,5 +1663,115 @@ describe("moveMessages — read-state side effects", () => {
     // Read-state is appserver-owned and not reconstructed by replay, so a
     // replayed move must leave the live counts alone.
     expect(sourceRow?.unread_count).toBe(1);
+  });
+});
+
+describe("sort keys are a pure function of the log", () => {
+  /**
+   * Materialise a room's messages into a fresh DB and read back the ordering
+   * key each one got. The events carry a `receivedAt` the way the log records
+   * it, so this is the same input a rebuild would replay.
+   */
+  async function materialiseAndReadKeys(
+    events: LoggedEvent[],
+  ): Promise<Array<{ id: string; sort_idx: string | null }>> {
+    const { db, asyncDb } = freshDb();
+    await applyBatch(asyncDb, STREAM, events, { isBackfill: false });
+    return (
+      db
+        .query("select id, sort_idx from entities where sort_idx is not null order by id")
+        .all() as Array<{ id: string; sort_idx: string | null }>
+    );
+  }
+
+  test("the same log materialised twice yields identical keys", async () => {
+    const room = newUlid();
+    // A skewed sender clock: both ids decode to an hour ago, while the server
+    // received them now. The ordering key must follow the receipt, not the id.
+    const skewedAt = Date.now() - 60 * 60 * 1000;
+    const receivedAt = Date.now();
+    const events = [
+      decoded(createMessageEvent(room, ulid(skewedAt), "a"), 1, receivedAt),
+      decoded(createMessageEvent(room, ulid(skewedAt), "b"), 2, receivedAt),
+    ];
+
+    // Two independent derivations of one log. The defect this pins is a key
+    // that reads the wall clock at materialisation: a rebuild would then
+    // disagree with the original.
+    const first = await materialiseAndReadKeys(events);
+    const second = await materialiseAndReadKeys(events);
+
+    expect(second).toEqual(first);
+    expect(first).toHaveLength(2);
+    // ...and the key is the receipt instant, not the sender's ULID.
+    for (const row of first) {
+      expect(decodeTime(row.sort_idx!)).toBe(receivedAt);
+    }
+  });
+
+  test("messages sharing one timestamp order by log position", async () => {
+    const room = newUlid();
+    const receivedAt = Date.now();
+    // Same instant for every message — a replayed batch, or a burst inside
+    // one millisecond. Without a log-position tie-break the order would be a
+    // random ULID suffix and could differ between derivations.
+    const events = [1, 2, 3].map((i) =>
+      decoded(createMessageEvent(room, newUlid(), `m${i}`), i, receivedAt),
+    );
+
+    const { asyncDb } = freshDb();
+    await applyBatch(asyncDb, STREAM, events, { isBackfill: false });
+    const { messages } = await selectMessages(asyncDb, {
+      kind: "room",
+      roomId: room,
+      limit: 10,
+      cursor: null,
+    });
+
+    // Returned oldest → newest, so the log positions run ascending.
+    expect(messages.map((m) => m.id)).toEqual(events.map((e) => e.event.id));
+    for (const e of events) {
+      const row = await asyncDb
+        .query("select sort_idx from entities where id = ?")
+        .get<{ sort_idx: string }>(e.event.id);
+      expect(row!.sort_idx).toBe(orderKey(receivedAt, e.idx));
+    }
+  });
+
+  test("a timestampOverride still wins over the receipt time", async () => {
+    const room = newUlid();
+    const bridgedAt = Date.now() - 48 * 60 * 60 * 1000;
+    const event = createMessageEvent(room, newUlid(), "from discord");
+    (event as Record<string, unknown>).extensions = {
+      "space.roomy.extension.timestampOverride.v0": {
+        $type: "space.roomy.extension.timestampOverride.v0",
+        timestamp: bridgedAt,
+      },
+    };
+
+    const { asyncDb } = freshDb();
+    await applyBatch(
+      asyncDb,
+      STREAM,
+      [decoded(event, 1, Date.now())],
+      { isBackfill: false },
+    );
+    const row = await asyncDb
+      .query("select sort_idx from entities where id = ?")
+      .get<{ sort_idx: string }>(event.id);
+    expect(decodeTime(row!.sort_idx)).toBe(bridgedAt);
+  });
+
+  test("a message with no receipt time falls back to its own ULID time", async () => {
+    const room = newUlid();
+    const event = createMessageEvent(room, newUlid(), "legacy row");
+
+    const { asyncDb } = freshDb();
+    await applyBatch(asyncDb, STREAM, [decoded(event, 7)], { isBackfill: false });
+    const row = await asyncDb
+      .query("select sort_idx from entities where id = ?")
+      .get<{ sort_idx: string }>(event.id);
+    // An event logged before `received_at` existed has no other clock.
+    expect(row!.sort_idx).toBe(orderKey(decodeTime(event.id), 7));
   });
 });

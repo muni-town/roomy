@@ -18,7 +18,6 @@
 
 import type { DbLike } from "../db/types.ts";
 import type {
-  DecodedStreamEvent,
   StreamDid,
   StreamIndex,
   Ulid,
@@ -27,10 +26,10 @@ import type {
 
 import { materialize } from "./materializer.ts";
 import { applyBundle, getSavepointMutex } from "./applyBundle.ts";
-import { canonicalMessageTimestamp } from "./sortIdx.ts";
+import { messageSortIdxKey } from "./sortIdx.ts";
 import { applyDeleteSideEffects, collectPendingDeletes } from "./deleteMessage.ts";
 import { isGlobalDbStatement } from "./statementRouting.ts";
-import type { StatementBundleSuccess } from "./types.ts";
+import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
 import {
   isDebugEnabled,
   recordMaterialization,
@@ -51,7 +50,6 @@ import {
 import { decodeContent, decodeRichTextBody } from "../db/content.ts";
 import { enqueueIndexMessage, enqueueDeleteMessage } from "../search/indexer.ts";
 import { RICHTEXT_MIME, extractFacetUrls } from "@roomy-space/sdk";
-import { decodeTime, ulid } from "ulidx";
 
 import { log } from "../log.ts";
 const MAX_TRACKED_FAILURES = 100;
@@ -104,7 +102,7 @@ interface ChunkStep {
 export async function applyBatch(
   db: DbLike,
   streamId: StreamDid,
-  events: DecodedStreamEvent[],
+  events: LoggedEvent[],
   opts: ApplyBatchOpts,
   globalDb?: DbLike,
 ): Promise<MaterializationStats> {
@@ -207,18 +205,17 @@ export async function applyBatch(
         }
       }
 
-      // sort_idx: inline the UPDATE (no SELECT needed)
+      // sort_idx: inline the UPDATE (no SELECT needed).
+      //
+      // The key is the message's canonical ordering time plus this event's
+      // log position. The time comes from `receivedAt` — the instant the
+      // server accepted the event, recorded in the log at append — not from
+      // the sender-minted ULID, which a skewed device clock would use to bury
+      // a message mid-history for every other client. Reading it from the
+      // event's log row rather than the wall clock is what makes a rebuild
+      // reproduce the same key live materialisation wrote. See `sortIdx.ts`.
       if (e.event.$type === "space.roomy.message.createMessage.v0") {
-        // A live createMessage is keyed by the SERVER's clock, not the
-        // client-minted ULID: the id is minted on the sender's device, so a
-        // skewed clock would write an ordering key in the past and bury the
-        // message mid-history for every other client — durably, since the
-        // wrong sort_idx is written once. Backfill replays an existing log,
-        // where the id is the only time the events carry (a client is not
-        // involved), so it keeps the ULID-derived key.
-        const sortIdx = ulid(
-          canonicalMessageTimestamp(e.event, opts.isBackfill ? "event" : "arrival"),
-        ) as Ulid;
+        const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt);
         chunkSteps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
@@ -236,7 +233,7 @@ export async function applyBatch(
       // client's room query returns the newest `limit` rows), so the forward
       // would flash in via the WS diff and vanish on the next refetch.
       if (e.event.$type === "space.roomy.message.forwardMessages.v0") {
-        const sortIdx = ulid(decodeTime(e.event.id)) as Ulid;
+        const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt);
         chunkSteps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
@@ -566,7 +563,7 @@ export async function applyBatch(
  */
 async function applyChunkSideEffects(
   db: DbLike,
-  chunk: DecodedStreamEvent[],
+  chunk: LoggedEvent[],
   streamId: StreamDid,
   isBackfill: boolean,
   detectedLinks: string[],
@@ -582,7 +579,13 @@ async function applyChunkSideEffects(
         statements: [],
         dependsOn: [],
       };
-      await applyBundle(db, bundle, { isBackfill, streamId }, globalDb, openReadStateDb());
+      await applyBundle(
+        db,
+        bundle,
+        { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt },
+        globalDb,
+        openReadStateDb(),
+      );
 
       // Search indexing: enqueue the message for the out-of-band
       // Qdrant indexer — the worker re-reads the materialised rows, so no
@@ -665,7 +668,7 @@ async function applyChunkSideEffects(
         statements: [],
         dependsOn: [],
       };
-      await applyBundle(db, bundle, { isBackfill, streamId }, globalDb, openReadStateDb());
+      await applyBundle(db, bundle, { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt }, globalDb, openReadStateDb());
 
       // Re-index every moved message: the search worker reads the message's
       // `room` from the per-space DB, and Qdrant filters on it, so a moved
