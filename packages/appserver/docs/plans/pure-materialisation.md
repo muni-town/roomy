@@ -8,7 +8,7 @@ migrate in place before falling back to a rebuild (§6a).
 ## 1. Problem
 
 Materialisation currently mixes three responsibilities in one pass: applying an
-event's SQL to the per-space DB, maintaining state that is *not* derived from the
+event's SQL to the per-space DB, maintaining state that is _not_ derived from the
 event log (unread counters, embed data, profile fetches), and kicking off
 process-local background work (search indexing, embed sweeping, push).
 
@@ -63,19 +63,19 @@ An item can be more than one.
 
 ### 3.1 `entities.sort_idx` carries the ingesting clock (D, I) — resolved by Step 1
 
-| Site | Old behaviour |
-|---|---|
-| `applyBatch.ts:219-222` | Live `createMessage`: `ulid(canonicalMessageTimestamp(event, "arrival"))`. `"arrival"` is `Date.now()`. |
+| Site                           | Old behaviour                                                                                                                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applyBatch.ts:219-222`        | Live `createMessage`: `ulid(canonicalMessageTimestamp(event, "arrival"))`. `"arrival"` is `Date.now()`.                                                                       |
 | `sortIdx.ts:26-40`, `:217-244` | `setMessageSortIdxByTimestamp` and `canonicalMessageTimestamp`; `TimestampSource = "event" \| "arrival"`. The write is guarded `where sort_idx is null`, so it is apply-once. |
-| `sortIdx.ts:96` | `setMessageSortIdxByMove` — a moved message is keyed by the move event's own ULID time. |
-| `sortIdx.ts:121` | `setMessageSortIdxByReorder` — reads neighbouring rows' `sort_idx` and writes a midpoint: an ambient read of the current table. |
+| `sortIdx.ts:96`                | `setMessageSortIdxByMove` — a moved message is keyed by the move event's own ULID time.                                                                                       |
+| `sortIdx.ts:121`               | `setMessageSortIdxByReorder` — reads neighbouring rows' `sort_idx` and writes a midpoint: an ambient read of the current table.                                               |
 
 Two distinct defects, both addressed by Step 1:
 
 - **The clock.** The `"arrival"` branch existed deliberately: the message id is
   minted on the sender's device, so a skewed client clock would durably bury a
   message mid-history. That concern is real and is preserved. What changed is
-  that the *value chosen at ingest* is now recorded in the log, so replay
+  that the _value chosen at ingest_ is now recorded in the log, so replay
   reproduces it instead of substituting a different rule.
 - **The random suffix.** `ulid()` emits a 10-char time prefix plus 16 characters
   from a CSPRNG. Even the pure replay branch was not byte-reproducible, and two
@@ -84,13 +84,13 @@ Two distinct defects, both addressed by Step 1:
 
 ### 3.2 Unread counters are increments (I, C)
 
-| Site | Behaviour |
-|---|---|
-| `applyBundle.ts:185-197` | Thread room: insert `read_positions` for every user in `user_thread_activity` tracking the thread, `unread_count = 1`. Reads `max(sort_idx)` from the per-space DB as `seen_up_to`. |
-| `applyBundle.ts:200-210` | Channel: `update read_positions set unread_count = unread_count + 1 where room_id = ?`. |
-| `moveMessages.ts:202-210,216-220` | `+1` in the destination room, both branches. |
-| `roomDerivedState.ts:92-117` | `decrementUnreadForRemovedMessages` — subtracts per reader whose read position is below the moved/deleted message. |
-| `deleteMessage.ts:89` | Calls the same decrement helper for the delete path. |
+| Site                              | Behaviour                                                                                                                                                                           |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applyBundle.ts:185-197`          | Thread room: insert `read_positions` for every user in `user_thread_activity` tracking the thread, `unread_count = 1`. Reads `max(sort_idx)` from the per-space DB as `seen_up_to`. |
+| `applyBundle.ts:200-210`          | Channel: `update read_positions set unread_count = unread_count + 1 where room_id = ?`.                                                                                             |
+| `moveMessages.ts:202-210,216-220` | `+1` in the destination room, both branches.                                                                                                                                        |
+| `roomDerivedState.ts:92-117`      | `decrementUnreadForRemovedMessages` — subtracts per reader whose read position is below the moved/deleted message.                                                                  |
+| `deleteMessage.ts:89`             | Calls the same decrement helper for the delete path.                                                                                                                                |
 
 Two problems. The operation is a read-modify-write against state that is not in
 the log, so it is neither deterministic nor idempotent; and the source of truth
@@ -105,20 +105,20 @@ which is exactly where the current complexity, and the replay hazard, come from.
 
 ### 3.3 Non-log writers to the per-space DB (C)
 
-| Site | Writes | Assessment |
-|---|---|---|
-| `handlers/space.roomy.space.setHandle.ts:65-73` | `comp_space.handle`, `updated_at` | **Unrecoverable from the log.** Must become an event. |
-| `streams/StreamManager.ts:400` | `insert into entities` for a new space | Recoverable — the space's own `addAdmin` event creates the row on replay. |
-| `streams/StreamManager.ts:418` | `delete from entities` on a failed create | Best-effort cleanup; harmless if the space never materialises. |
-| `queries/joinedSpaces.ts:186,191,218,223` | `entities` seeding + `edges` (`joinedSpace` / `leftSpace`) | Exported but **no production caller** — `createSpace` uses `recordGlobalMembership`. Dead API surface that breaks closure. |
-| `auth/access.ts:265,581` → `queries/roomAccessProjection.ts:262` | `room_access` (read-path warm) | Derived cache of log data. Benign **provided** replay invalidates it — which `applyBatch.ts:248-272` does. |
-| `queries/threadActivity.ts:233` → `queries/roomActivityProjection.ts:350` | `room_activity` (read-path warm) | Same. |
-| `embed/enricher.ts:298,329,382` | `comp_embed_link_data` | **Not derived from the log at all.** Moves out (see §3.5). |
+| Site                                                                      | Writes                                                     | Assessment                                                                                                                 |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `handlers/space.roomy.space.setHandle.ts:65-73`                           | `comp_space.handle`, `updated_at`                          | **Unrecoverable from the log.** Must become an event.                                                                      |
+| `streams/StreamManager.ts:400`                                            | `insert into entities` for a new space                     | Recoverable — the space's own `addAdmin` event creates the row on replay.                                                  |
+| `streams/StreamManager.ts:418`                                            | `delete from entities` on a failed create                  | Best-effort cleanup; harmless if the space never materialises.                                                             |
+| `queries/joinedSpaces.ts:186,191,218,223`                                 | `entities` seeding + `edges` (`joinedSpace` / `leftSpace`) | Exported but **no production caller** — `createSpace` uses `recordGlobalMembership`. Dead API surface that breaks closure. |
+| `auth/access.ts:265,581` → `queries/roomAccessProjection.ts:262`          | `room_access` (read-path warm)                             | Derived cache of log data. Benign **provided** replay invalidates it — which `applyBatch.ts:248-272` does.                 |
+| `queries/threadActivity.ts:233` → `queries/roomActivityProjection.ts:350` | `room_activity` (read-path warm)                           | Same.                                                                                                                      |
+| `embed/enricher.ts:298,329,382`                                           | `comp_embed_link_data`                                     | **Not derived from the log at all.** Moves out (see §3.5).                                                                 |
 
 The read-path warms are acceptable: they are caches of values the log determines,
-and they are rebuilt on replay. The rule to hold is *a non-materialisation writer
+and they are rebuilt on replay. The rule to hold is _a non-materialisation writer
 may only write a value the log already determines, and must be invalidated by
-replay.* `setHandle` and `comp_embed_link_data` break that rule.
+replay._ `setHandle` and `comp_embed_link_data` break that rule.
 
 ### 3.4 Clock columns (D, cosmetic)
 
@@ -157,17 +157,17 @@ byte-for-byte, which hides real divergence in a diff.
 
 ## 4. Target model
 
-Split by *what the value is a function of*, not by which file it currently lives in:
+Split by _what the value is a function of_, not by which file it currently lives in:
 
-| Value | Function of | Home |
-|---|---|---|
-| Message ordering (`sort_idx`) | Log position + recorded ingest timestamp | Per-space projection |
-| Room/space content, roles, edges, reactions | Log | Per-space projection |
-| `room_access`, `room_activity` | Log (denormalised cache) | Per-space projection, rebuilt on replay |
-| Unread counts | Log + read positions | Read-state, recomputed — not incremented |
-| Embed metadata | Outbound HTTP | Global/gateway, never per-space |
-| Profiles | Network index | Global/gateway |
-| Search index, push, embed sweeps | Log (as work items) | Lease-partitioned background workers |
+| Value                                       | Function of                              | Home                                     |
+| ------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
+| Message ordering (`sort_idx`)               | Log position + recorded ingest timestamp | Per-space projection                     |
+| Room/space content, roles, edges, reactions | Log                                      | Per-space projection                     |
+| `room_access`, `room_activity`              | Log (denormalised cache)                 | Per-space projection, rebuilt on replay  |
+| Unread counts                               | Log + read positions                     | Read-state, recomputed — not incremented |
+| Embed metadata                              | Outbound HTTP                            | Global/gateway, never per-space          |
+| Profiles                                    | Network index                            | Global/gateway                           |
+| Search index, push, embed sweeps            | Log (as work items)                      | Lease-partitioned background workers     |
 
 Two consequences worth stating plainly:
 
@@ -249,7 +249,7 @@ with a non-materialisation writer must fail this test today and pass after.
 derived from the read position and the message set, computed where it is read.
 
 This is the largest behavioural change and needs its own design pass; the
-constraint to hold is that the *stored* representation must be recomputable
+constraint to hold is that the _stored_ representation must be recomputable
 rather than incrementally maintained. Two viable shapes:
 
 - store `seen_up_to` only and derive the count on read (a per-room range count,
@@ -271,7 +271,7 @@ materialising it live.
 `selectMessages`, `activityFeed` and `links`. Move it to the global/gateway layer
 keyed by URL, where the sweeper already works, and have the read paths join
 against it in JS rather than reading a per-space row. The `comp_embed_link`
-(which links a message contains) stays per-space — that part *is* log-derived.
+(which links a message contains) stays per-space — that part _is_ log-derived.
 
 **Why.** It is the one per-space table with no log provenance, and it is on the
 read hot path, so any second derivation of a space renders bare links.
@@ -296,15 +296,15 @@ failing the test on `fetch`). Background loops run on exactly one owner.
 
 ## 6. Invariants to pin
 
-| # | Invariant | Where proven |
-|---|---|---|
-| P1 | Two derivations of the same log produce identical `sort_idx` for every message | **Step 1** — `reMaterialize.blueGreen.test.ts` (live write vs rebuild), `applyBatch.test.ts` (same log twice) |
-| P2 | Equal-timestamp messages order by log position, not randomly | **Step 1** — `applyBatch.test.ts` |
-| P3 | For every per-space table, rebuild-from-log equals live state | Step 2 |
-| P4 | Applying a batch twice leaves read-state unchanged | Step 3 |
-| P5 | Materialisation performs no outbound network I/O | Step 5 |
-| P6 | A rebuilt space serves enriched links without the sweeper | Step 4 |
-| P7 | No per-space table has a writer outside materialisation (+ documented caches) | Steps 2, 4 |
+| #   | Invariant                                                                      | Where proven                                                                                                  |
+| --- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| P1  | Two derivations of the same log produce identical `sort_idx` for every message | **Step 1** — `reMaterialize.blueGreen.test.ts` (live write vs rebuild), `applyBatch.test.ts` (same log twice) |
+| P2  | Equal-timestamp messages order by log position, not randomly                   | **Step 1** — `applyBatch.test.ts`                                                                             |
+| P3  | For every per-space table, rebuild-from-log equals live state                  | Step 2                                                                                                        |
+| P4  | Applying a batch twice leaves read-state unchanged                             | Step 3                                                                                                        |
+| P5  | Materialisation performs no outbound network I/O                               | Step 5                                                                                                        |
+| P6  | A rebuilt space serves enriched links without the sweeper                      | Step 4                                                                                                        |
+| P7  | No per-space table has a writer outside materialisation (+ documented caches)  | Steps 2, 4                                                                                                    |
 
 The general form of P3/P7 is worth automating: a harness that materialises a log
 into `:memory:`, snapshots every table, rebuilds, and diffs. That test fails today
@@ -342,13 +342,22 @@ open, the task runs at boot, and only the marker ties them together.
 The write gate covers both windows: `StreamManager.sendEvents` rejects a write
 while the space is migrating or rebuilding, so a request cannot race the pass.
 
+The pass is a serial sweep over every stream, and each DB request it makes
+carries the worker's 30s budget. A request that exceeds it rejects, so the pass
+retries the step (`withStreamStepRetry`) and, for a stream it still cannot read,
+records the failure and moves on. Without that, one slow read — not a broken
+database — would abandon the sweep before it reached the upgrades: the bump
+lands, no space is re-keyed, and the same abort repeats at every boot. Every
+step is retried only if it is safe to run twice, which is why the sweep reads
+without writing and the upgrade is guarded by the marker it stamps on success.
+
 Cost: a bump is now a per-space scan of the log for the versions that need one
 (v3 replays ordering events only) instead of a full replay of every event in
 every space. It remains proportional to the space's log, so a migration that
 does need the whole log is still O(space).
 
 Not every change can migrate. A version whose new derived value depends on the
-order rows are *visited* rather than only on the log cannot be reproduced by an
+order rows are _visited_ rather than only on the log cannot be reproduced by an
 in-place replay over a DB that already holds every row. `reorderMessage` is the
 existing instance (§7), and such a task throws `SpaceMigrationNeedsRebuildError`
 so the space falls back.
@@ -361,7 +370,7 @@ so the space falls back.
   known consequence.
 - **`reorderMessage` is genuinely order-dependent.** A reorder is defined relative
   to its neighbours, so it cannot be a pure function of the single event — it
-  needs the surrounding order, which *is* log-derived, but the midpoint arithmetic
+  needs the surrounding order, which _is_ log-derived, but the midpoint arithmetic
   must be pinned so that the same neighbourhood yields the same key. Fractional
   indexing with a deterministic tie-break is the likely answer. Until then it is
   also the one event an in-place migration cannot replay (§6a), so a space that
@@ -374,7 +383,7 @@ so the space falls back.
 - **`isBackfill` still matters after this work** — but only for signal emission
   (whether a diff and an unread bump are produced), not for read-state safety.
   With materialisation pure, replaying into a fresh DB can never corrupt anything;
-  the flag only decides what the *client* is told. That is a much smaller contract
+  the flag only decides what the _client_ is told. That is a much smaller contract
   to reason about than today's.
 - **Open:** `recordPersonalSpaceMembership` (`queries/joinedSpaces.ts:175`),
   `recordLeftSpaceEdge` (`:210`) and `removeLeftSpaceEdge` (`:239`) write per-space
@@ -385,9 +394,9 @@ so the space falls back.
 
 ## 8. Related documents
 
-| Document | Relevance |
-|---|---|
-| [`per-space-dbs.md`](per-space-dbs.md) | The per-space split; data classification and cross-space queries |
-| [`blue-green-read-serving.md`](blue-green-read-serving.md) | Rebuild machinery this work depends on and reuses for migration |
-| [`denormalised-read-projections.md`](denormalised-read-projections.md) | Read-path projections; measured endpoint costs |
-| [`readstate-sharding-review.md`](readstate-sharding-review.md) | Why read-state stays one file |
+| Document                                                               | Relevance                                                        |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [`per-space-dbs.md`](per-space-dbs.md)                                 | The per-space split; data classification and cross-space queries |
+| [`blue-green-read-serving.md`](blue-green-read-serving.md)             | Rebuild machinery this work depends on and reuses for migration  |
+| [`denormalised-read-projections.md`](denormalised-read-projections.md) | Read-path projections; measured endpoint costs                   |
+| [`readstate-sharding-review.md`](readstate-sharding-review.md)         | Why read-state stays one file                                    |

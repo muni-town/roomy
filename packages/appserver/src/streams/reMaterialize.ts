@@ -14,7 +14,12 @@
  */
 
 import { decode } from "@atcute/cbor";
-import { type Event, type StreamDid, type StreamIndex, type UserDid } from "@roomy-space/sdk";
+import {
+  type Event,
+  type StreamDid,
+  type StreamIndex,
+  type UserDid,
+} from "@roomy-space/sdk";
 import type { DbLike } from "../db/types.ts";
 import { applyBatch } from "../materialization/applyBatch.ts";
 import {
@@ -27,6 +32,7 @@ import { log } from "../log.ts";
 import { runPendingGlobalMigrations } from "../db/globalMigrations.ts";
 import { refreshSpaceStats } from "../queries/spaceStats.ts";
 import { upgradeSpaceInPlace } from "../db/spaceMigrations.ts";
+import { isTransientDbError } from "../db/transient.ts";
 import type { LoggedEvent } from "../materialization/types.ts";
 
 interface RawEvent {
@@ -39,6 +45,65 @@ interface RawEvent {
 
 /** Default number of streams re-materialized concurrently (matches the pool default). */
 export const DEFAULT_REMATERIALIZE_CONCURRENCY = 4;
+
+/**
+ * How many times a per-stream boot step is re-issued after a DB request times
+ * out, and how long to wait before each re-issue. The worker bound is
+ * `REQUEST_TIMEOUT_MS` (30s) per request, so the schedule gives a step up to
+ * four of those budgets before it is treated as failed.
+ */
+const STREAM_STEP_ATTEMPTS = 4;
+const STREAM_STEP_BACKOFF_MS = 5_000;
+
+export interface ReMaterializeOpts {
+  /**
+   * Retry schedule for a per-stream boot step whose DB request timed out
+   * (see `withStreamStepRetry`). Shortening it is for tests only: production
+   * needs the budget to outlast a genuinely slow query.
+   */
+  streamStep?: { attempts?: number; backoffMs?: number };
+}
+
+/**
+ * Run one per-stream boot step, re-issuing it after a timed-out DB request.
+ *
+ * The boot pass is a long serial sweep over thousands of streams. A DB request
+ * that exceeds its 30s budget rejects, and the sweep's single-threaded
+ * partitioning holds thousands of requests in flight — so one slow query, not a
+ * broken database, would otherwise abandon the whole pass: the per-space
+ * upgrades it had not reached yet never run, and the log they would have
+ * re-keyed stays unre-keyed. Retrying the step is what lets the sweep finish
+ * while the database is merely slow.
+ *
+ * A step must therefore be safe to run twice. Everything wrapped here is:
+ * partitioning reads `materialization_cursor` and `stream_events` without
+ * writing, and `upgradeSpaceInPlace` is guarded by the per-space marker it
+ * stamps only on success. Any other error is the step's own failure and is
+ * reported to the caller immediately.
+ */
+async function withStreamStepRetry<T>(
+  streamDid: string,
+  step: string,
+  run: () => Promise<T>,
+  opts: ReMaterializeOpts["streamStep"] = {},
+): Promise<T> {
+  const attempts = opts.attempts ?? STREAM_STEP_ATTEMPTS;
+  const backoffMs = opts.backoffMs ?? STREAM_STEP_BACKOFF_MS;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (err) {
+      if (attempt >= attempts || !isTransientDbError(err)) throw err;
+      log.warn(
+        "startup",
+        `${step} timed out for ${streamDid} (attempt ${attempt}/${attempts}); retrying in ${backoffMs}ms`,
+      );
+      const { promise, resolve } = Promise.withResolvers<void>();
+      setTimeout(resolve, backoffMs);
+      await promise;
+    }
+  }
+}
 
 /**
  * Re-materialize streams that have un-materialized events in the local events DB.
@@ -69,24 +134,23 @@ export const DEFAULT_REMATERIALIZE_CONCURRENCY = 4;
  * sync adapter (`:memory:` tests) has no space handle, so it reports nothing
  * pending. A missing table means the DB has never been opened by this build,
  * which the caller's upgrade pass will handle.
+ *
+ * A failure to answer the question propagates: a stream that owes a migration
+ * and is not upgraded stays on keys no entity carries, so reporting "nothing
+ * pending" would serve the regression this pass exists to repair.
  */
 async function hasPendingSpaceMigrations(
   db: DbLike,
   streamDid: string,
 ): Promise<boolean> {
   if (!db.forSpace) return false;
-  try {
-    const row = await db
-      .forSpace(streamDid as StreamDid)
-      .query(
-        "select count(*) as n from space_schema_migrations where completed_at is null",
-      )
-      .get<{ n: number }>();
-    return (row?.n ?? 0) > 0;
-  } catch {
-    // Table absent (never opened, or an adapter without it): nothing to prove.
-    return false;
-  }
+  const row = await db
+    .forSpace(streamDid as StreamDid)
+    .query(
+      "select count(*) as n from space_schema_migrations where completed_at is null",
+    )
+    .get<{ n: number }>();
+  return (row?.n ?? 0) > 0;
 }
 
 export async function reMaterializeFromLocalEvents(
@@ -94,10 +158,23 @@ export async function reMaterializeFromLocalEvents(
   getProfiles: GetProfilesFn | undefined = undefined,
   happyView: HappyViewConfig | null = null,
   concurrency: number = DEFAULT_REMATERIALIZE_CONCURRENCY,
+  opts: ReMaterializeOpts = {},
 ): Promise<void> {
-  const streams = await db
-    .query("SELECT DISTINCT stream_id FROM stream_events ORDER BY stream_id")
-    .all<{ stream_id: string }>();
+  // The sweep's own first read. It is the request most likely to be slow — it
+  // runs while the rest of boot is still warming the pool — and it is what the
+  // pass died on in production, leaving every per-space upgrade untouched. It
+  // is a read, so it is safe to issue again.
+  const streams = await withStreamStepRetry(
+    "<stream sweep>",
+    "stream sweep",
+    () =>
+      db
+        .query(
+          "SELECT DISTINCT stream_id FROM stream_events ORDER BY stream_id",
+        )
+        .all<{ stream_id: string }>(),
+    opts.streamStep,
+  );
 
   const streamDids = streams.map(({ stream_id }) => stream_id as StreamDid);
   const finishGlobalMigrations = async (): Promise<void> => {
@@ -145,96 +222,138 @@ export async function reMaterializeFromLocalEvents(
   }> = [];
 
   for (const { stream_id } of streams) {
-    // Upgrade decision point: is the canonical per-space DB on the current
-    // schema? When `checkSpaceSchema` is absent (sync adapters in tests that
-    // don't exercise the upgrade), default to current so behavior is unchanged.
-    const { current } =
-      (await db.checkSpaceSchema?.(stream_id)) ?? { current: true };
-
-    // A stale DB needs the full upgrade; a current one may still owe a data
-    // task from a pass that was interrupted after the version row advanced
-    // (the two are committed separately: the version bumps at open, the task
-    // runs later in the boot runner). Either way the upgrade pass below runs
-    // it, and falls back to a rebuild for this stream if it cannot.
-    const pending =
-      !current || (await hasPendingSpaceMigrations(db, stream_id));
-    if (pending) {
-      upgrades.push(stream_id);
-      continue;
-    }
-
-    // Backfill the global `entity_space` index from this space's
-    // per-space DB. Existing per-space DBs materialized before the index
-    // existed have no entries, so `openSpaceDbForEntity` would 404 on every
-    // room/message. This runs for every current-schema stream (caught up or
-    // not) and is idempotent. Worker-internal, so it's one round-trip per
-    // space. (Rebuild streams skip this — applyBatch populates the index.)
     try {
-      await db.backfillEntitySpace?.(stream_id);
+      // Upgrade decision point: is the canonical per-space DB on the current
+      // schema? When `checkSpaceSchema` is absent (sync adapters in tests that
+      // don't exercise the upgrade), default to current so behavior is unchanged.
+      const { current } = await withStreamStepRetry(
+        stream_id,
+        "schema check",
+        async () =>
+          (await db.checkSpaceSchema?.(stream_id)) ?? { current: true },
+        opts.streamStep,
+      );
+
+      // A stale DB needs the full upgrade; a current one may still owe a data
+      // task from a pass that was interrupted after the version row advanced
+      // (the two are committed separately: the version bumps at open, the task
+      // runs later in the boot runner). Either way the upgrade pass below runs
+      // it, and falls back to a rebuild for this stream if it cannot.
+      const pending =
+        !current ||
+        (await withStreamStepRetry(
+          stream_id,
+          "migration-marker check",
+          () => hasPendingSpaceMigrations(db, stream_id),
+          opts.streamStep,
+        ));
+      if (pending) {
+        upgrades.push(stream_id);
+        continue;
+      }
+
+      // Backfill the global `entity_space` index from this space's
+      // per-space DB. Existing per-space DBs materialized before the index
+      // existed have no entries, so `openSpaceDbForEntity` would 404 on every
+      // room/message. This runs for every current-schema stream (caught up or
+      // not) and is idempotent. Worker-internal, so it's one round-trip per
+      // space. (Rebuild streams skip this — applyBatch populates the index.)
+      try {
+        await db.backfillEntitySpace?.(stream_id);
+      } catch (err) {
+        log.warn(
+          "startup",
+          `entity_space backfill failed for ${stream_id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      // Publish this space's `space_stats` aggregate row. Member count only
+      // exists in the space's own DB, so the admin dashboard's member-count
+      // ordering needs it precomputed; a per-request aggregate would fan out over
+      // every space. This sweep runs for every stream on every boot (caught up or
+      // not), so an existing dataset self-heals on the next deploy and no separate
+      // data migration is needed. Idempotent.
+      try {
+        await refreshSpaceStats(db, stream_id as StreamDid);
+      } catch (err) {
+        log.warn(
+          "startup",
+          `space_stats refresh failed for ${stream_id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      // The materialization_cursor lives in the per-space DB (each
+      // space DB is self-describing about its own re-materialization state),
+      // not the event-log DB. Read it from the per-space handle. Streams
+      // without a cursor row (e.g. after a schema-version wipe, or first boot)
+      // default to -1, meaning "nothing materialized yet — replay everything".
+      const cursorRow = await withStreamStepRetry(
+        stream_id,
+        "cursor read",
+        () =>
+          db.forSpace!(stream_id as StreamDid)
+            .query(
+              "SELECT materialized_to FROM materialization_cursor WHERE stream_id = ?",
+            )
+            .get<{ materialized_to: number }>(stream_id),
+        opts.streamStep,
+      );
+      const materializedTo = cursorRow?.materialized_to ?? -1;
+
+      // Check the latest event idx for this stream in the events DB.
+      const latestRow = await withStreamStepRetry(
+        stream_id,
+        "event-log read",
+        () =>
+          db
+            .query(
+              "SELECT coalesce(max(idx), -1) AS latest FROM stream_events WHERE stream_id = ?",
+            )
+            .get<{ latest: number }>(stream_id),
+        opts.streamStep,
+      );
+      const latest = latestRow?.latest ?? -1;
+
+      if (materializedTo >= latest) {
+        skipped++;
+        continue;
+      }
+
+      toReplay.push({
+        streamId: stream_id,
+        fromIdx: materializedTo + 1,
+        rebuild: false,
+      });
     } catch (err) {
-      log.warn(
+      // One stream this pass cannot read must not take the pass with it: the
+      // per-space upgrades below are what re-key the log, and a stream that
+      // keeps timing out would otherwise mean no space is ever upgraded. The
+      // stream is reported and left for a later boot — its cursor and its
+      // migration marker are both unchanged, so nothing is half-applied.
+      log.error(
         "startup",
-        `entity_space backfill failed for ${stream_id}: ${err instanceof Error ? err.message : String(err)}`,
+        `re-materialize scan failed for ${stream_id}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-
-    // Publish this space's `space_stats` aggregate row. Member count only
-    // exists in the space's own DB, so the admin dashboard's member-count
-    // ordering needs it precomputed; a per-request aggregate would fan out over
-    // every space. This sweep runs for every stream on every boot (caught up or
-    // not), so an existing dataset self-heals on the next deploy and no separate
-    // data migration is needed. Idempotent.
-    try {
-      await refreshSpaceStats(db, stream_id as StreamDid);
-    } catch (err) {
-      log.warn(
-        "startup",
-        `space_stats refresh failed for ${stream_id}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    // The materialization_cursor lives in the per-space DB (each
-    // space DB is self-describing about its own re-materialization state),
-    // not the event-log DB. Read it from the per-space handle. Streams
-    // without a cursor row (e.g. after a schema-version wipe, or first boot)
-    // default to -1, meaning "nothing materialized yet — replay everything".
-    const cursorRow = await db
-      .forSpace!(stream_id as StreamDid)
-      .query("SELECT materialized_to FROM materialization_cursor WHERE stream_id = ?")
-      .get<{ materialized_to: number }>(stream_id);
-    const materializedTo = cursorRow?.materialized_to ?? -1;
-
-    // Check the latest event idx for this stream in the events DB.
-    const latestRow = await db
-      .query(
-        "SELECT coalesce(max(idx), -1) AS latest FROM stream_events WHERE stream_id = ?",
-      )
-      .get<{ latest: number }>(stream_id);
-    const latest = latestRow?.latest ?? -1;
-
-    if (materializedTo >= latest) {
-      skipped++;
-      continue;
-    }
-
-    toReplay.push({
-      streamId: stream_id,
-      fromIdx: materializedTo + 1,
-      rebuild: false,
-    });
   }
 
   // Upgrade stale-schema spaces in place. A stream the migration declines or
   // fails on is queued for a rebuild instead.
   for (const streamId of upgrades) {
     try {
-      await upgradeSpaceInPlace(db, streamId as StreamDid);
+      await withStreamStepRetry(
+        streamId,
+        "in-place upgrade",
+        () => upgradeSpaceInPlace(db, streamId as StreamDid),
+        opts.streamStep,
+      );
       // The upgrade replayed no events, so the cursor is unchanged; the space
       // is now current-schema and any un-materialized gap is caught up by the
       // incremental pass below.
-      const cursorRow = await db
-        .forSpace!(streamId as StreamDid)
-        .query("SELECT materialized_to FROM materialization_cursor WHERE stream_id = ?")
+      const cursorRow = await db.forSpace!(streamId as StreamDid)
+        .query(
+          "SELECT materialized_to FROM materialization_cursor WHERE stream_id = ?",
+        )
         .get<{ materialized_to: number }>(streamId);
       const materializedTo = cursorRow?.materialized_to ?? -1;
       const latestRow = await db
@@ -363,9 +482,15 @@ export async function reMaterializeFromLocalEvents(
           }
 
           const globalDb = db.global?.();
-          const stats = await applyBatch(handle, streamDid as StreamDid, decodedEvents, {
-            isBackfill: true,
-          }, globalDb);
+          const stats = await applyBatch(
+            handle,
+            streamDid as StreamDid,
+            decodedEvents,
+            {
+              isBackfill: true,
+            },
+            globalDb,
+          );
 
           if (stats.materializerErrors > 0 || stats.applyErrors > 0) {
             log.warn("[re-materialize] stream-done", {

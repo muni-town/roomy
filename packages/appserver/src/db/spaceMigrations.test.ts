@@ -27,7 +27,10 @@ import { ulid } from "ulidx";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { SpaceRematerializingError, StreamManager } from "../streams/StreamManager.ts";
+import {
+  SpaceRematerializingError,
+  StreamManager,
+} from "../streams/StreamManager.ts";
 import { fileURLToPath } from "node:url";
 import { DatabasePool } from "../db/pool.ts";
 import { GLOBAL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION } from "../db/db.ts";
@@ -157,8 +160,7 @@ function keysOf(
   db: DbLike,
   streamDid: StreamDid,
 ): Promise<Array<{ id: string; sort_idx: string | null }>> {
-  return db
-    .forSpace!(streamDid)
+  return db.forSpace!(streamDid)
     .query("select id, sort_idx from entities order by id")
     .all<{ id: string; sort_idx: string | null }>();
 }
@@ -197,11 +199,15 @@ describe("in-place per-space migration", () => {
     // Deploy: a new pool over the same files must upgrade, not replay.
     ({ router } = await openPool());
     expect((await router.checkSpaceSchema!(streamDid)).current).toBe(false);
-    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+    );
 
     // The DB was kept: the sentinel a rebuild would have dropped is still here.
-    const sentinel = await router
-      .forSpace!(streamDid)
+    const sentinel = await router.forSpace!(streamDid)
       .query("select id from entities where id = 'sentinel-in-place'")
       .get<{ id: string }>();
     expect(sentinel?.id).toBe("sentinel-in-place");
@@ -223,7 +229,9 @@ describe("in-place per-space migration", () => {
       .get<{ version: string }>();
     expect(version?.version).toBe(SPACE_SCHEMA_VERSION);
     const marker = await spaceDb
-      .query("select completed_at from space_schema_migrations where version = '3'")
+      .query(
+        "select completed_at from space_schema_migrations where version = '3'",
+      )
       .get<{ completed_at: number | null }>();
     expect(marker?.completed_at).not.toBeNull();
     expect((await router.checkSpaceSchema!(streamDid)).current).toBe(true);
@@ -233,7 +241,10 @@ describe("in-place per-space migration", () => {
     const streamDid = StreamDid.assert("did:web:migration-rebuild.example");
     let router: DbLike;
     ({ router } = await openPool());
-    const { roomId, messageIds } = await materialiseSkewedSpace(router, streamDid);
+    const { roomId, messageIds } = await materialiseSkewedSpace(
+      router,
+      streamDid,
+    );
     await seedEvent(
       router,
       streamDid,
@@ -247,16 +258,25 @@ describe("in-place per-space migration", () => {
       3,
       Date.now(),
     );
-    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+    );
 
     makeItAnOlderSpace(streamDid);
 
     ({ router } = await openPool());
-    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+    );
 
     // The rebuild replaced the DB: the sentinel is gone.
-    const sentinel = await router
-      .forSpace!(streamDid)
+    const sentinel = await router.forSpace!(streamDid)
       .query("select id from entities where id = 'sentinel-in-place'")
       .get<{ id: string }>();
     expect(sentinel).toBeNull();
@@ -291,9 +311,13 @@ describe("in-place per-space migration", () => {
 
     // Reads still serve the existing rows — the worker never wipes a DB it
     // cannot upgrade, and the pass rebuilds it rather than serving it as-is.
-    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
-    const version = await router
-      .forSpace!(streamDid)
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+    );
+    const version = await router.forSpace!(streamDid)
       .query("select version from space_schema_version where id = 1")
       .get<{ version: string }>();
     expect(version?.version).toBe(SPACE_SCHEMA_VERSION);
@@ -327,7 +351,12 @@ describe("in-place per-space migration", () => {
     // The version is current, so this is not a stale DB — the pending marker is
     // the only signal that work remains.
     expect((await router.checkSpaceSchema!(streamDid)).current).toBe(true);
-    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+    );
 
     const after = (await keysOf(router, streamDid)).filter(
       (r) => r.sort_idx !== null,
@@ -337,11 +366,104 @@ describe("in-place per-space migration", () => {
       expect(after.find((r) => r.id === id)?.sort_idx).not.toBe(id);
     }
 
-    const marker = await router
-      .forSpace!(streamDid)
-      .query("select completed_at from space_schema_migrations where version = '3'")
+    const marker = await router.forSpace!(streamDid)
+      .query(
+        "select completed_at from space_schema_migrations where version = '3'",
+      )
       .get<{ completed_at: number | null }>();
     expect(marker?.completed_at).not.toBeNull();
+  });
+
+  test("a stream whose reads time out does not hold up the in-place upgrade", async () => {
+    // The pass walks thousands of streams with one DB request in flight at a
+    // time, and every request carries a 30s budget. A request that exceeds it
+    // rejects, and before the retry that rejection ended the whole pass: every
+    // per-space upgrade behind the slow stream was never attempted, so a
+    // schema bump landed with no space re-keyed and every boot repeated the
+    // same abort.
+    //
+    // The timing-out stream here is the first row of the sweep, so every other
+    // stream's partitioning runs behind it. Its reads reject the way a real
+    // timeout does, and the pass must outlast the rejection to upgrade the
+    // stale space.
+    const streamDid = StreamDid.assert("did:web:migration-wedged.example");
+    const slow = StreamDid.assert("did:aaa:migration-wedged-slow.example");
+
+    let router: DbLike;
+    ({ router } = await openPool());
+    const { messageIds } = await materialiseSkewedSpace(router, streamDid);
+    await seedEvent(
+      router,
+      slow,
+      parse({
+        id: ulid(),
+        room: ulid(),
+        $type: "space.roomy.message.createMessage.v0",
+        body: {
+          mimeType: "text/plain",
+          data: { $bytes: Buffer.from("wedged").toString("base64") },
+        },
+        extensions: {},
+      }),
+      0,
+      Date.now(),
+    );
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+    );
+    const live = (await keysOf(router, streamDid)).filter(
+      (r) => r.sort_idx !== null,
+    );
+
+    makeItAnOlderSpace(streamDid);
+
+    ({ router } = await openPool());
+    const forSpace = router.forSpace!.bind(router);
+    router.forSpace = (did: string) => {
+      const handle = forSpace(did);
+      if (did !== slow) return handle;
+      return new Proxy(handle, {
+        get: (target, prop, receiver) => {
+          if (prop !== "query") return Reflect.get(target, prop, receiver);
+          return (sql: string) =>
+            new Proxy(target.query(sql), {
+              get: (stmt, stmtProp, stmtReceiver) => {
+                if (stmtProp !== "get") {
+                  return Reflect.get(stmt, stmtProp, stmtReceiver);
+                }
+                return () =>
+                  Promise.reject(new Error("Request timed out: query"));
+              },
+            });
+        },
+      }) as DbLike;
+    };
+
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+      { streamStep: { attempts: 2, backoffMs: 0 } },
+    );
+
+    // The stale space was upgraded in place and re-keyed: the sentinel a
+    // rebuild would have dropped is still here, and the keys follow the
+    // receipt instant rather than the message ids the pre-v3 rule wrote.
+    const sentinel = await router.forSpace!(streamDid)
+      .query("select id from entities where id = 'sentinel-in-place'")
+      .get<{ id: string }>();
+    expect(sentinel?.id).toBe("sentinel-in-place");
+    const after = (await keysOf(router, streamDid)).filter(
+      (r) => r.sort_idx !== null,
+    );
+    expect(after.map((r) => r.sort_idx)).toEqual(live.map((r) => r.sort_idx));
+    for (const id of messageIds) {
+      expect(after.find((r) => r.id === id)?.sort_idx).not.toBe(id);
+    }
   });
 
   test("the in-place upgrade re-anchors read-state watermarks", async () => {
@@ -385,7 +507,12 @@ describe("in-place per-space migration", () => {
       1,
       receivedAt,
     );
-    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+    );
 
     // The user's watermark is the message's then-current key, which no rebuild
     // reproduces: a live createMessage was keyed by the arrival clock, and a
@@ -398,7 +525,10 @@ describe("in-place per-space migration", () => {
     const raw = new Database(join(spacesDir, `${streamDid}.sqlite`));
     raw.run("update space_schema_version set version = '2' where id = 1");
     raw.run("delete from space_schema_migrations");
-    raw.run("update entities set sort_idx = ? where id = ?", [legacyKey, messageId]);
+    raw.run("update entities set sort_idx = ? where id = ?", [
+      legacyKey,
+      messageId,
+    ]);
     raw.close();
 
     const readState = router.readState!();
@@ -413,18 +543,22 @@ describe("in-place per-space migration", () => {
     );
 
     ({ router } = await openPool(readStatePath));
-    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+    await reMaterializeFromLocalEvents(
+      router,
+      (async () => []) as never,
+      null,
+      1,
+    );
 
-    const entityKey = await router
-      .forSpace!(streamDid)
+    const entityKey = await router.forSpace!(streamDid)
       .query("select sort_idx from entities where id = ?")
       .get<{ sort_idx: string }>(messageId);
-    const watermark = await router
-      .readState!()
-      .query("select seen_up_to from read_positions where user_did = ? and room_id = ?")
+    const watermark = await router.readState!()
+      .query(
+        "select seen_up_to from read_positions where user_did = ? and room_id = ?",
+      )
       .get<{ seen_up_to: string }>(ADMIN, roomId);
-    const version = await router
-      .forSpace!(streamDid)
+    const version = await router.forSpace!(streamDid)
       .query("select version from space_schema_version where id = 1")
       .get<{ version: string }>();
 
@@ -438,9 +572,10 @@ describe("in-place per-space migration", () => {
     // Which is what the read path measures against: the room is read up to
     // that message. A watermark left on the old key names no entity, so this
     // count returns every message in the room instead.
-    const after = await router
-      .forSpace!(streamDid)
-      .query("select count(*) as n from entities where room = ? and sort_idx > ?")
+    const after = await router.forSpace!(streamDid)
+      .query(
+        "select count(*) as n from entities where room = ? and sort_idx > ?",
+      )
       .get<{ n: number }>(roomId, watermark!.seen_up_to);
     expect(after!.n).toBe(0);
   });
@@ -463,7 +598,14 @@ describe("in-place per-space migration", () => {
     const err = await sm
       .sendEvents(
         streamDid,
-        [parse({ id: ulid(), $type: "space.roomy.room.createRoom.v0", kind: "space.roomy.channel", name: "mid-migration" })],
+        [
+          parse({
+            id: ulid(),
+            $type: "space.roomy.room.createRoom.v0",
+            kind: "space.roomy.channel",
+            name: "mid-migration",
+          }),
+        ],
         ADMIN,
       )
       .then(
@@ -476,8 +618,7 @@ describe("in-place per-space migration", () => {
     expect(await router.isSpaceMigrating!(streamDid)).toBe(false);
 
     // The write did not land, so no room was created.
-    const rooms = await router
-      .forSpace!(streamDid)
+    const rooms = await router.forSpace!(streamDid)
       .query("select count(*) as n from comp_room")
       .get<{ n: number }>();
     expect(rooms!.n).toBe(1);
