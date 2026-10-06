@@ -56,12 +56,17 @@ async function seedEvents(
 ): Promise<void> {
   for (let i = 0; i < events.length; i++) {
     const payload = encode(events[i] as Parameters<typeof encode>[0]);
+    // The log's server-observed clocks: a seeded row models one this server
+    // accepted just now, which is what the ordering key reads.
+    const receivedAt = Date.now();
     await db.run(
-      "insert into stream_events (stream_id, idx, user, payload, signature) values (?, ?, ?, ?, x'')",
+      "insert into stream_events (stream_id, idx, user, payload, signature, created_at, received_at) values (?, ?, ?, ?, x'', ?, ?)",
       streamDid,
       startIdx + i,
       user,
       payload,
+      receivedAt,
+      receivedAt,
     );
   }
 }

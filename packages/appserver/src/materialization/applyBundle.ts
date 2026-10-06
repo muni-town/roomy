@@ -95,6 +95,8 @@ export interface ApplyBundleOpts {
   idx: StreamIndex;
   /** `stream_events.received_at`: the server's receipt instant. See `sortIdx.ts`. */
   receivedAt?: number;
+  /** `stream_events.created_at`: the log's ingest time, the receipt's fallback. */
+  createdAt?: number;
 }
 
 export async function applyBundle(
@@ -147,15 +149,22 @@ async function applyBundleInner(
       bundle.event,
       opts.idx,
       opts.receivedAt,
+      opts.createdAt,
     );
     await setMessageSortIdxByReorder(db, opts.streamId, bundle.event);
-    await setMessageSortIdxByForward(db, bundle.event, opts.idx, opts.receivedAt);
+    await setMessageSortIdxByForward(
+      db,
+      bundle.event,
+      opts.idx,
+      opts.receivedAt,
+      opts.createdAt,
+    );
 
     // Activity feed: upsert the activity item for every createMessage event
     // (including backfill, so existing rooms get populated). The timestamp is
     // the canonical message time (timestampOverride for bridged messages,
-    // else the ULID time) — the ULID alone encodes bridge-ingestion time for
-    // Discord-bridged messages, which would mis-order the feed.
+    // else the log's receipt) — a bridged message's ULID encodes
+    // bridge-ingestion time, which would mis-order the feed.
     if (
       bundle.event.$type === "space.roomy.message.createMessage.v0" &&
       bundle.event.room
@@ -293,6 +302,7 @@ async function applyBundleInner(
         event: bundle.event,
         idx: opts.idx,
         receivedAt: opts.receivedAt,
+        createdAt: opts.createdAt,
         readStateDb,
         isBackfill: opts.isBackfill,
       });

@@ -81,24 +81,30 @@ export function orderKey(timeMs: number, idx: number): Ulid {
 }
 
 /**
- * The instant a message is ordered by when nothing more specific is known:
- * a `timestampOverride` (the true order of another system's timeline) wins,
- * then the server's recorded receipt of the event, then — for events logged
- * before `received_at` existed, which a rebuild has no other clock for — the
- * event's own ULID time.
+ * The instant a message is ordered by, in precedence order:
  *
- * `receivedAt` is what keeps a skewed sender clock from burying a message: it
- * is the server's observation, not the sender's claim. Recording it in the
- * event log rather than reading the wall clock at materialisation is what lets
- * a rebuild reproduce the same key.
+ *  1. a `timestampOverride` extension — the true order of another system's
+ *     timeline (the Discord bridge stamps the original Discord send time);
+ *  2. the log's server-observed receipt (`stream_events.received_at`), which
+ *     is the rule: it keeps a skewed sender clock from burying a message, and
+ *     recording it once at append is what lets a rebuild reproduce the same key
+ *     instead of re-deciding it;
+ *  3. the log's ingest time (`stream_events.created_at`) — the same observation
+ *     at second resolution, for a row whose append never stamped a receipt;
+ *  4. the event's own ULID time — the sender's clock, and the only value left
+ *     for a row that carries no server observation at all.
  */
-export function messageOrderTime(event: Event, receivedAt?: number): number {
+export function messageOrderTime(
+  event: Event,
+  receivedAt?: number | null,
+  createdAt?: number | null,
+): number {
   if (event.$type === "space.roomy.message.createMessage.v0") {
     const override =
       event.extensions?.["space.roomy.extension.timestampOverride.v0"];
     if (override) return Number(override.timestamp);
   }
-  return receivedAt ?? decodeTime(event.id);
+  return receivedAt ?? createdAt ?? decodeTime(event.id);
 }
 
 /**
@@ -113,9 +119,10 @@ export function messageOrderTime(event: Event, receivedAt?: number): number {
 export function messageSortIdxKey(
   event: Event,
   idx: StreamIndex | number,
-  receivedAt?: number,
+  receivedAt?: number | null,
+  createdAt?: number | null,
 ): Ulid {
-  return orderKey(messageOrderTime(event, receivedAt), idx);
+  return orderKey(messageOrderTime(event, receivedAt, createdAt), idx);
 }
 
 /**
@@ -129,11 +136,12 @@ export async function setMessageSortIdxByTimestamp(
   db: DbLike,
   event: Event,
   idx: StreamIndex | number,
-  receivedAt?: number,
+  receivedAt?: number | null,
+  createdAt?: number | null,
 ): Promise<void> {
   if (event.$type !== "space.roomy.message.createMessage.v0") return;
 
-  const sortIdx = messageSortIdxKey(event, idx, receivedAt);
+  const sortIdx = messageSortIdxKey(event, idx, receivedAt, createdAt);
   // No SELECT needed: the entity was just created by ensureEntity in the same
   // savepoint with sort_idx = NULL. If the row is missing or sort_idx is
   // already set, this UPDATE is a no-op.
@@ -142,7 +150,7 @@ export async function setMessageSortIdxByTimestamp(
 
 /**
  * Set `entities.sort_idx` for a forward-reference entity created by a
- * `forwardMessages` event, using the forward's receipt time — it is new
+ * `forwardMessages` event, using the forward's ordering time — it is new
  * content arriving now, so it belongs at the top of the destination.
  *
  * The forwarded original stays where it is; the forward-reference entity is a
@@ -160,11 +168,12 @@ export async function setMessageSortIdxByForward(
   db: DbLike,
   event: Event,
   idx: StreamIndex | number,
-  receivedAt?: number,
+  receivedAt?: number | null,
+  createdAt?: number | null,
 ): Promise<void> {
   if (event.$type !== "space.roomy.message.forwardMessages.v0") return;
 
-  const sortIdx = orderKey(messageOrderTime(event, receivedAt), idx);
+  const sortIdx = orderKey(messageOrderTime(event, receivedAt, createdAt), idx);
   await db.run(
     "update entities set sort_idx = ? where id = ? and sort_idx is null",
     sortIdx,
@@ -176,8 +185,8 @@ export async function setMessageSortIdxByForward(
  * Set `entities.sort_idx` for messages moved by a `moveMessages` event.
  *
  * Ordering policy — a moved message sorts at the TOP of the destination
- * room's timeline, keyed by the move's receipt time. Why: `sort_idx` is the
- * server's page-selection key (`selectMessages` orders by it and takes the
+ * room's timeline, keyed by the move event's ordering time. Why: `sort_idx` is
+ * the server's page-selection key (`selectMessages` orders by it and takes the
  * newest `limit` rows — room.getMessages.ts). A moved message that kept its
  * original `sort_idx` would be buried according to its ORIGINAL send time, so
  * moving an old message into a busy channel would put it outside the
@@ -200,11 +209,12 @@ export async function setMessageSortIdxByMove(
   db: DbLike,
   event: Event,
   idx: StreamIndex | number,
-  receivedAt?: number,
+  receivedAt?: number | null,
+  createdAt?: number | null,
 ): Promise<void> {
   if (event.$type !== "space.roomy.message.moveMessages.v0") return;
 
-  const sortIdx = orderKey(messageOrderTime(event, receivedAt), idx);
+  const sortIdx = orderKey(messageOrderTime(event, receivedAt, createdAt), idx);
   for (const messageId of event.messageIds) {
     await db.run(
       "update entities set sort_idx = ? where id = ? and room = ?",

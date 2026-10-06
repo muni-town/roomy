@@ -49,9 +49,9 @@ function seedEvent(
   createdAt: number,
 ): void {
   ctx.db.run(
-    `insert into stream_events (stream_id, idx, user, payload, signature, event_type, created_at)
-     values (?, ?, ?, x'', x'', ?, ?)`,
-    [streamId, idx, USER_A, eventType, createdAt],
+    `insert into stream_events (stream_id, idx, user, payload, signature, event_type, created_at, received_at)
+     values (?, ?, ?, x'', x'', ?, ?, ?)`,
+    [streamId, idx, USER_A, eventType, createdAt, createdAt],
   );
   ctx.db.run(
     `insert into stream_state (stream_id, latest_event) values (?, ?)

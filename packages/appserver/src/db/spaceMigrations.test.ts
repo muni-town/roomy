@@ -49,7 +49,8 @@ beforeEach(() => {
   eventsPath = join(dir, "events.sqlite");
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await pool?.closeGracefully();
   pool = null;
   rmSync(dir, { recursive: true, force: true });
 });
@@ -59,10 +60,12 @@ afterEach(() => {
  * previous one is what a deploy looks like: same DBs on disk, new worker
  * threads with an empty handle cache.
  */
-async function openPool(): Promise<{ pool: DatabasePool; router: DbLike }> {
+async function openPool(
+  readStateDbPath: string = ":memory:",
+): Promise<{ pool: DatabasePool; router: DbLike }> {
   const p = new DatabasePool(1, join(THIS_DIR, "worker.ts"));
   await p.init({
-    readStateDbPath: ":memory:",
+    readStateDbPath,
     eventsDbPath: eventsPath,
     globalDbPath: join(dir, "global.sqlite"),
     spacesDir,
@@ -70,7 +73,9 @@ async function openPool(): Promise<{ pool: DatabasePool; router: DbLike }> {
     spaceSchemaVersion: SPACE_SCHEMA_VERSION,
     globalSchemaVersion: GLOBAL_SCHEMA_VERSION,
   });
-  await pool?.close();
+  // Graceful: the previous workers must have closed their SQLite handles, or
+  // this pool's first write to the same files races the OS releasing them.
+  await pool?.closeGracefully();
   pool = p;
   return { pool: p, router: p.router() };
 }
@@ -337,6 +342,93 @@ describe("in-place per-space migration", () => {
       .query("select completed_at from space_schema_migrations where version = '3'")
       .get<{ completed_at: number | null }>();
     expect(marker?.completed_at).not.toBeNull();
+  });
+
+  test("the in-place upgrade re-anchors read-state watermarks", async () => {
+    const streamDid = StreamDid.assert("did:web:migration-watermark.example");
+    const roomId = ulid();
+    // A sender clock six hours behind, so the pre-v3 key (the ULID) and the
+    // post-v3 key (the receipt) are distinguishable.
+    const skewedAt = Date.now() - 6 * 60 * 60 * 1000;
+    const messageId = ulid(skewedAt);
+    const receivedAt = Date.now();
+
+    const readStatePath = join(dir, "readstate.sqlite");
+
+    let router: DbLike;
+    ({ router } = await openPool(readStatePath));
+    await seedEvent(
+      router,
+      streamDid,
+      parse({
+        id: roomId,
+        $type: "space.roomy.room.createRoom.v0",
+        kind: "space.roomy.channel",
+        name: "general",
+      }),
+      0,
+      receivedAt,
+    );
+    await seedEvent(
+      router,
+      streamDid,
+      parse({
+        id: messageId,
+        room: roomId,
+        $type: "space.roomy.message.createMessage.v0",
+        body: {
+          mimeType: "text/plain",
+          data: { $bytes: Buffer.from("hi").toString("base64") },
+        },
+        extensions: {},
+      }),
+      1,
+      receivedAt,
+    );
+    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+
+    // The user's watermark is the message's then-current key: the old rule
+    // keyed a replayed message by its own ULID.
+    const readState = router.readState!();
+    await readState.run(
+      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
+       values (?, ?, ?, ?, 0, ?)`,
+      ADMIN,
+      roomId,
+      streamDid,
+      messageId,
+      receivedAt,
+    );
+
+    // Age the space DB so the deploy below takes the in-place upgrade.
+    const raw = new Database(join(spacesDir, `${streamDid}.sqlite`));
+    raw.run("update space_schema_version set version = '2' where id = 1");
+    raw.run("delete from space_schema_migrations");
+    raw.run("update entities set sort_idx = id where sort_idx is not null");
+    raw.close();
+
+    ({ router } = await openPool(readStatePath));
+    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+
+    const entityKey = await router
+      .forSpace!(streamDid)
+      .query("select sort_idx from entities where id = ?")
+      .get<{ sort_idx: string }>(messageId);
+    const watermark = await router
+      .readState!()
+      .query("select seen_up_to from read_positions where user_did = ? and room_id = ?")
+      .get<{ seen_up_to: string }>(ADMIN, roomId);
+    const version = await router
+      .forSpace!(streamDid)
+      .query("select version from space_schema_version where id = 1")
+      .get<{ version: string }>();
+
+    // The upgrade ran in place (not the rebuild fallback)...
+    expect(version?.version).toBe(SPACE_SCHEMA_VERSION);
+    // ...the message carries its new key, and the persisted watermark names
+    // that same key rather than the one it held before the re-key.
+    expect(entityKey?.sort_idx).not.toBe(messageId);
+    expect(watermark?.seen_up_to).toBe(entityKey?.sort_idx);
   });
 
   test("a write is rejected while the migration gate is open", async () => {

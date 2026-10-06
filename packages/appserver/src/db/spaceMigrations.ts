@@ -23,6 +23,7 @@ import {
   type SpaceAsyncVersion,
 } from "./spaceVersions.ts";
 import { messageSortIdxKey } from "../materialization/sortIdx.ts";
+import { openReadStateDb } from "./db.ts";
 import { log } from "../log.ts";
 
 /** Rows decoded per round-trip when scanning the log. */
@@ -47,6 +48,7 @@ interface RawEvent {
   user: string;
   payload: Uint8Array;
   received_at: number | null;
+  created_at: number | null;
 }
 
 /**
@@ -79,6 +81,95 @@ async function findReorderEvent(
     }
     cursor = rows[rows.length - 1]!.idx;
   }
+}
+
+/**
+ * The read-state handle a data migration needs, resolved lazily.
+ *
+ * The read-state DB holds values derived from `entities.sort_idx` (the
+ * `read_positions.seen_up_to` watermark), so a task that re-keys those entities
+ * has to re-anchor those copies in the same pass — otherwise the space and the
+ * read-state disagree about what a stored key means.
+ *
+ * `readState` is absent on adapters that don't route it (sync test adapters),
+ * in which case there is nothing to re-anchor. The global `openReadStateDb()`
+ * fallback covers the boot path, which reaches the pool through `PooledDatabase`
+ * — a router that declares the seams but does not spread them onto its
+ * prototype, so feature detection alone would silently skip the re-anchor.
+ */
+function createReadStateResolver(db: DbLike): () => DbLike | undefined {
+  let resolved: DbLike | undefined;
+  return () => {
+    if (resolved !== undefined) return resolved;
+    if (db.readState) return (resolved = db.readState());
+    try {
+      resolved = openReadStateDb();
+    } catch {
+      resolved = undefined;
+    }
+    return resolved;
+  };
+}
+
+/**
+ * Re-anchor the read-state watermarks this space's `read_positions` rows carry.
+ *
+ * `seen_up_to` is a stored `entities.sort_idx` (`readStateSchema.sql`), and it
+ * is compared against live `sort_idx` values in two places: `updateSeen` counts
+ * the messages after it, and `decrementUnreadForRemovedMessages` decides
+ * whether a removed message was still unread. A re-key therefore has to follow
+ * it, or the watermark names a key no entity carries and every message in the
+ * room compares past it.
+ *
+ * The anchor is the message id (`seen_up_to` is the ULID of the message the
+ * user read up to), which survives the re-key. Its new key is read back from
+ * the space's `entities` — the task replays the log in `idx` order, so a later
+ * move has already overwritten this row by the time the pass finishes, and the
+ * id lookup returns the final key rather than the create-time one. A watermark
+ * that is not a materialised entity's id (`''`/`'0'` from a lazily-created or
+ * legacy row) is left alone: it decodes to "no watermark" either way.
+ */
+async function reanchorReadStateWatermarks(
+  spaceDb: DbLike,
+  readState: DbLike,
+  streamDid: StreamDid,
+): Promise<number> {
+  const rows = await readState
+    .query(
+      `select user_did, room_id, seen_up_to from read_positions where space_did = ?`,
+    )
+    .all<{ user_did: string; room_id: string; seen_up_to: string }>(streamDid);
+  if (rows.length === 0) return 0;
+
+  // Keyed by the stored watermark; `null` records "no entity carries this key"
+  // so the `''`/`'0'` rows every lazily-created position starts with cost one
+  // lookup between them rather than one each.
+  const remapped = new Map<string, string | null>();
+  let changed = 0;
+  for (const row of rows) {
+    if (!remapped.has(row.seen_up_to)) {
+      const entity = await spaceDb
+        .query("select sort_idx from entities where id = ?")
+        .get<{ sort_idx: string | null }>(row.seen_up_to);
+      remapped.set(row.seen_up_to, entity?.sort_idx ?? null);
+    }
+    if (remapped.get(row.seen_up_to) !== null) changed++;
+  }
+  if (changed === 0) return 0;
+
+  const updates = rows.flatMap((row) => {
+    const next = remapped.get(row.seen_up_to);
+    if (next === undefined || next === null) return [];
+    return [
+      {
+        type: "run" as const,
+        sql: "update read_positions set seen_up_to = ? where user_did = ? and room_id = ?",
+        params: [next, row.user_did, row.room_id] as unknown[],
+      },
+    ];
+  });
+  if (updates.length > 0) await readState.transaction(updates);
+  return updates.length;
 }
 
 /**
@@ -132,7 +223,7 @@ async function recomputeSortIdxFromLog(
   for (;;) {
     const rows = await db
       .query(
-        `select idx, user, payload, received_at from stream_events
+        `select idx, user, payload, received_at, created_at from stream_events
           where stream_id = ? and idx > ?
           order by idx limit ?`,
       )
@@ -143,21 +234,22 @@ async function recomputeSortIdxFromLog(
       const event = decode(row.payload) as Event;
       const idx = row.idx as StreamIndex;
       const receivedAt = row.received_at ?? undefined;
+      const createdAt = row.created_at ?? undefined;
 
       if (event.$type === "space.roomy.message.createMessage.v0") {
         steps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
-          params: [messageSortIdxKey(event, idx, receivedAt), event.id],
+          params: [messageSortIdxKey(event, idx, receivedAt, createdAt), event.id],
         });
       } else if (event.$type === "space.roomy.message.forwardMessages.v0") {
         steps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
-          params: [messageSortIdxKey(event, idx, receivedAt), event.id],
+          params: [messageSortIdxKey(event, idx, receivedAt, createdAt), event.id],
         });
       } else if (event.$type === "space.roomy.message.moveMessages.v0") {
-        const sortIdx = messageSortIdxKey(event, idx, receivedAt);
+        const sortIdx = messageSortIdxKey(event, idx, receivedAt, createdAt);
         for (const messageId of event.messageIds) {
           steps.push({
             type: "run",
@@ -177,7 +269,21 @@ async function recomputeSortIdxFromLog(
   }
 
   await flush();
-  log.info("startup", `sort_idx migration replayed ${applied} ordering events for ${streamDid}`);
+
+  // The entities now carry their new keys, so the read-state watermarks keyed
+  // by the old ones can be re-anchored. This runs on every re-run, not only the
+  // first: the task is idempotent, so an interrupted pass (or a second pass
+  // after a deploy that re-runs it) must leave the watermarks correct rather
+  // than double-remapped.
+  const readState = createReadStateResolver(db)();
+  const reanchored = readState
+    ? await reanchorReadStateWatermarks(spaceDb, readState, streamDid)
+    : 0;
+  log.info(
+    "startup",
+    `sort_idx migration replayed ${applied} ordering events for ${streamDid}` +
+      (readState ? `, re-anchored ${reanchored} read watermark(s)` : ""),
+  );
 }
 
 /**

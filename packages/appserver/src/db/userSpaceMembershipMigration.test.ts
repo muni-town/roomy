@@ -42,12 +42,15 @@ async function seedEvent(
       .query("select coalesce(max(idx), -1) + 1 as n from stream_events where stream_id = ?")
       .get<{ n: number }>(streamId)
   )!.n;
+  const receivedAt = Date.now();
   await db.run(
-    "insert into stream_events (stream_id, idx, user, payload, signature) values (?, ?, ?, ?, x'')",
+    "insert into stream_events (stream_id, idx, user, payload, signature, created_at, received_at) values (?, ?, ?, ?, x'', ?, ?)",
     streamId,
     idx,
     user,
     payload,
+    receivedAt,
+    receivedAt,
   );
 }
 

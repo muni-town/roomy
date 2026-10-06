@@ -193,23 +193,24 @@ export class StreamManager {
       params?: unknown[];
     }> = [];
 
-    // The receipt instant recorded for this batch, shared by the log row and
-    // the in-memory events materialised below: the ordering key's time
-    // component is this value, so both derivations of the log must read the
-    // same one. `created_at` (the admin dashboard's window key) tracks it but
-    // is not read back for ordering.
+    // The instant this batch was accepted, recorded twice: `received_at` is the
+    // ordering key's time component (millisecond resolution) and `created_at`
+    // is the admin dashboard's window key and the ordering key's fallback
+    // (second resolution, via `unixepoch() * 1000`). Both derivations of the
+    // log — the in-memory events materialised below and a later rebuild — must
+    // read the same receipt, so it is stamped once here and carried on each
+    // event.
     const receivedAt = Date.now();
     for (let i = 0; i < encoded.length; i++) {
       const eventType = events[i]!.$type;
       steps.push({
         type: "run",
-        sql: "insert into stream_events (stream_id, idx, user, payload, signature, event_type, created_at, received_at) select ?, coalesce(max(idx), -1) + 1, ?, ?, x'', ?, ?, ? from stream_events where stream_id = ?",
+        sql: "insert into stream_events (stream_id, idx, user, payload, signature, event_type, created_at, received_at) select ?, coalesce(max(idx), -1) + 1, ?, ?, x'', ?, unixepoch() * 1000, ? from stream_events where stream_id = ?",
         params: [
           streamDid,
           user,
           encoded[i] as Uint8Array,
           eventType,
-          receivedAt,
           receivedAt,
           streamDid,
         ],
@@ -239,14 +240,15 @@ export class StreamManager {
     // gap between insert and materialize (decode → materialize →
     // invalidate → listeners). Different streams are not serialized.
     await this.#runSerialized(streamDid, async () => {
-      // 3. Decode events back to LoggedEvent[] — each carries the receipt
-      //    instant its log row was stamped with.
+      // 3. Decode events back to LoggedEvent[] — each carries the clocks its
+      //    log row was stamped with.
       const decodedEvents: LoggedEvent[] = encoded.map(
         (bytes, i): LoggedEvent => ({
           idx: (startIdx + i) as StreamIndex,
           event: decode(bytes) as Event,
           user: (userOverride ?? "unknown") as UserDid,
           receivedAt,
+          createdAt: receivedAt,
         }),
       );
 

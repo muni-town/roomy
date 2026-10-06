@@ -21,7 +21,6 @@ import { applyBatch } from "./applyBatch.ts";
 import { applyBundle } from "./applyBundle.ts";
 import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
-import { messageSortIdxKey, orderKey } from "./sortIdx.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -77,8 +76,13 @@ function seedSpace(db: Database, streamDid: StreamDid): void {
   db.run("insert into comp_space (entity) values (?)", [streamDid]);
 }
 
-function decoded(event: Event, idx: number, receivedAt?: number): LoggedEvent {
-  return { event, idx: idx as StreamIndex, user: USER, receivedAt };
+function decoded(
+  event: Event,
+  idx: number,
+  receivedAt?: number,
+  createdAt?: number,
+): LoggedEvent {
+  return { event, idx: idx as StreamIndex, user: USER, receivedAt, createdAt };
 }
 
 function createRoomEvent(name: string): Event {
@@ -1734,7 +1738,12 @@ describe("sort keys are a pure function of the log", () => {
       const row = await asyncDb
         .query("select sort_idx from entities where id = ?")
         .get<{ sort_idx: string }>(e.event.id);
-      expect(row!.sort_idx).toBe(orderKey(receivedAt, e.idx));
+      // Read the key's two halves directly: the time component is the receipt
+      // instant, and the position component is the event's log index. Asserting
+      // against a re-exported `orderKey` would move with the implementation.
+      const key = row!.sort_idx!;
+      expect(decodeTime(key)).toBe(receivedAt);
+      expect(Number(key.slice(10))).toBe(e.idx);
     }
   });
 
@@ -1762,16 +1771,39 @@ describe("sort keys are a pure function of the log", () => {
     expect(decodeTime(row!.sort_idx)).toBe(bridgedAt);
   });
 
-  test("a message with no receipt time falls back to its own ULID time", async () => {
+  test("a row with no receipt time falls back to the log's ingest time", async () => {
     const room = newUlid();
-    const event = createMessageEvent(room, newUlid(), "legacy row");
+    // The ULID carries a skewed sender clock, so the fallback is only visible
+    // if the ingest time disagrees with it.
+    const senderAt = Date.now() - 6 * 60 * 60 * 1000;
+    const ingestedAt = Date.now();
+    const event = createMessageEvent(room, ulid(senderAt), "legacy row");
+
+    const { asyncDb } = freshDb();
+    await applyBatch(
+      asyncDb,
+      STREAM,
+      [decoded(event, 7, undefined, ingestedAt)],
+      { isBackfill: false },
+    );
+    const row = await asyncDb
+      .query("select sort_idx from entities where id = ?")
+      .get<{ sort_idx: string }>(event.id);
+    expect(decodeTime(row!.sort_idx!)).toBe(ingestedAt);
+  });
+
+  test("a row with neither receipt nor ingest time falls back to its ULID", async () => {
+    const room = newUlid();
+    const senderAt = Date.now() - 6 * 60 * 60 * 1000;
+    const event = createMessageEvent(room, ulid(senderAt), "imported row");
 
     const { asyncDb } = freshDb();
     await applyBatch(asyncDb, STREAM, [decoded(event, 7)], { isBackfill: false });
     const row = await asyncDb
       .query("select sort_idx from entities where id = ?")
       .get<{ sort_idx: string }>(event.id);
-    // An event logged before `received_at` existed has no other clock.
-    expect(row!.sort_idx).toBe(orderKey(decodeTime(event.id), 7));
+    // A row imported from another store carries no server observation at all,
+    // so the sender's own clock is the only value left.
+    expect(decodeTime(row!.sort_idx!)).toBe(decodeTime(event.id));
   });
 });

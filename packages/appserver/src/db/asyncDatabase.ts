@@ -292,6 +292,33 @@ export class WorkerLink {
     this.#worker.terminate();
   }
 
+  /**
+   * Ask the worker to close its SQLite handles, then terminate it once it has.
+   *
+   * `terminate()` alone drops the thread without running `handleClose()`, so
+   * the OS releases the file locks whenever it gets around to it. A test that
+   * opens a fresh pool over the same files in the same tick then races that
+   * release and fails with `database is locked`. That is a test-only shape —
+   * production closes on process exit — but the flake it produces is real
+   * (`db/spaceMigrations.test.ts`).
+   *
+   * The reply is the signal: `handleClose` closes every handle before it
+   * returns, and the reply is posted after that. A worker that never answers
+   * (already dead, or wedged) is still terminated once the race resolves.
+   */
+  async closeGracefully(): Promise<void> {
+    if (this.#closed) return;
+    const closed = this.send({ type: "close" }).then(
+      () => undefined,
+      () => undefined,
+    );
+    await Promise.race([
+      closed,
+      new Promise((resolve) => setTimeout(resolve, 250)),
+    ]);
+    this.terminate();
+  }
+
   /** Number of in-flight (pending) requests on this worker. */
   get pendingCount(): number {
     return this.#pending.size;

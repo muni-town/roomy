@@ -45,19 +45,23 @@ export type ApplyOutcome =
   | { result: "error"; eventId: Ulid; error: string };
 
 /**
- * A decoded event plus the receipt time the event log recorded for it.
+ * A decoded event plus the clocks the event log recorded for its row.
  *
  * `receivedAt` is `stream_events.received_at`: the instant the server accepted
- * the event, which is the ordering key's time component for a message the
- * sender's own clock cannot be trusted to place (see `sortIdx.ts`). It is
- * server-side materialisation metadata, so it is carried here rather than on
- * the SDK's `DecodedStreamEvent`, which is also the shape handed to clients.
+ * the event, and the ordering key's time component for a message the sender's
+ * own clock cannot be trusted to place (see `sortIdx.ts`). `createdAt` is
+ * `stream_events.created_at`, the same observation at second resolution, and
+ * is the ordering key's second fallback for a row whose append stamped no
+ * receipt. Both are server-side materialisation metadata, so they are carried
+ * here rather than on the SDK's `DecodedStreamEvent`, which is also the shape
+ * handed to clients.
  *
- * Optional because an event logged before the column existed has no receipt
- * time; the ordering key then falls back to the event's own ULID time.
+ * Optional because a row imported from another store carries neither; the
+ * ordering key then falls back to the event's own ULID time.
  */
 export interface LoggedEvent extends DecodedStreamEvent {
   receivedAt?: number;
+  createdAt?: number;
 }
 
 /** Context for materialiser invocations. */

@@ -232,12 +232,27 @@ export class DatabasePool {
     ]);
   }
 
-  /** Terminate all workers, rejecting in-flight requests. */
+  /** Terminate all workers, rejecting in-flight requests immediately. */
   close(): void {
     for (const l of this.#poolLinks) l.terminate();
     this.#globalLink.terminate();
     this.#readStateLink.terminate();
     this.#eventsLink.terminate();
+  }
+
+  /**
+   * Close every worker's SQLite handles, then terminate them. Use this instead
+   * of `close()` whenever something opens the same DB files right afterwards
+   * (a test simulating a deploy, primarily) — see
+   * `WorkerLink.closeGracefully`.
+   */
+  async closeGracefully(): Promise<void> {
+    await Promise.all([
+      ...this.#poolLinks.map((l) => l.closeGracefully()),
+      this.#globalLink.closeGracefully(),
+      this.#readStateLink.closeGracefully(),
+      this.#eventsLink.closeGracefully(),
+    ]);
   }
 
   /**

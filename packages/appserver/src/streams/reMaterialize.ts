@@ -34,6 +34,7 @@ interface RawEvent {
   user: string;
   payload: Uint8Array;
   received_at: number | null;
+  created_at: number | null;
 }
 
 /** Default number of streams re-materialized concurrently (matches the pool default). */
@@ -334,7 +335,7 @@ export async function reMaterializeFromLocalEvents(
 
         const rawEvents = await db
           .query(
-            "SELECT idx, user, payload, received_at FROM stream_events WHERE stream_id = ? AND idx >= ? ORDER BY idx",
+            "SELECT idx, user, payload, received_at, created_at FROM stream_events WHERE stream_id = ? AND idx >= ? ORDER BY idx",
           )
           .all<RawEvent>(streamDid, fromIdx);
 
@@ -345,6 +346,7 @@ export async function reMaterializeFromLocalEvents(
               event: decode(e.payload) as Event,
               user: e.user as UserDid,
               receivedAt: e.received_at ?? undefined,
+              createdAt: e.created_at ?? undefined,
             }),
           );
 

@@ -79,6 +79,8 @@ export async function applyMoveSideEffects(
     idx: StreamIndex;
     /** `stream_events.received_at`: the server's receipt instant. */
     receivedAt?: number;
+    /** `stream_events.created_at`: the log's ingest time, the receipt's fallback. */
+    createdAt?: number;
     readStateDb?: DbLike;
     /** True for backfill/replay — skips the read-state mutations. */
     isBackfill: boolean;
@@ -90,17 +92,22 @@ export async function applyMoveSideEffects(
   if (!event.room || !event.toRoomId) return;
 
   const spaceId = opts.streamId;
-  // The move's canonical instant: the server's receipt of the event, with the
-  // event's own ULID time as the fallback for a row logged before receipt
-  // times existed. This is the same rule `setMessageSortIdxByMove` keys the
-  // ordering by, so the timeline order and the feed's window order use one
-  // instant and cannot drift apart.
-  const movedAt = messageOrderTime(opts.event, opts.receivedAt);
+  // The move's canonical instant: the server's receipt of the event, then the
+  // log's ingest time, then the event's own ULID time — the same rule
+  // `setMessageSortIdxByMove` keys the ordering by, so the timeline order and
+  // the feed's window order use one instant and cannot drift apart.
+  const movedAt = messageOrderTime(opts.event, opts.receivedAt, opts.createdAt);
 
   // Ordering: the moved message takes the move's instant so it lands at the
   // top of the destination timeline instead of being buried at its original
   // send time (see `setMessageSortIdxByMove`).
-  await setMessageSortIdxByMove(db, opts.event, opts.idx, opts.receivedAt);
+  await setMessageSortIdxByMove(
+    db,
+    opts.event,
+    opts.idx,
+    opts.receivedAt,
+    opts.createdAt,
+  );
 
   const moved = await readMovedMessages(db, event.messageIds);
   if (moved.length === 0) return;

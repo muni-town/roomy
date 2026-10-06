@@ -215,7 +215,7 @@ export async function applyBatch(
       // event's log row rather than the wall clock is what makes a rebuild
       // reproduce the same key live materialisation wrote. See `sortIdx.ts`.
       if (e.event.$type === "space.roomy.message.createMessage.v0") {
-        const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt);
+        const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt, e.createdAt);
         chunkSteps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
@@ -233,7 +233,7 @@ export async function applyBatch(
       // client's room query returns the newest `limit` rows), so the forward
       // would flash in via the WS diff and vanish on the next refetch.
       if (e.event.$type === "space.roomy.message.forwardMessages.v0") {
-        const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt);
+        const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt, e.createdAt);
         chunkSteps.push({
           type: "run",
           sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
@@ -582,7 +582,7 @@ async function applyChunkSideEffects(
       await applyBundle(
         db,
         bundle,
-        { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt },
+        { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt, createdAt: e.createdAt },
         globalDb,
         openReadStateDb(),
       );
@@ -668,7 +668,7 @@ async function applyChunkSideEffects(
         statements: [],
         dependsOn: [],
       };
-      await applyBundle(db, bundle, { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt }, globalDb, openReadStateDb());
+      await applyBundle(db, bundle, { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt, createdAt: e.createdAt }, globalDb, openReadStateDb());
 
       // Re-index every moved message: the search worker reads the message's
       // `room` from the per-space DB, and Qdrant filters on it, so a moved

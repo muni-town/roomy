@@ -55,16 +55,17 @@ export type SpaceMigrationEntry =
  * that `create table if not exists` cannot express.
  */
 export const SPACE_MIGRATIONS = {
-  // v1–v2 predate this manifest: v1 is the initial per-space split, v2 was the
-  // FTS5 search index (since removed). Their DDL lives in schema-space.sql, so
-  // neither carries an `up`.
+  // v1–v2 predate this manifest: v1 is the initial per-space split, v2 added a
+  // full-text search index that no longer exists. Their DDL lives in
+  // schema-space.sql, so neither carries an `up`.
   "1": { kind: "structural" },
   "2": { kind: "structural" },
-  // Deterministic ordering keys. `entities.sort_idx` is now `time + log
-  // position`, where the time half is `stream_events.received_at` — the
-  // instant the server accepted the event — instead of the sender-minted ULID
-  // time (live) or the event ULID time (replay). Existing rows are recomputed
-  // from the log by the v3 task; the alternative is replaying every space.
+  // Deterministic ordering keys. `entities.sort_idx` is `time + log position`,
+  // where the time half is the log's server-observed receipt
+  // (`stream_events.received_at`, falling back to `created_at` and then the
+  // sender-minted ULID time) instead of the sender's clock. The task recomputes
+  // every message's key from the log and re-anchors the read-state watermarks
+  // that stored the old ones; the alternative is replaying every space.
   "3": { kind: "data" },
   // Next per-space schema change goes here, e.g.:
   //   "4": { kind: "structural", up(db) { /* alter table … */ } },
