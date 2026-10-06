@@ -38,7 +38,7 @@
   // Derive resolveState from the metadata query
   let resolveState = $derived.by<JoinResolveState>(() => {
     if (metaQuery.isPending) return { status: "loading" };
-    if (metaQuery.isError) {
+    if (metaQuery.isLoadingError) {
       const message =
         metaQuery.error instanceof Error
           ? metaQuery.error.message

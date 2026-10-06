@@ -47,7 +47,7 @@
       </div>
       <div class="h-3 w-24 rounded-full bg-base-200 dark:bg-base-700 animate-pulse"></div>
       <div class="h-2 w-40 rounded-full bg-base-100 dark:bg-base-800 animate-pulse"></div>
-    {:else if metaQuery.isError}
+    {:else if metaQuery.isLoadingError}
       <div class="flex items-center justify-center" style="width: 88px; height: 88px;">
         <ErrorMessage message="Unable to load space" class="py-4" />
       </div>

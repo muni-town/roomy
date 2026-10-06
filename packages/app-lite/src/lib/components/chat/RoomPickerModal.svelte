@@ -143,7 +143,7 @@
       if (roomsSearchQuery.isPending && !roomsSearchQuery.data) {
         return { status: "loading" };
       }
-      if (roomsSearchQuery.isError) {
+      if (roomsSearchQuery.isLoadingError) {
         return {
           status: "error",
           message:
@@ -157,7 +157,7 @@
     }
 
     if (metaQuery.isPending) return { status: "loading" };
-    if (metaQuery.isError)
+    if (metaQuery.isLoadingError)
       return {
         status: "error",
         message:

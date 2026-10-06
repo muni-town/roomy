@@ -42,7 +42,7 @@
   }
 </script>
 
-{#if linksQuery.isError && !linksQuery.data}
+{#if linksQuery.isLoadingError}
   <ErrorMessage
     message={linksQuery.error.message}
     class="h-full w-full justify-center"

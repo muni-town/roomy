@@ -74,7 +74,7 @@
 
     {#if invitesQuery.isPending}
       <p class="text-sm text-base-400">Loading…</p>
-    {:else if invitesQuery.isError}
+    {:else if invitesQuery.isLoadingError}
       <ErrorMessage message={invitesQuery.error.message} class="py-8" />
     {:else if invitesQuery.data}
       {@const invites = invitesQuery.data.invites}

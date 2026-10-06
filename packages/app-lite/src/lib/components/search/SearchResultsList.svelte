@@ -266,7 +266,7 @@
         <p class="text-sm text-base-400">Type at least 3 characters to search.</p>
       {:else if searchQuery.isPending && !searchQuery.data}
         <p class="text-sm text-base-400">Searching…</p>
-      {:else if searchQuery.isError}
+      {:else if searchQuery.isLoadingError}
         <ErrorMessage message={searchQuery.error.message} class="py-8" />
       {:else if searchQuery.data}
         {#if messages.length === 0}

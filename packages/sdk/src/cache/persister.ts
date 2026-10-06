@@ -164,11 +164,6 @@ export interface SnapshotPolicy {
   version: string;
   /** DID the current session belongs to. An empty account restores nothing. */
   account: string;
-  /**
-   * Discard the whole snapshot when it is older than this, measured from
-   * its write time. `undefined` applies no age limit.
-   */
-  maxAgeMs?: number;
   /** Diagnostic sink. Defaults to `console.warn`. */
   onDiagnostic?: Diagnostic;
 }
@@ -191,16 +186,20 @@ export function writeSnapshot(
  * Decode an already-parsed snapshot value into entries, discarding
  * whatever cannot be trusted.
  *
- * A snapshot that is absent, unreadable, of another version, of another
- * account, or past its age is discarded whole. An entry that is
- * malformed inside an otherwise valid snapshot is dropped alone, leaving
- * the rest intact: a partial restore is acceptable, a partial entry is
- * not.
+ * A snapshot that is absent, unreadable, of another version, or of
+ * another account is discarded whole. An entry that is malformed inside
+ * an otherwise valid snapshot is dropped alone, leaving the rest intact:
+ * a partial restore is acceptable, a partial entry is not.
+ *
+ * Age is deliberately not a reason to discard. A restored value is stale
+ * from the moment it is restored — the restore invalidates what it
+ * hydrates, so the query the user looks at refetches — and a snapshot's
+ * age says nothing about whether the view would rather have it than
+ * nothing.
  */
 export function readSnapshot(
   raw: unknown,
   policy: SnapshotPolicy,
-  now: number = Date.now(),
 ): PersistedEntry[] {
   const diag = policy.onDiagnostic ?? defaultDiagnostic;
 
@@ -217,14 +216,6 @@ export function readSnapshot(
 
   if (policy.account === "" || snapshot.account !== policy.account) {
     diag("cache: snapshot belongs to another account; discarding");
-    return [];
-  }
-
-  if (
-    policy.maxAgeMs !== undefined &&
-    now - snapshot.savedAt > policy.maxAgeMs
-  ) {
-    diag("cache: snapshot is older than maxAge; discarding");
     return [];
   }
 

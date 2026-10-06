@@ -122,7 +122,7 @@
   </div>
   {#if membersQuery.isPending}
     <p class="text-sm text-base-400">Loading…</p>
-  {:else if membersQuery.isError}
+  {:else if membersQuery.isLoadingError}
     <ErrorMessage message={membersQuery.error.message} class="py-8" />
   {:else if membersQuery.data}
     {@const { members, externalAdmins } = membersQuery.data}

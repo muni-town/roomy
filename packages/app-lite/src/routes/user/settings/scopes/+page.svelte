@@ -68,7 +68,7 @@
 
   {#if settingsQuery.isPending}
     <p class="text-sm text-base-400">Loading access settings…</p>
-  {:else if settingsQuery.isError}
+  {:else if settingsQuery.isLoadingError}
     <ErrorMessage message="Error: {settingsQuery.error.message}" class="py-4" />
   {:else if settingsQuery.data}
     {#snippet capabilityRow(name: string, desc: string, tier: RequestableScopeSetName)}

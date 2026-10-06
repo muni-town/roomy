@@ -16,6 +16,7 @@
     "playwright.config.ts",
     "e2e/fixtures.ts",
     "e2e/spec-helpers.ts",
+    "e2e/cache-snapshot.ts",
     "e2e/*.spec.ts"
   ]
 }

@@ -52,28 +52,21 @@ export async function pxUnauth(): Promise<
   return unauthXrpc;
 }
 
-/**
- * How long a persisted snapshot may be restored: 24 hours, matching the app's
- * existing precedent for this class of state
- * (`scroll-position.svelte.ts`'s 24 h discard window). It is also the
- * `gcTime` below, since an in-memory entry collected before `maxAge` would
- * never reach the next snapshot.
- *
- * This is the persistence plan's `maxAge`, not the wire's: the WebSocket
- * remains the sole freshness authority; this only bounds how old a *restored*
- * value may be before it is discarded rather than shown.
- */
-export const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-
 // WS is sole freshness authority — all queries use staleTime: Infinity.
 //
-// `gcTime` is raised off the 5-minute browser default to the persistence
-// window. TanStack's guidance is `gcTime >= maxAge`; with no override an
-// unobserved entry is collected after 5 minutes, and the next snapshot save
-// then omits it — so a room revisited the next day would restore nothing.
-// The six `gcTime: 0` call sites (threads/links/search) keep their opt-out:
-// they are collected the moment nothing observes them, and are excluded from
-// the persisted set structurally.
+// The refetching that does happen is stale-while-revalidate. A refetch that
+// fails leaves the last value the server sent in place with `status: "error"`
+// alongside it (TanStack's `isRefetchError`), so a view keeps rendering what
+// it has and the views guard their error branch on there being nothing to fall
+// back on. `query-health.ts` reads the same state and drives the stale-data
+// banner.
+//
+// `gcTime` is `Infinity`: an entry nothing observes is not collected, so the
+// next snapshot still holds the rooms the user was not looking at — which are
+// exactly the entries persistence exists to keep. The six `gcTime: 0` call
+// sites (threads/links/search) keep their opt-out: they are collected the
+// moment nothing observes them, and are excluded from the persisted set
+// structurally.
 //
 // The query/mutation cache `onError` callbacks route recoverable ATProto
 // session/auth errors (expired/revoked tokens, failed service-auth) to the
@@ -90,7 +83,7 @@ const config: QueryClientConfig = {
   defaultOptions: {
     queries: {
       staleTime: Infinity,
-      gcTime: CACHE_MAX_AGE_MS,
+      gcTime: Infinity,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
     },
@@ -171,10 +164,12 @@ function choosePersister(policy: SnapshotPolicy): CachePersister {
 export async function restoreCache(accountDid: string): Promise<void> {
   if (session) return;
 
+  // No `maxAgeMs`: a snapshot is restored however old it is, and the restore's
+  // own invalidation is what makes the mounted room refetch it. Discarding on
+  // age would have thrown away exactly the rows persistence exists to keep.
   const policy: SnapshotPolicy = {
     version: persistedShapeVersion(__BUILD_ID__),
     account: accountDid,
-    maxAgeMs: CACHE_MAX_AGE_MS,
     onDiagnostic: report,
   };
 

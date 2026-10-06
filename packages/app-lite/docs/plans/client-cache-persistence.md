@@ -1,11 +1,15 @@
 # Persistent Client Caches — Plan
 
 **Date:** 2026-09-29
-**Status:** P1 and P2 shipped. P1 (the `CachePersister` seam) merged as #333
-(`c2ad8a1e`); P2 (the real storages, restore-on-load, and the §5.3 restore
-validator) merged as #343 (`ba73c0db`). §2–§5 are the design those phases
-implement. §6 is a **later, unconfirmed, unscheduled** phase recorded so the
-proposal and the objections to it are not lost — it is not a commitment.
+**Status:** P1 and P2 shipped, with two revisions since. P1 (the
+`CachePersister` seam) merged as #333 (`c2ad8a1e`); P2 (the real storages,
+restore-on-load, and the §5.3 restore validator) merged as #343 (`ba73c0db`).
+§2–§5 are the design those phases implement, as revised by §5.1: the
+persisted-snapshot age cap is gone (a snapshot is restored however old it is)
+and a failed refetch is reported as stale data — a banner and a grey dot —
+rather than as an error state. §6 is a **later, unconfirmed, unscheduled**
+phase recorded so the proposal and the objections to it are not lost — it is
+not a commitment.
 **Next:** P3 — `TauriStorePersister` (the storage plugin, its capability, and
 `CONFIG`-driven selection in the shell; also the iOS default per §4.1). Not
 implemented and not dispatched; no open task tracks it. P3 is the last phase in
@@ -26,6 +30,12 @@ correct from there.
 The persistence layer must sit behind a seam, so the same cache can be stored by
 whatever the platform offers — browser storage, Tauri's native storage, or
 nothing at all — without the sync layer or the UI knowing which one it got.
+
+Two properties were revised after P2 shipped, and §5.1/§5.1b are the current
+statement: **the cache is not discarded for being old** (a snapshot is restored
+however long ago it was written) and **a failed refetch is not an error state**
+(the view keeps the value it has and the app says the refresh did not go
+through).
 
 ---
 
@@ -379,12 +389,15 @@ Concretely, in order of what is guaranteed:
 | Situation | Required behaviour |
 |---|---|
 | No snapshot (first run, cleared, evicted) | Empty cache. Queries fetch on mount, exactly as `main`. |
-| Snapshot older than `maxAge` | Discard silently, empty cache. |
 | Snapshot written by another persisted-shape version | Discard silently, empty cache. |
 | Snapshot written for another DID | Discard silently, empty cache. |
 | `load` throws / the store is unreadable | Log a diagnostic, empty cache, and switch to the fallback adaptor for the rest of the session. |
 | An entry inside an otherwise valid snapshot is malformed | Drop **that entry**, keep the rest. An entry that cannot be understood is absent, not empty-valued. |
 | A restored entry's data fails its shape check | Drop that entry (§5.3). Never render an unvalidated row. |
+
+Age is deliberately absent from the table: a snapshot is restored however old it
+is (§5.1), so there is no age at which the app prefers nothing to something it
+already had.
 
 **A partial restore is acceptable; a partial entry is not.** This is why the rule
 is stated per-entry: the failure that matters is not "we lost the cache" (that is
@@ -412,13 +425,15 @@ is stated per-entry: the failure that matters is not "we lost the cache" (that i
 ### 5.1 What is shown, and for how long
 
 - **Shown from cache:** any restored entry, immediately, exactly as it was
-  stored — with no visual "stale" treatment beyond what the app already has for
-  a refetch in flight.
-- **For how long:** until the entry is refetched, and never past `maxAge`
-  measured from the snapshot's write time. Suggested `maxAge` is **24 hours**,
-  matching the app's existing precedent for this class of state
-  (`scroll-position.svelte.ts:56-59` keeps positions for 24 h). It is a
-  proposal, not a decision — see §8.
+  stored.
+- **For how long:** until the entry is refetched — with no age limit on the
+  restore itself, and no age limit on what is kept. A value from a snapshot
+  written weeks ago is still shown while the room refetches, because the
+  alternative is an empty view. The refetch, not a clock, is what replaces it:
+  the restore invalidates every key it hydrates (§2.1), so the room the user
+  opens fetches immediately (`queries/messages.ts`), and the WebSocket keeps it
+  live from there. Nothing is discarded on the grounds of age — a snapshot that
+  old is exactly the case persistence exists for.
 - **Which entries are persisted at all:** queries, not mutations. Within those,
   success-status, non-error, and not `gcTime: 0`. The `gcTime: 0` queries
   (`threads.ts:62,88`, `links.ts:29,50`, `search.ts:50`, `search-rooms.ts:46`)
@@ -427,13 +442,40 @@ is stated per-entry: the failure that matters is not "we lost the cache" (that i
   because the app already caches them deliberately (`routes/+layout.svelte:166-178`
   discusses the "Not authenticated" case) and a stale error is strictly worse
   than no error.
-- **`gcTime` must be raised for persisted entries.** TanStack's own guidance is
-  that `gcTime` should be `>= maxAge`; the browser default is 5 minutes
-  (`removable.js:21`). With `maxAge` at 24 h and no `gcTime` override, the
-  in-memory entry is collected after 5 minutes of no observers and the *next*
-  snapshot save then omits it. The persisted set is therefore not the same as the
-  cached set unless `gcTime` is raised (or set to `Infinity`) for the persisted
-  subset.
+- **`gcTime` is `Infinity` for the persisted set.** An in-memory entry the cache
+  collects is one the next snapshot omits, so collecting an unobserved entry
+  discards the room the user was not looking at — which is the set persistence
+  exists to keep. TanStack's browser default is 5 minutes
+  (`removable.js:21`), so the override is not optional; the six `gcTime: 0` call
+  sites keep their opt-out, and are excluded structurally as above.
+
+### 5.1b A failed refetch is stale data, not an error state
+
+A refetch that fails leaves the query holding the value it already had with
+`status: "error"` alongside it — TanStack's `isRefetchError` — so the value is
+still there to render. Under `staleTime: Infinity` and a WebSocket-only
+freshness authority that is the ordinary case, not an exception: an unreachable
+appserver fails the refetch behind every mounted query at once.
+
+Two rules follow, and they are what the views and the indicators implement:
+
+- **With data, the view stays.** Every error branch is guarded on there being
+  nothing to fall back on (`isLoadingError`, not `isError`), so a failed
+  revalidation re-renders the last good value instead of an error message.
+- **Without data, the view reports it.** An initial fetch that failed has left
+  nothing on screen and nothing to show, so the view's own error state is the
+  only thing that can say so.
+
+`query-health.ts` reads the first case off the cache — `status: "error"` with
+`data !== undefined` — and `query-health.svelte.ts` recomputes that count on
+every cache update, so a successful refetch clears the indication without
+anything remembering which query failed. The indicators are the banner above
+the content (`StaleDataBanner.svelte`) and the dot on the sidebar user card
+(grey for stale, red only when there is neither a socket nor a fallback).
+
+A recoverable session/auth failure is not a special case here: it is what
+`error-recovery.ts` is for, and it reloads within a second of the first failed
+query. Until it does, the value genuinely is stale, and saying so is accurate.
 
 ### 5.2 When a refetch is triggered
 
@@ -635,6 +677,7 @@ its own; none of this is dispatched from this document.
 |---|---|---|---|
 | P1 | The `CachePersister` interface, the in-memory impl, and the key-set / version / account-scope rules in the SDK. No storage yet; the app is unchanged. | `next` | Merged #333 (`c2ad8a1e`) |
 | P2 | `IndexedDbPersister` + `LocalStoragePersister`, restore-on-load and invalidate-on-restore in `client.ts`, `gcTime` raised for the persisted subset, `logout()` clears — **and the restore validator of §5.3**. The validator is part of this phase, not a follow-up: P2 without it restores rows nothing has checked. | P1 | Merged #343 (`ba73c0db`) |
+| P2.1 | No age limit on a restore (`gcTime` is `Infinity`), and a failed refetch reported as stale data — the views guarded on `isLoadingError`, the banner and the sidebar dot — instead of an error state (§5.1, §5.1b). | P2 | Shipped with the revisions above |
 | P3 | `TauriStorePersister`: the storage plugin, its capability, and `CONFIG`-driven selection in the shell. Also the iOS default, per §4.1. | P2 | Not started — dispatchable |
 | — | The log (§6) | not scheduled | — |
 
@@ -643,10 +686,13 @@ its own; none of this is dispatched from this document.
 ## 8. Open questions for Meri
 
 Decision-shaped, with the plan's recommendation where it has one. Questions
-1–4 and 6 were settled by the P1/P2 implementations — persistence is always on,
-`maxAge` is 24 h, the budget is a count cap, the snapshot version is derived
-from the build id, and the persisted set is the SDK's `isPersistableQuery` rule
-(queries, success, non-error, not `gcTime: 0`) rather than a hardcoded list.
+1, 3, 4 and 6 were settled by the P1/P2 implementations — persistence is always
+on, the budget is a count cap, the snapshot version is derived from the build
+id, and the persisted set is the SDK's `isPersistableQuery` rule (queries,
+success, non-error, not `gcTime: 0`) rather than a hardcoded list. Question 2
+was settled against the plan's own proposal: there is no age limit at all
+(§5.1), so the question is no longer "how old may a snapshot be" but "what does
+the app show while the refetch that would replace it is failing" (§5.1b).
 Question 5 (the §6 log phase) remains the one open decision.
 
 1. **Is persistence opt-in, or always on?** A user-visible setting ("keep the
@@ -655,10 +701,11 @@ Question 5 (the §6 log phase) remains the one open decision.
    simpler and gets the benefit to everyone. *Recommendation: always on, with a
    setting only if a reviewer wants one; the data is the same data the app
    already fetched and already holds in memory.*
-2. **`maxAge` and eviction policy.** 24 hours is the proposal (§5.1), matching
-   `scroll-position.svelte.ts:56`. Shorter makes the feature miss the daily
-   user; longer widens the window in which a restored-and-not-yet-refetched room
-   is wrong.
+2. **Is there a `maxAge`, and what is the eviction policy?** ~~24 hours is the
+   proposal~~ **Settled: no `maxAge`.** A snapshot is restored however old it
+   is; the restore's invalidation is what replaces it, and discarding on age
+   threw away exactly the rows persistence exists to keep. Eviction is still by
+   count, oldest-written first (§3.2 rule 4).
 3. **The storage budget, and what happens at it.** How much is persisted per
    account (room count × page size), and is the response to hitting the budget
    to drop oldest, drop least-recently-*visited*, or refuse to persist more?
@@ -684,8 +731,13 @@ Question 5 (the §6 log phase) remains the one open decision.
 
 **Client cache and queries**
 
-- `packages/app-lite/src/lib/client.ts:45-69` — the one `QueryClient`; `staleTime:
-  Infinity`, no `gcTime` override.
+- `packages/app-lite/src/lib/client.ts:45-69` — the one `QueryClient`;
+  `staleTime: Infinity`, no `gcTime` override.
+- `packages/app-lite/src/lib/query-health.ts`,
+  `query-health.svelte.ts`, `components/layout/StaleDataBanner.svelte` — the
+  stale-data rule, its reactive binding, and the banner (§5.1b).
+- `packages/app-lite/src/lib/components/sidebar/SidebarUserCard.svelte` — the
+  connection dot (online / stale / offline).
 - `packages/app-lite/src/lib/queries/messages.ts:20-64` — the message read path,
   its WS-diff/refetch race guard, and the ordering key.
 - `packages/app-lite/src/lib/queries/spaces.ts:19-33`,
@@ -732,6 +784,9 @@ Question 5 (the §6 log phase) remains the one open decision.
 
 - `packages/app-lite/src/lib/components/chat/scroll-position.svelte.ts:47-82` —
   the app's existing 24 h localStorage cache.
+- `packages/app-lite/e2e/cache-stale.spec.ts`,
+  `e2e/client-cache-restore.spec.ts`, `e2e/cache-snapshot.ts` — what the restore
+  and the stale-data path are asserted end to end against.
 - `packages/app-lite/src/lib/last-login.ts:59-62`,
   `error-recovery.ts:37-46,108-141`, `push.svelte.ts:26,204,289` — guarded
   storage access and the ignore-on-failure discipline.

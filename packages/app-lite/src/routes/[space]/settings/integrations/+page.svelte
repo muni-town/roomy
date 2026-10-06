@@ -74,7 +74,7 @@
   {:else if isAdmin}
     {#if metaQuery.isPending}
       <p class="text-sm text-base-400">Loading…</p>
-    {:else if metaQuery.isError}
+    {:else if metaQuery.isLoadingError}
       <ErrorMessage message={metaQuery.error.message} class="py-8" />
     {:else if meta}
       <ScopeGate

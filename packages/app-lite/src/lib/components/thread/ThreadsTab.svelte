@@ -73,7 +73,7 @@
   <div class="h-full w-full flex items-center justify-center">
     <div class="text-sm text-base-400 p-2">Loading…</div>
   </div>
-{:else if roomsQuery.isError && !roomsQuery.data}
+{:else if roomsQuery.isLoadingError}
   <ErrorMessage message={roomsQuery.error.message} class="h-full w-full justify-center" />
 {:else}
   <div class="flex flex-col h-full min-h-0">

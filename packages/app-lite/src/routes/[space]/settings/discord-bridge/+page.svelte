@@ -639,7 +639,7 @@
     >
       <p class="text-sm text-base-400">Checking your membership…</p>
     </section>
-  {:else if statusQuery.isError}
+  {:else if statusQuery.isLoadingError}
     <section
       class="rounded-lg border border-red-500/30 bg-red-200/20 dark:bg-red-950/10 px-4 py-3"
     >

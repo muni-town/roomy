@@ -24,43 +24,8 @@ import {
   SEED_ROOM_PATH,
   TEST_USER_DID,
 } from "./fixtures.ts";
+import { readSnapshot } from "./cache-snapshot.ts";
 import type { Page } from "@playwright/test";
-
-interface PersistedSnapshotShape {
-  entries: Array<{ key: unknown[]; state: unknown }>;
-}
-
-/** Narrow a value read out of IndexedDB to the snapshot shape this spec wrote. */
-function asSnapshot(value: unknown): PersistedSnapshotShape | null {
-  if (typeof value !== "object" || value === null) return null;
-  if (!("entries" in value)) return null;
-  const entries = value.entries;
-  if (!Array.isArray(entries)) return null;
-  return { entries: entries as PersistedSnapshotShape["entries"] };
-}
-
-/** Read the persisted snapshot straight out of IndexedDB, in the page. */
-async function readSnapshot(page: Page): Promise<PersistedSnapshotShape | null> {
-  const raw = await page.evaluate(async () => {
-    const { promise, resolve, reject } = Promise.withResolvers<IDBDatabase>();
-    const open = indexedDB.open("roomy-query-cache");
-    open.onsuccess = () => resolve(open.result);
-    open.onerror = () => reject(open.error);
-    const db = await promise;
-
-    if (!db.objectStoreNames.contains("snapshots")) return null;
-    const get = db
-      .transaction("snapshots", "readonly")
-      .objectStore("snapshots")
-      .get("current");
-    const { promise: got, resolve: gotResolve, reject: gotReject } =
-      Promise.withResolvers<unknown>();
-    get.onsuccess = () => gotResolve(get.result ?? null);
-    get.onerror = () => gotReject(get.error);
-    return got;
-  });
-  return asSnapshot(raw);
-}
 
 /**
  * A route handler that authenticates (the appserver is in test mode) and can

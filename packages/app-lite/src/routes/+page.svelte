@@ -53,7 +53,7 @@
       <div class="flex flex-col gap-8 items-center w-full">
         {#if spacesQuery.isPending}
           <p class="text-sm text-base-400">Loading spaces…</p>
-        {:else if spacesQuery.isError}
+        {:else if spacesQuery.isLoadingError}
           <ErrorMessage message="Error: {spacesQuery.error.message}" class="py-8 justify-center" />
         {:else if spacesQuery.data}
           {@const joined = spacesQuery.data.spaces.filter((s) => s.isMember)}

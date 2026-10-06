@@ -64,7 +64,7 @@
 
 {#if feedQuery.isPending}
   <ActivityFeedSkeleton count={limit > 10 ? 5 : 3} />
-{:else if feedQuery.isError}
+{:else if feedQuery.isLoadingError}
   <ErrorMessage message={feedQuery.error.message} class="py-8 justify-center" />
 {:else if feedQuery.data}
   {@const feed = feedQuery.data.feed}

@@ -49,7 +49,7 @@
 
     {#if spacesQuery.isPending}
       <p class="text-sm text-base-400">Loading spaces…</p>
-    {:else if spacesQuery.isError}
+    {:else if spacesQuery.isLoadingError}
       <ErrorMessage message="Error: {spacesQuery.error.message}" class="py-8" />
     {:else if spacesQuery.data}
       {@const left = spacesQuery.data.spaces.filter(

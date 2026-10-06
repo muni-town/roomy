@@ -33,7 +33,7 @@
   const fetchState = $derived.by((): RestoreFetchState => {
     if (!open) return { status: "idle" };
     if (deletedRoomsQuery.isPending) return { status: "loading" };
-    if (deletedRoomsQuery.isError)
+    if (deletedRoomsQuery.isLoadingError)
       return {
         status: "error",
         message:

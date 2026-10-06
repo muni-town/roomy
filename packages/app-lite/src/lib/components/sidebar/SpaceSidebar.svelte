@@ -627,7 +627,7 @@
   {/snippet}
 
   {#snippet body()}
-    {#if metaQuery.isError}
+    {#if metaQuery.isLoadingError}
       <ErrorMessage message={metaQuery.error.message} class="px-4 py-3" />
     {:else if meta}
       <div class="relative">

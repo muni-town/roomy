@@ -493,7 +493,7 @@
             <ChatMessageSkeleton />
             <ChatMessageSkeleton mergeWithPrevious />
           </div>
-        {:else if messagesQuery.isError}
+        {:else if messagesQuery.isLoadingError}
           <ErrorMessage message="Failed to load messages: {messagesQuery.error.message}" class="p-8 justify-center" />
         {:else if timeline}
           <ol class="flex flex-col justify-end gap-2 max-w-full h-full">

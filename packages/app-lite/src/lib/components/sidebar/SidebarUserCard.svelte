@@ -22,9 +22,21 @@
   import { logout, auth } from "$lib/auth.svelte";
   import { lastLogin } from "$lib/last-login.svelte";
   import { sync_ } from "$lib/sync.svelte";
+  import { queryHealth } from "$lib/query-health.svelte";
   import { goto } from "$app/navigation";
 
-  const connected = $derived(!!sync_.ctx);
+  /**
+   * What the dot on the avatar says: green while the sync socket is up and
+   * nothing failed, grey while a value is being shown whose refresh did not go
+   * through, red when there is no socket and nothing to fall back on.
+   *
+   * Stale wins over the socket's own presence: while the appserver is
+   * unreachable the WS may still read as connected for a moment before the
+   * reconnect, and the value on screen is stale in either case.
+   */
+  const connection = $derived(
+    queryHealth.staleCount > 0 ? "stale" : sync_.ctx ? "online" : "offline",
+  );
 
   // Reactive profile from auth module — updates immediately on login/init.
   // Falls back to the last-login record for the initial render before the
@@ -62,8 +74,10 @@
       </div>
       <div
         class="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-white dark:border-base-950"
-        class:bg-green-500={connected}
-        class:bg-red-500={!connected}
+        data-status={connection}
+        class:bg-green-500={connection === "online"}
+        class:bg-base-400={connection === "stale"}
+        class:bg-red-500={connection === "offline"}
       ></div>
     </div>
     <a

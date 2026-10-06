@@ -65,7 +65,7 @@
   <div class="h-full w-full flex items-center justify-center">
     <div class="text-sm text-base-400 p-2">Loading threads…</div>
   </div>
-{:else if threadsQuery.isError && !threadsQuery.data}
+{:else if threadsQuery.isLoadingError}
   <div class="h-full w-full flex items-center justify-center">
     <div class="text-sm text-red-600 p-2">{threadsQuery.error.message}</div>
   </div>

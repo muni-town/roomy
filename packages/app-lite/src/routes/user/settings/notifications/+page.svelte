@@ -192,7 +192,7 @@
 
       {#if prefsQuery.isPending}
         <p class="text-sm text-base-400">Loading preferences…</p>
-      {:else if prefsQuery.isError}
+      {:else if prefsQuery.isLoadingError}
         <ErrorMessage message="Error: {prefsQuery.error.message}" class="py-4" />
       {:else if prefsQuery.data}
         <UpdateRhythmChooser

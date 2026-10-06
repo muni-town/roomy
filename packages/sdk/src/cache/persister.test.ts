@@ -181,23 +181,22 @@ describe("rule 3 — the snapshot is scoped to an account", () => {
   });
 });
 
-describe("the snapshot is discarded past its age", () => {
-  it("discards a snapshot older than maxAge", () => {
-    const raw = writeSnapshot(
-      [entry("a")],
-      { version: VERSION, account: ACCOUNT },
-      0,
-    );
-    expect(readSnapshot(raw, policy({ maxAgeMs: 1000 }), 500)).toHaveLength(1);
-    expect(readSnapshot(raw, policy({ maxAgeMs: 1000 }), 2000)).toEqual([]);
-  });
-
-  it("no maxAge means no age limit", () => {
+describe("a snapshot is restored whatever its age", () => {
+  it("keeps a snapshot written long ago", () => {
+    // Age is not a reason to discard: a restored value is stale from the
+    // moment it is restored, and the restore's invalidation is what makes the
+    // mounted query refetch it. Dropping it would leave the view empty.
     const raw = writeSnapshot([entry("a")], {
       version: VERSION,
       account: ACCOUNT,
     });
-    expect(readSnapshot(raw, policy(), 10 ** 15)).toHaveLength(1);
+    expect(readSnapshot(raw, policy())).toHaveLength(1);
+    expect(
+      readSnapshot(
+        { ...raw, savedAt: 0 },
+        policy(),
+      ),
+    ).toHaveLength(1);
   });
 });
 
