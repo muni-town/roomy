@@ -54,6 +54,11 @@ export const FEATURE_FLAGS: readonly FeatureFlagDef[] = [
     description:
       "Per-user blocking: the Block action on a profile, behind enforcement on the read path",
   },
+  {
+    key: "voice-chat",
+    description:
+      "Voice rooms: the sidebar's call list and the room's call panel",
+  },
 ];
 export const FEATURE_FLAG_KEYS: ReadonlySet<string> = new Set(
   FEATURE_FLAGS.map((f) => f.key),

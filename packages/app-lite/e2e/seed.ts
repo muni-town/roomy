@@ -69,6 +69,8 @@ import {
   SEED_SPACE_3_ROOM_NAME,
   SEED_SPACE_ID,
   SEED_SPACE_NAME,
+  SEED_VOICE_ROOM_ID,
+  SEED_VOICE_ROOM_NAME,
   TEST_ADMIN_DID,
   TEST_USER_DID,
   TEST_USER_DISPLAY_NAME,
@@ -120,13 +122,14 @@ async function sendEvents(
   }
 }
 
-/** Create a channel through the real write path. */
+/** Create a room through the real write path. */
 async function createRoom(
   origin: string,
   spaceId: string,
   roomId: string,
   name: string,
   callerDid: string = TEST_USER_DID,
+  kind: "space.roomy.channel" | "space.roomy.voice" = "space.roomy.channel",
 ): Promise<void> {
   await sendEvents(
     origin,
@@ -135,7 +138,7 @@ async function createRoom(
       {
         id: roomId,
         $type: "space.roomy.room.createRoom.v0",
-        kind: "space.roomy.channel",
+        kind,
         name,
       },
     ],
@@ -335,9 +338,19 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
 
   // ── Rooms + messages, through the real write path ────────────────────
   // Two batches: a room created in the same batch as its message is rejected
-  // (the destination room must already be materialised).
   await createRoom(appserverOrigin, SEED_SPACE_ID, SEED_ROOM_ID, SEED_ROOM_NAME);
   await createRoom(appserverOrigin, SEED_SPACE_ID, SEED_ROOM_2_ID, SEED_ROOM_2_NAME);
+  // A voice room in the first space: labelled `space.roomy.voice`, so
+  // `getMetadata` returns it in its `voiceRooms` list and the room route
+  // renders the call panel rather than a message timeline.
+  await createRoom(
+    appserverOrigin,
+    SEED_SPACE_ID,
+    SEED_VOICE_ROOM_ID,
+    SEED_VOICE_ROOM_NAME,
+    TEST_USER_DID,
+    "space.roomy.voice",
+  );
   await createMessage(
     appserverOrigin,
     SEED_SPACE_ID,
@@ -414,11 +427,12 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
   // `access-settings` gates the user Access settings page and its sidebar
   // entry; `user-blocks` gates the Block action on a profile;
   // `semble-integration` gates both Semble card actions in the message
-  // toolbar. Every flag defaults to off in the appserver, so the specs that
+  // toolbar; `voice-chat` gates the sidebar's voice list and the room's call
+  // panel. Every flag defaults to off in the appserver, so the specs that
   // cover a flagged surface enable it here and the flag-off behaviour is
   // asserted by toggling.
   await readStateDb(db).run(
-    "insert into feature_flags (key, global_enabled) values ('search', 1), ('access-settings', 1), ('user-blocks', 1), ('semble-integration', 1) on conflict(key) do update set global_enabled = 1",
+    "insert into feature_flags (key, global_enabled) values ('search', 1), ('access-settings', 1), ('user-blocks', 1), ('semble-integration', 1), ('voice-chat', 1) on conflict(key) do update set global_enabled = 1",
   );
 
   // ── Global profile row ───────────────────────────────────────────────

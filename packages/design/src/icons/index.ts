@@ -62,6 +62,14 @@ export { default as IconNeedleThread } from "~icons/tabler/needle-thread";
 export { default as IconReply } from "~icons/ph/arrow-bend-up-left-bold";
 export { default as IconForward } from "~icons/ph/arrow-u-down-right-bold";
 
+// Voice
+export { default as IconPhone } from "~icons/ph/phone-bold";
+export { default as IconPhoneDisconnect } from "~icons/ph/phone-x-bold";
+export { default as IconMicrophone } from "~icons/ph/microphone-bold";
+export { default as IconMicrophoneSlash } from "~icons/ph/microphone-slash-bold";
+export { default as IconSpeakerHigh } from "~icons/ph/speaker-high-bold";
+export { default as IconSpeakerSlash } from "~icons/ph/speaker-slash-bold";
+
 // Status
 export { default as IconAlertCircle } from "~icons/ph/warning-circle-bold";
 export { default as IconLoading } from "~icons/ph/spinner-bold";

@@ -5,7 +5,8 @@
 export interface CurrentRoomInfo {
   id: string;
   name: string;
-  kind: "channel" | "thread";
+  /** A voice room has no message timeline; the navbar marks it as a call. */
+  kind: "channel" | "thread" | "voice";
   /** The channel this thread belongs to (only for threads). */
   parentChannelId?: string;
   parentChannelName?: string;

@@ -21,6 +21,7 @@
   import RoomPickerModal from "$lib/components/chat/RoomPickerModal.svelte";
   import type { Message } from "$lib/queries/messages";
   import ChannelBoardView from "$lib/components/thread/ChannelBoardView.svelte";
+  import VoiceRoomPanel from "$lib/components/voice/VoiceRoomPanel.svelte";
   import LinksView from "$lib/components/thread/LinksView.svelte";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { composerCanWrite, refreshWriteRefusal } from "$lib/write-refusal.svelte";
@@ -170,6 +171,24 @@
   const spaceMetaQuery = createSpaceMetadataQuery(() => spaceId);
 
   /**
+   * Which features this session may see. Declared with the other queries, not
+   * beside the tab state that first used it, because `roomKind` below reads it
+   * — and a `$derived` is evaluated at declaration, so a `const` it reads must
+   * already be bound.
+   */
+  const flagsQuery = createFeatureFlagsQuery();
+  /**
+   * Voice chat is gated behind the `voice-chat` flag, which defaults off. A
+   * voice room reached with the flag off renders as an ordinary room — the
+   * timeline it actually has — rather than as a call surface: the room *kind*
+   * is on the wire and cannot be unlearned, but nothing the user sees may
+   * depend on it until the flag is on.
+   */
+  const voiceChatEnabled = $derived(
+    flagsQuery.data?.flags.includes("voice-chat") ?? false,
+  );
+
+  /**
    * Derive room display info from the already-cached getSpaceMetadata sidebar
    * data (shared with the layout + sidebar) so the navbar renders instantly
    * without waiting for a separate room metadata fetch.
@@ -231,8 +250,16 @@
   const roomUnreadThreadCount = $derived(
     roomQuery.data?.unreadThreadCount ?? 0,
   );
+  /**
+   * Gated: with the flag off, `roomKind` never resolves to the call surface,
+   * so every `roomKind === "voice"` read below (the panel, the navbar) sees an
+   * ordinary room.
+   */
   const roomKind = $derived(
-    sidebarRoomInfo?.kind ?? roomQuery.data?.kind,
+    sidebarRoomInfo?.kind ??
+      (roomQuery.data?.kind === "voice" && !voiceChatEnabled
+        ? "channel"
+        : roomQuery.data?.kind),
   );
   /** The server's own answer for this room, before any refusal is applied. */
   const roomServerCanWrite = $derived(
@@ -269,7 +296,7 @@
       setCurrentRoom({
         id: roomId,
         name,
-        kind: kind === "thread" ? "thread" : "channel",
+        kind: kind === "thread" ? "thread" : kind === "voice" ? "voice" : "channel",
         parentChannelId: parentId,
         parentChannelName: parentName,
         ...(sidebarRoomInfo?.federated
@@ -291,7 +318,6 @@
   // always lands in Chat.
   // The Links tab is gated behind the "links-view" feature flag: it only
   // appears once an admin has enabled the flag. All flags default false.
-  const flagsQuery = createFeatureFlagsQuery();
   const linksViewEnabled = $derived(
     flagsQuery.data?.flags.includes("links-view") ?? false,
   );
@@ -417,6 +443,13 @@
         <ChatInputArea spaceId={effectiveSpaceId} {roomId} canWrite={roomCanWrite} {disableUploads} onForwardSelection={openForward} onMoveSelection={isAdmin ? openMove : undefined} onDeleteSelection={isAdmin ? openDeleteConfirm : undefined} />
       {/key}
     {/if}
+  {:else if roomKind === "voice"}
+    <!-- A voice room has no message timeline: its whole surface is the call.
+         The panel keys on the room so a switch remounts it rather than
+         carrying the previous room's participant list into the new one. -->
+    {#key roomId}
+      <VoiceRoomPanel {roomId} />
+    {/key}
   {:else}
     <!-- Thread rooms only have chat view -->
     <ChatArea spaceId={effectiveSpaceId} {roomId} {highlightMessage} onSeen={() => { if (roomUnreadCount > 0) updateSeen(roomId).catch(() => {}); }} onForward={openForward} onMove={openMove} onRequestDelete={openDeleteConfirm} />

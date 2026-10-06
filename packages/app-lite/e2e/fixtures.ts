@@ -147,3 +147,13 @@ export const SEED_SPACE_2_ROOM_PATH = `/${SEED_SPACE_2_ID}/${SEED_SPACE_2_ROOM_I
 export const SEED_SPACE_3_ROOM_PATH = `/${SEED_SPACE_3_ID}/${SEED_SPACE_3_ROOM_ID}`;
 /** Path to the member space's channel. */
 export const SEED_MEMBER_SPACE_ROOM_PATH = `/${SEED_MEMBER_SPACE_ID}/${SEED_MEMBER_SPACE_ROOM_ID}`;
+
+/**
+ * Seeded voice room. It is labelled `space.roomy.voice`, so `getMetadata`
+ * returns it in its own `voiceRooms` list rather than the channel tree, and
+ * the room route renders the call panel instead of a timeline.
+ */
+export const SEED_VOICE_ROOM_ID = "01M3C8QTVS0000000000000009";
+export const SEED_VOICE_ROOM_NAME = "voice-lounge";
+/** Path to the seeded voice room. */
+export const SEED_VOICE_ROOM_PATH = `/${SEED_SPACE_ID}/${SEED_VOICE_ROOM_ID}`;

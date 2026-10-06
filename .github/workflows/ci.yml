@@ -137,6 +137,8 @@ jobs:
         run: pnpm turbo run build-lib
       - name: Test App-lite
         run: pnpm --filter app-lite test
+      - name: Unit Test App-lite (Vitest)
+        run: pnpm --filter app-lite test:unit
 
   test-app-lite-e2e:
     name: Test App-lite E2E

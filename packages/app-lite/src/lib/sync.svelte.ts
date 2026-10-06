@@ -13,6 +13,7 @@ import type { QueryClient } from "@tanstack/svelte-query";
 import { queryClient } from "./client";
 import { px } from "./auth.svelte";
 import { CONFIG } from "./config";
+import { voicePresence } from "./voice/presence.svelte";
 
 const { SyncConnection, SyncRouter, TopicManager } = sync;
 const { resolveAppserverWsOrigin } = transport;
@@ -31,6 +32,15 @@ export interface SyncContext {
   readonly connection: SyncConnectionLike;
   readonly topicManager: TopicManagerLike;
   readonly status: SyncStatus;
+  /**
+   * Send the caller's ephemeral voice state for a room's call.
+   *
+   * Declared here rather than reached through `connection` because the SDK's
+   * structural `SyncConnectionLike` (the type the Svelte adapter exposes)
+   * deliberately covers only the status surface; the concrete connection is
+   * what carries `sendVoiceState`.
+   */
+  sendVoiceState: (roomId: string, muted: boolean, deafened: boolean) => void;
 }
 
 function mapStatus(s: sync.ConnectionStatus): SyncStatus {
@@ -158,6 +168,61 @@ export function createSyncContext(deps: {
         log(
           `[invalidate] nsid=${body.nsid} params=${JSON.stringify(body.params)}`,
         );
+      } else if (t === "#voicePresenceDiff") {
+        const body = frame.body as {
+          roomId?: string;
+          callId?: string;
+          op?: "join" | "leave" | "callEnded";
+          did?: string;
+        };
+        log(
+          `[voicePresenceDiff] roomId=${body.roomId} op=${body.op} did=${body.did}`,
+        );
+        if (
+          typeof body.roomId === "string" &&
+          typeof body.callId === "string" &&
+          body.op
+        ) {
+          const outcome = voicePresence.applyPresence(
+            body.roomId,
+            body.callId,
+            body.op,
+            body.did,
+          );
+          // A frame naming a call generation the store never held carries no
+          // participant list with it, so the projection is re-read instead of
+          // the store inventing one.
+          if (outcome.needsRefetch) {
+            void queryClient.invalidateQueries({
+              queryKey: queryKey(VOICE_PARTICIPANTS_NSID, {
+                roomId: body.roomId,
+              }),
+            });
+          }
+        }
+      } else if (t === "#voiceStateDiff") {
+        const body = frame.body as {
+          roomId?: string;
+          did?: string;
+          muted?: boolean;
+          deafened?: boolean;
+        };
+        log(
+          `[voiceStateDiff] roomId=${body.roomId} did=${body.did} muted=${body.muted} deafened=${body.deafened}`,
+        );
+        if (
+          typeof body.roomId === "string" &&
+          typeof body.did === "string" &&
+          typeof body.muted === "boolean" &&
+          typeof body.deafened === "boolean"
+        ) {
+          voicePresence.applyState(
+            body.roomId,
+            body.did,
+            body.muted,
+            body.deafened,
+          );
+        }
       }
     });
 
@@ -215,6 +280,11 @@ export function createSyncContext(deps: {
     },
     connect,
     disconnect,
+    // A no-op while the socket is closed: the SDK drops the frame rather than
+    // erroring, and the state is re-sent when the call reconnects, so there is
+    // nothing to queue.
+    sendVoiceState: (roomId, muted, deafened) =>
+      connection?.sendVoiceState(roomId, muted, deafened),
   };
 }
 
@@ -225,6 +295,7 @@ let activeRoomId = $state<string | null>(null);
 
 const { queryKey } = cache;
 const GET_MESSAGES_NSID = "space.roomy.room.getMessages" as const;
+const VOICE_PARTICIPANTS_NSID = "space.roomy.voice.getParticipants" as const;
 
 /**
  * Highest diff seq observed on this connection. The appserver stamps each

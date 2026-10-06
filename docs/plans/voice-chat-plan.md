@@ -115,7 +115,7 @@ LiveKit (external SFU, self-hosted or managed)
 
 ### 5.2 New XRPC surface (lexicons in `packages/appserver/lexicons/` + SDK schemas)
 
-- `space.roomy.voice.getToken` (query) — roomId → `{ token, e2eeKey, callId }`. Requires room membership. Creates call session + per-call key on first join. `token` TTL ~5 min.
+- `space.roomy.voice.getToken` (query) — roomId → `{ token, callId, livekitUrl, e2eeKey, ttl }`, every field null when LiveKit is unconfigured. Requires room read + space membership. Starts the call on first join and returns the SFU URL, so the client hard-codes no `LIVEKIT_URL`. `token` TTL ~5 min.
 - `space.roomy.voice.join` (procedure) — records USER join intent fact (optimistic).
 - `space.roomy.voice.leave` (procedure) — records USER leave intent fact.
 - `space.roomy.voice.getParticipants` (query) — roomId → participants (from projection), with callId for stale-event guarding.
@@ -123,7 +123,7 @@ LiveKit (external SFU, self-hosted or managed)
 - `space.roomy.voice.moderate` (procedure, later phase) — server mute/deafen/disconnect (Colibri model, role-gated).
 - Webhook route: `POST /webhooks/livekit` (HMAC via `livekit/protocol` webhook auth), handling `participant_joined` / `participant_left` / `room_finished`, filtering to our server's room-name prefix and excluding companion identities.
 
-Wire additions to `packages/app-lite/src/lib/config.ts` (`APPSERVER_RPCS` + `OAUTH_SCOPE`) and the SDK transport registry.
+The SDK transport registry carries the five voice NSIDs (added with the server phase). On the client, the voice RPCs are registered in `packages/app-lite/src/lib/scopes.ts` as their own `voice` tier outside `base` — requesting them at first login makes HappyView reject the whole grant, so the join button consents to them instead (see §5.7).
 
 ### 5.3 Room model
 
@@ -146,12 +146,49 @@ Reuse the existing sendEvents → event store → materialiser pipeline:
 
 New client→server messages on `space.roomy.sync.subscribe`: `voice_state` (`{ roomId, muted, deafened }`); server→client frames: `voice_presence_event` (`{ roomId, did, event: join|leave }`) and `voice_state_event` (`{ roomId, did, muted, deafened }`), scoped to subscribers of that room topic (existing topic routing handles this). Member-list reconciliation: like Colibri's fix, treat the members snapshot from `voice.getParticipants` as source of truth and re-apply on reconnect.
 
-### 5.7 Client (app-lite)
+### 5.7 Client (app-lite) — shipped
 
-- `src/lib/voice/VoiceCallState.svelte.ts` modeled on Chatto's `voiceCall.svelte.ts` (but voice-only v1): dynamic-import `livekit-client`, `ExternalE2EEKeyProvider` + E2EE worker, mono mic capture (`AudioPresets.speech`, echo cancellation, noise suppression, DTX, RED), join/leave coalescing, compensating leave on connect failure, media-device failure classification → actionable toasts, `track.attach()` for remote audio.
-- Room sidebar: voice room icon with active-call pulse; Voice panel component (`VoiceRoomPanel.svelte`): participant list with speaking indicators (audio-level cache at ~60 ms), mute/deafen controls, join/leave; call observer state for non-joined members (who's in the call + Join button).
-- Sync integration: wire `voice_state` sends + presence frame handling into `sync.svelte.ts` / query cache (TanStack Query invalidation + a lightweight presence store).
-- Config: `LIVEKIT_URL` exposure to the client (runtime config or the token response), feature-flag gate.
+- `src/lib/voice/VoiceCallState.svelte.ts` (modelled on Chatto's
+  `voiceCall.svelte.ts`, voice-only v1): `livekit-client` is reached only
+  through `src/lib/voice/livekit.ts`, whose dynamic imports keep the media SDK
+  out of the app shell; `ExternalE2EEKeyProvider` + the E2EE worker; mono mic
+  capture (`AudioPresets.speech`, echo cancellation, noise suppression, DTX,
+  RED); join/leave coalescing; the compensating leave on connect failure;
+  media-device failure classification → actionable toasts; `track.attach()` for
+  remote audio. All network/media access arrives through an injected
+  `VoiceCallDeps`, so the class is exercised without a browser or an SFU
+  (`src/lib/voice/session.svelte.ts` supplies the real one).
+- Room sidebar: `ChannelIcon` renders a voice room with a phone icon that
+  pulses while its call is live (`createVoiceActiveCallsQuery`); voice rooms
+  render under their own heading because `getMetadata.voiceRooms` places them
+  by id, not as category children. `VoiceRoomPanel.svelte` +
+  `VoiceParticipantRow.svelte`: participant list with speaking indicators
+  (audio levels sampled at 60 ms), mute/deafen controls, join/leave, and the
+  observer state for a non-joined member.
+- Sync integration: `sync.svelte.ts` sends `voice_state` and routes
+  `#voicePresenceDiff` / `#voiceStateDiff` into
+  `src/lib/voice/presence.svelte.ts` (a lightweight store), invalidating
+  `voice.getParticipants` when a frame names an unknown call generation. The
+  `getParticipants` projection is written into the same store, so frames and
+  snapshots are one view.
+- Config: the client holds no `LIVEKIT_URL` of its own — the appserver returns
+  `livekitUrl` in the `getToken` response, and every field null is the signal
+  the UI gates on. Nothing in the join path imports `livekit-client` before
+  that response says there is a call.
+- Flag: `voice-chat` gates the whole client surface — the sidebar's voice list
+  (and therefore its `getActiveCalls` request) and the room's call panel. Both
+  read the one `getFlags` value, so with the flag off a voice room renders as
+  the ordinary room it is: no sidebar entry, no call surface, no voice RPC.
+  The flag defaults off, so shipping this phase changes nothing a user sees
+  until an admin enables it.
+- Scope: the voice RPCs are outside the `base` tier, and their scopes are not
+  registered on the HappyView API client — `voice` is ceiling-only in
+  `scopes.ts`, alongside `blocks`. No login may request it and no consent
+  round-trip could grant it, so the join button asks for nothing: a session
+  without the scope learns it from the join failing, and
+  `connectionErrorMessage` names the missing permission rather than reporting
+  a permission failure as an unreachable call server. The consent dialogue
+  returns to the join button when the scopes are registered.
 
 ## 6. Testing & Verification Plan (Chatto model, adapted to Roomy)
 
@@ -172,21 +209,41 @@ When `APPSERVER_TEST_MODE=true`, register `/webhooks/test/call-join` and `/webho
 
 ### 6.3 Frontend unit tests (Vitest)
 
-- `VoiceCallState.svelte.ts` spec with a fully mocked `livekit-client` module (Chatto's pattern): E2EE-before-connect ordering, mono capture, join-muted-on-mic-failure, join/leave coalescing, compensating leave, presence event handling, stale-call guards. Mock the livekit module with controllable failure gates.
-- Presence reducer / participant-list logic as pure functions with dedicated tests (Colibri's `voice-presence.test.ts` pattern).
-- Component tests for the voice panel (happy-dom or browser-mode Vitest) covering observer vs participant states, mute/deafen controls, speaking indicators.
+- `VoiceCallState.svelte.spec.ts` with a mocked `./livekit` seam (the module
+  the class imports through): the degraded path (all-null token response
+  imports nothing and records nothing), E2EE-before-connect ordering, mono
+  capture config, join-muted-on-mic-failure, join/leave coalescing, the
+  deferred leave during a join, the compensating leave on connect failure, and
+  participant add/remove. `voice-errors.spec.ts` covers the device-failure
+  classification and the credential redaction.
+- The presence reducer is a pure class with its own tests
+  (`VoiceCallState.svelte.spec.ts`): diff application, stale-generation
+  guards, snapshot authority, and the refetch signal.
+- No component tests for the panel yet: the observer vs participant branches
+  are covered end to end instead (see §6.4), and the mute/deafen controls are
+  covered at the session level.
 
 ### 6.4 E2E (extend existing appserver E2E harness)
 
-- Boot the real appserver factory in test mode with fake LiveKit config (token gen is pure JWT — no live server needed).
-- Drive join/leave via the test webhook endpoints; assert UI: room icon appears/disappears, participant lists update across two clients, timeline rows ("started a call" / "call ended") appear without reload, observer panel shows Join, leave removes participants.
-- Assert `livekitUrl` surfaces in runtime config.
-- Media (real WebRTC) remains manual/local verification, documented as such (Chatto's explicit stance).
+- `e2e/voice-room.spec.ts` seeds a voice room and asserts the sidebar lists
+  it under its own heading with the voice icon, that opening it renders the
+  call panel rather than a timeline, and that an unconfigured deployment (the
+  E2E appserver has no `LIVEKIT_*` env, so this is the real degraded path)
+  reports no call rather than a broken one.
+- Not covered end to end yet: the appserver E2E stack has no LiveKit config,
+  so there is nothing to mint a token against, and the test webhook endpoints
+  are not wired into the app-lite harness. Driving join/leave and two-client
+  participant updates through those endpoints needs a second seeded identity
+  and a fake LiveKit config on the stack.
+- Media (real WebRTC) remains manual/local verification: there is no SFU in CI
+  and no browser microphone, so the media path has no automated coverage. Its
+  logic is covered against the mocked seam (see §6.3).
 
 ### 6.5 CI
 
-- Extend the existing CI (TASK-55 in progress) with the new bun test files + Vitest + the E2E harness job. No real LiveKit in CI.
-- Optional later: performance regression for participant-list rendering at scale (Chatto's large-server benchmark precedent), media E2E job with ffmpeg for screen-share fixtures.
+- The app-lite job runs both of the package's runners: `test` (node:test,
+  the pure modules) and `test:unit` (Vitest, the Svelte/runes specs). The E2E
+  job picks up `e2e/voice-room.spec.ts` with the rest of the suite.
 
 ## 7. Milestones
 
