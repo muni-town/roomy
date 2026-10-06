@@ -134,6 +134,12 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
   - **Alert:** `rate(roomy_embed_sweep_cycles_total[5m]) > 0` with
     `rate(roomy_embed_enriched_ok_total[5m]) == 0` for 15m.
 - `roomy_search_indexer_queue` / `roomy_search_backfilled` / `roomy_push_queued`
+- `roomy_process_rss_bytes` — resident set size of the appserver process, in
+  bytes. This is the figure the host bills as memory; nothing else in the
+  service reports it, so a footprint claim that is not backed by this series is
+  an inference from a local process, not a measurement of the deployed one.
+  Sample it with `max_over_time(roomy_process_rss_bytes[1h])` to see the peak a
+  restart reaches, not just the idle value a scrape happens to catch.
 - `roomy_db_timeouts_total` — DB requests that hit the 30s timeout (pool saturation)
 - `roomy_process_starts_total` — process boots, incremented once per process
   at startup (`src/fatal.ts`). This is the crash-loop signal: with
@@ -153,9 +159,12 @@ Grafana Cloud Mimir. Build Grafana dashboards + alerts on these, e.g. alert
 when any `roomy_pool_worker_pending` > threshold or `roomy_db_timeouts_total`
 rate > 0.
 
-The appserver also emits a **periodic metrics snapshot** to Loki every 30s
+The appserver also emits a **periodic metrics snapshot** to Loki every 60s
 (`[metrics] snapshot` log line) so saturation trends are visible in Grafana
-Loki even without a metrics backend.
+Loki even without a metrics backend. The period matches the Alloy scrape's
+default interval, since the line is a fallback for the same numbers —
+sampling it faster than the scrape it stands in for buys no resolution, only
+Loki ingest.
 
 ## How apps forward logs
 

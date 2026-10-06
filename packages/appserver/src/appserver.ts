@@ -662,10 +662,13 @@ export async function createAppserver(
   maintenanceTimer.unref();
 
   // ─── Periodic metrics snapshot ──────────────────────────────────────
-  // Emit a compact pool/cache/embed/search snapshot to Loki every 30s so
+  // Emit a compact pool/cache/embed/search snapshot to Loki every 60s so
   // operators can chart saturation over time in Grafana without a metrics
   // backend. This is what surfaces a worker backlog (e.g. the system-worker
-  // N+1) as a visible trend rather than a manual /health/pool curl.
+  // N+1) as a visible trend rather than a manual /health/pool curl. The
+  // interval is deliberately the same as the Alloy scrape's: this line is the
+  // fallback for the series Mimir carries, so sampling it faster than the
+  // scrape it stands in for buys no resolution, only Loki ingest.
   const metricsTimer = setInterval(() => {
     // Fire-and-forget: the callback must stay synchronous, and the DB count
     // is the one async part. Failures are swallowed below so a DB hiccup
@@ -728,7 +731,7 @@ export async function createAppserver(
         },
       });
     })();
-  }, 30 * 1000);
+  }, 60 * 1000);
   metricsTimer.unref();
 
   // ─── Invalidation + Sync ─────────────────────────────────────────────
@@ -862,6 +865,14 @@ export async function createAppserver(
     "roomy_pool_worker_pending",
     "In-flight (queued) requests on a pool worker.",
     ["worker"],
+  );
+  // Resident set size of this process. The host bills the container's memory
+  // per GB-minute and nothing else in the service reports it, so this series is
+  // the only ground truth for the deployed footprint. Read at scrape time: the
+  // value is then never staler than the scrape that reads it.
+  const processRss = metrics.gauge(
+    "roomy_process_rss_bytes",
+    "Resident set size of the appserver process in bytes (what the host bills as memory).",
   );
   const cacheHits = metrics.gauge("roomy_cache_hits_total", "Query response cache hits.");
   const cacheMisses = metrics.gauge("roomy_cache_misses_total", "Query response cache misses.");
@@ -1153,6 +1164,9 @@ export async function createAppserver(
         searchBackfilled.set({}, backfill.backfilled ?? 0);
         const push = pushDispatcherStats();
         pushQueued.set({}, push.queueDepth ?? 0);
+        // `rss` is what the host charges for; `heapUsed` moves under the GC and
+        // is not the billed figure, so it is not published here.
+        processRss.set({}, process.memoryUsage.rss());
         return new Response(metrics.render(), {
           headers: { "content-type": "text/plain; version=0.0.4; charset=utf-8", ...corsHeaders },
         });

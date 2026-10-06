@@ -114,6 +114,7 @@ describe("createAppserver factory", () => {
       // `roomy_embed_enriched_ok_total` is the oscillation, so it can be
       // alerted on directly rather than through a range query.
       "roomy_embed_backlog_stuck_transitions_total",
+      "roomy_process_rss_bytes",
       "roomy_db_timeouts_total",
       // The sweep-cycle RATE and the success metric. Primed with a 0 series at
       // module load, so a process that has never succeeded still exposes
@@ -147,6 +148,13 @@ describe("createAppserver factory", () => {
     // expression (`increase(roomy_process_starts_total[10m]) > 3`) has a
     // series to fire on.
     expect(body).toMatch(/^roomy_process_starts_total \d+$/m);
+    // Memory is only useful if it is present on every scrape: the footprint of
+    // the deployed process is not observable any other way, so a `# TYPE` line
+    // with no sample would leave the signal this gauge exists for unreadable.
+    // Any real RSS is far above 1 MiB and far below 1 TiB.
+    const rss = Number(body.match(/^roomy_process_rss_bytes (\d+)$/m)?.[1]);
+    expect(rss).toBeGreaterThan(1024 * 1024);
+    expect(rss).toBeLessThan(1024 ** 4);
   });
 
   test("roomy_embed_pending equals /health/embed's pending (both read the DB backlog)", async () => {
