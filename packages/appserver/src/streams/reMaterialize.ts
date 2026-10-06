@@ -32,6 +32,7 @@ import { log } from "../log.ts";
 import { runPendingGlobalMigrations } from "../db/globalMigrations.ts";
 import { refreshSpaceStats } from "../queries/spaceStats.ts";
 import { upgradeSpaceInPlace } from "../db/spaceMigrations.ts";
+import { sweepReadStateWatermarks } from "../db/readStateWatermarks.ts";
 import { isTransientDbError } from "../db/transient.ts";
 import type { LoggedEvent } from "../materialization/types.ts";
 
@@ -177,7 +178,7 @@ export async function reMaterializeFromLocalEvents(
   );
 
   const streamDids = streams.map(({ stream_id }) => stream_id as StreamDid);
-  const finishGlobalMigrations = async (): Promise<void> => {
+  const finishStartupMigrations = async (): Promise<void> => {
     try {
       await runPendingGlobalMigrations(db, streamDids);
     } catch (err) {
@@ -188,10 +189,27 @@ export async function reMaterializeFromLocalEvents(
         `global post-migration failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+    // Re-anchor read-state watermarks that name no ordering key. It runs here,
+    // after every per-space upgrade and replay, because both of them rewrite
+    // keys: the v3 task re-keys `entities` in place and a rebuild derives a
+    // fresh set, so a watermark resolved before them would be resolved against
+    // keys that no longer exist. Idempotent — a space whose watermarks all name
+    // a key costs one scan of the read-state table and no writes.
+    try {
+      await sweepReadStateWatermarks(db, streamDids);
+    } catch (err) {
+      // Best-effort, like the global post-migrations: an unreadable read-state
+      // DB must not abandon the pass that has already re-materialized the
+      // spaces it reached.
+      log.error(
+        "startup",
+        `read-state watermark sweep failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   };
 
   if (streams.length === 0) {
-    await finishGlobalMigrations();
+    await finishStartupMigrations();
     log.info("startup", "no streams to re-materialize from local events DB");
     return;
   }
@@ -405,7 +423,7 @@ export async function reMaterializeFromLocalEvents(
   }
 
   if (toReplay.length === 0) {
-    await finishGlobalMigrations();
+    await finishStartupMigrations();
     log.info(
       "startup",
       `re-materialization: all ${skipped} streams already up to date, nothing to replay`,
@@ -549,7 +567,7 @@ export async function reMaterializeFromLocalEvents(
 
   await Promise.all(Array.from({ length: cap }, () => replayWorker()));
 
-  await finishGlobalMigrations();
+  await finishStartupMigrations();
 
   log.info("[re-materialize] complete", { succeeded, failed });
 }

@@ -37,6 +37,7 @@ import { GLOBAL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION } from "../db/db.ts";
 import { READSTATE_SCHEMA_VERSION } from "../db/readStateDb.ts";
 import type { DbLike } from "../db/types.ts";
 import { reMaterializeFromLocalEvents } from "../streams/reMaterialize.ts";
+import { orderKey } from "../materialization/sortIdx.ts";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const ADMIN = UserDid.assert("did:plc:migration-admin");
@@ -578,6 +579,86 @@ describe("in-place per-space migration", () => {
       )
       .get<{ n: number }>(roomId, watermark!.seen_up_to);
     expect(after!.n).toBe(0);
+  });
+
+  test("the boot pass re-anchors a watermark the upgrade could not follow", async () => {
+    // The residue the in-place upgrade leaves: a watermark that names no key
+    // and that `sort_idx_prev` had no row for, so the re-anchor had nothing to
+    // follow it through. The boot sweep re-derives the anchor from the keys the
+    // room holds now, long after the snapshot table is gone.
+    const streamDid = StreamDid.assert("did:web:migration-residue.example");
+    const { router } = await openPool(join(dir, "readstate-residue.sqlite"));
+    const roomId = ulid();
+    const receivedAt = Date.now();
+    await seedEvent(
+      router,
+      streamDid,
+      parse({
+        id: roomId,
+        $type: "space.roomy.room.createRoom.v0",
+        kind: "space.roomy.channel",
+        name: "general",
+      }),
+      0,
+      receivedAt,
+    );
+    // Two messages an hour apart, so the room holds keys on both sides of the
+    // watermark below.
+    const messageIds = [ulid(receivedAt), ulid(receivedAt + 3_600_000)];
+    for (let i = 0; i < messageIds.length; i++) {
+      await seedEvent(
+        router,
+        streamDid,
+        parse({
+          id: messageIds[i],
+          room: roomId,
+          $type: "space.roomy.message.createMessage.v0",
+          body: {
+            mimeType: "text/plain",
+            data: { $bytes: Buffer.from(`hi ${i}`).toString("base64") },
+          },
+          extensions: {},
+        }),
+        i + 1,
+        receivedAt + i * 3_600_000,
+      );
+    }
+    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+
+    const keys = await router.forSpace!(streamDid)
+      .query("select id, sort_idx from entities where room = ? order by sort_idx")
+      .all<{ id: string; sort_idx: string }>(roomId);
+    expect(keys).toHaveLength(2);
+
+    // Half an hour past the first message: names no key, and sits below the
+    // second. The honest anchor is the first message — the last one the user
+    // could have seen.
+    const orphan = orderKey(receivedAt + 1_800_000, 0);
+    await router.readState!().run(
+      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
+       values (?, ?, ?, ?, 99, ?)`,
+      [ADMIN, roomId, streamDid, orphan, receivedAt],
+    );
+
+    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+
+    const watermark = await router.readState!()
+      .query(
+        "select seen_up_to, unread_count from read_positions where user_did = ? and room_id = ?",
+      )
+      .get<{ seen_up_to: string; unread_count: number }>(ADMIN, roomId);
+    // Anchored to the earlier message's key, with the count recomputed from
+    // that anchor rather than carried over from the stale row.
+    expect(watermark?.seen_up_to).toBe(keys[0]!.sort_idx);
+    expect(watermark?.seen_up_to).not.toBe(orphan);
+
+    // Which is what the read path measures against: the room's unread count now
+    // equals the messages the timeline shows after the anchor.
+    const after = await router.forSpace!(streamDid)
+      .query("select count(*) as n from entities where room = ? and sort_idx > ?")
+      .get<{ n: number }>(roomId, watermark!.seen_up_to);
+    expect(after!.n).toBe(1);
+    expect(watermark!.unread_count).toBe(after!.n);
   });
 
   test("a write is rejected while the migration gate is open", async () => {
