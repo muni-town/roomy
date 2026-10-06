@@ -12,7 +12,6 @@
   import { wideSidebar } from "./wide-sidebar.svelte";
   import NavbarSpaceInfo from "./NavbarSpaceInfo.svelte";
   import SyncStatusBanner from "./SyncStatusBanner.svelte";
-  import StaleDataBanner from "./StaleDataBanner.svelte";
   import SearchBar from "./SearchBar.svelte";
   import ServerBar from "$lib/components/sidebar/ServerBar.svelte";
   import EnableNotificationsBanner from "./EnableNotificationsBanner.svelte";
@@ -158,7 +157,6 @@
 
   <div class="flex flex-col h-full max-h-full overflow-y-hidden">
     <SyncStatusBanner />
-    <StaleDataBanner />
     {@render children()}
   </div>
 </div>

@@ -11,8 +11,8 @@
  *
  *   2. **A failed refetch is not an error state.** With the appserver
  *      unreachable, the query keeps the value the snapshot restored and the
- *      app says so once — the banner above the content and the grey dot on the
- *      sidebar user card — instead of replacing the room with an error.
+ *      app says so once — the grey dot on the sidebar user card — instead of
+ *      replacing the room with an error.
  */
 import { expect, test, waitForAuthenticated } from "./spec-helpers.ts";
 import {
@@ -111,7 +111,7 @@ test.describe("a stale snapshot is restored, not discarded", () => {
 });
 
 test.describe("a failed refetch keeps the stale value", () => {
-  test("the room stays up, with a banner and a grey dot", async ({ page }) => {
+  test("the room stays up, with a grey dot", async ({ page }) => {
     let offline = false;
     await page.route(`${APPSERVER_HTTP_ORIGIN}/**`, async (route) => {
       if (offline) return route.abort("internetdisconnected");
@@ -135,9 +135,6 @@ test.describe("a failed refetch keeps the stale value", () => {
     await expect(page.getByText("Failed to load messages")).toHaveCount(0);
 
     // And the failure is reported once, non-fatally.
-    await expect(
-      page.getByText("Showing saved content — the latest couldn't be loaded."),
-    ).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('[data-status="stale"]')).toBeVisible();
   });
 });

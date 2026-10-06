@@ -469,9 +469,10 @@ Two rules follow, and they are what the views and the indicators implement:
 `query-health.ts` reads the first case off the cache — `status: "error"` with
 `data !== undefined` — and `query-health.svelte.ts` recomputes that count on
 every cache update, so a successful refetch clears the indication without
-anything remembering which query failed. The indicators are the banner above
-the content (`StaleDataBanner.svelte`) and the dot on the sidebar user card
-(grey for stale, red only when there is neither a socket nor a fallback).
+anything remembering which query failed. The indicator is the dot on the
+sidebar user card (grey for stale, red only when there is neither a socket nor
+a fallback). A banner above the content used to report the same state and was
+removed as too eager; a replacement UI is still to be designed.
 
 A recoverable session/auth failure is not a special case here: it is what
 `error-recovery.ts` is for, and it reloads within a second of the first failed
@@ -733,9 +734,8 @@ Question 5 (the §6 log phase) remains the one open decision.
 
 - `packages/app-lite/src/lib/client.ts:45-69` — the one `QueryClient`;
   `staleTime: Infinity`, no `gcTime` override.
-- `packages/app-lite/src/lib/query-health.ts`,
-  `query-health.svelte.ts`, `components/layout/StaleDataBanner.svelte` — the
-  stale-data rule, its reactive binding, and the banner (§5.1b).
+- `packages/app-lite/src/lib/query-health.ts`, `query-health.svelte.ts` — the
+  stale-data rule and its reactive binding (§5.1b).
 - `packages/app-lite/src/lib/components/sidebar/SidebarUserCard.svelte` — the
   connection dot (online / stale / offline).
 - `packages/app-lite/src/lib/queries/messages.ts:20-64` — the message read path,
