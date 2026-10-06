@@ -387,8 +387,20 @@ describe("in-place per-space migration", () => {
     );
     await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
 
-    // The user's watermark is the message's then-current key: the old rule
-    // keyed a replayed message by its own ULID.
+    // The user's watermark is the message's then-current key, which no rebuild
+    // reproduces: a live createMessage was keyed by the arrival clock, and a
+    // replayed one by the event's own ULID, each with a random suffix. Model
+    // that by keying the row the way the pre-v3 replay did and storing that
+    // value, rather than the message id the old handler never wrote.
+    const legacyKey = ulid(skewedAt);
+
+    // Age the space DB so the deploy below takes the in-place upgrade.
+    const raw = new Database(join(spacesDir, `${streamDid}.sqlite`));
+    raw.run("update space_schema_version set version = '2' where id = 1");
+    raw.run("delete from space_schema_migrations");
+    raw.run("update entities set sort_idx = ? where id = ?", [legacyKey, messageId]);
+    raw.close();
+
     const readState = router.readState!();
     await readState.run(
       `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
@@ -396,16 +408,9 @@ describe("in-place per-space migration", () => {
       ADMIN,
       roomId,
       streamDid,
-      messageId,
+      legacyKey,
       receivedAt,
     );
-
-    // Age the space DB so the deploy below takes the in-place upgrade.
-    const raw = new Database(join(spacesDir, `${streamDid}.sqlite`));
-    raw.run("update space_schema_version set version = '2' where id = 1");
-    raw.run("delete from space_schema_migrations");
-    raw.run("update entities set sort_idx = id where sort_idx is not null");
-    raw.close();
 
     ({ router } = await openPool(readStatePath));
     await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
@@ -429,6 +434,15 @@ describe("in-place per-space migration", () => {
     // that same key rather than the one it held before the re-key.
     expect(entityKey?.sort_idx).not.toBe(messageId);
     expect(watermark?.seen_up_to).toBe(entityKey?.sort_idx);
+
+    // Which is what the read path measures against: the room is read up to
+    // that message. A watermark left on the old key names no entity, so this
+    // count returns every message in the room instead.
+    const after = await router
+      .forSpace!(streamDid)
+      .query("select count(*) as n from entities where room = ? and sort_idx > ?")
+      .get<{ n: number }>(roomId, watermark!.seen_up_to);
+    expect(after!.n).toBe(0);
   });
 
   test("a write is rejected while the migration gate is open", async () => {

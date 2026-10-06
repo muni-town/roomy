@@ -112,64 +112,64 @@ function createReadStateResolver(db: DbLike): () => DbLike | undefined {
 }
 
 /**
- * Re-anchor the read-state watermarks this space's `read_positions` rows carry.
+ * Move this space's read-state watermarks onto the keys the re-key produced.
  *
- * `seen_up_to` is a stored `entities.sort_idx` (`readStateSchema.sql`), and it
- * is compared against live `sort_idx` values in two places: `updateSeen` counts
- * the messages after it, and `decrementUnreadForRemovedMessages` decides
- * whether a removed message was still unread. A re-key therefore has to follow
- * it, or the watermark names a key no entity carries and every message in the
- * room compares past it.
+ * `seen_up_to` is a stored `entities.sort_idx` (`readStateSchema.sql`) —
+ * `updateSeen` writes `max(sort_idx)` for the room, or the `sort_idx` of the
+ * message its `seenUpTo` names — and it is compared against live `sort_idx`
+ * values in two places: `updateSeen` counts the messages after it, and
+ * `decrementUnreadForRemovedMessages` decides whether a removed message was
+ * still unread. A re-key that does not follow it leaves the watermark naming a
+ * key no entity carries, so every message in the room compares past it.
  *
- * The anchor is the message id (`seen_up_to` is the ULID of the message the
- * user read up to), which survives the re-key. Its new key is read back from
- * the space's `entities` — the task replays the log in `idx` order, so a later
- * move has already overwritten this row by the time the pass finishes, and the
- * id lookup returns the final key rather than the create-time one. A watermark
- * that is not a materialised entity's id (`''`/`'0'` from a lazily-created or
- * legacy row) is left alone: it decodes to "no watermark" either way.
+ * The old key is not recomputable — it was this server's arrival clock on the
+ * live path, the event's own ULID on a replay, and the Discord override where a
+ * message carried one, and its random suffix is gone either way. It does not
+ * have to be: `sort_idx_prev` holds the keys as they stood before the clear, so
+ * each watermark is resolved through the entity it named rather than guessed
+ * from its contents.
+ *
+ * Runs after the replay, when `entities` carries the new keys. A watermark that
+ * matches no snapshot row — the `''`/`'0'` a lazily-created position starts
+ * with, or a message since deleted — is left alone and counted rather than
+ * guessed at.
  */
 async function reanchorReadStateWatermarks(
   spaceDb: DbLike,
   readState: DbLike,
   streamDid: StreamDid,
-): Promise<number> {
+): Promise<{ moved: number; unresolved: number }> {
   const rows = await readState
     .query(
       `select user_did, room_id, seen_up_to from read_positions where space_did = ?`,
     )
     .all<{ user_did: string; room_id: string; seen_up_to: string }>(streamDid);
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) return { moved: 0, unresolved: 0 };
 
-  // Keyed by the stored watermark; `null` records "no entity carries this key"
-  // so the `''`/`'0'` rows every lazily-created position starts with cost one
-  // lookup between them rather than one each.
-  const remapped = new Map<string, string | null>();
-  let changed = 0;
+  const updates: Array<{ type: "run"; sql: string; params: unknown[] }> = [];
+  let unresolved = 0;
   for (const row of rows) {
-    if (!remapped.has(row.seen_up_to)) {
-      const entity = await spaceDb
-        .query("select sort_idx from entities where id = ?")
-        .get<{ sort_idx: string | null }>(row.seen_up_to);
-      remapped.set(row.seen_up_to, entity?.sort_idx ?? null);
+    const next = await spaceDb
+      .query(
+        `select e.sort_idx as sort_idx
+           from sort_idx_prev p
+           join entities e on e.id = p.id
+          where p.sort_idx = ?`,
+      )
+      .get<{ sort_idx: string | null }>(row.seen_up_to);
+    if (next?.sort_idx == null) {
+      if (row.seen_up_to !== "" && row.seen_up_to !== "0") unresolved++;
+      continue;
     }
-    if (remapped.get(row.seen_up_to) !== null) changed++;
+    updates.push({
+      type: "run",
+      sql: "update read_positions set seen_up_to = ? where user_did = ? and room_id = ?",
+      params: [next.sort_idx, row.user_did, row.room_id],
+    });
   }
-  if (changed === 0) return 0;
 
-  const updates = rows.flatMap((row) => {
-    const next = remapped.get(row.seen_up_to);
-    if (next === undefined || next === null) return [];
-    return [
-      {
-        type: "run" as const,
-        sql: "update read_positions set seen_up_to = ? where user_did = ? and room_id = ?",
-        params: [next, row.user_did, row.room_id] as unknown[],
-      },
-    ];
-  });
   if (updates.length > 0) await readState.transaction(updates);
-  return updates.length;
+  return { moved: updates.length, unresolved };
 }
 
 /**
@@ -208,6 +208,17 @@ async function recomputeSortIdxFromLog(
     );
   }
 
+  // Snapshot the keys this migration is about to destroy. They are not
+  // recomputable — the live path keyed a message by this server's arrival
+  // clock and the replay path by the event's own ULID, and either way the
+  // random suffix is gone — so the read-state watermarks that stored one can
+  // only be followed through the entity it named. Created before the clear,
+  // and only when absent, so a retry after an interrupted pass still holds the
+  // pre-clear keys rather than a table of nulls. Dropped once the re-anchor has
+  // consumed it.
+  await spaceDb.run(
+    "create table if not exists sort_idx_prev as select id, sort_idx from entities",
+  );
   await spaceDb.run("update entities set sort_idx = null");
 
   let cursor = -1;
@@ -270,19 +281,24 @@ async function recomputeSortIdxFromLog(
 
   await flush();
 
-  // The entities now carry their new keys, so the read-state watermarks keyed
-  // by the old ones can be re-anchored. This runs on every re-run, not only the
-  // first: the task is idempotent, so an interrupted pass (or a second pass
-  // after a deploy that re-runs it) must leave the watermarks correct rather
-  // than double-remapped.
+  // The entities now carry their new keys, so the read-state watermarks that
+  // stored an old one can be moved onto them. This runs on every re-run, not
+  // only the first: the task is idempotent, so an interrupted pass (or a second
+  // pass after a deploy that re-runs it) must leave the watermarks correct
+  // rather than double-remapped. By then each stored key is either already a
+  // new key — which matches no snapshot row — or an old one, and only the
+  // latter moves.
   const readState = createReadStateResolver(db)();
-  const reanchored = readState
+  const { moved, unresolved } = readState
     ? await reanchorReadStateWatermarks(spaceDb, readState, streamDid)
-    : 0;
+    : { moved: 0, unresolved: 0 };
+  await spaceDb.run("drop table if exists sort_idx_prev");
   log.info(
     "startup",
     `sort_idx migration replayed ${applied} ordering events for ${streamDid}` +
-      (readState ? `, re-anchored ${reanchored} read watermark(s)` : ""),
+      (readState
+        ? `, re-anchored ${moved} read watermark(s), ${unresolved} left unresolved`
+        : ""),
   );
 }
 
