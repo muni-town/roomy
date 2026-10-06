@@ -448,11 +448,10 @@ async function handleCreateMessage(
   }
 
   // The new message is now this room's latest activity, which reorders the
-  // activity-ordered views: the boards (`space.getThreads`, `room.getThreads`)
-  // and `room.getMetadata.recentThreads`. Those are ORDERED LISTS, so a diff
-  // rather than an invalidation is what keeps them fresh — broadcast the one
-  // row that moved and let each client move it, instead of making every reader
-  // refetch every board (see `RoomActivityDiff`).
+  // activity-ordered boards (`space.getThreads`, `room.getThreads`). Those are
+  // ORDERED LISTS, so a diff rather than an invalidation is what keeps them
+  // fresh — broadcast the one row that moved and let each client move it,
+  // instead of making every reader refetch every board (see `RoomActivityDiff`).
   if (message) {
     const facts = await readRoomBoardFacts(
       db ?? openSpaceDb(event.streamDid),
@@ -463,11 +462,10 @@ async function handleCreateMessage(
       signal: roomActivityDiff(spaceId, roomId, facts, message),
     });
   }
-
-  // The boards' CACHED bodies are still stale (their ordering changed), so the
-  // server-side response cache must drop them — but a connected client is
-  // patching from the diff above and must not be told to refetch. Evict
-  // without a frame.
+  // The boards' CACHED bodies are still stale (their ordering changed) and
+  // `room.getMetadata`'s unread count moved — but a connected client patches
+  // both from the diff frames above and must not be told to refetch. Evict
+  // the server cache without a frame.
   signals.push(evictOnly("space.roomy.room.getMetadata", { roomId }));
   signals.push(evictOnly("space.roomy.room.getThreads", { roomId }));
   signals.push(evictOnly("space.roomy.space.getThreads", { spaceId }));
@@ -550,10 +548,9 @@ async function handleEditMessage(
       message,
     }));
   }
-  // Edit doesn't change unread count, but room metadata's recentThreads
-  // might reference this message's activity, and the space index board
-  // shows the edited message as its latest activity.
-  signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));
+  // An edit can change the latest-message preview on the space index board.
+  // `room.getMetadata` carries no message content (name, kind and unread
+  // counts only) and an edit moves no read position, so it is not touched.
   signals.push(
     invalidate("space.roomy.space.getThreads", { spaceId: event.streamDid }),
   );

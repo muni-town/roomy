@@ -505,7 +505,7 @@ export const prose: Record<string, EndpointProse> = {
   // ── Rooms ───────────────────────────────────────────────────────────────
   "space.roomy.room.getMetadata": {
     description:
-      "Returns room metadata with recently active threads included. The recentThreads field replaces the separate getLinkedRooms query. For threads, defaultAccess is resolved server-side by following the link edge to the parent channel.",
+      "Returns room metadata. For threads, defaultAccess is resolved server-side by following the link edge to the parent channel.",
     auth: "Caller must have read access to the room (admin, default_access != none, or matching role grant).",
     params: [
       { name: "roomId", type: "string", required: true, description: "ULID of the room entity." },
@@ -521,7 +521,7 @@ export const prose: Record<string, EndpointProse> = {
         canWrite: { type: "boolean", description: "Caller-scoped write permission." },
         lastRead: { type: "string | null", description: "ISO timestamp of last read position." },
         unreadCount: { type: "number", description: "Number of unread messages." },
-        recentThreads: { type: "Array<RecentThread>", description: "Recently active threads with: id, name, canRead, canWrite, unreadCount, lastRead." },
+        unreadThreadCount: { type: "number", description: "Number of engaged threads in this channel with unread messages." },
       },
     },
     notes: [
@@ -532,7 +532,6 @@ export const prose: Record<string, EndpointProse> = {
       "Room name/kind changes",
       "Room default_access changes",
       "Unread count changes",
-      "Thread activity in this room",
       "Caller's admin edge or role assignments change",
       "A role's permission for this room changes",
     ],

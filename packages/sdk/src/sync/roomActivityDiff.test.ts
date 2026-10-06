@@ -13,12 +13,10 @@ import type {
   RoomActivityPatch,
   SpaceThreadsData,
   RoomThreadsData,
-  RoomMetadataData,
 } from "./roomActivityDiff";
 import {
   patchSpaceBoard,
   patchRoomBoard,
-  patchRecentThreads,
   patchSpaceBoardUnread,
   patchRoomBoardUnread,
 } from "./roomActivityDiff";
@@ -152,30 +150,6 @@ describe("patchRoomBoard", () => {
       pageParams: [undefined],
     };
     expect(patchRoomBoard(prev, patch())).toBeUndefined();
-  });
-});
-
-describe("patchRecentThreads", () => {
-  it("moves the thread to the front of its parent channel's recentThreads", () => {
-    const prev = {
-      recentThreads: [
-        { id: "01X", canRead: true, canWrite: true, unreadCount: 0 },
-        { id: "01THREAD", canRead: true, canWrite: true, unreadCount: 0 },
-      ],
-    } as unknown as RoomMetadataData;
-
-    const next = patchRecentThreads(prev, patch())!;
-    expect(next.recentThreads.map((t) => t.id)).toEqual(["01THREAD", "01X"]);
-  });
-
-  it("leaves a list that does not contain the room untouched", () => {
-    // A channel's recentThreads holds its linked threads, never the channel
-    // itself — so a channel message is a genuine no-op, not a miss.
-    const prev = {
-      recentThreads: [{ id: "01X", canRead: true, canWrite: true, unreadCount: 0 }],
-    } as unknown as RoomMetadataData;
-
-    expect(patchRecentThreads(prev, patch())).toBe(prev);
   });
 });
 

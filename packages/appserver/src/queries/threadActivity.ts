@@ -1,9 +1,8 @@
 /**
  * Thread activity helper.
  *
- * Used by `space.getThreads`, `room.getThreads`, and the `recentThreads` field
- * of `room.getMetadata`. Returns each thread with its latest message timestamp
- * and up to 3 unique recent participants.
+ * Used by `space.getThreads` and `room.getThreads`. Returns each thread with
+ * its latest message timestamp
  *
  * Forwarded messages are forward-reference entities with no own content/author
  * — their timestamp and author live on the original message reached via the

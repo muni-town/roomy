@@ -8,15 +8,6 @@ export const NSID = "space.roomy.room.getMetadata" as const;
 
 export const Params = type({ roomId: "string" });
 
-export const RecentThread = type({
-  id: "string",
-  "name?": "string",
-  canRead: "boolean",
-  canWrite: "boolean",
-  unreadCount: "number",
-  "lastRead?": "string",
-});
-
 export const Response = type({
   "name?": "string",
   kind: "string",
@@ -29,5 +20,4 @@ export const Response = type({
   unreadCount: "number",
   /** Number of threads in this channel with unread messages (engaged only). */
   unreadThreadCount: "number",
-  recentThreads: RecentThread.array(),
 });

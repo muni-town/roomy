@@ -34,7 +34,6 @@ import {
 import {
   patchSpaceBoard,
   patchRoomBoard,
-  patchRecentThreads,
   patchSpaceBoardUnread,
   patchRoomBoardUnread,
   type RoomActivityPatch,
@@ -217,13 +216,11 @@ export class SyncRouter {
    * Apply a `#roomActivityDiff`: the room's board row moved to the front of
    * every activity-ordered view that shows it.
    *
-   * Each view is either patched in place or invalidated, never both:
-   *   - the space board and the parent channel's thread board are PAGES, and a
-   *     patch is only faithful when the room is on the cached first page and
-   *     the message advanced its timestamp (see `roomActivityDiff.ts`). When it
-   *     isn't, the query is invalidated — the pre-diff behaviour.
-   *   - `recentThreads` exists only on the parent channel's metadata, and only
-   *     for threads, so a channel message leaves it untouched.
+   * Each view is either patched in place or invalidated, never both: the space
+   * board and the parent channel's thread board are PAGES, and a patch is only
+   * faithful when the room is on the cached first page and the message
+   * advanced its timestamp (see `roomActivityDiff.ts`). When it isn't, the
+   * query is invalidated — the pre-diff behaviour.
    */
   #applyRoomActivityDiff(patch: RoomActivityPatch): void {
     this.#applyOrInvalidate<InfiniteData<SpaceThreadsData>>(
@@ -231,18 +228,13 @@ export class SyncRouter {
       (prev) => patchSpaceBoard(prev, patch),
     );
 
-    // Threads only: the parent channel's board and its in-chat thread list.
+    // Threads only: the parent channel's board lists the thread.
     const parentId = patch.parentChannelId;
     if (!parentId) return;
 
     this.#applyOrInvalidate<InfiniteData<RoomThreadsData>>(
       queryKey(ROOM_THREADS_NSID, { roomId: parentId }),
       (prev) => patchRoomBoard(prev, patch),
-    );
-
-    const parentMetaKey = queryKey(ROOM_METADATA_NSID, { roomId: parentId });
-    this.#adapter.patch<RoomMetadataResponse>(parentMetaKey, (prev) =>
-      patchRecentThreads(prev, patch),
     );
   }
 

@@ -13,9 +13,8 @@
  *
  *   - `space.roomy.space.getThreads` — the space index board (infinite query)
  *   - `space.roomy.room.getThreads`  — a channel's thread board (infinite query)
- *   - `room.getMetadata.recentThreads` — a channel's in-chat thread list
  *
- * All three order newest-activity-first and are therefore *pages*: the server
+ * Both order newest-activity-first and are therefore *pages*: the server
  * returns the newest N, and moving a room to the front drops the previous
  * occupant of the last slot. That is exactly reproducible client-side when the
  * room is already in the cached page (move to front, truncate to the original
@@ -43,13 +42,11 @@
 
 import { Response as SpaceThreadsResponse } from "../schemas/queries/getSpaceThreads";
 import { Response as RoomThreadsResponse } from "../schemas/queries/getRoomThreads";
-import { Response as RoomMetadataResponse } from "../schemas/queries/getRoomMetadata";
 import type { Body as RoomActivityDiffBody } from "../schemas/frames/roomActivityDiff";
 
 /** The wire shapes these patchers read and write. */
 export type SpaceThreadsData = typeof SpaceThreadsResponse.infer;
 export type RoomThreadsData = typeof RoomThreadsResponse.infer;
-export type RoomMetadataData = typeof RoomMetadataResponse.infer;
 
 type SpaceRoom = SpaceThreadsData["rooms"][number];
 type RoomThreadRow = RoomThreadsData["threads"][number];
@@ -212,39 +209,6 @@ export function patchRoomBoard(
     pages: [patched as RoomThreadsData, ...rest],
     pageParams: prev.pageParams,
   };
-}
-
-/**
- * Apply a room-activity diff to a `room.getMetadata` response's
- * `recentThreads`.
- *
- * This list holds the room's linked threads — never the room itself (`roomId`
- * is filtered out server-side) — so a message in a channel changes nothing
- * here, and a message in a thread reorders that thread only within its PARENT
- * channel's list (callers pass the parent's key). A list that does not contain
- * the room is therefore a genuine no-op, not a miss: return `prev` unchanged.
- *
- * Returns `undefined` when there is no cached entry (a no-op for
- * `setQueryData`), matching the other metadata patchers.
- */
-export function patchRecentThreads(
-  prev: RoomMetadataData | undefined,
-  patch: RoomActivityPatch,
-): RoomMetadataData | undefined {
-  if (!prev) return undefined;
-  const index = prev.recentThreads.findIndex((t) => t.id === patch.roomId);
-  if (index < 0) return prev;
-
-  const row = prev.recentThreads[index]!;
-  const moved = {
-    ...row,
-    ...(patch.name !== undefined ? { name: patch.name } : {}),
-  };
-  const rest = [
-    ...prev.recentThreads.slice(0, index),
-    ...prev.recentThreads.slice(index + 1),
-  ];
-  return { ...prev, recentThreads: [moved, ...rest] };
 }
 
 // ─── Caller-scoped board fields (from #roomMetadataDiff) ─────────────────

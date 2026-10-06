@@ -12,10 +12,10 @@
  * first CBOR value of the frame.
  *
  * A message just landed in `roomId` and is now that room's latest activity, so
- * the activity-ordered views move: the boards (`space.roomy.space.getThreads`,
- * `space.roomy.room.getThreads`) and `room.getMetadata.recentThreads`. The
- * client upserts this row and moves it to the front, instead of refetching
- * each board per message.
+ * the activity-ordered views move: the boards
+ * (`space.roomy.space.getThreads`, `space.roomy.room.getThreads`). The client
+ * upserts this row and moves it to the front, instead of refetching each board
+ * per message.
  *
  * The frame carries no caller-scoped field: unread counts ride on
  * `#roomMetadataDiff`, which knows the per-user delta.

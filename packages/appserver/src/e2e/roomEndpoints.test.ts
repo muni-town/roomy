@@ -106,6 +106,9 @@ describe("room-scoped endpoints resolve a materialized room", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty("spaceId", SPACE);
+    // The room's thread listing is `room.getThreads`; the metadata response
+    // carries no thread list.
+    expect(body).not.toHaveProperty("recentThreads");
   });
 
   test("getRoomSummary returns 200", async () => {

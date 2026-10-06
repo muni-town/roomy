@@ -58,30 +58,15 @@ const spaceMetadata = {
   deletedRooms: [{ id: "01DELETEDROOM0000000000000", name: "gone" }],
 };
 
-/**
- * A `room.getMetadata` response. `recentThreads` is the listing that names a
- * thread the sidebar has already dropped — the one place the failing lobby
- * target is still on the client.
- */
-const roomMetadata = {
-  kind: "channel",
-  spaceId: "did:plc:space",
-  defaultAccess: "readwrite",
-  canRead: true,
-  canWrite: true,
-  unreadCount: 0,
-  unreadThreadCount: 0,
-  recentThreads: [
-    { id: LOBBY_THREAD, name: "TASK-179", canRead: true, canWrite: true, unreadCount: 0 },
-  ],
-};
 
 /** An infinite query's cached data: `{ pages: [...] }`. */
 const spaceThreads = {
   pages: [{ rooms: [{ id: "01SPACETHREAD0000000000000", kind: "thread" }] }],
 };
 const roomThreads = {
-  pages: [{ threads: [{ id: "01CHANNELTHREAD00000000000" }] }],
+  pages: [
+    { threads: [{ id: LOBBY_THREAD }, { id: "01CHANNELTHREAD00000000000" }] },
+  ],
 };
 
 const NSIDS = {
@@ -117,11 +102,11 @@ describe("isNonMessageReplyTarget", () => {
   });
 
   // The exact production shape: a lobby reply whose target is a thread of
-  // lobby. The sidebar does not list it; `room.getMetadata.recentThreads` does.
+  // lobby. The sidebar does not list it; the channel's board does.
   test("a lobby reply targeting a lobby thread is not a message", () => {
     const ids = collectRoomIds([
       entry(NSIDS.spaceMetadata, spaceMetadata),
-      entry(NSIDS.roomMetadata, roomMetadata, { roomId: LOBBY }),
+      entry(NSIDS.roomThreads, roomThreads, { roomId: LOBBY }),
     ]);
     assert.equal(isNonMessageReplyTarget(LOBBY_THREAD, LOBBY, ids), true);
   });
@@ -142,7 +127,6 @@ describe("isNonMessageReplyTarget", () => {
   test("a real message target is asked about", () => {
     const ids = collectRoomIds([
       entry(NSIDS.spaceMetadata, spaceMetadata),
-      entry(NSIDS.roomMetadata, roomMetadata, { roomId: LOBBY }),
       entry(NSIDS.spaceThreads, spaceThreads),
       // The message list holds the message itself; a message id is not a room.
       entry(NSIDS.messages, [{ id: MESSAGE, replyTo: LOBBY_THREAD }], {
@@ -201,7 +185,9 @@ describe("collectRoomIds", () => {
   test("an unexpected payload shape yields no ids instead of throwing", () => {
     const ids = collectRoomIds([
       entry(NSIDS.spaceMetadata, null),
-      entry(NSIDS.roomMetadata, { recentThreads: "not an array" }, { roomId: LOBBY }),
+      // A room-metadata entry is keyed by a room id: the index reads the
+      // param, so a malformed body still yields that room.
+      entry(NSIDS.roomMetadata, { unreadCount: "nope" }, { roomId: LOBBY }),
       entry(NSIDS.spaceThreads, { pages: [{ rooms: [null, 7, { id: 42 }] }] }),
       entry(NSIDS.roomThreads, { pages: null }),
     ]);

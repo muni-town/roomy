@@ -582,9 +582,8 @@ export class SyncManager {
 
   /**
    * Deliver a room-activity patch to every connection watching one of the
-   * boards it reorders: the room itself, its parent channel (threads only —
-   * the parent's board and `recentThreads` both list the thread), and the
-   * space (the space index board).
+   * boards it reorders: the room itself, its parent channel (threads only),
+   * and the space (the space index board).
    *
    * One frame per connection, not one per topic: a client typically has all
    * three topics at once, and the frame is identical for each.

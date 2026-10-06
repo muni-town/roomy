@@ -380,11 +380,6 @@ describe("SyncRouter", () => {
       "space.roomy.room.getThreads",
       { roomId: "01CHANNEL" },
     ]);
-    // The parent channel's recentThreads list is patched too.
-    expect(patchedKeys).toContainEqual([
-      "space.roomy.room.getMetadata",
-      { roomId: "01CHANNEL" },
-    ]);
 
     // The board patch moved the room to the front with the new activity.
     const spacePatcher = patch.mock.calls.find(

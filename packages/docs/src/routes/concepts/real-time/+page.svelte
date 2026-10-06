@@ -129,7 +129,7 @@
 
   <h3>#roomActivityDiff</h3>
 
-  <p>Board re-ordering, <strong>broadcast</strong> to every connection subscribed to the room, its parent channel, or the space. A message makes its room the most recently active one, which re-orders <code>room.getThreads</code>, <code>space.getThreads</code> and <code>room.getMetadata.recentThreads</code> — these views carry the room's latest-activity fields and a latest-first ordering, so the row is <em>upserted and moved to the front</em> rather than merely refetched. The frame carries the whole board row subset, so the client needs no HTTP round-trip. <code>space.getActivityFeed</code> is <em>not</em> patched (its items hydrate embeds per message) and still refetches.</p>
+  <p>Board re-ordering, <strong>broadcast</strong> to every connection subscribed to the room, its parent channel, or the space. A message makes its room the most recently active one, which re-orders <code>room.getThreads</code> and <code>space.getThreads</code> — these views carry the room's latest-activity fields and a latest-first ordering, so the row is <em>upserted and moved to the front</em> rather than merely refetched. The frame carries the whole board row subset, so the client needs no HTTP round-trip. <code>space.getActivityFeed</code> is <em>not</em> patched (its items hydrate embeds per message) and still refetches.</p>
 
   <p>No field here is caller-scoped: <code>unreadCount</code> / <code>unread</code> on the board rows are absent, and are patched from <code>#roomMetadataDiff</code>, whose <code>delta</code> is per-user. Both frames accompany the same event. Delivery re-checks room access, because the frame carries a message preview and its author.</p>
 

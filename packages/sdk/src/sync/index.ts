@@ -39,7 +39,6 @@ export {
 export {
   patchSpaceBoard,
   patchRoomBoard,
-  patchRecentThreads,
   patchSpaceBoardUnread,
   patchRoomBoardUnread,
   type RoomActivityPatch,

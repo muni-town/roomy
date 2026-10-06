@@ -46,10 +46,8 @@ type IdPath = readonly (string | "*")[];
 /**
  * Where each room-listing response keeps its room ids.
  *
- * Only listings that name *rooms* belong here. `space.roomy.space.getMetadata`
- * is the sidebar the client renders; `room.getMetadata`'s `recentThreads` is
- * the one place a thread the sidebar has already dropped is still named, and
- * the two board queries are the full space/channel room lists.
+ * Only listings that name *rooms* belong here: the sidebar the client
+ * renders, the space index board, and the two per-channel board queries.
  */
 const ROOM_ID_PATHS: Record<string, readonly IdPath[]> = {
   "space.roomy.space.getMetadata": [
@@ -61,7 +59,6 @@ const ROOM_ID_PATHS: Record<string, readonly IdPath[]> = {
     // same way; the sidebar lists them for the restore flow.
     ["deletedRooms", "*", "id"],
   ],
-  "space.roomy.room.getMetadata": [["recentThreads", "*", "id"]],
   "space.roomy.space.getThreads": [["pages", "*", "rooms", "*", "id"]],
   "space.roomy.room.getThreads": [["pages", "*", "threads", "*", "id"]],
   "space.roomy.search.rooms": [["rooms", "*", "id"]],

@@ -1,12 +1,11 @@
 /**
  * Build the `RoomActivityDiff` a newly-applied message implies.
  *
- * The board views (`space.getThreads`, `room.getThreads`) and
- * `room.getMetadata.recentThreads` are ordered by each room's latest activity,
- * so a new message reorders them. Expressing that as a per-message
- * `#invalidate` for each of those endpoints would make every reader refetch
- * every board on every message, so the diff below carries only the facts that
- * changed instead.
+ * The board views (`space.getThreads`, `room.getThreads`) are ordered by each
+ * room's latest activity, so a new message reorders them. Expressing that as a
+ * per-message `#invalidate` for each of those endpoints would make every reader
+ * refetch every board on every message, so the diff below carries only the
+ * facts that changed instead.
  *
  * The facts that actually changed are small and identical for all readers:
  * which room, its latest timestamp, and which participants are most recent.

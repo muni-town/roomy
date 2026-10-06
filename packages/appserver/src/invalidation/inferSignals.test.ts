@@ -535,10 +535,11 @@ describe("inferSignals: message events", () => {
     }
 
     const nsids = invalidatedNsids(signals);
-    expect(nsids).toContain("space.roomy.room.getMetadata");
     // An edit can change the latest-message preview on the space index board.
     expect(nsids).toContain("space.roomy.space.getThreads");
-    // editMessage should NOT invalidate space metadata (no unread change).
+    // room.getMetadata carries no message content and an edit moves no read
+    // position, so neither it nor space metadata is invalidated.
+    expect(nsids).not.toContain("space.roomy.room.getMetadata");
     expect(nsids).not.toContain("space.roomy.space.getMetadata");
   });
 

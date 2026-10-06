@@ -153,7 +153,7 @@ describe("schemas/queries", () => {
     assertOk(parsed);
   });
 
-  it("getRoomMetadata parses a response with recentThreads", () => {
+  it("getRoomMetadata parses a response", () => {
     const ex = {
       name: "general",
       kind: "channel",
@@ -164,14 +164,6 @@ describe("schemas/queries", () => {
       lastRead: "2026-05-17T00:00:00.000Z",
       unreadCount: 3,
       unreadThreadCount: 0,
-      recentThreads: [
-        {
-          id: "01T0000000000000000000000X",
-          canRead: true,
-          canWrite: true,
-          unreadCount: 0,
-        },
-      ],
     };
     const parsed = queries.getRoomMetadata.Response(ex);
     assertOk(parsed);

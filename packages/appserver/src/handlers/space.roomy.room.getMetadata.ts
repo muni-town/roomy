@@ -1,28 +1,17 @@
 /**
  * XRPC: space.roomy.room.getMetadata (query).
  *
- * Room metadata plus the channel's recently active threads, which the caller
- * renders as the sidebar's thread list.
+ * Room metadata plus the channel's thread-unread badge count.
  */
 
-import { createAccessMemo, roomAccessMany } from "../auth/access.ts";
+import { createAccessMemo } from "../auth/access.ts";
 import { openReadStateDb, openSpaceDbForEntity } from "../db/db.ts";
-import { getChannelUnreadThreadCount, getReadPosition, getReadPositions, type ReadPosition } from "../queries/readPositions.ts";
-import { listThreadActivity } from "../queries/threadActivity.ts";
+import { getChannelUnreadThreadCount, getReadPosition, type ReadPosition } from "../queries/readPositions.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
-
-interface RecentThread {
-  id: string;
-  name?: string;
-  canRead: boolean;
-  canWrite: boolean;
-  unreadCount: number;
-  lastRead?: string;
-}
 
 interface GetRoomMetadataResult {
   name?: string;
@@ -35,7 +24,6 @@ interface GetRoomMetadataResult {
   unreadCount: number;
   /** Number of engaged threads in this channel with unread messages. */
   unreadThreadCount: number;
-  recentThreads: RecentThread[];
 }
 
 export const getRoomMetadataHandler: QueryHandler<
@@ -45,18 +33,15 @@ export const getRoomMetadataHandler: QueryHandler<
   const userDid = parseUserDid(auth);
   const roomId = requireString(params, "roomId");
 
-
   const db = await openSpaceDbForEntity(roomId);
   if (!db) {
     throw new XrpcError(404, "NotFound", `Room not found: ${roomId}`);
   }
   const mainDb = openReadStateDb();
-  // Per-request access memo: this handler calls roomAccess for the room
-  // itself plus up to 20 recent threads, and each roomAccess call
-  // internally checks isMember/isAdmin/isBanned/allowsPublicJoin on the
-  // same parent space. Without the memo, that's ~5 redundant space-level
-  // queries per thread (~100 per request). The memo collapses them to one
-  // set per (space, did).
+  // Per-request access memo: this handler and the channel-unread-thread
+  // count below both check isMember/isAdmin/isBanned/allowsPublicJoin on
+  // the same parent space. The memo collapses them to one set per
+  // (space, did).
   const memo = createAccessMemo();
   const access = await requireRoomRead(db, roomId, userDid, memo);
 
@@ -68,59 +53,6 @@ export const getRoomMetadataHandler: QueryHandler<
         where cr.entity = ?`,
     )
     .get<{ name: string | null; label: string | null }>(roomId);
-
-  // Recent threads: scope is this channel for channels, the parent channel
-  // for threads (so we get sibling threads). Falls back to the room itself
-  // when there's no parent (which yields an empty list).
-  const channelForThreads = access.parentChannelId ?? roomId;
-  const { threads: threadActivity } = (await listThreadActivity(
-    db,
-    { kind: "channel", channelId: channelForThreads },
-    20,
-  ));
-
-  const recentThreads: RecentThread[] = [];
-  if (userDid !== null) {
-    // Compute roomAccess once per thread and reuse the result for both
-    // the read-gate filter and the canRead/canWrite fields below: a second
-    // pass would double the per-thread SQL cost (~6 statements per thread,
-    // ~120 per request for a full sidebar).
-    //
-    // The memo further collapses the per-thread space-level membership
-    // checks (all threads share the same parent space) into a single set
-    // of queries for the whole request.
-    const candidates = threadActivity.filter((t) => t.id !== roomId);
-    // One batched access pass across every candidate thread, rather than a
-    // `roomAccess` call per thread. `roomAccess` is memoised but not batched:
-    // each distinct thread is its own round-trip. With the `room_access`
-    // projection the whole page collapses to one per-space read.
-    const threadAccess = await roomAccessMany(
-      db,
-      candidates.map((t) => t.id),
-      userDid,
-      memo,
-    );
-    const accessible = candidates.filter(
-      (t) => threadAccess.get(t.id)?.canRead ?? false,
-    );
-    const threadPositions = await getReadPositions(
-      mainDb,
-      userDid,
-      accessible.map((t) => t.id),
-    );
-    for (const thread of accessible) {
-      const access = threadAccess.get(thread.id)!;
-      const pos = threadPositions.get(thread.id);
-      recentThreads.push(stripNulls({
-        id: thread.id,
-        name: thread.name,
-        canRead: access.canRead,
-        canWrite: access.canWrite,
-        unreadCount: pos?.unreadCount ?? 0,
-        lastRead: (pos?.lastRead as string | null) ?? null,
-      }) as RecentThread);
-    }
-  }
 
   let pos: ReadPosition;
   let unreadThreadCount = 0;
@@ -151,7 +83,6 @@ export const getRoomMetadataHandler: QueryHandler<
     lastRead: (pos.lastRead as string | null) ?? null,
     unreadCount: pos.unreadCount,
     unreadThreadCount,
-    recentThreads,
   }) as GetRoomMetadataResult;
 };
 

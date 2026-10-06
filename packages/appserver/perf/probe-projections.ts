@@ -205,9 +205,9 @@ for (let r = 0; r < ROOMS; r++) {
 const HOT = roomIds[0]!;
 
 // Threads hanging off the hot channel, each with a link edge to its parent.
-// `listThreadActivity` (behind room.getThreads / space.getThreads /
-// room.getMetadata's recentThreads) is only exercised when the space has
-// thread-shaped rooms — with channels alone it does almost nothing.
+// `listThreadActivity` (behind room.getThreads / space.getThreads) is only
+// exercised when the space has thread-shaped rooms — with channels alone it
+// does almost nothing.
 const threadIds: string[] = [];
 for (let t = 0; t < THREADS; t++) {
   const ev = {
@@ -532,8 +532,6 @@ console.log(`\n=== ${LABEL} — live fanout (1 message, ${CLIENTS} subscribed cl
 console.log(`  sendEvents latency: ${writeMs.toFixed(1)}ms`);
 console.log(`  frames per client: ${perClient.join(", ")}`);
 console.log(`  frame kinds (client 0): ${[...kindCounts.entries()].map(([k, n]) => `${k}:${n}`).join(" ") || "(none)"}`);
-console.log(`  #invalidate nsids (client 0): ${[...nsidCounts.entries()].map(([k, n]) => `${k}:${n}`).join(" ") || "(none)"}`);
-
 // The follow-up reads the frames force, per client. This is the load the
 // fanout adds to the appserver: one HTTP read per distinct query key a frame
 // tells the client to refetch.

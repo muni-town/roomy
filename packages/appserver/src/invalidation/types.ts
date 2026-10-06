@@ -74,9 +74,9 @@ export interface QueryInvalidation {
    *
    * Emit this for queries whose client-side freshness is delivered by a diff
    * (see `RoomActivityDiff`) but whose *cached* response body is still stale —
-   * `space.getThreads` and `room.getMetadata` on `createMessage`, whose
-   * board/`recentThreads` ordering is patched client-side by the activity
-   * diff while the server cache still needs the eviction.
+   * `space.getThreads` on `createMessage`, whose board ordering is patched
+   * client-side by the activity diff while the server cache still needs the
+   * eviction.
    */
   cacheEvictionOnly?: boolean;
 }
@@ -182,9 +182,9 @@ export interface MentionDiff {
  * A room's latest-activity facts, broadcast when a message lands in it.
  *
  * This is what keeps the activity-ordered *board* views (`space.getThreads`,
- * `room.getThreads`) and `room.getMetadata.recentThreads` ordered and
- * up to date without refetching them on every message: the client upserts the
- * row it describes and moves it to the front of its board.
+ * `room.getThreads`) ordered and up to date without refetching them on every
+ * message: the client upserts the row it describes and moves it to the front of
+ * its board.
  *
  * It is deliberately a **broadcast** (one frame to every subscriber of the
  * room / its parent channel / the space), unlike `RoomMetadataDiff`, which is
