@@ -18,9 +18,11 @@ import { PostChain, errorText } from "./postChain.js";
 
 type DirectXrpcClient = InstanceType<typeof transport.DirectXrpcClient>;
 
-/** Room kinds that keep thinking traces in the room itself (threads). */
+/** Room kinds that keep thinking traces in the room itself (threads).
+ *  `kind` is the short form the appserver strips the `space.roomy.` prefix
+ *  down to (`getMetadata`'s `stripLabel`), so a thread arrives as `"thread"`. */
 const IN_ROOM_TRACE_KINDS: Record<string, true> = {
-  "space.roomy.thread": true,
+  thread: true,
 };
 
 /** URL prefix for linking a trace thread from the answer in the channel. */
@@ -358,31 +360,35 @@ async function runMentionJob(
 
   // Trace placement: a session in a CHANNEL gets a dedicated 💭 thread room and
   // streams its thinking there; a session already in a thread room keeps its
-  // traces in that room. `ensureTraceThread` returns undefined for thread rooms,
-  // so the same call handles both.
+  // traces in that room. `resolveTraceTarget` separates those two from the
+  // third case — it could not tell — which posts no trace at all.
   //
   // Continuations need this as much as fresh mentions do. A chain whose root was
   // a self-triggered tick has no stored 💭 room — self-triggers persist no
   // session (so `prior.traceThreadId` is absent) — and a reply to it would
-  // otherwise stream its thinking straight into the channel, which is exactly
-  // the clutter a trace thread exists to prevent.
+  // otherwise get its own trace thread rather than none.
   //
   // Self-triggered sessions (the scheduled self-check posts a facet mention of
   // the agent itself) are exempt entirely: they fire on a timer, so a 💭 room
   // and streamed thinking chunks per tick would be pure clutter for an
   // unattended check. Their answer is the whole deliverable.
   const selfTriggered = msg.authorDid === agentDid;
-  let traceRoomId: string | undefined = selfTriggered ? undefined : prior?.traceThreadId;
-  if (!selfTriggered && !traceRoomId && (opts.traceThreads ?? true)) {
-    traceRoomId = (await ensureTraceThread(xrpc, spaceId, roomId, msg)) ?? undefined;
+  let trace: TraceTarget = { kind: "none" };
+  if (!selfTriggered) {
+    if (prior?.traceThreadId) trace = { kind: "thread", id: prior.traceThreadId };
+    else if (opts.traceThreads ?? true) trace = await resolveTraceTarget(xrpc, spaceId, roomId, msg, log);
+    // `--no-trace-threads` asks for traces in the room itself, the pre-thread
+    // behaviour. In-room traces are only ever correct in a thread room, but this
+    // flag is an explicit operator choice and no room-kind probe happens here.
+    else trace = { kind: "room" };
   }
 
-  const streamThinking = !selfTriggered && (opts.streamThinking ?? true);
+  const streamThinking = !selfTriggered && trace.kind !== "none" && (opts.streamThinking ?? true);
   // Serialize streamed thinking-chunk posts so they land in order, and so
   // the final answer is posted only after every chunk has been sent.
   // PostChain contains per-chunk failures (logged + counted, chain carries
   // on) rather than leaving a rejected link unhandled — see postChain.ts.
-  // Chunks posted to a trace room chain under the room's first chunk.
+  // Chunks posted to a trace thread chain under the room's first chunk.
   const thinkingPosts = new PostChain((m) => log(`thinking-chunk ${m}`));
   let streamedThinking = false;
   let lastTraceChunkId: string | undefined;
@@ -390,14 +396,15 @@ async function runMentionJob(
   try {
     reply = await runOmp(prompt, { ...opts, resume }, {
       onThinking: (chunk) => {
-        // Self-triggered ticks post no thinking at all: dropping the callback
-        // here (not just the flags below) is what prevents the chunks, since
-        // omp streams them regardless of the streamThinking/postThinking flags.
-        if (selfTriggered) return;
+        // No trace target means no thinking is posted anywhere: a self-triggered
+        // tick, or a channel whose trace thread could not be resolved. Dropping
+        // the callback here (not just the flags below) is what prevents the
+        // chunks, since omp streams them regardless of those flags.
+        if (selfTriggered || trace.kind === "none") return;
         streamedThinking = true;
         thinkingPosts.push(async () => {
-          if (traceRoomId) {
-            const { messageId } = await sendReply(xrpc, spaceId, traceRoomId, chunk, buildThinkingBlocks(chunk), lastTraceChunkId);
+          if (trace.kind === "thread") {
+            const { messageId } = await sendReply(xrpc, spaceId, trace.id, chunk, buildThinkingBlocks(chunk), lastTraceChunkId);
             lastTraceChunkId = messageId;
           } else {
             await sendReply(xrpc, spaceId, roomId, chunk, buildThinkingBlocks(chunk), parent);
@@ -424,7 +431,10 @@ async function runMentionJob(
   // Self-triggered ticks are independent (each is a fresh root id), so
   // persisting an entry per tick would only grow the session file forever.
   if (reply.sessionId && !selfTriggered) {
-    sessions?.set(chainKey, { sessionId: reply.sessionId, traceThreadId: traceRoomId });
+    sessions?.set(chainKey, {
+      sessionId: reply.sessionId,
+      traceThreadId: trace.kind === "thread" ? trace.id : undefined,
+    });
   }
   // `runOmp` rejects on a failed turn, so reaching here means a successful turn
   // that produced no text. Do not post an empty message.
@@ -443,20 +453,21 @@ async function runMentionJob(
     );
   }
 
-  const traceLink = traceRoomId ? `\n\n---\n💭 trace: ${ROOMY_APP_URL}/${spaceId}/${traceRoomId}` : "";
+  const traceLink =
+    trace.kind === "thread" ? `\n\n---\n💭 trace: ${ROOMY_APP_URL}/${spaceId}/${trace.id}` : "";
   if (streamThinking && streamedThinking) {
     const { messageId } = await sendReply(xrpc, spaceId, roomId, `${reply.answer}${traceLink}`, undefined, parent);
-    log(`replied ${messageId} (answer; thinking ${traceRoomId ? `in trace thread ${traceRoomId}` : "streamed in room"})`);
+    log(`replied ${messageId} (answer; thinking ${trace.kind === "thread" ? `in trace thread ${trace.id}` : "streamed in room"})`);
     return;
   }
   const thinking = reply.thinking?.trim();
-  const postThinking = !selfTriggered && (opts.thinking ?? true) && !!thinking;
-  if (postThinking && traceRoomId) {
+  const postThinking = !selfTriggered && trace.kind !== "none" && (opts.thinking ?? true) && !!thinking;
+  if (postThinking && trace.kind === "thread") {
     // Traces go to the trace room even when not streamed: post the trace
     // there and the clean answer (with a link) in the channel.
-    await sendReply(xrpc, spaceId, traceRoomId, thinking, buildThinkingBlocks(thinking));
+    await sendReply(xrpc, spaceId, trace.id, thinking, buildThinkingBlocks(thinking));
     const { messageId } = await sendReply(xrpc, spaceId, roomId, `${reply.answer}${traceLink}`, undefined, parent);
-    log(`replied ${messageId} (answer; thinking in trace thread ${traceRoomId})`);
+    log(`replied ${messageId} (answer; thinking in trace thread ${trace.id})`);
     return;
   }
   const blocks = buildReplyBlocks(reply.answer, postThinking ? thinking : undefined);
@@ -470,6 +481,20 @@ async function runMentionJob(
   );
   log(`replied ${messageId}${postThinking ? " (with thinking)" : ""}`);
 }
+
+/**
+ * Where a session's thinking trace is posted.
+ *
+ *  - `thread`: the dedicated 💭 thread room, either stored from a prior turn or
+ *    just created and linked under the channel the agent was prompted in.
+ *  - `room`: the room itself, for a session that is already in a thread.
+ *  - `none`: no trace is posted. Self-triggered ticks, `--no-trace-threads`, and
+ *    — the case this type exists for — a channel whose trace thread could not be
+ *    resolved. A channel's trace belongs in its thread or nowhere; posting it
+ *    into the channel is the exact clutter the thread exists to prevent, so an
+ *    unresolved target must never degrade to `room`.
+ */
+type TraceTarget = { kind: "thread"; id: string } | { kind: "room" } | { kind: "none" };
 
 /** One queued cron job: post the prompt text to the room (threaded under
  *  `parent` when set). This is the seam a future scheduler drives. */
@@ -560,21 +585,36 @@ async function walkChain(
 }
 
 /**
- * Create (and return the id of) a dedicated 💭 trace-thread room for a fresh
- * channel mention, linked under the channel the agent was prompted in.
- * Returns undefined when the room is a thread (traces stay in-room) or when
- * creation fails (fall back to in-room traces).
+ * Resolve where a channel-initiated session's thinking trace belongs.
+ *
+ * A channel gets its own dedicated 💭 trace-thread room, linked under the
+ * channel it was prompted in; a session already in a thread room keeps its
+ * traces in that same room. Both outcomes come from the triggering room's kind.
+ *
+ * When the kind cannot be read (the room-metadata probe failed) the target is
+ * `none`, so nothing is streamed. Falling back to `room` here would post the
+ * trace into a channel — precisely the clutter a trace thread exists to
+ * prevent, and it would do so silently. A missing trace is recoverable; a
+ * channel full of thinking is what this routing exists to avoid.
  */
-async function ensureTraceThread(
+export async function resolveTraceTarget(
   xrpc: DirectXrpcClient,
   spaceId: string,
   roomId: string,
   msg: MentionEvent["message"],
-): Promise<string | undefined> {
+  log: (m: string) => void,
+): Promise<TraceTarget> {
+  let kind: string | undefined;
   try {
     const meta = await xrpc.query("space.roomy.room.getMetadata", { roomId });
-    if (IN_ROOM_TRACE_KINDS[meta.kind]) return undefined;
+    kind = meta.kind;
+  } catch (error) {
+    log(`trace routing: room-metadata probe failed (${errorText(error)}) — posting no trace`);
+    return { kind: "none" };
+  }
+  if (IN_ROOM_TRACE_KINDS[kind]) return { kind: "room" };
 
+  try {
     const body = plaintextOf({ content: msg.content, mimeType: msg.mimeType });
     const words = body.replace(/\s+/g, " ").trim().slice(0, 40);
     const when = new Date(msg.timestamp).toISOString().slice(0, 16).replace("T", " ");
@@ -582,15 +622,10 @@ async function ensureTraceThread(
     const events = createThread({ linkToRoom: roomId as Ulid, name });
     const threadId = events[0]!.id;
     await xrpc.procedure("space.roomy.space.sendEvents", { spaceId, events });
-    return threadId;
+    return { kind: "thread", id: threadId };
   } catch (error) {
-    try {
-      // eslint-disable-next-line no-console
-      console.error(`[respond] trace-thread create failed: ${error instanceof Error ? error.message : String(error)}`);
-    } catch {
-      // logger unavailable — swallow
-    }
-    return undefined;
+    log(`trace routing: trace-thread create failed (${errorText(error)}) — posting no trace`);
+    return { kind: "none" };
   }
 }
 

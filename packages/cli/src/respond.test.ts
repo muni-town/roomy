@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Readable } from "node:stream";
-import { respond } from "./respond.js";
+import { respond, resolveTraceTarget } from "./respond.js";
 import { QueueStore } from "./queue.js";
 import type { CronJobPayload } from "./queue.js";
 
@@ -114,4 +114,86 @@ describe("respond reclaims a stranded active job", () => {
       }
     },
   );
+});
+
+describe("resolveTraceTarget: a channel's trace never lands in the channel", () => {
+  const msg = {
+    id: "01MSG",
+    roomId: "room:chan",
+    authorDid: "did:plc:author",
+    authorName: "Meri",
+    content: "please look at this",
+    mimeType: "text/markdown",
+    timestamp: "2026-10-06T21:00:00.000Z",
+  };
+
+  test("a channel gets a dedicated trace thread linked under it", async () => {
+    const sentEvents: { id: string }[][] = [];
+    const xrpc = {
+      query: async () => ({ kind: "channel", name: "lobby" }),
+      procedure: async (_nsid: string, params: unknown) => {
+        if (
+          params !== null &&
+          typeof params === "object" &&
+          "events" in params &&
+          Array.isArray(params.events)
+        ) {
+          sentEvents.push(params.events as { id: string }[]);
+        }
+        return {};
+      },
+    } as never;
+
+    const target = await resolveTraceTarget(xrpc, "space:test", "room:chan", msg, () => {});
+
+    expect(target.kind).toBe("thread");
+    expect(sentEvents).toHaveLength(1);
+    // The thread room the trace streams into is the id the create event minted.
+    expect(sentEvents[0]![0]!.id).toBe(target.kind === "thread" ? target.id : "");
+    expect(target.kind === "thread" ? target.id : "").not.toBe("");
+  });
+
+  test("a thread room keeps its traces in the room", async () => {
+    const xrpc = {
+      query: async () => ({ kind: "thread", name: "a thread" }),
+      procedure: async () => {
+        throw new Error("no thread should be created inside a thread");
+      },
+    } as never;
+
+    expect(await resolveTraceTarget(xrpc, "space:test", "room:thread", msg, () => {}))
+      .toEqual({ kind: "room" });
+  });
+
+  test("an unreadable room kind posts no trace rather than falling back to the channel", async () => {
+    // The production failure mode: `getMetadata` throwing (schema skew, a
+    // timeout, a 5xx) used to make the trace stream into the channel itself.
+    const xrpc = {
+      query: async () => {
+        throw new Error("XRPC response failed validation for space.roomy.room.getMetadata");
+      },
+      procedure: async () => {
+        throw new Error("no thread should be attempted");
+      },
+    } as never;
+
+    const logged: string[] = [];
+    expect(await resolveTraceTarget(xrpc, "space:test", "room:chan", msg, (m) => logged.push(m)))
+      .toEqual({ kind: "none" });
+    expect(logged.join("\n")).toContain("posting no trace");
+  });
+
+  test("a failed trace-thread creation posts no trace rather than the channel", async () => {
+    const xrpc = {
+      query: async () => ({ kind: "channel", name: "lobby" }),
+      procedure: async () => {
+        throw new Error("sendEvents timed out");
+      },
+    } as never;
+
+    const logged: string[] = [];
+    expect(await resolveTraceTarget(xrpc, "space:test", "room:chan", msg, (m) => logged.push(m)))
+      .toEqual({ kind: "none" });
+    expect(logged.join("\n")).toContain("posting no trace");
+  });
 });
