@@ -270,3 +270,49 @@ describe("blue-green read serving (worker seam)", () => {
     expect(await pool.isSpaceRebuilding(SPACE)).toBe(false);
   });
 });
+
+describe("statistics on first open", () => {
+  /**
+   * Query plan SQLite picks for the `entities.id` lookup every per-space read
+   * funnels through (`readPositions`, `userActiveThreads`).
+   */
+  const planFor = async (spaceDid: string): Promise<string> => {
+    const ids = Array.from({ length: 8 }, (_, i) => `entity-${i}`);
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = await pool
+      .forSpace(spaceDid)
+      .query(
+        `explain query plan
+           select id from entities
+            where id in (${placeholders}) and stream_id = ?`,
+      )
+      .all<{ detail: string }>(...ids, spaceDid);
+    return rows.map((r) => r.detail).join(" | ");
+  };
+
+  test("a space first opened mid-uptime plans by rowid without waiting for a boot sweep", async () => {
+    // A space created after the boot sweep has passed is never visited by it.
+    // Opening its DB is what must leave it able to plan a point lookup, so
+    // this seeds a large file and lets the ordinary open path do the work —
+    // no `analyze()` call anywhere in the test.
+    //
+    // The fixture is written straight to the file with a second connection
+    // rather than through the pool: enough `run()` round-trips to cross the
+    // planner's crossover cost more than the test budget.
+    const file = join(spacesDir, `${SPACE}.sqlite`);
+    const seed = new Database(file, { create: true });
+    seed.exec(readFileSync(SCHEMA_PATH, "utf8"));
+    seed.run("insert into space_schema_version (id, version) values (1, ?)", [
+      SPACE_SCHEMA_VERSION,
+    ]);
+    const rows = 2000;
+    const values = Array.from(
+      { length: rows },
+      (_, i) => `('entity-${i}', '${SPACE}', 'room-${i % 20}')`,
+    ).join(",");
+    seed.exec(`insert into entities (id, stream_id, room) values ${values}`);
+    seed.close();
+
+    expect(await planFor(SPACE)).toContain("sqlite_autoindex_entities_1");
+  });
+});

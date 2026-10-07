@@ -107,6 +107,18 @@ export interface DbLike {
    * that don't exercise the entity→space index.
    */
   backfillEntitySpace?(spaceDid: string): Promise<{ backfilled: number }>;
+  /**
+   * Optional: refresh the query-planner statistics of the shared DBs (global,
+   * read-state, event log) on their own workers. Absent on sync adapters,
+   * which hold a single synchronous handle and plan nothing.
+   */
+  analyzeShared?(): Promise<void>;
+  /**
+   * Optional: refresh this handle's DB's query-planner statistics. Absent on
+   * sync adapters (tests), which never accumulate the entity counts that make
+   * the planner mis-cost a lookup.
+   */
+  analyze?(): Promise<{ analyzed: boolean }>;
 }
 
 // ─── Worker message protocol types ──────────────────────────────────────
@@ -137,7 +149,8 @@ export interface WorkerRequest {
     | "spaceMigrationBegin"
     | "spaceMigrationEnd"
     | "isSpaceMigrating"
-    | "checkSpaceSchema";
+    | "checkSpaceSchema"
+    | "analyze";
   /** SQL string (for query/run/exec/prepare). */
   sql?: string;
   /** Bind parameters (for query/run/prepareRun/prepareAll/prepareGet). */

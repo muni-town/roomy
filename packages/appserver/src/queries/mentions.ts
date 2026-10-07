@@ -51,6 +51,31 @@ export interface SyncMentionsIndexOpts {
  * router) resolve once per batch of events so the write path stays
  * batch-friendly; missing targets (deleted / not-yet-materialised) simply
  * have no entry and produce no reply row.
+ *
+ * `+author_e.label` is a deliberate no-op on the value: SQLite cannot use an
+ * index on a column an arithmetic operator is applied to, so the unary plus
+ * pins the join to `sqlite_autoindex_edges_1 (head=?)` — the correlated lookup
+ * on `reply_e.tail`. Unforced, the planner may instead drive from
+ * `idx_edges_label_tail (label='author')`, whose tail is a user DID: it
+ * matches every message that user ever wrote, then seeks each one in `reply_e`
+ * for the reply edge. Measured against a space whose authors hold thousands of
+ * messages, one reply id costs ~20ms that way and a batch of eight ~76ms,
+ * against ~0.002ms for the correlated form.
+ *
+ * Both label predicates stay, and each guards a different edge that shares a
+ * message's `head`:
+ *
+ * - `reply_e.label = 'reply'` — `forward` edges also start at the message, so
+ *   dropping it lets a forward's target author through as the reply target
+ *   (message.ts:172, message.ts:514).
+ * - `author_e.label = 'author'` — a message's own `reply` edge has the same
+ *   `head` as its `author` edge, so dropping it matches that edge and resolves
+ *   the replied-to message's id as an "author".
+ *
+ * Neither can be defended by a test through this function: the result is a Map
+ * keyed by `message_id`, so a second row for the same message overwrites the
+ * first rather than failing an assertion. The predicates are what keep the
+ * overwrite from happening.
  */
 export async function resolveReplyToAuthors(
   spaceDb: DbLike,
@@ -65,7 +90,7 @@ export async function resolveReplyToAuthors(
          from edges reply_e
          join edges author_e
            on author_e.head = reply_e.tail
-          and author_e.label = 'author'
+          and +author_e.label = 'author'
         where reply_e.head in (${ph})
           and reply_e.label = 'reply'`,
     )

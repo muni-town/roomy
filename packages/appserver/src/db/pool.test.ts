@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { openDb, closeDb } from "./db.ts";
-import { hashSpace } from "./pool.ts";
+import { hashSpace, type PooledDatabase } from "./pool.ts";
 
 describe("hashSpace", () => {
   test("is deterministic across calls", () => {
@@ -175,6 +175,95 @@ describe("DatabasePool routing", () => {
       .query("select unread_count from read_positions where user_did = ? and room_id = ?")
       .get<{ unread_count: number }>("u", room);
     expect(rp?.unread_count).toBe(0);
+
+    await db.close();
+  });
+});
+
+describe("per-space query-planner statistics", () => {
+  /**
+   * Query plan SQLite picks for the `entities.id` lookup that every
+   * room/message read funnels through (`readPositions`, `userActiveThreads`).
+   */
+  const planFor = async (
+    db: PooledDatabase,
+    spaceDid: string,
+  ): Promise<string> => {
+    // 23 bound ids: the shape production's `readPositions`/`userActiveThreads`
+    // lookups actually issue (they build one placeholder per thread id).
+    const ids = Array.from({ length: 23 }, (_, i) => `entity-${i}`);
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = await db
+      .forSpace(spaceDid)
+      .query(
+        `explain query plan
+           select id from entities
+            where id in (${placeholders}) and stream_id = ?`,
+      )
+      .all<{ detail: string }>(...ids, spaceDid);
+    return rows.map((r) => r.detail).join(" | ");
+  };
+
+  test("a space with no statistics resolves entities by rowid, not by partition scan", async () => {
+    // Without statistics SQLite costs the single-column `stream_id` index below
+    // the rowid index, and scans the whole `stream_id` partition to answer a
+    // lookup for a handful of ids. That scan runs on the space's only worker,
+    // so it is paid by every other request queued behind it. Statistics are
+    // what let the planner see the rowid index is the selective one.
+    //
+    // The fixture is inserted as one multi-row statement rather than a loop:
+    // every `run()` is a worker round-trip, and one per row costs more than the
+    // test budget. The plan is then read through `analyze`, which is the same
+    // call an eviction or the boot sweep makes — the fixture reaches its row
+    // count after the open that would normally have analyzed it.
+    const db = openDb({ path: ":memory:", isolated: true });
+    const space = "did:plc:plan-stats";
+    const rows = 2000;
+    const values = Array.from(
+      { length: rows },
+      (_, i) => `('entity-${i}', '${space}', 'room-${i % 20}')`,
+    ).join(",");
+    await db
+      .forSpace(space)
+      .exec(`insert into entities (id, stream_id, room) values ${values}`);
+
+    expect(await planFor(db, space)).toContain("idx_entities_stream_room");
+
+    await db.forSpace(space).analyze();
+
+    expect(await planFor(db, space)).toContain("sqlite_autoindex_entities_1");
+
+    await db.close();
+  });
+
+  test("analyzeShared refreshes the shared databases' statistics", async () => {
+    // A shared DB's statistics are only ever created by this call — the
+    // open-time refresh covers per-space DBs, and nothing else runs ANALYZE on
+    // a shared one — so their presence, and their agreement with the row count
+    // just written, is what "the shared DBs were refreshed" means. The global
+    // `entity_space` index is the one every room/message handler resolves an
+    // owner through, and it grows with the whole fleet's entities rather than
+    // one space.
+    const db = openDb({ path: ":memory:", isolated: true });
+    const space = "did:plc:shared-stats";
+    const rows = 2000;
+    const values = Array.from(
+      { length: rows },
+      (_, i) => `('entity-${i}', '${space}')`,
+    ).join(",");
+    await db
+      .global()
+      .exec(`insert into entity_space (entity_id, space_did) values ${values}`);
+
+    await db.analyzeShared();
+
+    const row = await db
+      .global()
+      .query(
+        "select stat from sqlite_stat1 where tbl = 'entity_space' and idx = 'sqlite_autoindex_entity_space_1'",
+      )
+      .get<{ stat: string }>();
+    expect(row?.stat?.split(" ")[0]).toBe("2000");
 
     await db.close();
   });

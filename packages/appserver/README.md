@@ -39,6 +39,14 @@ they are derived data that regenerate lazily via re-materialisation from the
 event log on first access after a restore (litestream also needs static paths,
 which can't enumerate an unbounded set of spaces).
 
+Each per-space DB and each shared DB keeps its own query-planner statistics
+(`sqlite_stat1`). A space refreshes its own when it is opened and when its
+handle is evicted; the boot sweep refreshes every stream and the shared DBs.
+Without them a point lookup plans as a scan of that space's whole `stream_id`
+partition, which the space's single worker serializes behind everything else it
+is serving — and the mis-plan starts well below six figures. See
+`docs/per-space-stats.md`.
+
 The `/data` volume persists across deploys, so the DBs (including the
 per-space views and their `materialization_cursor`) are not wiped on redeploy.
 On boot, an existing valid local DB wins and replication simply continues; a

@@ -158,6 +158,15 @@ export class DatabasePool {
     return this.forSpace(spaceDid).isSpaceMigrating(spaceDid);
   }
 
+  /** Refresh the statistics of the three shared DBs on their own workers. */
+  async analyzeShared(): Promise<void> {
+    await Promise.all([
+      this.#globalLink.send({ type: "analyze", targetDb: "global" }),
+      this.#readStateLink.send({ type: "analyze", targetDb: "readstate" }),
+      this.#eventsLink.send({ type: "analyze", targetDb: "events" }),
+    ]);
+  }
+
   /** A handle to the global DB's dedicated worker. */
   global(): AsyncDatabase {
     return new AsyncDatabase(this.#globalLink, { targetDb: "global" });
@@ -361,5 +370,8 @@ export class PooledDatabase implements DbLike {
     // Runs on the global worker, which owns the global DB and can open the
     // per-space DB file for the entity_space backfill.
     return this.#pool.global().backfillEntitySpace(spaceDid);
+  }
+  analyzeShared(): Promise<void> {
+    return this.#pool.analyzeShared();
   }
 }

@@ -496,6 +496,20 @@ export class AsyncDatabase {
     return this.#link.send({ type: "exec", sql }, this.#route) as Promise<void>;
   }
 
+  /**
+   * Refresh the query-planner statistics for this handle's DB.
+   *
+   * Statistics persist in the DB file, so this is cheap when they are already
+   * current and only re-measures the tables whose size has moved (see
+   * `handleAnalyze` in the worker). Routed like every other request, so a
+   * per-space handle analyzes that space's DB on the worker that owns it.
+   */
+  analyze(): Promise<{ analyzed: boolean }> {
+    return this.#link.send({ type: "analyze" }, this.#route) as Promise<{
+      analyzed: boolean;
+    }>;
+  }
+
   run(
     sql: string,
     ...params: unknown[]
