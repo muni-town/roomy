@@ -561,6 +561,35 @@ export function getRegisteredNsids(): { nsid: string; kind: string }[] {
   return router.getRegisteredNsids();
 }
 
+// ─── Request metrics ──────────────────────────────────────────────────────
+
+/**
+ * Normalise a request path into the `endpoint` label value.
+ *
+ * The label must be drawn from a bounded set: a Prometheus label set lives
+ * for the life of the process, so a label carrying a path parameter grows
+ * without limit. Every blob is served under its own `/blob/<did>/<cid>` path,
+ * so naming those by the raw pathname would retain one series per blob the
+ * process has ever proxied.
+ *
+ * Collapsed: `/blob/<did>/<cid>` → `/blob`
+ * Unchanged: XRPC nsids, which are bounded by the route table and stay
+ * attributable per endpoint, and the literal routes (`/health`, `/metrics`,
+ * `/webhooks/livekit`, …).
+ */
+export function metricEndpoint(pathname: string): string {
+  // Everything under /blob is one route: the path parameters select a blob,
+  // not a route. Collapsing the whole prefix rather than just the
+  // two-segment form leaves no spelling of a blob URL — trailing slash, extra
+  // segment, percent-encoded DID — that can mint a label of its own.
+  if (pathname === "/blob" || pathname.startsWith("/blob/")) return "/blob";
+  // Test-mode webhooks: `/webhooks/test/<route>` → `/webhooks/test`. Bounded
+  // either way (the route is one of a fixed set), but folding it keeps every
+  // path-parameterised route named by its stable prefix.
+  if (pathname.startsWith("/webhooks/test/")) return "/webhooks/test";
+  return pathname;
+}
+
 // ─── Factory ──────────────────────────────────────────────────────────────
 
 export async function createAppserver(
@@ -1200,20 +1229,23 @@ export async function createAppserver(
   async function handleFetch(req: Request, server: Server<WsData>): Promise<Response | undefined> {
     const start = performance.now();
     const pathname = new URL(req.url).pathname;
+    // Label the metrics with the bounded route, not the raw path (see
+    // metricEndpoint); the access log keeps the full path.
+    const endpoint = metricEndpoint(pathname);
     try {
       const res = await handleFetchInner(req, server);
       const status = res?.status ?? 0; // 0 = ws upgrade (undefined response)
       const durationMs = performance.now() - start;
-      xrpcRequests.inc({ endpoint: pathname, method: req.method, status: String(status) });
-      xrpcDuration.observe({ endpoint: pathname, method: req.method }, durationMs / 1000);
+      xrpcRequests.inc({ endpoint, method: req.method, status: String(status) });
+      xrpcDuration.observe({ endpoint, method: req.method }, durationMs / 1000);
       if (!quiet && res) {
         log.info(`[xrpc] ${req.method} ${pathname} → ${res.status}`, { duration_ms: Math.round(durationMs) });
       }
       return res;
     } catch (err) {
       const durationMs = performance.now() - start;
-      xrpcRequests.inc({ endpoint: pathname, method: req.method, status: "500" });
-      xrpcDuration.observe({ endpoint: pathname, method: req.method }, durationMs / 1000);
+      xrpcRequests.inc({ endpoint, method: req.method, status: "500" });
+      xrpcDuration.observe({ endpoint, method: req.method }, durationMs / 1000);
       throw err;
     }
   }

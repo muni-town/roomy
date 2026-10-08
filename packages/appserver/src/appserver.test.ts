@@ -157,6 +157,66 @@ describe("createAppserver factory", () => {
     expect(rss).toBeLessThan(1024 ** 4);
   });
 
+  test("path-parameterised routes collapse to one bounded endpoint label", async () => {
+    handle = await createAppserver({
+      port: ephemeralPort(),
+      authVerifier: testAuthVerifier,
+      dbPath: ":memory:",
+      readStateDbPath: ":memory:",
+      quiet: true,
+      ownDid: "did:web:test.example",
+      serviceEndpoint: "http://test.example",
+      disableBackgroundWorkers: true,
+    });
+
+    const base = `http://localhost:${handle.port}`;
+    const origTestMode = process.env.APPSERVER_TEST_MODE;
+
+    try {
+      process.env.APPSERVER_TEST_MODE = "true";
+      // Two blobs, differing in both path parameters, plus two test webhooks.
+      // Every one of these resolves its DID against the real PLC directory, so
+      // use `did:key` (no network) and let the proxy fail with 502.
+      await fetch(`${base}/blob/did:key:zAlice/1`);
+      await fetch(`${base}/blob/did:key:zBob/2`);
+      for (const route of ["call-join", "call-leave"]) {
+        await fetch(`${base}/webhooks/test/${route}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ room: { name: "x" } }),
+        });
+      }
+    } finally {
+      if (origTestMode === undefined) delete process.env.APPSERVER_TEST_MODE;
+      else process.env.APPSERVER_TEST_MODE = origTestMode;
+    }
+
+    // An XRPC nsid is the endpoint itself: bounded by the route table, and the
+    // per-endpoint attribution is the point of the metric.
+    await fetch(`${base}/xrpc/space.roomy.space.getSpaces`);
+
+    const body = await (await fetch(`${base}/metrics`)).text();
+
+    // Both blobs land on ONE series. A blob URL is not an endpoint, and a
+    // label set lives for the life of the process — one per blob proxied is an
+    // unbounded label.
+    expect(body).toMatch(
+      /^roomy_xrpc_requests_total\{endpoint="\/blob",method="GET",status="502"\} 2$/m,
+    );
+    expect(body).toContain(
+      'roomy_xrpc_request_duration_seconds_count{endpoint="/blob",method="GET"} 2',
+    );
+    expect(body).not.toContain("/blob/did:key:zAlice/1");
+
+    // Same for the test-mode webhook routes, which carry the route as a path
+    // parameter.
+    expect(body).toContain('endpoint="/webhooks/test"');
+    expect(body).not.toContain("/webhooks/test/call-join");
+
+    // Not over-collapsed: the XRPC path keeps its nsid.
+    expect(body).toContain('endpoint="/xrpc/space.roomy.space.getSpaces"');
+  });
+
   test("roomy_embed_pending equals /health/embed's pending (both read the DB backlog)", async () => {
     // The gauge must be set from the DB backlog, not the in-memory priority
     // queue: `embedSweeperStats().priorityQueue` reads 0 when the backlog is

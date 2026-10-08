@@ -76,6 +76,13 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
 `packages/appserver/src/metrics.ts`) with:
 
 - `roomy_xrpc_requests_total` / `roomy_xrpc_request_duration_seconds` — per-endpoint request count + latency histogram
+  - `endpoint` is the route, not the raw path. A path-parameterised route
+    collapses to its prefix (`/blob/<did>/<cid>` → `/blob`,
+    `/webhooks/test/<route>` → `/webhooks/test`). A label set lives for the
+    life of the process, so labelling by raw path retains one series per blob
+    proxied — every blob URL a new series, never reclaimed. XRPC nsids are kept
+    as-is: they are bounded by the route table, and the per-endpoint split is
+    the point of the metric.
 - `roomy_pool_size` / `roomy_pool_worker_pending` — DB pool size + per-worker queue depth (the signal that caught the system-worker N+1)
 - `roomy_cache_hits_total` / `roomy_cache_misses_total` / `roomy_cache_evictions_total` / `roomy_cache_size`
 - `roomy_embed_pending` / `roomy_embed_in_flight` / `roomy_embed_enriched_null` / `roomy_embed_db_backoff` / `roomy_embed_priority_queue` / `roomy_embed_transient_backoff`
