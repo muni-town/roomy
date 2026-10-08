@@ -76,15 +76,21 @@ beforeEach(() => {
 const adaptors = [
   {
     name: "IndexedDbPersister",
-    make: (): IndexedDbPersister =>
-      new IndexedDbPersister({ policy: policy(), indexedDB: new IDBFactory() }),
+    make: (seen: string[] = []): IndexedDbPersister =>
+      new IndexedDbPersister({
+        policy: policy({ onDiagnostic: (m) => seen.push(m) }),
+        indexedDB: new IDBFactory(),
+      }),
     absent: (): IndexedDbPersister =>
       new IndexedDbPersister({ policy: policy(), indexedDB: null }),
   },
   {
     name: "LocalStoragePersister",
-    make: (): LocalStoragePersister =>
-      new LocalStoragePersister({ policy: policy(), storage: memoryStorage() }),
+    make: (seen: string[] = []): LocalStoragePersister =>
+      new LocalStoragePersister({
+        policy: policy({ onDiagnostic: (m) => seen.push(m) }),
+        storage: memoryStorage(),
+      }),
     absent: (): LocalStoragePersister =>
       new LocalStoragePersister({ policy: policy(), storage: null }),
   },
@@ -113,6 +119,14 @@ for (const { name, make, absent } of adaptors) {
       expect(persister.available).toBe(false);
       await expect(persister.save([entry("a")])).resolves.toBeUndefined();
       await expect(persister.load()).resolves.toEqual([]);
+    });
+
+    it("loads a never-written key without reporting a corrupt store", async () => {
+      const seen: string[] = [];
+      const persister = make(seen);
+
+      await expect(persister.load()).resolves.toEqual([]);
+      expect(seen).toEqual([]);
     });
   });
 }

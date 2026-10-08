@@ -191,6 +191,12 @@ export function writeSnapshot(
  * an otherwise valid snapshot is dropped alone, leaving the rest intact:
  * a partial restore is acceptable, a partial entry is not.
  *
+ * `undefined` is the absent-key value every store returns for a key that
+ * was never written, so it restores nothing and reports nothing — a first
+ * run is not a corrupt store. Any other value that is not a snapshot is a
+ * value the store did produce, and diagnosing it is what distinguishes the
+ * corrupt case from the empty one.
+ *
  * Age is deliberately not a reason to discard. A restored value is stale
  * from the moment it is restored — the restore invalidates what it
  * hydrates, so the query the user looks at refetches — and a snapshot's
@@ -201,6 +207,8 @@ export function readSnapshot(
   raw: unknown,
   policy: SnapshotPolicy,
 ): PersistedEntry[] {
+  if (raw === undefined) return [];
+
   const diag = policy.onDiagnostic ?? defaultDiagnostic;
 
   const snapshot = asSnapshot(raw);

@@ -14,6 +14,7 @@ import {
   type PersistedSnapshot,
   type SnapshotPolicy,
 } from "./persister";
+import { createSnapshotPersister } from "./storage";
 
 const VERSION = persistedShapeVersion("build-abc");
 const ACCOUNT = "did:plc:alice";
@@ -144,14 +145,38 @@ describe("rule 2 — the snapshot is versioned", () => {
     expect(readSnapshot(raw, policy())).toEqual([]);
   });
 
-  it("discards raw bytes that do not form a snapshot object", () => {
-    const p = policy();
-    expect(readSnapshot(undefined, p)).toEqual([]);
+  it("discards raw bytes that do not form a snapshot object, and reports", () => {
+    const seen: string[] = [];
+    const p = policy({ onDiagnostic: (m) => seen.push(m) });
     expect(readSnapshot("not a snapshot", p)).toEqual([]);
     expect(readSnapshot({ version: VERSION }, p)).toEqual([]);
     expect(
       readSnapshot({ ...writeSnapshot([], p), savedAt: "soon" }, p),
     ).toEqual([]);
+    expect(seen).toHaveLength(3);
+  });
+});
+
+describe("an absent snapshot is empty, not corrupt", () => {
+  it("a never-written key restores nothing and reports nothing", () => {
+    const seen: string[] = [];
+    const p = policy({ onDiagnostic: (m) => seen.push(m) });
+
+    expect(readSnapshot(undefined, p)).toEqual([]);
+    expect(seen).toEqual([]);
+  });
+
+  it("a persister over a never-written key reports nothing", async () => {
+    const seen: string[] = [];
+    const persister = createSnapshotPersister({
+      policy: policy({ onDiagnostic: (m) => seen.push(m) }),
+      read: async () => undefined,
+      write: async () => {},
+      remove: async () => {},
+    });
+
+    await expect(persister.load()).resolves.toEqual([]);
+    expect(seen).toEqual([]);
   });
 });
 
