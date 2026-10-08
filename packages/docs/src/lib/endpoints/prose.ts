@@ -145,20 +145,20 @@ export const prose: Record<string, EndpointProse> = {
       properties: {
         spaces: {
           type: "Array<SpaceRow>",
-          description: "List of spaces the caller has access to. Each SpaceRow has: id, name, avatar, description, unreadCount, isMember, isAdmin, roleIds.",
+          description: "List of spaces the caller has access to. Each SpaceRow has: id, name, avatar, description, handle, hasUnreads, isMember, isAdmin, roleIds.",
         },
       },
     },
     notes: [
       "isMember and isAdmin are independent — both, either, or neither may be true.",
-      "unreadCount is computed only over rooms the caller has read access to.",
+      "hasUnreads is computed only over rooms the caller has read access to. It is a level, not a count — the per-room unread badges come from space.getMetadata's sidebar.",
       "Hydrates the caller's membership (joinedSpace edges), then queries local SQLite for the union.",
     ],
     invalidation: [
       "Caller joins/leaves a space (member edge added/removed)",
       "Caller's admin edge added/removed",
       "Caller's role assignments change",
-      "Unread counts change in any reachable room",
+      "hasUnreads flips: a message makes a previously-unread-free space unread, or a read drains its last unread room",
       "A role's room permissions change affecting reachable rooms",
     ],
   },

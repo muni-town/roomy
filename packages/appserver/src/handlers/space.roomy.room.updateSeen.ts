@@ -6,7 +6,8 @@
  * state event is rejected at the write path.
  */
 
-import { openReadStateDb, openSpaceDbForEntity } from "../db/db.ts";
+import { openReadStateDb, openSpaceDb, openSpaceDbForEntity } from "../db/db.ts";
+import { spaceHasUnreads } from "../queries/readPositions.ts";
 import { resetNotificationState } from "../queries/notificationState.ts";
 import { isThread, upsertUserThreadActivity } from "../queries/userActiveThreads.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
@@ -165,16 +166,6 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
           affectedUser: userDid,
         },
       },
-      // Reading a room zeroes its unread count, which moves the READER's own
-      // list totals; no other caller's list is touched.
-      {
-        kind: "queryInvalidation",
-        signal: {
-          nsid: "space.roomy.space.getSpaces" as QueryNsid,
-          params: {},
-          affectedUser: userDid,
-        },
-      },
     ];
     // Reading a thread changes the parent channel's unreadThreadCount (the
     // Threads-tab badge on the channel page) — invalidate the channel's
@@ -204,15 +195,28 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
           affectedUser: userDid,
         },
       });
-      // The federated room's unread row moved in this reader's list only.
-      signals.push({
-        kind: "queryInvalidation",
-        signal: {
-          nsid: "space.roomy.space.getSpaces" as QueryNsid,
-          params: {},
-          affectedUser: userDid,
-        },
-      });
+    }
+    // The reader's own `getSpaces` row moves only when this read drained the
+    // LAST unread room of the space whose row it is — the list carries a
+    // single `hasUnreads` boolean, and a read that leaves other unread rooms
+    // keeps it true. Probe that space (the federated home for a federated
+    // reader, the room's own space otherwise) and emit only on a drain. The
+    // sidebar/feed invalidations above are ungated: their counts move on every
+    // read.
+    const listSpaceId = fedHome ?? access.spaceId;
+    if (listSpaceId) {
+      const listDb = openSpaceDb(listSpaceId);
+      const drained = !(await spaceHasUnreads(mainDb, listDb, userDid, listSpaceId));
+      if (drained) {
+        signals.push({
+          kind: "queryInvalidation",
+          signal: {
+            nsid: "space.roomy.space.getSpaces" as QueryNsid,
+            params: {},
+            affectedUser: userDid,
+          },
+        });
+      }
     }
     router.emit(signals);
   }

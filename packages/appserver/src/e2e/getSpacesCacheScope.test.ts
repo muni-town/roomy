@@ -43,13 +43,13 @@ const USER_IN_C = "did:plc:list-scope-c-only";
 async function readSpaces(
   ctx: E2eContext,
   user: string,
-): Promise<{ cached: boolean; spaces: Array<{ id: string; name?: string; unreadCount: number }> }> {
+): Promise<{ cached: boolean; spaces: Array<{ id: string; name?: string; hasUnreads: boolean }> }> {
   const cache = ctx.handle.queryCache!;
   const hitsBefore = cache.stats.hits;
   const res = await ctx.authedFetch(user)(`${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces`);
   expect(res.status).toBe(200);
   const body = (await res.json()) as {
-    spaces: Array<{ id: string; name?: string; unreadCount: number }>;
+    spaces: Array<{ id: string; name?: string; hasUnreads: boolean }>;
   };
   return { cached: cache.stats.hits > hitsBefore, spaces: body.spaces };
 }

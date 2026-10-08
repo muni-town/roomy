@@ -213,33 +213,30 @@ describe("createTanstackCacheAdapter", () => {
 
       queryClient.setQueryData(withParams as unknown[], {
         spaces: [
-          { id: "s1", unreadCount: 2, unreadRoomCount: 1, isMember: true, isAdmin: false, roleIds: [] },
+          { id: "s1", hasUnreads: false, isMember: true, isAdmin: false, roleIds: [] },
         ],
       });
       queryClient.setQueryData(bare as unknown[], {
         spaces: [
-          { id: "s1", unreadCount: 2, unreadRoomCount: 1, isMember: true, isAdmin: false, roleIds: [] },
+          { id: "s1", hasUnreads: false, isMember: true, isAdmin: false, roleIds: [] },
         ],
       });
 
-      adapter.patchAll<{ spaces: Array<{ unreadCount: number }> }>(
+      adapter.patchAll<{ spaces: Array<{ hasUnreads: boolean }> }>(
         queryKey("space.roomy.space.getSpaces"),
         (prev) => {
           if (!prev) return undefined;
           return {
-            spaces: prev.spaces.map((s) => ({
-              ...s,
-              unreadCount: s.unreadCount + 1,
-            })),
+            spaces: prev.spaces.map((s) => ({ ...s, hasUnreads: true })),
           };
         },
       );
 
       expect(queryClient.getQueryData(withParams as unknown[])).toEqual({
-        spaces: [expect.objectContaining({ unreadCount: 3 })],
+        spaces: [expect.objectContaining({ hasUnreads: true })],
       });
       expect(queryClient.getQueryData(bare as unknown[])).toEqual({
-        spaces: [expect.objectContaining({ unreadCount: 3 })],
+        spaces: [expect.objectContaining({ hasUnreads: true })],
       });
     });
 

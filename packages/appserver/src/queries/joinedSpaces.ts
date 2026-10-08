@@ -13,7 +13,7 @@
 import type { DbLike } from "../db/types.ts";
 import type { StreamDid, UserDid } from "@roomy-space/sdk";
 import { openSpaceDb } from "../db/db.ts";
-import { getSpaceUnreadStats } from "./readPositions.ts";
+import { spaceHasUnreads } from "./readPositions.ts";
 import { selectUserSpaces } from "./userSpaceMembership.ts";
 
 /**
@@ -40,9 +40,15 @@ export interface SpaceRow {
   avatar?: string;
   description?: string;
   handle?: string;
-  unreadCount: number;
-  /** Number of rooms (channels + engaged threads) with unread messages. */
-  unreadRoomCount: number;
+  /**
+   * Whether any room of this space has unread messages for the caller. A
+   * level rather than a count: the per-room badges come from the sidebar,
+   * and this list only needs to know whether to mark the space at all.
+   *
+   * A left space is never unread: it has no accessible rooms, so the probe
+   * reports false. The UI filters left spaces out of the list.
+   */
+  hasUnreads: boolean;
   isMember: boolean;
   isAdmin: boolean;
   roleIds: string[];
@@ -61,7 +67,7 @@ export interface SelectSpacesOptions {
  * transition to ATProto permission records), then fans out to each space's
  * per-space DB for display fields and membership truth (`member`/`admin`
  * edges, `comp_bans`). `readStateDb` serves both the membership intent and
- * the read-state unread-count aggregate.
+ * the unread probe.
  */
 export async function selectJoinedSpaces(
   readStateDb: DbLike,
@@ -79,14 +85,9 @@ export async function selectJoinedSpaces(
       // Left spaces are always included (isMember/isAdmin false). Joined
       // spaces require a member/admin edge (real membership truth).
       if (!isLeft && !row.is_member && !row.is_admin) return null;
-      const stats = await getSpaceUnreadStats(readStateDb, spaceDb, userDid, r.space_did);
       const space: SpaceRow = {
         id: r.space_did,
-        unreadCount: stats.unreadCount,
-        // Home cards show "rooms with unreads" — channels + engaged threads
-        // (the spec's "homepage counts only count channels and active
-        // threads"). The split lives on space.getMetadata for the toggles.
-        unreadRoomCount: stats.unreadRoomCount + stats.unreadThreadCount,
+        hasUnreads: await spaceHasUnreads(readStateDb, spaceDb, userDid, r.space_did),
         // A left space is never a member/admin, regardless of any stale
         // per-space member/admin edge (leaving persists those edges).
         isMember: isLeft ? false : !!row.is_member,

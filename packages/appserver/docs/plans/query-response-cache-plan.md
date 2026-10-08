@@ -204,7 +204,7 @@ The cache key includes `userDid` because responses diverge per caller. The evict
 | `room.getMetadata.canRead/canWrite` | yes | role **assignment** (add/remove member role, ban) → affectedUser; role **permission** edit (`setRoleRoomPermission`) → broadcast (see note below) |
 | `room.getMetadata.unreadCount`   | yes       | `updateSeen` emit, `roomMetadataDiff`            |
 | `room.getMetadata.recentThreads` | yes       | `handleCreateMessage` (affectedUser = author)    |
-| `getSpaces[*].unreadCount/unreadRoomCount` | yes | join/leave/create, mark-read, unread diffs (affectedUser) |
+| `getSpaces[*].hasUnreads`        | yes       | flipped only, per affected user: a message that makes the space newly-unread patches it via `roomMetadataDiff` (`spaceUnreadFlip`), a read that drains the space emits an `updateSeen` invalidation |
 | `getSpaces[*].name/avatar/handle/isMember/isAdmin` | yes | the space's own events (`updateSpaceInfo`, role/ban/admin/federation) — the signal names that space as coverage, so only lists holding it are evicted |
 
 The rule the eviction listener implements: **if `affectedUser` is set, evict that user's entry (and anon, for fields visible to anon); otherwise sweep all users for that `(nsid, params)`.** This is correct for every row in the matrix because `inferSignals` already sets `affectedUser` exactly when the changed field is caller-scoped.

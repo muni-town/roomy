@@ -119,7 +119,10 @@ function seedMessageDb(opts: {
   // Attach readstate schema (handleCreateMessage reads read_positions).
   db.exec("attach database ':memory:' as readstate");
   db.exec(
-    "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
+    "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, space_did text not null default '', seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
+  );
+  db.exec(
+    "create table if not exists readstate.user_thread_activity (user_did text not null, thread_id text not null, space_did text not null default '', last_active_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, thread_id)) strict",
   );
   const ts = Date.parse("2026-05-08T12:00:00Z");
 
@@ -219,9 +222,11 @@ describe("inferSignals: message events", () => {
       expect(roomDiff!.signal.users[0]).toBe(USER_DID);
       // The seeded read_positions row has unread_count = 1 (the +1 bump
       // already applied), so the user became newly-unread: the channel
-      // room-count delta is +1 for them.
+      // room-count delta is +1 for them, and — with no other unread room in
+      // the space — the SPACE flipped too.
       expect(roomDiff!.signal.roomUnreadDeltas?.get(USER_DID)).toBe(1);
       expect(roomDiff!.signal.threadUnreadDeltas).toBeUndefined();
+      expect(roomDiff!.signal.spaceUnreadFlips?.get(USER_DID)).toBe(true);
     }
 
     // The new message is the room's latest activity, so the boards get a
@@ -267,6 +272,50 @@ describe("inferSignals: message events", () => {
     expect(evictOnlyNsids).toContain("space.roomy.room.getMetadata");
     expect(evictOnlyNsids).toContain("space.roomy.space.getThreads");
     expect(evictOnlyNsids).not.toContain("space.roomy.space.getActivityFeed");
+  });
+
+  it("createMessage does not flip the space when the reader already has another unread room", async () => {
+    const { db, asyncDb } = seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "hello",
+    });
+    // This message makes ROOM_ID newly-unread (unread_count 0 → 1)…
+    db.run(
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
+      [USER_DID, ROOM_ID, "0", 1],
+    );
+    // …but the space already has an unread room, so the space was already
+    // marked and `hasUnreads` cannot have moved.
+    const otherRoom = "01HXSXKBQ4TESTROOM0000000ZZ";
+    db.run("insert into entities (id, stream_id) values (?, ?)", [otherRoom, STREAM_DID]);
+    db.run("insert into comp_room (entity, label) values (?, 'space.roomy.channel')", [otherRoom]);
+    db.run(
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
+      [USER_DID, otherRoom, "0", 4],
+    );
+
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.message.createMessage.v0",
+        roomId: ROOM_ID,
+        details: { content: "hello", authorName: "Alice" },
+      }),
+      asyncDb,
+    );
+
+    const roomDiff = findRoomMetadataDiff(signals);
+    expect(roomDiff).toBeDefined();
+    if (roomDiff!.kind === "roomMetadataDiff") {
+      // The room-count delta still applies (this room went newly-unread)…
+      expect(roomDiff!.signal.roomUnreadDeltas?.get(USER_DID)).toBe(1);
+      // …but the space-level flip does not — `getSpaces` is untouched, so no
+      // getSpaces patcher or invalidation is emitted.
+      expect(roomDiff!.signal.spaceUnreadFlips).toBeUndefined();
+    }
+    expect(invalidatedNsids(signals)).not.toContain("space.roomy.space.getSpaces");
   });
 
   it("createMessage uses a pre-fetched messageSnapshots map and skips the DB read", async () => {
@@ -1159,12 +1208,34 @@ describe("inferSignals: invite events", () => {
 // ─── State events ───────────────────────────────────────────────────────
 
 describe("inferSignals: state events", () => {
-  it("markRead invalidates room + space only for the reading user", async () => {
+  /**
+   * Seed a channel room into the per-space DB the createMessage fixture builds:
+   * the entity row, its `comp_room` label, and a read_positions row.
+   */
+  function seedChannel(db: Database, roomId: string, unread: number): void {
+    db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [roomId, STREAM_DID]);
+    db.run("insert into comp_room (entity, label) values (?, 'space.roomy.channel')", [roomId]);
+    db.run(
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
+      [USER_DID, roomId, "0", unread],
+    );
+  }
+
+  it("markRead invalidates room + space for the reader on a space drain", async () => {
+    const { db, asyncDb } = seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "hello",
+    });
+    // The room is this space's only room, with no unreads left — the read
+    // drained the space, so the reader's getSpaces is invalidated.
+    seedChannel(db, ROOM_ID, 0);
+
     const signals = await inferSignals(
-      makeEvent({
-        type: "space.roomy.state.markRead.v0",
-        roomId: ROOM_ID,
-      }),
+      makeEvent({ type: "space.roomy.state.markRead.v0", roomId: ROOM_ID }),
+      asyncDb,
     );
 
     const nsids = invalidatedNsids(signals);
@@ -1172,15 +1243,39 @@ describe("inferSignals: state events", () => {
     expect(nsids).toContain("space.roomy.space.getMetadata");
     expect(nsids).toContain("space.roomy.space.getSpaces");
 
-    // All invalidations should be scoped to the reading user.
+    // All invalidations are scoped to the reading user.
     const unscoped = signals.filter(
       (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
         s.kind === "queryInvalidation" && s.signal.affectedUser === undefined,
     );
     expect(unscoped).toHaveLength(0);
   });
-});
 
+  it("markRead with another unread room left does not invalidate getSpaces", async () => {
+    const { db, asyncDb } = seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "hello",
+    });
+    // ROOM_ID is now fully read, but a second room of the space still has
+    // unreads: the space's `hasUnreads` stays true, so the list is not stale.
+    const otherRoom = "01HXSXKBQ4TESTROOM0000000ZZ";
+    seedChannel(db, ROOM_ID, 0);
+    seedChannel(db, otherRoom, 2);
+
+    const signals = await inferSignals(
+      makeEvent({ type: "space.roomy.state.markRead.v0", roomId: ROOM_ID }),
+      asyncDb,
+    );
+
+    const nsids = invalidatedNsids(signals);
+    expect(nsids).toContain("space.roomy.room.getMetadata");
+    expect(nsids).toContain("space.roomy.space.getMetadata");
+    expect(nsids).not.toContain("space.roomy.space.getSpaces");
+  });
+});
 // ─── Link events ────────────────────────────────────────────────────────
 
 describe("inferSignals: link events", () => {

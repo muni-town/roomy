@@ -168,21 +168,16 @@ describe("SyncRouter", () => {
     // No cache entry → no-op (returns undefined).
     expect(roomPatch(undefined)).toBeUndefined();
 
-    // The getSpaces patcher adds delta to the matching space's unreadCount.
+    // The getSpaces patcher leaves the list untouched without a space-level
+    // flip (the list carries only the `hasUnreads` boolean).
     const spacesPatch = patchAll.mock.calls[0]![1] as CachePatcher<unknown>;
-    expect(
-      spacesPatch({
-        spaces: [
-          { id: "did:web:space.example.com", unreadCount: 4, unreadRoomCount: 1, isMember: true, isAdmin: false, roleIds: [] },
-          { id: "did:web:other.example.com", unreadCount: 0, unreadRoomCount: 0, isMember: true, isAdmin: false, roleIds: [] },
-        ],
-      }),
-    ).toEqual({
+    const listBody = {
       spaces: [
-        expect.objectContaining({ id: "did:web:space.example.com", unreadCount: 5 }),
-        expect.objectContaining({ id: "did:web:other.example.com", unreadCount: 0 }),
+        { id: "did:web:space.example.com", hasUnreads: false, isMember: true, isAdmin: false, roleIds: [] },
+        { id: "did:web:other.example.com", hasUnreads: false, isMember: true, isAdmin: false, roleIds: [] },
       ],
-    });
+    };
+    expect(spacesPatch(listBody)).toEqual(listBody);
 
     // The space.getMetadata patcher adds delta to the sidebar channel.
     const spaceMetaPatch = patch.mock.calls[1]![1] as CachePatcher<unknown>;
@@ -266,20 +261,15 @@ describe("SyncRouter", () => {
       expect.objectContaining({ unreadThreadCount: 3 }),
     );
 
-    // The getSpaces patcher bumps the combined rooms-with-unreads count by
-    // roomUnreadDelta + threadUnreadDelta (0 + 1 here).
+    // The getSpaces patcher is a no-op without a space-level flip (this
+    // frame carries none), leaving the list unchanged.
     const spacesPatch = patchAll.mock.calls[0]![1] as CachePatcher<unknown>;
-    expect(
-      spacesPatch({
-        spaces: [
-          { id: "did:web:space.example.com", unreadCount: 4, unreadRoomCount: 1, isMember: true, isAdmin: false, roleIds: [] },
-        ],
-      }),
-    ).toEqual({
+    const listBody = {
       spaces: [
-        expect.objectContaining({ id: "did:web:space.example.com", unreadCount: 5, unreadRoomCount: 2 }),
+        { id: "did:web:space.example.com", hasUnreads: false, isMember: true, isAdmin: false, roleIds: [] },
       ],
-    });
+    };
+    expect(spacesPatch(listBody)).toEqual(listBody);
 
     // The space.getMetadata patcher bumps the top-level thread count and the
     // matching active-thread entry under the parent channel.
@@ -310,6 +300,38 @@ describe("SyncRouter", () => {
     };
     expect(patched.unreadThreadCount).toBe(2);
     expect(patched.sidebar.categories[0]!.channels[0]!.activeThreads![0]!.unreadCount).toBe(2);
+  });
+
+  it("flips hasUnreads only for a frame that marks a space-level flip", () => {
+    const { conn, emit } = mockConnection();
+    const { adapter, patchAll } = mockAdapter();
+    const router = new SyncRouter(conn as SyncConnection, adapter);
+    router.start();
+
+    emit(
+      makeFrame("#roomMetadataDiff", {
+        spaceId: "did:web:space.example.com",
+        roomId: "01ROOM",
+        delta: 1,
+        seq: 7,
+        spaceUnreadFlip: true,
+      }),
+    );
+
+    const spacesPatch = patchAll.mock.calls[0]![1] as CachePatcher<unknown>;
+    expect(
+      spacesPatch({
+        spaces: [
+          { id: "did:web:space.example.com", hasUnreads: false, isMember: true, isAdmin: false, roleIds: [] },
+          { id: "did:web:other.example.com", hasUnreads: false, isMember: true, isAdmin: false, roleIds: [] },
+        ],
+      }),
+    ).toEqual({
+      spaces: [
+        expect.objectContaining({ id: "did:web:space.example.com", hasUnreads: true }),
+        expect.objectContaining({ id: "did:web:other.example.com", hasUnreads: false }),
+      ],
+    });
   });
 
   it("ignores frames that fail arktype validation and surfaces them via callback", () => {

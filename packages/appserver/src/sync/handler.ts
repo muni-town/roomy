@@ -661,6 +661,7 @@ export class SyncManager {
       parentChannelId?: string;
       roomUnreadDeltas?: ReadonlyMap<string, number>;
       threadUnreadDeltas?: ReadonlyMap<string, number>;
+      spaceUnreadFlips?: ReadonlyMap<string, true>;
     },
   ): void {
     // Per-user: the frame carries a delta (the same for every user), but
@@ -684,6 +685,7 @@ export class SyncManager {
             ...(signal.threadUnreadDeltas?.get(user)
               ? { threadUnreadDelta: signal.threadUnreadDeltas.get(user) }
               : {}),
+            ...(signal.spaceUnreadFlips?.get(user) ? { spaceUnreadFlip: true } : {}),
           }),
         );
       }

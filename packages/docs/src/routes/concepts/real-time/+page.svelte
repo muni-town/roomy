@@ -116,7 +116,7 @@
 
   <h3>#roomMetadataDiff</h3>
 
-  <p>Unread-count delta for a room, sent <strong>per affected user</strong> (not broadcast — only users with a read-position row for the room get a frame; a user with multiple tabs gets one per connection). The client patches three cache entries without refetching: <code>room.getMetadata.unreadCount</code>, the matching <code>SpaceRow.unreadCount</code> in <code>getSpaces</code>, and the channel entry in the <code>space.getMetadata</code> sidebar tree.</p>
+  <p>Unread-count delta for a room, sent <strong>per affected user</strong> (not broadcast — only users with a read-position row for the room get a frame; a user with multiple tabs gets one per connection). The client patches cache entries without refetching: <code>room.getMetadata.unreadCount</code>, the channel entry in the <code>space.getMetadata</code> sidebar tree, and — from <code>spaceUnreadFlip</code>, present only for users whose space went from no unread rooms to one — the single <code>hasUnreads</code> boolean on the matching <code>SpaceRow</code> in <code>getSpaces</code>.</p>
 
   <pre><code>// Header: &#123; op: 1, t: "#roomMetadataDiff" &#125;
 // Body:
@@ -124,7 +124,7 @@
   spaceId: string;
   roomId: string;
   delta: number;   // +1 per message
-  seq: number;
+  spaceUnreadFlip?: boolean;  // true only when this message made the space newly-unread
 &#125;</code></pre>
 
   <h3>#roomActivityDiff</h3>

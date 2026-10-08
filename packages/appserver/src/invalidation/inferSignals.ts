@@ -27,9 +27,9 @@ import type {
 } from "@roomy-space/sdk";
 import type { AppliedEvent, InvalidationEvent, MessageDiffOp, QueryNsid } from "./types.ts";
 import type { DbLike } from "../db/types.ts";
-import { openReadStateDb, openSpaceDb, tryOpenGlobalDb } from "../db/db.ts";
+import { openReadStateDb, openSpaceDb, tryOpenGlobalDb, tryOpenReadStateDb, tryOpenSpaceDb } from "../db/db.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
-import { getRoomReadPositionUsers } from "../queries/readPositions.ts";
+import { getRoomReadPositionUsers, spaceHasUnreads } from "../queries/readPositions.ts";
 import { getMentionedDidsForMessage, resolveReplyToAuthors } from "../queries/mentions.ts";
 import { readRoomBoardFacts, roomActivityDiff } from "./roomActivity.ts";
 
@@ -151,14 +151,16 @@ function invalidateSpace(spaceId: StreamDid): InvalidationEvent[] {
  *
  * Only channel messages call this (thread messages don't render on the
  * receiving side; the fed row is the channel). Returns one `roomMetadataDiff`
- * per receiving space (the receiving-side patch for the fed room row and the
- * space's room-count badge) plus the `space.getMetadata`/`getSpaces`
- * invalidations — the frames patch receiving-space connections directly; the
- * invalidations catch other tabs/connections and keep the server-side query
- * cache coherent.
+ * per receiving space (the receiving-side patch for the fed room row, the
+ * space's room-count badge, and the `hasUnreads` flip for the readers whose
+ * receiving-space list flipped), a `space.getMetadata` invalidation for the
+ * sidebar, and a per-user `getSpaces` invalidation for exactly the flipping
+ * readers — the list carries only `hasUnreads`, so a reader whose receiving
+ * space was already unread has nothing to refetch.
  */
 async function federatedReceiversInvalidation(
   globalDb: DbLike | null,
+  db: DbLike | undefined,
   spaceId: StreamDid,
   roomId: Ulid,
   signal: {
@@ -166,8 +168,21 @@ async function federatedReceiversInvalidation(
     users: ReadonlyArray<UserDid>;
     roomUnreadDeltas: ReadonlyMap<UserDid, number>;
   },
+  newlyUnread: ReadonlyArray<UserDid>,
 ): Promise<InvalidationEvent[]> {
   if (!globalDb) return [];
+
+  // `db` is the caller-supplied handle: production passes none (the Router
+  // calls `inferSignals` without one) and the pool handles below resolve the
+  // read-state and per-space DBs; direct callers/tests pass a sync-adapter
+  // handle that serves every read off one attached DB. Never call `.forSpace`
+  // on a read-state handle — that routes a space request to the readstate
+  // worker, which has no per-space DBs.
+  const readState = db ?? tryOpenReadStateDb();
+  const spaceDbFor = (spaceDid: string): DbLike | null =>
+    (db as { forSpace?: (d: string) => DbLike } | undefined)?.forSpace?.(spaceDid) ??
+    tryOpenSpaceDb(spaceDid);
+
 
   const fedRows = await globalDb
     .query(
@@ -185,23 +200,40 @@ async function federatedReceiversInvalidation(
 
   const signals: InvalidationEvent[] = [];
   for (const r of fedRows) {
+    const home = r.home;
+    const homeDb = spaceDbFor(home);
+    // Which newly-unread readers' RECEIVING-space list flips — they had no
+    // other unread room in the receiving space before this message (the fed
+    // room itself is unread by construction, so it is excluded).
+    const spaceUnreadFlips = new Map<UserDid, true>();
+    if (readState && homeDb) {
+      for (const user of newlyUnread) {
+        if (!(await spaceHasUnreads(readState, homeDb, user, home, undefined, roomId))) {
+          spaceUnreadFlips.set(user, true);
+        }
+      }
+    }
     signals.push({
       kind: "roomMetadataDiff",
       signal: {
-        spaceId: r.home as StreamDid,
+        spaceId: home as StreamDid,
         roomId,
         delta: signal.delta,
         users: [...signal.users],
         roomUnreadDeltas: signal.roomUnreadDeltas,
+        ...(spaceUnreadFlips.size > 0 ? { spaceUnreadFlips } : {}),
       },
     });
-    // Receiving-space sidebar + space list refetch for clients the live
-    // frame missed (other tabs/connections, cache coherence). The fed room
-    // lives in the receiving space's sidebar, so the callers whose list went
-    // stale are those whose list HOLDS that receiving space — named here as
-    // coverage, so the cache evicts that space's readers and no one else.
-    signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: r.home as StreamDid }));
-    signals.push(invalidateSpaceList(r.home as StreamDid));
+    // The receiving-space sidebar renders the fed row's unread count, which
+    // moves on every message — always refetch it (coverage: only the callers
+    // whose list holds the receiving space).
+    signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: home as StreamDid }));
+    // The space list only moves for the readers whose `hasUnreads` flipped.
+    for (const user of spaceUnreadFlips.keys()) {
+      signals.push(
+        invalidate("space.roomy.space.getSpaces", { spaceId: home as StreamDid }, user),
+      );
+    }
   }
   return signals;
 }
@@ -370,10 +402,10 @@ async function handleCreateMessage(
   // `unread_count + 1` for every user with a `read_positions` row for
   // this room; one read here yields the affected user set. The
   // SyncManager sends a dedicated `#roomMetadataDiff` frame to each
-  // user's connection, which patches `room.getMetadata.unreadCount`,
-  // the matching `SpaceRow.unreadCount` in `getSpaces`, and the channel
-  // entry in the `space.getMetadata` sidebar tree — all with `delta +1`,
-  // no refetch.
+  // user's connection, which patches `room.getMetadata.unreadCount`, the
+  // channel entry in the `space.getMetadata` sidebar tree, and — for the
+  // space list, whose only unread field is `hasUnreads` — that one boolean
+  // for the users whose SPACE this message made newly-unread.
   const users = await getRoomReadPositionUsers(db ?? openReadStateDb(), roomId);
   if (users.length > 0) {
     // Determine which users became newly-unread: their unread_count went
@@ -391,9 +423,28 @@ async function handleCreateMessage(
       .filter((r) => r.unread_count === 1)
       .map((r) => r.user_did as UserDid);
 
+    // Which of those users' SPACE also went newly-unread — they had no other
+    // unread room in this space before this message. `getSpaces` carries only
+    // the boolean, so this flip is the entire change this event can make to
+    // their list.
+    //
+    // The probe is the same one `getSpaces` runs (`spaceHasUnreads`), with the
+    // message's own room excluded — that room is unread by construction, so
+    // only OTHER rooms can answer "was the space already unread?". Using the
+    // authoritative candidate set (accessible channels + engaged threads +
+    // federated channels) keeps this in lockstep with the list itself; a
+    // cheaper room-id scan would count a room the reader cannot see (deleted,
+    // role-gated) and silently drop a real flip.
+    const spaceUnreadFlips = new Map<UserDid, true>();
+    const spaceDb = db ?? openSpaceDb(event.streamDid);
+    for (const user of newlyUnread) {
+      if (!(await spaceHasUnreads(readState, spaceDb, user, spaceId, undefined, roomId))) {
+        spaceUnreadFlips.set(user, true);
+      }
+    }
+
     // Thread messages only bump engaged users and carry the parent channel
     // so the client can patch the channel-scoped thread count.
-    const spaceDb = db ?? openSpaceDb(event.streamDid);
     const roomRow = await spaceDb
       .query("select label from comp_room where entity = ?")
       .get<{ label: string | null }>(roomId);
@@ -430,6 +481,7 @@ async function handleCreateMessage(
                 newlyUnread.map((u) => [u, 1] as const),
               ),
             }),
+        ...(spaceUnreadFlips.size > 0 ? { spaceUnreadFlips } : {}),
       },
     });
 
@@ -448,6 +500,7 @@ async function handleCreateMessage(
           // direct callers/tests fall back to the process-wide registry.
           (db as { global?: () => DbLike } | undefined)?.global?.()
             ?? tryOpenGlobalDb(),
+          db,
           spaceId,
           roomId,
           {
@@ -457,6 +510,7 @@ async function handleCreateMessage(
               newlyUnread.map((u) => [u, 1] as const),
             ),
           },
+          newlyUnread,
         )),
       );
     }
@@ -1037,18 +1091,41 @@ function handleUpdateProfile(event: AppliedEvent): InvalidationEvent[] {
 
 // ─── State events ───────────────────────────────────────────────────────
 
-function handleMarkRead(event: AppliedEvent): InvalidationEvent[] {
+/**
+ * A read in a room zeroes that room's unread count. The reader's own
+ * `getSpaces` row only moves when this read drained the LAST unread room of
+ * their space — the list carries a single `hasUnreads` boolean, and a read
+ * that leaves other unread rooms keeps it true. So the `getSpaces`
+ * invalidation is emitted only on that drain; the sidebar queries
+ * (`room.getMetadata` / `space.getMetadata`) move on every read and stay
+ * ungated.
+ */
+async function handleMarkRead(
+  event: AppliedEvent,
+  db?: DbLike,
+): Promise<InvalidationEvent[]> {
   const roomId = event.roomId;
   if (!roomId) return [];
   const spaceId = event.streamDid;
 
-  return [
+  const signals: InvalidationEvent[] = [
     invalidate("space.roomy.room.getMetadata", { roomId }, event.user),
     invalidate("space.roomy.space.getMetadata", { spaceId }, event.user),
-    // Reading a room zeroes that room's unread count, which moves the
-    // reader's own list totals — nobody else's list is touched.
-    invalidate("space.roomy.space.getSpaces", {}, event.user),
   ];
+  // Mirror `handleCreateMessage`'s handle resolution: a directly-passed `db`
+  // (tests, standalone callers) serves both reads; production passes none and
+  // the pool handles are used.
+  const readState = db ?? tryOpenReadStateDb();
+  const spaceDb = db ?? tryOpenSpaceDb(spaceId);
+  // No handles to probe with — over-invalidate rather than claim a drain
+  // (the file's standing rule: a spurious refetch is cheap, a stale list is
+  // a bug).
+  const drained =
+    readState === null ||
+    spaceDb === null ||
+    !(await spaceHasUnreads(readState, spaceDb, event.user, spaceId));
+  if (drained) signals.push(invalidate("space.roomy.space.getSpaces", {}, event.user));
+  return signals;
 }
 
 // ─── Federation events ──────────────────────────────────────────────────

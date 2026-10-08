@@ -179,53 +179,16 @@ export async function getActiveFederatedChannels(
 }
 
 /**
- * Unread stats for a space: total unread messages plus the number of rooms
- * (channels + engaged threads) that have any unread messages.
+ * The rooms of `spaceId` whose unread state counts for `userDid`: the
+ * channels the caller can read, the threads they have engaged with, and the
+ * channels federated into this space from an origin they can read. Voice
+ * rooms and pages are not unread-bearing and are excluded.
  *
- * Used for the per-space unreadCount / unreadRoomCount / unreadThreadCount
- * in getSpaces and space.getMetadata.
- *
- * Filters channels by the user's roomAccess so inaccessible channels
- * (e.g. role-gated or invite-only) are excluded from the totals.
+ * The per-room access decisions and the channel/voice rows the sidebar
+ * renders are returned alongside, so `getSpaceSidebarData` and
+ * `spaceHasUnreads` resolve the candidate set exactly once each.
  */
-export interface SpaceUnreadStats {
-  /** Total unread messages across accessible channels + engaged threads. */
-  unreadCount: number;
-  /** Number of accessible channels with unread messages. */
-  unreadRoomCount: number;
-  /** Number of engaged threads with unread messages. */
-  unreadThreadCount: number;
-}
-
-export async function getSpaceUnreadStats(
-  readStateDb: DbLike,
-  spaceDb: DbLike,
-  userDid: string,
-  spaceId: string,
-  memo?: AccessMemo,
-): Promise<SpaceUnreadStats> {
-  const data = await getSpaceSidebarData(readStateDb, spaceDb, userDid, spaceId, memo);
-  return {
-    unreadCount: data.unreadCount,
-    unreadRoomCount: data.unreadRoomCount,
-    unreadThreadCount: data.unreadThreadCount,
-  };
-}
-
-/**
- * Everything `space.getMetadata` needs from the per-space + read-state DBs,
- * computed in ONE pass and returned together so the handler does not re-fetch
- * the same rows — the per-space DB round-trips on this sidebar path are the
- * hottest in the app.
- *
- * Returns the non-deleted channels (with names + default_access), the batched
- * read-access decisions and read positions for every channel + engaged thread,
- * and the unread aggregates. `getSpaceUnreadStats` is a thin projection of this
- * (it discards the per-room detail) so `getSpaces` stays exactly as cheap as
- * before — `includeReadPositions` lets the sidebar path opt into the per-room
- * read positions without penalising callers that only need the counts.
- */
-export interface SpaceSidebarData {
+interface SpaceUnreadCandidates {
   /** Non-deleted channels in the space (id, name, default_access). */
   channels: Array<{ id: string; name: string | null; defaultAccess: string | null }>;
   /** Voice rooms in the space. Kept apart from `channels` because a voice
@@ -234,27 +197,21 @@ export interface SpaceSidebarData {
   voiceRooms: Array<{ id: string; name: string | null; defaultAccess: string | null }>;
   /** Read-access decisions for every channel + engaged thread (roomId → decision). */
   access: Map<string, RoomAccess>;
-  /** Read positions (unreadCount) for every channel + engaged thread. */
-  readPositions: Map<string, ReadPosition>;
   /** Channel ids the caller can read (native channels in this space). */
   accessibleIds: string[];
-  /** Federated channel ids (origin's rooms) the caller can read via a grant. */
-  federatedIds: string[];
   /** Engaged thread ids belonging to this space. */
   threadIds: string[];
-  unreadCount: number;
-  unreadRoomCount: number;
-  unreadThreadCount: number;
+  /** Federated channel ids (origin's rooms) the caller can read via a grant. */
+  federatedIds: string[];
 }
 
-export async function getSpaceSidebarData(
+async function resolveSpaceUnreadCandidates(
   readStateDb: DbLike,
   spaceDb: DbLike,
   userDid: string,
   spaceId: string,
   memo?: AccessMemo,
-  options: { includeReadPositions?: boolean } = {},
-): Promise<SpaceSidebarData> {
+): Promise<SpaceUnreadCandidates> {
   // Fetch the space's non-deleted rooms, WITH names + default_access. The
   // sidebar assembly in getMetadata reuses these rows directly instead of
   // re-querying after the unread computation.
@@ -374,7 +331,98 @@ export async function getSpaceSidebarData(
     }
   }
 
-  const allRoomIds = [...accessible, ...threadIds, ...federatedIds];
+  return {
+    channels,
+    voiceRooms,
+    access: channelAccess,
+    accessibleIds: accessible,
+    threadIds,
+    federatedIds,
+  };
+}
+
+/**
+ * Whether any room of `spaceId` has unread messages for `userDid`.
+ *
+ * The space list carries this level, not counts (see `space.getSpaces`), so
+ * this is one existence probe over the same candidate rooms
+ * `space.getMetadata` counts, with the same access filtering — no
+ * aggregation, and the probe stops at the first unread room.
+ *
+ * `excludeRoomId` drops one room from the candidate set. The message-create
+ * path uses it to ask "was the space already unread by some OTHER room?" — the
+ * room the message just landed in is unread by construction and must not
+ * answer that question.
+ */
+export async function spaceHasUnreads(
+  readStateDb: DbLike,
+  spaceDb: DbLike,
+  userDid: string,
+  spaceId: string,
+  memo?: AccessMemo,
+  excludeRoomId?: string,
+): Promise<boolean> {
+  const { accessibleIds, threadIds, federatedIds } = await resolveSpaceUnreadCandidates(
+    readStateDb,
+    spaceDb,
+    userDid,
+    spaceId,
+    memo,
+  );
+  const allRoomIds = [...accessibleIds, ...threadIds, ...federatedIds].filter(
+    (id) => id !== excludeRoomId,
+  );
+  if (allRoomIds.length === 0) return false;
+  const placeholders = allRoomIds.map(() => "?").join(",");
+  const row = await readStateDb
+    .query(
+      `select 1 as one from read_positions
+        where user_did = ? and room_id in (${placeholders}) and unread_count > 0
+        limit 1`,
+    )
+    .get<{ one: number }>([userDid, ...allRoomIds]);
+  return row !== null && row !== undefined;
+}
+
+/**
+ * Everything `space.getMetadata` needs from the per-space + read-state DBs,
+ * computed in ONE pass and returned together so the handler does not re-fetch
+ * the same rows — the per-space DB round-trips on this sidebar path are the
+ * hottest in the app.
+ *
+ * Returns the candidate rooms (channels, voice rooms, access decisions), the
+ * per-room read positions, and the unread aggregates. `includeReadPositions`
+ * lets a caller that only needs the aggregates skip the per-room read.
+ */
+export interface SpaceSidebarData extends SpaceUnreadCandidates {
+  /** Read positions (unreadCount) for every channel + engaged thread. */
+  readPositions: Map<string, ReadPosition>;
+  /** Total unread messages across accessible channels + engaged threads. */
+  unreadCount: number;
+  /** Accessible channels with unread messages. */
+  unreadRoomCount: number;
+  /** Engaged threads with unread messages. */
+  unreadThreadCount: number;
+}
+
+export async function getSpaceSidebarData(
+  readStateDb: DbLike,
+  spaceDb: DbLike,
+  userDid: string,
+  spaceId: string,
+  memo?: AccessMemo,
+  options: { includeReadPositions?: boolean } = {},
+): Promise<SpaceSidebarData> {
+  const candidates = await resolveSpaceUnreadCandidates(
+    readStateDb,
+    spaceDb,
+    userDid,
+    spaceId,
+    memo,
+  );
+  const { accessibleIds, threadIds, federatedIds } = candidates;
+  const allRoomIds = [...accessibleIds, ...threadIds, ...federatedIds];
+
   let unreadCount = 0;
   let unreadRoomCount = 0;
   let unreadThreadCount = 0;
@@ -411,21 +459,16 @@ export async function getSpaceSidebarData(
     unreadThreadCount = threadRoomsWithUnread;
   }
 
-  // Per-room read positions for the sidebar. Only computed when requested
-  // (getSpaces — via getSpaceUnreadStats — needs only the aggregates).
+  // Per-room read positions for the sidebar. Only computed when requested —
+  // a caller that needs only the aggregates skips the per-room read.
   let readPositions = new Map<string, ReadPosition>();
   if (options.includeReadPositions && allRoomIds.length > 0) {
     readPositions = await getReadPositions(readStateDb, userDid, allRoomIds);
   }
 
   return {
-    channels,
-    voiceRooms,
-    access: channelAccess,
+    ...candidates,
     readPositions,
-    accessibleIds: accessible,
-    federatedIds,
-    threadIds,
     unreadCount,
     unreadRoomCount,
     unreadThreadCount,

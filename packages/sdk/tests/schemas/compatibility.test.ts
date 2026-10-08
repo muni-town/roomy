@@ -24,8 +24,7 @@ describe("schemas/queries", () => {
         {
           id: "01H000000000000000000000XX",
           name: "Roomy Dev",
-          unreadCount: 0,
-          unreadRoomCount: 0,
+          hasUnreads: false,
           isMember: true,
           isAdmin: false,
           roleIds: [],

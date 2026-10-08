@@ -292,7 +292,7 @@
             shape="squircle"
             ringVar="--avatar-ring"
           />
-          {#if space.unreadCount > 0}
+          {#if space.hasUnreads}
             <div
               class="absolute bottom-0.5 left-0.5 size-1.5 rounded-full bg-accent-500 ring-1 ring-base-100 dark:ring-base-950"
             ></div>
@@ -305,13 +305,7 @@
               >
                 {space.name ?? "Unnamed Space"}
               </span>
-              <!-- {#if space.unreadCount > 0}
-                <span
-                  class="text-xs text-base-500 dark:text-base-400 truncate"
-                >
-                  {space.unreadCount} unread
-                </span>
-              {/if} -->
+
             </div>
           {/if}
         </button>

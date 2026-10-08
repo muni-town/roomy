@@ -121,10 +121,10 @@ export type MessageSnapshot = MessageDto;
  * or know the previous value.
  *
  * The frame carries the exact change the client needs, so the broad
- * `getSpaces` + `space.getMetadata` invalidation is not required: the client
- * patches `room.getMetadata.unreadCount`, the matching `SpaceRow.unreadCount`
- * in `getSpaces`, and the channel's `unreadCount` in the `space.getMetadata`
- * sidebar tree directly from the frame, with no refetch.
+ * `space.getMetadata` invalidation is not required: the client patches
+ * `room.getMetadata.unreadCount`, the channel's `unreadCount` in the
+ * `space.getMetadata` sidebar tree, and — for the space list — the single
+ * boolean `hasUnreads` when this message made the space newly-unread.
  */
 export interface RoomMetadataDiff {
   spaceId: StreamDid;
@@ -149,7 +149,8 @@ export interface RoomMetadataDiff {
   /**
    * Per-user room-count deltas: `+1` for each user whose channel became
    * newly-unread (their `unread_count` went 0 → 1). Keyed by user DID; the
-   * SyncManager picks each user's delta when building its frame.
+   * SyncManager picks each user's delta when building its frame. Patches
+   * `space.getMetadata`'s sidebar count only.
    */
   roomUnreadDeltas?: ReadonlyMap<UserDid, number>;
   /**
@@ -157,6 +158,14 @@ export interface RoomMetadataDiff {
    * whose engaged thread became newly-unread. Keyed by user DID.
    */
   threadUnreadDeltas?: ReadonlyMap<UserDid, number>;
+  /**
+   * The users whose SPACE went from no unread rooms to one with this
+   * message. `getSpaces` carries only the `hasUnreads` boolean, so this is
+   * the whole of the change that frame can make: it sets `hasUnreads: true`
+   * for those users and nothing for the rest. Keyed by user DID, mirroring
+   * `roomUnreadDeltas`.
+   */
+  spaceUnreadFlips?: ReadonlyMap<UserDid, true>;
 }
 
 

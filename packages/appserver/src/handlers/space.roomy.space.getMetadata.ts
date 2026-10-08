@@ -172,9 +172,9 @@ export const getMetadataHandler: QueryHandler<
   let unreadThreadCount = 0;
   if (userDid !== null && (access.isMember || access.isAdmin)) {
     // Fetch the channel list, per-channel access, read positions, and unread
-    // aggregates in ONE pass (rather than getSpaceUnreadStats fetching only
-    // counts and this handler re-querying channels + read positions). Reuses
-    // the shared access memo, so roomAccessMany work is not repeated.
+    // aggregates in ONE pass (rather than this handler re-querying channels +
+    // read positions separately). Reuses the shared access memo, so
+    // roomAccessMany work is not repeated.
     const data = await getSpaceSidebarData(mainDb, db, userDid, spaceId, memo, {
       includeReadPositions: true,
     });

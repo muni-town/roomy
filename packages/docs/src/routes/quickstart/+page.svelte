@@ -44,7 +44,7 @@ const &#123; data &#125; = await agent.com.atproto.server.getServiceAuth(&#123;
 
   <p>You'll get a JSON object with a <code>spaces</code> array — each entry has
   <code>id</code> (the space's stream DID), <code>name</code>, <code>isMember</code>,
-  <code>isAdmin</code>, and <code>unreadCount</code>.</p>
+  <code>isAdmin</code>, and <code>hasUnreads</code>.</p>
 
   <h2>3. Read messages from a room</h2>
 

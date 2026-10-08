@@ -17,9 +17,13 @@ export const Space = type({
   "avatar?": "string",
   "description?": "string",
   "handle?": "string",
-  unreadCount: "number",
-  /** Number of rooms (channels + engaged threads) with unread messages. */
-  unreadRoomCount: "number",
+  /**
+   * Whether any room of this space has unread messages for the caller.
+   * A level, not a count: the unread badges the caller sees are the sidebar's
+   * per-room counts, and the space list only needs to know whether to mark
+   * the space at all.
+   */
+  hasUnreads: "boolean",
   isMember: "boolean",
   isAdmin: "boolean",
   roleIds: "string[]",

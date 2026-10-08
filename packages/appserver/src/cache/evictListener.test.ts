@@ -134,7 +134,7 @@ describe("attachCacheEvictionListener", () => {
     const router = new Router();
     const unsub = attachCacheEvictionListener(router, cache);
 
-    const body = (id: string) => ({ spaces: [{ id, unreadCount: 0 }] });
+    const body = (id: string) => ({ spaces: [{ id, hasUnreads: false }] });
 
     cache.set("space.roomy.space.getSpaces", {}, "did:plc:1", body("a"));
     cache.set("space.roomy.space.getSpaces", { includeLeft: "true" }, "did:plc:1", body("a"));

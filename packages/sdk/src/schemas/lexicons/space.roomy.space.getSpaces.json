@@ -5,14 +5,16 @@
     "spaces": {
       "type": "object",
       "required": [
+        "hasUnreads",
         "id",
         "isAdmin",
         "isMember",
-        "roleIds",
-        "unreadCount",
-        "unreadRoomCount"
+        "roleIds"
       ],
       "properties": {
+        "hasUnreads": {
+          "type": "boolean"
+        },
         "id": {
           "type": "string"
         },
@@ -27,12 +29,6 @@
           "items": {
             "type": "string"
           }
-        },
-        "unreadCount": {
-          "type": "integer"
-        },
-        "unreadRoomCount": {
-          "type": "integer"
         },
         "avatar": {
           "type": "string"

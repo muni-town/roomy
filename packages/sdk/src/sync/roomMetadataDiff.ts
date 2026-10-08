@@ -13,16 +13,17 @@
  * (e.g. the channel isn't in the sidebar), the patcher returns `prev`
  * unchanged — a harmless no-op rather than a destructive delete.
  *
- * The frame also carries per-user room-count deltas:
+ * The frame also carries per-user room-count deltas for the sidebar:
  *   - `roomUnreadDelta` — `+1` when a channel message makes a channel
- *     newly-unread for the user, `-1` when reading makes it fully-read.
- *     Patches `getSpaces[].unreadRoomCount` and
- *     `space.getMetadata.unreadRoomCount`.
+ *     newly-unread for the user. Patches `space.getMetadata.unreadRoomCount`.
  *   - `threadUnreadDelta` — same for engaged threads. Patches
- *     `getSpaces[].unreadThreadCount`, `space.getMetadata.unreadThreadCount`,
- *     and the parent channel's `room.getMetadata.unreadThreadCount`.
+ *     `space.getMetadata.unreadThreadCount`, and the parent channel's
+ *     `room.getMetadata.unreadThreadCount`.
  *   - `parentChannelId` — the thread's parent channel, so the channel-scoped
  *     thread count can be patched.
+ *   - `spaceUnreadFlip` — true when the message made the whole SPACE
+ *     newly-unread for the user. Patches `getSpaces[].hasUnreads`, which is
+ *     the only field of that list a message can move.
  *
  * The patchers:
  *   - {@link patchRoomMetadata}        → `room.getMetadata` response (the room)
@@ -57,12 +58,17 @@ export type {
 export interface RoomMetadataDiffPatch {
   /** The unread-count increment (`+1` per message) for the room itself. */
   delta: number;
-  /** `+1`/`-1` for the space's channel-with-unreads count. */
+  /** `+1` for the space's channel-with-unreads count. */
   roomUnreadDelta?: number;
-  /** `+1`/`-1` for the space's engaged-threads-with-unreads count. */
+  /** `+1` for the space's engaged-threads-with-unreads count. */
   threadUnreadDelta?: number;
   /** The thread's parent channel id (thread messages only). */
   parentChannelId?: string;
+  /**
+   * True when this message made the space newly-unread for the user (their
+   * space had no unread room before it). Flips `getSpaces[].hasUnreads`.
+   */
+  spaceUnreadFlip?: boolean;
 }
 
 /**
@@ -94,12 +100,14 @@ export function patchChannelThreadCount(
 }
 
 /**
- * Patch the matching space's `unreadCount` in a `getSpaces` response by
- * adding `delta`, plus the rooms-with-unreads count by the per-user deltas.
- * (`getSpaces.unreadRoomCount` is the combined channels + engaged-threads
- * count the home cards show; the split lives on `space.getMetadata`.)
- * Returns `undefined` when there's no cached entry; returns `prev` unchanged
- * when the space isn't in the list.
+ * Patch the matching space's `hasUnreads` in a `getSpaces` response.
+ *
+ * The list carries a boolean level, not counts, so the only change a message
+ * can express here is the false→true flip the frame marks with
+ * `spaceUnreadFlip`. A frame without the flag leaves the list untouched and
+ * returns `prev` unchanged (no refetch, no over-write). Returns `undefined`
+ * when there's no cached entry; returns `prev` unchanged when the space isn't
+ * in the list.
  */
 export function patchSpaces(
   prev: GetSpacesResponse | undefined,
@@ -107,18 +115,12 @@ export function patchSpaces(
   patch: RoomMetadataDiffPatch,
 ): GetSpacesResponse | undefined {
   if (!prev) return undefined;
+  if (!patch.spaceUnreadFlip) return prev;
   let found = false;
   const spaces: Space[] = prev.spaces.map((space) => {
     if (space.id === spaceId) {
       found = true;
-      return {
-        ...space,
-        unreadCount: space.unreadCount + patch.delta,
-        unreadRoomCount:
-          space.unreadRoomCount +
-          (patch.roomUnreadDelta ?? 0) +
-          (patch.threadUnreadDelta ?? 0),
-      };
+      return { ...space, hasUnreads: true };
     }
     return space;
   });

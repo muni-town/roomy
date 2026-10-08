@@ -7,7 +7,7 @@ import {
   recordPersonalSpaceMembership,
   selectJoinedSpaces,
 } from "./joinedSpaces.ts";
-import { getSpaceUnreadStats } from "./readPositions.ts";
+import { spaceHasUnreads } from "./readPositions.ts";
 import { setUserSpaceMembership } from "./userSpaceMembership.ts";
 
 const USER = UserDid.assert("did:plc:test-user");
@@ -296,7 +296,7 @@ describe("recordPersonalSpaceMembership", () => {
     expect(await selectJoinedSpaces(mainDb, USER)).toHaveLength(1);
   });
 
-  test("getSpaceUnreadStats counts engaged threads belonging to the space only", async () => {
+  test("spaceHasUnreads counts engaged threads belonging to the space only", async () => {
     const { mainDb } = setup();
     const OTHER = StreamDid.assert("did:web:other-space.example");
 
@@ -328,10 +328,16 @@ describe("recordPersonalSpaceMembership", () => {
       );
     }
 
-    const stats = await getSpaceUnreadStats(rs, spaceDb, USER, SPACE);
-    // Only t1 (3 unread) belongs to this space; tOther is excluded.
-    expect(stats.unreadCount).toBe(3);
-    expect(stats.unreadThreadCount).toBe(1);
+    // Only t1 (3 unread) belongs to this space; tOther is excluded — even
+    // though it has unreads, it is not one of this space's rooms.
+    expect(await spaceHasUnreads(rs, spaceDb, USER, SPACE)).toBe(true);
+
+    // Zeroing t1's unread count drains the space.
+    await rs.run(
+      "update read_positions set unread_count = 0 where user_did = ? and room_id = ?",
+      [USER, t1],
+    );
+    expect(await spaceHasUnreads(rs, spaceDb, USER, SPACE)).toBe(false);
   });
 });
 

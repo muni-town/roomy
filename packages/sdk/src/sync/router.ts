@@ -150,6 +150,7 @@ export class SyncRouter {
         roomUnreadDelta: parsed.roomUnreadDelta,
         threadUnreadDelta: parsed.threadUnreadDelta,
         parentChannelId: parsed.parentChannelId,
+        spaceUnreadFlip: parsed.spaceUnreadFlip,
       };
       // Patch cache entries from the one frame. Each patcher returns
       // undefined when its cache entry is absent or the target isn't found —
@@ -168,7 +169,8 @@ export class SyncRouter {
       // Patch every cached variant of getSpaces (the server bar caches
       // `?includeLeft=true`, the home page the bare query). `patchAll`
       // prefix-matches rather than requiring the exact key, so a single
-      // frame updates every mounted variant; no cache entry = no-op.
+      // frame updates every mounted variant; no cache entry = no-op. The
+      // patcher is a no-op unless the frame marks a space-level flip.
       this.#adapter.patchAll<GetSpacesResponse>(
         queryKey(GET_SPACES_NSID),
         (prev) => patchSpaces(prev, parsed.spaceId, patch),

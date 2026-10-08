@@ -122,7 +122,7 @@ describe("e2e: read-state schema migration on an existing DB", () => {
         headers: { ...init?.headers, "X-Test-Did": did, "Content-Type": "application/json" },
       });
 
-    // getSpaces → getSpaceUnreadStats → queries user_thread_activity with
+    // getSpaces → spaceHasUnreads → queries user_thread_activity with
     // space_did. If the migration didn't run, this throws "no such column".
     const res = await authedFetch(USER)(`${baseUrl}/xrpc/space.roomy.space.getSpaces?includeLeft=false`);
     expect(res.status).toBe(200);

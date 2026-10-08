@@ -102,7 +102,7 @@ export async function preloadSpaceSidebars(): Promise<void> {
   });
   const joined = [...spaces.spaces]
     .filter((s) => s.isMember)
-    .sort((a, b) => (b.unreadRoomCount ?? 0) - (a.unreadRoomCount ?? 0));
+    .sort((a, b) => Number(b.hasUnreads) - Number(a.hasUnreads));
   await withConcurrency(joined, (space) =>
     queryClient.ensureQueryData({
       queryKey: queryKey(SPACE_METADATA, { spaceId: space.id }),

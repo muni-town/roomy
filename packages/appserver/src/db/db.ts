@@ -204,6 +204,28 @@ export function openReadStateDb(): AsyncDatabase {
 }
 
 /**
+ * Return the read-state handle if the pool is initialised, or `null`
+ * otherwise. Mirrors {@link tryOpenGlobalDb}: used by code paths that may run
+ * against a raw in-memory `Database` in tests (where the pool isn't set up)
+ * and should skip the read rather than spin one up.
+ */
+export function tryOpenReadStateDb(): AsyncDatabase | null {
+  if (!pool) return null;
+  return pool.readState();
+}
+
+/**
+ * Return a handle routed to the per-space DB for `spaceDid` if the pool is
+ * initialised, or `null` otherwise. Mirrors {@link tryOpenGlobalDb}: used by
+ * code paths that may run against a raw in-memory `Database` in tests and
+ * should skip the read rather than spin up a pool (and its files) implicitly.
+ */
+export function tryOpenSpaceDb(spaceDid: string): AsyncDatabase | null {
+  if (!pool) return null;
+  return pool.forSpace(spaceDid);
+}
+
+/**
  * Return a handle that routes every request to the event-log DB
  * (`data/roomy-events.sqlite`), on the events worker.
  */

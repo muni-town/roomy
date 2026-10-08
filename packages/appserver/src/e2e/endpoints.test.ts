@@ -124,7 +124,7 @@ describe("space.roomy.space.getSpaces", () => {
     expect(body.spaces).toEqual([]);
   });
 
-  test("unreadRoomCount counts channels + engaged threads with unreads", async () => {
+  test("hasUnreads reflects unreads over channels + engaged threads", async () => {
     const ctx = await startAppserver();
     const { db } = ctx;
     seedSpace(db, SPACE, USER);
@@ -138,23 +138,35 @@ describe("space.roomy.space.getSpaces", () => {
     // Engaged thread with unread messages (user_thread_activity + read_positions).
     const thread = newUlid();
     seedRoom(db, thread, SPACE, "space.roomy.thread");
-    readStateDb(db).run(
+    await readStateDb(db).run(
       `insert into user_thread_activity (user_did, thread_id, space_did, last_active_at, updated_at)
        values (?, ?, ?, ?, ?)`,
       [USER, thread, SPACE, Date.now(), Date.now()],
     );
     seedReadPosition(db, USER, thread, "0", 1);
 
-    const res = await ctx.authedFetch(USER)(
-      `${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces?includeLeft=false`,
+    // Each read uses a distinct param variant so the response cache (keyed on
+    // params) cannot serve the previous body.
+    const read = async (
+      query = "",
+    ): Promise<{ hasUnreads: boolean } | undefined> => {
+      const res = await ctx.authedFetch(USER)(
+        `${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces${query}`,
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return body.spaces.find((s: { id: string }) => s.id === SPACE);
+    };
+
+    // Unread messages anywhere in the space read as one boolean.
+    expect((await read("?includeLeft=false"))?.hasUnreads).toBe(true);
+
+    // Zeroing every room's unread count flips it back to false.
+    await readStateDb(db).run(
+      "update read_positions set unread_count = 0 where user_did = ?",
+      USER,
     );
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    const space = body.spaces.find((s: { id: string }) => s.id === SPACE);
-    expect(space).toBeDefined();
-    // Home cards show the combined rooms-with-unreads count.
-    expect(space.unreadRoomCount).toBe(2);
-    expect(space.unreadCount).toBe(4);
+    expect((await read("?includeLeft=true"))?.hasUnreads).toBe(false);
   });
 });
 
