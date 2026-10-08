@@ -1,6 +1,7 @@
 // Worker is a global in Bun — no import needed.
 
-import type { WorkerRequest, WorkerResponse } from "./types.ts";
+import type { WorkerCacheStats, WorkerRequest, WorkerResponse } from "./types.ts";
+import type { DbMemoryBounds } from "./bounds.ts";
 import { metrics } from "../metrics.ts";
 import { log } from "../log.ts";
 
@@ -323,7 +324,47 @@ export class WorkerLink {
   get pendingCount(): number {
     return this.#pending.size;
   }
+
+  /**
+   * This worker's open-handle / prepared-statement counts and the bounds in
+   * force, read through the `health` request. Async because the counts live in
+   * the worker thread.
+   *
+   * Bounded by its own short deadline rather than the 30s request timeout:
+   * `send()` queues behind whatever the worker is executing, and the caller is
+   * a health scrape that must answer promptly even when the worker is the
+   * thing being diagnosed. A miss surfaces as "no stats" (`DatabasePool.stats`
+   * substitutes zeros) instead of holding the scrape for half a minute.
+   */
+  cacheStats(): Promise<WorkerCacheStats> {
+    const { promise, resolve, reject } =
+      Promise.withResolvers<WorkerCacheStats>();
+    const timer = setTimeout(
+      () => reject(new Error("cacheStats: worker did not answer")),
+      CACHE_STATS_TIMEOUT_MS,
+    );
+    timer.unref?.();
+    (this.send({ type: "health" }) as Promise<WorkerCacheStats>).then(
+      (stats) => {
+        clearTimeout(timer);
+        resolve(stats);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      },
+    );
+    return promise;
+  }
 }
+
+/**
+ * How long `cacheStats()` waits for a worker's `health` reply. Well under the
+ * 30s request timeout so a wedged worker cannot hold a scrape, but far above a
+ * healthy round-trip (sub-millisecond warm, tens of ms while a worker is still
+ * starting) so a cold worker's stats are not reported as zeros.
+ */
+const CACHE_STATS_TIMEOUT_MS = 2000;
 
 // ─── DbRoute ──────────────────────────────────────────────────────────────
 
@@ -445,7 +486,7 @@ export class AsyncDatabase {
     readStateSchemaVersion?: string;
     spaceSchemaVersion?: string;
     globalSchemaVersion?: string;
-    maxSpaceDbs?: number;
+    bounds?: Partial<DbMemoryBounds>;
   }): Promise<{ mainDbPath: string; readStateDbPath: string; version: string }> {
     return this.#link.send({ type: "init", initOpts: opts }) as Promise<{
       mainDbPath: string;

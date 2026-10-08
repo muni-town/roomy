@@ -5,6 +5,9 @@
  * The real `Database` is wrapped in an adapter; `AsyncDatabase` implements
  * it natively.
  */
+
+import type { DbMemoryBounds } from "./bounds.ts";
+
 export interface DbLike {
   query(sql: string): {
     all<T = Record<string, unknown>>(...params: unknown[]): Promise<T[]>;
@@ -183,7 +186,13 @@ export interface WorkerRequest {
     readStateSchemaVersion?: string;
     spaceSchemaVersion?: string;
     globalSchemaVersion?: string;
-    maxSpaceDbs?: number;
+    /**
+     * Worker cache bounds (page cache per connection, open-space-DB ceiling,
+     * live prepared-statement ceiling). Read from the environment on the main
+     * thread and passed here so the worker's configuration has one source; a
+     * pool may also init with explicit values (tests).
+     */
+    bounds?: Partial<DbMemoryBounds>;
     /**
      * Worker role (system-worker split). "space" workers only open
      * per-space DBs and reject shared-DB requests; "global", "readstate" and
@@ -212,4 +221,18 @@ export interface WorkerResponse {
    * carries the line. Absent on healthy requests.
    */
   slowMs?: number;
+}
+
+/** A worker's open-handle and prepared-statement counts, for `/health/pool`. */
+export interface WorkerCacheStats {
+  /** Open per-space DB handles in this worker's LRU cache. */
+  openSpaceDbs: number;
+  /** Live prepared statements held by this worker. */
+  preparedStmts: number;
+  /** Page cache per connection, in KiB (`PRAGMA cache_size`). */
+  cacheKib: number;
+  /** Open-space-DB ceiling before LRU eviction. */
+  maxSpaceDbs: number;
+  /** Live prepared-statement ceiling before LRU finalize. */
+  maxPreparedStmts: number;
 }

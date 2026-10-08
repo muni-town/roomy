@@ -47,6 +47,10 @@ partition, which the space's single worker serializes behind everything else it
 is serving — and the mis-plan starts well below six figures. See
 `docs/per-space-stats.md`.
 
+The DB workers' native-memory caches — the page cache of each open per-space
+connection, and the live prepared statements — are bounded and reported.
+See `docs/db-memory-bounds.md`.
+
 The `/data` volume persists across deploys, so the DBs (including the
 per-space views and their `materialization_cursor`) are not wiped on redeploy.
 On boot, an existing valid local DB wins and replication simply continues; a

@@ -71,7 +71,7 @@ const db = openDb();
 await runPendingReadStateMigrationsWithRetry(db);
 
 const happyView = getHappyView();
-const poolSize = poolStats()?.size;
+const poolSize = (await poolStats())?.size;
 const concurrency = poolSize ?? DEFAULT_REMATERIALIZE_CONCURRENCY;
 reMaterializeFromLocalEvents(db, undefined, happyView, concurrency).catch((err) => {
   log.error("startup", `re-materialization failed: ${err instanceof Error ? err.message : String(err)}`);

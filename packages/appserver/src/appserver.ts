@@ -703,7 +703,7 @@ export async function createAppserver(
     // is the one async part. Failures are swallowed below so a DB hiccup
     // can't turn a metrics snapshot into an unhandled rejection.
     void (async () => {
-      const pool = poolStats();
+      const pool = await poolStats();
       const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0, byNsid: {} };
       const embed = embedSweeperStats();
       const search = searchIndexerStats();
@@ -716,10 +716,19 @@ export async function createAppserver(
         pool: pool
           ? {
               size: pool.size,
-              spaceWorkers: pool.spaceWorkers.map((w) => w.pending),
+              // In-flight per worker, plus how many space connections that
+              // worker holds open: the open count × the per-connection page
+              // cache is the native-memory term RSS climbs on, and neither is
+              // visible from the pending count alone.
+              spaceWorkers: pool.spaceWorkers.map((w) => ({
+                pending: w.pending,
+                openSpaceDbs: w.openSpaceDbs,
+              })),
               globalWorker: pool.globalWorker.pending,
               readStateWorker: pool.readStateWorker.pending,
               eventsWorker: pool.eventsWorker.pending,
+              cacheKib: pool.cacheKib,
+              maxSpaceDbs: pool.maxSpaceDbs,
             }
           : null,
         cache,
@@ -894,6 +903,19 @@ export async function createAppserver(
     "roomy_pool_worker_pending",
     "In-flight (queued) requests on a pool worker.",
     ["worker"],
+  );
+  const poolWorkerOpenDbs = metrics.gauge(
+    "roomy_db_open_space_dbs",
+    "Per-space DB connections held open by a worker's LRU cache.",
+    ["worker"],
+  );
+  const poolDbCacheKib = metrics.gauge(
+    "roomy_db_space_cache_kib",
+    "Page cache per per-space DB connection, in KiB.",
+  );
+  const poolDbMaxSpaceDbs = metrics.gauge(
+    "roomy_db_max_space_dbs",
+    "Open per-space DBs per worker before LRU eviction (the cache's ceiling).",
   );
   // Resident set size of this process. The host bills the container's memory
   // per GB-minute and nothing else in the service reports it, so this series is
@@ -1086,10 +1108,12 @@ export async function createAppserver(
         );
       }
       if (url.pathname === "/health/pool") {
-        // Per-worker pool stats (size + in-flight per worker) so an operator
-        // can see whether load is spreading across the pool and the three
-        // shared-DB workers, or collapsing onto one.
-        const stats = poolStats();
+        // Per-worker pool stats: size, in-flight per worker, and open
+        // connection / prepared-statement counts against their bounds. Lets an
+        // operator see whether load is spreading across the pool and the three
+        // shared-DB workers or collapsing onto one — and whether the
+        // connection cache is at its ceiling or still climbing.
+        const stats = await poolStats();
         return new Response(
           JSON.stringify(stats ? { enabled: true, ...stats } : { enabled: false }),
           { headers: { "content-type": "application/json", ...corsHeaders } },
@@ -1137,13 +1161,21 @@ export async function createAppserver(
         // live pool/cache/embed/search/push stats into gauges, then renders
         // the registry (request counters/histograms + DB timeouts are
         // maintained incrementally elsewhere).
-        const pool = poolStats();
+        const pool = await poolStats();
         if (pool) {
           poolGauge.set({}, pool.size);
-          pool.spaceWorkers.forEach((w, i) => poolWorkerPending.set({ worker: `space-${i}` }, w.pending));
+          pool.spaceWorkers.forEach((w, i) => {
+            poolWorkerPending.set({ worker: `space-${i}` }, w.pending);
+            poolWorkerOpenDbs.set({ worker: `space-${i}` }, w.openSpaceDbs);
+          });
           poolWorkerPending.set({ worker: "global" }, pool.globalWorker.pending);
           poolWorkerPending.set({ worker: "readstate" }, pool.readStateWorker.pending);
           poolWorkerPending.set({ worker: "events" }, pool.eventsWorker.pending);
+          // The connection cache's own size and ceiling as exported gauges:
+          // `roomy_db_open_space_dbs` × `roomy_db_space_cache_kib` is the
+          // native-memory term the per-space connection cache contributes.
+          poolDbCacheKib.set({}, pool.cacheKib);
+          poolDbMaxSpaceDbs.set({}, pool.maxSpaceDbs);
         }
         const cache = queryCache?.stats ?? { hits: 0, misses: 0, evictions: 0, size: 0, byNsid: {} };
         cacheHits.set({}, cache.hits);

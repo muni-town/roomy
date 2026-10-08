@@ -92,15 +92,23 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
     unreadCount = (countRow?.n as number) ?? 0;
   }
 
-  const stmt = await mainDb.prepare(
+  // A one-shot write goes through `run`, not `prepare`/`finalize`: the worker
+  // keeps a compiled statement per prepared handle until it is finalized, and
+  // this handler runs on every mark-as-read. `run` compiles through the
+  // worker's SQL cache, which is keyed by SQL text and therefore bounded by the
+  // number of distinct statements rather than by call count.
+  await mainDb.run(
     `insert into read_positions (user_did, room_id, seen_up_to, unread_count, updated_at)
      values (?, ?, ?, ?, (unixepoch() * 1000))
      on conflict(user_did, room_id) do update set
        seen_up_to = excluded.seen_up_to,
        unread_count = excluded.unread_count,
        updated_at = excluded.updated_at`,
+    userDid,
+    roomId,
+    seenUpTo,
+    unreadCount,
   );
-  await stmt.run([userDid, roomId, seenUpTo, unreadCount]);
 
   // Treat reads as engagement: reading a thread counts toward its activity
   // window, so a thread you've read (but not necessarily written to) stays in

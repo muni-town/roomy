@@ -430,9 +430,13 @@ export async function purgeStaleThreadActivity(
   db: DbLike,
   olderThan: number,
 ): Promise<number> {
-  const result = await (await db.prepare(
+  // One-shot: `run` rather than `prepare`, so the worker does not accumulate a
+  // compiled statement per timer tick (it keeps prepared handles until they are
+  // finalized). See `updateSeen`.
+  const result = await db.run(
     `delete from user_thread_activity
      where last_active_at < ?`,
-  )).run([olderThan]);
+    olderThan,
+  );
   return result.changes;
 }

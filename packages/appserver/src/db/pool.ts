@@ -29,7 +29,8 @@
  */
 
 import { AsyncDatabase, WorkerLink } from "./asyncDatabase.ts";
-import type { DbLike } from "./types.ts";
+import type { DbLike, WorkerCacheStats } from "./types.ts";
+import type { DbMemoryBounds } from "./bounds.ts";
 
 /**
  * Stable string hash over the space DID. Deterministic across restarts so a
@@ -69,7 +70,12 @@ export interface PoolInitOptions {
   readStateSchemaVersion?: string;
   spaceSchemaVersion?: string;
   globalSchemaVersion?: string;
-  maxSpaceDbs?: number;
+  /**
+   * Cache bounds applied to every worker (page cache per connection, open
+   * space DB and prepared-statement ceilings). Defaults to the worker's own
+   * defaults; `openDb()` fills it from the environment.
+   */
+  bounds?: Partial<DbMemoryBounds>;
 }
 
 /**
@@ -197,7 +203,7 @@ export class DatabasePool {
     const spaceOpts = {
       spacesDir: opts.spacesDir,
       spaceSchemaVersion: opts.spaceSchemaVersion,
-      maxSpaceDbs: opts.maxSpaceDbs,
+      bounds: opts.bounds,
       role: "space" as const,
     };
     // Post every init message synchronously (before awaiting) so each worker
@@ -214,7 +220,7 @@ export class DatabasePool {
         globalDbPath: opts.globalDbPath,
         globalSchemaVersion: opts.globalSchemaVersion,
         spaceSchemaVersion: opts.spaceSchemaVersion,
-        maxSpaceDbs: opts.maxSpaceDbs,
+        bounds: opts.bounds,
         role: "global",
       },
     });
@@ -265,26 +271,86 @@ export class DatabasePool {
   }
 
   /**
-   * Pool size and in-flight request counts per worker. Lets an operator see
-   * whether load is spreading across the pool and the three shared-DB workers,
-   * or collapsing onto one.
+   * Pool size, in-flight request counts, and per-worker cache occupancy.
+   * Lets an operator see whether load is spreading across the pool and the
+   * three shared-DB workers or collapsing onto one, and whether the connection
+   * cache is at its bound or still climbing.
+   *
+   * Async because the cache counts live in the worker threads (one `health`
+   * round-trip per worker). A worker that fails to answer reports zeros rather
+   * than failing the scrape: `/health/pool` must stay readable while a worker
+   * is wedged, which is when an operator needs it most.
    */
-  stats(): {
-    size: number;
-    spaceWorkers: Array<{ pending: number }>;
-    globalWorker: { pending: number };
-    readStateWorker: { pending: number };
-    eventsWorker: { pending: number };
-  } {
+  async stats(): Promise<PoolStats> {
+    const [spaceWorkers, globalWorker, readStateWorker, eventsWorker] =
+      await Promise.all([
+        Promise.all(
+          this.#poolLinks.map((l) =>
+            workerStats(l, l.pendingCount),
+          ),
+        ),
+        workerStats(this.#globalLink, this.#globalLink.pendingCount),
+        workerStats(this.#readStateLink, this.#readStateLink.pendingCount),
+        workerStats(this.#eventsLink, this.#eventsLink.pendingCount),
+      ]);
+    // The bounds are uniform across workers, so the first space worker is the
+    // representative — a space worker is where the open-connection cache
+    // actually accrues.
+    const first = spaceWorkers[0];
     return {
       size: this.#size,
-      spaceWorkers: this.#poolLinks.map((l) => ({ pending: l.pendingCount })),
-      globalWorker: { pending: this.#globalLink.pendingCount },
-      readStateWorker: { pending: this.#readStateLink.pendingCount },
-      eventsWorker: { pending: this.#eventsLink.pendingCount },
+      cacheKib: first?.cacheKib ?? 0,
+      maxSpaceDbs: first?.maxSpaceDbs ?? 0,
+      maxPreparedStmts: first?.maxPreparedStmts ?? 0,
+      spaceWorkers,
+      globalWorker,
+      readStateWorker,
+      eventsWorker,
     };
   }
 }
+
+/** One worker's in-flight count plus its cache occupancy and bounds. */
+export interface PoolWorkerStats extends WorkerCacheStats {
+  pending: number;
+}
+
+/** `DatabasePool.stats()`: pool size, per-worker stats, and the bounds. */
+export interface PoolStats {
+  size: number;
+  cacheKib: number;
+  maxSpaceDbs: number;
+  maxPreparedStmts: number;
+  spaceWorkers: PoolWorkerStats[];
+  globalWorker: PoolWorkerStats;
+  readStateWorker: PoolWorkerStats;
+  eventsWorker: PoolWorkerStats;
+}
+
+/**
+ * Read one worker's cache occupancy for `stats()`. A worker that fails to
+ * answer (wedged, or terminated mid-scrape) reports zeros rather than throwing:
+ * `/health/pool` existing to diagnose that worker is the point.
+ */
+async function workerStats(
+  link: WorkerLink,
+  pending: number,
+): Promise<PoolWorkerStats> {
+  let cache: WorkerCacheStats;
+  try {
+    cache = await link.cacheStats();
+  } catch {
+    cache = {
+      openSpaceDbs: 0,
+      preparedStmts: 0,
+      cacheKib: 0,
+      maxSpaceDbs: 0,
+      maxPreparedStmts: 0,
+    };
+  }
+  return { pending, ...cache };
+}
+
 
 /**
  * The router handle returned by `openDb()`. Default operations (query/run/

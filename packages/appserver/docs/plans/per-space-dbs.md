@@ -780,7 +780,7 @@ This is the subtle part. Cross-space queries fan out to many per-space DBs, and 
 
 #### 3. Observability
 
-- **Per-worker stats.** `/health/pool` reports pool size and per-worker in-flight counts (`poolStats()`), exported to Prometheus as `roomy_pool_size` + `roomy_pool_worker_pending{worker=...}`. LRU cache hit rate / eviction counters and worker round-trips per query are **not** exposed.
+- **Per-worker stats.** `/health/pool` reports pool size, per-worker in-flight counts, and each worker's open connection / live prepared-statement counts against their bounds (`poolStats()` → `WorkerLink.cacheStats()`), exported to Prometheus as `roomy_pool_size`, `roomy_pool_worker_pending{worker=...}`, `roomy_db_open_space_dbs{worker=...}`, `roomy_db_space_cache_kib`, and `roomy_db_max_space_dbs`. LRU eviction counters and worker round-trips per query are **not** exposed.
 - **Not built:** the logged `spaceDid → worker` map.
 
 #### 4. Operational

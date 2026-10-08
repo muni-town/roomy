@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { openDb, closeDb } from "./db.ts";
+import { newUlid } from "@roomy-space/sdk";
+import { openDb, closeDb, poolStats } from "./db.ts";
 import { hashSpace, type PooledDatabase } from "./pool.ts";
+import {
+  DEFAULT_MAX_PREPARED_STMTS,
+  DEFAULT_MAX_SPACE_DBS,
+  DEFAULT_SPACE_DB_CACHE_KIB,
+} from "./bounds.ts";
+import { updateSeenHandler } from "../handlers/space.roomy.room.updateSeen.ts";
 
 describe("hashSpace", () => {
   test("is deterministic across calls", () => {
@@ -367,5 +374,181 @@ describe("DatabasePool teardown", () => {
     }
 
     expect(unhandled).toEqual([]);
+  });
+});
+
+describe("worker cache bounds", () => {
+  // The prepared-statement map is keyed by an ever-incrementing handle, so a
+  // caller that prepares per invocation and never finalizes used to leave one
+  // compiled statement — native memory the JS GC cannot reclaim — behind per
+  // call. The bound caps the map at `maxPreparedStmts`, and the counts are read
+  // back through `poolStats()` (the `health` round-trip `/health/pool` uses).
+  test("the prepared-statement map does not grow with a leaking caller", async () => {
+    // The process-wide singleton, so `poolStats()` reads the pool the handle
+    // actually routes to.
+    closeDb();
+    const db = openDb({ path: ":memory:" });
+    const space = db.forSpace("did:plc:stmt-bound");
+    await space.run(
+      "insert into entities (id, stream_id) values (?, ?)",
+      "entity-stmt",
+      "did:plc:stmt-bound",
+    );
+    // The SQL is identical every time; the leak is the handle, not the text.
+    // 1000 prepares is several times the ceiling, so the bound is observed both
+    // reached and held, and few enough round-trips to stay well under the test
+    // timeout under CI's --isolate load.
+    for (let i = 0; i < 1000; i++) {
+      await space.prepare("select id from entities where id = ?");
+    }
+
+    const stats = (await poolStats())!;
+    const held = stats.spaceWorkers.reduce((n, w) => n + w.preparedStmts, 0);
+    // Bound is live, not vacuously zero: the ceiling is reached, yet never
+    // exceeded, despite more prepares than the ceiling.
+    expect(stats.maxPreparedStmts).toBe(DEFAULT_MAX_PREPARED_STMTS);
+    expect(held).toBe(stats.maxPreparedStmts);
+    closeDb();
+  }, 30_000);
+
+  test("the prepared-statement bound is an LRU: a kept handle stays usable", async () => {
+    // The bound must not be insertion-order, or a long-lived handle a caller
+    // keeps executing would be finalized out from under it by a leaking
+    // neighbour. `takeStatement` refreshes the handle on every use, so here the
+    // kept handle survives 500 prepares of pressure and still runs.
+    closeDb();
+    const db = openDb({ path: ":memory:" });
+    const space = db.forSpace("did:plc:stmt-lru");
+    await space.run(
+      "insert into entities (id, stream_id) values (?, ?)",
+      "entity-lru",
+      "did:plc:stmt-lru",
+    );
+    const kept = await space.prepare("select id from entities where id = ?");
+    for (let i = 0; i < 500; i++) {
+      // Refresh the kept handle's recency, then prepare-and-drop another.
+      await kept.get("entity-lru");
+      await space.prepare("select 1");
+    }
+    // If the bound evicted the kept handle, this would throw
+    // "Unknown prepared statement handle".
+    const row = await kept.get<{ id: string }>("entity-lru");
+    expect(row?.id).toBe("entity-lru");
+
+    closeDb();
+  }, 30_000);
+
+  test("the updateSeen write path holds no prepared statements across many calls", async () => {
+    // The mark-as-read handler used to `prepare` a one-shot insert per call and
+    // never finalize it. It goes through `run` now, which the worker compiles
+    // through its SQL cache: same row written, zero held statements. The
+    // handler resolves its DBs through `openDb()`, so this drives the
+    // process-wide singleton.
+    closeDb();
+    const db = openDb({ path: ":memory:" });
+    const spaceDid = "did:web:stmt-bound-updateseen";
+    const roomId = newUlid();
+    const msgId = newUlid();
+    const space = db.forSpace(spaceDid);
+    await space.run("insert into entities (id, stream_id) values (?, ?)", [
+      spaceDid,
+      spaceDid,
+    ]);
+    await space.run("insert into entities (id, stream_id) values (?, ?)", [
+      roomId,
+      spaceDid,
+    ]);
+    await space.run(
+      "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+      [msgId, spaceDid, roomId, "a"],
+    );
+    await db.global().run(
+      "insert into entity_space (entity_id, space_did) values (?, ?)",
+      [roomId, spaceDid],
+    );
+
+    const did = "did:plc:stmt-bound-user";
+    // 200 calls: every one is several worker round-trips, so a larger count
+    // risks the default 5s test timeout under CI's --isolate load. 200 still
+    // proves the path holds nothing by call count. The explicit timeout keeps a
+    // loaded runner from turning a slow-but-correct run into a failure.
+    for (let i = 0; i < 200; i++) {
+      await updateSeenHandler({}, { did }, { roomId });
+    }
+
+    const stats = (await poolStats())!;
+    expect(stats.spaceWorkers.reduce((n, w) => n + w.preparedStmts, 0)).toBe(0);
+    expect(stats.readStateWorker.preparedStmts).toBe(0);
+
+    closeDb();
+  }, 30_000);
+
+  test("the space-DB cache reports open connections against its bound", async () => {
+    closeDb();
+    const db = openDb({ path: ":memory:" });
+    for (let i = 0; i < 6; i++) {
+      const did = `did:plc:space-bound-${i}`;
+      await db
+        .forSpace(did)
+        .run("insert into entities (id, stream_id) values (?, ?)", [`e${i}`, did]);
+    }
+    const stats = (await poolStats())!;
+    // Six opens against the default ceiling: all held, none evicted.
+    expect(stats.maxSpaceDbs).toBe(DEFAULT_MAX_SPACE_DBS);
+    expect(stats.cacheKib).toBe(DEFAULT_SPACE_DB_CACHE_KIB);
+    expect(stats.spaceWorkers.reduce((n, w) => n + w.openSpaceDbs, 0)).toBe(6);
+    expect(
+      stats.spaceWorkers.every((w) => w.openSpaceDbs <= stats.maxSpaceDbs),
+    ).toBe(true);
+
+    closeDb();
+  });
+});
+
+describe("cache bounds from the environment", () => {
+  // The three bounds are read once, when the pool opens, from
+  // APPSERVER_MAX_SPACE_DBS / APPSERVER_MAX_PREPARED_STMTS /
+  // APPSERVER_SPACE_DB_CACHE_KIB. These are the operator's only lever on the
+  // appserver's native-memory ceiling, so the override must reach the workers
+  // and be visible on the stats the health route serves.
+  const KEYS = [
+    "APPSERVER_MAX_SPACE_DBS",
+    "APPSERVER_MAX_PREPARED_STMTS",
+    "APPSERVER_SPACE_DB_CACHE_KIB",
+  ] as const;
+
+  test("the worker honours env overrides and rejects malformed values", async () => {
+    const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+    try {
+      process.env.APPSERVER_MAX_SPACE_DBS = "3";
+      process.env.APPSERVER_MAX_PREPARED_STMTS = "7";
+      process.env.APPSERVER_SPACE_DB_CACHE_KIB = "256";
+      closeDb();
+      const db = openDb({ path: ":memory:" });
+      // A space DB has to open for its worker's cache stats to be meaningful,
+      // but the bounds are reported regardless.
+      await db.forSpace("did:plc:env-bounds").run(
+        "insert into entities (id, stream_id) values (?, ?)",
+        ["e", "did:plc:env-bounds"],
+      );
+      const stats = (await poolStats())!;
+      expect(stats.maxSpaceDbs).toBe(3);
+      expect(stats.maxPreparedStmts).toBe(7);
+      expect(stats.cacheKib).toBe(256);
+      closeDb();
+
+      // A malformed value falls back to the default rather than a NaN/0 bound
+      // (which would close every connection or evict every statement).
+      process.env.APPSERVER_MAX_SPACE_DBS = "not-a-number";
+      openDb({ path: ":memory:" });
+      const stats2 = (await poolStats())!;
+      expect(stats2.maxSpaceDbs).toBe(DEFAULT_MAX_SPACE_DBS);
+      closeDb();
+    } finally {
+      for (const k of KEYS) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
   });
 });

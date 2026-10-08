@@ -21,6 +21,8 @@ import { AsyncDatabase } from "./asyncDatabase.ts";
 import { DatabasePool, PooledDatabase } from "./pool.ts";
 import { READSTATE_SCHEMA_VERSION } from "./readStateDb.ts";
 import { dbPath, spacesDir } from "./paths.ts";
+import { dbMemoryBoundsFromEnv } from "./bounds.ts";
+import type { PoolStats } from "./pool.ts";
 
 /**
  * Per-space DB schema version (`data/spaces/*.sqlite`) — re-exported from the
@@ -107,6 +109,7 @@ export function openDb(opts: OpenDbOptions = {}): PooledDatabase {
     readStateSchemaVersion: READSTATE_SCHEMA_VERSION,
     spaceSchemaVersion: SPACE_SCHEMA_VERSION,
     globalSchemaVersion: GLOBAL_SCHEMA_VERSION,
+    bounds: dbMemoryBoundsFromEnv(),
   }).catch(() => {
     // Error already propagates via the first queued request's response.
   });
@@ -218,17 +221,11 @@ function ensurePool(): void {
 }
 
 /**
- * Per-worker pool stats for `/health/pool`. Returns `null` when the pool
- * isn't initialised.
+ * Per-worker pool stats for `/health/pool`. Resolves to `null` when the pool
+ * isn't initialised. Async: the cache counts are read from the workers.
  */
-export function poolStats(): {
-  size: number;
-  spaceWorkers: Array<{ pending: number }>;
-  globalWorker: { pending: number };
-  readStateWorker: { pending: number };
-  eventsWorker: { pending: number };
-} | null {
-  return pool?.stats() ?? null;
+export async function poolStats(): Promise<PoolStats | null> {
+  return pool ? pool.stats() : null;
 }
 
 /**

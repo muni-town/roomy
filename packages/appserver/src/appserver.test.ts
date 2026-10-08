@@ -108,6 +108,9 @@ describe("createAppserver factory", () => {
       "roomy_xrpc_request_duration_seconds",
       "roomy_pool_size",
       "roomy_pool_worker_pending",
+      "roomy_db_open_space_dbs",
+      "roomy_db_space_cache_kib",
+      "roomy_db_max_space_dbs",
       "roomy_cache_hits_total",
       "roomy_embed_pending",
       // The stall-flap counter: a rate on it with a flat
@@ -641,5 +644,19 @@ describe("query response cache", () => {
     expect(typeof body.readStateWorker.pending).toBe("number");
     expect(body.eventsWorker).toBeDefined();
     expect(typeof body.eventsWorker.pending).toBe("number");
+    // The connection cache's occupancy and its bounds travel with the stats:
+    // without them an operator cannot tell whether the native-memory term is at
+    // its ceiling or still climbing (the pending count says nothing about it).
+    expect(typeof body.maxSpaceDbs).toBe("number");
+    expect(body.maxSpaceDbs).toBeGreaterThanOrEqual(1);
+    expect(typeof body.cacheKib).toBe("number");
+    expect(body.cacheKib).toBeGreaterThan(0);
+    expect(typeof body.maxPreparedStmts).toBe("number");
+    for (const w of body.spaceWorkers) {
+      expect(typeof w.openSpaceDbs).toBe("number");
+      expect(typeof w.preparedStmts).toBe("number");
+    }
+    expect(typeof body.globalWorker.openSpaceDbs).toBe("number");
+    expect(typeof body.readStateWorker.preparedStmts).toBe("number");
   });
 });

@@ -18,8 +18,13 @@
  * in the response.
  */
 
-import { Database, type Changes } from "bun:sqlite";
-import type { SQLQueryBindings } from "bun:sqlite";
+import { Database, type Changes, type SQLQueryBindings, type Statement } from "bun:sqlite";
+import {
+  DEFAULT_MAX_PREPARED_STMTS,
+  DEFAULT_MAX_SPACE_DBS,
+  DEFAULT_SPACE_DB_CACHE_KIB,
+  type DbMemoryBounds,
+} from "./bounds.ts";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,7 +59,15 @@ function normaliseRowid(
 
 let readStateDb: Database | null = null;
 let eventsDb: Database | null = null;
-const preparedStmts = new Map<number, ReturnType<Database["prepare"]>>();
+/**
+ * Live prepared statements, keyed by handle. Ordered by insertion, so the
+ * first key is the oldest: `handlePrepare` evicts and finalizes it once the
+ * map reaches `maxPreparedStmts`. Without that bound a caller that prepares
+ * per invocation and never finalizes (see `AsyncStatement.finalize`) leaves
+ * one compiled statement — native memory the JS GC cannot reclaim — per call,
+ * forever.
+ */
+const preparedStmts = new Map<number, Statement>();
 let nextHandle = 1;
 let closed = false;
 
@@ -82,8 +95,12 @@ let spacesDir: string | null = null;
 let globalDbPath: string | null = null;
 let spaceSchemaVersion: string | null = null;
 let globalSchemaVersion: string | null = null;
-/** Max concurrently-open space DBs before LRU eviction. */
-let maxSpaceDbs = 100;
+/** The worker's cache bounds (env-derived on the main thread, sent via init). */
+let bounds: DbMemoryBounds = {
+  maxSpaceDbs: DEFAULT_MAX_SPACE_DBS,
+  maxPreparedStmts: DEFAULT_MAX_PREPARED_STMTS,
+  spaceDbCacheKib: DEFAULT_SPACE_DB_CACHE_KIB,
+};
 /**
  * Worker role. "space" workers only open per-space DBs; "global", "readstate"
  * and "events" workers each own exactly one of the shared DBs; "system" is the
@@ -425,13 +442,12 @@ function openSpaceDb(spaceDid: string): Database {
   // is new, or was first opened after the sweep passed it, gets its statistics
   // before it serves a query.
   analyzeSpaceDb(db);
-
   // LRU eviction: close the least-recently-used handle when over capacity.
   // Statistics are refreshed immediately before the close, which is the
   // cadence SQLite documents for `PRAGMA optimize` (periodically, and before
   // closing a long-lived connection): the handle being evicted is the one that
   // has been serving writes, so this is where a space's growth gets measured.
-  if (spaceDbs.size >= maxSpaceDbs) {
+  if (spaceDbs.size >= bounds.maxSpaceDbs) {
     let oldest: string | null = null;
     let oldestTs = Infinity;
     for (const [did, entry] of spaceDbs) {
@@ -481,6 +497,21 @@ function applySpacePragmas(db: Database): void {
   db.exec("pragma synchronous = normal");
   db.exec("pragma foreign_keys = on");
   db.exec("pragma busy_timeout = 5000");
+  // Bound the connection's native page cache. SQLite's default is 2 MiB
+  // (`DEFAULT_CACHE_SIZE=-2000`) of NATIVE memory per connection that the JS
+  // GC cannot reclaim; with up to `maxSpaceDbs` connections per worker and one
+  // worker per pool slot that is the pool's dominant memory term. Set
+  // explicitly so the ceiling is `maxSpaceDbs × spaceDbCacheKib` and an
+  // operator can move it with `APPSERVER_SPACE_DB_CACHE_KIB`.
+  db.exec(`pragma cache_size = -${bounds.spaceDbCacheKib}`);
+  // Pin memory mapping off rather than inherit it from the SQLite build. This
+  // build defaults `DEFAULT_MMAP_SIZE` to 0, but the bound must not depend on a
+  // compile-time default: a build that mapped the file would add address space
+  // (and, once touched, RSS) beyond the `cache_size` ceiling this function
+  // exists to establish. Mapped pages are file-backed rather than heap, so
+  // leaving them on would also make the RSS ceiling untrackable from
+  // `poolStats()`.
+  db.exec("pragma mmap_size = 0");
 }
 
 /**
@@ -838,7 +869,7 @@ function handleRequest(req: WorkerRequest): unknown {
     case "close":
       return handleClose();
     case "health":
-      return { ok: true };
+      return cacheStats();
     case "backfillEntitySpace":
       return handleBackfillEntitySpace(req);
     case "spaceRebuildBegin":
@@ -918,7 +949,7 @@ function handleInit(req: WorkerRequest): {
     (opts.globalDbPath ?? "") === ":memory:";
   spaceSchemaVersion = opts.spaceSchemaVersion ?? "";
   globalSchemaVersion = opts.globalSchemaVersion ?? "";
-  if (opts.maxSpaceDbs !== undefined) maxSpaceDbs = opts.maxSpaceDbs;
+  bounds = { ...bounds, ...opts.bounds };
   role = opts.role ?? "system";
 
   // Per-space DB access is only available on roles that own (or assist the
@@ -1061,19 +1092,49 @@ function handleAnalyze(req: WorkerRequest): { analyzed: boolean } {
 
 function handlePrepare(req: WorkerRequest): { handle: number } {
   const db = dbForRequest(req);
+  // Evict before inserting so the map never exceeds the bound. Map iteration
+  // order is insertion order and `takeStatement` re-inserts on every use, so
+  // the first key is the least-recently-used handle: a caller that prepares per
+  // invocation and never finalizes (the shape that leaked) evicts its own
+  // abandoned statements, while a handle a caller keeps executing is refreshed
+  // and survives. Finalizing frees the compiled statement, which the JS GC
+  // cannot.
+  while (preparedStmts.size >= bounds.maxPreparedStmts) {
+    const oldest = preparedStmts.keys().next();
+    if (oldest.done) break;
+    const stmt = preparedStmts.get(oldest.value);
+    preparedStmts.delete(oldest.value);
+    try {
+      stmt?.finalize();
+    } catch {
+      /* best-effort */
+    }
+  }
   const handle = nextHandle++;
   preparedStmts.set(handle, db.prepare(req.sql!));
   return { handle };
+}
+
+/**
+ * Look up a prepared statement for a handle and mark it most-recently-used by
+ * moving it to the end of the map's insertion order. `handlePrepare` evicts
+ * from the front, so this is what makes the bound a true LRU: a statement a
+ * caller keeps executing survives, while one prepared and abandoned falls out
+ * first.
+ */
+function takeStatement(handle: number): Statement {
+  const stmt = preparedStmts.get(handle);
+  if (!stmt) throw new Error(`Unknown prepared statement handle: ${handle}`);
+  preparedStmts.delete(handle);
+  preparedStmts.set(handle, stmt);
+  return stmt;
 }
 
 function handlePrepareRun(req: WorkerRequest): {
   changes: number;
   lastInsertRowid?: number;
 } {
-  const stmt = preparedStmts.get(req.handle!);
-  if (!stmt)
-    throw new Error(`Unknown prepared statement handle: ${req.handle}`);
-  const result = stmt.run(...toBindings(req.params));
+  const result = takeStatement(req.handle!).run(...toBindings(req.params));
   return {
     changes: result.changes,
     lastInsertRowid: normaliseRowid(result.lastInsertRowid),
@@ -1081,17 +1142,11 @@ function handlePrepareRun(req: WorkerRequest): {
 }
 
 function handlePrepareAll(req: WorkerRequest): unknown[] {
-  const stmt = preparedStmts.get(req.handle!);
-  if (!stmt)
-    throw new Error(`Unknown prepared statement handle: ${req.handle}`);
-  return stmt.all(...toBindings(req.params));
+  return takeStatement(req.handle!).all(...toBindings(req.params));
 }
 
 function handlePrepareGet(req: WorkerRequest): unknown {
-  const stmt = preparedStmts.get(req.handle!);
-  if (!stmt)
-    throw new Error(`Unknown prepared statement handle: ${req.handle}`);
-  return stmt.get(...toBindings(req.params)) ?? null;
+  return takeStatement(req.handle!).get(...toBindings(req.params)) ?? null;
 }
 
 function handlePrepareFinalize(req: WorkerRequest): void {
@@ -1108,9 +1163,21 @@ function handleTransaction(req: WorkerRequest): unknown {
   const run = db.transaction(() => {
     for (const step of req.steps ?? []) {
       switch (step.type) {
-        case "query":
-          lastResult = db.prepare(step.sql).all(...toBindings(step.params));
+        case "query": {
+          // Compile, run, finalize: a transaction step is one-shot, so this
+          // frees the compiled statement immediately instead of leaving one per
+          // step (the leak `handlePrepare` bounds elsewhere). `db.query` would
+          // cache the statement for reuse, which this path must not do — the
+          // same SQL can already be live on the connection from another caller,
+          // and re-entering a cached statement mid-transaction misuses it.
+          const stmt = db.prepare(step.sql);
+          try {
+            lastResult = stmt.all(...toBindings(step.params));
+          } finally {
+            stmt.finalize();
+          }
           break;
+        }
         case "run":
           lastResult = (db.run as (...args: unknown[]) => Changes)(step.sql, ...toBindings(step.params));
           break;
@@ -1125,8 +1192,37 @@ function handleTransaction(req: WorkerRequest): unknown {
   return lastResult;
 }
 
+/**
+ * This worker's open-handle and prepared-statement counts, plus the bounds in
+ * force. Reported on the `health` request so `/health/pool` can show the
+ * connection cache's actual size against its ceiling — `pending` alone cannot
+ * tell an operator whether native memory is at its bound or still climbing.
+ */
+function cacheStats(): {
+  openSpaceDbs: number;
+  preparedStmts: number;
+  cacheKib: number;
+  maxSpaceDbs: number;
+  maxPreparedStmts: number;
+} {
+  return {
+    openSpaceDbs: spaceDbs.size,
+    preparedStmts: preparedStmts.size,
+    cacheKib: bounds.spaceDbCacheKib,
+    maxSpaceDbs: bounds.maxSpaceDbs,
+    maxPreparedStmts: bounds.maxPreparedStmts,
+  };
+}
+
 function handleClose(): void {
   closed = true;
+  for (const [, stmt] of preparedStmts) {
+    try {
+      stmt.finalize();
+    } catch {
+      /* best-effort */
+    }
+  }
   preparedStmts.clear();
   for (const [, entry] of spaceDbs) {
     try {
