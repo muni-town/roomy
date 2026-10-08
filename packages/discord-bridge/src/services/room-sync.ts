@@ -13,6 +13,7 @@ import type { DiscordDataSource } from "../discord/data-source.ts";
 import { createLogger } from "../logger.ts";
 import { getCapacityGate } from "../roomy/capacity.ts";
 import type { BridgeSidebarCategory, RoomyGateway } from "../roomy/gateway.ts";
+import { sendEventOrQueue } from "./send-retry.ts";
 
 const log = createLogger("room");
 
@@ -60,16 +61,17 @@ export async function ensureRoomyChannel(
 			},
 		};
 
-		try {
-			await roomy.sendEvent(spaceDid, event);
+		const landed = await sendEventOrQueue(repo, roomy, {
+			spaceDid,
+			op: "room_create",
+			discordId: channelId,
+			events: [event],
+			mapping: { kind: "channel", value: roomUlid },
+		});
+		if (landed) {
 			repo.registerMapping(spaceDid, "channel", channelId, roomUlid);
 			log.info(
 				`Created Roomy room ${roomUlid} for Discord channel ${channelId} in ${spaceDid}`,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to create Roomy room for channel ${channelId} in ${spaceDid}`,
-				err,
 			);
 		}
 	}
@@ -223,24 +225,26 @@ export async function handleThreadCreate(
 			},
 		];
 
-		try {
-			await roomy.sendEvents(spaceDid, events);
+		// The allowlist row goes in before the send: it is what a subset
+		// bridge reads to carry the thread's messages, it stays inert until
+		// the thread's mapping exists, and a create that queues must not lose
+		// it — the sweep can only replay what the entry stores.
+		const config = repo.getBridgeConfig(guildId, spaceDid);
+		if (config?.mode === "subset") {
+			repo.addToAllowlist(spaceDid, threadId, guildId);
+		}
 
+		const landed = await sendEventOrQueue(repo, roomy, {
+			spaceDid,
+			op: "room_create",
+			discordId: threadId,
+			events,
+			mapping: { kind: "thread", value: threadUlid },
+		});
+		if (landed) {
 			repo.registerMapping(spaceDid, "thread", threadId, threadUlid);
-
-			// Auto-add thread to allowlist for subset mode bridges
-			const config = repo.getBridgeConfig(guildId, spaceDid);
-			if (config?.mode === "subset") {
-				repo.addToAllowlist(spaceDid, threadId, guildId);
-			}
-
 			log.info(
 				`Created Roomy thread ${threadUlid} for Discord thread ${threadId} in ${spaceDid}`,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to create Roomy thread for ${threadId} in ${spaceDid}`,
-				err,
 			);
 		}
 	}
@@ -280,15 +284,16 @@ export async function handleRoomUpdate(
 			name: channel.name,
 		};
 
-		try {
-			await roomy.sendEvent(spaceDid, event);
+		const landed = await sendEventOrQueue(repo, roomy, {
+			spaceDid,
+			op: "room_update",
+			discordId: channelId,
+			events: [event],
+			mapping: null,
+		});
+		if (landed) {
 			log.info(
 				`Updated Roomy ${kind} ${roomyId} name to "${channel.name}" in ${spaceDid}`,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to update Roomy ${kind} ${roomyId} in ${spaceDid}`,
-				err,
 			);
 		}
 	}
@@ -322,16 +327,17 @@ export async function handleRoomDelete(
 			roomId: Ulid.assert(roomyId),
 		};
 
-		try {
-			await roomy.sendEvent(spaceDid, event);
+		const landed = await sendEventOrQueue(repo, roomy, {
+			spaceDid,
+			op: "room_delete",
+			discordId: channelId,
+			events: [event],
+			mapping: { kind, value: null },
+		});
+		if (landed) {
 			repo.unregisterMapping(spaceDid, kind, channelId);
 			log.info(
 				`Deleted Roomy ${kind} ${roomyId} for Discord channel ${channelId} in ${spaceDid}`,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to delete Roomy ${kind} ${roomyId} in ${spaceDid}`,
-				err,
 			);
 		}
 	}

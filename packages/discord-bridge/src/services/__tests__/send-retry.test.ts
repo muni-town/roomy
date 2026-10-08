@@ -8,7 +8,6 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from "bun:test";
-import type { Event } from "@roomy-space/sdk";
 import { BridgeRepository } from "../../db/repository.ts";
 import { resetCapacityGate, setCapacityGate } from "../../roomy/capacity.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
@@ -26,7 +25,7 @@ import {
 	ROOMY_MESSAGE_ULID,
 	SPACE_A,
 } from "./helpers/test-data.ts";
-import { expectToBe, expectToBeDefined } from "./utils.ts";
+import { expectToBe, expectToBeDefined, queuedEvents } from "./utils.ts";
 
 const MSG_ID = "987654321";
 const CREATE_TYPE = "space.roomy.message.createMessage.v0";
@@ -38,24 +37,6 @@ const LATER = 60 * 60 * 1000;
 /** The create event for SPACE_A, once it has landed. */
 function createMessageEvent(roomy: MockRoomyGateway) {
 	return roomy.findEvent(SPACE_A, "space.roomy.message.createMessage.v0");
-}
-
-/** The event stored in a queue entry's payload. */
-function queuedEvent(eventJson: string): Event {
-	const parsed: unknown = JSON.parse(eventJson);
-	if (!isEventLike(parsed)) {
-		throw new Error(`queued entry has no event: ${eventJson}`);
-	}
-	return parsed;
-}
-
-function isEventLike(value: unknown): value is Event {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"id" in value &&
-		typeof value.id === "string"
-	);
 }
 
 /** Fields of a structured log line; `msg` is absent for non-JSON output. */
@@ -135,8 +116,9 @@ describe("send-retry", () => {
 
 		const queuedRow = repo.listFailedSends()[0];
 		expectToBeDefined(queuedRow);
-		const queuedId = queuedEvent(queuedRow.eventJson).id;
-
+		const queuedEvent = queuedEvents(queuedRow.eventJson)[0];
+		expectToBeDefined(queuedEvent);
+		const queuedId = queuedEvent.id;
 		await retryQueuedSends(repo, roomy, Date.now() + LATER);
 
 		const sent = createMessageEvent(roomy);

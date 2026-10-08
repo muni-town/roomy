@@ -14,7 +14,13 @@ const log = createLogger("send-retry");
  * Kind of send queued in `failed_sends`. Part of the queue key, so a message
  * create, the edit that follows it and the delete that ends it each get a row.
  */
-export type SendOp = "message_create" | "message_edit" | "message_delete";
+export type SendOp =
+	| "message_create"
+	| "message_edit"
+	| "message_delete"
+	| "room_create"
+	| "room_update"
+	| "room_delete";
 
 /** Re-offers before a queued entry is abandoned. */
 export const SEND_SWEEP_MAX_ATTEMPTS = 8;
@@ -27,15 +33,20 @@ const SWEEP_BATCH_LIMIT = 50;
 export type DurableSend = {
 	spaceDid: string;
 	op: SendOp;
-	/** Discord snowflake the event concerns; keys the queue entry. */
+	/** Discord snowflake the send concerns; keys the queue entry. */
 	discordId: string;
-	event: Event;
-	/** Mapping registered once the event lands — null for pure mutations. */
-	mapping: { kind: MappingKind; value: string } | null;
+	/** Delivered as one atomic call; a thread create carries its room and link. */
+	events: Event[];
+	/**
+	 * The mapping this send establishes, replayed once when the entry lands.
+	 * `value: null` removes the mapping instead (a deleted room); a null
+	 * `mapping` leaves the table alone for a pure mutation.
+	 */
+	mapping: { kind: MappingKind; value: string | null } | null;
 };
 
 /**
- * Send one event, and on failure queue it durably instead of dropping it.
+ * Send the events, and on failure queue them durably instead of dropping them.
  *
  * The send is attempted once. Ingest runs from a Discord gateway packet, and
  * discordeno neither serializes packet handling nor awaits the event handler,
@@ -44,9 +55,9 @@ export type DurableSend = {
  * XRPC timeout. Re-offering is the sweep's job (`retryQueuedSends`), out of
  * band, with backoff, and across restarts.
  *
- * Returns true when the event landed, in which case the caller runs its own
- * post-send bookkeeping; the sweep registers the mapping when a queued entry
- * lands later.
+ * Returns true when the send landed, in which case the caller runs its own
+ * post-send bookkeeping; the sweep replays the entry's mapping when a queued
+ * send lands later.
  */
 export async function sendEventOrQueue(
 	repo: BridgeRepository,
@@ -54,7 +65,7 @@ export async function sendEventOrQueue(
 	send: DurableSend,
 ): Promise<boolean> {
 	try {
-		await roomy.sendEvent(send.spaceDid, send.event);
+		await roomy.sendEvents(send.spaceDid, send.events);
 		return true;
 	} catch (err) {
 		const error = describe(err);
@@ -64,7 +75,7 @@ export async function sendEventOrQueue(
 			discordId: send.discordId,
 			mappingKind: send.mapping?.kind ?? null,
 			mappingValue: send.mapping?.value ?? null,
-			eventJson: JSON.stringify(send.event),
+			eventJson: JSON.stringify(send.events),
 			error,
 			attempts: 1,
 			nextRetryAt: Date.now() + sweepBackoffMs(1),
@@ -84,7 +95,7 @@ export async function sendEventOrQueue(
 
 /**
  * Re-offer queued sends whose backoff has elapsed. An entry that lands is
- * deleted and its mapping registered; one that keeps failing backs off until
+ * deleted and its mapping replayed; one that keeps failing backs off until
  * SEND_SWEEP_MAX_ATTEMPTS, then goes terminal. Terminal rows are kept, so
  * `countFailedSends()` stays a true count of everything the bridge dropped.
  */
@@ -121,8 +132,8 @@ export async function retryQueuedSends(
 			continue;
 		}
 
-		const event = parseQueuedEvent(entry);
-		if (!event) {
+		const events = parseQueuedEvents(entry);
+		if (!events) {
 			repo.markFailedSendTerminal(entry.id, "unreadable event payload");
 			log.error("Discord→Roomy send abandoned: unreadable payload", {
 				op: entry.op,
@@ -133,14 +144,25 @@ export async function retryQueuedSends(
 		}
 
 		try {
-			await roomy.sendEvent(entry.spaceDid, event);
-			if (entry.mappingKind && entry.mappingValue) {
-				repo.registerMapping(
-					entry.spaceDid,
-					entry.mappingKind,
-					entry.discordId,
-					entry.mappingValue,
-				);
+			await roomy.sendEvents(entry.spaceDid, events);
+			// The mapping is replayed here rather than by the caller: a queued
+			// send lands outside the handler that issued it, and only what is
+			// stored on the entry can be replayed.
+			if (entry.mappingKind) {
+				if (entry.mappingValue === null) {
+					repo.unregisterMapping(
+						entry.spaceDid,
+						entry.mappingKind,
+						entry.discordId,
+					);
+				} else {
+					repo.registerMapping(
+						entry.spaceDid,
+						entry.mappingKind,
+						entry.discordId,
+						entry.mappingValue,
+					);
+				}
 			}
 			repo.deleteFailedSend(entry.id);
 			log.info("Discord→Roomy send re-offer landed", {
@@ -188,15 +210,22 @@ function describe(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
-/** Decode a queued event; null when the stored payload carries no event. */
-function parseQueuedEvent(entry: FailedSend): Event | null {
+/**
+ * Decode a queued payload into the events to send; null when it carries none.
+ * Entries written before sends could carry more than one event hold a bare
+ * event object; either shape decodes to the same list.
+ */
+function parseQueuedEvents(entry: FailedSend): Event[] | null {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(entry.eventJson);
 	} catch {
 		return null;
 	}
-	return isEventLike(parsed) ? parsed : null;
+	if (Array.isArray(parsed)) {
+		return parsed.length > 0 && parsed.every(isEventLike) ? parsed : null;
+	}
+	return isEventLike(parsed) ? [parsed] : null;
 }
 
 /** An event is anything with a string `id`; the rest is opaque to the sweep. */

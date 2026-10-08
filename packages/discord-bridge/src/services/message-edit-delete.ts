@@ -156,7 +156,7 @@ export async function handleMessageEdit(
 			spaceDid,
 			op: "message_edit",
 			discordId: messageId,
-			event,
+			events: [event],
 			mapping: null,
 		});
 		if (landed) {
@@ -222,7 +222,7 @@ export async function handleMessageDelete(
 			spaceDid,
 			op: "message_delete",
 			discordId: messageIdStr,
-			event,
+			events: [event],
 			mapping: null,
 		});
 		if (landed) {

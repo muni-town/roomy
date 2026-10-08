@@ -33,9 +33,9 @@ export class MockRoomyGateway implements RoomyGateway {
 	#subscribeAttempts = 0;
 
 	/**
-	 * Make `sendEvent` reject, as a degraded appserver does when an XRPC send
-	 * times out. Affects every later call unless `count` is given, and only
-	 * events of `$type` unless it is omitted.
+	 * Make the send methods reject, as a degraded appserver does when an XRPC
+	 * send times out. Affects every later call unless `count` is given, and
+	 * only sends carrying an event of `$type` unless it is omitted.
 	 */
 	failSends(
 		opts: { count?: number; $type?: Event["$type"]; error?: Error } = {},
@@ -50,21 +50,19 @@ export class MockRoomyGateway implements RoomyGateway {
 	}
 
 	async sendEvent(spaceDid: string, event: Event): Promise<void> {
+		await this.sendEvents(spaceDid, [event]);
+	}
+
+	async sendEvents(spaceDid: string, events: Event[]): Promise<void> {
 		const failure = this.#failure;
 		if (
 			failure &&
 			failure.count > 0 &&
-			(!failure.$type || failure.$type === event.$type)
+			(!failure.$type || events.some((event) => event.$type === failure.$type))
 		) {
 			failure.count--;
 			throw failure.error;
 		}
-		const list = this.#events.get(spaceDid) ?? [];
-		list.push(event);
-		this.#events.set(spaceDid, list);
-	}
-
-	async sendEvents(spaceDid: string, events: Event[]): Promise<void> {
 		const list = this.#events.get(spaceDid) ?? [];
 		list.push(...events);
 		this.#events.set(spaceDid, list);

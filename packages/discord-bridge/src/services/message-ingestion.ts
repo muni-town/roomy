@@ -314,7 +314,7 @@ export async function ingestDiscordMessage(
 			spaceDid,
 			op: "message_create",
 			discordId: messageId,
-			event,
+			events: [event],
 			mapping: { kind: "message", value: eventUlid },
 		});
 		if (!landed) {

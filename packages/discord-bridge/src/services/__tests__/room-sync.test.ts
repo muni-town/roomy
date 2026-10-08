@@ -2,7 +2,9 @@
  * Unit tests for room-sync.ts
  *
  * Covers: RO01–RO13 — channel/thread create, update, delete,
- * full/subset mode, public/private, fan-out, idempotency.
+ * full/subset mode, public/private, fan-out, idempotency; RQ01–RQ05 — a room
+ * send that fails is queued and re-offered by the send sweep instead of being
+ * dropped with a log line.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -23,6 +25,7 @@ import {
 	readGuildStructure,
 	syncInitialStructure,
 } from "../room-sync.ts";
+import { retryQueuedSends, SEND_SWEEP_MAX_ATTEMPTS } from "../send-retry.ts";
 import {
 	CATEGORY,
 	CATEGORY_2,
@@ -38,7 +41,7 @@ import {
 	SPACE_B,
 	THREAD,
 } from "./helpers/test-data.ts";
-import { expectToBe } from "./utils.ts";
+import { expectToBe, expectToBeDefined, queuedEvents } from "./utils.ts";
 
 function createRoomEvent(gateway: MockRoomyGateway, spaceDid: string) {
 	return gateway.findEvent(spaceDid, "space.roomy.room.createRoom.v0");
@@ -413,6 +416,158 @@ describe("ensureRoomyChannel", () => {
 		const event = createRoomEvent(roomy, SPACE_A);
 		expectToBe(event?.$type, "space.roomy.room.createRoom.v0");
 		expect(event?.defaultAccess).toBe("none");
+	});
+});
+
+describe("room sends that fail are queued", () => {
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
+	/** Past every backoff the sweep can schedule (capped at 30 min). */
+	const LATER = 60 * 60 * 1000;
+
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+	});
+
+	// RQ01
+	test("RQ01: a failed rename leaves a queue row, and the sweep lands it on the same room", async () => {
+		repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
+		roomy.failSends({ $type: "space.roomy.room.updateRoom.v0", count: 1 });
+
+		await handleRoomUpdate(makeChannel({ name: "new-name" }), repo, roomy);
+
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
+		const row = repo.listFailedSends()[0];
+		expectToBeDefined(row);
+		expectToBe(row.op, "room_update");
+		expectToBe(row.discordId, CHANNEL);
+		expect(row.mappingKind).toBeNull();
+		expect(row.lastError).toContain("sendEvents timed out");
+		const queued = queuedEvents(row.eventJson)[0];
+		expectToBeDefined(queued);
+		expectToBe(queued.$type, "space.roomy.room.updateRoom.v0");
+		const queuedId = queued.id;
+
+		await retryQueuedSends(repo, roomy, Date.now() + LATER);
+
+		const sent = roomy.findEvent(SPACE_A, "space.roomy.room.updateRoom.v0");
+		expectToBeDefined(sent);
+		expect(sent.roomId).toBe(ROOMY_CHANNEL_ULID);
+		expect(sent.name).toBe("new-name");
+		expect(sent.id).toBe(queuedId);
+	});
+
+	// RQ02
+	test("RQ02: a failed channel create queues its mapping, registered only when it lands", async () => {
+		roomy.failSends({ $type: "space.roomy.room.createRoom.v0", count: 1 });
+
+		await handleChannelCreate(makeChannel(), repo, roomy);
+
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBeUndefined();
+		const row = repo.listFailedSends()[0];
+		expectToBeDefined(row);
+		expectToBe(row.op, "room_create");
+		expectToBe(row.discordId, CHANNEL);
+		expectToBe(row.mappingKind, "channel");
+
+		await retryQueuedSends(repo, roomy, Date.now() + LATER);
+
+		const sent = createRoomEvent(roomy, SPACE_A);
+		expectToBeDefined(sent);
+		expect(sent.name).toBe("general");
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(sent.id);
+		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 0 });
+	});
+
+	// RQ03
+	test("RQ03: a failed thread create queues room and link together, and allowlists the thread", async () => {
+		repo = setupRepo("subset");
+		repo.addToAllowlist(SPACE_A, CHANNEL, GUILD);
+		repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
+		roomy = new MockRoomyGateway();
+		roomy.failSends({ $type: "space.roomy.room.createRoom.v0", count: 1 });
+
+		await handleThreadCreate(makeThread({ parentId: CHANNEL }), repo, roomy);
+
+		// The allowlist row is written before the send, so a queued create
+		// still lets the thread's messages through once it lands.
+		expect(repo.isAllowlisted(SPACE_A, THREAD)).toBe(true);
+		expect(repo.getRoomyId(SPACE_A, "thread", THREAD)).toBeUndefined();
+
+		const row = repo.listFailedSends()[0];
+		expectToBeDefined(row);
+		expectToBe(row.op, "room_create");
+		expectToBe(row.discordId, THREAD);
+		expectToBe(row.mappingKind, "thread");
+		const queued = queuedEvents(row.eventJson);
+		expect(queued.map((event) => event.$type)).toEqual([
+			"space.roomy.room.createRoom.v0",
+			"space.roomy.link.createRoomLink.v0",
+		]);
+
+		await retryQueuedSends(repo, roomy, Date.now() + LATER);
+
+		const roomEvents = eventsFromGateway(
+			roomy,
+			SPACE_A,
+			"space.roomy.room.createRoom.v0",
+		);
+		const linkEvents = eventsFromGateway(
+			roomy,
+			SPACE_A,
+			"space.roomy.link.createRoomLink.v0",
+		);
+		expect(roomEvents).toHaveLength(1);
+		expect(linkEvents).toHaveLength(1);
+		const room = roomEvents[0];
+		expectToBeDefined(room);
+		expectToBe(linkEvents[0]?.$type, "space.roomy.link.createRoomLink.v0");
+		expect(linkEvents[0]?.linkToRoom).toBe(room.id);
+		expect(repo.getRoomyId(SPACE_A, "thread", THREAD)).toBe(room.id);
+		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 0 });
+	});
+
+	// RQ04
+	test("RQ04: a failed delete queues, and the sweep drops the mapping once it lands", async () => {
+		repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
+		roomy.failSends({ $type: "space.roomy.room.deleteRoom.v0", count: 1 });
+
+		await handleRoomDelete(makeChannel(), repo, roomy);
+
+		// The mapping outlives the failed delete: the room is gone on Roomy
+		// only once the event lands.
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBe(
+			ROOMY_CHANNEL_ULID,
+		);
+		const row = repo.listFailedSends()[0];
+		expectToBeDefined(row);
+		expectToBe(row.op, "room_delete");
+		expectToBe(row.mappingKind, "channel");
+		expect(row.mappingValue).toBeNull();
+
+		await retryQueuedSends(repo, roomy, Date.now() + LATER);
+
+		const sent = roomy.findEvent(SPACE_A, "space.roomy.room.deleteRoom.v0");
+		expectToBeDefined(sent);
+		expect(sent.roomId).toBe(ROOMY_CHANNEL_ULID);
+		expect(repo.getRoomyId(SPACE_A, "channel", CHANNEL)).toBeUndefined();
+		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 0 });
+	});
+
+	// RQ05
+	test("RQ05: a rename that never lands goes terminal, and the drop stays counted", async () => {
+		repo.registerMapping(SPACE_A, "channel", CHANNEL, ROOMY_CHANNEL_ULID);
+		roomy.failSends({ $type: "space.roomy.room.updateRoom.v0" });
+
+		await handleRoomUpdate(makeChannel({ name: "new-name" }), repo, roomy);
+
+		for (let sweep = 0; sweep < SEND_SWEEP_MAX_ATTEMPTS; sweep++) {
+			await retryQueuedSends(repo, roomy, Date.now() + LATER);
+		}
+
+		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 1 });
+		expect(roomy.eventCount(SPACE_A)).toBe(0);
 	});
 });
 

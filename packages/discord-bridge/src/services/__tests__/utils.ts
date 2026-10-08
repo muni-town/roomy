@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import type { Event } from "@roomy-space/sdk";
 
 /** Assert that a value is defined (NonNullable) — narrows the type for TypeScript. */
 export function expectToBeDefined<T>(
@@ -19,6 +20,25 @@ export function decodeBodyString(body: { data: { $bytes: string } }): string {
 	const binary = atob(body.data.$bytes);
 	const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
 	return new TextDecoder().decode(bytes);
+}
+
+/** An event is anything with a string `id`; the rest is opaque here. */
+export function isEventLike(value: unknown): value is Event {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"id" in value &&
+		typeof value.id === "string"
+	);
+}
+
+/** The events a `failed_sends` payload holds. */
+export function queuedEvents(eventJson: string): Event[] {
+	const parsed: unknown = JSON.parse(eventJson);
+	if (!Array.isArray(parsed) || !parsed.every(isEventLike)) {
+		throw new Error(`queued entry carries no events: ${eventJson}`);
+	}
+	return parsed;
 }
 
 /** Summary of a rich text body for assertions. */
