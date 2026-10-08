@@ -22,7 +22,7 @@ import { decodeContent, decodeRichTextBody } from "../db/content.ts";
 import { RICHTEXT_MIME, blocksToPlaintext } from "@roomy-space/sdk";
 import { hydrateProfiles } from "./profileStore.ts";
 import {
-  readRoomActivityProjectionRows,
+  readRoomActivityProjectionFor,
   rebuildRoomActivity,
   warnProjectionUnavailable,
   type RoomActivityAuthor,
@@ -500,7 +500,8 @@ function decodeBoardPreview(
  * content).
  *
  * On a partial hit the missing rooms are warmed first and the page is then
- * served entirely from the projection. Warming only those rooms costs their
+ * served entirely from the projection — the read/warm/re-read sequence is
+ * `readRoomActivityProjectionFor`. Warming only those rooms costs their
  * messages and populates the rows, so the next read is fully projected; the
  * live scan — which reads every message on the page — is left for the one case
  * it is needed: a DB with no projection table (a schema predating it, or a read
@@ -517,20 +518,9 @@ async function fetchProjectedRoomActivity(
   db: DbLike,
   roomIds: string[],
 ): Promise<Map<string, ThreadActivity> | null> {
-  const read = await readRoomActivityProjectionRows(db, roomIds);
-  if (read === null) return null;
-  if (read.missing.length > 0) {
-    try {
-      await rebuildRoomActivity(db, read.missing);
-    } catch (err) {
-      warnProjectionUnavailable(err);
-      return null;
-    }
-    const reread = await readRoomActivityProjectionRows(db, roomIds);
-    if (reread === null || reread.missing.length > 0) return null;
-    return projectRoomActivity(db, roomIds, reread.rows);
-  }
-  return projectRoomActivity(db, roomIds, read.rows);
+  const rows = await readRoomActivityProjectionFor(db, roomIds);
+  if (rows === null) return null;
+  return projectRoomActivity(db, roomIds, rows);
 }
 
 /**

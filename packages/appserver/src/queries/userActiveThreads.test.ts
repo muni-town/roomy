@@ -28,6 +28,7 @@ import {
   isThread,
   purgeStaleThreadActivity,
 } from "./userActiveThreads.ts";
+import { readRoomActivityProjection } from "./roomActivityProjection.ts";
 
 const SPACE = "did:web:space.example";
 const CHANNEL = "01CHANNEL00000000000000000";
@@ -85,6 +86,21 @@ async function seedBasic(spaceDb: DbLike) {
   // User entities
   await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [USER, SPACE]);
   await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [OTHER_USER, SPACE]);
+}
+
+/**
+ * The same DB with `room_activity` made unreadable, so `resolveThreadsByIds`
+ * takes its scan fallback. The projection is an optimisation; the scan is the
+ * behaviour it has to reproduce.
+ */
+function noProjectionDb(spaceDb: DbLike): DbLike {
+  return {
+    ...spaceDb,
+    query(sql: string) {
+      if (sql.includes("room_activity")) throw new Error("no such table: room_activity");
+      return spaceDb.query(sql);
+    },
+  };
 }
 
 describe("isThread", () => {
@@ -295,6 +311,101 @@ describe("resolveThreadsByIds", () => {
   test("returns empty map for empty input", async () => {
     const { spaceDb } = freshDb();
     expect((await resolveThreadsByIds(spaceDb, [])).size).toBe(0);
+  });
+});
+
+/**
+ * `resolveThreadsByIds` reads its activity columns from the `room_activity`
+ * projection. These tests read the same fixture through the scan fallback and
+ * through the projection and require the two to agree exactly — the
+ * optimisation is only sound if the thread metadata is unchanged.
+ */
+describe("resolveThreadsByIds activity columns", () => {
+  /** Post a message with an explicit timestamp, as the materialiser leaves it. */
+  async function postM(
+    spaceDb: DbLike,
+    id: string,
+    room: string,
+    did: string,
+    ts: number | null,
+  ): Promise<void> {
+    await spaceDb.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      id,
+      SPACE,
+      room,
+    ]);
+    await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [did, did]);
+    await spaceDb.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/plain', ?, ?, ?)",
+      [id, Buffer.from("hi"), id, ts],
+    );
+    await spaceDb.run("insert into edges (head, tail, label) values (?, ?, 'author')", [id, did]);
+  }
+
+  /** Post more messages than the board renders, from distinct authors. */
+  async function postMany(spaceDb: DbLike, room: string, count: number): Promise<void> {
+    for (let i = 0; i < count; i++) {
+      await postM(spaceDb, `01MSGPARITY${String(i).padStart(13, "0")}`, room, `did:plc:author${i}`, 1000 + i);
+    }
+  }
+
+  test("projection matches the scan for multiple messages per thread", async () => {
+    const { spaceDb } = freshDb();
+    await seedBasic(spaceDb);
+
+    // Four authors in THREAD_A, two in THREAD_B, one of them older.
+    await postM(spaceDb, "01MSGPARITYA000000000000001", THREAD_A, USER, 5000);
+    await postM(spaceDb, "01MSGPARITYA000000000000002", THREAD_A, OTHER_USER, 9000);
+    await postM(spaceDb, "01MSGPARITYA000000000000003", THREAD_A, "did:plc:carol", 7000);
+    await postM(spaceDb, "01MSGPARITYA000000000000004", THREAD_A, USER, 3000);
+    await postM(spaceDb, "01MSGPARITYB000000000000001", THREAD_B, "did:plc:dave", 2000);
+    await postM(spaceDb, "01MSGPARITYB000000000000002", THREAD_B, "did:plc:erin", 8000);
+
+    const scanned = await resolveThreadsByIds(noProjectionDb(spaceDb), [THREAD_A, THREAD_B]);
+    // The projection starts empty, so the first read warms it and the second
+    // reads it — and the columns must be identical.
+    await resolveThreadsByIds(spaceDb, [THREAD_A, THREAD_B]);
+    const projected = await resolveThreadsByIds(spaceDb, [THREAD_A, THREAD_B]);
+    // A silent fallback would make the comparison pass trivially.
+    expect(await readRoomActivityProjection(spaceDb, [THREAD_A, THREAD_B])).not.toBeNull();
+    expect([...projected.entries()]).toEqual([...scanned.entries()]);
+    expect(projected.get(THREAD_A)!.latestTimestamp).toBe(new Date(9000).toISOString());
+    expect(projected.get(THREAD_B)!.latestTimestamp).toBe(new Date(8000).toISOString());
+  });
+
+  test("the three rendered participants are the newest authors, in order", async () => {
+    const { spaceDb } = freshDb();
+    await seedBasic(spaceDb);
+
+    // A fourth author who is neither newest nor oldest must be dropped by the
+    // three-member cap, in both paths.
+    await postMany(spaceDb, THREAD_A, 4);
+    await resolveThreadsByIds(spaceDb, [THREAD_A]);
+    const projected = await resolveThreadsByIds(spaceDb, [THREAD_A]);
+    const scanned = await resolveThreadsByIds(noProjectionDb(spaceDb), [THREAD_A]);
+
+    const dids = (r: { latestMembers: Array<{ did: string }> }) =>
+      r.latestMembers.map((m) => m.did);
+    expect(dids(projected.get(THREAD_A)!)).toHaveLength(3);
+    expect(dids(projected.get(THREAD_A)!)).toEqual(dids(scanned.get(THREAD_A)!));
+    // Newest-first: author3 posted at 1003, author2 at 1002, author1 at 1001.
+    expect(dids(projected.get(THREAD_A)!)).toEqual([
+      "did:plc:author3",
+      "did:plc:author2",
+      "did:plc:author1",
+    ]);
+  });
+
+  test("a thread with no messages has no timestamp and no members", async () => {
+    const { spaceDb } = freshDb();
+    await seedBasic(spaceDb);
+
+    const projected = await resolveThreadsByIds(spaceDb, [THREAD_A]);
+    const scanned = await resolveThreadsByIds(noProjectionDb(spaceDb), [THREAD_A]);
+
+    expect([...projected.entries()]).toEqual([...scanned.entries()]);
+    expect(projected.get(THREAD_A)!.latestTimestamp).toBeNull();
+    expect(projected.get(THREAD_A)!.latestMembers).toEqual([]);
   });
 });
 

@@ -467,6 +467,33 @@ export async function readRoomActivityProjection(
   return read.rows;
 }
 
+/**
+ * Read the projection for `roomIds`, rebuilding the rooms it has no row for
+ * and reading again, so the whole set is answered from the projection.
+ *
+ * `null` when the table cannot be read at all, or when a row is still missing
+ * after the rebuild — the caller's cue to use the live scan. Both cases are the
+ * ones `threadActivity.ts:fetchProjectedRoomActivity` already handles for a
+ * board page; this variant exists for callers whose room set is not a page and
+ * whose fallback is their own, so the read-then-warm-then-reread sequence is
+ * not written a third time.
+ */
+export async function readRoomActivityProjectionFor(
+  db: DbLike,
+  roomIds: readonly string[],
+): Promise<Map<string, RoomActivitySummary> | null> {
+  const read = await readRoomActivityProjectionRows(db, roomIds);
+  if (read === null) return null;
+  if (read.missing.length === 0) return read.rows;
+  try {
+    await rebuildRoomActivity(db, read.missing);
+  } catch (err) {
+    warnProjectionUnavailable(err);
+    return null;
+  }
+  return readRoomActivityProjection(db, roomIds);
+}
+
 let warnedUnavailable = false;
 
 /**
