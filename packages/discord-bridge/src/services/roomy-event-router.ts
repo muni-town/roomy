@@ -146,6 +146,40 @@ function stripFauxPrefixLines(content: string): string {
 	return content.replace(/^(?:-# ↪[^\n]*\n?)+/, "");
 }
 
+/** A bare URL (explicit scheme or `www.`) running to the next whitespace or
+ * angle bracket. */
+const BARE_URL_RE = /(?:https?:\/\/|www\.)[^\s<>]+/g;
+
+/**
+ * Neutralise bare URLs in a quote snippet by wrapping each in `<…>`, Discord's
+ * embed-suppression syntax. Quoting a message whose own text is a link would
+ * otherwise recreate the link card the parent message already carries; this is
+ * the inverse of `decodeBody`'s autolink unwrapping, which exists so a bridged
+ * link does unfurl.
+ */
+export function suppressUrlEmbeds(text: string): string {
+	return text.replace(BARE_URL_RE, (url) => `<${url}>`);
+}
+
+/**
+ * Truncate `text` to `maxLength` characters without splitting a URL. When the
+ * window would end inside a URL, the cut backs up to that URL's start: a
+ * half-URL in the quote renders as a broken link.
+ */
+export function truncateOutsideUrls(text: string, maxLength: number): string {
+	if (text.length <= maxLength) return text;
+	let cut = maxLength;
+	for (const match of text.matchAll(BARE_URL_RE)) {
+		const start = match.index;
+		if (start >= cut) break;
+		if (start + match[0].length > cut) {
+			cut = start;
+			break;
+		}
+	}
+	return text.slice(0, cut);
+}
+
 /**
  * Decode a message body from a Roomy event into a Discord-renderable string.
  *
@@ -953,8 +987,10 @@ export class RoomyEventRouter {
 	 *
 	 * Discord webhooks can't set `message_reference`, so a reply is rendered
 	 * as small grey text: `-# ↪ <message-link> <quote-snippet>`. The raw link
-	 * renders as a clickable button in Discord. Falls back to no prefix when
-	 * the target message or guild can't be resolved.
+	 * renders as a clickable button in Discord. The snippet is the parent's
+	 * own text with URLs neutralised (see `suppressUrlEmbeds`) and truncated
+	 * only where it cannot split one (see `truncateOutsideUrls`). Falls back to
+	 * no prefix when the target message or guild can't be resolved.
 	 */
 	async #buildReplyPrefix(
 		channelId: string,
@@ -980,10 +1016,14 @@ export class RoomyEventRouter {
 				// When the parent has no own text, fall back to link-only.
 				const ownText = stripFauxPrefixLines(original.content);
 				if (ownText) {
-					snippet =
-						ownText.length > QUOTE_MAX_LENGTH
-							? ` ${ownText.slice(0, QUOTE_MAX_LENGTH)}...`
-							: ` ${ownText}`;
+					const quoted = truncateOutsideUrls(ownText, QUOTE_MAX_LENGTH);
+					// A quote that is empty once the URL is dropped (the parent's
+					// own text opens with a URL longer than the window) falls back
+					// to link-only like a parent with no own text.
+					if (quoted) {
+						const ellipsis = quoted.length < ownText.length ? "..." : "";
+						snippet = ` ${suppressUrlEmbeds(quoted)}${ellipsis}`;
+					}
 				}
 			}
 		} catch {

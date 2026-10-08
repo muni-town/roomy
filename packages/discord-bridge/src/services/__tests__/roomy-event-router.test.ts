@@ -30,6 +30,8 @@ import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import {
 	RoomyEventRouter,
 	resolveAttachmentUrl,
+	suppressUrlEmbeds,
+	truncateOutsideUrls,
 } from "../roomy-event-router.ts";
 import {
 	GUILD,
@@ -1651,6 +1653,130 @@ test("RER42: reply to a marker-only parent falls back to a link-only prefix", as
 	);
 });
 
+/** The quote snippet of a faux reply prefix: everything past its own link. */
+function replyQuoteSnippet(
+	content: string | undefined,
+	parentDiscordId: string,
+): string {
+	const prefixLine = content?.split("\n")[0] ?? "";
+	const link = `-# ↪ https://discord.com/channels/${GUILD}/${DISCORD_CHANNEL_ID}/${parentDiscordId}`;
+	return prefixLine.slice(link.length);
+}
+
+/**
+ * RER56: Quoting a parent whose own text is a bare URL must not recreate the
+ * link card the parent already carries. URLs in the snippet are wrapped in
+ * `<…>`, Discord's embed-suppression syntax.
+ */
+test("RER56: reply quote neutralises a URL in the parent's own text", async () => {
+	const { roomy, discord, router, repo } = setup();
+	const parentRoomyId = newUlid();
+	const parentDiscordId = "8a0000000000000001";
+	const parentUrl = "https://example.com/very/interesting/path";
+	repo.registerMapping(SPACE_A, "message", parentDiscordId, parentRoomyId);
+	discord.setMessage(DISCORD_CHANNEL_ID, parentDiscordId, parentUrl);
+	await router.subscribeToSpace(SPACE_A);
+
+	const event = makeCreateMessageEvent({
+		content: "This is a reply to a link",
+		extensions: {
+			"space.roomy.extension.attachments.v0": {
+				$type: "space.roomy.extension.attachments.v0",
+				attachments: [
+					{
+						$type: "space.roomy.attachment.reply.v0",
+						target: parentRoomyId,
+					},
+				],
+			},
+		},
+	});
+	await roomy.fireEvent(SPACE_A, event);
+
+	expect(discord.sent).toHaveLength(1);
+	const snippet = replyQuoteSnippet(discord.sent[0]?.content, parentDiscordId);
+	expect(snippet).toBe(` <${parentUrl}>`);
+	// No bare URL in the snippet means Discord has nothing to unfurl.
+	expect(snippet).not.toMatch(/(?<!<)https?:\/\//);
+});
+
+/**
+ * RER57: A URL that crosses the quote window is dropped whole rather than cut
+ * in half — a truncated URL renders as a broken link in Discord.
+ */
+test("RER57: reply quote never truncates mid-URL", async () => {
+	const { roomy, discord, router, repo } = setup();
+	const parentRoomyId = newUlid();
+	const parentDiscordId = "8a0000000000000002";
+	const parentOwnText =
+		"See https://example.com/a/very/long/path/that/crosses/the/window";
+	repo.registerMapping(SPACE_A, "message", parentDiscordId, parentRoomyId);
+	discord.setMessage(DISCORD_CHANNEL_ID, parentDiscordId, parentOwnText);
+	await router.subscribeToSpace(SPACE_A);
+
+	const event = makeCreateMessageEvent({
+		content: "This is a reply to a long link",
+		extensions: {
+			"space.roomy.extension.attachments.v0": {
+				$type: "space.roomy.extension.attachments.v0",
+				attachments: [
+					{
+						$type: "space.roomy.attachment.reply.v0",
+						target: parentRoomyId,
+					},
+				],
+			},
+		},
+	});
+	await roomy.fireEvent(SPACE_A, event);
+
+	expect(discord.sent).toHaveLength(1);
+	const snippet = replyQuoteSnippet(discord.sent[0]?.content, parentDiscordId);
+	// The URL starts at index 4 and the window ends inside it, so the quote
+	// keeps the words before it and stops there.
+	expect(snippet).toBe(" See ...");
+	expect(snippet).not.toContain("example.com");
+});
+
+/**
+ * RER58: When the parent's own text opens with a URL longer than the quote
+ * window there is no text left to quote — the prefix falls back to link-only,
+ * like a parent with no own text.
+ */
+test("RER58: reply quote falls back to link-only when only a long URL fits", async () => {
+	const { roomy, discord, router, repo } = setup();
+	const parentRoomyId = newUlid();
+	const parentDiscordId = "8a0000000000000003";
+	repo.registerMapping(SPACE_A, "message", parentDiscordId, parentRoomyId);
+	discord.setMessage(
+		DISCORD_CHANNEL_ID,
+		parentDiscordId,
+		`https://example.com/${"x".repeat(60)}`,
+	);
+	await router.subscribeToSpace(SPACE_A);
+
+	const event = makeCreateMessageEvent({
+		content: "This is a reply to a bare long link",
+		extensions: {
+			"space.roomy.extension.attachments.v0": {
+				$type: "space.roomy.extension.attachments.v0",
+				attachments: [
+					{
+						$type: "space.roomy.attachment.reply.v0",
+						target: parentRoomyId,
+					},
+				],
+			},
+		},
+	});
+	await roomy.fireEvent(SPACE_A, event);
+
+	expect(discord.sent).toHaveLength(1);
+	expect(discord.sent[0]?.content).toBe(
+		`-# ↪ https://discord.com/channels/${GUILD}/${DISCORD_CHANNEL_ID}/${parentDiscordId}\nThis is a reply to a bare long link`,
+	);
+});
+
 /**
  * RER43: deleting a message inside a bridged thread deletes it in the thread
  * while resolving the webhook from the parent channel — threads can't have
@@ -2144,7 +2270,9 @@ describe("resolveAttachmentUrl", () => {
 // ─── Roomy → Discord history backfill ──────────────────────────────
 
 /** A room-history message fixture, as `space.roomy.room.getMessages` returns one. */
-function roomMessage(overrides: Partial<RoomyRoomMessage> = {}): RoomyRoomMessage {
+function roomMessage(
+	overrides: Partial<RoomyRoomMessage> = {},
+): RoomyRoomMessage {
 	return {
 		id: newUlid(),
 		content: "history message",
@@ -2375,11 +2503,19 @@ describe("RoomyEventRouter Roomy→Discord history backfill", () => {
 	/** RB09: a thread room posts through its parent channel's webhook. */
 	test("RB09: posts a thread's history into the thread", async () => {
 		const { repo, roomy, discord, router } = setup();
-		repo.registerMapping(SPACE_A, "thread", DISCORD_THREAD_ID, ROOMY_THREAD_ULID);
+		repo.registerMapping(
+			SPACE_A,
+			"thread",
+			DISCORD_THREAD_ID,
+			ROOMY_THREAD_ULID,
+		);
 		discord.setParentChannelId(DISCORD_THREAD_ID, DISCORD_CHANNEL_ID);
 		roomy.seedRoomMessages(ROOMY_THREAD_ULID, [roomMessage()]);
 
-		const result = await router.backfillRoomToDiscord(SPACE_A, ROOMY_THREAD_ULID);
+		const result = await router.backfillRoomToDiscord(
+			SPACE_A,
+			ROOMY_THREAD_ULID,
+		);
 
 		expectToBe(result.posted, 1);
 		// Webhooks live on the parent channel; a thread cannot own one.
@@ -2407,5 +2543,28 @@ describe("RoomyEventRouter Roomy→Discord history backfill", () => {
 		expectToBe(result.posted, 1);
 		expectToBe(result.failed, 1);
 		expect(discord.sent.map((m) => m.content)).toEqual(["fine"]);
+	});
+});
+
+describe("reply quote text helpers", () => {
+	test("truncateOutsideUrls cuts at a URL's start, never inside it", () => {
+		const url = "https://example.com/abcdef";
+		const text = `see ${url} now`;
+		// A window ending exactly at the URL's end keeps it whole.
+		expect(truncateOutsideUrls(text, 4 + url.length)).toBe(`see ${url}`);
+		// One character shorter lands inside it, so the whole URL is dropped.
+		expect(truncateOutsideUrls(text, 3 + url.length)).toBe("see ");
+		// A later URL is untouched once an earlier one ends inside the window.
+		expect(truncateOutsideUrls(`${url} ${url}/x`, url.length)).toBe(url);
+	});
+
+	test("suppressUrlEmbeds wraps URLs and leaves plain text alone", () => {
+		expect(suppressUrlEmbeds("see https://example.com/a?b=1 now")).toBe(
+			"see <https://example.com/a?b=1> now",
+		);
+		expect(suppressUrlEmbeds("see www.example.com now")).toBe(
+			"see <www.example.com> now",
+		);
+		expect(suppressUrlEmbeds("no links here")).toBe("no links here");
 	});
 });
