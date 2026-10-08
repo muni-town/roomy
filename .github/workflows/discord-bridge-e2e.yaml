@@ -1,0 +1,153 @@
+# Live end-to-end run for the Discord bridge: a real bridge process, a real
+# Discord guild, a real PDS login, the staging appserver.
+#
+# Manual on purpose. The run bridges a real channel: it posts, edits, deletes,
+# and creates threads in it, and it needs a bridge account's credentials. Two
+# runs at once would both answer the same events, and a fork PR must never
+# reach the credentials — so this is a human-triggered run, never a pull
+# request gate.
+#
+# Dispatch the branch you want to test: the workflow checks out, builds, and
+# boots the bridge from the dispatched ref, so an open PR can be validated
+# before merge.
+#
+# Prerequisites (repo settings):
+#   secrets.DISCORD_BRIDGE_E2E_TOKEN         — staging bridge bot token
+#   secrets.DISCORD_BRIDGE_E2E_APP_PASSWORD  — app password of the bridge account
+# The fixtures below are repo variables with staging defaults: the `#general`
+# channel of the bridge test guild, bridged to a room in the `Bridge E2E Test`
+# space. Override them to point the run at a different channel, room, or
+# appserver. The seed records whatever threads that channel already holds as
+# handled, so a dispatch neither rooms them nor ingests their history.
+name: Discord Bridge E2E
+
+on:
+  workflow_dispatch:
+
+# Queue, never cancel: a cancelled run leaves its webhook and thread in the
+# channel and can leave the bridge mid-send.
+concurrency:
+  group: discord-bridge-e2e
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # One fresh database for the run: the bridge writes it, the E2E reads
+      # its message mappings back out. Seeded below before the bridge starts.
+      BRIDGE_DB_PATH: /tmp/bridge-e2e/bridge.sqlite
+      BRIDGE_DATA_DIR: /tmp/bridge-e2e
+      LOG_LEVEL: debug
+
+      # Staging appserver.
+      APPSERVER_URL: ${{ vars.DISCORD_BRIDGE_E2E_APPSERVER_URL || 'https://api.roomy.space' }}
+      APPSERVER_DID: ${{ vars.DISCORD_BRIDGE_E2E_APPSERVER_DID || 'did:web:api.roomy.space' }}
+
+      # Bridge account.
+      DISCORD_TOKEN: ${{ secrets.DISCORD_BRIDGE_E2E_TOKEN }}
+      ATPROTO_BRIDGE_APP_PASSWORD: ${{ secrets.DISCORD_BRIDGE_E2E_APP_PASSWORD }}
+      ATPROTO_BRIDGE_DID: ${{ vars.DISCORD_BRIDGE_E2E_BRIDGE_DID || 'did:plc:pf4dgats5ugmzpzmfbu4jbn5' }}
+
+      # The bridged (channel, space) pair the E2E drives.
+      E2E_SPACE_DID: ${{ vars.DISCORD_BRIDGE_E2E_SPACE_DID || 'did:plc:r5hlxel6tbh6vucl2jtdmni3' }}
+      E2E_ROOM_ULID: ${{ vars.DISCORD_BRIDGE_E2E_ROOM_ULID || '01KZNSNH2FM879C12C1VK87MY7' }}
+      E2E_DISCORD_CHANNEL_ID: ${{ vars.DISCORD_BRIDGE_E2E_CHANNEL_ID || '1475625518132105319' }}
+
+    steps:
+      # Credentials only exist in repo secrets, so a run that lacks them
+      # should say so before it installs and builds.
+      - name: Check the E2E credentials are configured
+        run: |
+          missing=""
+          [ -z "${DISCORD_TOKEN}" ] && missing="${missing} DISCORD_BRIDGE_E2E_TOKEN"
+          [ -z "${ATPROTO_BRIDGE_APP_PASSWORD}" ] && missing="${missing} DISCORD_BRIDGE_E2E_APP_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::missing repo secret(s):${missing}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.16.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK (discord-bridge imports its dist)
+        run: pnpm turbo run build-lib
+
+      # The bridge is booted here, not by the E2E: the E2E asserts on the
+      # bridge's own database, so the bridge it drives has to be this
+      # checkout's code on this run's database.
+      - name: Seed the bridge DB for the E2E pair
+        working-directory: packages/discord-bridge
+        run: bun run src/scripts/seed-e2e-db.ts
+
+      - name: Start the bridge
+        working-directory: packages/discord-bridge
+        run: |
+          set -euo pipefail
+          bun run src/index.ts > "$RUNNER_TEMP/bridge.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/bridge.pid"
+          echo "bridge pid $(cat "$RUNNER_TEMP/bridge.pid")"
+
+      - name: Wait for the bridge to subscribe to the space
+        working-directory: packages/discord-bridge
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if grep -q "Subscribed to events from ${E2E_SPACE_DID}" "$RUNNER_TEMP/bridge.log"; then
+              echo "bridge is live on ${E2E_SPACE_DID}"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/bridge.pid")" 2>/dev/null; then
+              echo "::error::bridge exited before subscribing"
+              tail -50 "$RUNNER_TEMP/bridge.log"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::bridge did not subscribe within 120s"
+          tail -100 "$RUNNER_TEMP/bridge.log"
+          exit 1
+
+      - name: Run the E2E
+        working-directory: packages/discord-bridge
+        run: bun run src/scripts/e2e.ts
+
+      - name: Stop the bridge
+        if: ${{ always() }}
+        run: |
+          if [ -f "$RUNNER_TEMP/bridge.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/bridge.pid")" 2>/dev/null || true
+          fi
+
+      - name: Upload bridge log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: discord-bridge-e2e-log
+          path: ${{ runner.temp }}/bridge.log
+          if-no-files-found: ignore
+          retention-days: 7

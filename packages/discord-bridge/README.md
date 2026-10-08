@@ -397,3 +397,48 @@ bun run dev       # watch mode
 bun run start     # production mode
 ```
 
+## End-to-end test (live)
+
+`src/scripts/e2e.ts` drives a **running** bridge against a real Discord channel
+and the staging appserver: Roomy→Discord sends/edits/deletes (channel and
+thread) and Discord→Roomy media ingestion. It reads the bridge's own SQLite DB
+to resolve the message ids it asserts on, so the bridge it drives must be the
+one that owns `BRIDGE_DB_PATH` — and that bridge must be booted on a **fresh**
+database, or it would re-ingest the channel's history and replay the space's
+event log back into Discord.
+
+A run leaves the channel as it found it where it can: it takes back the
+webhook it made, the Discord thread it had the bridge create, that thread's
+`THREAD_CREATED` system message, and the bridge's own channel webhook (whose
+token row it keeps if Discord refuses the delete). The messages it bridges
+stay — they exist on both sides.
+
+`src/scripts/seed-e2e-db.ts` writes the rows that make the pair look like an
+established connection — `bridge_config`, allowlist, channel→room mapping,
+backfill complete, structure sync applied, Roomy cursor past the end of the
+log, and every thread the channel already holds recorded as handled (a fresh
+database makes the bridge adopt any thread under a bridged channel it has no
+mapping for, once per run) — so a fresh database behaves for that one pair
+like the live bridge.
+
+CI runs both scripts on demand
+([`.github/workflows/discord-bridge-e2e.yaml`](../../.github/workflows/discord-bridge-e2e.yaml),
+`workflow_dispatch` only — the run mutates a real channel, so it is not a pull
+request gate). It needs the `DISCORD_BRIDGE_E2E_TOKEN` and
+`DISCORD_BRIDGE_E2E_APP_PASSWORD` repo secrets; the appserver and the
+(channel, space, room) triple it targets are `DISCORD_BRIDGE_E2E_*` repo
+variables with staging defaults in the workflow.
+
+The same sequence locally, from `packages/discord-bridge`:
+
+```bash
+export BRIDGE_DB_PATH=/tmp/e2e-bridge.sqlite
+export E2E_SPACE_DID=did:plc:...            # bridged space
+export E2E_ROOM_ULID=01...                  # bridged channel's Roomy room
+export E2E_DISCORD_CHANNEL_ID=147...       # bridged Discord channel
+
+bun run src/scripts/seed-e2e-db.ts   # once, on a fresh database path
+bun run src/index.ts                 # the bridge under test, same BRIDGE_DB_PATH
+bun run src/scripts/e2e.ts           # in another shell
+```
+

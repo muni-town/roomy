@@ -20,24 +20,33 @@
  * start it). It authenticates as the bridge account and reads the bridge's
  * SQLite DB to resolve Roomy↔Discord message mappings.
  *
- * CI note: this cannot run in CI today — it needs a real Discord guild with
- * a bridged channel, a staging appserver, and the bridge account's app
- * password. It is written to be CI-adoptable: it takes all inputs from env,
- * exits non-zero on any failure, and cleans up the webhook and the thread it
- * creates. The delete checks need the bridge bot to have Create Threads in
- * that channel (as ordinary thread bridging does) and Manage Threads to tear
- * the test thread down again.
+ * It leaves the channel as it found it: the test webhook, the Discord thread
+ * it had the bridge create, that thread's THREAD_CREATED system message, and
+ * the bridge's own channel webhook all come back out.
+ *
+ * CI runs it through `.github/workflows/discord-bridge-e2e.yaml`, on manual
+ * dispatch: that job seeds a fresh bridge DB with the rows for the E2E pair
+ * (`src/scripts/seed-e2e-db.ts`, which also records the threads the channel
+ * already holds as handled, so a run never creates rooms for them or ingests
+ * their history), boots the bridge from the dispatched ref on that DB, and
+ * then runs this script against it. The delete checks need the bridge bot to
+ * have Create Threads in that channel (as ordinary thread bridging does) and
+ * Manage Threads to tear the test thread down again.
  *
  * Usage (from packages/discord-bridge, with .env loaded):
  *   export E2E_SPACE_DID=did:plc:...            # bridged space
  *   export E2E_ROOM_ULID=01...                  # bridged channel's Roomy room
  *   export E2E_DISCORD_CHANNEL_ID=147...       # bridged Discord channel
- *   bun run src/scripts/e2e.ts
+ *   export BRIDGE_DB_PATH=/tmp/e2e-bridge.sqlite
+ *   bun run src/scripts/seed-e2e-db.ts          # once, on a fresh path
+ *   bun run src/index.ts                        # the bridge, on that DB
+ *   bun run src/scripts/e2e.ts                  # this script
  */
 
 import { Database } from "bun:sqlite";
 import { AtpAgent } from "@atproto/api";
 import { transport, newUlid, toBytes, serializeBlocks } from "@roomy-space/sdk";
+import { MsgType } from "../discord/types.ts";
 
 // ── config ──────────────────────────────────────────────────────────────────
 
@@ -183,6 +192,59 @@ function roomyIdForDiscordMessage(discordMessageId: string): string | undefined 
 			)
 			.get(discordMessageId) as { roomy_id: string } | null;
 		return row?.roomy_id;
+	} finally {
+		db.close();
+	}
+}
+
+/**
+ * Discord posts a THREAD_CREATED system message in the parent channel when a
+ * thread starts; deleting the thread does not take it with it.
+ */
+async function threadCreatedMessageId(
+	channelId: string,
+	threadName: string,
+): Promise<string | undefined> {
+	const messages = await discordGet<
+		{ id: string; type: number; content: string }[]
+	>(`/channels/${channelId}/messages?limit=10`);
+	return messages.find(
+		(m) => m.type === MsgType.ThreadCreated && m.content === threadName,
+	)?.id;
+}
+
+/**
+ * Delete the channel webhook this run's bridge created, along with its token
+ * row: a bridge on a fresh database makes one webhook per channel it sends
+ * into, so a run that leaves it behind adds one webhook to the channel every
+ * time. The row only goes once Discord confirms the webhook is gone, so a
+ * failed delete keeps the token for a later run on the same database.
+ */
+async function removeBridgeChannelWebhook(): Promise<void> {
+	const db = new Database(DB_PATH);
+	try {
+		const row = db
+			.query<{ webhook_id: string }, [string]>(
+				`SELECT webhook_id FROM webhook_tokens WHERE channel_id = ?`,
+			)
+			.get(CHANNEL_ID);
+		if (!row) return;
+
+		const res = await discordFetch(`/webhooks/${row.webhook_id}`, {
+			method: "DELETE",
+			headers: discordHeaders(),
+		});
+		if (!res.ok && res.status !== 404) {
+			console.error(
+				`  (channel webhook ${row.webhook_id} not removed: ${res.status})`,
+			);
+			return;
+		}
+
+		db.prepare(`DELETE FROM webhook_tokens WHERE channel_id = ?`).run(
+			CHANNEL_ID,
+		);
+		console.log("  (cleaned up bridged-channel webhook)");
 	} finally {
 		db.close();
 	}
@@ -493,6 +555,7 @@ async function main(): Promise<void> {
 	// use the parent channel's webhook (threads can't have webhooks) while
 	// targeting the thread itself.
 	const threadId = newUlid();
+	const threadName = `E2E thread ${threadId.slice(-8)}`;
 	await xrpc.procedure("space.roomy.space.sendEvents", {
 		spaceId: SPACE_DID,
 		events: [
@@ -500,7 +563,7 @@ async function main(): Promise<void> {
 				id: threadId,
 				$type: "space.roomy.room.createRoom.v0",
 				kind: "space.roomy.thread",
-				name: `E2E thread ${threadId.slice(-8)}`,
+				name: threadName,
 				defaultAccess: "readwrite",
 				extensions: {},
 			},
@@ -548,8 +611,19 @@ async function main(): Promise<void> {
 		}
 		// Deleting the Discord thread removes whatever the checks left behind.
 		await discordDelete(`/channels/${discordThreadId}`).catch(() => {});
+		const createdMessageId = await threadCreatedMessageId(
+			CHANNEL_ID,
+			threadName,
+		).catch(() => undefined);
+		if (createdMessageId) {
+			await discordDelete(
+				`/channels/${CHANNEL_ID}/messages/${createdMessageId}`,
+			).catch(() => {});
+		}
 		console.log("  (cleaned up E2E thread)");
 	}
+
+	await removeBridgeChannelWebhook();
 
 	// ── summary ─────────────────────────────────────────────────────────────
 	console.log("");
