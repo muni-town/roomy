@@ -13,7 +13,7 @@ tokens; web users get HappyView-custodied ~2-year confidential tokens.
 ## What is already in place (untested on desktop)
 
 - `tauriLogin()` in `packages/sdk/src/browser/oauth.ts` already contains a
-  HappyView branch: `client.prepareLogin(handle, {state, scope})` →
+  HappyView branch: `client.prepareLogin(handle, {scope})` →
   `tauri.opener.openUrl(authorizationUrl)` → wait for the
   `space.roomy:/?state=…&code=…` deep link → `client.initCallback(search)`.
   It has never been run against a real PDS/HappyView instance.

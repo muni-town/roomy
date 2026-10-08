@@ -22,6 +22,11 @@ import { clearPersistedCache } from "./client";
 import { setAppserverOrigin } from "./appserver-origin";
 import { subscribeIfAlreadyPermitted, clearPushSubscription } from "./push.svelte";
 import { saveLastLogin } from "./last-login.svelte";
+import {
+  consumeReturnUrl,
+  hasOAuthCallbackParams,
+  rememberReturnUrl,
+} from "./return-url";
 
 const { ServiceAuthClient, DirectXrpcClient, resolveAppserverHttpOrigin } = transport;
 
@@ -102,29 +107,9 @@ export const auth = {
   },
 };
 
-/**
- * The current page location (path + query + hash), suitable for round-tripping
- * through the OAuth `state` parameter so we can send the user back where they
- * were after the PDS callback.
- */
+/** The current page location (path + query + hash), a return-URL candidate. */
 function currentReturnUrl(): string {
   return location.pathname + location.search + location.hash;
-}
-
-/**
- * Validate a value returned from the OAuth `state` parameter before treating
- * it as a navigation target. `state` is opaque to the PDS and returned verbatim,
- * so under normal flow it is exactly what we sent in `login()`. But a crafted
- * callback URL could inject an arbitrary `state`, so only accept same-origin,
- * path-relative targets (must start with a single `/`). This prevents an
- * open-redirect via a malicious `state` like `https://evil.example` or
- * `//evil.example`.
- */
-function safeReturnUrl(state: unknown): string | null {
-  if (typeof state !== "string" || state.length === 0) return null;
-  // Must be a root-relative path; reject protocol-relative (`//`) and absolute URLs.
-  if (state[0] !== "/" || state[1] === "/") return null;
-  return state;
 }
 
 /**
@@ -237,6 +222,10 @@ export async function init() {
       return;
     }
 
+    // Read the callback marker BEFORE `initSession`: either client rewrites
+    // the address bar (dropping the query) as it processes the callback, so
+    // the signal is gone by the time the session resolves.
+    const oauthCallback = hasOAuthCallbackParams(location.search);
     const result = await initSession({
       happyviewEndpoint: CONFIG.happyviewEndpoint,
       clientKey: CONFIG.happyviewClientKey,
@@ -276,13 +265,13 @@ export async function init() {
       }
 
       // After an OAuth callback the browser lands on the fixed redirect URI
-      // (the homepage). If we round-tripped the original URL through the
-      // `state` parameter in `login()`, navigate back to it now. On a plain
-      // session restore (reload) `result.state` is undefined, so we stay put.
-      const returnUrl = safeReturnUrl(result.state);
-      if (returnUrl && returnUrl !== currentReturnUrl()) {
-        goto(returnUrl, { replaceState: true });
-      }
+      // (the homepage). `login()` stored the page the user came from; navigate
+      // back to it now. Only on an actual callback: a plain session restore
+      // (reload) must never consume the store meant for a pending sign-in.
+      const target = oauthCallback
+        ? consumeReturnUrl(currentReturnUrl())
+        : null;
+      if (target) goto(target, { replaceState: true });
       // Re-register this device's push subscription in case the browser
       // rotated the endpoint (Chrome/FCM does this periodically). No-op if
       // push is unsupported/unconfigured or permission was never granted.
@@ -375,7 +364,9 @@ export async function login(handle: string) {
 
   // Remember the page the user was on so `init()` can send them back here
   // after the PDS redirects to the fixed OAuth redirect URI (the homepage).
-  const returnUrl = currentReturnUrl();
+  // The OAuth `state` is the client's own CSRF token, never a transport for
+  // this path (see `return-url.ts`).
+  rememberReturnUrl(currentReturnUrl());
   const result = await sdkLogin(handle, {
     happyviewEndpoint: CONFIG.happyviewEndpoint,
     clientKey: CONFIG.happyviewClientKey,
@@ -384,10 +375,12 @@ export async function login(handle: string) {
     handleResolverUrl: CONFIG.handleResolverUrl,
     scope: reconcile,
     clientIdScope: CLIENT_ID_SCOPE,
-    state: returnUrl,
   });
 
   if (result) {
+    // Tauri: sdkLogin resolves in place (no page navigation, so `init()`'s
+    // navigation never runs). Wire up the session and go back to the store
+    // directly.
     session = result.session;
     agent = result.agent;
     await setupDirectXrpc(result.agent);
@@ -395,10 +388,8 @@ export async function login(handle: string) {
     // Same grant-tracking as init: introspect the granted scope (which may
     // have been narrowed on the consent screen) and sync it fire-and-forget.
     void trackGrant(result.session);
-    const target = safeReturnUrl(result.state) ?? returnUrl;
-    if (target && target !== currentReturnUrl()) {
-      goto(target, { replaceState: true });
-    }
+    const target = consumeReturnUrl(currentReturnUrl());
+    if (target) goto(target, { replaceState: true });
   }
 }
 
@@ -448,7 +439,9 @@ export async function requestScopeExpansion(
   // (unexpanded) scope. The PDS consent screen shows only the delta (the
   // tier's additions) for an already-granted base. On return `init()`'s
   // `trackGrant` records what the PDS actually granted.
-  const returnUrl = currentReturnUrl();
+  // Remember where the user was (the settings page) across the round-trip the
+  // same way `login()` does; `init()` navigates back on the callback.
+  rememberReturnUrl(currentReturnUrl());
   const result = await sdkLogin(currentHandle, {
     happyviewEndpoint: CONFIG.happyviewEndpoint,
     clientKey: CONFIG.happyviewClientKey,
@@ -457,17 +450,19 @@ export async function requestScopeExpansion(
     port: CONFIG.port,
     scope: SCOPE_SETS[tier],
     clientIdScope: CLIENT_ID_SCOPE,
-    state: returnUrl,
   });
   if (result) {
-    // Tauri: sdkLogin resolves in-place (no page navigation). Wire up the
-    // session like login() does so the app is usable immediately; init()'s
-    // trackGrant path is not invoked here, so record the grant directly.
+    // Tauri: sdkLogin resolves in-place (no page navigation), so `init()`'s
+    // navigation never runs. Wire up the session like `login()` does and
+    // return to the store directly; `init()`'s trackGrant path is not invoked
+    // here, so record the grant directly.
     session = result.session;
     agent = result.agent;
     await setupDirectXrpc(result.agent);
     authenticated = true;
     void trackGrant(result.session);
+    const target = consumeReturnUrl(currentReturnUrl());
+    if (target) goto(target, { replaceState: true });
   }
 }
 

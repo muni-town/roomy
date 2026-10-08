@@ -27,7 +27,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Agent } from "@atproto/api";
 import { BrowserOAuthClient } from "@atproto/oauth-client-browser";
 import { HappyViewBrowserClient } from "@happyview/oauth-client-browser";
-import { createOAuthClient, initSession } from "../../src/browser/oauth";
+import { createOAuthClient, initSession, login } from "../../src/browser/oauth";
 import { MemoryStorage } from "@happyview/oauth-client-browser";
 
 const HV = "https://happyview.test";
@@ -320,6 +320,14 @@ describe("HappyView session lifecycle", () => {
     expect(captured.parHasDpopProof).toBe(true);
     expect(captured.parBody.scope).toBe(SCOPE);
 
+    // The `state` that actually reaches the PDS is the client's own random
+    // value, not a caller-supplied return URL. A conforming PDS enforces the
+    // spec's entropy guidance (and rejects the page path app-lite used to
+    // forward with `invalid_state`); the same value is also what makes the
+    // callback a CSRF-checked round-trip.
+    expect(captured.parBody.state).toMatch(/^[0-9a-f]{32}$/);
+    expect(captured.parBody.state).not.toBe("/");
+
     // Callback: token exchange with assertion + session registration.
     const callback = await client.initCallback(
       `?state=${prepared.state}&code=auth_code_1`,
@@ -409,5 +417,40 @@ describe("HappyView session lifecycle", () => {
     expect(stored.accessToken).toBe("at_test_access");
     // The DPoP private key IS in the browser (shared with HappyView).
     expect((stored.dpopKey as Record<string, unknown>).d).toBeTruthy();
+  });
+
+  // The regression that broke self-hosted sign-in: app-lite passed the page
+  // path as `state`, so the PAR carried a one-character value (`/`) that an
+  // OAuth-conforming PDS rejects with `invalid_state`, and the callback had no
+  // CSRF protection. This drives the real `login()` seam with a page path in
+  // `opts.state` and asserts on the bytes that reach the PDS.
+  it("sends an unguessable, per-attempt random state in the PAR body", async () => {
+    dpopJwk = await generateDpopJwk();
+    const states: string[] = [];
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await login(HANDLE, {
+        happyviewEndpoint: HV,
+        clientKey: "hvc_test",
+        clientId: "https://app.test/oauth-client-metadata.json",
+        redirectUri: "https://app.test/",
+        scope: SCOPE,
+        fetch: mockFetch,
+        storage: new MemoryStorage(),
+        // The value app-lite used to forward. The SDK must not let it through.
+        state: "/space/1",
+      } as unknown as Parameters<typeof login>[1]);
+      states.push(captured.parBody.state);
+    }
+
+    for (const state of states) {
+      // OAuth's state-entropy guidance, and the length a strict PDS enforces.
+      expect(state.length).toBeGreaterThanOrEqual(8);
+      // Not the page path, not a guessable short string.
+      expect(state).not.toBe("/space/1");
+      expect(state).not.toBe("/");
+    }
+    // A fresh value per attempt, not one reused across sign-ins.
+    expect(states[0]).not.toBe(states[1]);
   });
 });

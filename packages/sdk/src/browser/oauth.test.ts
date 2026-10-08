@@ -14,6 +14,11 @@
  * `@atproto/oauth-client-browser` is mocked: it pulls in WebCrypto/IndexedDB
  * and a full client instantiation would hit the network. We assert only the
  * arguments `login()` hands the client, which is the contract under test.
+ *
+ * `state` is the other half of the contract: `login()` must never forward one.
+ * Both PDS clients mint their own random `state` and store the matching
+ * authorization session under it; a caller-supplied value replaces that
+ * generation — the bug this pins against.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -110,20 +115,22 @@ describe("login() scope forwarding", () => {
     expect(signIn).toHaveBeenCalledWith(HANDLE, { scope: BASE });
   });
 
-  it("forwards state AND scope together when both are supplied", async () => {
+  it("never forwards a state — the OAuth client owns that parameter", async () => {
+    // A caller-supplied `state` would override the client's own random value
+    // (HappyView: `options?.state ?? randomHex(16)`), which is exactly how a
+    // one-character return URL became the OAuth `state` and broke sign-in at
+    // every PDS enforcing the spec's entropy guidance. `login()` keeps its
+    // return URL in its own storage; the protocol parameter stays the client's.
     stubGlobals();
     await login(HANDLE, {
       scope: BASE,
       state: "/some/room",
-    });
+    } as { scope: string; state: string });
 
-    expect(signIn).toHaveBeenCalledWith(HANDLE, {
-      state: "/some/room",
-      scope: BASE,
-    });
+    expect(signIn).toHaveBeenCalledWith(HANDLE, { scope: BASE });
   });
 
-  it("omits options entirely when neither state nor scope is supplied", async () => {
+  it("omits options entirely when no scope is supplied", async () => {
     // Preserves the prior behaviour: no per-request override, so the client
     // uses its metadata ceiling (the SDK default path for non-app-lite callers).
     stubGlobals();

@@ -632,13 +632,6 @@ export type OAuthSession = HappyViewSession | AtprotoOAuthSession;
 
 export interface InitSessionOptions extends CreateOAuthClientOptions {
   /**
-   * Opaque string carried through the OAuth round-trip via the `state`
-   * parameter. Returned verbatim by `initSession()` once the callback is
-   * processed. Apps use this to remember the URL the user was on before
-   * signing in and redirect back to it after the PDS callback.
-   */
-  state?: string;
-  /**
    * How long the login flow should stay pending before `login()`
    * aborts (user abandoned auth). Defaults to 10 minutes,
    */
@@ -657,16 +650,12 @@ export interface InitSessionOptions extends CreateOAuthClientOptions {
 export type LoginResult = {
   session: OAuthSession;
   agent: Agent;
-  state?: string | null;
 };
 
 /**
  * Adapt a client's restored/callback session into a `LoginResult`.
  */
-function toLoginResult(result: {
-  session: OAuthSession;
-  state?: string | null;
-}): LoginResult {
+function toLoginResult(result: { session: OAuthSession }): LoginResult {
   return {
     session: result.session,
     // HappyViewSession satisfies Agent's session contract (did +
@@ -675,16 +664,13 @@ function toLoginResult(result: {
     agent: new Agent(
       result.session as unknown as ConstructorParameters<typeof Agent>[0],
     ),
-    state: result.state,
   };
 }
 
 /**
  * Try to restore an existing session (e.g. after a page reload or redirect
- * back from the PDS). Returns `{ session, agent, state }` if a session was
- * found, or `null` if the user is not authenticated. `state` is the OAuth
- * `state` value round-tripped through the PDS (present only when this call
- * processed an OAuth callback, not a plain session restore).
+ * back from the PDS). Returns `{ session, agent }` if a session was found, or
+ * `null` if the user is not authenticated.
  */
 export async function initSession(
   opts: InitSessionOptions = {},
@@ -693,12 +679,7 @@ export async function initSession(
 
   const result = await client.init();
 
-  if (result?.session) {
-    // `state` is only present when `init()` processed an OAuth callback
-    // (URL contained callback params). On a plain session restore it is
-    // `undefined`, so callers can distinguish the two cases.
-    return toLoginResult(result);
-  }
+  if (result?.session) return toLoginResult(result);
   return null;
 }
 
@@ -740,9 +721,9 @@ export async function login(
     await client.signIn(handle, authorizeRequestOptions(opts));
     return;
   }
-  // Forward `state` (round-trip the return URL) and `scope` — the *subset*
-  // the caller chose. Passing no `scope` makes the client fall back to
-  // `clientMetadata.scope`, the full ceiling; see `authorizeRequestOptions`.
+  // Forward `scope` — the *subset* the caller chose. Passing no `scope` makes
+  // the client fall back to `clientMetadata.scope`, the full ceiling; see
+  // `authorizeRequestOptions`. The OAuth `state` is the client's own.
   await client.signIn(handle, authorizeRequestOptions(opts));
 }
 
