@@ -21,14 +21,23 @@
 
 import { describe, expect, test } from "bun:test";
 import { newUlid } from "@roomy-space/sdk";
-import { materializeSpace, startAppserver, type E2eContext } from "./helpers.ts";
+import {
+  globalDb,
+  materializeSpace,
+  seedReadPosition,
+  startAppserver,
+  type E2eContext,
+} from "./helpers.ts";
 
 const SPACE_A = "did:plc:list-scope-space-a";
 const SPACE_B = "did:plc:list-scope-space-b";
+const SPACE_C = "did:plc:list-scope-space-c";
 /** In both spaces, so A's list holds A and B's list holds B. */
 const USER_IN_BOTH = "did:plc:list-scope-both";
 /** In B only — a room change in A cannot move any number their list reports. */
 const USER_IN_B_ONLY = "did:plc:list-scope-b-only";
+/** In C only — unrelated to A's federation with B. */
+const USER_IN_C = "did:plc:list-scope-c-only";
 
 /** Read getSpaces for `user`, reporting whether it came from the cache. */
 async function readSpaces(
@@ -134,5 +143,92 @@ describe("getSpaces cache eviction is scoped to the callers whose list the space
     // one per event, and nothing at all for the reader in B alone.
     expect(evictions).toBeLessThanOrEqual(readersInA.length);
     expect((await readSpaces(ctx, USER_IN_B_ONLY)).cached).toBe(true);
+  });
+
+  test("a space rename evicts that space's readers, not every caller", async () => {
+    const ctx = await startAppserver();
+    await materializeSpace(ctx, SPACE_A, USER_IN_BOTH, { roomName: "a-general" });
+    await materializeSpace(ctx, SPACE_B, USER_IN_B_ONLY, { roomName: "b-general" });
+
+    await warm(ctx, USER_IN_BOTH);
+    await warm(ctx, USER_IN_B_ONLY);
+
+    // A rename renders on A's row in every A member's list; B's list has no
+    // such row, so nothing it reports can have moved. A signal that reached
+    // every caller would drop B's entry too — one wasted handler run per
+    // rename per reader who cannot see the space.
+    const res = await ctx.authedFetch(USER_IN_BOTH)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          spaceId: SPACE_A,
+          events: [
+            { id: newUlid(), $type: "space.roomy.space.updateSpaceInfo.v0", name: "renamed" },
+          ],
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+
+    expect((await readSpaces(ctx, USER_IN_BOTH)).cached).toBe(false);
+    expect((await readSpaces(ctx, USER_IN_B_ONLY)).cached).toBe(true);
+  });
+
+  test("a message in a federated room evicts the receiving space's readers only", async () => {
+    const ctx = await startAppserver();
+    const { roomId } = await materializeSpace(ctx, SPACE_A, USER_IN_BOTH, {
+      roomName: "a-general",
+    });
+    // Space B receives A's channel; C is unrelated to the federation.
+    await materializeSpace(ctx, SPACE_B, USER_IN_B_ONLY, { roomName: "b-general" });
+    await materializeSpace(ctx, SPACE_C, USER_IN_C, { roomName: "c-general" });
+
+    await globalDb(ctx.db)
+      .run(
+        `insert into space_federations
+           (space_id, federating_space_did, status, requested_by_did)
+         values (?, ?, 'active', ?)`,
+        [SPACE_A, SPACE_B, USER_IN_BOTH],
+      );
+    await globalDb(ctx.db)
+      .run(
+        `insert into federation_room_permissions (space_id, federating_space_did, room_id, permission)
+         values (?, ?, ?, 'readwrite')`,
+        [SPACE_A, SPACE_B, roomId],
+      );
+    // The receiving-space invalidation only fires when the room has a reader
+    // with a read position (it rides the per-user unread diff).
+    seedReadPosition(ctx.db, USER_IN_BOTH, roomId, "0", 1);
+
+    await warm(ctx, USER_IN_BOTH);
+    await warm(ctx, USER_IN_B_ONLY);
+    await warm(ctx, USER_IN_C);
+
+    const res = await ctx.authedFetch(USER_IN_BOTH)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          spaceId: SPACE_A,
+          events: [
+            {
+              id: newUlid(),
+              $type: "space.roomy.message.createMessage.v0",
+              room: roomId,
+              body: { mimeType: "text/plain", data: { $bytes: "aGVsbG8=" } },
+              extensions: {},
+            },
+          ],
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+
+    // B's list renders the federated row, so it is stale. C's list never held
+    // the receiving space and must survive; before the signal named it, this
+    // path emitted an empty param set and swept every cached list.
+    expect((await readSpaces(ctx, USER_IN_B_ONLY)).cached).toBe(false);
+    expect((await readSpaces(ctx, USER_IN_C)).cached).toBe(true);
   });
 });

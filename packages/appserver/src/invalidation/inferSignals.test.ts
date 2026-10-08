@@ -1248,7 +1248,12 @@ describe("inferSignals: federation events", () => {
     expect(signalsFor(signals, "space.roomy.space.getMetadata")).toEqual([
       { spaceId: B },
     ]);
-    expect(signalsFor(signals, "space.roomy.space.getSpaces")).toEqual([{}]);
+    // The list signal names B as coverage — the callers whose list holds B are
+    // the ones whose rows moved. An empty param set would sweep every cached
+    // list, including callers who cannot see B at all.
+    expect(signalsFor(signals, "space.roomy.space.getSpaces")).toEqual([
+      { spaceId: B },
+    ]);
   });
 
   it("remove invalidates A's outgoing/grants and B's incoming/sidebar", async () => {

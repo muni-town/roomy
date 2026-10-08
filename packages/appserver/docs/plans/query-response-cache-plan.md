@@ -9,10 +9,14 @@ shipped as #330 (`2d7dcf9f`); the `getSpaces` eviction scope fix shipped as
 part of `2340ab58`. This document is a record of what shipped, not a proposal.
 **Next:** No phase remains. One item from Phase 4 is outstanding but is not a
 phase: the observability check (a >90% cache hit rate on the badge fan-out) has
-no automated assertion, and a later report finds `getSpaces` still evicting on
-broadcast signals that #357 did not remove. That is a finding to re-measure, not
-work dispatchable from this document. Recommend keeping this as the design
-record and closing it as an active plan.
+no automated assertion. #357 removed the room-shaped broadcast but left the
+space-scoped ones, and a measurement of the deployed build found the list still
+serving a low hit rate against a high eviction rate; those signals are now
+scoped to the space they name, so the only `{}` signal left for this NSID is a
+caller's own join or leave, which carries `affectedUser`. The observability check
+still has no automated assertion, and remains a measurement rather than work
+dispatchable from this document. Recommend keeping this as the design record and
+closing it as an active plan.
 **Parent doc:** `appserver-architecture.md`
 
 ## Problem
@@ -200,11 +204,14 @@ The cache key includes `userDid` because responses diverge per caller. The evict
 | `room.getMetadata.canRead/canWrite` | yes | role **assignment** (add/remove member role, ban) → affectedUser; role **permission** edit (`setRoleRoomPermission`) → broadcast (see note below) |
 | `room.getMetadata.unreadCount`   | yes       | `updateSeen` emit, `roomMetadataDiff`            |
 | `room.getMetadata.recentThreads` | yes       | `handleCreateMessage` (affectedUser = author)    |
-| `getSpaces[*].*`                 | yes       | join/leave/create + unread diffs (affectedUser)  |
+| `getSpaces[*].unreadCount/unreadRoomCount` | yes | join/leave/create, mark-read, unread diffs (affectedUser) |
+| `getSpaces[*].name/avatar/handle/isMember/isAdmin` | yes | the space's own events (`updateSpaceInfo`, role/ban/admin/federation) — the signal names that space as coverage, so only lists holding it are evicted |
 
 The rule the eviction listener implements: **if `affectedUser` is set, evict that user's entry (and anon, for fields visible to anon); otherwise sweep all users for that `(nsid, params)`.** This is correct for every row in the matrix because `inferSignals` already sets `affectedUser` exactly when the changed field is caller-scoped.
 
-**Note on role-permission vs role-assignment asymmetry (row above):** a role *assignment* (`handleAddMemberRole`/`handleRemoveMemberRole`, `inferSignals.ts:477–496`) changes one user's `canRead`/`canWrite` and emits with `affectedUser = targetUser` — only that user's entry is evicted, which is correct. A role *permission* edit (`handleSetRoleRoomPermission`, `inferSignals.ts:498–514`) changes `canRead`/`canWrite` for **every** member of that role, so it emits **broadcast** (no `affectedUser`) and the sweep evicts all callers' entries for the affected `roomId`/`spaceId`. The listener honours both correctly because it keys off `affectedUser`, not off the event type. This distinction is worth calling out because the matrix otherwise lumps "role events" together; the two sub-cases have opposite eviction scopes.
+Two NSIDs are per-caller queries whose params are filters rather than identities, and for those the row above says "which lists hold the changed thing" instead of "which field changed": `getActivityFeed` (`cache/activityFeedCoverage.ts`) and `getSpaces` (`cache/spaceListCoverage.ts`). A signal naming a space for either one is matched against the cached body, so the sweep is bounded by the callers who can see that space rather than by every caller. That is the distinction between a signal naming a space and one carrying `{}`: `{}` on these NSIDs still means "every caller", which is why it is reserved for a change to which spaces a caller belongs, where the caller's list does not yet contain the space and only `affectedUser` can bound the eviction.
+
+**Note on role-permission vs role-assignment asymmetry (row above):** a role *assignment* (`handleAddMemberRole`/`handleRemoveMemberRole`, `inferSignals.ts:477–496`) changes one user's `canRead`/`canWrite` and emits with `affectedUser = targetUser` — only that user's entry is evicted, which is correct. A role *permission* edit (`handleSetRoleRoomPermission`, `inferSignals.ts:498–514`) changes `canRead`/`canWrite` for **every** member of that role, so it emits **broadcast** (no `affectedUser`) and the sweep evicts all callers' entries for the affected `roomId`/`spaceId`. The listener honours both correctly because it keys off `affectedUser`, not off the event type. For `getSpaces` the permission edit names the space as coverage instead of sweeping every caller, which bounds that sweep to the space's own readers. This distinction is worth calling out because the matrix otherwise lumps "role events" together; the two sub-cases have opposite eviction scopes.
 
 ### The anon case
 

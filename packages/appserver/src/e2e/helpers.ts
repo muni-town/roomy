@@ -513,7 +513,8 @@ export function spaceDb(db: Database, spaceDid: string): AsyncLike {
   return wrapAsyncLike((db as unknown as RoutedDb).forSpace(spaceDid));
 }
 
-function globalDb(db: Database): AsyncLike {
+/** Route a write to the global DB (space registry, mentions, federations). */
+export function globalDb(db: Database): AsyncLike {
   return wrapAsyncLike((db as unknown as RoutedDb).global());
 }
 

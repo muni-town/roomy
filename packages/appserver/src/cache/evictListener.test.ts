@@ -126,23 +126,61 @@ describe("attachCacheEvictionListener", () => {
     unsub();
   });
 
-  it("evicts getSpaces entries with empty signal params (broadcast sweep)", () => {
+  it("evicts the lists whose body holds the named space, and no others", () => {
+    // `{ spaceId }` on a getSpaces signal is COVERAGE, not a param: the params
+    // of a cached list name no space, so subset matching has nothing to match.
+    // The space named is the space whose row moved in the list.
+    const cache = new QueryCache();
+    const router = new Router();
+    const unsub = attachCacheEvictionListener(router, cache);
+
+    const body = (id: string) => ({ spaces: [{ id, unreadCount: 0 }] });
+
+    cache.set("space.roomy.space.getSpaces", {}, "did:plc:1", body("a"));
+    cache.set("space.roomy.space.getSpaces", { includeLeft: "true" }, "did:plc:1", body("a"));
+    cache.set("space.roomy.space.getSpaces", {}, "did:plc:2", body("b"));
+    cache.set("space.roomy.space.getMetadata", { spaceId: "a" }, "did:plc:1", "meta");
+
+    router.emit([qInvalidation("space.roomy.space.getSpaces", { spaceId: "a" })]);
+
+    // Both of caller 1's cached shapes (bare and includeLeft) list `a`.
+    expect(cache.get("space.roomy.space.getSpaces", {}, "did:plc:1")).toBeUndefined();
+    expect(
+      cache.get("space.roomy.space.getSpaces", { includeLeft: "true" }, "did:plc:1"),
+    ).toBeUndefined();
+    // Caller 2's list holds `b`, which the signal did not name.
+    expect(cache.get("space.roomy.space.getSpaces", {}, "did:plc:2")).toEqual({
+      value: body("b"),
+    });
+    // Another NSID is untouched.
+    expect(cache.get("space.roomy.space.getMetadata", { spaceId: "a" }, "did:plc:1")).toEqual({
+      value: "meta",
+    });
+
+    unsub();
+  });
+
+  it("an empty-param getSpaces signal still sweeps every list", () => {
+    // The remaining `{}` signals are the ones whose change is "which spaces
+    // this caller belongs to" (a join or a leave): the caller's list does not
+    // contain the space yet, so coverage would match nothing and the whole
+    // set must be restated. Those signals carry `affectedUser`, which is what
+    // keeps them from reaching anyone else.
     const cache = new QueryCache();
     cache.set("space.roomy.space.getSpaces", {}, "did:plc:1", "v1");
     cache.set("space.roomy.space.getSpaces", { includeLeft: "true" }, "did:plc:1", "v2");
+    cache.set("space.roomy.space.getSpaces", {}, "did:plc:2", "v3");
 
     const router = new Router();
     const unsub = attachCacheEvictionListener(router, cache);
 
-    // getSpaces invalidation always uses {} params.
-    router.emit([
-      qInvalidation("space.roomy.space.getSpaces", {}),
-    ]);
+    router.emit([qInvalidation("space.roomy.space.getSpaces", {}, "did:plc:1" as UserDid)]);
 
     expect(cache.get("space.roomy.space.getSpaces", {}, "did:plc:1")).toBeUndefined();
     expect(
       cache.get("space.roomy.space.getSpaces", { includeLeft: "true" }, "did:plc:1"),
     ).toBeUndefined();
+    expect(cache.get("space.roomy.space.getSpaces", {}, "did:plc:2")).toEqual({ value: "v3" });
 
     unsub();
   });

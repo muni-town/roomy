@@ -100,28 +100,43 @@ function evictOnly(
 }
 
 /**
+ * The `getSpaces` invalidation for a space-scoped change.
+ *
+ * The list is a per-CALLER query whose params name no space, so the space is
+ * carried as COVERAGE rather than as a param: the cache evicts the callers
+ * whose list CONTAINS `spaceId`, which is exactly the set whose rows a change
+ * inside that space can have moved (see `cache/spaceListCoverage.ts`). A
+ * caller in an unrelated space keeps their entry.
+ *
+ * An empty param set must NOT be used here: `paramsSubset` reads it as a
+ * subset of every entry, so one space-scoped event sweeps every cached list —
+ * one wasted handler run per reader per event, for readers who cannot see the
+ * space at all. `{}` is correct in exactly one place, a change to WHICH spaces
+ * a caller belongs to (`handleJoinSpace`, `handleLeaveSpace`), where the
+ * caller's list by definition does not contain the space yet and coverage
+ * would therefore match nothing; those signals carry `affectedUser` and stay
+ * targeted per user.
+ */
+function invalidateSpaceList(spaceId: StreamDid): InvalidationEvent {
+  return invalidate("space.roomy.space.getSpaces", { spaceId });
+}
+
+/**
  * Invalidate the space-scoped queries a room-shaped change stales.
  *
- * The caller is a room event, so `roomId` is a room of `spaceId` whose rows
- * move every member's space-list badge and sidebar. `getSpaces` is the one
- * NSID here that is caller-scoped rather than space-scoped: its response is a
- * per-caller list, and nothing in the cached body names the rooms it counts
- * — the unread totals are rolled up from `read_positions`, so a caller who
- * cannot read the changed room sees the same numbers afterwards. A broadcast
- * (`{}`, no `affectedUser`) therefore evicts every member's list for a room
- * change only the current room's readers can observe, and `invalidateSpace`
- * is reached by every message in every room.
- *
- * So the signal names the ROOM as coverage, matched by "did this caller's
- * cached list count this room?" — the same mapping `activityFeedCoverage`
- * gives a feed page, and for the same reason: the param is a filter over a
- * per-caller result, so param subset matching has nothing to subset. A room
- * the caller cannot read contributes nothing, and no invalidation is due.
+ * The caller is a room event: a room of `spaceId` whose rows move the sidebar
+ * and the space-list badges of that space's readers. `getSpaces` is the one
+ * NSID here that is caller-scoped rather than space-scoped — its response is
+ * a per-caller list, and the unread totals in it roll up from
+ * `read_positions`, so a caller in another space sees the same numbers
+ * afterwards. The list is therefore scoped to the space as coverage (see
+ * `invalidateSpaceList`); the room itself is not needed, because a cached
+ * list does not carry per-room rows the cache could match on.
  */
-function invalidateSpace(spaceId: StreamDid, roomId: Ulid): InvalidationEvent[] {
+function invalidateSpace(spaceId: StreamDid): InvalidationEvent[] {
   return [
     invalidate("space.roomy.space.getMetadata", { spaceId }),
-    invalidate("space.roomy.space.getSpaces", { spaceId, roomId }),
+    invalidateSpaceList(spaceId),
     invalidate("space.roomy.space.getThreads", { spaceId }),
     invalidate("space.roomy.space.getMembers", { spaceId }),
   ];
@@ -182,11 +197,11 @@ async function federatedReceiversInvalidation(
     });
     // Receiving-space sidebar + space list refetch for clients the live
     // frame missed (other tabs/connections, cache coherence). The fed room
-    // lives in the receiving space's sidebar, so every caller who can see
-    // that space has it in their list — a broadcast here is the caller-scoped
-    // case, where "which callers does this stale" has no narrower answer.
+    // lives in the receiving space's sidebar, so the callers whose list went
+    // stale are those whose list HOLDS that receiving space — named here as
+    // coverage, so the cache evicts that space's readers and no one else.
     signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: r.home as StreamDid }));
-    signals.push(invalidate("space.roomy.space.getSpaces", {}));
+    signals.push(invalidateSpaceList(r.home as StreamDid));
   }
   return signals;
 }
@@ -197,9 +212,9 @@ function invalidateRoom(roomId: Ulid, spaceId: StreamDid): InvalidationEvent[] {
     invalidate("space.roomy.room.getThreads", { roomId }),
     invalidate("space.roomy.room.getLinks", { roomId }),
     // Space sidebar may show unread counts for this room. The space list's
-    // rollup follows the same rule as `invalidateSpace` — see there.
+    // rollup follows the same space-coverage rule as `invalidateSpace`.
     invalidate("space.roomy.space.getMetadata", { spaceId }),
-    invalidate("space.roomy.space.getSpaces", { spaceId, roomId }),
+    invalidateSpaceList(spaceId),
   ];
 }
 
@@ -756,7 +771,7 @@ function handleCreateRoom(event: AppliedEvent): InvalidationEvent[] {
   const roomId = event.id; // For createRoom events, the event's id IS the room ID
 
   const signals: InvalidationEvent[] = [
-    ...invalidateSpace(spaceId, roomId),
+    ...invalidateSpace(spaceId),
     // New room means sidebar changed.
     invalidate("space.roomy.space.getMetadata", { spaceId }),
     // Room-scoped queries need invalidation so the client can fetch
@@ -798,7 +813,7 @@ function handleDeleteRoom(event: AppliedEvent): InvalidationEvent[] {
     // Deleting a room removes the room's row and its unread contribution from
     // every member's list, so the list follows the same room-coverage rule as
     // the other room-shaped changes.
-    signals.push(...invalidateSpace(spaceId, roomId));
+    signals.push(...invalidateSpace(spaceId));
   }
   // Deleting a room removes its activity items from every feed that covers
   // this space.
@@ -818,11 +833,12 @@ function handleRestoreRoom(event: AppliedEvent): InvalidationEvent[] {
 function handleUpdateSpaceInfo(event: AppliedEvent): InvalidationEvent[] {
   const spaceId = event.streamDid;
   // The space's name/avatar/handle renders on that space's row in every
-  // member's list, so this is the caller-scoped case: every caller who can see
-  // the space has it in their list, and the signal has no narrower target.
+  // member's list. The signal names the space as COVERAGE: the callers whose
+  // list went stale are those whose list holds it, so a caller in an unrelated
+  // space keeps their entry.
   return [
     invalidate("space.roomy.space.getMetadata", { spaceId }),
-    invalidate("space.roomy.space.getSpaces", {}),
+    invalidateSpaceList(spaceId),
   ];
 }
 
@@ -947,9 +963,9 @@ function handleDeleteRole(event: AppliedEvent): InvalidationEvent[] {
   return [
     invalidate("space.roomy.space.getRoles", { spaceId }),
     invalidate("space.roomy.space.getMetadata", { spaceId }),
-    // Deleting a role can change which rooms callers may read, so it restates
-    // the space's rooms for everyone who can see it.
-    invalidate("space.roomy.space.getSpaces", {}),
+    // Deleting a role can change which rooms callers may read, so the list
+    // restates the space's rooms for its readers.
+    invalidateSpaceList(spaceId),
   ];
 }
 
@@ -988,9 +1004,8 @@ function handleSetRoleRoomPermission(event: AppliedEvent): InvalidationEvent[] {
     invalidate("space.roomy.space.getRoles", { spaceId }),
     invalidate("space.roomy.space.getMetadata", { spaceId }),
     // Granting a role access to a room restates which rooms the space holds
-    // for every caller, so the list has no narrower target than "everyone who
-    // can see this space".
-    invalidate("space.roomy.space.getSpaces", {}),
+    // for its readers.
+    invalidateSpaceList(spaceId),
   ];
 
   if (roomId) {
@@ -1067,9 +1082,8 @@ function handleFederationRespond(event: AppliedEvent): InvalidationEvent[] {
     signals.push(invalidate("space.roomy.federation.getIncoming", { spaceId: b }));
     signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: b }));
     // Approval changes which federated channels B's callers can see, and the
-    // space's handle/name render in their lists besides. Every caller who can
-    // see B is affected.
-    signals.push(invalidate("space.roomy.space.getSpaces", {}));
+    // space's handle/name render in their lists besides.
+    signals.push(invalidateSpaceList(b as StreamDid));
   }
   return signals;
 }
@@ -1088,9 +1102,8 @@ function handleFederationRemove(event: AppliedEvent): InvalidationEvent[] {
   if (b) {
     signals.push(invalidate("space.roomy.federation.getIncoming", { spaceId: b }));
     signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: b }));
-    // Removing a federation drops B's federated rows; every caller who can
-    // see B is affected.
-    signals.push(invalidate("space.roomy.space.getSpaces", {}));
+    // Removing a federation drops B's federated rows.
+    signals.push(invalidateSpaceList(b as StreamDid));
   }
   return signals;
 }
@@ -1110,7 +1123,7 @@ function handleSetRoomPermission(event: AppliedEvent): InvalidationEvent[] {
   if (b) {
     signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: b }));
     // A grant flip changes whether B's callers can see the federated channel.
-    signals.push(invalidate("space.roomy.space.getSpaces", {}));
+    signals.push(invalidateSpaceList(b as StreamDid));
   }
   return signals;
 }
@@ -1124,9 +1137,9 @@ function handleSetReceiverPermission(event: AppliedEvent): InvalidationEvent[] {
   return [
     invalidate("space.roomy.federation.getGrants", { spaceId }),
     invalidate("space.roomy.space.getMetadata", { spaceId }),
-    // A receiver grant flip shows or hides a federated channel for every
-    // caller who can see this space.
-    invalidate("space.roomy.space.getSpaces", {}),
+    // A receiver grant flip shows or hides a federated channel for the
+    // space's readers.
+    invalidateSpaceList(spaceId),
   ];
 }
 
