@@ -345,6 +345,22 @@
   }
 
   /**
+   * Escape leaves select mode. The mode replaces the composer and dims the
+   * rest of the room, so the standard "get me out of this" key has to work —
+   * and it has to work when focus sits on a message row (the usual case,
+   * since clicking one is how the selection is built), not only inside the
+   * bar. The listener is on `window` for that reason; it ignores the key
+   * while a dialog is open so it can't fight the modal's own Escape.
+   */
+  function handleSelectModeKeydown(e: KeyboardEvent) {
+    if (e.key !== "Escape") return;
+    if (messagingState.current.kind !== "selecting") return;
+    if (document.querySelector('[role="dialog"],[role="alertdialog"]')) return;
+    e.preventDefault();
+    messagingState.setNormal();
+  }
+
+  /**
    * Send button. Delegates to the composer's `submit()` rather than calling
    * `handleSend` directly: `submit()` is the Enter-key path, which flushes a
    * trailing autolinked URL and serializes the editor's *current* document.
@@ -491,6 +507,8 @@
     }
   }
 </script>
+
+<svelte:window onkeydown={handleSelectModeKeydown} />
 
 <ChatInputShell
   {canWrite}

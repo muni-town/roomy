@@ -132,8 +132,12 @@
 
 <div class="flex-none pt-2 pb-[calc(--spacing(1)_+_env(safe-area-inset-bottom))] pr-2">
   {#if showContextPreview}
+    <!-- The context strip is composer chrome, not a floating overlay: a flat
+         fill and a hairline top rule, no shadow and no blur. Select mode
+         replaces the composer entirely, so for it the strip is the whole
+         bottom-chrome region rather than a header above an editor. -->
     <div
-      class="flex justify-between bg-secondary text-secondary-content rounded-t-lg p-2 gap-2 pr-0"
+      class="flex justify-between rounded-t-lg p-2 gap-2 pr-0 @container bg-base-100 dark:bg-base-900 border-t border-base-200 dark:border-base-800"
     >
       {#if mode === "replying"}
         <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
@@ -150,7 +154,7 @@
         <div
           class="px-2 flex flex-wrap items-center gap-1 overflow-hidden text-xs w-full"
         >
-          <span class="shrink-0 text-base-900 dark:text-base-100"
+          <span class="shrink-0 text-base-800 dark:text-base-200"
             >Creating thread with</span
           >
           {#if threadSelectedCount > 0}
@@ -159,14 +163,14 @@
             </div>
           {/if}
           {#if threadSelectedCount > 1}
-            <span class="shrink-0 text-base-900 dark:text-base-100"
+            <span class="shrink-0 text-base-800 dark:text-base-200"
               >and {threadSelectedCount - 1} other message{threadSelectedCount >
               2
                 ? "s"
                 : ""}</span
             >
           {:else if threadSelectedCount === 0}
-            <span class="shrink-0 text-base-900 dark:text-base-100"
+            <span class="shrink-0 text-base-800 dark:text-base-200"
               >no messages</span
             >
           {/if}
@@ -190,18 +194,32 @@
           <IconX class="size-4" />
         </Button>
       {:else if mode === "selecting"}
-        <div class="flex items-center gap-1 overflow-hidden text-xs w-full px-2">
-          <IconCheckSquare class="size-4 shrink-0" />
-          <span class="shrink-0 text-base-900 dark:text-base-100"
+        <!-- The mode's own header: a live count, plus what is selected. The
+             preview is the first selected message, the same form the thread
+             strip uses. On a narrow container (a phone) the preview is
+             dropped rather than truncated to nothing — the count and the
+             actions are the mode, the preview is context. -->
+        <div
+          class="flex items-center gap-1.5 overflow-hidden text-xs w-full px-2 min-w-0"
+          role="status"
+          aria-live="polite"
+        >
+          <IconCheckSquare class="size-4 shrink-0 text-accent-600 dark:text-accent-400" />
+          <span class="shrink-0 font-medium text-base-800 dark:text-base-200"
             >{selectedCount} selected</span
           >
           {#if selectedCount > 0}
-            <div class="max-w-[28rem]">
+            <span class="hidden @[30rem]:block w-px self-stretch bg-base-200 dark:bg-base-800 mx-0.5"></span>
+            <div class="hidden @[30rem]:block max-w-[28rem] min-w-0 text-base-500 dark:text-base-400">
               {@render contextPreview?.()}
             </div>
           {/if}
         </div>
         <div class="flex items-center gap-1 shrink-0">
+          <!-- Below 34rem the icon carries the action alone. The label
+               stays in the accessibility tree at every width (`sr-only`), so
+               the button's name is the same on a phone as on a desktop,
+               rather than an icon-only control that announces nothing. -->
           <Button
             variant="secondary"
             size="sm"
@@ -209,7 +227,7 @@
             onclick={onForwardSelection}
           >
             <IconForward class="size-4" />
-            Forward
+            <span class="sr-only @[34rem]:not-sr-only">Forward</span>
           </Button>
           {#if onMoveSelection}
             <Button
@@ -219,7 +237,7 @@
               onclick={onMoveSelection}
             >
               <IconMove class="size-4" />
-              Move
+              <span class="sr-only @[34rem]:not-sr-only">Move</span>
             </Button>
           {/if}
           {#if onDeleteSelection}
@@ -230,7 +248,7 @@
               onclick={onDeleteSelection}
             >
               <IconTrash class="size-4" />
-              Delete
+              <span class="sr-only @[34rem]:not-sr-only">Delete</span>
             </Button>
           {/if}
           <Button
@@ -240,7 +258,7 @@
             onclick={onSelectCreateThread}
           >
             <IconNeedleThread class="size-4" />
-            Create Thread
+            <span class="sr-only @[34rem]:not-sr-only">Create Thread</span>
           </Button>
         </div>
         <Button

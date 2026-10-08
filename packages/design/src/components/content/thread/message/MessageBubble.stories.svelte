@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import MessageBubble from "./MessageBubble.svelte";
+  import SelectionTick from "./SelectionTick.svelte";
 
   const { Story } = defineMeta({
     title: "Content/Thread/Message/MessageBubble",
@@ -8,7 +9,7 @@
   });
 </script>
 
-{#snippet template(args: { authorName: string; isBridged: boolean; isSystem: boolean; mergeWithPrevious: boolean; deliveryState?: "pending" | "failed" | "queued"; queuedLabel?: string })}
+{#snippet template(args: { authorName: string; isBridged: boolean; isSystem: boolean; mergeWithPrevious: boolean; isSelected?: boolean; selectionTick?: boolean; deliveryState?: "pending" | "failed" | "queued"; queuedLabel?: string })}
   <div class="w-full max-w-2xl p-4">
     <MessageBubble
       authorDid="did:plc:test"
@@ -19,10 +20,16 @@
       isBridged={args.isBridged}
       isSystem={args.isSystem}
       mergeWithPrevious={args.mergeWithPrevious}
+      isSelected={args.isSelected}
       deliveryState={args.deliveryState}
       queuedLabel={args.queuedLabel}
       onAvatarClick={() => {}}
     >
+      {#if args.selectionTick}
+        {#snippet selectionIndicator()}
+          <SelectionTick checked={args.isSelected ?? false} />
+        {/snippet}
+      {/if}
       {#snippet content()}
         <p class="text-sm">
           The quick brown fox jumps over the lazy dog. This is a regular
@@ -141,6 +148,34 @@
     mergeWithPrevious: false,
     deliveryState: "queued",
     queuedLabel: "Waiting",
+  }}
+  {template}
+/>
+
+<!-- Multi-select: the tick takes the avatar's place, so the row shows its
+     state where identity already lives and the message body never shifts. -->
+<Story
+  name="Select mode, selected"
+  args={{
+    authorName: "Alice",
+    isBridged: false,
+    isSystem: false,
+    mergeWithPrevious: false,
+    isSelected: true,
+    selectionTick: true,
+  }}
+  {template}
+/>
+
+<Story
+  name="Select mode, unselected"
+  args={{
+    authorName: "Alice",
+    isBridged: false,
+    isSystem: false,
+    mergeWithPrevious: false,
+    isSelected: false,
+    selectionTick: true,
   }}
   {template}
 />

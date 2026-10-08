@@ -15,6 +15,10 @@
     actionMenuOpen: boolean;
     canSend: boolean;
     showContextPreview: boolean;
+    selectedCount?: number;
+    threadSelectedCount?: number;
+    /** Space admin: select mode also offers Move and Delete. */
+    canModerate?: boolean;
   };
 </script>
 
@@ -27,7 +31,8 @@
       mode={args.mode as "normal"}
       actionMenuOpen={args.actionMenuOpen}
       threadName=""
-      threadSelectedCount={0}
+      threadSelectedCount={args.threadSelectedCount ?? 0}
+      selectedCount={args.selectedCount ?? 0}
       canSend={args.canSend}
       showContextPreview={args.showContextPreview}
       onActionMenuOpenChange={() => {}}
@@ -37,6 +42,8 @@
       onCreateThreadFromMenu={() => {}}
       onCreateThread={() => {}}
       onForwardSelection={() => {}}
+      onMoveSelection={args.canModerate ? () => {} : undefined}
+      onDeleteSelection={args.canModerate ? () => {} : undefined}
       onSelectCreateThread={() => {}}
       onRemoveImage={() => {}}
       onThreadNameChange={() => {}}
@@ -102,6 +109,24 @@
     actionMenuOpen: false,
     canSend: false,
     showContextPreview: false,
+  }}
+  {template}
+/>
+
+<!-- Select mode: the composer is replaced by the selection bar, so this is
+     the whole bottom-chrome region rather than a strip above an editor. -->
+<Story
+  name="SelectMode"
+  args={{
+    canWrite: true,
+    isSendingMessage: false,
+    previewImages: [],
+    mode: "selecting",
+    actionMenuOpen: false,
+    canSend: false,
+    showContextPreview: true,
+    selectedCount: 3,
+    canModerate: true,
   }}
   {template}
 />

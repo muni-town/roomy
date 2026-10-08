@@ -53,6 +53,9 @@
     reactions,
     actions,
     deliveryActions,
+    /** Replaces the avatar in the left slot — e.g. the multi-select tick, so a
+        selected row shows its state where the eye already goes for identity. */
+    selectionIndicator,
     queuedLabel,
   }: {
     authorDid: string | null;
@@ -102,6 +105,10 @@
     /** Controls rendered beside the marker of an unsent message (retry /
         discard). Rendered for both the `failed` and the `queued` state. */
     deliveryActions?: Snippet;
+    /** Occupies the avatar slot when present, for a row whose left identity
+        mark is a state rather than a person (multi-select). The wrapper owns
+        what it renders and whether it replaces the avatar at all. */
+    selectionIndicator?: Snippet;
     /** Text of the marker a `queued` send gets instead of the "Not sent" line.
         Absent, a `queued` message falls back to the failure marker. */
     queuedLabel?: string;
@@ -230,7 +237,14 @@
          above the message, and the row never shifts when the avatar comes
          back. -->
     {#if !isSystem}
-      {#if deliveryState === "pending"}
+      {#if selectionIndicator}
+        <!-- The wrapper decided this row's left mark is a selection state, not
+             an identity: it occupies the avatar's box exactly, so selecting
+             never moves the message body. -->
+        <div class="size-8 shrink-0 sm:size-10">
+          {@render selectionIndicator()}
+        </div>
+      {:else if deliveryState === "pending"}
         <!-- Sized and top-aligned like the avatar it replaces, so the swap
              when the server row lands moves nothing. -->
         <div class="flex size-8 shrink-0 items-center justify-center sm:size-10">
@@ -242,19 +256,31 @@
         <div class="w-8 shrink-0 sm:w-10"></div>
       {:else}
         <div class="size-8 sm:size-10">
-          <button
-            onclick={(e) => {
-              e.stopPropagation();
-              onAvatarClick?.(e);
-            }}
-            class="rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
-          >
+          {#if onAvatarClick}
+            <button
+              onclick={(e) => {
+                e.stopPropagation();
+                onAvatarClick?.(e);
+              }}
+              class="rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
+            >
+              <UserAvatar
+                src={avatarSrc ?? authorAvatarUrl}
+                name={authorDid || "system"}
+                class="size-8 sm:size-10"
+              />
+            </button>
+          {:else}
+            <!-- No handler: the avatar is a mark, not a control. Rendering a
+                 button here would put a focusable do-nothing stop in the tab
+                 order, and a button inside a row that is itself a control
+                 (the multi-select checkbox) is invalid nesting. -->
             <UserAvatar
               src={avatarSrc ?? authorAvatarUrl}
               name={authorDid || "system"}
               class="size-8 sm:size-10"
             />
-          </button>
+          {/if}
         </div>
       {/if}
     {/if}

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { MediaQuery } from "svelte/reactivity";
-  import { Checkbox } from "bits-ui";
   import MessageBubble from "@roomy/design/components/content/thread/message/MessageBubble.svelte";
   import { messagingState, toggleToolbar, toolbarOpenState } from "./messaging-state.svelte";
   import Button from "@roomy/design/components/ui/button/Button.svelte";
@@ -9,6 +8,7 @@
   import MessageContext from "./MessageContext.svelte";
   import MessageReactions from "./MessageReactions.svelte";
   import MessageToolbar from "./MessageToolbar.svelte";
+  import SelectionTick from "@roomy/design/components/content/thread/message/SelectionTick.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import ForwardContext from "./ForwardContext.svelte";
@@ -435,6 +435,14 @@
   }
 </script>
 
+<!--
+  In select mode the tick takes the avatar's place, so a row shows its state
+  where the eye already goes for identity and the message body never moves.
+-->
+{#snippet selectionTick()}
+  <SelectionTick checked={isSelected} />
+{/snippet}
+
 {#snippet messageBox()}
   <div
     class="relative"
@@ -468,6 +476,7 @@
       {showToolbar}
       {deliveryState}
       queuedLabel="Waiting"
+      selectionIndicator={isSelecting ? selectionTick : undefined}
     >
       {#snippet replyContext()}
         {#if message.forwardedFrom}
@@ -700,19 +709,38 @@
 {/snippet}
 
 {#if isThreading || isSelecting}
-  <Checkbox.Root
+  <!-- The row IS the selection control in these modes: one full-width button
+       with `aria-checked`, rather than a checkbox wrapping content that still
+       contains its own links and buttons. The row's interactive descendants
+       are neutralised below so a click anywhere toggles, and the tick takes
+       the avatar's place so the state reads where identity already lives. -->
+  <button
+    type="button"
+    role="checkbox"
+    aria-checked={isSelected}
     aria-label="Select message"
-    onclick={(e) => e.stopPropagation()}
-    bind:checked={
-      () => isSelected,
-      () => messagingState.toggleMessageSelection(message)
-    }
-    class={`flex flex-col w-full relative max-w-full isolate px-2 select-none${highlighted ? " message-highlight" : ""}`}
+    data-message-id={message.id}
+    onclick={(e) => {
+      e.stopPropagation();
+      messagingState.toggleMessageSelection(message);
+    }}
+    class="chat-select-row flex flex-col w-full relative max-w-full isolate px-2 select-none text-start cursor-pointer [font:inherit] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-500"
   >
-    {@render messageBox()}
-  </Checkbox.Root>
+    <!-- `inert` (not just pointer-events) so the message body's links and
+         buttons leave the tab order too: the row is the only control here, and
+         an unreachable focus stop inside it would be a trap. `contents` keeps
+         the wrapper out of the layout, so the row renders exactly as it does
+         outside select mode. -->
+    <div inert class="contents">
+      {@render messageBox()}
+    </div>
+  </button>
 {:else}
+  <!-- The row says which message it is in every mode, not only under select:
+       a row-level identity is what lets a caller aim at the row rather than at
+       whatever happens to be first in the list. -->
   <div
+    data-message-id={message.id}
     class="flex flex-col w-full relative max-w-full isolate px-2"
     class:message-highlight={highlighted}
   >
@@ -729,9 +757,9 @@
     Deep-link highlight (`?message=<id>` / notification click). The row flashes
     accent-tinted then fades to transparent; the class stays on the recycled
     virtualizer row for the highlight window so the target stays identified.
-    Works in both themes via a translucent accent mix. Global: the class is
-    forwarded through Checkbox.Root (thread-selection row) whose root element
-    this component cannot scope.
+    Works in both themes via a translucent accent mix. Global because the
+    class is also applied by the multi-select row (which is the root element
+    this component renders in that mode), so it cannot be scoped.
   */
   :global(.message-highlight) {
     border-radius: 0.75rem;
