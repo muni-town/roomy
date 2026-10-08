@@ -104,6 +104,25 @@ function supportsPush(): boolean {
     typeof Notification !== "undefined"
   );
 }
+
+/**
+ * The push service host an endpoint points at (`fcm.googleapis.com`), for
+ * logs. The endpoint itself is a per-device capability URL — deliverable for
+ * the subscription's life, revocable only by re-subscribing — and the browser
+ * console is forwarded to telemetry, so the host is all we log: it is what
+ * identifies the push service an operator is debugging.
+ *
+ * `"none"` when this device has no subscription, `"unknown"` when the
+ * endpoint is not a parseable URL.
+ */
+function pushServiceHost(endpoint: string | null | undefined): string {
+  if (!endpoint) return "none";
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return "unknown";
+  }
+}
 /**
  * Returns this device's active push subscription endpoint, or `null` if push
  * is unsupported, permission isn't granted, or no subscription exists. Used
@@ -232,7 +251,7 @@ async function subscribeAndRegister(): Promise<PushOutcome> {
   try {
     const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
-    console.debug("[push] serviceWorker.ready; existing subscription:", existing?.endpoint ?? "none");
+    console.debug("[push] serviceWorker.ready; existing subscription on:", pushServiceHost(existing?.endpoint));
     // Wrap subscribe in a timeout. Some Chromium builds (e.g. ungoogled forks
     // without Google FCM keys, or networks blocking the GCM channel on port
     // 5228) never resolve or reject `pushManager.subscribe()` — it just hangs.
@@ -253,14 +272,14 @@ async function subscribeAndRegister(): Promise<PushOutcome> {
           ),
         ),
       ]));
-    console.debug("[push] pushManager.subscribe ok; endpoint:", subscription.endpoint);
+    console.debug("[push] pushManager.subscribe ok; push service:", pushServiceHost(subscription.endpoint));
     // Cache the VAPID key in the service worker so it can resubscribe on
     // `pushsubscriptionchange` (which fires with no page open). The SW can't
     // call the authenticated XRPC endpoint, so it needs the key locally.
     postVapidKeyToServiceWorker(vapidKey);
 
     await registerPushSubscription(subscription);
-    console.info("[push] registered subscription with appserver:", subscription.endpoint);
+    console.info("[push] registered subscription with appserver; push service:", pushServiceHost(subscription.endpoint));
     localStorage.setItem(LAST_ENDPOINT_KEY, subscription.endpoint);
     return { status: "ok" };
   } catch (e) {
@@ -351,7 +370,7 @@ export function installPushSubscriptionChangeListener(): () => void {
         expirationTime: sub.expirationTime,
       });
       localStorage.setItem(LAST_ENDPOINT_KEY, sub.endpoint);
-      console.info("[push] re-registered rotated subscription with appserver:", sub.endpoint);
+      console.info("[push] re-registered rotated subscription with appserver; push service:", pushServiceHost(sub.endpoint));
     } catch (e) {
       // The login-time subscribeIfAlreadyPermitted will retry on next session.
       console.warn("[push] re-register of rotated subscription failed:", e);
