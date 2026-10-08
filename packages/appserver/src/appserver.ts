@@ -999,7 +999,7 @@ export async function createAppserver(
   );
   const embedBacklogStuck = metrics.gauge(
     "roomy_embed_backlog_stuck",
-    "1 when the embed backlog is non-empty but the sweeper selected nothing and the oldest row is stale.",
+    "1 when the embed backlog is non-empty, the sweeper selected nothing, and the empty selection is a fault: rows the backoff set does not account for went unselected. A backlog entirely inside its backoff windows is a retry schedule, and reads 0.",
   );
   const embedBacklogStuckSince = metrics.gauge(
     "roomy_embed_backlog_stuck_since_seconds",

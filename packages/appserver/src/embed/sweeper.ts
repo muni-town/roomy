@@ -259,13 +259,25 @@ let dbErrorCount = 0;
 let dbBackoffUntil = 0;
 /**
  * Backlog-stall signal. Set on a cycle that selected nothing while the DB
- * backlog is non-empty and its oldest row is older than {@link STALL_AGE_MS}.
- * That is the "the backlog is not draining" state — invisible to
- * `pending`/`inFlight` (both read 0/false in-memory while 5k rows sit in
- * `pending_links`). `since` is when the stall began (ms); `skipped` counts the
- * cycles the stall persisted through — selection found nothing, or the work it
- * selected settled no rows. Exposed on /health/embed and as a Prometheus gauge
- * so an alert can fire on the stalled backlog.
+ * backlog is non-empty, its oldest row is older than {@link STALL_AGE_MS}, and
+ * the empty selection is one the queue cannot EXPLAIN — rows existed that no
+ * backoff window accounted for and a re-run of the selection did not return
+ * them either (`selectable-but-absent`). That is the "the backlog is not
+ * draining" state — invisible to `pending`/`inFlight` (both read 0/false
+ * in-memory while 5k rows sit in `pending_links`). `since` is when the stall
+ * began (ms); `skipped` counts the cycles the stall persisted through —
+ * selection found nothing, or the work it selected settled no rows. Exposed on
+ * /health/embed and as a Prometheus gauge so an alert can fire on the stalled
+ * backlog.
+ *
+ * A backlog whose every row is inside a backoff window does NOT raise it. That
+ * is a retry schedule, not a fault: the attempts are already scheduled, the
+ * empty selection is the correct answer about the rows the query may take, and
+ * the queue drains on its own as windows expire — each expiry settles the row
+ * or spends one of its bounded attempts, and the attempt ceiling settles the
+ * last one. An alert must mean "waiting will not fix this"; read
+ * `parkedAttemptHistogram` for how a healthy parked backlog is progressing,
+ * instead of a flag that is up for as long as the schedule is.
  *
  * Cleared only on GENUINE recovery: the backlog fell
  * {@link STALL_DRAIN_FRACTION} below the size the stall was raised on. Settling
@@ -291,7 +303,8 @@ let backlogStuckSkipped = 0;
  *
  * - `all-parked`: every pending row is inside a backoff window (`selectable`
  *   0), so returning empty is correct and the backlog will drain as windows
- *   expire.
+ *   expire. A retry schedule doing its job, NOT a stall — {@link backlogStuck}
+ *   stays down for it.
  * - `selectable-but-absent`: rows were NOT parked yet the query still returned
  *   nothing — a real bug (the query, the skip-set bind, or a different
  *   population), which the log line must escalate rather than smooth over.
@@ -338,7 +351,7 @@ let lastCycle: {
  * A repeated cause must stay silent while the backlog stays stalled, and a
  * cause after genuine recovery must be reported again, so the guard tracks the
  * last cause WRITTEN rather than the current one. Only {@link clearStall}
- * resets it — see {@link stallRecovered} for what counts as recovery.
+ * resets it — see `backlogStuck` above for what counts as recovery.
  */
 let loggedStallCause: StallCause | null = null;
 
@@ -645,11 +658,15 @@ export function embedSweeperStats(): {
   dbErrorCount: number;
   dbBackoffActive: boolean;
   /**
-   * True when the backlog is non-empty but the sweeper selected nothing and
-   * the oldest pending row is older than {@link STALL_AGE_MS}. This is the
-   * signal the `pending`/`inFlight` pair cannot express: a stuck 5k-row
-   * backlog looks idle. The CAUSE is not implied — read {@link lastStallCause}
-   * and {@link lastCycle}. See /health/embed and `roomy_embed_backlog_stuck`.
+   * True when the backlog is non-empty but the sweeper selected nothing AND
+   * the empty selection is a fault rather than a schedule: stale rows existed
+   * that no backoff window accounted for and a re-run of the selection did not
+   * take them either. This is the signal the `pending`/`inFlight` pair cannot
+   * express: a stuck 5k-row backlog looks idle. A backlog that is entirely
+   * parked does NOT count — that is a retry schedule working, reported by
+   * `parkedAttemptHistogram` instead. The CAUSE is not implied — read
+   * {@link lastStallCause} and {@link lastCycle}. See /health/embed and
+   * `roomy_embed_backlog_stuck`.
    */
   backlogStuck: boolean;
   /** Epoch-ms the stall began (0 when not stuck). */
@@ -702,13 +719,17 @@ export function embedSweeperStats(): {
    */
   parkedOverCeiling: number;
   /**
-   * Measured reason the last cycle that selected nothing did so. `null` until
-   * such a cycle has run. `"all-parked"` means every pending ROW was inside a
-   * backoff window; `"selectable-but-absent"` means selectable rows existed
-   * and the query returned nothing anyway — a real selection bug.
+   * Measured reason the cycle that raised the stall above selected nothing.
+   * `null` until such a cycle has run. Always `"selectable-but-absent"`:
+   * selectable rows existed and the query returned nothing anyway — a real
+   * selection bug. An all-parked backlog never raises the stall, so it is never
+   * the cause here (see {@link StallCause}).
    */
   lastStallCause: StallCause | null;
-  /** Row/URL breakdown of the last cycle that selected nothing (`null` until then). */
+  /**
+   * Row/URL breakdown of the cycle that raised the stall above (`null` until
+   * then).
+   */
   lastCycle: {
     pendingRows: number;
     selectableRows: number;
@@ -826,19 +847,19 @@ async function seedTransientRetry(globalDb: DbLike): Promise<void> {
  * Idle-poll delay the loop uses after a cycle that selected nothing — the
  * pacing of the STALLED path.
  *
- * A fully parked backlog (`pending` non-zero, `selectableRows` 0,
- * `lastStallCause` all-parked) would otherwise take the plain
- * {@link IDLE_POLL_MS} idle branch forever: the batch is never "full", so the
- * full-batch throttle cannot engage, and every 30-second cycle runs the stall
- * diagnostic (one aggregate plus one probe, each binding a parameter per
- * parked URL) and re-offers the same log line.
- *
  * While the stall persists the poll escalates 30s → 60s → 120s → 240s → 300s
- * and stops at {@link STALL_POLL_MAX_MS}. Bounded on purpose: nothing wakes the
- * loop when a parked URL's window EXPIRES, so this poll is what notices, and
- * keying the escalation on the stall's AGE (hours) would delay the drain by
- * hours. `waitForWake` is used, so a poke for a freshly-posted link still cuts
- * any wait short. Healthy cycles keep the plain {@link IDLE_POLL_MS}.
+ * and stops at {@link STALL_POLL_MAX_MS}. A latched stall repeats one ERROR
+ * line and re-runs one aggregate plus one probe per cycle, each binding a
+ * parameter per row it measures, so backing off bounds both while the fault is
+ * being worked.
+ *
+ * The plain {@link IDLE_POLL_MS} is the whole schedule for every state that is
+ * not a latched stall — INCLUDING a backlog whose rows are all parked. Nothing
+ * wakes the loop when a parked URL's window EXPIRES, so the poll is what
+ * notices, and a parked backlog is a retry schedule being waited out rather
+ * than a fault being fixed (see {@link backlogStuck}): stretching that poll
+ * would delay the very retry the window exists to schedule. `waitForWake` is
+ * used, so a poke for a freshly-posted link still cuts any wait short.
  */
 export function sweepIdleDelayMs(): number {
   if (!backlogStuck) return IDLE_POLL_MS;
@@ -1210,6 +1231,9 @@ async function runSweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
   // URL, the backlog by row).
   // `classifyPendingLinks` counts the ROWS the same skip set excludes, so the
   // numbers in the log line cannot disagree with what the query actually did.
+  // The measured cause then decides whether this is a fault at all: only an
+  // empty selection the queue cannot explain raises the flag (see the
+  // `selectable-but-absent` branch below).
   //
   // These queries run ONLY on a cycle that selected nothing — i.e. while
   // stalled, roughly one cheap indexed `min(created_at)` plus one aggregate per
@@ -1252,7 +1276,19 @@ async function runSweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
         const probe = await findPendingLinks(globalDb, SWEEP_BATCH, backoffUrls);
         const cause: StallCause = classifyStallCause(selectable, probe.length);
 
-        if (cause !== "unknown") {
+        // An empty selection out of a stale backlog is NOT yet a fault: every
+        // row being parked is a retry schedule with the attempts already
+        // SCHEDULED, and the queue moves on its own as windows expire. Each
+        // expiry either settles the row or spends one of its bounded attempts,
+        // and the attempt ceiling settles the last one — so the flag stays
+        // DOWN and these rows are reported by `parkedAttemptHistogram` instead.
+        //
+        // Only `selectable-but-absent` is stuck: rows exist that no window
+        // accounts for, and the re-run returned none of them either, so nothing
+        // in the queue will ever move them. `unknown` is not stuck either — the
+        // probe took the rows, so the empty selection was a race with
+        // in-flight inserts.
+        if (cause === "selectable-but-absent") {
           stallCause = cause;
           lastCycle = {
             pendingRows: total,
@@ -1271,31 +1307,23 @@ async function runSweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
           // `backlogStuckTransitions` makes any remaining flap countable.
           if (cause !== loggedStallCause) {
             loggedStallCause = cause;
-            if (cause === "all-parked") {
-              // Every pending row is inside a backoff window, so the empty
-              // selection is correct and the backlog drains as windows expire.
-              // Report the numbers so the next reader doesn't re-derive them.
-              log.warn(
-                `[embed-sweeper] backlog stalled: oldest pending row is ${age}m old ` +
-                  `and the last cycle selected nothing — cause=all-parked (${numbers()})`,
-              );
-            } else {
-              // A re-run of the selection returned nothing while selectable
-              // rows exist: a real bug (the query, the skip-set bind, or the
-              // two call sites reading different populations). ERROR, not warn
-              // — a fixed-cause message would conceal it.
-              log.error(
-                `[embed-sweeper] backlog stalled: oldest pending row is ${age}m old ` +
-                  `and the last cycle selected nothing — cause=selectable-but-absent ` +
-                  `(a re-run of the backlog query returned none while rows outside ` +
-                  `the backoff set exist) (${numbers()})`,
-              );
-            }
+            // A re-run of the selection returned nothing while selectable
+            // rows exist: a real bug (the query, the skip-set bind, or the
+            // two call sites reading different populations). ERROR, not warn —
+            // a fixed-cause message would conceal it.
+            log.error(
+              `[embed-sweeper] backlog stalled: oldest pending row is ${age}m old ` +
+                `and the last cycle selected nothing — cause=selectable-but-absent ` +
+                `(a re-run of the backlog query returned none while rows outside ` +
+                `the backoff set exist) (${numbers()})`,
+            );
           }
         } else if (backlogStuck) {
-          // The probe found selectable rows: the backlog is NOT stalled (the
-          // empty selection was a transient race with in-flight inserts).
-          // Clear the flag instead of publishing a cause that is not true.
+          // The probe found the rows: the backlog is NOT stalled (the empty
+          // selection was a transient race with in-flight inserts). Clear the
+          // flag instead of publishing a cause that is not true. This is also
+          // where a stall left latched by an earlier selection bug clears, once
+          // that bug stops reproducing and the selection starts returning rows.
           clearStall();
         }
       }

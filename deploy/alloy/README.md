@@ -99,12 +99,20 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
   `roomy_embed_backlog_stuck_baseline` / `roomy_embed_backlog_stuck_drain_target` /
   `roomy_embed_backlog_stuck_transitions_total`
   - `roomy_embed_backlog_stuck` is 1 when the backlog is non-empty but the
-    sweeper is making no progress: it selected nothing (every pending link is
-    inside its transient-retry backoff, or the selection is broken), or the
-    work it selected settled no rows. `inFlight` 0 and `dbBackoff` 0 in that
-    state, so those two gauges cannot express it. **Alert:**
-    `roomy_embed_backlog_stuck == 1` for 15m — the backlog is not draining and
-    needs intervention.
+    sweeper is making no progress it cannot explain: it selected nothing
+    *although rows existed that no transient-retry backoff window accounted
+    for*, and a re-run of the selection did not return them either — a broken
+    selection. `inFlight` 0 and `dbBackoff` 0 in that state, so those two gauges
+    cannot express it. **Alert:** `roomy_embed_backlog_stuck == 1` for 15m — the
+    backlog is not draining and needs intervention.
+  - A backlog whose rows are all inside their backoff windows does **not** set
+    the flag: every attempt there is already scheduled, and the queue drains on
+    its own as the windows expire (each expiry either settles the row or spends
+    one of its bounded attempts; the attempt ceiling settles the last one).
+    Waiting fixes it, so it is not an alert. Read
+    `roomy_embed_transient_backoff` with `roomy_embed_parked_attempts` to watch
+    that schedule instead, and `lastStallCause` / `lastCycle` on
+    `/health/embed` for why a cycle that DID latch selected nothing.
   - The flag clears only on a genuine drain: `roomy_embed_pending` must fall to
     `roomy_embed_backlog_stuck_baseline - roomy_embed_backlog_stuck_drain_target`
     — a tenth of the backlog the stall was raised on, read once when the flag
