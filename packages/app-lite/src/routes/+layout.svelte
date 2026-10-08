@@ -4,7 +4,7 @@
   import { afterNavigate, onNavigate } from "$app/navigation";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient, restoreCache } from "$lib/client";
-  import { auth, init, updateProfile } from "$lib/auth.svelte";
+  import { auth, init, logout, updateProfile } from "$lib/auth.svelte";
   import { loadLastLogin } from "$lib/last-login.svelte";
   import { installNativePushListeners } from "$lib/native-push";
   import { installPushDebug } from "$lib/push-debug";
@@ -20,6 +20,7 @@
     installGlobalErrorRecovery,
     noteSuccessfulNavigation,
     resetReloadBudget,
+    setSessionExpiryHandler,
   } from "$lib/error-recovery";
   import { serverBar } from "$lib/components/layout/server-bar.svelte";
   import { settingsBar } from "$lib/components/layout/settings-bar.svelte";
@@ -55,6 +56,13 @@
     // failures) that would otherwise leave the app unusable. In the PWA the
     // page cannot be manually refreshed, so this is the safety net.
     installGlobalErrorRecovery();
+    // Once a dead session has spent the auto-reload budget, reloading is over
+    // and the client must not settle into a console-error loop: hand off to
+    // the login path. Wired here, at the single point that owns app startup and
+    // already owns `logout`, so `error-recovery` stays independent of auth.
+    setSessionExpiryHandler(() => {
+      void logout();
+    });
     // Faro first so console capture/error instrumentation is active before
     // auth/bootstrap logs anything (no-op unless PUBLIC_FARO_URL is set).
     initFaro();

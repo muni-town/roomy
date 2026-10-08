@@ -40,6 +40,7 @@ import { isRecoverableAtprotoError } from "./error-recovery.ts";
 import type {
   installGlobalErrorRecovery,
   noteSuccessfulNavigation,
+  setSessionExpiryHandler,
 } from "./error-recovery.ts";
 
 /** The documented budget. Not exported; pinned here as observable behavior. */
@@ -52,6 +53,7 @@ const STORAGE_KEY = "roomy:autoReload";
 type RecoveryModule = {
   installGlobalErrorRecovery: typeof installGlobalErrorRecovery;
   noteSuccessfulNavigation: typeof noteSuccessfulNavigation;
+  setSessionExpiryHandler: typeof setSessionExpiryHandler;
 };
 
 /** The `window` the module under test installs its listeners on. */
@@ -65,6 +67,12 @@ interface Page {
   fire(type: string, event: unknown): void;
   /** Run the timers the page scheduled — reloads are deferred by a delay. */
   flush(): void;
+  /**
+   * The hand-off `scheduleAutoReload` reports through: it is a module-level
+   * callback the host installs, so a page that has not installed one can
+   * still be observed reaching the branch.
+   */
+  sessionExpiries: Error[];
 }
 
 /**
@@ -156,6 +164,7 @@ function createBrowser(): Browser {
   const load = async (): Promise<{ page: Page; module: RecoveryModule }> => {
     const handlers = new Map<string, Array<(event: unknown) => void>>();
     const timers: Array<() => void> = [];
+    const sessionExpiries: Error[] = [];
 
     installGlobals({
       sessionStorage: storage,
@@ -179,10 +188,14 @@ function createBrowser(): Browser {
       `./error-recovery.ts?browser=${instance}&load=${nextLoadId}`
     );
     module.installGlobalErrorRecovery();
+    module.setSessionExpiryHandler((err) => {
+      sessionExpiries.push(err as Error);
+    });
 
     return {
       module,
       page: {
+        sessionExpiries,
         fire(type, event) {
           for (const handler of handlers.get(type) ?? []) handler(event);
         },
@@ -395,6 +408,133 @@ describe("vite:preloadError recovery", () => {
     );
     assert.ok(Array.isArray(recorded));
     assert.equal(recorded.length, 1);
+  });
+});
+
+/**
+ * The hand-off is per *spend of the budget*, not per tab: it fires once, and
+ * the document it lands in owns a clean budget. `logout()` signs the session
+ * out and reloads, which both ends the reason the reloads were being refused
+ * and leaves the login path in charge. So the hand-off appears in exactly one
+ * page load, and the next load is an ordinary signed-out one.
+ */
+describe("the reload budget, once spent", () => {
+  /** Spend the budget from a failure the module's own trigger recognises. */
+  async function spendBudget(browser: Browser): Promise<void> {
+    for (let load = 0; load < MAX_RELOADS; load += 1) {
+      const page = await browser.load();
+      page.fire("unhandledrejection", { reason: deadSession() });
+      page.flush();
+    }
+  }
+  /** The document `logout()` reloads into, once the budget has been spent. */
+  async function spendAndHandOff(browser: Browser): Promise<Page> {
+    await spendBudget(browser);
+    const page = await browser.load();
+    page.fire("unhandledrejection", { reason: deadSession() });
+    page.flush();
+    assert.equal(page.sessionExpiries.length, 1);
+    return page;
+  }
+
+  test("a dead session hands off to the login path instead of looping", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+    await spendBudget(browser);
+    assert.equal(browser.reloads, MAX_RELOADS);
+
+    const page = await browser.load();
+    page.fire("unhandledrejection", { reason: deadSession() });
+    page.flush();
+
+    // No further reload — the budget said so — and no silence either: the
+    // recovery action is the hand-off the host registered, which is what takes
+    // the user to a login prompt.
+    assert.equal(browser.reloads, MAX_RELOADS);
+    assert.equal(page.sessionExpiries.length, 1);
+  });
+
+  test("one dead session hands off once, however many callers report it", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+    await spendBudget(browser);
+
+    // One dead session surfaces through every failed query, the profile fetch
+    // and the push re-subscribe. Each is the same failure and is already being
+    // acted on.
+    const page = await browser.load();
+    for (let i = 0; i < 5; i += 1) {
+      page.fire("unhandledrejection", { reason: deadSession() });
+      page.fire("error", { error: deadSession() });
+    }
+    page.flush();
+
+    assert.equal(page.sessionExpiries.length, 1);
+    assert.equal(browser.reloads, MAX_RELOADS);
+  });
+
+  test("a spent budget still refuses a stale chunk without handing off", async () => {
+    // The budget is shared, but the outcome is not: a stale chunk is
+    // transient, so spending the budget on one must not sign the user out.
+    const browser = createBrowser();
+    browser.advance(0);
+    await spendBudget(browser);
+
+    const page = await browser.load();
+    page.fire("vite:preloadError", staleChunk());
+    page.flush();
+
+    assert.equal(browser.reloads, MAX_RELOADS);
+    assert.equal(page.sessionExpiries.length, 0);
+  });
+
+  test("a fresh budget reloads instead of handing off", async () => {
+    // The hand-off belongs to the exhausted branch alone: while reloads
+    // remain, a dead session is still retried by reload, not given up on.
+    const browser = createBrowser();
+    browser.advance(0);
+    const page = await browser.load();
+
+    page.fire("unhandledrejection", { reason: deadSession() });
+    page.flush();
+
+    assert.equal(browser.reloads, 1);
+    assert.equal(page.sessionExpiries.length, 0);
+  });
+
+  test("the hand-off is not itself a loop: the landing document has a clean budget", async () => {
+    // `logout()` reloads into the same tab, so the next document would find the
+    // exhaustion branch again. If that handed off again, the app would log out
+    // and reload forever — the loop the budget exists to stop, merely renamed.
+    // It does not: the landing document owns a whole budget again.
+    const browser = createBrowser();
+    browser.advance(0);
+    await spendAndHandOff(browser);
+
+    const afterHandOff = await browser.load();
+    afterHandOff.fire("unhandledrejection", { reason: deadSession() });
+    afterHandOff.flush();
+
+    assert.equal(browser.reloads, MAX_RELOADS + 1);
+    assert.equal(afterHandOff.sessionExpiries.length, 0);
+  });
+
+  test("a navigation the user drove can hand off again", async () => {
+    // The login affordances reset the budget by hand, so a session that dies
+    // again after the user asked to start over is handled rather than ignored.
+    const browser = createBrowser();
+    browser.advance(0);
+    await spendAndHandOff(browser);
+
+    const module = await browser.loadModule();
+    module.noteSuccessfulNavigation("link");
+
+    await spendBudget(browser);
+    const page = await browser.load();
+    page.fire("unhandledrejection", { reason: deadSession() });
+    page.flush();
+
+    assert.equal(page.sessionExpiries.length, 1);
   });
 });
 

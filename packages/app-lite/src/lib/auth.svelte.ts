@@ -547,23 +547,46 @@ export async function updateProfile() {
   }
 }
 
+/**
+ * End the session and return to the login path, by reloading into a document
+ * that has no session to restore.
+ *
+ * The local state is cleared unconditionally, ahead of the reload, so a step
+ * that fails cannot leave the app rendering the previous account.
+ */
 export async function logout() {
-  // The cache store is per-origin, not per-account, and this reloads the page
-  // without a fresh session — so the snapshot must go first or the next
-  // account's first load restores the previous account's rooms. Best-effort:
-  // the account-scope check on load is the second line of defence.
-  await clearPersistedCache();
-  // Stop delivering push to this device while signed out. Best-effort: a
-  // failure here must not block logout. clearPushSubscription returns an
-  // outcome (never throws) — just log on non-ok.
-  const pushOutcome = await clearPushSubscription();
-  if (pushOutcome.status !== "ok" && pushOutcome.status !== "unsupported") {
-    console.warn("[push] clear on logout failed:", pushOutcome.status);
+  // Every step below is best-effort: a session that is already dead — the case
+  // that reaches here from the error-recovery hand-off — is exactly one whose
+  // sign-out can reject (the HappyView client, for one, revokes over the same
+  // network it just failed on). None of it may leave the app authenticated and
+  // stuck, so each step is guarded and the local state is cleared regardless.
+  try {
+    // The cache store is per-origin, not per-account, and this reloads the page
+    // without a fresh session — so the snapshot must go first or the next
+    // account's first load restores the previous account's rooms. Best-effort:
+    // the account-scope check on load is the second line of defence.
+    await clearPersistedCache();
+  } catch (err) {
+    console.warn("[logout] clearing the persisted cache failed:", err);
   }
-  if (appPasswordAgent) {
-    await appPasswordAgent.logout();
-  } else if (session) {
-    await sdkLogout(session);
+  try {
+    // Stop delivering push to this device while signed out. clearPushSubscription
+    // returns an outcome (never throws) — just log on non-ok.
+    const pushOutcome = await clearPushSubscription();
+    if (pushOutcome.status !== "ok" && pushOutcome.status !== "unsupported") {
+      console.warn("[push] clear on logout failed:", pushOutcome.status);
+    }
+  } catch (err) {
+    console.warn("[push] clear on logout threw:", err);
+  }
+  try {
+    if (appPasswordAgent) {
+      await appPasswordAgent.logout();
+    } else if (session) {
+      await sdkLogout(session);
+    }
+  } catch (err) {
+    console.warn("[logout] revoking the session failed:", err);
   }
   serviceAuth?.clear();
   serviceAuth = null;
