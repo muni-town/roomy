@@ -1,13 +1,13 @@
 # Voice Chat in Roomy — Implementation Plan
 
 **Date:** 2026-08-28
-**Status:** Phase 1 shipped; Phases 2–5 not started. The server half (voice
-room kind, call facts, LiveKit token/webhook/reconcile, sync-socket presence,
-`space.roomy.voice.*` RPCs) merged as #318 (`d1dfb73d`) and is deployed. The
-client half (call UI and sync wiring) is PR #344
-(`redcurrant/voice-phase1-client`), open in review.
-**Next:** Phase 2 — call UX polish, after PR #344 merges. Phase 2 is not
-dispatched; it depends on the Phase 1 client half landing.
+**Status:** Phase 1 shipped and deployed. The server half (voice room kind,
+call facts, LiveKit token/webhook/reconcile, sync-socket presence,
+`space.roomy.voice.*` RPCs) merged as #318 (`d1dfb73d`); the client half (call
+UI and sync wiring) merged as #344 (`6ae4b7c6`), so both halves are live.
+Phases 2–5 not started.
+**Next:** Phase 2 — call UX polish. Not dispatched.
+
 **Author:** Chanterelle
 **References researched:** `chattocorp/chatto` (main, 2026-08-28) and `colibri-social/colibri.social` + `colibri-social/appview` (main, 2026-08-25).
 
@@ -247,8 +247,7 @@ When `APPSERVER_TEST_MODE=true`, register `/webhooks/test/call-join` and `/webho
 
 ## 7. Milestones
 
-- **Phase 1 — Signaling + presence (v1 core) — shipped (#318 server, `d1dfb73d`; client half = PR #344):** voice room kind, join/leave/getToken/getParticipants/getActiveCalls RPCs, durable call facts + materialisation + invalidation, LiveKit webhook handler, test webhook endpoints, sync-socket presence, sidebar icon + observer panel. Mic connect works end to end.
-- **Phase 2 — Call UX polish:** participant cards + speaking indicators + audio-level cache, mute/deafen, join/leave sound cues, timeline call rows, reconnect/coalescing hardening, E2EE key lifecycle hardening.
+- **Phase 1 — Signaling + presence (v1 core) — shipped:** voice room kind, join/leave/getToken/getParticipants/getActiveCalls RPCs, durable call facts + materialisation + invalidation, LiveKit webhook handler, test webhook endpoints, sync-socket presence, sidebar icon + observer panel. Mic connect works end to end. Server half #318 (`d1dfb73d`); client half #344 (`6ae4b7c6`).
 - **Phase 3 — Moderation & hardening:** `voice.moderate` (server mute/deafen/disconnect, role-gated), membership-change cleanup (leave room/kick/ban/delete → auto-leave + media teardown), reconciliation failure thresholds tuned for production.
 - **Phase 4 — Video & screen share:** camera tiles, screen share (browser picker), simulcast/dynacast settings; optional native companion later.
 - **Phase 5 — Ops:** LiveKit deployment docs (self-hosted + managed), TURN for restrictive networks, `LIVEKIT_*` env wiring in Railway, monitoring (call quality metrics).
