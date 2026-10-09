@@ -12,6 +12,9 @@
   const now = Date.parse("2026-10-02T12:00:00.000Z");
   const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString();
 
+  /** A supplied handler is what makes the card show its action button. */
+  const noop = () => {};
+
   const rich: LinkInfo = {
     url: "https://svelte.dev/blog/runes",
     timestamp: hoursAgo(2),
@@ -96,6 +99,19 @@
     <LinkViewItem link={args.link} />
   </div>
 {/snippet}
+{#snippet actionsTemplate(args: {
+  link: LinkInfo;
+  onCreateCard?: (link: LinkInfo) => void;
+  onSaveToCollection?: (link: LinkInfo) => void;
+})}
+  <div class="w-[19rem] @container">
+    <LinkViewItem
+      link={args.link}
+      onCreateCard={args.onCreateCard}
+      onSaveToCollection={args.onSaveToCollection}
+    />
+  </div>
+{/snippet}
 
 <Story name="With image" args={{ link: rich }} {template} />
 <Story name="With video" args={{ link: video }} {template} />
@@ -104,3 +120,20 @@
 <Story name="No timestamp" args={{ link: undated }} {template} />
 <Story name="Broken timestamp" args={{ link: badDate }} {template} />
 <Story name="Long copy" args={{ link: long }} {template} />
+
+<!--
+  The two ellipsis states. The card shows the top-right button whenever a
+  handler is supplied; the menu itself portals, so open it by clicking the
+  button to see the two Semble rows.
+-->
+<Story
+  name="Admin actions"
+  args={{ link: rich, onCreateCard: noop, onSaveToCollection: noop }}
+  template={actionsTemplate}
+/>
+
+<Story
+  name="Member actions"
+  args={{ link: rich, onSaveToCollection: noop }}
+  template={actionsTemplate}
+/>

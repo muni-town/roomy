@@ -55,7 +55,7 @@
       preventScroll={false}
       class={cn(
         "z-50 min-w-[180px] overflow-hidden rounded-xl border border-base-200 dark:border-base-800",
-        "bg-base-50/90 dark:bg-base-900/20 backdrop-blur-xl",
+        "bg-base-50/90 dark:bg-base-900/90 backdrop-blur-xl",
         "shadow-lg",
         "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
         "data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2",

@@ -23,6 +23,8 @@
     loadMore,
     hasMore = false,
     loading = false,
+    onCreateCard,
+    onSaveToCollection,
   }: {
     links: LinkInfo[];
     emptyMessage?: string;
@@ -32,6 +34,10 @@
     hasMore?: boolean;
     /** First page is still in flight — renders the skeleton grid. */
     loading?: boolean;
+    /** Space admin only — per-card "Add card to space Semble". */
+    onCreateCard?: (link: LinkInfo) => void;
+    /** Any member — per-card "Add card to my Semble". */
+    onSaveToCollection?: (link: LinkInfo) => void;
   } = $props();
 
   let sentinel: HTMLElement | undefined = $state();
@@ -93,7 +99,7 @@
         class="grid grid-cols-1 gap-3 @[34rem]:grid-cols-2 @[52rem]:grid-cols-3 @[74rem]:grid-cols-4"
       >
         {#each links as link (link.url)}
-          <LinkViewItem {link} />
+          <LinkViewItem {link} {onCreateCard} {onSaveToCollection} />
         {/each}
       </div>
 

@@ -15,12 +15,46 @@
    * transition is the snap-fast 75ms used by `shadow-lift` and the buttons.
    * Under `prefers-reduced-motion` the transition is limited to colour, so the
    * lift still marks hover but no longer animates.
+   *
+   * A card may also carry actions (the Semble save pair). Those live behind a
+   * top-right "More actions" ellipsis that is a SIBLING of the card's own
+   * `<a>`, never nested inside it: a `<button>` within an `<a>` is invalid
+   * HTML, and its click would both trip the menu and follow the link. The
+   * ellipsis only renders when at least one action is supplied, so a card with
+   * nothing to offer shows no chrome.
    */
-  import { IconArrowUpRight, IconLink, IconPlay } from "../../../../icons/index";
+  import {
+    IconArrowUpRight,
+    IconEllipsisHorizontal,
+    IconLink,
+    IconPlay,
+  } from "../../../../icons/index";
   import { formatDate, formatRelativeTime } from "../../../../utils/date.js";
+  import Button from "../../../ui/button/Button.svelte";
+  import ContextMenu from "../../../ui/context-menu/ContextMenu.svelte";
+  import ContextMenuItem from "../../../ui/context-menu/ContextMenuItem.svelte";
+  import SembleMark from "../../../marketing/SembleMark.svelte";
   import type { LinkInfo } from "./types";
 
-  let { link }: { link: LinkInfo } = $props();
+  let {
+    link,
+    /**
+     * The Semble actions, named and gated exactly as the message toolbar's
+     * (`ToolbarShell`): a handler's *presence* is the eligibility signal, so
+     * the caller passes one only when the viewer may use it — the space-card
+     * handler for admins under the feature flag, the personal handler for any
+     * member. The link is handed to the handler, since this component renders
+     * many cards from one parent.
+     */
+    onCreateCard,
+    onSaveToCollection,
+  }: {
+    link: LinkInfo;
+    /** Space admin only — shows "Add card to space Semble". */
+    onCreateCard?: (link: LinkInfo) => void;
+    /** Any member — shows "Add card to my Semble". */
+    onSaveToCollection?: (link: LinkInfo) => void;
+  } = $props();
 
   const embed = $derived(link.embed);
   const title = $derived(embed?.title);
@@ -30,8 +64,6 @@
   const imageUrl = $derived(embed?.image);
   /** The still used wherever the card shows a picture (poster for videos). */
   const stillUrl = $derived(imageUrl ?? thumbnailUrl);
-  /** Any visual to show — a video, or an image/thumbnail like LinkCard's fallback. */
-  const mediaUrl = $derived(videoUrl ?? stillUrl);
 
   /** oEmbed provider — author, matching the message-link card's sub-line. */
   const subtitle = $derived(
@@ -78,94 +110,149 @@
       };
     })(),
   );
+
+  // Each action is offered iff its handler was supplied; the caller decides
+  // eligibility (admin + feature flag for the space card, feature flag for the
+  // personal collection) when it builds the handler, exactly as the message
+  // toolbar does. `hasActions` then decides whether the card shows any chrome.
+  const hasActions = $derived(!!onCreateCard || !!onSaveToCollection);
 </script>
 
-<a
-  href={link.url}
-  target="_blank"
-  rel="noopener noreferrer"
-  class="group relative flex flex-col overflow-hidden rounded-2xl border border-base-300/70 bg-base-100/60 translate-y-[2px] transition-all duration-75 ease-out hover:translate-y-0 hover:border-accent-400/70 hover:bg-accent-500/[0.04] hover:shadow-[0_4px_0_0_var(--shadow-button-color)] active:translate-y-[2px] active:shadow-none focus-visible:translate-y-0 focus-visible:border-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-base-50 motion-reduce:transition-colors dark:border-base-800 dark:bg-base-900/40 dark:hover:border-accent-700/70 dark:hover:bg-accent-500/[0.06] dark:focus-visible:ring-offset-base-950 [--shadow-button-color:var(--color-base-300)] dark:[--shadow-button-color:var(--color-base-800)]"
->
-  <!-- Media band: a real preview when the enricher found one, else a quiet
-       accent plate so an unenriched link reads as intentional absence rather
-       than a failed image load. -->
-  <div class="relative aspect-video w-full overflow-hidden bg-base-200/60 dark:bg-base-800/50">
-    {#if videoUrl}
-      <!-- svelte-ignore a11y_media_has_caption -->
-      <video
-        muted
-        preload="metadata"
-        playsinline
-        class="h-full w-full object-cover"
-        poster={thumbnailUrl}
-        src={videoUrl}
-      ></video>
-      <div class="absolute inset-0 flex items-center justify-center">
-        <span
-          class="flex size-11 items-center justify-center rounded-full bg-base-950/60 text-base-50 transition-transform duration-150 ease-out group-hover:scale-110 motion-reduce:transition-none"
-        >
-          <IconPlay class="size-6" />
-        </span>
-      </div>
-    {:else if stillUrl}
-      <img
-        alt=""
-        loading="lazy"
-        class="h-full w-full object-cover transition-transform duration-150 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-        src={stillUrl}
-      />
-    {:else}
-      <div
-        class="flex h-full w-full items-center justify-center bg-gradient-to-br from-accent-500/[0.09] to-accent-500/[0.02] text-accent-600/70 dark:text-accent-400/60"
-      >
-        <IconLink class="size-8" />
-      </div>
-    {/if}
-  </div>
-
-  <!-- Text well -->
-  <div class="flex flex-1 flex-col gap-1 p-3">
-    {#if sourceLine}
-      <span class="truncate text-xs font-medium text-base-500 dark:text-base-400">
-        {sourceLine}
-      </span>
-    {/if}
-
-    <span
-      class="line-clamp-2 text-sm font-semibold leading-snug text-base-900 dark:text-base-100"
-    >
-      {heading}
-    </span>
-
-    {#if description}
-      <p class="line-clamp-2 text-xs leading-relaxed text-base-500 dark:text-base-400">
-        {description}
-      </p>
-    {/if}
-  </div>
-
-  <!-- Footer rule: share date + the open affordance, which is the card's
-       whole point and so stays visible rather than appearing on hover. -->
-  <div
-    class="mt-auto flex items-center justify-between gap-2 border-t border-base-200/70 px-3 py-2 dark:border-base-800/70"
+<div class="relative">
+  <a
+    href={link.url}
+    target="_blank"
+    rel="noopener noreferrer"
+    class="group relative flex flex-col overflow-hidden rounded-2xl border border-base-300/70 bg-base-100/60 translate-y-[2px] transition-all duration-75 ease-out hover:translate-y-0 hover:border-accent-400/70 hover:bg-accent-500/[0.04] hover:shadow-[0_4px_0_0_var(--shadow-button-color)] active:translate-y-[2px] active:shadow-none focus-visible:translate-y-0 focus-visible:border-accent-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-base-50 motion-reduce:transition-colors dark:border-base-800 dark:bg-base-900/40 dark:hover:border-accent-700/70 dark:hover:bg-accent-500/[0.06] dark:focus-visible:ring-offset-base-950 [--shadow-button-color:var(--color-base-300)] dark:[--shadow-button-color:var(--color-base-800)]"
   >
-    {#if sharedAt}
-      <time
-        datetime={link.timestamp}
-        title={sharedAt.exact}
-        class="truncate text-xs text-base-500 dark:text-base-400"
-      >
-        {sharedAt.label}
-      </time>
-    {:else}
-      <span class="truncate text-xs text-base-500 dark:text-base-400">{hostname}</span>
-    {/if}
+    <!-- Media band: a real preview when the enricher found one, else a quiet
+         accent plate so an unenriched link reads as intentional absence rather
+         than a failed image load. -->
+    <div class="relative aspect-video w-full overflow-hidden bg-base-200/60 dark:bg-base-800/50">
+      {#if videoUrl}
+        <!-- svelte-ignore a11y_media_has_caption -->
+        <video
+          muted
+          preload="metadata"
+          playsinline
+          class="h-full w-full object-cover"
+          poster={thumbnailUrl}
+          src={videoUrl}
+        ></video>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <span
+            class="flex size-11 items-center justify-center rounded-full bg-base-950/60 text-base-50 transition-transform duration-150 ease-out group-hover:scale-110 motion-reduce:transition-none"
+          >
+            <IconPlay class="size-6" />
+          </span>
+        </div>
+      {:else if stillUrl}
+        <img
+          alt=""
+          loading="lazy"
+          class="h-full w-full object-cover transition-transform duration-150 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+          src={stillUrl}
+        />
+      {:else}
+        <div
+          class="flex h-full w-full items-center justify-center bg-gradient-to-br from-accent-500/[0.09] to-accent-500/[0.02] text-accent-600/70 dark:text-accent-400/60"
+        >
+          <IconLink class="size-8" />
+        </div>
+      {/if}
+    </div>
 
-    <span
-      class="flex shrink-0 items-center text-base-500 transition-colors duration-75 group-hover:text-accent-600 dark:text-base-400 dark:group-hover:text-accent-300 motion-reduce:transition-none"
-      aria-hidden="true"
+    <!-- Text well -->
+    <div class="flex flex-1 flex-col gap-1 p-3">
+      {#if sourceLine}
+        <span class="truncate text-xs font-medium text-base-500 dark:text-base-400">
+          {sourceLine}
+        </span>
+      {/if}
+
+      <span
+        class="line-clamp-2 text-sm font-semibold leading-snug text-base-900 dark:text-base-100"
+      >
+        {heading}
+      </span>
+
+      {#if description}
+        <p class="line-clamp-2 text-xs leading-relaxed text-base-500 dark:text-base-400">
+          {description}
+        </p>
+      {/if}
+    </div>
+
+    <!-- Footer rule: share date + the open affordance, which is the card's
+         whole point and so stays visible rather than appearing on hover. -->
+    <div
+      class="mt-auto flex items-center justify-between gap-2 border-t border-base-200/70 px-3 py-2 dark:border-base-800/70"
     >
-      <IconArrowUpRight class="size-4" />
-    </span>
-  </div>
-</a>
+      {#if sharedAt}
+        <time
+          datetime={link.timestamp}
+          title={sharedAt.exact}
+          class="truncate text-xs text-base-500 dark:text-base-400"
+        >
+          {sharedAt.label}
+        </time>
+      {:else}
+        <span class="truncate text-xs text-base-500 dark:text-base-400">{hostname}</span>
+      {/if}
+
+      <span
+        class="flex shrink-0 items-center text-base-500 transition-colors duration-75 group-hover:text-accent-600 dark:text-base-400 dark:group-hover:text-accent-300 motion-reduce:transition-none"
+        aria-hidden="true"
+      >
+        <IconArrowUpRight class="size-4" />
+      </span>
+    </div>
+  </a>
+
+  {#if hasActions}
+    <!--
+      The chip uses the shared `Button` in its `secondary` variant — the same
+      control `LinkCard` puts over a link preview — so it keeps that variant's
+      thin hairline border and its theme-aware stone face. Overrides: the chip
+      shrinks by padding alone (`p-1.5` against the variant's `p-2`), so the
+      glyph keeps its 16px size and only the surface around it tightens; the
+      radius is full; the face is more translucent than the variant's, since it
+      floats over the image rather than the page; and the variant's hover shadow
+      is suppressed. That shadow is drawn for a full-size button at `2px`, which
+      reads as noise under a chip this size rather than as lift, and it is tinted
+      `base-600` in dark mode, where it muddies against the image instead of
+      separating the chip from it. Both `hover:` and `dark:hover:` forms must be
+      cleared — they are separate variants, so one does not cancel the other. The
+      border hover still lands, giving the chip a hover cue without the shadow.
+    -->
+    <div class="absolute right-2 top-2 z-10">
+      <ContextMenu side="bottom" align="end" sideOffset={8}>
+        {#snippet trigger({ props })}
+          <Button
+            {...props}
+            variant="secondary"
+            size="icon"
+            aria-label="More actions"
+            class="p-1.5 rounded-full bg-base-50/60 backdrop-blur-sm hover:shadow-none dark:bg-base-900/60 dark:hover:shadow-none"
+          >
+            <IconEllipsisHorizontal class="size-4" />
+          </Button>
+        {/snippet}
+
+        {#if onCreateCard}
+          <ContextMenuItem onclick={() => onCreateCard(link)}>
+            <SembleMark class="size-4" />
+            Add card to space Semble
+          </ContextMenuItem>
+        {/if}
+
+        {#if onSaveToCollection}
+          <ContextMenuItem onclick={() => onSaveToCollection(link)}>
+            <SembleMark class="size-4" />
+            Add card to my Semble
+          </ContextMenuItem>
+        {/if}
+      </ContextMenu>
+    </div>
+  {/if}
+</div>
