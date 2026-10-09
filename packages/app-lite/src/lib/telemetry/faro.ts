@@ -13,9 +13,14 @@
  *
  * v1 scope: console.* interception + error instrumentation. No web vitals
  * or tracing.
+ *
+ * Every item is passed through `beforeSend` (`./scrub.ts`) before it leaves
+ * the browser: logged errors routinely carry a request URL, which for a
+ * `com.atproto.server.getServiceAuth` call is a signed capability.
  */
 import { browser } from "$app/environment";
 import { CONFIG } from "$lib/config";
+import { scrubTelemetryItem } from "./scrub";
 
 let initialized = false;
 
@@ -39,6 +44,11 @@ export function initFaro(): void {
         version: __APP_VERSION__,
       },
       ...(CONFIG.faroApiKey ? { apiKey: CONFIG.faroApiKey } : {}),
+      // Errors arrive here from code that logs them whole, including
+      // third-party messages that embed the request URL (a
+      // `getServiceAuth` URL carries a signed token's `exp`/`lxm`). Every
+      // item is scrubbed on its way out — see ./scrub.ts.
+      beforeSend: scrubTelemetryItem,
       instrumentations: [
         // Captures console.* calls as log messages.
         new ConsoleInstrumentation(),
