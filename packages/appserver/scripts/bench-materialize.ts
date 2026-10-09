@@ -34,8 +34,7 @@ globalThis.fetch = async () => dummyResponse;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, "..", "data");
-const SCHEMA_PATH = join(__dirname, "..", "src", "db", "schema.sql");
-const SCHEMA_VERSION = "10-appserver.4";
+const SCHEMA_PATH = join(__dirname, "..", "src", "db", "schema-space.sql");
 
 // ── CLI args ────────────────────────────────────────────────────────────────
 
@@ -237,7 +236,6 @@ db.exec("pragma synchronous = normal");
 db.exec("pragma foreign_keys = on");
 const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
 db.exec(schemaSql);
-db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
 const asyncDb: DbLike = wrapDb(toAsyncDb(db));
 const t5 = Bun.nanoseconds();
 console.log(`  Created materialization DB: ${formatMs((t5 - t4) / 1_000_000)}`);

@@ -19,8 +19,7 @@ import type { DbLike } from "../db/types.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
-const SCHEMA_VERSION = "10-appserver.4";
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema-space.sql");
 
 /** Create a fresh in-memory DB for testing. */
 function freshDb(): { db: Database; asyncDb: DbLike } {
@@ -30,7 +29,6 @@ function freshDb(): { db: Database; asyncDb: DbLike } {
   db.exec("pragma foreign_keys = on");
   const schemaSql = readFileSync(SCHEMA_PATH, "utf8");
   db.exec(schemaSql);
-  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
   return { db, asyncDb: toAsyncDb(db) };
 }
 

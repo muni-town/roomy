@@ -24,7 +24,7 @@ import {
 } from "./roomActivityProjection.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema-space.sql");
 
 const SPACE = "did:web:room-activity.example";
 const ROOM_A = "01ROOMAA000000000000000000";

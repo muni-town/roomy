@@ -36,9 +36,9 @@ create table dids ( did text primary key ) strict;
 create table did_keys ( did text references dids(did), p256_key blob, k256_key blob, unique (did) ) strict;
 create table did_owners ( did text references dids(did), owner text not null, unique (did, owner) ) strict;</code></pre>
 
-  <h2>Materialised Views (schema.sql)</h2>
+  <h2>Materialised Views (schema-space.sql)</h2>
 
-  <p>The column names and types must stay in sync with the SDK's materializer output. <code>SCHEMA_VERSION</code> bumps wipe this DB and trigger a full re-materialisation from the event log.</p>
+  <p>One per-space DB (<code>data/spaces/&lt;spaceDid&gt;.sqlite</code>). The column names and types must stay in sync with the SDK's materializer output. <code>SPACE_SCHEMA_VERSION</code> bumps upgrade each space in place; only a migration that cannot be applied falls back to a rebuild from the event log.</p>
 
   <h3>entities</h3>
   <p>The base table for all entities (spaces, rooms, messages, users). Every entity has a unique ID (DID or ULID) and belongs to a stream.</p>
@@ -231,7 +231,7 @@ create table did_owners ( did text references dids(did), owner text not null, un
     <li><strong>comp_calendar_link / comp_calendar_event</strong> — OpenMeet calendar integration</li>
     <li><strong>comp_last_read</strong> — Legacy per-room read position (superseded by <code>read_positions</code>)</li>
     <li><strong>materialization_cursor</strong> — Per-stream materialization cursor, read on boot to skip caught-up streams</li>
-    <li><strong>roomy_schema_version</strong> — Materialised-view schema version; a bump wipes and re-materialises</li>
+    <li><strong>space_schema_version</strong> — Per-space schema version; a bump upgrades the space in place</li>
   </ul>
 
   <h2>Key Indexes</h2>

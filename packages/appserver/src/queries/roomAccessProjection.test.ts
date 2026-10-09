@@ -22,7 +22,7 @@ import {
 } from "./roomAccessProjection.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema-space.sql");
 
 const SPACE = "did:web:projection.example";
 const CHANNEL = "01CHANNEL00000000000000000";

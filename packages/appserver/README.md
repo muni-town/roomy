@@ -8,7 +8,7 @@ Most XRPC methods are authenticated by proxying via the PDS. The appserver can b
 
 The appserver owns its event store locally; no external event-stream server (Leaf) is required as a runtime dependency.
 
-`APPSERVER_PERSONAL_STREAM_NSID` will determine the collection to refer to for the personal stream. The appserver caches the personal stream DID with no TTL, so the `roomy.sqlite` db files need to be deleted to clear that cache. The `roomy-readstate.sqlite` db is only used to store unread count read states. It is meant as a persistent source of truth whereas the `roomy` db is derived data.
+The event log (`roomy-events.sqlite`) is the append-only source of truth, and the read-state DB (`roomy-readstate.sqlite`) holds unread counts that cannot be reconstructed from it. Everything else is derived: the global DB and the per-space views both regenerate from the event log. The Deployment section below lists each DB and its kind.
 
 ## Deployment
 

@@ -28,9 +28,8 @@ import {
 } from "./deleteMessage.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCHEMA_PATH = join(__dirname, "..", "db", "schema.sql");
+const SCHEMA_PATH = join(__dirname, "..", "db", "schema-space.sql");
 const READSTATE_SCHEMA_PATH = join(__dirname, "..", "db", "readStateSchema.sql");
-const SCHEMA_VERSION = "10-appserver.4";
 
 const SPACE = "did:web:space.example";
 const ROOM = "01CHANNEL00000000000000000";
@@ -51,7 +50,6 @@ function freshDb(): { db: Database; asyncDb: DbLike } {
   const db = new Database(":memory:");
   db.exec("pragma foreign_keys = on");
   db.exec(readFileSync(SCHEMA_PATH, "utf8"));
-  db.run("insert into roomy_schema_version (id, version) values (1, ?)", [SCHEMA_VERSION]);
   return { db, asyncDb: toAsyncDb(db) };
 }
 

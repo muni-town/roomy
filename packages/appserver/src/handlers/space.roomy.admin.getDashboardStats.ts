@@ -19,7 +19,7 @@
  *   system: {
  *     uptime: number,             // seconds since appserver start
  *     appserverDid: string,
- *     dbSizeBytes: number,        // SQLite file size
+ *     dbSizeBytes: number,        // event-log SQLite file size
  *     pushVapidConfigured: boolean,
  *     pushTotalSubscriptions: number,
  *   },
@@ -27,6 +27,7 @@
  */
 
 import { openDb, openReadStateDb } from "../db/db.ts";
+import { dbPath } from "../db/paths.ts";
 import { requireAdmin } from "../admin.ts";
 import { getSyncManager } from "../sync/handler.ts";
 import { isPushConfigured } from "../push/transports/webPush.ts";
@@ -140,13 +141,16 @@ export const adminGetDashboardStatsHandler: QueryHandler<
 
   const appserverDid = process.env.APPSERVER_DID ?? "did:web:api.roomy.space";
 
-  const dbPath = process.env.APPSERVER_DB_PATH ?? "data/roomy.sqlite";
+  // The event-log DB is the one file that is both shared across spaces and
+  // grows without bound, so it is the meaningful thing to size. Per-space DBs
+  // are derived and rebuildable, and there is no longer a monolithic DB.
+  const eventsDbFile = dbPath("roomy-events.sqlite");
   let dbSizeBytes = 0;
   try {
-    const stat = await Bun.file(dbPath).stat();
+    const stat = await Bun.file(eventsDbFile).stat();
     dbSizeBytes = stat.size;
   } catch {
-    // File not found or not accessible.
+    // `DATA_DIR=:memory:`, or the file is not there yet.
   }
 
   // Push stats. push_subscriptions lives in the read-state DB, not the

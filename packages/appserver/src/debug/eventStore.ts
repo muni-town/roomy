@@ -6,8 +6,9 @@
  * received from the subscription and every materializer output is recorded
  * here, purely for offline forensics (query with sqlite3 CLI).
  *
- * This DB is independent from the main `roomy.sqlite` — no schema versioning,
- * no wipe-on-mismatch, no production impact. Just append-only logging.
+ * This DB is independent from the appserver's own databases — no schema
+ * versioning, no wipe-on-mismatch, no production impact. Just append-only
+ * logging.
  */
 
 import { Database } from "bun:sqlite";

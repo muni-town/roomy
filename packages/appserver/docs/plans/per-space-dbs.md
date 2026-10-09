@@ -181,7 +181,7 @@ The historical divide between *personal join intent* (`personal.joinSpace`) and 
 
 #### `src/db/schema-space.sql`
 
-The per-space schema is the current `schema.sql` minus cross-space tables. Specifically, it drops:
+The per-space schema is derived from the shared schema by dropping cross-space state. Specifically, it drops:
 
 - The `joinedSpace`/`leftSpace` edge labels (moves to global DB — but the `edges` table itself stays, just without those labels)
 
@@ -671,6 +671,12 @@ Run the full test suite with the monolithic DB in read-only mode. All tests shou
 ## Phase 3: Remove Monolithic DB
 
 **Goal**: Delete the monolithic DB and all associated infrastructure.
+
+> **Status (2026-10):** Shipped. `src/db/schema.sql` is deleted, and the
+> monolithic DB it described no longer exists — `openDb()` is the pool router
+> over the per-space/global/read-state/event-log workers, and every former
+> reader of the monolithic schema now reads `schema-space.sql`. The remaining
+> references to `schema.sql` in this document are the pre-split design record.
 
 ### Changes
 

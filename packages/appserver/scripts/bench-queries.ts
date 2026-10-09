@@ -31,9 +31,8 @@ globalThis.fetch = async () => dummyResponse;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, "..", "data");
-const SCHEMA_PATH = join(__dirname, "..", "src", "db", "schema.sql");
+const SCHEMA_PATH = join(__dirname, "..", "src", "db", "schema-space.sql");
 const READSTATE_SCHEMA_PATH = join(__dirname, "..", "src", "db", "readStateSchema.sql");
-const SCHEMA_VERSION = "10-appserver.4";
 const READSTATE_SCHEMA_VERSION = "2";
 
 // ── Helpers ────────────────────────────────────────────────────────────────

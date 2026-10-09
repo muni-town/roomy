@@ -24,10 +24,8 @@ create table if not exists stream_events (
 -- `handleInit`'s ALTER, which cannot add a NOT NULL constraint to a populated
 -- table, so the guarantee is on writers rather than on the file: the ALTER
 -- backfills `created_at`, and `StreamManager.sendEvents` — the only production
--- writer — always stamps both. A row with neither is one imported by
--- `scripts/migrate-from-leaf.ts` (which inserts only the five protocol columns,
--- so SQLite rejects it once this column is NOT NULL); those order by the
--- sender-minted ULID time until that script stamps a receipt.
+-- writer — always stamps both. A row carrying neither predates both columns
+-- and orders by the sender-minted ULID time (`materialization/sortIdx.ts`).
 
 -- Supports "events in the last N hours/day" counts (admin dashboard). Without
 -- it those are full table scans of the whole event log.

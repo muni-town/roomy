@@ -78,8 +78,7 @@ COPY packages/appserver/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create data directory for SQLite databases. These live on the Railway
-# persistent volume mounted at /data (the legacy APPSERVER_DB_PATH=
-# /data/roomy.sqlite points at it too). Because the volume survives deploys,
+# persistent volume mounted at /data. Because the volume survives deploys,
 # the per-space DBs (and their materialization_cursor / schema-version state)
 # persist, so boot re-materialisation only replays the gap instead of
 # rebuilding every space on each deploy.

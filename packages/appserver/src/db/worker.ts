@@ -1064,9 +1064,8 @@ function handleInit(req: WorkerRequest): {
       // no-op.
       //
       // This reaches only rows this appserver appended. A row with no
-      // `created_at` either — history imported by
-      // `scripts/migrate-from-leaf.ts`, which writes the five protocol columns
-      // and nothing else — keeps the ULID fallback (`materialization/sortIdx.ts`).
+      // `created_at` either predates both columns and keeps the ULID fallback
+      // (`materialization/sortIdx.ts`).
       eventsDb.exec(
         "update stream_events set received_at = created_at where received_at is null and created_at is not null",
       );

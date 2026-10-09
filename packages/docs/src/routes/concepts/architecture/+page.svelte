@@ -133,7 +133,8 @@ AT Protocol PDS  ←→  PLC directory</code></pre>
       access.ts               ← Pure predicates: isMember, isAdmin, canRead, canWrite
       writeAuth.ts            ← Per-event authorisation for sendEvents
     db/
-      schema.sql              ← Materialised view schema
+      schema-space.sql        ← Per-space materialised view schema
+      schema-global.sql       ← Cross-space state (membership, profiles, handles)
       eventsSchema.sql        ← Raw event log (stream_events)
       readStateSchema.sql     ← Read positions, push, flags (appserver-owned)
     queries/                  ← SQL query helpers

@@ -29,7 +29,7 @@ import {
  */
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
-const SCHEMA_PATH = join(THIS_DIR, "..", "db", "schema.sql");
+const SCHEMA_PATH = join(THIS_DIR, "..", "db", "schema-space.sql");
 const READSTATE_SCHEMA_PATH = join(THIS_DIR, "..", "db", "readStateSchema.sql");
 
 const SPACE = "did:web:space.example";
