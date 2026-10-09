@@ -1,7 +1,9 @@
 # Appserver Architecture
 
-**Date:** 2026-04-13
-**Status:** Phase 1 — Implementation
+**Date:** 2026-10-09
+**Status:** Current/needs review
+
+See packages/appserver/docs/plans/replicable-space-workers.md for more up to date plan
 
 ## Context
 
