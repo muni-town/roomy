@@ -28,7 +28,7 @@ export interface CronJobPayload {
   spaceId: string;
   roomId: string;
   text: string;
-  /** Message id to thread the reply under, when the job is a reply. */
+  /** Id of a message to attach the post to as a reply. Must be a message. */
   parent?: string;
 }
 

@@ -40,11 +40,46 @@ export function plaintextOf(msg: { content: string; mimeType?: string }): string
   return msg.content;
 }
 
+/**
+ * Whether `id` names a message the caller can read.
+ *
+ * A message is the only entity that has a room, and
+ * `space.roomy.message.getMessage` resolves exactly that: it answers 400 for
+ * every other entity kind (a room, a thread, a page) and 404 for an id it has
+ * never seen. Both are answers about the id. Any other failure — a timeout, a
+ * 403 for a message in a room the caller cannot read, a 5xx — says nothing
+ * about the id and is rethrown, so callers can tell "not a message" apart from
+ * "could not determine".
+ */
+export async function isMessageId(
+  xrpc: DirectXrpcClient,
+  id: string,
+): Promise<boolean> {
+  try {
+    await xrpc.query("space.roomy.message.getMessage", { messageId: id });
+    return true;
+  } catch (error) {
+    // The transport attaches the HTTP `status` to errors built from an error
+    // response. 400 = the entity is not a message; 404 = no such entity. Both
+    // are answers about the id; anything else is not.
+    const status =
+      error !== null && typeof error === "object" && "status" in error
+        ? error.status
+        : undefined;
+    if (status === 400 || status === 404) return false;
+    throw error;
+  }
+}
+
 export interface SendOptions {
   /** Rich-text blocks body (new format). When set, `text` is ignored and the
    *  wire body is the blocks+facets document. */
   blocks?: Block[];
-  /** ID of a message to reply to. Creates a thread rooted at that message. */
+  /**
+   * Message id this message replies to. The reply is attached as a
+   * `space.roomy.attachment.reply.v0`; it does NOT create a thread room.
+   * Must name a message — `sendMessage` rejects anything else locally.
+   */
   parent?: string;
 }
 
@@ -58,6 +93,28 @@ export async function sendMessage(
   text: string,
   opts: SendOptions = {},
 ): Promise<{ messageId: string }> {
+  // A reply attachment's target must be a message, and the appserver rejects
+  // the whole sendEvents batch otherwise — the caller learns that only from a
+  // 400 naming an id it believed was a message. Reject a definite
+  // non-message here instead, before any event is built or sent, so no
+  // sendEvents call leaves the process.
+  //
+  // The probe is best-effort: it is skipped entirely when it cannot tell (a
+  // timeout, or a message the caller cannot read → 403), because the appserver
+  // stays the authority and an inconclusive probe must not block a valid send.
+  if (opts.parent) {
+    let isMessage = true;
+    try {
+      isMessage = await isMessageId(xrpc, opts.parent);
+    } catch {
+      // Inconclusive — let sendEvents decide.
+    }
+    if (!isMessage) {
+      throw new Error(
+        `Reply target ${opts.parent} is not a message id — --parent takes a message, not a room or thread`,
+      );
+    }
+  }
   const messageId = newUlid();
   const body = opts.blocks
     ? {
@@ -159,8 +216,10 @@ export function buildThinkingBlocks(thinking: string): Block[] {
   ];
 }
 
-/** Post a reply to a room as the agent's own message. Threads the reply under
- *  `parent` when set so task chatter stays in that thread (not the room root). */
+/** Post a reply to a room as the agent's own message. Attaches the reply to
+ *  `parent` when set, so task chatter stays under that message rather than at
+ *  the room root. A `parent` that is not a message is rejected before any
+ *  event is sent (see {@link sendMessage}). */
 export async function sendReply(
   xrpc: DirectXrpcClient,
   spaceId: string,
@@ -169,46 +228,10 @@ export async function sendReply(
   blocks?: Block[],
   parent?: string,
 ): Promise<{ messageId: string }> {
-  const messageId = newUlid();
-  const body = blocks && blocks.length > 0
-    ? {
-        mimeType: "application/vnd.roomy.richtext+json",
-        data: toBytes(
-          new TextEncoder().encode(
-            JSON.stringify({
-              $type: "space.roomy.richtext.document",
-              blocks,
-            }),
-          ),
-        ),
-      }
-    : {
-        mimeType: "text/markdown",
-        data: toBytes(new TextEncoder().encode(text)),
-      };
-
-  await xrpc.procedure("space.roomy.space.sendEvents", {
-    spaceId,
-    events: [
-      {
-        id: messageId,
-        room: roomId,
-        $type: "space.roomy.message.createMessage.v0",
-        body,
-        extensions: parent
-          ? {
-              "space.roomy.extension.attachments.v0": {
-                attachments: [
-                  { $type: "space.roomy.attachment.reply.v0", target: parent },
-                ],
-              },
-            }
-          : {},
-      },
-    ],
+  return sendMessage(xrpc, spaceId, roomId, text, {
+    ...(blocks ? { blocks } : {}),
+    ...(parent ? { parent } : {}),
   });
-
-  return { messageId };
 }
 
 /**

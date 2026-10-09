@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Readable } from "node:stream";
-import { respond, resolveTraceTarget } from "./respond.js";
+import { respond, resolveTraceTarget, resolveParent } from "./respond.js";
 import { QueueStore } from "./queue.js";
 import type { CronJobPayload } from "./queue.js";
 
@@ -195,5 +195,61 @@ describe("resolveTraceTarget: a channel's trace never lands in the channel", () 
     expect(await resolveTraceTarget(xrpc, "space:test", "room:chan", msg, (m) => logged.push(m)))
       .toEqual({ kind: "none" });
     expect(logged.join("\n")).toContain("posting no trace");
+  });
+});
+
+/**
+ * A reply is attached to the triggering message's own reply target, so it
+ * lands beside its siblings. A stale target that is not a message (a room, a
+ * deleted message) must fall back to the triggering message: re-sending the
+ * doomed edge rejects the whole sendEvents batch and loses the turn.
+ */
+describe("resolveParent: a bad reply target never becomes the next parent", () => {
+  const message = (id: string, replyTo?: string): { id: string; replyTo?: string } =>
+    replyTo === undefined ? { id } : { id, replyTo };
+
+  test("an in-window target is reused without a probe", async () => {
+    const xrpc = {
+      query: async () => {
+        throw new Error("no probe expected for an in-window target");
+      },
+    } as never;
+    const window = new Map([["01A", message("01A")]]);
+
+    expect(await resolveParent(xrpc, message("01B", "01A"), "01B", window)).toBe("01A");
+  });
+
+  test("a target that is not a message falls back to the triggering message", async () => {
+    const xrpc = {
+      query: async () => {
+        const err = new Error("Entity room:test is not a message (no room)");
+        Object.assign(err, { status: 400 });
+        throw err;
+      },
+    } as never;
+
+    expect(await resolveParent(xrpc, message("01B", "room:test"), "01B", new Map()))
+      .toBe("01B");
+  });
+
+  test("a failed probe falls back rather than losing the turn", async () => {
+    const xrpc = {
+      query: async () => {
+        throw new Error("sendEvents timed out");
+      },
+    } as never;
+
+    expect(await resolveParent(xrpc, message("01B", "01A"), "01B", new Map()))
+      .toBe("01B");
+  });
+
+  test("a triggering message with no reply target is its own parent", async () => {
+    const xrpc = {
+      query: async () => {
+        throw new Error("no probe expected without a reply target");
+      },
+    } as never;
+
+    expect(await resolveParent(xrpc, message("01B"), "01B", new Map())).toBe("01B");
   });
 });

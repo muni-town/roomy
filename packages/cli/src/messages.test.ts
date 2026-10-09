@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_PAGE_LIMIT, readMessagePage, readMessages } from "./messages.js";
+import { MAX_PAGE_LIMIT, readMessagePage, readMessages, sendMessage } from "./messages.js";
 
 /**
  * Regression coverage for TASK-188: `read --limit N` for N > 100 was a hard
@@ -170,5 +170,136 @@ describe("readMessagePage", () => {
 
     expect(room.calls[0]!.limit).toBe(MAX_PAGE_LIMIT);
     expect(page.messages).toHaveLength(MAX_PAGE_LIMIT);
+  });
+});
+
+/**
+ * `send --parent <id>` attaches a reply to a message. The appserver refuses
+ * the WHOLE sendEvents batch when the target is not a message (a room, a
+ * thread, a page), so a room id passed as `--parent` used to cost a full turn:
+ * nothing was sent, and the only signal was a 400 naming an id the caller
+ * believed was a message.
+ *
+ * The fake reproduces both halves of the appserver's contract: `getMessage`
+ * resolves only messages (400 for anything else, 404 for nothing), and
+ * `sendEvents` refuses a reply whose target is not one. A test that stubbed
+ * the rejection away would pass against the unfixed code.
+ */
+function fakeMessages() {
+  const messages = new Set<string>(["01MSG"]);
+  const sent: { events: unknown[] }[] = [];
+  const xrpc = {
+    async query(nsid: string, params: { messageId: string }) {
+      if (nsid !== "space.roomy.message.getMessage") {
+        throw new Error(`unexpected query: ${nsid}`);
+      }
+      if (!messages.has(params.messageId)) {
+        const err = new Error(`Entity ${params.messageId} is not a message (no room)`);
+        Object.assign(err, { status: 400 });
+        throw err;
+      }
+      return { id: params.messageId };
+    },
+    async procedure(nsid: string, params: { events: unknown[] }) {
+      if (nsid !== "space.roomy.space.sendEvents") {
+        throw new Error(`unexpected procedure: ${nsid}`);
+      }
+      // Server-side reply-target validation, mirrored (writeAuth.ts): a reply
+      // whose target is not a message rejects the whole batch.
+      for (const event of params.events) {
+        const target = replyTargetOf(event);
+        if (target !== undefined && !messages.has(target)) {
+          const err = new Error(`Reply target ${target} is not a message (no room)`);
+          Object.assign(err, { status: 400 });
+          throw err;
+        }
+      }
+      sent.push({ events: params.events });
+      return {};
+    },
+  } as never;
+  return { xrpc, sent };
+}
+
+/** The reply target an event carries, or undefined when it is not a reply. */
+function replyTargetOf(event: unknown): string | undefined {
+  if (typeof event !== "object" || event === null || !("extensions" in event)) {
+    return undefined;
+  }
+  const extensions = event.extensions;
+  if (typeof extensions !== "object" || extensions === null) return undefined;
+  const ext = (extensions as Record<string, unknown>)["space.roomy.extension.attachments.v0"];
+  if (typeof ext !== "object" || ext === null || !("attachments" in ext)) return undefined;
+  const attachments = ext.attachments;
+  if (!Array.isArray(attachments)) return undefined;
+  for (const att of attachments) {
+    if (typeof att !== "object" || att === null) continue;
+    const a = att as Record<string, unknown>;
+    if (a.$type === "space.roomy.attachment.reply.v0" && typeof a.target === "string") {
+      return a.target;
+    }
+  }
+  return undefined;
+}
+
+describe("sendMessage --parent validation", () => {
+  test("a room id is rejected locally, with no sendEvents call", async () => {
+    const { xrpc, sent } = fakeMessages();
+
+    await expect(
+      sendMessage(xrpc, "space:test", "room:test", "hi", { parent: "room:test" }),
+    ).rejects.toThrow(/not a message id — --parent takes a message/);
+    expect(sent).toHaveLength(0);
+  });
+
+  test("a message id still sends, carrying the reply attachment", async () => {
+    const { xrpc, sent } = fakeMessages();
+
+    const { messageId } = await sendMessage(xrpc, "space:test", "room:test", "hi", {
+      parent: "01MSG",
+    });
+
+    expect(messageId).not.toBe("");
+    expect(sent).toHaveLength(1);
+    expect(replyTargetOf(sent[0]!.events[0])).toBe("01MSG");
+  });
+
+  test("a 404 (no such entity) is a definite negative — rejected locally", async () => {
+    const xrpc = {
+      async query() {
+        const err = new Error("Message not found: 01GONE");
+        Object.assign(err, { status: 404 });
+        throw err;
+      },
+      async procedure() {
+        throw new Error("sendEvents must not be called");
+      },
+    } as never;
+
+    await expect(
+      sendMessage(xrpc, "space:test", "room:test", "hi", { parent: "01GONE" }),
+    ).rejects.toThrow(/not a message id/);
+  });
+
+  test("an inconclusive probe does not block the send", async () => {
+    // A 403 (a message in a room the caller cannot read) says nothing about
+    // whether the target is a message — the appserver stays the authority, so
+    // the send proceeds and is left to decide.
+    let sendEventsCalls = 0;
+    const xrpc = {
+      async query() {
+        const err = new Error("Caller has no read access to this room");
+        Object.assign(err, { status: 403 });
+        throw err;
+      },
+      async procedure(nsid: string) {
+        if (nsid === "space.roomy.space.sendEvents") sendEventsCalls += 1;
+        return {};
+      },
+    } as never;
+
+    await sendMessage(xrpc, "space:test", "room:test", "hi", { parent: "01MSG" });
+
+    expect(sendEventsCalls).toBe(1);
   });
 });

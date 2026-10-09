@@ -176,7 +176,7 @@ program
     "--json <json>",
     "Send a JSON richtext document (blocks array) instead of plain text",
   )
-  .option("--parent <id>", "Reply to a message id, creating a thread rooted at it")
+  .option("--parent <id>", "Id of a message to reply to (attaches a reply; does not create a thread)")
   .action(async (options: { space: string; room?: string; text?: string; mention?: string; mentionLabel?: string; json?: string; parent?: string }) => {
     try {
       const config = loadConfig();
@@ -483,7 +483,7 @@ queueCmd
   .requiredOption("--space <id>", "Space id")
   .requiredOption("--room <id>", "Room id")
   .requiredOption("--text <text>", "Prompt text to post")
-  .option("--parent <id>", "Thread the post under this message id")
+  .option("--parent <id>", "Id of a message to attach this post to as a reply")
   .option("--only-if-empty", "Skip enqueueing when the queue is not empty (cron: never stack behind a backlog)")
   .option("--queue-file <path>", "Path to the queue file")
   .action(async (options: { space: string; room: string; text: string; parent?: string; onlyIfEmpty?: boolean; queueFile?: string }) => {

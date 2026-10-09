@@ -9,6 +9,7 @@ import {
   buildReplyBlocks,
   buildThinkingBlocks,
   plaintextOf,
+  isMessageId,
   readMessages,
   sendReply,
   type MessageInfo,
@@ -114,8 +115,9 @@ export interface RespondOptions extends Omit<OmpOptions, "resume"> {
 interface ChainWalk {
   /** Conversation root id the session is keyed on (see walkChain). */
   rootId: string;
-  /** Message the reply should be threaded under (the triggering message's
-   *  reply target, or the triggering message itself). */
+  /** Message the reply is attached to: the triggering message's own reply
+   *  target when that target is a message, else the triggering message
+   *  itself. A reply attachment never creates a thread room. */
   parent: string;
   /** Chain-message context (oldest first, excluding the triggering message,
    *  the agent's own messages, and thinking traces). */
@@ -506,17 +508,22 @@ async function runCronJob(xrpc: DirectXrpcClient, job: QueueJob, log: (m: string
 }
 
 /**
- * Fetch a recent-message window in a room, walk the triggering message's
- * reply chain to its root, and build (a) the conversation root id the omp
- * session is keyed on, (b) the threading parent, and (c) a context string
- * limited to the chain's own messages (oldest first) — plus the room name,
- * so the prompt explicitly states where the agent was prompted in.
+ * Fetch a recent-message window in a room, walk the triggering message's reply
+ * chain to its root, and build (a) the conversation root id the omp session is
+ * keyed on, (b) the message to attach the reply to, and (c) a context string
+ * limited to the chain's own messages (oldest first) — plus the room name, so
+ * the prompt explicitly states where the agent was prompted in.
  *
- * Root resolution: walk `replyTo` upward through the fetched window. The
- * root is the first message with no replyTo inside the window, OR the first
- * replyTo target that falls outside the window (a stable boundary id —
- * every message in the same chain walks to the same boundary). This keeps
- * session keys deterministic with a single bounded fetch.
+ * Parent resolution: the triggering message's own reply target when it names a
+ * message (so the reply lands beside its siblings), else the triggering message
+ * itself. See {@link resolveParent} for why a target that is not a message is
+ * not re-propagated.
+ *
+ * Root resolution: walk `replyTo` upward through the fetched window. The root
+ * is the first message with no replyTo inside the window, OR the first replyTo
+ * target that falls outside the window (a stable boundary id — every message in
+ * the same chain walks to the same boundary). This keeps session keys
+ * deterministic with a single bounded fetch.
  */
 async function walkChain(
   xrpc: DirectXrpcClient,
@@ -575,12 +582,46 @@ async function walkChain(
 
     return {
       rootId,
-      parent: chain[0]?.replyTo ?? msgId,
+      parent: await resolveParent(xrpc, chain[0], msgId, byId),
       context,
       roomName: typeof meta?.name === "string" ? meta.name : undefined,
     };
   } catch {
     return { rootId: msgId, parent: msgId, context: "" };
+  }
+}
+
+/**
+ * Resolve the message a reply is attached to, so a reply lands beside its
+ * siblings under the same parent rather than at the room root.
+ *
+ * That target is normally the triggering message's own reply target, which the
+ * appserver guarantees is a message — it refuses any other kind. A stale edge
+ * can still name one that is not (a room, or a deleted message), and
+ * re-propagating it would lose the whole turn: `sendReply` rejects the batch,
+ * and the answer is never posted. So a target that is not a message falls back
+ * to the triggering message itself — the reply is then a plain reply that
+ * always sends — rather than replaying the doomed edge.
+ *
+ * Resolution is best-effort: a probe that fails (rather than answering "not a
+ * message") also falls back, because the appserver remains the authority and a
+ * failed probe must not be the reason a turn is lost.
+ */
+export async function resolveParent(
+  xrpc: DirectXrpcClient,
+  triggering: MessageInfo | undefined,
+  msgId: string,
+  window: ReadonlyMap<string, MessageInfo>,
+): Promise<string> {
+  const target = triggering?.replyTo;
+  if (!target) return msgId;
+  // A target in the fetched window is a message: the server returns nothing
+  // else. Only an out-of-window target needs the probe.
+  if (window.has(target)) return target;
+  try {
+    return (await isMessageId(xrpc, target)) ? target : msgId;
+  } catch {
+    return msgId;
   }
 }
 
