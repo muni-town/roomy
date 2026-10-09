@@ -1,6 +1,7 @@
 <script lang="ts">
-  import Button from "@roomy/design/components/ui/button/Button.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
+  import Switch from "@roomy/design/components/ui/toggle/Toggle.svelte";
+  import { IconChevronRight } from "@roomy/design/icons";
   import { toast } from "@foxui/core";
   import { auth, requestScopeExpansion, revokeScopeSettings } from "$lib/auth.svelte";
   import { createScopeSettingsQuery } from "$lib/queries/scope-settings";
@@ -20,115 +21,261 @@
   const settingsQuery = createScopeSettingsQuery(() => accessSettingsEnabled);
   const queryKey = ["space.roomy.auth.getScopeSettings"];
 
-  // The granted scope is what the live token actually holds. The server's
-  // stored `scope`/`requestedScope` drive display of the raw strings.
-  const grantedScope = $derived(auth.grantedScope);
+  /**
+   * The optional capabilities, in the order they are shown.
+   *
+   * The `base` tier is deliberately absent: every session carries it and the
+   * app cannot work without it, so it is not a choice this page offers. Each
+   * tier here is `base` plus its own additions — the tiers are alternatives,
+   * never layers on top of one another.
+   */
+  const CAPABILITIES: readonly {
+    tier: RequestableScopeSetName;
+    name: string;
+    description: string;
+  }[] = [
+    {
+      tier: "semble",
+      name: "Semble collections",
+      description:
+        "Save links from messages into a Semble collection in your own account.",
+    },
+    {
+      tier: "withDms",
+      name: "Bluesky direct messages",
+      description:
+        "Read and send Bluesky chats as you. No Roomy feature uses this yet.",
+    },
+  ];
+
+  /**
+   * What the server holds as the saved grant — the scope the next sign-in will
+   * ask for. The switches mirror this rather than the live token: removing a
+   * capability narrows what is saved and leaves the running session untouched
+   * (see `revokeScopeSettings`), so a switch wired to the live token would
+   * spring back on the moment it was turned off.
+   */
+  const savedScope = $derived(settingsQuery.data?.scope ?? null);
+
+  function saved(tier: RequestableScopeSetName): boolean {
+    return savedScope !== null && hasScopeSet(savedScope, tier);
+  }
+
+  /** Requested at the provider, but not confirmed yet, so not saved. */
+  function awaitingConfirmation(tier: RequestableScopeSetName): boolean {
+    const requested = settingsQuery.data?.requestedScope;
+    return !!requested && hasScopeSet(requested, tier) && !saved(tier);
+  }
+
+  /**
+   * What acting on one capability does to the other, when that is anything.
+   *
+   * Neither direction is a per-row edit: confirming a capability sends a fresh
+   * request for `base` plus that tier alone, and removing one resets the saved
+   * grant to `base`. Either way the other tier goes with it — but only when the
+   * other tier was saved to begin with, so the note appears only then, on the
+   * row the user is acting on rather than in the result.
+   */
+  function crossEffect(tier: RequestableScopeSetName): string | null {
+    const other = CAPABILITIES.find((c) => c.tier !== tier);
+    if (!other || !saved(other.tier)) return null;
+    const otherName = other.name.toLowerCase();
+    return saved(tier)
+      ? `Turning this off also stops asking for ${otherName} when you next sign in.`
+      : `Confirming this replaces your saved access — ${otherName} turns off.`;
+  }
 
   let busy = $state<RequestableScopeSetName | null>(null);
+  /**
+   * Bumped whenever an attempt settles. The switches are controlled by `saved`,
+   * so a settled attempt that did not change it (a refused or failed provider
+   * round-trip) leaves the switch's own state flipped; re-keying on this puts
+   * every switch back in step with the saved grant.
+   */
+  let attempt = $state(0);
 
   async function refresh(): Promise<void> {
     await queryClient.invalidateQueries({ queryKey });
   }
 
-  /** Toggle an extra capability tier. */
+  /**
+   * Ask for a capability, or stop asking for one.
+   *
+   * Enabling is not a local toggle: it records the request and drives a sign-in
+   * with the provider, so the browser leaves this page and comes back. Removing
+   * only narrows the saved grant; the session in hand keeps its access until the
+   * next sign-in, and the copy beside the switches says so.
+   */
   async function toggle(tier: RequestableScopeSetName, enabled: boolean): Promise<void> {
     busy = tier;
     try {
       if (enabled) {
         await requestScopeExpansion(tier);
-        return; // browser navigates to the PDS consent screen
+        return; // browser navigates to the provider's consent screen
       }
-      await revokeScopeSettings(); // narrows stored grant; live token unchanged
+      await revokeScopeSettings();
       await refresh();
       toast.success(
-        "Removed. This takes effect at your next login — the current " +
-          "session keeps its access until you sign in again.",
+        "Saved. This takes effect the next time you sign in — the session " +
+          "you're using now keeps its access until then.",
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       busy = null;
+      attempt += 1;
     }
   }
 </script>
 
 {#if accessSettingsEnabled}
-<div class="flex flex-col gap-10">
+<div class="flex flex-col gap-8">
   <section>
     <h2 class="text-base font-semibold mb-1 text-base-900 dark:text-base-100">
-      Data access
+      What Roomy can do
     </h2>
-    <p class="text-sm text-base-400 mb-4">
-      Roomy requests permission to read or write data on your personal
-      account. You control which capabilities are enabled. Enabling a
-      capability on your account starts a quick sign-in to confirm with your
-      provider; removing one applies on your next sign-in.
+    <p class="text-sm text-base-600 dark:text-base-400 max-w-prose">
+      Your account is yours. Roomy asks for the access it needs to work, and
+      you decide what else it may do.
     </p>
   </section>
 
   {#if settingsQuery.isPending}
-    <p class="text-sm text-base-400">Loading access settings…</p>
+    <div
+      class="rounded-2xl ring-1 ring-base-200 dark:ring-base-800 divide-y divide-base-200 dark:divide-base-800"
+      aria-hidden="true"
+    >
+      {#each [0, 1, 2] as row (row)}
+        <div class="flex items-start justify-between gap-6 px-4 py-4 sm:px-5">
+          <div class="flex grow flex-col gap-2">
+            <div
+              class="h-4 w-40 rounded-full bg-base-200 dark:bg-base-800 motion-safe:animate-pulse"
+            ></div>
+            <div
+              class="h-3 w-64 max-w-full rounded-full bg-base-100 dark:bg-base-900 motion-safe:animate-pulse"
+            ></div>
+          </div>
+          <div
+            class="h-6 w-10.5 shrink-0 rounded-full bg-base-100 dark:bg-base-900 motion-safe:animate-pulse"
+          ></div>
+        </div>
+      {/each}
+    </div>
+    <span class="sr-only">Loading access settings…</span>
   {:else if settingsQuery.isLoadingError}
     <ErrorMessage message="Error: {settingsQuery.error.message}" class="py-4" />
   {:else if settingsQuery.data}
-    {#snippet capabilityRow(name: string, desc: string, tier: RequestableScopeSetName)}
-      {@const granted = grantedScope !== null && hasScopeSet(grantedScope, tier)}
-      <div class="flex items-start justify-between gap-4 py-4 border-t border-base-200 dark:border-base-800">
+    <ul
+      class="rounded-2xl ring-1 ring-base-200 dark:ring-base-800 divide-y divide-base-200 dark:divide-base-800"
+    >
+      <!-- The foundation every session carries. Not a choice, so not a switch. -->
+      <li class="flex items-start justify-between gap-6 px-4 py-4 sm:px-5">
         <div class="min-w-0">
-          <p class="text-sm font-medium text-base-900 dark:text-base-100">{name}</p>
-          <p class="text-sm text-base-400 mt-0.5">{desc}</p>
-        </div>
-        <Button
-          size="sm"
-          variant={granted ? "secondary" : "primary"}
-          onclick={() => toggle(tier, !granted)}
-          disabled={busy !== null && busy !== tier}
-        >
-          {busy === tier
-            ? "Working…"
-            : granted
-              ? "Remove"
-              : "Enable"}
-        </Button>
-      </div>
-    {/snippet}
-
-    {@render capabilityRow(
-      "Profile",
-      "Read your public profile to show who you are across Roomy spaces.",
-      "base",
-    )}
-
-    {@render capabilityRow(
-      "Semble collections",
-      "Save cards to your own Semble collection. Requests write access to " +
-        "your personal `network.cosmik.card` records.",
-      "semble",
-    )}
-
-    {@render capabilityRow(
-      "Direct messages",
-      "Send and receive direct messages. (Not yet used by any Roomy " +
-        "feature.)",
-      "withDms",
-    )}
-
-    {#if settingsQuery.data.scope}
-      <div class="pt-4 border-t border-base-200 dark:border-base-800">
-        <p class="text-xs text-base-400">
-          Your current stored grant:
-        </p>
-        <code
-          class="block text-[11px] text-base-500 dark:text-base-400 break-all mt-1 bg-base-100 dark:bg-base-900 rounded-md px-2 py-1.5">{settingsQuery.data.scope}</code>
-        {#if settingsQuery.data.requestedScope}
-          <p class="text-xs text-base-400 mt-2">
-            Pending request (confirm at your next sign-in):
+          <p class="text-sm font-medium text-base-900 dark:text-base-100">
+            Using Roomy
           </p>
-          <code
-            class="block text-[11px] text-base-500 dark:text-base-400 break-all mt-1 bg-base-100 dark:bg-base-900 rounded-md px-2 py-1.5">{settingsQuery.data.requestedScope}</code>
+          <p class="mt-1 text-sm text-base-600 dark:text-base-400 max-w-prose">
+            Your spaces, messages and profile — everything the app needs to
+            work at all.
+          </p>
+        </div>
+        <p
+          class="shrink-0 pt-0.5 text-xs whitespace-nowrap text-base-500 dark:text-base-400"
+        >
+          Always on
+        </p>
+      </li>
+
+      {#each CAPABILITIES as { tier, name, description } (tier)}
+        {@const isSaved = saved(tier)}
+        {@const effect = crossEffect(tier)}
+        {@const waiting = awaitingConfirmation(tier)}
+        <li class="flex items-start justify-between gap-6 px-4 py-4 sm:px-5">
+          <div class="min-w-0">
+            <p
+              id="access-{tier}-name"
+              class="text-sm font-medium text-base-900 dark:text-base-100"
+            >
+              {name}
+            </p>
+            <p
+              id="access-{tier}-description"
+              class="mt-1 text-sm text-base-600 dark:text-base-400 max-w-prose"
+            >
+              {description}
+            </p>
+            {#if waiting}
+              <p class="mt-2 text-xs text-base-500 dark:text-base-400">
+                Waiting for confirmation — this arrives the next time you sign
+                in.
+              </p>
+            {:else if effect}
+              <p class="mt-2 text-xs text-base-500 dark:text-base-400">
+                {effect}
+              </p>
+            {/if}
+          </div>
+          <div class="shrink-0 pt-0.5">
+            {#key `${tier}-${attempt}`}
+              <Switch
+                checked={isSaved}
+                disabled={busy !== null}
+                aria-labelledby="access-{tier}-name"
+                aria-describedby="access-{tier}-description"
+                onCheckedChange={(checked: boolean) => toggle(tier, checked)}
+              />
+            {/key}
+          </div>
+        </li>
+      {/each}
+    </ul>
+
+    <p class="text-xs text-base-500 dark:text-base-400 max-w-prose">
+      Turning something on takes you to your provider to confirm it right away.
+      Turning it off saves the change now and applies the next time you sign in
+      — the session you&rsquo;re using keeps its access until then.
+    </p>
+
+    <details class="group text-xs">
+      <summary
+        class="inline-flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-2xl text-base-500 dark:text-base-400 hover:text-base-700 dark:hover:text-base-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-base-900 dark:focus-visible:outline-base-50 [&::-webkit-details-marker]:hidden"
+      >
+        <IconChevronRight
+          class="size-3.5 motion-safe:transition-transform group-open:rotate-90"
+        />
+        Technical details
+      </summary>
+      <dl
+        class="mt-3 flex flex-col gap-3 rounded-2xl bg-base-100 p-4 text-base-600 dark:bg-base-900 dark:text-base-400"
+      >
+        <div>
+          <dt>The access this session is using</dt>
+          <dd class="mt-1">
+            <code
+              class="block break-all text-xs leading-relaxed text-base-600 dark:text-base-300">{auth.grantedScope ?? "None recorded."}</code
+            >
+          </dd>
+        </div>
+        <div>
+          <dt>What your next sign-in will ask for</dt>
+          <dd class="mt-1">
+            <code
+              class="block break-all text-xs leading-relaxed text-base-600 dark:text-base-300">{settingsQuery.data.scope ?? "None recorded."}</code
+            >
+          </dd>
+        </div>
+        {#if settingsQuery.data.requestedScope}
+          <div>
+            <dt>Requested, not yet confirmed</dt>
+            <dd class="mt-1">
+              <code
+                class="block break-all text-xs leading-relaxed text-base-600 dark:text-base-300">{settingsQuery.data.requestedScope}</code
+              >
+            </dd>
+          </div>
         {/if}
-      </div>
-    {/if}
+      </dl>
+    </details>
   {/if}
 </div>
 {:else}
