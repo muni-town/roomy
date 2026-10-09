@@ -66,6 +66,9 @@ interface GetMetadataResult {
   description?: string;
   handle?: string;
   joinPolicy: { allowPublicJoin: boolean; allowMemberInvites: boolean };
+  /** Whether the space may be suggested to other users. Absent while the
+   *  admins have not answered — an unanswered space reads as suggested. */
+  suggestToOthers?: boolean;
   isMember: boolean;
   isAdmin: boolean;
   /** Number of channels with unread messages (sidebar-visible rooms only). */
@@ -131,6 +134,7 @@ export const getMetadataHandler: QueryHandler<
            cs.handle as handle,
            cs.allow_public_join as allow_public_join,
            cs.allow_member_invites as allow_member_invites,
+           cs.suggest_to_others as suggest_to_others,
            cs.sidebar_config as sidebar_config
          from comp_space cs
          left join comp_info ci on ci.entity = cs.entity
@@ -143,6 +147,7 @@ export const getMetadataHandler: QueryHandler<
       handle: string | null;
       allow_public_join: number | null;
       allow_member_invites: number | null;
+      suggest_to_others: number | null;
       sidebar_config: string;
     }>(spaceId);
 
@@ -352,6 +357,13 @@ export const getMetadataHandler: QueryHandler<
       allowPublicJoin: spaceRow.allow_public_join !== 0,
       allowMemberInvites: spaceRow.allow_member_invites === 1,
     },
+    // Tri-state, deliberately not collapsed: null (unanswered) is omitted by
+    // stripNulls so clients see the key absent, distinct from an explicit
+    // false. An unanswered space reads as suggested to other users.
+    suggestToOthers:
+      spaceRow.suggest_to_others === null
+        ? null
+        : spaceRow.suggest_to_others === 1,
     isMember: access.isMember,
     isAdmin: access.isAdmin,
     unreadRoomCount,

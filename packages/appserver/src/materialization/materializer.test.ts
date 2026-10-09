@@ -81,4 +81,76 @@ describe("materialize", () => {
     }
     expect(bundle.dependsOn).toContain(messageId);
   });
+
+  test("updateSpaceInfo maps suggestToOthers onto the comp_space column", () => {
+    // The event's `suggestToOthers` is materialised as a comp_space upsert on
+    // the `suggest_to_others` column, mirroring allowPublicJoin. Assert on the
+    // emitted statement text + params rather than running SQL: the materialiser
+    // is pure and its output is the contract.
+    const event = {
+      $type: "space.roomy.space.updateSpaceInfo.v0",
+      id: newUlid(),
+      suggestToOthers: false,
+    } as unknown as Event;
+
+    const bundle = materialize(
+      event,
+      { streamId: STREAM, user: USER },
+      3 as StreamIndex,
+    );
+
+    expect(bundle.status).toBe("success");
+    if (bundle.status !== "success") return;
+    const upsert = bundle.statements.find((s) =>
+      (s.sql as string).includes("suggest_to_others"),
+    );
+    expect(upsert).toBeDefined();
+    expect(upsert!.sql).toContain("insert into comp_space");
+    expect(upsert!.params).toMatchObject({ ":suggest_to_others": 0 });
+  });
+
+  test("updateSpaceInfo materialises an explicit true as 1", () => {
+    const event = {
+      $type: "space.roomy.space.updateSpaceInfo.v0",
+      id: newUlid(),
+      suggestToOthers: true,
+    } as unknown as Event;
+
+    const bundle = materialize(
+      event,
+      { streamId: STREAM, user: USER },
+      4 as StreamIndex,
+    );
+
+    expect(bundle.status).toBe("success");
+    if (bundle.status !== "success") return;
+    const upsert = bundle.statements.find((s) =>
+      (s.sql as string).includes("suggest_to_others"),
+    );
+    expect(upsert).toBeDefined();
+    expect(upsert!.params).toMatchObject({ ":suggest_to_others": 1 });
+  });
+
+  test("updateSpaceInfo omitting suggestToOthers leaves the column untouched", () => {
+    // A space created before the setting existed never mentions the field; the
+    // upsert must not name the column, so the stored value stays NULL
+    // (unanswered) rather than being collapsed to the read default.
+    const event = {
+      $type: "space.roomy.space.updateSpaceInfo.v0",
+      id: newUlid(),
+      name: "Renamed",
+    } as unknown as Event;
+
+    const bundle = materialize(
+      event,
+      { streamId: STREAM, user: USER },
+      5 as StreamIndex,
+    );
+
+    expect(bundle.status).toBe("success");
+    if (bundle.status !== "success") return;
+    for (const s of bundle.statements) {
+      expect(s.sql as string).not.toContain("suggest_to_others");
+    }
+  });
 });

@@ -20,6 +20,9 @@
             },
             "description": {
               "type": "string"
+            },
+            "suggestToOthers": {
+              "type": "boolean"
             }
           }
         }

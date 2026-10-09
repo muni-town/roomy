@@ -614,6 +614,9 @@
             },
             "name": {
               "type": "string"
+            },
+            "suggestToOthers": {
+              "type": "boolean"
             }
           }
         }

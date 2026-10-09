@@ -18,6 +18,7 @@
     avatarFile: null as File | null,
     allowPublicJoin: "yes" as string,
     allowMemberInvites: "no" as string,
+    suggestToOthers: "yes" as string,
   });
 
   let avatarUrl = $derived(
@@ -55,6 +56,7 @@
           form.allowPublicJoin === "no"
             ? form.allowMemberInvites === "yes"
             : undefined,
+        suggestToOthers: form.suggestToOthers === "yes",
       });
       goto(`/${spaceId}`);
     } catch (e) {
@@ -187,6 +189,26 @@
                 />
               </div>
             {/if}
+
+            <div>
+              <p
+                class="block text-sm/6 font-medium text-base-900 dark:text-base-100 mb-1"
+              >
+                Suggest this space to other users?
+              </p>
+              <p class="text-sm text-base-500 dark:text-base-400 mb-2">
+                Suggested spaces can appear in discovery. You can change this
+                any time in the space's settings.
+              </p>
+              <ToggleGroup
+                name="suggestToOthers"
+                bind:value={form.suggestToOthers}
+                options={[
+                  { label: "Yes", value: "yes" },
+                  { label: "No", value: "no" },
+                ]}
+              />
+            </div>
           </div>
         </div>
 

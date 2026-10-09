@@ -138,6 +138,9 @@ const UpdateSpaceInfoSchema = type({
   $type: "'space.roomy.space.updateSpaceInfo.v0'",
   "allowPublicJoin?": "boolean | null",
   "allowMemberInvites?": "boolean | null",
+  // Null = the admins have not answered yet (reads as yes); an explicit
+  // false opts the space out of being suggested to other users.
+  "suggestToOthers?": "boolean | null",
 })
   .and(BasicInfoUpdate)
   .describe(
@@ -158,6 +161,7 @@ export const UpdateSpaceInfo = defineEvent(
     const spaceUpdates = [
       { key: "allow_public_join", value: event.allowPublicJoin },
       { key: "allow_member_invites", value: event.allowMemberInvites },
+      { key: "suggest_to_others", value: event.suggestToOthers },
     ];
     const setSpaceUpdates = spaceUpdates.filter((x) => x.value !== undefined);
 

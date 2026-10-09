@@ -243,6 +243,49 @@ describe("space.roomy.space.getMetadata", () => {
     expect(ch.activeThreads).toHaveLength(1);
     expect(ch.activeThreads[0].id).toBe(thread);
   });
+  test("suggestToOthers is absent while unanswered (reads as suggested)", async () => {
+    const ctx = await startAppserver();
+    const { db } = ctx;
+    // No suggestToOthers option → the column stays NULL.
+    seedSpace(db, SPACE, USER);
+    seedJoinedSpace(db, USER, SPACE);
+
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${SPACE}`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Key absent — the unanswered state is preserved, not collapsed to true.
+    expect(body).not.toHaveProperty("suggestToOthers");
+  });
+
+  test("suggestToOthers is false after a space opts out", async () => {
+    const ctx = await startAppserver();
+    const { db } = ctx;
+    seedSpace(db, SPACE, USER, { suggestToOthers: 0 });
+    seedJoinedSpace(db, USER, SPACE);
+
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${SPACE}`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.suggestToOthers).toBe(false);
+  });
+
+  test("suggestToOthers is true after an explicit yes", async () => {
+    const ctx = await startAppserver();
+    const { db } = ctx;
+    seedSpace(db, SPACE, USER, { suggestToOthers: 1 });
+    seedJoinedSpace(db, USER, SPACE);
+
+    const res = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${SPACE}`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.suggestToOthers).toBe(true);
+  });
 });
 
 // ─── space.roomy.space.getMembers ───────────────────────────────────────
@@ -1242,6 +1285,47 @@ describe("space.roomy.space.sendEvents", () => {
       },
     );
     expect(res.status).toBe(400);
+  });
+  test("updateSpaceInfo flips suggestToOthers and getMetadata reflects it", async () => {
+    // The acceptance path: an admin answers the setting and the change persists
+    // through updateSpaceInfo. Start unanswered, then explicitly opt out.
+    const ctx = await startAppserver();
+    const { db } = ctx;
+    seedSpace(db, SPACE, USER); // suggest_to_others NULL (unanswered)
+    seedJoinedSpace(db, USER, SPACE);
+    spaceDb(db, SPACE).run(
+      "insert or ignore into edges (head, tail, label) values (?, ?, 'admin')",
+      [SPACE, USER],
+    );
+
+    const before = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${SPACE}`,
+    );
+    expect((await before.json())).not.toHaveProperty("suggestToOthers");
+
+    const send = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          spaceId: SPACE,
+          events: [
+            {
+              id: newUlid(),
+              $type: "space.roomy.space.updateSpaceInfo.v0",
+              suggestToOthers: false,
+            },
+          ],
+        }),
+      },
+    );
+    expect(send.status).toBe(200);
+
+    const after = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${SPACE}`,
+    );
+    expect(after.status).toBe(200);
+    expect((await after.json()).suggestToOthers).toBe(false);
   });
 });
 

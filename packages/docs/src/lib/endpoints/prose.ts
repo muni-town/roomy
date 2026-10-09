@@ -176,6 +176,7 @@ export const prose: Record<string, EndpointProse> = {
         avatar: { type: "string | null", description: "Space avatar URL." },
         description: { type: "string | null", description: "Space description." },
         joinPolicy: { type: "object", description: "allowPublicJoin (default true), allowMemberInvites (default false)." },
+        suggestToOthers: { type: "boolean", description: "Whether the space may be suggested to other users. Absent while an admin has not answered (which reads as yes); false is an explicit opt-out." },
         isMember: { type: "boolean", description: "Caller has 'member' edge." },
         isAdmin: { type: "boolean", description: "Caller has 'admin' edge (orthogonal to membership)." },
         sidebar: { type: "object", description: "Sidebar tree with categories, channels, orphans. Each channel has: id, name, defaultAccess, canRead, canWrite, unreadCount, lastRead." },

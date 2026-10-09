@@ -269,6 +269,34 @@ describe("blue-green read serving (worker seam)", () => {
     expect((await pool.checkSpaceSchema(SPACE)).current).toBe(true);
     expect(await pool.isSpaceRebuilding(SPACE)).toBe(false);
   });
+
+  test("a current-version DB missing an additive column is healed without a rebuild", async () => {
+    // A DB stamped current but created before `suggest_to_others` existed: the
+    // version matches, so the worker serves it (no rebuild) and adds the
+    // column in place. This is the pre-existing-space case the setting must
+    // not wipe for.
+    const db = new Database(canonicalPath, { create: true });
+    db.exec(readFileSync(SCHEMA_PATH, "utf8"));
+    db.exec("alter table comp_space drop column suggest_to_others");
+    db.run("insert into space_schema_version (id, version) values (1, ?)", [
+      SPACE_SCHEMA_VERSION,
+    ]);
+    db.run("insert into entities (id, stream_id) values (?, ?)", [SPACE, SPACE]);
+    db.close();
+
+    // Serving the DB heals the column; a comp_space insert then succeeds.
+    await pool.forSpace(SPACE).run(
+      "insert into comp_space (entity, suggest_to_others) values (?, ?)",
+      [SPACE, 1],
+    );
+    const row = await pool
+      .forSpace(SPACE)
+      .query("select suggest_to_others from comp_space where entity = ?")
+      .get<{ suggest_to_others: number | null }>(SPACE);
+    expect(row?.suggest_to_others).toBe(1);
+    // Unhealed DBs would have thrown on the insert above, not rebuilt:
+    expect(await pool.isSpaceRebuilding(SPACE)).toBe(false);
+  });
 });
 
 describe("statistics on first open", () => {

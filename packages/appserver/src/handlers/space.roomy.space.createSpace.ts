@@ -22,6 +22,7 @@ interface CreateSpaceBody {
   avatar?: unknown;
   allowPublicJoin?: unknown;
   allowMemberInvites?: unknown;
+  suggestToOthers?: unknown;
 }
 
 interface CreateSpaceResult {
@@ -74,6 +75,16 @@ export const createSpaceHandler: ProcedureHandler<
       "Field 'allowMemberInvites' must be a boolean if provided",
     );
   }
+  if (
+    body.suggestToOthers !== undefined &&
+    typeof body.suggestToOthers !== "boolean"
+  ) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      "Field 'suggestToOthers' must be a boolean if provided",
+    );
+  }
 
   const callerDid = parseUserDid(auth);
   if (callerDid === null) {
@@ -98,6 +109,13 @@ export const createSpaceHandler: ProcedureHandler<
       body.allowMemberInvites !== undefined
         ? body.allowMemberInvites
         : undefined,
+    // A new space is suggested by default. The create flow asks the question
+    // and sends the creator's answer, so a space is never left unanswered
+    // (null) by this path — null is reserved for spaces that predate the
+    // setting, which the request flow prompts. An omitted field resolves to
+    // the default here, at the API boundary.
+    suggestToOthers:
+      body.suggestToOthers !== undefined ? body.suggestToOthers : true,
   });
   await streamManager.sendEvents(spaceId, seedEvents, callerDid);
 

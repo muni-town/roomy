@@ -155,7 +155,7 @@ export function seedSpace(
   db: Database,
   spaceId: string,
   userDid: string,
-  opts?: { handle?: string; allowPublicJoin?: number },
+  opts?: { handle?: string; allowPublicJoin?: number; suggestToOthers?: number },
 ): string {
   const sp = spaceDb(db, spaceId);
   // Space entity
@@ -163,11 +163,19 @@ export function seedSpace(
     "insert or ignore into entities (id, stream_id) values (?, ?)",
     [spaceId, spaceId],
   );
-  // comp_space row
+  // comp_space row. `suggestToOthers` is left NULL (unanswered) when omitted —
+  // the same default a space created before the setting existed carries.
   sp.run(
-    `insert or ignore into comp_space (entity, handle, allow_public_join, allow_member_invites)
-     values (?, ?, ?, ?)`,
-    [spaceId, opts?.handle ?? null, opts?.allowPublicJoin ?? null, 1],
+    `insert or ignore into comp_space
+       (entity, handle, allow_public_join, allow_member_invites, suggest_to_others)
+     values (?, ?, ?, ?, ?)`,
+    [
+      spaceId,
+      opts?.handle ?? null,
+      opts?.allowPublicJoin ?? null,
+      1,
+      opts?.suggestToOthers ?? null,
+    ],
   );
   // comp_info row (for name/avatar/description)
   sp.run(

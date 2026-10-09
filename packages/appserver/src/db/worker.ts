@@ -401,6 +401,33 @@ function scheduleSpaceDataMigration(db: Database, version: string): void {
 // ─── Per-space DB management ──────────────────────────────────────────────
 
 /**
+ * Add columns introduced after a per-space DB was first created.
+ *
+ * `schema-space.sql` is exec'd idempotently on every open, but
+ * `create table if not exists` does not alter an existing table — a new column
+ * on a table that already exists needs an explicit ALTER. The DBs this touches
+ * stay on the same `SPACE_SCHEMA_VERSION`, so nothing is wiped or re-derived:
+ * the column is added, defaulting to NULL (unset). SQLite has no
+ * `ADD COLUMN IF NOT EXISTS`, so the column list is checked first (same
+ * pattern as the events DB below).
+ */
+function healSpaceSchema(db: Database): void {
+  const cols = new Set(
+    db
+      .query<{ name: string }, []>(
+        "select name from pragma_table_info('comp_space')",
+      )
+      .all()
+      .map((r) => r.name),
+  );
+  if (!cols.has("suggest_to_others")) {
+    db.exec(
+      "alter table comp_space add column suggest_to_others integer check(suggest_to_others in (0, 1))",
+    );
+  }
+}
+
+/**
  * Open (or return from the LRU cache) the per-space DB for `spaceDid`.
  * On first open: create the file, apply the per-space schema, upgrade an
  * older DB to the current version in place, and refresh the query-planner
@@ -418,6 +445,9 @@ function openSpaceDb(spaceDid: string): Database {
   let db = openSpaceDbFile(spaceDid);
   try {
     initializeSpaceSchema(db, spaceSchemaVersion ?? "");
+    // Current-version DB: heal additive columns. A stale DB throws above and
+    // is served as-is, so it is never mutated.
+    healSpaceSchema(db);
   } catch (err) {
     if (err instanceof SchemaVersionMismatchError) {
       // The on-disk version is not one this build can upgrade from (unknown,

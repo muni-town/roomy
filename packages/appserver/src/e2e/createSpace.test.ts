@@ -184,6 +184,16 @@ describe("space.roomy.space.createSpace (via arbiter)", () => {
         };
         const ids = (spaces.spaces ?? []).map((s) => s.id ?? s.spaceId);
         expect(ids).toContain(NEW_SPACE_DID);
+
+        // A new space is suggested by default: an omitted field resolves to
+        // true at the API boundary, and getMetadata reflects the stored value.
+        const metaRes = await fetch(
+          `${base}/xrpc/space.roomy.space.getMetadata?spaceId=${NEW_SPACE_DID}`,
+          { headers: { "X-Test-Did": USER } },
+        );
+        expect(metaRes.status).toBe(200);
+        const meta = (await metaRes.json()) as { suggestToOthers?: boolean };
+        expect(meta.suggestToOthers).toBe(true);
       } finally {
         await handle.close();
       }

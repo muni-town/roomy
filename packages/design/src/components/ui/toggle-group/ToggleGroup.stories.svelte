@@ -36,3 +36,18 @@
   }}
   {template}
 />
+
+<!-- A tri-state setting that carries no answer: `value` matches no option, so
+     every option renders unselected instead of a fabricated choice. -->
+<Story
+  name="No selection"
+  args={{
+    name: "suggestToOthers",
+    options: [
+      { label: "Yes", value: "yes" },
+      { label: "No", value: "no" },
+    ],
+    value: undefined,
+  }}
+  {template}
+/>

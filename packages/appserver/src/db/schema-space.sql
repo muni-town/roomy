@@ -113,6 +113,12 @@ create table if not exists comp_space (
   sidebar_config text not null default '{"categories": []}', -- JSON sidebar config
   allow_public_join integer check(allow_public_join in (0, 1)), -- null = unset (defaults to open)
   allow_member_invites integer check(allow_member_invites in (0, 1)), -- null = unset (defaults to yes)
+  -- null = admins have not answered (reads as suggested); 0 = opted out.
+  -- The value is kept three-valued so the space-requests flow can tell an
+  -- unanswered space from an admin-answered one. New columns on an existing
+  -- table cannot be added by re-exec'ing this file, so the worker heals
+  -- pre-existing DBs with an idempotent ALTER (no SPACE_SCHEMA_VERSION bump).
+  suggest_to_others integer check(suggest_to_others in (0, 1)),
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;

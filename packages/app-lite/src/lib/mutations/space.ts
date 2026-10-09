@@ -36,6 +36,7 @@ export async function createSpace(opts: {
   avatar?: string;
   allowPublicJoin?: boolean;
   allowMemberInvites?: boolean;
+  suggestToOthers?: boolean;
 }): Promise<{ spaceId: string }> {
   // Invalidation is handled by the appserver's sync signal
   // (joinSpace → getSpaces invalidation via WebSocket).
@@ -48,6 +49,9 @@ export async function createSpace(opts: {
       : {}),
     ...(opts.allowMemberInvites !== undefined
       ? { allowMemberInvites: opts.allowMemberInvites }
+      : {}),
+    ...(opts.suggestToOthers !== undefined
+      ? { suggestToOthers: opts.suggestToOthers }
       : {}),
   });
 
@@ -62,6 +66,7 @@ export async function updateSpaceInfo(
     avatar?: string;
     allowPublicJoin?: boolean;
     allowMemberInvites?: boolean;
+    suggestToOthers?: boolean;
   },
 ): Promise<void> {
   await sendEvents(spaceId, [
@@ -76,6 +81,9 @@ export async function updateSpaceInfo(
       }),
       ...(opts.allowMemberInvites !== undefined && {
         allowMemberInvites: opts.allowMemberInvites,
+      }),
+      ...(opts.suggestToOthers !== undefined && {
+        suggestToOthers: opts.suggestToOthers,
       }),
     },
   ]);

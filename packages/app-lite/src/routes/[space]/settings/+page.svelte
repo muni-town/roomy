@@ -38,6 +38,9 @@
   let description = $state("");
   let allowPublicJoin = $state("yes");
   let allowMemberInvites = $state("no");
+  // `undefined` = the admins have not answered. The control shows no choice
+  // rather than fabricating one; the stored value stays NULL until they pick.
+  let suggestToOthers = $state<string | undefined>(undefined);
   let avatarFile = $state<File | null>(null);
   let avatarPreview = $state<string | null>(null);
 
@@ -82,6 +85,15 @@
     avatarPreview = null;
   }
 
+  /**
+   * The UI's tri-state for the stored answer: `undefined` while the admins have
+   * not answered (`suggest_to_others` is NULL), so the toggle shows no choice;
+   * otherwise "yes"/"no".
+   */
+  function suggestSelection(suggest: boolean | undefined): string | undefined {
+    return suggest === undefined ? undefined : suggest ? "yes" : "no";
+  }
+
   // Initialise on load and re-sync after a successful save: the space topic
   // subscription invalidates the metadata query, producing a fresh `meta`.
   $effect(() => {
@@ -90,6 +102,7 @@
     description = meta.description ?? "";
     allowPublicJoin = meta.joinPolicy.allowPublicJoin ? "yes" : "no";
     allowMemberInvites = meta.joinPolicy.allowMemberInvites ? "yes" : "no";
+    suggestToOthers = suggestSelection(meta.suggestToOthers);
     untrack(clearAvatarSelection);
   });
 
@@ -107,12 +120,16 @@
     !!meta &&
       (allowMemberInvites === "yes") !== meta.joinPolicy.allowMemberInvites,
   );
+  const suggestChanged = $derived(
+    !!meta && suggestToOthers !== suggestSelection(meta.suggestToOthers),
+  );
   const hasChanged = $derived(
     nameChanged ||
       descriptionChanged ||
       avatarChanged ||
       publicJoinChanged ||
-      memberInvitesChanged,
+      memberInvitesChanged ||
+      suggestChanged,
   );
 
   function handleAvatarSelect(event: Event) {
@@ -130,6 +147,7 @@
     description = meta.description ?? "";
     allowPublicJoin = meta.joinPolicy.allowPublicJoin ? "yes" : "no";
     allowMemberInvites = meta.joinPolicy.allowMemberInvites ? "yes" : "no";
+    suggestToOthers = suggestSelection(meta.suggestToOthers);
     clearAvatarSelection();
     saveError = null;
   }
@@ -153,6 +171,9 @@
         allowMemberInvites: memberInvitesChanged
           ? allowMemberInvites === "yes"
           : undefined,
+        // Sent only once an admin has picked a side; an unanswered space
+        // writes nothing.
+        suggestToOthers: suggestChanged ? suggestToOthers === "yes" : undefined,
       });
       clearAvatarSelection();
     } catch (e) {
@@ -294,6 +315,24 @@
               />
             </div>
           {/if}
+          <div>
+            <p
+              class="block text-sm font-medium mb-2 text-base-900 dark:text-base-100"
+            >
+              Suggest this space to other users?
+            </p>
+            <p class="text-sm text-base-500 dark:text-base-400 mb-2">
+              Suggested spaces can appear in discovery.
+            </p>
+            <ToggleGroup
+              name="suggestToOthers"
+              bind:value={suggestToOthers}
+              options={[
+                { label: "Yes", value: "yes" },
+                { label: "No", value: "no" },
+              ]}
+            />
+          </div>
         </div>
 
         {#if saveError}

@@ -20,6 +20,11 @@ export interface CreateDefaultSpaceOptions {
   allowPublicJoin?: boolean;
   /** Whether to allow any member to create invite links (default: false) */
   allowMemberInvites?: boolean;
+  /**
+   * Whether this space may be suggested to other users. Left unset the
+   * space is unanswered and reads as yes; an explicit `false` opts it out.
+   */
+  suggestToOthers?: boolean;
 }
 
 /**
@@ -90,6 +95,9 @@ export function createDefaultSpaceEvents(
       }),
       ...(options.allowMemberInvites !== undefined && {
         allowMemberInvites: options.allowMemberInvites,
+      }),
+      ...(options.suggestToOthers !== undefined && {
+        suggestToOthers: options.suggestToOthers,
       }),
     },
     // Create lobby channel
@@ -197,6 +205,9 @@ export function updateSpaceInfoEvents(
     }),
     ...(options.allowMemberInvites !== undefined && {
       allowMemberInvites: options.allowMemberInvites,
+    }),
+    ...(options.suggestToOthers !== undefined && {
+      suggestToOthers: options.suggestToOthers,
     }),
   };
 }

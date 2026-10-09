@@ -10,6 +10,11 @@
     disabled = false,
   }: {
     name: string;
+    /**
+     * Current selection. A value matching no option — including the initial
+     * `undefined` — leaves every option unselected, so a tri-state setting can
+     * render "unanswered" without fabricating a choice.
+     */
     value?: string;
     options: { label: string; value: string; disabled?: boolean }[];
     /** Fired with the newly selected value when the user picks an option. */

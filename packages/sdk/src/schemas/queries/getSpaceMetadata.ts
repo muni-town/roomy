@@ -71,6 +71,14 @@ export const Response = type({
   "description?": "string",
   "handle?": "string",
   joinPolicy: JoinPolicy,
+  /**
+   * Whether the space may be suggested to other users. The key is absent when
+   * an admin has not answered (which reads as yes); `false` is an explicit
+   * opt-out. Storage keeps the unanswered state as NULL rather than
+   * collapsing it to a value, so a client can tell a defaulted space from an
+   * answered one.
+   */
+  "suggestToOthers?": "boolean",
   isMember: "boolean",
   isAdmin: "boolean",
   /** Number of channels with unread messages (sidebar-visible rooms only). */
