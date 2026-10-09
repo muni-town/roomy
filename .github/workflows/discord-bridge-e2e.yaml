@@ -7,9 +7,11 @@
 # reach the credentials — so this is a human-triggered run, never a pull
 # request gate.
 #
-# Dispatch the branch you want to test: the workflow checks out, builds, and
-# boots the bridge from the dispatched ref, so an open PR can be validated
-# before merge.
+# This workflow file lives on `main`, the default branch: GitHub only lists a
+# `workflow_dispatch` workflow, and offers its Run-workflow button, when the
+# file is on the default branch. The `ref` input below selects what the run
+# actually exercises — `next` by default, or an open PR's branch — because the
+# job checks out, builds, and boots the bridge from that ref.
 #
 # Prerequisites (repo settings):
 #   secrets.DISCORD_BRIDGE_E2E_TOKEN         — staging bridge bot token
@@ -23,6 +25,14 @@ name: Discord Bridge E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        # The dispatched ref supplies the bridge and the E2E, not this file's
+        # branch: a PR is validated by running the workflow against its branch.
+        description: Branch, tag, or SHA to test
+        required: true
+        default: next
+        type: string
 
 # Queue, never cancel: a cancelled run leaves its webhook and thread in the
 # channel and can leave the bridge mid-send.
@@ -72,8 +82,14 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout
+      - name: Checkout the dispatched ref
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      # The run bridges a real channel from this commit, so the log names it.
+      - name: Show the commit under test
+        run: git log -1 --format='%H %s'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
