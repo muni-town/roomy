@@ -16,6 +16,7 @@
  */
 import { decode } from "@atcute/cbor";
 import type { Event, StreamDid, StreamIndex } from "@roomy-space/sdk";
+import { upsertSpaceHandle } from "../queries/spaceHandles.ts";
 import type { DbLike } from "./types.ts";
 import {
   SPACE_SCHEMA_VERSION,
@@ -314,12 +315,79 @@ async function recomputeSortIdxFromLog(
  */
 const SPACE_MIGRATION_TASKS: Record<SpaceAsyncVersion, SpaceMigrationTask> = {
   "3": recomputeSortIdxFromLog,
+  "4": moveSpaceHandleToGlobal,
 };
 
 type SpaceMigrationTask = (
   db: DbLike,
   streamDid: StreamDid,
 ) => Promise<void>;
+
+/**
+ * Copy a space's DNS handle out of the per-space `comp_space.handle` into the
+ * global `space_handles` store, when the column is still present and carries a
+ * value.
+ *
+ * The handle is assigned by the space's PDS/DNS and never written by an event,
+ * so it is not a projection of the log: a space replayed from the log had no
+ * way to reproduce it. It now lives in the global DB, beside the global
+ * `profiles` table, and the per-space DB keeps no copy.
+ *
+ * Called from the v4 migration (which then drops the column) and from the boot
+ * sweep's fallback to a blue-green rebuild, whose fresh DB has no such column
+ * and would otherwise discard the value with the old file. Idempotent, and a
+ * no-op once the column is gone.
+ */
+export async function carrySpaceHandleToGlobal(
+  db: DbLike,
+  streamDid: StreamDid,
+): Promise<void> {
+  const spaceDb = db.forSpace?.(streamDid);
+  if (!spaceDb) return;
+
+  const columns = await spaceDb
+    .query("select name from pragma_table_info('comp_space')")
+    .all<{ name: string }>();
+  if (!columns.some((c) => c.name === "handle")) return;
+
+  const row = await spaceDb
+    .query("select handle from comp_space where entity = ?")
+    .get<{ handle: string | null }>(streamDid);
+  if (!row?.handle) return;
+
+  const globalDb = db.global?.();
+  // A `null` global handle means an adapter that does not route the global DB
+  // (a sync test adapter). There is nothing to migrate onto there.
+  if (globalDb) await upsertSpaceHandle(streamDid, row.handle, globalDb);
+}
+
+/**
+ * v4: move the DNS handle to the global store and drop the per-space column.
+ *
+ * The copy must happen before the DDL removes the column, and the worker
+ * applies structural `up`s at open — ahead of this task — so the removal is
+ * here rather than in the version's `up`.
+ */
+async function moveSpaceHandleToGlobal(
+  db: DbLike,
+  streamDid: StreamDid,
+): Promise<void> {
+  await carrySpaceHandleToGlobal(db, streamDid);
+  const spaceDb = db.forSpace?.(streamDid);
+  if (!spaceDb) {
+    throw new Error(
+      `moveSpaceHandleToGlobal: no per-space handle for ${streamDid}`,
+    );
+  }
+
+  const columns = await spaceDb
+    .query("select name from pragma_table_info('comp_space')")
+    .all<{ name: string }>();
+  if (!columns.some((c) => c.name === "handle")) return;
+
+  await spaceDb.run("alter table comp_space drop column handle");
+  log.info("startup", `moved the DNS handle of ${streamDid} into the global store`);
+}
 
 /**
  * Run this space's incomplete data migrations in version order, within the

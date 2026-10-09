@@ -420,7 +420,7 @@ export const prose: Record<string, EndpointProse> = {
   },
   "space.roomy.space.setHandle": {
     description:
-      "Sets or removes a space handle (DNS-based approach). The handle is persisted in the local DB for fast query access. Requires admin access on the space.",
+      "Sets or removes a space handle (DNS-based approach). The handle is stored in the global `space_handles` table, keyed by space DID. Requires admin access on the space.",
     auth: "Authenticated. Caller must be an admin of the space.",
     inputSchema: {
       type: "object",
@@ -430,7 +430,8 @@ export const prose: Record<string, EndpointProse> = {
       },
     },
     notes: [
-      "The handle is persisted only in the space's own DB; no external registration is performed.",
+      "The handle comes from the space's PDS/DNS rather than the event log, so it lives in the global DB and survives a rebuild of the space.",
+      "No per-space copy is kept: getMetadata and getSpaces read the global store.",
       "Invalidates getMetadata and getSpaces for all viewers of this space.",
     ],
   },

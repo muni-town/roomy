@@ -2,11 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { StreamDid, UserDid } from "@roomy-space/sdk";
 import { closeDb, openDb, openReadStateDb, openSpaceDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
-import {
-  JOINED_SPACE_LABEL,
-  recordPersonalSpaceMembership,
-  selectJoinedSpaces,
-} from "./joinedSpaces.ts";
+import { selectJoinedSpaces } from "./joinedSpaces.ts";
 import { spaceHasUnreads } from "./readPositions.ts";
 import { setUserSpaceMembership } from "./userSpaceMembership.ts";
 
@@ -243,59 +239,7 @@ describe("selectJoinedSpaces", () => {
   });
 });
 
-describe("recordPersonalSpaceMembership", () => {
-  test("makes an already-materialised space visible to getSpaces", async () => {
-    const { mainDb } = setup();
-    await seedSpace();
-    expect(await selectJoinedSpaces(mainDb, USER)).toEqual([]);
-
-    // `recordPersonalSpaceMembership` seeds the joinedSpace edge + entity rows
-    // in the per-space DB. The read path reads durable intent from the
-    // read-state DB, so we mirror the join there too (as the handler does).
-    const spaceDb = openSpaceDb(SPACE);
-    await recordPersonalSpaceMembership(spaceDb, SPACE, USER);
-    await joinIntent(USER, SPACE);
-
-    const spaces = await selectJoinedSpaces(mainDb, USER);
-    expect(spaces).toHaveLength(1);
-    expect(spaces[0]).toMatchObject({ id: SPACE, name: "Test Space" });
-  });
-
-  test("seeds the entity rows the joinedSpace edge depends on", async () => {
-    const { mainDb } = setup();
-    // Neither the space nor the user entity exists yet. The write lands in
-    // the per-space DB (which has the `entities` table).
-    const spaceDb = openSpaceDb(SPACE);
-    await recordPersonalSpaceMembership(spaceDb, SPACE, USER);
-
-    const edge = await spaceDb
-      .query(
-        "select head, tail from edges where label = ?",
-      )
-      .get<{ head: string; tail: string }>(JOINED_SPACE_LABEL);
-    expect(edge).toEqual({ head: USER, tail: SPACE });
-
-    // The space entity is scoped to its own stream, not the user.
-    const spaceEntity = await spaceDb
-      .query(
-        "select stream_id from entities where id = ?",
-      )
-      .get<{ stream_id: string }>(SPACE);
-    expect(spaceEntity?.stream_id).toBe(SPACE);
-  });
-
-  test("is idempotent", async () => {
-    const { mainDb } = setup();
-    await seedSpace();
-
-    const spaceDb = openSpaceDb(SPACE);
-    await recordPersonalSpaceMembership(spaceDb, SPACE, USER);
-    await recordPersonalSpaceMembership(spaceDb, SPACE, USER);
-    await joinIntent(USER, SPACE);
-
-    expect(await selectJoinedSpaces(mainDb, USER)).toHaveLength(1);
-  });
-
+describe("spaceHasUnreads", () => {
   test("spaceHasUnreads counts engaged threads belonging to the space only", async () => {
     const { mainDb } = setup();
     const OTHER = StreamDid.assert("did:web:other-space.example");

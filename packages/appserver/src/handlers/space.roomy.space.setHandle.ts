@@ -2,13 +2,15 @@
  * XRPC: space.roomy.space.setHandle (procedure).
  *
  * Sets or removes a space handle for a space (DNS-based approach). The handle
- * is persisted in the space's own DB below for fast query access; a `null`
- * handle removes it.
+ * is stored in the global DB (`space_handles`), not in the space's per-space
+ * DB — it comes from the PDS/DNS, so it is not derivable from the event log
+ * and must survive a replay. A `null` handle removes it.
  *
  * Requires admin access on the space.
  */
 
-import { openSpaceDb } from "../db/db.ts";
+import { openGlobalDb, openSpaceDb } from "../db/db.ts";
+import { upsertSpaceHandle } from "../queries/spaceHandles.ts";
 import { parseUserDid, requireSpaceAccess } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { Router as InvalidationRouter } from "../invalidation/index.ts";
@@ -58,24 +60,16 @@ export const setHandleHandler: ProcedureHandler<SetHandleBody, void> = async (
     );
   }
 
-  // ── Persist handle in local DB for fast query access ────────────
-  // The per-space DB is the source of truth for `comp_space`; there is no
-  // second DB to dual-write.
-  if (handle !== null) {
-    await db.run(
-      `update comp_space set handle = ?, updated_at = unixepoch() * 1000 where entity = ?`,
-      [handle, spaceId],
-    );
-  } else {
-    await db.run(
-      `update comp_space set handle = null, updated_at = unixepoch() * 1000 where entity = ?`,
-      [spaceId],
-    );
-  }
+  // ── Persist the handle in the global store ─────────────────────────
+  // The handle is assigned by the space's PDS/DNS, not by any event, so it
+  // is not derived from the log and must not live in the per-space DB — a
+  // space replayed from the log would lose it. Same split as user profiles:
+  // authoritative in the global DB, no per-space copy.
+  await upsertSpaceHandle(spaceId, handle, openGlobalDb());
 
   // ── Invalidate cached queries that surface the handle ───────────────
-  // `getMetadata` returns comp_space.handle; `getSpaces` may surface it in
-  // the space list. The handle is space-scoped (not per-user), so broadcast
+  // `getMetadata` returns the handle; `getSpaces` may surface it in the
+  // space list. The handle is space-scoped (not per-user), so broadcast
   // to every viewer of this space.
   const router = InvalidationRouter.getInstance();
   if (router) {

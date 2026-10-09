@@ -165,18 +165,27 @@ export function seedSpace(
   );
   // comp_space row. `suggestToOthers` is left NULL (unanswered) when omitted —
   // the same default a space created before the setting existed carries.
+  // The DNS handle is not stored here — it lives in the global `space_handles`
+  // table (written below), because the PDS/DNS assigns it rather than deriving
+  // it from the event log.
   sp.run(
     `insert or ignore into comp_space
-       (entity, handle, allow_public_join, allow_member_invites, suggest_to_others)
-     values (?, ?, ?, ?, ?)`,
+       (entity, allow_public_join, allow_member_invites, suggest_to_others)
+     values (?, ?, ?, ?)`,
     [
       spaceId,
-      opts?.handle ?? null,
       opts?.allowPublicJoin ?? null,
       1,
       opts?.suggestToOthers ?? null,
     ],
   );
+  if (opts?.handle !== undefined) {
+    globalDb(db).run(
+      `insert into space_handles (space_did, handle) values (?, ?)
+       on conflict (space_did) do update set handle = excluded.handle`,
+      [spaceId, opts.handle],
+    );
+  }
   // comp_info row (for name/avatar/description)
   sp.run(
     `insert or ignore into comp_info (entity, name)

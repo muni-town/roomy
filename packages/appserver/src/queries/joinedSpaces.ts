@@ -2,25 +2,21 @@
  * Joined-spaces query + membership recording.
  *
  * `selectJoinedSpaces` is the SQL behind `space.roomy.space.getSpaces`:
- * the union of join intent (`joinedSpace` edges from the user DID) and
+ * the union of durable membership intent (`user_space_membership`) and
  * per-space membership truth (`member`/`admin` edges).
- *
- * `recordPersonalSpaceMembership` writes the rows that query depends on
- * directly, used by `createSpace` to make a freshly-created space visible
- * without depending on materialisation ordering/timing.
  */
 
 import type { DbLike } from "../db/types.ts";
 import type { StreamDid, UserDid } from "@roomy-space/sdk";
 import { openSpaceDb } from "../db/db.ts";
+import { getSpaceHandles } from "./spaceHandles.ts";
 import { spaceHasUnreads } from "./readPositions.ts";
 import { selectUserSpaces } from "./userSpaceMembership.ts";
 
 /**
  * Edge label for join intent: `head` is the user DID, `tail` is the joined
  * space. Membership is per-(user, space), so it must live in `edges` (a
- * many-to-many table) rather than on the single global `comp_space` /
- * `entities` row a space has.
+ * many-to-many table) rather than on the single `entities` row a space has.
  *
  * Must match the label written by the SDK's `JoinSpace` / `LeaveSpace`
  * materialisers.
@@ -76,6 +72,10 @@ export async function selectJoinedSpaces(
 ): Promise<SpaceRow[]> {
   const rows = await selectUserSpaces(readStateDb, userDid, options.includeLeft);
 
+  // The DNS handle lives in the global store (it is not log-derived), so it is
+  // fetched for the whole page in one round-trip rather than per space.
+  const handles = await getSpaceHandles(rows.map((r) => r.space_did));
+
   const spaceRows = await Promise.all(
     rows.map(async (r) => {
       const isLeft = r.state === "left";
@@ -85,6 +85,7 @@ export async function selectJoinedSpaces(
       // Left spaces are always included (isMember/isAdmin false). Joined
       // spaces require a member/admin edge (real membership truth).
       if (!isLeft && !row.is_member && !row.is_admin) return null;
+      const handle = handles.get(r.space_did) ?? null;
       const space: SpaceRow = {
         id: r.space_did,
         hasUnreads: await spaceHasUnreads(readStateDb, spaceDb, userDid, r.space_did),
@@ -97,7 +98,7 @@ export async function selectJoinedSpaces(
       if (row.name !== null) space.name = row.name;
       if (row.avatar !== null) space.avatar = row.avatar;
       if (row.description !== null) space.description = row.description;
-      if (row.handle !== null) space.handle = row.handle;
+      if (handle !== null) space.handle = handle;
       return space;
     }),
   );
@@ -119,7 +120,6 @@ async function querySpaceRow(
   name: string | null;
   avatar: string | null;
   description: string | null;
-  handle: string | null;
   is_member: number;
   is_admin: number;
 } | null> {
@@ -135,9 +135,6 @@ async function querySpaceRow(
   const info = await spaceDb
     .query("select name, avatar, description from comp_info where entity = ?")
     .get<{ name: string | null; avatar: string | null; description: string | null }>([spaceId]);
-  const cs = await spaceDb
-    .query("select handle from comp_space where entity = ?")
-    .get<{ handle: string | null }>([spaceId]);
   const member = await spaceDb
     .query(
       "select 1 as n from edges where head = ? and tail = ? and label = 'member' limit 1",
@@ -154,99 +151,9 @@ async function querySpaceRow(
     name: info?.name ?? null,
     avatar: info?.avatar ?? null,
     description: info?.description ?? null,
-    handle: cs?.handle ?? null,
     is_member: member ? 1 : 0,
     is_admin: admin ? 1 : 0,
   };
-}
-
-/**
- * Record that `userDid` has joined `spaceId` by writing the `joinedSpace`
- * edge `selectJoinedSpaces` reads.
- *
- * Why this exists: `createSpace` materialises the new space and sends the
- * space-side `space.joinSpace` event, but the live materialisation of that
- * event may not have landed by the time the HTTP response returns. Writing
- * the edge directly makes the new space visible to the immediately
- * following `getSpaces` call regardless of materialisation timing.
- *
- * The writes mirror the SDK's `JoinSpace` materialiser and are idempotent,
- * so the later live materialisation of the same event is a harmless no-op.
- */
-export async function recordPersonalSpaceMembership(
-  db: DbLike,
-  spaceId: StreamDid,
-  userDid: UserDid,
-): Promise<void> {
-  const now = Date.now();
-  // The `joinedSpace` edge has FKs to both entity rows. Each entity is
-  // scoped to its own stream — the space entity belongs to the space stream,
-  // never the user's — so seed both with stream_id = id. Existing rows are
-  // left untouched (their stream_id is already correct).
-  await db.run(
-    `insert into entities (id, stream_id, created_at) values (?, ?, ?)
-     on conflict(id) do nothing`,
-    [spaceId, spaceId, now],
-  );
-  await db.run(
-    `insert into entities (id, stream_id, created_at) values (?, ?, ?)
-     on conflict(id) do nothing`,
-    [userDid, userDid, now],
-  );
-  await db.run(`insert or ignore into edges (head, tail, label) values (?, ?, ?)`, [
-    userDid,
-    spaceId,
-    JOINED_SPACE_LABEL,
-  ]);
-}
-
-/**
- * Record that `userDid` has left `spaceId` by writing a `leftSpace` edge.
- * This makes the space visible to subsequent `getSpaces?includeLeft=true`
- * calls with `isMember = false`.
- *
- * Called by the leaveSpace handler, which deletes the `joinedSpace` edge
- * first (no event deletes it anymore — see space.roomy.space.leaveSpace.ts).
- */
-export async function recordLeftSpaceEdge(
-  db: DbLike,
-  spaceId: StreamDid,
-  userDid: UserDid,
-): Promise<void> {
-  const now = Date.now();
-  // Seed entity rows if they don't exist yet.
-  await db.run(
-    `insert into entities (id, stream_id, created_at) values (?, ?, ?)
-     on conflict(id) do nothing`,
-    [spaceId, spaceId, now],
-  );
-  await db.run(
-    `insert into entities (id, stream_id, created_at) values (?, ?, ?)
-     on conflict(id) do nothing`,
-    [userDid, userDid, now],
-  );
-  await db.run(`insert or ignore into edges (head, tail, label) values (?, ?, ?)`, [
-    userDid,
-    spaceId,
-    LEFT_SPACE_LABEL,
-  ]);
-}
-
-/**
- * Remove a `leftSpace` edge, used when a user rejoins a space they had left.
- * Called directly by the joinSpace handler (no event removes it — see
- * space.roomy.space.joinSpace.ts).
- */
-export async function removeLeftSpaceEdge(
-  db: DbLike,
-  spaceId: StreamDid,
-  userDid: UserDid,
-): Promise<void> {
-  await db.run(
-    `delete from edges
-      where head = ? and tail = ? and label = ?`,
-    [userDid, spaceId, LEFT_SPACE_LABEL],
-  );
 }
 
 /**
@@ -254,7 +161,7 @@ export async function removeLeftSpaceEdge(
  * fast-paths (`createSpace`/`joinSpace`/`leaveSpace`) for read-after-write
  * consistency before the materialiser lands. The global DB has only the
  * `edges` table (no `entities`), so this writes just the edge — no entity
- * seeding, unlike `recordPersonalSpaceMembership` above.
+ * seeding.
  *
  * `label` is `JOINED_SPACE_LABEL` or `LEFT_SPACE_LABEL`.
  */

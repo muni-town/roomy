@@ -31,7 +31,7 @@ import type { HappyViewConfig } from "../happyview.ts";
 import { log } from "../log.ts";
 import { runPendingGlobalMigrations } from "../db/globalMigrations.ts";
 import { refreshSpaceStats } from "../queries/spaceStats.ts";
-import { upgradeSpaceInPlace } from "../db/spaceMigrations.ts";
+import { upgradeSpaceInPlace, carrySpaceHandleToGlobal } from "../db/spaceMigrations.ts";
 import { sweepReadStateWatermarks } from "../db/readStateWatermarks.ts";
 import { isTransientDbError } from "../db/transient.ts";
 import type { LoggedEvent } from "../materialization/types.ts";
@@ -472,6 +472,14 @@ export async function reMaterializeFromLocalEvents(
       if (idx >= total) return;
       const { streamId: streamDid, fromIdx, rebuild } = toReplay[idx]!;
       try {
+        // The DNS handle lives in the global store, not the per-space DB, so a
+        // rebuild must carry it across before the swap drops the old file. The
+        // boot sweep already ran the v4 migration for every other path; this
+        // covers a space that reached the rebuild without it (a version this
+        // build cannot start from, or a declined migration).
+        if (rebuild) {
+          await carrySpaceHandleToGlobal(db, streamDid as StreamDid);
+        }
         // Blue-green rebuild: begin explicitly so the temp `.sqlite.new` DB is
         // created and the space is flagged rebuilding BEFORE replay starts
         // (and before any slow profile hydration holds the window open) —

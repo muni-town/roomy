@@ -64,11 +64,10 @@ create table did_owners ( did text references dids(did), owner text not null, un
 );</code></pre>
 
   <h3>comp_space</h3>
-  <p>Space-global config, handle, backfill cursor, and join policy. One row per space. Membership is <strong>not</strong> read from this row — it lives in <code>edges</code> as per-user <code>joinedSpace</code> rows (the legacy <code>hidden</code> column is written for compatibility but ignored by the appserver).</p>
+  <p>Space-global config, handle provider, backfill cursor, and join policy. One row per space. Membership is <strong>not</strong> read from this row — it lives in <code>edges</code> as per-user <code>joinedSpace</code> rows (the legacy <code>hidden</code> column is written for compatibility but ignored by the appserver). The DNS space handle is not here either: it comes from the space's PDS/DNS rather than the event log, so it lives in the global DB's <code>space_handles</code> table and survives a rebuild of the space.</p>
   <pre><code>create table comp_space (
   entity text primary key,
   hidden integer default 0,
-  handle text,
   handle_provider text,
   backfilled_to integer default 0,
   sidebar_config text not null default '&#123;"categories": []&#125;',

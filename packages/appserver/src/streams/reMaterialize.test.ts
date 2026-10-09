@@ -149,8 +149,8 @@ describe("reMaterializeFromLocalEvents", () => {
 
     // Verify key columns are populated
     const spaceRow1 = await space
-      .query("select entity, handle, sidebar_config from comp_space where entity = ?")
-      .get<{ entity: string; handle: string | null; sidebar_config: string }>(streamDid);
+      .query("select entity, sidebar_config from comp_space where entity = ?")
+      .get<{ entity: string; sidebar_config: string }>(streamDid);
     expect(spaceRow1).not.toBeNull();
     expect(spaceRow1!.entity).toBe(streamDid);
     const infoRow1 = await space
@@ -184,8 +184,8 @@ describe("reMaterializeFromLocalEvents", () => {
 
     // Key column values unchanged
     const spaceRow2 = await space
-      .query("select entity, handle, sidebar_config from comp_space where entity = ?")
-      .get<{ entity: string; handle: string | null; sidebar_config: string }>(streamDid);
+      .query("select entity, sidebar_config from comp_space where entity = ?")
+      .get<{ entity: string; sidebar_config: string }>(streamDid);
     expect(spaceRow2).not.toBeNull();
     expect(spaceRow2!.entity).toBe(streamDid);
 

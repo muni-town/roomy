@@ -107,7 +107,6 @@ create index if not exists idx_edges_label_tail on edges(label, tail);
 create table if not exists comp_space (
   entity text primary key references entities(id) on delete cascade,
   hidden integer not null default 0 check(hidden in (0, 1)),
-  handle text, -- domain
   handle_provider text,
   backfilled_to integer default 0,
   sidebar_config text not null default '{"categories": []}', -- JSON sidebar config

@@ -113,10 +113,11 @@ describe("sendEvents", () => {
 // ─── createStream ───────────────────────────────────────────────────────
 
 describe("createStream", () => {
-  test("writes the addAdmin event and the entities row", async () => {
+  test("writes the addAdmin event, whose materialiser creates the entity row", async () => {
     const streamDid = await sm.createStream(ADMIN);
 
-    // Entities row exists (in the per-space DB)
+    // Entities row exists (in the per-space DB), created by the addAdmin
+    // event's own materialiser rather than by a direct write here.
     const entityRow = await db
       .forSpace!(streamDid)
       .query("select id, stream_id from entities where id = ?")
@@ -133,11 +134,11 @@ describe("createStream", () => {
     expect(eventRow[0]!.user).toBe(ADMIN);
   });
 
-  test("failure cleanup — if sendEvents throws, entities row is removed", async () => {
-    // Create a minimal DbLike mock that only supports the operations
-    // createStream actually calls: run (for entities insert + key storage)
-    // and transaction (which we make throw).
-    let insertedEntity: string | null = null;
+  test("does not touch the per-space DB directly", async () => {
+    // The entity row is materialisation's to create. A direct write here would
+    // be a second writer outside the event log, and would also need unwinding
+    // when the sendEvents call below fails. The mock's per-space seam throws,
+    // so any direct access is a failure rather than a silent extra write.
     const mockDb: DbLike = {
       query: () => {
         throw new Error("query not expected in this test");
@@ -148,46 +149,14 @@ describe("createStream", () => {
       exec: async () => {
         throw new Error("exec not expected in this test");
       },
-      run: async (sql: string, ...params: unknown[]) => {
-        // Capture the entities insert so we can verify cleanup
-        if (sql.includes("insert into entities")) {
-          insertedEntity = params[0] as string;
-        }
-        // Track delete cleanup
-        if (sql.includes("delete from entities")) {
-          insertedEntity = null;
-        }
-        return { changes: 1 };
-      },
+      run: async () => ({ changes: 1 }),
       transaction: async <T>(): Promise<T> => {
         throw new Error("simulated sendEvents failure");
       },
       close: async () => {},
-      // createStream writes the entities row via the per-space handle.
-      forSpace: () => ({
-        query: () => {
-          throw new Error("query not expected in this test");
-        },
-        prepare: async () => {
-          throw new Error("prepare not expected in this test");
-        },
-        exec: async () => {
-          throw new Error("exec not expected in this test");
-        },
-        run: async (sql: string, ...params: unknown[]) => {
-          if (sql.includes("insert into entities")) {
-            insertedEntity = params[0] as string;
-          }
-          if (sql.includes("delete from entities")) {
-            insertedEntity = null;
-          }
-          return { changes: 1 };
-        },
-        transaction: async <T>(): Promise<T> => {
-          throw new Error("simulated sendEvents failure");
-        },
-        close: async () => {},
-      }),
+      forSpace: () => {
+        throw new Error("createStream must not open the per-space DB");
+      },
     };
 
     const failingSm = new StreamManager(mockDb, {
@@ -198,9 +167,6 @@ describe("createStream", () => {
     await expect(failingSm.createStream(ADMIN)).rejects.toThrow(
       "simulated sendEvents failure",
     );
-
-    // The entities row should have been cleaned up (deleted)
-    expect(insertedEntity).toBeNull();
   });
 
   test("provisions via the arbiter when configured", async () => {

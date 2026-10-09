@@ -67,6 +67,13 @@ export const SPACE_MIGRATIONS = {
   // every message's key from the log and re-anchors the read-state watermarks
   // that stored the old ones; the alternative is replaying every space.
   "3": { kind: "data" },
+  // `comp_space.handle` moved to the global DB (`space_handles`): the DNS
+  // handle comes from the PDS/DNS rather than the event log, so a replayed
+  // space lost it. The task copies each space's existing value into the global
+  // store, then drops the column — hence `data`, not a structural `up`: the
+  // value must be read out before the DDL removes it, and `up` runs at open,
+  // ahead of the boot runner's tasks.
+  "4": { kind: "data" },
   // Next per-space schema change goes here, e.g.:
   //   "4": { kind: "structural", up(db) { /* alter table … */ } },
   //   "4": { kind: "data" },          // plus a task in SPACE_MIGRATION_TASKS

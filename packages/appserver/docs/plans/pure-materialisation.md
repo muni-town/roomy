@@ -1,7 +1,7 @@
 # Pure Materialisation
 
 **Date:** 2026-10-02
-**Status:** Step 1 landed; steps 2–5 not started. Per-space schema changes now
+**Status:** Steps 1–2 landed; steps 3–5 not started. Per-space schema changes now
 migrate in place before falling back to a rebuild (§6a).
 **Owner:** appserver
 
@@ -28,10 +28,12 @@ are visible today, before any replication:
   are suppressed during replay only because every materialisation call site passes
   `isBackfill: true`. Any path that replays without that flag double-counts.
 - **The per-space DB is not self-describing.** `space.roomy.space.setHandle`
-  writes `comp_space.handle` directly and authors no event
-  (`handlers/space.roomy.space.setHandle.ts:65-73`). A space rebuilt from the log
-  loses its handle. Embed data (`comp_embed_link_data`) is written by the
-  sweeper, never by the log, and is read on the message and activity-feed paths.
+  wrote `comp_space.handle` directly and authored no event
+  (`handlers/space.roomy.space.setHandle.ts:65-73`), so a space rebuilt from the
+  log lost its handle. (Resolved by Step 2: the handle now lives in the global
+  DB, since its value comes from the PDS/DNS rather than the log.) Embed data
+  (`comp_embed_link_data`) is written by the sweeper, never by the log, and is
+  read on the message and activity-feed paths.
 
 This matters because the per-space DB is the unit of scale. Making it a
 deterministic projection of the log is what lets more than one process derive it,
@@ -107,18 +109,20 @@ which is exactly where the current complexity, and the replay hazard, come from.
 
 | Site                                                                      | Writes                                                     | Assessment                                                                                                                 |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `handlers/space.roomy.space.setHandle.ts:65-73`                           | `comp_space.handle`, `updated_at`                          | **Unrecoverable from the log.** Must become an event.                                                                      |
-| `streams/StreamManager.ts:400`                                            | `insert into entities` for a new space                     | Recoverable — the space's own `addAdmin` event creates the row on replay.                                                  |
-| `streams/StreamManager.ts:418`                                            | `delete from entities` on a failed create                  | Best-effort cleanup; harmless if the space never materialises.                                                             |
-| `queries/joinedSpaces.ts:186,191,218,223`                                 | `entities` seeding + `edges` (`joinedSpace` / `leftSpace`) | Exported but **no production caller** — `createSpace` uses `recordGlobalMembership`. Dead API surface that breaks closure. |
+| `handlers/space.roomy.space.setHandle.ts:65-73`                           | `comp_space.handle`, `updated_at`                          | **Unrecoverable from the log.** Resolved by Step 2 — the handle moved to the global `space_handles` store.                 |
+| ~~`streams/StreamManager.ts:400`~~                                        | ~~`insert into entities` for a new space~~                 | Resolved by Step 2 — the `addAdmin` event's materialiser creates the row.                                                  |
+| ~~`streams/StreamManager.ts:418`~~                                        | ~~`delete from entities` on a failed create~~              | Gone with the insert above.                                                                                                |
+| ~~`queries/joinedSpaces.ts:186,191,218,223`~~                             | ~~`entities` seeding + `edges` (`joinedSpace` / `leftSpace`)~~ | Deleted by Step 2 — exported, no production caller (`createSpace` uses `recordGlobalMembership`).                         |
 | `auth/access.ts:265,581` → `queries/roomAccessProjection.ts:262`          | `room_access` (read-path warm)                             | Derived cache of log data. Benign **provided** replay invalidates it — which `applyBatch.ts:248-272` does.                 |
 | `queries/threadActivity.ts:233` → `queries/roomActivityProjection.ts:350` | `room_activity` (read-path warm)                           | Same.                                                                                                                      |
 | `embed/enricher.ts:298,329,382`                                           | `comp_embed_link_data`                                     | **Not derived from the log at all.** Moves out (see §3.5).                                                                 |
 
 The read-path warms are acceptable: they are caches of values the log determines,
-and they are rebuilt on replay. The rule to hold is _a non-materialisation writer
-may only write a value the log already determines, and must be invalidated by
-replay._ `setHandle` and `comp_embed_link_data` break that rule.
+and a replay invalidates them (it never populates them) so the next read warms
+them from the replayed tables — audited in Step 2. The rule to hold is _a
+non-materialisation writer may only write a value the log already determines, and
+must be invalidated by replay._ `comp_embed_link_data` still breaks that rule
+(Step 4).
 
 ### 3.4 Clock columns (D, cosmetic)
 
@@ -225,22 +229,40 @@ with a `reorderMessage` event in its log declines the in-place path — a reorde
 is defined relative to its neighbours' keys, which an in-place replay over a
 fully-populated DB cannot reproduce — and takes the rebuild instead.
 
-### Step 2 — Remove the non-log writers
+### Step 2 — Remove the non-log writers — **landed**
 
 **Change.**
 
-- `setHandle`: author an event (`space.roomy.space.updateSpaceHandle.v0` or a
-  field on the existing space-info event) and derive `comp_space.handle` in the
-  materialiser. Until the event exists in the log, the handler is the only writer
-  and a rebuild silently drops the handle.
-- `createStream`: write the `entities` row through an event, or accept that it is
-  recreated on replay and document the create path as event-first.
-- Audit the read-path warms (`room_access`, `room_activity`) to confirm every
-  replay path invalidates them rather than merging into stale rows.
+- `setHandle`: **moved out of the per-space DB entirely.** The DNS handle comes
+  from the space's PDS/DNS and changes without any on-protocol write, so it will
+  never have event semantics; authoring an event would model a value the log
+  cannot observe. It now lives in the global `space_handles` table, beside the
+  global `profiles` table, and the per-space `comp_space` keeps no copy — the
+  same split user profiles already use. `createSpace`'s `comp_space.handle`
+  column is dropped by the v4 per-space migration, which copies each space's
+  existing value into the global store first. (`handle_provider` is a different
+  value, already log-derived by `space.roomy.space.setHandleProvider.v0`, and
+  stays per-space.)
+- `createStream`: **the direct `entities` insert is gone.** The space's own
+  `addAdmin` event materialises `ensureEntity(streamId, streamId)` before its
+  edge inserts, so the row is created by the event that already has to exist.
+  Nothing is written outside materialisation, and there is no hand-unwound
+  cleanup on the failure path.
+- Dead membership writers: `recordPersonalSpaceMembership`,
+  `recordLeftSpaceEdge` and `removeLeftSpaceEdge` deleted — exported, writing
+  per-space `entities`/`edges`, with no production caller (`createSpace` uses
+  `recordGlobalMembership`).
+- The read-path warms (`room_access`, `room_activity`) were audited and are
+  correct: `applyBatch` invalidates on replay (`isBackfill`) rather than merging,
+  and the read path re-warms from the replayed tables.
 
-**Acceptance.** For every per-space table, a test that materialises a log,
-records the table, then rebuilds from the same log and asserts equality. Tables
-with a non-materialisation writer must fail this test today and pass after.
+**Acceptance.** `reMaterialize.purity.test.ts` snapshots every per-space table
+after a live write and after a rebuild from the same log, and asserts equality
+modulo the documented clock columns (§3.4) and the read-path caches — which a
+rebuild leaves empty for the next read to warm, rather than carrying forward.
+The same file pins that a replay invalidates those caches instead of merging into
+a stale row. `spaceMigrations.test.ts` covers the handle moving into the global
+store and surviving a rebuild.
 
 ### Step 3 — Move unread out of the materialiser
 

@@ -11,6 +11,7 @@ import { createFederationMemo, federatedRoomAccess } from "../auth/federation.ts
 import { openReadStateDb, openSpaceDb, openGlobalDb } from "../db/db.ts";
 import { getReadPositions, getSpaceSidebarData, ensureReadPositions } from "../queries/readPositions.ts";
 import { queryActiveThreads, resolveThreadsByIds } from "../queries/userActiveThreads.ts";
+import { getSpaceHandle } from "../queries/spaceHandles.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
@@ -131,7 +132,6 @@ export const getMetadataHandler: QueryHandler<
            ci.name as name,
            ci.avatar as avatar,
            ci.description as description,
-           cs.handle as handle,
            cs.allow_public_join as allow_public_join,
            cs.allow_member_invites as allow_member_invites,
            cs.suggest_to_others as suggest_to_others,
@@ -144,7 +144,6 @@ export const getMetadataHandler: QueryHandler<
       name: string | null;
       avatar: string | null;
       description: string | null;
-      handle: string | null;
       allow_public_join: number | null;
       allow_member_invites: number | null;
       suggest_to_others: number | null;
@@ -154,6 +153,9 @@ export const getMetadataHandler: QueryHandler<
   if (spaceRow === null) {
     throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`);
   }
+
+  // The DNS handle is not log-derived, so it lives in the global store.
+  const spaceHandle = await getSpaceHandle(spaceId, openGlobalDb());
 
   let config: SidebarConfig;
   try {
@@ -351,7 +353,7 @@ export const getMetadataHandler: QueryHandler<
     name: spaceRow.name,
     avatar: spaceRow.avatar,
     description: spaceRow.description,
-    handle: spaceRow.handle,
+    handle: spaceHandle,
     joinPolicy: {
       // null = unset → defaults per schema comments.
       allowPublicJoin: spaceRow.allow_public_join !== 0,

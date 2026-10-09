@@ -157,6 +157,29 @@ async function materialiseSkewedSpace(
   return { roomId, messageIds };
 }
 
+/**
+ * Materialise a space whose only event is an `updateSpaceInfo`, which
+ * materialises a `comp_space` row — the row the DNS handle is stored on before
+ * v4.
+ */
+async function seedSpaceWithCompSpaceRow(
+  db: DbLike,
+  streamDid: StreamDid,
+): Promise<void> {
+  await seedEvent(
+    db,
+    streamDid,
+    parse({
+      id: ulid(),
+      $type: "space.roomy.space.updateSpaceInfo.v0",
+      name: "Handled",
+    }),
+    0,
+    Date.now(),
+  );
+  await reMaterializeFromLocalEvents(db, (async () => []) as never, null, 1);
+}
+
 function keysOf(
   db: DbLike,
   streamDid: StreamDid,
@@ -703,5 +726,86 @@ describe("in-place per-space migration", () => {
       .query("select count(*) as n from comp_room")
       .get<{ n: number }>();
     expect(rooms!.n).toBe(1);
+  });
+
+  test("v4 moves a space's DNS handle into the global store", async () => {
+    // The DNS handle is assigned by the space's PDS/DNS and never written by an
+    // event, so it is not a projection of the log. It moved out of the
+    // per-space `comp_space` into the global `space_handles` store, which is
+    // what makes a space rebuilt from the log keep it.
+    const streamDid = StreamDid.assert("did:web:migration-handle.example");
+    let router: DbLike;
+    ({ router } = await openPool());
+    await seedSpaceWithCompSpaceRow(router, streamDid);
+
+    // Reshape the DB into what a pre-v4 deployment left behind.
+    const raw = new Database(join(spacesDir, `${streamDid}.sqlite`));
+    raw.run("alter table comp_space add column handle text");
+    raw.run("update comp_space set handle = ? where entity = ?", [
+      "handled.example",
+      streamDid,
+    ]);
+    raw.run("update space_schema_version set version = '3' where id = 1");
+    raw.run("delete from space_schema_migrations");
+    raw.close();
+
+    // Deploy: a fresh pool over the same files upgrades the space in place.
+    ({ router } = await openPool());
+    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+
+    expect(
+      await router.global!()
+        .query("select handle from space_handles where space_did = ?")
+        .get<{ handle: string }>(streamDid),
+    ).toEqual({ handle: "handled.example" });
+
+    // The per-space column is gone, so a second writer cannot reappear.
+    const columns = await router.forSpace!(streamDid)
+      .query("select name from pragma_table_info('comp_space')")
+      .all<{ name: string }>();
+    expect(columns.map((c) => c.name)).not.toContain("handle");
+
+    // A later rebuild of the space leaves the handle alone: it is global state
+    // now, not something the replay derives.
+    const stale = new Database(join(spacesDir, `${streamDid}.sqlite`));
+    stale.run("update space_schema_version set version = '0' where id = 1");
+    stale.close();
+    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+
+    expect(
+      await router.global!()
+        .query("select handle from space_handles where space_did = ?")
+        .get<{ handle: string }>(streamDid),
+    ).toEqual({ handle: "handled.example" });
+  });
+
+  test("a rebuild carries the handle across before the swap", async () => {
+    // A space that reaches the rebuild path without the v4 task having run —
+    // a version this build cannot start from — must not lose its handle with
+    // the old file.
+    const streamDid = StreamDid.assert("did:web:migration-handle-rebuild.example");
+    let router: DbLike;
+    ({ router } = await openPool());
+    await seedSpaceWithCompSpaceRow(router, streamDid);
+
+    const raw = new Database(join(spacesDir, `${streamDid}.sqlite`));
+    raw.run("alter table comp_space add column handle text");
+    raw.run("update comp_space set handle = ? where entity = ?", [
+      "rebuilt.example",
+      streamDid,
+    ]);
+    // "0" predates the manifest, so the upgrade path declines and the space is
+    // re-derived into a fresh DB instead.
+    raw.run("update space_schema_version set version = '0' where id = 1");
+    raw.close();
+
+    ({ router } = await openPool());
+    await reMaterializeFromLocalEvents(router, (async () => []) as never, null, 1);
+
+    expect(
+      await router.global!()
+        .query("select handle from space_handles where space_did = ?")
+        .get<{ handle: string }>(streamDid),
+    ).toEqual({ handle: "rebuilt.example" });
   });
 });

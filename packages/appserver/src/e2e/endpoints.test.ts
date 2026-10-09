@@ -1170,7 +1170,7 @@ describe("space.roomy.space.reorderSpaces", () => {
 // ─── space.roomy.space.setHandle (procedure) ─────────────────────────────
 
 describe("space.roomy.space.setHandle", () => {
-  test("authenticated → persists handle in local DB (no remote backend needed)", async () => {
+  test("authenticated → persists handle in the global store (no remote backend needed)", async () => {
     const ctx = await setupBasicSpace();
     const { db } = ctx;
     // setHandle requires admin access. Seed an admin edge in the per-space DB.
@@ -1188,10 +1188,24 @@ describe("space.roomy.space.setHandle", () => {
     );
     expect(res.status).toBe(200);
     const row = await (db as unknown as AsyncDatabase)
-      .forSpace(SPACE)
-      .query("select handle from comp_space where entity = ?")
+      .global()
+      .query("select handle from space_handles where space_did = ?")
       .get<{ handle: string | null }>(SPACE);
     expect(row?.handle).toBe("my-space.example");
+
+    // Both read paths surface it from the global store.
+    const metadata = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${SPACE}`,
+    );
+    expect((await metadata.json()).handle).toBe("my-space.example");
+    const spaces = await ctx.authedFetch(USER)(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getSpaces`,
+    );
+    expect(
+      (await spaces.json()).spaces.find(
+        (s: { id: string }) => s.id === SPACE,
+      ).handle,
+    ).toBe("my-space.example");
   });
 
   test("anonymous → 401", async () => {

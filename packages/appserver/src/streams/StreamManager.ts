@@ -402,8 +402,14 @@ export class StreamManager {
    *
    * Provisioning is irreversible — via the arbiter the new DID is a real
    * ATProto account on the Roomy PDS; via the legacy path the PLC registration
-   * at plc.directory stands. If subsequent steps fail, the entities row is
-   * deleted (best-effort) but the provisioning operation stands.
+   * at plc.directory stands.
+   *
+   * No per-space row is written here. The space's `entities` row is created by
+   * the `addAdmin` event's own materialiser (`ensureEntity(streamId, streamId)`,
+   * SDK `schema/events/space.ts`), which runs before the event's edge inserts
+   * in the same transaction. Writing it here as well would be a second writer
+   * outside materialisation for a value the log already determines, and would
+   * have to be unwound by hand when the write below fails.
    */
   async createStream(adminDid: UserDid): Promise<StreamDid> {
     // 1. Provision the space DID. When the arbiter is configured, this
@@ -418,30 +424,17 @@ export class StreamManager {
           this.#db,
         );
 
-    try {
-      // 2. Insert space entity row (before addAdmin so materialization FK resolves)
-      await this.#db.forSpace!(streamDid).run(
-        "insert into entities (id, stream_id) values (?, ?)",
-        streamDid,
-        streamDid,
-      );
-
-      // 3. Write and materialize addAdmin event
-      const addAdminResult = parseEvent({
-        id: newUlid(),
-        $type: "space.roomy.space.addAdmin.v0",
-        userDid: adminDid,
-      });
-      if (!addAdminResult.success) {
-        throw new Error(`Failed to create addAdmin event: ${addAdminResult.error}`);
-      }
-      await this.sendEvents(streamDid, [addAdminResult.data], adminDid);
-    } catch (err) {
-      // Best-effort cleanup: remove the entities row. PLC registration
-      // cannot be rolled back.
-      await this.#db.forSpace!(streamDid).run("delete from entities where id = ?", streamDid);
-      throw err;
+    // 2. Write and materialize addAdmin event — this creates the space's
+    //    entity row in its own DB.
+    const addAdminResult = parseEvent({
+      id: newUlid(),
+      $type: "space.roomy.space.addAdmin.v0",
+      userDid: adminDid,
+    });
+    if (!addAdminResult.success) {
+      throw new Error(`Failed to create addAdmin event: ${addAdminResult.error}`);
     }
+    await this.sendEvents(streamDid, [addAdminResult.data], adminDid);
 
     return streamDid;
   }

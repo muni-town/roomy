@@ -245,3 +245,19 @@ create table if not exists voice_reconciler_failures (
   consecutive     integer not null,
   last_failure_at integer not null
 ) strict;
+
+-- DNS space handles, one row per space that has one. The handle is assigned by
+-- the space's PDS (or the domain's DNS) and changes without any on-protocol
+-- write, so it is not derived from the event log and must not live in the
+-- per-space DB — a space replayed from the log would silently lose it. Same
+-- split as user profiles: authoritative here, and the per-space DB holds no
+-- copy. Written by `space.roomy.space.setHandle`; read by `getMetadata` and
+-- `getSpaces` (queries/spaceHandles.ts).
+--
+-- Purely additive: this file is exec'd on every open, so existing global DBs
+-- gain the table with no version bump.
+create table if not exists space_handles (
+  space_did  text primary key,
+  handle     text not null,
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
