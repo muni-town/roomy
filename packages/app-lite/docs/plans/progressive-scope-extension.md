@@ -1048,10 +1048,30 @@ it explains the action, not the scope token.
   The UI must say the change applies at next login rather than implying
   immediate revocation (Open Question 4).
 
-- **Loopback vs public ceiling (unchanged).** The union ceiling can get long.
-  For the loopback client, long `client_id` query strings may hit URL limits;
-  the public client (production) uses a URL-based `client_id` with no such
-  limit. Dev loopback should stay on `base` only.
+- **Loopback vs public ceiling (resolved).** The union ceiling can get long.
+  The public client (production) uses a URL-based `client_id` with no such
+  limit, so the deployed metadata may declare the full ceiling. The dev
+  *loopback* client embeds its scope in the `client_id` query param, and that
+  id rides in the authorize URL, whose length browsers cap the `Referer` of at
+  4096 bytes — past that they strip the Referer to the origin and the PDS
+  rejects consent with `Invalid referrer`. So the loopback client id
+  (`CLIENT_ID_SCOPE`) is not the full ceiling: it is the union of the
+  requestable tiers a dev login can request (`base` + `semble`, ~2.9 KB),
+  excluding `withDms` whose client id would overflow. The SDK throws if a
+  loopback client id ever exceeds the cap
+  (`packages/sdk/src/browser/oauth.ts` `assertLoopbackClientIdLength`);
+  `scopes.test.ts` pins both the coverage and the length.
+
+  Consequently `login()` must reconcile a stored grant against the *active*
+  client's ceiling, not unconditionally `FULL_SCOPE_CEILING`
+  (`activeClientCeiling()` in `auth.svelte.ts`). A stored grant can carry tokens
+  the PDS expanded an `include:` into (`rpc:space.roomy.authComplete.arbiter.proxy`,
+  the voice RPCs) that are in the full ceiling but absent from the loopback
+  client id; reconciling against the full ceiling re-requests them and the PDS
+  rejects the whole authorization with `invalid_scope`. `decideLoginScope()`
+  takes the ceiling as a parameter, and `requestScopeExpansion()` refuses a tier
+  the active client does not declare (`scopeWithinCeiling`) instead of driving a
+  round-trip that must fail.
 
 ### Server-side tracking edge cases
 

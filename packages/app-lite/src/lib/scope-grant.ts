@@ -13,7 +13,8 @@
  *     return the user's previously-stored scope, or `null` for a first-time /
  *     never-recorded user. `decideLoginScope` turns that into the exact scope
  *     to request: `null`/empty → the base tier (fresh or unrecorded user),
- *     otherwise the stored scope reconciled against the current ceiling.
+ *     otherwise the stored scope reconciled against the ceiling the *active*
+ *     OAuth client declares.
  *
  *   - **App-password (test-mode) grants.** An app-password session has no
  *     OAuth token, so there is no `getTokenInfo()` to introspect and nothing
@@ -22,7 +23,7 @@
  *     the single source the `auth.svelte.ts` `grantedScope` initializer uses.
  */
 
-import { SCOPE_SETS, reconcileScope } from "./scopes.ts";
+import { FULL_SCOPE_CEILING, SCOPE_SETS, reconcileScope } from "./scopes.ts";
 
 /**
  * Decide the OAuth scope to request at login from the server's stored scope
@@ -30,14 +31,23 @@ import { SCOPE_SETS, reconcileScope } from "./scopes.ts";
  *
  *   - `null` / empty / whitespace → the base tier. This is both a first-time
  *     user and the "getLoginScope failed, fall back to base" path.
- *   - otherwise → `reconcileScope(stored)` (base always retained, stale
- *     out-of-ceiling tokens dropped, deduped).
+ *   - otherwise → `reconcileScope(stored, base, ceiling)` (base always
+ *     retained, tokens outside `ceiling` dropped, deduped).
+ *
+ * `ceiling` MUST be the ceiling the *active OAuth client declares*, not
+ * unconditionally the full metadata ceiling. The dev loopback client embeds
+ * its scope in the client id, which is narrower than the deployed metadata
+ * (`FULL_SCOPE_CEILING`) because it has to fit the browser's 4096-byte Referer
+ * cap; reconciling against the full ceiling there re-requests tokens the
+ * client does not declare, and the PDS rejects the whole authorization with
+ * `invalid_scope`. See `activeClientCeiling` in `auth.svelte.ts`.
  */
 export function decideLoginScope(
   stored: string | null | undefined,
+  ceiling: string = FULL_SCOPE_CEILING,
 ): string {
   if (!stored || stored.trim() === "") return SCOPE_SETS.base;
-  return reconcileScope(stored);
+  return reconcileScope(stored, SCOPE_SETS.base, ceiling);
 }
 
 /**

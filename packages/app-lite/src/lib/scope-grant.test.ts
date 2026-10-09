@@ -13,7 +13,7 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { SCOPE_SETS } from "./scopes.ts";
+import { CLIENT_ID_SCOPE, FULL_SCOPE_CEILING, SCOPE_SETS } from "./scopes.ts";
 import {
   APP_PASSWORD_GRANTED_SCOPE,
   decideLoginScope,
@@ -71,6 +71,49 @@ describe("decideLoginScope", () => {
     const stale = "rpc:space.roomy.not.a.real.method?aud=*";
     const out = decideLoginScope(`${SCOPE_SETS.base} ${stale}`);
     assert.ok(!out.split(" ").includes(stale));
+  });
+
+  test("drops a stored scope token absent from the ACTIVE client's ceiling", () => {
+    // The regression: on the dev loopback client the active ceiling is the
+    // narrower CLIENT_ID_SCOPE, not the full metadata ceiling. A stored grant
+    // can contain tokens the PDS expanded an `include:` into (e.g. the
+    // arbiter-proxy RPC) — present in FULL_SCOPE_CEILING but absent from the
+    // loopback client id. Reconciling against the full ceiling re-requests
+    // them, and the PDS rejects the whole authorization with `invalid_scope`.
+    // Passed the active ceiling, they are dropped before the request.
+    const storedWithIncludeExpansion = `${SCOPE_SETS.base} rpc:space.roomy.authComplete.arbiter.proxy?aud=*`;
+    assert.ok(
+      FULL_SCOPE_CEILING.split(" ").includes(
+        "rpc:space.roomy.authComplete.arbiter.proxy?aud=*",
+      ),
+      "precondition: token is in the full ceiling",
+    );
+
+    const out = decideLoginScope(storedWithIncludeExpansion, CLIENT_ID_SCOPE);
+    assert.ok(
+      !out.split(" ").includes(
+        "rpc:space.roomy.authComplete.arbiter.proxy?aud=*",
+      ),
+      "token outside the active loopback ceiling must not be requested",
+    );
+    // The full ceiling still keeps it (deployed/Tauri clients declare it).
+    assert.ok(
+      decideLoginScope(storedWithIncludeExpansion, FULL_SCOPE_CEILING)
+        .split(" ")
+        .includes("rpc:space.roomy.authComplete.arbiter.proxy?aud=*"),
+    );
+  });
+
+  test("every token the reconcile result can emit is in the active ceiling", () => {
+    // Property: reconcileScope(stored, base, ceiling) ⊆ base ∪ ceiling. With the
+    // loopback ceiling, that is exactly base ∪ CLIENT_ID_SCOPE — the set the
+    // loopback client declares — so no result token can trip invalid_scope.
+    const stored = `${FULL_SCOPE_CEILING}`;
+    const out = decideLoginScope(stored, CLIENT_ID_SCOPE);
+    const allowed = new Set(`${SCOPE_SETS.base} ${CLIENT_ID_SCOPE}`.split(" ").filter(Boolean));
+    for (const s of out.split(" ")) {
+      assert.ok(allowed.has(s), `reconciled token not in active ceiling: ${s}`);
+    }
   });
 });
 

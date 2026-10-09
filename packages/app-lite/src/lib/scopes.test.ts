@@ -26,6 +26,7 @@ import {
   CLIENT_ID_SCOPE,
   parseScopes,
   hasScopeSet,
+  scopeWithinCeiling,
   reconcileScope,
 } from "./scopes.ts";
 
@@ -78,6 +79,29 @@ describe("hasScopeSet", () => {
 
   test("false for the empty string", () => {
     assert.equal(hasScopeSet("", "base"), false);
+  });
+});
+
+describe("scopeWithinCeiling", () => {
+  test("true when every token is declared in the ceiling", () => {
+    assert.equal(scopeWithinCeiling(SCOPE_SETS.base, FULL_SCOPE_CEILING), true);
+  });
+
+  test("false when any token is absent from the ceiling", () => {
+    assert.equal(
+      scopeWithinCeiling(`${SCOPE_SETS.base} rpc:x.y?aud=*`, FULL_SCOPE_CEILING),
+      false,
+    );
+  });
+
+  test("the DM tier is outside the dev loopback ceiling but inside the full one", () => {
+    // The loopback client id is narrower than the metadata ceiling (Referer
+    // cap), so `withDms` is requestable only where the full ceiling is declared
+    // — the deployed web / desktop clients. This is the guard
+    // `requestScopeExpansion` applies before a consent round-trip.
+    assert.equal(scopeWithinCeiling(SCOPE_SETS.withDms, CLIENT_ID_SCOPE), false);
+    assert.equal(scopeWithinCeiling(SCOPE_SETS.withDms, FULL_SCOPE_CEILING), true);
+    assert.equal(scopeWithinCeiling(SCOPE_SETS.semble, CLIENT_ID_SCOPE), true);
   });
 });
 
@@ -212,22 +236,44 @@ describe("tier/ceiling invariants", () => {
     }
   });
 
-  test("CLIENT_ID_SCOPE is the ceiling — a stable superset of every tier", () => {
+  test("CLIENT_ID_SCOPE covers the requestable tiers a loopback login can request", () => {
     // The dev loopback client id embeds this scope; the PDS records the client
     // id with the authorization request and rejects a differing one at token
     // exchange/refresh ("Token was not issued to this client"). So it must be
     // (a) constant — the same for every login/init/restore — and (b) a superset
-    // of every per-login scope we may request, or the PDS would reject a
-    // requested scope the client id's metadata does not declare.
-    assert.equal(CLIENT_ID_SCOPE, FULL_SCOPE_CEILING);
+    // of every per-login scope the loopback client can request, or the PDS
+    // would reject a requested scope the client id's metadata does not declare.
+    //
+    // `withDms` is deliberately NOT covered: its client id overflows the
+    // browser Referer cap (see the length test below), so no loopback login can
+    // request it. It stays requestable for the deployed HappyView client, whose
+    // client id is a short metadata URL.
     const clientIdSet = parseScopes(CLIENT_ID_SCOPE);
-    for (const [tier, scope] of Object.entries(SCOPE_SETS)) {
-      for (const s of parseScopes(scope)) {
+    for (const tier of ["base", "semble"] as const) {
+      for (const s of parseScopes(REQUESTABLE_SCOPE_SETS[tier])) {
         assert.ok(
           clientIdSet.has(s),
-          `tier ${tier} scope not covered by CLIENT_ID_SCOPE: ${s}`,
+          `requestable tier ${tier} scope not covered by CLIENT_ID_SCOPE: ${s}`,
         );
       }
     }
+  });
+
+  test("CLIENT_ID_SCOPE's loopback client_id stays under the browser Referer cap", () => {
+    // The client id is a query param of the authorize request, whose URL
+    // becomes the consent page's Referer. Browsers cap the Referer at 4096
+    // bytes and strip it to the origin past that, after which the PDS rejects
+    // the consent submission with "Invalid referrer". The SDK throws below the
+    // cap (packages/sdk/src/browser/oauth.ts, assertLoopbackClientIdLength), so
+    // this pins that the scope we ship does not trip it.
+    const redirectUri = "http://127.0.0.1:5180/";
+    const clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(CLIENT_ID_SCOPE)}`;
+    // Mirrors the SDK guard: the encoded client id plus the authorize URL's
+    // endpoint/`request_uri`/separators must fit under 4096.
+    const urlLength = encodeURIComponent(clientId).length + 384;
+    assert.ok(
+      urlLength <= 4096,
+      `loopback authorize URL too long for the Referer cap: ${urlLength}`,
+    );
   });
 });

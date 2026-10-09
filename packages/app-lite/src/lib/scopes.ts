@@ -338,15 +338,29 @@ export const FULL_SCOPE_CEILING = [
  * identical on the `login()` that starts the flow, the `init()` that processes
  * the callback, and every session restore/refresh — all of which build their
  * OAuth client independently. It therefore cannot be a per-login value like
- * `reconcileScope(stored)` or `SCOPE_SETS[tier]`; it is the app's full,
- * constant ceiling, a superset of every scope any login may request.
+ * `reconcileScope(stored)` or `SCOPE_SETS[tier]`.
+ *
+ * It is deliberately NOT the full {@link FULL_SCOPE_CEILING}. The client id is
+ * a URL carried as a query parameter of the authorize request, and browsers cap
+ * the `Referer` header at 4096 bytes: a longer consent-page URL makes the
+ * browser strip the Referer to the bare origin, and the PDS then rejects the
+ * submission with `Invalid referrer`. bsky.social requires PAR, so the
+ * authorize URL is `…/oauth/authorize?client_id=<this>&request_uri=…` — with
+ * the full 4166-byte ceiling embedded, that URL is ~6 KB and dev sign-in fails.
+ *
+ * So it is the union of the requestable tiers a dev login may request — `base`
+ * plus `semble` — a stable superset of every `scope` that `login()`, `init()`,
+ * and scope-expansion pass. The `withDms` tier is excluded because embedding it
+ * overflows the limit; no in-tree DM feature requests it, and the SDK throws a
+ * clear error if a loopback client id ever exceeds the cap (see
+ * `packages/sdk/src/browser/oauth.ts`).
  *
  * Only meaningful for the loopback client (local dev, no deployed metadata);
  * deployed/HappyView builds use the metadata document URL as the client id and
  * never read this. The per-request `scope` still selects the subset shown on
  * the consent screen.
  */
-export const CLIENT_ID_SCOPE = FULL_SCOPE_CEILING;
+export const CLIENT_ID_SCOPE = [...BASE_SCOPES, ...SEMBLE_SCOPES].join(" ");
 
 /** Parse a scope string into a Set of individual scope tokens. */
 export function parseScopes(scope: string): Set<string> {
@@ -358,6 +372,19 @@ export function hasScopeSet(grantedScope: string, tier: ScopeSetName): boolean {
   const required = parseScopes(SCOPE_SETS[tier]);
   const granted = parseScopes(grantedScope);
   for (const s of required) if (!granted.has(s)) return false;
+  return true;
+}
+
+/**
+ * True if every token in `scope` is declared in `ceiling`. Unlike
+ * {@link hasScopeSet} (which names a tier), this takes two raw scope strings —
+ * used to check a requested tier against the *active* client's declared ceiling
+ * before starting an authorization round-trip, so a tier the active client does
+ * not declare fails locally instead of at the PDS with `invalid_scope`.
+ */
+export function scopeWithinCeiling(scope: string, ceiling: string): boolean {
+  const ceilingSet = parseScopes(ceiling);
+  for (const s of parseScopes(scope)) if (!ceilingSet.has(s)) return false;
   return true;
 }
 

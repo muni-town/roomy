@@ -10,8 +10,10 @@ import { goto } from "$app/navigation";
 import { CONFIG } from "./config";
 import {
   CLIENT_ID_SCOPE,
+  FULL_SCOPE_CEILING,
   SCOPE_SETS,
   hasScopeSet,
+  scopeWithinCeiling,
   type RequestableScopeSetName,
   type ScopeSetName,
 } from "./scopes";
@@ -339,6 +341,28 @@ export async function init() {
   }
 }
 
+/**
+ * The scope ceiling the ACTIVE OAuth client actually declares.
+ *
+ * Deployed web (HappyView) and Tauri desktop use a metadata-document URL as the
+ * client id, whose declared scope is the full {@link FULL_SCOPE_CEILING}. The
+ * dev loopback client embeds its scope in the client id instead, and that has
+ * to stay short enough to fit the browser's 4096-byte Referer cap — so it is the
+ * narrower {@link CLIENT_ID_SCOPE}.
+ *
+ * `login()` reconciles a stored grant against this, not unconditionally against
+ * the full ceiling: reconciling against the full ceiling on the loopback client
+ * re-requests tokens the client id does not declare, and the PDS rejects the
+ * whole authorization with `invalid_scope`. The two conditions mirror
+ * `createOAuthClient`'s choice (SDK): an explicit `clientId` or Tauri ⇒ a
+ * metadata-document client id ⇒ full ceiling; otherwise the dev loopback client.
+ */
+function activeClientCeiling(): string {
+  const tauri = typeof window !== "undefined" && "__TAURI__" in window;
+  if (tauri || CONFIG.oauthClientId) return FULL_SCOPE_CEILING;
+  return CLIENT_ID_SCOPE;
+}
+
 export async function login(handle: string) {
   currentHandle = handle;
 
@@ -346,16 +370,16 @@ export async function login(handle: string) {
   // consented to (unauthenticated `getLoginScope` — no token yet). A returning
   // user gets their previously-approved scope requested back, so the PDS
   // issues a full-access token with zero re-prompting. reconcileScope keeps
-  // `base` always, drops anything the current ceiling no longer declares
-  // (which the PDS would reject with invalid_scope), and dedupes.
+  // `base` always, drops anything the ACTIVE client's ceiling no longer
+  // declares (which the PDS would reject with invalid_scope), and dedupes.
   let reconcile: string = SCOPE_SETS.base;
   try {
     const res = await (
       await pxUnauth()
     ).query("space.roomy.auth.getLoginScope", { handle });
     // decideLoginScope returns base for null/empty (fresh or unrecorded user)
-    // and reconcileScope(stored) for a stored grant.
-    reconcile = decideLoginScope(res?.scope);
+    // and reconcileScope(stored, base, ceiling) for a stored grant.
+    reconcile = decideLoginScope(res?.scope, activeClientCeiling());
   } catch (err) {
     // Failure is non-fatal: fall back to requesting base only. A stored-grant
     // lookup must never block a fresh login.
@@ -442,13 +466,28 @@ export async function requestScopeExpansion(
   // Remember where the user was (the settings page) across the round-trip the
   // same way `login()` does; `init()` navigates back on the callback.
   rememberReturnUrl(currentReturnUrl());
+  const ceiling = activeClientCeiling();
+  const tierScope = SCOPE_SETS[tier];
+  if (!scopeWithinCeiling(tierScope, ceiling)) {
+    // The active client does not declare this tier — the loopback client id is
+    // deliberately narrower than the full ceiling (it must fit the Referer
+    // cap), so e.g. `withDms` cannot be requested from a dev loopback session.
+    // Failing here keeps the error actionable instead of the PDS's opaque
+    // `invalid_scope`. Deployed/HappyView builds declare the full ceiling, so
+    // this is a dev-only guard.
+    throw new Error(
+      `The "${tier}" scope tier is not available in this build's OAuth client. ` +
+        `It can only be requested where the client declares the full scope ` +
+        `ceiling (a deployed web or desktop build), not the dev loopback client.`,
+    );
+  }
   const result = await sdkLogin(currentHandle, {
     happyviewEndpoint: CONFIG.happyviewEndpoint,
     clientKey: CONFIG.happyviewClientKey,
     clientId: CONFIG.oauthClientId,
     handleResolverUrl: CONFIG.handleResolverUrl,
     port: CONFIG.port,
-    scope: SCOPE_SETS[tier],
+    scope: tierScope,
     clientIdScope: CLIENT_ID_SCOPE,
   });
   if (result) {

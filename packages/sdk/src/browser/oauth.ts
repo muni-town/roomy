@@ -408,11 +408,13 @@ export interface CreateOAuthClientOptions extends HappyViewClientOptions {
    *
    * Because the loopback client id embeds its scope, that scope MUST be stable
    * across the authorize call, the OAuth callback, and session restore — so it
-   * is the app's full ceiling (a superset of every `scope` a login may
-   * request), NOT the per-login scope. Defaults to `scope` for SDK consumers
-   * that only ever request one scope. Ignored when an explicit `clientId` is
-   * given (deployed/HappyView), where the client id is the metadata document
-   * URL and is already stable.
+   * is a constant superset of every `scope` a login may request, NOT the
+   * per-login scope. It must also stay short: the client id rides in the
+   * authorize URL, which browsers cap the `Referer` of at 4096 bytes (see
+   * `assertLoopbackClientIdLength`). Defaults to `scope` for SDK consumers that
+   * only ever request one scope. Ignored when an explicit `clientId` is given
+   * (deployed/HappyView), where the client id is the metadata document URL and
+   * is already stable.
    */
   clientIdScope?: string;
 }
@@ -426,6 +428,43 @@ const DEFAULT_SCOPE = "atproto transition:generic";
  * direct-PDS `@atproto/oauth-client-browser` client.
  */
 export type RoomyOAuthClient = HappyViewBrowserClient | BrowserOAuthClient;
+/**
+ * Browsers cap the `Referer` header at 4096 bytes. The dev loopback
+ * `client_id` is embedded (URI-encoded) in the PDS authorize URL, which becomes
+ * the consent page URL and thus the Referer of the consent submission. Once
+ * that URL exceeds the cap the browser strips the Referer to the bare origin,
+ * and the PDS rejects the submission with `Invalid referrer`.
+ */
+export const MAX_AUTHORIZE_URL_LENGTH = 4096;
+
+/** Bytes reserved for the authorize URL around the client id: the endpoint,
+ *  `request_uri` (a PAR reference), and separators. Generous on purpose. */
+const AUTHORIZE_URL_OVERHEAD = 384;
+
+/**
+ * Throw if the dev loopback authorize URL would overflow the browser's
+ * `Referer` limit. The failure it prevents is otherwise inscrutable — the PDS
+ * consent screen returns `Invalid referrer` with no hint that the client id was
+ * the cause. Callers keep the id short by passing a `clientIdScope` that is the
+ * union of the tiers a login may request, not the full metadata ceiling.
+ *
+ * Budgets the encoded client id plus the rest of the URL, since the encode step
+ * and the endpoint/`request_uri` are both real bytes under the same cap.
+ */
+export function assertLoopbackClientIdLength(clientId: string): void {
+  const urlLength =
+    encodeURIComponent(clientId).length + AUTHORIZE_URL_OVERHEAD;
+  if (urlLength > MAX_AUTHORIZE_URL_LENGTH) {
+    throw new Error(
+      `Loopback authorize URL would be ~${urlLength} bytes, over the ` +
+        `${MAX_AUTHORIZE_URL_LENGTH}-byte browser Referer limit. Shrink the ` +
+        `scope embedded in the client id (clientIdScope) to the union of the ` +
+        `tiers a login may request — the full metadata ceiling makes the ` +
+        `authorize URL too long and the PDS rejects consent with ` +
+        `"Invalid referrer".`,
+    );
+  }
+}
 
 export async function createOAuthClient(
   opts: CreateOAuthClientOptions = {},
@@ -489,6 +528,7 @@ async function createHappyViewClient(
       baseUrl.pathname = "/";
       redirectUri = baseUrl.href;
       clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(clientIdScope)}`;
+      assertLoopbackClientIdLength(clientId);
     }
   }
   if (!redirectUri) {
@@ -582,6 +622,7 @@ async function createLegacyClient(
   const redirectUri = baseUrl.href;
 
   const clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(clientIdScope)}`;
+  assertLoopbackClientIdLength(clientId);
 
   return new BrowserOAuthClient({
     clientMetadata: {

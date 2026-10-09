@@ -203,4 +203,21 @@ describe("login() scope forwarding", () => {
     expect(client_id).toContain(`scope=${encodeURIComponent(BASE)}`);
     expect(scope).toBe(BASE);
   });
+
+  it("throws when the dev loopback client_id would overflow the Referer cap", async () => {
+    // A client id whose authorize URL exceeds the browser's 4096-byte Referer
+    // cap makes the browser strip the Referer to the bare origin, and the PDS
+    // then rejects consent with "Invalid referrer" — an error that names
+    // neither the client id nor the length. The SDK fails fast and loudly at
+    // construction instead.
+    stubGlobals();
+    const HUGE = `atproto ${"rpc:space.roomy.x.y?aud=* ".repeat(200)}`.trim();
+
+    await expect(
+      login(HANDLE, { scope: BASE, clientIdScope: HUGE }),
+    ).rejects.toThrow(/Referer limit/);
+
+    // Thrown before the client is built, so nothing was constructed.
+    expect(clientOpts).toHaveLength(0);
+  });
 });
