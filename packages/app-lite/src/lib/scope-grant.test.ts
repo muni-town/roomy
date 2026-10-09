@@ -3,10 +3,14 @@
  * `auth.svelte.ts` applies (kept out of the `svelte.ts` module so they run
  * under app-lite's `node --test --experimental-strip-types` runner).
  *
- * Pins two contracts:
+ * Pins three contracts:
  *
  *   - `decideLoginScope` — how a stored scope from `getLoginScope` becomes the
  *     exact scope requested at login. null/empty → base; stored → reconciled.
+ *   - `decideScopeReauthIdentity` — the identity a scope expansion
+ *     re-authorizes as must be the session DID, not the in-memory handle,
+ *     because the PDS redirect drops the latter (the callback runs in a fresh
+ *     document).
  *   - `APP_PASSWORD_GRANTED_SCOPE` — the app-password (test-mode) path has no
  *     OAuth token, so its granted scope is the requested tier, and no
  *     `recordScopeGrant` is ever sent.
@@ -17,6 +21,7 @@ import { CLIENT_ID_SCOPE, FULL_SCOPE_CEILING, SCOPE_SETS } from "./scopes.ts";
 import {
   APP_PASSWORD_GRANTED_SCOPE,
   decideLoginScope,
+  decideScopeReauthIdentity,
 } from "./scope-grant.ts";
 
 describe("decideLoginScope", () => {
@@ -114,6 +119,36 @@ describe("decideLoginScope", () => {
     for (const s of out.split(" ")) {
       assert.ok(allowed.has(s), `reconciled token not in active ceiling: ${s}`);
     }
+  });
+});
+
+describe("decideScopeReauthIdentity", () => {
+  // The bug: an expansion runs after a PDS redirect, so the handle typed at
+  // login (an in-memory value) is gone. The session DID survives and must be
+  // what drives the round-trip — otherwise `requestScopeExpansion` no-ops and
+  // the guarded action rethrows the original scope-miss.
+  test("prefers the session DID whenever one exists", () => {
+    assert.equal(
+      decideScopeReauthIdentity({
+        sessionDid: "did:plc:alice",
+        handle: "alice.test",
+      }),
+      "did:plc:alice",
+    );
+  });
+
+  test("falls back to the handle only when there is no session DID", () => {
+    assert.equal(
+      decideScopeReauthIdentity({ handle: "alice.test" }),
+      "alice.test",
+    );
+  });
+
+  test("returns null for a sessionless caller", () => {
+    // The settings page can be reached signed out: no identity to re-authorize
+    // with, so the caller records intent instead of driving a doomed redirect.
+    assert.equal(decideScopeReauthIdentity({}), null);
+    assert.equal(decideScopeReauthIdentity({ sessionDid: "", handle: "" }), null);
   });
 });
 

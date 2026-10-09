@@ -1037,6 +1037,22 @@ it explains the action, not the scope token.
   `authorize()` as `login_hint`, so the PDS pre-fills the account and skips
   re-entry — the user only sees the consent delta, not a full sign-in.
 
+- **The re-auth identity must be the session DID, not the login handle
+  (fixed).** `requestScopeExpansion` drives a *fresh* OAuth authorization, so
+  it must name the account again. The handle the user typed at `login()` lives
+  only in the in-memory `currentHandle`, and the PDS redirect leaves it behind:
+  the callback runs in a brand-new document where `currentHandle === ""`. The
+  old guard `if (!currentHandle) return` therefore no-opped the expansion on
+  *every* web OAuth session (dev loopback and deployed HappyView alike; Tauri
+  escaped it because its `login()` resolves in place). The consent dialogue
+  still appeared — `guardedXrpc` showed it on the 403 scope-miss — but
+  accepting it silently did nothing and the action rethrew `Missing required
+  scope "…"`. Fix: `decideScopeReauthIdentity` (`scope-grant.ts`) prefers
+  `session.did` (persisted, survives the reload) and falls back to
+  `currentHandle`; both OAuth clients accept a DID as the identifier. Pinned by
+  `scope-grant.test.ts`; the E2E suite cannot see it because app-password
+  (test-mode) sessions return before the redirect.
+
 - **Existing sessions in production.** Users who logged in before this change
   have a `base` grant. The metadata's new union ceiling does not retroactively
   grant them Semble — they still need to expand via the consent dialogue. This

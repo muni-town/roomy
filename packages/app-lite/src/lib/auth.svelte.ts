@@ -17,7 +17,11 @@ import {
   type RequestableScopeSetName,
   type ScopeSetName,
 } from "./scopes";
-import { APP_PASSWORD_GRANTED_SCOPE, decideLoginScope } from "./scope-grant";
+import {
+  APP_PASSWORD_GRANTED_SCOPE,
+  decideLoginScope,
+  decideScopeReauthIdentity,
+} from "./scope-grant";
 import { scheduleAutoReload } from "./error-recovery";
 import { pxUnauth } from "./client";
 import { clearPersistedCache } from "./client";
@@ -453,9 +457,17 @@ export async function requestScopeExpansion(
   // Record intent appserver-side first (fire-and-forget; a failure must not
   // block the round-trip).
   await requestScopeSettings(tier);
-  if (!currentHandle) {
-    // No authenticated handle to re-authorize (e.g. signed-out settings
-    // page). The intent is recorded; a future login will request it.
+  // Re-authorize as the account the live session belongs to. The handle typed
+  // at login lives only in memory and is gone after the PDS redirect (the
+  // callback lands in a new document), so the decision prefers the session DID
+  // — which survives the reload — and only falls back to the in-memory handle.
+  // `null` is a signed-out / sessionless caller: the intent is recorded above
+  // and a future login will request it.
+  const identity = decideScopeReauthIdentity({
+    sessionDid: session?.did,
+    handle: currentHandle,
+  });
+  if (!identity) {
     return;
   }
   // Drive the PDS consent round-trip with the WIDER tier's scope request —
@@ -481,7 +493,7 @@ export async function requestScopeExpansion(
         `ceiling (a deployed web or desktop build), not the dev loopback client.`,
     );
   }
-  const result = await sdkLogin(currentHandle, {
+  const result = await sdkLogin(identity, {
     happyviewEndpoint: CONFIG.happyviewEndpoint,
     clientKey: CONFIG.happyviewClientKey,
     clientId: CONFIG.oauthClientId,
