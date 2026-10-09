@@ -127,7 +127,7 @@ export function pushDispatcherStats(): {
  * Enqueue live createMessage jobs and wake an idle loop. Cheap and safe to
  * call frequently: if the loop is busy draining, extra pokes just append to
  * the queue. Called by the `StreamManager` on every live createMessage batch
- * (skipped for backfill, matching the unread-counter/embed-sweeper gate).
+ * (skipped for backfill, matching the embed-sweeper gate).
  */
 export function pokePushDispatcher(jobs: PushJob[]): void {
   if (jobs.length === 0) return;
@@ -210,8 +210,8 @@ export async function _runDigestSweep(db: DbLike): Promise<void> {
   // fired (the process was down, the room was never reopened, a replay seeded
   // it). Firing it greets the user with hours-old messages, and every restart
   // re-fires it. Drop the stale rows instead: they can never become current,
-  // and the user's unread counter is driven by `read_positions`, not by this
-  // table, so nothing user-visible is lost.
+  // and the user's unread count is derived from `read_positions`, not from
+  // this table, so nothing user-visible is lost.
   const now = Date.now();
   // `first_unseen_at` is null-typed at the SQL boundary (the column is
   // nullable), though the query filters those rows out. Treat an absent

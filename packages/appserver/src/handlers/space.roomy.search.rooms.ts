@@ -21,7 +21,7 @@
 import { createAccessMemo, roomAccess } from "../auth/access.ts";
 import { openReadStateDb, openSpaceDb } from "../db/db.ts";
 import { fetchRoomActivity } from "../queries/threadActivity.ts";
-import { getEngagedThreadIds, getReadPositions } from "../queries/readPositions.ts";
+import { getEngagedThreadIds, getReadPositions, type ReadPosition } from "../queries/readPositions.ts";
 import { parseUserDid, requireSpaceRead } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { optionalInt, requireString } from "../xrpc/params.ts";
@@ -211,7 +211,7 @@ export const searchRoomsHandler: QueryHandler<
     const activityByRoom = await fetchRoomActivity(db, roomIds);
     const readStateDb = openReadStateDb();
     const readPositions = userDid
-      ? await getReadPositions(readStateDb, userDid, roomIds)
+      ? await getReadPositions(readStateDb, db, userDid, roomIds)
       : new Map();
     const engagedThreadIds = userDid
       ? await getEngagedThreadIds(readStateDb, userDid, roomIds)

@@ -12,7 +12,7 @@
 import { createAccessMemo, roomAccessMany } from "../auth/access.ts";
 import { openReadStateDb, openSpaceDb } from "../db/db.ts";
 import { listThreadActivity } from "../queries/threadActivity.ts";
-import { getEngagedThreadIds, getReadPositions } from "../queries/readPositions.ts";
+import { getEngagedThreadIds, getReadPositions, type ReadPosition } from "../queries/readPositions.ts";
 import { parseUserDid, requireSpaceRead } from "../xrpc/authGuards.ts";
 import { optionalInt, optionalString, requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
@@ -104,7 +104,9 @@ export const getSpaceThreadsHandler: QueryHandler<
 
       // Collect all room IDs for batch unread lookup.
       const roomIds = all.map((t) => t.id);
-      const readPositions = auth.did ? await getReadPositions(mainDb, auth.did, roomIds) : new Map();
+      const readPositions = auth.did
+        ? await getReadPositions(mainDb, db, auth.did, roomIds)
+        : new Map<string, ReadPosition>();
       // Threads the user has never engaged with have no read_positions row of
       // their own — they read as unread in the board even though their
       // unreadCount is 0 (the honest view of what you have and haven't read).

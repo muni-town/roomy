@@ -165,12 +165,11 @@ describe("DatabasePool routing", () => {
       "joinedSpace",
     );
     await db.readState().run(
-      "insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count) values (?, ?, ?, ?, ?)",
+      "insert into read_positions (user_did, room_id, space_did, seen_up_to) values (?, ?, ?, ?)",
       "u",
       room,
       "s",
       "0",
-      0,
     );
 
     const e = await db.global()
@@ -179,9 +178,9 @@ describe("DatabasePool routing", () => {
     expect(e?.tail).toBe("s");
 
     const rp = await db.readState()
-      .query("select unread_count from read_positions where user_did = ? and room_id = ?")
-      .get<{ unread_count: number }>("u", room);
-    expect(rp?.unread_count).toBe(0);
+      .query("select seen_up_to from read_positions where user_did = ? and room_id = ?")
+      .get<{ seen_up_to: string }>("u", room);
+    expect(rp?.seen_up_to).toBe("0");
 
     await db.close();
   });

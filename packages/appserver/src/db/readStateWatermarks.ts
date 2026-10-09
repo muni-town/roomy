@@ -4,11 +4,10 @@
  *
  * `read_positions.seen_up_to` stores an `entities.sort_idx` and is compared
  * against live `sort_idx` values by every unread computation: `updateSeen`
- * counts the messages after it, `decrementUnreadForRemovedMessages` decides
- * whether a removed message was still unread, and `decodeSeenUpTo` maps an
- * undecodable value to "no real watermark". A watermark that names no key is
- * therefore not a harmless stale value — the room reads as though the user had
- * never opened it.
+ * counts the messages after it, `deriveUnreadCounts` does the same on the read
+ * path, and `decodeSeenUpTo` maps an undecodable value to "no real watermark".
+ * A watermark that names no key is therefore not a harmless stale value — the
+ * room reads as though the user had never opened it.
  *
  * The v3 re-key (`spaceMigrations.ts`) moved the watermarks it could follow
  * through `sort_idx_prev`, the pre-clear keys, and dropped that table when it
@@ -41,10 +40,8 @@
  *     instead would write a value no reader compares against and could count
  *     content rows the unread accounting has never counted.
  *
- * `unread_count` is recomputed from the new anchor in the same statement, which
- * is what `updateSeen` computes for an explicit watermark
- * (`select count(*) … where room = ? and sort_idx > ?`), so a repaired row is
- * indistinguishable from one the procedure wrote itself.
+ * The repair writes only the position. The unread count is derived from it on
+ * read, so a row it re-anchors needs nothing else to become consistent.
  *
  * ## What it cannot repair
  *
@@ -121,7 +118,6 @@ interface Repair {
   roomId: string;
   seenUpTo: string;
   anchor: string;
-  unreadCount: number;
 }
 
 /** What one space contributed: the residue it holds and the repairs for it. */
@@ -137,11 +133,10 @@ interface SpaceResult {
 /**
  * Resolve distinct (room, watermark) pairs against the space's live keys.
  *
- * One statement per {@link RESOLVE_BATCH} pairs: a CTE of the pairs joined to
- * two correlated subqueries, one for the anchor (`max(sort_idx)` at or below the
- * watermark) and one for the count after it. Both walk
- * `idx_entities_room_sort`, so a pair costs a seek rather than a scan of its
- * room.
+ * One statement per {@link RESOLVE_BATCH} pairs: a CTE of the pairs with one
+ * correlated subquery for the anchor (`max(sort_idx)` at or below the
+ * watermark), which walks `idx_entities_room_sort`, so a pair costs a seek
+ * rather than a scan of its room.
  *
  * Deduplicated because a channel's watermark is one row per reader and a room
  * with N readers shares one resolution — the production residue is thousands of
@@ -150,8 +145,8 @@ interface SpaceResult {
 async function resolveSpace(
   spaceDb: DbLike,
   rows: readonly PendingRow[],
-): Promise<Map<string, { anchor: string | null; unreadCount: number }>> {
-  const resolved = new Map<string, { anchor: string | null; unreadCount: number }>();
+): Promise<Map<string, { anchor: string | null }>> {
+  const resolved = new Map<string, { anchor: string | null }>();
   const pairs = new Map<string, { roomId: string; seenUpTo: string }>();
   for (const row of rows) {
     pairs.set(`${row.roomId}\u0000${row.seenUpTo}`, {
@@ -174,17 +169,12 @@ async function resolveSpace(
                          where e.room = wm.room and e.sort_idx <= wm.w)
                   from wm
               )
-         select a.room as room, a.w as w, a.anchor as anchor,
-                (select count(*) from entities e
-                  where e.room = a.room and e.sort_idx > a.anchor) as unread_count
+         select a.room as room, a.w as w, a.anchor as anchor
            from anchored a`,
       )
-      .all<{ room: string; w: string; anchor: string | null; unread_count: number }>(...params);
+      .all<{ room: string; w: string; anchor: string | null }>(...params);
     for (const r of found) {
-      resolved.set(`${r.room}\u0000${r.w}`, {
-        anchor: r.anchor,
-        unreadCount: r.anchor === null ? 0 : r.unread_count,
-      });
+      resolved.set(`${r.room}\u0000${r.w}`, { anchor: r.anchor });
     }
   }
   return resolved;
@@ -224,7 +214,6 @@ async function measureSpace(
       roomId: row.roomId,
       seenUpTo: row.seenUpTo,
       anchor: r.anchor,
-      unreadCount: r.unreadCount,
     });
   }
   return result;
@@ -379,8 +368,8 @@ export async function sweepReadStateWatermarks(
             // boots racing the same repair must not overwrite a watermark the
             // user has moved in between with an anchor derived from the value
             // it held before.
-            sql: "update read_positions set seen_up_to = ?, unread_count = ?, updated_at = (unixepoch() * 1000) where user_did = ? and room_id = ? and seen_up_to = ?",
-            params: [r.anchor, r.unreadCount, r.userDid, r.roomId, r.seenUpTo],
+            sql: "update read_positions set seen_up_to = ?, updated_at = (unixepoch() * 1000) where user_did = ? and room_id = ? and seen_up_to = ?",
+            params: [r.anchor, r.userDid, r.roomId, r.seenUpTo],
           })),
         );
         repaired += repairs.length;

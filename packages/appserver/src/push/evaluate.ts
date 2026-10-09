@@ -29,8 +29,8 @@
  * batch. One push per room per batch is enforced by the `notified` flag.
  *
  * Recipients are enumerated from `edges ... label='member'` (∪ admin)
- * directly, NOT from `read_positions`, which sidesteps the lazy-row gap in
- * `applyBundle`'s unread-counter increment.
+ * directly, NOT from `read_positions`, which sidesteps the lazy-row gap: a
+ * room's readers only have a read position once someone has opened it.
  *
  * Returns two kinds of {@link PushDelivery}: immediate `message` pushes
  * (Busy, quiet+mentioned, engaged+mentioned) and on-event `digest` pushes

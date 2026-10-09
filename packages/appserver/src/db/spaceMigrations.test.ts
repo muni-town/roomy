@@ -557,8 +557,8 @@ describe("in-place per-space migration", () => {
 
     const readState = router.readState!();
     await readState.run(
-      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values (?, ?, ?, ?, 0, ?)`,
+      `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+       values (?, ?, ?, ?, ?)`,
       ADMIN,
       roomId,
       streamDid,
@@ -658,8 +658,8 @@ describe("in-place per-space migration", () => {
     // could have seen.
     const orphan = orderKey(receivedAt + 1_800_000, 0);
     await router.readState!().run(
-      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values (?, ?, ?, ?, 99, ?)`,
+      `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+       values (?, ?, ?, ?, ?)`,
       [ADMIN, roomId, streamDid, orphan, receivedAt],
     );
 
@@ -667,21 +667,20 @@ describe("in-place per-space migration", () => {
 
     const watermark = await router.readState!()
       .query(
-        "select seen_up_to, unread_count from read_positions where user_did = ? and room_id = ?",
+        "select seen_up_to from read_positions where user_did = ? and room_id = ?",
       )
-      .get<{ seen_up_to: string; unread_count: number }>(ADMIN, roomId);
-    // Anchored to the earlier message's key, with the count recomputed from
-    // that anchor rather than carried over from the stale row.
+      .get<{ seen_up_to: string }>(ADMIN, roomId);
+    // Anchored to the earlier message's key — the last one the user could have
+    // seen — rather than left on a value that names no key.
     expect(watermark?.seen_up_to).toBe(keys[0]!.sort_idx);
     expect(watermark?.seen_up_to).not.toBe(orphan);
 
-    // Which is what the read path measures against: the room's unread count now
-    // equals the messages the timeline shows after the anchor.
+    // And that anchor is what the read path measures against: the room's unread
+    // count is the messages the timeline shows after it.
     const after = await router.forSpace!(streamDid)
       .query("select count(*) as n from entities where room = ? and sort_idx > ?")
       .get<{ n: number }>(roomId, watermark!.seen_up_to);
     expect(after!.n).toBe(1);
-    expect(watermark!.unread_count).toBe(after!.n);
   });
 
   test("a write is rejected while the migration gate is open", async () => {

@@ -18,6 +18,7 @@
 import { decode } from "@atcute/cbor";
 import type { DbLike } from "./types.ts";
 import { classifyMembershipEvent, type MembershipIntent } from "../queries/userSpaceMembership.ts";
+import { anchorPlaceholderReadPositions } from "./readStatePositionsMigration.ts";
 import {
   readStateMigrationEntry,
   type ReadStateAsyncVersion,
@@ -223,6 +224,7 @@ const READSTATE_MIGRATION_TASKS: Record<
 > = {
   "6": recoverUserSpaceMembership,
   "7": backfillUserThreadActivitySpaceDid,
+  "14": anchorPlaceholderReadPositions,
 };
 
 /**

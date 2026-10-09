@@ -9,7 +9,12 @@
 import { createAccessMemo, roomAccessMany, spaceAccess } from "../auth/access.ts";
 import { createFederationMemo, federatedRoomAccess } from "../auth/federation.ts";
 import { openReadStateDb, openSpaceDb, openGlobalDb } from "../db/db.ts";
-import { getReadPositions, getSpaceSidebarData, ensureReadPositions } from "../queries/readPositions.ts";
+import {
+  getReadPositions,
+  getSpaceSidebarData,
+  ensureReadPositions,
+  type ReadPosition,
+} from "../queries/readPositions.ts";
 import { queryActiveThreads, resolveThreadsByIds } from "../queries/userActiveThreads.ts";
 import { getSpaceHandle } from "../queries/spaceHandles.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
@@ -275,7 +280,7 @@ export const getMetadataHandler: QueryHandler<
       const threadMetaMap = await resolveThreadsByIds(db, threadIds);
 
       // Build active thread objects with access checks and read positions.
-      const threadReadPositions = await getReadPositions(mainDb, userDid, threadIds);
+      const threadReadPositions = await getReadPositions(mainDb, db, userDid, threadIds);
       const threadAccess = await roomAccessMany(db, threadIds, userDid, memo);
       const activeThreadsByParent = new Map<string, ActiveSidebarThread[]>();
 
@@ -412,14 +417,25 @@ async function buildFederatedSidebarChannels(
     byOrigin.set(r.origin, list);
   }
   const out: SidebarChannel[] = [];
-  // Federated rooms' read positions live in the shared read-state DB (the
-  // origin's materializer bumps the caller's row, see applyBundle), so real
-  // per-user unreadCounts are available — batch-fetch them once for all
-  // federated rooms, like the native channel pass does.
+  // Federated rooms' read positions live in the shared read-state DB, but the
+  // messages they are counted against live in the ORIGIN's per-space DB, so
+  // each origin's counts are derived against its own DB — the same
+  // watermark-and-range-count rule the native channel pass uses.
   const mainDb = openReadStateDb();
-  const fedGrantRoomIds = rows.map((r) => r.room_id);
-  await ensureReadPositions(mainDb, userDid, fedGrantRoomIds);
-  const fedPositions = await getReadPositions(mainDb, userDid, fedGrantRoomIds);
+  const fedPositions = new Map<string, ReadPosition>();
+  for (const [origin, grants] of byOrigin) {
+    const originDb = openSpaceDb(origin);
+    const originRoomIds = grants.map((g) => g.roomId);
+    await ensureReadPositions(mainDb, originDb, origin, userDid, originRoomIds);
+    for (const [roomId, pos] of await getReadPositions(
+      mainDb,
+      originDb,
+      userDid,
+      originRoomIds,
+    )) {
+      fedPositions.set(roomId, pos);
+    }
+  }
   for (const [origin, grants] of byOrigin) {
     const originDb = openSpaceDb(origin);
     // Origin space display info (name + avatar) for the sidebar decoration
@@ -470,10 +486,9 @@ async function buildFederatedSidebarChannels(
         defaultAccess: fed.canWrite ? "readwrite" : "read",
         canRead: true,
         canWrite: fed.canWrite,
-        // Real per-user unread count: fed rooms' read positions live in the
-        // shared read-state DB (the origin's materializer bumps the caller's
-        // row on every new message, even for receiving-space members), so
-        // the sidebar dot/bold match native channels.
+        // Real per-user unread count: the fed room's read position lives in
+        // the shared read-state DB, and its message set in the origin's
+        // per-space DB, so the sidebar dot/bold match native channels.
         unreadCount: fedPositions.get(g.roomId)?.unreadCount ?? 0,
         federated: {
           originSpaceId: origin,

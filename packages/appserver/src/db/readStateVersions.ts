@@ -135,6 +135,24 @@ export const READSTATE_MIGRATIONS = {
   },
   // Pending OAuth scope-expansion intents — user_scope_intents in readStateSchema.sql.
   "13": { kind: "structural" },
+  // Read positions store only the position (`seen_up_to`); the unread count is
+  // derived on read. The async task anchors the placeholder positions at their
+  // room's newest key (see `readStatePositionsMigration.ts`), and the
+  // structural `up` then drops the column from the schema file's shape.
+  "14": {
+    kind: "data",
+    up(db: Database) {
+      const cols = db
+        .query<{ name: string }, []>(
+          "select name from pragma_table_info('read_positions')",
+        )
+        .all()
+        .map((r) => r.name);
+      if (cols.includes("unread_count")) {
+        db.exec("alter table read_positions drop column unread_count");
+      }
+    },
+  },
 } as const satisfies Record<string, ReadStateMigrationEntry>;
 
 /**

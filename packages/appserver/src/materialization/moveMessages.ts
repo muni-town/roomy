@@ -3,10 +3,9 @@
  *
  * The SDK materialiser only rewrites `entities.room` — enough for
  * room-scoped READS to be correct, but not enough for a move to be correct
- * anywhere derived data is keyed by the message's room, or for the unread
- * bookkeeping that createMessage maintains. The side-effects here mirror
- * `applyBundle`'s createMessage path for the DESTINATION and unwind it for
- * the SOURCE:
+ * anywhere derived data is keyed by the message's room. The side-effects here
+ * mirror `applyBundle`'s createMessage path for the DESTINATION and unwind it
+ * for the SOURCE:
  *
  *   - `sort_idx`           → the move's receipt time (see
  *                            `setMessageSortIdxByMove`) so a moved message is
@@ -16,10 +15,9 @@
  *                            newest 5 (the moved message may have been one of
  *                            them, and the ones beyond the window were never
  *                            stored).
- *   - read-state (unread)  → destination +1 for every tracker of the room
- *                            (threads: only engaged users), source decremented
- *                            EXACTLY — one per moved message the user had not
- *                            yet read, never below zero.
+ *   - unread               → nothing to do. A reader's count is derived from
+ *                            their read position and the room's message set,
+ *                            both of which the move has already updated.
  *   - thread activity      → a move into a thread re-surfaces it for everyone
  *                            tracking it, at the move time, and registers the
  *                            message's author as tracking it (their content
@@ -34,12 +32,9 @@
 
 import type { DbLike } from "../db/types.ts";
 import type { Event, StreamDid, StreamIndex, Ulid } from "@roomy-space/sdk";
-import { decodeTime, ulid } from "ulidx";
+import { decodeTime } from "ulidx";
 import { upsertActivityItem } from "./activityItem.ts";
-import {
-  decrementUnreadForRemovedMessages,
-  rebuildActivityWindow,
-} from "./roomDerivedState.ts";
+import { rebuildActivityWindow } from "./roomDerivedState.ts";
 import { rebuildRoomActivity } from "../queries/roomActivityProjection.ts";
 import { messageOrderTime, setMessageSortIdxByMove } from "./sortIdx.ts";
 import { isThread, refreshThreadActivityOnMessage } from "../queries/userActiveThreads.ts";
@@ -128,11 +123,16 @@ export async function applyMoveSideEffects(
   // for the same reason the windows above are.
   await rebuildRoomActivity(db, [event.room, event.toRoomId]);
 
-  // ── Read-state: unread counts, thread activity, participation ─────────
-  // Live events only, mirroring createMessage's unread bump in `applyBundle`:
-  // read-state is appserver-owned and not reconstructed by replay (the boot
-  // recovery migration re-derives membership only), so replaying an old move
-  // over a newer read-state would corrupt the counts.
+  // ── Read-state: thread activity, participation ────────────────────────
+  // Unread is not touched: a reader's count is derived from their read
+  // position and the room's message set, so moving a message between rooms
+  // changes it without anyone adjusting it. What remains here is the state
+  // the log cannot supply — which threads a user tracks, and which rooms
+  // they have spoken in.
+  //
+  // Live events only, mirroring createMessage's read-state section in
+  // `applyBundle`: a replayed move over a newer read-state would resurrect
+  // activity for a thread the user has since stopped tracking.
   const readStateDb = opts.readStateDb;
   if (!readStateDb || opts.isBackfill) return;
 
@@ -149,9 +149,6 @@ export async function applyMoveSideEffects(
       }
     }
   }
-
-  await bumpDestinationUnread(db, readStateDb, event.toRoomId, spaceId);
-  await decrementSourceUnread(readStateDb, event.room, moved);
 
   for (const m of moved) {
     if (!m.authorDid) continue;
@@ -188,67 +185,6 @@ async function readMovedMessages(
     timestamp: r.timestamp,
     authorDid: r.author_did,
   }));
-}
-
-
-/**
- * Destination unread bump. Mirrors `applyBundle`'s createMessage path: a
- * channel bumps every user with a `read_positions` row; a thread bumps only
- * users who have engaged with it (lazily creating their row).
- */
-async function bumpDestinationUnread(
-  db: DbLike,
-  readStateDb: DbLike,
-  roomId: string,
-  spaceId: StreamDid,
-): Promise<void> {
-  if (await isThread(db, roomId)) {
-    const maxSortRow = await db
-      .query("select max(sort_idx) as m from entities where room = ?")
-      .get<{ m: string | null }>([roomId]);
-    const seenUpTo = maxSortRow?.m ?? "0";
-    await readStateDb.run(
-      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       select uta.user_did, ?, ?, ?, 1, (unixepoch() * 1000)
-         from user_thread_activity uta
-        where uta.thread_id = ?
-       on conflict(user_did, room_id) do update set
-         unread_count = unread_count + 1,
-         updated_at = (unixepoch() * 1000)`,
-      [roomId, spaceId, seenUpTo, roomId],
-    );
-    return;
-  }
-
-  await readStateDb.run(
-    `update read_positions
-        set unread_count = unread_count + 1,
-            updated_at = (unixepoch() * 1000)
-      where room_id = ?`,
-    [roomId],
-  );
-}
-
-/**
- * Source unread decrement. The moved message's `sort_idx` has already been
- * rewritten by the move, so the ORIGINAL ordering key is reconstructed from
- * `comp_content.timestamp` (falling back to the id's own time for a
- * content-less forward).
- *
- * Caveat: a message that was *reordered* before being moved carries a
- * mid-pointed `sort_idx` that is not reproducible from its timestamp; the
- * reconstruction is then off by less than a millisecond, which can only
- * mis-decide a message sitting exactly on a user's watermark.
- */
-async function decrementSourceUnread(
-  readStateDb: DbLike,
-  sourceRoomId: string,
-  moved: readonly MovedMessage[],
-): Promise<void> {
-  const originalSortIdx = moved.map(
-    (m) => ulid(m.timestamp ?? decodeTime(m.id)) as string,
-  );
-  await decrementUnreadForRemovedMessages(readStateDb, sourceRoomId, originalSortIdx);
 }
 
 /**

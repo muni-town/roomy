@@ -70,23 +70,22 @@ function seedRoom(spaceRaw: Database, keys: readonly string[]) {
 function seedWatermark(
   readStateRaw: Database,
   seenUpTo: string,
-  unreadCount: number,
   opts: { roomId?: string; spaceDid?: string } = {},
 ) {
   readStateRaw.run(
-    `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-     values (?, ?, ?, ?, ?, ?)`,
-    [USER, opts.roomId ?? ROOM, opts.spaceDid ?? SPACE, seenUpTo, unreadCount, 0],
+    `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+     values (?, ?, ?, ?, ?)`,
+    [USER, opts.roomId ?? ROOM, opts.spaceDid ?? SPACE, seenUpTo, 0],
   );
 }
 
 function watermark(readStateRaw: Database, roomId: string = ROOM) {
   return readStateRaw
     .query<
-      { seen_up_to: string; unread_count: number; updated_at: number },
+      { seen_up_to: string; updated_at: number },
       [string, string]
     >(
-      "select seen_up_to, unread_count, updated_at from read_positions where user_did = ? and room_id = ?",
+      "select seen_up_to, updated_at from read_positions where user_did = ? and room_id = ?",
     )
     .get(USER, roomId);
 }
@@ -101,9 +100,7 @@ describe("read-state watermark repair", () => {
       "01D00000000000000000000000",
     ]);
     const stale = "01C50000000000000000000000";
-    // Stored count is the pre-re-key number and is deliberately wrong here:
-    // the repair recomputes it from the anchor it writes.
-    seedWatermark(readStateRaw, stale, 999);
+    seedWatermark(readStateRaw, stale);
 
     const result = await sweepReadStateWatermarks(router, [SPACE]);
 
@@ -114,20 +111,17 @@ describe("read-state watermark repair", () => {
     // Anchored to the greatest key at or below the watermark — the last message
     // the user could have seen — not to the newest message in the room.
     expect(watermark(readStateRaw)?.seen_up_to).toBe("01C00000000000000000000000");
-    // The one message after that key. The unkeyed row is on neither side.
-    expect(watermark(readStateRaw)?.unread_count).toBe(1);
   });
 
   test("is idempotent: a second pass changes nothing", async () => {
     const { spaceRaw, readStateRaw, router } = fixture();
     seedRoom(spaceRaw, ["01A00000000000000000000000", "01B00000000000000000000000"]);
-    seedWatermark(readStateRaw, "01A50000000000000000000000", 7);
+    seedWatermark(readStateRaw, "01A50000000000000000000000");
 
     const first = await sweepReadStateWatermarks(router, [SPACE]);
     expect(first.repaired).toBe(1);
     const after = watermark(readStateRaw);
     expect(after?.seen_up_to).toBe("01A00000000000000000000000");
-    expect(after?.unread_count).toBe(1);
 
     const second = await sweepReadStateWatermarks(router, [SPACE]);
 
@@ -137,26 +131,24 @@ describe("read-state watermark repair", () => {
     expect(second.repaired).toBe(0);
     expect(second.unresolved).toBe(0);
     expect(watermark(readStateRaw)?.seen_up_to).toBe(after?.seen_up_to);
-    expect(watermark(readStateRaw)?.unread_count).toBe(after?.unread_count);
     // Not merely the same value: the row was not written at all. A repair that
     // re-ran would refresh `updated_at` even though every field matched.
     expect(watermark(readStateRaw)?.updated_at).toBe(after?.updated_at);
   });
 
-  test("leaves a watermark naming a live key alone, count included", async () => {
+  test("leaves a watermark naming a live key alone", async () => {
     const { spaceRaw, readStateRaw, router } = fixture();
     seedRoom(spaceRaw, ["01A00000000000000000000000", "01B00000000000000000000000"]);
     // The live key, with a count the user's own updateSeen wrote.
-    seedWatermark(readStateRaw, "01B00000000000000000000000", 4);
+    seedWatermark(readStateRaw, "01B00000000000000000000000");
 
     const result = await sweepReadStateWatermarks(router, [SPACE]);
 
     expect(result.found).toBe(0);
     expect(result.repaired).toBe(0);
-    // Untouched, including the count: this pass repairs markers, it does not
-    // re-derive unread for rows that were never its business.
+    // Untouched: this pass repairs markers, it does not re-derive unread for
+    // rows that were never its business.
     expect(watermark(readStateRaw)?.seen_up_to).toBe("01B00000000000000000000000");
-    expect(watermark(readStateRaw)?.unread_count).toBe(4);
     expect(watermark(readStateRaw)?.updated_at).toBe(0);
   });
 
@@ -165,7 +157,7 @@ describe("read-state watermark repair", () => {
     seedRoom(spaceRaw, ["01B00000000000000000000000"]);
     // Older than the room's only key: the message it named was deleted, so
     // there is no honest anchor. Left alone and counted, not reset.
-    seedWatermark(readStateRaw, "01A00000000000000000000000", 0);
+    seedWatermark(readStateRaw, "01A00000000000000000000000");
 
     const result = await sweepReadStateWatermarks(router, [SPACE]);
 
@@ -173,7 +165,6 @@ describe("read-state watermark repair", () => {
     expect(result.repaired).toBe(0);
     expect(result.unresolved).toBe(1);
     expect(watermark(readStateRaw)?.seen_up_to).toBe("01A00000000000000000000000");
-    expect(watermark(readStateRaw)?.unread_count).toBe(0);
   });
 
   test("a room with no keys left cannot anchor its watermark", async () => {
@@ -182,14 +173,13 @@ describe("read-state watermark repair", () => {
       "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, null)",
       ["01EMPTYROOM000000000000000", SPACE, ROOM],
     );
-    seedWatermark(readStateRaw, STALE, 12);
+    seedWatermark(readStateRaw, STALE);
 
     const result = await sweepReadStateWatermarks(router, [SPACE]);
 
     expect(result.found).toBe(1);
     expect(result.unresolved).toBe(1);
     expect(watermark(readStateRaw)?.seen_up_to).toBe(STALE);
-    expect(watermark(readStateRaw)?.unread_count).toBe(12);
   });
 
   test("publishes the residue before repairing it", async () => {
@@ -197,7 +187,7 @@ describe("read-state watermark repair", () => {
     seedRoom(spaceRaw, ["01A00000000000000000000000"]);
     // A row that cannot be anchored at all, so the fleet figure stays non-zero
     // and the pre-repair gauge value is distinguishable from the post-repair one.
-    seedWatermark(readStateRaw, "01900000000000000000000000", 0);
+    seedWatermark(readStateRaw, "01900000000000000000000000");
     const found = new Map<string, number[]>();
     // The gauge publishes twice: the measured residue, then what is left. The
     // first write is the figure a scrape during the pass reads.
@@ -219,10 +209,10 @@ describe("read-state watermark repair", () => {
   test("counts watermarks it cannot attribute to a space it can read", async () => {
     const { spaceRaw, readStateRaw, router } = fixture();
     seedRoom(spaceRaw, ["01A00000000000000000000000"]);
-    seedWatermark(readStateRaw, STALE, 3);
+    seedWatermark(readStateRaw, STALE);
     // Written before `space_did` was populated. A per-space pass cannot reach
     // it, so it is reported separately rather than dropped from the figure.
-    seedWatermark(readStateRaw, STALE, 3, {
+    seedWatermark(readStateRaw, STALE, {
       roomId: "01ORPHANROOM000000000000",
       spaceDid: "",
     });
@@ -241,7 +231,7 @@ describe("read-state watermark repair", () => {
     // What a user's own `updateSeen` writes: the read path never populates
     // `space_did`, so the row carries an empty one and no per-space pass can
     // reach it. The global index says which space the room belongs to.
-    seedWatermark(readStateRaw, STALE, 2, { spaceDid: "" });
+    seedWatermark(readStateRaw, STALE, { spaceDid: "" });
     globalRaw.run("insert into entity_space (entity_id, space_did) values (?, ?)", [
       ROOM,
       SPACE,
@@ -253,7 +243,6 @@ describe("read-state watermark repair", () => {
     expect(result.found).toBe(1);
     expect(result.repaired).toBe(1);
     expect(watermark(readStateRaw)?.seen_up_to).toBe("01A00000000000000000000000");
-    expect(watermark(readStateRaw)?.unread_count).toBe(0);
   });
 
   test("counts a row the index cannot attribute as unattributed", async () => {
@@ -262,7 +251,7 @@ describe("read-state watermark repair", () => {
     // The room belongs to no space in this sweep — a room id from another
     // deployment, or one whose stream no longer exists. Reported on its own so
     // the residue cannot look smaller than it is.
-    seedWatermark(readStateRaw, STALE, 2, { spaceDid: "", roomId: "01UNKNOWNROOM00000000000" });
+    seedWatermark(readStateRaw, STALE, { spaceDid: "", roomId: "01UNKNOWNROOM00000000000" });
 
     const result = await sweepReadStateWatermarks(router, [SPACE]);
 
@@ -274,7 +263,7 @@ describe("read-state watermark repair", () => {
   test("is a no-op on an adapter with no read-state or per-space seam", async () => {
     const { spaceRaw, readStateRaw } = fixture();
     seedRoom(spaceRaw, ["01A00000000000000000000000"]);
-    seedWatermark(readStateRaw, STALE, 5);
+    seedWatermark(readStateRaw, STALE);
     // A plain sync adapter: the seams are absent, so there is nothing to
     // re-anchor and no throw.
     const plain = toAsyncDb(spaceRaw);
@@ -295,13 +284,13 @@ describe("read-state watermark repair", () => {
   test("a space that cannot be read is reported and does not stop the pass", async () => {
     const { spaceRaw, readStateRaw, router } = fixture();
     seedRoom(spaceRaw, ["01A00000000000000000000000"]);
-    seedWatermark(readStateRaw, STALE, 1);
+    seedWatermark(readStateRaw, STALE);
 
     const other = "did:web:watermarks-other.example";
     const otherSpace = new Database(":memory:");
     otherSpace.exec("pragma foreign_keys = on");
     otherSpace.exec(SPACE_SCHEMA);
-    seedWatermark(readStateRaw, STALE, 1, { roomId: "01OTHERROOM000000000000", spaceDid: other });
+    seedWatermark(readStateRaw, STALE, { roomId: "01OTHERROOM000000000000", spaceDid: other });
 
     const forSpace = router.forSpace!;
     router.forSpace = (did: string) => {
@@ -326,10 +315,10 @@ describe("read-state watermark repair", () => {
       ["01MSGTWO000000000000000000", SPACE, otherRoom, "01F00000000000000000000000"],
     );
     // Each user's watermark resolves against its own room's keys.
-    seedWatermark(readStateRaw, "01A50000000000000000000000", 0);
+    seedWatermark(readStateRaw, "01A50000000000000000000000");
     readStateRaw.run(
-      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values (?, ?, ?, ?, 0, 0)`,
+      `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+       values (?, ?, ?, ?, 0)`,
       ["did:plc:other-reader", ROOM, SPACE, "01B50000000000000000000000"],
     );
 
@@ -349,8 +338,8 @@ describe("read-state watermark repair", () => {
   test("ignores the placeholder watermarks a lazily-created row starts with", async () => {
     const { spaceRaw, readStateRaw, router } = fixture();
     seedRoom(spaceRaw, ["01A00000000000000000000000"]);
-    seedWatermark(readStateRaw, "0", 0);
-    seedWatermark(readStateRaw, "", 0, { roomId: "01ROOMTWO0000000000000000" });
+    seedWatermark(readStateRaw, "0");
+    seedWatermark(readStateRaw, "", { roomId: "01ROOMTWO0000000000000000" });
 
     const result = await sweepReadStateWatermarks(router, [SPACE]);
 

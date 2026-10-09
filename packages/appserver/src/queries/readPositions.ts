@@ -1,8 +1,22 @@
 /**
- * Helper to look up pre-computed unread counts from the readstate database.
+ * Read positions, and the unread counts derived from them.
  *
- * All unread data is read directly from the `unread_count` column — no
- * COUNT(*) against entities. This is O(1) per room.
+ * A read position is one durable fact: `seen_up_to`, the `entities.sort_idx` of
+ * the last message the user read. It is written only by `updateSeen` (and the
+ * boot repair pass), never by materialisation, so it is a value the user owns
+ * rather than a counter the write path adjusts.
+ *
+ * `unreadCount` is not stored. It is the difference between the read position
+ * and the room's message set, both of which are already durable, so it is
+ * computed where it is read ({@link deriveUnreadCounts}). Storing the
+ * difference meant every event that added or removed a message had to remember
+ * to adjust it — an increment against state outside the log, which is neither
+ * deterministic nor idempotent — and it put a read-modify-write across two
+ * databases on the message-creation path.
+ *
+ * The count is answered by the per-space DB (`entities`), the watermark by the
+ * read-state DB, so a reader has to hold both. Every caller here already does:
+ * a sidebar or board read opens the space's DB for the rooms' names anyway.
  */
 
 import { createAccessMemo, roomAccessMany, type AccessMemo, type RoomAccess } from "../auth/access.ts";
@@ -38,111 +52,195 @@ function decodeSeenUpTo(seenUpTo: string | null | undefined): string | null {
   }
 }
 
+/** A room whose unread count is to be derived, with the watermark to count past. */
+export interface UnreadQuery {
+  roomId: string;
+  /**
+   * The reader's `seen_up_to`. An empty string or `'0'` is "no real
+   * watermark": every message in the room is past it, which is what the range
+   * count below yields without special-casing.
+   */
+  seenUpTo: string;
+}
+
 /**
- * Ensure read_positions rows exist for a user across the given rooms.
- * For rooms where no row exists, creates one with `seen_up_to` set to the
- * current max sort_idx (everything so far is considered "seen") and
- * `unread_count = 0`.
+ * Derive the unread count for each `(room, watermark)` pair, in input order.
  *
- * This lazy-initialization approach avoids needing to seed rows on join
- * or on createMessage — the first query creates them on demand.
+ * This is the same range count `updateSeen` computes for an explicit watermark
+ * (`count(*) … where room = ? and sort_idx > ?`): the messages after the last
+ * one the reader saw. Two properties are worth stating, because the increment
+ * it replaces had neither:
+ *
+ *   - It is a pure function of the log-derived tables. Applying the same event
+ *     twice cannot change it, because nothing about it is accumulated.
+ *   - It reads `entities` by `(room, sort_idx)`, which `idx_entities_room_sort`
+ *     covers, so a caught-up room costs an index seek rather than a scan
+ *     (measured: 0.03 ms per room against a 200k-message space).
+ *
+ * A room with no messages, or a watermark at or past its newest, counts zero.
+ * Rows are matched on `sort_idx` alone, exactly as `updateSeen` does — an
+ * entity the materialiser never keyed (a thread, a room) has a NULL `sort_idx`,
+ * which no comparison can pass, so it is not a message and is not counted.
+ */
+export async function deriveUnreadCounts(
+  spaceDb: DbLike,
+  queries: readonly UnreadQuery[],
+): Promise<number[]> {
+  if (queries.length === 0) return [];
+  const rows = await spaceDb
+    .query(
+      `with w(room, wm) as (
+         select json_extract(value, '$.roomId'), json_extract(value, '$.seenUpTo')
+           from json_each(?1)
+       )
+       select (select count(*) from entities e
+                where e.room = w.room and e.sort_idx > w.wm) as n
+         from w`,
+    )
+    .all<{ n: number }>(JSON.stringify(queries));
+  return rows.map((r) => r.n ?? 0);
+}
+
+/**
+ * Ensure read_positions rows exist for a user across the given rooms, anchored
+ * at each room's newest message — everything posted so far is considered seen,
+ * so a room the reader has never opened does not open as fully unread.
+ *
+ * This is the row's creation point (the materialiser no longer creates them):
+ * the first sidebar or board read of a room writes it. The anchor comes from
+ * the room's own DB, which is why the caller passes it — the read-state DB
+ * holds no `entities` to take a `max(sort_idx)` from.
+ *
+ * The `space_did` is recorded alongside, so a row written here needs no
+ * attribution pass to work out which space its room belongs to.
  */
 export async function ensureReadPositions(
   db: DbLike,
+  spaceDb: DbLike,
+  spaceId: string,
   userDid: string,
   roomIds: string[],
 ): Promise<void> {
   if (roomIds.length === 0) return;
 
+  const anchors = await spaceDb
+    .query(
+      `select room as room_id, max(sort_idx) as newest
+         from entities
+        where room in (select value from json_each(?1))
+        group by room`,
+    )
+    .all<{ room_id: string; newest: string | null }>(JSON.stringify(roomIds));
+  const newestByRoom = new Map(anchors.map((r) => [r.room_id, r.newest]));
+
   const now = Date.now();
-  // `entities` lives in the per-space DBs, not the read-state DB, so
-  // `space_did` / a real `seen_up_to` can't be derived from a subquery here.
-  // Defaults: space_did '' / seen_up_to '0' (no real watermark — decodes to
-  // lastRead null). Materialization populates them correctly via
-  // `applyBundle` for live message creates.
-  //
-  // Batch all rows into a single multi-row INSERT instead of one round-trip
-  // per room. The read-state DB lives on its own worker, so the previous
-  // per-room loop was an N+1 that saturated it under load (getMetadata /
-  // getThreads call this for every channel + engaged thread).
-  const values = roomIds.map(() => "(?, ?, '', '0', 0, ?)").join(",");
+  // One multi-row INSERT rather than a round-trip per room: the read-state DB
+  // lives on its own worker, and getMetadata calls this for every channel plus
+  // every engaged thread.
   const params: (string | number)[] = [];
   for (const roomId of roomIds) {
-    params.push(userDid, roomId, now);
+    params.push(userDid, roomId, spaceId, newestByRoom.get(roomId) ?? "0", now);
   }
   await db.run(
-    `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-     values ${values}
+    `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+     values ${roomIds.map(() => "(?, ?, ?, ?, ?)").join(",")}
      on conflict(user_did, room_id) do nothing`,
     ...params,
   );
 }
 
 /**
- * Look up the read position for a single (user, room) pair.
- * Lazily creates the row if it doesn't exist yet.
+ * Read the stored watermarks for a set of rooms, keyed by room id. Rooms with
+ * no row are absent — the caller treats a missing watermark as "no real
+ * watermark" (everything unread), which is what a lazily-created row starts
+ * as before {@link ensureReadPositions} anchors it.
+ */
+async function readWatermarks(
+  db: DbLike,
+  userDid: string,
+  roomIds: readonly string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (roomIds.length === 0) return out;
+  const ph = roomIds.map(() => "?").join(",");
+  const rows = await db
+    .query(
+      `select room_id, seen_up_to from read_positions
+        where user_did = ? and room_id in (${ph})`,
+    )
+    .all<{ room_id: string; seen_up_to: string }>(userDid, ...roomIds);
+  for (const r of rows) out.set(r.room_id, r.seen_up_to);
+  return out;
+}
+
+/**
+ * Look up the read position for a single (user, room) pair — the stored
+ * watermark plus the count derived from it against `spaceDb`.
+ * Lazily creates the row (anchored at the room's newest message) if it does
+ * not exist yet.
  */
 export async function getReadPosition(
   db: DbLike,
+  spaceDb: DbLike,
   userDid: string,
   roomId: string,
+  spaceId?: string,
 ): Promise<ReadPosition> {
-  await ensureReadPositions(db, userDid, [roomId]);
-
-  const row = await db
-    .query(
-      "select unread_count, seen_up_to from read_positions where user_did = ? and room_id = ?",
-    )
-    .get<{ unread_count: number; seen_up_to: string }>([userDid, roomId]);
-
-  return {
-    unreadCount: row?.unread_count ?? 0,
-    lastRead: decodeSeenUpTo(row?.seen_up_to),
-  };
+  await ensureReadPositions(db, spaceDb, spaceId ?? "", userDid, [roomId]);
+  const positions = await getReadPositions(db, spaceDb, userDid, [roomId]);
+  return positions.get(roomId) ?? { unreadCount: 0, lastRead: null };
 }
 
 /**
  * Look up read positions for multiple rooms at once.
- * Returns a Map<roomId, ReadPosition>. Rooms without a row get the default.
+ * Returns a Map<roomId, ReadPosition>.
  *
- * Calls ensureReadPositions first so that rows are lazily created for any
- * rooms the user hasn't queried before.
+ * A room with no `read_positions` row reads as zero unread: the appserver has
+ * never been told where the reader is, so there is no watermark to count past.
+ * (A room the reader has never opened still reads as unread to the boards, but
+ * through their own honest-flag rule rather than a count — see
+ * `room.getThreads`.) A row created by {@link ensureReadPositions} is anchored
+ * at the room's newest message, so it starts at zero the same way.
+ *
+ * All the rooms must live in `spaceDb` — the room ids of a channel page, a
+ * space board, or one origin space's federated channels. A caller holding
+ * rooms from several spaces (the federated sidebar) calls this once per space.
  */
 export async function getReadPositions(
   db: DbLike,
+  spaceDb: DbLike,
   userDid: string,
-  roomIds: string[],
+  roomIds: readonly string[],
 ): Promise<Map<string, ReadPosition>> {
   const result = new Map<string, ReadPosition>();
-
   if (roomIds.length === 0) return result;
+  const watermarks = await readWatermarks(db, userDid, roomIds);
+  return derivePositions(spaceDb, roomIds, watermarks);
+}
 
-  // Lazily create rows for any rooms that don't have one yet.
-  await ensureReadPositions(db, userDid, roomIds);
-
-  // Batch the read into a single `in (...)` query instead of one round-trip
-  // per room to the read-state worker — the previous loop was an N+1 that
-  // saturated it under load.
-  const ph = roomIds.map(() => "?").join(",");
-  const rows = await db
-    .query(
-      `select room_id, unread_count, seen_up_to from read_positions
-        where user_did = ? and room_id in (${ph})`,
-    )
-    .all<{ room_id: string; unread_count: number; seen_up_to: string }>(userDid, ...roomIds);
-  for (const r of rows) {
-    result.set(r.room_id, {
-      unreadCount: r.unread_count,
-      lastRead: decodeSeenUpTo(r.seen_up_to),
+/**
+ * Derive a position per room from the watermarks that exist, defaulting the
+ * rest to zero. Shared by the batched readers so the "no row" rule is stated
+ * once.
+ */
+async function derivePositions(
+  spaceDb: DbLike,
+  roomIds: readonly string[],
+  watermarks: ReadonlyMap<string, string>,
+): Promise<Map<string, ReadPosition>> {
+  const known = roomIds.filter((roomId) => watermarks.has(roomId));
+  const counts = await deriveUnreadCounts(
+    spaceDb,
+    known.map((roomId) => ({ roomId, seenUpTo: watermarks.get(roomId)! })),
+  );
+  const countByRoom = new Map(known.map((roomId, i) => [roomId, counts[i] ?? 0]));
+  const result = new Map<string, ReadPosition>();
+  for (const roomId of roomIds) {
+    result.set(roomId, {
+      unreadCount: countByRoom.get(roomId) ?? 0,
+      lastRead: decodeSeenUpTo(watermarks.get(roomId)),
     });
   }
-  // Rooms without a row get the default.
-  for (const roomId of roomIds) {
-    if (!result.has(roomId)) {
-      result.set(roomId, { unreadCount: 0, lastRead: null });
-    }
-  }
-
   return result;
 }
 
@@ -203,6 +301,12 @@ interface SpaceUnreadCandidates {
   threadIds: string[];
   /** Federated channel ids (origin's rooms) the caller can read via a grant. */
   federatedIds: string[];
+  /**
+   * The federated rooms, grouped by the per-space DB that holds their
+   * messages. The read-state DB holds their watermarks but no `entities` to
+   * count against, so each origin's counts are derived against its own DB.
+   */
+  federatedByDb: Map<DbLike, string[]>;
 }
 
 async function resolveSpaceUnreadCandidates(
@@ -264,7 +368,7 @@ async function resolveSpaceUnreadCandidates(
     .filter((c) => channelAccess.get(c.id)?.canRead)
     .map((c) => c.id);
 
-  await ensureReadPositions(readStateDb, userDid, accessible);
+  await ensureReadPositions(readStateDb, spaceDb, spaceId, userDid, accessible);
 
   // Also include threads the user has engaged with (user_thread_activity,
   // read-state DB) that belong to this space (entities, per-space DB).
@@ -293,19 +397,18 @@ async function resolveSpaceUnreadCandidates(
     threadIds = belonging.map((r) => r.id);
   }
   // Ensure read_positions rows exist for engaged threads too.
-  await ensureReadPositions(readStateDb, userDid, threadIds);
+  await ensureReadPositions(readStateDb, spaceDb, spaceId, userDid, threadIds);
 
   // Federated channels (channel federation): rooms of OTHER (origin) spaces
   // granted INTO this space. Their read positions live in the shared
-  // read-state DB — the origin's materializer bumps unread_count for every
-  // user with a row (including this space's members), so the receiving
-  // space sees real per-user counts, not a presence flag. Access resolves
-  // per-origin via the federation grant (B admin override or receiver
-  // grant); native roomAccess would check the ORIGIN space's membership,
-  // which B members lack.
+  // read-state DB, but their message sets live in the ORIGIN's per-space DB —
+  // so both the watermark and the count it is measured against are resolved
+  // per origin below.
   const fedMemo = createFederationMemo();
   const globalDb = tryOpenGlobalDb();
   let federatedIds: string[] = [];
+  /** Federated rooms grouped by the per-space DB that holds their messages. */
+  const federatedByDb = new Map<DbLike, string[]>();
   if (globalDb) {
     const fedChannels = await getActiveFederatedChannels(spaceId);
     if (fedChannels.length > 0) {
@@ -318,16 +421,23 @@ async function resolveSpaceUnreadCandidates(
       }
       for (const [origin, roomIds] of byOrigin) {
         const originDb = openSpaceDb(origin);
+        const readable: string[] = [];
         for (const roomId of roomIds) {
           const fed = await federatedRoomAccess(originDb, globalDb, roomId, userDid, {
             spaceDbResolver: openSpaceDb,
             memo: fedMemo,
             accessMemo: m,
           });
-          if (fed?.canRead) federatedIds.push(roomId);
+          if (fed?.canRead) {
+            federatedIds.push(roomId);
+            readable.push(roomId);
+          }
+        }
+        if (readable.length > 0) {
+          await ensureReadPositions(readStateDb, originDb, origin, userDid, readable);
+          federatedByDb.set(originDb, readable);
         }
       }
-      await ensureReadPositions(readStateDb, userDid, federatedIds);
     }
   }
 
@@ -338,7 +448,100 @@ async function resolveSpaceUnreadCandidates(
     accessibleIds: accessible,
     threadIds,
     federatedIds,
+    federatedByDb,
   };
+}
+
+/**
+ * Derive the read position — and with it the unread count — for every
+ * candidate room of a space.
+ *
+ * One read-state query yields the watermarks; each room's count is then a
+ * range count against the DB that holds its messages: the space's own, or an
+ * origin's for a federated room. Reading `entities` by `(room, sort_idx)`
+ * (`idx_entities_room_sort`) makes a caught-up room an index seek rather than
+ * a scan, and because the count is a pure function of the two durable facts,
+ * nothing has to keep it in step with the room's message set.
+ *
+ * `excludeRoomId` drops one room from the candidate set, for a caller asking
+ * about the space as it stood *before* that room's event.
+ */
+async function deriveSpacePositions(
+  readStateDb: DbLike,
+  spaceDb: DbLike,
+  userDid: string,
+  candidates: SpaceUnreadCandidates,
+  excludeRoomId?: string,
+): Promise<Map<string, ReadPosition>> {
+  const keep = (id: string): boolean => id !== excludeRoomId;
+  const accessibleIds = candidates.accessibleIds.filter(keep);
+  const threadIds = candidates.threadIds.filter(keep);
+  const allRoomIds = [
+    ...accessibleIds,
+    ...threadIds,
+    ...candidates.federatedIds.filter(keep),
+  ];
+  if (allRoomIds.length === 0) return new Map();
+
+  const watermarks = await readWatermarks(readStateDb, userDid, allRoomIds);
+  const positions = await derivePositions(
+    spaceDb,
+    [...accessibleIds, ...threadIds],
+    watermarks,
+  );
+  for (const [originDb, roomIds] of candidates.federatedByDb) {
+    const kept = roomIds.filter(keep);
+    if (kept.length === 0) continue;
+    for (const [roomId, pos] of await derivePositions(originDb, kept, watermarks)) {
+      positions.set(roomId, pos);
+    }
+  }
+  return positions;
+}
+
+/**
+ * Whether any of `roomIds` — all of which live in `spaceDb` — has messages
+ * past its watermark. The existence form of {@link deriveUnreadCounts}, for a
+ * caller that only needs to know if the answer is non-zero.
+ *
+ * Asking the count question and scanning the result would derive a count for
+ * every candidate room to look for one `> 0`, allocating a `ReadPosition`, a
+ * `Map` entry and a result row per room. `spaceHasUnreads` is the per-message
+ * path — a message create asks it once per reader the message made newly
+ * unread — and the candidate set is a space's whole sidebar, so the probe
+ * stops at the first room that answers instead.
+ *
+ * A room with no stored watermark is not a candidate: the caller's
+ * `ensureReadPositions` gives every candidate room a row, and one that is
+ * missing anyway has no position to count past, which its siblings read as
+ * zero unread.
+ */
+async function anyUnread(
+  spaceDb: DbLike,
+  roomIds: readonly string[],
+  watermarks: ReadonlyMap<string, string>,
+): Promise<boolean> {
+  const queries: UnreadQuery[] = [];
+  for (const roomId of roomIds) {
+    const seenUpTo = watermarks.get(roomId);
+    if (seenUpTo !== undefined) queries.push({ roomId, seenUpTo });
+  }
+  if (queries.length === 0) return false;
+
+  const row = await spaceDb
+    .query(
+      `with w(room, wm) as (
+         select json_extract(value, '$.roomId'), json_extract(value, '$.seenUpTo')
+           from json_each(?1)
+       )
+       select 1 as one
+         from w
+        where exists (select 1 from entities e
+                       where e.room = w.room and e.sort_idx > w.wm)
+        limit 1`,
+    )
+    .get<{ one: number }>(JSON.stringify(queries));
+  return row !== null && row !== undefined;
 }
 
 /**
@@ -362,26 +565,30 @@ export async function spaceHasUnreads(
   memo?: AccessMemo,
   excludeRoomId?: string,
 ): Promise<boolean> {
-  const { accessibleIds, threadIds, federatedIds } = await resolveSpaceUnreadCandidates(
+  const candidates = await resolveSpaceUnreadCandidates(
     readStateDb,
     spaceDb,
     userDid,
     spaceId,
     memo,
   );
-  const allRoomIds = [...accessibleIds, ...threadIds, ...federatedIds].filter(
-    (id) => id !== excludeRoomId,
-  );
-  if (allRoomIds.length === 0) return false;
-  const placeholders = allRoomIds.map(() => "?").join(",");
-  const row = await readStateDb
-    .query(
-      `select 1 as one from read_positions
-        where user_did = ? and room_id in (${placeholders}) and unread_count > 0
-        limit 1`,
-    )
-    .get<{ one: number }>([userDid, ...allRoomIds]);
-  return row !== null && row !== undefined;
+  const keep = (id: string): boolean => id !== excludeRoomId;
+  // The space's own rooms are asked as one group, and each federated origin's
+  // as another: they live in different DBs, so the probe can only short-circuit
+  // within a group — a hit in any group is the answer either way.
+  const ownRooms = [
+    ...candidates.accessibleIds.filter(keep),
+    ...candidates.threadIds.filter(keep),
+  ];
+  const watermarks = await readWatermarks(readStateDb, userDid, [
+    ...ownRooms,
+    ...candidates.federatedIds.filter(keep),
+  ]);
+  if (await anyUnread(spaceDb, ownRooms, watermarks)) return true;
+  for (const [originDb, roomIds] of candidates.federatedByDb) {
+    if (await anyUnread(originDb, roomIds.filter(keep), watermarks)) return true;
+  }
+  return false;
 }
 
 /**
@@ -392,7 +599,7 @@ export async function spaceHasUnreads(
  *
  * Returns the candidate rooms (channels, voice rooms, access decisions), the
  * per-room read positions, and the unread aggregates. `includeReadPositions`
- * lets a caller that only needs the aggregates skip the per-room read.
+ * lets a caller that only needs the aggregates skip handing back the map.
  */
 export interface SpaceSidebarData extends SpaceUnreadCandidates {
   /** Read positions (unreadCount) for every channel + engaged thread. */
@@ -420,58 +627,30 @@ export async function getSpaceSidebarData(
     spaceId,
     memo,
   );
-  const { accessibleIds, threadIds, federatedIds } = candidates;
-  const allRoomIds = [...accessibleIds, ...threadIds, ...federatedIds];
+  const positions = await deriveSpacePositions(readStateDb, spaceDb, userDid, candidates);
+  const unreadOf = (roomId: string): number => positions.get(roomId)?.unreadCount ?? 0;
 
-  let unreadCount = 0;
-  let unreadRoomCount = 0;
-  let unreadThreadCount = 0;
-  if (allRoomIds.length > 0) {
-    // Sum unread counts and count rooms with unreads across accessible
-    // channels and engaged threads.
-    const placeholders = allRoomIds.map(() => "?").join(",");
-    const row = await readStateDb
-      .query(
-        `select coalesce(sum(unread_count), 0) as total,
-                coalesce(sum(case when unread_count > 0 then 1 else 0 end), 0) as rooms_with_unread
-           from read_positions
-          where user_did = ? and room_id in (${placeholders})`,
-      )
-      .get<{ total: number; rooms_with_unread: number }>([userDid, ...allRoomIds]);
-    const total = row?.total ?? 0;
-    const roomsWithUnread = row?.rooms_with_unread ?? 0;
+  const allRoomIds = [
+    ...candidates.accessibleIds,
+    ...candidates.threadIds,
+    ...candidates.federatedIds,
+  ];
+  const unreadCount = allRoomIds.reduce((sum, id) => sum + unreadOf(id), 0);
+  const roomsWithUnread = allRoomIds.filter((id) => unreadOf(id) > 0).length;
+  const threadRoomsWithUnread = candidates.threadIds.filter((id) => unreadOf(id) > 0).length;
 
-    // Split the room count into channels vs engaged threads.
-    let threadRoomsWithUnread = 0;
-    if (threadIds.length > 0) {
-      const tph = threadIds.map(() => "?").join(",");
-      const trow = await readStateDb
-        .query(
-          `select count(*) as n from read_positions
-            where user_did = ? and room_id in (${tph}) and unread_count > 0`,
-        )
-        .get<{ n: number }>([userDid, ...threadIds]);
-      threadRoomsWithUnread = trow?.n ?? 0;
-    }
-
-    unreadCount = total;
-    unreadRoomCount = roomsWithUnread - threadRoomsWithUnread;
-    unreadThreadCount = threadRoomsWithUnread;
-  }
-
-  // Per-room read positions for the sidebar. Only computed when requested —
-  // a caller that needs only the aggregates skips the per-room read.
-  let readPositions = new Map<string, ReadPosition>();
-  if (options.includeReadPositions && allRoomIds.length > 0) {
-    readPositions = await getReadPositions(readStateDb, userDid, allRoomIds);
-  }
+  // Per-room read positions for the sidebar. Only returned when requested —
+  // a caller that needs only the aggregates does not pay to hand back a map.
+  const readPositions = options.includeReadPositions
+    ? positions
+    : new Map<string, ReadPosition>();
 
   return {
     ...candidates,
     readPositions,
     unreadCount,
-    unreadRoomCount,
-    unreadThreadCount,
+    unreadRoomCount: roomsWithUnread - threadRoomsWithUnread,
+    unreadThreadCount: threadRoomsWithUnread,
   };
 }
 
@@ -532,16 +711,18 @@ export async function getChannelUnreadThreadCount(
     .map((r) => r.thread_id);
   if (accessible.length === 0) return 0;
 
-  await ensureReadPositions(readStateDb, userDid, accessible);
-  const ph = accessible.map(() => "?").join(",");
-  const row = await readStateDb
-    .query(
-      `select count(*) as n from read_positions
-        where user_did = ? and room_id in (${ph}) and unread_count > 0`,
-    )
-    .get<{ n: number }>([userDid, ...accessible]);
-  return row?.n ?? 0;
+  // A thread the user engaged with but never opened has no row until this
+  // call creates it, anchored at the thread's newest message — so it counts
+  // only what arrives afterwards, which is the same rule the sidebar uses.
+  await ensureReadPositions(readStateDb, spaceDb, "", userDid, accessible);
+  const watermarks = await readWatermarks(readStateDb, userDid, accessible);
+  const counts = await deriveUnreadCounts(
+    spaceDb,
+    accessible.map((roomId) => ({ roomId, seenUpTo: watermarks.get(roomId) ?? "0" })),
+  );
+  return counts.filter((n) => n > 0).length;
 }
+
 /**
  * Return the set of thread ids the user has engaged with (user_thread_activity
  * rows). Used by the getThreads handlers to compute the honest unread flag:
@@ -565,30 +746,27 @@ export async function getEngagedThreadIds(
 }
 
 /**
- * Return every user with a `read_positions` row for `roomId`. This is
- * exactly the set the materializer's unread-count bump touched (see
- * `applyBundle`), so calling this right after a `createMessage` event
- * yields the affected users in a single query — used to drive targeted
- * `#roomMetadataDiff` frames instead of broadcasting a `getSpaces`
- * invalidation to every connection.
+ * Every user tracking `roomId` — the users with a `read_positions` row for it,
+ * with the watermark they hold. A row exists for a user once they have opened
+ * the room (or had the sidebar create one for them), so this is exactly the
+ * audience a new message can make newly-unread.
  *
- * The frame carries a `delta` (the unread-count increment, always +1 per
- * message), not the absolute count — the client applies `prev + delta` to
- * each cache entry, avoiding the need to read the absolute count or to
- * know the previous value server-side.
+ * Used to drive targeted `#roomMetadataDiff` frames instead of broadcasting a
+ * `getSpaces` invalidation to every connection. The frame carries the unread
+ * increment for the users whose count this message moved, which the caller
+ * derives from these watermarks against the room's messages.
  */
-export async function getRoomReadPositionUsers(
+export async function getRoomReadPositionWatermarks(
   db: DbLike,
   roomId: string,
-): Promise<UserDid[]> {
+): Promise<Array<{ userDid: UserDid; seenUpTo: string }>> {
   const rows = await db
     .query(
-      `select user_did from read_positions where room_id = ?`,
+      `select user_did, seen_up_to from read_positions where room_id = ?`,
     )
-    .all<{ user_did: string }>([roomId]);
-  return rows.map((r) => r.user_did as UserDid);
+    .all<{ user_did: string; seen_up_to: string }>([roomId]);
+  return rows.map((r) => ({
+    userDid: r.user_did as UserDid,
+    seenUpTo: r.seen_up_to,
+  }));
 }
-
-/**
- * Ensure read_positions rows exist for a user across all rooms in a space.
- */

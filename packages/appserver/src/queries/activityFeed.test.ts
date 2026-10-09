@@ -140,10 +140,14 @@ async function postMessage(
 ): Promise<string> {
   const db = openSpaceDb(spaceId);
   const msgId = ulidForTimestamp(ts);
-  await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+  // `sort_idx` is the message's ordering key, and the unread range count
+  // (`sort_idx > seen_up_to`) compares against it, so a message without one is
+  // invisible to every unread computation.
+  await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
     msgId,
     spaceId,
     roomId,
+    msgId,
   ]);
   await db.run(
     "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/plain', ?, ?, ?)",
@@ -191,16 +195,36 @@ async function seedActivityItem(
   );
 }
 
-async function seedUnreadCount(
-  userDid: string,
+/**
+ * Give `roomId` exactly `count` unread messages for `userDid`.
+ *
+ * The count is derived, not stored, so this writes the two facts it is the
+ * difference of: a read position anchored at the room's current newest message,
+ * and `count` messages posted after it.
+ */
+async function seedUnreadMessages(
+  spaceId: string,
   roomId: string,
+  userDid: string,
   count: number,
 ) {
-  const db = openReadStateDb();
-  await db.run(
-    "insert into read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
-    [userDid, roomId, "idx-0", count],
+  const db = openSpaceDb(spaceId);
+  const anchor =
+    (
+      await db
+        .query("select max(sort_idx) as newest from entities where room = ?")
+        .get<{ newest: string | null }>(roomId)
+    )?.newest ?? "0";
+  await openReadStateDb().run(
+    `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+     values (?, ?, ?, ?, ?)
+     on conflict(user_did, room_id) do update set seen_up_to = excluded.seen_up_to, space_did = excluded.space_did`,
+    [userDid, roomId, spaceId, anchor, Date.now()],
   );
+  const base = Date.now();
+  for (let i = 0; i < count; i++) {
+    await postMessage(spaceId, roomId, userDid, base + i);
+  }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────
@@ -217,7 +241,7 @@ describe("selectActivityFeed", () => {
       const ts = 1_717_536_000_000;
       const msgId = await postMessage(SPACE, CHANNEL, USER, ts, "Hello world");
       await seedActivityItem(SPACE, CHANNEL, 0, ts, [msgId], "general", "Test Space");
-      await seedUnreadCount(USER, CHANNEL, 3);
+      await seedUnreadMessages(SPACE, CHANNEL, USER, 3);
 
       const { feed, cursor } = await selectActivityFeed(readState, USER, {
         limit: 50,
@@ -652,8 +676,8 @@ describe("selectActivityFeed", () => {
 
       await seedActivityItem(SPACE, CHANNEL, 0, ts, [msg1], "general", "Test Space");
       await seedActivityItem(SPACE, THREAD_A, 1, ts, [msg2], "Thread A", "Test Space");
-      await seedUnreadCount(USER, CHANNEL, 5);
-      await seedUnreadCount(USER, THREAD_A, 2);
+      await seedUnreadMessages(SPACE, CHANNEL, USER, 5);
+      await seedUnreadMessages(SPACE, THREAD_A, USER, 2);
 
       const { feed } = await selectActivityFeed(readState, USER, {
         limit: 50,

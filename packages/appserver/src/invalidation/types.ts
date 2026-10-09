@@ -148,7 +148,7 @@ export interface RoomMetadataDiff {
   parentChannelId?: string;
   /**
    * Per-user room-count deltas: `+1` for each user whose channel became
-   * newly-unread (their `unread_count` went 0 → 1). Keyed by user DID; the
+   * newly-unread (their derived unread count went 0 → 1). Keyed by user DID; the
    * SyncManager picks each user's delta when building its frame. Patches
    * `space.getMetadata`'s sidebar count only.
    */

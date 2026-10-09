@@ -21,6 +21,7 @@ import { applyBatch } from "./applyBatch.ts";
 import { applyBundle } from "./applyBundle.ts";
 import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
+import { getReadPositions } from "../queries/readPositions.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -939,15 +940,15 @@ describe("applyBatch concurrency", () => {
     const { db } = freshDb();
     seedSpace(db, STREAM);
 
-    // Live batches (isBackfill: false) touch readstate.read_positions for
-    // the unread-counter increment, so the readstate schema must be attached
-    // (mirrors joinedSpaces.test.ts / dispatcher.test.ts fixtures).
+    // Live batches (isBackfill: false) write readstate rows for thread
+    // activity and room participation, so the readstate schema must be
+    // attached (mirrors joinedSpaces.test.ts / dispatcher.test.ts fixtures).
     db.exec("attach database ':memory:' as readstate");
     db.exec(
       "create table if not exists readstate_schema_version (id integer primary key check (id = 1), version text not null) strict",
     );
     db.exec(
-      "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
+      "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, space_did text not null default '', seen_up_to text not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
     );
     db.exec(
       "create table if not exists readstate.user_thread_activity (user_did text not null, thread_id text not null, space_did text not null default '', last_active_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, thread_id)) strict",
@@ -1518,158 +1519,6 @@ describe("moveMessages", () => {
   });
 });
 
-describe("moveMessages — read-state side effects", () => {
-  /**
-   * Seed a channel pair plus read positions in the read-state DB (reached via
-   * the process-wide handle `beforeEach` installs).
-   */
-  async function seedChannels(
-    db: Database,
-    positions: Array<{ roomId: string; seenUpTo: string; unreadCount: number }>,
-  ): Promise<{ source: string; dest: string }> {
-    const source = newUlid();
-    const dest = newUlid();
-    for (const id of [source, dest]) {
-      db.run("insert into entities (id, stream_id) values (?, ?)", [id, STREAM]);
-      db.run(
-        "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.channel', 'readwrite')",
-        [id],
-      );
-    }
-    for (const p of positions) {
-      await openReadStateDb().run(
-        `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-         values (?, ?, ?, ?, ?, ?)`,
-        [USER, p.roomId, STREAM, p.seenUpTo, p.unreadCount, Date.now()],
-      );
-    }
-    return { source, dest };
-  }
-
-  /**
-   * Materialize the message via a BACKFILL batch — it writes the row (and its
-   * `comp_content.timestamp`) without touching read-state, so the move's own
-   * effect is measured in isolation.
-   */
-  async function seedMessage(
-    asyncDb: DbLike,
-    roomId: string,
-    messageId: string,
-  ): Promise<void> {
-    await applyBatch(
-      asyncDb,
-      STREAM,
-      [decoded(createMessageEvent(roomId, messageId, "payload"), 1)],
-      { isBackfill: true },
-    );
-  }
-
-  test("an unread moved message leaves the source count and bumps the destination", async () => {
-    const { db, asyncDb } = freshDb();
-    seedSpace(db, STREAM);
-
-    const msgTs = Date.now() - 60_000;
-    const movedId = ulid(msgTs);
-    const { source, dest } = await seedChannels(db, []);
-    await seedMessage(asyncDb, source, movedId);
-
-    // The user read everything BEFORE the message (watermark below it), and
-    // tracks the destination with a caught-up count.
-    await openReadStateDb().run(
-      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values (?, ?, ?, ?, ?, ?)`,
-      [USER, source, STREAM, ulid(msgTs - 10_000), 1, Date.now()],
-    );
-    await openReadStateDb().run(
-      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values (?, ?, ?, ?, ?, ?)`,
-      [USER, dest, STREAM, "0", 0, Date.now()],
-    );
-
-    await applyBatch(
-      asyncDb,
-      STREAM,
-      [decoded(moveMessagesEvent(source, dest, newUlid(), movedId), 1)],
-      { isBackfill: false },
-    );
-
-    const readState = openReadStateDb();
-    const sourceRow = await readState
-      .query("select unread_count from read_positions where user_did = ? and room_id = ?")
-      .get<{ unread_count: number }>([USER, source]);
-    // The message was unread for this user, so moving it out removes exactly
-    // that one from the room's count.
-    expect(sourceRow?.unread_count).toBe(0);
-
-    const destRow = await readState
-      .query("select unread_count from read_positions where user_did = ? and room_id = ?")
-      .get<{ unread_count: number }>([USER, dest]);
-    // A channel move bumps every user tracking the destination.
-    expect(destRow?.unread_count).toBe(1);
-  });
-
-  test("an ALREADY-READ moved message does not decrement the source count", async () => {
-    const { db, asyncDb } = freshDb();
-    seedSpace(db, STREAM);
-
-    const msgTs = Date.now() - 60_000;
-    const movedId = ulid(msgTs);
-    const { source, dest } = await seedChannels(db, []);
-    await seedMessage(asyncDb, source, movedId);
-
-    // The watermark is PAST the moved message, and a later message is what
-    // the count of 1 refers to. A blind `-1 per moved message` would wrongly
-    // zero it; the exact decrement compares against the watermark instead.
-    await openReadStateDb().run(
-      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values (?, ?, ?, ?, ?, ?)`,
-      [USER, source, STREAM, ulid(msgTs + 10_000), 1, Date.now()],
-    );
-
-    await applyBatch(
-      asyncDb,
-      STREAM,
-      [decoded(moveMessagesEvent(source, dest, newUlid(), movedId), 1)],
-      { isBackfill: false },
-    );
-
-    const sourceRow = await openReadStateDb()
-      .query("select unread_count from read_positions where user_did = ? and room_id = ?")
-      .get<{ unread_count: number }>([USER, source]);
-    expect(sourceRow?.unread_count).toBe(1);
-  });
-
-  test("backfill replay skips the read-state mutations", async () => {
-    const { db, asyncDb } = freshDb();
-    seedSpace(db, STREAM);
-
-    const msgTs = Date.now() - 60_000;
-    const movedId = ulid(msgTs);
-    const { source } = await seedChannels(db, []);
-    await seedMessage(asyncDb, source, movedId);
-
-    await openReadStateDb().run(
-      `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values (?, ?, ?, ?, ?, ?)`,
-      [USER, source, STREAM, ulid(msgTs - 10_000), 1, Date.now()],
-    );
-
-    await applyBatch(
-      asyncDb,
-      STREAM,
-      [decoded(moveMessagesEvent(source, newUlid(), newUlid(), movedId), 1)],
-      { isBackfill: true },
-    );
-
-    const sourceRow = await openReadStateDb()
-      .query("select unread_count from read_positions where user_did = ? and room_id = ?")
-      .get<{ unread_count: number }>([USER, source]);
-    // Read-state is appserver-owned and not reconstructed by replay, so a
-    // replayed move must leave the live counts alone.
-    expect(sourceRow?.unread_count).toBe(1);
-  });
-});
-
 describe("sort keys are a pure function of the log", () => {
   /**
    * Materialise a room's messages into a fresh DB and read back the ordering
@@ -1807,3 +1656,143 @@ describe("sort keys are a pure function of the log", () => {
     expect(decodeTime(row!.sort_idx!)).toBe(decodeTime(event.id));
   });
 });
+
+describe("read state is derived, not written (plan P4)", () => {
+  /** The whole read-state DB, as a stable snapshot: it has no other writer here. */
+  async function readStateSnapshot(db: DbLike): Promise<string> {
+    const rows = await db
+      .query(
+        "select user_did, room_id, space_did, seen_up_to from read_positions order by user_did, room_id",
+      )
+      .all<Record<string, unknown>>();
+    return JSON.stringify(rows);
+  }
+
+  /** The unread counts the sidebar/board read path would derive, per room. */
+  async function derivedCounts(
+    spaceDb: DbLike,
+    userDid: string,
+    roomIds: string[],
+  ): Promise<number[]> {
+    const positions = await getReadPositions(openReadStateDb(), spaceDb, userDid, roomIds);
+    return roomIds.map((id) => positions.get(id)!.unreadCount);
+  }
+
+  /**
+   * A channel plus a thread under it, with users tracking both, so every
+   * read-state write the materialiser used to make is on the path:
+   * `user_thread_activity` (thread engagement), `user_room_participation`
+   * (the author's rooms) and the unread increments themselves.
+   */
+  async function seedTrackedRoom(
+    db: Database,
+    userDid: string,
+  ): Promise<{ channel: string; thread: string }> {
+    const channel = newUlid();
+    const thread = newUlid();
+    for (const id of [channel, thread]) {
+      db.run("insert into entities (id, stream_id) values (?, ?)", [id, STREAM]);
+    }
+    db.run(
+      "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.channel', 'readwrite')",
+      [channel],
+    );
+    db.run(
+      "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.thread', null)",
+      [thread],
+    );
+    // The read-state DB is one process-wide handle shared by both derivations
+    // below, so each gets its own reader — the same reader twice would collide
+    // on the read position's primary key.
+    await openReadStateDb().run(
+      "insert into user_thread_activity (user_did, thread_id, space_did, last_active_at) values (?, ?, ?, ?)",
+      [userDid, thread, STREAM, Date.now()],
+    );
+    return { channel, thread };
+  }
+
+  test("applying a batch twice leaves read-state byte-identical (P4a)", async () => {
+    const { db, asyncDb } = freshDb();
+    seedSpace(db, STREAM);
+    const { channel, thread } = await seedTrackedRoom(db, USER);
+    const events = [
+      decoded(createMessageEvent(channel, newUlid(), "one"), 1),
+      decoded(createMessageEvent(thread, newUlid(), "two"), 2),
+      decoded(createMessageEvent(channel, newUlid(), "three"), 3),
+    ];
+
+    await applyBatch(asyncDb, STREAM, events, { isBackfill: false });
+    const afterFirst = await readStateSnapshot(openReadStateDb());
+
+    // The same live batch again. Under the increment, `unread_count` and the
+    // activity windows would move on the second pass; a derived count cannot,
+    // because there is nothing on the write path to move.
+    await applyBatch(asyncDb, STREAM, events, { isBackfill: false });
+    expect(await readStateSnapshot(openReadStateDb())).toBe(afterFirst);
+  });
+
+  test("a replayed log yields the same read state as a live one (P4b)", async () => {
+    // One log, two derivations: applied live, and replayed from empty. Each
+    // gets its own reader, since the read-state DB is one process-wide handle.
+    const LIVE_READER = UserDid.assert("did:plc:p4-live-reader");
+    const REPLAY_READER = UserDid.assert("did:plc:p4-replay-reader");
+
+    const { db: liveDb, asyncDb: liveAsyncDb } = freshDb();
+    seedSpace(liveDb, STREAM);
+    const { channel, thread } = await seedTrackedRoom(liveDb, LIVE_READER);
+    await seedTrackedRoom(liveDb, REPLAY_READER);
+    const firstId = newUlid();
+    const events: LoggedEvent[] = [
+      decoded(createMessageEvent(channel, firstId, "one"), 1),
+      decoded(createMessageEvent(thread, newUlid(), "two"), 2),
+      decoded(createMessageEvent(channel, newUlid(), "three"), 3),
+      // A move: the other event class that used to adjust both rooms' counts.
+      decoded(moveMessagesEvent(channel, thread, newUlid(), firstId), 4),
+    ];
+
+    /** Read the channel and hold a position at exactly its current newest key. */
+    const openChannel = async (db: DbLike, reader: UserDid) => {
+      await openReadStateDb().run(
+        `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+         values (?, ?, ?, ?, ?)`,
+        [reader, channel, STREAM, await newestKey(db, channel), Date.now()],
+      );
+    };
+
+    // Live: the reader opens the channel halfway through the log, so their
+    // position is a real watermark and what follows is a derived, non-zero
+    // count against it.
+    await applyBatch(liveAsyncDb, STREAM, events.slice(0, 2), { isBackfill: false });
+    await openChannel(liveAsyncDb, LIVE_READER);
+    await applyBatch(liveAsyncDb, STREAM, events.slice(2), { isBackfill: false });
+
+    // Replay: the same log from empty, opened at the same point in the log.
+    const { asyncDb: replayAsyncDb } = freshDb();
+    await applyBatch(replayAsyncDb, STREAM, events.slice(0, 2), { isBackfill: true });
+    await openChannel(replayAsyncDb, REPLAY_READER);
+    await applyBatch(replayAsyncDb, STREAM, events.slice(2), { isBackfill: true });
+
+    // Same message set, same positions, same derived counts.
+    const rooms = [channel, thread];
+    const liveCounts = await derivedCounts(liveAsyncDb, LIVE_READER, rooms);
+    expect(await derivedCounts(replayAsyncDb, REPLAY_READER, rooms)).toEqual(liveCounts);
+    // The channel is genuinely unread for both, so equal counts is not
+    // vacuously equal zeros.
+    expect(liveCounts[0]).toBeGreaterThan(0);
+    const messageIds = async (db: DbLike) =>
+      (
+        await db
+          .query("select id from entities where room is not null order by id")
+          .all<{ id: string }>()
+      ).map((r) => r.id);
+    expect(await messageIds(replayAsyncDb)).toEqual(await messageIds(liveAsyncDb));
+  });
+});
+
+/** The newest message key in a room — what `updateSeen` anchors a position at. */
+async function newestKey(db: DbLike, roomId: string): Promise<string> {
+  const row = await db
+    .query("select max(sort_idx) as m from entities where room = ?")
+    .get<{ m: string | null }>(roomId);
+  return row?.m ?? "0";
+}

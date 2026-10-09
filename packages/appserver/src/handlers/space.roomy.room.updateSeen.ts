@@ -59,7 +59,6 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
     await requireRoomRead(db, roomId, userDid);
 
   let seenUpTo: string;
-  let unreadCount: number;
 
   if (seenUpToRaw === undefined) {
     // No watermark → mark everything as read up to the latest message.
@@ -68,7 +67,6 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
       .get<{ max_sort: string | null }>(roomId);
 
     seenUpTo = (maxRow?.max_sort as string) ?? "";
-    unreadCount = 0;
   } else {
     // Validate that the message exists and belongs to this room.
     const msgRow = await db
@@ -84,13 +82,6 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
     }
 
     seenUpTo = msgRow.sort_idx as string;
-
-    // One-time count of remaining messages after the watermark.
-    const countRow = await db
-      .query("select count(*) as n from entities where room = ? and sort_idx > ?")
-      .get<{ n: number }>(roomId, seenUpTo);
-
-    unreadCount = (countRow?.n as number) ?? 0;
   }
 
   // A one-shot write goes through `run`, not `prepare`/`finalize`: the worker
@@ -98,17 +89,20 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   // this handler runs on every mark-as-read. `run` compiles through the
   // worker's SQL cache, which is keyed by SQL text and therefore bounded by the
   // number of distinct statements rather than by call count.
+  //
+  // Only the position is stored. The unread count is derived from it on read
+  // (`deriveUnreadCounts`), so nothing here has to keep a count in step with
+  // the room's message set — marking read is a single row write.
   await mainDb.run(
-    `insert into read_positions (user_did, room_id, seen_up_to, unread_count, updated_at)
+    `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
      values (?, ?, ?, ?, (unixepoch() * 1000))
      on conflict(user_did, room_id) do update set
        seen_up_to = excluded.seen_up_to,
-       unread_count = excluded.unread_count,
        updated_at = excluded.updated_at`,
     userDid,
     roomId,
+    access.spaceId ?? "",
     seenUpTo,
-    unreadCount,
   );
 
   // Treat reads as engagement: reading a thread counts toward its activity

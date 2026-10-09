@@ -198,8 +198,9 @@ describe("getSpaces cache eviction is scoped to the callers whose list the space
         [SPACE_A, SPACE_B, roomId],
       );
     // The receiving-space invalidation only fires when the room has a reader
-    // with a read position (it rides the per-user unread diff).
-    seedReadPosition(ctx.db, USER_IN_BOTH, roomId, "0", 1);
+    // with a read position (it rides the per-user unread diff). The position
+    // sits before the message this test sends, so the reader is newly unread.
+    seedReadPosition(ctx.db, USER_IN_BOTH, roomId, "0");
 
     await warm(ctx, USER_IN_BOTH);
     await warm(ctx, USER_IN_B_ONLY);

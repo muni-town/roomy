@@ -2,16 +2,15 @@
  * Tests for the derived-state side-effects of `deleteMessage`.
  *
  * Deleting the entity rows alone would leave the appserver's derived state
- * describing a message that does not exist:
+ * describing a message that does not exist: the room's
+ * `activity_item.recent_message_ids` window would keep naming the deleted
+ * message, and the room would keep appearing in the activity feed after every
+ * one of its messages was deleted.
  *
- *   - the room's `activity_item.recent_message_ids` window would keep naming
- *     the deleted message (and the room would keep appearing in the activity
- *     feed after every one of its messages was deleted), and
- *   - every reader's `unread_count` would keep counting it, so an unread badge
- *     could never be cleared.
- *
- * These pin the unwind, including the two ways it can be wrong: decrementing
- * a message a user had already read, and going below zero.
+ * Read state needs no unwind, and that is the second thing these pin: the
+ * unread count is the difference between the reader's position and the room's
+ * message set, so removing a message from that set lowers every affected count
+ * on the next read, with no `read_positions` write anywhere in the delete path.
  */
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -21,11 +20,8 @@ import { Database } from "bun:sqlite";
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import type { DbLike } from "../db/types.ts";
 import type { DecodedStreamEvent } from "@roomy-space/sdk";
-import {
-  applyDeleteSideEffects,
-  captureDeleteSortIndexes,
-  collectPendingDeletes,
-} from "./deleteMessage.ts";
+import { applyDeleteSideEffects, collectPendingDeletes } from "./deleteMessage.ts";
+import { deriveUnreadCounts } from "../queries/readPositions.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = join(__dirname, "..", "db", "schema-space.sql");
@@ -118,19 +114,19 @@ function activityItemExists(db: Database): boolean {
   );
 }
 
-function seedReadPosition(db: Database, userDid: string, seenUpTo: string, unread: number) {
+function seedReadPosition(db: Database, userDid: string, seenUpTo: string) {
   db.run(
-    `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-     values (?, ?, ?, ?, ?, 0)`,
-    [userDid, ROOM, SPACE, seenUpTo, unread],
+    `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+     values (?, ?, ?, ?, 0)`,
+    [userDid, ROOM, SPACE, seenUpTo],
   );
 }
 
-function unreadOf(db: Database, userDid: string): number {
-  const row = db
-    .query("select unread_count from read_positions where user_did = ? and room_id = ?")
-    .get(userDid, ROOM) as { unread_count: number } | null;
-  return row?.unread_count ?? -1;
+/** The room's read-position rows, ordered, as the delete path must leave them. */
+function readPositionRows(db: Database): Array<{ user_did: string; seen_up_to: string }> {
+  return db
+    .query("select user_did, seen_up_to from read_positions order by user_did")
+    .all() as Array<{ user_did: string; seen_up_to: string }>;
 }
 
 /** The window timestamp of the newest remaining message (S2's ULID time). */
@@ -150,14 +146,9 @@ describe("deleteMessage side-effects", () => {
     ]);
 
     // Delete the newest message: the window must drop exactly that entry.
-    const sortIndexes = await captureDeleteSortIndexes(asyncDb, [S3]);
     db.run("delete from entities where id = ?", [S3]);
 
-    await applyDeleteSideEffects(
-      asyncDb,
-      [{ roomId: ROOM, sortIdx: sortIndexes.get(S3)! }],
-      { isBackfill: false },
-    );
+    await applyDeleteSideEffects(asyncDb, [{ roomId: ROOM }]);
 
     const window = readWindow(db);
     expect(window).not.toBeNull();
@@ -175,112 +166,74 @@ describe("deleteMessage side-effects", () => {
     seedMessage(db, S1, S1);
     seedActivityItem(db, [{ id: S1, ts: 1700000000000 }]);
 
-    const sortIndexes = await captureDeleteSortIndexes(asyncDb, [S1]);
     db.run("delete from entities where id = ?", [S1]);
 
-    await applyDeleteSideEffects(
-      asyncDb,
-      [{ roomId: ROOM, sortIdx: sortIndexes.get(S1)! }],
-      { isBackfill: false },
-    );
+    await applyDeleteSideEffects(asyncDb, [{ roomId: ROOM }]);
 
     // The room must stop being listed in the feed at all.
     expect(activityItemExists(db)).toBe(false);
   });
 
-  test("decrements exactly the messages that were unread", async () => {
+  test("a reader's unread count drops for a deleted message, with no row written", async () => {
     const { db: spaceDb, asyncDb } = freshDb();
-    const { db: readDb, asyncDb: readAsyncDb } = freshReadStateDb();
+    const { db: readDb } = freshReadStateDb();
     seedFixtures(spaceDb);
     seedMessage(spaceDb, S1, S1);
     seedMessage(spaceDb, S2, S2);
     seedMessage(spaceDb, S3, S3);
     seedActivityItem(spaceDb, [{ id: S3, ts: 1700000002000 }]);
-    // Alice has read S1 only (2 unread); Bob has read everything (0 unread).
-    seedReadPosition(readDb, ALICE, S1, 2);
-    seedReadPosition(readDb, BOB, S3, 0);
+    // Alice has read S1 only; Bob is caught up past everything.
+    seedReadPosition(readDb, ALICE, S1);
+    seedReadPosition(readDb, BOB, S3);
+    const before = readPositionRows(readDb);
 
-    const sortIndexes = await captureDeleteSortIndexes(asyncDb, [S3]);
+    const unreadOf = (userDid: string) =>
+      deriveUnreadCounts(asyncDb, [
+        { roomId: ROOM, seenUpTo: userDid === ALICE ? S1 : S3 },
+      ]);
+    expect(await unreadOf(ALICE)).toEqual([2]);
+
     spaceDb.run("delete from entities where id = ?", [S3]);
+    await applyDeleteSideEffects(asyncDb, [{ roomId: ROOM }]);
 
-    await applyDeleteSideEffects(
-      asyncDb,
-      [{ roomId: ROOM, sortIdx: sortIndexes.get(S3)! }],
-      { readStateDb: readAsyncDb, isBackfill: false },
-    );
-
-    // Alice loses the one unread message she still owed.
-    expect(unreadOf(readDb, ALICE)).toBe(1);
-    // Bob had already read it — his count must not go negative.
-    expect(unreadOf(readDb, BOB)).toBe(0);
+    // Alice loses the one unread message she still owed; Bob's count stays 0
+    // and cannot go negative.
+    expect(await unreadOf(ALICE)).toEqual([1]);
+    expect(await unreadOf(BOB)).toEqual([0]);
+    // The positions are the reader's own fact: the unwind writes nothing.
+    expect(readPositionRows(readDb)).toEqual(before);
   });
 
-  test("a message the user had already read does not decrement", async () => {
+  test("deleting a batch of unread messages drops them all at once", async () => {
     const { db: spaceDb, asyncDb } = freshDb();
-    const { db: readDb, asyncDb: readAsyncDb } = freshReadStateDb();
+    const { db: readDb } = freshReadStateDb();
     seedFixtures(spaceDb);
     seedMessage(spaceDb, S1, S1);
     seedMessage(spaceDb, S2, S2);
     seedMessage(spaceDb, S3, S3);
     seedActivityItem(spaceDb, [{ id: S3, ts: 1700000002000 }]);
-    // Alice is up to date: 0 unread, watermark past every message.
-    seedReadPosition(readDb, ALICE, S3, 0);
+    seedReadPosition(readDb, ALICE, S1);
 
-    const sortIndexes = await captureDeleteSortIndexes(asyncDb, [S1]);
-    spaceDb.run("delete from entities where id = ?", [S1]);
-
-    await applyDeleteSideEffects(
-      asyncDb,
-      [{ roomId: ROOM, sortIdx: sortIndexes.get(S1)! }],
-      { readStateDb: readAsyncDb, isBackfill: false },
-    );
-
-    expect(unreadOf(readDb, ALICE)).toBe(0);
-  });
-
-  test("deleting a batch decrements each unread message once", async () => {
-    const { db: spaceDb, asyncDb } = freshDb();
-    const { db: readDb, asyncDb: readAsyncDb } = freshReadStateDb();
-    seedFixtures(spaceDb);
-    seedMessage(spaceDb, S1, S1);
-    seedMessage(spaceDb, S2, S2);
-    seedMessage(spaceDb, S3, S3);
-    seedActivityItem(spaceDb, [{ id: S3, ts: 1700000002000 }]);
-    seedReadPosition(readDb, ALICE, S1, 2);
-
-    const sortIndexes = await captureDeleteSortIndexes(asyncDb, [S2, S3]);
     spaceDb.run("delete from entities where id in (?, ?)", [S2, S3]);
+    await applyDeleteSideEffects(asyncDb, [{ roomId: ROOM }, { roomId: ROOM }]);
 
-    await applyDeleteSideEffects(
-      asyncDb,
-      [
-        { roomId: ROOM, sortIdx: sortIndexes.get(S2)! },
-        { roomId: ROOM, sortIdx: sortIndexes.get(S3)! },
-      ],
-      { readStateDb: readAsyncDb, isBackfill: false },
-    );
-
-    expect(unreadOf(readDb, ALICE)).toBe(0);
+    expect(await deriveUnreadCounts(asyncDb, [{ roomId: ROOM, seenUpTo: S1 }])).toEqual([0]);
     expect(readWindow(spaceDb)!.map((e) => e.id)).toEqual([S1]);
   });
 
-  test("backfill rebuilds the window but leaves read-state alone", async () => {
+  test("backfill rebuilds the window and still leaves read-state alone", async () => {
     const { db: spaceDb, asyncDb } = freshDb();
-    const { db: readDb, asyncDb: readAsyncDb } = freshReadStateDb();
+    const { db: readDb } = freshReadStateDb();
     seedFixtures(spaceDb);
     seedMessage(spaceDb, S2, S2);
     seedActivityItem(spaceDb, [{ id: S3, ts: 1700000002000 }]);
-    seedReadPosition(readDb, ALICE, S1, 5);
+    seedReadPosition(readDb, ALICE, S1);
 
-    await applyDeleteSideEffects(
-      asyncDb,
-      [{ roomId: ROOM, sortIdx: S3 }],
-      { readStateDb: readAsyncDb, isBackfill: true },
-    );
+    await applyDeleteSideEffects(asyncDb, [{ roomId: ROOM }]);
 
     expect(readWindow(spaceDb)!.map((e) => e.id)).toEqual([S2]);
     // Replaying history must not touch appserver-owned read-state.
-    expect(unreadOf(readDb, ALICE)).toBe(5);
+    expect(readPositionRows(readDb)).toEqual([{ user_did: ALICE, seen_up_to: S1 }]);
   });
 });
 
@@ -299,28 +252,23 @@ describe("collectPendingDeletes", () => {
     } as unknown as DecodedStreamEvent;
   }
 
-  test("reads each victim's ordering key before the rows are deleted", async () => {
-    const { db, asyncDb } = freshDb();
+  test("collects one entry per targeted room", async () => {
+    const { db } = freshDb();
     seedFixtures(db);
-    seedMessage(db, S1, S1);
-    seedMessage(db, S2, S2);
 
-    const pending = await collectPendingDeletes(asyncDb, [
+    const pending = collectPendingDeletes([
       decodedDelete(ROOM, S1, 0),
       decodedDelete(ROOM, S2, 1),
     ]);
 
-    expect(pending).toEqual([
-      { roomId: ROOM, sortIdx: S1 },
-      { roomId: ROOM, sortIdx: S2 },
-    ]);
+    expect(pending).toEqual([{ roomId: ROOM }, { roomId: ROOM }]);
   });
 
   test("ignores non-delete events and deletes with no target", async () => {
-    const { db, asyncDb } = freshDb();
+    const { db } = freshDb();
     seedFixtures(db);
 
-    const pending = await collectPendingDeletes(asyncDb, [
+    const pending = collectPendingDeletes([
       {
         idx: 0,
         user: ALICE,
@@ -329,8 +277,8 @@ describe("collectPendingDeletes", () => {
       {
         idx: 1,
         user: ALICE,
-        // Delete with no messageId: nothing to unwind.
-        event: { id: S2, $type: "space.roomy.message.deleteMessage.v0", room: ROOM },
+        // Delete with no room: nothing to unwind.
+        event: { id: S2, $type: "space.roomy.message.deleteMessage.v0" },
       } as unknown as DecodedStreamEvent,
     ]);
 

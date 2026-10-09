@@ -29,7 +29,11 @@ import type { AppliedEvent, InvalidationEvent, MessageDiffOp, QueryNsid } from "
 import type { DbLike } from "../db/types.ts";
 import { openReadStateDb, openSpaceDb, tryOpenGlobalDb, tryOpenReadStateDb, tryOpenSpaceDb } from "../db/db.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
-import { getRoomReadPositionUsers, spaceHasUnreads } from "../queries/readPositions.ts";
+import {
+  deriveUnreadCounts,
+  getRoomReadPositionWatermarks,
+  spaceHasUnreads,
+} from "../queries/readPositions.ts";
 import { getMentionedDidsForMessage, resolveReplyToAuthors } from "../queries/mentions.ts";
 import { readRoomBoardFacts, roomActivityDiff } from "./roomActivity.ts";
 
@@ -41,9 +45,10 @@ import { readRoomBoardFacts, roomActivityDiff } from "./roomActivity.ts";
  * e.g. synthetic backfill events).
  *
  * @param event - The applied event to infer signals for.
- * @param db - Optional database instance. For per-space reads (`selectMessages`)
- *   this defaults to `openSpaceDb(event.streamDid)`; for read-state reads
- *   (`getRoomReadPositionUsers`) it defaults to `openReadStateDb()`.
+ * @param db - Optional database instance. For per-space reads (`selectMessages`,
+ *   `deriveUnreadCounts`) this defaults to `openSpaceDb(event.streamDid)`; for
+ *   read-state reads (`getRoomReadPositionWatermarks`) it defaults to
+ *   `openReadStateDb()`.
  * @param messageSnapshots - Optional pre-fetched message rows keyed by
  *   message id. When the caller has already batch-fetched the messages a
  *   batch of events will reference (e.g. `Router.onEventsApplied`), passing
@@ -398,30 +403,33 @@ async function handleCreateMessage(
     }));
   }
 
-  // Per-user unread-count diff. The materializer already bumped
-  // `unread_count + 1` for every user with a `read_positions` row for
-  // this room; one read here yields the affected user set. The
-  // SyncManager sends a dedicated `#roomMetadataDiff` frame to each
-  // user's connection, which patches `room.getMetadata.unreadCount`, the
-  // channel entry in the `space.getMetadata` sidebar tree, and — for the
-  // space list, whose only unread field is `hasUnreads` — that one boolean
-  // for the users whose SPACE this message made newly-unread.
-  const users = await getRoomReadPositionUsers(db ?? openReadStateDb(), roomId);
-  if (users.length > 0) {
-    // Determine which users became newly-unread: their unread_count went
-    // 0 → 1 with this message's +1 bump. Those users' room-count badges
-    // (channels-with-unreads / engaged-threads-with-unreads) increment.
-    const readState = db ?? openReadStateDb();
-    const ph = users.map(() => "?").join(",");
-    const unreadRows = await readState
-      .query(
-        `select user_did, unread_count from read_positions
-          where user_did in (${ph}) and room_id = ?`,
-      )
-      .all<{ user_did: string; unread_count: number }>([...users, roomId]);
-    const newlyUnread = unreadRows
-      .filter((r) => r.unread_count === 1)
-      .map((r) => r.user_did as UserDid);
+  // Per-user unread-count diff. One read yields the room's readers (the users
+  // holding a read position for it); their counts are derived from those
+  // positions against the message this event just added. The SyncManager sends
+  // a dedicated `#roomMetadataDiff` frame to each user's connection, which
+  // patches `room.getMetadata.unreadCount`, the channel entry in the
+  // `space.getMetadata` sidebar tree, and — for the space list, whose only
+  // unread field is `hasUnreads` — that one boolean for the users whose SPACE
+  // this message made newly-unread.
+  const readState = db ?? openReadStateDb();
+  const readers = await getRoomReadPositionWatermarks(readState, roomId);
+  if (readers.length > 0) {
+    const users = readers.map((r) => r.userDid);
+    const spaceDb = db ?? openSpaceDb(event.streamDid);
+    // A reader whose watermark sits before the new message is newly unread
+    // only if nothing else was unread for them — i.e. their count went 0 → 1.
+    // That also makes their room-count badges (channels-with-unreads /
+    // engaged-threads-with-unreads) increment. The message is the event's own
+    // row, which the materialiser keyed at this log position, so the count of
+    // messages past the watermark is exact.
+    const counts = await deriveUnreadCounts(
+      spaceDb,
+      users.map((userDid, i) => ({
+        roomId,
+        seenUpTo: readers[i]!.seenUpTo,
+      })),
+    );
+    const newlyUnread = users.filter((_, i) => counts[i] === 1);
 
     // Which of those users' SPACE also went newly-unread — they had no other
     // unread room in this space before this message. `getSpaces` carries only
@@ -436,7 +444,6 @@ async function handleCreateMessage(
     // cheaper room-id scan would count a room the reader cannot see (deleted,
     // role-gated) and silently drop a real flip.
     const spaceUnreadFlips = new Map<UserDid, true>();
-    const spaceDb = db ?? openSpaceDb(event.streamDid);
     for (const user of newlyUnread) {
       if (!(await spaceHasUnreads(readState, spaceDb, user, spaceId, undefined, roomId))) {
         spaceUnreadFlips.set(user, true);

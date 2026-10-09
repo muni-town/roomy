@@ -57,7 +57,7 @@ export const getRoomMetadataHandler: QueryHandler<
   let pos: ReadPosition;
   let unreadThreadCount = 0;
   if (userDid !== null) {
-    pos = await getReadPosition(mainDb, userDid, roomId);
+    pos = await getReadPosition(mainDb, db, userDid, roomId, access.spaceId ?? undefined);
     // Channel pages show a Threads-tab badge: engaged threads in this
     // channel with unreads. Thread rooms have no sibling-thread badge.
     if (access.parentChannelId === null) {

@@ -173,7 +173,7 @@ async function subscribedClient(): Promise<{
   seedRoom(ctx.db, CHANNEL, SPACE, "general");
   // A read-position row is what makes the reader a recipient of the per-user
   // unread patch; without it the room has no tracked readers to notify.
-  seedReadPosition(ctx.db, USER, CHANNEL, "0", 0);
+  seedReadPosition(ctx.db, USER, CHANNEL, "0");
 
   const ws = await openWs(ctx, USER);
   const sink = frameSink(ws);

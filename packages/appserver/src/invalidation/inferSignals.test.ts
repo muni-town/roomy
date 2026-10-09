@@ -12,7 +12,8 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { StreamDid, UserDid, Ulid, EventType } from "@roomy-space/sdk";
-import { type, schemas } from "@roomy-space/sdk";
+import { type, schemas, newUlid } from "@roomy-space/sdk";
+import { ulid } from "ulidx";
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import { inferSignals } from "./inferSignals.ts";
 import type { MessageDto } from "../queries/selectMessages.ts";
@@ -117,7 +118,7 @@ function seedMessageDb(opts: {
   // Attach readstate schema (handleCreateMessage reads read_positions).
   db.exec("attach database ':memory:' as readstate");
   db.exec(
-    "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, space_did text not null default '', seen_up_to text not null, unread_count integer not null default 0, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
+    "create table if not exists readstate.read_positions (user_did text not null, room_id text not null, space_did text not null default '', seen_up_to text not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, room_id)) strict",
   );
   db.exec(
     "create table if not exists readstate.user_thread_activity (user_did text not null, thread_id text not null, space_did text not null default '', last_active_at integer not null, updated_at integer not null default (unixepoch() * 1000), primary key (user_did, thread_id)) strict",
@@ -158,12 +159,12 @@ describe("inferSignals: message events", () => {
       authorName: "Alice",
       content: "hello",
     });
-    // Seed a read_positions row so getRoomUnreadCounts has a user to report.
-    // In production the materializer bumps unread_count before inferSignals
-    // runs; here we pre-seed the row to simulate that.
+    // Seed a read_positions row so the unread diff has a reader to report.
+    // The watermark sits before the message this event just added, so the
+    // derived count for that reader is 1: newly unread.
     db.run(
-      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
-      [USER_DID, ROOM_ID, "0", 1],
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to) values (?, ?, ?)",
+      [USER_DID, ROOM_ID, "0"],
     );
 
     const signals = await inferSignals(
@@ -218,8 +219,8 @@ describe("inferSignals: message events", () => {
       expect(roomDiff!.signal.delta).toBe(1);
       expect(roomDiff!.signal.users).toHaveLength(1);
       expect(roomDiff!.signal.users[0]).toBe(USER_DID);
-      // The seeded read_positions row has unread_count = 1 (the +1 bump
-      // already applied), so the user became newly-unread: the channel
+      // The reader's watermark sits before the new message and nothing else
+      // was unread, so this message makes them newly unread: the channel
       // room-count delta is +1 for them, and — with no other unread room in
       // the space — the SPACE flipped too.
       expect(roomDiff!.signal.roomUnreadDeltas?.get(USER_DID)).toBe(1);
@@ -280,10 +281,11 @@ describe("inferSignals: message events", () => {
       authorName: "Alice",
       content: "hello",
     });
-    // This message makes ROOM_ID newly-unread (unread_count 0 → 1)…
+    // This message makes ROOM_ID newly-unread: the reader's position is below
+    // the message the fixture just keyed, so the derived count goes 0 → 1…
     db.run(
-      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
-      [USER_DID, ROOM_ID, "0", 1],
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to) values (?, ?, '0')",
+      [USER_DID, ROOM_ID],
     );
     // …but the space already has an unread room, so the space was already
     // marked and `hasUnreads` cannot have moved.
@@ -291,9 +293,15 @@ describe("inferSignals: message events", () => {
     db.run("insert into entities (id, stream_id) values (?, ?)", [otherRoom, STREAM_DID]);
     db.run("insert into comp_room (entity, label) values (?, 'space.roomy.channel')", [otherRoom]);
     db.run(
-      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
-      [USER_DID, otherRoom, "0", 4],
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to) values (?, ?, '0')",
+      [USER_DID, otherRoom],
     );
+    for (let i = 0; i < 4; i++) {
+      db.run(
+        "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+        [newUlid(), STREAM_DID, otherRoom, ulid(Date.now() + i)],
+      );
+    }
 
     const signals = await inferSignals(
       makeEvent({
@@ -452,10 +460,10 @@ describe("inferSignals: message events", () => {
       authorName: "Alice",
       content: "hello",
     });
-    // Seed a read_positions row so the unread bump has a user to report.
+    // Seed a read_positions row so the unread diff has a reader to report.
     await asyncDb.run(
-      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
-      [USER_DID, ROOM_ID, "0", 1],
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to) values (?, ?, ?)",
+      [USER_DID, ROOM_ID, "0"],
     );
 
     // A federation: ROOM_ID (stream A = STREAM_DID) is granted to B and C.
@@ -1213,10 +1221,27 @@ describe("inferSignals: state events", () => {
   function seedChannel(db: Database, roomId: string, unread: number): void {
     db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [roomId, STREAM_DID]);
     db.run("insert into comp_room (entity, label) values (?, 'space.roomy.channel')", [roomId]);
+    // Unread is derived, so it is seeded as its two halves: a read position,
+    // and the messages past it. The fixture already put this room's message in
+    // (EVENT_ID, keyed by its own id), so the position is anchored at whatever
+    // the room holds now and then `unread` newer messages are added above it —
+    // leaving exactly `unread` unread, whether or not the room had any.
+    const anchor =
+      (
+        db
+          .query("select max(sort_idx) as m from entities where room = ?")
+          .get(roomId) as { m: string | null } | null
+      )?.m ?? "0";
     db.run(
-      "insert into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)",
-      [USER_DID, roomId, "0", unread],
+      "insert into readstate.read_positions (user_did, room_id, seen_up_to) values (?, ?, ?)",
+      [USER_DID, roomId, anchor],
     );
+    for (let i = 0; i < unread; i++) {
+      db.run(
+        "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+        [newUlid(), STREAM_DID, roomId, ulid(Date.now() + i)],
+      );
+    }
   }
 
   it("markRead invalidates room + space for the reader on a space drain", async () => {

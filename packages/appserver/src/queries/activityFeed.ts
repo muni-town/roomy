@@ -15,6 +15,7 @@ import { decodeContent } from "../db/content.ts";
 import { openSpaceDb } from "../db/db.ts";
 import { hydrateProfiles } from "./profileStore.ts";
 import { selectJoinedSpaceDids } from "./userSpaceMembership.ts";
+import { deriveUnreadCounts } from "./readPositions.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -129,8 +130,9 @@ const NOT_DELETED = "(cr.deleted is null or cr.deleted = 0)";
 /**
  * Select the activity feed by fanning out to per-space DBs.
  *
- * `mainDb` is the READ-STATE handle, used ONLY for the read-state unread-count
- * query (read_positions lives in the read-state DB). All other reads go
+ * `mainDb` is the READ-STATE handle, used ONLY for the read-state watermark
+ * query (read_positions lives in the read-state DB); the unread counts are
+ * derived from those watermarks against the per-space DBs. All other reads go
  * against the per-space DBs, one per joined space.
  */
 export async function selectActivityFeed(
@@ -221,10 +223,12 @@ export async function selectActivityFeed(
     for (const [k, v] of fetched) messagesData.set(k, v);
   }
 
-  // Step 6: fetch unread counts from the read-state handle (`read_positions`
-  // lives in the read-state DB, not in the per-space DBs).
+  // Step 6: derive unread counts. The watermark lives in the read-state DB
+  // (`read_positions`); the messages it is counted against live in the room's
+  // per-space DB, so the count is resolved per space — one range count per
+  // room, and no scan of the room's messages.
   const roomIds = pageRows.map((r) => r.room_id);
-  const unreadCounts = await batchFetchUnreadCounts(mainDb, userDid, roomIds);
+  const unreadCounts = await batchFetchUnreadCounts(mainDb, bySpace, userDid, roomIds);
 
   // Step 7: assemble feed items.
   const feed: ActivityFeedItem[] = pageRows.map((r) => {
@@ -380,32 +384,44 @@ async function batchFetchMessages(
 }
 
 /**
- * Batch-fetch unread counts for a set of room IDs.
+ * Derive unread counts for a page of feed rooms.
  * Returns a Map<roomId, unreadCount>.
  *
- * Uses a single batched query (WHERE IN) rather than N individual
- * prepared statements. The read-state DB is a separate database, so the
- * query targets `read_positions` directly.
+ * The watermarks come from one read-state query; each room's count is then a
+ * range count against the per-space DB that holds its messages, batched per
+ * space. `rowsBySpace` is the page's own grouping (room id → its space), so
+ * the fan-out matches the message fetch above rather than re-resolving each
+ * room's owning space.
  */
 async function batchFetchUnreadCounts(
-  db: DbLike,
+  readStateDb: DbLike,
+  rowsBySpace: ReadonlyMap<string, ActivityItemRow[]>,
   userDid: string,
-  roomIds: string[],
+  roomIds: readonly string[],
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
   if (roomIds.length === 0) return result;
 
-  const placeholders = roomIds.map(() => "?").join(",");
-  const rows = await db
+  const ph = roomIds.map(() => "?").join(",");
+  const rows = await readStateDb
     .query(
-      `select room_id, unread_count
+      `select room_id, seen_up_to
          from read_positions
-        where user_did = ? and room_id in (${placeholders})`,
+        where user_did = ? and room_id in (${ph})`,
     )
-    .all<{room_id: string; unread_count: number}>([userDid, ...roomIds]);
+    .all<{ room_id: string; seen_up_to: string }>(userDid, ...roomIds);
+  const watermarks = new Map(rows.map((r) => [r.room_id, r.seen_up_to]));
 
-  for (const row of rows) {
-    result.set(row.room_id, row.unread_count);
+  for (const [spaceDid, spaceRows] of rowsBySpace) {
+    const spaceRoomIds = spaceRows
+      .map((r) => r.room_id)
+      .filter((id) => watermarks.has(id));
+    if (spaceRoomIds.length === 0) continue;
+    const counts = await deriveUnreadCounts(
+      openSpaceDb(spaceDid),
+      spaceRoomIds.map((roomId) => ({ roomId, seenUpTo: watermarks.get(roomId)! })),
+    );
+    spaceRoomIds.forEach((roomId, i) => result.set(roomId, counts[i] ?? 0));
   }
 
   return result;

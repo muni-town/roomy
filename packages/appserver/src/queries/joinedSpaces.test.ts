@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { StreamDid, UserDid } from "@roomy-space/sdk";
+import { ulid } from "ulidx";
 import { closeDb, openDb, openReadStateDb, openSpaceDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
 import { selectJoinedSpaces } from "./joinedSpaces.ts";
@@ -264,22 +265,49 @@ describe("spaceHasUnreads", () => {
       );
     }
 
-    // Unread counts: t1 has 3 unread, t2 has 0, tOther has 5.
-    for (const [t, n] of [[t1, 3], [t2, 0], [tOther, 5]] as const) {
-      await rs.run(
-        "insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count) values (?, ?, ?, '0', ?)",
-        [USER, t, SPACE, n],
+    // Unread is the difference between a read position and a room's message
+    // set, so the counts are made of both: t1 has 3 messages past its
+    // position, t2 is read up to its last one, and tOther's 5 live in another
+    // space.
+    const keys = [
+      "01HF7YAT00Z8SA759H2SDDCH32",
+      "01HF7YATZ8WP5D8EG2QDZPWCNW",
+      "01HF7YAVYGAPZA41KB05BTJR1F",
+    ];
+    for (const k of keys) {
+      await spaceDb.run(
+        "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+        [ulid(), SPACE, t1, k],
       );
     }
+    for (const k of keys) {
+      await otherDb.run(
+        "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+        [ulid(), OTHER, tOther, k],
+      );
+    }
+    await rs.run(
+      "insert into read_positions (user_did, room_id, space_did, seen_up_to) values (?, ?, ?, '')",
+      [USER, t1, SPACE],
+    );
+    await rs.run(
+      "insert into read_positions (user_did, room_id, space_did, seen_up_to) values (?, ?, ?, ?)",
+      [USER, t2, SPACE, keys[2]],
+    );
+    await rs.run(
+      "insert into read_positions (user_did, room_id, space_did, seen_up_to) values (?, ?, ?, '')",
+      [USER, tOther, OTHER],
+    );
 
     // Only t1 (3 unread) belongs to this space; tOther is excluded — even
     // though it has unreads, it is not one of this space's rooms.
     expect(await spaceHasUnreads(rs, spaceDb, USER, SPACE)).toBe(true);
 
-    // Zeroing t1's unread count drains the space.
+    // Reading t1 up to its newest message drains the space: the position is
+    // the only fact, so moving it past the messages is what marks them read.
     await rs.run(
-      "update read_positions set unread_count = 0 where user_did = ? and room_id = ?",
-      [USER, t1],
+      "update read_positions set seen_up_to = ? where user_did = ? and room_id = ?",
+      [keys[2], USER, t1],
     );
     expect(await spaceHasUnreads(rs, spaceDb, USER, SPACE)).toBe(false);
   });

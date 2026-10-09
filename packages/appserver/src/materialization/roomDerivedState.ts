@@ -1,22 +1,24 @@
 /**
  * Derived state that depends on a room's CURRENT message set.
  *
- * Two operations must agree, wherever a room's messages are added or removed:
+ * `rebuildActivityWindow` recomputes `activity_item.recent_message_ids` from
+ * the room's newest message-shaped rows, deleting the row when the room is
+ * empty so the activity feed stops listing a gutted room.
  *
- *   - `rebuildActivityWindow` — recompute `activity_item.recent_message_ids`
- *     from the room's newest message-shaped rows, deleting the row when the
- *     room is empty so the activity feed stops listing a gutted room.
- *   - `decrementUnreadForRemovedMessages` — remove exactly the unread messages
- *     a user still owed when messages leave the room, never below zero.
+ * Both places a room's messages can grow or shrink — `moveMessages` (source
+ * room) and `deleteMessage` — need it, so it lives here rather than in either
+ * caller: a second copy is how the two paths drift.
+ *
+ * Unread is deliberately absent. It is the difference between a reader's
+ * position (`read_positions.seen_up_to`) and the room's message set, so a
+ * message leaving the room lowers every affected count the moment the delete
+ * or move lands — nothing here has to adjust it. See
+ * `queries/readPositions.ts:deriveUnreadCounts`.
  *
  * The `room_activity` board projection needs the same "a room's messages just
  * changed, re-derive its summary" step, but it lives with its own read path in
  * `queries/roomActivityProjection.ts` (`rebuildRoomActivity`), which owns the
- * projection's schema, maintenance rules and fallback. Only the unread unwind
- * and the feed window are shared from here.
- *
- * `moveMessages` (source room) and `deleteMessage` both need them, so they live
- * here rather than in either caller: a second copy is how the two paths drift.
+ * projection's schema, maintenance rules and fallback.
  */
 
 import type { DbLike } from "../db/types.ts";
@@ -68,52 +70,4 @@ export async function rebuildActivityWindow(db: DbLike, roomId: string): Promise
       where room_id = ?`,
     [entries[0]!.ts, JSON.stringify(entries), roomId],
   );
-}
-
-/**
- * Remove messages from every reader's unread count — exact, not a blind `-1`.
- *
- * A user's `unread_count` for a room counts the messages past their
- * `seen_up_to` watermark (createMessage adds one per message). Removing a
- * message must subtract only the messages that were still unread for that
- * user, and the watermark decides it: `originalSortIndexes` are the ordering
- * keys the messages held while they were in the room, and `seen_up_to` is
- * also a stored `sort_idx`, so comparing the two says whether each was unread.
- *
- * Blindly subtracting one per message would corrupt the count for users who
- * had already read them — the count is maintained incrementally, so this is
- * the only place with enough information to be exact.
- *
- * Callers pass the ordering key they can vouch for: a move reconstructs it
- * from `comp_content.timestamp` (the message's `sort_idx` has already been
- * rewritten by then), a delete passes the `sort_idx` it read before the row
- * was removed.
- */
-export async function decrementUnreadForRemovedMessages(
-  readStateDb: DbLike,
-  roomId: string,
-  originalSortIndexes: readonly string[],
-): Promise<void> {
-  if (originalSortIndexes.length === 0) return;
-
-  const rows = await readStateDb
-    .query(
-      `select user_did, seen_up_to, unread_count
-         from read_positions
-        where room_id = ? and unread_count > 0`,
-    )
-    .all<{ user_did: string; seen_up_to: string; unread_count: number }>([roomId]);
-  if (rows.length === 0) return;
-
-  for (const row of rows) {
-    const unreadRemoved = originalSortIndexes.filter((s) => s > row.seen_up_to).length;
-    if (unreadRemoved === 0) continue;
-    const next = Math.max(0, row.unread_count - unreadRemoved);
-    await readStateDb.run(
-      `update read_positions
-          set unread_count = ?, updated_at = (unixepoch() * 1000)
-        where user_did = ? and room_id = ?`,
-      [next, row.user_did, roomId],
-    );
-  }
 }

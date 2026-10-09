@@ -1,8 +1,8 @@
 # Pure Materialisation
 
 **Date:** 2026-10-02
-**Status:** Steps 1–2 landed; steps 3–5 not started. Per-space schema changes now
-migrate in place before falling back to a rebuild (§6a).
+**Status:** Steps 1–3 landed; steps 4 and 5 not started. Per-space schema changes
+now migrate in place before falling back to a rebuild (§6a).
 **Owner:** appserver
 
 ## 1. Problem

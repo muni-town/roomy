@@ -58,22 +58,27 @@ create table if not exists read_positions (
   user_did    text not null,
   room_id     text not null,
   space_did   text not null default '',  -- space stream DID (per-space split §1f)
-  seen_up_to  text not null,   -- sort_idx of the last-read message entity
-  unread_count integer not null default 0,
+  seen_up_to  text not null,   -- sort_idx of the last-read message entity, or '0'/''
   updated_at  integer not null default (unixepoch() * 1000),
   primary key (user_did, room_id)
 ) strict;
 
+-- A read position is one durable fact: where the user last read up to. The
+-- unread count is the difference between it and the room's message set, and is
+-- computed on read (`queries/readPositions.ts:deriveUnreadCounts`) rather than
+-- stored — the materialiser used to keep it as a counter (`+1` per message,
+-- `-1` per move/delete), which was neither deterministic nor idempotent and
+-- was a read-modify-write across two databases.
+
 -- Room-scoped read-state lookups. The primary key is (user_did, room_id), so
--- every query that filters by `room_id` alone — the createMessage unread bump
--- (`update ... where room_id = ?`), its `getRoomReadPositionUsers` read, and
--- the delete/move unwind (`select ... where room_id = ? and unread_count > 0`)
--- — had no usable index and scanned the WHOLE table. `read_positions` is
--- global across every space, so that scan cost grows with total readership,
--- not with the room being written to: on a production-sized table (~10M rows,
--- 50k rooms x 200 readers) a single scan measured ~1.1s, which a 50-delete
--- sendEvents batch multiplies into ~55s of worker time. Purely additive and
--- idempotent, so it is safe to declare here for every version.
+-- every query that filters by `room_id` alone — the push digest gate's audience
+-- read (`getRoomReadPositionWatermarks`) and the boot repair pass — had no
+-- usable index and scanned the WHOLE table. `read_positions` is global across
+-- every space, so that scan cost grows with total readership, not with the room
+-- being written to: on a production-sized table (~10M rows, 50k rooms x 200
+-- readers) a single scan measured ~1.1s, which a 50-delete sendEvents batch
+-- multiplies into ~55s of worker time. Purely additive and idempotent, so it is
+-- safe to declare here for every version.
 create index if not exists idx_read_positions_room on read_positions(room_id);
 
 create table if not exists user_thread_activity (

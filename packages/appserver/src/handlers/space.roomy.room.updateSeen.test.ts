@@ -4,14 +4,16 @@
  * (fire-and-forget); the handler reads the already-on-disk materialisation and
  * writes the watermark synchronously. These tests seed a room + messages, then
  * call the handler with NO materializer registered for the room's space and
- * assert the read_positions row is written correctly.
+ * assert the read position it writes is the one the reader's unread count is
+ * then derived from.
  */
 
 import { beforeEach, afterEach, describe, expect, test } from "bun:test";
 import { StreamDid, UserDid, newUlid } from "@roomy-space/sdk";
 
-import { closeDb, openDb, openReadStateDb } from "../db/db.ts";
+import { closeDb, openDb, openReadStateDb, openSpaceDb } from "../db/db.ts";
 import { updateSeenHandler } from "./space.roomy.room.updateSeen.ts";
+import { deriveUnreadCounts } from "../queries/readPositions.ts";
 
 const USER = UserDid.assert("did:plc:seen-user");
 const SPACE = StreamDid.assert("did:web:space.example");
@@ -19,13 +21,21 @@ const SPACE = StreamDid.assert("did:web:space.example");
 
 interface ReadPositionRow {
   seen_up_to: string;
-  unread_count: number;
 }
 
 async function readPosition(roomId: string): Promise<ReadPositionRow | null> {
   return openReadStateDb()
-    .query("select seen_up_to, unread_count from read_positions where user_did = ? and room_id = ?")
+    .query("select seen_up_to from read_positions where user_did = ? and room_id = ?")
     .get<ReadPositionRow>(USER, roomId);
+}
+
+/** The unread count that follows from the position the handler just wrote. */
+async function unreadFor(roomId: string): Promise<number> {
+  const row = await readPosition(roomId);
+  const [n] = await deriveUnreadCounts(openSpaceDb(SPACE), [
+    { roomId, seenUpTo: row?.seen_up_to ?? "" },
+  ]);
+  return n!;
 }
 
 let roomId: string;
@@ -81,7 +91,8 @@ describe("updateSeen", () => {
     const row = await readPosition(roomId);
     expect(row).not.toBeNull();
     expect(row?.seen_up_to).toBe("b"); // max(sort_idx)
-    expect(row?.unread_count).toBe(0);
+    // An explicit watermark at the newest message leaves nothing unread.
+    expect(await unreadFor(roomId)).toBe(0);
   });
 
   test("explicit seenUpTo → watermark at that message, unread counts the rest", async () => {
@@ -89,7 +100,8 @@ describe("updateSeen", () => {
 
     const row = await readPosition(roomId);
     expect(row?.seen_up_to).toBe("a"); // msgA's sort_idx
-    expect(row?.unread_count).toBe(1); // msgB is after the watermark
+    // msgB is after the watermark, so it is the one unread message.
+    expect(await unreadFor(roomId)).toBe(1);
   });
 
   test("reading a thread registers it as engagement (user_thread_activity)", async () => {

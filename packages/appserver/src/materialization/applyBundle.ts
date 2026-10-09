@@ -5,7 +5,7 @@
  * back cleanly without poisoning the rest of the batch. Partial application
  * is treated as a bug, not a feature.
  *
- * Side-effects (sort_idx, unread counter) live here rather than inside the SDK
+ * Side-effects (sort_idx, activity items) live here rather than inside the SDK
  * materialisers because materialisers are kept free of
  * backfill awareness.
  *
@@ -13,8 +13,9 @@
  * `globalDb` (optional) receives the
  * `joinedSpace`/`leftSpace` membership edges and the `SetUserProfile` global
  * profile write. `readStateDb` (optional) receives the read-state side-effects
- * (read_positions, user_thread_activity, user_room_participation) — the
- * per-space DB has no readstate tables.
+ * (user_thread_activity, user_room_participation) — the per-space DB has no
+ * readstate tables. Materialisation writes no read positions: unread is derived
+ * from the reader's position and the room's message set, never accumulated.
  *
  * Concurrency: `applyBundle` manages its SAVEPOINT via individual async
  * `db.exec` calls (each a separate worker message). Without serialization,
@@ -88,7 +89,7 @@ export function getSavepointMutex(streamId: string): AsyncMutex {
 }
 
 export interface ApplyBundleOpts {
-  /** True for backfill events — skips the unread-counter increment. */
+  /** True for backfill events — skips the read-state side-effects. */
   isBackfill: boolean;
   streamId: StreamDid;
   /** This event's log position — the sort key's tie-break. */
@@ -179,6 +180,14 @@ async function applyBundleInner(
 
     // ── Read-state side effects (readStateDb only) ────────────────────
     // readstate.* tables do not exist in the per-space DB.
+    //
+    // Unread is NOT tracked here. A reader's unread count is the difference
+    // between their read position (`read_positions.seen_up_to`, written only
+    // by `updateSeen`) and the room's message set, both of which the log
+    // already determines, so it is derived where it is read rather than
+    // incremented on every event that changes the message set. What remains
+    // below is the state the log cannot supply: which threads a user is
+    // tracking, and which rooms they have spoken in.
 
     if (
       !opts.isBackfill &&
@@ -187,41 +196,6 @@ async function applyBundleInner(
       readStateDb
     ) {
       const isThreadRoom = await cachedIsThread(bundle.event.room);
-
-      // Increment unread for all users tracking this room.
-      if (isThreadRoom) {
-        // Threads: only bump users who have engaged with this thread.
-        // Uses INSERT ... ON CONFLICT DO UPDATE so the read_positions row
-        // is created if it doesn't exist yet (lazy creation). The space_did
-        // and seen_up_to come from the per-space DB (opts.streamId is the
-        // space DID; max sort_idx is read from the per-space entities).
-        const maxSortRow = await db
-          .query("select max(sort_idx) as m from entities where room = ?")
-          .get<{ m: string | null }>(bundle.event.room);
-        const seenUpTo = maxSortRow?.m ?? "0";
-        await readStateDb.run(
-          `insert into read_positions (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-           select uta.user_did, ?, ?, ?, 1, (unixepoch() * 1000)
-             from user_thread_activity uta
-            where uta.thread_id = ?
-           on conflict(user_did, room_id) do update set
-             unread_count = unread_count + 1,
-             updated_at = (unixepoch() * 1000)`,
-          bundle.event.room,
-          opts.streamId,
-          seenUpTo,
-          bundle.event.room,
-        );
-      } else {
-        // Channels: bump all users with a read_positions row.
-        await readStateDb.run(
-          `update read_positions
-              set unread_count = unread_count + 1,
-                  updated_at = (unixepoch() * 1000)
-            where room_id = ?`,
-          bundle.event.room,
-        );
-      }
 
       // Track thread activity: a message in a thread refreshes the activity
       // window for every user tracking the thread (re-surfacing it in their

@@ -14,19 +14,60 @@
 
 import { describe, expect, test } from "bun:test";
 import { newUlid } from "@roomy-space/sdk";
-import { materializeSpace, readStateDb, startAppserver, type E2eContext } from "./helpers.ts";
+import {
+  materializeSpace,
+  readStateDb,
+  spaceDb,
+  startAppserver,
+  type E2eContext,
+} from "./helpers.ts";
 
 const SPACE = "did:plc:unread-gate-space";
 const USER = "did:plc:unread-gate-user";
 
-/** Set a room's unread count for the caller, overriding anything seeded. */
-async function setUnread(ctx: E2eContext, roomId: string, count: number): Promise<void> {
+/**
+ * Set a room's read position, which is the whole of its unread state: a
+ * position below the room's messages leaves them unread, and a position at or
+ * past them leaves none.
+ */
+async function setPosition(ctx: E2eContext, roomId: string, seenUpTo: string): Promise<void> {
   await readStateDb(ctx.db).run(
-    `insert into read_positions (user_did, room_id, seen_up_to, unread_count)
-     values (?, ?, '0', ?)
-     on conflict(user_did, room_id) do update set unread_count = excluded.unread_count`,
-    [USER, roomId, count],
+    `insert into read_positions (user_did, room_id, space_did, seen_up_to)
+     values (?, ?, ?, ?)
+     on conflict(user_did, room_id) do update set seen_up_to = excluded.seen_up_to`,
+    [USER, roomId, SPACE, seenUpTo],
   );
+}
+
+/** The newest message key in a room — the position a caught-up reader holds. */
+async function newestKey(ctx: E2eContext, roomId: string): Promise<string> {
+  const row = await spaceDb(ctx.db, SPACE)
+    .query("select max(sort_idx) as m from entities where room = ?")
+    .get<{ m: string | null }>(roomId);
+  return row?.m ?? "0";
+}
+
+/** Post one message into `roomId` through the real write path. */
+async function post(ctx: E2eContext, roomId: string): Promise<void> {
+  const res = await ctx.authedFetch(USER)(
+    `${ctx.baseUrl}/xrpc/space.roomy.space.sendEvents`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        spaceId: SPACE,
+        events: [
+          {
+            id: newUlid(),
+            $type: "space.roomy.message.createMessage.v0",
+            room: roomId,
+            body: { mimeType: "text/plain", data: { $bytes: "aGVsbG8=" } },
+            extensions: {},
+          },
+        ],
+      }),
+    },
+  );
+  expect(res.status).toBe(200);
 }
 
 /** Read getSpaces, reporting whether the response came from the cache. */
@@ -81,9 +122,11 @@ describe("getSpaces invalidation is gated on the hasUnreads flip", () => {
     const ctx = await startAppserver();
     const { roomId: roomA } = await materializeSpace(ctx, SPACE, USER, { roomName: "a" });
     const roomB = await createRoom(ctx, "b");
-    // Both rooms hold unreads, so the space is marked.
-    await setUnread(ctx, roomA, 3);
-    await setUnread(ctx, roomB, 2);
+    await post(ctx, roomB);
+    // Both rooms hold a message past the reader's position, so the space is
+    // marked.
+    await setPosition(ctx, roomA, "0");
+    await setPosition(ctx, roomB, "0");
 
     const warm = await readSpaces(ctx, QUERY);
     expect(warm.spaces.find((s) => s.id === SPACE)?.hasUnreads).toBe(true);
@@ -102,8 +145,9 @@ describe("getSpaces invalidation is gated on the hasUnreads flip", () => {
   test("a message that flips the space unread does not evict the list", async () => {
     const ctx = await startAppserver();
     const { roomId } = await materializeSpace(ctx, SPACE, USER, { roomName: "a" });
-    // Nothing unread anywhere — the space starts unmarked.
-    await setUnread(ctx, roomId, 0);
+    // Nothing unread anywhere — the reader is caught up, so the space starts
+    // unmarked.
+    await setPosition(ctx, roomId, await newestKey(ctx, roomId));
 
     const warm = await readSpaces(ctx, QUERY);
     expect(warm.spaces.find((s) => s.id === SPACE)?.hasUnreads).toBe(false);

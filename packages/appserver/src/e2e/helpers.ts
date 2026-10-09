@@ -31,6 +31,7 @@ import { _resetProfileStoreCache, _setTestGetProfiles } from "../queries/profile
 import { _setTestGetRoomyProfileRecord } from "../materialization/roomyProfile.ts";
 import { _resetProfileNegativeCache } from "../materialization/profiles.ts";
 import { newUlid } from "@roomy-space/sdk";
+import { ulid } from "ulidx";
 import type { Database } from "bun:sqlite";
 
 // ─── Appserver lifecycle ─────────────────────────────────────────────────
@@ -469,19 +470,47 @@ export function seedActivityItem(
 /**
  * Seed a read position in the read-state DB (read-state is its own routed
  * DB, `data/roomy-readstate.sqlite`).
+ *
+ * `seenUpTo` is the whole fact: it is the room's message key the reader last
+ * saw, and the unread count every reader derives from it.
  */
 export function seedReadPosition(
   db: Database,
   userDid: string,
   roomId: string,
   seenUpTo: string,
-  unreadCount?: number,
 ): void {
   readStateDb(db).run(
-    `insert or ignore into read_positions (user_did, room_id, seen_up_to, unread_count)
-     values (?, ?, ?, ?)`,
-    [userDid, roomId, seenUpTo, unreadCount ?? 0],
+    `insert or replace into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+     values (?, ?, '', ?, ?)`,
+    [userDid, roomId, seenUpTo, Date.now()],
   );
+}
+
+/**
+ * Give a reader exactly `count` unread messages in a room.
+ *
+ * The count is derived, not stored, so this seeds both halves of the
+ * difference: a read position below the room's messages, and `count` messages
+ * keyed above it. The anchor is the placeholder `'0'`, which sorts below every
+ * real key — so the count is exactly the messages seeded here, whether or not
+ * the room already held any.
+ */
+export function seedUnreadMessages(
+  db: Database,
+  userDid: string,
+  roomId: string,
+  spaceId: string,
+  count: number,
+): void {
+  seedReadPosition(db, userDid, roomId, "0");
+
+  // Keys one millisecond apart from now, ascending and real ULIDs, so they
+  // sort past the placeholder and past each other.
+  const at = Date.now();
+  for (let i = 0; i < count; i++) {
+    seedMessage(db, newUlid(), roomId, spaceId, ulid(at + i));
+  }
 }
 
 // ─── DB routing ──────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import {
   seedUser,
   seedActivityItem,
   seedReadPosition,
+  seedUnreadMessages,
   spaceDb,
   readStateDb,
   type E2eContext,
@@ -130,10 +131,12 @@ describe("space.roomy.space.getSpaces", () => {
     seedSpace(db, SPACE, USER);
     seedJoinedSpace(db, USER, SPACE);
 
-    // Channel with unread messages.
+    // Channel with unread messages. Unread is derived from the read position
+    // and the room's message set, so three unread messages means three
+    // messages posted past the position.
     const channel = newUlid();
     seedRoom(db, channel, SPACE);
-    seedReadPosition(db, USER, channel, "0", 3);
+    seedUnreadMessages(db, USER, channel, SPACE, 3);
 
     // Engaged thread with unread messages (user_thread_activity + read_positions).
     const thread = newUlid();
@@ -143,7 +146,7 @@ describe("space.roomy.space.getSpaces", () => {
        values (?, ?, ?, ?, ?)`,
       [USER, thread, SPACE, Date.now(), Date.now()],
     );
-    seedReadPosition(db, USER, thread, "0", 1);
+    seedUnreadMessages(db, USER, thread, SPACE, 1);
 
     // Each read uses a distinct param variant so the response cache (keyed on
     // params) cannot serve the previous body.
@@ -161,11 +164,17 @@ describe("space.roomy.space.getSpaces", () => {
     // Unread messages anywhere in the space read as one boolean.
     expect((await read("?includeLeft=false"))?.hasUnreads).toBe(true);
 
-    // Zeroing every room's unread count flips it back to false.
-    await readStateDb(db).run(
-      "update read_positions set unread_count = 0 where user_did = ?",
-      USER,
-    );
+    // Marking every room read flips it back to false. Going through the real
+    // procedure is what advances the position to each room's newest message —
+    // the unread count is the messages past that position, so there is no
+    // separate counter to zero.
+    for (const roomId of [channel, thread]) {
+      const read = await ctx.authedFetch(USER)(
+        `${ctx.baseUrl}/xrpc/space.roomy.room.updateSeen`,
+        { method: "POST", body: JSON.stringify({ roomId }) },
+      );
+      expect(read.status).toBe(200);
+    }
     expect((await read("?includeLeft=true"))?.hasUnreads).toBe(false);
   });
 });
@@ -345,7 +354,9 @@ describe("space.roomy.space.getThreads", () => {
       [Date.now(), msgId],
     );
     seedActivityItem(db, channel, SPACE, Date.now());
-    seedReadPosition(db, USER, channel, "a", 2);
+    // The watermark sits before the room's only message, so that message is
+    // the room's one unread.
+    seedReadPosition(db, USER, channel, "0");
 
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.space.getThreads?spaceId=${SPACE}`,
@@ -356,7 +367,7 @@ describe("space.roomy.space.getThreads", () => {
     expect(room).toBeDefined();
     expect(room.kind).toBe("channel");
     expect(room.name).toBe("general");
-    expect(room.unreadCount).toBe(2);
+    expect(room.unreadCount).toBe(1);
     expect(room.unread).toBe(true);
     expect(room.channel).toBeUndefined();
   });
@@ -549,8 +560,8 @@ describe("space.roomy.room.getMetadata", () => {
         [USER, t, SPACE, Date.now(), Date.now()],
       );
     }
-    seedReadPosition(db, USER, t1, "0", 2); // unread
-    seedReadPosition(db, USER, t2, "0", 0); // read
+    seedUnreadMessages(db, USER, t1, SPACE, 2); // unread
+    seedReadPosition(db, USER, t2, "0"); // read
 
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.room.getMetadata?roomId=${channel}`,
@@ -641,7 +652,7 @@ describe("space.roomy.search.rooms", () => {
     );
     seedUser(db, USER, "author.test");
     seedActivityItem(db, coordination, SPACE, Date.now());
-    seedReadPosition(db, USER, coordination, "a", 2);
+    seedReadPosition(db, USER, coordination, "0");
 
     const res = await ctx.authedFetch(USER)(
       `${ctx.baseUrl}/xrpc/space.roomy.search.rooms?spaceId=${SPACE}&q=coordination`,
@@ -681,7 +692,7 @@ describe("space.roomy.search.rooms", () => {
     expect(channelHit!.activity!.latestMembers.length).toBeGreaterThanOrEqual(1);
     expect(channelHit!.activity!.latestMembers[0]!.did).toBe(USER);
     expect(channelHit!.activity!.latestMessage?.content).toContain("hello");
-    expect(channelHit!.unreadCount).toBe(2);
+    expect(channelHit!.unreadCount).toBe(1);
     expect(channelHit!.unread).toBe(true);
 
     // The thread has no messages — empty activity, not unread.
