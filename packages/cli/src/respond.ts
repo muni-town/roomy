@@ -266,14 +266,16 @@ export async function respond(
   // stdin event. 5s poll keeps lock churn negligible (peek is one tiny read).
   //
   // A job stranded in `active` by a dead holder is not in `enqueued`, so the
-  // `enqueued > 0` check alone would never trigger a pump here — and if the
-  // holder died while its lock was still within TTL (the lock has not yet gone
-  // stale), the boot heal is also a no-op. The orphan would then sit forever
-  // with no external stdin event to reclaim it. Extend the predicate to pump
-  // whenever a foreign-dead holder's `active` job remains outstanding; the
-  // pump's `acquire()` then takes over the stale lock and `requeueStaleActive`
-  // heals the job back to the queue head. `lock.info()` is one tiny read, so
-  // the extra check keeps the 5s poll's lock churn negligible.
+  // `enqueued > 0` check alone would never trigger a pump here, and the boot
+  // heal runs only at startup. Extend the predicate to pump whenever a job is
+  // left `active` behind a lock that is stale or absent: a job is only ever
+  // `active` while its holder holds the lock (acquire → claim → run → finish →
+  // release), so `active` with no lock file means the holder released the lock
+  // and stopped before the job reached `done`/`failed` (e.g. the `finish` write
+  // fails on a full disk while `release` — an unlink — still succeeds). The
+  // pump's `acquire()` then takes the free lock and `requeueStaleActive` heals
+  // the job back to the queue head. `lock.info()` is one tiny read, so the
+  // extra check keeps the 5s poll's lock churn negligible.
   const drainIntervalMs = opts.drainIntervalMs ?? 5_000;
   const drainTimer = setInterval(() => {
     const state = queue.status();
@@ -282,7 +284,7 @@ export async function respond(
       return;
     }
     const lockInfo = lock.info();
-    if (state.active && lockInfo && lockInfo.stale) void pump();
+    if (state.active && (lockInfo?.stale ?? true)) void pump();
   }, drainIntervalMs);
   drainTimer.unref();
 

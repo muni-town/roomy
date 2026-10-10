@@ -114,6 +114,65 @@ describe("respond reclaims a stranded active job", () => {
       }
     },
   );
+
+  test(
+    "an active job behind an absent lock is reclaimed without any stdin event",
+    { timeout: 20_000 },
+    async () => {
+      // The sibling of the stale-lock case: the holder released the lock (an
+      // unlink, which can still succeed on a full disk) but never wrote
+      // `finish`, so the job is stranded `active` with `lock.info()` === null.
+      // Only the drain timer can notice it — no stdin event arrives, and the
+      // boot heal has already come and gone.
+      const dir = tmpdir();
+      const queueFile = path.join(dir, "queue.json");
+      const lockFile = `${queueFile}.lock`;
+
+      const drainIntervalMs = 25;
+      const lockTtlMs = 25;
+
+      const originalStdin = process.stdin;
+      try {
+        const stdin = new Readable({ read() {} });
+        (process.stdin as unknown) = stdin;
+
+        const respondDone = respond(fakeXrpc, { did: "did:plc:agent" }, {
+          queueFile,
+          lockFile,
+          lockTtlMs,
+          drainIntervalMs,
+          continuity: false,
+          traceThreads: false,
+          streamThinking: false,
+          thinking: false,
+        });
+
+        // Boot idle: drain timer running, no jobs, no lock file.
+        await new Promise((r) => setTimeout(r, 100));
+
+        const queue = new QueueStore(queueFile);
+        const job = queue.enqueue("cron", cronPayload("orphaned"));
+        queue.claim(job.id);
+        expect(queue.status().active?.id).toBe(job.id);
+        // The holder is gone and its lock file with it.
+        expect(fs.existsSync(lockFile)).toBe(false);
+
+        await waitFor(() => {
+          const s = queue.status();
+          return s.active === null && s.done.some((j) => j.id === job.id);
+        }, 3_000);
+
+        const state = queue.status();
+        expect(state.done.find((j) => j.id === job.id)?.status).toBe("done");
+        expect(state.active).toBeNull();
+
+        stdin.push(null);
+        await respondDone;
+      } finally {
+        (process.stdin as unknown) = originalStdin;
+      }
+    },
+  );
 });
 
 describe("resolveTraceTarget: a channel's trace never lands in the channel", () => {
