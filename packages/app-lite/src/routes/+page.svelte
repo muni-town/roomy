@@ -26,7 +26,7 @@
 
   const homeTitle = $derived("Roomy");
   const homeDescription = $derived("Cozy community spaces; cultivate your digital gardens.");
-  const homeImage = $derived("https://roomy.space/logo/roomy_blob_flat.png");
+  const homeImage = $derived("https://roomy.space/roomy-og.png");
 </script>
 
 <SeoMeta title={homeTitle} description={homeDescription} image={homeImage} />

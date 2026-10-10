@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { base } from "$app/paths";
-
   let {
     title,
     description,
@@ -17,7 +15,7 @@
     siteName?: string;
   } = $props();
 
-  const defaultImage = `${base}/logo/roomy_blob_flat.png`;
+  const defaultImage = `https://roomy.space/roomy-og.png`;
   const ogImage = $derived(image ?? defaultImage);
 </script>
 
