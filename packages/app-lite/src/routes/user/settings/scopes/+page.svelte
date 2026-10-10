@@ -3,7 +3,7 @@
   import Switch from "@roomy/design/components/ui/toggle/Toggle.svelte";
   import { IconChevronRight } from "@roomy/design/icons";
   import { toast } from "@foxui/core";
-  import { auth, requestScopeExpansion, revokeScopeSettings } from "$lib/auth.svelte";
+  import { auth, requestScopeExpansion, revokeCapability } from "$lib/auth.svelte";
   import { createScopeSettingsQuery } from "$lib/queries/scope-settings";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { hasScopeSet, type RequestableScopeSetName } from "$lib/scopes";
@@ -26,8 +26,8 @@
    *
    * The `base` tier is deliberately absent: every session carries it and the
    * app cannot work without it, so it is not a choice this page offers. Each
-   * tier here is `base` plus its own additions — the tiers are alternatives,
-   * never layers on top of one another.
+   * row here adds its own scopes on top of `base`; the switches are
+   * independent, and what is saved is the union of every one that is on.
    */
   const CAPABILITIES: readonly {
     tier: RequestableScopeSetName;
@@ -52,7 +52,7 @@
    * What the server holds as the saved grant — the scope the next sign-in will
    * ask for. The switches mirror this rather than the live token: removing a
    * capability narrows what is saved and leaves the running session untouched
-   * (see `revokeScopeSettings`), so a switch wired to the live token would
+   * (see `revokeCapability`), so a switch wired to the live token would
    * spring back on the moment it was turned off.
    */
   const savedScope = $derived(settingsQuery.data?.scope ?? null);
@@ -65,24 +65,6 @@
   function awaitingConfirmation(tier: RequestableScopeSetName): boolean {
     const requested = settingsQuery.data?.requestedScope;
     return !!requested && hasScopeSet(requested, tier) && !saved(tier);
-  }
-
-  /**
-   * What acting on one capability does to the other, when that is anything.
-   *
-   * Neither direction is a per-row edit: confirming a capability sends a fresh
-   * request for `base` plus that tier alone, and removing one resets the saved
-   * grant to `base`. Either way the other tier goes with it — but only when the
-   * other tier was saved to begin with, so the note appears only then, on the
-   * row the user is acting on rather than in the result.
-   */
-  function crossEffect(tier: RequestableScopeSetName): string | null {
-    const other = CAPABILITIES.find((c) => c.tier !== tier);
-    if (!other || !saved(other.tier)) return null;
-    const otherName = other.name.toLowerCase();
-    return saved(tier)
-      ? `Turning this off also stops asking for ${otherName} when you next sign in.`
-      : `Confirming this replaces your saved access — ${otherName} turns off.`;
   }
 
   let busy = $state<RequestableScopeSetName | null>(null);
@@ -113,7 +95,7 @@
         await requestScopeExpansion(tier);
         return; // browser navigates to the provider's consent screen
       }
-      await revokeScopeSettings();
+      await revokeCapability(tier);
       await refresh();
       toast.success(
         "Saved. This takes effect the next time you sign in — the session " +
@@ -188,7 +170,6 @@
 
       {#each CAPABILITIES as { tier, name, description } (tier)}
         {@const isSaved = saved(tier)}
-        {@const effect = crossEffect(tier)}
         {@const waiting = awaitingConfirmation(tier)}
         <li class="flex items-start justify-between gap-6 px-4 py-4 sm:px-5">
           <div class="min-w-0">
@@ -208,10 +189,6 @@
               <p class="mt-2 text-xs text-base-500 dark:text-base-400">
                 Waiting for confirmation — this arrives the next time you sign
                 in.
-              </p>
-            {:else if effect}
-              <p class="mt-2 text-xs text-base-500 dark:text-base-400">
-                {effect}
               </p>
             {/if}
           </div>

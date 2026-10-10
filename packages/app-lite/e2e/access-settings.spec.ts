@@ -12,7 +12,9 @@
  *     Every token in the ceiling is a `kind:value` string, so a `:` is the
  *     signal that one leaked.
  *   - the switch reads the user's saved grant rather than a constant: the spec
- *     serves two different `getScopeSettings` responses and the switch follows.
+ *     serves three different `getScopeSettings` responses and the switches
+ *     follow — including a saved UNION of every capability, which must light
+ *     both switches rather than trade one for the other.
  *
  * The seed enables the flag globally (see `seed.ts`), so the flag-on case runs
  * against the real projection. The flag-off case rewrites the `getFlags`
@@ -23,7 +25,7 @@
 import { expect, test, waitForAuthenticated } from "./spec-helpers.ts";
 import type { Page } from "@playwright/test";
 import { APPSERVER_DID, APPSERVER_HTTP_ORIGIN, TEST_USER_DID } from "./fixtures.ts";
-import { SCOPE_SETS } from "../src/lib/scopes.ts";
+import { SCOPE_SETS, capabilityScope } from "../src/lib/scopes.ts";
 
 /**
  * The tier scopes as the *browser* computes them — the comparison the page
@@ -38,6 +40,11 @@ import { SCOPE_SETS } from "../src/lib/scopes.ts";
 const BROWSER_TIERS = {
   semble: SCOPE_SETS.semble.replaceAll("did:web:api.roomy.space", APPSERVER_DID),
   withDms: SCOPE_SETS.withDms.replaceAll("did:web:api.roomy.space", APPSERVER_DID),
+  /** `base` ∪ Semble ∪ DMs — the union both capability switches produce. */
+  union: capabilityScope(["semble", "withDms"]).replaceAll(
+    "did:web:api.roomy.space",
+    APPSERVER_DID,
+  ),
 } as const;
 
 /** Serve `getFlags` with `access-settings` removed, before navigation. */
@@ -155,5 +162,26 @@ test.describe("access-settings flag", () => {
       "aria-checked",
       "false",
     );
+  });
+
+  test("a saved union grant lights every switch it covers", async ({ page }) => {
+    // Enabling one capability must not displace another: the saved grant is the
+    // union of everything the user turned on, so a grant carrying both Semble
+    // and DMs shows both switches on. A model where each capability replaces
+    // the others cannot render this — it would have to pick one.
+    await withStoredGrant(page, BROWSER_TIERS.union);
+    await page.goto("/user/settings/scopes");
+    await waitForAuthenticated(page);
+    await expect(page.getByText("What Roomy can do")).toBeVisible();
+
+    await expect(page.locator(SEMBLE_SWITCH)).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(page.locator(DMS_SWITCH)).toHaveAttribute("aria-checked", "true");
+
+    // No switch acts on another, so the page carries no copy claiming one does.
+    await expect(page.getByText("also stops asking for")).toHaveCount(0);
+    await expect(page.getByText("replaces your saved access")).toHaveCount(0);
   });
 });

@@ -19,11 +19,14 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  CAPABILITY_SCOPES,
   SCOPE_SETS,
   REQUESTABLE_SCOPE_SETS,
   FULL_SCOPE_CEILING,
   UNREGISTERED_SCOPES,
   CLIENT_ID_SCOPE,
+  capabilityScope,
+  coveredCapabilities,
   parseScopes,
   hasScopeSet,
   scopeWithinCeiling,
@@ -152,6 +155,93 @@ describe("reconcileScope", () => {
     const doubled = `${base} ${base}`;
     const out = reconcileScope(doubled, base, ceiling);
     assert.deepEqual([...parseScopes(out)], [...parseScopes(base)]);
+  });
+});
+
+describe("capabilityScope", () => {
+  test("is the deduped union of base and every enabled capability's extras", () => {
+    // The whole point of the union model: an enabled capability ADDS its
+    // extras, it does not replace another's. `{semble, withDms}` must therefore
+    // contain all three sets, each token once.
+    const union = capabilityScope(["semble", "withDms"]);
+    const tokens = parseScopes(union);
+    for (const s of [
+      ...parseScopes(SCOPE_SETS.base),
+      ...CAPABILITY_SCOPES.semble,
+      ...CAPABILITY_SCOPES.withDms,
+    ]) {
+      assert.ok(tokens.has(s), `union missing ${s}`);
+    }
+    assert.equal(union.split(" ").length, tokens.size);
+  });
+
+  test("enabling a second capability does not drop the first", () => {
+    // This is the behaviour the settings page's independent switches promise:
+    // {semble} ⊆ {semble, withDms}, so requesting the wider union still covers
+    // everything the narrower one did.
+    const semble = parseScopes(capabilityScope(["semble"]));
+    const both = parseScopes(capabilityScope(["semble", "withDms"]));
+    for (const s of semble) assert.ok(both.has(s), `union dropped ${s}`);
+    assert.ok(both.size > semble.size, "expected the union to be strictly wider");
+  });
+
+  test("with no capability enabled it is exactly base", () => {
+    assert.deepEqual(
+      [...parseScopes(capabilityScope([]))],
+      [...parseScopes(SCOPE_SETS.base)],
+    );
+  });
+
+  test("keeps base order first, then the capabilities' extras", () => {
+    const tokens = capabilityScope(["withDms", "semble"]).split(" ");
+    assert.deepEqual(tokens.slice(0, parseScopes(SCOPE_SETS.base).size), [
+      ...parseScopes(SCOPE_SETS.base),
+    ]);
+  });
+
+  test("drops a capability's extras that the ceiling does not declare", () => {
+    // The loopback client id deliberately declares base + semble only. Asking
+    // for DMs there must not emit a token the client cannot request — the PDS
+    // rejects the whole authorization with invalid_scope.
+    const loopback = capabilityScope(["semble", "withDms"], SCOPE_SETS.base, CLIENT_ID_SCOPE);
+    const tokens = parseScopes(loopback);
+    for (const s of CAPABILITY_SCOPES.semble) assert.ok(tokens.has(s));
+    for (const s of CAPABILITY_SCOPES.withDms) assert.equal(tokens.has(s), false);
+    assert.equal(scopeWithinCeiling(loopback, CLIENT_ID_SCOPE), true);
+  });
+
+  test("every token of a full-ceiling union is declared in the ceiling", () => {
+    const union = capabilityScope(["semble", "withDms"], SCOPE_SETS.base, FULL_SCOPE_CEILING);
+    assert.equal(scopeWithinCeiling(union, FULL_SCOPE_CEILING), true);
+  });
+});
+
+describe("coveredCapabilities", () => {
+  test("names every capability whose extras the scope carries", () => {
+    assert.deepEqual(coveredCapabilities(capabilityScope(["semble", "withDms"])), [
+      "semble",
+      "withDms",
+    ]);
+  });
+
+  test("is the inverse of capabilityScope for a base-only grant", () => {
+    assert.deepEqual(coveredCapabilities(SCOPE_SETS.base), []);
+    assert.deepEqual(coveredCapabilities(capabilityScope(["semble"])), ["semble"]);
+  });
+
+  test("null and empty grants cover nothing", () => {
+    assert.deepEqual(coveredCapabilities(null), []);
+    assert.deepEqual(coveredCapabilities(""), []);
+  });
+
+  test("a partial capability's extras do not count as covered", () => {
+    // Half of a capability's tokens is not the capability: narrowing must not
+    // treat a hand-narrowed grant as still having it on.
+    const partial = capabilityScope(["semble"])
+      .split(" ")
+      .filter((s) => s !== CAPABILITY_SCOPES.semble[0])
+      .join(" ");
+    assert.deepEqual(coveredCapabilities(partial), []);
   });
 });
 

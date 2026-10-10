@@ -6,8 +6,11 @@ storage) #253 (`41b7ae56`), P2 (client scope refactor) #259 (`00200a1d`), P3
 (client grant tracking + server sync) #260 (`84f2e008`), P4 (metadata ceiling +
 user-editable access settings) #263 (`32060f13`), P5 (reactive consent dialogue)
 #265 (`89863b76`), P6 (the Semble personal collection — the first tier reached
-through the dialogue) #342 (`1c4247a2`). This document is a record of what
-shipped, not a proposal.
+through the dialogue) #342 (`1c4247a2`). The access settings page models the
+capabilities as an **additive union**: the saved and per-login scope is `base`
+∪ the extras of every enabled capability, so enabling one adds its extras
+without removing another's and disabling one removes only that capability. This
+document is a record of what shipped, not a proposal.
 **Next:** No phase remains in this plan. Later scope work is tracked elsewhere:
 the user-blocks feature (record + write path shipped as #317 `9731537c`)
 continues through its own phases in
@@ -150,13 +153,21 @@ later release) prompt only for the genuinely new scopes.
 ### Scope tiers
 
 Define named scope tiers in a new `scopes.ts`. The `base` tier matches the
-current `OAUTH_SCOPE`. Each additional tier is `base` plus its extras.
+current `OAUTH_SCOPE`. Each additional tier names the extras one capability
+adds on top of `base`.
 
 ```
 base      ── current OAUTH_SCOPE (core Roomy functionality)
 semble    ── base + network.cosmik.* writes to the user's own repo
 withDms   ── base + Bluesky chat RPC scopes   (deferred; not in-tree)
 ```
+
+A tier is not an alternative to the others. The scope a session asks for is
+the **union** of `base` and the extras of every capability the user has
+enabled (`capabilityScope` in `scopes.ts`): enabling one capability adds its
+extras without removing another's, and disabling one removes only that
+capability's. Each capability is therefore one independent switch, and the
+stored grant is the union of the switches that are on.
 
 `semble` is the first tier that will actually be exercised (Phase 6).
 `withDms` stays defined in this plan as the shape a future tier takes, but

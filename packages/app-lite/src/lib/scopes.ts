@@ -2,7 +2,10 @@
  * Scope definitions — the single source of truth for every OAuth scope string
  * the app produces:
  *
- *   - `SCOPE_SETS[tier]`    → the per-login authorization `scope` (auth.svelte.ts)
+ *   - `capabilityScope(…)`  → the per-request authorization `scope`: `base` plus
+ *                             the extras of every enabled capability, unioned
+ *                             (auth.svelte.ts). `SCOPE_SETS[tier]` names the
+ *                             tiers those extras come from.
  *   - `FULL_SCOPE_CEILING`  → the `scope` field in the OAuth client metadata
  *                             (built by scripts/build-prod.sh)
  *
@@ -284,6 +287,12 @@ export const BLOCKS_SCOPE = BLOCK_SCOPES[0];
  * so a returning user who has already consented to them gets them requested
  * back on relogin (via the stored grant) with no re-prompt, and so the
  * metadata ceiling can declare every scope the app might ever want.
+ *
+ * A tier is `base` plus that tier's own extras — it is NOT the scope a
+ * capability switch requests. Capabilities compose: the requested scope is
+ * `base` ∪ the extras of every enabled capability (see `capabilityScope`), so a
+ * tier names where one capability's extras come from, not an alternative to
+ * the others.
  */
 export const SCOPE_SETS = {
   ...REQUESTABLE_SCOPE_SETS,
@@ -292,6 +301,27 @@ export const SCOPE_SETS = {
 
 export type ScopeSetName = keyof typeof SCOPE_SETS;
 export type RequestableScopeSetName = keyof typeof REQUESTABLE_SCOPE_SETS;
+
+/**
+ * The extras each opt-in capability adds on top of `base`.
+ *
+ * The keys are the tier names the settings page, the consent dialogue and
+ * `guardedXrpc`'s `requiredTier` use: a capability's scope is
+ * `SCOPE_SETS[capability]` minus `base`. `base` itself is not a capability
+ * (every session carries it), and the ceiling-only tiers (`blocks`, `voice`)
+ * are absent until they become requestable.
+ */
+export const CAPABILITY_SCOPES = {
+  semble: SEMBLE_SCOPES,
+  withDms: DM_SCOPES,
+} as const;
+
+export type CapabilityName = keyof typeof CAPABILITY_SCOPES;
+
+/** True when `name` names an opt-in capability rather than `base` or a tier. */
+export function isCapabilityName(name: string): name is CapabilityName {
+  return name in CAPABILITY_SCOPES;
+}
 
 /**
  * Every token the OAuth client metadata may carry, in the exact order it ships.
@@ -412,4 +442,48 @@ export function reconcileScope(
   for (const s of baseSet) result.add(s);
   for (const s of storedSet) if (ceilingSet.has(s)) result.add(s);
   return [...result].join(" ");
+}
+
+/**
+ * The scope to request for a set of enabled capabilities: `base` ∪ the extras
+ * of every one of them, deduped, `base` order first, anything outside
+ * `ceiling` dropped.
+ *
+ * This is the union the capability switches imply. Enabling a capability adds
+ * its extras to whatever is already granted; it never replaces another
+ * capability's extras, so the authorization request for an already-enabled
+ * capability's union re-requests its tokens as a harmless no-op instead of
+ * withdrawing them.
+ *
+ * A grant is defined as `base` plus capabilities: a stored token that belongs
+ * to no entry of {@link CAPABILITY_SCOPES} is not carried by the union. Every
+ * requestable token is a capability extra (the ceiling-only tiers are not
+ * requestable), so nothing a session can actually hold is lost here.
+ */
+export function capabilityScope(
+  enabled: Iterable<CapabilityName>,
+  baseScope: string = SCOPE_SETS.base,
+  ceiling: string = FULL_SCOPE_CEILING,
+): string {
+  const ceilingSet = parseScopes(ceiling);
+  const result = new Set<string>();
+  for (const s of parseScopes(baseScope)) if (ceilingSet.has(s)) result.add(s);
+  for (const name of enabled) {
+    for (const s of CAPABILITY_SCOPES[name]) if (ceilingSet.has(s)) result.add(s);
+  }
+  return [...result].join(" ");
+}
+
+/**
+ * The capabilities a raw scope string covers — every {@link CAPABILITY_SCOPES}
+ * entry whose extras are all present in `scope`. The inverse of
+ * {@link capabilityScope}, for callers that must reason about a stored grant
+ * (e.g. narrowing it when one capability is turned off).
+ */
+export function coveredCapabilities(scope: string | null): CapabilityName[] {
+  if (!scope) return [];
+  const tokens = parseScopes(scope);
+  return (Object.keys(CAPABILITY_SCOPES) as CapabilityName[]).filter((name) =>
+    CAPABILITY_SCOPES[name].every((s) => tokens.has(s)),
+  );
 }

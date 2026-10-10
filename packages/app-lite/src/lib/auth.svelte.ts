@@ -12,8 +12,13 @@ import {
   CLIENT_ID_SCOPE,
   FULL_SCOPE_CEILING,
   SCOPE_SETS,
+  capabilityScope,
+  coveredCapabilities,
   hasScopeSet,
+  isCapabilityName,
+  reconcileScope,
   scopeWithinCeiling,
+  type CapabilityName,
   type RequestableScopeSetName,
   type ScopeSetName,
 } from "./scopes";
@@ -431,18 +436,54 @@ export function isScopeExpansionPending(): ScopeSetName | null {
 }
 
 /**
- * Ask the PDS to grant a wider scope tier and, on return, surface the result.
+ * The capabilities the user has enabled: those the stored grant covers, plus
+ * those a pending request covers, plus `extra`.
  *
- * The user asked to enable a capability (e.g. in the Phase 4 settings page).
- * This re-runs the OAuth flow with the wider tier's scope:
+ * The stored grant is the record of what the user last consented to; a pending
+ * request is a capability whose consent round-trip has not confirmed yet.
+ * Taking both is what keeps enabling a second capability from dropping the
+ * first: an interrupted round-trip leaves the first capability in the pending
+ * request, and reading only the grant would recompute the union without it.
+ */
+async function enabledCapabilities(extra?: CapabilityName): Promise<CapabilityName[]> {
+  let stored: string | null = null;
+  let requested: string | null = null;
+  try {
+    const res = await px().query("space.roomy.auth.getScopeSettings", {});
+    stored = res.scope ?? null;
+    requested = res.requestedScope ?? null;
+  } catch (err) {
+    // A failed read is not fatal — the caller still knows what it is asking
+    // for, and a capability already in the stored grant is re-requested on the
+    // next plain login anyway.
+    console.warn("Failed to read scope settings:", err);
+  }
+  const enabled = new Set<CapabilityName>([
+    ...coveredCapabilities(stored),
+    ...coveredCapabilities(requested),
+  ]);
+  if (extra) enabled.add(extra);
+  return [...enabled];
+}
+
+/**
+ * Ask the PDS to grant a wider scope and, on return, surface the result.
+ *
+ * The user asked to enable a capability (e.g. in the Phase 4 settings page,
+ * or from a consent dialogue). This re-runs the OAuth flow with the scope the
+ * capability implies:
  *
  *   1. Record the desired tier in `sessionStorage` (survives the redirect —
  *      the browser navigates to the PDS and back, so in-memory state is lost).
  *   2. Record the intent on the appserver via `setScopeSettings`, then drive
- *      the PDS consent round-trip with the wider tier's scope.
+ *      the PDS consent round-trip with the same scope string.
  *   3. On return, `init()`'s `trackGrant` reads the actually-granted scope and
  *      fires `recordScopeGrant`; the settings page derives real state from
  *      the granted scope (whether the expansion took or was refused/narrowed).
+ *
+ * The scope asked for is the UNION of every enabled capability, not this one
+ * alone: capabilities compose, so enabling the second must not withdraw the
+ * first.
  */
 export async function requestScopeExpansion(
   tier: RequestableScopeSetName,
@@ -454,9 +495,16 @@ export async function requestScopeExpansion(
   if (typeof sessionStorage !== "undefined") {
     sessionStorage.setItem(PENDING_EXPANSION_KEY, tier);
   }
+  const ceiling = activeClientCeiling();
+  const extra = isCapabilityName(tier) ? tier : undefined;
+  // What the user is asking for, before any ceiling truncation — the guard
+  // below judges this string, so a capability the active client cannot declare
+  // fails loudly here instead of being silently dropped into a no-op request.
+  const requested = capabilityScope(await enabledCapabilities(extra));
   // Record intent appserver-side first (fire-and-forget; a failure must not
   // block the round-trip).
-  await requestScopeSettings(tier);
+  const scope = reconcileScope(requested, SCOPE_SETS.base, ceiling);
+  await requestScopeSettings(scope);
   // Re-authorize as the account the live session belongs to. The handle typed
   // at login lives only in memory and is gone after the PDS redirect (the
   // callback lands in a new document), so the decision prefers the session DID
@@ -470,27 +518,26 @@ export async function requestScopeExpansion(
   if (!identity) {
     return;
   }
-  // Drive the PDS consent round-trip with the WIDER tier's scope request —
-  // not `login()`'s stored-grant reconcile, which would request the old
-  // (unexpanded) scope. The PDS consent screen shows only the delta (the
-  // tier's additions) for an already-granted base. On return `init()`'s
-  // `trackGrant` records what the PDS actually granted.
+  // Drive the PDS consent round-trip with the union scope — not `login()`'s
+  // stored-grant reconcile, which would request the old (unexpanded) scope.
+  // The PDS consent screen shows only the delta for what is already granted.
+  // On return `init()`'s `trackGrant` records what the PDS actually granted.
   // Remember where the user was (the settings page) across the round-trip the
   // same way `login()` does; `init()` navigates back on the callback.
   rememberReturnUrl(currentReturnUrl());
-  const ceiling = activeClientCeiling();
-  const tierScope = SCOPE_SETS[tier];
-  if (!scopeWithinCeiling(tierScope, ceiling)) {
-    // The active client does not declare this tier — the loopback client id is
-    // deliberately narrower than the full ceiling (it must fit the Referer
-    // cap), so e.g. `withDms` cannot be requested from a dev loopback session.
-    // Failing here keeps the error actionable instead of the PDS's opaque
-    // `invalid_scope`. Deployed/HappyView builds declare the full ceiling, so
-    // this is a dev-only guard.
+  if (!scopeWithinCeiling(requested, ceiling)) {
+    // The active client does not declare everything the user is asking for —
+    // the loopback client id is deliberately narrower than the full ceiling (it
+    // must fit the Referer cap), so e.g. enabling DMs alongside Semble cannot be
+    // requested from a dev loopback session. Failing here keeps the error
+    // actionable instead of silently requesting a narrower set, or failing at
+    // the PDS with an opaque `invalid_scope`. Deployed / HappyView builds
+    // declare the full ceiling, so this is a dev-only guard.
     throw new Error(
-      `The "${tier}" scope tier is not available in this build's OAuth client. ` +
-        `It can only be requested where the client declares the full scope ` +
-        `ceiling (a deployed web or desktop build), not the dev loopback client.`,
+      `Enabling "${tier}" is not available in this build's OAuth client: the ` +
+        `resulting access set is wider than this client declares. It can only ` +
+        `be requested where the client declares the full scope ceiling (a ` +
+        `deployed web or desktop build), not the dev loopback client.`,
     );
   }
   const result = await sdkLogin(identity, {
@@ -499,7 +546,7 @@ export async function requestScopeExpansion(
     clientId: CONFIG.oauthClientId,
     handleResolverUrl: CONFIG.handleResolverUrl,
     port: CONFIG.port,
-    scope: tierScope,
+    scope,
     clientIdScope: CLIENT_ID_SCOPE,
   });
   if (result) {
@@ -518,7 +565,7 @@ export async function requestScopeExpansion(
 }
 
 /**
- * Record the user's requested scope tier on the appserver (Phase 4).
+ * Record the raw scope the user asked for on the appserver (Phase 4).
  *
  * `space.roomy.auth.setScopeSettings` cannot grant anything by itself —
  * granting needs the PDS consent round-trip. It records *intent*; the actual
@@ -526,14 +573,10 @@ export async function requestScopeExpansion(
  * `recordScopeGrant`). App-password (test) mode has no PDS grant and no
  * OAuth round-trip, so this is a no-op there.
  */
-export async function requestScopeSettings(
-  tier: RequestableScopeSetName,
-): Promise<void> {
+export async function requestScopeSettings(scope: string): Promise<void> {
   if (appPasswordAgent) return; // no PDS grant to request in test mode
   try {
-    await px().procedure("space.roomy.auth.setScopeSettings", {
-      scope: SCOPE_SETS[tier],
-    });
+    await px().procedure("space.roomy.auth.setScopeSettings", { scope });
   } catch (err) {
     // Non-fatal: the client still drives the consent round-trip; a failed
     // intent record self-heals on the next login via getLoginScope.
@@ -542,22 +585,29 @@ export async function requestScopeSettings(
 }
 
 /**
- * Narrow the stored grant to `base` (revoke every extra tier).
+ * Stop asking for one capability, leaving the others enabled.
  *
+ * The narrowed scope is `base` ∪ the extras of the capabilities that stay —
+ * derived from the saved grant with this one's extras removed, not reset to
+ * `base` — so turning one switch off does not turn the other off with it.
  * Recording the narrower scope via `recordScopeGrant` makes the next login
  * request less — no PDS round-trip because narrowing needs no consent. The
  * LIVE token keeps its scopes until the next re-auth; the UI must say so
  * rather than implying immediate revocation. App-password (test) mode has no
  * real grant to narrow.
  */
-export async function revokeScopeSettings(): Promise<void> {
+export async function revokeCapability(tier: RequestableScopeSetName): Promise<void> {
   if (appPasswordAgent) return; // no PDS grant in test mode
   try {
+    const ceiling = activeClientCeiling();
+    const remaining = (await enabledCapabilities()).filter((c) => c !== tier);
+    const narrowed = capabilityScope(remaining, SCOPE_SETS.base, ceiling);
     // Record the intent (clears any pending expansion) …
-    await requestScopeSettings("base");
-    // … and narrow the stored grant so a future login requests only base.
+    await requestScopeSettings(narrowed);
+    // … and narrow the stored grant so a future login requests only the
+    // capabilities that are still on.
     await px().procedure("space.roomy.auth.recordScopeGrant", {
-      scope: SCOPE_SETS.base,
+      scope: narrowed,
     });
   } catch (err) {
     console.warn("Failed to revoke scope settings:", err);
