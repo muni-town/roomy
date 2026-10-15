@@ -1,10 +1,10 @@
 /**
- * Pure, unit-testable scope-guard primitives for the reactive consent flow.
+ * Pure, unit-testable scope-guard primitives for the reactive scope flow.
  *
- * This module holds the two decisions the reactive dialogue wiring applies,
+ * This module holds the decisions the reactive dialogue wiring applies,
  * deliberately free of Svelte runes, `$env`/`$app`, and the SDK — mirroring how
  * `scopes.ts` and `scope-grant.ts` keep testable pure logic out of their
- * reactive wrappers. Both functions run under app-lite's
+ * reactive wrappers. Everything here runs under app-lite's
  * `node --test --experimental-strip-types` runner.
  *
  *   - **`isInsufficientScopeError`** — the narrow predicate that recognises a
@@ -17,17 +17,22 @@
  *     HappyView's forward-time check, which is what the deployed web client
  *     actually meets (see plan Open Question 3).
  *
- *   - **`guardedXrpc`** — runs an XRPC call; on a recognisable scope-miss with a
- *     `requiredTier`, prompts the user to consent (via an injected
- *     `prompt(tier) => Promise<boolean>`), and on acceptance the **prompt** is
- *     responsible for driving `requestScopeExpansion(tier)`. `guardedXrpc`
- *     itself never calls the expansion — the prompt is injected so the pure
- *     core stays testable — and it **never retries** after a decline or an
- *     in-place acceptance, so it cannot loop even in app-password (test) mode
- *     where `requestScopeExpansion` is a no-op.
+ *   - **`guardedXrpc`** — runs an XRPC call; on a recognisable scope-miss for a
+ *     named tier, calls the injected `prompt(tier) => Promise<boolean>` — the
+ *     one place a user learns their session lacks the permission, and the one
+ *     place the remedy is chosen: a requestable tier gets the consent dialogue,
+ *     a ceiling-only tier gets the "Roomy cannot request this yet" notice. The
+ *     prompt owns that choice (and, on consent, driving
+ *     `requestScopeExpansion`) so this module stays pure and testable.
+ *     `guardedXrpc` **never retries** after a decline or an in-place acceptance,
+ *     so it cannot loop even in app-password (test) mode where
+ *     `requestScopeExpansion` is a no-op.
+ *
+ *   - **`SCOPE_UNAVAILABLE_EXPLANATION`** — what the notice shown for a
+ *     scope-miss no consent round-trip can fix says.
  */
 
-import type { RequestableScopeSetName } from "./scopes.ts";
+import type { ScopeSetName } from "./scopes.ts";
 
 /** The resource-server error name `ScopeMissingError` surfaces under. */
 export const SCOPE_MISSING_ERROR_NAME = "ScopeMissingError";
@@ -97,62 +102,85 @@ export function isInsufficientScopeError(err: unknown): boolean {
   );
 }
 
-/** The user's accept/reject decision for a proposed tier expansion. */
-export type ScopeExpansionPrompt = (
-  tier: RequestableScopeSetName,
-) => Promise<boolean>;
+/**
+ * The user's answer to a scope prompt. Resolves `true` on accept; a notice with
+ * no consent to give (a tier Roomy cannot request yet) resolves `false`.
+ *
+ * The prompt is where the remedy is chosen, because only it knows what the
+ * session can do next: `isRequestableScopeSet(tier)` selects the consent
+ * dialogue versus the "cannot request this yet" notice, and on consent the
+ * prompt drives `requestScopeExpansion(tier)` — navigating away in a real
+ * browser session, a no-op in app-password (test) mode.
+ */
+export type ScopePrompt = (tier: ScopeSetName) => Promise<boolean>;
 
 export interface GuardedXrpcOptions {
   /**
-   * The tier to request an expansion for when the call fails with a
-   * recognisable scope-miss. When a feature needs scope it can only express as
-   * a tier (the umbrella vocabulary — see scopes.ts), pass that tier here. When
-   * a boundary genuinely cannot be expressed as a tier, the caller must NOT
-   * invent a parallel vocabulary; leave tier undefined and the error surfaces
-   * raw.
+   * The tier whose scope the call needs, named in the umbrella vocabulary
+   * (scopes.ts). Any tier: a requestable one drives the consent round-trip, a
+   * ceiling-only one the "not registered yet" notice.
    *
-   * Only a *requestable* tier is accepted: a ceiling-only tier's scopes are not
-   * registered on the HappyView API client, so asking for one turns a
-   * recoverable scope-miss into a sign-in failure for every user. A feature
-   * whose scopes are not yet registered must not reach the consent dialogue.
+   * A boundary that genuinely cannot be expressed as a tier must NOT invent a
+   * parallel vocabulary; leave this undefined and the error surfaces raw.
+   *
+   * Always pair it with `prompt`: a scope-miss that reaches the caller is then
+   * one the user has already been shown, which is what lets callers tell a
+   * presented miss from an unhandled failure with `isInsufficientScopeError`.
    */
-  requiredTier?: RequestableScopeSetName;
+  requiredScope?: ScopeSetName;
   /**
-   * Prompt the user to consent to expanding to `requiredTier`. Resolves `true`
-   * on accept. The prompt (not `guardedXrpc`) drives `requestScopeExpansion`:
-   * in a real browser session that navigates away; in app-password (test) mode
-   * `requestScopeExpansion` is a no-op, so the prompt should resolve `false`
-   * to keep the guarded call from appearing to succeed without a grant.
+   * Show the user why the call failed — and what the session can do about it —
+   * then resolve with their answer. Resolves `false` when there is nothing the
+   * user can consent to, so the guarded call cannot appear to have succeeded.
    */
-  prompt?: ScopeExpansionPrompt;
+  prompt?: ScopePrompt;
 }
 
 /**
- * Run an XRPC call; on a recognisable scope-miss with a `requiredTier` +
- * prompt, surface the consent dialogue instead of the raw error. Accepting the
- * dialogue (via the prompt) navigates away to the PDS on the prompt's `true`;
- * declining leaves the action failed and the UI intact.
+ * Run an XRPC call; on a recognisable scope-miss for `requiredScope`, hand the
+ * tier to `prompt` (see {@link ScopePrompt}) instead of leaving the raw error
+ * to the caller. Declining — or a notice with nothing to consent to — leaves
+ * the action failed and the UI intact.
  *
  * Never retries the call: after a decline, or after an acceptance that could
  * not navigate away (e.g. app-password mode where `requestScopeExpansion` is a
- * no-op), the original error is rethrown so the caller surfaces a clean,
- * usable failure rather than looping.
+ * no-op), the original error is rethrown. It is recognisable with
+ * `isInsufficientScopeError` precisely so callers know the user has already
+ * been told, and do not repeat the failure in their own copy.
  */
 export async function guardedXrpc<T>(
   fn: () => Promise<T>,
   options: GuardedXrpcOptions = {},
 ): Promise<T> {
-  const { requiredTier, prompt } = options;
+  const { requiredScope, prompt } = options;
   try {
     return await fn();
   } catch (err) {
-    if (requiredTier && prompt && isInsufficientScopeError(err)) {
+    if (requiredScope && prompt && isInsufficientScopeError(err)) {
       // The prompt drives the consent round-trip on accept (navigate-away in
       // OAuth; a no-op in test mode where no OAuth grant exists) and resolves
       // `false` on reject. Either way we never retry — the caller surfaces a
       // clean, usable failure rather than looping.
-      await prompt(requiredTier);
+      await prompt(requiredScope);
     }
     throw err;
   }
 }
+
+/**
+ * What the notice shown for a scope-miss Roomy cannot fix says.
+ *
+ * A tier is ceiling-only because its scopes are declared in this app's OAuth
+ * metadata but not registered on the deployed API client (see
+ * `scopes.ts` UNREGISTERED_SCOPES), and the client refuses the whole granted
+ * set at session registration. So the permission cannot be part of any new
+ * session either: a re-login is not a remedy, and telling the user to try one
+ * sends them through a round-trip that cannot change the outcome. The copy says
+ * what is true — the permission is not one Roomy can ask for yet — and what
+ * happens when it is.
+ */
+export const SCOPE_UNAVAILABLE_EXPLANATION =
+  "Roomy cannot ask for this permission yet, so this session cannot be granted it. " +
+  "Signing in again will not change that — the permission has to be added to " +
+  "Roomy's sign-in request first. Once it is, you will be prompted to approve it " +
+  "and this action will work.";

@@ -36,6 +36,8 @@ import {
   scopeCovers,
   scopeWithinCeiling,
   reconcileScope,
+  isRequestableScopeSet,
+  type ScopeSetName,
 } from "./scopes.ts";
 
 describe("parseScopes", () => {
@@ -529,5 +531,26 @@ describe("capability coverage of a stored grant", () => {
   test("a union grant covers every capability it names", () => {
     const grant = asGranted(capabilityScope(["semble", "withDms"]));
     assert.deepEqual(coveredCapabilities(grant), ["semble", "withDms"]);
+  });
+});
+
+describe("isRequestableScopeSet", () => {
+  test("is true for a registered tier and false for a ceiling-only one", () => {
+    // The split the reactive flow reads before choosing a dialogue. A wrong
+    // `true` drives a consent round-trip for a scope the deployed client
+    // refuses, and the client rejects the whole granted set at session
+    // registration — a failed sign-in for every user, not a failed feature.
+    for (const tier of Object.keys(REQUESTABLE_SCOPE_SETS)) {
+      assert.equal(isRequestableScopeSet(tier as ScopeSetName), true, tier);
+    }
+    for (const tier of Object.keys(SCOPE_SETS)) {
+      if (tier in REQUESTABLE_SCOPE_SETS) continue;
+      assert.equal(isRequestableScopeSet(tier as ScopeSetName), false, tier);
+    }
+    // The tiers the notice exists for, named so a rename cannot quietly make
+    // this vacuous.
+    assert.equal(isRequestableScopeSet("blocks"), false);
+    assert.equal(isRequestableScopeSet("voice"), false);
+    assert.equal(isRequestableScopeSet("semble"), true);
   });
 });

@@ -208,17 +208,19 @@ test.describe("blocking an account", () => {
    * whole base tier, and a real scope-miss needs a narrower token than any
    * test account has.
    *
-   * No consent dialogue is offered. The block scope is not yet registered on
-   * the HappyView API client, so a re-authorization carrying it would be
-   * refused at session registration and leave the user unable to sign in at
-   * all — the dialogue is withheld until the scope becomes requestable
-   * (`scopes.ts` UNREGISTERED_SCOPES).
+   * The scope is ceiling-only — declared in Roomy's metadata, not registered on
+   * the deployed API client — so no authorization round-trip may ask for it, and
+   * there is nothing for the user to consent to. The failure surfaces as the
+   * notice saying so: not a consent dialogue, and not the "sign in again to
+   * grant it" copy it replaced, which could not help — a new session carries
+   * exactly the scopes this one does.
    *
-   * Two things are load-bearing and both are asserted: the write is attempted
-   * exactly once — a silent retry can never succeed against a token that
-   * simply does not carry the scope — and the affordance survives the failure.
+   * Three things are load-bearing and all are asserted: the write is attempted
+   * exactly once (a retry can never succeed against a token that simply does not
+   * carry the scope), the raw scope token never reaches the user, and the
+   * affordance survives the failure.
    */
-  test("a stale session gets a clear message, and the write is not retried", async ({
+  test("a stale session is told the permission cannot be requested yet, and the write is not retried", async ({
     page,
   }) => {
     let attempts = 0;
@@ -242,16 +244,21 @@ test.describe("blocking an account", () => {
 
     await blockButton(page).click();
 
-    // The action fails with the message that says what to do about it, rather
-    // than looping on a request that cannot succeed.
-    await expect(
-      page.getByText(/Sign in again to grant it/),
-    ).toBeVisible();
+    // The capability, the reason, and no dead end.
+    const notice = page.getByRole("dialog", { name: "Manage your blocks" });
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("cannot ask for this permission yet");
+    await expect(notice).toContainText("Signing in again will not change that");
+    await expect(notice).not.toContainText(/sign in again to/i);
     // The raw scope token is never shown to the user.
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(notice).not.toContainText("repo:");
+    await expect(page.getByText(/Missing required scope/)).toHaveCount(0);
     expect(attempts).toBe(1);
-    // The affordance is intact: the button is still there, still offering
-    // Block rather than a stuck "Blocked".
+
+    // Dismissing leaves the affordance intact: the button is still there, still
+    // offering Block rather than a stuck "Blocked".
+    await notice.getByRole("button", { name: "Close" }).click();
+    await expect(notice).toHaveCount(0);
     await expect(blockButton(page)).toBeVisible();
   });
 });

@@ -18,8 +18,8 @@
   import { editMessage, removeLinkEmbed } from "$lib/mutations/message";
   import { createSpaceCard } from "$lib/mutations/space-card";
   import { saveToPersonalCollection } from "$lib/mutations/semble-personal";
-  import { guardedXrpc } from "$lib/scope-guard";
-  import { showScopeConsentDialogue } from "$lib/scope-consent-dialogue";
+  import { guardedXrpc, isInsufficientScopeError } from "$lib/scope-guard";
+  import { showScopeDialogue } from "$lib/scope-dialogue";
   import { toast } from "@foxui/core";
   import {
     discardPendingSend,
@@ -349,9 +349,9 @@
       await guardedXrpc(
         () => createSpaceCard(spaceId, singleLink),
         {
-          requiredTier: "base",
+          requiredScope: "base",
           prompt: (tier) =>
-            showScopeConsentDialogue(tier, {
+            showScopeDialogue(tier, {
               title: "Create Space cards",
               description:
                 "Creating a card in this Space writes through the Space's " +
@@ -362,7 +362,10 @@
       );
       toast.success("Space card created.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to create space card.");
+      // A scope-miss has already been presented by the dialogue.
+      if (!isInsufficientScopeError(e)) {
+        toast.error(e instanceof Error ? e.message : "Failed to create space card.");
+      }
     }
   }
 
@@ -382,9 +385,9 @@
       await guardedXrpc(
         () => saveToPersonalCollection(singleLink),
         {
-          requiredTier: "semble",
+          requiredScope: "semble",
           prompt: (tier) =>
-            showScopeConsentDialogue(tier, {
+            showScopeDialogue(tier, {
               title: "Save to your Semble collection",
               description:
                 "Saving this link writes a card to your own Semble " +
@@ -396,9 +399,11 @@
       );
       toast.success("Saved to your Semble collection.");
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Failed to save to your collection.",
-      );
+      if (!isInsufficientScopeError(e)) {
+        toast.error(
+          e instanceof Error ? e.message : "Failed to save to your collection.",
+        );
+      }
     }
   }
 

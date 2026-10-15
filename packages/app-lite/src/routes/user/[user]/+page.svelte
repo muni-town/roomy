@@ -19,9 +19,9 @@
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { blockErrorMessage, blockUser, unblockUser, type BlockRecord } from "$lib/mutations/blocks";
   import { refreshBlocksDetached } from "$lib/mutations/refresh-blocks";
-  import { guardedXrpc } from "$lib/scope-guard";
-  import { showScopeConsentDialogue } from "$lib/scope-consent-dialogue";
-  import type { RequestableScopeSetName } from "$lib/scopes";
+  import { guardedXrpc, isInsufficientScopeError } from "$lib/scope-guard";
+  import { showScopeDialogue } from "$lib/scope-dialogue";
+  import type { ScopeSetName } from "$lib/scopes";
   import { queryClient } from "$lib/client";
   import { cache } from "@roomy-space/sdk";
 
@@ -64,21 +64,18 @@
   }
 
   // The blocks scope arrived with this feature, so a session authorised before
-  // it fails the write with a scope-miss.
-  //
-  // No tier is passed to `guardedXrpc`: `blocks` is ceiling-only for now. Its
-  // scope is not yet registered on the HappyView API client, so no login may
-  // request it (`scopes.ts` UNREGISTERED_SCOPES) and no consent round-trip
-  // could grant it. A feature whose scope cannot be requested reports the
-  // failure rather than offering consent that would be refused; the dialogue
-  // arrives with the tier, once the scope is registered.
-  const consentPrompt = (tier: RequestableScopeSetName) =>
-    showScopeConsentDialogue(tier, {
+  // it fails the write with a scope-miss. `blocks` is ceiling-only: its scopes
+  // are declared in the metadata but not registered on the deployed API client
+  // (`scopes.ts` UNREGISTERED_SCOPES), so no sign-in could ask for it. The guard
+  // names the tier the call needs and the dialogue follows from that — here the
+  // notice that Roomy cannot request the permission yet, rather than a consent
+  // round-trip that would end in a failed session registration.
+  const scopePrompt = (tier: ScopeSetName) =>
+    showScopeDialogue(tier, {
       title: "Manage your blocks",
       description:
-        "Blocking writes a block record to your own account. Roomy needs " +
-        "your permission for this action — the consent screen will show the " +
-        "exact access it requests.",
+        "Blocking writes a block record to your own account, so Roomy needs " +
+        "your permission to manage your blocks there.",
     });
 
   async function blockThisUser() {
@@ -88,12 +85,17 @@
     blockError = null;
     try {
       await guardedXrpc(() => blockUser(subject), {
-        prompt: consentPrompt,
+        requiredScope: "blocks",
+        prompt: scopePrompt,
       });
       refreshBlocksDetached(subject);
       await refreshBlock();
     } catch (e) {
-      blockError = blockErrorMessage(e, "block this user");
+      // A scope-miss has already been shown by the dialogue; only a failure with
+      // no dialogue behind it belongs in the inline error.
+      if (!isInsufficientScopeError(e)) {
+        blockError = blockErrorMessage(e, "block this user");
+      }
       console.error("blockUser error", e);
     } finally {
       blockBusy = false;
@@ -107,12 +109,15 @@
     blockError = null;
     try {
       await guardedXrpc(() => unblockUser(block.rkey), {
-        prompt: consentPrompt,
+        requiredScope: "blocks",
+        prompt: scopePrompt,
       });
       refreshBlocksDetached(block.subject);
       await refreshBlock();
     } catch (e) {
-      blockError = blockErrorMessage(e, "unblock this user");
+      if (!isInsufficientScopeError(e)) {
+        blockError = blockErrorMessage(e, "unblock this user");
+      }
       console.error("unblockUser error", e);
     } finally {
       blockBusy = false;

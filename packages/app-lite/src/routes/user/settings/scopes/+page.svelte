@@ -11,10 +11,7 @@
     type CapabilityName,
     type RequestableScopeSetName,
   } from "$lib/scopes";
-  import {
-    showScopeConsentDialogue,
-    type ScopeConsentOptions,
-  } from "$lib/scope-consent-dialogue";
+  import { showScopeDialogue, type ScopeDialogueCopy } from "$lib/scope-dialogue";
   import { queryClient } from "$lib/client";
 
   // The Access settings page is gated behind the access-settings flag while
@@ -75,7 +72,7 @@
    * the wording a row already uses, extended with the permission the provider
    * is about to ask for.
    */
-  const CONSENT_COPY: Record<CapabilityName, ScopeConsentOptions> = {
+  const CONSENT_COPY: Record<CapabilityName, ScopeDialogueCopy> = {
     semble: {
       title: "Save to your Semble collection",
       description:
@@ -146,7 +143,7 @@
         // contract, the same seam `guardedXrpc` consumes. Resolving `false` is
         // the refusal: nothing was requested, and the re-key below settles the
         // switch back to the saved grant it reads from.
-        await showScopeConsentDialogue(tier, CONSENT_COPY[tier]);
+        await showScopeDialogue(tier, CONSENT_COPY[tier]);
         return;
       }
       await revokeCapability(tier);

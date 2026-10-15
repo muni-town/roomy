@@ -15,19 +15,24 @@
  *     unrelated name or sentence, or any of those shapes without a 403 — a
  *     predicate that matches everything is precisely the failure Phase 5
  *     exists to prevent.
- *   - `guardedXrpc` — runs the call, and only on a recognised scope-miss with a
- *     `requiredTier` + prompt invokes the prompt; never retries, so even a
- *     no-op `requestScopeExpansion` (app-password/test mode) cannot loop.
+ *   - `guardedXrpc` — runs the call, and only on a recognised scope-miss for a
+ *     `requiredScope` + prompt invokes the prompt. It hands the prompt the tier
+ *     as declared, requestable or ceiling-only, so the choice of dialogue stays
+ *     in one place; it never retries, so even a no-op `requestScopeExpansion`
+ *     (app-password/test mode) cannot loop.
+ *   - `SCOPE_UNAVAILABLE_EXPLANATION` — the notice's copy, which must stay
+ *     honest about a permission no sign-in can supply yet.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   isInsufficientScopeError,
   SCOPE_MISSING_ERROR_NAME,
+  SCOPE_UNAVAILABLE_EXPLANATION,
   guardedXrpc,
-  type ScopeExpansionPrompt,
+  type ScopePrompt,
 } from "./scope-guard.ts";
-import type { RequestableScopeSetName } from "./scopes.ts";
+import type { ScopeSetName } from "./scopes.ts";
 
 /** The measured/source-verified wire shape: a 403 with `error === "ScopeMissingError"`. */
 function measuredShape(error = SCOPE_MISSING_ERROR_NAME, status = 403) {
@@ -151,7 +156,7 @@ describe("guardedXrpc", () => {
     let prompted = false;
     await assert.rejects(
       guardedXrpc(() => Promise.reject(new Error("boom")), {
-        requiredTier: "base",
+        requiredScope: "base",
         prompt: (_tier) => {
           prompted = true;
           return Promise.resolve(true);
@@ -163,11 +168,11 @@ describe("guardedXrpc", () => {
   });
 
   test("invokes the prompt on a recognised scope-miss and rethrows the error", async () => {
-    let prompted: RequestableScopeSetName | undefined;
+    let prompted: ScopeSetName | undefined;
     const err: unknown = measuredShape();
     await assert.rejects(
       guardedXrpc(() => Promise.reject(err), {
-        requiredTier: "base",
+        requiredScope: "base",
         prompt: (tier) => {
           prompted = tier;
           return Promise.resolve(true);
@@ -183,7 +188,7 @@ describe("guardedXrpc", () => {
     let prompted = false;
     await assert.rejects(
       guardedXrpc(() => Promise.reject(measuredShape(SCOPE_MISSING_ERROR_NAME, 500)), {
-        requiredTier: "base",
+        requiredScope: "base",
         prompt: (_tier) => {
           prompted = true;
           return Promise.resolve(true);
@@ -194,10 +199,10 @@ describe("guardedXrpc", () => {
   });
 
   test("invokes the prompt on HappyView's refusal — the path a deployed web write takes", async () => {
-    let prompted: RequestableScopeSetName | undefined;
+    let prompted: ScopeSetName | undefined;
     await assert.rejects(
       guardedXrpc(() => Promise.reject(happyViewShape()), {
-        requiredTier: "semble",
+        requiredScope: "semble",
         prompt: (tier) => {
           prompted = tier;
           return Promise.resolve(false);
@@ -207,7 +212,52 @@ describe("guardedXrpc", () => {
     assert.equal(prompted, "semble");
   });
 
-  test("does NOT invoke the prompt when no requiredTier is given", async () => {
+  test("hands a ceiling-only tier to the prompt unchanged, so the notice can say Roomy cannot request it", async () => {
+    // `blocks` is declared in the metadata ceiling but not registered on the
+    // deployed API client. This guard does not know that — it forwards the tier
+    // and the prompt decides from `isRequestableScopeSet`, which is what lets one
+    // flow cover a requestable tier and a deferred one.
+    let prompted: ScopeSetName | undefined;
+    const err: unknown = measuredShape();
+    await assert.rejects(
+      guardedXrpc(() => Promise.reject(err), {
+        requiredScope: "blocks",
+        prompt: (tier) => {
+          prompted = tier;
+          return Promise.resolve(false);
+        },
+      }),
+      (e) => e === err,
+    );
+    assert.equal(prompted, "blocks");
+  });
+
+  test("does not retry the write after the unavailable-scope notice", async () => {
+    // The notice resolves without a consent, because there is none to give. The
+    // write must stay failed: a retry could only fail the same way, and a caller
+    // that read it as success would report a block that was never written.
+    let calls = 0;
+    let prompted = false;
+    await assert.rejects(
+      guardedXrpc(
+        () => {
+          calls++;
+          return Promise.reject(measuredShape());
+        },
+        {
+          requiredScope: "blocks",
+          prompt: (_tier) => {
+            prompted = true;
+            return Promise.resolve(false);
+          },
+        },
+      ),
+    );
+    assert.equal(prompted, true);
+    assert.equal(calls, 1);
+  });
+
+  test("does NOT invoke the prompt when no requiredScope is given", async () => {
     let prompted = false;
     await assert.rejects(
       guardedXrpc(() => Promise.reject(measuredShape()), {
@@ -222,7 +272,7 @@ describe("guardedXrpc", () => {
 
   test("does NOT invoke the prompt when no prompt is injected", async () => {
     await assert.rejects(
-      guardedXrpc(() => Promise.reject(measuredShape()), { requiredTier: "base" }),
+      guardedXrpc(() => Promise.reject(measuredShape()), { requiredScope: "base" }),
     );
   });
 
@@ -231,7 +281,7 @@ describe("guardedXrpc", () => {
     // cause the guarded call to re-run and re-fail forever — it rethrows once.
     let calls = 0;
     let prompted = false;
-    const prompt: ScopeExpansionPrompt = (_tier) => {
+    const prompt: ScopePrompt = (_tier) => {
       prompted = true;
       return Promise.resolve(true); // requestScopeExpansion no-op; accepts
     };
@@ -241,7 +291,7 @@ describe("guardedXrpc", () => {
           calls++;
           return Promise.reject(measuredShape());
         },
-        { requiredTier: "base", prompt },
+        { requiredScope: "base", prompt },
       ),
     );
     assert.equal(calls, 1); // called once — never re-run
@@ -258,7 +308,7 @@ describe("guardedXrpc", () => {
           return Promise.reject(measuredShape());
         },
         {
-          requiredTier: "base",
+          requiredScope: "base",
           prompt: (_tier) => {
             prompted = true;
             return Promise.resolve(false); // declined
@@ -268,5 +318,24 @@ describe("guardedXrpc", () => {
     );
     assert.equal(calls, 1);
     assert.equal(prompted, true);
+  });
+});
+
+describe("SCOPE_UNAVAILABLE_EXPLANATION", () => {
+  test("says Roomy cannot request the permission, and never offers a sign-in that cannot grant it", () => {
+    // The copy this replaces told the user to sign in again — a dead end, since
+    // a session's granted scope is fixed for its life and no round-trip can ask
+    // for a scope the client refuses. Any sentence that mentions signing in must
+    // deny that it helps.
+    assert.match(SCOPE_UNAVAILABLE_EXPLANATION, /cannot ask for this permission/i);
+    for (const sentence of SCOPE_UNAVAILABLE_EXPLANATION.split(". ")) {
+      if (/\b(?:sign|log)\s?(?:ing )?(?:in|out)\b/i.test(sentence)) {
+        assert.match(
+          sentence,
+          /\b(?:not|won't|cannot|can't)\b/i,
+          `a sentence naming sign-in must deny it helps: "${sentence}"`,
+        );
+      }
+    }
   });
 });

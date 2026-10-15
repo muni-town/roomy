@@ -343,15 +343,34 @@ export const SCOPE_SETS = {
 
 export type ScopeSetName = keyof typeof SCOPE_SETS;
 export type RequestableScopeSetName = keyof typeof REQUESTABLE_SCOPE_SETS;
+/** A tier declared in the metadata ceiling but not yet registered on the
+ *  deployed API client — see {@link UNREGISTERED_SCOPES}. */
+export type DeferredScopeSetName = keyof typeof DEFERRED_SCOPE_SETS;
+
+/**
+ * True when `name`'s scopes may be asked for in an authorization round-trip:
+ * every token in the tier is registered on the deployed HappyView API client.
+ *
+ * False for a ceiling-only tier. Its scopes are declared in this app's metadata
+ * but absent from the client's allowlist, and the client rejects the whole
+ * granted set at session registration — so requesting one does not fail this
+ * feature, it fails sign-in for every user (see {@link UNREGISTERED_SCOPES}).
+ * The reactive flow reads this to choose between the consent round-trip and the
+ * "Roomy cannot request this yet" notice.
+ */
+export function isRequestableScopeSet(
+  name: ScopeSetName,
+): name is RequestableScopeSetName {
+  return name in REQUESTABLE_SCOPE_SETS;
+}
 
 /**
  * The extras each opt-in capability adds on top of `base`.
  *
- * The keys are the tier names the settings page, the consent dialogue and
- * `guardedXrpc`'s `requiredTier` use: a capability's scope is
- * `SCOPE_SETS[capability]` minus `base`. `base` itself is not a capability
- * (every session carries it), and the ceiling-only tiers (`blocks`, `voice`)
- * are absent until they become requestable.
+ * The keys are the tier names the settings page and the consent dialogue use: a
+ * capability's scope is `SCOPE_SETS[capability]` minus `base`. `base` itself is
+ * not a capability (every session carries it), and the ceiling-only tiers
+ * (`blocks`, `voice`) are absent until they become requestable.
  */
 export const CAPABILITY_SCOPES = {
   semble: SEMBLE_SCOPES,

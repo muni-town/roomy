@@ -7,9 +7,9 @@
    * OAuth consent round-trip via `requestScopeExpansion(tier)`; reject fails
    * the pending action cleanly and leaves the UI usable.
    *
-   * Drive it imperatively via `showScopeConsentDialogue(...)` from
-   * `$lib/scope-consent-dialogue.ts` (the `prompt` seam `guardedXrpc` and
-   * `ScopeGate` consume); mounting it inline is not intended.
+   * Drive it imperatively via `showScopeDialogue(...)` from
+   * `$lib/scope-dialogue.ts`, the `prompt` seam `guardedXrpc` consumes — which
+   * picks it for a requestable tier; mounting it inline is not intended.
    *
    * In app-password (test) mode `requestScopeExpansion` is a no-op, so the
    * accept button calls it (safe, no-op) then resolves `true`; the caller's

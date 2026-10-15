@@ -19,17 +19,16 @@
  * Errors are deliberately NOT translated here. `repo:space.roomy.user.block`
  * arrived with this feature, so a session established before it fails these
  * calls with a resource-server scope-miss, and the caller must be able to see
- * that shape: `isInsufficientScopeError` (used by `guardedXrpc` to offer the
- * consent round-trip, and by the caller to fall back to a sign-in message)
- * inspects the raw error. Wrapping it would hide the very signal the caller
- * needs. {@link blockErrorMessage} is the one piece of copy that belongs with
- * the write, kept pure so it is unit-testable.
+ * that shape: `isInsufficientScopeError` inspects the raw error, `guardedXrpc`
+ * turns the miss into the scope dialogue, and the caller then knows the user has
+ * already been told and leaves its own copy out. Wrapping the error would hide
+ * the very signal that flow runs on. {@link blockErrorMessage} is the one piece
+ * of copy that belongs with the write, kept pure so it is unit-testable.
  */
 
 import { TID } from "@atproto/common-web";
 import type { Agent } from "@atproto/api";
 import { auth } from "$lib/auth.svelte";
-import { isInsufficientScopeError } from "$lib/scope-guard";
 
 /** The block collection. One record per block, `key: tid`. */
 export const BLOCK_COLLECTION = "space.roomy.user.block";
@@ -43,17 +42,13 @@ export interface BlockRecord {
 }
 
 /**
- * The message to show for a failed block/unblock.
+ * The message to show for a failed block/unblock that has no dialogue behind
+ * it.
  *
- * A scope-miss gets its own copy: the session was authorised before Roomy asked
- * for block access, so the fix is to authorise again — and saying so is the
- * only honest answer, because retrying cannot grant a scope the token does not
- * hold.
+ * A scope-miss does not reach here as copy: `guardedXrpc` presents it, and the
+ * caller skips this for an error `isInsufficientScopeError` recognises.
  */
 export function blockErrorMessage(err: unknown, action: string): string {
-  if (isInsufficientScopeError(err)) {
-    return `Roomy does not have permission to manage your blocks on this session. Sign in again to grant it, then retry.`;
-  }
   if (err instanceof Error && err.message) return err.message;
   return `Failed to ${action}.`;
 }
