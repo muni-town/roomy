@@ -1,8 +1,9 @@
 /**
  * Unit tests for the bridge-token handlers: spend rule (>100 members marks
- * the grant spent, once, permanently), revocation guards (pending vs spent
- * vs not-grantor), grant conflicts (one active grant per user), and the
- * admin getSpaceMembership response shape.
+ * the grant spent, once, permanently — which locks the token to the guild but
+ * keeps its capacity), the free-tier capacity floor (no live grant), revocation
+ * guards (pending vs spent vs not-grantor), grant conflicts (one active grant
+ * per user), and the admin getSpaceMembership response shape.
  *
  * Polar fetches are stubbed (never hit real Polar in tests). The read-state
  * + per-space DBs run in-memory via openDb({ path: ":memory:" }).
@@ -23,7 +24,10 @@ import {
 import { markGrantSpent, selectGrantForGrantor } from "../queries/bridgeTokens.ts";
 import { grantBridgeTokenHandler } from "./space.roomy.space.grantBridgeToken.ts";
 import { revokeBridgeTokenHandler } from "./space.roomy.space.revokeBridgeToken.ts";
-import { adminGetSpaceMembershipHandler } from "./space.roomy.admin.getSpaceMembership.ts";
+import {
+  adminGetSpaceMembershipHandler,
+  FREE_BRIDGE_CAPACITY,
+} from "./space.roomy.admin.getSpaceMembership.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 
 const GRANTOR = UserDid.assert("did:plc:bt-grantor");
@@ -286,7 +290,7 @@ describe("admin getSpaceMembership (spend rule + response shape)", () => {
     expect(res.checkedAt).toBeTypeOf("number");
   });
 
-  test("memberCount > 100 marks a pending grant spent (persisted, permanent)", async () => {
+  test("memberCount > 100 marks a pending grant spent (permanent) but keeps its capacity", async () => {
     stubPolar(proState());
     await makeMember(GRANTOR);
     await grantBridgeTokenHandler({}, auth(GRANTOR), { spaceId: SPACE });
@@ -302,11 +306,14 @@ describe("admin getSpaceMembership (spend rule + response shape)", () => {
     );
     expect(res.memberCount).toBe(101);
     const token = res.tokens.find((t) => t.grantorDid === String(GRANTOR));
+    // Spent locks the token to this guild; it does NOT zero its capacity, so
+    // the bridge keeps running up to the granted (1000) capacity and its 2x
+    // hard stop (2000).
     expect(token?.status).toBe("spent");
-    expect(token?.capacity).toBe(0);
-    expect(token?.live).toBe(false);
-    expect(res.maxMembers).toBe(0);
-    expect(res.overLimit).toBe(true);
+    expect(token?.capacity).toBe(1000);
+    expect(token?.live).toBe(true);
+    expect(res.maxMembers).toBe(1000);
+    expect(res.overLimit).toBe(false);
 
     // Persisted → grant is spent forever.
     const row = await selectGrantForGrantor(openReadStateDb(), GRANTOR);
@@ -327,7 +334,7 @@ describe("admin getSpaceMembership (spend rule + response shape)", () => {
     }
   });
 
-  test("spent grant stays spent even though the grantor's Polar lapses", async () => {
+  test("spent grant is not resurrected when the grantor's Polar lapses", async () => {
     stubPolar(proState());
     await makeMember(GRANTOR);
     await grantBridgeTokenHandler({}, auth(GRANTOR), { spaceId: SPACE });
@@ -335,8 +342,11 @@ describe("admin getSpaceMembership (spend rule + response shape)", () => {
     // Force-spend.
     await markGrantSpent(openReadStateDb(), GRANTOR);
 
-    // Grantor's sub lapsing must not resurrect the token.
+    // Grantor's sub lapsing drops live capacity to 0 — the grant stays spent
+    // (not resurrected) and the space falls back to the free-tier floor.
+    // Clear the Polar TTL cache so the lapsed state is re-resolved.
     stubPolar({ active_subscriptions: [], granted_benefits: [] });
+    _clearPolarCache();
     const res = await adminGetSpaceMembershipHandler(
       { spaceId: SPACE },
       auth(GRANTOR),
@@ -344,5 +354,37 @@ describe("admin getSpaceMembership (spend rule + response shape)", () => {
     const token = res.tokens.find((t) => t.grantorDid === String(GRANTOR));
     expect(token?.status).toBe("spent");
     expect(token?.capacity).toBe(0);
+    expect(res.maxMembers).toBe(FREE_BRIDGE_CAPACITY);
+  });
+
+  test("no grants → free-tier floor, not zero", async () => {
+    stubPolar(proState());
+    await makeMember(GRANTOR);
+
+    const res = await adminGetSpaceMembershipHandler(
+      { spaceId: SPACE },
+      auth(GRANTOR),
+    );
+    expect(res.tokens).toHaveLength(0);
+    expect(res.validTokenCount).toBe(0);
+    expect(res.maxMembers).toBe(FREE_BRIDGE_CAPACITY);
+    expect(res.overLimit).toBe(false);
+  });
+
+  test("free-tier space over 50 members is over limit", async () => {
+    stubPolar(proState());
+    await makeMember(GRANTOR);
+    // 50 extras + grantor = 51 members > FREE_BRIDGE_CAPACITY.
+    for (let i = 0; i < 50; i++) {
+      await makeMember(`did:plc:bt-free-${i}`);
+    }
+
+    const res = await adminGetSpaceMembershipHandler(
+      { spaceId: SPACE },
+      auth(GRANTOR),
+    );
+    expect(res.tokens).toHaveLength(0);
+    expect(res.maxMembers).toBe(FREE_BRIDGE_CAPACITY);
+    expect(res.overLimit).toBe(true);
   });
 });
