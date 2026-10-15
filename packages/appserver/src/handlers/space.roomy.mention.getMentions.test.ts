@@ -13,8 +13,6 @@ import { closeDb, openDb, openGlobalDb, openSpaceDb } from "../db/db.ts";
 import { _setTestFetchBlockRecords, type BlockRecord } from "../materialization/blocks.ts";
 import { _resetProfileStoreCache, _setTestGetProfiles } from "../queries/profileStore.ts";
 import {
-  _blockFetchesInFlight,
-  _blockSweepsInFlight,
   _resetBlockCaches,
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
@@ -109,11 +107,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // `hiddenBy` starts sweeps and refetches detached from the read that
-  // triggered them, so they have to be drained while the PDS stub is still
-  // installed — before the DBs go away under them.
-  await Promise.all(_blockSweepsInFlight());
-  await Promise.all(_blockFetchesInFlight());
   _setTestFetchBlockRecords(null);
   _setTestGetProfiles(null);
   _resetBlockCaches();

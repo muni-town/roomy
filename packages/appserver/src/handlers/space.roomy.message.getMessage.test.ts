@@ -27,8 +27,6 @@ import {
 } from "../db/db.ts";
 import { _setTestFetchBlockRecords, type BlockRecord } from "../materialization/blocks.ts";
 import {
-  _blockFetchesInFlight,
-  _blockSweepsInFlight,
   _resetBlockCaches,
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
@@ -55,8 +53,7 @@ beforeEach(async () => {
   closeDb();
   const db = openDb({ path: ":memory:" });
   _resetBlockCaches();
-  // Hermetic by default: no test may reach a real PDS, and the sweeps that
-  // `hiddenBy` starts in the background must find nothing to fetch.
+  // Hermetic: no test may reach a real PDS.
   _setTestFetchBlockRecords(async () => []);
 
   roomId = newUlid();
@@ -113,11 +110,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // `hiddenBy` starts sweeps and refetches detached from the read that
-  // triggered them, so they have to be drained while the PDS stub is still
-  // installed — before the DBs go away under them.
-  await Promise.all(_blockSweepsInFlight());
-  await Promise.all(_blockFetchesInFlight());
   _setTestFetchBlockRecords(null);
   _resetBlockCaches();
   closeDb();
@@ -265,8 +257,6 @@ describe("getMessage and the admin reveal", () => {
   test("the reveal writes nothing", async () => {
     await makeAdmin(VIEWER);
     await seedBlockSet(VIEWER, [block(AUTHOR)]);
-    await Promise.all(_blockSweepsInFlight());
-    await Promise.all(_blockFetchesInFlight());
 
     /** Row counts for every table, across all three DBs. */
     const census = async (): Promise<Record<string, number>> => {
@@ -296,7 +286,6 @@ describe("getMessage and the admin reveal", () => {
     // every caller, revealing or not — so what the census below sees is the
     // reveal's own footprint and nothing else.
     expect((await getMessage()).content).toBe("a body only a reveal should return");
-    await Promise.all(_blockFetchesInFlight());
 
     const before = await census();
     expect((await getMessage()).content).toBe("a body only a reveal should return");

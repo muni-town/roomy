@@ -18,7 +18,6 @@ import {
   type BlockRecord,
 } from "../materialization/blocks.ts";
 import {
-  _blockFetchesInFlight,
   _resetBlockCaches,
   blocks,
   hiddenBy,
@@ -97,7 +96,6 @@ describe("refreshBlocks", () => {
     // B's view is warmed while nobody has blocked them, so the memo the
     // invalidation has to clear is the empty one.
     expect([...(await hiddenBy(BOB))]).toEqual([]);
-    await Promise.all(_blockFetchesInFlight());
 
     // A now blocks B. B's own repos are untouched — the evidence is in A's.
     serve(ALICE, [BOB]);

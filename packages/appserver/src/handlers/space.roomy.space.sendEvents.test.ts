@@ -19,6 +19,7 @@ import { createAppserver, type AppserverHandle } from "../appserver.ts";
 import { testAuthVerifier } from "../xrpc/auth.ts";
 import { closeDb, openDb } from "../db/db.ts";
 import { _resetEmbedSweeper } from "../embed/sweeper.ts";
+import { _setTestFetchBlockRecords } from "../materialization/blocks.ts";
 
 const SPACE = "did:web:send-events-test.example";
 const USER = UserDid.assert("did:plc:send-events-user");
@@ -89,6 +90,9 @@ function makeReplyEvent(roomId: string, target: string) {
 beforeEach(async () => {
   closeDb();
   _resetEmbedSweeper();
+  // Hermetic: an authenticated request refreshes that account's block set
+  // (`queries/userBlocks.ts`), so no test may reach a real PDS.
+  _setTestFetchBlockRecords(async () => []);
 
   // Open the singleton event-log DB in-memory so handlers' internal
   // openDb() resolves. Materialised rows live in the per-space DB.
@@ -157,6 +161,7 @@ afterEach(async () => {
     await handle.close();
     handle = null;
   }
+  _setTestFetchBlockRecords(null);
   closeDb();
   _resetEmbedSweeper();
 });

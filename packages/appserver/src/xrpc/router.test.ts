@@ -159,3 +159,32 @@ describe("XrpcRouter schema validation", () => {
     expect(await res.json()).toEqual({ anything: 123 });
   });
 });
+
+describe("XrpcRouter authenticated-request observer", () => {
+  test("reports the caller's DID for a query and for a procedure", async () => {
+    const seen: string[] = [];
+    const router = build((r) => {
+      r.setOnAuthenticated((did) => seen.push(did));
+      r.query("test.query", { handler: async () => ({ ok: true }) });
+      r.procedure("test.proc", { handler: async () => undefined });
+    });
+
+    await call(router, "http://x/xrpc/test.query");
+    await call(router, "http://x/xrpc/test.proc", { method: "POST" });
+
+    expect(seen).toEqual(["did:plc:test", "did:plc:test"]);
+  });
+
+  test("reports nothing for an anonymous caller", async () => {
+    const seen: string[] = [];
+    const router = new XrpcRouter(async () => ({ did: null })).query(
+      "test.query",
+      { handler: async () => ({ ok: true }) },
+    );
+    router.setOnAuthenticated((did) => seen.push(did));
+
+    await call(router, "http://x/xrpc/test.query");
+
+    expect(seen).toEqual([]);
+  });
+});

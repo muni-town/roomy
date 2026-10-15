@@ -16,8 +16,6 @@ import type { DbLike } from "../db/types.ts";
 import { _setTestFetchBlockRecords, type BlockRecord } from "../materialization/blocks.ts";
 import { _resetProfileStoreCache } from "./profileStore.ts";
 import {
-  _blockFetchesInFlight,
-  _blockSweepsInFlight,
   _resetBlockCaches,
   hiddenBy,
   refreshBlockSet,
@@ -51,8 +49,7 @@ beforeEach(async () => {
   openDb({ path: ":memory:" });
   _resetBlockCaches();
   _resetProfileStoreCache();
-  // Hermetic: no test may reach a real PDS, and the sweeps `hiddenBy` starts
-  // in the background must find nothing to fetch.
+  // Hermetic: no test may reach a real PDS.
   _setTestFetchBlockRecords(async () => []);
 
   const space = openSpaceDb(SPACE);
@@ -105,10 +102,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // `hiddenBy` starts sweeps and refetches detached from the read that
-  // triggered them, so drain them while the PDS stub is still installed.
-  await Promise.all(_blockSweepsInFlight());
-  await Promise.all(_blockFetchesInFlight());
   _setTestFetchBlockRecords(null);
   _resetBlockCaches();
   _resetProfileStoreCache();

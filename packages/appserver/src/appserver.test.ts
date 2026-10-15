@@ -6,6 +6,7 @@ import { _resetEmbedSweeper } from "./embed/sweeper.ts";
 import { recordProcessStart } from "./fatal.ts";
 import { _resetProfileStoreCache } from "./queries/profileStore.ts";
 import { _resetProfileNegativeCache } from "./materialization/profiles.ts";
+import { _setTestFetchBlockRecords } from "./materialization/blocks.ts";
 
 // Pick a free port by letting the OS assign one (port 0).
 function ephemeralPort(): number {
@@ -21,6 +22,9 @@ beforeEach(() => {
   _resetEmbedSweeper();
   _resetProfileStoreCache();
   _resetProfileNegativeCache();
+  // Hermetic: an authenticated request refreshes that account's block set
+  // (`queries/userBlocks.ts`), so no test may reach a real PDS.
+  _setTestFetchBlockRecords(async () => []);
   // Use a temp data dir so the DID-doc test's signing key lands in /tmp,
   // not the real data dir.
   process.env.DATA_DIR = "/tmp/appserver-test-data";
@@ -31,6 +35,7 @@ afterEach(async () => {
     await handle.close();
     handle = null;
   }
+  _setTestFetchBlockRecords(null);
 });
 
 describe("createAppserver factory", () => {

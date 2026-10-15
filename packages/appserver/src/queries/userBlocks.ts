@@ -15,24 +15,31 @@
  * hidden from this viewer, so every downstream consumer is direction-agnostic
  * and the mutual case costs no branching anywhere.
  *
- * ## Where the reverse set comes from
+ * ## Who starts a fetch
  *
- * Enumerating the viewer's space-members' repos. `listRecords` against one
- * account's PDS is the only place a fresh answer exists; a network index would
- * answer more cheaply but only at an ingest lag this feature cannot bound. Each
- * candidate's resolved set is cached in `user_blocks` under *their own*
- * `user_did` — the same row shape as a viewer's own set, so one table serves
- * both directions and the enumeration is a cache warm rather than a per-request
- * cost.
+ * The DID the set describes, once that DID authenticates ({@link warmBlockSet}).
+ * The record naming a blocked account lives in the blocker's own repo, so a row
+ * answering `blockedBy` is written by a fetch keyed on the *blocker* — the same
+ * `user_blocks` shape as their forward set, keyed by their own `user_did`. One
+ * table, two directions, and the set of repos the appserver reads is the set of
+ * accounts that actually use it.
  *
- * ## Why nothing here blocks on the network
+ * ## Why a read never fetches
  *
  * Every read path in the appserver consumes this set, `room.getMessages`
  * included. A PDS round-trip inside a read would make a message list as slow as
- * its slowest member's PDS. So a read serves the indexed rows it already has and
- * the fetch lands detached for the next read — the same detach-and-hydrate shape
- * as `profileStore`, down to the in-flight map that collapses N concurrent
- * readers of one DID into a single fetch.
+ * its slowest member's PDS, so a read serves the indexed rows it already has
+ * and nothing else — no DID resolution, no `listRecords`, nothing awaited.
+ * Refreshing is the account's own business, and the stamp of the last attempt
+ * keeps it to one PDS read per cache window however many requests it makes. The
+ * same detach-and-hydrate shape as `profileStore`, down to the in-flight map
+ * that collapses N concurrent requests for one DID into a single fetch.
+ *
+ * The staleness this accepts: a block written where the appserver cannot see it
+ * — a Bluesky client, say — is enforced from the blocker's next authenticated
+ * request rather than at a fixed deadline. A block written *in* Roomy is exact,
+ * because the client's `space.roomy.user.refreshBlocks` call refreshes the
+ * writer in the same breath as the write.
  */
 
 import type { UserDid } from "@roomy-space/sdk";
@@ -40,14 +47,13 @@ import {
   fetchBlockRecords,
   type BlockRecord,
 } from "../materialization/blocks.ts";
-import { openSpaceDb, tryOpenReadStateDb } from "../db/db.ts";
+import { tryOpenReadStateDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
-import { selectJoinedSpaceDids } from "./userSpaceMembership.ts";
 import { log } from "../log.ts";
 
 /**
- * How long a resolved block set is served from the in-memory cache. A resolved
- * set is authoritative until its TTL, so reads stay off the read-state DB.
+ * How long a refreshed block set is trusted for: the window a read serves the
+ * rows it has, and the least time between two reads of one account's repos.
  *
  * Read per call so a test can drive a short window and observe a refetch, the
  * same seam `profileFetchTimeoutMs` provides for the profile deadline.
@@ -59,9 +65,9 @@ function blockCacheTtlMs(): number {
 
 /**
  * How long a failed fetch is left alone. A block lives in the user's own PDS,
- * so a failure is transient (a slow or briefly-down host); retrying it per
- * request would turn one unreadable PDS into a fetch per read, and this is short
- * enough that a recovered host is picked up within the minute.
+ * so a failure is transient (a slow or briefly-down host); retrying it on every
+ * request would turn one unreadable PDS into a fetch per request, and this is
+ * short enough that a recovered host is picked up within the minute.
  */
 function blockErrorBackoffMs(): number {
   const raw = Number(process.env.BLOCK_ERROR_BACKOFF_MS);
@@ -75,28 +81,26 @@ const DEFAULT_ERROR_BACKOFF_MS = 60_000;
 const NO_DIDS: ReadonlySet<string> = new Set<string>();
 
 /**
- * Candidate-blocker sweeps in flight, one per viewer. Keyed by viewer DID so
- * concurrent reads by the same user collapse into one sweep; the sweep's own
- * per-DID fetches are deduplicated by {@link startFetch}.
+ * Refreshes in flight, one per account. Keyed by DID so N requests from one
+ * account collapse into one refresh; the entry is the whole chain (decide,
+ * then fetch), so a test can await it from the moment it is registered.
  */
-const inflightSweeps = new Map<string, Promise<void>>();
-
-/** Per-DID fetches in flight, so N readers of one author issue one request. */
 const inflightFetches = new Map<string, Promise<void>>();
 
 interface CacheEntry {
   /** Author DIDs the memoised user must not see. */
   dids: Set<string>;
-  fetchedAt: number;
+  /** When the rows behind this answer were read from the read-state DB. */
+  readAt: number;
 }
 
-/** Resolved sets of the blocks a user *wrote*; keyed by that user's DID. */
+/** The blocks a user *wrote*; keyed by that user's DID. */
 const writtenCache = new Map<string, CacheEntry>();
 
 /**
- * Resolved reverse sets: the recovered blockers of a user. Keyed by the blocked
- * user's DID. Separate from {@link writtenCache} because the two are different
- * questions over the same table, and a fetch for one does not answer the other.
+ * The recovered blockers of a user. Keyed by the blocked user's DID. Separate
+ * from {@link writtenCache} because the two are different questions over the
+ * same table, and a fetch for one does not answer the other.
  */
 const reverseCache = new Map<string, CacheEntry>();
 
@@ -106,17 +110,11 @@ const reverseCache = new Map<string, CacheEntry>();
 export function _resetBlockCaches(): void {
   writtenCache.clear();
   reverseCache.clear();
-  inflightSweeps.clear();
   inflightFetches.clear();
 }
 
-/** The sweeps currently in flight, so a test can await them. */
-export function _blockSweepsInFlight(): Promise<void>[] {
-  return [...new Set(inflightSweeps.values())];
-}
-
-/** The fetches currently in flight, so a test can await them. */
-export function _blockFetchesInFlight(): Promise<void>[] {
+/** The refreshes currently in flight, so a test can await them. */
+export function _blockRefreshesInFlight(): Promise<void>[] {
   return [...new Set(inflightFetches.values())];
 }
 
@@ -125,36 +123,27 @@ export function _blockFetchesInFlight(): Promise<void>[] {
 /**
  * The blocks `userDid` wrote into their own repos.
  *
- * Serves the memoised set when it is fresh; otherwise reads the indexed rows and
- * starts a detached refresh when those rows are missing or stale. Never fails
- * the caller: a PDS this cannot reach returns whatever rows are already known,
- * because throwing here would fail the message list the set exists to filter.
+ * The memoised set when it is fresh, else the indexed rows, else the empty set.
+ * Never fails the caller: throwing here would fail the message list the set
+ * exists to filter.
  */
 export async function blocks(userDid: UserDid): Promise<ReadonlySet<string>> {
   const cached = writtenCache.get(userDid);
-  if (cached && Date.now() - cached.fetchedAt < blockCacheTtlMs()) {
+  if (cached && Date.now() - cached.readAt < blockCacheTtlMs()) {
     return cached.dids;
   }
 
   const readStateDb = tryOpenReadStateDb();
   if (!readStateDb) return cached?.dids ?? NO_DIDS;
 
-  const rows = await readOwnRows(readStateDb, userDid);
+  const rows = await readStateDb
+    .query("select blocked_did from user_blocks where user_did = ?")
+    .all<{ blocked_did: string }>([userDid]);
   const entry: CacheEntry = {
-    dids: new Set(rows.written),
-    fetchedAt: Date.now(),
+    dids: new Set(rows.map((r) => r.blocked_did)),
+    readAt: Date.now(),
   };
   writtenCache.set(userDid, entry);
-
-  // No rows and no stamp at all means the repo has never been read; an empty
-  // set of *written* blocks is indistinguishable from an unread repo without
-  // the stamp, so both are refetched on the same cadence. A failed attempt
-  // inside the backoff window is left alone rather than retried per read.
-  const stale = Date.now() - rows.fetchedAt >= blockCacheTtlMs();
-  const backedOff =
-    rows.status === "error" && Date.now() - rows.fetchedAt < blockErrorBackoffMs();
-  if (stale && !backedOff) startFetch(userDid, readStateDb);
-
   return entry.dids;
 }
 
@@ -163,12 +152,12 @@ export async function blocks(userDid: UserDid): Promise<ReadonlySet<string>> {
  * direction.
  *
  * A plain indexed read (`idx_user_blocks_blocked`): the reverse fact is *stored*
- * here once a candidate's repo has been read, so answering needs no network at
- * all. What populates those rows is {@link warmBlockers}.
+ * here once the blocker's repo has been read, so answering needs no network at
+ * all. What populates those rows is {@link warmBlockSet}, run for the blocker.
  */
 export async function blockedBy(userDid: UserDid): Promise<ReadonlySet<string>> {
   const cached = reverseCache.get(userDid);
-  if (cached && Date.now() - cached.fetchedAt < blockCacheTtlMs()) {
+  if (cached && Date.now() - cached.readAt < blockCacheTtlMs()) {
     return cached.dids;
   }
 
@@ -180,7 +169,7 @@ export async function blockedBy(userDid: UserDid): Promise<ReadonlySet<string>> 
     .all<{ user_did: string }>([userDid]);
   const entry: CacheEntry = {
     dids: new Set(rows.map((r) => r.user_did)),
-    fetchedAt: Date.now(),
+    readAt: Date.now(),
   };
   reverseCache.set(userDid, entry);
   return entry.dids;
@@ -191,12 +180,12 @@ export async function blockedBy(userDid: UserDid): Promise<ReadonlySet<string>> 
  * blocks them.
  *
  * `viewerDid === null` is an anonymous caller, who hides nobody and is hidden
- * from nobody — the empty set, with no DB read and no sweep.
+ * from nobody — the empty set, with no DB read and no fetch.
  *
- * The reverse half is only as complete as the last sweep of the viewer's space
- * members' repos. That sweep is started here — detached, so this read returns
- * what is already known — and its completion drops the viewer's memo entries so
- * the next read picks up whatever it recovered.
+ * Both halves are answered from `user_blocks` alone, so this is as fresh as the
+ * last fetch of the DID each half belongs to and never a network call: the
+ * viewer's own set is refreshed by the viewer ({@link warmBlockSet}), a
+ * blocker's by the blocker.
  */
 export async function hiddenBy(
   viewerDid: UserDid | null,
@@ -207,7 +196,6 @@ export async function hiddenBy(
     blocks(viewerDid),
     blockedBy(viewerDid),
   ]);
-  warmBlockers(viewerDid);
 
   if (reverse.size === 0) return own;
   const union = new Set(own);
@@ -216,25 +204,21 @@ export async function hiddenBy(
 }
 
 /**
- * Read one user's written rows and their last-fetch stamp.
+ * The last recorded fetch attempt for `userDid`.
  *
  * The stamp is what separates "no blocks" from "never read" — a user with a
  * genuinely empty set has no rows to carry a timestamp, the same distinction
- * `profiles.ts` draws between a profile row and its negative cache.
+ * `profiles.ts` draws between a profile row and its negative cache. An absent
+ * row reads as `fetchedAt: 0`, which is stale by definition.
  */
-async function readOwnRows(
+async function readFetchStamp(
   readStateDb: DbLike,
   userDid: UserDid,
-): Promise<{ written: string[]; fetchedAt: number; status: "ok" | "error" | null }> {
-  const written = await readStateDb
-    .query("select blocked_did from user_blocks where user_did = ?")
-    .all<{ blocked_did: string }>([userDid]);
+): Promise<{ fetchedAt: number; status: "ok" | "error" | null }> {
   const stamp = await readStateDb
     .query("select fetched_at, status from user_block_fetches where user_did = ?")
     .get<{ fetched_at: number; status: "ok" | "error" }>([userDid]);
-
   return {
-    written: written.map((r) => r.blocked_did),
     fetchedAt: stamp?.fetched_at ?? 0,
     status: stamp?.status ?? null,
   };
@@ -243,31 +227,52 @@ async function readOwnRows(
 // ─── Refresh ───────────────────────────────────────────────────────────────
 
 /**
- * Fetch `userDid`'s repos and write the result, off the caller's path.
+ * Refresh `userDid`'s block set because *they* are present: an authenticated
+ * request by that DID is the trigger, and another user's read never is.
  *
- * Detached by design: the caller is a read that already returned. The completion
- * drops the memo entries that could have been derived from the pre-fetch rows —
- * this user's own set, and their reverse set, since these rows are what a
- * `blockedBy` read answers from.
+ * That is what makes the cost of the reverse direction proportional to the
+ * accounts that use the appserver rather than to who shares a space with whom —
+ * the rows a `blockedBy` read answers from are written by their own author's
+ * fetch. The DIDs read are the DIDs that authenticate, and the stamp of the last
+ * attempt bounds each of them to one PDS read per cache window.
+ *
+ * Detached by construction, so the request that triggers it is not slowed by it:
+ * a Map lookup and a promise nobody awaits. The chain records its own failures —
+ * this can never surface as an unhandled rejection or as an error on the request
+ * that called it.
+ *
+ * The rows a read answers from change only when the fetch lands, and that is
+ * when the memos derived from the previous ones go: this user's own set here,
+ * the subjects' reverse sets inside `fetchAndStore`. A refresh that decided not
+ * to fetch leaves both alone, so an ordinary request costs no DB re-read.
  */
-function startFetch(userDid: UserDid, readStateDb: DbLike): void {
+export function warmBlockSet(userDid: UserDid): void {
   if (inflightFetches.has(userDid)) return;
+  const readStateDb = tryOpenReadStateDb();
+  if (!readStateDb) return;
 
-  const run = fetchAndStore(userDid, readStateDb)
+  const refresh = (async () => {
+    const stamp = await readFetchStamp(readStateDb, userDid);
+    const age = Date.now() - stamp.fetchedAt;
+    const due =
+      stamp.status === "error"
+        ? age >= blockErrorBackoffMs()
+        : age >= blockCacheTtlMs();
+    if (!due) return;
+    if (!(await fetchAndStore(userDid, readStateDb))) return;
+    writtenCache.delete(userDid);
+  })()
     .catch((err) => {
       // `fetchAndStore` records its own failures; this is the outer guard so a
       // defect in it can never surface as an unhandled rejection.
       const message = err instanceof Error ? err.message : String(err);
-      log.warn(`[userBlocks] background fetch failed for ${userDid}: ${message}`);
+      log.warn(`[userBlocks] background refresh failed for ${userDid}: ${message}`);
     })
     .finally(() => {
       inflightFetches.delete(userDid);
-      writtenCache.delete(userDid);
-      reverseCache.delete(userDid);
-    })
-    .then(() => undefined);
+    });
 
-  inflightFetches.set(userDid, run);
+  inflightFetches.set(userDid, refresh);
 }
 
 /**
@@ -289,6 +294,11 @@ async function fetchAndStore(
     return false;
   }
   await replaceBlockRows(readStateDb, userDid, records);
+  // These rows are the answer to *every* blocked account's reverse lookup, so no
+  // reverse memo survives the replacement. Naming the subjects exactly would
+  // mean reading the pre-fetch rows first; a memo entry costs one indexed read
+  // to rebuild, and a clear cannot miss a subject.
+  reverseCache.clear();
   return true;
 }
 
@@ -389,127 +399,4 @@ export async function refreshBlockSet(userDid: UserDid): Promise<boolean> {
 export function invalidateBlockSet(userDid: UserDid): void {
   writtenCache.delete(userDid);
   reverseCache.delete(userDid);
-}
-
-// ─── Candidate enumeration ──────────────────────────────────────────────────
-
-/**
- * Sweep the viewer's space-members' repos and cache each one's block set, so the
- * next `blockedBy` reads a complete answer.
- *
- * The reverse direction is the only part of a block the appserver cannot learn
- * from the viewer's own repo, and the only way to learn it is to read the
- * accounts that *could* hold it. The candidate set is the viewer's space
- * members: a block by someone the viewer shares no space with could never hide
- * anything from them, so reading that repo would be work with no possible effect.
- *
- * Detached, one sweep per viewer per cache window, with the per-DID fetches
- * deduplicated by {@link startFetch} — the sweep's cost is one `listRecords` loop
- * per member the appserver does not already have a fresh answer for.
- */
-export function warmBlockers(viewerDid: UserDid): void {
-  if (inflightSweeps.has(viewerDid)) return;
-  const readStateDb = tryOpenReadStateDb();
-  if (!readStateDb) return;
-
-  const run = sweepBlockers(viewerDid, readStateDb)
-    .catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
-      log.warn(`[userBlocks] blocker sweep failed for ${viewerDid}: ${message}`);
-    })
-    .finally(() => {
-      inflightSweeps.delete(viewerDid);
-      // The sweep may have recovered rows naming this viewer, so the reverse
-      // memo is dropped for the next read to re-read.
-      reverseCache.delete(viewerDid);
-    });
-
-  inflightSweeps.set(viewerDid, run);
-}
-
-async function sweepBlockers(
-  viewerDid: UserDid,
-  readStateDb: DbLike,
-): Promise<void> {
-  const candidates = await candidateBlockerDids(viewerDid, readStateDb);
-  candidates.delete(viewerDid);
-  if (candidates.size === 0) return;
-
-  const dids = [...candidates];
-  const stamps = await readStateDb
-    .query(
-      `select user_did, fetched_at, status from user_block_fetches
-        where user_did in (${dids.map(() => "?").join(",")})`,
-    )
-    .all<{ user_did: string; fetched_at: number; status: "ok" | "error" }>(dids);
-  const now = Date.now();
-  const fresh = new Set<string>();
-  for (const row of stamps) {
-    const age = now - row.fetched_at;
-    if (
-      row.status === "error"
-        ? age < blockErrorBackoffMs()
-        : age < blockCacheTtlMs()
-    ) {
-      fresh.add(row.user_did);
-    }
-  }
-
-  await mapWithConcurrency(
-    dids.filter((did) => !fresh.has(did)),
-    SWEEP_CONCURRENCY,
-    async (did) => {
-      startFetch(did, readStateDb);
-      // Awaiting the shared promise is what bounds the sweep's concurrency; the
-      // fetch itself is already detached from every read path.
-      await inflightFetches.get(did);
-    },
-  );
-}
-
-/**
- * The DIDs that could hold a block naming `viewerDid`: the members of every space
- * the viewer has joined.
- *
- * Bridged authors never appear here as blockers — they hold no repo to write a
- * block into — which is why the reverse direction is ATProto-only by
- * construction.
- */
-async function candidateBlockerDids(
-  viewerDid: UserDid,
-  readStateDb: DbLike,
-): Promise<Set<UserDid>> {
-  const spaceDids = await selectJoinedSpaceDids(readStateDb, viewerDid);
-  const candidates = new Set<UserDid>();
-  for (const spaceDid of spaceDids) {
-    const members = await openSpaceDb(spaceDid)
-      .query("select tail as did from edges where head = ? and label = 'member'")
-      .all<{ did: string }>([spaceDid]);
-    for (const member of members) candidates.add(member.did as UserDid);
-  }
-  return candidates;
-}
-
-/** How many candidate repos are read at once. */
-const SWEEP_CONCURRENCY = 4;
-
-/** Run `work` over `items` with at most `limit` in flight. */
-async function mapWithConcurrency<T>(
-  items: readonly T[],
-  limit: number,
-  work: (item: T) => Promise<void>,
-): Promise<void> {
-  if (items.length === 0) return;
-  let next = 0;
-  const runners = Array.from(
-    { length: Math.min(limit, items.length) },
-    async () => {
-      for (;;) {
-        const index = next++;
-        if (index >= items.length) return;
-        await work(items[index] as T);
-      }
-    },
-  );
-  await Promise.all(runners);
 }

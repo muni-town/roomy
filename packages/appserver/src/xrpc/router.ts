@@ -69,6 +69,7 @@ export interface WsData {
 export class XrpcRouter {
   readonly #routes = new Map<string, RouteDef>();
   readonly #auth: AuthVerifier;
+  #onAuthenticated: ((did: string) => void) | undefined;
   #queryCache: QueryCache | undefined;
   #cacheableNsids: ReadonlySet<string> = new Set();
 
@@ -85,6 +86,18 @@ export class XrpcRouter {
   setQueryCache(queryCache: QueryCache, cacheableNsids: ReadonlySet<string>): void {
     this.#queryCache = queryCache;
     this.#cacheableNsids = cacheableNsids;
+  }
+
+  /**
+   * Observe every authenticated request with the caller's DID. The router has
+   * no opinion about what a DID being present means; the composition root
+   * installs the one subscriber that does.
+   *
+   * Called synchronously from the request path, so a subscriber must return
+   * promptly — it is a notification, not part of the response.
+   */
+  setOnAuthenticated(fn: ((did: string) => void) | undefined): void {
+    this.#onAuthenticated = fn;
   }
 
   query(nsid: string, def: Omit<import("./types.ts").QueryDef, "kind">): this {
@@ -176,7 +189,7 @@ export class XrpcRouter {
               { status: 405 },
             );
           }
-          const auth = await this.#auth(req);
+          const auth = await this.#verifyAuth(req);
           let params: QueryParams | unknown = route.parseParams
             ? route.parseParams(rawParams)
             : rawParams;
@@ -227,7 +240,7 @@ export class XrpcRouter {
               { status: 405 },
             );
           }
-          const auth = await this.#auth(req);
+          const auth = await this.#verifyAuth(req);
           const params = route.parseParams
             ? route.parseParams(rawParams)
             : rawParams;
@@ -328,6 +341,17 @@ export class XrpcRouter {
         return toErrorResponse(err);
       }
     };
+  }
+
+  /**
+   * Resolve the caller, reporting an authenticated DID to the observer. The
+   * only place identity is established for a request, so the only place that
+   * signal can be emitted once.
+   */
+  async #verifyAuth(req: Request): Promise<AuthCtx> {
+    const auth = await this.#auth(req);
+    if (auth.did !== null) this.#onAuthenticated?.(auth.did);
+    return auth;
   }
 
   get websocket(): import("bun").WebSocketHandler<WsData> {

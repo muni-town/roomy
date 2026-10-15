@@ -15,8 +15,6 @@ import { StreamDid, UserDid } from "@roomy-space/sdk";
 import { closeDb, openDb, openGlobalDb, openSpaceDb } from "../db/db.ts";
 import { _setTestFetchBlockRecords, type BlockRecord } from "../materialization/blocks.ts";
 import {
-  _blockFetchesInFlight,
-  _blockSweepsInFlight,
   _resetBlockCaches,
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
@@ -88,8 +86,7 @@ beforeEach(async () => {
   closeDb();
   openDb({ path: ":memory:" });
   _resetBlockCaches();
-  // Hermetic: no test may reach a real PDS, and the sweeps `hiddenBy` starts
-  // in the background must find nothing to fetch.
+  // Hermetic: no test may reach a real PDS.
   _setTestFetchBlockRecords(async () => []);
 
   const space = openSpaceDb(SPACE);
@@ -129,8 +126,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await Promise.all(_blockSweepsInFlight());
-  await Promise.all(_blockFetchesInFlight());
   _setTestFetchBlockRecords(null);
   _resetBlockCaches();
   _resetQdrantClient();

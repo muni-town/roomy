@@ -1,6 +1,6 @@
 # User-level blocks — Implementation Plan
 
-**Date:** 2026-09-26 (revised 2026-09-27, 2026-09-28, 2026-10-13)
+**Date:** 2026-09-26 (revised 2026-09-27, 2026-09-28, 2026-10-13, 2026-10-15)
 **Status:** Phase 1 shipped (#317, `9731537c5`); Phase 2 (the appserver block
 set) merged to `next` (#427). Phases 3–6 are ready to dispatch; §7 is a
 decision record and every question in it is answered. Phase 2's
@@ -29,6 +29,19 @@ scope.** Phase 2 added the RPC NSID to `APPSERVER_RPCS`, which put it in
 `base`; the deployed HappyView client does not list it and rejected the whole
 granted set at session registration, blocking sign-in. Both block scopes now
 live in the ceiling-only `blocks` tier until the client lists them.
+
+**Revision 2026-10-15 — the reverse index is built from each account's own
+requests, and the member sweep is gone.** The reverse set was to be recovered by
+enumerating the members of every space the viewer had joined and reading each
+member's repos (§3.5). That sweep ran on the read path, so one viewer's reads
+read the PDSs of every account they shared a space with: measured on the
+deployed appserver over 24 h, ~300 distinct accounts were read, individual sets
+reached 56k records, and the resulting `delete from user_blocks` writes
+saturated the read-state worker. It is **removed**. A read never starts a fetch
+now, and a refresh is triggered only by the account it describes — when that
+account makes an authenticated request. §2.5 states the freshness that trades
+away, why it is the safe direction, and why a Jetstream consumer is still not
+the answer.
 
 **Packages:** `packages/appserver`, `packages/app-lite`, `packages/design`,
 `packages/sdk`, `packages/docs`
@@ -494,19 +507,19 @@ gives all consumers one synchronous, indexed lookup.
   and the negative cache in `profiles.ts:87-132`.
 - Backed by one indexed read of `user_blocks` (`primary key (user_did,
   blocked_did)` gives a prefix scan on `user_did`).
-- Background refresh on miss/stale, so a read never blocks on the PDS — the
-  same detach-and-hydrate shape as `hydrateMissingProfiles`
+- Background refresh, started by the account's own authenticated request rather
+  than by a read (§2.5), so a read never blocks on the PDS — the same
+  detach-and-hydrate shape as `hydrateMissingProfiles`
   (`profileStore.ts:310-347`).
 - A failed fetch records `status = 'error'` and backs off for 60 s rather than
   retrying per request (the `isProfileFetchBackedOff` pattern).
 - **Anonymous callers have no block set.** `parseUserDid(auth) === null` → empty
   set, no DB read, no redaction. An account-less viewer hides nobody and is
   hidden from nobody.
-- **The reverse rows share the same table.** A row written for a *candidate
-  blocker* — fetched to answer `blockedBy(did)` — is keyed by that user's own
-  `user_did` and is exactly the same shape, so one table serves both
-  directions and the primary key's `user_did` prefix scan still answers the
-  common lookup (§3.5).
+- **The reverse rows share the same table.** A row written for a *blocker* —
+  the set that answers `blockedBy(did)` — is keyed by that user's own `user_did`
+  and is exactly the same shape, so one table serves both directions and the
+  primary key's `user_did` prefix scan still answers the common lookup (§3.5).
 
 ### 2.4 Immediate invalidation after an in-app block
 
@@ -534,6 +547,79 @@ TTL remains the convergence path for a block written by *another* client.
 There is nothing else for the procedure to invalidate: the reveal is not
 recorded in the block set or anywhere else (§3.6), so a block's only effect on
 the server's state is its membership in `hiddenBy`.
+
+### 2.5 Decision: no index and no sweep — the reverse set is built from each account's own requests
+
+The reverse question — "who blocked this DID?" — is the only part of §3.5's
+predicate the appserver cannot answer from the viewer's own repo. Three shapes
+were on the table: enumerate the viewer's space-members' repos (the original
+revision's choice), index the record type in HappyView/Jetstream (§2.1's
+rejected mechanism; the Appendix records the registrations it would need), or
+read a repo when *its owner* is present. The third is what ships:
+
+- **A read never fetches.** `hiddenBy(viewerDid)` answers from `user_blocks`
+  alone: one indexed query for the viewer's own set, one for the reverse set. No
+  DID resolution, no `listRecords`, nothing awaited.
+- **An authenticated request refreshes its own account.** `warmBlockSet(did)`
+  runs for every authenticated request — the router reports each caller's DID
+  (`xrpc/router.ts`, installed by `appserver.ts`) — and reads that account's
+  repos only when the stamp of its last attempt is older than the 60 s TTL, or
+  past the 60 s error backoff. One account therefore costs at most one PDS page
+  loop per cache window however often it calls, and the set of repos read is the
+  set of accounts that use the appserver rather than the sum over viewers of
+  their space-mates.
+- **The write path stays synchronous.** `refreshBlocks` (§2.4) is awaited in the
+  writer's own request, so a block placed in Roomy is enforced for the writer
+  the moment it is written — and the row that answers the *blocked* account's
+  reverse lookup is written by that same call.
+
+**The staleness window, and why it is the safe direction.** A block placed in
+Roomy is exact on both sides: the writer's refresh runs inside the request that
+placed it, and the reverse memo of every subject is dropped when the rows are
+replaced (`reverseCache.clear()` in `queries/userBlocks.ts` — the replacement
+answers every blocked account's lookup, so no reverse memo survives it). What
+lags is a block placed where the appserver cannot see it, such as a Bluesky
+client: it is enforced for its author when that author's set is next refreshed
+(their next use of Roomy) and for its target when those rows next change. Two
+properties make that acceptable rather than a hole. First, an active account's
+set is at most one TTL behind, because the trigger is per-request while the
+stamp is per-window. Second, and decisively, the viewer's *own* block is
+unaffected: `blocks(viewerDid)` is refreshed by the viewer, and that is the
+direction with the security consequence. What a stale reverse set costs is that
+a target keeps seeing the blocker until the blocker next uses the appserver —
+the failure is "not yet hidden", never "a message the viewer was told was
+hidden is served anyway", and never a case where a viewer's own block stops
+being enforced.
+
+**Why not a Jetstream consumer (answering the question against the code).**
+Subscribing to one firehose over `space.roomy.user.block` and/or
+`app.bsky.graph.block` and writing `user_blocks` from it would remove the PDS
+page loops entirely, and it is the only shape that answers the reverse question
+without reading a repo at all. It is rejected on two measurements and one
+property:
+
+- **Size, unchanged for the Bluesky half.** `app.bsky.graph.block` is globally
+  enormous — ≥300k repos, mean 73 records each, ~20M records extrapolated
+  (§2.1) — so indexing it means a multi-hour backfill and a permanent
+  multi-million-row local index.
+- **The Roomy collection alone is small, but it is not the half that needs
+  help.** `space.roomy.user.block` is ours and small, so a consumer over it is
+  cheap in bytes. It is not cheaper in *freshness*: Jetstream delivery lags the
+  repo write by an unbounded amount — the objection §2.1 already records — while
+  the PDS read that ships is exact at the moment it runs. A permanent subscriber
+  and a second writer into `user_blocks` buy nothing the trigger does not
+  already have for a read that is deliberately stale-tolerant.
+- **The current code already satisfies the freshness that matters, more
+  cheaply.** The writer's own `refreshBlocks` is synchronous and in-request
+  (§2.4), so the direction with a security consequence needs no index and no
+  subscriber at all. Only the *reverse* direction is allowed to be stale, and a
+  target has nothing to act on.
+
+**If it is revisited:** the decision to re-open is the one §2.1 records, and the
+trigger does not change it. The appendix's `subject`-filtered HappyView query
+would answer `blockedBy` in one call, but only at an ingest lag this plan still
+cannot bound, and it would not make the *forward* direction fresher than the PDS
+read it replaces.
 
 ---
 
@@ -827,7 +913,7 @@ What changes, and what does not:
 - **The reverse set is resolved for every viewer, including the blocked.**
   The blocked user has no record in their own repo saying they were blocked —
   the evidence lives in the blocker's repo, which is public (§1.2). So
-  `getBlockedDids(did)` cannot answer it alone; it becomes two lookups whose
+  `blocks(did)` cannot answer it alone; it becomes two lookups whose
   union is the answer:
   1. `blocks(did)` — the viewer's own repos, both collections. This is the
      §2.2 fetch, unchanged.
@@ -836,12 +922,12 @@ What changes, and what does not:
      tree does not have today, and it is the real cost of mutual hiding: the
      appserver must learn about a record in somebody else's repo, and it has
      only three ways to do it.
-- **Where the reverse set comes from.** Ranked by fit:
+- **Where the reverse set comes from.** Ranked by fit (§2.5):
 
   | Source | Freshness | Cost | Verdict |
   |---|---|---|---|
-  | HappyView `space.roomy.user.block` index with a `filter = { field = "subject", value = did }` query | Jetstream lag (minutes, unbounded) | One index and one query lexicon (§Appendix; the appendix's Lua `filter` is exactly this lookup) | **Not in v1.** A safety property whose enforcement window "depends on HappyView's ingest lag, not on the appserver" is the same defect §2.1 rejected for the forward direction |
-  | Appserver-side enumeration of space members' repos via `listRecords` | Fresh on every refresh | One PDS round-trip per member the appserver does not already have an answer for | **In v1, bounded.** The appserver already knows every member DID in the viewer's spaces and already reads PDSs with a per-request deadline (§2.2). Cache each *candidate blocker's* block set in `user_blocks` under their own `user_did` — it is the same row shape, keyed by the author rather than the viewer — and invalidate with the same TTL plus the `refreshBlocks` write-through (§2.4) |
+  | HappyView `app.bsky.graph.block` index with a `filter = { field = "subject", value = did }` query | Jetstream lag (minutes, unbounded) | One index and one query lexicon (§Appendix; the appendix's Lua `filter` is exactly this lookup) | **Not in v1.** A safety property whose enforcement window "depends on HappyView's ingest lag, not on the appserver" is the same defect §2.1 rejected for the forward direction |
+  | Reading a blocker's repo when *that account* authenticates | Exact for the write that placed the block (`refreshBlocks`, §2.4); otherwise as old as that account's last authenticated request | One PDS page loop per account per cache window — proportional to the accounts that use the appserver, not to the space-mates of everyone reading | **Shipped.** `warmBlockSet` in `queries/userBlocks.ts`, called for every authenticated request; a read serves `user_blocks` and never fetches |
   | Nothing — one-way only | — | — | Rejected by §7.7 |
 
 - **`space.roomy.user.refreshBlocks` has to fan out.** §2.4 drops the memo for
@@ -1313,16 +1399,16 @@ exist for the fetch to have anything to read).
 2. `user_blocks` + `user_block_fetches` in
    `packages/appserver/src/db/readStateSchema.sql`; `"11": { kind: "structural" }`
    in `readStateVersions.ts` (§2.3).
-3. `packages/appserver/src/queries/userBlocks.ts` — `getBlockedDids(userDid)`
-   (the viewer's own repos) with the 60 s in-memory memo, the negative/error
-   backoff, and a detached background refresh mirroring
-   `queries/profileStore.ts` and `materialization/profiles.ts`.
-4. `hiddenBy(userDid)` (§3.5) — `getBlockedDids(userDid)` unioned with
+3. `packages/appserver/src/queries/userBlocks.ts` — `blocks(userDid)` (the
+   viewer's own repos) served from `user_blocks` with the 60 s in-memory memo
+   and the error backoff, and `warmBlockSet(did)` as the detached refresh,
+   triggered by that account's own authenticated request (§2.5).
+4. `hiddenBy(userDid)` (§3.5) — `blocks(userDid)` unioned with
    `blockedBy(userDid)`, the reverse index over `user_blocks` (rows whose
-   `blocked_did` is the viewer). A candidate blocker's set is fetched with the
-   same `fetchBlockRecords` and cached under their own `user_did`, so the
-   enumeration over the viewer's space-members' repos is a cache warm, not a
-   per-request cost.
+   `blocked_did` is the viewer). Both are indexed reads: a read never fetches.
+   The rows a reverse lookup answers from are written by the blocker's own
+   refresh under their own `user_did` — the same row shape as a viewer's own
+   set, so one table serves both directions (§2.5).
 5. `space.roomy.user.refreshBlocks` procedure (§2.4): SDK arktype schema,
    `PROCEDURE_SCHEMAS` entry, generated lexicon, route in `buildRouter`, prose
    in `packages/docs/.../prose.ts` + regenerated `nsids.generated.json`, and
@@ -1338,15 +1424,16 @@ exist for the fetch to have anything to read).
    `refreshBlocks` (fire-and-forget).
 7. Unit tests: the union of the two collections; an empty repo; a PDS that
    404s the unknown collection; a fetch failure recorded as `status:'error'`
-   with backoff; the TTL expiry triggering a refetch; and — the mutual case —
-   that `hiddenBy(B)` includes a blocker `A` who holds a block naming `B`,
-   without `B`'s own repos containing anything. The PDS call must be
-   stubbed — `materialization/profileFetchBounds.test.ts` is the template for
-   proving every call site is deadline-bounded.
+   with backoff; the stamp expiring and the next authenticated request
+   refreshing; that a read with a cold cache starts no fetch at all; and — the
+   mutual case — that `hiddenBy(B)` includes a blocker `A` who holds a block
+   naming `B`, without `B`'s own repos containing anything. The PDS call must
+   be stubbed — `materialization/profileFetchBounds.test.ts` is the template
+   for proving every call site is deadline-bounded.
 
 **Acceptance:** `hiddenBy` returns the correct union — the viewer's own Roomy
-and Bluesky blocks plus every recovered reverse block — and no read path is
-affected yet.
+and Bluesky blocks plus every recovered reverse block — from `user_blocks`
+alone, and no read path starts a fetch.
 
 ---
 
@@ -1578,16 +1665,13 @@ expect from Bluesky.
 
 **What it costs in the appserver, stated plainly:** the blocker's repo is the
 only place the reverse fact lives, so the reverse set must be *recovered* from
-public repos (§3.5). That is an enumeration of the viewer's space-members'
-repos and a `blockedBy` predicate over the cached sets — all in Phase 2, none of
-it a new phase or a new read path. There is no `space.roomy.user.getBlocks`
-query and no fan-out on `refreshBlocks` beyond the writer and the block's
-subject: the client reads its own blocks straight from its own repo with
-`listBlocks` (`mutations/blocks.ts`), and the server never needs to answer "who
-blocked me" over HTTP. HappyView's `filter = { field = "subject" }` lookup would
-answer the server-side reverse question in one call but only at Jetstream
-freshness, which §2.1 already rejected as a safety property; it is the right
-optimisation later, not the v1 mechanism.
+public repos (§3.5). That is a `blockedBy` predicate over `user_blocks`, whose
+rows are written by the blocker's own authenticated refresh (§2.5) — all in
+Phase 2, none of it a new phase or a new read path. There is no
+`space.roomy.user.getBlocks` query and no fan-out on `refreshBlocks` beyond the
+writer and the block's subject: the client reads its own blocks straight from
+its own repo with `listBlocks` (`mutations/blocks.ts`), and the server never
+needs to answer "who blocked me" over HTTP.
 
 **8. Should blocking in Roomy also write an `app.bsky.graph.block` record?**
 **Decided: no.** Blocking on Roomy is a Roomy act; silently changing a
@@ -1798,9 +1882,9 @@ whole point of §7.12 is that there is none.
 Recorded so the §2.1 decision can be revisited on evidence, and because it is
 the obvious eventual home for §3.5's reverse lookup: a `db.query` filtered on
 `subject` answers "who blocked this DID" in one call, which is exactly the
-`blockedBy(did)` query the v1 member-enumeration stands in for. What it cannot
-yet do is answer it *freshly* — Jetstream lag is the same objection §2.1
-records. Indexing
+`blockedBy(did)` query the per-account trigger stands in for. What it cannot yet
+do is answer it *freshly* — Jetstream lag is the same objection §2.1 records,
+and the PDS read that ships is exact at the moment it runs (§2.5). Indexing
 `app.bsky.graph.block` in HappyView needs three out-of-band registrations
 (nothing in this repository performs them — the `packages/appserver/lexicons/`
 directory is documentation only and is never read at runtime):
@@ -1858,9 +1942,12 @@ security-relevant read rather than a convenience.
 - `packages/appserver/src/handlers/space.roomy.message.getMessage.ts:44` — the
   one route §3.6 widens: it resolves the room and the space before the
   tombstone/reveal decision
-- `packages/appserver/src/materialization/blocks.ts` (new) and
-  `packages/appserver/src/queries/userBlocks.ts` (new) — `fetchBlockRecords`
-  and the `blocks` / `hiddenBy` predicates §3.6's gate reads
+- `packages/appserver/src/materialization/blocks.ts` and
+  `packages/appserver/src/queries/userBlocks.ts` — `fetchBlockRecords`, the
+  `blocks` / `blockedBy` / `hiddenBy` predicates §3.6's gate reads, and
+  `warmBlockSet`, the per-account refresh (§2.5)
+- `packages/appserver/src/xrpc/router.ts` — `setOnAuthenticated`, the hook that
+  reports every authenticated caller's DID; installed in `appserver.ts`
 
 **In-tree — the admin reveal (§3.6, §7.12–§7.16)**
 - `packages/appserver/src/auth/access.ts:124-131` — `isAdmin(db, spaceId, did)`,

@@ -24,6 +24,7 @@ import { countPendingLinks } from "./embed/enricher.ts";
 import { openDb, openGlobalDb, openReadStateDb, openSpaceDb, openSpaceDbForEntity, closeDb, poolStats } from "./db/db.ts";
 import { StreamManager, setStreamManager, _resetStreamManager } from "./streams/StreamManager.ts";
 import { ACTIVE_WINDOW_MS, purgeStaleThreadActivity, purgeStaleThreadBackfill } from "./queries/userActiveThreads.ts";
+import { warmBlockSet } from "./queries/userBlocks.ts";
 import { getConnectionTicketHandler } from "./handlers/space.roomy.auth.getConnectionTicket.ts";
 import { getLoginScopeHandler } from "./handlers/space.roomy.auth.getLoginScope.ts";
 import { recordScopeGrantHandler } from "./handlers/space.roomy.auth.recordScopeGrant.ts";
@@ -105,7 +106,7 @@ import { processTestWebhook } from "./voice/testWebhook.ts";
 import { startPushDispatcher, stopPushDispatcher, pushDispatcherStats } from "./push/dispatcher.ts";
 import { startSearchIndexer, stopSearchIndexer, searchIndexerStats } from "./search/indexer.ts";
 import { startSearchBackfill, stopSearchBackfill, searchBackfillStats } from "./search/backfill.ts";
-import { schemas } from "@roomy-space/sdk";
+import { schemas, type UserDid } from "@roomy-space/sdk";
 import { initHappyView, setHappyView, type HappyViewConfig } from "./happyview.ts";
 import { initQdrant } from "./qdrant.ts";
 import { initPolar } from "./billing/polar.ts";
@@ -914,6 +915,13 @@ export async function createAppserver(
     },
   );
   const router = buildRouter(authVerifier, syncSubscribeHandler);
+
+  // An authenticated request is the appserver's only signal that an account is
+  // present, and a block set is refreshed from that signal rather than from
+  // other users' reads (see `queries/userBlocks.ts`). The DID is the caller's
+  // own, established when the request was verified; the brand is what marks a
+  // DID that reached a handler with it.
+  router.setOnAuthenticated((did) => warmBlockSet(did as UserDid));
 
   // The router's route table, as the allowlist the `endpoint` label is drawn
   // from (see metricEndpoint). Read once here: the table is fixed at
