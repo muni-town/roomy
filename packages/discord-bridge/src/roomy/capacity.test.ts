@@ -1,17 +1,17 @@
 /**
- * Unit tests for the capacity decision service (Roomy Pro bridge tokens).
+ * Unit tests for the capacity decision service (free tier + Roomy Pro
+ * bridge tokens).
  *
- * Covers: over/under limit decisions, unprovisioned spaces (no grants)
- * failing open, ops kill switch, stale-keeps-previous, TTL expiry,
- * member-count/XRPC failure keeps previous, state-change callback, force
- * refresh, and the module-level gate singleton.
+ * Covers: over/under limit decisions, the free-tier capacity the appserver
+ * reports for grant-less spaces, ops kill switch, stale-keeps-previous, TTL
+ * expiry, member-count/XRPC failure keeps previous, state-change callback,
+ * force refresh, and the module-level gate singleton.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
 import {
 	CAPACITY_TTL_MS,
 	CapacityService,
-	FAIL_OPEN_SUMMARY_INTERVAL_MS,
 	getCapacityGate,
 	setCapacityGate,
 	type CapacityDecision,
@@ -20,7 +20,6 @@ import {
 	type SpaceMembership,
 	type SpaceMembershipToken,
 } from "./capacity.ts";
-import { _setLokiSink } from "../logger.ts";
 
 const GUILD = "guild-1";
 const SPACE = "did:web:space-a.example";
@@ -90,47 +89,7 @@ function makeService(
 	});
 }
 
-// ─── Capacity log capture ───────────────────────────────────────────────
-//
-// The capacity service logs through the structured logger. Tests capture
-// lines via a mock Loki sink (the same harness the logger tests use) and
-// silence the stdout sinks.
-
-interface CapturedLine {
-	msg: string;
-	[key: string]: unknown;
-}
-
-let captured: CapturedLine[] = [];
-let consoleSpies: Array<{ mockRestore(): void }> = [];
-
-function startLogCapture(): void {
-	captured = [];
-	consoleSpies = [
-		vi.spyOn(console, "info").mockImplementation(() => {}),
-		vi.spyOn(console, "warn").mockImplementation(() => {}),
-		vi.spyOn(console, "error").mockImplementation(() => {}),
-	];
-	_setLokiSink({
-		push: (record) => captured.push(JSON.parse(record.line)),
-		flush: async () => {},
-		stop: () => {},
-		stats: () => ({ queued: 0, sent: 0, dropped: 0, failed: 0 }),
-	});
-}
-
-function stopLogCapture(): void {
-	_setLokiSink(null);
-	for (const spy of consoleSpies) spy.mockRestore();
-	consoleSpies = [];
-}
-
-/** Captured capacity lines whose message contains `needle`. */
-function logsMatching(needle: string): CapturedLine[] {
-	return captured.filter(
-		(line) => line.scope === "capacity" && String(line.msg).includes(needle),
-	);
-}
+// ─── Decision suite ──────────────────────────────────────────────────────
 
 describe("CapacityService decisions", () => {
 	test("over limit but below 2x → still enabled (notify-only)", async () => {
@@ -205,20 +164,37 @@ describe("CapacityService decisions", () => {
 		expect(decision.overLimit).toBe(false);
 	});
 
-	test("over limit with no grants fails open (unprovisioned space)", async () => {
+	test("over the free-tier limit with no grants → hard stop (free tier enforced)", async () => {
+		// The appserver reports the free-tier floor (50) as maxMembers for a
+		// grant-less space; at 100 members that is the 2x hard stop.
 		const client = makeClient([
-			membership({ memberCount: 150, maxMembers: 0, overLimit: true }),
+			membership({ memberCount: 100, maxMembers: 50, overLimit: true }),
 		]);
-		const service = makeService(client, makeMemberCount(150));
+		const service = makeService(client, makeMemberCount(100));
+
+		const decision = await service.check(GUILD, SPACE);
+
+		expect(decision.enabled).toBe(false);
+		expect(decision.overLimit).toBe(true);
+		expect(decision.hardStop).toBe(true);
+		expect(decision.maxMembers).toBe(50);
+
+		// The decision is cached like any other: no re-query.
+		await service.check(GUILD, SPACE);
+		expect(client.calls.length).toBe(1);
+	});
+
+	test("free-tier space over 50 but under 100 → enabled (notify-only)", async () => {
+		const client = makeClient([
+			membership({ memberCount: 80, maxMembers: 50, overLimit: true }),
+		]);
+		const service = makeService(client, makeMemberCount(80));
 
 		const decision = await service.check(GUILD, SPACE);
 
 		expect(decision.enabled).toBe(true);
-		expect(decision.overLimit).toBe(false);
-
-		// The fail-open decision is cached like any other: no re-query.
-		await service.check(GUILD, SPACE);
-		expect(client.calls.length).toBe(1);
+		expect(decision.overLimit).toBe(true);
+		expect(decision.hardStop).toBe(false);
 	});
 
 	test("kill switch forces enabled without consulting client or member count", async () => {
@@ -619,176 +595,6 @@ describe("CapacityService usage-change callback", () => {
 	});
 });
 
-describe("CapacityService fail-open log cadence", () => {
-	const NO_GRANTS = "no capacity to enforce";
-	const RECOVERED = "no longer fails open";
-
-	beforeEach(() => {
-		startLogCapture();
-	});
-
-	afterEach(() => {
-		stopLogCapture();
-	});
-
-	test("repeated sweep with unchanged state emits the warning once", async () => {
-		// Three sweeps, identical grant-less over-limit state throughout.
-		const client = makeClient([
-			membership({ memberCount: 150, maxMembers: 0, overLimit: true }),
-			membership({ memberCount: 150, maxMembers: 0, overLimit: true }),
-			membership({ memberCount: 150, maxMembers: 0, overLimit: true }),
-		]);
-		const service = makeService(client, makeMemberCount(150));
-
-		await service.check(GUILD, SPACE, { force: true });
-		const afterFirst = logsMatching(NO_GRANTS).length;
-		await service.check(GUILD, SPACE, { force: true });
-		await service.check(GUILD, SPACE, { force: true });
-
-		expect(client.calls.length).toBe(3);
-		expect(afterFirst).toBe(1);
-		expect(logsMatching(NO_GRANTS).length).toBe(1);
-	});
-
-	test("the entry warning carries the guild, space and fail-open state", async () => {
-		const client = makeClient([
-			membership({ memberCount: 150, maxMembers: 0, overLimit: true }),
-		]);
-		const service = makeService(client, makeMemberCount(150));
-
-		await service.check(GUILD, SPACE, { force: true });
-
-		const [entry] = logsMatching(NO_GRANTS);
-		expect(entry).toMatchObject({
-			guildId: GUILD,
-			spaceDid: SPACE,
-			memberCount: 150,
-			failOpen: true,
-		});
-	});
-
-	test("emits again when the state changes: grants ship, then are revoked", async () => {
-		const client = makeClient([
-			// Sweep 1: over limit, no grants → enters fail-open.
-			membership({ memberCount: 150, maxMembers: 100, overLimit: true }),
-			// Sweep 2: same tuple, still over limit, but a grant now exists.
-			membership({
-				memberCount: 150,
-				maxMembers: 100,
-				overLimit: true,
-				tokens: [token()],
-				validTokenCount: 1,
-			}),
-			// Sweep 3: grant revoked → fail-open again.
-			membership({ memberCount: 150, maxMembers: 100, overLimit: true }),
-		]);
-		const service = makeService(client, makeMemberCount(150));
-
-		await service.check(GUILD, SPACE, { force: true }); // fail open
-		await service.check(GUILD, SPACE, { force: true }); // enforced
-		const afterRecovery = logsMatching(RECOVERED).length;
-		await service.check(GUILD, SPACE, { force: true }); // fail open again
-
-		expect(afterRecovery).toBe(1);
-		expect(logsMatching(NO_GRANTS).length).toBe(2);
-		expect(logsMatching(NO_GRANTS)[1]).toMatchObject({
-			guildId: GUILD,
-			spaceDid: SPACE,
-			failOpen: true,
-		});
-	});
-
-	test("stale membership does not count as a state change", async () => {
-		const client = makeClient([
-			membership({ memberCount: 150, maxMembers: 100, overLimit: true }),
-			// Polar unreachable: appserver serves stale state, over limit with
-			// no grants in that stale view. The sweep keeps the previous
-			// decision, so this must not re-emit or clear the fail-open state.
-			membership({ memberCount: 150, maxMembers: 100, overLimit: true, stale: true }),
-			membership({ memberCount: 150, maxMembers: 100, overLimit: true }),
-		]);
-		const service = makeService(client, makeMemberCount(150));
-
-		await service.check(GUILD, SPACE, { force: true });
-		await service.check(GUILD, SPACE, { force: true });
-		await service.check(GUILD, SPACE, { force: true });
-
-		expect(logsMatching(NO_GRANTS).length).toBe(1);
-		expect(logsMatching(RECOVERED).length).toBe(0);
-	});
-
-	test("healthy tuples stay silent even at warn level", async () => {
-		const client = makeClient([
-			membership({ memberCount: 50, maxMembers: 100, overLimit: false }),
-			membership({ memberCount: 60, maxMembers: 100, overLimit: false }),
-		]);
-		const service = makeService(client, makeMemberCount(60));
-
-		await service.check(GUILD, SPACE, { force: true });
-		await service.check(GUILD, SPACE, { force: true });
-
-		expect(logsMatching(NO_GRANTS).length).toBe(0);
-		expect(logsMatching(RECOVERED).length).toBe(0);
-	});
-
-	test("steady state stays observable: at most one summary line per interval, counting the failing-open pairs", async () => {
-		const OTHER_SPACE = "did:web:space-b.example";
-		const interval = 50;
-		vi.useFakeTimers();
-		try {
-			const membershipClient = makeClient([]);
-			membershipClient.getSpaceMembership = async (spaceId) =>
-				membership({
-					spaceDid: spaceId,
-					memberCount: 150,
-					maxMembers: 0,
-					overLimit: true,
-				});
-			const svc = new CapacityService(membershipClient, makeMemberCount(150), {
-				failOpenSummaryIntervalMs: interval,
-			});
-
-			// Both tuples enter the fail-open state.
-			await svc.check(GUILD, SPACE, { force: true });
-			await svc.check(GUILD, OTHER_SPACE, { force: true });
-			expect(logsMatching(NO_GRANTS).length).toBe(2);
-
-			// A sweep inside the interval stays silent.
-			await svc.check(GUILD, SPACE, { force: true });
-			expect(logsMatching(NO_GRANTS).length).toBe(2);
-
-			// Interval elapsed → one summary for the whole process naming both
-			// pairs; the second tuple's sweep right after is throttled.
-			vi.advanceTimersByTime(interval + 1);
-			await svc.check(GUILD, SPACE, { force: true });
-			await svc.check(GUILD, OTHER_SPACE, { force: true });
-			const summaryLines = logsMatching(NO_GRANTS);
-			expect(summaryLines.length).toBe(3);
-			expect(summaryLines[2]).toMatchObject({
-				failOpen: true,
-				failOpenCount: 2,
-			});
-			expect(summaryLines[2]!.pairs).toEqual([
-				{ guildId: GUILD, spaceDid: SPACE },
-				{ guildId: GUILD, spaceDid: OTHER_SPACE },
-			]);
-
-			// Next interval → the steady state is restated once more.
-			vi.advanceTimersByTime(interval + 1);
-			await svc.check(GUILD, SPACE, { force: true });
-			await svc.check(GUILD, OTHER_SPACE, { force: true });
-			expect(logsMatching(NO_GRANTS).length).toBe(4);
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-});
-
-describe("CapacityService fail-open summary constant", () => {
-	test("summary interval defaults to 1h", () => {
-		expect(FAIL_OPEN_SUMMARY_INTERVAL_MS).toBe(3_600_000);
-	});
-});
 
 describe("capacity gate singleton", () => {
 	afterEach(() => {

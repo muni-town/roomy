@@ -284,6 +284,21 @@ describe("space.roomy.admin.getSpaceMembership", () => {
     expect(nonAdmin.status).toBe(403);
   });
 
+  test("no grant → free-tier floor, not zero (every space has a limit)", async () => {
+    stubPolarState(proState());
+    const ctx = await startTest();
+    seedSpaceWithMember(ctx);
+
+    // No grantBridgeToken call: the space has no bridge-token grants.
+    const res = await ctx.authedFetch(ADMIN)(membershipUrl(ctx, SPACE));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tokens).toHaveLength(0);
+    expect(body.validTokenCount).toBe(0);
+    expect(body.maxMembers).toBe(50);
+    expect(body.overLimit).toBe(false);
+  });
+
   test("happy path: pending grant → live capacity, maxMembers", async () => {
     stubPolarState(proState());
     const ctx = await startTest();
@@ -311,7 +326,7 @@ describe("space.roomy.admin.getSpaceMembership", () => {
     expect(body.checkedAt).toBeTypeOf("number");
   });
 
-  test("spend at 101 members: >100 marks the token spent permanently", async () => {
+  test("spend at 101 members: token spent permanently, capacity retained", async () => {
     stubPolarState(proState());
     const ctx = await startTest();
     seedSpaceWithMember(ctx);
@@ -325,14 +340,16 @@ describe("space.roomy.admin.getSpaceMembership", () => {
     const res = await ctx.authedFetch(ADMIN)(membershipUrl(ctx, SPACE));
     const body = await res.json();
     expect(body.memberCount).toBe(101);
+    // Spent locks the token to this guild; capacity is unaffected, so the
+    // bridge keeps running up to 1000 (and hard-stops at 2000).
     expect(body.tokens[0]).toEqual({
       grantorDid: GRANTOR,
-      capacity: 0,
+      capacity: 1000,
       status: "spent",
-      live: false,
+      live: true,
     });
-    expect(body.maxMembers).toBe(0);
-    expect(body.overLimit).toBe(true);
+    expect(body.maxMembers).toBe(1000);
+    expect(body.overLimit).toBe(false);
 
     // Spent is permanent: getBridgeTokens reports spent, revoke → 409,
     // grant → 409.

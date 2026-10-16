@@ -3,7 +3,8 @@
  *
  * Returns the bridge-token capacity picture for one space: every grant,
  * its live Polar-derived capacity, spend state, and the space's
- * maxMembers (Σ valid capacities) vs current member count.
+ * maxMembers (the free-tier floor, or the Σ of live grant capacities) vs
+ * current member count.
  *
  * The Discord bridge polls this endpoint to decide whether bridging may
  * continue: `overLimit` (memberCount > maxMembers) means the bridge must
@@ -15,9 +16,14 @@
  *     max_members feature_flag benefit); no valid state → 0.
  *   - Spend rule: a grant that is not yet spent is marked spent (PERMANENT)
  *     once the bridged guild's member count exceeds 100 (per
- *     guild-space-tuple; one guild per space assumed v1).
+ *     guild-space-tuple; one guild per space assumed v1). Spent locks the
+ *     token to this guild — it can no longer be revoked or granted elsewhere
+ *     — but does NOT reduce capacity: a spent grant keeps powering its
+ *     bridge from the grantor's live Polar state.
  *   - Polar outage / 5xx FAILS OPEN: last-known-valid cached state is
  *     served with `stale: true`; an unknown state is never capacity 0.
+ *   - Free tier: every space bridges up to FREE_BRIDGE_CAPACITY members
+ *     regardless of grants, so `maxMembers` is never 0.
  *
  * Authorisation: admin allowlist (`APPSERVER_ADMIN_DIDS`). No lexicon —
  * inline admin endpoint following the space.roomy.admin.getDashboardStats
@@ -41,7 +47,18 @@ import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
 import type { AuthCtx, QueryHandler, QueryParams } from "../xrpc/types.ts";
 
-/** Guilds above this member count spend the bridge token (permanent). */
+/**
+ * Free-tier bridge capacity: a space with no live bridge-token grant still
+ * bridges its guild up to this member count. With the bridge's 2x hard stop,
+ * free bridging halts at 100 members. Mirrors FREE_BRIDGE_MEMBER_LIMIT in the
+ * app's pricing/settings copy (packages/app-lite/src/lib/config.ts).
+ */
+export const FREE_BRIDGE_CAPACITY = 50;
+
+/**
+ * Guilds above this member count spend the bridge token (permanent). Spend
+ * locks the token to the guild; it does not reduce the space's capacity.
+ */
 export const BRIDGE_TOKEN_SPEND_THRESHOLD = 100;
 
 export interface MembershipToken {
@@ -56,7 +73,7 @@ export interface GetSpaceMembershipResult {
   spaceDid: string;
   tokens: MembershipToken[];
   validTokenCount: number;
-  /** Σ of live token capacities (spent grants contribute 0). */
+  /** max(FREE_BRIDGE_CAPACITY, Σ of live token capacities). */
   maxMembers: number;
   memberCount: number;
   /** memberCount > maxMembers — the bridge must halt. */
@@ -107,8 +124,8 @@ export const adminGetSpaceMembershipHandler: QueryHandler<
     let spent = grant.spent_at !== null;
 
     // Spend rule: a pending grant whose guild exceeded the threshold is
-    // spent now, permanently. Mark BEFORE computing live capacity so the
-    // spent grant contributes nothing.
+    // spent now, permanently. Spent locks the token to this guild (no revoke,
+    // no re-grant); the capacity below is unaffected by spent.
     if (!spent && memberCount > BRIDGE_TOKEN_SPEND_THRESHOLD) {
       await markGrantSpent(readStateDb, grant.grantor_did);
       spent = true;
@@ -116,22 +133,17 @@ export const adminGetSpaceMembershipHandler: QueryHandler<
 
     let capacity = 0;
     let live = false;
-    if (spent) {
-      // Spent grants stay listed with 0 live capacity, regardless of the
-      // grantor's current Polar state (spent is PERMANENT).
-    } else {
-      try {
-        const resolved = await resolveGrantorCapacityWith(config, grant.grantor_did);
-        capacity = resolved.capacity;
-        live = capacity > 0;
-        if (resolved.stale) stale = true;
-      } catch {
-        // Polar unavailable with nothing cached: fail open — the grant's
-        // grant-time snapshot keeps it visible, but it contributes 0 and
-        // gets no live flag. Never an error: the space keeps serving on its
-        // last-known-valid picture.
-        stale = true;
-      }
+    try {
+      const resolved = await resolveGrantorCapacityWith(config, grant.grantor_did);
+      capacity = resolved.capacity;
+      live = capacity > 0;
+      if (resolved.stale) stale = true;
+    } catch {
+      // Polar unavailable with nothing cached: fail open — the grant's
+      // grant-time snapshot keeps it visible, but it contributes 0 and
+      // gets no live flag. Never an error: the space keeps serving on its
+      // last-known-valid picture.
+      stale = true;
     }
 
     tokens.push({
@@ -146,13 +158,17 @@ export const adminGetSpaceMembershipHandler: QueryHandler<
     }
   }
 
+  // The free tier always applies: a space with no live grant (or only lapsed
+  // ones) still bridges up to FREE_BRIDGE_CAPACITY, so maxMembers is never 0.
+  const effectiveMaxMembers = Math.max(FREE_BRIDGE_CAPACITY, maxMembers);
+
   return {
     spaceDid,
     tokens,
     validTokenCount,
-    maxMembers,
+    maxMembers: effectiveMaxMembers,
     memberCount,
-    overLimit: memberCount > maxMembers,
+    overLimit: memberCount > effectiveMaxMembers,
     stale,
     checkedAt: Date.now(),
   };

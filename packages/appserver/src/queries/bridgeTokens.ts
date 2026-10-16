@@ -5,9 +5,11 @@
  * a Pro subscriber grants their single bridge token to a space, and the
  * grant powers a guild-space bridge up to the granted capacity. A grant is
  * "spent" when the bridged guild's member count exceeds 100 (spent_at set,
- * PERMANENT). Written by the grantBridgeToken / revokeBridgeToken
- * procedures + the admin getSpaceMembership spend rule; read by
- * getBridgeTokens and the admin endpoint.
+ * PERMANENT), which locks the token to that guild — it can no longer be
+ * revoked or granted elsewhere — but does not reduce its capacity. Written
+ * by the grantBridgeToken / revokeBridgeToken procedures + the admin
+ * getSpaceMembership spend rule; read by getBridgeTokens and the admin
+ * endpoint.
  */
 
 import type { DbLike } from "../db/types.ts";
