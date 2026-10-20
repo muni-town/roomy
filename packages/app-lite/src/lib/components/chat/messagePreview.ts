@@ -1,6 +1,6 @@
 import { RICHTEXT_MIME, blocksToPlaintext } from "@roomy-space/sdk";
 import { renderMarkdownPlaintext } from "@roomy/design/utils";
-import { parseRichTextContent } from "./message-body";
+import { parseRichTextContent } from "@roomy/design/utils";
 
 /**
  * Render a message body as plaintext for compact previews (reply context,

@@ -28,7 +28,7 @@
 
 import { extractFacetUrls } from "@roomy-space/sdk";
 import type { Block } from "@roomy-space/sdk";
-import { findTileAddresses } from "./at-uri.ts";
+import { findTileAddresses } from "./at-uri.js";
 
 /**
  * The most tiles one message renders.

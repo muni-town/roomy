@@ -18,7 +18,7 @@
   import {
     prefetchInternalLinkSummariesFromBlocks,
   } from "./prefetch-link-summaries";
-  import { parseRichTextContent } from "./message-body";
+  import { parseRichTextContent } from "@roomy/design/utils";
   import { isBlockedTombstone, redactBlockedAuthors } from "./redact";
   import {
     blockState,

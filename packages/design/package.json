@@ -14,6 +14,7 @@
     "./components/*": "./src/components/*"
   },
   "dependencies": {
+    "@dasl/tile-loader": "2.0.0",
     "@foxui/core": "^0.9.1",
     "@foxui/social": "^0.8.10",
     "@iconify/svelte": "^4.2.0",

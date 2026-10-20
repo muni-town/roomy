@@ -1,7 +1,8 @@
 # Presentational-UI migration: app-lite → @roomy/design
 
-**Date:** 2026-09-25 (phase 2 outcome added 2026-10-13)
-**Status:** Phase 1 complete (TASK-208); phase 2 keystone seam landed — `MessageContent` + `BlocksRenderer` are next
+**Date:** 2026-09-25 (phase 2 outcome added 2026-10-13; the `MessageContent` +
+`BlocksRenderer` move added 2026-10-14)
+**Status:** Phase 2 complete — the remaining candidates are wrapped data accessors
 **Umbrella:** "refactor presentational UI code from app-lite to `design` and set up
 storybook stories" (Meri, `#coordination`, 2026-09-25T11:52Z)
 
@@ -66,8 +67,8 @@ app-lite coupling. `$lib/utils` counts as coupling.
 | 6 | `welcome/WelcomeActions.svelte` | **moved** → `marketing/WelcomeActions.svelte` | Zero props; design `Button` with `href`. |
 | 7 | `welcome/FeatureDemoCards.svelte` | **moved** → `marketing/FeatureDemoCards.svelte` | Zero props; static scoped CSS. |
 | 8 | `settings/HandleDomainDialog.svelte` | **moved** → `modals/HandleDomainDialog.svelte` | Static dialog: `open` bindable + `did` prop, **copy handler injected by the app**. Renders in isolation. |
-| 9 | `chat/MessageContent.svelte` | **deferred — unblocked by the phase-2 seam, not yet moved** | Imports sibling *app-lite* modules: `./enrich-internal-links` (which `mount()`s the badge, and calls `location.origin`) and `./message-body`. The badge is now in design with its lookups injected, so the remaining coupling is this file's own; it moves together with #10. |
-| 10 | `chat/BlocksRenderer.svelte` | **deferred — unblocked with #9, not yet moved** | Imports `enrichInternalLinks` from the same module. Largest render-logic prize (262 lines: UTF-8→UTF-16 facet offsets, facet nesting, anchor non-nesting). |
+| 9 | `chat/MessageContent.svelte` | **moved** → `content/thread/message/MessageContent.svelte` | Markdown body + the `BlocksRenderer` branch, over `renderMarkdownSanitized` and the SDK's `RICHTEXT_MIME` test. Its remaining app-side imports (`./message-body`, the tile stack) move with it; the enrichment action takes injected lookups. See "This PR". |
+| 10 | `chat/BlocksRenderer.svelte` | **moved** → `content/thread/message/BlocksRenderer.svelte` | Largest render-logic prize (262 lines: UTF-8→UTF-16 facet offsets, facet nesting, anchor non-nesting). Import-path changes only. |
 | 11 | `seo/SeoMeta.svelte` | **rejected — not presentational** | Uses `$app/paths` `base` and `<svelte:head>`. It is route/head metadata, not a component in a design system, and Storybook has no `$app/paths` stub. |
 | 12 | `auth/HandleTypeahead.svelte` | **rejected — data-coupled** | Hardcodes a live `fetch` to `https://api.bsky.app/xrpc/app.bsky.actor.searchActorsTypeahead` plus 200 ms debounce; it is a Bluesky AppView client, not a presentational primitive. design already has `ui/user-typeahead/UserTypeahead{,List}.svelte` — the right end state is app-lite wrapping that shell. |
 
@@ -102,15 +103,52 @@ and the two decisions the plan parked are settled as follows.
    `setAppserverOrigin`, which already had the value. The app-lite copy is deleted,
    not aliased, and all 31 import sites point at `@roomy/design/utils`.
 
-**Not in this PR:** `chat/MessageContent.svelte` and `chat/BlocksRenderer.svelte`
-stay put. The seam unblocks them, but they are containers until this lands and is
-reviewed; they move in the next PR as the plan prescribes.
+### This PR: `MessageContent` + `BlocksRenderer` (moved)
 
-### What moves next (remaining phase 2 candidates)
+Both moved as pure `git mv` renames, plus the minimum dependency closure they
+cannot render without. Each file's diff against its app-lite original is an
+import-path change and nothing else.
 
-1. **`MessageContent` + `BlocksRenderer`, together in one PR** — now unblocked, as
-   above.
-2. **Thin wrappers over data accessors** — each imports only a query or mutation
+| from (app-lite) | to (design) |
+|---|---|
+| `chat/MessageContent.svelte` | `content/thread/message/MessageContent.svelte` |
+| `chat/BlocksRenderer.svelte` | `content/thread/message/BlocksRenderer.svelte` |
+| `chat/message-body.ts` | `utils/message-body.ts` |
+| `chat/enrich-internal-links.ts` | `content/thread/message/enrich-internal-links.ts` |
+| `components/tiles/MessageTiles.svelte` | `content/thread/message/tiles/MessageTiles.svelte` |
+| `components/tiles/TileEmbed.svelte` | `content/thread/message/tiles/TileEmbed.svelte` |
+| `lib/tiles/{at-uri,message-tiles,mothership}.ts` | `content/thread/message/tiles/` |
+
+The tile stack comes along because `MessageContent` renders `MessageTiles` in
+its body: it is presentational (a tile is a record fetched from the tile's own
+PDS, with no path into the app's data model), so it is the closure's own edge
+rather than a data coupling. The three `node:test` files moved with their
+modules and were converted to Vitest, which is the only runner `design` has.
+
+**The enrichment seam, applied.** `enrichInternalLinks` mounts a badge per
+link imperatively, so its three app-owned inputs are injected once at boot
+rather than passed as props:
+
+```
+app-lite: chat/enrich-internal-links.ts   (the wiring)
+    configureInternalLinks({ origins, resolveSpace, resolveRoom, isCurrentSpace })
+design:   content/thread/message/enrich-internal-links.ts   (the action)
+          content/thread/message/types.ts                   (the contract)
+```
+
+`origins` also feeds `setInternalLinkOrigins`, so the markdown renderer and the
+action read one list. Unconfigured, the renderer degrades to a badge labelled
+with the target's own id rather than throwing — which is what keeps the stories
+renderable without a boot step.
+
+The design-side `internalLinkOrigins` is one array mutated in place by the
+setter, not a `let` reassigned by it: `BlocksRenderer` captures the reference at
+import time for its facet walk, and a reassignment would leave it reading the
+empty array.
+
+## What moves next (remaining phase 2 candidates)
+
+1. **Thin wrappers over data accessors** — each imports only a query or mutation
    hook and can take its result as a prop:
    - `chat/MessageContext.svelte` (`$lib/queries/messages`)
    - `chat/MessageToolbar.svelte` (`$lib/mutations/reaction`, `$lib/queries/messages`)
@@ -121,7 +159,7 @@ reviewed; they move in the next PR as the plan prescribes.
    - `chat/embeds/MediaEmbed.svelte`, `chat/ForwardContext.svelte`, `welcome/SpaceCards.svelte` —
      their only coupling was `resolveBlobUrl`, which now comes from design, so each
      moves as soon as its own remaining props are named.
-3. **`auth/LoginModal.svelte` after the `HandleTypeahead` decision** — it owns
+2. **`auth/LoginModal.svelte` after the `HandleTypeahead` decision** — it owns
    `$env/dynamic/public` + `$lib/auth.svelte` + `$lib/last-login.svelte`; a
    prop-driven shell is feasible, but only once the typeahead question is settled.
 

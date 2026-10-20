@@ -18,7 +18,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { requireAuth } from "$lib/components/layout/auth-guard.svelte";
-  import TileEmbed from "$lib/components/tiles/TileEmbed.svelte";
+  import TileEmbed from "@roomy/design/components/content/thread/message/tiles/TileEmbed.svelte";
 
   requireAuth.value = false;
 

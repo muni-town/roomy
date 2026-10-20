@@ -7,8 +7,14 @@ import { Did, Ulid, type } from "@roomy-space/sdk";
  * origin this document is served from, plus the web origin of the appserver
  * it talks to. Set at boot by the app (`setInternalLinkOrigins`), because
  * neither is knowable here.
+ *
+ * One array, mutated in place by the setter, so a module that captured a
+ * reference to it reads the live set. A module-level `let` reassigned by the
+ * setter would leave every earlier reader — the internal-link enrichment
+ * action, `BlocksRenderer`'s facet walk — holding the empty array it saw at
+ * import time.
  */
-let internalLinkOrigins: readonly string[] = [];
+export const internalLinkOrigins: string[] = [];
 
 /**
  * Declare the origins internal space/room links may be rooted at — the
@@ -17,7 +23,7 @@ let internalLinkOrigins: readonly string[] = [];
  * HTML behind that was marked under the previous origins.
  */
 export function setInternalLinkOrigins(origins: readonly string[]): void {
-  internalLinkOrigins = origins;
+  internalLinkOrigins.splice(0, internalLinkOrigins.length, ...origins);
   htmlCache.clear();
   plaintextCache.clear();
 }

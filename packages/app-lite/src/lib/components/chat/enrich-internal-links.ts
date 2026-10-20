@@ -1,103 +1,44 @@
-import { mount, unmount } from "svelte";
-import SpaceRoomBadge from "@roomy/design/components/content/thread/message/embeds/SpaceRoomBadge.svelte";
-import { extractInternalLinkTargets, parseInternalLinkHref } from "@roomy-space/sdk";
-import { setInternalLinkOrigins } from "@roomy/design/utils";
+/**
+ * Wires the internal-link renderer to this client.
+ *
+ * The renderer itself — the `use:` action over a rendered body and the facet
+ * walk — lives in `@roomy/design`; what it cannot know is this deployment's own
+ * origins, how a space/room summary is fetched, and which space the reader is
+ * in. Those are declared here, once, at module load, so the configuration is in
+ * place before the first message renders: importing this module is the wiring.
+ *
+ * The design surface is re-exported so a caller reaches the renderer through
+ * the module that configures it, not around it.
+ */
+
+import { configureInternalLinks } from "@roomy/design/components/content/thread/message/enrich-internal-links.js";
+import { internalLinkOrigins } from "@roomy/design/utils";
 import { CONFIG } from "$lib/config";
 import { internalOriginsFor } from "$lib/internal-link-origins";
-import { resolveRoomSummary, resolveSpaceSummary } from "$lib/queries/badge-summaries";
+import {
+  resolveRoomSummary,
+  resolveSpaceSummary,
+} from "$lib/queries/badge-summaries";
 import { currentSpaceState } from "$lib/components/layout/current-space.svelte";
-import type { Block } from "@roomy-space/sdk";
 
-export interface InternalLinkTarget {
-  spaceId: string;
-  roomId?: string;
-}
+export { internalLinkOrigins };
+export {
+  enrichInternalLinks,
+  enrichInternalLinksFromBlocks,
+} from "@roomy/design/components/content/thread/message/enrich-internal-links.js";
+export type { InternalLinkTarget } from "@roomy/design/components/content/thread/message/enrich-internal-links.js";
 
-/**
- * The origins an absolute link may be rooted at to name a space this client
- * can look up — this document's own origin and the web origin of the
- * appserver it talks to. See `internal-link-origins.ts`.
- */
-export const internalLinkOrigins = internalOriginsFor(
-  CONFIG.appserverDid,
-  typeof location !== "undefined" ? location.origin : "",
-);
-
-// The design-system markdown renderer marks internal links as it renders, so
-// it needs the same origins before the first message is rendered. Importing
-// this module (which every render path does) is what configures it.
-setInternalLinkOrigins(internalLinkOrigins);
-
-/**
- * Extract the unique internal-link targets from a blocks+facets body.
- * Reads `#roomRef` facets directly (no DOM walk) via the SDK's
- * `extractInternalLinkTargets` — the blocks equivalent of the markdown
- * extractor in prefetch-link-summaries.ts.
- */
-export function enrichInternalLinksFromBlocks(
-  blocks: Block[],
-): InternalLinkTarget[] {
-  return extractInternalLinkTargets(blocks);
-}
-
-/**
- * Svelte action: after the markdown HTML is rendered inside `el`, find internal
- * links and replace them with SpaceRoomBadge components.
- *
- * Handles both relative links (/did:plc:xxx) and absolute URLs rooted at an
- * internal origin (https://roomy.space/did:plc:xxx).
- */
-export function enrichInternalLinks(el: HTMLElement) {
-  // The markdown renderer marks absolute links under the origins it was
-  // configured with; mark anything the runtime considers internal too, so a
-  // link written as an absolute URL to this deployment still becomes a badge.
-  for (const origin of internalLinkOrigins) {
-    for (const a of el.querySelectorAll<HTMLAnchorElement>(`a[href^="${origin}/"]`)) {
-      a.setAttribute("data-roomy-internal-link", "true");
-    }
-  }
-
-  const links = el.querySelectorAll<HTMLAnchorElement>('a[data-roomy-internal-link="true"]');
-  if (links.length === 0) return;
-
-  const mounted: Array<Record<string, any>> = [];
-
-  for (const link of links) {
-    const href = link.getAttribute("href");
-    if (!href) continue;
-
-    const target = parseInternalLinkHref(href, internalLinkOrigins);
-    if (!target) continue;
-
-    // Only treat as explicit link text if it differs from the href (bare
-    // URLs have text === href; [text](/did) links have custom text).
-    const explicitText = link.textContent !== href ? (link.textContent ?? undefined) : undefined;
-
-    // Mount the badge directly before the link, then remove the link.
-    // Using `anchor` avoids a placeholder <span> that would add spacing.
-    const badge = mount(SpaceRoomBadge, {
-      target: link.parentElement!,
-      anchor: link,
-      props: {
-        spaceId: target.spaceId,
-        roomId: target.roomId,
-        href,
-        linkText: explicitText,
-        resolveSpace: resolveSpaceSummary,
-        resolveRoom: resolveRoomSummary,
-        // Read through the accessor on every render rather than captured:
-        // navigating between spaces reuses the mounted badge, and the
-        // suppression of the current space's own name must follow.
-        isCurrentSpace: () => currentSpaceState.value?.id === target.spaceId,
-      },
-    });
-    link.remove();
-    mounted.push(badge);
-  }
-
-  return {
-    destroy() {
-      for (const b of mounted) unmount(b);
-    },
-  };
-}
+configureInternalLinks({
+  // The origin this document is served from, plus the web origin of the
+  // appserver it talks to. See `internal-link-origins.ts`.
+  origins: internalOriginsFor(
+    CONFIG.appserverDid,
+    typeof location !== "undefined" ? location.origin : "",
+  ),
+  resolveSpace: resolveSpaceSummary,
+  resolveRoom: resolveRoomSummary,
+  // Read through on every render rather than captured: navigating between
+  // spaces reuses a mounted badge, and the suppression of the current space's
+  // own name must follow.
+  isCurrentSpace: (spaceId) => currentSpaceState.value?.id === spaceId,
+});

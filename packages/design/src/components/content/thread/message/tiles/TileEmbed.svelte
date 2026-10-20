@@ -12,13 +12,13 @@
   the app's own data model.
 
   The loader is browser-only and heavy (zip, mime, TOML), so it is reached
-  through `$lib/tiles/mothership` — a dynamic import that runs on first render,
+  through `./mothership.ts` — a dynamic import that runs on first render,
   keeping the packages out of the base bundle.
 -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getTileMothership } from "$lib/tiles/mothership";
-  import { parseTileAddress, TILE_COLLECTION } from "$lib/tiles/at-uri";
+  import { getTileMothership } from "./mothership.js";
+  import { parseTileAddress, TILE_COLLECTION } from "./at-uri.js";
 
   type Props = {
     /** The `ing.dasl.masl` record to render. */

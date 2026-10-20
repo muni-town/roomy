@@ -14,16 +14,16 @@
   is final.
 
   Code is skipped: an address quoted inside a code block is a sample, not a
-  tile (see `$lib/tiles/message-tiles`).
+  tile (see `./message-tiles.ts`).
 -->
 <script lang="ts">
   import { RICHTEXT_MIME } from "@roomy-space/sdk";
-  import { parseRichTextContent } from "../chat/message-body";
+  import { parseRichTextContent } from "../../../../../utils/message-body.js";
   import {
     MAX_TILES_PER_MESSAGE,
     tileAddressesInBlocks,
     tileAddressesInMarkdown,
-  } from "$lib/tiles/message-tiles";
+  } from "./message-tiles.js";
   import TileEmbed from "./TileEmbed.svelte";
 
   let {

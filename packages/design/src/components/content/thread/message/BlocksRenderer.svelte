@@ -1,7 +1,8 @@
 <script lang="ts">
   import { parseInternalLinkHref, utf8ToUtf16Index } from "@roomy-space/sdk";
   import type { Block, Facet, FacetFeature } from "@roomy-space/sdk";
-  import { enrichInternalLinks, internalLinkOrigins } from "./enrich-internal-links";
+  import { enrichInternalLinks } from "./enrich-internal-links.js";
+  import { internalLinkOrigins } from "@roomy/design/utils";
   let {
     blocks,
   }: {

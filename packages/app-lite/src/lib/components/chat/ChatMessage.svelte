@@ -12,7 +12,7 @@
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import ForwardContext from "./ForwardContext.svelte";
-  import MessageContent from "./MessageContent.svelte";
+  import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
   import ChatInput from "./ChatInput.svelte";
   import { createMentionSearch } from "$lib/tiptap/mentions";
   import { editMessage, removeLinkEmbed } from "$lib/mutations/message";
@@ -35,7 +35,7 @@
   } from "$lib/write-refusal.svelte";
   import { RICHTEXT_MIME, extractFacetUrls } from "@roomy-space/sdk";
   import type { schemas, Block } from "@roomy-space/sdk";
-  import { parseRichTextContent, messageHasVisibleContent, richTextBlocksEqual } from "./message-body";
+  import { parseRichTextContent, messageHasVisibleContent, richTextBlocksEqual } from "@roomy/design/utils";
   import { extractUrls, fetchEmbedData } from "$lib/embed/embed-service";
 
   type LinkEmbedData = typeof schemas.queries.getMessage.LinkEmbedData.infer;

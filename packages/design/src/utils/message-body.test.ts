@@ -13,17 +13,16 @@
  * `serializeBlocks([])`. Both are encoded here exactly as the wire would
  * carry them, so the test fails if the predicate ever regresses to a
  * string-truthiness check.
- *
- * Written against `node:test` + `node:assert` (available without adding a
- * dependency to app-lite; app-lite ships no test runner of its own) so the
- * file runs under both `bun test` and `node --test --experimental-strip-types`.
  */
 
-import { describe, test } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { RICHTEXT_MIME, serializeBlocks } from "@roomy-space/sdk";
 import type { Block } from "@roomy-space/sdk";
-import { messageHasVisibleContent, parseRichTextContent, richTextBlocksEqual } from "./message-body.ts";
+import {
+  messageHasVisibleContent,
+  parseRichTextContent,
+  richTextBlocksEqual,
+} from "./message-body.js";
 
 /** The wire `content` for a rich-text body: base64 of the encoded document. */
 function wire(content: string): string {
@@ -37,31 +36,31 @@ const UNTOUCHED_COMPOSER_DOC = {
 };
 
 describe("messageHasVisibleContent — rich text", () => {
-  test("an untouched composer's empty text block is not visible", () => {
+  it("an untouched composer's empty text block is not visible", () => {
     const content = wire(JSON.stringify(UNTOUCHED_COMPOSER_DOC));
     // The body is non-empty as a string — which is what made the forwarder's
     // commentary bubble render on a bare forward.
-    assert.notEqual(content, "");
-    assert.equal(messageHasVisibleContent(content, RICHTEXT_MIME), false);
+    expect(content).not.toBe("");
+    expect(messageHasVisibleContent(content, RICHTEXT_MIME)).toBe(false);
   });
 
-  test("a thread forward's empty blocks document is not visible", () => {
+  it("a thread forward's empty blocks document is not visible", () => {
     const serialized = serializeBlocks([]);
     const content = wire(new TextDecoder().decode(serialized.data));
-    assert.equal(messageHasVisibleContent(content, RICHTEXT_MIME), false);
+    expect(messageHasVisibleContent(content, RICHTEXT_MIME)).toBe(false);
   });
 
-  test("a whitespace-only text block is not visible", () => {
+  it("a whitespace-only text block is not visible", () => {
     const content = wire(
       JSON.stringify({
         $type: "space.roomy.richtext.document",
         blocks: [{ $type: "space.roomy.richtext.blocks#text", text: "   \n " }],
       }),
     );
-    assert.equal(messageHasVisibleContent(content, RICHTEXT_MIME), false);
+    expect(messageHasVisibleContent(content, RICHTEXT_MIME)).toBe(false);
   });
 
-  test("real commentary is visible", () => {
+  it("real commentary is visible", () => {
     const content = wire(
       JSON.stringify({
         $type: "space.roomy.richtext.document",
@@ -70,10 +69,10 @@ describe("messageHasVisibleContent — rich text", () => {
         ],
       }),
     );
-    assert.equal(messageHasVisibleContent(content, RICHTEXT_MIME), true);
+    expect(messageHasVisibleContent(content, RICHTEXT_MIME)).toBe(true);
   });
 
-  test("a non-text block that renders an element counts", () => {
+  it("a non-text block that renders an element counts", () => {
     // BlocksRenderer emits an <img> / <hr> for these even with no text, so a
     // caption-less image forward is not a bare forward.
     for (const block of [
@@ -83,41 +82,41 @@ describe("messageHasVisibleContent — rich text", () => {
       const content = wire(
         JSON.stringify({ $type: "space.roomy.richtext.document", blocks: [block] }),
       );
-      assert.equal(messageHasVisibleContent(content, RICHTEXT_MIME), true);
+      expect(messageHasVisibleContent(content, RICHTEXT_MIME)).toBe(true);
     }
   });
 
-  test("a malformed rich-text body is not visible and does not throw", () => {
-    assert.equal(messageHasVisibleContent("not-valid-base64-json!!", RICHTEXT_MIME), false);
-    assert.equal(messageHasVisibleContent("", RICHTEXT_MIME), false);
+  it("a malformed rich-text body is not visible and does not throw", () => {
+    expect(messageHasVisibleContent("not-valid-base64-json!!", RICHTEXT_MIME)).toBe(false);
+    expect(messageHasVisibleContent("", RICHTEXT_MIME)).toBe(false);
   });
 });
 
 describe("messageHasVisibleContent — legacy markdown", () => {
-  test("blank and whitespace-only bodies are not visible", () => {
-    assert.equal(messageHasVisibleContent("", undefined), false);
-    assert.equal(messageHasVisibleContent("   \n\t ", "text/markdown"), false);
+  it("blank and whitespace-only bodies are not visible", () => {
+    expect(messageHasVisibleContent("", undefined)).toBe(false);
+    expect(messageHasVisibleContent("   \n\t ", "text/markdown")).toBe(false);
   });
 
-  test("text is visible", () => {
-    assert.equal(messageHasVisibleContent("hello", "text/markdown"), true);
+  it("text is visible", () => {
+    expect(messageHasVisibleContent("hello", "text/markdown")).toBe(true);
   });
 });
 
 describe("parseRichTextContent", () => {
-  test("round-trips an empty document to an empty block list", () => {
+  it("round-trips an empty document to an empty block list", () => {
     const serialized = serializeBlocks([]);
     const content = wire(new TextDecoder().decode(serialized.data));
-    assert.deepEqual(parseRichTextContent(content), []);
+    expect(parseRichTextContent(content)).toEqual([]);
   });
 
-  test("returns null for a legacy markdown body", () => {
-    assert.equal(parseRichTextContent(wire(JSON.stringify({ not: "a doc" }))), null);
+  it("returns null for a legacy markdown body", () => {
+    expect(parseRichTextContent(wire(JSON.stringify({ not: "a doc" })))).toBe(null);
   });
 });
 
 describe("richTextBlocksEqual", () => {
-  test("blocks built by different serializer paths compare equal", () => {
+  it("blocks built by different serializer paths compare equal", () => {
     // The edit guard compares the editor's round-trip blocks (facets emitted
     // by `proseMirrorDocToBlocks`) against the stored wire blocks — same
     // shape, possibly different property order.
@@ -150,17 +149,17 @@ describe("richTextBlocksEqual", () => {
         text: "seeded message",
       },
     ];
-    assert.equal(richTextBlocksEqual(stored, roundTripped), true);
+    expect(richTextBlocksEqual(stored, roundTripped)).toBe(true);
   });
 
-  test("a changed block is not equal", () => {
+  it("a changed block is not equal", () => {
     const a: Block[] = [{ $type: "space.roomy.richtext.blocks#text", text: "a" }];
     const b: Block[] = [{ $type: "space.roomy.richtext.blocks#text", text: "b" }];
-    assert.equal(richTextBlocksEqual(a, b), false);
+    expect(richTextBlocksEqual(a, b)).toBe(false);
   });
 
-  test("a missing block is not equal", () => {
+  it("a missing block is not equal", () => {
     const one: Block[] = [{ $type: "space.roomy.richtext.blocks#text", text: "a" }];
-    assert.equal(richTextBlocksEqual(one, []), false);
+    expect(richTextBlocksEqual(one, [])).toBe(false);
   });
 });

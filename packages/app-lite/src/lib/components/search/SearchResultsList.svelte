@@ -15,13 +15,13 @@
   import type { ThreadInfo } from "@roomy/design/components/content/thread/boardView/types.ts";
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
-  import MessageContent from "../chat/MessageContent.svelte";
+  import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
   import ForwardContext from "../chat/ForwardContext.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
   import MediaEmbed from "../chat/embeds/MediaEmbed.svelte";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import { messageContentToPlaintext } from "../chat/messagePreview";
-  import { messageHasVisibleContent } from "../chat/message-body";
+  import { messageHasVisibleContent } from "@roomy/design/utils";
   import {
     IconChevronRight,
     IconNeedleThread,
