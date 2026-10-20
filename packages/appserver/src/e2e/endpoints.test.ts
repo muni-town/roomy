@@ -1409,3 +1409,89 @@ describe("space.roomy.admin.materializeSpace", () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ─── the anonymous read boundary ──────────────────────────────────────────
+//
+// The two spaces below differ in exactly one column, `allow_public_join`, and
+// what an anonymous caller may read across that line is the contract a
+// server-rendered document rests on: a crawler holds no session, so a space's
+// name and avatar must be readable without one, while a room's contents must
+// not be. `allowPublicJoin` NULL counts as open (`coalesce(allow_public_join, 1)`),
+// which is why only the invite-only space is seeded with 0.
+//
+// `getMetadata` is deliberately ungated on membership — the join prompt needs
+// a name for a space the caller has not joined — so it answers 200 either way.
+
+describe("anonymous reads of a public and an invite-only space", () => {
+  const PUBLIC_SPACE = "did:web:public-e2e.example";
+  const PRIVATE_SPACE = "did:web:private-e2e.example";
+  const PUBLIC_ROOM = newUlid();
+  const PRIVATE_ROOM = newUlid();
+
+  /** One space of each kind, each with a room and a message in it. */
+  async function seedBoth(): Promise<E2eContext> {
+    const ctx = await startAppserver();
+    const { db } = ctx;
+
+    seedSpace(db, PUBLIC_SPACE, USER, { allowPublicJoin: 1 });
+    seedRoom(db, PUBLIC_ROOM, PUBLIC_SPACE);
+    seedMessage(db, newUlid(), PUBLIC_ROOM, PUBLIC_SPACE, "a");
+
+    seedSpace(db, PRIVATE_SPACE, USER, { allowPublicJoin: 0 });
+    seedRoom(db, PRIVATE_ROOM, PRIVATE_SPACE);
+    seedMessage(db, newUlid(), PRIVATE_ROOM, PRIVATE_SPACE, "b");
+
+    return ctx;
+  }
+
+  test("space.getMetadata → 200 for both (the name is what a join prompt needs)", async () => {
+    const ctx = await seedBoth();
+    for (const spaceId of [PUBLIC_SPACE, PRIVATE_SPACE]) {
+      const res = await ctx.anonFetch(
+        `${ctx.baseUrl}/xrpc/space.roomy.space.getMetadata?spaceId=${spaceId}`,
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe("Test Space");
+    }
+  });
+
+  test("space.getThreads → 200 public, 403 invite-only", async () => {
+    const ctx = await seedBoth();
+    const pub = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getThreads?spaceId=${PUBLIC_SPACE}`,
+    );
+    expect(pub.status).toBe(200);
+
+    const priv = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.space.getThreads?spaceId=${PRIVATE_SPACE}`,
+    );
+    expect(priv.status).toBe(403);
+  });
+
+  test("room.getMetadata → 200 public, 403 invite-only", async () => {
+    const ctx = await seedBoth();
+    const pub = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.room.getMetadata?roomId=${PUBLIC_ROOM}`,
+    );
+    expect(pub.status).toBe(200);
+
+    const priv = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.room.getMetadata?roomId=${PRIVATE_ROOM}`,
+    );
+    expect(priv.status).toBe(403);
+  });
+
+  test("room.getMessages → 200 public, 403 invite-only", async () => {
+    const ctx = await seedBoth();
+    const pub = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.room.getMessages?roomId=${PUBLIC_ROOM}`,
+    );
+    expect(pub.status).toBe(200);
+
+    const priv = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.room.getMessages?roomId=${PRIVATE_ROOM}`,
+    );
+    expect(priv.status).toBe(403);
+  });
+});

@@ -27,6 +27,11 @@
   import { composerCanWrite, refreshWriteRefusal } from "$lib/write-refusal.svelte";
   import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
   import { resolveBlobUrl } from "@roomy/design/utils";
+  import { CONFIG } from "$lib/config";
+  import { resolveShareOrigin } from "$lib/share-url";
+  import type { PageData } from "./$types";
+
+  let { data }: { data: PageData } = $props();
 
   const spaceId = $derived(page.params.space!);
   const roomId = $derived(page.params.room!);
@@ -240,9 +245,13 @@
     return null;
   });
 
-  // Use sidebar data when available (instant from cache), fall back to room query.
+  // Use sidebar data when available (instant from cache), then the room's own
+  // query, then the server's anonymous read of this room.
   const roomName = $derived(
-    sidebarRoomInfo?.name ?? roomQuery.data?.name ?? "Channel",
+    sidebarRoomInfo?.name ??
+      roomQuery.data?.name ??
+      data.roomMeta?.name ??
+      "Channel",
   );
   const roomUnreadCount = $derived(
     sidebarRoomInfo?.unreadCount ?? roomQuery.data?.unreadCount ?? 0,
@@ -372,13 +381,38 @@
   const isAdmin = $derived(roomSpaceMetaQuery.data?.isAdmin ?? false);
   /** Current user's DID — distinguishes "my own message" from moderation. */
   const currentUserDid = $derived(auth.userDid);
+
+  /**
+   * The head's space fields: the client's queries once they answer, the
+   * server's anonymous reads until then. Same NSIDs, so a crawler that never
+   * runs the bundle and a client that does agree about the tags.
+   */
+  const spaceName = $derived(
+    spaceMetaQuery.data?.name ?? data.spaceMeta?.name ?? null,
+  );
+  const spaceDescription = $derived(
+    spaceMetaQuery.data?.description ?? data.spaceMeta?.description ?? null,
+  );
+  const spaceAvatar = $derived(
+    spaceMetaQuery.data?.avatar ?? data.spaceMeta?.avatar ?? null,
+  );
+  // Rooted at the public web origin rather than the document's, so the link a
+  // crawler is told about is one a recipient can open. `share-url.ts` owns the
+  // rule.
+  const shareOrigin = $derived(
+    resolveShareOrigin(
+      CONFIG.publicWebOrigin,
+      page.url.origin,
+      CONFIG.publicWebOriginMarker,
+    ),
+  );
 </script>
 
 <SeoMeta
-  title={roomName !== "Channel" ? `${roomName} - ${spaceMetaQuery.data?.name ?? "Roomy"}` : spaceMetaQuery.data?.name ? `${spaceMetaQuery.data.name} - Roomy` : "Roomy"}
-  description={spaceMetaQuery.data?.description}
-  image={spaceMetaQuery.data?.avatar ? resolveBlobUrl(spaceMetaQuery.data.avatar) : undefined}
-  url={page.url.origin ? `${page.url.origin}/${spaceId}/${roomId}` : undefined}
+  title={roomName !== "Channel" ? `${roomName} - ${spaceName ?? "Roomy"}` : spaceName ? `${spaceName} - Roomy` : "Roomy"}
+  description={spaceDescription}
+  image={spaceAvatar ? resolveBlobUrl(spaceAvatar) : undefined}
+  url={`${shareOrigin}/${spaceId}/${roomId}`}
 />
 
 {#snippet roomNavbar()}

@@ -69,6 +69,13 @@ import {
   SEED_SPACE_2_MESSAGE_TEXT,
   SEED_SPACE_2_NAME,
   SEED_SPACE_2_ROOM_ID,
+  SEED_PUBLIC_ROOM_ID,
+  SEED_PUBLIC_ROOM_NAME,
+  SEED_PUBLIC_SPACE_AVATAR,
+  SEED_PUBLIC_SPACE_DESCRIPTION,
+  SEED_PUBLIC_SPACE_ID,
+  SEED_PUBLIC_SPACE_NAME,
+  SEED_PUBLIC_SPACE_OWNER_DID,
   SEED_SPACE_2_ROOM_NAME,
   SEED_SPACE_3_CATEGORY_ID,
   SEED_SPACE_3_ID,
@@ -512,6 +519,33 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     "01M3C8QTVSG74JEG1QBM3STVX7",
     SEED_OPEN_SPACE_ROOM_ID,
     SEED_OPEN_SPACE_MESSAGE_TEXT,
+  );
+
+  // ── Public space ──────────────────────────────────────────────────────
+  // The one space that allows public joins, so an anonymous read of its room's
+  // metadata answers instead of the 403 an invite-only space's does. Its own
+  // DID, its own admin, and no `seedJoinedSpace` for anyone else: it appears in
+  // no viewer's `getSpaces` and changes no existing spec's sidebar. The room is
+  // created through the real write path, like every other room here.
+  seedSpace(db, SEED_PUBLIC_SPACE_ID, SEED_PUBLIC_SPACE_OWNER_DID, {
+    allowPublicJoin: 1,
+  });
+  seedMembership(db, SEED_PUBLIC_SPACE_ID, SEED_PUBLIC_SPACE_OWNER_DID, "admin");
+  await spaceDb(db, SEED_PUBLIC_SPACE_ID).run(
+    "update comp_info set name = ?, description = ?, avatar = ? where entity = ?",
+    [
+      SEED_PUBLIC_SPACE_NAME,
+      SEED_PUBLIC_SPACE_DESCRIPTION,
+      SEED_PUBLIC_SPACE_AVATAR,
+      SEED_PUBLIC_SPACE_ID,
+    ],
+  );
+  await createRoom(
+    appserverOrigin,
+    SEED_PUBLIC_SPACE_ID,
+    SEED_PUBLIC_ROOM_ID,
+    SEED_PUBLIC_ROOM_NAME,
+    SEED_PUBLIC_SPACE_OWNER_DID,
   );
 
   // ── Feature flags ────────────────────────────────────────────────────

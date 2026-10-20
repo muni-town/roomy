@@ -15,6 +15,13 @@
   import { onMount } from "svelte";
   import { getPushSubscriptionEndpoint } from "$lib/push.svelte";
   import { resolveSpaceRef } from "$lib/space-ref";
+  import SeoMeta from "$lib/components/seo/SeoMeta.svelte";
+  import { CONFIG } from "$lib/config";
+  import { resolveShareOrigin, shareUrl } from "$lib/share-url";
+  import { resolveBlobUrl } from "@roomy/design/utils";
+  import type { PageData } from "./$types";
+
+  let { data }: { data: PageData } = $props();
 
   const { queryKey } = cache;
 
@@ -189,8 +196,32 @@
       };
     }
   }
+
+  /**
+   * The head's fields for the space this link names, from the server's
+   * anonymous read of `space.roomy.space.getMetadata`. The page's own
+   * resolution above waits for a session, which is too late for a crawler and
+   * beside the point for one: an invite link's unfurl is the invitation's first
+   * impression, signed in or not.
+   */
+  const joinSpaceName = $derived(data.spaceMeta?.name ?? null);
+  const joinSpaceDescription = $derived(data.spaceMeta?.description ?? null);
+  const joinSpaceAvatar = $derived(data.spaceMeta?.avatar ?? null);
+  const shareOrigin = $derived(
+    resolveShareOrigin(
+      CONFIG.publicWebOrigin,
+      page.url.origin,
+      CONFIG.publicWebOriginMarker,
+    ),
+  );
 </script>
 
+<SeoMeta
+  title={joinSpaceName ? `${joinSpaceName} - Roomy` : "Roomy"}
+  description={joinSpaceDescription}
+  image={joinSpaceAvatar ? resolveBlobUrl(joinSpaceAvatar) : undefined}
+  url={shareUrl(shareOrigin, page.url).href}
+/>
 <JoinDialog {resolveState} {joinState} {inviteToken} {onJoin} {pushEnabled}>
   {#snippet avatar()}
     <div class="w-10 h-10 rounded-full bg-base-200 dark:bg-base-700"></div>
