@@ -64,6 +64,30 @@ describe("refreshBlocks", () => {
     ).rejects.toThrow(/Invalid block subject/);
   });
 
+  /**
+   * A repo can name one subject twice — a block in each collection, or the same
+   * block recorded again — and the block set is their union. The refresh has to
+   * survive that rather than fail on the primary key, because a refresh that
+   * throws leaves the account's previous set in place and the newly written block
+   * unenforced until the next successful one.
+   */
+  test("a repo naming one subject twice still stores a set", async () => {
+    repos.set(ALICE, [
+      { subject: BOB, source: "roomy", createdAt: null },
+      { subject: BOB, source: "bluesky", createdAt: null },
+    ]);
+
+    await refreshBlocksHandler({}, { did: ALICE }, {});
+
+    expect([...(await blocks(ALICE))]).toEqual([BOB]);
+    // The stamp landed with the rows, so the account is not refetched on every
+    // authenticated request until the window expires.
+    const stamp = await openReadStateDb()
+      .query("select status from user_block_fetches where user_did = ?")
+      .get<{ status: string }>([ALICE]);
+    expect(stamp?.status).toBe("ok");
+  });
+
   test("the caller's freshly written block is stored and visible to the next read", async () => {
     serve(ALICE, [BOB]);
 

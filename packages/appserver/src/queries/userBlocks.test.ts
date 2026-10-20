@@ -25,7 +25,9 @@ import {
   hiddenBy,
   refreshBlockSet,
   warmBlockSet,
+  replaceBlockRows,
 } from "./userBlocks.ts";
+import type { BlockRecord } from "../materialization/blocks.ts";
 
 const ALICE = UserDid.assert("did:plc:alice");
 const BOB = UserDid.assert("did:plc:bob");
@@ -230,8 +232,9 @@ describe("fetchBlockRecords", () => {
   });
 
   /**
-   * The fetch is a third-party call on a read path, so it must give up rather
-   * than hang. The DID document is served (pointing at the black hole) so that
+   * The fetch is a third-party call, so it must give up rather than hang: the
+   * refresh holding it never resolves otherwise, and the DID is left without a
+   * stamp. The DID document is served (pointing at the black hole) so that
    * resolution succeeds and the *record* call is what the deadline bounds.
    */
   test("the PDS record fetch returns instead of hanging", async () => {
@@ -393,6 +396,98 @@ describe("the refresh trigger", () => {
     _setTestFetchBlockRecords(async () => []);
     await refreshBlockSet(ALICE);
     expect([...(await blocks(ALICE))]).toEqual([]);
+  });
+});
+
+describe("replaceBlockRows", () => {
+  /** One record, as a fetch would report it. */
+  const record = (
+    subject: string,
+    source: "roomy" | "bluesky" = "roomy",
+    createdAt: number | null = null,
+  ): BlockRecord => ({ subject, source, createdAt });
+
+  test("the stored set is exactly the records passed in, in one write", async () => {
+    await replaceBlockRows(openReadStateDb(), ALICE, [
+      record(BOB, "roomy", 1_700_000_000_000),
+      record(CAROL, "bluesky"),
+    ]);
+
+    expect(await storedRows(ALICE)).toEqual([`${BOB}:roomy`, `${CAROL}:bluesky`]);
+    // The stamp the refresh trigger reads for freshness lands with the rows.
+    expect((await fetchStamp(ALICE))?.status).toBe("ok");
+  });
+
+  test("a record's created_at survives the round trip, absent one included", async () => {
+    await replaceBlockRows(openReadStateDb(), ALICE, [
+      record(BOB, "roomy", 1_700_000_000_000),
+      record(CAROL, "bluesky", null),
+    ]);
+
+    const rows = await openReadStateDb()
+      .query(
+        "select blocked_did, created_at from user_blocks where user_did = ? order by blocked_did",
+      )
+      .all<{ blocked_did: string; created_at: number | null }>([ALICE]);
+    expect(rows).toEqual([
+      { blocked_did: BOB, created_at: 1_700_000_000_000 },
+      { blocked_did: CAROL, created_at: null },
+    ]);
+  });
+
+  /**
+   * A block set is the union of two collections, so one account can hold several
+   * records naming the same subject. That is not two rows — the primary key is
+   * `(user_did, blocked_did)` — and a write that assumed they were distinct would
+   * abort on the key and leave the account's previous set in place.
+   */
+  test("a subject blocked in both collections is one row", async () => {
+    await replaceBlockRows(openReadStateDb(), ALICE, [
+      record(BOB, "roomy"),
+      record(BOB, "bluesky"),
+      record(CAROL),
+    ]);
+
+    // One row per subject, carrying the last source read for it; the union is
+    // the set that matters, not which collection named the subject.
+    expect(await storedRows(ALICE)).toEqual([`${BOB}:bluesky`, `${CAROL}:roomy`]);
+    expect([...(await blocks(ALICE))].sort()).toEqual([BOB, CAROL].sort());
+  });
+
+  test("a write replaces the previous set rather than adding to it", async () => {
+    await replaceBlockRows(openReadStateDb(), ALICE, [record(BOB), record(CAROL)]);
+    await replaceBlockRows(openReadStateDb(), ALICE, [record(CAROL)]);
+
+    expect(await storedRows(ALICE)).toEqual([`${CAROL}:roomy`]);
+  });
+
+  test("an empty set clears the rows and still stamps the attempt", async () => {
+    await replaceBlockRows(openReadStateDb(), ALICE, [record(BOB)]);
+    await replaceBlockRows(openReadStateDb(), ALICE, []);
+
+    expect(await storedRows(ALICE)).toEqual([]);
+    // The stamp is what separates "blocks nobody" from "never read", so an
+    // empty set has to leave one behind.
+    expect((await fetchStamp(ALICE))?.status).toBe("ok");
+  });
+
+  test("one account's write leaves another account's rows alone", async () => {
+    await replaceBlockRows(openReadStateDb(), BOB, [record(CAROL)]);
+    await replaceBlockRows(openReadStateDb(), ALICE, [record(CAROL)]);
+
+    expect(await storedRows(BOB)).toEqual([`${CAROL}:roomy`]);
+  });
+
+  /**
+   * The set is a user's whole repo, so its length is not bounded by anything the
+   * appserver controls. The write carries it as one binding rather than one
+   * statement per record; a set large enough to matter for that is still a set.
+   */
+  test("a set far larger than one page of records is written whole", async () => {
+    const many = Array.from({ length: 5_000 }, (_, i) => record(`did:plc:blocked${i}`));
+    await replaceBlockRows(openReadStateDb(), ALICE, many);
+
+    expect((await blocks(ALICE)).size).toBe(many.length);
   });
 });
 

@@ -308,6 +308,24 @@ async function fetchAndStore(
  * One transaction, because the delete and the inserts are a single replacement:
  * a crash between them would leave the user with an empty set — nobody hidden —
  * which is the one failure mode a block must not have.
+ *
+ * The insert is set-based. A block set is one account's whole repo and a repo is
+ * not bounded: the largest account measured carries 16.5k blocks. A statement per
+ * record costs ~6.9µs per record on a quiet readstate worker against ~3.4µs for
+ * the set-based write below (50k-record fixture, `perf/probe-userblocks-replace.ts`),
+ * and the worker serialises its requests, so the difference is also time every
+ * other request on it spends queued. In production the shape has been logged
+ * carrying 16653 records in 3400ms.
+ *
+ * The set travels as one JSON array of `[blocked_did, source, created_at]`: a
+ * transaction step carries one SQL string and one params array, so the row set
+ * has to arrive inside a single binding.
+ *
+ * Rows are deduplicated by `blocked_did`. The set is the union of two collections
+ * and an account can hold several blocks naming one subject, so the records are
+ * not unique on the primary key: one measured account's 16651 records resolved to
+ * 15462 subjects, 1186 of them named more than once. A row per record aborts the
+ * insert on the primary key, leaving that account's previous set in place.
  */
 export async function replaceBlockRows(
   readStateDb: DbLike,
@@ -315,35 +333,41 @@ export async function replaceBlockRows(
   records: readonly BlockRecord[],
 ): Promise<void> {
   const now = Date.now();
-  const steps: Array<{
-    type: "query" | "run" | "exec";
-    sql: string;
-    params?: unknown[];
-  }> = [
+  // Last record wins, matching the order the two collections are read in: a
+  // subject blocked in both Roomy and Bluesky is one row, not two.
+  const byBlocked = new Map<string, BlockRecord>();
+  for (const record of records) byBlocked.set(record.subject, record);
+  const payload = JSON.stringify(
+    [...byBlocked.values()].map((record) => [
+      record.subject,
+      record.source,
+      record.createdAt,
+    ]),
+  );
+
+  await readStateDb.transaction([
     {
       type: "run",
       sql: "delete from user_blocks where user_did = ?",
       params: [userDid],
     },
-  ];
-  for (const record of records) {
-    steps.push({
+    {
       type: "run",
       sql: `insert into user_blocks (user_did, blocked_did, source, created_at, fetched_at)
-            values (?, ?, ?, ?, ?)`,
-      params: [userDid, record.subject, record.source, record.createdAt, now],
-    });
-  }
-  steps.push({
-    type: "run",
-    sql: `insert into user_block_fetches (user_did, fetched_at, status)
+            select ?, value ->> 0, value ->> 1, value ->> 2, ?
+              from json_each(?)`,
+      params: [userDid, now, payload],
+    },
+    {
+      type: "run",
+      sql: `insert into user_block_fetches (user_did, fetched_at, status)
           values (?, ?, 'ok')
           on conflict(user_did) do update set
             fetched_at = excluded.fetched_at,
             status = excluded.status`,
-    params: [userDid, now],
-  });
-  await readStateDb.transaction(steps);
+      params: [userDid, now],
+    },
+  ]);
 }
 
 /**
