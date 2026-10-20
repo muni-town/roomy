@@ -27,9 +27,10 @@
  * bounded as concurrent users × rooms grows.
  *
  * Why `ensureQueryData` and not SvelteKit preload hooks: all app data lives in
- * the TanStack cache (`staleTime: Infinity`, WS is the sole freshness
- * authority — see `client.ts`). `data-sveltekit-preload-data="hover"` only
- * covers SvelteKit `load` data, which this app doesn't use for room data.
+ * the TanStack cache (WS invalidation is the freshness authority — see
+ * `client.ts`; the two cross-space views opt into a mount refetch instead).
+ * `data-sveltekit-preload-data="hover"` only covers SvelteKit `load` data,
+ * which this app doesn't use for room data.
  * `ensureQueryData` returns immediately on a cache hit and only fetches on a
  * miss, so re-running these on navigation/metadata updates is free for
  * already-prefetched entries — and the WS `#messageDiff`/`#roomMetadataDiff`

@@ -30,6 +30,23 @@ export function createActivityFeedQuery(opts: () => ActivityFeedOptions = () => 
       queryKey: queryKey("space.roomy.space.getActivityFeed", params),
       queryFn: () =>
         px().query("space.roomy.space.getActivityFeed", params),
+      // A pulled view: the server sends no frame for a message-driven change
+      // to the feed (see `cacheEvictionOnly` in the appserver's
+      // `invalidation/types.ts`), so the read is reissued on mount instead.
+      //
+      // `staleTime: 0` is what makes that happen — the app-wide default is
+      // `Infinity` (WS invalidation is the freshness authority elsewhere), and
+      // under it a mount would serve the cached page forever. `staleTime` and
+      // not `refetchOnMount`, because a mount refetch goes through TanStack's
+      // default `cancelRefetch: true`, which restarts an in-flight fetch; the
+      // SDK cache adapter exists to prevent exactly that for this query, which
+      // is expensive (p50 measured in seconds in production), and a stale entry
+      // reaches the same mount refetch without touching it.
+      //
+      // The previous answer keeps rendering while the refetch is in flight:
+      // `data` survives a pending fetch, so `isPending` stays false and the
+      // list below does not fall back to the skeleton.
+      staleTime: 0,
       // The page mounts before auth lands (the root layout renders beneath
       // the login overlay while auth is still resolving), and getActivityFeed
       // 401s for an unauthenticated caller. Gate on auth so the request is

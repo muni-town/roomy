@@ -687,7 +687,7 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("getSpaces invalidation reaches all connections regardless of topic subscriptions", async () => {
+  test("a per-user getSpaces invalidation reaches all of that user's connections regardless of topic", async () => {
     const router = new MockRouter();
     const db = new MockDb();
     db.seedMembership(SPACE_ID, USER_B, "member");
@@ -711,6 +711,10 @@ describe("SyncManager", () => {
     socketA.sentFrames.length = 0;
     socketB.sentFrames.length = 0;
 
+    // The unfiltered `{}` key is what the per-user cases carry — joining or
+    // leaving a space restates which spaces the caller's list holds. It is
+    // delivered to every connection of that user: the user may be on a page
+    // with no space topic at all and still needs the list.
     router.emitSignals([queryInvalidation("space.roomy.space.getSpaces", {})]);
 
     // getSpaces is user-scoped — both connections receive it.
@@ -720,12 +724,13 @@ describe("SyncManager", () => {
     manager.destroy();
   });
 
-  test("getActivityFeed's server-cache space param is sent to clients as an unfiltered key", async () => {
-    // The signal carries a space because the server cache matches on feed
-    // COVERAGE (which space a page includes). The client's query keys are the
-    // params it queried with, and a `{ spaceId }` key prefix-matches only that
-    // one page — leaving the client's unfiltered page stale, which is the page
-    // it holds on the home feed. The frame must therefore be the empty key.
+  test("a per-user getActivityFeed invalidation is sent to clients as an unfiltered key", async () => {
+    // The `{}` key is what the per-user cases carry: a join or a leave changes
+    // WHICH spaces the feed covers, and the client's query keys are the params
+    // it queried with, so a `{ spaceId }` key would prefix-match only that one
+    // page — leaving the client's unfiltered page stale, which is the page it
+    // holds on the home feed. Message-driven feed signals never reach here (they
+    // are evicted with no frame — see `cacheEvictionOnly`).
     const router = new MockRouter();
     const db = new MockDb();
     db.seedMembership(SPACE_ID, USER_B, "member");
@@ -758,10 +763,13 @@ describe("SyncManager", () => {
   });
 
   test("a batch spanning two spaces sends ONE getActivityFeed frame", async () => {
-    // Each space's signal carries a different `spaceId` (so neither dedupes
-    // against the other at the router) but both render to the same unfiltered
-    // client key. Sending it twice is the refetch storm the signal dedup
-    // exists to prevent.
+    // A handler-contract test: this NSID's params are rendered AWAY (the frame
+    // is always the unfiltered key, see #routeQueryInvalidation), so two
+    // signals differing only by `spaceId` are one frame to the client, and
+    // sending it twice is the refetch storm the collapse exists to prevent.
+    // No signal produced today carries a `spaceId` on a frame-sending feed
+    // signal — message-driven ones are eviction-only — but the transformation
+    // is lossy whether or not one does, and that is the property under test.
     const router = new MockRouter();
     const { manager } = makeManager(router as unknown as InvalidationRouter, mockStreamManager);
     const socket = new MockSocket(USER_A);
@@ -920,8 +928,9 @@ describe("SyncManager", () => {
 
   test("a cacheEvictionOnly invalidation never reaches a connection", async () => {
     // These exist for the server-side response cache (whose eviction listener
-    // sees every signal); the client is kept fresh by a diff frame instead, so
-    // sending it a refetch instruction is the exact cost the flag avoids.
+    // sees every signal). Either the client patches the query from a diff frame
+    // or it pulls the view on mount, so sending it a refetch instruction is the
+    // exact cost the flag avoids.
     const router = new MockRouter();
     const { manager } = makeManager(router as unknown as InvalidationRouter);
 

@@ -129,7 +129,9 @@
 
   <h3>#roomActivityDiff</h3>
 
-  <p>Board re-ordering, <strong>broadcast</strong> to every connection subscribed to the room, its parent channel, or the space. A message makes its room the most recently active one, which re-orders <code>room.getThreads</code> and <code>space.getThreads</code> — these views carry the room's latest-activity fields and a latest-first ordering, so the row is <em>upserted and moved to the front</em> rather than merely refetched. The frame carries the whole board row subset, so the client needs no HTTP round-trip. <code>space.getActivityFeed</code> is <em>not</em> patched (its items hydrate embeds per message) and still refetches.</p>
+  <p>Board re-ordering, <strong>broadcast</strong> to every connection subscribed to the room, its parent channel, or the space. A message makes its room the most recently active one, which re-orders <code>room.getThreads</code> and <code>space.getThreads</code> — these views carry the room's latest-activity fields and a latest-first ordering, so the row is <em>upserted and moved to the front</em> rather than merely refetched. The frame carries the whole board row subset, so the client needs no HTTP round-trip.</p>
+
+  <p><code>space.getActivityFeed</code> is <em>not</em> patched and is no longer pushed either. Its items hydrate media/link embeds per message, so no diff can carry them, and it spans every space the caller joined — which under per-space ownership no single worker can keep fresh on its own. The client instead refetches it on mount and on an explicit refresh, and a message-driven change to it evicts the server's cached response with no frame sent.</p>
 
   <p>No field here is caller-scoped: <code>unreadCount</code> / <code>unread</code> on the board rows are absent, and are patched from <code>#roomMetadataDiff</code>, whose <code>delta</code> is per-user. Both frames accompany the same event. Delivery re-checks room access, because the frame carries a message preview and its author.</p>
 
@@ -173,6 +175,8 @@
   <pre><code>queryClient.invalidateQueries(&#123; queryKey: [nsid, params] &#125;);</code></pre>
 
   <p><code>getSpaces</code> and <code>getActivityFeed</code> are user-scoped global queries — invalidation for them is broadcast to <strong>all</strong> of the affected user's connections regardless of topic subscriptions (the user may be on a page with no space topic). Signals carrying an <code>affectedUser</code> (e.g. admin-edge changes, role assignments, join/leave) are delivered only to that user's connections.</p>
+
+  <p>Both are <strong>pulled</strong> views, so most changes to them produce no frame at all. A message-driven change evicts the server's cached response and sends nothing: the client refetches these two on mount and on an explicit refresh rather than waiting to be told, which is what lets several spaces behind one response be owned by different workers. Only the <em>per-user</em> cases — joining or leaving a space, a role or admin edit, a read that drained the space, a space reorder — still push a frame, and those are for one caller's own view.</p>
 
   <h3>#streamEvents</h3>
 
@@ -227,15 +231,15 @@
       </tr>
     </thead>
     <tbody>
-      <tr><td>createMessage in room X</td><td><code>room:X</code> + parent channel + <code>space:Y</code></td><td><code>#messageDiff</code> (add) + <code>#roomMetadataDiff</code> (delta +1) + <code>#roomActivityDiff</code> + <code>#invalidate</code> space.getActivityFeed, space.getMetadata (author)</td></tr>
-      <tr><td>editMessage in room X</td><td><code>room:X</code></td><td><code>#messageDiff</code> (update) + <code>#invalidate</code> room.getMetadata</td></tr>
-      <tr><td>deleteMessage in room X</td><td><code>room:X</code></td><td><code>#messageDiff</code> (remove)</td></tr>
+      <tr><td>createMessage in room X</td><td><code>room:X</code> + parent channel + <code>space:Y</code></td><td><code>#messageDiff</code> (add) + <code>#roomMetadataDiff</code> (delta +1) + <code>#roomActivityDiff</code> + <code>#invalidate</code> space.getMetadata (author). The feed is a cache eviction only.</td></tr>
+      <tr><td>editMessage in room X</td><td><code>room:X</code></td><td><code>#messageDiff</code> (update) + <code>#invalidate</code> room.getMetadata, space.getThreads, the link indexes. The feed is a cache eviction only.</td></tr>
+      <tr><td>deleteMessage in room X</td><td><code>room:X</code></td><td><code>#messageDiff</code> (remove) + <code>#invalidate</code> room/space metadata and threads. The feed and the space list are cache evictions only.</td></tr>
       <tr><td>forwardMessages into room X</td><td><code>room:X</code></td><td><code>#messageDiff</code> (add) + <code>#roomMetadataDiff</code> (delta +1)</td></tr>
-      <tr><td>Reaction add/remove in room X</td><td><code>room:X</code></td><td><code>#invalidate</code> room.getMessages + activity feed (+ message.getMessage)</td></tr>
-      <tr><td>createRoom in space Y</td><td><code>space:Y</code>, <code>room:&lt;new&gt;</code></td><td><code>#invalidate</code> space.getMetadata, getSpaces, getThreads, getMembers + room.getMetadata, getMessages, getThreads</td></tr>
-      <tr><td>updateRoom / deleteRoom / restoreRoom</td><td><code>space:&lt;parent&gt;</code>, <code>room:X</code></td><td><code>#invalidate</code> room.getMetadata + space queries</td></tr>
-      <tr><td>Space info / sidebar config change</td><td><code>space:X</code></td><td><code>#invalidate</code> space.getMetadata (+ getSpaces)</td></tr>
-      <tr><td>joinSpace / leaveSpace in space X</td><td><code>space:X</code></td><td><code>#invalidate</code> getSpaces, getMetadata, getThreads, getMembers (affectedUser = caller)</td></tr>
+      <tr><td>Reaction add/remove in room X</td><td><code>room:X</code></td><td><code>#invalidate</code> room.getMessages + space.getThreads (+ message.getMessage). The feed is a cache eviction only.</td></tr>
+      <tr><td>createRoom in space Y</td><td><code>space:Y</code>, <code>room:&lt;new&gt;</code></td><td><code>#invalidate</code> space.getMetadata, getThreads, getMembers + room.getMetadata, getMessages, getThreads. The space list is a cache eviction only.</td></tr>
+      <tr><td>updateRoom / deleteRoom / restoreRoom</td><td><code>space:&lt;parent&gt;</code>, <code>room:X</code></td><td><code>#invalidate</code> room.getMetadata + space queries. The space list is a cache eviction only.</td></tr>
+      <tr><td>Space info / sidebar config change</td><td><code>space:X</code></td><td><code>#invalidate</code> space.getMetadata. The space list is a cache eviction only.</td></tr>
+      <tr><td>joinSpace / leaveSpace in space X</td><td><code>space:X</code></td><td><code>#invalidate</code> getSpaces, getActivityFeed, getMetadata, getThreads, getMembers (affectedUser = caller) — a per-user change still pushes.</td></tr>
       <tr><td>Admin edge add/remove</td><td><code>space:X</code></td><td><code>#invalidate</code> getSpaces, getMetadata, getMembers</td></tr>
       <tr><td>Role create/update/delete</td><td><code>space:Y</code></td><td><code>#invalidate</code> space.getRoles</td></tr>
       <tr><td>addMemberRole / removeMemberRole</td><td><code>space:Y</code></td><td><code>#invalidate</code> getRoles, getMembers (affectedUser)</td></tr>

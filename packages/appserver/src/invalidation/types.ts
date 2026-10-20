@@ -66,17 +66,23 @@ export interface QueryInvalidation {
    * Evict the server-side response cache WITHOUT sending a `#invalidate`
    * frame to connected clients.
    *
-   * The two consumers want different things. The server cache must be evicted
-   * on every change (a client loading the page fresh has no diff frame to
-   * apply — it would otherwise be served a stale body for up to the cache
-   * TTL). A connected client, however, is already patchable from a diff frame,
-   * so an invalidation frame for it is pure refetch cost.
+   * Used where a query's cached *body* is stale but a connected, mounted client
+   * gains nothing from a refetch. Two cases:
    *
-   * Emit this for queries whose client-side freshness is delivered by a diff
-   * (see `RoomActivityDiff`) but whose *cached* response body is still stale —
-   * `space.getThreads` on `createMessage`, whose board ordering is patched
-   * client-side by the activity diff while the server cache still needs the
-   * eviction.
+   * - **The client patches from a diff.** `space.getThreads`,
+   *   `room.getThreads`, `room.getMetadata` on `createMessage` — the client
+   *   applies `#roomActivityDiff` / `#roomMetadataDiff`, so a frame for it is
+   *   pure refetch cost.
+   * - **The view is pulled.** `space.getActivityFeed` and
+   *   `space.getSpaces` answer one caller by merging what several spaces hold,
+   *   so under per-space leases no single worker can push their freshness
+   *   (replicable-space-workers.md §4). The client refetches them on mount and
+   *   on refresh, and the eviction is what keeps a *fresh* mount from being
+   *   served the pre-write body.
+   *
+   * An eviction-only signal may still carry `affectedUser`: a message-driven
+   * signal that is also caller-scoped (a federated reader whose own list
+   * flipped) narrows the eviction to that caller and sends no frame.
    */
   cacheEvictionOnly?: boolean;
 }

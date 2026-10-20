@@ -89,23 +89,43 @@ function invalidate(
  * Invalidate for the server-side response cache ONLY — no `#invalidate` frame
  * is sent to connected clients.
  *
- * Used where a query's cached *body* is stale but connected clients are kept
- * fresh by a diff frame instead: the client patches from the diff (no refetch),
- * while a client loading the page fresh has no diff to apply and must not be
- * served the stale cached body. See `QueryInvalidation.cacheEvictionOnly`.
+ * Used where a query's cached *body* is stale but a connected client has no
+ * reason to refetch it, so it must be evicted for the next reader while the
+ * mounted one is left alone. That has two shapes:
+ *
+ * - **A diff keeps the client fresh.** The client patches the row from
+ *   `#roomActivityDiff` / `#roomMetadataDiff`, so a frame for it would be pure
+ *   refetch cost. Applies to the boards (`space.getThreads`, `room.getThreads`)
+ *   and their cached bodies.
+ * - **A pulled view.** `space.getActivityFeed` and `space.getSpaces` answer one
+ *   caller by merging what several spaces hold, so under per-space leases the
+ *   spaces behind a response may be owned by different workers and no worker
+ *   can push the view's freshness on its own. The client refetches them on
+ *   mount and on refresh instead ("Cross-space views are refreshed by pull, not
+ *   push", replicable-space-workers.md §4). The eviction is what stops a
+ *   *fresh* mount being served the pre-write body.
+ *
+ * See `QueryInvalidation.cacheEvictionOnly`.
+ *
+ * `affectedUser` narrows the eviction exactly as it does for a frame-sending
+ * signal: only that caller's entry (and the anon bucket) is dropped. A
+ * message-driven signal that is also caller-scoped — a federated reader whose
+ * own list flipped — needs both halves.
  */
 function evictOnly(
   nsid: QueryNsid,
   params: Record<string, string>,
+  affectedUser?: UserDid,
 ): InvalidationEvent {
   return {
     kind: "queryInvalidation",
-    signal: { nsid, params, cacheEvictionOnly: true },
+    signal: { nsid, params, affectedUser, cacheEvictionOnly: true },
   };
 }
 
 /**
- * The `getSpaces` invalidation for a space-scoped change.
+ * The `getSpaces` signal for a change to the shape of a space's own row: its
+ * name, its rooms, its permissions.
  *
  * The list is a per-CALLER query whose params name no space, so the space is
  * carried as COVERAGE rather than as a param: the cache evicts the callers
@@ -121,9 +141,14 @@ function evictOnly(
  * caller's list by definition does not contain the space yet and coverage
  * would therefore match nothing; those signals carry `affectedUser` and stay
  * targeted per user.
+ *
+ * Eviction only — no client frame. The list is one of the two cross-space
+ * views, so its freshness is pulled rather than pushed; see {@link evictOnly}.
+ * The change still lands for any caller who remounts, because the eviction is
+ * what makes their next read miss.
  */
-function invalidateSpaceList(spaceId: StreamDid): InvalidationEvent {
-  return invalidate("space.roomy.space.getSpaces", { spaceId });
+function evictOnlySpaceList(spaceId: StreamDid): InvalidationEvent {
+  return evictOnly("space.roomy.space.getSpaces", { spaceId });
 }
 
 /**
@@ -135,13 +160,13 @@ function invalidateSpaceList(spaceId: StreamDid): InvalidationEvent {
  * a per-caller list, and the unread totals in it roll up from
  * `read_positions`, so a caller in another space sees the same numbers
  * afterwards. The list is therefore scoped to the space as coverage (see
- * `invalidateSpaceList`); the room itself is not needed, because a cached
+ * `evictOnlySpaceList`); the room itself is not needed, because a cached
  * list does not carry per-room rows the cache could match on.
  */
 function invalidateSpace(spaceId: StreamDid): InvalidationEvent[] {
   return [
     invalidate("space.roomy.space.getMetadata", { spaceId }),
-    invalidateSpaceList(spaceId),
+    evictOnlySpaceList(spaceId),
     invalidate("space.roomy.space.getThreads", { spaceId }),
     invalidate("space.roomy.space.getMembers", { spaceId }),
   ];
@@ -235,10 +260,12 @@ async function federatedReceiversInvalidation(
     // moves on every message — always refetch it (coverage: only the callers
     // whose list holds the receiving space).
     signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: home as StreamDid }));
-    // The space list only moves for the readers whose `hasUnreads` flipped.
+    // The space list only moves for the readers whose `hasUnreads` flipped,
+    // and that flip is what the `roomMetadataDiff` above patches — so the
+    // eviction is for the next mount, not for the mounted client.
     for (const user of spaceUnreadFlips.keys()) {
       signals.push(
-        invalidate("space.roomy.space.getSpaces", { spaceId: home as StreamDid }, user),
+        evictOnly("space.roomy.space.getSpaces", { spaceId: home as StreamDid }, user),
       );
     }
   }
@@ -253,7 +280,7 @@ function invalidateRoom(roomId: Ulid, spaceId: StreamDid): InvalidationEvent[] {
     // Space sidebar may show unread counts for this room. The space list's
     // rollup follows the same space-coverage rule as `invalidateSpace`.
     invalidate("space.roomy.space.getMetadata", { spaceId }),
-    invalidateSpaceList(spaceId),
+    evictOnlySpaceList(spaceId),
   ];
 }
 
@@ -573,7 +600,12 @@ async function handleCreateMessage(
   // coverage includes this space are stale — the eviction listener reads the
   // space as coverage, not as a param to subset-match (see
   // `cache/activityFeedCoverage.ts`).
-  signals.push(invalidate("space.roomy.space.getActivityFeed", { spaceId }));
+  //
+  // Eviction only: the mounted client pulls the feed rather than waiting for
+  // a frame (see `evictOnly`). The unread counts a new message moves reach it
+  // through the `#roomMetadataDiff` above; the items themselves arrive on the
+  // next mount or refresh.
+  signals.push(evictOnly("space.roomy.space.getActivityFeed", { spaceId }));
 
   // A message in a thread may update the author's `activeThreads` in the
   // space sidebar. The `roomMetadataDiff` only patches `unreadCount`, not
@@ -647,8 +679,10 @@ async function handleEditMessage(
   // An edit may add/remove link attachments, changing both link indexes.
   signals.push(invalidate("space.roomy.room.getLinks", { roomId }));
   signals.push(invalidate("space.roomy.space.getLinks", { spaceId: event.streamDid }));
-  // An edited message may change the activity feed's rendered item.
-  signals.push(invalidate("space.roomy.space.getActivityFeed", { spaceId: event.streamDid }));
+  // An edited message may change the activity feed's rendered item — cached
+  // body stale, but the mounted client refetches the feed on its own schedule
+  // rather than from a frame (see `evictOnly`).
+  signals.push(evictOnly("space.roomy.space.getActivityFeed", { spaceId: event.streamDid }));
 
   return signals;
 }
@@ -681,8 +715,9 @@ async function handleDeleteMessage(
     invalidate("space.roomy.space.getThreads", { spaceId: event.streamDid }),
     // The deleted message may have been the only share of a link.
     invalidate("space.roomy.space.getLinks", { spaceId: event.streamDid }),
-    // A deleted message may remove an activity-feed item.
-    invalidate("space.roomy.space.getActivityFeed", { spaceId: event.streamDid }),
+    // A deleted message may remove an activity-feed item — eviction only, for
+    // the same reason as the create path: the feed is pulled (see `evictOnly`).
+    evictOnly("space.roomy.space.getActivityFeed", { spaceId: event.streamDid }),
   ];
 
   // Emit `remove` mention ops for every DID the deleted message mentioned,
@@ -795,7 +830,8 @@ async function handleMoveMessages(
   signals.push(invalidate("space.roomy.room.getMessages", { roomId: toRoomId }));
   signals.push(invalidate("space.roomy.space.getThreads", { spaceId }));
   signals.push(invalidate("space.roomy.space.getLinks", { spaceId }));
-  signals.push(invalidate("space.roomy.space.getActivityFeed", { spaceId }));
+  // The feed is evicted, not framed — the client pulls it (see `evictOnly`).
+  signals.push(evictOnly("space.roomy.space.getActivityFeed", { spaceId }));
 
   return signals;
 }
@@ -814,8 +850,9 @@ function handleReactionChange(event: AppliedEvent): InvalidationEvent[] {
     // A reaction on (or removing one from) a room's latest message changes
     // that feed item's rendered reactions. Scoped to the reacting message's
     // space: the feed is per-caller and spans spaces, so only pages covering
-    // this space are stale.
-    invalidate("space.roomy.space.getActivityFeed", { spaceId }),
+    // this space are stale. Eviction only — the feed is pulled (see
+    // `evictOnly`).
+    evictOnly("space.roomy.space.getActivityFeed", { spaceId }),
     // A reaction on a room's latest message changes the space index board's
     // `latestMembers` (recent participants) for that room — broadcast.
     invalidate("space.roomy.space.getThreads", { spaceId }),
@@ -891,8 +928,8 @@ function handleDeleteRoom(event: AppliedEvent): InvalidationEvent[] {
     signals.push(...invalidateSpace(spaceId));
   }
   // Deleting a room removes its activity items from every feed that covers
-  // this space.
-  signals.push(invalidate("space.roomy.space.getActivityFeed", { spaceId }));
+  // this space — eviction only, since the feed is pulled (see `evictOnly`).
+  signals.push(evictOnly("space.roomy.space.getActivityFeed", { spaceId }));
   if (roomId) {
     signals.push(invalidate("space.roomy.room.getMetadata", { roomId }));
   }
@@ -913,7 +950,7 @@ function handleUpdateSpaceInfo(event: AppliedEvent): InvalidationEvent[] {
   // space keeps their entry.
   return [
     invalidate("space.roomy.space.getMetadata", { spaceId }),
-    invalidateSpaceList(spaceId),
+    evictOnlySpaceList(spaceId),
   ];
 }
 
@@ -1040,7 +1077,7 @@ function handleDeleteRole(event: AppliedEvent): InvalidationEvent[] {
     invalidate("space.roomy.space.getMetadata", { spaceId }),
     // Deleting a role can change which rooms callers may read, so the list
     // restates the space's rooms for its readers.
-    invalidateSpaceList(spaceId),
+    evictOnlySpaceList(spaceId),
   ];
 }
 
@@ -1080,7 +1117,7 @@ function handleSetRoleRoomPermission(event: AppliedEvent): InvalidationEvent[] {
     invalidate("space.roomy.space.getMetadata", { spaceId }),
     // Granting a role access to a room restates which rooms the space holds
     // for its readers.
-    invalidateSpaceList(spaceId),
+    evictOnlySpaceList(spaceId),
   ];
 
   if (roomId) {
@@ -1181,7 +1218,7 @@ function handleFederationRespond(event: AppliedEvent): InvalidationEvent[] {
     signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: b }));
     // Approval changes which federated channels B's callers can see, and the
     // space's handle/name render in their lists besides.
-    signals.push(invalidateSpaceList(b as StreamDid));
+    signals.push(evictOnlySpaceList(b as StreamDid));
   }
   return signals;
 }
@@ -1201,7 +1238,7 @@ function handleFederationRemove(event: AppliedEvent): InvalidationEvent[] {
     signals.push(invalidate("space.roomy.federation.getIncoming", { spaceId: b }));
     signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: b }));
     // Removing a federation drops B's federated rows.
-    signals.push(invalidateSpaceList(b as StreamDid));
+    signals.push(evictOnlySpaceList(b as StreamDid));
   }
   return signals;
 }
@@ -1221,7 +1258,7 @@ function handleSetRoomPermission(event: AppliedEvent): InvalidationEvent[] {
   if (b) {
     signals.push(invalidate("space.roomy.space.getMetadata", { spaceId: b }));
     // A grant flip changes whether B's callers can see the federated channel.
-    signals.push(invalidateSpaceList(b as StreamDid));
+    signals.push(evictOnlySpaceList(b as StreamDid));
   }
   return signals;
 }
@@ -1237,7 +1274,7 @@ function handleSetReceiverPermission(event: AppliedEvent): InvalidationEvent[] {
     invalidate("space.roomy.space.getMetadata", { spaceId }),
     // A receiver grant flip shows or hides a federated channel for the
     // space's readers.
-    invalidateSpaceList(spaceId),
+    evictOnlySpaceList(spaceId),
   ];
 }
 

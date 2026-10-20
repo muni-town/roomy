@@ -54,7 +54,14 @@ export async function pxUnauth(): Promise<
   return unauthXrpc;
 }
 
-// WS is sole freshness authority — all queries use staleTime: Infinity.
+// WS is the freshness authority — queries use staleTime: Infinity, with two
+// exceptions noted here so the rule reads correctly at the point it is set.
+//
+// The exceptions are the two cross-space views, `getActivityFeed` and
+// `getSpaces`: for them the server pushes no frame on a message-driven change
+// (they are evicted from its response cache instead), so each sets
+// `staleTime: 0` to refetch on mount. See `queries/activity-feed.ts` and
+// `queries/spaces.ts`.
 //
 // The refetching that does happen is stale-while-revalidate. A refetch that
 // fails leaves the last value the server sent in place with `status: "error"`

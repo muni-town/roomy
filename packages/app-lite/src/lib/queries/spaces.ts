@@ -29,5 +29,17 @@ export function createSpacesQuery(opts: SpacesQueryOptions = {}) {
     // TanStack prefix matching means invalidating the base key touches both.
     queryKey: queryKey("space.roomy.space.getSpaces", params),
     queryFn: () => px().query("space.roomy.space.getSpaces", params),
+    // A pulled view, like the activity feed: a message-driven change to the
+    // list is evicted server-side with no frame (see `cacheEvictionOnly` in
+    // the appserver's `invalidation/types.ts`), so a mount reissues the read.
+    // `staleTime: 0` is the lever — the app-wide default is `Infinity` — and
+    // why not `refetchOnMount` is spelled out in `activity-feed.ts`. The last
+    // answer keeps rendering while the refetch is in flight.
+    //
+    // The per-user cases (join, leave, a role or admin change, a read that
+    // drained the space, a reorder) still arrive as frames and still
+    // invalidate this query, so the list stays current for its own changes
+    // without a remount.
+    staleTime: 0,
   }));
 }

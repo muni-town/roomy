@@ -13,8 +13,9 @@
     "did:plc:gnwy2zbm3hu4gfdawzxmpb2s",
   ];
 
-  // Cached query of the user's joined spaces — no extra network round trip if
-  // the homepage already loaded it.
+  // Cached query of the user's joined spaces. The query refetches on mount
+  // (it is a pulled view — see `queries/spaces.ts`), so this costs one request
+  // per mount of this section rather than sharing the homepage's.
   const spacesQuery = createSpacesQuery();
 
   // DIDs the user is currently a member of.

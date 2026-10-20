@@ -11,12 +11,13 @@ The goal of this work is horizontal scale-out of the read and connection plane. 
 | `space.getActivityFeed` | p95 3.1s | p50 24ms, p95 955ms |
 | `space.getThreads` | p95 3.4s | p50 9ms, p95 786ms |
 | `room.getMetadata` | p50 7ms, p95 349ms | p50 6ms, p95 69ms |
-| Fan-out per live message, per client | 7 WebSocket frames, 5 of them invalidations, about 137 DB round-trips | 7 frames, 4 invalidations (`#roomActivityDiff` replaced the boards') |
+| Fan-out per live message, per client | 7 WebSocket frames, 5 of them invalidations, about 137 DB round-trips | 6 frames, 3 invalidations (`#roomActivityDiff` replaced the boards'; WS5b retired the feed's) |
 
 The read-path work of the last two weeks is what moved the first three rows, and the
 projections work is what will move them further. The fan-out column moved partway: the three
-activity-ordered boards now receive a diff frame instead of an invalidation, so the four that
-remain are the link-index pair, the activity feed and the author-scoped space metadata.
+activity-ordered boards now receive a diff frame instead of an invalidation, and the activity
+feed — a pulled view since WS5b — no longer receives one at all. What remains is the link-index
+pair and the author-scoped space metadata.
 
 **Not goals of this plan:** protocol-native ingestion (see the migration plan), durability and ops simplification (these fall out of moving the log off the volume), and a Rust rewrite as an end in itself.
 
@@ -107,17 +108,25 @@ The projections work already planned targets `getActivityFeed`, `getThreads`, `r
 
 ### WS5b. Pull freshness for the cross-space views
 
-Split out of WS5 because it is client- and gateway-local, needs no lease, and is the one piece
-here that can land before Rust exists.
+**Shipped.** Split out of WS5 because it is client- and gateway-local, needs no
+lease, and was the one piece here that could land before Rust exists. Both halves
+are in: `cacheEvictionOnly` on the appserver, and `staleTime: 0` on the two
+queries plus a refresh control on the feed, on the client.
 
-- The client fetches `getActivityFeed` on mount and on an explicit refresh, rather than waiting
-  for a frame, and shows its last answer while a refetch is in flight.
-- The gateway caches these two responses against the signal channel it already has, so a mount
-  is served from cache unless the space it covers moved.
-- The push signals for the message-driven cases become cache evictions with no client frame. The
-  per-user cases (join, leave, mark-read) keep their frames.
-- The `getSpaces` broadcast on every message is the same question asked of a different view and
-  is decided with it.
+- The client fetches `getActivityFeed` and `getSpaces` on mount and on an
+  explicit refresh — `staleTime: 0` on both queries, plus a refresh control on
+  the feed — rather than waiting for a frame, and shows its last answer while a
+  refetch is in flight. `staleTime` and not `refetchOnMount`, so a mount refetch
+  cannot restart the feed's in-flight fetch through `cancelRefetch`.
+- The response cache holds both against the signal channel it already has, so a
+  mount is served from cache unless the space it covers moved. Today that cache
+  is the appserver's own (`CACHEABLE_NSIDS`); it moves to the gateway, unchanged,
+  when the gateway exists.
+- The push signals for the message-driven cases become cache evictions with no
+  client frame (`cacheEvictionOnly`). The per-user cases (join, leave, mark-read,
+  a reorder) keep their frames.
+- The `getSpaces` broadcast on every message is the same question asked of a
+  different view and is decided with it.
 
 ### WS6. Bus
 
@@ -144,10 +153,13 @@ is what makes WS5 expensive to build.
 
 - **Rebuild-equality harness** at the end of WS1, WS3 and WS4, including TS against Rust. It lives in `packages/appserver/src/streams/rebuildEquality.ts`: `snapshotSpaceDb` reads every derived per-space table, `diffSnapshots` names the tables two readings disagree on, `digestOf` hashes one reading, and `materialiseAndDiff` composes the TS-only case (derive, rebuild through the blue-green path, diff). The WS4 runner uses the first three — snapshot the Rust worker's per-space DB, snapshot the TS one, compare — and needs no TS materialisation to do it.
 - **Performance:** p95 per endpoint and DB round-trips per message, before and after WS2 and again after WS5.
-- **Pull freshness (WS5b):** the feed and the space list answer correctly with the frames suppressed — a
+- **Pull freshness (WS5b, verified):** the feed and the space list answer correctly with the frames suppressed — a
   remount after a write returns the new row, and a mount inside the TTL that covers no change is served
   from cache. The counter-check the same test holds is that suppressing the frames without the client
-  change leaves a mounted feed frozen, which is what makes the two halves one change.
+  change leaves a mounted feed frozen, which is what makes the two halves one change. Held by
+  `packages/app-lite/e2e/pull-freshness.spec.ts` (mounted-feed-does-not-update, remount and refresh
+  both do, and a held-open refetch keeps the last answer on screen) and, on the server side, by
+  `src/e2e/deleteInvalidationStorm.test.ts` (zero frames, one eviction per batch).
 - **Replication:** a test that unread counts do not inflate across replicas.
 - **Failover:** a lease expiry test with an in-flight write, confirming a single writer is preserved.
 
@@ -158,7 +170,10 @@ is what makes WS5 expensive to build.
 - **A re-sort at the source swap** invalidates the golden files. This is expected and planned in the migration plan.
 - **Pull freshness shows a stale feed for as long as the TTL.** Accepted: a feed is a view a
   reader opens, not a stream they sit in. The mitigation is the TTL being short and the mount
-  and refresh paths both refetching — not a push frame.
+  and refresh paths both refetching — not a push frame. With the client half shipped, the
+  residual window is a reader who leaves the feed open: they see what was true when it mounted
+  until they press Refresh. That is the deliberate trade, and the refresh control is the answer
+  to it.
 - **Cache invalidation correctness** in the gateway, for the two pushed per-user cases and for
   the space-scoped views, which are unaffected.
 - **Lease edge cases:** split brain, and lease expiry during a write.

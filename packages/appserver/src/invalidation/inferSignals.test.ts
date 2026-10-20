@@ -60,6 +60,24 @@ function invalidatedNsids(signals: InvalidationEvent[]): QueryNsid[] {
     .map((s) => s.signal.nsid);
 }
 
+/**
+ * The NSIDs evicted from the server-side response cache with NO client frame.
+ *
+ * A separate list from {@link invalidatedNsids} because the two halves of the
+ * contract are different questions: "is the cached body dropped?" and "is any
+ * connection told to refetch?". A signal answers the first with
+ * `cacheEvictionOnly` and the second without it, and a test that only asks the
+ * first would pass on a change that silently started pushing again.
+ */
+function evictOnlyNsids(signals: InvalidationEvent[]): QueryNsid[] {
+  return signals
+    .filter(
+      (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
+        s.kind === "queryInvalidation" && s.signal.cacheEvictionOnly === true,
+    )
+    .map((s) => s.signal.nsid);
+}
+
 /** The single `getActivityFeed` invalidation, with its params. */
 function findFeedInvalidation(
   signals: InvalidationEvent[],
@@ -151,7 +169,7 @@ function seedMessageDb(opts: {
 // ─── Message events ─────────────────────────────────────────────────────
 
 describe("inferSignals: message events", () => {
-  it("createMessage produces a messageDiff + roomMetadataDiff + room/space invalidation", async () => {
+  it("createMessage produces a messageDiff + roomMetadataDiff, evicting the boards and the pulled views", async () => {
     const { db, asyncDb } = seedMessageDb({
       id: EVENT_ID,
       roomId: ROOM_ID,
@@ -245,32 +263,28 @@ describe("inferSignals: message events", () => {
       ]);
     }
 
-    // The boards' CACHED bodies are still stale, so they are evicted from the
-    // server-side response cache — but WITHOUT a client frame, because each
-    // connected client patches from the activity diff above. That distinction
-    // is the whole point of the flag: a fresh page load has no diff to apply
-    // and must not be served the stale body, while a live client must not be
-    // told to refetch.
+    // A message stales the pulled cross-space views and the boards' cached
+    // bodies, so they are evicted from the server-side response cache — but
+    // WITHOUT a client frame. For the boards the connected client patches from
+    // the activity diff above; for the feed and the space list there is no
+    // frame to send at all, because the client refetches them on mount and on
+    // refresh rather than waiting to be told (see `evictOnly`). Either way a
+    // fresh page load must not be served the stale body.
     const nsids = invalidatedNsids(signals);
     expect(nsids).toContain("space.roomy.space.getThreads");
     expect(nsids).toContain("space.roomy.room.getMetadata");
     expect(nsids).toContain("space.roomy.room.getThreads");
     expect(nsids).toContain("space.roomy.space.getMetadata");
     expect(nsids).not.toContain("space.roomy.space.getSpaces");
-    // The activity feed hydrates media/embeds the diff does not carry, so it
-    // stays a real (frame-sending) invalidation.
     expect(nsids).toContain("space.roomy.space.getActivityFeed");
 
-    const evictOnlyNsids = signals
-      .filter(
-        (s): s is { kind: "queryInvalidation"; signal: QueryInvalidation } =>
-          s.kind === "queryInvalidation" && s.signal.cacheEvictionOnly === true,
-      )
-      .map((s) => s.signal.nsid);
-    expect(evictOnlyNsids).toContain("space.roomy.room.getThreads");
-    expect(evictOnlyNsids).toContain("space.roomy.room.getMetadata");
-    expect(evictOnlyNsids).toContain("space.roomy.space.getThreads");
-    expect(evictOnlyNsids).not.toContain("space.roomy.space.getActivityFeed");
+    const evicted = evictOnlyNsids(signals);
+    expect(evicted).toContain("space.roomy.room.getThreads");
+    expect(evicted).toContain("space.roomy.room.getMetadata");
+    expect(evicted).toContain("space.roomy.space.getThreads");
+    // The pulled feed is evicted for the next mount; nothing is pushed. (The
+    // space list is not staled by a message at all — see the delete case.)
+    expect(evicted).toContain("space.roomy.space.getActivityFeed");
   });
 
   it("createMessage does not flip the space when the reader already has another unread room", async () => {
@@ -624,6 +638,17 @@ describe("inferSignals: message events", () => {
     expect(nsids).toContain("space.roomy.space.getMetadata");
     // Deleting a room's latest message can reorder/drop it on the index board.
     expect(nsids).toContain("space.roomy.space.getThreads");
+    // A delete stales both pulled cross-space views, and both are evicted
+    // rather than pushed: the feed loses an item, and the caller's space list
+    // may lose the room's unread contribution. The `#messageDiff` above is
+    // what a mounted client applies; the evictions are what the next mount
+    // reads through.
+    expect(evictOnlyNsids(signals)).toEqual(
+      expect.arrayContaining([
+        "space.roomy.space.getActivityFeed",
+        "space.roomy.space.getSpaces",
+      ]),
+    );
   });
 
   it("moveMessages emits a source remove AND a destination add, invalidating both rooms", async () => {

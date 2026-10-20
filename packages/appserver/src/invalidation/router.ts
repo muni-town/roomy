@@ -226,9 +226,9 @@ export class Router implements IInvalidationRouter {
  * client-side refetch storms.
  *
  * Only `queryInvalidation` signals collapse, keyed by their full identity
- * `(nsid, params, affectedUser)`: that is what "this query result is stale"
- * means, and a duplicate says exactly the same thing again. Everything else is
- * per-event data and passes through untouched —
+ * `(nsid, params, affectedUser, cacheEvictionOnly)`: that is what "this query
+ * result is stale" means, and a duplicate says exactly the same thing again.
+ * Everything else is per-event data and passes through untouched —
  *   - `messageDiff`/`mentionDiff` are per-message ops (and carry a unique seq),
  *   - `roomMetadataDiff` carries an unread DELTA: two creates each mean +1, so
  *     collapsing them by (space, room) would silently lose an increment.
@@ -248,7 +248,11 @@ export function dedupeSignals(
   const out: InvalidationEvent[] = [];
   for (const signal of signals) {
     if (signal.kind === "queryInvalidation") {
-      const key = `${signal.signal.nsid}\u0000${signal.signal.affectedUser ?? ""}\u0000${canonicalParams(signal.signal.params)}`;
+      // `cacheEvictionOnly` is part of the identity: an eviction-only signal
+      // and a frame-sending one for the same `(nsid, params, affectedUser)`
+      // tell different consumers different things, so collapsing one into the
+      // other would either drop a frame a client needed or send one it did.
+      const key = `${signal.signal.nsid}\u0000${signal.signal.affectedUser ?? ""}\u0000${signal.signal.cacheEvictionOnly ? "evict" : "frame"}\u0000${canonicalParams(signal.signal.params)}`;
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(signal);

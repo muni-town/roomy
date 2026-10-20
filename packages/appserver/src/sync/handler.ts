@@ -573,13 +573,13 @@ export class SyncManager {
 
   // ─── Signal routing ────────────────────────────────────────────────
   #onSignals(events: readonly InvalidationEvent[]): void {
-    // `getActivityFeed` signals carry the space that changed for the server
-    // cache's benefit, but every one of them renders to the same client frame
-    // (the unfiltered key — see #routeQueryInvalidation). A batch touching two
-    // spaces therefore holds two signals that mean one frame to the client, so
-    // collapse them here rather than sending identical bytes twice. The key
-    // matches `dedupeSignals`' identity: a different `affectedUser` is a
-    // different frame for a different set of connections.
+    // These two NSIDs render to a fixed frame body: `#routeQueryInvalidation`
+    // drops their params (the client's own key is what its query was built
+    // from), so two signals that differ only by `spaceId` are one frame to the
+    // client. What still carries a `spaceId` is the server cache's coverage
+    // hint (see `cache/activityFeedCoverage.ts`), which `dedupeSignals` keeps
+    // as two distinct signals — so the collapse has to happen here, against
+    // the rendered key.
     const routedFeedFrames = new Set<string>();
     for (const event of events) {
       if (event.kind === "messageDiff") {
@@ -796,10 +796,11 @@ export class SyncManager {
       cacheEvictionOnly?: boolean;
     },
   ): void {
-    // Cache-only signals exist for the server-side response cache (which the
-    // eviction listener handles). The client is being kept fresh by a diff
-    // frame instead, so telling it to refetch is exactly the cost this flag
-    // exists to avoid.
+    // Cache-only signals exist for the server-side response cache (whose
+    // eviction listener sees every signal). Two shapes produce them: a query
+    // the mounted client patches from a diff frame, and one of the two
+    // cross-space views the client pulls on mount and on refresh. Either way
+    // telling the client to refetch now is exactly the cost the flag avoids.
     if (signal.cacheEvictionOnly) return;
 
     const topics = topicsForSignal(signal);
@@ -811,19 +812,24 @@ export class SyncManager {
     // on /new or / with no space topic, but still needs their space
     // list to update when a space is created or joined).
     //
-    // getActivityFeed is likewise a per-caller query spanning every space
-    // the caller joined, and relevant to every connection. Its signal
-    // carries the space that changed for the SERVER CACHE's benefit (see
-    // `cache/activityFeedCoverage.ts`); the client's query keys are the
-    // params it queried with, so the frame it understands is the unfiltered
-    // `{}` — a `queryKey(nsid, {})` prefix-matches every feed page the
-    // client holds, including the global one a `{ spaceId }` frame would
-    // leave stale.
+    // What reaches here are the PER-USER cases — joining or leaving a space,
+    // a join that changes a role or admin edge, a read that drained the last
+    // unread room, a reorder. A message-driven change to the list is evicted
+    // for the server cache without a frame, because the list is one of the
+    // two cross-space views the client pulls on mount and on refresh rather
+    // than waits for a frame to stay current (see §4 of
+    // `replicable-space-workers.md`, and `cacheEvictionOnly`).
     //
-    // getSpaces is the same shape: its signal names the space (and room) that
-    // changed so the server cache can check which callers' lists contain it
-    // (see `cache/spaceListCoverage.ts`), while the client frame stays the
-    // unfiltered `{}` its query key was built from.
+    // getActivityFeed is likewise a per-caller query spanning every space
+    // the caller joined, and the per-user cases that reach here are the ones
+    // that change WHICH spaces it covers — joining or leaving a space. Its
+    // `{}` key is what those carry; a message-driven feed signal never gets
+    // this far.
+    //
+    // Both keep the unfiltered `{}` frame because that is the key the client
+    // built its query from, and a `queryKey(nsid, {})` prefix-matches every
+    // page the client holds — including the global one a `{ spaceId }` frame
+    // would leave stale.
     if (
       signal.nsid === "space.roomy.space.getSpaces" ||
       signal.nsid === "space.roomy.space.getActivityFeed"

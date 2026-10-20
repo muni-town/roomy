@@ -314,6 +314,10 @@ This is where the fanout actually shrinks, and R1 is what makes it safe:
   round-trips per client** when measured on that commit — the merged base
   carries two additional link-index invalidations, so the same measurement
   there reads **7 → 4** and **102 → 45** (see §Results R2).
+- The activity feed followed: it is a **pulled** cross-space view rather than a
+  pushed one, so a message-driven change to it is eviction-only too (`WS5b` in
+  `replicable-space-workers.md`). That takes one more read per client per
+  message off the storm; the numbers above are quoted as measured before it.
 
 The plan expected this to be "a diff, not an invalidation" via
 `roomMetadataDiff`. It is a **separate broadcast frame** instead: that frame is
@@ -487,13 +491,18 @@ merged-after`:
 | across 4 clients (reads) | 28 | **16** (−43 %) |
 
 The invalidated NSIDs that disappeared are exactly the three boards:
-`room.getMetadata`, `room.getThreads`, `space.getThreads`. The four that remain
-are the link-index pair (`room.getLinks`, `space.getLinks` — added by the link
-aggregation work), `space.getActivityFeed` (its items hydrate media/link-embeds
-per message — a shape the activity diff does not carry, so it stays a refetch),
-and the author-scoped `space.getMetadata` (`activeThreads`). A batch of N
+`room.getMetadata`, `room.getThreads`, `space.getThreads`. The link-index pair
+(`room.getLinks`, `space.getLinks` — added by the link aggregation work) and the
+author-scoped `space.getMetadata` (`activeThreads`) remain. A batch of N
 messages in one room collapses to **one** activity diff (verified end-to-end),
 because each is a superseding snapshot of the same row.
+
+`space.getActivityFeed` no longer takes part in this at all. Its items hydrate
+media/link-embeds per message — a shape the activity diff does not carry — so it
+cannot be patched; it is instead one of the two cross-space views the client
+pulls on mount and on refresh, and a message-driven change to it is a
+server-cache eviction with no frame (`WS5b` in `replicable-space-workers.md`).
+That removes one read per client per message from the storm above.
 
 ### The probe had to be fixed to see this
 
@@ -623,14 +632,17 @@ Unchanged, as scoped — R3 makes each refetch cheaper, it does not reduce their
 number:
 
 ```
-  frames per client: 7   (#messageDiff:1  #roomMetadataDiff:1  #roomActivityDiff:1  #invalidate:4)
-  #invalidate nsids: room.getLinks, space.getLinks, space.getActivityFeed, space.getMetadata
-  refetch storm per client: 4 requests, 45 DB round-trips
+  frames per client: 6   (#messageDiff:1  #roomMetadataDiff:1  #roomActivityDiff:1  #invalidate:3)
+  #invalidate nsids: room.getLinks, space.getLinks, space.getMetadata
+  refetch storm per client: 3 requests, ~45 DB round-trips
 ```
 
-The four remaining invalidations are the link-index pair, the activity feed
-(whose items hydrate media/link embeds per message — a shape the activity diff
-does not carry), and the author-scoped `space.getMetadata`.
+(Quoted as measured on this round. `space.getActivityFeed` was one of the four
+there; it has since left the push path entirely — see the R2 note above this
+section.)
+
+The three remaining invalidations are the link-index pair and the author-scoped
+`space.getMetadata`.
 
 ### Rematerialisation constraint
 
@@ -764,11 +776,11 @@ un-scoped signal (join/leave, which restates the whole feed for one caller)
 still evicts every page, scoped to `affectedUser` when set, so the
 no-stale-reads direction is unchanged.
 
-The client-facing `#invalidate` frame is unaffected: `sync/handler.ts` renders
-every `getActivityFeed` signal as the unfiltered `{}` key, which is what the
-client's own query keys prefix-match. Signals that differ only by `spaceId` now
-collapse to one client frame per emission scope, so a batch spanning two spaces
-does not put identical bytes on the wire twice.
+The client-facing `#invalidate` frame is no longer produced for a
+message-driven change: the feed is pulled, so the signal is eviction-only and
+reaches no connection (`WS5b` in `replicable-space-workers.md`). The frame that
+does remain — for the per-user cases, joining or leaving a space — is the
+unfiltered `{}` key, which is what the client's own query keys prefix-match.
 
 ### Result
 

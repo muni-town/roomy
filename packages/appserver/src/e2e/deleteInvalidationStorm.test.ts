@@ -1,24 +1,28 @@
 /**
  * E2E test for the delete-invalidation storm.
  *
- * Symptom: deleting messages freezes the app under a non-stopping stream of
+ * Symptom: deleting messages froze the app under a non-stopping stream of
  * `space.roomy.space.getActivityFeed` invalidations.
  *
- * The amplification has three server-side sources, all exercised here through
- * the REAL write path (`space.roomy.space.sendEvents` → materialize →
+ * The amplification had three server-side sources, exercised here through the
+ * REAL write path (`space.roomy.space.sendEvents` → materialize →
  * InvalidationRouter → SyncManager → WS frames):
  *
- *   1. Per-event fan-out — a batch of N deletes emits the whole batch-level
+ *   1. Per-event fan-out — a batch of N deletes emitted the whole batch-level
  *      signal set N times (N identical `getActivityFeed` invalidations).
- *   2. Every one of those is broadcast to EVERY connection, because
+ *   2. Every one of those was broadcast to EVERY connection, because
  *      getActivityFeed (like getSpaces) is user-scoped and has no topic index
  *      to narrow delivery.
  *   3. A delete must not leave derived state behind: the room's
  *      `activity_item` window names the deleted messages, so the feed would
  *      keep serving a room with nothing in it.
  *
- * This test asserts all three hold: ONE feed invalidation for a batch of
- * five deletes, and a feed that does not list the emptied room.
+ * (2) is now answered at the source: the feed is a pulled cross-space view, so
+ * a message-driven change to it is a cache eviction with no frame at all. What
+ * this test asserts is the pair that makes the eviction safe — ZERO frames for
+ * the feed, and exactly ONE eviction for a batch of five deletes, so the
+ * collapsing still happens and the cached page is genuinely dropped for the
+ * next mount. The second test asserts (3) still holds.
  *
  * Run: bun test --cwd packages/appserver src/e2e/deleteInvalidationStorm.test.ts
  */
@@ -140,7 +144,7 @@ function deleteMessageEvent(roomId: string, messageId: string) {
 
 describe("delete invalidation storm", () => {
   test(
-    "a batch of K deletes produces ONE getActivityFeed invalidation",
+    "a batch of K deletes evicts the feed once and sends no frame",
     async () => {
       const ctx = await startAppserver();
       seedSpace(ctx.db, SPACE, USER, { allowPublicJoin: 1 });
@@ -180,7 +184,18 @@ describe("delete invalidation storm", () => {
       );
       expect(createRes.status).toBe(200);
 
-      const before = countInvalidations(frames, FEED_NSID);
+      // Warm the feed's cached page, so the batch's eviction has an entry to
+      // drop. The number of entries a batch drops is what proves the batch
+      // collapsed to ONE signal rather than one per deleted message: five
+      // signals would drop the same entry five times over (and, with several
+      // readers' pages cached, five times per page).
+      const feedRes = await ctx.authedFetch(USER)(
+        `${ctx.baseUrl}/xrpc/space.roomy.space.getActivityFeed?spaceId=${SPACE}`,
+      );
+      expect(feedRes.status).toBe(200);
+      const cache = ctx.handle.queryCache!;
+      const evictionsBefore = cache.stats.byNsid[FEED_NSID]?.evictions ?? 0;
+
       const deleteRes = await sendEvents(
         ctx,
         USER,
@@ -188,7 +203,7 @@ describe("delete invalidation storm", () => {
       );
       expect(deleteRes.status).toBe(200);
 
-      // The delete batch's feed invalidations arrive asynchronously.
+      // The delete batch's diffs arrive asynchronously.
       await waitFor(
         frames,
         () =>
@@ -202,12 +217,16 @@ describe("delete invalidation storm", () => {
         "5 remove diffs",
       );
 
-      const after = countInvalidations(frames, FEED_NSID);
-      const emitted = after - before;
+      // The feed is one of the two cross-space views the client pulls, so a
+      // message-driven change to it is evicted with NO `#invalidate` frame: the
+      // removals above are the whole of what a connected client is told, and
+      // its next mount or refresh reads the evicted page through.
+      expect(countInvalidations(frames, FEED_NSID)).toBe(0);
 
-      // A batch of deletes must produce ONE feed invalidation, not one per
-      // deleted message.
-      expect(emitted).toBe(1);
+      // One eviction for the batch — not one per deleted message.
+      const evictions =
+        (cache.stats.byNsid[FEED_NSID]?.evictions ?? 0) - evictionsBefore;
+      expect(evictions).toBe(1);
 
       // The per-message diffs must still be one per deleted message.
       const removeDiffs = frames.filter(

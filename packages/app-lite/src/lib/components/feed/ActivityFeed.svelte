@@ -20,7 +20,8 @@
   import type { Block } from "@roomy-space/sdk";
   import { auth } from "$lib/auth.svelte";
   import { blockState, ensureOwnBlocks } from "$lib/blocks-state.svelte";
-  import { IconChevronRight } from "@roomy/design/icons";
+  import { IconChevronRight, IconRetry } from "@roomy/design/icons";
+  import Button from "@roomy/design/components/ui/button/Button.svelte";
 
   let { spaceId, showSpaceInfo = true, limit = 20 }: { spaceId?: string; showSpaceInfo?: boolean; limit?: number } = $props();
 
@@ -285,13 +286,30 @@
           <hr class="border-base-200/50 dark:border-base-800/50" />
         {/if}
       {/each}
-
-      <!-- End of feed notice -->
-      <div class="flex justify-center py-6">
-        <p class="text-sm text-base-400 italic">That's all we got.</p>
-      </div>
     </div>
   {/if}
+
+  <!-- End of feed: the notice, plus the refresh a pulled view needs.
+       The server sends no frame for a message-driven change to the feed, so
+       this is how a reader who is already here asks for what landed since —
+       the other half being the mount fetch in the query itself. -->
+  <div class="flex items-center justify-center gap-3 py-6">
+    {#if feed.length > 0}
+      <p class="text-sm text-base-400 italic">That's all we got.</p>
+    {/if}
+    <Button
+      variant="ghost"
+      size="sm"
+      class="text-base-400"
+      disabled={feedQuery.isFetching}
+      aria-label="Refresh activity feed"
+      title="Refresh activity feed"
+      onclick={() => feedQuery.refetch()}
+    >
+      <IconRetry class={feedQuery.isFetching ? "animate-spin" : ""} />
+      Refresh
+    </Button>
+  </div>
 {/if}
 
 <style>

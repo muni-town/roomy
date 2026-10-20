@@ -1,21 +1,26 @@
 /**
  * E2E test for the per-message invalidation fanout.
  *
- * Problem: ONE live message produces 5 `#invalidate` frames per subscribed
- * client, each of which forces an HTTP refetch — `room.getMetadata` and
- * `room.getThreads` by every createMessage, and `space.getThreads` too. Four
- * of those five land on endpoints carrying per-room access resolution, so a
- * message becomes ~16 reads and ~550 DB round-trips across 4 clients.
+ * Problem: ONE live message produced 5 `#invalidate` frames per subscribed
+ * client, each of which forced an HTTP refetch — `room.getMetadata` and
+ * `room.getThreads` by every createMessage, `space.getThreads` too, and the
+ * activity feed. Four of those five land on endpoints carrying per-room access
+ * resolution, so a message became ~16 reads and ~550 DB round-trips across 4
+ * clients.
  *
  * An activity-ordered view is a LIST, and a list only needs the row that
  * moved, so it is carried as a diff rather than an ordering-driven
- * invalidation. This test exercises the REAL write path (`sendEvents` →
- * materialize → InvalidationRouter → SyncManager → WS frames) and asserts the
- * observable frame set.
+ * invalidation. The activity feed is not patchable that way — its items hydrate
+ * embeds per message — so it is not carried at all: it is one of the two
+ * cross-space views the client pulls on mount and on refresh, and a
+ * message-driven change to it is a server-cache eviction with no frame. This
+ * test exercises the REAL write path (`sendEvents` → materialize →
+ * InvalidationRouter → SyncManager → WS frames) and asserts the observable
+ * frame set.
  *
  * It is deliberately stated in terms of what a client receives, not in terms of
  * which internal signal fired: the contract is "a board is patchable from what
- * arrives, and nothing tells the client to refetch it".
+ * arrives, and nothing tells the client to refetch it or the feed".
  *
  * Run: bun test --cwd packages/appserver src/e2e/roomActivityFanout.test.ts
  */
@@ -218,6 +223,12 @@ describe("per-message invalidation fanout", () => {
       for (const nsid of BOARD_NSIDS) {
         expect(invalidationsFor(sink.frames, nsid)).toBe(0);
       }
+      // Nor one for the feed: it is evicted from the server cache and pulled by
+      // the client, so a message must tell a connected client to refetch
+      // nothing at all on its account.
+      expect(
+        invalidationsFor(sink.frames, "space.roomy.space.getActivityFeed"),
+      ).toBe(0);
 
       // The activity diff carries what a board refetch would have returned:
       // the room, its newest message, and the author as the newest member.
