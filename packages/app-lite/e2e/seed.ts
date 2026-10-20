@@ -39,6 +39,9 @@ import {
   OTHER_USER_DID,
   OTHER_USER_DISPLAY_NAME,
   OTHER_USER_HANDLE,
+  SEED_ADMIN_SPACE_DESCRIPTION,
+  SEED_ADMIN_SPACE_ID,
+  SEED_ADMIN_SPACE_NAME,
   SEED_MEMBER_SPACE_CATEGORY_ID,
   SEED_MEMBER_SPACE_ID,
   SEED_MEMBER_SPACE_MESSAGE_TEXT,
@@ -49,6 +52,12 @@ import {
   SEED_MESSAGE_TEXT,
   SEED_LINK_MESSAGE_ID,
   SEED_LINK_MESSAGE_URL,
+  SEED_OPEN_SPACE_CATEGORY_ID,
+  SEED_OPEN_SPACE_ID,
+  SEED_OPEN_SPACE_MESSAGE_TEXT,
+  SEED_OPEN_SPACE_NAME,
+  SEED_OPEN_SPACE_ROOM_ID,
+  SEED_OPEN_SPACE_ROOM_NAME,
   SEED_ROOM_2_ID,
   SEED_ROOM_2_MESSAGE_TEXT,
   SEED_ROOM_2_NAME,
@@ -72,6 +81,10 @@ import {
   SEED_VOICE_ROOM_ID,
   SEED_VOICE_ROOM_NAME,
   TEST_ADMIN_DID,
+  TEST_BANNABLE_DID,
+  TEST_BANNABLE_HANDLE,
+  TEST_NON_MEMBER_DID,
+  TEST_NON_MEMBER_HANDLE,
   TEST_USER_DID,
   TEST_USER_DISPLAY_NAME,
   TEST_USER_HANDLE,
@@ -319,6 +332,69 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     TEST_USER_DID,
   ]);
 
+  // ── Admin space ───────────────────────────────────────────────────────
+  // Whose settings the space-administration spec edits. Kept out of the loop
+  // above because that loop's spaces have names other specs assert on, and
+  // this one is renamed by a spec. Closed to public join, so opening it is a
+  // change. `allow_member_invites` is on, which is not the schema default an
+  // unread row would show, so the form reading the toggle as on is evidence
+  // the stored policy reached it.
+  seedSpace(db, SEED_ADMIN_SPACE_ID, TEST_USER_DID, { allowPublicJoin: 0 });
+  seedJoinedSpace(db, TEST_USER_DID, SEED_ADMIN_SPACE_ID);
+  seedMembership(db, SEED_ADMIN_SPACE_ID, TEST_USER_DID, "admin");
+  const adminSpace = spaceDb(db, SEED_ADMIN_SPACE_ID);
+  await adminSpace.run(
+    "update comp_space set allow_member_invites = 1 where entity = ?",
+    [SEED_ADMIN_SPACE_ID],
+  );
+  await adminSpace.run(
+    "update comp_info set name = ?, description = ? where entity = ?",
+    [SEED_ADMIN_SPACE_NAME, SEED_ADMIN_SPACE_DESCRIPTION, SEED_ADMIN_SPACE_ID],
+  );
+  await adminSpace.run("update comp_info set name = ? where entity = ?", [
+    TEST_USER_DISPLAY_NAME,
+    TEST_USER_DID,
+  ]);
+
+  // ── Open space ────────────────────────────────────────────────────────
+  // Public, so a member can leave and rejoin without an invite token, and the
+  // one space where a plain member reads a channel: restricting that channel
+  // is then an access change a spec can cause and observe.
+  seedSpace(db, SEED_OPEN_SPACE_ID, TEST_USER_DID, { allowPublicJoin: 1 });
+  seedJoinedSpace(db, TEST_USER_DID, SEED_OPEN_SPACE_ID);
+  seedMembership(db, SEED_OPEN_SPACE_ID, TEST_USER_DID, "admin");
+  seedMembership(db, SEED_OPEN_SPACE_ID, OTHER_USER_DID, "member");
+  seedJoinedSpace(db, OTHER_USER_DID, SEED_OPEN_SPACE_ID);
+  // A member who holds no role. The deny that a channel restricted to nobody
+  // has to produce is unambiguous only against a member with no other way
+  // into the channel; the role grant a spec adds is then what brings the
+  // channel back for the member who holds the role.
+  seedMembership(db, SEED_OPEN_SPACE_ID, TEST_NON_MEMBER_DID, "member");
+  seedJoinedSpace(db, TEST_NON_MEMBER_DID, SEED_OPEN_SPACE_ID);
+  seedUser(db, TEST_NON_MEMBER_DID, TEST_NON_MEMBER_HANDLE);
+  // A member who exists to be moderated. The members list renders this
+  // membership, and the ban a spec applies to it changes nothing else in the
+  // seeded world.
+  seedMembership(db, SEED_OPEN_SPACE_ID, TEST_BANNABLE_DID, "member");
+  seedJoinedSpace(db, TEST_BANNABLE_DID, SEED_OPEN_SPACE_ID);
+  seedUser(db, TEST_BANNABLE_DID, TEST_BANNABLE_HANDLE);
+  const openSpace = spaceDb(db, SEED_OPEN_SPACE_ID);
+  await openSpace.run(
+    "update comp_space set sidebar_config = ? where entity = ?",
+    [
+      sidebarConfig(SEED_OPEN_SPACE_CATEGORY_ID, [SEED_OPEN_SPACE_ROOM_ID]),
+      SEED_OPEN_SPACE_ID,
+    ],
+  );
+  await openSpace.run(
+    "update comp_info set name = ? where entity = ?",
+    [SEED_OPEN_SPACE_NAME, SEED_OPEN_SPACE_ID],
+  );
+  await openSpace.run("update comp_info set name = ? where entity = ?", [
+    TEST_USER_DISPLAY_NAME,
+    TEST_USER_DID,
+  ]);
+
   const space1 = spaceDb(db, SEED_SPACE_ID);
   await space1.run(
     "update comp_space set sidebar_config = ? where entity = ?",
@@ -422,6 +498,22 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     OTHER_USER_DID,
   );
 
+  // The open space's only channel, and a message in it: the member's read
+  // before a permission change takes the channel away.
+  await createRoom(
+    appserverOrigin,
+    SEED_OPEN_SPACE_ID,
+    SEED_OPEN_SPACE_ROOM_ID,
+    SEED_OPEN_SPACE_ROOM_NAME,
+  );
+  await createMessage(
+    appserverOrigin,
+    SEED_OPEN_SPACE_ID,
+    "01M3C8QTVSG74JEG1QBM3STVX7",
+    SEED_OPEN_SPACE_ROOM_ID,
+    SEED_OPEN_SPACE_MESSAGE_TEXT,
+  );
+
   // ── Feature flags ────────────────────────────────────────────────────
   // `search` gates the navbar search UI and the search routes;
   // `access-settings` gates the user Access settings page and its sidebar
@@ -459,6 +551,8 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     SEED_SPACE_2_ID,
     SEED_SPACE_3_ID,
     SEED_MEMBER_SPACE_ID,
+    SEED_ADMIN_SPACE_ID,
+    SEED_OPEN_SPACE_ID,
   ]) {
     const membership = await readStateDb(db)
       .query(

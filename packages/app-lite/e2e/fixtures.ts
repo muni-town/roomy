@@ -104,10 +104,28 @@ export const SEED_MEMBER_SPACE_MESSAGE_TEXT =
  */
 export const TEST_ADMIN_DID = "did:plc:e2etestadmin000000000000";
 /**
- * Valid DID with no membership anywhere in the seeded world — the caller the
- * appserver refuses a write from. Used to drive a genuinely refused press.
+ * Valid DID that is not a member of the member space — the caller the
+ * appserver refuses a write from there. It is seeded as a plain member of the
+ * open space, where it is the role-less member a channel restriction has to
+ * deny and a role grant has to restore.
  */
 export const TEST_NON_MEMBER_DID = "did:plc:e2enonmember000000000000";
+/**
+ * Handle for {@link TEST_NON_MEMBER_DID}. Seeded so the profile read finds a
+ * usable handle and does not fall through to a live Bluesky fetch.
+ */
+export const TEST_NON_MEMBER_HANDLE = "e2e.nonmember.roomy.test";
+/**
+ * Valid DID seeded as a plain member of the open space, there to be banned
+ * and unbanned. It holds no role and no other spec reads it, so the
+ * moderation state it carries cannot change what another spec observes.
+ */
+export const TEST_BANNABLE_DID = "did:plc:e2ebannable0000000000000";
+/**
+ * Handle for {@link TEST_BANNABLE_DID}. Seeded so the members list renders a
+ * handle where it would otherwise fall back to the DID.
+ */
+export const TEST_BANNABLE_HANDLE = "e2e.bannable.roomy.test";
 
 /** Seeded message, materialised through the real `sendEvents` write path. */
 export const SEED_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVX1";
@@ -157,3 +175,36 @@ export const SEED_VOICE_ROOM_ID = "01M3C8QTVS0000000000000009";
 export const SEED_VOICE_ROOM_NAME = "voice-lounge";
 /** Path to the seeded voice room. */
 export const SEED_VOICE_ROOM_PATH = `/${SEED_SPACE_ID}/${SEED_VOICE_ROOM_ID}`;
+
+/**
+ * Fifth space, whose settings the space-administration spec writes to. No
+ * other spec reads its name, description or join policy, so a run that has
+ * already rewritten them cannot disturb another spec's assertion — and each
+ * of those writes has somewhere to land that the seeded world does not depend
+ * on. Its join policy starts closed, so opening it is a change a spec can
+ * make and read back.
+ */
+export const SEED_ADMIN_SPACE_ID = "did:plc:e2eadminspace00000000000";
+export const SEED_ADMIN_SPACE_NAME = "E2E Admin Space";
+export const SEED_ADMIN_SPACE_DESCRIPTION =
+  "A space whose settings are edited by end-to-end tests.";
+/** Path to the fifth space's settings form. */
+export const SEED_ADMIN_SPACE_SETTINGS_PATH = `/${SEED_ADMIN_SPACE_ID}/settings`;
+
+/**
+ * Sixth space: public (anyone may join), admin-managed, with one channel and
+ * the other account a plain member. It is the single place in the seeded world
+ * where a non-admin can read a channel *and* the space is not the subject of
+ * another spec — so restricting that channel is an access change a spec can
+ * both cause and observe, and the space is one a member can leave and rejoin
+ * (a private space would demand an invite token on the way back).
+ */
+export const SEED_OPEN_SPACE_ID = "did:plc:e2eopenspace000000000000";
+export const SEED_OPEN_SPACE_NAME = "E2E Open Space";
+export const SEED_OPEN_SPACE_CATEGORY_ID = "01M3C8QTVS0000000000000010";
+export const SEED_OPEN_SPACE_ROOM_ID = "01M3C8QTVS0000000000000011";
+export const SEED_OPEN_SPACE_ROOM_NAME = "open-lobby";
+/** Body the member reads while the channel is still readable. */
+export const SEED_OPEN_SPACE_MESSAGE_TEXT = "seeded message in the open space";
+/** Path to the sixth space's channel. */
+export const SEED_OPEN_SPACE_ROOM_PATH = `/${SEED_OPEN_SPACE_ID}/${SEED_OPEN_SPACE_ROOM_ID}`;
