@@ -48,6 +48,7 @@ import { resolveLevel } from "../queries/pushPreferences.ts";
 import { selectSubscriptions } from "../queries/pushSubscriptions.ts";
 import { upsertNotificationState } from "../queries/notificationState.ts";
 import { hasUserParticipatedInSpace } from "../queries/userRoomParticipation.ts";
+import { hiddenBy } from "../queries/userBlocks.ts";
 import { resolveMessageIcon } from "./avatars.ts";
 import { log } from "../log.ts";
 import type { PushDelivery, PushJob, PushPayload } from "./types.ts";
@@ -233,6 +234,23 @@ export async function evaluatePush(
   const deliveries: PushDelivery[] = [];
   for (const did of candidateDids) {
     if (did === authorDid) continue; // never notify the author
+
+    // A recipient who hides the author gets nothing — in either direction,
+    // since `hiddenBy` is the union of what they blocked and who blocked them.
+    // It is checked before the level, the access check, the subscription read
+    // and the payload, because the payload renders the author's name as the
+    // notification title and their text as the body: building one and then
+    // discarding it would still be a reveal waiting on a mistake, and a digest
+    // payload would carry the identity and the count even with no body.
+    //
+    // There is deliberately no admin exception. Push runs with no caller
+    // present, so there is no viewer for a reveal to apply to (§3.6): an admin
+    // who blocked someone reads that one message through `getMessage`, and
+    // receives no notification for it.
+    if ((await hiddenBy(did)).has(authorDid)) {
+      log.debug(`[push-evaluate] skip ${did.slice(0, 20)}…: hides the author`);
+      continue;
+    }
 
     const level = await resolveLevel(readStateDb, did, spaceId);
     if (level === "silent") {

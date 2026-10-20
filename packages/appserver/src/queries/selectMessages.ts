@@ -121,6 +121,39 @@ export interface MessageDto {
   blocked?: boolean;
 }
 
+/**
+ * The row a hidden author's message becomes for a viewer who must not read it:
+ * identity and ordering kept — they are what the indicator, the deep link and
+ * the page's position rest on — and everything else gone.
+ *
+ * `authorDid` stays, and names who is hidden. It is the blocked identity, which
+ * the room's own membership already discloses; what a block withholds is the
+ * body, the attachments and the display profile.
+ *
+ * Exported because the live path builds the same row: a `#messageDiff` frame and
+ * the page fetched after it must agree, or a message would render as a body over
+ * the socket and as an indicator on the next read.
+ */
+export function blockedTombstone(row: {
+  id: string;
+  sort_idx?: string | null;
+  authorDid: string;
+  timestamp: string;
+}): MessageDto {
+  return stripNulls({
+    id: row.id,
+    sort_idx: row.sort_idx,
+    content: "",
+    authorDid: row.authorDid,
+    authorName: "",
+    blocked: true,
+    timestamp: row.timestamp,
+    reactions: [],
+    media: [],
+    linkEmbeds: [],
+  }) as MessageDto;
+}
+
 export type SelectScope =
   | { kind: "room"; roomId: string; limit: number; cursor: string | null }
   | {
@@ -579,20 +612,15 @@ export async function selectMessages(
     const authorHandle = r.author_handle;
     const authorAvatar = r.author_avatar;
 
-    // A hidden author's row is a tombstone: identity and ordering kept — they
-    // are what the indicator, the deep link and the page's position rest on —
-    // and everything else gone. It short-circuits here, before content
-    // decoding, before the reaction / media / link maps are consulted, and
-    // before `hydrateProfiles` could attach a name and avatar, so a blocked
-    // body is never even built.
+    // A hidden author's row short-circuits here, before content decoding,
+    // before the reaction / media / link maps are consulted, and before
+    // `hydrateProfiles` could attach a name and avatar, so a blocked body is
+    // never even built.
     if (r.blocked === 1) {
-      return stripNulls({
+      return blockedTombstone({
         id: r.id,
         sort_idx: r.sort_idx,
-        content: "",
         authorDid: authorDid ?? "",
-        authorName: "",
-        blocked: true,
         // Legacy forward-reference rows carry no comp_content, so
         // `cc.timestamp` is NULL; fall back to the forward event's own ULID
         // time, exactly as the ordinary path does.
@@ -602,10 +630,7 @@ export async function selectMessages(
             : r.forward_target != null
               ? new Date(decodeTime(r.id)).toISOString()
               : "",
-        reactions: [],
-        media: [],
-        linkEmbeds: [],
-      }) as MessageDto;
+      });
     }
 
     const content = decodeContent(mime, data);

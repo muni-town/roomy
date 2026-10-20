@@ -22,8 +22,13 @@ import type { ClientMessage, Frame, SyncSocket } from "../xrpc/types.ts";
 import type {
   InvalidationEvent,
   InvalidationRouter,
+  MentionDiff,
+  MessageDiff,
+  MessageDiffOp,
   QueryNsid,
   RoomActivityDiff,
+  RoomActivityDiffActivity,
+  RoomMetadataDiff,
   VoicePresenceDiff,
   VoiceStateDiff,
 } from "../invalidation/types.ts";
@@ -31,6 +36,8 @@ import { allowsPublicJoin, roomAccess, spaceAccess } from "../auth/access.ts";
 import { federatedRoomAccess } from "../auth/federation.ts";
 import type { DbLike } from "../db/types.ts";
 import { messageFrame } from "../xrpc/frame.ts";
+import { blockedTombstone } from "../queries/selectMessages.ts";
+import { hiddenBy } from "../queries/userBlocks.ts";
 import { log } from "../log.ts";
 
 // ─── Topic helpers ───────────────────────────────────────────────────────
@@ -218,6 +225,19 @@ export class SyncManager {
   readonly #streamAccessCache = new Map<string, { at: number; canRead: boolean }>();
   /** TTL for the delivery-time stream access cache (ms). */
   readonly #streamAccessTtlMs: number;
+  /**
+   * Short-TTL cache of the authors each connected user must not see (§ user
+   * blocks), for per-connection redaction on the delivery path.
+   *
+   * Keyed by DID, not by connection: a user with several tabs open resolves
+   * their block set once. The TTL is the same 60 s discipline the block set
+   * itself is memoised with, and a block or unblock written in the app drops
+   * that memo (see `refreshBlocks`), so the window a redaction can lag a block
+   * by is the round trip the client already makes after the write.
+   */
+  readonly #hiddenCache = new Map<string, { at: number; dids: ReadonlySet<string> }>();
+  /** TTL for the delivery-time hidden-author cache (ms). */
+  readonly #hiddenTtlMs: number;
 
   constructor(
     router: InvalidationRouter,
@@ -232,6 +252,11 @@ export class SyncManager {
     // connection. Tests pass 0 to force a re-check on every delivery.
     this.#roomAccessTtlMs = opts.accessCacheTtlMs ?? 5_000;
     this.#streamAccessTtlMs = opts.accessCacheTtlMs ?? 5_000;
+    // Follows the block set's own 60 s memo, so a redaction never outlives the
+    // set it was derived from. `accessCacheTtlMs` still overrides it, because a
+    // test that wants every delivery re-derived wants that for the block set
+    // too.
+    this.#hiddenTtlMs = opts.accessCacheTtlMs ?? 60_000;
     this.#unsubscribe = router.subscribe((events) => this.#onSignals(events));
     this.#unsubscribeStreams = streamManager.onEvents((streamDid, events) =>
       this.#onStreamEvents(streamDid, events),
@@ -488,6 +513,55 @@ export class SyncManager {
     return canRead;
   }
 
+  /**
+   * The author DIDs `did` must not see, memoised for the same reason the access
+   * decision is: the frames are fanned out per connection, so an un-memoised
+   * lookup would be a read-state round-trip per subscriber per frame.
+   *
+   * `hiddenBy` itself never blocks on the network — it answers from the indexed
+   * rows and leaves any refresh detached — so this memo bounds only the local
+   * read, and a block written elsewhere still lands within the same TTL.
+   */
+  async #hiddenFor(did: string): Promise<ReadonlySet<string>> {
+    const now = Date.now();
+    const cached = this.#hiddenCache.get(did);
+    if (cached && now - cached.at < this.#hiddenTtlMs) return cached.dids;
+    // Deliberately not caught: the block set resolves from local rows and
+    // cannot throw for a DID it has never seen. A failure here would mean the
+    // read-state DB is unreachable, where redacting nothing is the wrong
+    // answer — the frame is dropped instead (see `#deliverRoomFrame`).
+    const dids = await hiddenBy(did);
+    this.#hiddenCache.set(did, { at: now, dids });
+    return dids;
+  }
+
+  /**
+   * Redact one frame for one connection and send it. The single-connection
+   * counterpart of `#deliverRoomFrame`'s redaction step, for a frame whose
+   * delivery loop is per user (`#mention`, `#roomMetadataDiff`) and therefore
+   * has no room to gate read access on.
+   *
+   * A connection whose block set cannot be resolved does not receive the frame,
+   * for the same reason it would not receive a room frame: a mention of a hidden
+   * author is not something to send on the chance the lookup was wrong.
+   */
+  async #sendRedacted(
+    conn: ConnectionState,
+    buildFrame: (hidden: ReadonlySet<string>) => Frame,
+  ): Promise<void> {
+    if (!conn.isOpen) return;
+    let frame: Frame;
+    try {
+      frame = buildFrame(await this.#hiddenFor(conn.did));
+    } catch (err) {
+      log.error(
+        `Sync delivery redaction failed for ${conn.did}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+    if (conn.isOpen) conn.send(frame);
+  }
+
   /** Tear down the manager (tests only). */
   destroy(): void {
     this.#unsubscribe();
@@ -531,12 +605,7 @@ export class SyncManager {
     }
   }
 
-  #routeMessageDiff(
-    signal: InvalidationEvent["signal"] & {
-      roomId: string;
-      ops: unknown[];
-    },
-  ): void {
+  #routeMessageDiff(signal: MessageDiff): void {
     const topic = topicKey("room", signal.roomId);
     const connIds = this.#topicIndex.get(topic);
     if (!connIds) return;
@@ -547,11 +616,11 @@ export class SyncManager {
     // until they reconnect. The access decision is memoized with a short TTL
     // (see #canReceiveRoomContent) so the hot path doesn't do a DB round-trip
     // per frame per connection.
-    void this.#deliverRoomFrame(signal.roomId, connIds, (conn) =>
+    void this.#deliverRoomFrame(signal.roomId, connIds, (conn, hidden) =>
       messageFrame("#messageDiff", {
         roomId: signal.roomId,
         seq: ++conn.seq,
-        ops: signal.ops,
+        ops: redactMessageOps(signal.ops, hidden),
       }),
     );
   }
@@ -562,21 +631,36 @@ export class SyncManager {
    * `#roomActivityDiff` (message previews) — both carry message content, so
    * both need the same delivery-time re-check.
    *
-   * `buildFrame` is called per connection because `#messageDiff` carries that
-   * connection's seq for gap detection (see `ConnectionState.seq`); a frame
-   * with no per-connection field (e.g. `#roomActivityDiff`) just returns a
-   * shared instance.
+   * `buildFrame` is called per connection because the frame is caller-scoped:
+   * `#messageDiff` carries that connection's seq for gap detection (see
+   * `ConnectionState.seq`), and both frames are redacted against that
+   * connection's hidden authors (§ user blocks). A builder that finds nothing
+   * to redact returns the shared instance it was handed, so the fan-out
+   * allocates only for the connections that hide someone.
+   *
+   * A connection whose block set cannot be resolved does not receive the
+   * frame. Dropping content is the recoverable failure — the client re-reads
+   * the room on the next invalidation — while sending it is not.
    */
   async #deliverRoomFrame(
     roomId: string,
     connIds: Set<number>,
-    buildFrame: (conn: ConnectionState) => Frame,
+    buildFrame: (conn: ConnectionState, hidden: ReadonlySet<string>) => Frame,
   ): Promise<void> {
     for (const connId of connIds) {
       const conn = this.#connections.get(connId);
       if (!conn?.isOpen) continue;
       if (!(await this.#canReceiveRoomContent(roomId, conn.did))) continue;
-      conn.send(buildFrame(conn));
+      let hidden: ReadonlySet<string>;
+      try {
+        hidden = await this.#hiddenFor(conn.did);
+      } catch (err) {
+        log.error(
+          `Sync delivery redaction failed for room ${roomId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        continue;
+      }
+      conn.send(buildFrame(conn, hidden));
     }
   }
 
@@ -605,10 +689,11 @@ export class SyncManager {
     }
     if (connIds.size === 0) return;
 
-    // No `seq` on this frame, so it is identical for every connection and the
-    // one instance is shared (only `#messageDiff`/`#mention`/
-    // `#roomMetadataDiff` carry a connection's counter).
-    const frame = messageFrame("#roomActivityDiff", {
+    // No `seq` on this frame, so it is identical for every connection that
+    // hides nobody. That frame is built once and shared; only a connection
+    // whose own block set names one of the participants pays for its own copy.
+    const activity = signal.activity;
+    const shared = messageFrame("#roomActivityDiff", {
       spaceId: signal.spaceId,
       roomId: signal.roomId,
       kind: signal.kind,
@@ -619,76 +704,87 @@ export class SyncManager {
       ...(signal.parentChannelName != null
         ? { parentChannelName: signal.parentChannelName }
         : {}),
-      activity: signal.activity,
+      activity,
     });
-    void this.#deliverRoomFrame(signal.roomId, connIds, () => frame);
+
+    void this.#deliverRoomFrame(signal.roomId, connIds, (_conn, hidden) => {
+      const redacted = redactActivity(activity, hidden);
+      return redacted === activity
+        ? shared
+        : { header: shared.header, body: { ...shared.body, activity: redacted } };
+    });
   }
 
-  #routeMentionDiff(
-    signal: InvalidationEvent["signal"] & {
-      did: string;
-      spaceId: string;
-      roomId: string;
-      ops: unknown[];
-    },
-  ): void {
+  #routeMentionDiff(signal: MentionDiff): void {
     const topic = topicKey("mentions", signal.did);
     const connIds = this.#topicIndex.get(topic);
     if (!connIds) return;
 
     for (const connId of connIds) {
       const conn = this.#connections.get(connId);
-      if (conn?.isOpen) {
-        conn.send(
-          messageFrame("#mention", {
-            did: signal.did,
-            spaceId: signal.spaceId,
-            roomId: signal.roomId,
-            seq: ++conn.seq,
-            ops: signal.ops,
-          }),
-        );
-      }
+      if (!conn?.isOpen) continue;
+      void this.#sendRedacted(conn, (hidden) =>
+        messageFrame("#mention", {
+          did: signal.did,
+          spaceId: signal.spaceId,
+          roomId: signal.roomId,
+          seq: ++conn.seq,
+          ops: redactMessageOps(signal.ops, hidden),
+        }),
+      );
     }
   }
 
-  #routeRoomMetadataDiff(
-    signal: InvalidationEvent["signal"] & {
-      spaceId: string;
-      roomId: string;
-      delta: number;
-      users: ReadonlyArray<string>;
-      parentChannelId?: string;
-      roomUnreadDeltas?: ReadonlyMap<string, number>;
-      threadUnreadDeltas?: ReadonlyMap<string, number>;
-      spaceUnreadFlips?: ReadonlyMap<string, true>;
-    },
-  ): void {
+  #routeRoomMetadataDiff(signal: RoomMetadataDiff): void {
     // Per-user: the frame carries a delta (the same for every user), but
     // we still send one frame per user rather than broadcasting — only
     // users with a read_positions row for this room should see the unread
     // bump. A user may have multiple connections open (multiple tabs).
+    //
+    // A user who hides this message's author is not among them. The count they
+    // would be patching excludes the message already
+    // (`deriveUnreadCounts`), so a frame here would move a badge the next read
+    // takes back, and it would tell the reader a hidden author had posted.
     for (const user of signal.users) {
-      for (const conn of this.#connections.values()) {
-        if (!conn.isOpen) continue;
-        if (conn.did !== user) continue;
-        conn.send(
-          messageFrame("#roomMetadataDiff", {
-            spaceId: signal.spaceId,
-            roomId: signal.roomId,
-            delta: signal.delta,
-            seq: ++conn.seq,
-            ...(signal.parentChannelId ? { parentChannelId: signal.parentChannelId } : {}),
-            ...(signal.roomUnreadDeltas?.get(user)
-              ? { roomUnreadDelta: signal.roomUnreadDeltas.get(user) }
-              : {}),
-            ...(signal.threadUnreadDeltas?.get(user)
-              ? { threadUnreadDelta: signal.threadUnreadDeltas.get(user) }
-              : {}),
-            ...(signal.spaceUnreadFlips?.get(user) ? { spaceUnreadFlip: true } : {}),
-          }),
-        );
-      }
+      void this.#sendUnreadFrame(signal, user);
+    }
+  }
+
+  /**
+   * Deliver one user's `#roomMetadataDiff`, or nothing when that user hides the
+   * message's author.
+   */
+  async #sendUnreadFrame(signal: RoomMetadataDiff, user: UserDid): Promise<void> {
+    let hidden: ReadonlySet<string>;
+    try {
+      hidden = await this.#hiddenFor(user);
+    } catch (err) {
+      log.error(
+        `Sync unread-frame redaction failed for ${user}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+    if (signal.authorDid !== undefined && hidden.has(signal.authorDid)) return;
+
+    for (const conn of this.#connections.values()) {
+      if (!conn.isOpen) continue;
+      if (conn.did !== user) continue;
+      conn.send(
+        messageFrame("#roomMetadataDiff", {
+          spaceId: signal.spaceId,
+          roomId: signal.roomId,
+          delta: signal.delta,
+          seq: ++conn.seq,
+          ...(signal.parentChannelId ? { parentChannelId: signal.parentChannelId } : {}),
+          ...(signal.roomUnreadDeltas?.get(user)
+            ? { roomUnreadDelta: signal.roomUnreadDeltas.get(user) }
+            : {}),
+          ...(signal.threadUnreadDeltas?.get(user)
+            ? { threadUnreadDelta: signal.threadUnreadDeltas.get(user) }
+            : {}),
+          ...(signal.spaceUnreadFlips?.get(user) ? { spaceUnreadFlip: true } : {}),
+        }),
+      );
     }
   }
 
@@ -1122,6 +1218,74 @@ export class SyncManager {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Redact a message diff's ops for one viewer, returning the same array when the
+ * viewer hides none of the authors it carries.
+ *
+ * Shared by `#messageDiff` and `#mention`, which carry the same `MessageSnapshot`
+ * rows. A `remove` op names a message that is already gone and is passed
+ * through: there is nothing in it to withhold.
+ */
+function redactMessageOps(
+  ops: MessageDiffOp[],
+  hidden: ReadonlySet<string>,
+): MessageDiffOp[] {
+  if (hidden.size === 0) return ops;
+
+  let changed = false;
+  const redacted = ops.map((op) => {
+    if (op.op === "remove") return op;
+    if (!hidden.has(op.message.authorDid)) return op;
+    changed = true;
+    return {
+      ...op,
+      message: blockedTombstone({
+        id: op.message.id,
+        sort_idx: op.message.sort_idx,
+        authorDid: op.message.authorDid,
+        timestamp: op.message.timestamp,
+      }),
+    };
+  });
+
+  return changed ? redacted : ops;
+}
+
+/**
+ * Redact a room's latest-activity facts for one viewer: the preview body and
+ * the author it names.
+ *
+ * A hidden author's row has no preview and no identity to render, so the
+ * message is dropped and the author left out of the participant list. The
+ * structural half — which room moved, its name, its timestamp and its ordering
+ * — is viewer-independent and stays, so the board still reorders and no reader
+ * is made to refetch it.
+ *
+ * Returns the same object when the viewer hides none of the participants, which
+ * is why the fan-out still shares one frame instance in the ordinary case.
+ */
+function redactActivity(
+  activity: RoomActivityDiffActivity,
+  hidden: ReadonlySet<string>,
+): RoomActivityDiffActivity {
+  if (hidden.size === 0) return activity;
+
+  const members = activity.latestMembers.filter((m) => !hidden.has(m.did));
+  const keepMessage =
+    activity.latestMessage !== undefined &&
+    !hidden.has(activity.latestMessage.author.did);
+
+  if (members.length === activity.latestMembers.length && keepMessage) {
+    return activity;
+  }
+
+  return {
+    ...activity,
+    latestMembers: members,
+    ...(keepMessage ? {} : { latestMessage: undefined }),
+  };
+}
 
 function hasSpaceTopic(topics: Set<string>): boolean {
   for (const t of topics) {

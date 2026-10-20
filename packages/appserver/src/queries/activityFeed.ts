@@ -154,7 +154,7 @@ export async function selectActivityFeed(
   if (scope.spaceId) {
     spaceDids = [scope.spaceId];
   } else {
-    spaceDids = await selectJoinedSpaceDids(mainDb, userDid as UserDid);
+    spaceDids = await selectJoinedSpaceDids(mainDb, userDid);
   }
 
   if (spaceDids.length === 0) return { feed: [], cursor: null };
@@ -459,6 +459,11 @@ async function batchFetchUnreadCounts(
     .all<{ room_id: string; seen_up_to: string }>(userDid, ...roomIds);
   const watermarks = new Map(rows.map((r) => [r.room_id, r.seen_up_to]));
 
+  // The feed renders each room's unread count for this caller, so it counts
+  // what this caller can see: a hidden author's messages are not waiting to be
+  // read (`deriveUnreadCounts`).
+  const hidden = await hiddenBy(userDid);
+
   for (const [spaceDid, spaceRows] of rowsBySpace) {
     const spaceRoomIds = spaceRows
       .map((r) => r.room_id)
@@ -466,7 +471,11 @@ async function batchFetchUnreadCounts(
     if (spaceRoomIds.length === 0) continue;
     const counts = await deriveUnreadCounts(
       openSpaceDb(spaceDid),
-      spaceRoomIds.map((roomId) => ({ roomId, seenUpTo: watermarks.get(roomId)! })),
+      spaceRoomIds.map((roomId) => ({
+        roomId,
+        seenUpTo: watermarks.get(roomId)!,
+        hidden,
+      })),
     );
     spaceRoomIds.forEach((roomId, i) => result.set(roomId, counts[i] ?? 0));
   }

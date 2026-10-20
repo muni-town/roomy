@@ -8,6 +8,7 @@
 
 import { openReadStateDb, openSpaceDb, openSpaceDbForEntity } from "../db/db.ts";
 import { spaceHasUnreads } from "../queries/readPositions.ts";
+import { hiddenBy } from "../queries/userBlocks.ts";
 import { resetNotificationState } from "../queries/notificationState.ts";
 import { isThread, upsertUserThreadActivity } from "../queries/userActiveThreads.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
@@ -58,13 +59,32 @@ export const updateSeenHandler: ProcedureHandler<UpdateSeenBody, void> = async (
   const access: Awaited<ReturnType<typeof requireRoomRead>> =
     await requireRoomRead(db, roomId, userDid);
 
+  // The reader's hidden authors (§ user blocks). Both the position this call
+  // writes and the count derived from it exclude them, so the two agree.
+  const hidden = await hiddenBy(userDid);
+
   let seenUpTo: string;
 
   if (seenUpToRaw === undefined) {
     // No watermark → mark everything as read up to the latest message.
+    //
+    // Latest means latest *visible* message: the newest row this reader can see.
+    // A hidden author's message is one they cannot read, so anchoring on it
+    // would mark a message they never saw as seen while leaving the ones above
+    // it unread — the position would jump past content they still have to read.
+    // Excluding them also keeps this anchor consistent with the count derived
+    // from it, which excludes the same authors.
     const maxRow = await db
-      .query("select max(sort_idx) as max_sort from entities where room = ?")
-      .get<{ max_sort: string | null }>(roomId);
+      .query(
+        `select max(e.sort_idx) as max_sort
+           from entities e
+          where e.room = ?1
+            and not exists (select 1 from edges author_e
+                             where author_e.head = e.id
+                               and author_e.label = 'author'
+                               and author_e.tail in (select value from json_each(?2)))`,
+      )
+      .get<{ max_sort: string | null }>([roomId, JSON.stringify([...hidden])]);
 
     seenUpTo = (maxRow?.max_sort as string) ?? "";
   } else {

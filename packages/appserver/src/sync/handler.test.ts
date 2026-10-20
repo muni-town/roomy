@@ -476,7 +476,7 @@ describe("SyncManager", () => {
   });
 
 
-  test("mention diff is sent to connections subscribed to mentions:<did>", () => {
+  test("mention diff is sent to connections subscribed to mentions:<did>", async () => {
     const router = new MockRouter();
     const { manager } = makeManager(router as unknown as InvalidationRouter);
 
@@ -487,6 +487,9 @@ describe("SyncManager", () => {
     socket.sentFrames.length = 0;
 
     router.emitSignals([mentionDiff(USER_B)]);
+    // Delivery awaits the connection's block-set lookup before sending, so the
+    // frame lands on a later turn rather than synchronously.
+    await flush();
     expect(socket.sentFrames.length).toBe(1);
     const body = decodeFrameBody(socket.sentFrames[0]!);
     expect(body).toEqual({

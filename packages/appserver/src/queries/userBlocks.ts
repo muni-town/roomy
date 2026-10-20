@@ -127,7 +127,7 @@ export function _blockRefreshesInFlight(): Promise<void>[] {
  * Never fails the caller: throwing here would fail the message list the set
  * exists to filter.
  */
-export async function blocks(userDid: UserDid): Promise<ReadonlySet<string>> {
+export async function blocks(userDid: string): Promise<ReadonlySet<string>> {
   const cached = writtenCache.get(userDid);
   if (cached && Date.now() - cached.readAt < blockCacheTtlMs()) {
     return cached.dids;
@@ -155,7 +155,7 @@ export async function blocks(userDid: UserDid): Promise<ReadonlySet<string>> {
  * here once the blocker's repo has been read, so answering needs no network at
  * all. What populates those rows is {@link warmBlockSet}, run for the blocker.
  */
-export async function blockedBy(userDid: UserDid): Promise<ReadonlySet<string>> {
+export async function blockedBy(userDid: string): Promise<ReadonlySet<string>> {
   const cached = reverseCache.get(userDid);
   if (cached && Date.now() - cached.readAt < blockCacheTtlMs()) {
     return cached.dids;
@@ -188,7 +188,7 @@ export async function blockedBy(userDid: UserDid): Promise<ReadonlySet<string>> 
  * blocker's by the blocker.
  */
 export async function hiddenBy(
-  viewerDid: UserDid | null,
+  viewerDid: string | null,
 ): Promise<ReadonlySet<string>> {
   if (viewerDid === null) return NO_DIDS;
 
@@ -213,7 +213,7 @@ export async function hiddenBy(
  */
 async function readFetchStamp(
   readStateDb: DbLike,
-  userDid: UserDid,
+  userDid: string,
 ): Promise<{ fetchedAt: number; status: "ok" | "error" | null }> {
   const stamp = await readStateDb
     .query("select fetched_at, status from user_block_fetches where user_did = ?")
@@ -246,7 +246,7 @@ async function readFetchStamp(
  * the subjects' reverse sets inside `fetchAndStore`. A refresh that decided not
  * to fetch leaves both alone, so an ordinary request costs no DB re-read.
  */
-export function warmBlockSet(userDid: UserDid): void {
+export function warmBlockSet(userDid: string): void {
   if (inflightFetches.has(userDid)) return;
   const readStateDb = tryOpenReadStateDb();
   if (!readStateDb) return;
@@ -281,7 +281,7 @@ export function warmBlockSet(userDid: UserDid): void {
  * failure belongs in the recorded state, not in a rejection nobody awaits.
  */
 async function fetchAndStore(
-  userDid: UserDid,
+  userDid: string,
   readStateDb: DbLike,
 ): Promise<boolean> {
   let records: BlockRecord[];
@@ -311,7 +311,7 @@ async function fetchAndStore(
  */
 export async function replaceBlockRows(
   readStateDb: DbLike,
-  userDid: UserDid,
+  userDid: string,
   records: readonly BlockRecord[],
 ): Promise<void> {
   const now = Date.now();
@@ -358,7 +358,7 @@ export async function replaceBlockRows(
  */
 export async function recordFetchError(
   readStateDb: DbLike,
-  userDid: UserDid,
+  userDid: string,
 ): Promise<void> {
   await readStateDb.run(
     `insert into user_block_fetches (user_did, fetched_at, status)
@@ -400,3 +400,4 @@ export function invalidateBlockSet(userDid: UserDid): void {
   writtenCache.delete(userDid);
   reverseCache.delete(userDid);
 }
+

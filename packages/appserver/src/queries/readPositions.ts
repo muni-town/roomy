@@ -25,6 +25,7 @@ import { openSpaceDb, tryOpenGlobalDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
 import type { UserDid } from "@roomy-space/sdk";
 import { decodeTime } from "ulidx";
+import { hiddenBy } from "./userBlocks.ts";
 
 export interface ReadPosition {
   unreadCount: number;
@@ -61,6 +62,17 @@ export interface UnreadQuery {
    * count below yields without special-casing.
    */
   seenUpTo: string;
+  /**
+   * The author DIDs this reader must not see (§ user blocks), or omitted when
+   * the reader hides nobody.
+   *
+   * A hidden author's messages are not counted. An unread badge is a claim
+   * about what is waiting to be read, and a room whose three newest messages are
+   * all hidden has nothing for this reader — counting them would show a badge
+   * that no amount of reading can clear, because the rows a read would mark seen
+   * are not rows it renders.
+   */
+  hidden?: ReadonlySet<string>;
 }
 
 /**
@@ -81,6 +93,12 @@ export interface UnreadQuery {
  * Rows are matched on `sort_idx` alone, exactly as `updateSeen` does — an
  * entity the materialiser never keyed (a thread, a room) has a NULL `sort_idx`,
  * which no comparison can pass, so it is not a message and is not counted.
+ *
+ * A message whose author is in that reader's `hidden` set is not counted. The
+ * hidden sets ride on the query rows as JSON arrays rather than as parameters
+ * of their own, so one statement still answers every reader in a batch; the
+ * author is an `edges` row in the same DB, so the predicate is a correlated
+ * `not exists` and no second round-trip is needed.
  */
 export async function deriveUnreadCounts(
   spaceDb: DbLike,
@@ -89,16 +107,41 @@ export async function deriveUnreadCounts(
   if (queries.length === 0) return [];
   const rows = await spaceDb
     .query(
-      `with w(room, wm) as (
-         select json_extract(value, '$.roomId'), json_extract(value, '$.seenUpTo')
+      `with w(room, wm, hidden) as (
+         select json_extract(value, '$.roomId'),
+                json_extract(value, '$.seenUpTo'),
+                json_extract(value, '$.hidden')
            from json_each(?1)
        )
        select (select count(*) from entities e
-                where e.room = w.room and e.sort_idx > w.wm) as n
+                where e.room = w.room and e.sort_idx > w.wm
+                  and (w.hidden is null or not exists (
+                        select 1 from edges author_e
+                         where author_e.head = e.id
+                           and author_e.label = 'author'
+                           and author_e.tail in (select value from json_each(w.hidden))))) as n
          from w`,
     )
-    .all<{ n: number }>(JSON.stringify(queries));
+    .all<{ n: number }>(JSON.stringify(queries.map(toCountRow)));
   return rows.map((r) => r.n ?? 0);
+}
+
+/**
+ * The wire form of an {@link UnreadQuery}: the hidden set as an array, or null
+ * for a reader who hides nobody. Null rather than `[]` so the count skips the
+ * author join entirely on the path every existing caller takes.
+ */
+function toCountRow(q: UnreadQuery): {
+  roomId: string;
+  seenUpTo: string;
+  hidden: string[] | null;
+} {
+  const hidden = q.hidden;
+  return {
+    roomId: q.roomId,
+    seenUpTo: q.seenUpTo,
+    hidden: hidden && hidden.size > 0 ? [...hidden] : null,
+  };
 }
 
 /**
@@ -215,23 +258,32 @@ export async function getReadPositions(
   const result = new Map<string, ReadPosition>();
   if (roomIds.length === 0) return result;
   const watermarks = await readWatermarks(db, userDid, roomIds);
-  return derivePositions(spaceDb, roomIds, watermarks);
+  return derivePositions(spaceDb, roomIds, watermarks, await hiddenBy(userDid));
 }
 
 /**
  * Derive a position per room from the watermarks that exist, defaulting the
  * rest to zero. Shared by the batched readers so the "no row" rule is stated
  * once.
+ *
+ * `hidden` is the reader's hidden-author set (§ user blocks), already resolved
+ * by the caller: a count is per-reader by definition, so it must not count a
+ * message that reader cannot see.
  */
 async function derivePositions(
   spaceDb: DbLike,
   roomIds: readonly string[],
   watermarks: ReadonlyMap<string, string>,
+  hidden?: ReadonlySet<string>,
 ): Promise<Map<string, ReadPosition>> {
   const known = roomIds.filter((roomId) => watermarks.has(roomId));
   const counts = await deriveUnreadCounts(
     spaceDb,
-    known.map((roomId) => ({ roomId, seenUpTo: watermarks.get(roomId)! })),
+    known.map((roomId) => ({
+      roomId,
+      seenUpTo: watermarks.get(roomId)!,
+      ...(hidden ? { hidden } : {}),
+    })),
   );
   const countByRoom = new Map(known.map((roomId, i) => [roomId, counts[i] ?? 0]));
   const result = new Map<string, ReadPosition>();
@@ -484,15 +536,17 @@ async function deriveSpacePositions(
   if (allRoomIds.length === 0) return new Map();
 
   const watermarks = await readWatermarks(readStateDb, userDid, allRoomIds);
+  const hidden = await hiddenBy(userDid);
   const positions = await derivePositions(
     spaceDb,
     [...accessibleIds, ...threadIds],
     watermarks,
+    hidden,
   );
   for (const [originDb, roomIds] of candidates.federatedByDb) {
     const kept = roomIds.filter(keep);
     if (kept.length === 0) continue;
-    for (const [roomId, pos] of await derivePositions(originDb, kept, watermarks)) {
+    for (const [roomId, pos] of await derivePositions(originDb, kept, watermarks, hidden)) {
       positions.set(roomId, pos);
     }
   }
@@ -520,27 +574,37 @@ async function anyUnread(
   spaceDb: DbLike,
   roomIds: readonly string[],
   watermarks: ReadonlyMap<string, string>,
+  hidden?: ReadonlySet<string>,
 ): Promise<boolean> {
   const queries: UnreadQuery[] = [];
   for (const roomId of roomIds) {
     const seenUpTo = watermarks.get(roomId);
-    if (seenUpTo !== undefined) queries.push({ roomId, seenUpTo });
+    if (seenUpTo !== undefined) {
+      queries.push({ roomId, seenUpTo, ...(hidden ? { hidden } : {}) });
+    }
   }
   if (queries.length === 0) return false;
 
   const row = await spaceDb
     .query(
-      `with w(room, wm) as (
-         select json_extract(value, '$.roomId'), json_extract(value, '$.seenUpTo')
+      `with w(room, wm, hidden) as (
+         select json_extract(value, '$.roomId'),
+                json_extract(value, '$.seenUpTo'),
+                json_extract(value, '$.hidden')
            from json_each(?1)
        )
        select 1 as one
          from w
         where exists (select 1 from entities e
-                       where e.room = w.room and e.sort_idx > w.wm)
+                       where e.room = w.room and e.sort_idx > w.wm
+                         and (w.hidden is null or not exists (
+                               select 1 from edges author_e
+                                where author_e.head = e.id
+                                  and author_e.label = 'author'
+                                  and author_e.tail in (select value from json_each(w.hidden)))))
         limit 1`,
     )
-    .get<{ one: number }>(JSON.stringify(queries));
+    .get<{ one: number }>(JSON.stringify(queries.map(toCountRow)));
   return row !== null && row !== undefined;
 }
 
@@ -584,9 +648,13 @@ export async function spaceHasUnreads(
     ...ownRooms,
     ...candidates.federatedIds.filter(keep),
   ]);
-  if (await anyUnread(spaceDb, ownRooms, watermarks)) return true;
+  // The space list's `hasUnreads` answers the same question the counts do, so it
+  // excludes the same authors: a space whose only unread rows are hidden has no
+  // unread room to send the reader to.
+  const hidden = await hiddenBy(userDid);
+  if (await anyUnread(spaceDb, ownRooms, watermarks, hidden)) return true;
   for (const [originDb, roomIds] of candidates.federatedByDb) {
-    if (await anyUnread(originDb, roomIds.filter(keep), watermarks)) return true;
+    if (await anyUnread(originDb, roomIds.filter(keep), watermarks, hidden)) return true;
   }
   return false;
 }
@@ -716,9 +784,14 @@ export async function getChannelUnreadThreadCount(
   // only what arrives afterwards, which is the same rule the sidebar uses.
   await ensureReadPositions(readStateDb, spaceDb, "", userDid, accessible);
   const watermarks = await readWatermarks(readStateDb, userDid, accessible);
+  const hidden = await hiddenBy(userDid);
   const counts = await deriveUnreadCounts(
     spaceDb,
-    accessible.map((roomId) => ({ roomId, seenUpTo: watermarks.get(roomId) ?? "0" })),
+    accessible.map((roomId) => ({
+      roomId,
+      seenUpTo: watermarks.get(roomId) ?? "0",
+      hidden,
+    })),
   );
   return counts.filter((n) => n > 0).length;
 }

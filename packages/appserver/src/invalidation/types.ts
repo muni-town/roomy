@@ -130,6 +130,16 @@ export interface RoomMetadataDiff {
   spaceId: StreamDid;
   roomId: Ulid;
   /**
+   * The effective author of the message that produced this delta (§ user
+   * blocks). Absent for a delta no single author produced.
+   *
+   * The `#roomMetadataDiff` frame is not delivered to a user who hides this
+   * author. The count they would be patching already excludes the message, so
+   * the frame would move a badge that the next read takes straight back — and,
+   * for a hidden author, it would say that they had posted at all.
+   */
+  authorDid?: UserDid;
+  /**
    * The unread-count increment (always `+1` per createMessage event). The
    * client adds this to the cached `unreadCount` of each patched entry.
    */

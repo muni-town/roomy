@@ -47,6 +47,7 @@ import {
 } from "../queries/notificationState.ts";
 import { PUSH_MAX_DIGEST_AGE_MS } from "./freshness.ts";
 import { resolveEntityAvatar, resolveLatestRoomAuthor } from "./avatars.ts";
+import { hiddenBy } from "../queries/userBlocks.ts";
 import type { PushDelivery, PushJob, PushPayload } from "./types.ts";
 
 /**
@@ -348,6 +349,18 @@ export async function _runDigestSweep(db: DbLike): Promise<void> {
   await mapWithConcurrency(fresh, CONCURRENCY, async (row) => {
     const meta = roomMeta.get(row.roomId);
     const spaceId = meta?.spaceId ?? "";
+    // The batch is named after its most recent sender, so this is the author a
+    // reader who hides them would be shown. Delivering to that reader is the
+    // one way this path can name a hidden author, and it runs without a caller
+    // present, so there is nothing a reveal could apply to.
+    if (meta?.authorDid != null && (await hiddenBy(row.userDid)).has(meta.authorDid)) {
+      // Mark notified all the same: the reader is not waiting to be told, and
+      // leaving the row due would re-run this check every sweep until the batch
+      // ages out.
+      await markNotified(db, row.userDid, row.roomId);
+      return;
+    }
+
     const payload: PushPayload = {
       type: "digest",
       spaceId,

@@ -170,6 +170,7 @@ async function federatedReceiversInvalidation(
   roomId: Ulid,
   signal: {
     delta: number;
+    authorDid?: UserDid;
     users: ReadonlyArray<UserDid>;
     roomUnreadDeltas: ReadonlyMap<UserDid, number>;
   },
@@ -224,6 +225,7 @@ async function federatedReceiversInvalidation(
         spaceId: home as StreamDid,
         roomId,
         delta: signal.delta,
+        ...(signal.authorDid !== undefined ? { authorDid: signal.authorDid } : {}),
         users: [...signal.users],
         roomUnreadDeltas: signal.roomUnreadDeltas,
         ...(spaceUnreadFlips.size > 0 ? { spaceUnreadFlips } : {}),
@@ -414,6 +416,14 @@ async function handleCreateMessage(
   const readState = db ?? openReadStateDb();
   const readers = await getRoomReadPositionWatermarks(readState, roomId);
   if (readers.length > 0) {
+    // The effective author of the message this event added: the override for a
+    // bridged message, the sender otherwise. It names the frames that must not
+    // be delivered to a reader who hides it (§ user blocks), and it is the same
+    // identity the `author` edge carries.
+    const effectiveAuthor: UserDid =
+      event.details?.authorDid !== undefined
+        ? (event.details.authorDid as UserDid)
+        : event.user;
     const users = readers.map((r) => r.userDid);
     const spaceDb = db ?? openSpaceDb(event.streamDid);
     // A reader whose watermark sits before the new message is newly unread
@@ -474,6 +484,9 @@ async function handleCreateMessage(
       signal: {
         spaceId,
         roomId,
+        // The effective author, so the delivery path can drop this frame for a
+        // reader who hides them (§ user blocks).
+        authorDid: effectiveAuthor,
         delta: 1,
         users,
         ...(parentChannelId ? { parentChannelId } : {}),
@@ -512,6 +525,7 @@ async function handleCreateMessage(
           roomId,
           {
             delta: 1,
+            authorDid: effectiveAuthor,
             users,
             roomUnreadDeltas: new Map(
               newlyUnread.map((u) => [u, 1] as const),

@@ -105,7 +105,7 @@ export async function setUserSpaceMembership(
  */
 export async function selectJoinedSpaceDids(
   db: DbLike,
-  userDid: UserDid,
+  userDid: string,
 ): Promise<StreamDid[]> {
   const rows = await db
     .query(
