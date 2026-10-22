@@ -156,6 +156,10 @@ export async function stopPushDispatcher(): Promise<void> {
 }
 
 
+export function holdsPushDispatcher(): boolean {
+  return dispatcherLease?.held ?? false;
+}
+
 export function pushDispatcherStats(): {
   queueDepth: number;
   dispatched: number;
