@@ -117,6 +117,44 @@ export function _resetProfileNegativeCache(): void {
   negativeCache.clear();
 }
 
+/**
+ * The DIDs from `dids` worth sending to a profile source: a DID shape with a
+ * method segment and something after it, and not currently backed off.
+ *
+ * Both fetch sites pass their DIDs through here — the write path
+ * (`getProfilesRoomyFirst`, which also feeds HappyView) and the read path's
+ * hydration (`hydrateMissingProfiles`) — so an unreadable identifier is
+ * dropped the same way wherever the set is collected.
+ *
+ * The shape test is not cosmetic: a message row with no author materialises as
+ * `authorDid: ""` (`selectMessages`), and that empty string reaches this
+ * pipeline as if it were a DID. `app.bsky.actor.getProfiles` rejects the
+ * *whole* request when any `actors` value is empty (400 `InvalidRequest`,
+ * "Missing required key \"actors\""), which costs every other DID in the
+ * 25-actor chunk its profile. Synthetic but well-formed identifiers
+ * (`did:discord:…`, `did:space:…`) are accepted by the appview and answer with
+ * no profiles, so the bar is shape, not resolvability.
+ *
+ * Unreadable DIDs are recorded in the negative cache on the way past: they
+ * resolve to nothing, and the fetch set is rebuilt from message rows on every
+ * read, so without the record each rebuild would keep re-adding them.
+ */
+export function fetchableProfileDids(dids: readonly string[]): UserDid[] {
+  const fetchable: UserDid[] = [];
+  const unreadable: string[] = [];
+  for (const did of dids) {
+    if (!/^did:[a-z]+:.+$/.test(did)) {
+      unreadable.push(did);
+    } else if (!isProfileFetchBackedOff(did)) {
+      fetchable.push(did as UserDid);
+    }
+  }
+  if (unreadable.length > 0) {
+    recordUnresolvedProfiles(unreadable, new Set<string>());
+  }
+  return fetchable;
+}
+
 export type GetProfilesFn = (dids: UserDid[]) => Promise<ProfileViewDetailed[]>;
 /**
  * Bluesky appview profile fetcher — the fallback when no Roomy profile record
@@ -135,7 +173,7 @@ export type GetProfilesFn = (dids: UserDid[]) => Promise<ProfileViewDetailed[]>;
  */
 export const defaultGetProfiles: GetProfilesFn = async (dids: UserDid[]) => {
   if (dids.length === 0) return [];
-  const fetchable = dids.filter((d) => !isProfileFetchBackedOff(d));
+  const fetchable = fetchableProfileDids(dids);
   if (fetchable.length === 0) return [];
   const MAX_ACTORS = 25;
   const out: ProfileViewDetailed[] = [];
@@ -149,8 +187,10 @@ export const defaultGetProfiles: GetProfilesFn = async (dids: UserDid[]) => {
           `https://api.bsky.app/xrpc/app.bsky.actor.getProfiles?${params.toString()}`,
         );
         if (!resp.ok) {
+          // The appview rejects the whole chunk on one bad actor, so the DIDs
+          // it was asked about are the only record of what caused it.
           log.warn(
-            `[materialize] defaultGetProfiles: bsky appview returned ${resp.status} for ${chunk.length} DIDs`,
+            `[materialize] defaultGetProfiles: bsky appview returned ${resp.status} for ${chunk.length} DIDs: ${chunk.join(", ")}`,
           );
           continue;
         }
@@ -205,10 +245,10 @@ export async function getProfilesRoomyFirst(
 ): Promise<{ profiles: ProfileViewDetailed[]; extras: Map<string, RoomyProfileExtras> }> {
   if (dids.length === 0) return { profiles: [], extras: new Map() };
 
-  // DIDs that recently resolved to nothing are skipped entirely — no
-  // HappyView call, no Bluesky call — until the backoff elapses.
-  const requested = dids.filter((d) => !isProfileFetchBackedOff(d));
-
+  // DIDs that are unreadable or recently resolved to nothing are skipped
+  // entirely — no HappyView call, no Bluesky call — until the backoff
+  // elapses.
+  const requested = fetchableProfileDids(dids);
   const profiles: ProfileViewDetailed[] = [];
   const extras = new Map<string, RoomyProfileExtras>();
 

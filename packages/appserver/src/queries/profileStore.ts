@@ -35,9 +35,9 @@ import type { AsyncDatabase } from "../db/asyncDatabase.ts";
 import { getHappyView } from "../happyview.ts";
 import {
   PROFILE_REFRESH_TTL_MS,
+  fetchableProfileDids,
   getProfilesRoomyFirst,
   insertProfilesWithExtras,
-  isProfileFetchBackedOff,
   recordUnresolvedProfiles,
 } from "../materialization/profiles.ts";
 import type { UserDid } from "@roomy-space/sdk";
@@ -297,10 +297,12 @@ async function resolveFromGlobalDb(
  * swallowed — the DID is backed off and retried after the negative cache's TTL
  * or by the event materialisation path.
  *
- * The backoff lives in this function rather than inside the pipeline it calls,
- * so it applies identically whether the fetch is the real pipeline or a test
- * stub. `getProfilesRoomyFirst` also consults it, which is what keeps the write
- * path and the read path from retrying each other's failures.
+ * The DID set is gated by `fetchableProfileDids` before it reaches either the
+ * pipeline or the test stub, so the read path's filter — the backoff, and the
+ * shape test that keeps a message's empty author DID out of the appview's
+ * actor list — applies identically to both. `getProfilesRoomyFirst` gates its
+ * own input the same way, which is what keeps the write path and the read path
+ * from retrying each other's failures.
  *
  * Callers on the read path reach this through {@link startHydration}, which
  * runs it detached and deduplicates by DID; it is awaited inline only where
@@ -312,7 +314,7 @@ async function hydrateMissingProfiles(
   dids: string[],
 ): Promise<void> {
   if (dids.length === 0) return;
-  const fetchable = dids.filter((d) => !isProfileFetchBackedOff(d));
+  const fetchable = fetchableProfileDids(dids);
   if (fetchable.length === 0) return;
   try {
     if (testGetProfiles) {

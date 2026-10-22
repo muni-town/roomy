@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, mock, setSystemTime } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, mock, setSystemTime, spyOn } from "bun:test";
 import {
   StreamIndex,
   UserDid,
@@ -12,8 +12,15 @@ import { closeDb, openDb, openGlobalDb } from "../db/db.ts";
 import {
   defaultGetProfiles,
   getProfilesRoomyFirst,
+  isProfileFetchBackedOff,
   _resetProfileNegativeCache,
 } from "./profiles.ts";
+import {
+  hydrateProfiles,
+  _profileHydrationInFlight,
+  _resetProfileStoreCache,
+  _setTestGetProfiles,
+} from "../queries/profileStore.ts";
 import type { DbLike } from "../db/types.ts";
 
 const ALICE = UserDid.assert("did:plc:alice");
@@ -550,5 +557,112 @@ describe("profile fetch negative cache", () => {
       if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = prevNodeEnv;
     }
+  });
+});
+
+/**
+ * A message row with no author materialises as `authorDid: ""`
+ * (`selectMessages`), and that empty string travels the profile pipeline as
+ * if it were a DID. `app.bsky.actor.getProfiles` rejects the entire request
+ * when one `actors` value is empty, so the 24 real DIDs sharing the chunk lose
+ * their profiles too.
+ */
+describe("unreadable author DIDs", () => {
+  const realFetch = globalThis.fetch;
+  const realNodeEnv = process.env.NODE_ENV;
+
+  beforeEach(() => {
+    _resetProfileNegativeCache();
+    // `getProfilesRoomyFirst` skips the Bluesky leg under `bun test`; the
+    // pipeline needs to reach the (mocked) appview here.
+    delete process.env.NODE_ENV;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    _resetProfileNegativeCache();
+    _setTestGetProfiles(null);
+    _resetProfileStoreCache();
+    if (realNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = realNodeEnv;
+  });
+
+  /** A mocked appview that records every actor list it is asked for. */
+  function recordingAppview(): { requests: string[][] } {
+    const requests: string[][] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const actors = new URL(url.toString()).searchParams.getAll("actors");
+      requests.push(actors);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          profiles: actors.map((d) => profileFor(d, `${d}.test`)),
+        }),
+      } as unknown as Response;
+    }) as unknown as typeof globalThis.fetch;
+    return { requests };
+  }
+
+  test("an empty author DID is not sent as an actor, and its batch-mates still resolve", async () => {
+    const appview = recordingAppview();
+
+    const { profiles } = await getProfilesRoomyFirst(
+      ["", ALICE, BOB] as unknown as UserDid[],
+      null,
+    );
+
+    expect(appview.requests).toHaveLength(1);
+    expect(appview.requests[0]).toEqual(["did:plc:alice", "did:plc:bob"]);
+    expect(profiles.map((p) => p.did)).toEqual(["did:plc:alice", "did:plc:bob"]);
+  });
+
+  test("an empty author DID is recorded as unresolved", async () => {
+    recordingAppview();
+
+    await getProfilesRoomyFirst([""] as unknown as UserDid[], null);
+
+    expect(isProfileFetchBackedOff("")).toBe(true);
+  });
+
+  test("the message read path drops the empty author DID before it fetches", async () => {
+    freshGlobal();
+    _resetProfileStoreCache();
+    const seen: string[][] = [];
+    _setTestGetProfiles(async (dids) => {
+      seen.push(dids);
+      return [{ did: ALICE }];
+    });
+
+    // Exactly what a message list hands to `hydrateProfiles`: the empty string
+    // is the message DTO's representation of an unknown author.
+    const messages = [{ authorDid: "" }, { authorDid: "did:plc:alice" }];
+    await hydrateProfiles(messages, (m) => m.authorDid, () => {});
+    await Promise.all(_profileHydrationInFlight());
+
+    expect(seen).toEqual([["did:plc:alice"]]);
+  });
+
+  test("the appview warning names the DIDs in the rejected chunk", async () => {
+    globalThis.fetch = (async () =>
+      ({ ok: false, status: 400 }) as unknown as Response) as unknown as typeof globalThis.fetch;
+    const lines: string[] = [];
+    const spy = spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+      lines.push(String(args[0]));
+    });
+    try {
+      await defaultGetProfiles([ALICE, BOB]);
+    } finally {
+      spy.mockRestore();
+    }
+
+    const record = lines
+      .map((line) => JSON.parse(line) as { scope: string; msg: string })
+      .find((r) => r.msg.includes("bsky appview returned"));
+    expect(record).toBeDefined();
+    expect(record!.scope).toBe("materialize");
+    expect(record!.msg).toContain("returned 400 for 2 DIDs");
+    expect(record!.msg).toContain("did:plc:alice");
+    expect(record!.msg).toContain("did:plc:bob");
   });
 });
