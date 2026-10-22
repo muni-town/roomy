@@ -438,12 +438,7 @@ so the space falls back.
   With materialisation pure, replaying into a fresh DB can never corrupt anything;
   the flag only decides what the _client_ is told. That is a much smaller contract
   to reason about than today's.
-- **Open:** `recordPersonalSpaceMembership` (`queries/joinedSpaces.ts:175`),
-  `recordLeftSpaceEdge` (`:210`) and `removeLeftSpaceEdge` (`:239`) write per-space
-  `entities`/`edges` rows, are exported, and have no production caller —
-  `createSpace` uses `recordGlobalMembership` (`space.createSpace.ts:123`). The
-  module's header comment still claims `createSpace` uses them. Delete them, or
-  route them through events; do not leave an unguarded second writer in the tree.
+- **Membership has one writer.** `recordGlobalMembership` is what `createSpace`, `joinSpace` and `leaveSpace` call; the per-space `entities`/`edges` writers that used to sit beside it are gone (Step 2 above), so no exported function can write membership outside the event log.
 
 ## 8. Related documents
 

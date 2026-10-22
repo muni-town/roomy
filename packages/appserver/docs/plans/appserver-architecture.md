@@ -155,7 +155,7 @@ Client subscribes to topics (`space:<id>`, `room:<id>`), server pushes:
 2. **Phase 1:** Implement appserver — Bun HTTP + WebSocket, local event store, SQLite schema, XRPC routing, one working query end-to-end.
 3. **Phase 2:** Implement all query handlers + WS sync handler. Port client from LiveQuery to TanStack Query + XRPC.
 4. **Phase 3 (now):** Remove SQLite WASM worker and peer worker from client.
-5. **Phase 4:** Hand off to Rust appserver (same XRPC interface, drop-in replacement).
+5. **Phase 4 (superseded):** Hand off to Rust appserver. The Rust work is scoped and sequenced in [`replicable-space-workers.md`](replicable-space-workers.md): a per-space space worker behind this gateway, gated on the change-record interface (WS3) and checked against the TS implementation by the rebuild-equality harness. The gateway stays TS for that phase.
 
 ## Related Documents
 
