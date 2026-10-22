@@ -562,8 +562,11 @@ describe("room sends that fail are queued", () => {
 
 		await handleRoomUpdate(makeChannel({ name: "new-name" }), repo, roomy);
 
+		// One sweep per hour: the entry is due again only after its backoff.
+		let at = Date.now() + LATER;
 		for (let sweep = 0; sweep < SEND_SWEEP_MAX_ATTEMPTS; sweep++) {
-			await retryQueuedSends(repo, roomy, Date.now() + LATER);
+			await retryQueuedSends(repo, roomy, at);
+			at += LATER;
 		}
 
 		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 1 });

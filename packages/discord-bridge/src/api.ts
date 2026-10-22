@@ -1,4 +1,4 @@
-import type { BridgeRepository } from "./db/repository.ts";
+import type { BridgeRepository, FailedSend } from "./db/repository.ts";
 import { ATPROTO_BRIDGE_DID, PORT } from "./env.ts";
 import { createLogger } from "./logger.ts";
 import { isBackfillRunning } from "./services/backfill.ts";
@@ -23,7 +23,7 @@ export function startApi(
 
 			let response: Response;
 			try {
-				response = route(url, repo, getAppId);
+				response = route(req, url, repo, getAppId);
 			} catch (err) {
 				log.error("API error", err);
 				response = jsonResponse({ error: "Internal server error" }, 500);
@@ -41,6 +41,7 @@ export function startApi(
 }
 
 function route(
+	req: Request,
 	url: URL,
 	repo: BridgeRepository,
 	getAppId: () => string | undefined,
@@ -96,24 +97,36 @@ function route(
 
 		// Sends the bridge owes a space after their retries were exhausted.
 		// `pending` entries are still being re-offered; `terminal` ones are
-		// counted drops. Event payloads are omitted — callers only need to see
-		// that something is stuck, not its content.
+		// counted drops. Event payloads are omitted — this is a status read, and
+		// `id` is the handle `/sends/replay` takes.
 		case "/sends/failed": {
 			const spaceDid = url.searchParams.get("spaceDid") ?? undefined;
 			return jsonResponse({
 				...repo.countFailedSends(spaceDid),
-				sends: repo.listFailedSends(50, spaceDid).map((send) => ({
-					spaceDid: send.spaceDid,
-					op: send.op,
-					discordId: send.discordId,
-					attempts: send.attempts,
-					lastError: send.lastError,
-					firstFailedAt: send.firstFailedAt,
-					lastFailedAt: send.lastFailedAt,
-					nextRetryAt: send.nextRetryAt,
-					terminal: send.terminal,
-				})),
+				sends: repo.listFailedSends(50, spaceDid).map(sendStatus),
 			});
+		}
+
+		// Recover a send the bridge stopped re-offering, including every entry
+		// of an outage it could not outlast: the row is reset to due with a
+		// fresh attempt budget, and the re-offer sweep delivers it — payload and
+		// mapping replay included — on its next pass, within a minute. Resetting
+		// only makes the entry due, so a replay is durable and cannot diverge
+		// from the path a first delivery takes.
+		case "/sends/replay": {
+			if (req.method !== "POST") {
+				return jsonResponse({ error: "POST required" }, 405);
+			}
+			const raw = url.searchParams.get("id");
+			const id = raw === null ? Number.NaN : Number(raw);
+			if (!Number.isInteger(id) || id <= 0) {
+				return jsonResponse({ error: "id query parameter required" }, 400);
+			}
+			const replayed = repo.replayFailedSend(id);
+			if (!replayed) {
+				return jsonResponse({ error: "No queued send with that id" }, 404);
+			}
+			return jsonResponse({ replayed: sendStatus(replayed) });
 		}
 
 		default:
@@ -178,10 +191,40 @@ export function buildBackfillProgressPayload(
 	}));
 }
 
+/**
+ * One failed-send entry as the HTTP surface reports it: the replay handle and
+ * the drop's bookkeeping, never the event payload.
+ */
+function sendStatus(send: FailedSend): {
+	id: number;
+	spaceDid: string;
+	op: string;
+	discordId: string;
+	attempts: number;
+	lastError: string | null;
+	firstFailedAt: number;
+	lastFailedAt: number;
+	nextRetryAt: number | null;
+	terminal: boolean;
+} {
+	return {
+		id: send.id,
+		spaceDid: send.spaceDid,
+		op: send.op,
+		discordId: send.discordId,
+		attempts: send.attempts,
+		lastError: send.lastError,
+		firstFailedAt: send.firstFailedAt,
+		lastFailedAt: send.lastFailedAt,
+		nextRetryAt: send.nextRetryAt,
+		terminal: send.terminal,
+	};
+}
+
 function corsHeaders(): Record<string, string> {
 	return {
 		"Access-Control-Allow-Origin": "*",
-		"Access-Control-Allow-Methods": "GET, OPTIONS",
+		"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 		"Access-Control-Allow-Headers": "Content-Type",
 	};
 }

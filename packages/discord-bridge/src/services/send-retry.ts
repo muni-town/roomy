@@ -22,8 +22,14 @@ export type SendOp =
 	| "room_update"
 	| "room_delete";
 
-/** Re-offers before a queued entry is abandoned. */
-export const SEND_SWEEP_MAX_ATTEMPTS = 8;
+/**
+ * Failed delivery attempts before a queued entry is abandoned — one per
+ * recorded failure, in both the live path and the sweep. With the backoff
+ * below this spans ~29 h: the first six waits total ~31 min, then 57 waits at
+ * the 30-minute cap. A space that refuses every send for a day keeps its
+ * queue; only a space that refuses one for longer loses a message.
+ */
+export const SEND_SWEEP_MAX_ATTEMPTS = 64;
 /** Delay before the first re-offer, doubled per attempt up to the cap. */
 const SWEEP_BASE_MS = 30_000;
 const SWEEP_MAX_MS = 30 * 60_000;
@@ -97,12 +103,37 @@ export async function sendEventOrQueue(
  * Re-offer queued sends whose backoff has elapsed. An entry that lands is
  * deleted and its mapping replayed; one that keeps failing backs off until
  * SEND_SWEEP_MAX_ATTEMPTS, then goes terminal. Terminal rows are kept, so
- * `countFailedSends()` stays a true count of everything the bridge dropped.
+ * `countFailedSends()` stays a true count of everything the bridge dropped;
+ * `BridgeRepository.replayFailedSend` puts one back in the queue.
+ *
+ * One sweep runs at a time. During an outage every re-offer waits out the
+ * XRPC timeout, so a full batch outlasts the caller's minute tick; the
+ * overlapping sweeps a longer batch would allow re-send the same entry and
+ * spend one attempt each for what is a single delivery window.
  */
 export async function retryQueuedSends(
 	repo: BridgeRepository,
 	roomy: RoomyGateway,
 	now: number = Date.now(),
+): Promise<void> {
+	if (sweepInFlight) {
+		log.warn("Send re-offer sweep skipped: previous sweep still running", {});
+		return;
+	}
+	sweepInFlight = true;
+	try {
+		await sweepQueuedSends(repo, roomy, now);
+	} finally {
+		sweepInFlight = false;
+	}
+}
+
+let sweepInFlight = false;
+
+async function sweepQueuedSends(
+	repo: BridgeRepository,
+	roomy: RoomyGateway,
+	now: number,
 ): Promise<void> {
 	const due = repo.getStaleFailedSends(now, SWEEP_BATCH_LIMIT);
 	if (due.length === 0) return;
@@ -173,7 +204,12 @@ export async function retryQueuedSends(
 			});
 		} catch (err) {
 			const error = describe(err);
-			const attempts = entry.attempts + 1;
+			// The repository is the only writer of `attempts`, and the count it
+			// returns decides the delay and the terminal test alike: one failed
+			// delivery costs exactly one attempt, and no count read before this
+			// attempt can schedule past the budget. The delay is measured from
+			// the sweep's own clock, the same one that decided what was due.
+			const attempts = repo.recordFailedSendAttempt(entry.id, error);
 			if (attempts >= SEND_SWEEP_MAX_ATTEMPTS) {
 				repo.markFailedSendTerminal(entry.id, error);
 				log.error("Discord→Roomy send abandoned after re-offers", {
@@ -184,11 +220,7 @@ export async function retryQueuedSends(
 					error,
 				});
 			} else {
-				repo.bumpFailedSendAttempt(
-					entry.id,
-					error,
-					Date.now() + sweepBackoffMs(attempts),
-				);
+				repo.scheduleFailedSendRetry(entry.id, now + sweepBackoffMs(attempts));
 				log.warn("Discord→Roomy send re-offer failed; will retry", {
 					op: entry.op,
 					spaceDid: entry.spaceDid,

@@ -1177,27 +1177,72 @@ export class BridgeRepository {
 			.map(toFailedSend);
 	}
 
-	/** Record a failed re-offer and schedule the next one. */
-	bumpFailedSendAttempt(id: number, error: string, nextRetryAt: number): void {
+	/**
+	 * Record one failed delivery attempt and return the entry's attempt count
+	 * as it now stands. The count is read back from the row rather than derived
+	 * from the caller's copy, so what the caller schedules against — and tests
+	 * the terminal limit against — is what the row holds.
+	 */
+	recordFailedSendAttempt(id: number, error: string): number {
 		this.db
 			.prepare(
 				`UPDATE failed_sends SET
-           attempts = attempts + 1, last_error = ?, last_failed_at = ?, next_retry_at = ?
+           attempts = attempts + 1, last_error = ?, last_failed_at = ?
          WHERE id = ?`,
 			)
-			.run(error, Date.now(), nextRetryAt, id);
+			.run(error, Date.now(), id);
+		return this.getFailedSend(id)?.attempts ?? 0;
 	}
 
-	/** Stop re-offering an entry; the row stays so the drop remains countable. */
+	/** Schedule the next re-offer of an entry that keeps failing. */
+	scheduleFailedSendRetry(id: number, nextRetryAt: number): void {
+		this.db
+			.prepare("UPDATE failed_sends SET next_retry_at = ? WHERE id = ?")
+			.run(nextRetryAt, id);
+	}
+
+	/**
+	 * Stop re-offering an entry; the row stays so the drop remains countable.
+	 * Leaves `attempts` alone: recording the failure that exhausted the budget
+	 * is the caller's, and counting it twice would shorten the budget.
+	 */
 	markFailedSendTerminal(id: number, error: string): void {
 		this.db
 			.prepare(
 				`UPDATE failed_sends SET
-           terminal = 1, attempts = attempts + 1, last_error = ?, last_failed_at = ?,
-           next_retry_at = NULL
+           terminal = 1, last_error = ?, last_failed_at = ?, next_retry_at = NULL
          WHERE id = ?`,
 			)
 			.run(error, Date.now(), id);
+	}
+
+	/** One entry by id, payload included. */
+	getFailedSend(id: number): FailedSend | null {
+		const row = this.db
+			.query<FailedSendRow, [number]>(
+				`SELECT ${FAILED_SEND_COLUMNS} FROM failed_sends WHERE id = ?`,
+			)
+			.get(id);
+		return row ? toFailedSend(row) : null;
+	}
+
+	/**
+	 * Put an abandoned entry back in the queue: due for re-offer at `now`, its
+	 * attempt budget restarted, payload and mapping untouched. The re-offer
+	 * sweep then sends it on its next pass, down the same path a send that
+	 * failed inline takes — a replay cannot diverge from a first delivery, and
+	 * a reset entry survives a restart like any other queued one. Returns the
+	 * reset entry, or null when no row has that id.
+	 */
+	replayFailedSend(id: number, now: number = Date.now()): FailedSend | null {
+		const result = this.db
+			.prepare(
+				`UPDATE failed_sends SET
+           attempts = 0, terminal = 0, next_retry_at = ?
+         WHERE id = ?`,
+			)
+			.run(now, id);
+		return result.changes === 0 ? null : this.getFailedSend(id);
 	}
 
 	/** Remove an entry once its event has landed. */

@@ -1,9 +1,9 @@
 /**
  * Tests for the HTTP status surface.
  *
- * Covers: APIS01–APIS02 — /sends/failed reports the durable failed-send queue,
- * so an operator can see which sends the bridge still owes a space and which it
- * gave up on.
+ * Covers: APIS01–APIS04 — /sends/failed reports the durable failed-send queue,
+ * so an operator can see the sends the bridge still owes a space and which it
+ * gave up on, and /sends/replay puts an abandoned one back in that queue.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -103,9 +103,11 @@ describe("/sends/failed", () => {
 		expect(entry?.op).toBe("message_create");
 		expect(entry?.attempts).toBe(1);
 		expect(entry?.lastError).toContain("timed out");
-		// The payload is internal: the endpoint is a status read, not a replay.
+		// The payload is internal: this is a status read. `id` is the handle
+		// /sends/replay takes.
 		expect(entry?.eventJson).toBeUndefined();
 		expect(entry?.mappingValue).toBeUndefined();
+		expect(typeof entry?.id).toBe("number");
 	});
 
 	// APIS02
@@ -117,5 +119,48 @@ describe("/sends/failed", () => {
 
 		expect(body.pending).toBe(2);
 		expect(body.sends.length).toBe(2);
+	});
+});
+
+/** The /sends/replay response body. */
+type ReplayPayload = { replayed: Record<string, unknown> };
+
+/** Replay one entry by id; `init` overrides the POST for the refusal cases. */
+async function replaySend(
+	query: string,
+	init: RequestInit = { method: "POST" },
+): Promise<Response> {
+	return fetch(`http://127.0.0.1:${server.port}/sends/replay${query}`, init);
+}
+
+describe("/sends/replay", () => {
+	// APIS03
+	test("APIS03: replaying an abandoned entry requeues the same payload", async () => {
+		queue(SPACE_A, "42", true);
+
+		const listed = await getFailedSends(`?spaceDid=${SPACE_A}`);
+		const id = listed.sends[0]?.id;
+		expect(typeof id).toBe("number");
+
+		const res = await replaySend(`?id=${String(id)}`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as ReplayPayload;
+		expect(body.replayed.attempts).toBe(0);
+		expect(body.replayed.terminal).toBe(false);
+		expect(typeof body.replayed.nextRetryAt).toBe("number");
+		// The payload stays out of the response; only the queue state moves.
+		expect(body.replayed.eventJson).toBeUndefined();
+
+		const after = await getFailedSends(`?spaceDid=${SPACE_A}`);
+		expect(after.pending).toBe(1);
+		expect(after.terminal).toBe(0);
+	});
+
+	// APIS04
+	test("APIS04: an unknown id, a missing id and a non-POST are refused", async () => {
+		expect((await replaySend("?id=999")).status).toBe(404);
+		expect((await replaySend("")).status).toBe(400);
+		expect((await replaySend("?id=abc")).status).toBe(400);
+		expect((await replaySend("?id=1", { method: "GET" })).status).toBe(405);
 	});
 });

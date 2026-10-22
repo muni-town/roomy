@@ -1,12 +1,15 @@
 /**
  * Unit tests for send-retry.ts
  *
- * Covers: SR01–SR09 — a live send that throws is queued rather than dropped,
+ * Covers: SR01–SR13 — a live send that throws is queued rather than dropped,
  * the sweep re-offers it unchanged, re-queued sends supersede, capacity-halted
- * spaces wait, exhausted entries go terminal and stay counted, and the drop is
- * logged under a stable signature.
+ * spaces wait, an outage of hours costs one attempt per failed sweep and still
+ * lands, exhausted entries go terminal and stay counted, the drop is logged
+ * under a stable signature, a replay puts an abandoned entry back through the
+ * sweep, and an overlapping sweep is dropped rather than run twice.
  */
 
+import type { Event } from "@roomy-space/sdk";
 import { beforeEach, describe, expect, test, vi } from "bun:test";
 import { BridgeRepository } from "../../db/repository.ts";
 import { resetCapacityGate, setCapacityGate } from "../../roomy/capacity.ts";
@@ -33,6 +36,76 @@ const EDIT_TYPE = "space.roomy.message.editMessage.v0";
 const DELETE_TYPE = "space.roomy.message.deleteMessage.v0";
 /** Past every backoff the sweep can schedule (capped at 30 min). */
 const LATER = 60 * 60 * 1000;
+
+/**
+ * The body api.roomy.space returns when Cloudflare cannot reach it: not JSON,
+ * so the XRPC transport reports it verbatim after the status.
+ */
+const CLOUDFLARE_502 = `XRPC space.roomy.space.sendEvents failed (502): <!DOCTYPE html>
+<html>
+  <head><title>api.roomy.space | 502: Bad Gateway</title></head>
+  <body>
+    <h1>Bad gateway</h1>
+    <p>Error 502</p>
+  </body>
+</html>`;
+
+/** The production sweep tick; the sweep is driven by an advancing clock. */
+const SWEEP_TICK_MS = 60 * 1000;
+
+/**
+ * An appserver that refuses the message create until the clock reaches
+ * `recoverAt`. The sweep's `now` and this clock are the same object, so an
+ * outage runs on the schedule's own time and the test never sleeps.
+ */
+class OutageGateway extends MockRoomyGateway {
+	/** Message creates the gateway refused, live and re-offered alike. */
+	refused = 0;
+
+	constructor(
+		private readonly clock: { now: number },
+		private readonly recoverAt: number,
+	) {
+		super();
+	}
+
+	override async sendEvents(spaceDid: string, events: Event[]): Promise<void> {
+		if (
+			this.clock.now < this.recoverAt &&
+			events.some((event) => event.$type === CREATE_TYPE)
+		) {
+			this.refused++;
+			throw new Error(CLOUDFLARE_502);
+		}
+		await super.sendEvents(spaceDid, events);
+	}
+}
+
+/** A promise and its resolve, for gating a gateway send from a test. */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+	let resolve!: () => void;
+	const promise = new Promise<void>((r) => {
+		resolve = r;
+	});
+	return { promise, resolve };
+}
+
+/** A gateway whose sends hang until `release()`, so two sweeps can overlap. */
+class BlockingGateway extends MockRoomyGateway {
+	/** Sends that reached the gateway, released or not. */
+	sends = 0;
+	readonly #gate = deferred();
+
+	release(): void {
+		this.#gate.resolve();
+	}
+
+	override async sendEvents(spaceDid: string, events: Event[]): Promise<void> {
+		this.sends++;
+		await this.#gate.promise;
+		await super.sendEvents(spaceDid, events);
+	}
+}
 
 /** The create event for SPACE_A, once it has landed. */
 function createMessageEvent(roomy: MockRoomyGateway) {
@@ -321,5 +394,132 @@ describe("send-retry", () => {
 			"message_edit",
 		]);
 		expect(repo.countFailedSends()).toEqual({ pending: 3, terminal: 0 });
+	});
+
+	/**
+	 * Run an outage of `outageMs` against an appserver that refuses the message
+	 * create until it passes, sweeping once per production tick off the test's
+	 * clock. Returns the gateway, so a test can read how many attempts it saw.
+	 */
+	async function runOutage(outageMs: number): Promise<{
+		gateway: OutageGateway;
+		clock: { now: number };
+	}> {
+		const clock = { now: Date.now() };
+		const gateway = new OutageGateway(clock, clock.now + outageMs);
+		await ingestDiscordMessage(makeMessage({ id: MSG_ID }), repo, gateway);
+		const end = clock.now + outageMs;
+		for (; clock.now < end; clock.now += SWEEP_TICK_MS) {
+			await retryQueuedSends(repo, gateway, clock.now);
+		}
+		return { gateway, clock };
+	}
+
+	// SR10
+	test("SR10: a three-hour outage costs one attempt per failed sweep, and the message lands when it ends", async () => {
+		const { gateway, clock } = await runOutage(3 * 60 * 60 * 1000);
+
+		const queued = repo.listFailedSends()[0];
+		expectToBeDefined(queued);
+		expect(queued.terminal).toBe(false);
+		// One failed delivery, one attempt: the row's count is the number of
+		// failures the gateway saw, whichever path recorded them.
+		expect(queued.attempts).toBe(gateway.refused);
+		// Three hours of refusals cost about eleven attempts — an order of
+		// magnitude more than the first waits, far short of the budget.
+		expect(queued.attempts).toBeGreaterThanOrEqual(10);
+		expect(queued.attempts).toBeLessThan(SEND_SWEEP_MAX_ATTEMPTS);
+		expect(repo.countFailedSends()).toEqual({ pending: 1, terminal: 0 });
+
+		// The appserver returns; the entry is delivered by the first sweep after
+		// its backoff elapses.
+		clock.now = Math.max(clock.now, queued.nextRetryAt ?? clock.now);
+		await retryQueuedSends(repo, gateway, clock.now);
+
+		const sent = createMessageEvent(gateway);
+		expectToBeDefined(sent);
+		expect(repo.getRoomyId(SPACE_A, "message", MSG_ID)).toBe(sent.id);
+		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 0 });
+	});
+
+	// SR11
+	test("SR11: a day-long outage leaves the queue intact", async () => {
+		const { gateway, clock } = await runOutage(24 * 60 * 60 * 1000);
+
+		const queued = repo.listFailedSends()[0];
+		expectToBeDefined(queued);
+		expect(queued.terminal).toBe(false);
+		expect(queued.attempts).toBe(gateway.refused);
+		// A full day of refusals spends most of the budget and still fits: the
+		// claim the constant makes is the one this asserts.
+		expect(queued.attempts).toBeGreaterThan(50);
+		expect(repo.countFailedSends()).toEqual({ pending: 1, terminal: 0 });
+
+		clock.now = Math.max(clock.now, queued.nextRetryAt ?? clock.now);
+		await retryQueuedSends(repo, gateway, clock.now);
+
+		expectToBeDefined(createMessageEvent(gateway));
+		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 0 });
+	});
+
+	// SR12
+	test("SR12: a replayed terminal row goes through the sweep and lands", async () => {
+		roomy.failSends({ $type: CREATE_TYPE });
+		await ingestDiscordMessage(makeMessage({ id: MSG_ID }), repo, roomy);
+
+		for (let sweep = 0; sweep < SEND_SWEEP_MAX_ATTEMPTS; sweep++) {
+			const due = repo.listFailedSends()[0];
+			expectToBeDefined(due);
+			if (due.terminal) break;
+			await retryQueuedSends(repo, roomy, (due.nextRetryAt ?? 0) + 1);
+		}
+
+		const abandoned = repo.listFailedSends()[0];
+		expectToBeDefined(abandoned);
+		expect(abandoned.terminal).toBe(true);
+		const droppedEvent = queuedEvents(abandoned.eventJson)[0];
+		expectToBeDefined(droppedEvent);
+
+		// The appserver recovers and an operator replays the row.
+		roomy.failSends({ count: 0 });
+		const replayed = repo.replayFailedSend(abandoned.id, Date.now());
+		expectToBeDefined(replayed);
+		expect(replayed.attempts).toBe(0);
+		expect(replayed.terminal).toBe(false);
+		expect(replayed.eventJson).toBe(abandoned.eventJson);
+		expectToBe(replayed.mappingKind, "message");
+		expect(repo.countFailedSends()).toEqual({ pending: 1, terminal: 0 });
+
+		await retryQueuedSends(repo, roomy, replayed.nextRetryAt ?? 0);
+
+		const sent = createMessageEvent(roomy);
+		expectToBeDefined(sent);
+		// The sweep re-sends the stored event and replays its mapping, so the
+		// replay is delivered exactly as a first delivery would have been.
+		expect(sent.id).toBe(droppedEvent.id);
+		expect(repo.getRoomyId(SPACE_A, "message", MSG_ID)).toBe(droppedEvent.id);
+		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 0 });
+	});
+
+	// SR13
+	test("SR13: a sweep that outlives its tick does not run twice over one entry", async () => {
+		roomy.failSends({ $type: CREATE_TYPE, count: 1 });
+		await ingestDiscordMessage(makeMessage({ id: MSG_ID }), repo, roomy);
+
+		const gateway = new BlockingGateway();
+		const due = repo.listFailedSends()[0];
+		expectToBeDefined(due);
+		const at = (due.nextRetryAt ?? 0) + 1;
+
+		// The tick that fires while the first sweep is still waiting on its
+		// re-offer must not re-offer the same entry.
+		const first = retryQueuedSends(repo, gateway, at);
+		const second = retryQueuedSends(repo, gateway, at);
+		gateway.release();
+		await Promise.all([first, second]);
+
+		expect(gateway.sends).toBe(1);
+		expectToBeDefined(createMessageEvent(gateway));
+		expect(repo.countFailedSends()).toEqual({ pending: 0, terminal: 0 });
 	});
 });
