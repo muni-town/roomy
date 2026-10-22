@@ -28,7 +28,7 @@ import type {
 } from "../invalidation/types.ts";
 import type { StreamDid, UserDid, Ulid } from "@roomy-space/sdk";
 
-import { closeDb, openDb } from "../db/db.ts";
+import { closeDb, openDb, openReadStateDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
 import { _setTestFetchBlockRecords, type BlockRecord } from "../materialization/blocks.ts";
 import {
@@ -36,6 +36,7 @@ import {
   _resetBlockCaches,
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
+import { setFlagGlobal } from "../queries/featureFlags.ts";
 import { SyncManager, type StreamEventSource, type SyncDbAccess } from "./handler.ts";
 
 const SPACE = "did:web:space.example" as StreamDid;
@@ -317,10 +318,12 @@ function diffMessage(socket: MockSocket, index = 0): Record<string, unknown> {
   return ops[0]!.message;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   closeDb();
   openDb({ path: ":memory:" });
   _resetBlockCaches();
+  // The block feature is off by default; these tests are about its enforcement.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   // Hermetic: no test may reach a real PDS. The only fetch these tests trigger
   // is the one `refreshBlockSet` runs under `seedBlocks`; every other call
   // resolves to the empty stub.

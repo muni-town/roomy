@@ -30,6 +30,7 @@ import {
   _resetBlockCaches,
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
+import { setFlagGlobal } from "../queries/featureFlags.ts";
 import { getMessageHandler } from "./space.roomy.message.getMessage.ts";
 import { getMessagesHandler } from "./space.roomy.room.getMessages.ts";
 
@@ -52,6 +53,8 @@ let imageEntity: string;
 beforeEach(async () => {
   closeDb();
   const db = openDb({ path: ":memory:" });
+  // The block feature is off by default; these tests are about its enforcement.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   _resetBlockCaches();
   // Hermetic: no test may reach a real PDS.
   _setTestFetchBlockRecords(async () => []);

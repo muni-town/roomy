@@ -22,6 +22,7 @@ import {
   blocks,
   hiddenBy,
 } from "../queries/userBlocks.ts";
+import { setFlagGlobal } from "../queries/featureFlags.ts";
 import { refreshBlocksHandler } from "./space.roomy.user.refreshBlocks.ts";
 
 const ALICE = UserDid.assert("did:plc:alice");
@@ -30,9 +31,11 @@ const BOB = UserDid.assert("did:plc:bob");
 /** The blocks the stubbed PDS reports for each account. */
 let repos: Map<string, BlockRecord[]>;
 
-beforeEach(() => {
+beforeEach(async () => {
   closeDb();
   openDb({ path: ":memory:" });
+  // The block feature is off by default; these tests are about its enforcement.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   _resetBlockCaches();
   repos = new Map();
   _setTestFetchBlockRecords(async (did) => repos.get(did) ?? []);

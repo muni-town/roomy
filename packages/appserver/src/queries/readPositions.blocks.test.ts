@@ -28,6 +28,7 @@ import {
   hiddenBy,
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
+import { setFlagGlobal } from "../queries/featureFlags.ts";
 import { updateSeenHandler } from "../handlers/space.roomy.room.updateSeen.ts";
 
 const SPACE = StreamDid.assert("did:web:space.example");
@@ -52,6 +53,8 @@ beforeEach(async () => {
   closeDb();
   const db = openDb({ path: ":memory:" });
   _resetBlockCaches();
+  // The block feature is off by default; these tests are about its enforcement.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   _setTestFetchBlockRecords(async () => []);
 
   roomId = newUlid();

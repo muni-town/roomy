@@ -34,6 +34,7 @@ import {
   _resetBlockCaches,
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
+import { setFlagGlobal } from "../queries/featureFlags.ts";
 import { setUserDefault } from "../queries/pushPreferences.ts";
 import { upsertSubscription } from "../queries/pushSubscriptions.ts";
 import { evaluatePush } from "./evaluate.ts";
@@ -118,6 +119,8 @@ beforeEach(async () => {
   closeDb();
   openDb({ path: ":memory:" });
   _resetBlockCaches();
+  // The block feature is off by default; these tests are about its enforcement.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   _resetPushDispatcher();
   _setTestFetchBlockRecords(async () => []);
 

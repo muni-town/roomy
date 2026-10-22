@@ -21,6 +21,7 @@ import {
   hiddenBy,
   refreshBlockSet,
 } from "./userBlocks.ts";
+import { setFlagGlobal } from "./featureFlags.ts";
 import { resolveThreadsByIds } from "./userActiveThreads.ts";
 import { readRoomActivityProjection } from "./roomActivityProjection.ts";
 import { getMetadataHandler } from "../handlers/space.roomy.space.getMetadata.ts";
@@ -43,6 +44,8 @@ const VISIBLE_AVATAR = "https://cdn.example/visible-avatar.png";
 beforeEach(async () => {
   closeDb();
   openDb({ path: ":memory:" });
+  // The block feature is off by default; these tests are about its enforcement.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   _resetBlockCaches();
   _resetProfileStoreCache();
   // Hermetic: no test may reach a real PDS.

@@ -28,6 +28,7 @@ import {
   replaceBlockRows,
 } from "./userBlocks.ts";
 import type { BlockRecord } from "../materialization/blocks.ts";
+import { setFlagGlobal } from "./featureFlags.ts";
 
 const ALICE = UserDid.assert("did:plc:alice");
 const BOB = UserDid.assert("did:plc:bob");
@@ -41,6 +42,9 @@ beforeEach(async () => {
   closeDb();
   openDb({ path: ":memory:" });
   _resetBlockCaches();
+  // The module's own behaviour is what these tests are about, so the flag is on
+  // here; the gate's describe turns it off.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   _setTestFetchBlockRecords(null);
   // The DID-document cache is process-wide and long-lived, so a test that stubs
   // a DID's document would otherwise pass or fail on whether an earlier test had
@@ -560,5 +564,67 @@ describe("hiddenBy", () => {
     // One table, two directions: A's written rows answer `blockedBy(B)`.
     expect(await storedRows(ALICE)).toEqual([`${BOB}:roomy`]);
     expect([...(await hiddenBy(BOB))]).toEqual([ALICE]);
+  });
+});
+
+// ─── The feature flag gate ────────────────────────────────────────────────
+
+describe("the user-blocks flag gate", () => {
+  /** Turn the flag off for the test, with no memo left from a previous answer. */
+  async function turnBlocksOff(): Promise<void> {
+    await setFlagGlobal(openReadStateDb(), "user-blocks", false);
+    _resetBlockCaches();
+  }
+
+  /**
+   * The refresh is the egress: it reads the account's own PDS. Counting the
+   * fetcher is the point — an empty return value alone would also be observed
+   * if the read merely found no rows.
+   */
+  test("with the flag off, neither a read nor an authenticated request fetches", async () => {
+    let calls = 0;
+    _setTestFetchBlockRecords(async () => {
+      calls++;
+      return [{ subject: BOB, source: "roomy", createdAt: null }];
+    });
+    await turnBlocksOff();
+
+    expect([...(await hiddenBy(ALICE))]).toEqual([]);
+    expect([...(await blocks(ALICE))]).toEqual([]);
+    expect([...(await blockedBy(ALICE))]).toEqual([]);
+
+    warmBlockSet(ALICE);
+    await Promise.all(_blockRefreshesInFlight());
+
+    expect(calls).toBe(0);
+    expect(_blockRefreshesInFlight()).toEqual([]);
+  });
+
+  test("with the flag off, a refresh does not fetch either", async () => {
+    let calls = 0;
+    _setTestFetchBlockRecords(async () => {
+      calls++;
+      return [{ subject: BOB, source: "roomy", createdAt: null }];
+    });
+    await turnBlocksOff();
+
+    expect(await refreshBlockSet(ALICE)).toBe(false);
+    expect(calls).toBe(0);
+    expect(_blockRefreshesInFlight()).toEqual([]);
+  });
+
+  /** The other half of the gate: on, the refresh is unchanged. */
+  test("with the flag on, the authenticated request fetches exactly as before", async () => {
+    let calls = 0;
+    _setTestFetchBlockRecords(async () => {
+      calls++;
+      return [{ subject: BOB, source: "roomy", createdAt: null }];
+    });
+
+    warmBlockSet(ALICE);
+    await Promise.all(_blockRefreshesInFlight());
+
+    expect(calls).toBe(1);
+    expect([...(await hiddenBy(ALICE))]).toEqual([BOB]);
   });
 });

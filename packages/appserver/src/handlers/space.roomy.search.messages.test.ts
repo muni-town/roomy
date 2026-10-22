@@ -12,12 +12,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { StreamDid, UserDid } from "@roomy-space/sdk";
 
-import { closeDb, openDb, openGlobalDb, openSpaceDb } from "../db/db.ts";
+import { closeDb, openDb, openGlobalDb, openReadStateDb, openSpaceDb } from "../db/db.ts";
 import { _setTestFetchBlockRecords, type BlockRecord } from "../materialization/blocks.ts";
 import {
   _resetBlockCaches,
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
+import { setFlagGlobal } from "../queries/featureFlags.ts";
 import {
   _resetQdrantClient,
   _setQdrantClientForTest,
@@ -85,6 +86,8 @@ class FakeQdrant implements QdrantClientLike {
 beforeEach(async () => {
   closeDb();
   openDb({ path: ":memory:" });
+  // The block feature is off by default; these tests are about its enforcement.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   _resetBlockCaches();
   // Hermetic: no test may reach a real PDS.
   _setTestFetchBlockRecords(async () => []);

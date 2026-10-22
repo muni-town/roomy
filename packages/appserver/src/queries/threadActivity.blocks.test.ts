@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { StreamDid, UserDid } from "@roomy-space/sdk";
 
-import { closeDb, openDb, openGlobalDb, openSpaceDb } from "../db/db.ts";
+import { closeDb, openDb, openGlobalDb, openReadStateDb, openSpaceDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
 import { _setTestFetchBlockRecords, type BlockRecord } from "../materialization/blocks.ts";
 import { _resetProfileStoreCache } from "./profileStore.ts";
@@ -20,6 +20,7 @@ import {
   hiddenBy,
   refreshBlockSet,
 } from "./userBlocks.ts";
+import { setFlagGlobal } from "./featureFlags.ts";
 import { fetchRoomActivity, listThreadActivity, type ThreadActivity } from "./threadActivity.ts";
 import {
   readRoomActivityProjection,
@@ -47,6 +48,8 @@ const VISIBLE_AVATAR = "https://cdn.example/visible-avatar.png";
 beforeEach(async () => {
   closeDb();
   openDb({ path: ":memory:" });
+  // The block feature is off by default; these tests are about its enforcement.
+  await setFlagGlobal(openReadStateDb(), "user-blocks", true);
   _resetBlockCaches();
   _resetProfileStoreCache();
   // Hermetic: no test may reach a real PDS.

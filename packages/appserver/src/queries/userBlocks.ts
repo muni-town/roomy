@@ -40,6 +40,16 @@
  * request rather than at a fixed deadline. A block written *in* Roomy is exact,
  * because the client's `space.roomy.user.refreshBlocks` call refreshes the
  * writer in the same breath as the write.
+ *
+ * ## The feature flag
+ *
+ * The whole module is behind `user-blocks`, which is off by default. Each
+ * viewer's answer comes from the read-state DB this module already opens, so
+ * the gate needs no plumbing of its own. With the flag off for a DID the answer
+ * is the empty set and no refresh is started: the module is inert, not merely
+ * unfiltered. The gate sits at the entry points — {@link blocks},
+ * {@link blockedBy}, {@link hiddenBy}, {@link warmBlockSet} and
+ * {@link refreshBlockSet} — so no caller reaches the network around it.
  */
 
 import type { UserDid } from "@roomy-space/sdk";
@@ -50,6 +60,7 @@ import {
 import { tryOpenReadStateDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
 import { log } from "../log.ts";
+import { getEnabledFlagsForUser } from "./featureFlags.ts";
 
 /**
  * How long a refreshed block set is trusted for: the window a read serves the
@@ -104,11 +115,53 @@ const writtenCache = new Map<string, CacheEntry>();
  */
 const reverseCache = new Map<string, CacheEntry>();
 
+// ─── The feature flag ──────────────────────────────────────────────────────
+
+/** The flag that gates this whole module. */
+const USER_BLOCKS_FLAG = "user-blocks";
+
+interface FlagEntry {
+  enabled: boolean;
+  checkedAt: number;
+}
+
+/**
+ * The flag answer per DID, on the same window as the sets it gates. The gate
+ * sits on the read path, so an unmemoised answer would put a DB query behind
+ * every read the module serves.
+ */
+const flagCache = new Map<string, FlagEntry>();
+
+/**
+ * Whether the block feature exists for `userDid`.
+ *
+ * One indexed query per DID per window, because the flag lives in the
+ * read-state DB this module already opens. A read that fails is NOT memoised:
+ * the caller then sees the failure the way it sees a failure reading the sets
+ * themselves, rather than being told the feature is off while the DB is
+ * unreachable.
+ */
+async function blocksEnabled(
+  readStateDb: DbLike,
+  userDid: string,
+): Promise<boolean> {
+  const entry = flagCache.get(userDid);
+  if (entry && Date.now() - entry.checkedAt < blockCacheTtlMs()) {
+    return entry.enabled;
+  }
+
+  const flags = await getEnabledFlagsForUser(readStateDb, userDid);
+  const enabled = flags.includes(USER_BLOCKS_FLAG);
+  flagCache.set(userDid, { enabled, checkedAt: Date.now() });
+  return enabled;
+}
+
 // ─── Test helpers ─────────────────────────────────────────────────────────
 
 /** Clear every memo. Mirrors `_resetProfileStoreCache`. */
 export function _resetBlockCaches(): void {
   writtenCache.clear();
+  flagCache.clear();
   reverseCache.clear();
   inflightFetches.clear();
 }
@@ -119,22 +172,27 @@ export function _blockRefreshesInFlight(): Promise<void>[] {
 }
 
 // ─── Reads ─────────────────────────────────────────────────────────────────
-
 /**
  * The blocks `userDid` wrote into their own repos.
  *
  * The memoised set when it is fresh, else the indexed rows, else the empty set.
  * Never fails the caller: throwing here would fail the message list the set
  * exists to filter.
+ *
+ * Behind `user-blocks`: with the flag off for this user the answer is the empty
+ * set, and no block row is read.
  */
 export async function blocks(userDid: string): Promise<ReadonlySet<string>> {
+  const readStateDb = tryOpenReadStateDb();
+  if (!readStateDb) return writtenCache.get(userDid)?.dids ?? NO_DIDS;
+  // Ahead of the memo, not behind it: a set resolved while the flag was on must
+  // not be served once it is off.
+  if (!(await blocksEnabled(readStateDb, userDid))) return NO_DIDS;
+
   const cached = writtenCache.get(userDid);
   if (cached && Date.now() - cached.readAt < blockCacheTtlMs()) {
     return cached.dids;
   }
-
-  const readStateDb = tryOpenReadStateDb();
-  if (!readStateDb) return cached?.dids ?? NO_DIDS;
 
   const rows = await readStateDb
     .query("select blocked_did from user_blocks where user_did = ?")
@@ -154,15 +212,17 @@ export async function blocks(userDid: string): Promise<ReadonlySet<string>> {
  * A plain indexed read (`idx_user_blocks_blocked`): the reverse fact is *stored*
  * here once the blocker's repo has been read, so answering needs no network at
  * all. What populates those rows is {@link warmBlockSet}, run for the blocker.
+ *
+ * Behind the same flag as {@link blocks}: with it off, the empty set.
  */
 export async function blockedBy(userDid: string): Promise<ReadonlySet<string>> {
+  const readStateDb = tryOpenReadStateDb();
+  if (!readStateDb) return reverseCache.get(userDid)?.dids ?? NO_DIDS;
+  if (!(await blocksEnabled(readStateDb, userDid))) return NO_DIDS;
   const cached = reverseCache.get(userDid);
   if (cached && Date.now() - cached.readAt < blockCacheTtlMs()) {
     return cached.dids;
   }
-
-  const readStateDb = tryOpenReadStateDb();
-  if (!readStateDb) return cached?.dids ?? NO_DIDS;
 
   const rows = await readStateDb
     .query("select user_did from user_blocks where blocked_did = ?")
@@ -182,6 +242,9 @@ export async function blockedBy(userDid: string): Promise<ReadonlySet<string>> {
  * `viewerDid === null` is an anonymous caller, who hides nobody and is hidden
  * from nobody — the empty set, with no DB read and no fetch.
  *
+ * With `user-blocks` off for the viewer, also the empty set: neither half can
+ * be answered while the feature is off.
+ *
  * Both halves are answered from `user_blocks` alone, so this is as fresh as the
  * last fetch of the DID each half belongs to and never a network call: the
  * viewer's own set is refreshed by the viewer ({@link warmBlockSet}), a
@@ -191,6 +254,11 @@ export async function hiddenBy(
   viewerDid: string | null,
 ): Promise<ReadonlySet<string>> {
   if (viewerDid === null) return NO_DIDS;
+
+  const readStateDb = tryOpenReadStateDb();
+  if (readStateDb && !(await blocksEnabled(readStateDb, viewerDid))) {
+    return NO_DIDS;
+  }
 
   const [own, reverse] = await Promise.all([
     blocks(viewerDid),
@@ -245,6 +313,10 @@ async function readFetchStamp(
  * when the memos derived from the previous ones go: this user's own set here,
  * the subjects' reverse sets inside `fetchAndStore`. A refresh that decided not
  * to fetch leaves both alone, so an ordinary request costs no DB re-read.
+ *
+ * Nothing is fetched with the flag off. The flag answer is memoised, but a cold
+ * one is a DB read, so it is resolved inside the chain the caller never awaits
+ * rather than in front of it.
  */
 export function warmBlockSet(userDid: string): void {
   if (inflightFetches.has(userDid)) return;
@@ -252,6 +324,7 @@ export function warmBlockSet(userDid: string): void {
   if (!readStateDb) return;
 
   const refresh = (async () => {
+    if (!(await blocksEnabled(readStateDb, userDid))) return;
     const stamp = await readFetchStamp(readStateDb, userDid);
     const age = Date.now() - stamp.fetchedAt;
     const due =
@@ -403,10 +476,14 @@ export async function recordFetchError(
  * author's content for up to a minute. Awaited here because the caller is the
  * procedure whose whole purpose is to close that window; the client treats the
  * call itself as fire-and-forget.
+ *
+ * With the flag off this returns false without fetching, so a caller cannot
+ * re-arm the network work the gate exists to stop.
  */
 export async function refreshBlockSet(userDid: UserDid): Promise<boolean> {
   const readStateDb = tryOpenReadStateDb();
   if (!readStateDb) return false;
+  if (!(await blocksEnabled(readStateDb, userDid))) return false;
   writtenCache.delete(userDid);
   reverseCache.delete(userDid);
   return fetchAndStore(userDid, readStateDb);
