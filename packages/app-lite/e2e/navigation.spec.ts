@@ -8,6 +8,7 @@
 
 import { composer, expect, test, waitForAuthenticated } from "./spec-helpers.ts";
 import {
+  APP_LITE_ORIGIN,
   SEED_ROOM_ID,
   SEED_ROOM_NAME,
   SEED_ROOM_PATH,
@@ -51,6 +52,16 @@ test.describe("space list and room navigation", () => {
 
     // The composer only renders for a caller with write access to the room.
     await expect(composer(page)).toBeVisible();
+  });
+
+  test("a /home start URL lands on the feed", async ({ page }) => {
+    // A home-screen icon installed while the manifest declared
+    // `start_url: "/home"` still opens that path. Without a route of its own
+    // the segment matched `[space]` and rendered `No space at "home"`.
+    await page.goto("/home");
+
+    await expect(page).toHaveURL(`${APP_LITE_ORIGIN}/`);
+    await expect(page.getByText('No space at "home"')).toHaveCount(0);
   });
 
   test("a deep link to an unknown space does not render a space shell", async ({
