@@ -1,7 +1,15 @@
 # Server-Rendered Metadata — Design Plan
 
 **Date:** 2026-10-14
-**Status:** Planned. Not started.
+**Status:** M1 + M1b (the server-side read path for `[space]`, `[space]/[room]`,
+`user/[user]` and `join/[[spaceRef]]`) merged as `#456` and reverted by PR #495:
+a `+*.server.ts` load in an `adapter-static` build makes every navigation fetch
+`__data.json`, the static host answers with the HTML shell, and the navigation
+never completes. The loads land with the server build. M2 onward is not started:
+nothing here has been deployed as a server build.
+**Next:** M2 (§7) — a server build that runs and is deployed. M1 is not
+observable in production until M2 exists, so the two ship as one delivery; M3a
+and M3 follow, M4 and M5 alongside.
 **Scope:** Server-rendered `<head>` for public spaces and their rooms (short
 term), plus the groundwork for an anonymous read-only view (medium term).
 "SSR everywhere" is out of scope.

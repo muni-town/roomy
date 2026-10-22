@@ -1,7 +1,14 @@
 # Merge `docs` + `appserver-admin` into one interactive docs site
 
 **Date:** 2026-09-09
-**Status:** Draft
+**Status:** Phases 0–3 shipped. `packages/appserver-admin` was renamed to
+`packages/docs` and the old package deleted; the catalogue is generated from
+the appserver router (`src/lib/endpoints/nsids.generated.json`) and CI checks it
+against the router (`check:registry`); the playground and the `/concepts`,
+`/endpoints`, `/dashboard`, `/quickstart` routes are in place. Phase 4 is
+partly done (dark mode and the per-endpoint 403 hints are present; a global
+search index is not) and the deploy half is live (`Dockerfile.docs`, deployed at
+docs.roomy.space). No phase needs a dispatch.
 **Related:** `appserver-architecture.md`, `client-migration-plan.md`
 **Packages:** `packages/docs` (deleted), `packages/appserver-admin` (renamed → `packages/docs`)
 

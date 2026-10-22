@@ -2,9 +2,11 @@
 
 **Date:** 2026-09-21
 **Status:** R1 merged (`room_access` projection); R2 merged (`#roomActivityDiff`);
-R3 merged (`room_activity` projection); R6 merged (profile fetch off the read path);
-R7 merged (board scan reduces in SQL)
-**Task:** TASK-173 (R1), TASK-174 (R2), TASK-175 (R3), TASK-199 (R6), TASK-254 (R7)
+R3 merged (`room_activity` projection); R5 merged (`#252`, the scan stops
+shipping message bodies it throws away); R6 merged (profile fetch off the read
+path); R7 merged (board scan reduces in SQL). R4 (embed/reaction pre-join) is
+deferred, not merged — its batches measured under 0.5 ms each at 20k messages.
+**Task:** TASK-173 (R1), TASK-174 (R2), TASK-175 (R3), TASK-194 (R5), TASK-199 (R6), TASK-254 (R7)
 
 ## Summary
 

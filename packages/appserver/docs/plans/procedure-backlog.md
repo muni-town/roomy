@@ -1,7 +1,11 @@
 # Appserver XRPC Procedure Backlog
 
 **Date:** 2026-05-20
-**Status:** In progress — `createSpace`, `joinSpace`, `leaveSpace` implemented; reaction `myReactionId` pending
+**Status:** Shipped. `createSpace`, `joinSpace` and `leaveSpace` are XRPC
+procedures, and the "Message DTO: surface viewer reaction identity" item
+(§Related open items) also landed — `selectMessages` carries `myReactionId`
+per reaction and app-lite's `MessageReactions` wires toggle-off from it. The
+§"Related open items" calendar queries remain unimplemented.
 **Related:** `xrpc-interface-spec.md`, `sendEvents-procedure.md`, `../../../../docs/plans/client-migration-plan.md`
 
 ---
@@ -202,4 +206,5 @@ DIDs.
 - 2026-05-20 — Implemented `createSpace`, `joinSpace`, `leaveSpace` as XRPC
   procedures. SDK schemas added under `src/schemas/procedures/`; appserver
   handlers added under `src/handlers/`; routes registered in `src/index.ts`.
-  Remaining: reaction `myReactionId` DTO change.
+  Remaining: none — the reaction `myReactionId` DTO change landed (see §Related
+  open items).

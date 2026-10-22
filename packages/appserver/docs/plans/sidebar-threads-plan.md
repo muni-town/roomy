@@ -1,7 +1,13 @@
 # Sidebar Threads Plan
 
 **Date:** 2026-06-01
-**Status:** Plan
+**Status:** Shipped as designed. `user_thread_activity` exists in the
+readstate DB and is written from the materialisation hooks; the sidebar reads
+the up-to-8 active threads from `space.roomy.space.getMetadata`'s
+`activeThreads` (`queries/userActiveThreads.ts`, `MAX_ACTIVE_THREADS = 8`,
+72 h window), and app-lite merges them into the channel tree
+(`components/sidebar/SpaceSidebar.svelte`). The "recently interacted" rule is
+the plan's send-message-or-react hook.
 **Parent doc:** `appserver-architecture.md`
 
 ## Problem

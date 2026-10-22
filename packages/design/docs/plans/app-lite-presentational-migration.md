@@ -1,8 +1,10 @@
 # Presentational-UI migration: app-lite → @roomy/design
 
 **Date:** 2026-09-25 (phase 2 outcome added 2026-10-13; the `MessageContent` +
-`BlocksRenderer` move added 2026-10-14)
-**Status:** Phase 2 complete — the remaining candidates are wrapped data accessors
+`BlocksRenderer` move merged 2026-10-20)
+**Status:** Phase 2 keystone shipped — `MessageContent` + `BlocksRenderer` moved
+into `@roomy/design` (PR #453). The thin-wrapper batch is PR #462, open for
+review, not for a worker. The phase-2 triage below names what remains.
 **Umbrella:** "refactor presentational UI code from app-lite to `design` and set up
 storybook stories" (Meri, `#coordination`, 2026-09-25T11:52Z)
 

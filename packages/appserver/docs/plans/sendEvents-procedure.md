@@ -1,7 +1,10 @@
 # Plan: `space.roomy.space.sendEvents` XRPC Procedure
 
 **Date:** 2026-05-19
-**Status:** Plan
+**Status:** Shipped. `space.roomy.space.sendEvents` is registered in the
+appserver (`handlers/space.roomy.space.sendEvents.ts`); it is the write proxy
+all app-lite mutations go through. §Future Work lists the parts that remain
+unbuilt.
 **Prerequisite:** Leaf `userOverride` support (merged 2026-05-19)
 
 ## Overview

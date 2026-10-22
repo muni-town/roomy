@@ -1,19 +1,18 @@
 # Persistent Client Caches — Plan
 
 **Date:** 2026-09-29
-**Status:** P1 and P2 shipped, with two revisions since. P1 (the
-`CachePersister` seam) merged as #333 (`c2ad8a1e`); P2 (the real storages,
-restore-on-load, and the §5.3 restore validator) merged as #343 (`ba73c0db`).
-§2–§5 are the design those phases implement, as revised by §5.1: the
-persisted-snapshot age cap is gone (a snapshot is restored however old it is)
-and a failed refetch is reported as stale data — a banner and a grey dot —
-rather than as an error state. §6 is a **later, unconfirmed, unscheduled**
-phase recorded so the proposal and the objections to it are not lost — it is
-not a commitment.
-**Next:** P3 — `TauriStorePersister` (the storage plugin, its capability, and
-`CONFIG`-driven selection in the shell; also the iOS default per §4.1). Not
-implemented and not dispatched; no open task tracks it. P3 is the last phase in
-§7, and the §6 log stays unscheduled.
+**Status:** P1–P3 shipped. P1 (the `CachePersister` seam) merged as #333
+(`c2ad8a1e`); P2 (the real storages, restore-on-load, and the §5.3 restore
+validator) merged as #343 (`ba73c0db`); P3 (`TauriStorePersister` — the
+`tauri-plugin-store` adaptor, its capability, and `CONFIG`-driven selection in
+the shell) merged as #444 (`d093777d`). §2–§5 are the design those phases
+implement, as revised by §5.1: the persisted-snapshot age cap is gone (a
+snapshot is restored however old it is) and a failed refetch is reported as
+stale data — a banner and a grey dot — rather than as an error state. §6 is a
+**later, unconfirmed, unscheduled** phase recorded so the proposal and the
+objections to it are not lost — it is not a commitment.
+**Next:** nothing dispatchable — P3 was the last phase in §7 and has shipped.
+The §6 log stays unscheduled. This plan can be closed.
 **Packages:** `packages/sdk`, `packages/app-lite`
 
 ## Goal
@@ -679,7 +678,7 @@ its own; none of this is dispatched from this document.
 | P1 | The `CachePersister` interface, the in-memory impl, and the key-set / version / account-scope rules in the SDK. No storage yet; the app is unchanged. | `next` | Merged #333 (`c2ad8a1e`) |
 | P2 | `IndexedDbPersister` + `LocalStoragePersister`, restore-on-load and invalidate-on-restore in `client.ts`, `gcTime` raised for the persisted subset, `logout()` clears — **and the restore validator of §5.3**. The validator is part of this phase, not a follow-up: P2 without it restores rows nothing has checked. | P1 | Merged #343 (`ba73c0db`) |
 | P2.1 | No age limit on a restore (`gcTime` is `Infinity`), and a failed refetch reported as stale data — the views guarded on `isLoadingError`, the banner and the sidebar dot — instead of an error state (§5.1, §5.1b). | P2 | Shipped with the revisions above |
-| P3 | `TauriStorePersister`: the storage plugin, its capability, and `CONFIG`-driven selection in the shell. Also the iOS default, per §4.1. | P2 | Not started — dispatchable |
+| P3 | `TauriStorePersister`: the storage plugin, its capability, and `CONFIG`-driven selection in the shell. Also the iOS default, per §4.1. | P2 | Merged #444 (`d093777d`) |
 | — | The log (§6) | not scheduled | — |
 
 ---

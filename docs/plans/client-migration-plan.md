@@ -1,7 +1,18 @@
 # app-lite: New Thin-Client Frontend
 
 **Date:** 2026-05-18
-**Status:** Approved (Phase 0 only) — Phases 1–6 remain draft
+**Status:** Phases 1–6 shipped. `packages/app-lite` is the primary client and
+is deployed as a static build (`svelte.config.js` uses `@sveltejs/adapter-static`;
+`Dockerfile.app-lite` + `Caddyfile`) at `roomy.space`. Every phase-6 item is in
+place: `svelte:boundary` error handling (`design/.../StateSuspense.svelte`),
+responsive layout (the 640px sidebar/navbar breakpoints), dark mode
+(`app.html`), the generated OAuth client metadata (`scripts/build-prod.sh`,
+`scripts/check-oauth-scopes.mjs`), and the E2E suite (31 specs under
+`packages/app-lite/e2e/`, run by the `test-app-lite-e2e` CI job). Phase 0's two
+unchecked boxes are moot: they describe moving components into `@roomy/design`
+and updating `packages/app`'s imports, and `packages/app` was deleted.
+**Next:** nothing dispatchable — the remaining `[~]` items (channel board view,
+calendar parity, `EditRoomModal`) are optional parity work, not open phases.
 **Related:** `appserver-architecture.md`, `xrpc-interface-spec.md`, `livequery-inventory.md`
 **Reference implementation:** `packages/playground` (now `packages/appserver-admin`)
 

@@ -1,7 +1,21 @@
 # Arbiter Integration (leaf-0.4)
 
 **Date:** 2026-08-13
-**Status:** In progress — Phase 0 implemented (appserver signing key + self-signed serviceAuth); Phase 1 implemented (new spaces provisioned via the arbiter); Phases 2–4 not yet implemented
+**Status:** Phases 0, 1, 2 and 4a shipped. Phase 0 (appserver signing key +
+self-signed serviceAuth) and Phase 1 (new spaces provisioned as real ATProto
+accounts via the arbiter) are implemented. Phase 2's policy is **live**: every
+stewarded space's `town.muni.arbiter.config/self` names the layer at
+`at://did:plc:cyqufxsezk33hqulcilckna6/town.muni.arbiter.policy/default`, whose
+source and tests are in this package (`policy/default.rego`), and it asks the
+appserver's `space.roomy.space.getUserAccess` — **not** the
+`space.roomy.space.isAdmin` endpoint §Phase 2 proposed, which was never built
+and is not needed. Phase 4a's migration ran: stewarded space DIDs' `#atproto_pds`
+points at the Roomy PDS (`scripts/migrate-spaces-to-pds.ts`, with
+`scripts/migrate-arbiter-configs.ts` bootstrapping the config record).
+**Next:** Phase 3 (proxying appserver actions under a space account) — its only
+piece, the `proxy()` helper (`src/arbiter/client.ts`), already exists and
+provisioning uses it, so the phase is deferred rather than dispatchable. Phase 4b
+is rejected in the plan; 4a's runbook is done.
 
 ## Purpose
 
@@ -185,6 +199,15 @@ Install, via `resetPolicy` (as recovery admin), a root Rego policy that:
 - Allows any Roomy space admin, determined by an appserver XRPC call through
   the `xrpc` host function.
 
+**Shipped, with one deviation from the sketch below.** The policy lives in
+`policy/default.rego` and asks `space.roomy.space.getUserAccess` (already
+published, and the AppView is authoritative for adminship), not the
+`space.roomy.space.isAdmin` endpoint this section proposed — that endpoint was
+never built. The policy also reads the space's `space.roomy.service/self`
+record to find the hosting appserver, and treats the `recovery/self` DID as an
+admin, neither of which the sketch below has. The Rego that shipped is the
+authority; the sketch is kept only as the decision record.
+
 Because `spaceId == space DID`, the policy can query the appserver with
 `spaceId = input.arbiterDid` and the caller DID:
 
@@ -215,7 +238,14 @@ is_admin(caller) := resp if {
 default is_admin(_) := {"isAdmin": false}
 ```
 
-### New appserver XRPC endpoint: `space.roomy.space.isAdmin`
+### Not built: `space.roomy.space.isAdmin`
+
+This endpoint was never needed: the shipped policy reuses the published
+`space.roomy.space.getUserAccess`. The design below is kept only so a future
+reader does not re-propose it — `getUserAccess` already answers the same
+question for the same caller identity.
+
+The original sketch:
 
 There is no dedicated endpoint today. Add one so the policy can make a single
 cheap check (it is not secret — `getMetadata` already exposes `isAdmin`):

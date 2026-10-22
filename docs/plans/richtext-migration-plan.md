@@ -1,7 +1,15 @@
 # Migration Plan: Rich Text → Blocks + Facets
 
 **Date:** 2026-07-27
-**Status:** Draft for team review
+**Status:** Phases 1–5 shipped. The `space.roomy.richtext.*` lexicons and the
+SDK converters (`packages/sdk/src/richtext/convert.ts`) are the foundation;
+app-lite authors and renders blocks + facets (`mutations/message.ts`,
+`MessageContent`), the appserver branches on the mimeType throughout
+(`db/content.ts`), and the Discord bridge resolves mentions into blocks +
+facets (`services/mention-resolver.ts`). Phase 6's coexistence half is in
+place; its optional backfill and the legacy-path removal are not started, and
+the `space.roomy.extension.mentions.v0` sidecar is still written
+(`sdk/src/operations/message.ts`). Phase 7 verification is continuous.
 **Depends on:** `docs/rich-text-representation-research.md` (the research document establishing Option D — Leaflet-style blocks + facets)
 
 ---

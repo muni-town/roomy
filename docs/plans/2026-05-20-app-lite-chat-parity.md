@@ -1,5 +1,7 @@
 # app-lite Chat Parity Implementation Plan
 
+**Status:** All 15 tasks shipped, including the gated Task 8 (reaction removal). This document is a record of what shipped, not a proposal.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans (or superpowers:subagent-driven-development) to implement this plan task-by-task.
 
 **Goal:** Bring `packages/app-lite`'s chat message list and chat input area to full visual + feature parity with `packages/app`, by wiring the already-extracted `@roomy/design` shells to app-lite's TanStack Query / `sendEvents` data layer.
@@ -16,7 +18,7 @@
 
 1. **Message DTO is flatter than app's.** The appserver `getMessages` DTO (`packages/sdk/src/schemas/queries/_message.ts`) is: `{ id, content, authorDid, authorName, authorAvatar, timestamp, replyTo: string|null, forwardedFrom, reactions: {emoji,dids[]}[], media: {url,type,alt}[], tags: string[] }`. Notably it has **no `authorHandle`**, **no per-reaction id**, `replyTo` is a single string (not an array), and `media` is **already URL-resolved** (display is easy; upload is the work).
 
-2. **Reaction removal is backend-blocked.** `removeReaction.v0` requires a `reactionId`, but the DTO collapses reactions to `{emoji, dids[]}` with no id. The appserver-side fix (surface a viewer-scoped `myReactionId`) is **out of scope for this plan** — it is tracked in `packages/appserver/docs/plans/procedure-backlog.md` ("Message DTO: surface viewer reaction identity") and will land with the next appserver wave. Until then app-lite ships reaction *add* only; **Task 8** wires *toggle-off* and is gated on that backlog item.
+2. **Reaction removal landed.** The DTO now carries a viewer-scoped `myReactionId` per reaction (`packages/sdk/src/schemas/queries/_message.ts`), and `MessageReactions.svelte` calls `removeReaction` with it when the viewer has already reacted with that emoji. Task 8 below is done.
 
 3. **Verification is type-check, not unit tests.** This codebase verifies frontend phases with `pnpm --filter app-lite check` (svelte-check, 0 errors) plus manual smoke testing — matching how migration-plan Phases 1–5 were verified. There is no component unit-test harness; do not invent one. Each task's gate is `pnpm --filter app-lite check` passing with 0 errors.
 
@@ -165,7 +167,7 @@
 
 1. Props: `{ spaceId, roomId, messageId, reactions: {emoji,dids[]}[], currentUserDid? }`.
 2. Flatten DTO reactions into `ReactionInfo[]`: for each `{emoji, dids}`, emit one `ReactionInfo` per did — `{ reaction: emoji, userId: did, userName: did, reactionId: "" }`. (`userName` resolution to display name is a nice-to-have; the DTO lacks it. Leave as did for now.)
-3. `onToggleReaction(emoji)`: if `currentUserDid` is NOT in that emoji's `dids` → `addReaction(spaceId, roomId, messageId, emoji)`. If it IS already present, removal needs a `reactionId` the DTO does not yet carry — leave the remove branch unhandled (early return) so the add path is fully functional. Task 8 fills the remove branch once the appserver change lands. Keep this branch a clean early `return`, not a stub.
+3. `onToggleReaction(emoji)`: if `currentUserDid` is NOT in that emoji's `dids` → `addReaction(spaceId, roomId, messageId, emoji)`; if they ARE, → `removeReaction(spaceId, roomId, myReactionId)` (Task 8).
 
 **Verification:** `pnpm --filter app-lite check` — 0 errors.
 
@@ -173,26 +175,17 @@
 
 ---
 
-### Task 8: Wire reaction removal — GATED on appserver backlog item
+### ~~Task 8: Wire reaction removal~~ ✅
 
-**Status:** Blocked. Do **not** start until the appserver item "Message DTO:
-surface viewer reaction identity" (`packages/appserver/docs/plans/procedure-backlog.md`)
-has landed and the SDK `_message.ts` `Reaction` type carries `myReactionId`.
+The appserver item "Message DTO: surface viewer reaction identity"
+(`packages/appserver/docs/plans/procedure-backlog.md`) landed: `selectMessages`
+carries `myReactionId` per reaction and the SDK `Reaction` type exposes it.
+`MessageReactions.svelte` completes `onToggleReaction` — `addReaction` when the
+viewer has not reacted with that emoji, `removeReaction(spaceId, roomId,
+group.myReactionId)` when they have. `#messageDiff` reuses the same `Message`
+schema, so live reaction updates carry the id with no extra wiring.
 
-**Files:**
-- Modify: `packages/app-lite/src/lib/components/chat/MessageReactions.svelte`
-
-**Approach:** This is now an app-lite-only wiring task. The appserver + SDK
-schema change is owned by the appserver backlog. Once `myReactionId` is present
-on each reaction in the DTO, fill the removal branch left open in Task 7.
-
-**Steps:**
-
-1. Confirm `schemas.queries.getMessages.Message.infer` reactions now include `myReactionId: string | null` (rebuild the SDK dist if not yet reflected).
-2. In `MessageReactions.svelte`, complete `onToggleReaction`: when `currentUserDid` is in the emoji's `dids` and `myReactionId` is non-null, call `removeReaction(spaceId, roomId, myReactionId)`.
-3. `#messageDiff` reuses the `Message` schema, so real-time reaction updates carry `myReactionId` with no extra wiring.
-
-**Verification:** `pnpm --filter app-lite check` — 0 errors; manual: add then remove a reaction.
+**Verification:** `pnpm --filter app-lite check` — 0 errors.
 
 **Commit:** `feat(app-lite): wire reaction removal`
 
@@ -348,7 +341,7 @@ on each reaction in the DTO, fill the removal branch left open in Task 7.
 1. `pnpm --filter app-lite check` — 0 errors.
 2. `pnpm --filter @roomy/design check` — 0 errors (in case design was touched).
 3. `pnpm --filter app-lite build` — succeeds.
-4. Manual smoke test against a running appserver: open a room, verify — message bubbles render with avatars + markdown + grouping + formatted timestamps; send a message; reply to a message; add a reaction; toggle a reaction off (requires Task 8); edit/delete own message; hover toolbar + mobile drawer; create a thread; scroll up to lazy-load older messages; jump-to-present.
+4. Manual smoke test against a running appserver: open a room, verify — message bubbles render with avatars + markdown + grouping + formatted timestamps; send a message; reply to a message; add a reaction; toggle a reaction off; edit/delete own message; hover toolbar + mobile drawer; create a thread; scroll up to lazy-load older messages; jump-to-present.
 5. Write down any remaining parity gaps (e.g. Discord-mention resolution, link embeds, HLS video, reaction author display names) as follow-up issues.
 
 **Commit:** `chore(app-lite): chat parity verification`
