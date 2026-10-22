@@ -107,6 +107,16 @@ create index if not exists idx_edges_label on edges(label);
 create index if not exists idx_edges_label_head on edges(label, head);
 create index if not exists idx_edges_label_tail on edges(label, tail);
 
+-- Participated-rooms lookup: `select distinct e.room from edges author_e join
+-- entities e on e.id = author_e.head where label = 'author' and tail = ? and
+-- e.stream_id = ?`. It runs once per recipient per space on the push-digest
+-- path. `idx_edges_label_tail` is `(label, tail)` only, so the join key `head`,
+-- and every column filtered through it, comes from visiting the matching
+-- `edges` row; carrying `head` makes the seek covering. The planner only picks
+-- this index with statistics to choose from, so an un-analyzed space still
+-- drives the join from `entities` instead.
+create index if not exists idx_edges_label_tail_head on edges(label, tail, head);
+
 -- Space-global config + the legacy backfill cursor. One row per space.
 --
 -- NOTE: `hidden` is per-user join intent and so does NOT belong on this

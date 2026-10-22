@@ -7,13 +7,25 @@
  * be identical — the projection may only change what the backfill costs.
  */
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Database } from "bun:sqlite";
 import { closeDb, openDb, openReadStateDb, openSpaceDb } from "../db/db.ts";
 import type { DbLike } from "../db/types.ts";
 import {
   _resetParticipationBackfillCache,
+  authorRoomsSql,
   backfillUserRoomParticipation,
   hasUserParticipated,
 } from "./userRoomParticipation.ts";
+
+const SCHEMA_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "db",
+  "schema-space.sql",
+);
 
 const SPACE = "did:web:space.example";
 const ROOM_A = "01ROOMA0000000000000000000";
@@ -122,5 +134,53 @@ describe("backfillUserRoomParticipation", () => {
       .query("select room_id from user_room_participation where user_did = ? order by room_id")
       .all<{ room_id: string }>(USER);
     expect(rows.map((r) => r.room_id)).toEqual([ROOM_A, ROOM_B]);
+  });
+});
+
+describe("authorRooms candidate plan", () => {
+  /**
+   * The candidate lookup runs once per recipient per space on the push-digest
+   * path, over a table where `head` — the join key — is absent from
+   * `idx_edges_label_tail`'s key. Production analyzes each space on boot and
+   * the planner only reaches that index with statistics to estimate from, so
+   * the seed is sized and analyzed the same way: without statistics the plan
+   * below is a scan of the `stream_id` partition, and without the index it is a
+   * per-edge visit back to `entities`.
+   */
+  test("the candidate lookup seeks idx_edges_label_tail_head", () => {
+    const db = new Database(":memory:");
+    db.exec("pragma foreign_keys = on");
+    db.exec(readFileSync(SCHEMA_PATH, "utf8"));
+
+    // Enough authored edges per user, in enough rooms, that the distinct and
+    // the join are over something: 200 users x 5 messages, none of them the
+    // user in the assertion's own row set.
+    db.run("insert into entities (id, stream_id) values (?, ?)", [SPACE, SPACE]);
+    db.run("insert into entities (id, stream_id) values (?, ?)", [USER, SPACE]);
+    const messages: string[] = [];
+    const edges: string[] = [];
+    for (let a = 0; a < 200; a++) {
+      const did = `did:plc:author${a}`;
+      db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [did, SPACE]);
+      for (let m = 0; m < 5; m++) {
+        const id = `01PARTICIP${String(a * 5 + m).padStart(10, "0")}`;
+        messages.push(`('${id}', '${SPACE}', '01ROOM${(a * 5 + m) % 60}')`);
+        edges.push(`('${id}', '${did}', 'author')`);
+        edges.push(`('${id}', '${did}', 'reply')`);
+      }
+    }
+    db.exec(`insert into entities (id, stream_id, room) values ${messages.join(",")}`);
+    db.exec(`insert into edges (head, tail, label) values ${edges.join(",")}`);
+    db.exec("analyze");
+
+    const plan = db
+      .query<{ detail: string }, []>(`explain query plan ${authorRoomsSql()}`)
+      .all()
+      .map((r) => r.detail)
+      .join(" | ");
+
+    expect(plan).toContain(
+      "SEARCH author_e USING COVERING INDEX idx_edges_label_tail_head (label=? AND tail=?)",
+    );
   });
 });

@@ -85,13 +85,36 @@ export async function backfillUserRoomParticipation(
 }
 
 /**
+ * The participated-rooms candidate statement, exported so
+ * `userRoomParticipation.test.ts` can assert the plan on the SQL the backfill
+ * actually runs.
+ *
+ * `head` is in the index key so the join to `entities` — where `stream_id` and
+ * `room` live — is answered by the same covering index as the `label`/`tail`
+ * equality. `idx_edges_label_tail` matches `(label, tail)` only, so each
+ * matching `edges` row is visited to learn its `head` before the join.
+ */
+export function authorRoomsSql(): string {
+  return `
+      select distinct e.room as room
+        from edges author_e
+        join entities e on e.id = author_e.head
+       where author_e.label = 'author'
+         and author_e.tail = ?
+         and e.stream_id = ?
+         and e.room is not null
+    `;
+}
+
+/**
  * The rooms `userDid` has authored a message in, with their newest message
  * time.
  *
- * The candidates are the rooms the user's `author` edges point at, which an
- * index answers directly: 15 ms on a space with 120k messages and 10k of them
- * the user's, against 29-91 ms for the scan of every authored message that it
- * replaces. The `author` edge is what the message materialiser sets, so an
+ * The candidates are the rooms the user's `author` edges point at, which
+ * `idx_edges_label_tail_head` answers directly. See {@link authorRoomsSql} for
+ * why the index key carries `head`: without it the join back to `entities` is
+ * a visit per matching edge rather than part of the seek.
+ * The `author` edge is what the message materialiser sets, so an
  * authorOverride is honoured here as it was before.
  *
  * Two of the three columns (`room`, `last_message_at`) come from that edge and
@@ -107,15 +130,7 @@ async function authorRooms(
   spaceId: string,
 ): Promise<Array<{ room: string; ts: number | null }>> {
   const candidates = await spaceDb
-    .query(
-      `select distinct e.room as room
-         from edges author_e
-         join entities e on e.id = author_e.head
-        where author_e.label = 'author'
-          and author_e.tail = ?
-          and e.stream_id = ?
-          and e.room is not null`,
-    )
+    .query(authorRoomsSql())
     .all<{ room: string }>([userDid, spaceId]);
   if (candidates.length === 0) return [];
 
