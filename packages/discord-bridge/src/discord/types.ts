@@ -29,9 +29,18 @@ export const desiredProperties = createDesiredPropertiesObject({
 		mentionedChannelIds: true,
 		mentionedRoleIds: true,
 		messageSnapshots: true,
+		poll: true,
+		components: true,
 	},
 	messageSnapshot: {
 		message: true,
+	},
+	poll: {
+		question: true,
+		answers: true,
+	},
+	pollMedia: {
+		text: true,
 	},
 	guild: {
 		id: true,

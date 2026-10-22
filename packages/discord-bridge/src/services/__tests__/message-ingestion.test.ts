@@ -1,13 +1,17 @@
 /**
  * Unit tests for message-ingestion.ts
  *
- * Covers: MI01–MI16 — basic sync, fan-out, dedup, system messages,
+ * Covers: MI01–MI17 — basic sync, fan-out, dedup, system messages,
  * thread starters, mentions, attachments, embeds, backfill restriction,
- * subset mode.
+ * subset mode, and messages whose body comes only from a poll, components,
+ * or a Lottie sticker.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
+import { createBot, Intents } from "@discordeno/bot";
 import { Did, newUlid } from "@roomy-space/sdk";
+import { normalizeMessage } from "../../discord/normalizers.ts";
+import { desiredProperties } from "../../discord/types.ts";
 import { BridgeRepository } from "../../db/repository.ts";
 import { MockRoomyGateway } from "../../roomy/mock-gateway.ts";
 import {
@@ -35,7 +39,12 @@ import {
 	SPACE_B,
 	USER_ID,
 } from "./helpers/test-data.ts";
-import { decodeRichText, expectToBe, expectToBeDefined } from "./utils.ts";
+import {
+	decodeBodyString,
+	decodeRichText,
+	expectToBe,
+	expectToBeDefined,
+} from "./utils.ts";
 
 /** Extract the createMessage event from a gateway (skip profile sync events). */
 function createMessageEvent(roomy: MockRoomyGateway, spaceDid: string) {
@@ -45,6 +54,40 @@ function createMessageEvent(roomy: MockRoomyGateway, spaceDid: string) {
 /** Extract the forwardMessages event. */
 function forwardMessageEvent(roomy: MockRoomyGateway, spaceDid: string) {
 	return roomy.findEvent(spaceDid, "space.roomy.message.forwardMessages.v0");
+}
+
+// discordeno copies only the fields `desiredProperties.message` requests, so
+// these tests drive raw gateway payloads through the real transformer: a
+// hand-built DiscordMessageData fixture would keep passing after a field is
+// removed from that object.
+const GATEWAY_BOT_TOKEN = "MTQ3MzQ3NjE3MzM1MzcxMzc0NA.fake.fake";
+const gatewayBot = createBot({
+	token: GATEWAY_BOT_TOKEN,
+	intents: Intents.Guilds | Intents.GuildMessages | Intents.MessageContent,
+	desiredProperties,
+});
+
+/** Transform a raw MESSAGE_CREATE payload and normalize it as the bridge does. */
+function fromGateway(payload: Record<string, unknown>) {
+	return normalizeMessage(
+		gatewayBot.transformers.message(gatewayBot, { message: payload } as never),
+	);
+}
+
+/** All text in a rich-text body, including list items. */
+function bodyText(roomy: MockRoomyGateway, spaceDid: string): string {
+	const event = createMessageEvent(roomy, spaceDid);
+	expectToBeDefined(event);
+	const doc = JSON.parse(decodeBodyString(event.body)) as {
+		blocks?: { text?: string; items?: { text?: string }[] }[];
+	};
+	return (doc.blocks ?? [])
+		.flatMap((block) => [
+			block.text ?? "",
+			...(block.items ?? []).map((item) => item.text ?? ""),
+		])
+		.filter((text) => text.length > 0)
+		.join("\n");
 }
 
 /** Convenience: create a fresh repository with a pre-configured bridge. */
@@ -302,8 +345,8 @@ describe("ingestDiscordMessage — stickers", () => {
 			id: MSG_ID,
 			content: "",
 			stickerItems: [
-				{ id: "1001", formatType: 2 }, // PNG sticker
-				{ id: "1002", formatType: 4 }, // GIF sticker
+				{ id: "1001", name: "thinking", formatType: 2 }, // PNG sticker
+				{ id: "1002", name: "party", formatType: 4 }, // GIF sticker
 			],
 		});
 
@@ -955,5 +998,151 @@ describe("ingestDiscordMessage — capacity enforcement", () => {
 
 		expect(result).toEqual({ synced: 0, skipped: 1 });
 		expect(forwardMessageEvent(roomy, SPACE_A)).toBeUndefined();
+	});
+});
+
+describe("ingestDiscordMessage — messages with no content", () => {
+	let repo: BridgeRepository;
+	let roomy: MockRoomyGateway;
+
+	beforeEach(() => {
+		repo = setupRepo();
+		roomy = new MockRoomyGateway();
+		mapChannel(repo);
+	});
+
+	/** A MESSAGE_CREATE payload with nothing renderable in it. */
+	const emptyPayload = {
+		id: MSG_ID,
+		channel_id: CHANNEL,
+		guild_id: GUILD,
+		type: 0,
+		content: "",
+		timestamp: "2026-10-20T06:03:00.270Z",
+		author: { id: USER_ID, username: "pollbot", discriminator: "0" },
+		attachments: [],
+		embeds: [],
+		mentions: [],
+		mention_roles: [],
+	};
+
+	test("MI17a: a poll-only message renders its question and answers", async () => {
+		const message = fromGateway({
+			...emptyPayload,
+			poll: {
+				question: { text: "Which room next?" },
+				answers: [
+					{ answer_id: 1, poll_media: { text: "Garden" } },
+					{ answer_id: 2, poll_media: { text: "Library" } },
+				],
+				expiry: "2026-10-27T00:00:00.000Z",
+				allow_multiselect: false,
+				layout_type: 1,
+			},
+		});
+
+		const result = await ingestDiscordMessage(message, repo, roomy);
+
+		expect(result).toEqual({ synced: 1, skipped: 0 });
+		const text = bodyText(roomy, SPACE_A);
+		expect(text).toContain("Poll: Which room next?");
+		expect(text).toContain("Garden");
+		expect(text).toContain("Library");
+	});
+
+	test("MI17b: a component-only message renders its button and select labels", async () => {
+		const message = fromGateway({
+			...emptyPayload,
+			components: [
+				{
+					type: 1,
+					components: [
+						{ type: 2, style: 2, label: "Yes", custom_id: "yes" },
+						{ type: 2, style: 2, label: "No", custom_id: "no" },
+					],
+				},
+				{
+					type: 3,
+					custom_id: "role",
+					placeholder: "Pick a role",
+					options: [
+						{ label: "Artist", value: "artist" },
+						{ label: "Writer", value: "writer" },
+					],
+				},
+			],
+		});
+
+		const result = await ingestDiscordMessage(message, repo, roomy);
+
+		expect(result).toEqual({ synced: 1, skipped: 0 });
+		expect(bodyText(roomy, SPACE_A)).toContain(
+			"Message components: Yes, No, Pick a role, Artist, Writer",
+		);
+	});
+
+	test("MI17c: a Lottie sticker message syncs as a link, not a skip", async () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			const message = fromGateway({
+				...emptyPayload,
+				sticker_items: [
+					{
+						id: "749054660769218631",
+						name: "Wumpus Hello",
+						format_type: 3,
+					},
+				],
+			});
+
+			const result = await ingestDiscordMessage(message, repo, roomy);
+
+			expect(result).toEqual({ synced: 1, skipped: 0 });
+			const event = createMessageEvent(roomy, SPACE_A);
+			expectToBeDefined(event);
+			expect(
+				event.extensions?.["space.roomy.extension.attachments.v0"]
+					?.attachments,
+			).toEqual([
+				{
+					$type: "space.roomy.attachment.link.v0",
+					uri: "https://cdn.discordapp.com/stickers/749054660769218631.json",
+					showPreview: true,
+				},
+			]);
+			expect(bodyText(roomy, SPACE_A)).toContain("Sticker: Wumpus Hello");
+
+			const skipped = warnSpy.mock.calls
+				.map((call) => String(call[0]))
+				.filter((line) => line.includes(MSG_ID));
+			expect(skipped).toEqual([]);
+		} finally {
+			warnSpy.mockRestore();
+		}
+	});
+
+	test("MI17d: a message with nothing renderable still skips, naming its shape", async () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			const result = await ingestDiscordMessage(
+				fromGateway(emptyPayload),
+				repo,
+				roomy,
+			);
+
+			expect(result).toEqual({ synced: 0, skipped: 1 });
+			expect(createMessageEvent(roomy, SPACE_A)).toBeUndefined();
+
+			const line = warnSpy.mock.calls
+				.map((call) => String(call[0]))
+				.find((line) => line.includes(MSG_ID));
+			expectToBeDefined(line);
+			expect(line).toContain("type=0");
+			expect(line).toContain("poll=none");
+			expect(line).toContain("components=0");
+			expect(line).toContain("stickers=0");
+		} finally {
+			warnSpy.mockRestore();
+		}
 	});
 });

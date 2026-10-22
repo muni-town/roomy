@@ -1,6 +1,7 @@
 import { appendFile } from "node:fs/promises";
 import {
 	type Attachment,
+	type Block,
 	Did,
 	type Event,
 	newUlid,
@@ -190,6 +191,10 @@ export async function ingestDiscordMessage(
 		}
 	}
 
+	// Blocks for message classes that have no `content` of their own (polls,
+	// component labels, Lottie sticker names). They are space-independent.
+	const classBlocks = buildMessageClassBlocks(message);
+
 	let synced = 0;
 
 	for (const spaceDid of targetSpaces) {
@@ -232,16 +237,18 @@ export async function ingestDiscordMessage(
 		// Sync author profile before sending the message.
 		await syncUserProfile(message.author, [spaceDid], repo, roomy, guildId);
 
-		// Skip messages with no content, no attachments, and no embeds. An
-		// embed-only message is a message: Discord bots and link unfurls post
-		// them with empty content, and dropping them loses the message.
+		// Skip messages with nothing renderable: no content, no attachments,
+		// no embeds, and no poll, components, or Lottie sticker. An embed-only
+		// message is a message: Discord bots and link unfurls post them with
+		// empty content, and dropping them loses the message.
 		if (
 			!message.content &&
 			attachments.length === 0 &&
-			(message.embeds?.length ?? 0) === 0
+			(message.embeds?.length ?? 0) === 0 &&
+			classBlocks.length === 0
 		) {
 			log.warn(
-				`Skipping message ${messageId} in ${spaceDid}: no content and no attachments`,
+				`Skipping message ${messageId} in ${spaceDid}: no content and no attachments (${messageShape(message)})`,
 			);
 			writeSkipRecord("empty_message", message, spaceDid);
 			continue;
@@ -265,12 +272,15 @@ export async function ingestDiscordMessage(
 			username: m.name,
 			globalName: m.globalName,
 		}));
-		const blocks = resolveMentionsToBlocks(
-			message.content || "",
-			userMentions,
-			mentionCtx,
-			spaceDid,
-		);
+		const blocks = [
+			...resolveMentionsToBlocks(
+				message.content || "",
+				userMentions,
+				mentionCtx,
+				spaceDid,
+			),
+			...classBlocks,
+		];
 		const serializedBody = serializeBlocks(blocks);
 		const eventUlid = newUlid();
 		const extensions: Record<string, unknown> = {
@@ -337,6 +347,70 @@ export async function ingestDiscordMessage(
 	return { synced, skipped: targetSpaces.length - synced };
 }
 
+/**
+ * Blocks for message classes that carry no `content` of their own: a poll's
+ * question and answers, the labels of components on a component-only
+ * message, and the name of a Lottie sticker (whose JSON has no image
+ * rendition). Without these the message has an empty body and, for polls and
+ * components, no attachment either.
+ */
+function buildMessageClassBlocks(message: DiscordMessageData): Block[] {
+	const blocks: Block[] = [];
+
+	if (message.poll) {
+		blocks.push({
+			$type: "space.roomy.richtext.blocks#text",
+			text: message.poll.question ? `Poll: ${message.poll.question}` : "Poll",
+		});
+		if (message.poll.answers.length > 0) {
+			blocks.push({
+				$type: "space.roomy.richtext.blocks#unorderedList",
+				items: message.poll.answers.map((text) => ({ text })),
+			});
+		}
+	}
+
+	const componentLabels = message.componentLabels ?? [];
+	if (!message.content && componentLabels.length > 0) {
+		blocks.push({
+			$type: "space.roomy.richtext.blocks#text",
+			text: `Message components: ${componentLabels.join(", ")}`,
+		});
+	}
+
+	const lottieNames = (message.stickerItems ?? [])
+		.filter((sticker) => sticker.formatType === 3 && sticker.name.length > 0)
+		.map((sticker) => sticker.name);
+	if (lottieNames.length > 0) {
+		blocks.push({
+			$type: "space.roomy.richtext.blocks#text",
+			text: `Sticker: ${lottieNames.join(", ")}`,
+		});
+	}
+
+	return blocks;
+}
+
+/**
+ * One-line payload shape for the skip warning: the Discord type and which of
+ * the classes that carry no body were present. Enough for the line alone to
+ * say what was dropped, without the optional JSONL skip ledger.
+ */
+function messageShape(message: DiscordMessageData): string {
+	const stickers = message.stickerItems ?? [];
+	const formats = stickers.map((sticker) => sticker.formatType);
+	return [
+		`type=${message.type}`,
+		`contentLen=${message.content.length}`,
+		`poll=${message.poll ? `${message.poll.answers.length} answers` : "none"}`,
+		`components=${message.componentLabels?.length ?? 0}`,
+		`stickers=${stickers.length}`,
+		`stickerFormats=${formats.length > 0 ? formats.join(",") : "none"}`,
+		`embeds=${message.embeds?.length ?? 0}`,
+		`attachments=${message.attachments.length}`,
+	].join(", ");
+}
+
 function buildAttachments(
 	message: DiscordMessageData,
 	repo: BridgeRepository,
@@ -401,6 +475,15 @@ function buildAttachments(
 				$type: "space.roomy.attachment.image.v0",
 				uri: `https://cdn.discordapp.com/stickers/${id}.png`,
 				mimeType: "image/png",
+			});
+		} else if (sticker.formatType === 3) {
+			// Discord serves a Lottie sticker only as JSON; the CDN has no PNG
+			// rendition at the sticker path. The link keeps the sticker's URL
+			// and the body names it.
+			attachments.push({
+				$type: "space.roomy.attachment.link.v0",
+				uri: `https://cdn.discordapp.com/stickers/${id}.json`,
+				showPreview: true,
 			});
 		}
 	}

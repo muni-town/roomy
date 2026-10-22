@@ -77,9 +77,23 @@ export type DiscordReactionData = typeof DiscordReactionData.infer;
 
 export const DiscordStickerData = type({
 	id: "string",
+	name: "string",
 	formatType: "number",
 });
 export type DiscordStickerData = typeof DiscordStickerData.infer;
+
+// ─── Polls ─────────────────────────────────────────────────────────────
+
+/**
+ * A poll reduced to what the bridge renders: its question and answer labels.
+ * Discord carries emoji on each answer, but the bridge renders the text the
+ * author wrote; emoji-only answers normalise to their emoji name.
+ */
+export const DiscordPollData = type({
+	"question?": "string",
+	answers: "string[]",
+});
+export type DiscordPollData = typeof DiscordPollData.infer;
 
 // ─── Embeds ────────────────────────────────────────────────────────────
 
@@ -128,6 +142,8 @@ export const DiscordMessageData = type({
 	"mentions?": DiscordUserData.array(),
 	"mentionChannelIds?": "string[]",
 	"stickerItems?": DiscordStickerData.array().or("undefined"),
+	"poll?": DiscordPollData.or("undefined"),
+	"componentLabels?": "string[]",
 	"messageReference?": DiscordMessageReference.or("undefined"),
 	"flags?": "number",
 	"messageSnapshots?": DiscordMessageSnapshotData.array().or("undefined"),

@@ -12,6 +12,7 @@ import type {
 	DiscordMessageData,
 	DiscordMessageReference,
 	DiscordMessageSnapshotData,
+	DiscordPollData,
 	DiscordReactionData,
 	DiscordStickerData,
 	DiscordUserData,
@@ -38,6 +39,8 @@ export function normalizeMessage(msg: MessageProperties): DiscordMessageData {
 		mentions: (msg.mentions ?? []).map(normalizeUser),
 		mentionChannelIds: msg.mentionedChannelIds?.map(String),
 		stickerItems: (msg.stickerItems ?? []).map(normalizeSticker),
+		poll: normalizePoll(msg.poll),
+		componentLabels: normalizeComponentLabels(msg.components),
 		messageReference: normalizeMessageReference(msg.messageReference),
 		flags: msg.flags?.toJSON(),
 		messageSnapshots: (msg.messageSnapshots ?? []).map(
@@ -213,12 +216,70 @@ function normalizeReaction(r: {
 
 function normalizeSticker(s: {
 	id: bigint;
+	name: string;
 	formatType: number;
 }): DiscordStickerData {
 	return {
 		id: s.id.toString(),
+		name: s.name,
 		formatType: s.formatType,
 	};
+}
+
+// ─── Polls ─────────────────────────────────────────────────────────────────
+
+function normalizePoll(
+	poll:
+		| {
+				question?: { text?: string };
+				answers?: {
+					pollMedia?: { text?: string; emoji?: { name?: string } };
+				}[];
+		  }
+		| undefined,
+): DiscordPollData | undefined {
+	if (!poll) return undefined;
+	const answers = (poll.answers ?? [])
+		.map((answer) => answer.pollMedia?.text ?? answer.pollMedia?.emoji?.name)
+		.filter((text): text is string => text !== undefined && text.length > 0);
+	return {
+		question: poll.question?.text,
+		answers,
+	};
+}
+
+// ─── Message components ────────────────────────────────────────────────────
+
+/** Minimal component shape the bridge reads labels from. */
+interface NormalizableComponent {
+	label?: string;
+	placeholder?: string;
+	emoji?: { name?: string };
+	options?: { label: string }[];
+	components?: NormalizableComponent[];
+}
+
+/**
+ * Flatten a message's components into the human-readable labels they show:
+ * button labels (or emoji names), select placeholders and select options.
+ * A component-only message has no `content`, so these labels are the only
+ * thing it says.
+ */
+function normalizeComponentLabels(
+	components: NormalizableComponent[] | undefined,
+): string[] {
+	const labels: string[] = [];
+	const visit = (component: NormalizableComponent): void => {
+		const label = component.label ?? component.emoji?.name;
+		if (label) labels.push(label);
+		if (component.placeholder) labels.push(component.placeholder);
+		for (const option of component.options ?? []) {
+			if (option.label) labels.push(option.label);
+		}
+		for (const child of component.components ?? []) visit(child);
+	};
+	for (const component of components ?? []) visit(component);
+	return labels;
 }
 
 // ─── Embeds ────────────────────────────────────────────────────────────────
