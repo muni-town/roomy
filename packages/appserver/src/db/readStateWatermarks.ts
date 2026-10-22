@@ -47,7 +47,9 @@
  *
  * A watermark older than every key its room still holds — the messages it named
  * were all deleted, or the room was rebuilt empty — has no anchor. Those rows
- * are left byte-for-byte alone and counted, not guessed at.
+ * are left byte-for-byte alone and counted, not guessed at, and the count is a
+ * consequence of the room they name rather than a backlog: no later pass can
+ * clear one without inventing a position the reader never held.
  *
  * A row whose room belongs to a space this boot has no DB for — a room id from
  * another deployment, or one whose stream is no longer in the event log —
@@ -67,16 +69,23 @@ const ATTRIBUTE_BATCH = 500;
 const DEFAULT_CONCURRENCY = 4;
 
 /**
- * Read-state watermarks naming no message ordering key in their room.
+ * Read-state watermarks naming no ordering key in their room.
  *
  * The pass sets it twice: to the count found as soon as every space has been
- * measured, then to the count still unresolved once the repairs are in. A
- * steady 0 means there is nothing left to re-anchor; the value between those
- * two writes is the residue as it stood before this pass.
+ * measured, then to the count still without an anchor once the repairs are in.
+ * The value between those two writes is the residue as it stood before this
+ * pass.
+ *
+ * A non-zero steady value is not an outstanding repair. A watermark older than
+ * every key its room still holds has no anchor to adopt — the messages it named
+ * are gone, or the room was rebuilt empty — so the pass re-derives the same
+ * answer from the same room on every boot, and only a reader moving the
+ * watermark can change it. Read it as a property of the data: how many readers
+ * hold a position in a room whose timeline no longer reaches it.
  */
 export const watermarksUnresolved = metrics.gauge(
   "roomy_readstate_watermarks_unresolved",
-  "Read-state watermarks naming no message ordering key in their room. Set to the count found when the boot repair pass measures them, then to the count still unresolved once it has re-anchored what it can. Steady 0 means nothing is left to re-anchor.",
+  "Read-state watermarks naming no message ordering key in their room. Set to the count found when the boot repair pass measures them, then to the count still without an anchor once it has re-anchored what it can.",
 );
 /**
  * Watermarks this process re-anchored. The one-off figure for a fleet that had
@@ -97,11 +106,16 @@ export interface WatermarkSweepResult {
   found: number;
   /** Re-anchored to the greatest key their room holds at or below the watermark. */
   repaired: number;
-  /** `found - repaired` — still naming nothing, because no key survived. */
-  unresolved: number;
+  /**
+   * Of those, the ones that named no key AND had no key at or below them to
+   * adopt. Left as they stand, and re-derived as unanchorable on every pass:
+   * only the reader moving the watermark or the room gaining a key at or below
+   * it can change the answer.
+   */
+  unanchorable: number;
   /** Real watermarks whose owning space this boot could not examine. */
   unattributed: number;
-  /** Spaces the pass could not read; their rows stay unresolved until a later boot. */
+  /** Spaces the pass could not read; their rows stay unanchorable until a later boot. */
   failedSpaces: number;
 }
 
@@ -137,6 +151,12 @@ interface SpaceResult {
  * correlated subquery for the anchor (`max(sort_idx)` at or below the
  * watermark), which walks `idx_entities_room_sort`, so a pair costs a seek
  * rather than a scan of its room.
+ *
+ * The anchor is `sort_idx` because that is what the read path compares against:
+ * `deriveUnreadCounts` counts `sort_idx > wm`, and a row the materialiser never
+ * keyed (NULL `sort_idx`) is on neither side of that count. Anchoring to the
+ * timeline key `coalesce(sort_idx, id)` instead would write a value that
+ * measurement does not read.
  *
  * Deduplicated because a channel's watermark is one row per reader and a room
  * with N readers shares one resolution — the production residue is thousands of
@@ -246,7 +266,7 @@ export async function sweepReadStateWatermarks(
       examined: 0,
       found: 0,
       repaired: 0,
-      unresolved: 0,
+      unanchorable: 0,
       unattributed: 0,
       failedSpaces: 0,
     };
@@ -331,7 +351,7 @@ export async function sweepReadStateWatermarks(
         measured.push(result);
       } catch (err) {
         // One unreadable space must not abandon the pass: every space is
-        // independent, and this one's rows are still unresolved the next time
+        // independent, and this one's rows are still unanchorable the next time
         // the pass reaches them.
         failedSpaces++;
         log.warn(
@@ -386,16 +406,19 @@ export async function sweepReadStateWatermarks(
   }
 
   watermarksRepaired.inc({}, repaired);
-  const unresolved = found - repaired;
-  watermarksUnresolved.set({}, unresolved);
+  const unanchorable = found - repaired;
+  watermarksUnresolved.set({}, unanchorable);
 
   // A line per affected space, then the fleet summary. The gauge says how much
-  // is left; only these say where, which is what a repair is chased with.
+  // is left; only these say where, which is what a repair is chased with —
+  // debug, because a space whose watermarks cannot be re-anchored reports the
+  // same figure on every boot, and a constant number is not news. The summary
+  // carries the fleet figure at a level that survives the default threshold.
   let examined = 0;
   for (const space of measured) {
     examined += space.examined;
     if (space.repairs.length === 0 && space.unanchorable === 0) continue;
-    log.warn(
+    log.debug(
       "startup",
       `read-state watermarks for ${space.spaceDid}: ${space.repairs.length + space.unanchorable} of ${space.examined} named no ordering key, ${space.repairs.length} re-anchored, ${space.unanchorable} with no anchor`,
     );
@@ -403,10 +426,10 @@ export async function sweepReadStateWatermarks(
   if (found > 0 || unattributed > 0 || failedSpaces > 0) {
     const summary =
       `read-state watermarks: ${found} of ${examined} examined named no ordering key, ` +
-      `${repaired} re-anchored, ${unresolved} with no anchor` +
+      `${repaired} re-anchored, ${unanchorable} with no anchor` +
       (unattributed > 0 ? `, ${unattributed} not attributable to a space` : "") +
       (failedSpaces > 0 ? `, ${failedSpaces} space(s) unreadable` : "");
-    if (unresolved > 0 || unattributed > 0 || failedSpaces > 0) log.warn("startup", summary);
+    if (unanchorable > 0 || unattributed > 0 || failedSpaces > 0) log.warn("startup", summary);
     else log.info("startup", summary);
   }
 
@@ -414,7 +437,7 @@ export async function sweepReadStateWatermarks(
     examined,
     found,
     repaired,
-    unresolved,
+    unanchorable,
     unattributed,
     failedSpaces,
   };

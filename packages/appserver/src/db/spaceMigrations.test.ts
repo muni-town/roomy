@@ -391,6 +391,65 @@ describe("in-place per-space migration", () => {
     expect(marker?.completed_at).not.toBeNull();
   }, { timeout: 30_000 });
 
+  test("a move event that predates messageIds does not stop the in-place upgrade", async () => {
+    // The collection moved from a singular `messageId` to `messageIds`, so an
+    // old log holds move events with neither field. Reading through one threw
+    // inside the re-key, which abandoned the migration and sent the space to
+    // the rebuild path on every boot — and the rebuild read the same event and
+    // threw again, so the space never converged on either path.
+    const streamDid = StreamDid.assert("did:web:migration-legacy-move.example");
+    let router: DbLike;
+    ({ router } = await openPool());
+    const { messageIds } = await materialiseSkewedSpace(router, streamDid);
+    const live = (await keysOf(router, streamDid)).filter(
+      (r) => r.sort_idx !== null,
+    );
+
+    // A move whose payload predates the field. It names no messages, so it has
+    // no key to contribute and nothing to move.
+    await seedEvent(
+      router,
+      streamDid,
+      {
+        $type: "space.roomy.message.moveMessages.v0",
+        id: ulid(),
+        room: ulid(),
+        toRoomId: ulid(),
+      } as unknown as Event,
+      3,
+      Date.now(),
+    );
+
+    makeItAnOlderSpace(streamDid);
+
+    ({ router } = await openPool());
+    await reMaterializeFromLocalEvents(
+      router,
+      1,
+    );
+
+    // The upgrade ran in place: the sentinel a rebuild would have dropped is
+    // still here, and the space is current rather than looping.
+    const sentinel = await router.forSpace!(streamDid)
+      .query("select id from entities where id = 'sentinel-in-place'")
+      .get<{ id: string }>();
+    expect(sentinel).not.toBeNull();
+
+    const version = await router.forSpace!(streamDid)
+      .query("select version from space_schema_version where id = 1")
+      .get<{ version: string }>();
+    expect(version?.version).toBe(SPACE_SCHEMA_VERSION);
+
+    // …and the messages it re-keyed agree with what the live path produced.
+    const after = (await keysOf(router, streamDid)).filter(
+      (r) => r.sort_idx !== null,
+    );
+    expect(after.map((r) => r.sort_idx)).toEqual(live.map((r) => r.sort_idx));
+    for (const id of messageIds) {
+      expect(after.find((r) => r.id === id)?.sort_idx).not.toBe(id);
+    }
+  }, { timeout: 30_000 });
+
   test("a stream whose reads time out does not hold up the in-place upgrade", async () => {
     // The pass walks thousands of streams with one DB request in flight at a
     // time, and every request carries a 30s budget. A request that exceeds it

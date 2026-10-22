@@ -204,6 +204,9 @@ export async function setMessageSortIdxByForward(
  * id is a no-op), and the update is unconditional: unlike create/forward,
  * which use `and sort_idx is null`, a moved message already HAS a sort_idx and
  * the move must overwrite it.
+ *
+ * Called only by `applyMoveSideEffects`, which has already established that the
+ * event names its messages.
  */
 export async function setMessageSortIdxByMove(
   db: DbLike,

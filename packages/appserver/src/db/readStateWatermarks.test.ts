@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { toAsyncDb } from "./syncAdapter.ts";
 import type { DbLike } from "./types.ts";
 import { sweepReadStateWatermarks, watermarksUnresolved } from "./readStateWatermarks.ts";
+import { _setLokiSink } from "../log.ts";
 
 const THIS_DIR = dirname(fileURLToPath(import.meta.url));
 const SPACE_SCHEMA = readFileSync(join(THIS_DIR, "schema-space.sql"), "utf8");
@@ -90,6 +91,40 @@ function watermark(readStateRaw: Database, roomId: string = ROOM) {
     .get(USER, roomId);
 }
 
+/**
+ * Capture the records a sweep emits, through the logger's own Loki sink — the
+ * same record the deployed fleet ships, so a line asserted here is the line an
+ * operator would read. The level is raised to `debug` for the duration, because
+ * a record below the threshold is dropped before either sink sees it;
+ * `restore()` puts the level back so no test leaks state into the next.
+ */
+function captureLogs() {
+  const lines: string[] = [];
+  const previousLevel = process.env.LOG_LEVEL;
+  process.env.LOG_LEVEL = "debug";
+  _setLokiSink({
+    push: (r) => lines.push(r.line),
+    flush: async () => {},
+    stop: () => {},
+    stats: () => ({ queued: 0, sent: 0, dropped: 0, failed: 0 }),
+  });
+  const messagesAt = (level: string): string =>
+    lines
+      .filter((l) => l.includes(`"level":"${level}"`))
+      .map((l) => JSON.parse(l).msg as string)
+      .join("\n");
+  return {
+    debug: () => messagesAt("debug"),
+    info: () => messagesAt("info"),
+    warn: () => messagesAt("warn"),
+    restore: () => {
+      _setLokiSink(null);
+      if (previousLevel === undefined) delete process.env.LOG_LEVEL;
+      else process.env.LOG_LEVEL = previousLevel;
+    },
+  };
+}
+
 describe("read-state watermark repair", () => {
   test("re-anchors an unresolved watermark to the last key its room holds", async () => {
     const { spaceRaw, readStateRaw, router } = fixture();
@@ -107,7 +142,7 @@ describe("read-state watermark repair", () => {
     expect(result.examined).toBe(1);
     expect(result.found).toBe(1);
     expect(result.repaired).toBe(1);
-    expect(result.unresolved).toBe(0);
+    expect(result.unanchorable).toBe(0);
     // Anchored to the greatest key at or below the watermark — the last message
     // the user could have seen — not to the newest message in the room.
     expect(watermark(readStateRaw)?.seen_up_to).toBe("01C00000000000000000000000");
@@ -129,7 +164,7 @@ describe("read-state watermark repair", () => {
     // nothing found, nothing written, and the row is byte-identical.
     expect(second.found).toBe(0);
     expect(second.repaired).toBe(0);
-    expect(second.unresolved).toBe(0);
+    expect(second.unanchorable).toBe(0);
     expect(watermark(readStateRaw)?.seen_up_to).toBe(after?.seen_up_to);
     // Not merely the same value: the row was not written at all. A repair that
     // re-ran would refresh `updated_at` even though every field matched.
@@ -163,7 +198,7 @@ describe("read-state watermark repair", () => {
 
     expect(result.found).toBe(1);
     expect(result.repaired).toBe(0);
-    expect(result.unresolved).toBe(1);
+    expect(result.unanchorable).toBe(1);
     expect(watermark(readStateRaw)?.seen_up_to).toBe("01A00000000000000000000000");
   });
 
@@ -178,7 +213,7 @@ describe("read-state watermark repair", () => {
     const result = await sweepReadStateWatermarks(router, [SPACE]);
 
     expect(result.found).toBe(1);
-    expect(result.unresolved).toBe(1);
+    expect(result.unanchorable).toBe(1);
     expect(watermark(readStateRaw)?.seen_up_to).toBe(STALE);
   });
 
@@ -274,7 +309,7 @@ describe("read-state watermark repair", () => {
       examined: 0,
       found: 0,
       repaired: 0,
-      unresolved: 0,
+      unanchorable: 0,
       unattributed: 0,
       failedSpaces: 0,
     });
@@ -335,6 +370,83 @@ describe("read-state watermark repair", () => {
     ).toBe("01B00000000000000000000000");
   });
 
+  test("re-anchors a rebuild's watermarks onto the keys the rebuild produced", async () => {
+    const { spaceRaw, readStateRaw, router } = fixture();
+    // A room rebuilt from the log: every message carries a `sort_idx` derived
+    // from the log's receipt time, and a message the materialiser never keyed
+    // (a thread, a room) carries none.
+    const keys = ["01J0000000000000000000000A", "01J0000000000000000000000B"];
+    seedRoom(spaceRaw, keys);
+    // Watermarks as they stood before the rebuild: they name the pre-rekey keys,
+    // which no entity in the rebuilt room carries. This is the state a fleet
+    // whose re-key failed holds — the snapshot that could have followed the key
+    // is gone, and only the room's current keys can answer.
+    seedWatermark(readStateRaw, "01KZZZZZZZZZZZZZZZZZZZZZZ");
+    readStateRaw.run(
+      `insert into read_positions (user_did, room_id, space_did, seen_up_to, updated_at)
+       values (?, ?, ?, ?, 0)`,
+      ["did:plc:other-reader", ROOM, SPACE, "01J0000000000000000000000C"],
+    );
+
+    const result = await sweepReadStateWatermarks(router, [SPACE]);
+
+    expect(result.found).toBe(2);
+    // Both land on the greatest key at or below them in the rebuilt room, and
+    // what the gauge publishes is the count that could not move.
+    expect(result.repaired).toBe(2);
+    expect(result.unanchorable).toBe(0);
+    expect(watermark(readStateRaw)?.seen_up_to).toBe(keys[1]);
+    expect(
+      readStateRaw
+        .query<{ seen_up_to: string }, []>(
+          "select seen_up_to from read_positions where user_did = 'did:plc:other-reader'",
+        )
+        .get()?.seen_up_to,
+    ).toBe(keys[1]);
+  });
+
+  test("reports a space whose watermarks moved on the per-space debug line", async () => {
+    const { spaceRaw, readStateRaw, router } = fixture();
+    seedRoom(spaceRaw, ["01A00000000000000000000000"]);
+    seedWatermark(readStateRaw, STALE);
+
+    const logs = captureLogs();
+    try {
+      const result = await sweepReadStateWatermarks(router, [SPACE]);
+
+      expect(result.repaired).toBe(1);
+      // A repair is not news: the per-space line records where the pass acted
+      // for an operator who has turned debug on, and the summary line carries
+      // the fleet figure at every level.
+      expect(logs.debug()).toContain(`read-state watermarks for ${SPACE}`);
+      expect(logs.info()).toContain("read-state watermarks: 1 of 1 examined");
+      expect(logs.warn()).not.toContain(`read-state watermarks for ${SPACE}`);
+    } finally {
+      logs.restore();
+    }
+  });
+
+  test("keeps an unanchorable residue out of the per-space warn lines", async () => {
+    const { spaceRaw, readStateRaw, router } = fixture();
+    seedRoom(spaceRaw, ["01B00000000000000000000000"]);
+    // Older than the room's only key: nothing survives to anchor to, so this
+    // figure is a property of the data, identical on every boot. It belongs in
+    // the fleet summary, not in a line per space per boot.
+    seedWatermark(readStateRaw, "01A00000000000000000000000");
+
+    const logs = captureLogs();
+    try {
+      const result = await sweepReadStateWatermarks(router, [SPACE]);
+
+      expect(result.unanchorable).toBe(1);
+      expect(logs.debug()).toContain(`read-state watermarks for ${SPACE}`);
+      expect(logs.warn()).not.toContain(`read-state watermarks for ${SPACE}`);
+      expect(logs.warn()).toContain("read-state watermarks: 1 of 1 examined");
+    } finally {
+      logs.restore();
+    }
+  });
+
   test("ignores the placeholder watermarks a lazily-created row starts with", async () => {
     const { spaceRaw, readStateRaw, router } = fixture();
     seedRoom(spaceRaw, ["01A00000000000000000000000"]);
@@ -347,6 +459,6 @@ describe("read-state watermark repair", () => {
     // hands them to every first-time reader.
     expect(result.examined).toBe(0);
     expect(result.found).toBe(0);
-    expect(result.unresolved).toBe(0);
+    expect(result.unanchorable).toBe(0);
   });
 });

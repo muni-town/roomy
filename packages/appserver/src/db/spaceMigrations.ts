@@ -261,12 +261,24 @@ async function recomputeSortIdxFromLog(
           params: [messageSortIdxKey(event, idx, receivedAt, createdAt), event.id],
         });
       } else if (event.$type === "space.roomy.message.moveMessages.v0") {
+        // `messageIds` postdates the collection: the schema moved from a
+        // singular `messageId`, so the log holds move events that never carried
+        // the field. Skipping those instead of reading through them keeps the
+        // replay from throwing — which would abandon this migration and send
+        // the space down the rebuild path on every boot — and is the same
+        // answer the live path gives them: a move that names no messages has no
+        // key to derive.
+        if (!("messageIds" in event) || !("toRoomId" in event)) continue;
+        const ids = event.messageIds;
+        const toRoomId = event.toRoomId;
+        if (!Array.isArray(ids) || typeof toRoomId !== "string") continue;
         const sortIdx = messageSortIdxKey(event, idx, receivedAt, createdAt);
-        for (const messageId of event.messageIds) {
+        for (const messageId of ids) {
+          if (typeof messageId !== "string") continue;
           steps.push({
             type: "run",
             sql: "update entities set sort_idx = ? where id = ? and room = ?",
-            params: [sortIdx, messageId, event.toRoomId],
+            params: [sortIdx, messageId, toRoomId],
           });
         }
       } else {
