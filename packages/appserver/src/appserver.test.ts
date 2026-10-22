@@ -524,6 +524,14 @@ function seedMinimalSpace(spaceId: string, userDid: string): void {
   // User entity so membership edges have an FK target without trying to
   // resolve the DID via PLC (no server in tests).
   sp.run("insert or ignore into entities (id, stream_id) values (?, ?)", [userDid, userDid]);
+  // The global entity→space index is what proves the space exists: metadata
+  // reads check it instead of opening (and creating) the per-space DB.
+  openDb()
+    .global()
+    .run("insert or ignore into entity_space (entity_id, space_did) values (?, ?)", [
+      spaceId,
+      spaceId,
+    ]);
 }
 
 describe("query response cache", () => {

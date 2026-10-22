@@ -54,6 +54,12 @@ beforeEach(async () => {
   const space = openSpaceDb(SPACE);
   await space.run("insert into entities (id, stream_id) values (?, ?)", [SPACE, SPACE]);
   await space.run("insert into comp_space (entity) values (?)", [SPACE]);
+  // The global entity→space index is what proves the space exists: getMetadata
+  // checks it instead of opening (and creating) the per-space DB.
+  await openGlobalDb().run(
+    "insert or ignore into entity_space (entity_id, space_did) values (?, ?)",
+    [SPACE, SPACE],
+  );
   // `edges` carries FKs onto `entities`, so every DID and room must exist
   // before an author/member/link edge can name it.
   for (const did of [VIEWER, AUTHOR, VISIBLE]) {

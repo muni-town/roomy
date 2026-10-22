@@ -111,6 +111,16 @@ export interface DbLike {
    */
   backfillEntitySpace?(spaceDid: string): Promise<{ backfilled: number }>;
   /**
+   * Optional: delete per-space DB files that hold no materialised state and
+   * that the global `entity_space` index does not know. Absent on sync
+   * adapters, which have no per-space files.
+   */
+  sweepEmptySpaceDbs?(): Promise<{
+    scanned: number;
+    deleted: number;
+    kept: number;
+  }>;
+  /**
    * Optional: refresh the query-planner statistics of the shared DBs (global,
    * read-state, event log) on their own workers. Absent on sync adapters,
    * which hold a single synchronous handle and plan nothing.
@@ -145,6 +155,7 @@ export interface WorkerRequest {
     | "init"
     | "health"
     | "backfillEntitySpace"
+    | "sweepEmptySpaceDbs"
     | "spaceRebuildBegin"
     | "spaceRebuildCommit"
     | "spaceRebuildAbort"

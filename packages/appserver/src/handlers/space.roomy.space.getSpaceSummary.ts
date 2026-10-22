@@ -13,7 +13,7 @@
  */
 
 import { spaceAccess } from "../auth/access.ts";
-import { openSpaceDb } from "../db/db.ts";
+import { openSpaceDb, spaceExists } from "../db/db.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
 import { requireString } from "../xrpc/params.ts";
@@ -31,6 +31,13 @@ export const getSpaceSummaryHandler: QueryHandler<
 > = async (params: QueryParams, auth: AuthCtx) => {
   const userDid = parseUserDid(auth);
   const spaceId = requireString(params, "spaceId");
+
+  // Prove the space exists before opening its DB: opening one creates the
+  // file and applies the whole per-space schema, so an unknown id would leave
+  // a full-size DB behind on every 404.
+  if (!(await spaceExists(spaceId))) {
+    throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`);
+  }
 
   const db = openSpaceDb(spaceId);
 

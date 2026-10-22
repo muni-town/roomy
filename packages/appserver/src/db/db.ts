@@ -162,6 +162,26 @@ export async function resolveSpaceForEntity(
 }
 
 /**
+ * Whether `spaceId` is a space this appserver has materialised.
+ *
+ * Read from the global `entity_space` index, never from the space's own DB: a
+ * read that has to prove the space exists must not open a DB, because opening
+ * one creates its file and applies the whole per-space schema.
+ *
+ * Any materialised entity of the space is proof. `applyBatch` indexes every
+ * `entities` row it writes, including the space's own row, which the joinSpace
+ * materialiser creates (`ensureEntity(streamId, streamId)`) and the boot
+ * `entity_space` backfill re-derives from the per-space DB. A space with no
+ * index row has never been materialised here.
+ */
+export async function spaceExists(spaceId: string): Promise<boolean> {
+  const row = await openGlobalDb()
+    .query("select 1 as present from entity_space where space_did = ? limit 1")
+    .get<{ present: number }>(spaceId);
+  return row !== null;
+}
+
+/**
  * Resolve the space DID that owns `entityId` (a room or message entity) by
  * reading the global `entity_space` index, then return a handle that routes
  * requests to that space's per-space DB.

@@ -25,7 +25,15 @@ import {
   DEFAULT_SPACE_DB_CACHE_KIB,
   type DbMemoryBounds,
 } from "./bounds.ts";
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WorkerRequest, WorkerResponse } from "./types.ts";
@@ -92,6 +100,12 @@ const spaceRebuilds = new Map<
 /** Global DB (joinedSpace/leftSpace edges + profiles + entity index), opened lazily. */
 let globalDb: Database | null = null;
 let spacesDir: string | null = null;
+/**
+ * When this worker started. The empty space-DB sweep only removes files that
+ * predate it: a file created since may be held open by a request on another
+ * worker, and the next boot sweeps it.
+ */
+const startedAt = Date.now();
 let globalDbPath: string | null = null;
 let spaceSchemaVersion: string | null = null;
 let globalSchemaVersion: string | null = null;
@@ -902,6 +916,8 @@ function handleRequest(req: WorkerRequest): unknown {
       return cacheStats();
     case "backfillEntitySpace":
       return handleBackfillEntitySpace(req);
+    case "sweepEmptySpaceDbs":
+      return handleSweepEmptySpaceDbs();
     case "spaceRebuildBegin":
       return handleSpaceRebuildBegin(requireSpaceDid(req));
     case "spaceRebuildCommit":
@@ -957,6 +973,108 @@ function handleBackfillEntitySpace(req: WorkerRequest): { backfilled: number } {
   });
   run();
   return { backfilled: rows.length };
+}
+
+// ─── Empty space-DB sweep ─────────────────────────────────────────────────
+
+/**
+ * Delete per-space DB files that hold no materialised state and that the global
+ * `entity_space` index does not know.
+ *
+ * Opening a space's DB creates its file and applies the whole per-space schema,
+ * so a read of an id that is not a space used to leave a full-size, permanently
+ * unused DB behind — and those files compete with real spaces for the workers'
+ * LRU cache. Both conditions must hold before a file is removed, so a real
+ * space's DB can never be swept:
+ *
+ *   - the index has no entity belonging to the space, and
+ *   - the file contains no `entities` and no `comp_space` row, and predates
+ *     this worker (a file created since may be held open by a request).
+ *
+ * A file that cannot be opened or queried is kept: the sweep never guesses.
+ */
+function handleSweepEmptySpaceDbs(): {
+  scanned: number;
+  deleted: number;
+  kept: number;
+} {
+  if (role !== "global" && role !== "system") {
+    throw new Error("sweepEmptySpaceDbs requires the global DB (global worker)");
+  }
+  if (!spacesDir || spacesDir === ":memory:") {
+    return { scanned: 0, deleted: 0, kept: 0 };
+  }
+  let names: string[];
+  try {
+    names = readdirSync(spacesDir);
+  } catch {
+    return { scanned: 0, deleted: 0, kept: 0 };
+  }
+  const indexed = openGlobalDbInternal().prepare(
+    "select 1 from entity_space where space_did = ? limit 1",
+  );
+  let scanned = 0;
+  let deleted = 0;
+  let kept = 0;
+  for (const name of names) {
+    // `.sqlite.new` blue-green rebuilds are never canonical space DBs.
+    if (!name.endsWith(".sqlite")) continue;
+    const spaceId = name.slice(0, -".sqlite".length);
+    scanned++;
+    const path = join(spacesDir, name);
+    if (
+      indexed.get(spaceId) !== null ||
+      spaceDbs.has(spaceId) ||
+      spaceRebuilds.has(spaceId) ||
+      !isEmptySpaceDbFile(path)
+    ) {
+      kept++;
+      continue;
+    }
+    for (const suffix of ["", "-wal", "-shm"]) {
+      try {
+        unlinkSync(path + suffix);
+      } catch {
+        /* already gone */
+      }
+    }
+    deleted++;
+  }
+  return { scanned, deleted, kept };
+}
+
+/**
+ * Whether the file at `path` is a space DB with nothing in it. Unreadable or
+ * unrecognisable files are not empty, and a file this worker may still have
+ * just handed out is not swept.
+ */
+function isEmptySpaceDbFile(path: string): boolean {
+  let db: Database | null = null;
+  try {
+    if (statSync(path).mtimeMs >= startedAt) return false;
+    db = new Database(path);
+    const entities =
+      db
+        .query<{ present: number }, []>(
+          "select exists(select 1 from entities) as present",
+        )
+        .get()?.present ?? 1;
+    const spaces =
+      db
+        .query<{ present: number }, []>(
+          "select exists(select 1 from comp_space) as present",
+        )
+        .get()?.present ?? 1;
+    return entities === 0 && spaces === 0;
+  } catch {
+    return false;
+  } finally {
+    try {
+      db?.close();
+    } catch {
+      /* best-effort */
+    }
+  }
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────

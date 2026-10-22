@@ -8,7 +8,7 @@
 
 import { createAccessMemo, roomAccessMany, spaceAccess } from "../auth/access.ts";
 import { createFederationMemo, federatedRoomAccess } from "../auth/federation.ts";
-import { openReadStateDb, openSpaceDb, openGlobalDb } from "../db/db.ts";
+import { openReadStateDb, openSpaceDb, openGlobalDb, spaceExists } from "../db/db.ts";
 import {
   getReadPositions,
   getSpaceSidebarData,
@@ -105,6 +105,13 @@ export const getMetadataHandler: QueryHandler<
   const userDid = parseUserDid(auth);
   const spaceId = requireString(params, "spaceId");
 
+  // Prove the space exists before opening its DB: opening one creates the
+  // file and applies the whole per-space schema, so an unknown id would leave
+  // a full-size DB behind on every 404. The existence read is the global
+  // entity→space index, which needs no per-space DB.
+  if (!(await spaceExists(spaceId))) {
+    throw new XrpcError(404, "NotFound", `Space not found: ${spaceId}`);
+  }
 
   const db = openSpaceDb(spaceId);
   const mainDb = openReadStateDb();

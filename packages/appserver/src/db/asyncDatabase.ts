@@ -582,6 +582,23 @@ export class AsyncDatabase {
     }>;
   }
 
+  /**
+   * Delete per-space DB files that hold no materialised state and that the
+   * global `entity_space` index does not know (worker-internal). Runs on the
+   * global worker, which owns both the index and the spaces directory.
+   */
+  sweepEmptySpaceDbs(): Promise<{
+    scanned: number;
+    deleted: number;
+    kept: number;
+  }> {
+    return this.#link.send({ type: "sweepEmptySpaceDbs" }) as Promise<{
+      scanned: number;
+      deleted: number;
+      kept: number;
+    }>;
+  }
+
   async close(): Promise<void> {
     if (this.#ownedLink) {
       this.#link.terminate();

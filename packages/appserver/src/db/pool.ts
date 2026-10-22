@@ -437,6 +437,15 @@ export class PooledDatabase implements DbLike {
     // per-space DB file for the entity_space backfill.
     return this.#pool.global().backfillEntitySpace(spaceDid);
   }
+  sweepEmptySpaceDbs(): Promise<{
+    scanned: number;
+    deleted: number;
+    kept: number;
+  }> {
+    // Runs on the global worker, which owns the `entity_space` index and the
+    // spaces directory.
+    return this.#pool.global().sweepEmptySpaceDbs();
+  }
   analyzeShared(): Promise<void> {
     return this.#pool.analyzeShared();
   }

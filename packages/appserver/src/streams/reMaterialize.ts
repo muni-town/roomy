@@ -193,6 +193,21 @@ export async function reMaterializeFromLocalEvents(
         `read-state watermark sweep failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+    // Remove per-space DB files left behind by reads of ids that are not
+    // spaces. It runs here, after the per-stream `entity_space` backfill, so a
+    // real space's DB is indexed by the time the sweep asks whether its file
+    // belongs to one.
+    try {
+      const swept = await db.sweepEmptySpaceDbs?.();
+      if (swept && swept.deleted > 0) {
+        log.info("startup", "empty space DB files swept", swept);
+      }
+    } catch (err) {
+      log.warn(
+        "startup",
+        `empty space-DB sweep failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   };
 
   if (streams.length === 0) {
