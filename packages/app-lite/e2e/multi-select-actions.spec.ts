@@ -136,40 +136,45 @@ async function postLobbyMessage(linkUrl?: string): Promise<Posted> {
 }
 
 /**
- * Enter select mode from a message's hover toolbar, which pre-selects it.
+ * Open a message's actions menu from its hover toolbar.
  *
- * Scoped to the row throughout, so the click can only ever reach the message
- * the caller named. The row is scrolled into view and its toolbar confirmed
- * before the click: the chat area autoscrolls to the newest message and the
- * virtualizer re-measures as rows settle, so a toolbar read before that is a
- * toolbar whose position — or whose owning row — can still change underneath
- * the pointer.
+ * The toolbar mounts only while the pointer rests on its row, and the chat
+ * list moves under a stationary pointer: the autoscroll to the newest message,
+ * the virtualizer re-anchoring as rows are measured, and a row above growing
+ * when its link embed resolves all shift rows with no pointer movement at all.
+ * A browser dispatches no boundary events for a layout change, so the row that
+ * slid out from under the pointer is never told it lost the hover, and the row
+ * that slid under it is never told it gained one — the toolbar stays where it
+ * was, on the wrong message.
  *
- * The click waits for that settling out rather than failing on it. A toolbar
- * caught mid-re-measure is "not stable", and the row can be replaced outright,
- * detaching the button — both of which Playwright reports at the click, long
- * after the visibility check above passed.
+ * That is why re-resolving the button cannot recover: the row-scoped locator
+ * finds nothing to click, and nothing will mount our row's toolbar again until
+ * the pointer moves. Each attempt therefore re-places the pointer, which is
+ * the move a reader makes when this happens to them, and the attempt counts
+ * only once the menu is open — the app's own observable for the state asked
+ * for. Scoping the click to the row is what keeps a menu that opens mid-shift
+ * on another message from being mistaken for this one.
  */
-async function startSelect(page: Page, messageId: string): Promise<void> {
+async function openRowActionsMenu(page: Page, messageId: string): Promise<void> {
   const row = messageRow(page, messageId);
-  await row.scrollIntoViewIfNeeded();
-  await row.hover();
   const actions = row.getByLabel("More actions");
-  await expect(actions).toBeVisible();
   await expect
     .poll(
       async () => {
-        const button = await actions.boundingBox();
-        if (!button) return false;
-        await actions.click({ timeout: 5_000 }).then(
-          () => true,
-          () => false,
-        );
+        await row.scrollIntoViewIfNeeded().catch(() => {});
+        await row.hover({ timeout: 5_000 }).catch(() => {});
+        if (!(await actions.isVisible().catch(() => false))) return false;
+        await actions.click({ timeout: 5_000 }).catch(() => {});
         return menuIsOpen(page);
       },
       { timeout: 20_000 },
     )
     .toBe(true);
+}
+
+/** Enter select mode from a message's hover toolbar, which pre-selects it. */
+async function startSelect(page: Page, messageId: string): Promise<void> {
+  await openRowActionsMenu(page, messageId);
   await page.getByRole("menuitem", { name: "Select", exact: true }).click();
   await expect(selectBar(page)).toBeVisible();
 }
@@ -307,14 +312,11 @@ test.describe("multi-select message actions", () => {
 
     // Enter the mode from the toolbar without ever touching the mouse: open
     // the actions menu, walk to "Select", and activate it. Same row-scoped
-    // targeting as `startSelect`, for the same reason: the menu has to belong
-    // to the row the test thinks it is acting on.
-    const row = messageRow(page, target.id);
-    await row.scrollIntoViewIfNeeded();
-    await row.hover();
-    const actions = row.getByLabel("More actions");
-    await expect(actions).toBeVisible();
-    await actions.click();
+    // targeting as `startSelect`, through the same helper, for the same
+    // reason: the menu has to belong to the row the test thinks it is acting
+    // on. A second inline copy of the hover-and-click is a second place for
+    // the same race to be fixed twice, or fixed in one and left in the other.
+    await openRowActionsMenu(page, target.id);
     const select = page.getByRole("menuitem", { name: "Select", exact: true });
     await select.focus();
     await page.keyboard.press("Enter");
