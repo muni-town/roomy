@@ -36,6 +36,7 @@ import "./transports/fcm.ts";
 import "./transports/sse.ts";
 import { PUSH_TRANSPORTS, type PushTarget } from "./transports/types.ts";
 import { WorkerLease } from "../workers/lease.ts";
+import { mapWithConcurrency } from "../concurrency.ts";
 import {
   pruneSubscriptionByEndpoint,
   selectSubscriptions,
@@ -463,25 +464,6 @@ export async function deliverPayload(
       }
     }),
   );
-}
-
-/** Run `fn` over `items` with at most `limit` concurrent invocations. */
-async function mapWithConcurrency<T>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<void>,
-): Promise<void> {
-  let i = 0;
-  const workers = Array.from(
-    { length: Math.min(limit, items.length) },
-    async () => {
-      while (i < items.length) {
-        const idx = i++;
-        await fn(items[idx]!);
-      }
-    },
-  );
-  await Promise.all(workers);
 }
 
 /**

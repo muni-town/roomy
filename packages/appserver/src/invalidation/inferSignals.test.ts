@@ -11,11 +11,12 @@ import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { StreamDid, UserDid, Ulid, EventType } from "@roomy-space/sdk";
-import { type, schemas, newUlid } from "@roomy-space/sdk";
+import type { StreamDid, Ulid, EventType } from "@roomy-space/sdk";
+import { type, schemas, newUlid, UserDid } from "@roomy-space/sdk";
 import { ulid } from "ulidx";
 import { toAsyncDb } from "../db/syncAdapter.ts";
-import { inferSignals } from "./inferSignals.ts";
+import { inferSignals, UNREAD_PROBE_CONCURRENCY } from "./inferSignals.ts";
+import { spaceHasUnreads } from "../queries/readPositions.ts";
 import type { MessageDto } from "../queries/selectMessages.ts";
 import type {
   AppliedEvent,
@@ -337,6 +338,127 @@ describe("inferSignals: message events", () => {
     }
     expect(invalidatedNsids(signals)).not.toContain("space.roomy.space.getSpaces");
   });
+
+  it("createMessage probes every newly-unread reader with bounded concurrency", async () => {
+    // The per-reader probes are independent — each resolves that reader's own
+    // access — so they overlap instead of running one at a time. A serial
+    // fan-out holds the request open for the sum of every probe, which is the
+    // tail of this path on a space with many readers.
+    const READER_COUNT = 50;
+    const { db, asyncDb } = seedMessageDb({
+      id: EVENT_ID,
+      roomId: ROOM_ID,
+      authorDid: USER_DID,
+      authorName: "Alice",
+      content: "hello",
+    });
+
+    // A second channel with messages, so the probe has somewhere OTHER than
+    // the event's own room to find unread state.
+    const otherRoom = "01HXSXKBQ4TESTROOM0000000ZZ";
+    const otherKeys = Array.from({ length: 4 }, (_, i) => ulid(Date.now() - 1000 + i));
+    db.run("insert into entities (id, stream_id) values (?, ?)", [otherRoom, STREAM_DID]);
+    db.run("insert into comp_room (entity, label) values (?, 'space.roomy.channel')", [otherRoom]);
+    for (const key of otherKeys) {
+      db.run(
+        "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
+        [newUlid(), STREAM_DID, otherRoom, key],
+      );
+    }
+
+    // ROOM_ID holds only the event's message, so a watermark at 0 makes each
+    // reader's derived count exactly 1: every reader is newly unread in the
+    // room. Half of them are also unread in the other channel — their SPACE
+    // was already marked, so only the other half's space list flips.
+    const readers = Array.from({ length: READER_COUNT }, (_, i) => `did:plc:fanout-reader-${i}`);
+    const flips = new Set(readers.filter((_, i) => i % 2 === 1));
+    for (const [i, reader] of readers.entries()) {
+      db.run(
+        "insert into readstate.read_positions (user_did, room_id, seen_up_to) values (?, ?, '0')",
+        [reader, ROOM_ID],
+      );
+      db.run(
+        "insert into readstate.read_positions (user_did, room_id, seen_up_to) values (?, ?, ?)",
+        [reader, otherRoom, i % 2 === 0 ? "0" : otherKeys[3]!],
+      );
+    }
+
+    // Count a probe by its watermark read: it is the one statement
+    // `spaceHasUnreads` issues per reader, keyed by the reader's own DID.
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const probedReaders: string[] = [];
+    const countingDb: DbLike = {
+      ...asyncDb,
+      query(sql: string) {
+        const statement = asyncDb.query(sql);
+        if (!sql.includes("where user_did = ? and room_id in")) return statement;
+        return {
+          async all<T>(...params: unknown[]): Promise<T[]> {
+            probedReaders.push(String(params[0]));
+            inFlight++;
+            maxInFlight = Math.max(maxInFlight, inFlight);
+            try {
+              return await statement.all<T>(...params);
+            } finally {
+              inFlight--;
+            }
+          },
+          get: statement.get.bind(statement),
+        };
+      },
+    };
+
+    // The same probes asked one at a time, for the serial cost to report
+    // against. Read-only apart from the idempotent `ensureReadPositions`.
+    const serialStart = performance.now();
+    for (const reader of readers) {
+      await spaceHasUnreads(asyncDb, asyncDb, reader, STREAM_DID, undefined, ROOM_ID);
+    }
+    const serialMs = performance.now() - serialStart;
+    probedReaders.length = 0;
+    maxInFlight = 0;
+
+    const started = performance.now();
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.message.createMessage.v0",
+        roomId: ROOM_ID,
+        details: { content: "hello", authorName: "Alice" },
+      }),
+      countingDb,
+    );
+    const concurrentMs = performance.now() - started;
+
+    // Every newly-unread reader was probed exactly once…
+    expect(probedReaders).toHaveLength(READER_COUNT);
+    expect(new Set(probedReaders)).toEqual(new Set(readers));
+    // …with more than one in flight at a time, but never above the bound.
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(UNREAD_PROBE_CONCURRENCY);
+
+    // The fan-out changed nothing about the answer: the same users are
+    // patched, and the same half of them flip the space list.
+    const roomDiff = findRoomMetadataDiff(signals);
+    expect(roomDiff).toBeDefined();
+    if (roomDiff!.kind === "roomMetadataDiff") {
+      expect([...roomDiff!.signal.users].sort()).toEqual(
+        readers.map((d) => UserDid.assert(d)).sort(),
+      );
+      expect([...(roomDiff!.signal.spaceUnreadFlips?.keys() ?? [])].sort()).toEqual(
+        [...flips].map((d) => UserDid.assert(d)).sort(),
+      );
+    }
+    // The flip set rides the diff, so no per-user `getSpaces` invalidation is
+    // needed — the same shape a single reader produces.
+    expect(invalidatedNsids(signals)).not.toContain("space.roomy.space.getSpaces");
+
+    console.log(
+      `unread probe fan-out (${READER_COUNT} readers): serial ${Math.round(serialMs)} ms, ` +
+        `bounded(${UNREAD_PROBE_CONCURRENCY}) ${Math.round(concurrentMs)} ms, ` +
+        `max ${maxInFlight} in flight`,
+    );
+  }, { timeout: 30_000 });
 
   it("createMessage uses a pre-fetched messageSnapshots map and skips the DB read", async () => {
     // Seed a DB whose content is "from-db" but pass a snapshot map whose

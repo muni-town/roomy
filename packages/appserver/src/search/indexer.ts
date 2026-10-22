@@ -28,6 +28,7 @@ import { encodeSparse, type SparseVector } from "./bm25.ts";
 import { extractMessageText } from "./text.ts";
 import { log } from "../log.ts";
 import { WorkerLease } from "../workers/lease.ts";
+import { mapWithConcurrency } from "../concurrency.ts";
 
 // ─── Configuration ──────────────────────────────────────────────────────
 
@@ -391,25 +392,6 @@ async function resolveThreadId(db: DbLike, roomId: string): Promise<string | nul
     .query("select label from comp_room where entity = ?")
     .get<{ label: string | null }>(roomId);
   return row?.label === "space.roomy.thread" ? roomId : null;
-}
-
-/** Run `fn` over `items` with at most `limit` concurrent invocations. */
-async function mapWithConcurrency<T>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<void>,
-): Promise<void> {
-  let i = 0;
-  const workers = Array.from(
-    { length: Math.min(limit, items.length) },
-    async () => {
-      while (i < items.length) {
-        const idx = i++;
-        await fn(items[idx]!);
-      }
-    },
-  );
-  await Promise.all(workers);
 }
 
 /**

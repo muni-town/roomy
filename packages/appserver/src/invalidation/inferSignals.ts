@@ -36,6 +36,20 @@ import {
 } from "../queries/readPositions.ts";
 import { resolveReplyToAuthors, type RemovedMentionDids } from "../queries/mentions.ts";
 import { readRoomBoardFacts, roomActivityDiff } from "./roomActivity.ts";
+import { mapWithConcurrency } from "../concurrency.ts";
+
+/**
+ * Readers whose space-level unread state one message-create asks about at
+ * once.
+ *
+ * Each probe resolves that reader's own access over the space's whole
+ * candidate set, so the fan-out is DB-bound work on two workers (the space's
+ * and the read-state's). A bound keeps a space with many readers from putting
+ * one statement per in-flight probe into the same queue: eight probes is
+ * enough to keep both workers busy while leaving the per-space pool (100
+ * handles) far from saturated.
+ */
+export const UNREAD_PROBE_CONCURRENCY = 8;
 
 // ─── Public API ─────────────────────────────────────────────────────────
 
@@ -244,10 +258,13 @@ async function federatedReceiversInvalidation(
     // room itself is unread by construction, so it is excluded).
     const spaceUnreadFlips = new Map<UserDid, true>();
     if (readState && homeDb) {
-      for (const user of newlyUnread) {
-        if (!(await spaceHasUnreads(readState, homeDb, user, home, undefined, roomId))) {
-          spaceUnreadFlips.set(user, true);
-        }
+      const hasUnreads = await mapWithConcurrency(
+        newlyUnread,
+        UNREAD_PROBE_CONCURRENCY,
+        (user) => spaceHasUnreads(readState, homeDb, user, home, undefined, roomId),
+      );
+      for (const [i, alreadyUnread] of hasUnreads.entries()) {
+        if (!alreadyUnread) spaceUnreadFlips.set(newlyUnread[i]!, true);
       }
     }
     signals.push({
@@ -479,6 +496,12 @@ async function handleCreateMessage(
     // the boolean, so this flip is the entire change this event can make to
     // their list.
     //
+    // The probes are independent — each resolves that reader's own access —
+    // so they run with bounded concurrency rather than one at a time. A
+    // space's message-create path asks this once per reader the message made
+    // newly unread, and a serial fan-out holds the request open for the sum
+    // of every probe.
+    //
     // The probe is the same one `getSpaces` runs (`spaceHasUnreads`), with the
     // message's own room excluded — that room is unread by construction, so
     // only OTHER rooms can answer "was the space already unread?". Using the
@@ -486,11 +509,14 @@ async function handleCreateMessage(
     // federated channels) keeps this in lockstep with the list itself; a
     // cheaper room-id scan would count a room the reader cannot see (deleted,
     // role-gated) and silently drop a real flip.
+    const hasUnreads = await mapWithConcurrency(
+      newlyUnread,
+      UNREAD_PROBE_CONCURRENCY,
+      (user) => spaceHasUnreads(readState, spaceDb, user, spaceId, undefined, roomId),
+    );
     const spaceUnreadFlips = new Map<UserDid, true>();
-    for (const user of newlyUnread) {
-      if (!(await spaceHasUnreads(readState, spaceDb, user, spaceId, undefined, roomId))) {
-        spaceUnreadFlips.set(user, true);
-      }
+    for (const [i, alreadyUnread] of hasUnreads.entries()) {
+      if (!alreadyUnread) spaceUnreadFlips.set(newlyUnread[i]!, true);
     }
 
     // Thread messages only bump engaged users and carry the parent channel
