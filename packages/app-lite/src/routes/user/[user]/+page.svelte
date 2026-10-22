@@ -24,33 +24,10 @@
   import type { ScopeSetName } from "$lib/scopes";
   import { queryClient } from "$lib/client";
   import { cache } from "@roomy-space/sdk";
-  import type { PageData } from "./$types";
-
-  let { data }: { data: PageData } = $props();
 
   const actorParam = $derived(page.params.user ?? "");
   const profileQuery = createProfileQuery(() => actorParam);
   const profile = $derived(profileQuery.data);
-
-  /**
-   * The head's profile fields: the client's query once it has answered, the
-   * server's anonymous read until then. Same NSID, so a crawler that never runs
-   * the bundle and a client that does agree about the tags.
-   */
-  const seoDisplayName = $derived(
-    profile?.displayName ?? data.profileMeta?.displayName ?? null,
-  );
-  // The route segment is the fallback for a profile whose handle is unknown —
-  // it is the handle the link was followed by, or the DID it named.
-  const seoHandle = $derived(
-    profile?.handle ?? data.profileMeta?.handle ?? actorParam,
-  );
-  const seoDescription = $derived(
-    profile?.description ?? data.profileMeta?.description ?? null,
-  );
-  const seoAvatar = $derived(
-    profile?.avatar ?? data.profileMeta?.avatar ?? null,
-  );
   const error = $derived(
     profileQuery.error
       ? profileQuery.error instanceof Error
@@ -353,9 +330,9 @@
 </script>
 
 <SeoMeta
-  title={seoDisplayName ? `${seoDisplayName} (@${seoHandle}) - Roomy` : `@${seoHandle} - Roomy`}
-  description={seoDescription}
-  image={seoAvatar}
+  title={profile?.displayName ? `${profile.displayName} (@${profile.handle}) - Roomy` : `@${page.params.user} - Roomy`}
+  description={profile?.description}
+  image={profile?.avatar}
   type="profile"
 />
 
