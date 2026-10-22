@@ -196,6 +196,7 @@ function message(authorDid: UserDid) {
     authorDid,
     authorName: "Author",
     timestamp: new Date(1_700_000_000_000).toISOString(),
+    attachments: [],
     reactions: [],
     media: [],
     linkEmbeds: [],

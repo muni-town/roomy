@@ -97,6 +97,33 @@ export async function sendMessage(
     draft,
     message: (id) => {
       const profile = auth.profile;
+      // Mirrors the appserver's projection: one attachment entry per
+      // composer attachment, carrying the `$type` the message will carry. An
+      // embed-backed attachment's URL gains a `?message=<id>` query (see
+      // `selectMessages` / the createMessage materialiser), so the optimistic
+      // row renders the same image the server will return at the same URL.
+      // Replies and links produce no embed row, so they are not media here
+      // either.
+      const optimistic = attachments.flatMap((a): unknown[] => {
+        const $type = typeof a.$type === "string" ? a.$type : undefined;
+        if ($type === "space.roomy.attachment.reply.v0") {
+          return [{ $type, messageId: a.target }];
+        }
+        const { uri, mimeType: type } = a;
+        if (typeof $type !== "string" || typeof uri !== "string" || typeof type !== "string") {
+          return [];
+        }
+        return [
+          {
+            $type,
+            url: `${uri}?message=${id}`,
+            type,
+            ...(typeof a.alt === "string" ? { alt: a.alt } : {}),
+            ...(typeof a.size === "number" ? { size: a.size } : {}),
+            ...(typeof a.name === "string" ? { name: a.name } : {}),
+          },
+        ];
+      }) as Message["attachments"];
       return {
         id,
         content,
@@ -106,28 +133,10 @@ export async function sendMessage(
         ...(profile?.handle ? { authorHandle: profile.handle } : {}),
         ...(profile?.avatar ? { authorAvatar: profile.avatar } : {}),
         timestamp: new Date(decodeTime(id)).toISOString(),
+        attachments: optimistic,
         ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
         reactions: [],
-        // Mirrors the appserver's embed rows: media URLs carry a
-        // `?message=<id>` query (see `selectMessages` / the createMessage
-        // materialiser), so the optimistic row renders the same image the
-        // server will return at the same URL. Replies and links produce no
-        // embed row, so they are not media here either.
-        media: attachments.flatMap((a) => {
-          if (a.$type === "space.roomy.attachment.reply.v0") return [];
-          if (a.$type === "space.roomy.attachment.link.v0") return [];
-          const { uri, mimeType: type } = a;
-          if (typeof uri !== "string" || typeof type !== "string") return [];
-          return [
-            {
-              url: `${uri}?message=${id}`,
-              type,
-              ...(typeof a.alt === "string" ? { alt: a.alt } : {}),
-              ...(typeof a.size === "number" ? { size: a.size } : {}),
-              ...(typeof a.name === "string" ? { name: a.name } : {}),
-            },
-          ];
-        }),
+        media: [],
         linkEmbeds: [],
       } satisfies Message;
     },

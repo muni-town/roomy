@@ -191,13 +191,15 @@ create table did_owners ( did text references dids(did), owner text not null, un
 
   <h2>Embed Tables</h2>
 
-  <p>Rich media embeds attached to messages:</p>
+  <p>Rich media embeds attached to messages, one row per attachment, keyed by its URL (a link entity's id IS its URL):</p>
   <ul>
     <li><strong>comp_embed_image</strong> — Image embeds with dimensions, blurhash, alt text</li>
     <li><strong>comp_embed_video</strong> — Video embeds with dimensions, length, blurhash</li>
     <li><strong>comp_embed_file</strong> — File attachments with name and size</li>
     <li><strong>comp_embed_link</strong> — Link embeds with preview toggle</li>
   </ul>
+
+  <p>These four tables are the media half of a message's attachments. The read path projects all of them, plus the reply and forward edges, into one <code>attachments</code> list on the message, each entry discriminated by the <code>$type</code> of the attachment it came from. <code>media</code>, <code>linkEmbeds</code>, <code>replyTo</code> and <code>forwardedFrom</code> are per-kind views derived from that list.</p>
 
   <p>Enriched link metadata — the title, description and image a URL resolves to — is not per-space: the URL is the whole key, so it lives in the global <code>link_embeds</code> table and every space that shared the link reads the same row. It is fetched asynchronously by the embed sweeper; transient failures retry with exponential backoff (<code>attempts</code>, <code>retry_after</code>).</p>
 

@@ -8,6 +8,7 @@
   import ActivityFeedSkeleton from "@roomy/design/components/content/feed/ActivityFeedSkeleton.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import MediaEmbed from "../chat/embeds/MediaEmbed.svelte";
+  import { linkItems, mediaItems } from "../chat/attachment-views";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
@@ -238,16 +239,13 @@
                   <MessageContent content={last.content} mimeType={last.mimeType} />
                 </div>
 
-                {#if last.media && last.media.length > 0}
-                  {@const nonLinkMedia = last.media.filter((m) => !m.type.startsWith("text/"))}
-                  {#if nonLinkMedia.length > 0}
-                    <MediaEmbed media={nonLinkMedia.map((m) => ({ ...m, alt: m.alt ?? undefined }))} />
-                  {/if}
+                {#if last.attachments && mediaItems(last.attachments).length > 0}
+                  <MediaEmbed media={mediaItems(last.attachments)} />
                 {/if}
 
-                {#if last.linkEmbeds && last.linkEmbeds.length > 0}
+                {#if last.attachments && linkItems(last.attachments).length > 0}
                   <div class="flex flex-col gap-2 mt-1">
-                    {#each last.linkEmbeds as link (link.url)}
+                    {#each linkItems(last.attachments) as link (link.url)}
                       <LinkCard url={link.url} embed={link.embed} />
                     {/each}
                   </div>

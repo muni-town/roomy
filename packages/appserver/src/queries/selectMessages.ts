@@ -2,8 +2,9 @@
  * Message selection helper used by `room.getMessages` and `message.getMessage`.
  *
  * Returns fully denormalised message objects with all joins resolved
- * server-side: author, content, replyTo, forwardedFrom, reactions, media,
- * linkEmbeds.
+ * server-side: author, content, `attachments` (one entry per attachment, each
+ * carrying its `$type`), and the per-kind views derived from that list —
+ * `replyTo`, `forwardedFrom`, `media`, `linkEmbeds`.
  *
  * A forwarded message is the forwarder's own message; the original is fully
  * denormalised (author, content, timestamp, reactions, media, link embeds,
@@ -61,6 +62,192 @@ export interface MediaDto {
   name?: string;
 }
 
+/**
+ * One entry per attachment on a message, discriminated by `$type`.
+ *
+ * This is the whole of a message's attachments; `media`, `linkEmbeds`,
+ * `replyTo` and `forwardedFrom` on `MessageDto` are derived views over it,
+ * kept while the renderers built against them migrate. A renderer switches on
+ * `$type` here instead of being handed a fifth parallel field.
+ *
+ * The kind set is the projection's: `space.roomy.attachment.comment.v0` is
+ * materialised into `comp_comment` but read by no query, so it never reaches a
+ * client and has no variant. `Reply` carries no `message` — a reply renders as
+ * a context line that fetches on demand, unlike a forward, which is
+ * denormalised here because its embed renders the original inline.
+ */
+export type AttachmentDto =
+  | {
+      $type: "space.roomy.attachment.reply.v0";
+      messageId: string;
+    }
+  | {
+      $type: "space.roomy.attachment.forward.v0";
+      messageId: string;
+      roomId: string;
+      name: string;
+      message?: MessageDto;
+    }
+  | {
+      $type: "space.roomy.attachment.image.v0";
+      url: string;
+      type: string;
+      alt?: string;
+      width?: number;
+      height?: number;
+      blurhash?: string;
+      size?: number;
+    }
+  | {
+      $type: "space.roomy.attachment.video.v0";
+      url: string;
+      type: string;
+      alt?: string;
+      width?: number;
+      height?: number;
+      length?: number;
+      blurhash?: string;
+      size?: number;
+    }
+  | {
+      $type: "space.roomy.attachment.file.v0";
+      url: string;
+      type: string;
+      name?: string;
+      size?: number;
+    }
+  | {
+      $type: "space.roomy.attachment.link.v0";
+      url: string;
+      embed?: Record<string, unknown>;
+    };
+
+/** The four embed component tables a row can come from, tagged in the UNION. */
+export type EmbedKind = "image" | "video" | "file" | "link";
+
+/** An embed row as the batch query returns it: one row per attachment. */
+export interface EmbedRow {
+  message_id: string;
+  kind: EmbedKind;
+  url: string;
+  mime_type: string;
+  alt: string | null;
+  width: number | null;
+  height: number | null;
+  blurhash: string | null;
+  size: number | null;
+  length: number | null;
+  name: string | null;
+}
+
+/**
+ * Project one embed row into the attachment list entry for its kind.
+ *
+ * The row's `kind` is which component table it came from, and it is what
+ * supplies the entry's `$type` — the tag a renderer dispatches on and the one
+ * thing the flat `media` shape could not carry. The link variant takes its
+ * enriched metadata from the global store, keyed by URL.
+ */
+export function attachmentFromEmbedRow(
+  row: EmbedRow,
+  linkEmbedData: ReadonlyMap<string, Record<string, unknown> | null>,
+): AttachmentDto {
+  switch (row.kind) {
+    case "image":
+      return stripNulls({
+        $type: "space.roomy.attachment.image.v0",
+        url: row.url,
+        type: row.mime_type,
+        alt: row.alt ?? undefined,
+        width: row.width ?? undefined,
+        height: row.height ?? undefined,
+        blurhash: row.blurhash ?? undefined,
+        size: row.size ?? undefined,
+      }) as AttachmentDto;
+    case "video":
+      return stripNulls({
+        $type: "space.roomy.attachment.video.v0",
+        url: row.url,
+        type: row.mime_type,
+        alt: row.alt ?? undefined,
+        width: row.width ?? undefined,
+        height: row.height ?? undefined,
+        length: row.length ?? undefined,
+        blurhash: row.blurhash ?? undefined,
+        size: row.size ?? undefined,
+      }) as AttachmentDto;
+    case "file":
+      return stripNulls({
+        $type: "space.roomy.attachment.file.v0",
+        url: row.url,
+        type: row.mime_type,
+        name: row.name ?? undefined,
+        size: row.size ?? undefined,
+      }) as AttachmentDto;
+    case "link": {
+      const embed = linkEmbedData.get(row.url);
+      return {
+        $type: "space.roomy.attachment.link.v0",
+        url: row.url,
+        ...(embed != null ? { embed } : {}),
+      };
+    }
+  }
+}
+
+/**
+ * Derive the per-kind views a renderer built against `media` / `linkEmbeds`
+ * reads, from one message's attachment list.
+ *
+ * This is the single rule behind both fields: `media` is the image, video and
+ * file entries in kind order followed by the links as `text/uri-list` rows
+ * (which the media renderers filter out by MIME type — links have always
+ * travelled there), and `linkEmbeds` is the link entries with their enriched
+ * metadata. Both surfaces that hand a client attachments use this, so a
+ * derived view cannot drift from the list it claims to be a view of.
+ */
+export function deriveAttachmentViews(attachments: ReadonlyArray<AttachmentDto>): {
+  media: Array<MediaDto>;
+  linkEmbeds: Array<LinkEmbedDto>;
+} {
+  const media: Array<MediaDto> = [];
+  const linkEmbeds: Array<LinkEmbedDto> = [];
+  for (const a of attachments) {
+    if (a.$type === "space.roomy.attachment.link.v0") {
+      media.push(stripNulls({
+        url: a.url,
+        type: "text/uri-list",
+      }) as MediaDto);
+      linkEmbeds.push({
+        url: a.url,
+        ...(a.embed != null ? { embed: a.embed } : {}),
+      });
+    } else if (
+      a.$type === "space.roomy.attachment.image.v0" ||
+      a.$type === "space.roomy.attachment.video.v0"
+    ) {
+      media.push(stripNulls({
+        url: a.url,
+        type: a.type,
+        alt: a.alt,
+        width: a.width,
+        height: a.height,
+        blurhash: a.blurhash,
+        size: a.size,
+        length: a.$type === "space.roomy.attachment.video.v0" ? a.length : undefined,
+      }) as MediaDto);
+    } else if (a.$type === "space.roomy.attachment.file.v0") {
+      media.push(stripNulls({
+        url: a.url,
+        type: a.type,
+        size: a.size,
+        name: a.name,
+      }) as MediaDto);
+    }
+  }
+  return { media, linkEmbeds };
+}
+
 export interface MessageDto {
   id: string;
   /** Sort index for timeline ordering. ULID based on canonical timestamp. */
@@ -94,7 +281,15 @@ export interface MessageDto {
    * timestamp; clients render an "edited" affordance when it is present.
    */
   lastEdit?: string;
+  /**
+   * Every attachment on the message, one entry per row, discriminated by
+   * `$type`. The single list a renderer dispatches over; the derived fields
+   * below are views of it.
+   */
+  attachments: Array<AttachmentDto>;
+  /** Derived from `attachments` (the reply variant's `messageId`). */
   replyTo?: string;
+  /** Derived from `attachments` (the forward variant, denormalised). */
   forwardedFrom?: {
     messageId: string;
     name: string;
@@ -105,8 +300,14 @@ export interface MessageDto {
     message?: MessageDto;
   };
   reactions: Array<ReactionDto>;
+  /**
+   * Derived from `attachments`: the image, video and file variants plus the
+   * link variants as `text/uri-list` entries, in that kind order. Links have
+   * always travelled here and the media renderers filter them out by MIME
+   * type, so the derived view keeps that shape.
+   */
   media: Array<MediaDto>;
-  /** Link embeds with enriched metadata from the embed service. */
+  /** Derived from `attachments`: the link variants, with enriched metadata. */
   linkEmbeds: Array<LinkEmbedDto>;
   /**
    * The message's author is hidden from the viewer by a block, in either
@@ -148,6 +349,7 @@ export function blockedTombstone(row: {
     authorName: "",
     blocked: true,
     timestamp: row.timestamp,
+    attachments: [],
     reactions: [],
     media: [],
     linkEmbeds: [],
@@ -457,7 +659,12 @@ export async function selectMessages(
       // embed component tables. comp_embed_link has no media metadata — fall
       // back to nulls and "text/uri-list" mime type. Image/video share
       // width/height/blurhash/size; video adds length; file adds name.
-      `select e.room as message_id, ei.entity as url,
+      //
+      // `kind` names which table a row came from, so the one list this feeds
+      // can tag each entry with the attachment `$type` it came from. The UNION
+      // order (image, video, file, link) is the order both that list and the
+      // derived `media` view carry.
+      `select e.room as message_id, 'image' as kind, ei.entity as url,
               ei.mime_type as mime_type, ei.alt as alt,
               ei.width as width, ei.height as height,
               ei.blurhash as blurhash, ei.size as size,
@@ -466,7 +673,7 @@ export async function selectMessages(
          join entities e on e.id = ei.entity
         where e.room in (${idPh})
        union all
-       select e.room as message_id, ev.entity as url,
+       select e.room as message_id, 'video' as kind, ev.entity as url,
               ev.mime_type as mime_type, ev.alt as alt,
               ev.width as width, ev.height as height,
               ev.blurhash as blurhash, ev.size as size,
@@ -475,7 +682,7 @@ export async function selectMessages(
          join entities e on e.id = ev.entity
         where e.room in (${idPh})
        union all
-       select e.room as message_id, ef.entity as url,
+       select e.room as message_id, 'file' as kind, ef.entity as url,
               ef.mime_type as mime_type, null as alt,
               null as width, null as height,
               null as blurhash, ef.size as size,
@@ -484,7 +691,7 @@ export async function selectMessages(
          join entities e on e.id = ef.entity
         where e.room in (${idPh})
        union all
-       select e.room as message_id, el.entity as url,
+       select e.room as message_id, 'link' as kind, el.entity as url,
               'text/uri-list' as mime_type, null as alt,
               null as width, null as height,
               null as blurhash, null as size,
@@ -496,18 +703,7 @@ export async function selectMessages(
       )
       // Each UNION branch has its own `where ... in (${idPh})` — bind ids
       // once per branch (4× total). bun:sqlite has no positional reuse here.
-      .all<{
-        message_id: string;
-        url: string;
-        mime_type: string;
-        alt: string | null;
-        width: number | null;
-        height: number | null;
-        blurhash: string | null;
-        size: number | null;
-        length: number | null;
-        name: string | null;
-      }>([...liveIds, ...liveIds, ...liveIds, ...liveIds]);
+      .all<EmbedRow>([...liveIds, ...liveIds, ...liveIds, ...liveIds]);
 
   // ── Step 4: assemble ──────────────────────────────────────────────────
   const reactionMap = new Map<string, Map<string, Set<string>>>();
@@ -537,29 +733,6 @@ export async function selectMessages(
     }
   }
 
-  const mediaMap = new Map<
-    string,
-    Array<MediaDto>
-  >();
-  for (const e of embedRows) {
-    let arr = mediaMap.get(e.message_id);
-    if (!arr) {
-      arr = [];
-      mediaMap.set(e.message_id, arr);
-    }
-    arr.push(stripNulls({
-      url: e.url,
-      type: e.mime_type,
-      alt: e.alt ?? undefined,
-      width: e.width ?? undefined,
-      height: e.height ?? undefined,
-      blurhash: e.blurhash ?? undefined,
-      size: e.size ?? undefined,
-      length: e.length ?? undefined,
-      name: e.name ?? undefined,
-    }) as MediaDto);
-  }
-
   // ── Step 3b: batch-fetch enriched link embed data ────────────────────
   // The enrichment lives in the global store, keyed by URL, so it is fetched
   // from there by the URLs this page holds rather than joined to the
@@ -567,7 +740,7 @@ export async function selectMessages(
   // them.
   const linkUrls = new Set<string>();
   for (const e of embedRows) {
-    if (e.mime_type === "text/uri-list") {
+    if (e.kind === "link") {
       linkUrls.add(e.url);
     }
   }
@@ -583,21 +756,32 @@ export async function selectMessages(
     }
   }
 
-  // Build linkEmbeds map: messageId → LinkEmbedDto[]
-  const linkEmbedsMap = new Map<string, Array<LinkEmbedDto>>();
+  // ── Step 3c: the attachment list, and the views derived from it ──────
+  // The embed rows are the media/file/link half of a message's attachments;
+  // the reply and forward halves are edges, resolved in Step 2 and read off
+  // each base row below. Both land in `attachments` in the order the message's
+  // own list carried them where that is known, and in kinds order where it is
+  // not — an embed row is keyed by URL and has no position of its own.
+  //
+  // `media` and `linkEmbeds` are built from this same list rather than from
+  // the rows, so the derived views cannot drift from the list they claim to be
+  // views of.
+  const attachmentsMap = new Map<string, Array<AttachmentDto>>();
   for (const e of embedRows) {
-    if (e.mime_type === "text/uri-list") {
-      let arr = linkEmbedsMap.get(e.message_id);
-      if (!arr) {
-        arr = [];
-        linkEmbedsMap.set(e.message_id, arr);
-      }
-      const embedData = linkEmbedDataMap.get(e.url);
-      arr.push({
-        url: e.url,
-        ...(embedData != null ? { embed: embedData } : {}),
-      });
+    let arr = attachmentsMap.get(e.message_id);
+    if (!arr) {
+      arr = [];
+      attachmentsMap.set(e.message_id, arr);
     }
+    arr.push(attachmentFromEmbedRow(e, linkEmbedDataMap));
+  }
+
+  const mediaMap = new Map<string, Array<MediaDto>>();
+  const linkEmbedsMap = new Map<string, Array<LinkEmbedDto>>();
+  for (const [messageId, attachments] of attachmentsMap) {
+    const { media, linkEmbeds } = deriveAttachmentViews(attachments);
+    mediaMap.set(messageId, media);
+    linkEmbedsMap.set(messageId, linkEmbeds);
   }
 
   const messages: MessageDto[] = baseRows.map((r) => {
@@ -651,6 +835,30 @@ export async function selectMessages(
     const mediaForMsg = mediaMap.get(r.id) ?? [];
     const linkEmbedsForMsg = linkEmbedsMap.get(r.id) ?? [];
 
+    // The message's one attachment list: the reply and forward edges (this
+    // row's own columns) followed by the embed rows, which is the order both
+    // the derived `media` view and the pre-change projection carried. The
+    // reply and forward variants are addressed by id, not by url, so they
+    // cannot collide with an embed row.
+    const attachments: Array<AttachmentDto> = [];
+    if (r.reply_to != null) {
+      attachments.push({
+        $type: "space.roomy.attachment.reply.v0",
+        messageId: r.reply_to,
+      });
+    }
+    if (r.forward_target != null) {
+      const original = forwardOriginalDto.get(r.forward_target);
+      attachments.push(stripNulls({
+        $type: "space.roomy.attachment.forward.v0",
+        messageId: r.forward_target,
+        name: r.forward_target_room_name ?? "",
+        roomId: r.forward_target_room ?? "",
+        message: original ?? null,
+      }) as AttachmentDto);
+    }
+    for (const a of attachmentsMap.get(r.id) ?? []) attachments.push(a);
+
     return stripNulls({
       id: r.id,
       sort_idx: r.sort_idx,
@@ -684,6 +892,7 @@ export async function selectMessages(
       // (legacy forward references).
       lastEdit:
         r.last_edit != null && r.last_edit !== r.id ? r.last_edit : undefined,
+      attachments,
       replyTo: r.reply_to,
       forwardedFrom:
         r.forward_target != null

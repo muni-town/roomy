@@ -2,6 +2,101 @@
   "lexicon": 1,
   "id": "space.roomy.mention.getMentions",
   "defs": {
+    "attachmentFile": {
+      "type": "object",
+      "required": [
+        "$type",
+        "type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.file.v0"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      }
+    },
+    "attachmentForward": {
+      "type": "object",
+      "required": [
+        "$type",
+        "messageId",
+        "name",
+        "roomId"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.forward.v0"
+          ]
+        },
+        "messageId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "roomId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "ref",
+          "ref": "#message"
+        }
+      }
+    },
+    "attachmentImage": {
+      "type": "object",
+      "required": [
+        "$type",
+        "type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.image.v0"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "alt": {
+          "type": "string"
+        },
+        "blurhash": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      }
+    },
     "au": {
       "type": "object",
       "properties": {
@@ -79,6 +174,86 @@
         "vid": {
           "type": "ref",
           "ref": "#imgs"
+        }
+      }
+    },
+    "attachmentLink": {
+      "type": "object",
+      "required": [
+        "$type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.link.v0"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "embed": {
+          "type": "ref",
+          "ref": "#embed"
+        }
+      }
+    },
+    "attachmentReply": {
+      "type": "object",
+      "required": [
+        "$type",
+        "messageId"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.reply.v0"
+          ]
+        },
+        "messageId": {
+          "type": "string"
+        }
+      }
+    },
+    "attachmentVideo": {
+      "type": "object",
+      "required": [
+        "$type",
+        "type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.video.v0"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "alt": {
+          "type": "string"
+        },
+        "blurhash": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "length": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
         }
       }
     },
@@ -177,6 +352,7 @@
     "message": {
       "type": "object",
       "required": [
+        "attachments",
         "authorDid",
         "authorName",
         "content",
@@ -187,6 +363,21 @@
         "timestamp"
       ],
       "properties": {
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "union",
+            "closed": true,
+            "refs": [
+              "#attachmentFile",
+              "#attachmentForward",
+              "#attachmentImage",
+              "#attachmentLink",
+              "#attachmentReply",
+              "#attachmentVideo"
+            ]
+          }
+        },
         "authorDid": {
           "type": "string"
         },

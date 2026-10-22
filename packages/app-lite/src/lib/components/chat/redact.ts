@@ -41,6 +41,7 @@ export function isBlockedTombstone(message: Message): boolean {
     message.content === "" &&
     message.authorName === "" &&
     message.reactions.length === 0 &&
+    message.attachments.length === 0 &&
     message.media.length === 0 &&
     message.linkEmbeds.length === 0 &&
     message.mimeType === undefined &&
@@ -102,6 +103,7 @@ function redactOne(
     authorName: "",
     timestamp: withOriginal.timestamp,
     blocked: true,
+    attachments: [],
     reactions: [],
     media: [],
     linkEmbeds: [],

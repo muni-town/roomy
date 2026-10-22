@@ -14,6 +14,12 @@ import { decodeTime } from "ulidx";
 import { decodeContent } from "../db/content.ts";
 import { openSpaceDb } from "../db/db.ts";
 import { selectEmbedJsonByUrl } from "../embed/store.ts";
+import {
+  attachmentFromEmbedRow,
+  deriveAttachmentViews,
+  type AttachmentDto,
+  type EmbedRow,
+} from "./selectMessages.ts";
 import { hydrateProfiles } from "./profileStore.ts";
 import { selectJoinedSpaceDids } from "./userSpaceMembership.ts";
 import { deriveUnreadCounts } from "./readPositions.ts";
@@ -39,10 +45,20 @@ export interface ActivityMessage {
   author: ActivityAuthor;
   timestamp?: string;
 
-  media?: Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>;
+  /**
+   * Every attachment on the message, one entry per row, discriminated by
+   * `$type` — the same shape the message read path returns. Only hydrated on
+   * the latest message of each feed item, like the derived views below.
+   */
+  attachments?: Array<AttachmentDto>;
   /** Reactions on the message. Only hydrated on the latest message. */
   reactions?: Array<{ emoji: string; count: number; myReactionId?: string }>;
-  /** Link embeds with enriched metadata from the embed service. */
+  /**
+   * Derived from `attachments`. Only hydrated on the latest message of each
+   * feed item.
+   */
+  media?: Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>;
+  /** Derived from `attachments`: the link rows, with enriched metadata. */
   linkEmbeds?: Array<{ url: string; embed?: Record<string, unknown> }>;
 }
 
@@ -287,15 +303,13 @@ export async function selectActivityFeed(
     }
     arr.push(last);
   }
-  const mediaByMsg = new Map<string, Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>>();
+  const attachmentsByMsg = new Map<string, Array<AttachmentDto>>();
   const pageLinkUrls = new Set<string>();
-  const linkEmbedUrlsByMsg = new Map<string, string[]>();
   const reactionsByMsg = new Map<string, Array<{ emoji: string; count: number; myReactionId?: string }>>();
   for (const [spaceDid, lastMsgIds] of lastMsgIdsBySpace) {
     const spaceDb = openSpaceDb(spaceDid);
-    const { mediaByMsg: m, linkEmbedUrlsByMsg: l, linkUrls } = await batchFetchEmbeds(spaceDb, lastMsgIds);
-    for (const [k, v] of m) mediaByMsg.set(k, v);
-    for (const [k, v] of l) linkEmbedUrlsByMsg.set(k, v);
+    const { attachmentsByMsg: a, linkUrls } = await batchFetchEmbeds(spaceDb, lastMsgIds);
+    for (const [k, v] of a) attachmentsByMsg.set(k, v);
     for (const u of linkUrls) pageLinkUrls.add(u);
     const rxn = await batchFetchReactions(spaceDb, lastMsgIds, userDid);
     for (const [k, v] of rxn) reactionsByMsg.set(k, v);
@@ -318,14 +332,20 @@ export async function selectActivityFeed(
   for (const it of feed) {
     const last = it.messages[0];
     if (!last) continue;
-    const media = mediaByMsg.get(last.id);
-    if (media && media.length > 0) last.media = media;
-    const linkUrlsForMsg = linkEmbedUrlsByMsg.get(last.id);
-    if (linkUrlsForMsg && linkUrlsForMsg.length > 0) {
-      last.linkEmbeds = linkUrlsForMsg.map((url) => {
-        const embedData = linkEmbedDataMap.get(url);
-        return { url, ...(embedData != null ? { embed: embedData } : {}) };
-      }) as Array<{ url: string; embed?: Record<string, unknown> }>;
+    const attachments = attachmentsByMsg.get(last.id);
+    if (attachments && attachments.length > 0) {
+      // Link entries take their enrichment from the global store, which the
+      // per-space query above cannot reach — applied here, where both halves
+      // are in hand.
+      const resolved = attachments.map((a): AttachmentDto => {
+        if (a.$type !== "space.roomy.attachment.link.v0") return a;
+        const embed = linkEmbedDataMap.get(a.url);
+        return embed != null ? { $type: a.$type, url: a.url, embed } : a;
+      });
+      const { media, linkEmbeds } = deriveAttachmentViews(resolved);
+      last.attachments = resolved;
+      if (media.length > 0) last.media = media;
+      if (linkEmbeds.length > 0) last.linkEmbeds = linkEmbeds;
     }
     const reactions = reactionsByMsg.get(last.id);
     if (reactions && reactions.length > 0) last.reactions = reactions;
@@ -485,46 +505,41 @@ async function batchFetchUnreadCounts(
 
 // ─── Embed hydration (latest message only) ────────────────────────────────
 
-interface EmbedRow {
-  message_id: string;
-  url: string;
-  mime_type: string;
-  alt: string | null;
-  width: number | null;
-  height: number | null;
-  blurhash: string | null;
-  size: number | null;
-  length: number | null;
-  name: string | null;
-}
+/**
+ * No enrichment known yet: the link variant of an attachment is built here
+ * from the per-space row alone, and the caller fills its `embed` from the
+ * global store, the only place that holds one.
+ */
+const NO_EMBED_DATA: ReadonlyMap<string, Record<string, unknown> | null> = new Map();
 
 /**
- * Batch-fetch media attachments and link embeds for a set of message IDs.
+ * Batch-fetch the attachments of a set of message IDs.
  *
- * Mirrors the embed query in `selectMessages.ts`: a single UNION ALL across
+ * Mirrors the embed query in `selectMessages.ts` — a single UNION ALL across
  * comp_embed_image / _video / _file / _link joined to `entities` (whose `room`
- * points at the owning message). The per-space side supplies the link and media
- * rows; the enrichment for the link URLs comes from the global `link_embeds`
- * store, so the URLs are returned for the caller to resolve in one lookup
- * across every space on the page.
+ * points at the owning message), each branch tagging its rows with the kind
+ * they came from. That tag becomes each entry's `$type`, exactly as it does on
+ * the message read path, so both surfaces hand out the same attachment list.
+ *
+ * The per-space side supplies the link and media rows; the enrichment for the
+ * link URLs comes from the global `link_embeds` store, so the URLs are returned
+ * for the caller to resolve in one lookup across every space on the page.
  */
 async function batchFetchEmbeds(
   db: DbLike,
   messageIds: string[],
 ): Promise<{
-  mediaByMsg: Map<string, Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>>;
-  linkEmbedUrlsByMsg: Map<string, string[]>;
+  attachmentsByMsg: Map<string, Array<AttachmentDto>>;
   linkUrls: Set<string>;
 }> {
-  const mediaByMsg = new Map<string, Array<{ url: string; type: string; alt?: string; width?: number; height?: number; blurhash?: string; size?: number; length?: number; name?: string }>>();
-  const linkEmbedUrlsByMsg = new Map<string, string[]>();
+  const attachmentsByMsg = new Map<string, Array<AttachmentDto>>();
   const linkUrls = new Set<string>();
-  if (messageIds.length === 0) return { mediaByMsg, linkEmbedUrlsByMsg, linkUrls };
+  if (messageIds.length === 0) return { attachmentsByMsg, linkUrls };
 
   const idPh = messageIds.map(() => "?").join(",");
   const embedRows = await db
     .query(
-      `select e.room as message_id, ei.entity as url,
+      `select e.room as message_id, 'image' as kind, ei.entity as url,
               ei.mime_type as mime_type, ei.alt as alt,
               ei.width as width, ei.height as height,
               ei.blurhash as blurhash, ei.size as size,
@@ -533,7 +548,7 @@ async function batchFetchEmbeds(
          join entities e on e.id = ei.entity
         where e.room in (${idPh})
        union all
-       select e.room as message_id, ev.entity as url,
+       select e.room as message_id, 'video' as kind, ev.entity as url,
               ev.mime_type as mime_type, ev.alt as alt,
               ev.width as width, ev.height as height,
               ev.blurhash as blurhash, ev.size as size,
@@ -542,7 +557,7 @@ async function batchFetchEmbeds(
          join entities e on e.id = ev.entity
         where e.room in (${idPh})
        union all
-       select e.room as message_id, ef.entity as url,
+       select e.room as message_id, 'file' as kind, ef.entity as url,
               ef.mime_type as mime_type, null as alt,
               null as width, null as height,
               null as blurhash, ef.size as size,
@@ -551,7 +566,7 @@ async function batchFetchEmbeds(
          join entities e on e.id = ef.entity
         where e.room in (${idPh})
        union all
-       select e.room as message_id, el.entity as url,
+       select e.room as message_id, 'link' as kind, el.entity as url,
               'text/uri-list' as mime_type, null as alt,
               null as width, null as height,
               null as blurhash, null as size,
@@ -566,34 +581,18 @@ async function batchFetchEmbeds(
     .all<EmbedRow>([...messageIds, ...messageIds, ...messageIds, ...messageIds]);
 
   for (const e of embedRows) {
-    if (e.mime_type === "text/uri-list") {
-      let arr = linkEmbedUrlsByMsg.get(e.message_id);
-      if (!arr) {
-        arr = [];
-        linkEmbedUrlsByMsg.set(e.message_id, arr);
-      }
-      arr.push(e.url);
-      linkUrls.add(e.url);
-    } else {
-      let arr = mediaByMsg.get(e.message_id);
-      if (!arr) {
-        arr = [];
-        mediaByMsg.set(e.message_id, arr);
-      }
-      arr.push({
-        url: e.url, type: e.mime_type,
-        ...(e.alt != null ? { alt: e.alt } : {}),
-        ...(e.width != null ? { width: e.width } : {}),
-        ...(e.height != null ? { height: e.height } : {}),
-        ...(e.blurhash != null ? { blurhash: e.blurhash } : {}),
-        ...(e.size != null ? { size: e.size } : {}),
-        ...(e.length != null ? { length: e.length } : {}),
-        ...(e.name != null ? { name: e.name } : {}),
-      });
+    let arr = attachmentsByMsg.get(e.message_id);
+    if (!arr) {
+      arr = [];
+      attachmentsByMsg.set(e.message_id, arr);
     }
+    // The link variant's `embed` is filled from the global store by the
+    // caller, which is the only place that holds it.
+    arr.push(attachmentFromEmbedRow(e, NO_EMBED_DATA));
+    if (e.kind === "link") linkUrls.add(e.url);
   }
 
-  return { mediaByMsg, linkEmbedUrlsByMsg, linkUrls };
+  return { attachmentsByMsg, linkUrls };
 }
 
 interface ReactionRow {

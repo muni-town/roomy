@@ -1065,3 +1065,360 @@ describe("selectMessages blocked authors", () => {
     expect(rest.nextCursor).toBe(ids[0]!);
   });
 });
+
+describe("selectMessages attachments", () => {
+  const VIEWER = UserDid.assert("did:plc:attachments-viewer");
+  const AUTHOR = "did:plc:attachments-author";
+  /** The hidden set `selectMessages` takes, as the blocked-authors suite passes it. */
+  const hiding = (...dids: string[]) => dids;
+
+  /** Every attachment kind, each with the fields its variant carries. */
+  const IMAGE_URL = "01IMAGE0000000000000000000";
+  const VIDEO_URL = "01VIDEO0000000000000000000";
+  const FILE_URL = "01FILE00000000000000000000";
+  const LINK_URL = "https://example.com/article";
+
+  /**
+   * Seed one message carrying a reply edge and one embed row of every kind
+   * (image, video, file, link), with the link enriched in the global store.
+   * Returns the message id.
+   */
+  async function seedAllKinds(
+    db: DbLike,
+    roomId: string,
+    parentId: string,
+    sortIdx: string,
+  ): Promise<string> {
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    const id = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      id,
+      STREAM,
+      roomId,
+      sortIdx,
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      id,
+      AUTHOR,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [id, Buffer.from("body"), id, 1_700_000_000_000],
+    );
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'reply')", [
+      id,
+      parentId,
+    ]);
+    // Embed entities carry the MESSAGE id in their own `room` column — that is
+    // what the batch query joins on.
+    const embed = async (url: string, insert: () => Promise<unknown>) => {
+      await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+        url,
+        STREAM,
+        id,
+      ]);
+      await insert();
+    };
+    await embed(IMAGE_URL, () =>
+      db.run(
+        "insert into comp_embed_image (entity, mime_type, width, height, alt, blurhash, size) values (?, 'image/png', 10, 20, 'a picture', 'LKO2x', 42)",
+        [IMAGE_URL],
+      ),
+    );
+    await embed(VIDEO_URL, () =>
+      db.run(
+        "insert into comp_embed_video (entity, mime_type, width, height, length, blurhash, alt, size) values (?, 'video/mp4', 640, 480, 30, 'LKO2', 'a clip', 999)",
+        [VIDEO_URL],
+      ),
+    );
+    await embed(FILE_URL, () =>
+      db.run(
+        "insert into comp_embed_file (entity, mime_type, size, name) values (?, 'application/pdf', 123, 'doc.pdf')",
+        [FILE_URL],
+      ),
+    );
+    // A link embed's entity id IS its URL: the global store is keyed by that
+    // value, and `linkEmbeds[].url` comes from the same column.
+    await embed(LINK_URL, () =>
+      db.run("insert into comp_embed_link (entity, show_preview) values (?, 1)", [
+        LINK_URL,
+      ]),
+    );
+    await writeSettledLinkEmbed(
+      await openGlobalDb(),
+      LINK_URL,
+      JSON.stringify({ t: "A title" }),
+      1,
+    );
+    return id;
+  }
+
+  test("the one list carries every kind, and the derived views match what the per-kind fields held", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const parentId = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      parentId,
+      STREAM,
+      roomId,
+      "01",
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      parentId,
+      AUTHOR,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [parentId, Buffer.from("parent"), parentId, 1_700_000_000_000],
+    );
+
+    const id = await seedAllKinds(db, roomId, parentId, "02");
+
+    const { messages } = await selectMessages(
+      db,
+      { kind: "room", roomId, limit: 10, cursor: null },
+      VIEWER,
+      await openGlobalDb(),
+    );
+    const m = messages.find((x) => x.id === id)!;
+
+    // The reply and forward edges are addressed by id, not by url, so they
+    // lead the list; the embed rows follow in the query's kind order
+    // (image, video, file, link).
+    expect(m.attachments.map((a) => a.$type)).toEqual([
+      "space.roomy.attachment.reply.v0",
+      "space.roomy.attachment.image.v0",
+      "space.roomy.attachment.video.v0",
+      "space.roomy.attachment.file.v0",
+      "space.roomy.attachment.link.v0",
+    ]);
+
+    // Each entry carries what its renderer needs — this is what a renderer
+    // dispatches on instead of being handed a fifth parallel field.
+    expect(m.attachments[1]).toEqual({
+      $type: "space.roomy.attachment.image.v0",
+      url: IMAGE_URL,
+      type: "image/png",
+      alt: "a picture",
+      width: 10,
+      height: 20,
+      blurhash: "LKO2x",
+      size: 42,
+    });
+    expect(m.attachments[2]).toEqual({
+      $type: "space.roomy.attachment.video.v0",
+      url: VIDEO_URL,
+      type: "video/mp4",
+      alt: "a clip",
+      width: 640,
+      height: 480,
+      blurhash: "LKO2",
+      size: 999,
+      length: 30,
+    });
+    expect(m.attachments[3]).toEqual({
+      $type: "space.roomy.attachment.file.v0",
+      url: FILE_URL,
+      type: "application/pdf",
+      size: 123,
+      name: "doc.pdf",
+    });
+    expect(m.attachments[4]).toEqual({
+      $type: "space.roomy.attachment.link.v0",
+      url: LINK_URL,
+      embed: { t: "A title" },
+    });
+    expect(m.attachments[0]).toEqual({
+      $type: "space.roomy.attachment.reply.v0",
+      messageId: parentId,
+    });
+
+    // The derived views are what the per-kind fields held before the list
+    // existed: a link reaches `media` as a `text/uri-list` row (the media
+    // renderers filter it out by MIME type) as well as `linkEmbeds`.
+    expect(m.media).toEqual([
+      { url: IMAGE_URL, type: "image/png", alt: "a picture", width: 10, height: 20, blurhash: "LKO2x", size: 42 },
+      { url: VIDEO_URL, type: "video/mp4", alt: "a clip", width: 640, height: 480, blurhash: "LKO2", size: 999, length: 30 },
+      { url: FILE_URL, type: "application/pdf", size: 123, name: "doc.pdf" },
+      { url: LINK_URL, type: "text/uri-list" },
+    ]);
+    expect(m.linkEmbeds).toEqual([{ url: LINK_URL, embed: { t: "A title" } }]);
+    expect(m.replyTo).toBe(parentId);
+  });
+
+  test("a link the author dismissed is absent from both the list and the derived views", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const id = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      id,
+      STREAM,
+      roomId,
+      "01",
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      id,
+      AUTHOR,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [id, Buffer.from("body"), id, 1_700_000_000_000],
+    );
+    await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      LINK_URL,
+      STREAM,
+      id,
+    ]);
+    await db.run("insert into comp_embed_link (entity, show_preview) values (?, 0)", [
+      LINK_URL,
+    ]);
+
+    const { messages } = await selectMessages(db, {
+      kind: "room",
+      roomId,
+      limit: 10,
+      cursor: null,
+    });
+    const m = messages.find((x) => x.id === id)!;
+
+    // The projection drops the row, so a dismissed preview is indistinguish-
+    // able from a message that never had one — in the list as well as in the
+    // two views derived from it.
+    expect(m.attachments).toEqual([]);
+    expect(m.media).toEqual([]);
+    expect(m.linkEmbeds).toEqual([]);
+  });
+
+  test("a forward carries the original as an attachment, and the derived forward view is that entry", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const originalId = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      originalId,
+      STREAM,
+      roomId,
+      "01",
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      originalId,
+      AUTHOR,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [originalId, Buffer.from("the original"), originalId, 1_700_000_000_000],
+    );
+    await seedGlobalProfile(AUTHOR, "author.bsky.social", "Author");
+
+    const forwardId = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      forwardId,
+      STREAM,
+      roomId,
+      "02",
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      USER,
+      STREAM,
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      USER,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      forwardId,
+      USER,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [forwardId, Buffer.from(""), forwardId, 1_700_000_001_000],
+    );
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'forward')", [
+      forwardId,
+      originalId,
+    ]);
+
+    const { messages } = await selectMessages(
+      db,
+      { kind: "room", roomId, limit: 10, cursor: null },
+      VIEWER,
+      await openGlobalDb(),
+    );
+    const m = messages.find((x) => x.id === forwardId)!;
+
+    const forward = m.attachments.find(
+      (a) => a.$type === "space.roomy.attachment.forward.v0",
+    );
+    expect(forward).toBeDefined();
+    if (forward?.$type !== "space.roomy.attachment.forward.v0") throw new Error("unreachable");
+    expect(forward.messageId).toBe(originalId);
+    expect(forward.message?.id).toBe(originalId);
+    expect(forward.message?.content).toBe("the original");
+    // The derived view is the same entry, in the shape the forward context
+    // line has always read.
+    expect(m.forwardedFrom).toEqual({
+      messageId: originalId,
+      name: "",
+      roomId,
+      message: forward.message,
+    });
+  });
+
+  test("the tombstone carries an empty list, so no kind leaks through the redaction", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const parentId = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      parentId,
+      STREAM,
+      roomId,
+      "01",
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      parentId,
+      AUTHOR,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [parentId, Buffer.from("parent"), parentId, 1_700_000_000_000],
+    );
+
+    const id = await seedAllKinds(db, roomId, parentId, "02");
+    const { messages } = await selectMessages(
+      db,
+      { kind: "room", roomId, limit: 10, cursor: null },
+      VIEWER,
+      await openGlobalDb(),
+      hiding(AUTHOR),
+    );
+    const m = messages.find((x) => x.id === id)!;
+
+    expect(m.blocked).toBe(true);
+    expect(m.attachments).toEqual([]);
+    expect(m.media).toEqual([]);
+    expect(m.linkEmbeds).toEqual([]);
+    expect(m.replyTo).toBeUndefined();
+  });
+});

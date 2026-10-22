@@ -67,7 +67,14 @@ type LexSlot =
   | { type: "integer" }
   | { type: "boolean" }
   | { type: "array"; items: LexSlot }
-  | { type: "ref"; ref: string };
+  | { type: "ref"; ref: string }
+  /**
+   * A tagged union of object defs, emitted by arktype for a discriminated
+   * union (`AttachmentDto`). It is written INLINE at its reference site, never
+   * as a named def: `@atproto/lexicon` accepts `type: "union"` only in a value
+   * position, not in `defs`.
+   */
+  | { type: "union"; closed: true; refs: string[] };
 
 /** A named object definition to add to `defs`. */
 interface LexObjDef {
@@ -237,6 +244,28 @@ function convertSlot(
         knownValues: (rawDef["enum"] as unknown[]).map((v) => String(v)),
       };
     }
+    // A discriminated union — arktype emits it as an `anyOf` of `$ref`s to the
+    // variant defs (a tagged union is an object at the root, so it never
+    // reaches the `type: "object"` branch below). Emitted INLINE as a lexicon
+    // union: `@atproto/lexicon` accepts `type: "union"` in a value position
+    // only, never as a `defs` entry. The variants are extracted to named defs
+    // by the recursive calls, so the refs are stable.
+    if (Array.isArray(rawDef["anyOf"])) {
+      const branches = rawDef["anyOf"] as Array<Record<string, unknown>>;
+      const refs = branches.map((b, i) => {
+        // Name each variant after its `$type` (`…attachment.image.v0` →
+        // `attachmentImage`), so the defs a third-party client reads say what
+        // the variant is. Falls back to the position for an untagged member.
+        const slot = convertSlot(b, nsid, `${path}.${unionMemberName(b, i, collector)}`, collector);
+        if (slot.type !== "ref") {
+          throw new Error(
+            `${nsid}: ${path} → union member must be an object type, got ${JSON.stringify(slot)}`,
+          );
+        }
+        return slot.ref;
+      });
+      return { type: "union", closed: true, refs };
+    }
     // Array defs are inlined at the reference site (items must still be
     // refs) — matching how the non-recursive generator handled arrays — so
     // only the item object gets a named def. Object defs are extracted as
@@ -378,6 +407,36 @@ function convertRefDef(
   throw new Error(
     `${nsid}: ${path} → $defs entry must be an object or array, got ${String(t)}`,
   );
+}
+
+/**
+ * Def name for one member of a tagged union, derived from the variant's
+ * `$type` literal: `space.roomy.attachment.image.v0` → `attachmentImage`.
+ * The lexicon's own `defs` are what a third-party client reads, and the
+ * generator's positional fallback (`attachments`, `attachments2`, …) says
+ * nothing about which variant a def is. Falls back to the position when a
+ * member carries no tag.
+ */
+function unionMemberName(
+  member: Record<string, unknown>,
+  index: number,
+  collector: DefCollector,
+): string {
+  // arktype emits a tagged union's members either inline or as a `$ref` into
+  // `$defs`, depending on whether the member type is referenced elsewhere.
+  // Resolve the ref so both spellings name the variant identically.
+  const target =
+    typeof member["$ref"] === "string"
+      ? collector.rawDef(String(member["$ref"]).replace(/^#\/\$defs\//, ""))
+      : member;
+  const props = target?.["properties"] as Record<string, unknown> | undefined;
+  const typeNode = props?.["$type"] as Record<string, unknown> | undefined;
+  const literal = typeNode?.["const"];
+  if (typeof literal !== "string") return `member${index + 1}`;
+  const parts = literal.split(".").filter((p) => p && !/^v\d+$/.test(p));
+  const tail = parts.slice(-2);
+  if (tail.length < 2) return `member${index + 1}`;
+  return tail[0]! + tail[1]!.charAt(0).toUpperCase() + tail[1]!.slice(1);
 }
 
 /** Check if a JSON Schema node represents a nullable type. */

@@ -36,6 +36,7 @@ function message(overrides: Partial<Message> = {}): Message {
     authorName: "Alice",
     timestamp: at(0),
     reactions: [],
+    attachments: [],
     media: [],
     linkEmbeds: [],
     ...overrides,

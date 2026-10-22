@@ -17,6 +17,7 @@ function msg(over: Partial<Message> & { id: string }): Message {
     authorName: "alice",
     timestamp: "2026-01-01T00:00:00.000Z",
     reactions: [],
+    attachments: [],
     media: [],
     linkEmbeds: [],
     ...over,

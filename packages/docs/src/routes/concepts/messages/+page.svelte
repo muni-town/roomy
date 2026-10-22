@@ -26,11 +26,12 @@
     <li><code>authorDid</code>, <code>authorName</code>, <code>authorAvatar</code> — denormalised author</li>
     <li><code>timestamp</code> — ISO timestamp</li>
     <li><code>lastEdit</code> — absent unless the message was edited; when present, the ULID of the most recent edit event</li>
-    <li><code>replyTo</code> — parent message ID</li>
-    <li><code>forwardedFrom</code> — original source, with the fully denormalised original message nested</li>
+    <li><code>attachments</code> — every attachment on the message, one entry per row, each discriminated by its <code>$type</code> (reply, forward, image, video, file, link); the list a renderer dispatches over</li>
+    <li><code>replyTo</code> — parent message ID; derived from <code>attachments</code></li>
+    <li><code>forwardedFrom</code> — original source, with the fully denormalised original message nested; derived from <code>attachments</code></li>
     <li><code>reactions</code> — grouped by emoji, with reactor DIDs</li>
-    <li><code>media</code> — attached media URLs</li>
-    <li><code>tags</code> — message tags</li>
+    <li><code>media</code> — attached media URLs; derived from <code>attachments</code></li>
+    <li><code>linkEmbeds</code> — link previews with their enriched metadata; derived from <code>attachments</code></li>
   </ul>
 
   <h2>Writing messages</h2>

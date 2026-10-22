@@ -22,6 +22,71 @@
         }
       }
     },
+    "attachmentFile": {
+      "type": "object",
+      "required": [
+        "$type",
+        "type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.file.v0"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      }
+    },
+    "attachmentImage": {
+      "type": "object",
+      "required": [
+        "$type",
+        "type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.image.v0"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "alt": {
+          "type": "string"
+        },
+        "blurhash": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
+        }
+      }
+    },
     "au": {
       "type": "object",
       "properties": {
@@ -42,63 +107,6 @@
       }
     },
     "imgs": {
-      "type": "object",
-      "required": [
-        "u"
-      ],
-      "properties": {
-        "u": {
-          "type": "string"
-        },
-        "d": {
-          "type": "string"
-        },
-        "h": {
-          "type": "integer"
-        },
-        "m": {
-          "type": "string"
-        },
-        "w": {
-          "type": "integer"
-        }
-      }
-    },
-    "p": {
-      "type": "object",
-      "properties": {
-        "n": {
-          "type": "string"
-        },
-        "u": {
-          "type": "string"
-        }
-      }
-    },
-    "thumb": {
-      "type": "object",
-      "required": [
-        "u"
-      ],
-      "properties": {
-        "u": {
-          "type": "string"
-        },
-        "d": {
-          "type": "string"
-        },
-        "h": {
-          "type": "integer"
-        },
-        "m": {
-          "type": "string"
-        },
-        "w": {
-          "type": "integer"
-        }
-      }
-    },
-    "vid": {
       "type": "object",
       "required": [
         "u"
@@ -144,18 +152,98 @@
         },
         "p": {
           "type": "ref",
-          "ref": "#p"
+          "ref": "#au"
         },
         "t": {
           "type": "string"
         },
         "thumb": {
           "type": "ref",
-          "ref": "#thumb"
+          "ref": "#imgs"
         },
         "vid": {
           "type": "ref",
-          "ref": "#vid"
+          "ref": "#imgs"
+        }
+      }
+    },
+    "attachmentLink": {
+      "type": "object",
+      "required": [
+        "$type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.link.v0"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "embed": {
+          "type": "ref",
+          "ref": "#embed"
+        }
+      }
+    },
+    "attachmentReply": {
+      "type": "object",
+      "required": [
+        "$type",
+        "messageId"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.reply.v0"
+          ]
+        },
+        "messageId": {
+          "type": "string"
+        }
+      }
+    },
+    "attachmentVideo": {
+      "type": "object",
+      "required": [
+        "$type",
+        "type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.video.v0"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "alt": {
+          "type": "string"
+        },
+        "blurhash": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "length": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "width": {
+          "type": "integer"
         }
       }
     },
@@ -228,6 +316,154 @@
         }
       }
     },
+    "forwardedFrom": {
+      "type": "object",
+      "required": [
+        "messageId",
+        "name",
+        "roomId"
+      ],
+      "properties": {
+        "messageId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "roomId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "ref",
+          "ref": "#message"
+        }
+      }
+    },
+    "message": {
+      "type": "object",
+      "required": [
+        "attachments",
+        "authorDid",
+        "authorName",
+        "content",
+        "id",
+        "linkEmbeds",
+        "media",
+        "reactions",
+        "timestamp"
+      ],
+      "properties": {
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "union",
+            "closed": true,
+            "refs": [
+              "#attachmentFile",
+              "#attachmentForward",
+              "#attachmentImage",
+              "#attachmentLink",
+              "#attachmentReply",
+              "#attachmentVideo"
+            ]
+          }
+        },
+        "authorDid": {
+          "type": "string"
+        },
+        "authorName": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "linkEmbeds": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#linkEmbeds"
+          }
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#media"
+          }
+        },
+        "reactions": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#reactions"
+          }
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "authorAvatar": {
+          "type": "string"
+        },
+        "authorHandle": {
+          "type": "string"
+        },
+        "blocked": {
+          "type": "boolean"
+        },
+        "forwardedFrom": {
+          "type": "ref",
+          "ref": "#forwardedFrom"
+        },
+        "lastEdit": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": "string"
+        },
+        "replyTo": {
+          "type": "string"
+        },
+        "sort_idx": {
+          "type": "string"
+        },
+        "system": {
+          "type": "boolean"
+        }
+      }
+    },
+    "attachmentForward": {
+      "type": "object",
+      "required": [
+        "$type",
+        "messageId",
+        "name",
+        "roomId"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.forward.v0"
+          ]
+        },
+        "messageId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "roomId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "ref",
+          "ref": "#message"
+        }
+      }
+    },
     "messages": {
       "type": "object",
       "required": [
@@ -245,6 +481,21 @@
         },
         "id": {
           "type": "string"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "union",
+            "closed": true,
+            "refs": [
+              "#attachmentFile",
+              "#attachmentForward",
+              "#attachmentImage",
+              "#attachmentLink",
+              "#attachmentReply",
+              "#attachmentVideo"
+            ]
+          }
         },
         "linkEmbeds": {
           "type": "array",
@@ -328,6 +579,24 @@
         }
       }
     },
+    "output": {
+      "type": "object",
+      "required": [
+        "feed"
+      ],
+      "properties": {
+        "feed": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#feed"
+          }
+        },
+        "cursor": {
+          "type": "string"
+        }
+      }
+    },
     "main": {
       "type": "query",
       "parameters": {
@@ -347,22 +616,8 @@
       "output": {
         "encoding": "application/json",
         "schema": {
-          "type": "object",
-          "required": [
-            "feed"
-          ],
-          "properties": {
-            "feed": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "#feed"
-              }
-            },
-            "cursor": {
-              "type": "string"
-            }
-          }
+          "type": "ref",
+          "ref": "#output"
         }
       }
     }

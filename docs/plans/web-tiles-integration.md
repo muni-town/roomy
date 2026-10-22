@@ -1,14 +1,18 @@
 # Web Tiles Integration — Design Plan
 
 **Date:** 2026-10-09
-**Status:** Planned. Not started. This is the current plan for Web Tiles in
+**Status:** Milestone A shipped (`7aef4ba2c`, #440) — a standalone tile renders
+from its AT-URI, through a `TileMothership` and an `ATTileLoader` against the
+DASL project's shared loading server, with no loading domain of Roomy's own
+(§8.1, §11.3). Step B0 of Milestone B is in flight: the message DTO becomes one
+`attachments` list (§4.6, §11.1). This is the current plan for Web Tiles in
 Roomy. `docs/plans/web-tiles-roomy-feasibility.md` is the earlier feasibility
 read, kept as a historical record; §0 below states which of its conclusions
 still hold.
-**Next:** Milestone A (§11.1) — render a standalone tile in app-lite. That needs
-a `TileMothership` and an `ATTileLoader`, and no loading domain of Roomy's own:
-the mothership falls back to the DASL project's shared loading server (§8.1,
-§11.3).
+**Next:** Milestone B (§11.1) — the tile attachment, once its step B0 has
+landed: `space.roomy.attachment.tile.v0` carries the tile's AT-URI and a
+payload; the create and edit materialisers write it, the `attachments` list B0
+introduces carries it to the client, and a renderer loads it.
 **Scope of the funded stint:** two weeks, two features (§5, §6), plus a
 30-day engagement write-up (§10).
 **Verified against:** `origin/next` @ `4276631e`.
@@ -60,10 +64,11 @@ have since changed:
 | "You need to run a tile-loading server." | **Resolved the other way: Roomy runs none.** The loader defaults to the DASL project's own shared loading server, which serves the mandated header set and redirects per load; `loadDomain` is left unset (§8.1). Running Roomy's own is a later, one-value change that needs a wildcard certificate. |
 | "The main trust decision is administrative: which tiles a space may load, with what capabilities." | **Unchanged**, and the mechanism is the deployment's hardcoded OAuth scope ceiling plus manual review of public writes (§6.4, §9.3) — *not* a per-space setting, and *not* an OAuth scope a space administers (§9). |
 
-**What has not changed:** nothing in this repo depends on DASL, and no code for
-tiles exists. `grep` for `dasl|masl|atile|tile-loader` across
-`packages/appserver/src` and `packages/sdk/src` returns nothing; `pnpm-lock.yaml`
-has no `@dasl/*` entry.
+**What has not changed:** the tile path is app-lite's alone. `@dasl/tile-loader`
+(`packages/app-lite/package.json`) is the repo's only declared `@dasl/*`
+dependency, and a `grep` for `dasl` across `packages/appserver/src` and
+`packages/sdk/src` returns nothing: no tile is fetched, materialised, projected
+or resolved outside the browser.
 
 ---
 
@@ -538,7 +543,7 @@ survives tab switches.
   it is a small, direct use of `com.atproto.repo.getRecord` plus the existing
   DID→PDS resolution and timeout helpers (`fetchTimeout.ts:38-46`).
 
-### 4.6 The attachment read path — one list on the write side, four fields on the DTO
+### 4.6 The attachment read path — one list on the write side, one on the DTO
 
 The write side already treats an attachment as one thing. A message carries
 `extensions["space.roomy.extension.attachments.v0"].attachments: Attachment[]`,
@@ -548,29 +553,38 @@ attachment (`mutations/message.ts:65-91`). The SDK's `createMessage` option is
 generic over that union (`operations/message.ts:24`), so anything the union
 admits can be attached without a new operation.
 
-The read side splits it by kind. `selectMessages` projects each variant into its
-own DTO field:
+The read side used to split it by kind, projecting each variant into its own DTO
+field. Step B0 (§11.1) gives the DTO the list back — one `attachments` entry per
+attachment, each tagged with its `$type` — and keeps the per-kind fields as
+derived views of it, for the reads that are not attachment rendering:
 
-| Variant | `Message` field | Shape |
+| Variant | `$type` on `attachments` | Derived field it still feeds |
 |---|---|---|
-| reply | `replyTo` | the target message id, as a bare string |
-| forward | `forwardedFrom` | `{ messageId, roomId, name, message? }`, the original denormalised |
-| image / video / file | `media` | one flat `Media[]`, per-kind UNION, no `$type` |
-| link | `media` **and** `linkEmbeds` | `{ url, embed? }` carrying the enriched metadata |
-| comment | nothing | `comp_comment` is written by the materialiser and read by no query in the tree |
+| reply | `space.roomy.attachment.reply.v0` | `replyTo`, the target message id as a bare string |
+| forward | `space.roomy.attachment.forward.v0` | `forwardedFrom`, `{ messageId, roomId, name, message? }` with the original denormalised |
+| image | `space.roomy.attachment.image.v0` | `media` |
+| video | `space.roomy.attachment.video.v0` | `media` |
+| file | `space.roomy.attachment.file.v0` | `media` |
+| link | `space.roomy.attachment.link.v0` | `media` (as a `text/uri-list` row) **and** `linkEmbeds` |
+| comment | — | nothing: `comp_comment` is written by the materialiser and read by no query in the tree |
 
-Three properties follow, and each is what a tile would collide with:
+Three properties followed, and each is what a tile would collide with — all
+three are what milestone B meets. B0 answers the first; the other two are open:
 
-1. **No `$type` on the wire.** `Media` is `{ url, type, alt?, width?, height?, … }`
+1. **No `$type` on the wire.** *Answered by B0 for the read path: `attachments`
+   carries one per entry, and the renderers dispatch on it. `media` itself still
+   does not — it is a derived view kept for the reads that are not attachment
+   rendering.* `Media` is `{ url, type, alt?, width?, height?, … }`
    (`queries/_message.ts:21-31`) where `type` is the MIME type, overloaded as the
    kind: a link row is `text/uri-list` (`selectMessages.ts:366-374`), and the
    client drops `type.startsWith("text/")` from the media renderer so the same
    link is not drawn twice (`ChatMessage.svelte:640`). A renderer cannot
    dispatch on kind.
-2. **No order and no identity.** `media` is assembled from a four-branch UNION
-   in kind order (`selectMessages.ts:333-374`), so the order the author attached
-   things in is lost; an attachment has no id of its own — the row is keyed by
-   its URL, synthesised as `uri?message=<msgId>` on the explicit path
+2. **No order and no identity.** `attachments` is assembled from the reply and
+   forward edges followed by the four-branch UNION in kind order
+   (`selectMessages.ts:333-374`), so the order the author attached things in is
+   lost; an attachment has no id of its own — the row is keyed by its URL,
+   synthesised as `uri?message=<msgId>` on the explicit path
    (`events/message.ts:149-160`) and left bare on the detected path
    (`enricher.ts:586-603`). A link is addressable by URL; nothing else is
    addressable at all.
@@ -579,7 +593,8 @@ Three properties follow, and each is what a tile would collide with:
    `DiscordMessageOrigin` (`extensions/message.ts:152-163`) — the one attachment
    the protocol can delete is the Discord origin. The edit materialiser's
    link-only fast path (`events/message.ts:236-286`) is the sole per-attachment
-   update, and it is keyed on the URL.
+   update, and it is keyed on the URL. B0 does not touch this: it is a read-path
+   change, and the write path a tile attachment needs is milestone B's.
 
 **Two producers write one row per link, and they do not agree on the key.** An
 explicit `LinkAttachment` writes `uri?message=<msgId>`; the body scan
@@ -1292,19 +1307,27 @@ that already spells an address renders a tile with nothing rewritten.
 
 **Step B0 — the unified attachment read path.** Before a tile attachment has
 anywhere to land, the DTO becomes `Message.attachments: AttachmentDto[]`: one
-entry per attachment, each carrying its `$type`, with `media`, `linkEmbeds`,
-`replyTo` and `forwardedFrom` derived from the list while consumers migrate
-(§4.6). No materialiser change — the per-kind component tables already hold every
-row and `selectMessages` already reads them all
-(`selectMessages.ts:333-374`); what changes is that the projection emits one list
-instead of four shapes. It is a step rather than a milestone because nothing
-renders differently on its own; it is the shape the tile is added to.
+entry per attachment, each carrying its `$type`. No materialiser change — the
+per-kind component tables already hold every row and `selectMessages` already
+reads them all (`selectMessages.ts:333-374`); what changes is that the
+projection emits one list instead of four shapes. It is a step rather than a
+milestone because nothing renders differently on its own; it is the shape the
+tile is added to.
 
-Consumers to migrate with it: the `media` and `linkEmbeds` snippets in
-`ChatMessage` (`MessageBubble.svelte:47-56`, `ChatMessage.svelte:619-645`),
-`ActivityFeed.svelte:229-235`, `SearchResultsList.svelte:434-443`, the Links view,
-and the optimistic placeholder that hand-builds `media` and `linkEmbeds: []` in
-`mutations/message.ts:110-132`.
+The renderers that draw a message's attachments — the `media` and `linkEmbeds`
+snippets in `ChatMessage`, `ActivityFeed`, `SearchResultsList` — read that list
+through one module, `attachment-views.ts`, the single place a rendered message
+switches on an attachment's `$type`, rather than each filtering a per-kind
+field. The optimistic placeholder in `mutations/message.ts` builds the list the
+server will return instead of hand-building `media` and `linkEmbeds`, and the
+activity feed projection emits it for the latest message of each item
+(`activityFeed.ts`). The Links view turned out to have nothing to migrate: its
+rows come from `getLinks`, never from a message.
+
+`media`, `linkEmbeds`, `replyTo` and `forwardedFrom` stay on the DTO as derived
+views of the list, for the reads that are not attachment rendering — the reply
+context line, the forward embed, and the edit-time preview toggle, which is
+keyed on the URL rather than on an attachment.
 
 **Milestone B — the tile attachment.** A tile receives arbitrary JSON attached
 to the message alongside the tile's AT-URI. The motivating case is a Mermaid
@@ -1604,11 +1627,14 @@ milestone A.
 7. **Room-read capabilities** (§7.2): none in the first cut, or a small
    read-only verb set? The thread's conclusion that the compute belongs mostly
    on the client argues for handing the tile data the client already has.
-8. **The unified list's own protocol gaps** (§4.6): an entry carries no `$type`
-   today, has no id or order, and only a link is updatable or removable after
-   the fact. A tile lands in that list either way; how much of ordering,
-   identity and per-attachment editing comes with it is not settled. Ordering
-   and identity are DTO-only changes; per-attachment editing is not, because
+8. **The unified list's own protocol gaps** (§4.6): B0 settles `$type` — an
+   entry now says what kind it is, which is what lets a renderer dispatch on
+   it. What is still open is id and order: an entry has no id of its own (a row
+   is keyed by its URL, which only a link is addressed by) and the list is
+   assembled in kind order, not the order the author attached things in. A tile
+   lands in that list either way; how much of ordering, identity and
+   per-attachment editing comes with it is not settled. Ordering and identity
+   are DTO-only changes; per-attachment editing is not, because
    `MessageExtensionUpdateMap` replaces the whole set.
 9. **The first public-write capability** (§9.3): is the calendar RSVP the right
    forcing function, and what does the manual-review process actually look like

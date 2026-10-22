@@ -10,6 +10,7 @@
   import MessageToolbar from "./MessageToolbar.svelte";
   import SelectionTick from "@roomy/design/components/content/thread/message/SelectionTick.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
+  import { linkItems, mediaItems } from "./attachment-views";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import ForwardContext from "./ForwardContext.svelte";
   import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
@@ -335,8 +336,17 @@
   const isRevealing = $derived(revealingId === rendered.id);
 
   /**
+   * The attachment list of the message whose content this bubble renders: the
+   * embedded original's on a forward, the row's own otherwise. Both the
+   * `media` and `linkEmbeds` snippets read it, so the choice is made once.
+   */
+  const shownAttachments = $derived(
+    (original ?? message).attachments ?? [],
+  );
+
+  /**
    * Space-card eligibility: the message contains exactly one link — the
-   * appserver's extracted `linkEmbeds`, the same source that renders link
+   * appserver's extracted link attachments, the same source that renders link
    * previews. Shown to space admins via the toolbar's "..." menu.
    */
   let singleLink = $derived(
@@ -681,9 +691,9 @@
       {/snippet}
 
       {#snippet linkEmbeds()}
-        {@const embeds = (isForward ? original?.linkEmbeds : message.linkEmbeds) ?? []}
+        {@const embeds = linkItems(shownAttachments)}
         {#if embeds.length > 0}
-          {@const withEmbed = embeds.filter((l: Message["linkEmbeds"][number]) => l.embed)}
+          {@const withEmbed = embeds.filter((l) => l.embed)}
           {#if withEmbed.length > 0}
             <div class="flex flex-col gap-2 mt-1">
               {#each withEmbed as link (link.url)}
@@ -699,12 +709,9 @@
       {/snippet}
 
       {#snippet media()}
-        {@const media = (isForward ? original?.media : message.media) ?? []}
+        {@const media = mediaItems(shownAttachments)}
         {#if media.length > 0}
-          {@const nonLinkMedia = media.filter((m: Message["media"][number]) => !m.type.startsWith("text/"))}
-          {#if nonLinkMedia.length > 0}
-            <MediaEmbed media={nonLinkMedia.map((m: Message["media"][number]) => ({ ...m, alt: m.alt ?? undefined }))} />
-          {/if}
+          <MediaEmbed media={media} />
         {/if}
       {/snippet}
 
