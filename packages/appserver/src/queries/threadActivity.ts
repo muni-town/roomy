@@ -24,8 +24,6 @@ import { hydrateProfiles } from "./profileStore.ts";
 import { hiddenBy } from "./userBlocks.ts";
 import {
   readRoomActivityProjectionFor,
-  rebuildRoomActivity,
-  warnProjectionUnavailable,
   type RoomActivityAuthor,
   type RoomActivitySummary,
 } from "./roomActivityProjection.ts";
@@ -205,8 +203,14 @@ export async function listThreadActivity(
  *
  * Served from the `room_activity` projection, which holds the same
  * facts reduced once per write. `scanRoomActivity` below is the fallback: the
- * projection is an optimisation, and a page it cannot answer in full is read
- * from the messages themselves.
+ * projection is an optimisation, and a page it cannot answer is read from the
+ * messages themselves.
+ *
+ * A page the projection has no row for is warmed before that fallback is
+ * reached: `readRoomActivityProjectionFor` rebuilds exactly the rooms it is
+ * missing, so the page is projected from the next read on. That is the only
+ * warm — a page the projection cannot answer is scanned and left alone, since
+ * rebuilding it would be a statement over every message on the board.
  *
  * Rooms with no messages are absent from the map (or carry empty arrays) —
  * callers treat that as "no activity".
@@ -225,25 +229,6 @@ export async function fetchRoomActivity(
   // so a hidden author is gone from both the participants and the preview.
   if (hidden && hidden.size > 0) {
     for (const t of out.values()) redactActivity(t, hidden);
-  }
-  // Warm on miss — the `room_access` pattern (queries/roomAccessProjection.ts).
-  // The scan below has just derived every room's answer from the live tables, so
-  // writing those rows now means this page is projected from the next read on.
-  //
-  // Without this, the projection could never cover a room with no messages: no
-  // message event exists to maintain its row, and because a page is projected
-  // only when EVERY room in it is, a single quiet room would send the whole board
-  // back to the scan permanently. It is also what heals a blue-green rebuild,
-  // where rematerialisation deliberately invalidates without populating.
-  //
-  // Best-effort: the caller already holds a correct answer, so a failed warm must
-  // never turn a successful read into an error.
-  if (!projected) {
-    try {
-      await rebuildRoomActivity(db, roomIds);
-    } catch (err) {
-      warnProjectionUnavailable(err);
-    }
   }
 
   // Resolve participant + latest-message author profiles from the global store
@@ -535,17 +520,19 @@ function decodeBoardPreview(
  * On a partial hit the missing rooms are warmed first and the page is then
  * served entirely from the projection — the read/warm/re-read sequence is
  * `readRoomActivityProjectionFor`. Warming only those rooms costs their
- * messages and populates the rows, so the next read is fully projected; the
- * live scan — which reads every message on the page — is left for the one case
- * it is needed: a DB with no projection table (a schema predating it, or a read
- * error).
+ * messages and populates the rows, so the next read is fully projected. The
+ * live scan — which reads every message on the page — is left for the page the
+ * projection cannot answer: a DB with no projection table (a schema predating
+ * it, or a read error), or a requested id with no room row to render.
  *
  * A partial hit is the ordinary case on a rebuilt DB and on a board whose quiet
  * rooms have never had a message to project: the table is fine, a few rooms
  * simply have no row.
  *
  * Best-effort: if the warm or the re-read fails, return `null` so the caller
- * falls back to the scan, which cannot fail this way.
+ * falls back to the scan, which cannot fail this way. The warm has already
+ * covered every room the projection was missing, so that fallback is not
+ * followed by a rebuild.
  */
 async function fetchProjectedRoomActivity(
   db: DbLike,

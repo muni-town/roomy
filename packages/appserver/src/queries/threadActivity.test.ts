@@ -165,6 +165,12 @@ function forwardMessage(db: Database, threadId: string, origMsgId: string) {
   }
 }
 
+/** A map as plain JSON, rooms sorted by id — for comparing two reads. */
+const plain = (m: Map<string, unknown>) =>
+  JSON.parse(
+    JSON.stringify([...m.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))),
+  );
+
 describe("threadActivity", () => {
   test("space scope returns all threads in space, sorted by most recent activity", async () => {
     const { db, asyncDb } = freshDb();
@@ -593,11 +599,6 @@ describe("room_activity projection parity", () => {
     return { scanned, projected };
   }
 
-  const plain = (m: Map<string, unknown>) =>
-    JSON.parse(
-      JSON.stringify([...m.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))),
-    );
-
   test("matches the scan for threads with messages, empties, and a thread with no messages", async () => {
     const { db, asyncDb } = freshDb();
     seed(db);
@@ -722,6 +723,95 @@ describe("room_activity projection parity", () => {
     postMessage(noProjection, THREAD_A, ALICE, 1000, "a");
     const result = await fetchRoomActivity(toAsyncDb(noProjection), [THREAD_A]);
     expect(result.get(THREAD_A)!.latestMessage!.content).toBe("a");
+  });
+});
+
+/**
+ * The warm is bounded by what the projection is missing.
+ *
+ * A row is cold for documented reasons — a blue-green rebuild invalidates
+ * without populating, and a room with no messages never has an event to create
+ * one — so a read that misses must populate the rooms it missed, or the board
+ * is pinned to the live scan. What that warm costs is the messages of the rooms
+ * it covers, which is why it may only cover rooms the projection has no row
+ * for: a rebuild of the whole page is a single statement over every message on
+ * the board.
+ */
+describe("room_activity warm", () => {
+  /** Record the room set of every `room_activity` rebuild the reader issues. */
+  function warmSpy(asyncDb: DbLike): { db: DbLike; warmed: string[][] } {
+    const warmed: string[][] = [];
+    const db: DbLike = {
+      ...asyncDb,
+      async run(sql: string, ...params: unknown[]) {
+        if (/insert into room_activity/.test(sql)) {
+          warmed.push(JSON.parse(params[0] as string) as string[]);
+        }
+        return asyncDb.run(sql, ...params);
+      },
+    };
+    return { db, warmed };
+  }
+
+  test("a page larger than the missing set warms only the missing rooms", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+    postMessage(db, THREAD_A, ALICE, 1000, "a");
+    postMessage(db, THREAD_C, CAROL, 2000, "c");
+    // One of the page's three rooms is projected; the other two are cold.
+    await rebuildRoomActivity(asyncDb, [THREAD_A]);
+
+    const { db: spied, warmed } = warmSpy(asyncDb);
+    const result = await fetchRoomActivity(spied, [THREAD_A, THREAD_B, THREAD_C]);
+
+    expect(result.get(THREAD_A)!.latestMessage!.content).toBe("a");
+    expect(result.get(THREAD_C)!.latestMessage!.content).toBe("c");
+
+    // The warm is the two rooms with no row, in the order the page asked for
+    // them; the projected room is not rebuilt.
+    expect(warmed).toEqual([[THREAD_B, THREAD_C]]);
+  });
+
+  test("a page the projection cannot render is scanned, not warmed", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+    postMessage(db, THREAD_A, ALICE, 1000, "a");
+    // Both rooms are projected, but THREAD_B is no longer a room: the page has
+    // no room row to render it from, so the projection cannot answer it.
+    await rebuildRoomActivity(asyncDb, [THREAD_A, THREAD_B]);
+    db.run("delete from comp_room where entity = ?", [THREAD_B]);
+
+    const { db: spied, warmed } = warmSpy(asyncDb);
+    const result = await fetchRoomActivity(spied, [THREAD_A, THREAD_B]);
+
+    // The scan answers both: the room it knows, and the blank entry a stale id
+    // gets.
+    expect(result.get(THREAD_A)!.latestMessage!.content).toBe("a");
+    expect(result.get(THREAD_B)!.latestMessage).toBeNull();
+
+    // Nothing was missing from the projection, so there was nothing to warm —
+    // and rebuilding the page here would be over every message on the board.
+    expect(warmed).toEqual([]);
+  });
+
+  test("a second read of the same page rebuilds nothing", async () => {
+    const { db, asyncDb } = freshDb();
+    seed(db);
+    postMessage(db, THREAD_A, ALICE, 1000, "a");
+    postMessage(db, THREAD_C, CAROL, 2000, "c");
+    await rebuildRoomActivity(asyncDb, [THREAD_A]);
+
+    const page = [THREAD_A, THREAD_B, THREAD_C];
+    const first = warmSpy(asyncDb);
+    const readOne = await fetchRoomActivity(first.db, page);
+    expect(first.warmed).toEqual([[THREAD_B, THREAD_C]]);
+
+    // The warm populated the rows that were cold, so the page is projected from
+    // here on: no second rebuild, and the same answer.
+    const second = warmSpy(asyncDb);
+    const readTwo = await fetchRoomActivity(second.db, page);
+    expect(second.warmed).toEqual([]);
+    expect(plain(readTwo)).toEqual(plain(readOne));
   });
 });
 
