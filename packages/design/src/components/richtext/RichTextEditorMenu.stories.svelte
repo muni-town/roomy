@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { type ComponentProps } from "svelte";
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import RichTextEditorMenu from "./RichTextEditorMenu.svelte";
   import type { Editor } from "@tiptap/core";
@@ -6,6 +7,7 @@
   const { Story } = defineMeta({
     title: "RichText/RichTextEditorMenu",
     component: RichTextEditorMenu,
+    render: template,
   });
 
   const editorMock = {
@@ -22,12 +24,13 @@
   } as unknown as Editor;
 </script>
 
-{#snippet template(args: { editable?: boolean })}
+{#snippet template(args: ComponentProps<typeof RichTextEditorMenu>)}
   <div class="p-4">
     <RichTextEditorMenu
       editor={editorMock}
-      editable={(args as any).editable ?? false}
+      editable={args.editable ?? false}
       isBold={false}
+      isImage={false}
       isItalic={false}
       isUnderline={false}
       isStrikethrough={false}
@@ -38,6 +41,7 @@
       processImageFile={async () => {}}
       switchTo={() => {}}
       ref={null}
+      selectedType="paragraph"
     />
   </div>
 {/snippet}

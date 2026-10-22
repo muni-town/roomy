@@ -14,7 +14,7 @@
 
 {#snippet template(args: Args)}
   <div class="p-4">
-    <AvatarGroup users={(args as any).users} />
+    <AvatarGroup users={args.users} />
   </div>
 {/snippet}
 

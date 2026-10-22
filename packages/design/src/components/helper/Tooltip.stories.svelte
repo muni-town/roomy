@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Helper/Tooltip",
     component: Tooltip,
+    render: template,
   });
 </script>
 

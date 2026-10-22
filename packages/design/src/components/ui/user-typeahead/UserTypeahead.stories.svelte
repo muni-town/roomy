@@ -1,10 +1,12 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import UserTypeahead from "./UserTypeahead.svelte";
 
   const { Story } = defineMeta({
     title: "UI/UserTypeahead",
     component: UserTypeahead,
+    render: template,
   });
 
   const mockUsers = [
@@ -17,7 +19,7 @@
   function noop() {}
 </script>
 
-{#snippet template(args)}
+{#snippet template(args: ComponentProps<typeof UserTypeahead>)}
   <div class="p-4">
     <UserTypeahead
       users={mockUsers}

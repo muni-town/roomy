@@ -16,7 +16,7 @@
 
 {#snippet template(args: Args)}
   <div class="p-4">
-    <ToggleTabs {...(args as any)} />
+    <ToggleTabs {...args} />
   </div>
 {/snippet}
 

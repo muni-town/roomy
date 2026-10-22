@@ -15,7 +15,7 @@
       password="hunter2"
       tab="Login"
       loading={false}
-      error={(args as any).error ?? null}
+      error={args.error ?? null}
       handleSuffix="@example.com"
       onLogin={() => {}}
       onRegister={() => {}}

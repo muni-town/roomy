@@ -14,4 +14,5 @@ export type RichTextTypes =
   | "small"
   | "code"
   | "bullet-list"
-  | "ordered-list";
+  | "ordered-list"
+  | "image";

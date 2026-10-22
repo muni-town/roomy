@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "User/UserAvatar",
     component: UserAvatar,
+    render: template,
   });
 
   type Args = {
@@ -15,7 +16,7 @@
 
 {#snippet template(args: Args)}
   <div class="p-4">
-    <UserAvatar name={(args as any).name} size={(args as any).size} />
+    <UserAvatar name={args.name} size={args.size} />
   </div>
 {/snippet}
 

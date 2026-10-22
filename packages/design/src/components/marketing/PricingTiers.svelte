@@ -12,7 +12,6 @@
 
   let {
     heading = "A bridge for your community",
-    intro = "Roomy is open source and our hosted instance is free to use. We also provide a Discord Bridge with a free tier, and you can subscribe to bridge bigger communities.",
     activeTier = undefined,
     tiers = [
       {
@@ -50,7 +49,6 @@
     ] satisfies Tier[],
   }: {
     heading?: string;
-    intro?: string;
     /** Name of the tier to highlight as the user's current plan. */
     activeTier?: string;
     tiers?: Tier[];
@@ -66,9 +64,6 @@
   <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-base-900 dark:text-base-50 text-center">
     {heading}
   </h2>
-  <p class="intro text-base-600 dark:text-base-400 text-center mx-auto mt-3 max-w-xl">
-  </p>
-
   <div class="cards mt-10">
     {#each tiers as tier (tier.name)}
       <article

@@ -8,6 +8,7 @@
   const { Story } = defineMeta({
     title: "Content/Thread/Message/Embeds/LinkCard",
     component: LinkCard,
+    render: template,
   });
 
   const url = "https://atproto.com/blog/atproto-and-the-open-web";

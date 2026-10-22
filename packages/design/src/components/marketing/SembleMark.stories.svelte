@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Marketing/SembleMark",
     component: SembleMark,
+    render: template,
   });
 
   type Args = { class: string };

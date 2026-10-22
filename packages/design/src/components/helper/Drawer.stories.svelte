@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Helper/Drawer",
     component: Drawer,
+    render: template,
   });
 </script>
 

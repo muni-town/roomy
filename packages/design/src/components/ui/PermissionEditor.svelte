@@ -28,7 +28,10 @@
     ceiling?: "read" | "readwrite";
   } = $props();
 
-  const OPTIONS: { label: string; value: Permission; disabled?: boolean }[] = [
+  // Derived, not a constant: `ceiling` can drop after the first render (the
+  // federated permission arrives with the channel metadata), and the Read &
+  // Write option must disable itself when it does.
+  const OPTIONS = $derived<{ label: string; value: Permission; disabled?: boolean }[]>([
     { label: "None", value: "none" },
     { label: "Read", value: "read" },
     {
@@ -36,7 +39,7 @@
       value: "readwrite",
       disabled: ceiling !== "readwrite",
     },
-  ];
+  ]);
 </script>
 
 <div class="flex flex-col gap-5">

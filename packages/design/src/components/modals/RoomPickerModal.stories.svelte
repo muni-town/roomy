@@ -1,26 +1,20 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import RoomPickerModal from "./RoomPickerModal.svelte";
 
   const { Story } = defineMeta({
     title: "Modals/RoomPickerModal",
     component: RoomPickerModal,
+    render: template,
   });
 
-  type Args = {
-    open: boolean;
-    mode: "forward" | "move";
-    fetchState: {
-      status: "idle" | "loading" | "error" | "success";
-      data?: { id: string; name?: string }[];
-      message?: string;
-    };
-  };
+  type Args = ComponentProps<typeof RoomPickerModal>;
 </script>
 
 {#snippet template(args: Args)}
   <RoomPickerModal
-    {...(args as any)}
+    {...args}
     onSelect={async () => {
       /* no-op in story */
     }}

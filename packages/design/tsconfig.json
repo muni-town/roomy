@@ -10,7 +10,14 @@
     "noImplicitAny": true,
     "noEmit": true,
     "allowJs": true,
-    "checkJs": true
+    "checkJs": true,
+    // The only host that type-checks this package is Storybook, which serves
+    // `$app/*` from .storybook/app-stubs (see .storybook/main.ts). SvelteKit's
+    // virtual modules are otherwise unresolvable: this package has no runtime
+    // of its own.
+    "paths": {
+      "$app/*": ["./.storybook/app-stubs/*"]
+    }
   },
   "include": ["src/**/*"]
 }

@@ -1,22 +1,20 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
-  import Alert from "./Alert.svelte";
+  import { type ComponentProps } from "svelte";
+  import Alert, { type AlertVariant } from "./Alert.svelte";
 
   const { Story } = defineMeta({
     title: "UI/Alert",
     component: Alert,
+    render: template,
   });
 
-  type Args = {
-    title?: string;
-    type?: "info" | "warning" | "success" | "error";
-    variant?: string;
-  };
+  type Args = ComponentProps<typeof Alert> & { variant?: string };
 </script>
 
 {#snippet template(args: Args)}
   <div class="p-8">
-    <Alert title={args.title} type={args.type} variant={args.variant as any}>
+    <Alert title={args.title} type={args.type} variant={args.variant as AlertVariant}>
       {#snippet children()}
         <p>
           This is an alert message. Pass `type` to pick the semantic color + icon,

@@ -1,30 +1,21 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import JoinDialog from "./JoinDialog.svelte";
 
   const { Story } = defineMeta({
     title: "Modals/JoinDialog",
     component: JoinDialog,
+    render: template,
   });
 
-  type Args = {
-    resolveState: {
-      status: "loading" | "error" | "success";
-      message?: string;
-      data?: { name: string; allowPublicJoin: boolean };
-    };
-    joinState: {
-      status: "idle" | "loading" | "success" | "error";
-      message?: string;
-    };
-    pushEnabled: boolean;
-  };
+  type Args = ComponentProps<typeof JoinDialog>;
 </script>
 
 {#snippet template(args: Args)}
   <div class="p-4 h-96">
     <JoinDialog
-      {...(args as any)}
+      {...args}
       onJoin={() => {
         /* no-op in story */
       }}

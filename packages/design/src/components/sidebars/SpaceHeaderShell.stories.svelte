@@ -1,16 +1,17 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import SpaceHeaderShell from "./SpaceHeaderShell.svelte";
 
   const { Story } = defineMeta({
     title: "Sidebars/SpaceHeaderShell",
     component: SpaceHeaderShell,
+    render: template,
   });
 
-  type Args = {
+  type Args = ComponentProps<typeof SpaceHeaderShell> & {
     spaceName: string;
-    isAdmin: boolean;
-    showInviteButton: boolean;
+    spaceSelectorOpen: boolean;
   };
 </script>
 
@@ -20,20 +21,8 @@
       class="rounded-lg border border-base-200 dark:border-base-800 bg-base-50 dark:bg-base-950"
     >
       <SpaceHeaderShell
-        {...(args as any)}
-        onCreateChannel={() => {
-          /* no-op in story */
-        }}
-        onCreateCategory={() => {
-          /* no-op in story */
-        }}
-        settingsHref="/settings"
-        onInvite={() => {
-          /* no-op in story */
-        }}
-        onLeave={() => {
-          /* no-op in story */
-        }}
+        spaceName={args.spaceName}
+        spaceSelectorOpen={args.spaceSelectorOpen}
         onToggleSpaceSelector={() => {
           /* no-op in story */
         }}
@@ -50,13 +39,13 @@
 {/snippet}
 
 <Story
-  name="Admin"
-  args={{ spaceName: "Test Space", isAdmin: true, showInviteButton: true }}
+  name="Header"
+  args={{ spaceName: "Test Space", spaceSelectorOpen: false }}
   {template}
 />
 
 <Story
-  name="Member"
-  args={{ spaceName: "Test Space", isAdmin: false, showInviteButton: false }}
+  name="Header with selector open"
+  args={{ spaceName: "Test Space", spaceSelectorOpen: true }}
   {template}
 />

@@ -1,14 +1,16 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import Input from "./Input.svelte";
 
   const { Story } = defineMeta({
     title: "UI/Input",
     component: Input,
+    render: template,
   });
 </script>
 
-{#snippet template(args)}
+{#snippet template(args: ComponentProps<typeof Input>)}
   <div class="p-4">
     <Input
       placeholder={args.placeholder}

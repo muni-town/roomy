@@ -15,7 +15,7 @@
 
 {#snippet template(args: Args)}
   <InviteManager
-    {...(args as any)}
+    {...args}
     urlFor={(token: string) => `https://roomy.space/i/${token}`}
     onCreate={() => {
       /* no-op in story */

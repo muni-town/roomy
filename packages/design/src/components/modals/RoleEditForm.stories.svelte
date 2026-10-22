@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Modals/RoleEditForm",
     component: RoleEditForm,
+    render: template,
   });
 
   type Args = {
@@ -16,7 +17,7 @@
 
 {#snippet template(args: Args)}
   <RoleEditForm
-    {...(args as any)}
+    {...args}
     onSave={() => {
       /* no-op in story */
     }}

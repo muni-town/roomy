@@ -99,7 +99,7 @@
           return false;
         },
       });
-      joinState = { status: "success" };
+      joinState = { status: "success", data: undefined };
     } catch (e) {
       const message =
         e instanceof Error

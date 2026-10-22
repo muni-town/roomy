@@ -1,11 +1,11 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import SpaceCard from "./SpaceCard.svelte";
-  import SpaceAvatar from "./SpaceAvatar.svelte";
 
   const { Story } = defineMeta({
     title: "Spaces/SpaceCard",
     component: SpaceCard,
+    render: template,
   });
 
   type Args = {
@@ -18,9 +18,9 @@
 {#snippet template(args: Args)}
   <div class="p-4">
     <SpaceCard
-      name={(args as any).name}
-      description={(args as any).description}
-      href={(args as any).href}
+      name={args.name}
+      description={args.description}
+      href={args.href}
     >
       {#snippet avatar()}
         <div

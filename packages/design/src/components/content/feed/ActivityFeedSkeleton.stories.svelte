@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Content/Feed/ActivityFeedSkeleton",
     component: ActivityFeedSkeleton,
+    render: template,
   });
 
   type Args = { count: number };

@@ -52,7 +52,6 @@
     ...props
   }: Props = $props();
 
-  const tabs = ["Login", "Register"] as const;
 </script>
 
 {#snippet tabsUi()}

@@ -4,7 +4,7 @@
  * SvelteKit runtime. The stub keeps ToggleTabs renderable; `goto` no-ops.
  */
 
-export function goto(): void {
+export function goto(_url: string | URL, _opts?: { invalidateAll?: boolean }): void {
   /* no-op in Storybook */
 }
 

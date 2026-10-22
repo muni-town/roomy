@@ -1,14 +1,18 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import Button from "./Button.svelte";
 
   const { Story } = defineMeta({
     title: "UI/Button",
     component: Button,
+    render: template,
   });
+
+  type Args = ComponentProps<typeof Button> & { label: string };
 </script>
 
-{#snippet template(args)}
+{#snippet template(args: Args)}
   <div class="p-4">
     <Button
       variant={args.variant}

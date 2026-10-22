@@ -1,11 +1,13 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import Icon from "./Icon.svelte";
   import type { RichTextTypes } from ".";
 
   const { Story } = defineMeta({
     title: "RichText/Icon",
     component: Icon,
+    render: template,
   });
 
   const ALL_NAMES: RichTextTypes[] = [
@@ -21,7 +23,7 @@
   ];
 </script>
 
-{#snippet template(_args)}
+{#snippet template(_args: ComponentProps<typeof Icon>)}
   <div class="p-4">
     <div class="grid grid-cols-3 gap-4">
       {#each ALL_NAMES as name}

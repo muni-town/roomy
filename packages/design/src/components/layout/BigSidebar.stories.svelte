@@ -6,6 +6,7 @@
   const { Story } = defineMeta({
     title: "Layout/BigSidebar",
     component: BigSidebar,
+    render: template,
   });
 
   type Args = {
@@ -16,7 +17,7 @@
 {#snippet template(args: Args)}
   <div class="p-4">
     <div class="h-96">
-      <BigSidebar {...(args as any)}>
+      <BigSidebar {...args}>
         {#snippet children()}
           <nav class="flex flex-col gap-1 p-2">
             <a

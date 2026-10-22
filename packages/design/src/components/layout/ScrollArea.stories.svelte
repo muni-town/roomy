@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Layout/ScrollArea",
     component: ScrollArea,
+    render: template,
   });
 
   type Args = {
@@ -17,7 +18,7 @@
     <div
       class="h-64 w-full max-w-md overflow-hidden rounded-lg border border-base-200 dark:border-base-800 bg-base-50 dark:bg-base-950"
     >
-      <ScrollArea {...(args as any)}>
+      <ScrollArea {...args}>
         <div class="flex flex-col gap-2 p-3">
           {#each Array.from({ length: 30 }, (_, i) => i + 1) as n}
             <p class="text-sm text-base-700 dark:text-base-300">

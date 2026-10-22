@@ -1,25 +1,20 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import RestoreDialog from "./RestoreDialog.svelte";
 
   const { Story } = defineMeta({
     title: "Modals/RestoreDialog",
     component: RestoreDialog,
+    render: template,
   });
 
-  type Args = {
-    open: boolean;
-    fetchState: {
-      status: "idle" | "loading" | "error" | "success";
-      data?: { id: string; name?: string | null }[];
-      message?: string;
-    };
-  };
+  type Args = ComponentProps<typeof RestoreDialog>;
 </script>
 
 {#snippet template(args: Args)}
   <RestoreDialog
-    {...(args as any)}
+    {...args}
     onRestore={() => {
       /* no-op in story */
     }}

@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Content/Thread/Message/ToolbarShell",
     component: ToolbarShell,
+    render: template,
   });
 </script>
 

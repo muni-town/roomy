@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { type ComponentProps } from "svelte";
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import BoardView from "./BoardView.svelte";
   import type { ThreadInfo } from "./types";
@@ -6,6 +7,7 @@
   const { Story } = defineMeta({
     title: "Content/Thread/BoardView",
     component: BoardView,
+    render: template,
   });
 
   const threads: ThreadInfo[] = [
@@ -76,9 +78,10 @@
     hasMore: true,
     loadMore: () => {},
   }}
+  {template}
 />
 
-{#snippet template(args: { threads: ThreadInfo[]; emptyMessage: string; hasMore: boolean })}
+{#snippet template(args: ComponentProps<typeof BoardView>)}
   <div class="h-96 w-full">
     <BoardView
       threads={args.threads}

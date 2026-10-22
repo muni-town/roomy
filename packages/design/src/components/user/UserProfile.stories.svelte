@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "User/UserProfile",
     component: UserProfile,
+    render: template,
   });
 
   type Profile = {

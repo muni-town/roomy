@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Sidebars/LinkedRoomList",
     component: LinkedRoomList,
+    render: template,
   });
 
   type Args = {
@@ -22,7 +23,7 @@
         Linked rooms
       </p>
       <LinkedRoomList
-        {...(args as any)}
+        {...args}
         hrefFor={(id: string) => `#/${id}`}
       />
     </div>

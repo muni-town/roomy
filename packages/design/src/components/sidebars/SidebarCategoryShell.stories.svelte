@@ -6,6 +6,7 @@
   const { Story } = defineMeta({
     title: "Sidebars/SidebarCategoryShell",
     component: SidebarCategoryShell,
+    render: template,
   });
 
   type Args = {
@@ -18,7 +19,7 @@
 {#snippet template(args: Args)}
   <div class="p-4 w-64">
     <SidebarCategoryShell
-      {...(args as any)}
+      {...args}
       onEditCategory={() => {
         /* no-op in story */
       }}

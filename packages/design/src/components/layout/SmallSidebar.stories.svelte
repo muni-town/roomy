@@ -6,6 +6,7 @@
   const { Story } = defineMeta({
     title: "Layout/SmallSidebar",
     component: SmallSidebar,
+    render: template,
   });
 
   type Args = {
@@ -16,7 +17,7 @@
 {#snippet template(args: Args)}
   <div class="p-4">
     <div class="h-96">
-      <SmallSidebar {...(args as any)}>
+      <SmallSidebar {...args}>
         {#snippet children()}
           <div
             class="flex flex-col justify-between h-full w-full items-center py-2"

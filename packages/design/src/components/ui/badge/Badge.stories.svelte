@@ -1,14 +1,16 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import Badge from "./Badge.svelte";
 
   const { Story } = defineMeta({
     title: "UI/Badge",
     component: Badge,
+    render: template,
   });
 </script>
 
-{#snippet template(args)}
+{#snippet template(args: ComponentProps<typeof Badge>)}
   <div class="p-4">
     <Badge variant={args.variant} size={args.size}>
       {#snippet children()}New{/snippet}

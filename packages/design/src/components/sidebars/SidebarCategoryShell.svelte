@@ -5,7 +5,6 @@
   import {
     IconSettings,
     IconChevronDown,
-    IconChevronUp,
     IconGripVertical,
   } from "../../icons/index";
 

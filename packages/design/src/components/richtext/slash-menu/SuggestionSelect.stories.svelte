@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  import { type ComponentProps } from "svelte";
+  import type { RichTextTypes } from "..";
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import SuggestionSelect from "./SuggestionSelect.svelte";
   import type { Editor, Range } from "@tiptap/core";
@@ -6,6 +8,7 @@
   const { Story } = defineMeta({
     title: "RichText/SlashMenuSuggestionSelect",
     component: SuggestionSelect,
+    render: template,
   });
 
   const editorMock = {
@@ -32,13 +35,13 @@
       command: () => {},
     },
   ] as unknown as {
-    value: string;
+    value: RichTextTypes;
     label: string;
     command: ({ editor, range }: { editor: Editor; range: Range }) => void;
   }[];
 </script>
 
-{#snippet template(_args: { active?: number })}
+{#snippet template(_args: ComponentProps<typeof SuggestionSelect>)}
   <div class="p-4 w-full max-w-xs">
     <SuggestionSelect {items} {range} editor={editorMock} active={0} />
   </div>

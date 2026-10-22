@@ -5,23 +5,20 @@
   const { Story } = defineMeta({
     title: "UI/ToggleGroup",
     component: ToggleGroup,
+    render: template,
   });
 </script>
 
-{#snippet template(args)}
+{#snippet template(args: { name: string; options: { label: string; value: string }[]; value: string | undefined })}
   <div class="p-4">
     <ToggleGroup
       name={args.name}
       options={args.options}
       value={args.value}
-      onchange={noop}
+      onchange={() => {}}
     />
   </div>
 {/snippet}
-
-<script lang="ts">
-  function noop() {}
-</script>
 
 <Story
   name="Default"

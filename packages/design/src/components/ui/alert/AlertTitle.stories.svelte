@@ -1,14 +1,16 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import AlertTitle from "./AlertTitle.svelte";
 
   const { Story } = defineMeta({
     title: "UI/AlertTitle",
     component: AlertTitle,
+    render: template,
   });
 </script>
 
-{#snippet template(args)}
+{#snippet template(args: ComponentProps<typeof AlertTitle>)}
   <div class="p-4">
     <AlertTitle level={args.level}>{#snippet children()}Attention!{/snippet}</AlertTitle>
   </div>

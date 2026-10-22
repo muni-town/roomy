@@ -1,14 +1,16 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import Popover from "./Popover.svelte";
 
   const { Story } = defineMeta({
     title: "UI/Popover",
     component: Popover,
+    render: template,
   });
 </script>
 
-{#snippet template(args)}
+{#snippet template(args: ComponentProps<typeof Popover>)}
   <div class="flex h-96 w-full items-center justify-center p-4">
     <Popover triggerText={args.triggerText} side={args.side}>
       {#snippet children()}

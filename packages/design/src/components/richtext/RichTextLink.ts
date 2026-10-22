@@ -82,7 +82,7 @@ const RichTextLink = Link.extend<RichTextLinkOptions>({
   inclusive: false,
   addOptions() {
     return {
-      ...this.parent?.(),
+      ...this.parent!(),
       openOnClick: "whenNotEditable",
     };
   },

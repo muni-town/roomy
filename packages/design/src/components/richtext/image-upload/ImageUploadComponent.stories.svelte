@@ -1,11 +1,13 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import ImageUploadComponent from "./ImageUploadComponent.svelte";
   import type { NodeViewProps } from "@tiptap/core";
 
   const { Story } = defineMeta({
     title: "RichText/ImageUploadComponent",
     component: ImageUploadComponent,
+    render: template,
   });
 
   const nodeViewPropsMock = {
@@ -37,9 +39,9 @@
   } as unknown as NodeViewProps;
 </script>
 
-{#snippet template(_args)}
+{#snippet template(_args: ComponentProps<typeof ImageUploadComponent>)}
   <div class="p-4 w-full max-w-md">
-    <ImageUploadComponent {...(nodeViewPropsMock as any)} />
+    <ImageUploadComponent {...nodeViewPropsMock} />
   </div>
 {/snippet}
 

@@ -6,6 +6,7 @@
   const { Story } = defineMeta({
     title: "Sidebars/SidebarLayout",
     component: SidebarLayout,
+    render: template,
     parameters: { layout: "fullscreen" },
   });
 
@@ -16,7 +17,7 @@
 
 {#snippet template(args: Args)}
   <div class="h-96 w-64 border-r border-base-200 dark:border-base-800 bg-base-50 dark:bg-base-950">
-    <SidebarLayout {...(args as any)}>
+    <SidebarLayout {...args}>
       {#snippet header()}
         <div class="flex flex-col p-2">
           <div class="flex items-center gap-2">

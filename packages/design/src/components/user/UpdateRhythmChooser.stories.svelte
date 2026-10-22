@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "User/UpdateRhythmChooser",
     component: UpdateRhythmChooser,
+    render: template,
   });
 
   type Args = {
@@ -16,8 +17,8 @@
 {#snippet template(args: Args)}
   <div class="p-4 w-full max-w-md">
     <UpdateRhythmChooser
-      value={(args as any).value}
-      horizontal={(args as any).horizontal}
+      value={args.value}
+      horizontal={args.horizontal}
       onchange={() => {}}
     />
   </div>

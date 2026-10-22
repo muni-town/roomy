@@ -7,6 +7,7 @@
   const { Story } = defineMeta({
     title: "UI/ContextMenu",
     component: ContextMenu,
+    render: template,
   });
 
   function noop() {}

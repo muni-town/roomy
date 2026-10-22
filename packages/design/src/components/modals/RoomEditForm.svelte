@@ -14,7 +14,6 @@
     permissions,
     onSave,
     onDelete,
-    confirmArchive = $bindable(false),
     deleteLabel,
     deleteIcon = "archive",
     deleteConfirmTitle,
@@ -44,6 +43,11 @@
     /** Confirm button label. Defaults to "Yes, Archive". */
     deleteConfirmButton?: string;
   } = $props();
+
+  // The delete confirmation lives entirely inside this modal: the first
+  // Delete button opens it, and neither it nor the outcome is visible to the
+  // caller.
+  let confirmArchive = $state(false);
 
   function submit(e: Event) {
     e.preventDefault();
@@ -133,7 +137,10 @@
     </div>
     <div class="flex flex-row w-full justify-between">
         <Button
-          onclick={() => void onDelete() + (confirmArchive = false)}
+          onclick={() => {
+            void onDelete?.();
+            confirmArchive = false;
+          }}
           class="justify-start"
           variant="red"
         >

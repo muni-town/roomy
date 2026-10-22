@@ -87,6 +87,29 @@ jobs:
       - name: Test Design
         run: pnpm --filter @roomy/design test
 
+  check-design:
+    name: Check Design
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.16.1
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build SDK (svelte-check resolves its dist types)
+        run: pnpm turbo run build-lib
+      - name: Check Design
+        run: pnpm --filter @roomy/design check
+
   test-appserver:
     name: Test Appserver
     needs: install

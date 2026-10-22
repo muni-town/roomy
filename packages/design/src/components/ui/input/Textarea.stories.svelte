@@ -1,14 +1,16 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import Textarea from "./Textarea.svelte";
 
   const { Story } = defineMeta({
     title: "UI/Textarea",
     component: Textarea,
+    render: template,
   });
 </script>
 
-{#snippet template(args)}
+{#snippet template(args: ComponentProps<typeof Textarea>)}
   <div class="p-4">
     <Textarea placeholder={args.placeholder} value={args.value} />
   </div>

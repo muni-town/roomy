@@ -4,14 +4,6 @@
   let {
     spaceName,
     avatar,
-    isAdmin,
-    showInviteButton,
-    isEditing = $bindable(false),
-    onCreateChannel,
-    onCreateCategory,
-    settingsHref,
-    onInvite,
-    onLeave,
     /**
      * Whether the space selector (server bar) is currently open. Used for the
      * aria-expanded state and tooltip of the header toggle button.
@@ -26,19 +18,6 @@
     spaceName?: string;
     /** Avatar rendered by caller (e.g. SpaceAvatar wrapper) */
     avatar: Snippet;
-    isAdmin: boolean;
-    showInviteButton?: boolean;
-    isEditing?: boolean;
-    /** Called when "Create Channel" is clicked in the menu. Only shown when isAdmin. */
-    onCreateChannel?: () => void;
-    /** Called when "Create Category" is clicked in the menu. Only shown when isAdmin. */
-    onCreateCategory?: () => void;
-    /** Href for the "Space settings" admin action */
-    settingsHref?: string;
-    /** Called when Invite button is clicked. Wrapper decides between copy-link vs open modal. */
-    onInvite?: () => void;
-    /** Called when Leave Space is clicked. */
-    onLeave?: () => void;
     /**
      * Whether the space selector (server bar) is currently open. Used for the
      * aria-expanded state and tooltip of the header toggle button.

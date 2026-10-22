@@ -1,4 +1,7 @@
 <script lang="ts" module>
+  import type { AsyncStateWithIdle } from "@roomy-space/sdk";
+
+  /** The space being joined, while its metadata is being resolved. */
   export type JoinResolveState =
     | { status: "loading" }
     | { status: "error"; message: string }
@@ -7,11 +10,11 @@
         data: { name: string; allowPublicJoin: boolean };
       };
 
-  export type JoinState =
-    | { status: "idle" }
-    | { status: "loading" }
-    | { status: "success"; data?: unknown }
-    | { status: "error"; message: string };
+  /**
+   * The join procedure's progress. Idle until the user submits, and it
+   * carries no payload: the caller navigates away on success.
+   */
+  export type JoinState = AsyncStateWithIdle<unknown>;
 </script>
 
 <script lang="ts">

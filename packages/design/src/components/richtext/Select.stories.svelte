@@ -1,32 +1,26 @@
 <script lang="ts" module>
+  import { type ComponentProps } from "svelte";
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import Select from "./Select.svelte";
 
   const { Story } = defineMeta({
     title: "RichText/Select",
     component: Select,
+    render: template,
   });
 
-  type Args = {
-    items: { value: string; label: string; disabled?: boolean }[];
-    value?: string;
-    placeholder?: string;
-  };
 </script>
 
-{#snippet template(args: Args)}
+{#snippet template(args: ComponentProps<typeof Select>)}
   <div class="p-4 bg-base-50 dark:bg-base-950">
-    <Select
-      items={(args as any).items}
-      value={(args as any).value}
-      placeholder={(args as any).placeholder}
-    />
+    <Select {...args} />
   </div>
 {/snippet}
 
 <Story
   name="Default"
   args={{
+    type: "single",
     items: [
       { value: "p", label: "Paragraph" },
       { value: "h1", label: "Heading 1" },

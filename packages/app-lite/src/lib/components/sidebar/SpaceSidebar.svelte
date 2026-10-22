@@ -595,10 +595,8 @@
     <div class="border-b border-transparent hover:border-base-200/60 dark:hover:border-base-900/60">
       <SpaceHeaderShell
         spaceName={currentSpace?.name ?? meta?.name ?? spaceId}
-        isAdmin={currentSpace?.isAdmin ?? meta?.isAdmin ?? false}
         spaceSelectorOpen={serverBar.expanded}
         onToggleSpaceSelector={toggleServerBar}
-        bind:isEditing
       >
         {#snippet avatar()}
           <SpaceAvatar
@@ -856,7 +854,6 @@
 
   <CreateRoomModal
     bind:open={createChannelOpen}
-    {spaceId}
     defaultType="Channel"
     onCreate={handleCreate}
   >

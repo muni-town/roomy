@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Content/Thread/Message/ChatMessageSkeleton",
     component: ChatMessageSkeleton,
+    render: template,
   });
 </script>
 

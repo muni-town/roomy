@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Marketing/RoomyMark",
     component: RoomyMark,
+    render: template,
   });
 
   type Args = { sizeClass: string };

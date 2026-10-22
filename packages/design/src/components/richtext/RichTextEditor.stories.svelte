@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "RichText/RichTextEditor",
     component: RichTextEditor,
+    render: template,
   });
 
   type Args = {
@@ -17,9 +18,9 @@
 {#snippet template(args: Args)}
   <div class="p-4 w-full bg-base-50 dark:bg-base-950 min-h-[300px]">
     <RichTextEditor
-      content={(args as any).content}
-      editable={(args as any).editable}
-      placeholder={(args as any).placeholder}
+      content={args.content}
+      editable={args.editable}
+      placeholder={args.placeholder}
       onupdate={() => {}}
       ontransaction={() => {}}
       oncomment={() => {}}

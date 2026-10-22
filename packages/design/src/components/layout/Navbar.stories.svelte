@@ -6,6 +6,7 @@
   const { Story } = defineMeta({
     title: "Layout/Navbar",
     component: Navbar,
+    render: template,
   });
 
   type Args = {
@@ -16,7 +17,7 @@
 
 {#snippet template(args: Args)}
   <div class="p-4">
-    <Navbar {...(args as any)}>
+    <Navbar {...args}>
       {#snippet children()}
         <div class="relative flex items-center">
           <IconSearch class="size-4 absolute left-3 text-base-400" />

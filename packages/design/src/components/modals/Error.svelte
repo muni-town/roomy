@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Alert } from "@roomy/design/components/ui/alert/index.ts";
-  import Button from "@roomy/design/components/ui/button/Button.svelte";
+  import { Alert } from "../ui/alert/index.js";
+  import Button from "../ui/button/Button.svelte";
   import type { Snippet } from "svelte";
 
   let {

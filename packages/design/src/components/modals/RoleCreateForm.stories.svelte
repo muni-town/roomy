@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Modals/RoleCreateForm",
     component: RoleCreateForm,
+    render: template,
   });
 
   type Args = {
@@ -15,7 +16,7 @@
 
 {#snippet template(args: Args)}
   <RoleCreateForm
-    {...(args as any)}
+    {...args}
     onCreate={() => {
       /* no-op in story */
     }}

@@ -10,5 +10,5 @@
 
 <Story
   name="Default"
-  args={{ processImageFile: async (file: File) => {}, disabled: false }}
+  args={{ processImageFile: async (_file: File) => {}, disabled: false }}
 />

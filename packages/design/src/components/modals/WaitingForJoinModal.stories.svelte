@@ -8,9 +8,6 @@
     parameters: { layout: "fullscreen" },
   });
 
-  type Args = {
-    open: boolean;
-  };
 </script>
 
 <Story name="Default" args={{ open: true }} />

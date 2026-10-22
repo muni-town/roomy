@@ -7,14 +7,11 @@
 
   let {
     open = $bindable(false),
-    spaceId,
     defaultType = "Channel",
     permissions,
     onCreate,
   }: {
     open: boolean;
-    /** The space ID — used to form the default category link. */
-    spaceId: string;
     /** Optional permissions editor snippet (e.g. ChannelPermissions component). */
     permissions?: Snippet<[{ type: "Channel" | "Category" }]>;
     /** Called when the user submits the form. */
@@ -24,10 +21,13 @@
   } = $props();
 
   const types = ["Channel", "Category"] as const;
-  let type = $state<"Channel" | "Category">(defaultType);
+  let type = $state<"Channel" | "Category">("Channel");
   let name = $state("");
   let creating = $state(false);
 
+  // Discard the draft when the modal closes, so an abandoned name or type
+  // never leaks into the next opening. `defaultType` is re-read here rather
+  // than at initialisation so a caller that changes it takes effect.
   $effect(() => {
     if (!open) {
       name = "";

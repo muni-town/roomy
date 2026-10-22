@@ -179,7 +179,7 @@
       } catch (err) {
         console.warn("[join] could not save notification rhythm:", err);
       }
-      joinState = { status: "success" };
+      joinState = { status: "success", data: undefined };
       goto(`/${id}`);
     } catch (err) {
       console.error("[join] joinSpace failed", err);

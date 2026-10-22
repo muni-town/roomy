@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Spaces/SpaceAvatar",
     component: SpaceAvatar,
+    render: template,
   });
 
   type Args = {
@@ -18,10 +19,10 @@
 {#snippet template(args: Args)}
   <div class="p-4">
     <SpaceAvatar
-      name={(args as any).name}
-      id={(args as any).id}
-      size={(args as any).size}
-      shape={(args as any).shape}
+      name={args.name}
+      id={args.id}
+      size={args.size}
+      shape={args.shape}
     />
   </div>
 {/snippet}

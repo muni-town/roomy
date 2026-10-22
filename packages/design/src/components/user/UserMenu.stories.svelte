@@ -11,7 +11,7 @@
 {#snippet template(args: { connected: boolean })}
   <div class="p-4 w-full min-h-screen flex items-center justify-center bg-base-50 dark:bg-base-950">
     <UserMenu
-      connected={(args as any).connected}
+      connected={args.connected}
       displayName="Ada Lovelace"
       handle="ada@example.com"
       profileHref="#/u/ada"

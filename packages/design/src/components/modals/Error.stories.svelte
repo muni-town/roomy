@@ -8,11 +8,6 @@
     parameters: { layout: "fullscreen" },
   });
 
-  type Args = {
-    message: string;
-    goHome: boolean;
-    tellUs: boolean;
-  };
 </script>
 
 <Story

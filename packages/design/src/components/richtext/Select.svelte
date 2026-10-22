@@ -7,6 +7,7 @@
   import { cn, toggleVariants } from "@foxui/core";
   import { Select, type WithoutChildren } from "bits-ui";
   import Icon from "./Icon.svelte";
+  import type { RichTextTypes } from ".";
 
   type Props = WithoutChildren<Select.RootProps> & {
     placeholder?: string;
@@ -28,7 +29,7 @@
     {#snippet child({ props })}
       <button {...props} class={cn(toggleVariants({ size: "sm" }), "gap-1")}>
         {#if value}
-          <Icon name={value as any} />
+          <Icon name={value as RichTextTypes} />
         {:else}
           <span class="size-3.5">?</span>
         {/if}
@@ -76,7 +77,7 @@
                     : "hover:bg-accent-500/10",
                 )}
               >
-                <Icon name={value as any} />
+                <Icon name={value as RichTextTypes} />
                 {label}
               </div>
             {/snippet}

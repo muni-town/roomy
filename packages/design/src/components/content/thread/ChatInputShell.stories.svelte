@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Content/Thread/ChatInputShell",
     component: ChatInputShell,
+    render: template,
   });
 
   type Args = {

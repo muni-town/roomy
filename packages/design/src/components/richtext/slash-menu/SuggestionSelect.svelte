@@ -4,6 +4,7 @@
    * https://github.com/flo-bit/ui-kit/tree/main/packages/text/src/lib/components/rich-text-editor
    */
 
+  import { untrack } from "svelte";
   import { cn } from "@foxui/core";
   import type { Editor, Range } from "@tiptap/core";
   import Icon from "../Icon.svelte";
@@ -22,7 +23,8 @@
 
   let { items, range, editor, active }: Props = $props();
 
-  let activeIndex = $state(active ?? 0);
+  // Seeded once from `active`; the component owns the index from then on.
+  let activeIndex = $state(untrack(() => active) ?? 0);
 
   export function setItems(value: any[]) {
     items = value;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { Modal, Button, Input } from "@foxui/core";
   import { IconLoading, IconSave } from "../../icons/index";
 
@@ -18,13 +19,12 @@
     onSave: (name: string, description: string) => void;
   } = $props();
 
-  // State initialised from props. No $effect sync needed because the
-  // parent keys this component on role.id, so it's destroyed &
-  // recreated whenever the target role changes. This avoids the
-  // effect_update_depth_exceeded error caused by writing $state
-  // inside $effect.
-  let name = $state(role?.name ?? "");
-  let description = $state(role?.description ?? "");
+  // Seeded once from `role`, then owned by the form. The parent keys this
+  // component on role.id, so it is destroyed and recreated whenever the
+  // target role changes; that keeps the seed correct without an $effect that
+  // writes $state (which would be an effect_update_depth_exceeded loop).
+  let name = $state(untrack(() => role?.name) ?? "");
+  let description = $state(untrack(() => role?.description) ?? "");
 
   function submit() {
     if (!role || !name.trim()) return;

@@ -20,8 +20,11 @@
       progress = event.progress;
     });
 
-    if (url) {
-      const pos = props.getPos();
+    // `getPos()` returns undefined once the node has been removed from the
+    // document, which can happen while the upload is in flight. Nothing is
+    // left to replace in that case.
+    const pos = props.getPos();
+    if (url && pos !== undefined) {
       const filename = files?.[0]?.name.replace(/\.[^/.]+$/, "") || "unknown";
 
       props.deleteNode();

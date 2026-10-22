@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { type ComponentProps } from "svelte";
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import MessageBubble from "./MessageBubble.svelte";
   import SelectionTick from "./SelectionTick.svelte";
@@ -6,17 +7,21 @@
   const { Story } = defineMeta({
     title: "Content/Thread/Message/MessageBubble",
     component: MessageBubble,
+    render: template,
   });
 </script>
 
-{#snippet template(args: { authorName: string; isBridged: boolean; isSystem: boolean; mergeWithPrevious: boolean; isSelected?: boolean; selectionTick?: boolean; deliveryState?: "pending" | "failed" | "queued"; queuedLabel?: string })}
+{#snippet template(args: ComponentProps<typeof MessageBubble> & { selectionTick?: boolean })}
+  {#snippet selectionIndicator()}
+    <SelectionTick checked={args.isSelected ?? false} />
+  {/snippet}
   <div class="w-full max-w-2xl p-4">
     <MessageBubble
       authorDid="did:plc:test"
       authorName={args.authorName}
       authorHandle="alice"
       authorAvatarUrl="https://placehold.co/64x64/6366f1/ffffff?text=A"
-      timestamp={new Date().toISOString()}
+      timestamp={new Date()}
       isBridged={args.isBridged}
       isSystem={args.isSystem}
       mergeWithPrevious={args.mergeWithPrevious}
@@ -24,12 +29,8 @@
       deliveryState={args.deliveryState}
       queuedLabel={args.queuedLabel}
       onAvatarClick={() => {}}
+      selectionIndicator={args.selectionTick ? selectionIndicator : undefined}
     >
-      {#if args.selectionTick}
-        {#snippet selectionIndicator()}
-          <SelectionTick checked={args.isSelected ?? false} />
-        {/snippet}
-      {/if}
       {#snippet content()}
         <p class="text-sm">
           The quick brown fox jumps over the lazy dog. This is a regular

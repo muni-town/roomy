@@ -6,6 +6,7 @@
   const { Story } = defineMeta({
     title: "Sidebars/SidebarItemShell",
     component: SidebarItemShell,
+    render: template,
   });
 
   type Args = {
@@ -21,7 +22,7 @@
 {#snippet template(args: Args)}
   <div class="p-4 w-64">
     <SidebarItemShell
-      {...(args as any)}
+      {...args}
       onclick={() => {
         /* no-op in story */
       }}

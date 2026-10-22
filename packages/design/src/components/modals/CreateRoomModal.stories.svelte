@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Modals/CreateRoomModal",
     component: CreateRoomModal,
+    render: template,
   });
 
   type Args = {
@@ -16,7 +17,7 @@
 
 {#snippet template(args: Args)}
   <CreateRoomModal
-    {...(args as any)}
+    {...args}
     onCreate={async () => {
       /* no-op in story */
     }}

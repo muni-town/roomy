@@ -5,6 +5,7 @@
   const { Story } = defineMeta({
     title: "Helper/InlineMono",
     component: InlineMono,
+    render: template,
   });
 </script>
 

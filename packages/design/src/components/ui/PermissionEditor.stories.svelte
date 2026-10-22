@@ -1,10 +1,12 @@
 <script lang="ts" module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
+  import { type ComponentProps } from "svelte";
   import PermissionEditor from "./PermissionEditor.svelte";
 
   const { Story } = defineMeta({
     title: "UI/PermissionEditor",
     component: PermissionEditor,
+    render: template,
   });
 </script>
 
@@ -19,11 +21,12 @@
     ],
     rolesLoading: false,
   }}
+  {template}
 />
 
-{#snippet template(args)}
+{#snippet template(args: ComponentProps<typeof PermissionEditor>)}
   <div class="p-4">
-    <PermissionEditor {...(args as any)} />
+    <PermissionEditor {...args} />
   </div>
 {/snippet}
 

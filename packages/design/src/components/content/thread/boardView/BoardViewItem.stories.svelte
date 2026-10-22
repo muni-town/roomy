@@ -6,6 +6,7 @@
   const { Story } = defineMeta({
     title: "Content/Thread/BoardViewItem",
     component: BoardViewItem,
+    render: template,
   });
 
   const thread: ThreadInfo = {
