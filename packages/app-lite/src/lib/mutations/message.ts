@@ -241,8 +241,10 @@ export async function deleteMessage(
  * Delete one or more messages from a room.
  *
  * `space.roomy.message.deleteMessage.v0` carries a single `messageId`, so this
- * emits one event per message — batched into ONE `sendEvents` call so the
- * whole selection is one round-trip (same shape as {@link moveMessages}).
+ * emits one event per message. `sendEvents` caps a batch at
+ * `MAX_EVENTS_PER_SEND`, so a larger selection is split across calls in input
+ * order. The events are independent, and a call that the appserver rejects
+ * propagates to the caller rather than being retried for the remainder.
  */
 export async function deleteMessages(
   spaceId: string,
@@ -256,7 +258,9 @@ export async function deleteMessages(
     messageId,
   }));
 
-  await sendEvents(spaceId, events);
+  for (let i = 0; i < events.length; i += MAX_EVENTS_PER_SEND) {
+    await sendEvents(spaceId, events.slice(i, i + MAX_EVENTS_PER_SEND));
+  }
 }
 
 /**
@@ -298,8 +302,9 @@ export async function removeLinkEmbed(
  * is created, unlike {@link forwardMessage}.
  *
  * `space.roomy.message.moveMessages.v0` caps `messageIds` at one entry until
- * LibSQL TVFs land, so this emits one event per message (the schema is
- * batched as a single `sendEvents` call).
+ * LibSQL TVFs land, so this emits one event per message. `sendEvents` caps a
+ * batch at `MAX_EVENTS_PER_SEND`, so a larger selection is split across calls
+ * in input order; a rejected call propagates rather than being retried.
  */
 export async function moveMessages(
   spaceId: string,
@@ -315,7 +320,9 @@ export async function moveMessages(
     toRoomId,
   }));
 
-  await sendEvents(spaceId, events);
+  for (let i = 0; i < events.length; i += MAX_EVENTS_PER_SEND) {
+    await sendEvents(spaceId, events.slice(i, i + MAX_EVENTS_PER_SEND));
+  }
 }
 
 /**

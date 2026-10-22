@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Modal } from "@foxui/core";
   import Button from "../../../ui/button/Button.svelte";
+  import ErrorMessage from "../../../helper/ErrorMessage.svelte";
   import { IconTrash } from "../../../../icons/index";
 
   let {
@@ -27,6 +28,7 @@
   } = $props();
 
   let deleting = $state(false);
+  let errorMessage = $state<string | null>(null);
 
   const many = $derived(count > 1);
 
@@ -39,14 +41,29 @@
     return `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
   });
 
+  // A reopened dialog starts clean: the previous attempt's error belongs to
+  // a confirmation the user has since dismissed.
+  $effect(() => {
+    if (!open) errorMessage = null;
+  });
+
+  /**
+   * Run the delete and keep the dialog open on failure. Closing on a rejected
+   * send would report a delete that the appserver never accepted, so the error
+   * stays visible next to the confirm button and the caller's state (a
+   * selection, the timeline) is left as it was.
+   */
   async function confirm() {
     if (deleting) return;
     deleting = true;
+    errorMessage = null;
     try {
       await onConfirm();
+      open = false;
+    } catch (e) {
+      errorMessage = e instanceof Error ? e.message : "Failed to delete messages";
     } finally {
       deleting = false;
-      open = false;
     }
   }
 </script>
@@ -79,6 +96,9 @@
       <p class="text-red-700 dark:text-red-400 text-sm">
         This selection includes messages from {otherAuthorList}.
       </p>
+    {/if}
+    {#if errorMessage}
+      <ErrorMessage message={errorMessage} />
     {/if}
   </div>
   <div class="flex flex-row w-full justify-end gap-2">
