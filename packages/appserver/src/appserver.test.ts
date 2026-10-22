@@ -98,8 +98,7 @@ describe("createAppserver factory", () => {
     // Hit a real endpoint so the request counter/histogram have a sample.
     await fetch(`${base}/health`);
 
-    // Simulate this process's boot so the restart-rate counter has a series —
-    // the signal that turns silent restarts into an alertable rate.
+    // Stamp this process's boot so both process-boot families have a series.
     recordProcessStart();
 
     const res = await fetch(`${base}/metrics`);
@@ -152,10 +151,17 @@ describe("createAppserver factory", () => {
     // The /health hit should have been recorded as a request.
     expect(body).toContain('endpoint="/health"');
     expect(body).toContain('method="GET"');
-    // The boot counter renders with a value, so the restart-rate alert
-    // expression (`increase(roomy_process_starts_total[10m]) > 3`) has a
-    // series to fire on.
-    expect(body).toMatch(/^roomy_process_starts_total \d+$/m);
+    // The boot families render with values: the counter is the in-process boot
+    // count, and the gauge is the restart signal — its value differs between
+    // processes, so `changes(roomy_process_boot_timestamp_seconds[1h])` sees a
+    // restart that the counter, restarted at 1 each boot, cannot show.
+    // The count is only non-zero here: other files in the same test process
+    // also stamp a boot, and the exact value is not what this asserts.
+    expect(body).toMatch(/^roomy_process_starts_total [1-9]\d*$/m);
+    const bootStamp = Number(body.match(/^roomy_process_boot_timestamp_seconds (\S+)$/m)?.[1]);
+    // Seconds since the epoch, plausibly this boot and not a placeholder 0.
+    expect(bootStamp).toBeGreaterThan(Date.now() / 1000 - 3600);
+    expect(bootStamp).toBeLessThanOrEqual(Date.now() / 1000);
     // Memory is only useful if it is present on every scrape: the footprint of
     // the deployed process is not observable any other way, so a `# TYPE` line
     // with no sample would leave the signal this gauge exists for unreadable.

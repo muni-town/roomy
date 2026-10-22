@@ -103,7 +103,13 @@ describe("fatal exit handlers (child process)", () => {
   });
 });
 
-describe("roomy_process_starts_total", () => {
+/** Read a `name value` sample of a label-less family out of a scrape body. */
+function sample(body: string, name: string): number | undefined {
+  const match = body.match(new RegExp(`^${name} (\\S+)$`, "m"));
+  return match ? Number(match[1]) : undefined;
+}
+
+describe("process boot signals", () => {
   test("renders as a counter in the Prometheus text output", () => {
     // The family is registered at module load with the process-wide registry.
     const out = metrics.render();
@@ -121,6 +127,34 @@ describe("roomy_process_starts_total", () => {
     const out = m.render();
     expect(out).toContain("# TYPE roomy_process_starts_total counter");
     expect(out).toContain("roomy_process_starts_total 2");
+  });
+
+  test("two boots render different /metrics bodies", async () => {
+    // The defect this covers: `roomy_process_starts_total` is created fresh in
+    // each process and incremented to 1, so it reads 1 at every scrape of every
+    // boot and `increase()` on it is always 0 — a restart loop is invisible.
+    // Only a value that differs between processes can show a restart, so the
+    // assertion is on two real boots, not on one process's registry.
+    const first = await runFixture("metrics");
+    const second = await runFixture("metrics");
+
+    expect(first.exitCode).toBe(0);
+    expect(second.exitCode).toBe(0);
+    expect(first.stdout).not.toContain("FIXTURE STILL ALIVE");
+    expect(second.stdout).not.toContain("FIXTURE STILL ALIVE");
+
+    // The counter is identical in both boots — the reason it cannot alert.
+    expect(sample(first.stdout, "roomy_process_starts_total")).toBe(1);
+    expect(sample(second.stdout, "roomy_process_starts_total")).toBe(1);
+
+    // The boot stamp differs, so the two scrapes are distinguishable and
+    // `changes(roomy_process_boot_timestamp_seconds[1h])` sees the restart.
+    const bootA = sample(first.stdout, "roomy_process_boot_timestamp_seconds");
+    const bootB = sample(second.stdout, "roomy_process_boot_timestamp_seconds");
+    expect(bootA).toBeTypeOf("number");
+    expect(bootB).toBeTypeOf("number");
+    expect(bootA).not.toBe(bootB);
+    expect(bootB!).toBeGreaterThan(bootA!);
   });
 });
 

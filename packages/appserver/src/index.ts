@@ -26,8 +26,9 @@ import { runPendingReadStateMigrationsWithRetry } from "./db/userSpaceMembership
 // ─── Fatal-exit visibility ─────────────────────────────────────────────────
 // Install before anything that can throw or reject: a boot failure must leave
 // an error record behind, not just a raw Bun abort that never reaches Loki.
-// `recordProcessStart` bumps `roomy_process_starts_total`, which makes a
-// restart loop visible to a scrape (`increase(...[10m]) > 3`).
+// `recordProcessStart` stamps the boot time into
+// `roomy_process_boot_timestamp_seconds`, which is what makes a restart
+// visible to a scrape (`changes(...[1h])`) — see ./fatal.ts.
 installFatalHandlers();
 recordProcessStart();
 

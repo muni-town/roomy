@@ -164,11 +164,17 @@ The appserver exposes a Prometheus `/metrics` endpoint (see
   Sample it with `max_over_time(roomy_process_rss_bytes[1h])` to see the peak a
   restart reaches, not just the idle value a scrape happens to catch.
 - `roomy_db_timeouts_total` — DB requests that hit the 30s timeout (pool saturation)
-- `roomy_process_starts_total` — process boots, incremented once per process
-  at startup (`src/fatal.ts`). This is the crash-loop signal: with
-  `Restart=always`, a service that cannot boot shows as a rising boot count
-  instead of a service that merely looks healthy between restarts.
-  **Alert:** `increase(roomy_process_starts_total[10m]) > 3`.
+- `roomy_process_boot_timestamp_seconds` — Unix time at which the running
+  process booted (`src/fatal.ts`). The value changes with every restart, so a
+  restart is visible on the **first scrape after it happens**:
+  **Alert:** `changes(roomy_process_boot_timestamp_seconds[1h]) > 0`.
+- `roomy_process_starts_total` — boots counted *within* the running process
+  (`1` after a clean boot). Read it as the in-process boot count, **not** as a
+  restart signal: the counter is created fresh in each process and incremented
+  once, so it reads `1` at every scrape of every boot and
+  `increase(roomy_process_starts_total[10m])` is always `0`. Restarts are the
+  `roomy_process_boot_timestamp_seconds` signal above; this counter cannot see
+  them.
 
   A fatal exit (uncaught exception / unhandled rejection) is recorded before
   the process dies, as a `level="error"`, `scope="fatal"`, `fatal=true`

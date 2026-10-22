@@ -14,10 +14,17 @@
  *      abort, so the handler must exit explicitly. Returning instead would
  *      swallow the crash and leave a process serving requests in an undefined
  *      state.
- *   2. `recordProcessStart()` increments `roomy_process_starts_total` once at
- *      boot, exposing a restart loop as a scrape-visible signal:
+ *   2. `recordProcessStart()` stamps the boot once per process:
+ *      `roomy_process_boot_timestamp_seconds` records when it happened. That
+ *      gauge is the restart signal, because its value differs between
+ *      processes:
  *
- *        increase(roomy_process_starts_total[10m]) > 3
+ *        changes(roomy_process_boot_timestamp_seconds[1h]) > 0
+ *
+ *      `roomy_process_starts_total` rides beside it as the in-process boot
+ *      count. It is NOT the restart signal: a counter starts over at 1 in
+ *      every new process, so it reads the same value at every scrape and
+ *      `increase()` on it stays 0 across any number of restarts.
  *
  * Deliberately NOT here: signal handling / graceful shutdown. The container
  * runs under `litestream replicate`, which forwards signals to Bun and leaves
@@ -39,26 +46,34 @@ const FATAL_EXIT_CODE = 1;
  *  must never keep the process alive. */
 const FATAL_FLUSH_TIMEOUT_MS = 2_000;
 
-// Registered at module load (i.e. by the entry point importing this file), not
-// lazily on first boot, so the family is always present in a scrape: a process
-// that has never restarted still exposes `roomy_process_starts_total 1` rather
-// than no series at all.
+// Both families are registered at module load (i.e. by the entry point
+// importing this file), not lazily on first boot, so they are always present
+// in a scrape: a process that has never restarted still exposes its boot
+// stamp rather than no series at all.
 const processStarts = metrics.counter(
   "roomy_process_starts_total",
-  "Process boots (incremented once per process at startup). A restart loop shows as a rising rate: increase(roomy_process_starts_total[10m]) > 3.",
+  "Process boots, counted within the running process: 1 after a clean boot. The counter starts over with each process, so it is not the restart signal — roomy_process_boot_timestamp_seconds is.",
+);
+
+const processBootTimestamp = metrics.gauge(
+  "roomy_process_boot_timestamp_seconds",
+  "Unix time (seconds) at which this process booted. Changes with every restart, so a restart is visible on the next scrape: changes(roomy_process_boot_timestamp_seconds[1h]).",
 );
 
 /**
- * Count this process's boot. Call once, before anything else can fail.
+ * Stamp this process's boot: bump the boot count and record the boot time.
+ * Call once, before anything else can fail.
  *
  * Deliberately not called from `createAppserver`: the registry keys families by
  * name, so registering again would reset the family's samples, and tests call
  * the factory many times inside a single process. One boot per process is the
- * signal being measured, and the process entry point is the only place that
- * knows it.
+ * signal being measured — a second call in the same process would move the
+ * boot timestamp and read as a restart that never happened — and the process
+ * entry point is the only place that knows it.
  */
 export function recordProcessStart(): void {
   processStarts.inc();
+  processBootTimestamp.set({}, Date.now() / 1000);
 }
 
 /**

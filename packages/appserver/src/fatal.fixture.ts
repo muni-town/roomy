@@ -7,7 +7,13 @@
  * spawns this file with `FATAL_FIXTURE_KIND` set and asserts on the exit code
  * and the captured output.
  *
- * Kinds: `uncaught` | `rejection` | `rejection-non-error`.
+ * Kinds: `uncaught` | `rejection` | `rejection-non-error` | `metrics`.
+ *
+ * `metrics` is the boot probe: it stamps the boot, writes the `/metrics` body
+ * to stdout, and exits before the control timer below can fire. Spawning it
+ * twice gives two boots' scrapes to compare, which is how the boot timestamp's
+ * per-process value is asserted — an in-process test cannot produce a second
+ * boot to diff against.
  *
  * The trailing 500ms timer is the control: it prints only if the process is
  * still running after the event that must have killed it, so a handler that
@@ -16,6 +22,7 @@
  */
 
 import { installFatalHandlers, recordProcessStart } from "./fatal.ts";
+import { metrics } from "./metrics.ts";
 
 installFatalHandlers();
 recordProcessStart();
@@ -37,6 +44,11 @@ switch (process.env.FATAL_FIXTURE_KIND) {
     setTimeout(() => {
       void Promise.reject({ code: 503, detail: "polar unavailable" });
     }, 0);
+    break;
+  case "metrics":
+    // `render()` is exactly what the /metrics handler returns.
+    process.stdout.write(metrics.render());
+    process.exit(0);
     break;
   default:
     throw new Error(`unknown FATAL_FIXTURE_KIND: ${process.env.FATAL_FIXTURE_KIND}`);
