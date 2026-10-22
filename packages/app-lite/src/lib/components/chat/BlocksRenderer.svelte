@@ -35,6 +35,18 @@
       .replace(/</g, "&lt;");
   }
 
+  /** Whether `uri` is an http(s) link to an origin this app does not serve. */
+  function isExternalHref(uri: string): boolean {
+    let url: URL;
+    try {
+      url = new URL(uri);
+    } catch {
+      return false;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    return !internalLinkOrigins.includes(url.origin);
+  }
+
   /**
    * Render a text slice with its facets applied. Facets are sorted by
    * byteStart; overlapping ranges nest (later facets wrap earlier ones).
@@ -97,7 +109,12 @@
           if (appliedAnchor) break;
           appliedAnchor = true;
           const uri = (feature as { uri: string }).uri;
-          inner = `<a href="${escapeAttr(uri)}" oncontextmenu="event.stopPropagation()" class="text-accent-600 dark:text-accent-400 no-underline hover:underline">${inner}</a>`;
+          // Open links that leave this deployment in a new tab, as the
+          // markdown renderer does; links to an internal origin stay in-app.
+          const targetAttr = isExternalHref(uri)
+            ? ' target="_blank" rel="noopener noreferrer"'
+            : "";
+          inner = `<a href="${escapeAttr(uri)}"${targetAttr} oncontextmenu="event.stopPropagation()" class="text-accent-600 dark:text-accent-400 no-underline hover:underline">${inner}</a>`;
           break;
         }
         case "space.roomy.richtext.facet#didMention": {
