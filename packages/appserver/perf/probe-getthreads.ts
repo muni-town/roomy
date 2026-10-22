@@ -42,7 +42,7 @@ import { createAppserver } from "../src/appserver.ts";
 import { testAuthVerifier } from "../src/xrpc/auth.ts";
 import { closeDb, openDb, openReadStateDb, openSpaceDb } from "../src/db/db.ts";
 import { WorkerLink } from "../src/db/asyncDatabase.ts";
-import type { DbRoute } from "../src/db/types.ts";
+import type { DbRoute } from "../src/db/asyncDatabase.ts";
 import { _setAdminDids } from "../src/admin.ts";
 import { _resetEmbedSweeper, stopEmbedSweeper } from "../src/embed/sweeper.ts";
 import { _resetSearchIndexer, stopSearchIndexer } from "../src/search/indexer.ts";
@@ -268,7 +268,6 @@ const handle = await createAppserver({
   quiet: true,
   disableBackgroundWorkers: true,
   happyView: null,
-  getProfiles: async () => [],
   disableQueryCache: true,
 });
 const baseUrl = `http://localhost:${handle.port}`;

@@ -53,7 +53,7 @@ import { Router } from "../src/invalidation/router.ts";
 import { _setAdminDids } from "../src/admin.ts";
 import { _resetEmbedSweeper, stopEmbedSweeper } from "../src/embed/sweeper.ts";
 import { _resetSearchIndexer, stopSearchIndexer } from "../src/search/indexer.ts";
-import { _resetProfileStoreCache } from "../src/queries/profileStore.ts";
+import { _resetProfileStoreCache, _setTestGetProfiles } from "../src/queries/profileStore.ts";
 
 // ─── Args ─────────────────────────────────────────────────────────────────
 
@@ -144,6 +144,7 @@ _resetProfileStoreCache();
 
 openDb({ path: join(dataDir, "roomy-events.sqlite") });
 
+_setTestGetProfiles(async () => []);
 const handle = await createAppserver({
   authVerifier: testAuthVerifier,
   port: 0,
@@ -152,7 +153,6 @@ const handle = await createAppserver({
   quiet: true,
   disableBackgroundWorkers: !BACKGROUND,
   happyView: null,
-  getProfiles: async () => [],
 });
 
 // ─── Fixture ──────────────────────────────────────────────────────────────
@@ -169,9 +169,9 @@ async function seedSpace(space: string, user: string): Promise<string> {
   );
   await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [space, space]);
   await db.run(
-    `insert or ignore into comp_space (entity, handle, allow_public_join, allow_member_invites)
-     values (?, ?, ?, ?)`,
-    [space, null, 1, 1],
+    `insert or ignore into comp_space (entity, allow_public_join, allow_member_invites)
+     values (?, ?, ?)`,
+    [space, 1, 1],
   );
   await db.run("insert or ignore into comp_info (entity, name) values (?, ?)", [space, "Bisect Space"]);
   await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [user, user]);
@@ -213,8 +213,8 @@ if (READ_STATE_ROOMS > 0) {
     if (tuples.length === 0) return;
     await readStateDb.run(
       `insert or replace into read_positions
-         (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values ${tuples.join(",")}`,
+        (user_did, room_id, space_did, seen_up_to, updated_at)
+      values ${tuples.join(",")}`,
       ...params,
     );
     tuples = [];
@@ -222,14 +222,8 @@ if (READ_STATE_ROOMS > 0) {
   };
   for (let r = 0; r < READ_STATE_ROOMS; r++) {
     for (let u = 0; u < READ_STATE_READERS; u++) {
-      tuples.push("(?, ?, ?, ?, ?, 0)");
-      params.push(
-        `did:plc:reader-${r}-${u}`,
-        `filler-room-${r}`,
-        MAIN_SPACE,
-        "0".repeat(26),
-        u % 3 === 0 ? 4 : 0,
-      );
+      tuples.push("(?, ?, ?, ?, 0)");
+      params.push(`did:plc:reader-${r}-${u}`, `filler-room-${r}`, MAIN_SPACE, "0".repeat(26));
       if (tuples.length >= 400) await flush();
     }
   }
@@ -237,8 +231,8 @@ if (READ_STATE_ROOMS > 0) {
   // every one of them, so this is the row count the write path actually
   // touches rather than merely scans past.
   for (let u = 0; u < READ_STATE_READERS; u++) {
-    tuples.push("(?, ?, ?, ?, ?, 0)");
-    params.push(`did:plc:probe-reader-${u}`, MAIN_ROOM, MAIN_SPACE, "0".repeat(26), 0);
+    tuples.push("(?, ?, ?, ?, 0)");
+    params.push(`did:plc:probe-reader-${u}`, MAIN_ROOM, MAIN_SPACE, "0".repeat(26));
     if (tuples.length >= 400) await flush();
   }
   await flush();

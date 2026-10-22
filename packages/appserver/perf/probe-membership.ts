@@ -27,7 +27,7 @@ import { closeDb, openDb, openSpaceDb, openGlobalDb, openReadStateDb } from "../
 import { _setAdminDids } from "../src/admin.ts";
 import { _resetEmbedSweeper, stopEmbedSweeper } from "../src/embed/sweeper.ts";
 import { _resetSearchIndexer, stopSearchIndexer } from "../src/search/indexer.ts";
-import { _resetProfileStoreCache } from "../src/queries/profileStore.ts";
+import { _resetProfileStoreCache, _setTestGetProfiles } from "../src/queries/profileStore.ts";
 
 const argv = process.argv;
 const numArg = (name: string, fallback: number): number => {
@@ -55,6 +55,7 @@ _resetProfileStoreCache();
 
 openDb({ path: join(dataDir, "roomy-events.sqlite") });
 
+_setTestGetProfiles(async () => []);
 const handle = await createAppserver({
   authVerifier: testAuthVerifier,
   port: 0,
@@ -63,7 +64,6 @@ const handle = await createAppserver({
   quiet: true,
   disableBackgroundWorkers: true,
   happyView: null,
-  getProfiles: async () => [],
 });
 const baseUrl = `http://localhost:${handle.port}`;
 
@@ -90,8 +90,8 @@ const readStateDb = openReadStateDb();
 await globalDb.run("insert or ignore into entity_space (entity_id, space_did) values (?, ?)", [SPACE, SPACE]);
 await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [SPACE, SPACE]);
 await spaceDb.run(
-  `insert or ignore into comp_space (entity, handle, allow_public_join, allow_member_invites) values (?, ?, ?, ?)`,
-  [SPACE, null, 1, 1],
+  `insert or ignore into comp_space (entity, allow_public_join, allow_member_invites) values (?, ?, ?)`,
+  [SPACE, 1, 1],
 );
 await spaceDb.run("insert or ignore into comp_info (entity, name) values (?, ?)", [SPACE, "Membership Probe Space"]);
 await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [USER, USER]);

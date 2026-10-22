@@ -8,7 +8,7 @@
     "build": "bun build src/index.ts --outdir dist --target=bun",
     "typecheck": "tsc --noEmit",
     "test": "bun test --isolate",
-    "perf": "bun run perf/measure.ts",
+    "perf": "APPSERVER_TEST_MODE=true RATE_LIMIT_DISABLED=true bun run perf/measure.ts",
     "trace:smoke": "bun run perf/trace-smoke.ts",
     "test:e2e": "bun test src/e2e/",
     "mbt:traces": "./scripts/generate-mbt-traces.sh"

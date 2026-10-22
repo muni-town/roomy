@@ -54,7 +54,7 @@ import { WorkerLink } from "../src/db/asyncDatabase.ts";
 import { _setAdminDids } from "../src/admin.ts";
 import { _resetEmbedSweeper, stopEmbedSweeper } from "../src/embed/sweeper.ts";
 import { _resetSearchIndexer, stopSearchIndexer } from "../src/search/indexer.ts";
-import { _resetProfileStoreCache } from "../src/queries/profileStore.ts";
+import { _resetProfileStoreCache, _setTestGetProfiles } from "../src/queries/profileStore.ts";
 
 
 // ─── Args ─────────────────────────────────────────────────────────────────
@@ -124,6 +124,7 @@ _resetProfileStoreCache();
 
 openDb({ path: join(dataDir, "roomy-events.sqlite") });
 
+_setTestGetProfiles(async () => []);
 const handle = await createAppserver({
   authVerifier: testAuthVerifier,
   port: 0,
@@ -132,7 +133,6 @@ const handle = await createAppserver({
   quiet: true,
   disableBackgroundWorkers: true,
   happyView: null,
-  getProfiles: async () => [],
   // Off by default: the response cache would mask the handler cost this probe
   // exists to measure — projections are a *different* mechanism (durable,
   // per-space, survives restart) and must be measurable on their own.
@@ -181,9 +181,9 @@ await globalDb.run(
 );
 await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [SPACE, SPACE]);
 await spaceDb.run(
-  `insert or ignore into comp_space (entity, handle, allow_public_join, allow_member_invites)
-   values (?, ?, ?, ?)`,
-  [SPACE, null, 1, 1],
+  `insert or ignore into comp_space (entity, allow_public_join, allow_member_invites)
+   values (?, ?, ?)`,
+  [SPACE, 1, 1],
 );
 await spaceDb.run("insert or ignore into comp_info (entity, name) values (?, ?)", [SPACE, "Projection Probe Space"]);
 await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [USER, USER]);
@@ -245,12 +245,12 @@ const readStateDb = openReadStateDb();
   const tuples: string[] = [];
   const params: unknown[] = [];
   for (let u = 0; u < MEMBERS; u++) {
-    tuples.push("(?, ?, ?, ?, ?, 0)");
+    tuples.push("(?, ?, ?, ?, ?)");
     params.push(`did:plc:probe-reader-${u}`, HOT, SPACE, "0".repeat(26), 0);
   }
   await readStateDb.run(
     `insert or replace into read_positions
-       (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
+       (user_did, room_id, space_did, seen_up_to, updated_at)
      values ${tuples.join(",")}`,
     ...params,
   );
@@ -279,9 +279,9 @@ const space2Db = openSpaceDb(SPACE2);
 await globalDb.run("insert or ignore into entity_space (entity_id, space_did) values (?, ?)", [SPACE2, SPACE2]);
 await space2Db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [SPACE2, SPACE2]);
 await space2Db.run(
-  `insert or ignore into comp_space (entity, handle, allow_public_join, allow_member_invites)
-   values (?, ?, ?, ?)`,
-  [SPACE2, null, 1, 1],
+  `insert or ignore into comp_space (entity, allow_public_join, allow_member_invites)
+   values (?, ?, ?)`,
+  [SPACE2, 1, 1],
 );
 await space2Db.run("insert or ignore into comp_info (entity, name) values (?, ?)", [SPACE2, "Projection Probe Space 2"]);
 // Each per-space DB carries its own entity table, so the caller's rows have to

@@ -7,8 +7,15 @@
  * automatically.
  *
  * Usage:
- *   bun run packages/appserver/perf/measure.ts
- *   bun run packages/appserver/perf/measure.ts --iterations 500 --warmup 20 --concurrency 10
+ *   APPSERVER_TEST_MODE=true RATE_LIMIT_DISABLED=true \
+ *     bun run packages/appserver/perf/measure.ts
+ *   ... --iterations=500 --warmup=20 --concurrency=10
+ *
+ * `RATE_LIMIT_DISABLED=true` is not optional in spirit: every endpoint is
+ * called `warmup + iterations` times as one caller, so past a handful of
+ * iterations the per-endpoint limit answers 429 and the table measures the
+ * limiter rather than the handler. The limiters read the env at import time,
+ * so it has to be set by the caller.
  *
  * Output:
  *   - Console table sorted by p95 descending
@@ -18,11 +25,10 @@
 import { createAppserver, getRegisteredNsids } from "../src/appserver.ts";
 import { testAuthVerifier } from "../src/xrpc/auth.ts";
 import { closeDb, openDb } from "../src/db/db.ts";
-import { closeReadStateDb } from "../src/db/readStateDb.ts";
+import type { PooledDatabase } from "../src/db/pool.ts";
 import { _resetEmbedSweeper } from "../src/embed/sweeper.ts";
 import { _setAdminDids } from "../src/admin.ts";
 import { newUlid } from "@roomy-space/sdk";
-import type { Database } from "bun:sqlite";
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
@@ -53,18 +59,47 @@ interface EndpointResult {
 interface EndpointDef {
   nsid: string;
   kind: string;
-  /** Build the request: returns [method, path, body?]. */
-  buildRequest: (fixture: Fixture) => { method: string; path: string; body?: unknown };
+  /** Build the request for an iteration: returns [method, path, body?]. */
+  buildRequest: (fixture: Fixture, iteration: number) => { method: string; path: string; body?: unknown };
   /** Whether this endpoint needs auth. */
   needsAuth: boolean;
   /** Whether this is a write endpoint that needs unique keys per iteration. */
   isWrite: boolean;
-  /** For write endpoints, a function to reset state between iterations. */
-  reset?: (fixture: Fixture, iteration: number) => void;
+  /** For write endpoints, a function to reset state before each measured iteration. */
+  reset?: (fixture: Fixture) => void | Promise<void>;
+  /**
+   * For write endpoints that consume fixture state, a function that writes the
+   * seeded state back once the endpoint is done being measured. The endpoints
+   * measured after this one must start from the fixture, not from this
+   * endpoint's side effect.
+   */
+  restore?: (fixture: Fixture) => void | Promise<void>;
 }
 
+/**
+ * Endpoints whose auth guard requires a space or deployment admin. Every other
+ * endpoint is measured as the plain member (`Fixture.userDid`).
+ */
+const ADMIN_ONLY_NSIDS: Readonly<Record<string, true>> = {
+  "space.roomy.admin.connectSpace": true,
+  "space.roomy.admin.materializeSpace": true,
+  "space.roomy.space.setHandle": true,
+  "space.roomy.space.sendEvents": true,
+};
+
+/** The seeded membership facts a write endpoint may consume: both `member`
+ *  edge directions and the durable join intent `getSpaces` reads. */
+const MEMBER_EDGE_SQL = "insert or ignore into edges (head, tail, label) values (?, ?, 'member')";
+const JOINED_MEMBERSHIP_SQL = `insert into user_space_membership
+     (user_did, space_did, state, source, source_event_id)
+   values (?, ?, 'joined', 'perf', ?)
+   on conflict(user_did, space_did) do update set state = excluded.state`;
+const READ_POSITION_SQL = `insert or replace into read_positions
+     (user_did, room_id, space_did, seen_up_to, updated_at)
+   values (?, ?, ?, ?, ?)`;
+
 interface Fixture {
-  db: Database;
+  db: PooledDatabase;
   baseUrl: string;
   userDid: string;
   adminDid: string;
@@ -79,7 +114,15 @@ interface Fixture {
 
 // ─── Fixture seeding ────────────────────────────────────────────────────────
 
-function seedFixture(db: Database): Fixture {
+/**
+ * Seed the rows the measured endpoints read, through the pool's routed
+ * handles: space data (entities, comp_*, edges, roles, activity) in the
+ * space's own DB, durable membership intent and read positions in the
+ * read-state DB, and the entity→space index in the global DB. The reads that
+ * resolve a room or message back to its space go through `entity_space`, so
+ * every seeded entity needs an entry there.
+ */
+async function seedFixture(db: PooledDatabase): Promise<Fixture> {
   const userDid = "did:plc:perf-user";
   const adminDid = "did:plc:perf-admin";
   const spaceId = "did:web:perf-space.example";
@@ -90,54 +133,73 @@ function seedFixture(db: Database): Fixture {
   const inviteToken = "perf-invite-token";
   const secondUserDid = "did:plc:perf-user2";
 
+  const space = db.forSpace(spaceId);
+  const global = db.global();
+  const readState = db.readState();
+
   // ── Space ──
-  db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [spaceId, spaceId]);
-  db.run("insert or ignore into comp_space (entity, handle, allow_public_join, allow_member_invites) values (?, ?, ?, ?)", [spaceId, null, 1, 1]);
-  db.run("insert or ignore into comp_info (entity, name) values (?, ?)", [spaceId, "Perf Test Space"]);
+  await space.run("insert or ignore into entities (id, stream_id) values (?, ?)", spaceId, spaceId);
+  await space.run("insert or ignore into comp_space (entity, allow_public_join, allow_member_invites) values (?, ?, ?)", spaceId, 1, 1);
+  await space.run("insert or ignore into comp_info (entity, name) values (?, ?)", spaceId, "Perf Test Space");
+  await global.run("insert or ignore into entity_space (entity_id, space_did) values (?, ?)", spaceId, spaceId);
 
   // ── Users ──
   for (const did of [userDid, adminDid, secondUserDid]) {
-    db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [did, did]);
-    db.run("insert or ignore into comp_user (did, handle) values (?, ?)", [did, null]);
+    await space.run("insert or ignore into entities (id, stream_id) values (?, ?)", did, did);
+    await space.run("insert or ignore into comp_user (did, handle) values (?, ?)", did, null);
   }
 
   // ── Memberships ──
   for (const did of [userDid, adminDid, secondUserDid]) {
-    db.run("insert or ignore into edges (head, tail, label) values (?, ?, 'member')", [spaceId, did]);
-    db.run("insert or ignore into edges (head, tail, label) values (?, ?, 'member')", [did, spaceId]);
+    await space.run(MEMBER_EDGE_SQL, spaceId, did);
+    await space.run(MEMBER_EDGE_SQL, did, spaceId);
   }
 
   // Admin edge for admin user
-  db.run("insert or ignore into edges (head, tail, label) values (?, ?, 'admin')", [spaceId, adminDid]);
-  db.run("insert or ignore into edges (head, tail, label) values (?, ?, 'admin')", [adminDid, spaceId]);
+  await space.run("insert or ignore into edges (head, tail, label) values (?, ?, 'admin')", spaceId, adminDid);
+  await space.run("insert or ignore into edges (head, tail, label) values (?, ?, 'admin')", adminDid, spaceId);
 
   // ── Join intent ──
-  db.run("insert or ignore into edges (head, tail, label) values (?, ?, 'joinedSpace')", [userDid, spaceId]);
+  await global.run("insert or ignore into edges (head, tail, label) values (?, ?, 'joinedSpace')", userDid, spaceId);
+  await readState.run(JOINED_MEMBERSHIP_SQL, userDid, spaceId, `01PERF${spaceId}`);
 
   // ── Room ──
-  db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [roomId, spaceId]);
-  db.run("insert or ignore into comp_room (entity, label) values (?, ?)", [roomId, "space.roomy.channel"]);
+  await space.run("insert or ignore into entities (id, stream_id) values (?, ?)", roomId, spaceId);
+  await space.run("insert or ignore into comp_room (entity, label) values (?, ?)", roomId, "space.roomy.channel");
+  await global.run("insert or ignore into entity_space (entity_id, space_did) values (?, ?)", roomId, spaceId);
 
   // ── Messages ──
   for (const mid of [msgId, msgId2]) {
-    db.run("insert or ignore into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [mid, spaceId, roomId, mid]);
-    db.run("insert or ignore into comp_content (entity, mime_type, data, last_edit) values (?, 'text/html', ?, ?)", [mid, new TextEncoder().encode("<p>hello</p>"), mid]);
+    await space.run("insert or ignore into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", mid, spaceId, roomId, mid);
+    await space.run("insert or ignore into comp_content (entity, mime_type, data, last_edit) values (?, 'text/html', ?, ?)", mid, new TextEncoder().encode("<p>hello</p>"), mid);
+    await global.run("insert or ignore into entity_space (entity_id, space_did) values (?, ?)", mid, spaceId);
   }
 
   // ── Role ──
-  db.run("insert into roles (id, stream_id, name) values (?, ?, ?)", [roleId, spaceId, "Perf Role"]);
+  await space.run("insert into roles (id, stream_id, name) values (?, ?, ?)", roleId, spaceId, "Perf Role");
 
   // ── Invite ──
-  db.run("insert into comp_invite (entity, token, created_by_did, event_ulid) values (?, ?, ?, ?)", [spaceId, inviteToken, userDid, newUlid()]);
+  await space.run("insert into comp_invite (entity, token, created_by_did, event_ulid) values (?, ?, ?, ?)", spaceId, inviteToken, userDid, newUlid());
 
   // ── Activity feed item ──
-  db.run("insert into activity_item (room_id, space_id, last_activity_at, recent_message_ids) values (?, ?, ?, ?)", [roomId, spaceId, Date.now(), "[]"]);
+  await space.run("insert into activity_item (room_id, space_id, last_activity_at, recent_message_ids) values (?, ?, ?, ?)", roomId, spaceId, Date.now(), "[]");
 
   // ── Read position ──
-  db.run("insert or ignore into readstate.read_positions (user_did, room_id, seen_up_to, unread_count) values (?, ?, ?, ?)", [userDid, roomId, msgId, 0]);
+  await readState.run(READ_POSITION_SQL, userDid, roomId, spaceId, msgId, Date.now());
 
-    db, baseUrl: "", // filled after server starts
-    userDid, adminDid, spaceId, roomId, msgId, msgId2, roleId, inviteToken, secondUserDid,
+  return {
+    db,
+    baseUrl: "", // filled after server starts
+    userDid,
+    adminDid,
+    spaceId,
+    roomId,
+    msgId,
+    msgId2,
+    roleId,
+    inviteToken,
+    secondUserDid,
+  };
 }
 
 
@@ -152,7 +214,7 @@ function buildEndpoints(fixture: Fixture): EndpointDef[] {
     {
       nsid: "space.roomy.auth.getConnectionTicket",
       kind: "procedure",
-      buildRequest: () => ({ method: "POST", path: "/xrpc/space.roomy.auth.getConnectionTicket" }),
+      buildRequest: () => ({ method: "POST", path: "/xrpc/space.roomy.auth.getConnectionTicket", body: {} }),
       needsAuth: true,
       isWrite: false,
     },
@@ -262,8 +324,17 @@ function buildEndpoints(fixture: Fixture): EndpointDef[] {
       buildRequest: () => ({ method: "POST", path: "/xrpc/space.roomy.room.updateSeen", body: { roomId, seenUpTo: msgId2 } }),
       needsAuth: true,
       isWrite: true,
-      reset: (f, _i) => {
-        f.db.run("delete from readstate.read_positions where user_did = ? and room_id = ?", [userDid, roomId]);
+      reset: async (f) => {
+        await f.db.readState().run(
+          "delete from read_positions where user_did = ? and room_id = ?",
+          userDid,
+          roomId,
+        );
+      },
+      restore: async (f) => {
+        await f.db
+          .readState()
+          .run(READ_POSITION_SQL, userDid, roomId, spaceId, msgId, Date.now());
       },
     },
     {
@@ -292,10 +363,21 @@ function buildEndpoints(fixture: Fixture): EndpointDef[] {
       buildRequest: () => ({ method: "POST", path: "/xrpc/space.roomy.space.leaveSpace", body: { spaceId } }),
       needsAuth: true,
       isWrite: true,
-      reset: (f, _i) => {
-        // Re-add membership after leave
-        f.db.run("insert or ignore into edges (head, tail, label) values (?, ?, 'member')", [spaceId, userDid]);
-        f.db.run("insert or ignore into edges (head, tail, label) values (?, ?, 'member')", [userDid, spaceId]);
+      reset: async (f) => {
+        const space = f.db.forSpace(spaceId);
+        await space.run(MEMBER_EDGE_SQL, spaceId, userDid);
+        await space.run(MEMBER_EDGE_SQL, userDid, spaceId);
+        await f.db
+          .readState()
+          .run(JOINED_MEMBERSHIP_SQL, userDid, spaceId, `01PERF${spaceId}`);
+      },
+      restore: async (f) => {
+        const space = f.db.forSpace(spaceId);
+        await space.run(MEMBER_EDGE_SQL, spaceId, userDid);
+        await space.run(MEMBER_EDGE_SQL, userDid, spaceId);
+        await f.db
+          .readState()
+          .run(JOINED_MEMBERSHIP_SQL, userDid, spaceId, `01PERF${spaceId}`);
       },
     },
     {
@@ -319,10 +401,10 @@ function buildEndpoints(fixture: Fixture): EndpointDef[] {
         body: {
           spaceId,
           events: [{
-            $type: "space.roomy.channel.createChannel.v0",
+            $type: "space.roomy.room.createRoom.v0",
             id: newUlid(),
+            kind: "space.roomy.channel",
             name: "perf-channel",
-            label: "space.roomy.channel",
           }],
         },
       }),
@@ -357,6 +439,14 @@ function computeStats(durations: number[], errors: number): Omit<EndpointResult,
   };
 }
 
+/**
+ * The caller a measured request authenticates as: the fixture's space admin
+ * for endpoints only an admin may call, the plain member otherwise.
+ */
+function callerDid(def: EndpointDef, fixture: Fixture): string {
+  return ADMIN_ONLY_NSIDS[def.nsid] === true ? fixture.adminDid : fixture.userDid;
+}
+
 // ─── Sequential measurement ────────────────────────────────────────────────
 
 async function measureSequential(
@@ -365,7 +455,7 @@ async function measureSequential(
   iterations: number,
   warmup: number,
 ): Promise<EndpointResult> {
-  const authDid = def.nsid.startsWith("space.roomy.admin.") ? fixture.adminDid : fixture.userDid;
+  const authDid = callerDid(def, fixture);
   const durations: number[] = [];
   let errors = 0;
 
@@ -374,7 +464,7 @@ async function measureSequential(
 
     // Reset write endpoints between iterations (after warmup)
     if (i >= warmup && def.isWrite && def.reset) {
-      def.reset(fixture, i);
+      await def.reset(fixture);
     }
 
     const url = `${fixture.baseUrl}${path}`;
@@ -392,11 +482,10 @@ async function measureSequential(
     const start = performance.now();
     try {
       const res = await fetch(url, init);
-      if (!res.ok && res.status !== 400 && res.status !== 401 && res.status !== 403 && res.status !== 404) {
-        // Some endpoints return 4xx for expected reasons (e.g. admin endpoints
-        // with disabled backfill). Only count 5xx as errors.
-        if (res.status >= 500) errors++;
-      }
+      // Only 5xx counts: the harness measures handler latency, and a 4xx is
+      // the fixture's answer (an endpoint whose input the fixture does not
+      // satisfy) rather than a failure of the code under measurement.
+      if (res.status >= 500) errors++;
     } catch {
       errors++;
     }
@@ -406,6 +495,9 @@ async function measureSequential(
       durations.push(elapsed);
     }
   }
+
+  // Leave the fixture as seeded for the endpoints measured after this one.
+  if (def.isWrite && def.restore) await def.restore(fixture);
 
   return {
     nsid: def.nsid,
@@ -423,7 +515,7 @@ async function measureConcurrent(
   warmup: number,
   concurrency: number,
 ): Promise<EndpointResult> {
-  const authDid = def.nsid.startsWith("space.roomy.admin.") ? fixture.adminDid : fixture.userDid;
+  const authDid = callerDid(def, fixture);
   const durations: number[] = [];
   let errors = 0;
 
@@ -453,7 +545,7 @@ async function measureConcurrent(
     const promises = Array.from({ length: batch }, async (_, j) => {
       const idx = offset + j;
       if (def.isWrite && def.reset) {
-        def.reset(fixture, idx);
+        await def.reset(fixture);
       }
       const { method, path, body } = def.buildRequest(fixture, idx);
       const url = `${fixture.baseUrl}${path}`;
@@ -481,6 +573,9 @@ async function measureConcurrent(
     await Promise.all(promises);
     durations.push(...batchDurations);
   }
+
+  // Leave the fixture as seeded for the endpoints measured after this one.
+  if (def.isWrite && def.restore) await def.restore(fixture);
 
   const totalTime = durations.reduce((a, b) => a + b, 0);
   const throughput = totalTime > 0 ? (durations.length / totalTime) * 1000 : 0;
@@ -511,30 +606,27 @@ async function main() {
 
   // Reset singletons
   closeDb();
-  closeReadStateDb();
-  _resetMaterializerRegistry();
   _resetEmbedSweeper();
 
   // Open in-memory DB
   const db = openDb({ path: ":memory:" });
 
   // Start appserver
-  const handle = createAppserver({
+  const handle = await createAppserver({
     authVerifier: testAuthVerifier,
     port: 0,
     dbPath: ":memory:",
     readStateDbPath: ":memory:",
-    backfillMode: "disabled",
+    // The measurement is the request path alone: no background loop may run
+    // against the in-memory DB while a request is being timed.
+    disableBackgroundWorkers: true,
     quiet: true,
   });
 
   const baseUrl = `http://localhost:${handle.port}`;
 
   // Seed fixture
-  const fixture = seedFixture(db);
-
-  // Pre-warm materializers so handlers don't try to connect to a remote event backend
-  await preWarmMaterializer(fixture.spaceId);
+  const fixture = await seedFixture(db);
   fixture.baseUrl = baseUrl;
 
   // Discover endpoints
@@ -559,9 +651,8 @@ async function main() {
 
   if (toMeasure.length === 0) {
     console.error("No measurable endpoints found.");
-    handle.close();
+    await handle.close();
     closeDb();
-    closeReadStateDb();
     process.exit(1);
   }
 
@@ -647,10 +738,8 @@ async function main() {
   console.log(`\nResults written to ${outPath}`);
 
   // Cleanup
-  handle.close();
+  await handle.close();
   closeDb();
-  closeReadStateDb();
-  _resetMaterializerRegistry();
   _resetEmbedSweeper();
 }
 

@@ -47,7 +47,7 @@ import { Router } from "../src/invalidation/router.ts";
 import { _setAdminDids } from "../src/admin.ts";
 import { _resetEmbedSweeper, stopEmbedSweeper } from "../src/embed/sweeper.ts";
 import { _resetSearchIndexer, stopSearchIndexer } from "../src/search/indexer.ts";
-import { _resetProfileStoreCache } from "../src/queries/profileStore.ts";
+import { _resetProfileStoreCache, _setTestGetProfiles } from "../src/queries/profileStore.ts";
 
 // ─── Args ─────────────────────────────────────────────────────────────────
 
@@ -157,7 +157,9 @@ timeStage(Router.prototype, "onEventsApplied", "invalidation");
 interface OutboundFetch { url: string; ms: number; stack: string; }
 const outbound: OutboundFetch[] = [];
 const origFetch = globalThis.fetch;
-globalThis.fetch = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+// Bun's `fetch` carries a `preconnect` static that the wrapper does not
+// provide; the cast is honest because only call sites use this binding.
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const isLocal = url.startsWith("http://localhost") || url.startsWith("http://127.");
   const start = performance.now();
@@ -172,7 +174,7 @@ globalThis.fetch = async (input: Parameters<typeof fetch>[0], init?: Parameters<
       });
     }
   }
-};
+}) as typeof fetch;
 
 // ─── Boot ─────────────────────────────────────────────────────────────────
 
@@ -189,6 +191,11 @@ _resetProfileStoreCache();
 
 openDb({ path: join(dataDir, "roomy-events.sqlite") });
 
+// Production leaves the profile fetcher unset, so materialization uses the real
+// HappyView-first / Bluesky path (and writes the rows it resolves). The stub
+// keeps the probe hermetic; --production-profiles exercises the real pipeline
+// so fetch counts match production.
+_setTestGetProfiles(argv.includes("--production-profiles") ? null : async () => []);
 const handle = await createAppserver({
   authVerifier: testAuthVerifier,
   port: 0,
@@ -200,11 +207,6 @@ const handle = await createAppserver({
   // the synchronous write path alone.
   disableBackgroundWorkers: true,
   happyView: null,
-  // Production leaves `getProfiles` unset, so materialization uses the real
-  // HappyView-first / Bluesky path (and writes the rows it resolves). The
-  // stub keeps the probe hermetic; --production-profiles exercises the real
-  // pipeline so fetch counts match production.
-  ...(argv.includes("--production-profiles") ? {} : { getProfiles: async () => [] }),
 });
 const baseUrl = `http://localhost:${handle.port}`;
 
@@ -243,9 +245,9 @@ await globalDb.run(
 );
 await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [SPACE, SPACE]);
 await spaceDb.run(
-  `insert or ignore into comp_space (entity, handle, allow_public_join, allow_member_invites)
-   values (?, ?, ?, ?)`,
-  [SPACE, null, 1, 1],
+  `insert or ignore into comp_space (entity, allow_public_join, allow_member_invites)
+   values (?, ?, ?)`,
+  [SPACE, 1, 1],
 );
 await spaceDb.run("insert or ignore into comp_info (entity, name) values (?, ?)", [SPACE, "Probe Space"]);
 await spaceDb.run("insert or ignore into entities (id, stream_id) values (?, ?)", [USER, USER]);
@@ -284,8 +286,8 @@ if (READ_STATE_ROOMS > 0) {
     if (tuples.length === 0) return;
     await readStateDb.run(
       `insert or replace into read_positions
-         (user_did, room_id, space_did, seen_up_to, unread_count, updated_at)
-       values ${tuples.join(",")}`,
+        (user_did, room_id, space_did, seen_up_to, updated_at)
+      values ${tuples.join(",")}`,
       ...params,
     );
     tuples = [];
@@ -293,17 +295,17 @@ if (READ_STATE_ROOMS > 0) {
   };
   for (let r = 0; r < READ_STATE_ROOMS; r++) {
     for (let u = 0; u < READ_STATE_READERS; u++) {
-      tuples.push("(?, ?, ?, ?, ?, 0)");
-      // A third unread, so the delete/move unwind's `unread_count > 0`
-      // filter has work to do.
-      params.push(`did:plc:reader-${r}-${u}`, `filler-room-${r}`, SPACE, "0".repeat(26), u % 3 === 0 ? 4 : 0);
+      // `seen_up_to` is the whole fact: every seeded reader is below every
+      // message, so all of them have unread messages to unwind.
+      tuples.push("(?, ?, ?, ?, 0)");
+      params.push(`did:plc:reader-${r}-${u}`, `filler-room-${r}`, SPACE, "0".repeat(26));
       if (tuples.length >= 400) await flush();
     }
   }
   // Readers on the probe room: the createMessage bump updates every one.
   for (let u = 0; u < READ_STATE_READERS; u++) {
-    tuples.push("(?, ?, ?, ?, ?, 0)");
-    params.push(`did:plc:probe-reader-${u}`, ROOM, SPACE, "0".repeat(26), 0);
+    tuples.push("(?, ?, ?, ?, 0)");
+    params.push(`did:plc:probe-reader-${u}`, ROOM, SPACE, "0".repeat(26));
     if (tuples.length >= 400) await flush();
   }
   await flush();

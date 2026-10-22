@@ -211,7 +211,7 @@ const plan = raw
   .query<{ detail: string }, [string, string, number]>(`explain query plan ${scanSql}`)
   .all(USER, SPACE, now);
 for (const row of plan) console.log(`    ${row.detail}`);
-await time("live scan (statement alone)", RUNS, () =>
+await time("live scan (statement alone)", RUNS, async () =>
   raw.query(scanSql).all(USER, SPACE, now),
 );
 await time("queryActiveThreads, scan path", RUNS, async () => {

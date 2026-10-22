@@ -20,6 +20,7 @@ import { closeDb, openDb, openEventsDb } from "../src/db/db.ts";
 import { _setAdminDids } from "../src/admin.ts";
 import { _resetEmbedSweeper, stopEmbedSweeper } from "../src/embed/sweeper.ts";
 import { _resetSearchIndexer, stopSearchIndexer } from "../src/search/indexer.ts";
+import { _setTestGetProfiles } from "../src/queries/profileStore.ts";
 
 const argv = process.argv;
 const numArg = (name: string, fallback: number): number => {
@@ -85,6 +86,7 @@ _resetEmbedSweeper();
 _resetSearchIndexer();
 
 openDb({ path: eventsPath });
+_setTestGetProfiles(async () => []);
 const handle = await createAppserver({
   authVerifier: testAuthVerifier,
   port: 0,
@@ -93,7 +95,6 @@ const handle = await createAppserver({
   quiet: true,
   disableBackgroundWorkers: true,
   happyView: null,
-  getProfiles: async () => [],
 });
 
 // Sanity: the rollup must agree with the log.

@@ -14,6 +14,7 @@ import { createAppserver } from "../src/appserver.ts";
 import { testAuthVerifier } from "../src/xrpc/auth.ts";
 import { closeDb, openDb, openGlobalDb } from "../src/db/db.ts";
 import { _resetEmbedSweeper } from "../src/embed/sweeper.ts";
+import { _setTestGetProfiles } from "../src/queries/profileStore.ts";
 
 process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??= "http://127.0.0.1:14318";
 
@@ -46,6 +47,7 @@ await openGlobalDb().run(
   [CHANNEL, SPACE],
 );
 
+_setTestGetProfiles(async () => []);
 const handle = await createAppserver({
   port: 0,
   authVerifier: testAuthVerifier,
@@ -53,7 +55,6 @@ const handle = await createAppserver({
   readStateDbPath: ":memory:",
   quiet: true,
   disableBackgroundWorkers: true,
-  getProfiles: async () => [],
 });
 
 const base = `http://localhost:${handle.port}`;
