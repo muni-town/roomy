@@ -1,5 +1,21 @@
 # Appserver E2E Testing & Per-Endpoint Performance — Remaining Plan
 
+**Status:** A, B and E are shipped. C is mostly shipped: 34 spec files under
+`src/e2e/` (307 tests) boot the real server through `createAppserver` with
+`:memory:` DBs, `testAuthVerifier` and disabled backfill — no network, no PLC.
+**67 of the 73 registered NSIDs have an HTTP-level test; six do not**
+(`auth.getScopeSettings`, `auth.setScopeSettings`,
+`admin.push.getSubscriptions`, `admin.reconcileProMembers`,
+`federation.getIncoming`, `user.refreshBlocks`). **D is not shipped:**
+`perf/measure.ts` and the other `perf/` probes no longer compile — a refactor
+dropped the `return` from `seedFixture`, and the rest of the directory has drifted
+from around a dozen later refactors (27 errors across 8 files). Nothing
+type-checks `perf/` (`packages/appserver/tsconfig.json` includes only
+`src/**/*`), which is why this went unnoticed. **F is not shipped.**
+**Next:** cover the six NSIDs above, repair `perf/` and bring it into the
+typecheck program, then write the AGENTS.md section. None is dispatched.
+**Verified against:** `origin/next` @ `a691477a5`.
+
 ## Context
 
 **A (test-mode auth bypass)** and **B (server factory)** are implemented:
@@ -191,9 +207,18 @@ instance per test on an ephemeral port.
 
 ## Acceptance Criteria
 
+Measured on `origin/next` @ `a691477a5`:
+
 - [ ] Every registered XRPC NSID has at least one HTTP-level smoke test passing.
-- [ ] WebSocket sync subscription tested end-to-end (ticket → connect → frame).
-- [ ] Perf harness runs, outputs per-endpoint p50/p95/p99, auto-discovers all endpoints.
-- [ ] Full e2e suite runs in <5s with no network access (offline, no remote backend, no PLC).
-- [ ] No leaked processes/handles after suite exit.
-- [ ] `AGENTS.md` documents how to run e2e + perf.
+      **67 of 73**; the six named in the status line above remain.
+- [x] WebSocket sync subscription tested end-to-end (ticket → connect → frame)
+      — `src/e2e/sync.test.ts`.
+- [ ] Perf harness runs, outputs per-endpoint p50/p95/p99, auto-discovers all
+      endpoints. **Does not compile** (see the status line).
+- [ ] Full e2e suite runs in <5s with no network access (offline, no remote
+      backend, no PLC). The no-network half holds; the suite takes **~48s**, not
+      <5s.
+- [x] No leaked processes/handles after suite exit — the suite ends cleanly with
+      `0 fail` and no unhandled-error block.
+- [ ] `AGENTS.md` documents how to run e2e + perf. The e2e half is documented; the
+      perf half cannot be until the harness is repaired.

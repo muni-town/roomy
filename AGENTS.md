@@ -66,13 +66,18 @@ pnpm publish-packages       # Version & publish SDK to npm
 
 pnpm --filter app-lite check              # TypeScript check (svelte-check) for app-lite
 pnpm --filter @roomy/appserver typecheck  # TypeScript check (tsc --noEmit) for appserver
-bun test --cwd packages/appserver          # Unit tests (Bun test) for the appserver
-bun test --cwd packages/appserver src/appserver.test.ts  # E2E factory smoke tests (HTTP-level, test-mode auth, :memory: DB)
+bun test --cwd packages/appserver          # Unit + E2E tests (Bun test) for the appserver
+bun test --cwd packages/appserver src/e2e/ # HTTP-level E2E only (test-mode auth, :memory: DB)
+pnpm --filter app-lite test:e2e            # Playwright UI specs (packages/app-lite/e2e)
 pnpm --filter @roomy-space/sdk test       # Unit tests (Vitest) for the SDK
 pnpm --filter @roomy/design test          # Unit tests (Vitest) for the design system
 ```
 
-> Note: app-lite does not yet have its own test suite. The legacy `packages/app` test infrastructure (Vitest, Playwright, Robot Framework) was removed with the package — see the "Removed with app" section below.
+> app-lite has its own suites: Playwright specs under `packages/app-lite/e2e/`
+> (run by `test:e2e`) and `node --test` / Vitest unit tests (`test`, `test:unit`).
+> The legacy `packages/app` test infrastructure (Vitest, Playwright, Robot
+> Framework) was removed with the package — see the "Removed with app" section
+> below.
 
 ## Package: app-lite (Primary Client — SvelteKit Thin Client)
 
@@ -354,11 +359,19 @@ Browser (headless Chromium)
 
 All XRPC queries, procedures, and the WebSocket sync connection go to the local appserver. The app UI loads fully (spaces, navigation, user menu) without any production dependency.
 
-### Pre-existing Type Errors
+### Type-check Baselines
 
-Both `svelte-check` (app-lite) and `tsc --noEmit` (appserver) report pre-existing errors on `main` that are **not** introduced by your changes. When verifying, diff the error count against a clean checkout rather than treating any error as new. Current baseline: app-lite has 3 errors (SDK `RateLimitRetryOptions` export, tiptap `LinkOptions`, `Storage.markdown`); appserver has 36 errors (test files with brand types).
+Both `svelte-check` (app-lite) and `tsc --noEmit` (appserver) run clean on
+`main` and `next`, the same as CI's `Check App-lite` and `Typecheck Appserver`
+jobs. If either reports errors, treat them as introduced by your changes. The
+appserver check needs a built SDK first (`pnpm turbo run build-lib`), since it
+resolves `@roomy-space/sdk` through its `dist` types.
 
-The appserver has 39 test files (451 tests: 450 pass, 1 skip) runnable via `bun test`. Tests use mocked DBs — they exercise materialization, auth, invalidation, and XRPC handler logic at the unit level. There are no integration tests that boot the HTTP server and exercise XRPC endpoints end-to-end yet.
+The appserver has 133 test files (1533 tests: 1532 pass, 1 skip) runnable via
+`bun test`. Thirty-four of them are HTTP-level E2E tests under `src/e2e/` that
+boot the real server through `createAppserver` with `:memory:` DBs and
+`APPSERVER_TEST_MODE`; the rest exercise materialization, auth, invalidation and
+XRPC handler logic at the unit level.
 
 **`openDb()` init is fire-and-forget** (`src/db/db.ts`): the worker queues requests until init completes, and the un-awaited init promise has a `.catch()` attached — a failed init surfaces as an error on the first queued request's response, not as an unhandled rejection. A test run must report `0 errors` (not just `0 fail`); a `# Unhandled error between tests` block in the output is a regression.
 
