@@ -15,7 +15,7 @@ phase can be dispatched without re-deriving the surface.
 
 | Piece | File | What it does |
 |---|---|---|
-| Playwright config | `playwright.config.ts` | `testDir: e2e`, chromium project, `webServer` waits on the app-lite origin, traces/screenshots retained on failure. |
+| Playwright config | `playwright.config.ts` | `testDir: e2e`, two projects (desktop Chromium, and `mobile-chromium` for the phone shell), `webServer` waits on the app-lite origin, traces/screenshots retained on failure. |
 | Stack launcher | `e2e/launch-stack.ts` | Boots the whole stack hermetically: stub PDS → appserver (in-process, test mode) → seed → `vite dev`. |
 | Stub PDS | `e2e/pds-stub.ts` | Answers `createSession` + `getServiceAuth` (with CORS) so the client's **real** `AtpAgent` login path runs with no account and no network. |
 | Seeder | `e2e/seed.ts` | Seeds user/space/membership directly; creates the room + message through the **real** `sendEvents` write path. |
@@ -197,6 +197,24 @@ sync socket — still runs through the real appserver.
 |---|---|
 | a message moved into the open room lands where the server keys it | A live `#messageDiff` merge must order by the server's timeline key (`sort_idx`, id as fallback), not by `timestamp`. A move rewrites `sort_idx` to the move time while the body still claims its original send time, so a client-side re-sort on `timestamp` renders the row somewhere the server's page never puts it. The spec stalls `room.getMessages` so the diff is the only writer, then samples the rendered order every 50 ms across the change and asserts the sampled sequence is exactly the correct order — a wrong order that a later refetch repaired still fails, because the assertion is over the sequence, not the end state. |
 
+### `shell-cross-cutting.spec.ts` — the frame around the app
+| Test | Project | Defends |
+|---|---|---|
+| the sidebar is a drawer: off screen, summoned from the navbar, dismissed by tapping away | mobile | Below 640px the sidebar is an overlay drawer, not a column: it rests one width off screen and takes no layout space, the navbar toggle both opens it and reports the state it produced, and the backdrop dismisses it. Asserts the drawer's horizontal position — `toBeVisible` cannot tell "off screen" from "on screen", since a translated element still has a box. |
+| the navbar search is an icon that expands into the bar | mobile | The narrow navbar has no search field until asked: the icon expands into the searchbar, and the term submitted there reaches the room-scoped search route. |
+| a message sent from another client appears without a reload | desktop | The open room is kept current by `#messageDiff` frames. A second browser context — its own WebSocket, its own cache — authenticates through the same stub PDS and sends through the same `sendEvents` path, and the row reaches the first client while its own `room.getMessages` is held shut, so a refetch cannot be what put it there. The document marker and the unchanged URL are what "without a reload" means. |
+| a cold room link lands in that room, with the shell agreeing | desktop | A share link works from a bare URL: the room's content renders and exactly one sidebar row is active, naming that channel. |
+| a `?message=` link lands on that message and marks it | desktop | The link searches back to a message that is off the newest page, scrolls it into the chat viewport, and marks it — the route a search result, a push notification and a forwarded message's back-link all take. |
+
+The three desktop tests each run against a channel they create themselves,
+rather than the seeded ones. The seeded channels are shared by the whole suite
+and the timeline is virtualized and paged at 50, so by the time a later spec
+runs, the lobby's oldest row is no longer the row the room opens on — an
+assertion naming it would fail for a reason with nothing to do with the
+behaviour under test. A room a test just created has one message, which is
+both the newest and the row the room parks on. (`room-kinds.spec.ts` and
+`message-lifecycle.spec.ts` reached the same conclusion for the same reason.)
+
 ### `profile-identity.spec.ts` — profile & identity (area E)
 | Test | Defends |
 |---|---|
@@ -322,6 +340,35 @@ All breaks were reverted; the suite is green.
     The tab never reloaded, because `logout()` was waiting on a promise that
     never settles when no service worker is registered — see the coverage note
     on the harness constraint below.
+    
+12. **Deleted the `#messageDiff` arm of the SDK's `SyncRouter`** (leaving the
+   frame unapplied), keeping the spec. Demonstrated 2026-10-15:
+   → `a message sent from another client appears without a reload` **failed**
+   in ~1s of assertion time, with the row simply absent from the reader's
+   screen. The second client's send itself succeeded (`sendEvents` logged
+   `applied: 1`), which is the discriminating detail: the write landed and the
+   frame was delivered, and only the *client-side application* of it was gone.
+   → Nothing else in the spec failed, so the failure is attributable to the
+   live-diff path alone rather than to the two-client setup.
+   
+13. **Forced the deep-link mark off** (`ChatMessage.svelte`'s
+   `class:message-highlight={highlighted}` → `false`), keeping the spec.
+   Demonstrated 2026-10-15:
+   → `a ?message= link lands on that message and marks it` **failed** on
+   `toHaveClass(/message-highlight/)`, and the locator resolved 31 times with
+   the row present — so the search-back-and-scroll half still passed
+   independently, and the failure isolates the mark rather than the link.
+   
+14. **Made the mobile drawer never rest off screen** (`MainLayout.svelte`'s
+   `.sidebar-mobile` `transform` pinned to `translateX(0)` — the desktop
+   arrangement applied at every width), keeping the spec. Demonstrated
+   2026-10-15:
+   → `the sidebar is a drawer: …` **failed** on the first measurement, receiving
+   `0` for an expected `-256`: the sidebar was on screen at rest, which is
+   precisely the desktop behaviour the phone layout exists to replace.
+   → The mobile project's other test **skipped** (it is in a different
+   `describe`), so the two phone tests are independently scoped to what they
+   defend.
 
 ---
 
@@ -376,11 +423,6 @@ half of these — it is what the toolbar-menu gating test uses.
 - Log out → login modal returns; log back in works.
 
 ### F. Shell / cross-cutting
-- Mobile viewport project (the sidebar is a drawer below 640px; the navbar
-  search collapses to the icon). Currently only desktop Chromium.
-- Sync WebSocket: a live `#messageDiff` from a second client updates the room
-  without a reload (needs a second browser context).
-- Deep links / share URLs.
 - Service-worker & offline behaviour.
 - Push notification permission flows (browser-permission dependent).
 

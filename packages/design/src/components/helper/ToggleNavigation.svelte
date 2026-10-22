@@ -8,6 +8,9 @@
 
 <Button.Root
   onclick={() => (isSidebarVisible = !isSidebarVisible)}
+  aria-label="Navigation"
+  aria-expanded={isSidebarVisible}
+  aria-controls="sidebar"
   class="shrink-0 p-1 cursor-pointer text-base-900 dark:text-base-100"
 >
   <IconBars font-size="1.5rem" />

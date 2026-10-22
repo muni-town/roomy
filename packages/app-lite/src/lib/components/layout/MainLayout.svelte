@@ -164,7 +164,7 @@
 <!-- Mobile backdrop: always in DOM, opacity transition avoids layout thrash from #if -->
 <button
   onclick={() => (mobileSidebar.visible = false)}
-  aria-label="toggle navigation"
+  aria-label="Close navigation"
   class="fixed inset-0 z-30 sm:hidden cursor-pointer mobile-backdrop"
   class:mobile-backdrop-visible={mobileSidebar.visible}
   class:mobile-backdrop-hidden={!mobileSidebar.visible}
@@ -172,6 +172,7 @@
 
 <!-- Fixed sidebar (full height, left) — slides in from left on mobile -->
 <div
+  id="sidebar"
   class={[
     "isolate fixed top-0 bottom-0 left-0 z-40 overflow-hidden bg-base-50/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none sidebar-fixed",
     "sidebar-mobile",

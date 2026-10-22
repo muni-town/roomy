@@ -44,6 +44,27 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      // The phone shell: the sidebar is an overlay drawer below 640px and the
+      // navbar search collapses to an icon. This is a different arrangement of
+      // the same app, not the desktop one at a smaller size, and the rest of
+      // the suite asserts the desktop arrangement — a sidebar that is simply
+      // there, a navbar-wide searchbar, hover-revealed toolbars, a room that
+      // opens parked at the newest message. Run those at 393px and they would
+      // be asserting the wrong shell rather than finding a bug.
+      //
+      // So this project runs only the tests that are about the phone shell,
+      // named by the group they live in. The other tests in that file — a live
+      // frame from a second client, the deep links — describe behaviour that
+      // does not depend on the viewport, and are covered by the desktop
+      // project. The `test.skip(!isMobile)` guard inside them is the
+      // companion: it is what keeps the desktop project from collecting them
+      // onto the wrong shell.
+      name: "mobile-chromium",
+      testMatch: "**/shell-cross-cutting.spec.ts",
+      grep: /at a phone breakpoint/,
+      use: { ...devices["Pixel 5"] },
+    },
   ],
 
   webServer: {
