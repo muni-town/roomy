@@ -24,7 +24,11 @@ import type { DbLike } from "../db/types.ts";
 import type { StreamDid, Ulid } from "@roomy-space/sdk";
 import { inferSignals } from "./inferSignals.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
-import { syncMentionsIndex, resolveReplyToAuthors } from "../queries/mentions.ts";
+import {
+  syncMentionsIndex,
+  resolveReplyToAuthors,
+  type RemovedMentionDids,
+} from "../queries/mentions.ts";
 import { openSpaceDb } from "../db/db.ts";
 import { log } from "../log.ts";
 import { withSpan } from "../telemetry/tracing.ts";
@@ -100,10 +104,16 @@ export class Router implements IInvalidationRouter {
 
     // Dual-write the global mentions index so the `mentions:<did>` sync topic
     // can backfill and deleteMessage can resolve a deleted message's DIDs.
+    // A delete returns the DIDs whose rows it removed; they are gone from the
+    // index from that point on, so they are handed to `inferSignals` (which
+    // builds the `mentionDiff remove` ops) rather than read back there.
+    let removedMentionDids: RemovedMentionDids | undefined;
     const globalDb = (db as { global?: () => DbLike } | undefined)?.global?.();
     if (globalDb) {
-      await withSpan("router.syncMentionsIndex", { "roomy.event_count": events.length }, () =>
-        syncMentionsIndex(globalDb, events, { spaceDb, replyToAuthors }),
+      removedMentionDids = await withSpan(
+        "router.syncMentionsIndex",
+        { "roomy.event_count": events.length },
+        () => syncMentionsIndex(globalDb, events, { spaceDb, replyToAuthors }),
       );
     }
 
@@ -112,7 +122,13 @@ export class Router implements IInvalidationRouter {
     await withSpan("router.inferSignals", { "roomy.event_count": events.length }, async () => {
       for (const event of events) {
         collected.push(
-          ...(await inferSignals(event, undefined, messageSnapshots, replyToAuthors)),
+          ...(await inferSignals(
+            event,
+            undefined,
+            messageSnapshots,
+            replyToAuthors,
+            removedMentionDids,
+          )),
         );
       }
     });

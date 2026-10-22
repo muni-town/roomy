@@ -28,6 +28,30 @@ export interface MentionRow {
   created_at: number;
 }
 
+/**
+ * Every statement that touches ONE message's rows keys on `message_id` alone.
+ * Exported so `mentions.test.ts` can assert each walks `idx_mentions_message`
+ * rather than scanning the table — the plan is the contract that keeps the edit
+ * and delete paths off a full scan.
+ */
+export const MENTIONS_BY_MESSAGE_SQL = {
+  /** editMessage: drop the message's rows before re-inserting the new set. */
+  deleteForMessage: `delete from mentions where message_id = ?`,
+  /** deleteMessage: drop the message's rows, returning the DIDs they held. */
+  deleteForMessageReturningDids: `delete from mentions where message_id = ? returning did`,
+} as const;
+
+/**
+ * The DIDs whose mention rows a batch of events removed, keyed by the message
+ * whose rows they were.
+ *
+ * A delete has to notify the DIDs the deleted message mentioned, but the rows
+ * naming them are gone by the time the signal handlers run. `delete …
+ * returning did` hands them back as it removes them, so the delete path reads
+ * them from the same statement that cleared the index.
+ */
+export type RemovedMentionDids = ReadonlyMap<Ulid, readonly UserDid[]>;
+
 /** Options for {@link syncMentionsIndex}. */
 export interface SyncMentionsIndexOpts {
   /**
@@ -113,6 +137,12 @@ export async function resolveReplyToAuthors(
  *   have changed).
  * - deleteMessage: remove the message's rows.
  *
+ * Returns the DIDs each delete removed rows for, keyed by message id (see
+ * {@link RemovedMentionDids}). The rows are gone once this returns, so the
+ * caller is the last point at which the DIDs are knowable from the statement
+ * that removes them — the delete's `mentionDiff remove` ops are built from
+ * this value rather than from a read that would find an empty index.
+ *
  * Callers pass the global DB handle; the per-space DB is only needed to
  * re-read a message's content for edit (not currently the case) and to
  * resolve reply-edge authors (pass `spaceDb`/`replyToAuthors` from the
@@ -122,8 +152,9 @@ export async function syncMentionsIndex(
   globalDb: DbLike,
   events: readonly AppliedEvent[],
   opts: SyncMentionsIndexOpts = {},
-): Promise<void> {
+): Promise<RemovedMentionDids> {
   const { spaceDb, replyToAuthors } = opts;
+  const removedDids = new Map<Ulid, readonly UserDid[]>();
 
   for (const event of events) {
     const roomId = event.roomId;
@@ -156,7 +187,7 @@ export async function syncMentionsIndex(
       }
       case "space.roomy.message.editMessage.v0": {
         const messageId = (event.details?.messageId as Ulid | undefined) ?? event.id;
-        await globalDb.run(`delete from mentions where message_id = ?`, [messageId]);
+        await globalDb.run(MENTIONS_BY_MESSAGE_SQL.deleteForMessage, [messageId]);
         const mentions = event.details?.mentions as UserDid[] | undefined;
         const now = Date.now();
         for (const did of mentions ?? []) {
@@ -180,7 +211,15 @@ export async function syncMentionsIndex(
       }
       case "space.roomy.message.deleteMessage.v0": {
         const messageId = (event.details?.messageId as Ulid | undefined) ?? event.id;
-        await globalDb.run(`delete from mentions where message_id = ?`, [messageId]);
+        // `returning did` names the DIDs as the rows go, so the delete's
+        // `mentionDiff remove` ops survive an index that is empty immediately
+        // afterwards. One statement, one index seek.
+        const rows = await globalDb
+          .query(MENTIONS_BY_MESSAGE_SQL.deleteForMessageReturningDids)
+          .all<{ did: string }>([messageId]);
+        if (rows.length > 0) {
+          removedDids.set(messageId, rows.map((r) => r.did as UserDid));
+        }
         break;
       }
       case "space.roomy.message.moveMessages.v0": {
@@ -203,6 +242,8 @@ export async function syncMentionsIndex(
       }
     }
   }
+
+  return removedDids;
 }
 
 /**
@@ -242,20 +283,6 @@ async function insertMentionRow(
      on conflict (did, message_id) do update set kind = excluded.kind`,
     [did, messageId, event.streamDid, roomId, kind, now],
   );
-}
-
-/**
- * Resolve the DIDs a message mentioned (from the global index). Used by
- * deleteMessage to emit `remove` mention ops for the right users.
- */
-export async function getMentionedDidsForMessage(
-  globalDb: DbLike,
-  messageId: Ulid,
-): Promise<UserDid[]> {
-  const rows = await globalDb
-    .query(`select did from mentions where message_id = ?`)
-    .all<{ did: string }>([messageId]);
-  return rows.map((r) => r.did as UserDid);
 }
 
 /**

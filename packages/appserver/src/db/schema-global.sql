@@ -132,6 +132,13 @@ create table if not exists mentions (
 ) strict;
 create index if not exists idx_mentions_did_created on mentions(did, created_at desc);
 
+-- The `mentions` rows of ONE message, keyed by `message_id` alone: the edit and
+-- delete paths clear a message's rows that way, and the delete reads the DIDs it
+-- is removing from the same statement. The primary key is `(did, message_id)`,
+-- so `message_id` is usable as a seek key only once `did` is constrained; this
+-- index is what lets a `message_id`-only predicate seek instead of scanning.
+create index if not exists idx_mentions_message on mentions(message_id);
+
 -- Search backfill cursor. One row per
 -- space, tracking how far the Qdrant backfill sweeper has walked that
 -- space's messages (the cursor is the last message id, ULID-ordered, from

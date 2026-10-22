@@ -339,6 +339,48 @@ describe("Router", () => {
     expect(new Set(keys.map((k) => JSON.stringify(k))).size).toBe(3);
   });
 
+  it("emits one mentionDiff remove per DID a deleted message mentioned", async () => {
+    // The mentions index write (syncMentionsIndex) runs before inferSignals,
+    // and it is what removes the rows naming those DIDs. The handler therefore
+    // has to build its `remove` ops from what that write reports it removed:
+    // re-reading the index from the handler would find nothing and emit zero
+    // ops. This drives the real Router over a seeded row, so it observes the
+    // two steps in their production order.
+    const MESSAGE_ID = "01DELETEMSGMENTIONAAAAAAA" as Ulid;
+    const MENTIONED = "did:plc:mentioned" as UserDid;
+    const ROOM = "01ROOMMENTIONAAAAAAAAA000" as Ulid;
+    const DB = openDb({ path: ":memory:" });
+    await DB.global().run(
+      "insert into mentions (did, message_id, space_did, room_id) values (?, ?, ?, ?)",
+      [MENTIONED, MESSAGE_ID, STREAM_DID, ROOM],
+    );
+
+    const router = new Router();
+    const { events, listener } = collect();
+    router.subscribe(listener);
+
+    await router.onEventsApplied(
+      STREAM_DID,
+      [
+        makeEvent("space.roomy.message.deleteMessage.v0", {
+          roomId: ROOM,
+          details: { messageId: MESSAGE_ID },
+        }),
+      ],
+      { isBackfill: false },
+      DB,
+    );
+
+    const mentionDiffs = events[0]!.filter((e) => e.kind === "mentionDiff");
+    expect(mentionDiffs).toHaveLength(1);
+    const md = mentionDiffs[0]!;
+    if (md.kind === "mentionDiff") {
+      expect(md.signal.did).toBe(MENTIONED);
+      expect(md.signal.roomId).toBe(ROOM);
+      expect(md.signal.ops).toEqual([{ op: "remove", key: MESSAGE_ID }]);
+    }
+  });
+
   it("dedupes query invalidations that differ only by param key order", async () => {
     const router = new Router();
     const { events, listener } = collect();

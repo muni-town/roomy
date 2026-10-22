@@ -34,7 +34,7 @@ import {
   getRoomReadPositionWatermarks,
   spaceHasUnreads,
 } from "../queries/readPositions.ts";
-import { getMentionedDidsForMessage, resolveReplyToAuthors } from "../queries/mentions.ts";
+import { resolveReplyToAuthors, type RemovedMentionDids } from "../queries/mentions.ts";
 import { readRoomBoardFacts, roomActivityDiff } from "./roomActivity.ts";
 
 // ─── Public API ─────────────────────────────────────────────────────────
@@ -56,12 +56,18 @@ import { readRoomBoardFacts, roomActivityDiff } from "./roomActivity.ts";
  *   per-event `selectMessages` re-read — turning 5N queries into 5 per
  *   batch. Handlers fall back to their own read when the map is absent or
  *   does not contain the relevant id (direct callers like tests).
+ * @param removedMentionDids - Optional map from a batch's
+ *   `syncMentionsIndex` call: the DIDs whose mention rows each delete removed,
+ *   keyed by the deleted message id. A delete's `mentionDiff remove` ops are
+ *   built from this, since the rows naming those DIDs are gone by the time the
+ *   handler runs. Absent (direct callers), a delete emits no mention ops.
  */
 export async function inferSignals(
   event: AppliedEvent,
   db?: DbLike,
   messageSnapshots?: ReadonlyMap<Ulid, MessageDto>,
   replyToAuthors?: ReadonlyMap<Ulid, UserDid>,
+  removedMentionDids?: RemovedMentionDids,
 ): Promise<InvalidationEvent[]> {
   // Suppress signals for synthetic query events — they're bulk hydration,
   // not incremental changes.
@@ -69,7 +75,7 @@ export async function inferSignals(
 
   const handler = HANDLERS[event.type as keyof typeof HANDLERS];
   if (!handler) return [];
-  return await handler(event, db, messageSnapshots, replyToAuthors);
+  return await handler(event, db, messageSnapshots, replyToAuthors, removedMentionDids);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -689,7 +695,10 @@ async function handleEditMessage(
 
 async function handleDeleteMessage(
   event: AppliedEvent,
-  db?: DbLike,
+  _db?: DbLike,
+  _messageSnapshots?: ReadonlyMap<Ulid, MessageDto>,
+  _replyToAuthors?: ReadonlyMap<Ulid, UserDid>,
+  removedMentionDids?: RemovedMentionDids,
 ): Promise<InvalidationEvent[]> {
   const roomId = event.roomId;
   if (!roomId) return [];
@@ -720,24 +729,21 @@ async function handleDeleteMessage(
     evictOnly("space.roomy.space.getActivityFeed", { spaceId: event.streamDid }),
   ];
 
-  // Emit `remove` mention ops for every DID the deleted message mentioned,
-  // so connections subscribed to `mentions:<did>` drop it too. Resolve the
-  // DIDs from the global mentions index (the message's rows are removed by
-  // syncMentionsIndex in the router before inferSignals runs).
-  const globalDb = (db as { global?: () => DbLike } | undefined)?.global?.();
-  if (globalDb) {
-    const dids = await getMentionedDidsForMessage(globalDb, messageId);
-    for (const did of dids) {
-      signals.push({
-        kind: "mentionDiff",
-        signal: {
-          did,
-          spaceId: event.streamDid,
-          roomId,
-          ops: [{ op: "remove", key: messageId }],
-        },
-      });
-    }
+  // Emit `remove` mention ops for every DID the deleted message mentioned, so
+  // connections subscribed to `mentions:<did>` drop it too. The DIDs come from
+  // the statement that removed the rows (`syncMentionsIndex`, which the router
+  // runs before this handler) because at this point the index no longer holds
+  // them.
+  for (const did of removedMentionDids?.get(messageId) ?? []) {
+    signals.push({
+      kind: "mentionDiff",
+      signal: {
+        did,
+        spaceId: event.streamDid,
+        roomId,
+        ops: [{ op: "remove", key: messageId }],
+      },
+    });
   }
 
   return signals;
@@ -1359,7 +1365,7 @@ function voicePresence(
 
 // ─── Dispatch table ─────────────────────────────────────────────────────
 
-const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike, messageSnapshots?: ReadonlyMap<Ulid, MessageDto>, replyToAuthors?: ReadonlyMap<Ulid, UserDid>) => InvalidationEvent[] | Promise<InvalidationEvent[]>> = {
+const HANDLERS: Record<string, (event: AppliedEvent, db?: DbLike, messageSnapshots?: ReadonlyMap<Ulid, MessageDto>, replyToAuthors?: ReadonlyMap<Ulid, UserDid>, removedMentionDids?: RemovedMentionDids) => InvalidationEvent[] | Promise<InvalidationEvent[]>> = {
   // Messages
   "space.roomy.message.createMessage.v0": handleCreateMessage,
   "space.roomy.message.editMessage.v0": handleEditMessage,

@@ -304,6 +304,51 @@ describe("global schema v9 — mentions.kind column", () => {
   });
 });
 
+describe("mentions.message_id index", () => {
+  test("an existing global DB gains the index at boot, with no version bump", async () => {
+    // The index is additive DDL, not a migration: the worker re-execs the whole
+    // schema file on every boot, so a DB stamped at the current version still
+    // picks it up. Without that, the edit and delete paths would keep
+    // full-scanning `mentions` on every deployed database.
+    const dir = mkdtempSync(join(tmpdir(), "roomy-mentions-index-"));
+    cleanup.push(dir);
+    const globalPath = join(dir, "global.sqlite");
+    const preIndex = new Database(globalPath, { create: true });
+    preIndex.exec(readFileSync(GLOBAL_SCHEMA_PATH, "utf8"));
+    preIndex.exec("drop index idx_mentions_message");
+    preIndex.run("insert into global_schema_version (id, version) values (1, ?)", [
+      GLOBAL_SCHEMA_VERSION,
+    ]);
+    preIndex.close();
+
+    const pool = new DatabasePool(1, join(THIS_DIR, "worker.ts"));
+    try {
+      await pool.init({
+        readStateDbPath: ":memory:",
+        eventsDbPath: ":memory:",
+        globalDbPath: globalPath,
+        spacesDir: join(dir, "spaces"),
+        readStateSchemaVersion: READSTATE_SCHEMA_VERSION,
+        spaceSchemaVersion: SPACE_SCHEMA_VERSION,
+        globalSchemaVersion: GLOBAL_SCHEMA_VERSION,
+      });
+      const global = pool.global();
+      const index = await global
+        .query("select name from sqlite_master where type = 'index' and name = 'idx_mentions_message'")
+        .get<{ name: string }>();
+      expect(index?.name).toBe("idx_mentions_message");
+
+      // And the planner uses it for the statements that key on message_id.
+      const plan = await global
+        .query("explain query plan delete from mentions where message_id = ?")
+        .all<{ detail: string }>("01MSG1");
+      expect(plan.map((r) => r.detail).join(" | ")).toContain("idx_mentions_message");
+    } finally {
+      await pool.close();
+    }
+  });
+});
+
 describe("global schema v11 — search backfill candidate list", () => {
   test("an entity_space insert registers the space with the sweeper", () => {
     const db = new Database(":memory:");

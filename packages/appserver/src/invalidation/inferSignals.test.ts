@@ -989,28 +989,21 @@ describe("inferSignals: mentions", () => {
     }
   });
 
-  it("deleteMessage emits a mentionDiff remove for the deleted message's DIDs", async () => {
-    // Seed a global DB with a mentions row for the message being deleted.
-    const globalDb = new Database(":memory:");
-    globalDb.exec(
-      "create table if not exists mentions (did text not null, message_id text not null, space_did text not null, room_id text not null, created_at integer not null default (unixepoch() * 1000), primary key (did, message_id)) strict",
-    );
-    globalDb.run(
-      "insert into mentions (did, message_id, space_did, room_id) values (?, ?, ?, ?)",
-      [MENTIONED, EVENT_ID, STREAM_DID, ROOM_ID],
-    );
-    const asyncGlobal = toAsyncDb(globalDb);
-    const db = {
-      global: () => asyncGlobal,
-    } as unknown as DbLike;
-
+  it("deleteMessage emits a mentionDiff remove for the DIDs the index write reported", async () => {
+    // The DIDs are not read from the index here: syncMentionsIndex has already
+    // removed the rows by the time this handler runs (the Router order), so the
+    // batch's removal report is what names them. See the Router-level test for
+    // the two steps in production order.
     const signals = await inferSignals(
       makeEvent({
         type: "space.roomy.message.deleteMessage.v0",
         roomId: ROOM_ID,
         details: { messageId: EVENT_ID },
       }),
-      db,
+      undefined,
+      undefined,
+      undefined,
+      new Map([[EVENT_ID, [MENTIONED]]]),
     );
     const mentionDiffs = findMentionDiffs(signals);
     expect(mentionDiffs).toHaveLength(1);
@@ -1020,6 +1013,17 @@ describe("inferSignals: mentions", () => {
       expect(md.signal.ops[0]!.op).toBe("remove");
       expect(md.signal.ops[0]!.key).toBe(EVENT_ID);
     }
+  });
+
+  it("deleteMessage emits no mentionDiff when the batch reported no removed DIDs", async () => {
+    const signals = await inferSignals(
+      makeEvent({
+        type: "space.roomy.message.deleteMessage.v0",
+        roomId: ROOM_ID,
+        details: { messageId: EVENT_ID },
+      }),
+    );
+    expect(findMentionDiffs(signals)).toHaveLength(0);
   });
 });
 
