@@ -19,7 +19,11 @@
  */
 
 import { px } from "$lib/auth.svelte";
-import { ensurePushSubscription, base64UrlToUint8Array } from "$lib/push.svelte";
+import {
+  activeServiceWorker,
+  ensurePushSubscription,
+  base64UrlToUint8Array,
+} from "$lib/push.svelte";
 
 const DEV = import.meta.env.DEV;
 
@@ -84,7 +88,8 @@ export function installPushDebug(): void {
       const res = await px().query("space.roomy.push.getVapidPublicKey", {});
       const key = res.publicKey;
       if (!key) throw new Error("VAPID public key not configured on appserver");
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await activeServiceWorker();
+      if (!reg) throw new Error("no service worker registration to subscribe through");
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
         console.info("[push.testSubscribe] reusing existing subscription:", existing.endpoint);
@@ -137,23 +142,29 @@ export function installPushDebug(): void {
       let swInfo: PushDiagnostics["serviceWorker"] = null;
       if (supports.serviceWorker) {
         try {
-          const reg = await navigator.serviceWorker.ready;
-          swInfo = {
-            registered: true,
-            scope: reg.scope,
-            active: reg.active !== null,
-            installing: reg.installing !== null,
-            waiting: reg.waiting !== null,
-          };
+          // `getRegistrations`, not `serviceWorker.ready`: with no registration
+          // the latter never settles, and a diagnostics call that hangs is
+          // useless for diagnosing why push is not working.
+          const reg = await activeServiceWorker();
+          swInfo = reg
+            ? {
+                registered: true,
+                scope: reg.scope,
+                active: reg.active !== null,
+                installing: reg.installing !== null,
+                waiting: reg.waiting !== null,
+              }
+            : { registered: false, scope: null, active: false, installing: false, waiting: false };
         } catch {
           swInfo = { registered: false, scope: null, active: false, installing: false, waiting: false };
         }
       }
 
       let subInfo: PushDiagnostics["subscription"] = null;
-      if (swInfo && supports.pushManager) {
+      if (swInfo?.registered && supports.pushManager) {
         try {
-          const reg = await navigator.serviceWorker.ready;
+          const reg = await activeServiceWorker();
+          if (!reg) throw new Error("no registration");
           const sub = await reg.pushManager.getSubscription();
           if (sub) {
             let pushService = "unknown";

@@ -5,7 +5,12 @@
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import { createPushPreferencesQuery } from "$lib/queries/push-preferences";
   import { setDefaultPushLevel, type PushLevel } from "$lib/mutations/push-preferences";
-  import { ensurePushSubscription, clearPushSubscription, pushOutcomeMessage } from "$lib/push.svelte";
+  import {
+    activeServiceWorker,
+    ensurePushSubscription,
+    clearPushSubscription,
+    pushOutcomeMessage,
+  } from "$lib/push.svelte";
   import {
     PUSH_UNAVAILABLE_MESSAGES,
     classifyPushUnavailable,
@@ -65,8 +70,11 @@
     }
     if (pushSupported) {
       try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
+        // No registration means no subscription to report — and the lookup
+        // itself has to settle, which `navigator.serviceWorker.ready` does not
+        // do for a tab that has none (see `activeServiceWorker`).
+        const reg = await activeServiceWorker();
+        const sub = reg ? await reg.pushManager.getSubscription() : null;
         endpoint = sub?.endpoint ?? null;
       } catch {
         endpoint = null;

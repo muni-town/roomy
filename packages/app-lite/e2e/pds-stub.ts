@@ -69,7 +69,7 @@ export function mintStubJwt(lifetimeSeconds = 300): string {
 }
 
 /** One record in the stub repo, addressed by `repo/collection/rkey`. */
-interface StubRecord {
+export interface StubRecord {
   uri: string;
   cid: string;
   value: Record<string, unknown>;
@@ -111,6 +111,48 @@ export function stubListRecords(
 /** Empty the stub repo (a spec that needs a clean slate calls this). */
 export function stubClearRecords(): void {
   repo.clear();
+}
+
+/**
+ * One record from the stub repo, as a PDS `getRecord` would return its value.
+ *
+ * The appserver reads a user's Roomy profile record from their PDS, so the
+ * stack launcher wires this in place of the network call (see
+ * `_setTestGetRoomyProfileRecord` in `launch-stack.ts`): what the client wrote
+ * to the stub is what the appserver reads back.
+ *
+ * `$bytes` fields are base64url-decoded here because a real PDS decodes them
+ * from CBOR on the way out, while this stub keeps records as the JSON the
+ * client posted. `getProfile` feeds the record to a lexicon validator that
+ * requires a byte array, so the encoded form would be rejected as an invalid
+ * response.
+ */
+export function stubGetRecord(
+  repoDid: string,
+  collection: string,
+  rkey: string,
+): { uri: string; cid: string; value: Record<string, unknown> } | null {
+  const found = repo.get(keyOf(repoDid, collection, rkey));
+  if (!found) return null;
+  return { ...found, value: decodeBytes(found.value) };
+}
+
+/** Recursively replace `{ $bytes: <base64url> }` with the bytes it encodes. */
+function decodeBytes(value: unknown): Record<string, unknown> {
+  if (Array.isArray(value)) {
+    return value.map(decodeBytes) as unknown as Record<string, unknown>;
+  }
+  if (typeof value !== "object" || value === null) {
+    return value as Record<string, unknown>;
+  }
+  const record = value as Record<string, unknown>;
+  const encoded = record["$bytes"];
+  if (typeof encoded === "string") {
+    return Buffer.from(encoded, "base64url") as unknown as Record<string, unknown>;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(record)) out[key] = decodeBytes(entry);
+  return out;
 }
 
 export interface PdsStub {
@@ -239,10 +281,13 @@ export function startPdsStub(): PdsStub {
         cid,
         value: body.record,
       });
-      // `putRecord` also reports the commit, whose `rev` is the rkey (a TID,
-      // as the lexicon requires). `createRecord`'s output carries no commit.
+      // `putRecord` also reports the commit. Its `rev` is format-checked as a
+      // TID, so it is a freshly minted one — the caller-supplied rkey is not a
+      // TID for every collection (`space.roomy.user.profile` uses `self`), and
+      // reusing it would fail the client's validation of the response.
+      // `createRecord`'s output carries no commit.
       if (method === "com.atproto.repo.putRecord") {
-        return json({ uri, cid, commit: { cid, rev: rkey } });
+        return json({ uri, cid, commit: { cid, rev: mintRkey() } });
       }
       return json({ uri, cid });
     }

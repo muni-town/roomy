@@ -30,8 +30,9 @@ import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import { createAppserver } from "../../appserver/src/appserver.ts";
 import { _setTestGetRoomyProfileRecord } from "../../appserver/src/materialization/roomyProfile.ts";
+import type { RoomyProfileRecord } from "../../appserver/src/materialization/roomyProfile.ts";
 import { _setTestGetProfiles } from "../../appserver/src/queries/profileStore.ts";
-import { startPdsStub } from "./pds-stub.ts";
+import { startPdsStub, stubGetRecord } from "./pds-stub.ts";
 import { seedFixture } from "./seed.ts";
 import {
   APP_LITE_ORIGIN,
@@ -52,6 +53,10 @@ const REPO_ROOT = dirname(dirname(APP_LITE_DIR));
 
 /** The real directory the appserver resolves `did:plc:` accounts through. */
 const PLC_ORIGIN = "https://plc.directory";
+
+/** The collection + rkey a user's Roomy profile record lives at. */
+const PROFILE_COLLECTION = "space.roomy.user.profile";
+const PROFILE_RKEY = "self";
 
 /**
  * Answer the appserver's PLC lookups for the fixture DIDs, in-process.
@@ -149,14 +154,26 @@ async function main(): Promise<void> {
   const pds = startPdsStub();
 
   stubFixtureDidDocuments();
-  // Keep every profile lookup in-process, the same way the appserver's own
-  // e2e helpers do (`src/e2e/helpers.ts`). Without these the `getProfile`
-  // handler's PDS-first branch resolves the DID through https://plc.directory
-  // and then calls the user's PDS — a real network dependency inside the
-  // suite. Stubbed, the handler falls through to the seeded global profile
-  // row, which is what the specs assert on.
+  // Keep the Bluesky handle lookup in-process, the same way the appserver's own
+  // e2e helpers do (`src/e2e/helpers.ts`). Without it the `getProfile` handler's
+  // on-demand hydration fetches api.bsky.app — a real network dependency inside
+  // the suite. `getProfile` answers with the global `profiles` row instead,
+  // which is what the specs assert on.
   _setTestGetProfiles(async () => []);
-  _setTestGetRoomyProfileRecord(async () => null);
+  // The Roomy profile record, however, IS stubbed — with the stub PDS's own
+  // repo. A profile saved through the UI is a `space.roomy.user.profile/self`
+  // record in the user's repo, and `getProfile` reads the PDS first because the
+  // record is the authoritative source (a just-confirmed write must be visible
+  // immediately, which a Jetstream-fed index cannot promise). With the PDS
+  // replaced by a constant `null` that branch could never be reached, so a
+  // saved profile would be unobservable and the write path untestable.
+  // Reading the stub repo closes the loop: what the client wrote is what the
+  // handler reads back, with no network involved.
+  _setTestGetRoomyProfileRecord(async (did) => {
+    const record = stubGetRecord(did, PROFILE_COLLECTION, PROFILE_RKEY);
+    if (!record) return null;
+    return record.value as RoomyProfileRecord;
+  });
 
   const appserver = await createAppserver({
     port: APPSERVER_PORT,

@@ -106,6 +106,40 @@ function supportsPush(): boolean {
 }
 
 /**
+ * This page's active service worker registration, or `null` when there is
+ * none.
+ *
+ * `navigator.serviceWorker.ready` is NOT usable for this. Per spec it resolves
+ * only once a registration exists that has an *active* worker, and — unlike
+ * `register()` — it never registers one and never rejects: with no
+ * registration it stays pending forever. SvelteKit registers the service
+ * worker on the `load` event (`kit.serviceWorker.register`), so a caller that
+ * runs before that (or a tab whose registration was never created) would await
+ * a promise that never settles.
+ *
+ * That is not hypothetical: `clearPushSubscription` runs there, and logout
+ * awaits it, so a tab with no registration hangs in `logout()` with the
+ * session intact — the app never reaches the login path. `getRegistrations()`
+ * answers the same question ("is there a registration to use?") and always
+ * settles.
+ */
+export async function activeServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!supportsPush()) return null;
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    // `active` is the running worker; `waiting`/`installing` mean one exists
+    // but is not yet in control, which is still a registration to subscribe
+    // or unsubscribe through.
+    return (
+      registrations.find((reg) => reg.active || reg.waiting || reg.installing) ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The push service host an endpoint points at (`fcm.googleapis.com`), for
  * logs. The endpoint itself is a per-device capability URL — deliverable for
  * the subscription's life, revocable only by re-subscribing — and the browser
@@ -139,7 +173,8 @@ export async function getPushSubscriptionEndpoint(): Promise<string | null> {
     return null;
   }
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await activeServiceWorker();
+    if (!reg) return null;
     const sub = await reg.pushManager.getSubscription();
     return sub?.endpoint ?? null;
   } catch {
@@ -249,9 +284,13 @@ async function subscribeAndRegister(): Promise<PushOutcome> {
   if (!vapidKey) return { status: "no-key" };
 
   try {
-    const reg = await navigator.serviceWorker.ready;
+    // `null` when this tab has no registration (see `activeServiceWorker`).
+    // Subscribing needs one: with none, the push manager has nothing to
+    // subscribe and `ready` would never settle.
+    const reg = await activeServiceWorker();
+    if (!reg) return { status: "failed", message: "no service worker registration" };
     const existing = await reg.pushManager.getSubscription();
-    console.debug("[push] serviceWorker.ready; existing subscription on:", pushServiceHost(existing?.endpoint));
+    console.debug("[push] serviceWorker ready; existing subscription on:", pushServiceHost(existing?.endpoint));
     // Wrap subscribe in a timeout. Some Chromium builds (e.g. ungoogled forks
     // without Google FCM keys, or networks blocking the GCM channel on port
     // 5228) never resolve or reject `pushManager.subscribe()` — it just hangs.
@@ -308,7 +347,11 @@ export async function clearPushSubscription(): Promise<PushOutcome> {
   if (nativePushSupported()) return fromNative(await clearNativeSubscription());
   if (!supportsPush()) return { status: "unsupported" };
   try {
-    const reg = await navigator.serviceWorker.ready;
+    // A tab with no registration has nothing to clear — and awaits nothing,
+    // which is what keeps logout from hanging on a registration that will
+    // never exist (see `activeServiceWorker`).
+    const reg = await activeServiceWorker();
+    if (!reg) return { status: "ok" };
     const subscription = await reg.pushManager.getSubscription();
     if (subscription) {
       // Tell the appserver first (so we stop delivering), then drop the local
@@ -336,8 +379,10 @@ export async function clearPushSubscription(): Promise<PushOutcome> {
  */
 async function postVapidKeyToServiceWorker(vapidKey: string): Promise<void> {
   try {
-    const reg = await navigator.serviceWorker.ready;
-    reg.active?.postMessage({ type: "push-vapid-key", key: vapidKey });
+    // `null` when this tab has no registration; `ready` would never settle and
+    // this call is fire-and-forget from the subscribe path.
+    const reg = await activeServiceWorker();
+    reg?.active?.postMessage({ type: "push-vapid-key", key: vapidKey });
   } catch {
     // SW not ready yet — non-fatal; resubscribe on next login.
   }

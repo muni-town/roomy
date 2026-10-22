@@ -31,10 +31,25 @@ const HAND_OFF_KEY = "roomy:sessionExpiryHandOff";
 /**
  * Refuse every sign-in attempt from this point on. The page already holds a
  * session from the initial load; the next document cannot establish one.
+ *
+ * The refusal is lifted as soon as the hand-off is logged. That is not a
+ * convenience — it is what makes the hand-off observable. `logout()` ends the
+ * session by reloading, and in production the landing document holds no
+ * session and stops at the login prompt. In test mode `PUBLIC_TEST_*` re-runs
+ * the login in *every* document, so a dead credential would make the landing
+ * document fail, spend a fresh budget and hand off again a minute later: the
+ * tab would never settle, and "the app stopped reloading" would have no end
+ * state to assert. Letting the credential work again once the hand-off has
+ * happened leaves the one thing under test — that a spent budget hands off
+ * instead of looping — as the only behaviour on display.
  */
 async function refuseSignIn(page: Page): Promise<void> {
+  let refusing = true;
+  page.on("console", (message) => {
+    if (message.text().includes("handing off")) refusing = false;
+  });
   await page.route(`${PDS_ORIGIN}/**`, async (route) => {
-    if (!route.request().url().includes("createSession")) {
+    if (!refusing || !route.request().url().includes("createSession")) {
       await route.continue();
       return;
     }
@@ -85,6 +100,7 @@ function hasHandedOff(state: RecoveryState | null): boolean {
   return state !== null && state.handOff !== null && state.reloads === 0;
 }
 
+
 test.describe("a dead session with no reloads left", () => {
   test("stops reloading and hands off instead of looping", async ({ page }) => {
     const recovery: string[] = [];
@@ -93,9 +109,9 @@ test.describe("a dead session with no reloads left", () => {
       if (text.includes("[error-recovery]")) recovery.push(text);
     });
 
-    let navigations = 0;
-    page.on("framenavigated", (frame) => {
-      if (frame === page.mainFrame()) navigations += 1;
+    let loads = 0;
+    page.on("load", () => {
+      loads += 1;
     });
 
     await page.goto("/");
@@ -123,10 +139,25 @@ test.describe("a dead session with no reloads left", () => {
     expect(recovery.filter((l) => l.includes("handing off"))).toHaveLength(1);
     expect(recovery.filter((l) => l.includes("not repeating it"))).toEqual([]);
 
-    // And nothing is still pending: the page has stopped moving.
-    const settled = navigations;
+    // And nothing is still reloading. Every document load this tab makes is
+    // accounted for and there is one per cause: the `goto` above, the
+    // deliberate reload that starts the dead session, MAX_RELOADS from the
+    // spent budget, and the hand-off's own — the reload `logout()` ends the
+    // session with. That last one is what the count is polled *to*, so a
+    // client still looping has already overshot it and fails here rather than
+    // passing on a lucky reading. (A document load is what a reload is;
+    // `framenavigated` would also count the SPA's route changes, which say
+    // nothing about looping.)
+    await expect
+      .poll(() => loads, {
+        timeout: 30_000,
+        message: "the hand-off's reload should be the last document load",
+      })
+      .toBe(MAX_RELOADS + 3);
+
+    const settled = loads;
     await page.waitForTimeout(QUIET_MS);
-    expect(navigations).toBe(settled);
+    expect(loads).toBe(settled);
   });
 
   test("signs the user out, so the next document owns a whole budget", async ({
