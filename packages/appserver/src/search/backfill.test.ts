@@ -6,8 +6,12 @@
  * and `search_backfill_cursor`) and never aggregate over the entity→space
  * index, which grows with the whole corpus.
  *
- * The real global schema is applied to an in-memory DB, so the SQL under test
- * is the SQL that runs in production.
+ * The real global and space schemas are applied to in-memory DBs, so the SQL
+ * under test is the SQL that runs in production.
+ *
+ * The sweep's per-space statement is asserted here too: its ORDER BY must be
+ * served by an index, or each visit sorts a whole space's timeline into a temp
+ * B-tree before returning a page.
  *
  * Run: bun test --cwd packages/appserver src/search/backfill.test.ts
  */
@@ -19,13 +23,20 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import type { DbLike } from "../db/types.ts";
-import { nextCursorSpace } from "./backfill.ts";
+import { nextCursorSpace, SWEEP_SQL } from "./backfill.ts";
 
 const GLOBAL_SCHEMA_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
   "db",
   "schema-global.sql",
+);
+
+const SPACE_SCHEMA_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "db",
+  "schema-space.sql",
 );
 
 /** In-memory global DB with the real schema, plus every SQL it is asked to run. */
@@ -98,5 +109,55 @@ describe("nextCursorSpace", () => {
     db.run("delete from search_backfill_space");
 
     expect(await nextCursorSpace(dbLike)).toBeNull();
+  });
+});
+
+describe("sweep statement plan", () => {
+  /**
+   * The sweep re-derives one space's timeline in id order, once per
+   * round-robin visit, on a database worker the whole process shares. The
+   * equality on `stream_id` and the `order by e.id` must come from one index:
+   * without `idx_entities_stream_id_id` SQLite sorts every entity in the space
+   * into a temp B-tree on each visit, which is where a large space's sweep
+   * spends its wall clock.
+   *
+   * Asserted against the statement the sweep actually runs, on the real space
+   * schema, in the condition production plans it under — `analyze` runs per
+   * space on every boot (streams/reMaterialize.ts).
+   */
+  test("walks idx_entities_stream_id_id without a temp B-tree", () => {
+    const db = new Database(":memory:");
+    db.exec("pragma foreign_keys = on");
+    db.exec(readFileSync(SPACE_SCHEMA_PATH, "utf8"));
+
+    const insertEntity = db.prepare(
+      "insert into entities (id, stream_id, room) values (?, ?, ?)",
+    );
+    const insertContent = db.prepare(
+      "insert into comp_content (entity, mime_type, data, last_edit) values (?, 'text/plain', x'', '01EDIT')",
+    );
+    db.transaction(() => {
+      for (let i = 0; i < 5_000; i++) {
+        const id = `01ENTITY${String(i).padStart(6, "0")}`;
+        insertEntity.run(id, "did:web:swept.example", "01ROOM");
+        if (i % 2 === 0) insertContent.run(id);
+      }
+      insertEntity.run("01OTHERENTITY", "did:web:other.example", "01ROOM");
+    })();
+    db.exec("analyze");
+
+    for (const cursor of [null, "01ENTITY000500"]) {
+      const plan = db
+        .query<
+          { detail: string },
+          [string, string | null, string | null, number]
+        >(`explain query plan ${SWEEP_SQL}`)
+        .all("did:web:swept.example", cursor, cursor, 100)
+        .map((r) => r.detail)
+        .join(" | ");
+
+      expect(plan).toContain("SEARCH e USING INDEX idx_entities_stream_id_id");
+      expect(plan).not.toMatch(/TEMP B-TREE/);
+    }
   });
 });

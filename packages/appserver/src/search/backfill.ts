@@ -32,6 +32,23 @@ import { log } from "../log.ts";
 
 /** Max messages to re-index per sweep cycle. */
 const SWEEP_BATCH = 100;
+
+/**
+ * One page of a space's messages after its cursor, in id order. Exported so
+ * the sweep's query plan can be asserted against the statement that actually
+ * runs — `idx_entities_stream_id_id` exists to serve this ordering.
+ */
+export const SWEEP_SQL = `select e.id as id, e.room as room, cc.mime_type as mime_type,
+              cc.data as data, cc.timestamp as timestamp
+         from entities e
+         left join comp_content cc on cc.entity = e.id
+        where e.stream_id = ?
+          and e.room is not null
+          and cc.entity is not null
+          and (? is null or e.id > ?)
+        order by e.id
+        limit ?`;
+
 /** How often to poll for pending spaces while idle. */
 const IDLE_POLL_MS = 60_000;
 /**
@@ -224,18 +241,7 @@ async function sweepOneSpace(
   const cursor = cursorRow?.cursor ?? null;
 
   const rows = await spaceDb
-    .query(
-      `select e.id as id, e.room as room, cc.mime_type as mime_type,
-              cc.data as data, cc.timestamp as timestamp
-         from entities e
-         left join comp_content cc on cc.entity = e.id
-        where e.stream_id = ?
-          and e.room is not null
-          and cc.entity is not null
-          and (? is null or e.id > ?)
-        order by e.id
-        limit ?`,
-    )
+    .query(SWEEP_SQL)
     .all<{
       id: string;
       room: string;

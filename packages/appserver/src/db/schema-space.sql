@@ -53,6 +53,18 @@ create table if not exists entities (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 create index if not exists idx_entities_stream_id on entities (stream_id);
+-- The search-backfill sweep walks one space's messages in id order
+-- (`where stream_id = ? … order by e.id limit ?`), once per round-robin
+-- visit. `id` is the rowid, so a composite key serves the equality and the
+-- ORDER BY together; `idx_entities_stream_id` alone leaves the sort to a temp
+-- B-tree of every entity in the space.
+--
+-- Partial on `room is not null`, the sweep's own filter: the index holds only
+-- the rows the sweep can return, and stays out of the planner's options for
+-- the id-only lookups every per-space read funnels through. Purely
+-- additive/idempotent.
+create index if not exists idx_entities_stream_id_id
+  on entities (stream_id, id) where room is not null;
 create index if not exists idx_entities_sort_idx on entities(sort_idx);
 -- Covering index for threadActivity space scope: filter by stream_id, then
 -- join to comp_room on entity id. Without this, SQLite may scan comp_room
