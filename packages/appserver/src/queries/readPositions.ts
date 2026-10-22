@@ -22,6 +22,7 @@
 import { createAccessMemo, roomAccessMany, type AccessMemo, type RoomAccess } from "../auth/access.ts";
 import { createFederationMemo, federatedRoomAccess } from "../auth/federation.ts";
 import { openSpaceDb, tryOpenGlobalDb } from "../db/db.ts";
+import { newestSortIdxByRoom } from "../db/roomAnchors.ts";
 import type { DbLike } from "../db/types.ts";
 import type { UserDid } from "@roomy-space/sdk";
 import { decodeTime } from "ulidx";
@@ -152,7 +153,7 @@ function toCountRow(q: UnreadQuery): {
  * This is the row's creation point (the materialiser no longer creates them):
  * the first sidebar or board read of a room writes it. The anchor comes from
  * the room's own DB, which is why the caller passes it — the read-state DB
- * holds no `entities` to take a `max(sort_idx)` from.
+ * holds no `entities` to take a key from ({@link newestSortIdxByRoom}).
  *
  * The `space_did` is recorded alongside, so a row written here needs no
  * attribution pass to work out which space its room belongs to.
@@ -166,15 +167,7 @@ export async function ensureReadPositions(
 ): Promise<void> {
   if (roomIds.length === 0) return;
 
-  const anchors = await spaceDb
-    .query(
-      `select room as room_id, max(sort_idx) as newest
-         from entities
-        where room in (select value from json_each(?1))
-        group by room`,
-    )
-    .all<{ room_id: string; newest: string | null }>(JSON.stringify(roomIds));
-  const newestByRoom = new Map(anchors.map((r) => [r.room_id, r.newest]));
+  const newestByRoom = await newestSortIdxByRoom(spaceDb, roomIds);
 
   const now = Date.now();
   // One multi-row INSERT rather than a round-trip per room: the read-state DB

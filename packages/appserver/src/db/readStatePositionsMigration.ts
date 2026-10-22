@@ -31,6 +31,7 @@
 
 import type { DbLike } from "./types.ts";
 import { openSpaceDb } from "./db.ts";
+import { newestSortIdxByRoom } from "./roomAnchors.ts";
 import { log } from "../log.ts";
 
 /** Rows updated per transaction. */
@@ -102,15 +103,7 @@ export async function anchorPlaceholderReadPositions(db: DbLike): Promise<void> 
     // One statement per space: each room's newest key, which is the position a
     // reader with nothing unread holds (`updateSeen` writes it explicitly when
     // handed no watermark).
-    const newest = await spaceDb
-      .query(
-        `select room as room_id, max(sort_idx) as newest
-           from entities
-          where room in (select value from json_each(?1))
-          group by room`,
-      )
-      .all<{ room_id: string; newest: string | null }>(JSON.stringify(roomIds));
-    const newestByRoom = new Map(newest.map((r) => [r.room_id, r.newest]));
+    const newestByRoom = await newestSortIdxByRoom(spaceDb, roomIds);
     for (const [roomId, users] of byRoom) {
       const anchor = newestByRoom.get(roomId);
       if (anchor == null) {
