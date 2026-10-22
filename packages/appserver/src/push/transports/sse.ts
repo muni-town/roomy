@@ -84,6 +84,15 @@ export function closeSseConnection(endpoint: string, reason: string) {
   connectionsByEndpoint.get(endpoint)?.close(reason);
 }
 
+export function hasSseConnection(endpoint: string): boolean {
+  return connectionsByEndpoint.has(endpoint);
+}
+
+/** Total open streams on this replica. */
+export function sseConnectionCount(): number {
+  return connectionsByEndpoint.size;
+}
+
 /**
  * Frame a payload as one SSE event. `body` is `JSON.stringify` output, which
  * escapes line breaks, so it cannot contain the CR or LF that would end the

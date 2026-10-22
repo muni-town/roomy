@@ -92,6 +92,7 @@ import { getVapidPublicKeyHandler } from "./handlers/space.roomy.push.getVapidPu
 import { getPreferencesHandler } from "./handlers/space.roomy.push.getPreferences.ts";
 import { registerSubscriptionHandler } from "./handlers/space.roomy.push.registerSubscription.ts";
 import { unregisterSubscriptionHandler } from "./handlers/space.roomy.push.unregisterSubscription.ts";
+import { pushStreamHandler } from "./handlers/space.roomy.push.stream.ts";
 import { setPreferencesHandler } from "./handlers/space.roomy.push.setPreferences.ts";
 import { getVoiceTokenHandler } from "./handlers/space.roomy.voice.getToken.ts";
 import { getVoiceParticipantsHandler } from "./handlers/space.roomy.voice.getParticipants.ts";
@@ -513,6 +514,9 @@ export function buildRouter(
     .procedure("space.roomy.push.registerSubscription", {
       handler: registerSubscriptionHandler,
       inputSchema: schemas.procedures.registerPushSubscription.Input,
+    })
+    .stream("space.roomy.push.stream", {
+      handler: pushStreamHandler,
     })
     .procedure("space.roomy.push.unregisterSubscription", {
       handler: unregisterSubscriptionHandler,
