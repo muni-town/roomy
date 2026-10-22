@@ -112,8 +112,15 @@ interface PendingEntry {
   type: string;
   /** `performance.now()` when the request was enqueued. */
   startedAt: number;
-  /** The request itself, so a slow-request line can name its SQL and target. */
+  /** The request body as the caller built it, before the route is merged in. */
   req: Omit<WorkerRequest, "id">;
+  /**
+   * The route this link stamped onto the request. Held separately because the
+   * route is merged into the posted message only — `req` is never rewritten —
+   * so the slow-request line has to read the route from here to name the DB
+   * that actually served the request.
+   */
+  route?: DbRoute;
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -206,8 +213,10 @@ export class WorkerLink {
         log.warn("[db-slow] request", {
           worker: this.#name,
           type: entry.type,
-          targetDb: entry.req.targetDb ?? "events",
-          spaceDid: entry.req.spaceDid,
+          // Attribution mirrors the posted message: `{ ...req, ...route }`,
+          // so a route value wins over one carried in the body.
+          targetDb: entry.route?.targetDb ?? entry.req.targetDb ?? "events",
+          spaceDid: entry.route?.spaceDid ?? entry.req.spaceDid,
           sql: entry.req.sql ?? entry.req.steps?.[0]?.sql,
           steps: entry.req.steps?.length,
           // Time the worker spent executing, versus `totalMs` (enqueue to
@@ -268,6 +277,7 @@ export class WorkerLink {
       type: req.type,
       startedAt: performance.now(),
       req,
+      route,
     });
     this.#worker.postMessage({ ...req, ...route, id });
     // Some callers fire-and-forget DB requests (background loops, teardown
