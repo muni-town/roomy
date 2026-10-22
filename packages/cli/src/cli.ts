@@ -34,7 +34,7 @@ program
       for (const s of spaces) {
         const name = s.name ?? "(unnamed)";
         const handle = s.handle ? ` @${s.handle}` : "";
-        console.log(`${s.id}  ${name}${handle}  [${s.isAdmin ? "admin" : "member"}]  ${s.unreadCount} unread`);
+        console.log(`${s.id}  ${name}${handle}  [${s.isAdmin ? "admin" : "member"}]  ${s.hasUnreads ? "unread" : "all read"}`);
       }
     } catch (error) {
       console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);

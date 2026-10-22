@@ -13,7 +13,12 @@ export interface SpaceInfo {
   handle?: string;
   isMember: boolean;
   isAdmin: boolean;
-  unreadCount: number;
+  /**
+   * Whether any room of the space has unread messages for the caller. The
+   * space list carries a level, not a count — the per-room counts come from
+   * the sidebar (`rooms.ts`).
+   */
+  hasUnreads: boolean;
 }
 
 /**
@@ -44,6 +49,6 @@ export async function listSpaces(
     handle: s.handle,
     isMember: s.isMember,
     isAdmin: s.isAdmin,
-    unreadCount: s.unreadCount,
+    hasUnreads: s.hasUnreads,
   }));
 }
