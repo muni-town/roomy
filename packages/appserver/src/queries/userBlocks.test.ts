@@ -359,24 +359,28 @@ describe("the refresh trigger", () => {
   });
 
   test("the stamp expires and the next request refreshes", async () => {
-    process.env.BLOCK_CACHE_TTL_MS = "40";
-    let calls = 0;
-    _setTestFetchBlockRecords(async () => {
-      calls++;
-      return [{ subject: BOB, source: "roomy", createdAt: null }];
-    });
-
-    warmBlockSet(ALICE);
-    await Promise.all(_blockRefreshesInFlight());
-    expect(calls).toBe(1);
-
-    // Inside the window an authenticated request costs nothing.
-    warmBlockSet(ALICE);
-    await Promise.all(_blockRefreshesInFlight());
-    expect(calls).toBe(1);
-
+    // The clock is frozen for the whole test: whether the second request is
+    // inside the window must depend on the TTL alone, never on how long the
+    // DB round-trips between the two requests happened to take.
     vi.useFakeTimers();
     try {
+      process.env.BLOCK_CACHE_TTL_MS = "40";
+      let calls = 0;
+      _setTestFetchBlockRecords(async () => {
+        calls++;
+        return [{ subject: BOB, source: "roomy", createdAt: null }];
+      });
+
+      warmBlockSet(ALICE);
+      await Promise.all(_blockRefreshesInFlight());
+      expect(calls).toBe(1);
+
+      // Inside the window an authenticated request costs nothing.
+      warmBlockSet(ALICE);
+      await Promise.all(_blockRefreshesInFlight());
+      expect(calls).toBe(1);
+
+      // Past it, the next request refetches.
       vi.advanceTimersByTime(60);
       warmBlockSet(ALICE);
       await Promise.all(_blockRefreshesInFlight());
