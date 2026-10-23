@@ -41,6 +41,8 @@ export {
 
 // Event definitions and utilities
 export {
+  attachmentStatements,
+  type AttachmentInput,
   defineEvent,
   sql,
   ensureEntity,

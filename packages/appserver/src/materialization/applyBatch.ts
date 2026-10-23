@@ -18,6 +18,7 @@
 
 import type { DbLike } from "../db/types.ts";
 import type {
+  SqlStatement,
   StreamDid,
   StreamIndex,
   Ulid,
@@ -30,6 +31,12 @@ import { messageSortIdxKey } from "./sortIdx.ts";
 import { applyDeleteSideEffects, collectPendingDeletes } from "./deleteMessage.ts";
 import { isGlobalDbStatement } from "./statementRouting.ts";
 import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
+import {
+  applyMessageSideEffects,
+  messageDeleteRooms,
+  messageEventSteps,
+  planMessageBatch,
+} from "./records/messagePath.ts";
 import {
   isDebugEnabled,
   recordMaterialization,
@@ -134,29 +141,56 @@ export async function applyBatch(
     // event's per-space/global steps succeed.
     const membershipIntents = new Map<string, MembershipIntent>();
 
-    for (const e of chunk) {
-      const bundle = materialize(e.event, { streamId, user: e.user }, e.idx);
+    // Route the chunk: an entry whose every emitted kind is converted applies
+    // through the record rules, and every other entry keeps its event
+    // materialiser. The plans read the rooms the record rules cannot: see
+    // `records/messagePath.ts`.
+    const plans = await planMessageBatch(db, chunk, streamId);
 
-      if (bundle.status === "error") {
-        stats.materializerErrors++;
-        recordFailure(stats, {
-          eventId: bundle.eventId,
-          type: e.event.$type,
-          reason: "materializer",
-          message: bundle.message,
-        });
-        if (isDebugEnabled()) {
-          recordMaterialization({
-            streamDid: streamId,
-            idx: e.idx,
-            eventType: e.event.$type,
-            eventId: bundle.eventId,
-            status: "materializer_error",
-            errorMessage: bundle.message,
-            bundle,
+    for (let i = 0; i < chunk.length; i++) {
+      const e = chunk[i]!;
+      const routed = plans[i] ?? null;
+      const recordSteps = routed
+        ? messageEventSteps(routed, { streamId, isBackfill: opts.isBackfill })
+        : null;
+
+      // One entry's statements: the record rules' when it is routed, else the
+      // event materialiser's.
+      let statements: SqlStatement[];
+      let bundle: StatementBundleSuccess | undefined;
+      if (recordSteps) {
+        statements = recordSteps.statements;
+      } else {
+        const materialised = materialize(
+          e.event,
+          { streamId, user: e.user },
+          e.idx,
+        );
+
+        if (materialised.status === "error") {
+          stats.materializerErrors++;
+          recordFailure(stats, {
+            eventId: materialised.eventId,
+            type: e.event.$type,
+            reason: "materializer",
+            message: materialised.message,
           });
+          if (isDebugEnabled()) {
+            recordMaterialization({
+              streamDid: streamId,
+              idx: e.idx,
+              eventType: e.event.$type,
+              eventId: materialised.eventId,
+              status: "materializer_error",
+              errorMessage: materialised.message,
+              bundle: materialised,
+            });
+          }
+          continue;
         }
-        continue;
+
+        bundle = materialised;
+        statements = materialised.statements;
       }
 
       // Per-event savepoint for error isolation within the chunk
@@ -171,7 +205,7 @@ export async function applyBatch(
         if (intent) membershipIntents.set(savepoint, intent);
       }
       chunkSteps.push({ type: "exec", sql: `savepoint ${savepoint}`, derived: "none" });
-      for (const stmt of bundle.statements) {
+      for (const stmt of statements) {
         const params = stmt.params;
         chunkSteps.push({
           type: "run",
@@ -205,88 +239,21 @@ export async function applyBatch(
         }
       }
 
-      // sort_idx: inline the UPDATE (no SELECT needed).
-      //
-      // The key is the message's canonical ordering time plus this event's
-      // log position. The time comes from `receivedAt` — the instant the
-      // server accepted the event, recorded in the log at append — not from
-      // the sender-minted ULID, which a skewed device clock would use to bury
-      // a message mid-history for every other client. Reading it from the
-      // event's log row rather than the wall clock is what makes a rebuild
-      // reproduce the same key live materialisation wrote. See `sortIdx.ts`.
-      if (e.event.$type === "space.roomy.message.createMessage.v0") {
-        const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt, e.createdAt);
-        chunkSteps.push({
-          type: "run",
-          sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
-          params: [sortIdx, e.event.id],
-          derived: "space",
-        });
-      }
-
-      // forwardMessages sort_idx: the forward-reference entity sorts by the
-      // forward event's OWN time (its ULID), so a forward appears at the top
-      // of the destination room's timeline, matching the forward-as-embed
-      // representation (createMessage + forward attachment).
-      // Copying the original's sort_idx instead would bury a forward of an old
-      // message deep in history, outside the first getMessages page (the
-      // client's room query returns the newest `limit` rows), so the forward
-      // would flash in via the WS diff and vanish on the next refetch.
-      if (e.event.$type === "space.roomy.message.forwardMessages.v0") {
-        const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt, e.createdAt);
-        chunkSteps.push({
-          type: "run",
-          sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
-          params: [sortIdx, e.event.id],
-          derived: "space",
-        });
-      }
-
-      // Denormalised read projection: maintain `room_access` for the
-      // rooms this event can have changed, INSIDE the same per-event
-      // transaction as the event's own statements. Appending one step here
-      // costs no extra worker round-trip (the transaction is already sent) and
-      // makes the projection atomic with the write that dirtied it — a
-      // separate post-loop transaction could be skipped by the same failure
-      // mode that lets the cursor advance past a failed chunk.
-      //
-      // Live events UPSERT; replay INVALIDATES (deletes). Population during
-      // rematerialisation is explicitly out of scope, but a replayed structural
-      // change must not leave a stale row behind, and the read path warms a
-      // missing row from the replayed data on first access. See
-      // queries/roomAccessProjection.ts.
-      const projectionStep = maintainRoomAccess(
-        e.event as unknown as Record<string, unknown>,
-        streamId,
-        opts.isBackfill,
+      // Projection maintenance for this entry: the record path's activity step,
+      // or the event path's ordering key and read projections, all inside the
+      // same per-event transaction as the entry's own statements.
+      chunkSteps.push(
+        ...(recordSteps
+          ? recordSteps.activity.map(
+              (step): ChunkStep => ({
+                type: "run",
+                sql: step.sql,
+                params: step.params,
+                derived: "space",
+              }),
+            )
+          : eventProjectionSteps(e, streamId, opts.isBackfill)),
       );
-      if (projectionStep) {
-        chunkSteps.push({
-          type: "run",
-          sql: projectionStep.sql,
-          params: projectionStep.params,
-          derived: "space",
-        });
-      }
-
-      // Denormalised read projection: maintain `room_activity`,
-      // the per-room latest-message/recent-authors summary the board reads.
-      // Same placement and same rules as `room_access` above — one statement
-      // inside the per-event transaction, upsert on live events and invalidate
-      // on replay. The delete/move paths rebuild the rooms they invalidate in
-      // the chunk's side-effect stage (see materialization/roomDerivedState.ts).
-      const activityStep = maintainRoomActivity(
-        e.event as unknown as Record<string, unknown>,
-        opts.isBackfill,
-      );
-      if (activityStep) {
-        chunkSteps.push({
-          type: "run",
-          sql: activityStep.sql,
-          params: activityStep.params,
-          derived: "space",
-        });
-      }
       chunkSteps.push({ type: "exec", sql: `release ${savepoint}`, derived: "none" });
 
       stats.applied++;
@@ -298,7 +265,16 @@ export async function applyBatch(
           eventType: e.event.$type,
           eventId: e.event.id,
           status: "applied",
-          bundle,
+          // A routed entry has no materialiser bundle; the record's statements
+          // stand in, so the debug log still counts what was applied.
+          bundle: bundle ?? {
+            status: "success",
+            event: e.event,
+            eventIdx: e.idx,
+            user: e.user,
+            statements,
+            dependsOn: [],
+          },
         });
       }
 
@@ -323,8 +299,14 @@ export async function applyBatch(
     }
 
     // Capture the chunk's delete targets (the rooms whose windows must be
-    // rebuilt) before the chunk's SQL runs.
-    const pendingDeletes = collectPendingDeletes(chunk);
+    // rebuilt) before the chunk's SQL runs. A record-routed delete names no
+    // room, so the planner read the room its message was in.
+    const pendingDeletes = collectPendingDeletes(
+      chunk.filter((_e, i) => (plans[i] ?? null) === null),
+    );
+    for (const plan of plans) {
+      if (plan) for (const roomId of messageDeleteRooms(plan)) pendingDeletes.push({ roomId });
+    }
 
     // Compute the max idx for this chunk — used to advance the cursor after
     // the chunk is processed (whether it succeeded or failed).
@@ -488,11 +470,32 @@ export async function applyBatch(
       }
     }
 
-    // Post-transaction side-effects for this chunk: activity_item upsert and
-    // link detection. These need JS logic so they can't be inlined as SQL
-    // steps. Running them per-chunk keeps them interleaved with progress
-    // logging rather than causing a long freeze after the last progress line.
-    await applyChunkSideEffects(db, chunk, streamId, opts.isBackfill, stats.detectedLinks, globalDb);
+    // Post-transaction side-effects for this chunk: activity_item upsert, link
+    // detection, search indexing and read-state. These need JS logic so they
+    // can't be inlined as SQL steps. They run per entry, in log order, across
+    // both paths: the read-state writes are last-write-wins per (user, room),
+    // so splitting the chunk into two passes would reorder them.
+    for (let i = 0; i < chunk.length; i++) {
+      const plan = plans[i] ?? null;
+      if (plan) {
+        await applyMessageSideEffects(db, plan, {
+          streamId,
+          isBackfill: opts.isBackfill,
+          detectedLinks: stats.detectedLinks,
+          globalDb,
+          readStateDb: openReadStateDb(),
+        });
+      } else {
+        await applyEventSideEffects(
+          db,
+          chunk[i]!,
+          streamId,
+          opts.isBackfill,
+          stats.detectedLinks,
+          globalDb,
+        );
+      }
+    }
 
     // Refresh the global `space_stats` aggregate when this chunk contained an
     // event that can change the space's member/admin edges. One extra worker
@@ -549,129 +552,208 @@ export async function applyBatch(
 }
 
 /**
- * Post-transaction side-effects for a chunk: activity_item upsert and link
- * detection. These need JS logic (JSON array manipulation, URL extraction)
- * so they can't be inlined as SQL steps. Running them per-chunk keeps them
- * interleaved with progress logging rather than causing a long freeze after
- * the last progress line.
+ * The projection-maintenance steps one event-path entry appends after its
+ * statements, all inside the same per-event transaction.
+ *
+ * `sort_idx` is inlined rather than read back: the key is the message's
+ * canonical ordering time plus this event's log position, and the time comes
+ * from `receivedAt` — the instant the server accepted the event, recorded in
+ * the log at append — not from the sender-minted ULID, which a skewed device
+ * clock would use to bury a message mid-history for every other client.
+ * Reading it from the event's log row rather than the wall clock is what makes
+ * a rebuild reproduce the same key live materialisation wrote (see
+ * `sortIdx.ts`). A forward reference sorts by the forward event's own time, so
+ * it appears at the top of the destination room's timeline rather than at the
+ * original's send time.
+ *
+ * `room_access` and `room_activity` are the denormalised read projections.
+ * Live events upsert them; replay invalidates them, so a replayed structural
+ * change cannot leave a stale row behind and the read path warms the row from
+ * the replayed data on first access. The delete and move paths rebuild the
+ * rooms whose windows they invalidate in the chunk's side-effect stage (see
+ * `roomDerivedState.ts`).
  */
-async function applyChunkSideEffects(
+function eventProjectionSteps(
+  e: LoggedEvent,
+  streamId: StreamDid,
+  isBackfill: boolean,
+): ChunkStep[] {
+  const steps: ChunkStep[] = [];
+
+  if (e.event.$type === "space.roomy.message.createMessage.v0") {
+    const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt, e.createdAt);
+    steps.push({
+      type: "run",
+      sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
+      params: [sortIdx, e.event.id],
+      derived: "space",
+    });
+  }
+
+  if (e.event.$type === "space.roomy.message.forwardMessages.v0") {
+    const sortIdx = messageSortIdxKey(e.event, e.idx, e.receivedAt, e.createdAt);
+    steps.push({
+      type: "run",
+      sql: "update entities set sort_idx = ? where id = ? and sort_idx is null",
+      params: [sortIdx, e.event.id],
+      derived: "space",
+    });
+  }
+
+  const projectionStep = maintainRoomAccess(
+    e.event as unknown as Record<string, unknown>,
+    streamId,
+    isBackfill,
+  );
+  if (projectionStep) {
+    steps.push({
+      type: "run",
+      sql: projectionStep.sql,
+      params: projectionStep.params,
+      derived: "space",
+    });
+  }
+
+  const activityStep = maintainRoomActivity(
+    e.event as unknown as Record<string, unknown>,
+    isBackfill,
+  );
+  if (activityStep) {
+    steps.push({
+      type: "run",
+      sql: activityStep.sql,
+      params: activityStep.params,
+      derived: "space",
+    });
+  }
+
+  return steps;
+}
+
+/**
+ * Post-transaction side-effects for one event-path entry: activity_item upsert
+ * and link detection. These need JS logic (JSON array manipulation, URL
+ * extraction) so they can't be inlined as SQL steps.
+ *
+ * The message branches here serve the paths that still read events — the
+ * `_withEventPath` comparison a test runs, and any kind that has not converted.
+ * A converted kind's entry never reaches them.
+ */
+async function applyEventSideEffects(
   db: DbLike,
-  chunk: LoggedEvent[],
+  e: LoggedEvent,
   streamId: StreamDid,
   isBackfill: boolean,
   detectedLinks: string[],
   globalDb?: DbLike,
 ): Promise<void> {
-  for (const e of chunk) {
-    if (e.event.$type === "space.roomy.message.createMessage.v0" && (e.event as Record<string, unknown>).room) {
-      const bundle: StatementBundleSuccess = {
-        status: "success",
-        event: e.event,
-        eventIdx: e.idx,
-        user: e.user,
-        statements: [],
-        dependsOn: [],
-      };
-      await applyBundle(
-        db,
-        bundle,
-        { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt, createdAt: e.createdAt },
-        globalDb,
-        openReadStateDb(),
-      );
+  if (e.event.$type === "space.roomy.message.createMessage.v0" && (e.event as Record<string, unknown>).room) {
+    const bundle: StatementBundleSuccess = {
+      status: "success",
+      event: e.event,
+      eventIdx: e.idx,
+      user: e.user,
+      statements: [],
+      dependsOn: [],
+    };
+    await applyBundle(
+      db,
+      bundle,
+      { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt, createdAt: e.createdAt },
+      globalDb,
+      openReadStateDb(),
+    );
 
-      // Search indexing: enqueue the message for the out-of-band
-      // Qdrant indexer — the worker re-reads the materialised rows, so no
-      // synchronous search work happens here.
-      enqueueIndexMessage(streamId, e.event.id);
+    // Search indexing: enqueue the message for the out-of-band
+    // Qdrant indexer — the worker re-reads the materialised rows, so no
+    // synchronous search work happens here.
+    enqueueIndexMessage(streamId, e.event.id);
 
-      const body = (e.event as Record<string, unknown>).body as
-        | { mimeType?: string; data?: { buf: Uint8Array } }
-        | undefined;
-      if (body?.data?.buf) {
-        const mime = body.mimeType ?? "text/markdown";
-        const buf = Buffer.from(body.data.buf);
-        let detected: string[];
-        if (mime === RICHTEXT_MIME) {
-          // New format: URLs come from `#link` facet URIs, not regex scanning.
-          const blocks = decodeRichTextBody(mime, buf);
-          detected = await detectAndStoreLinksFromUrls(
-            db,
-            e.event.id,
-            blocks ? extractFacetUrls(blocks) : [],
+    const body = (e.event as Record<string, unknown>).body as
+      | { mimeType?: string; data?: { buf: Uint8Array } }
+      | undefined;
+    if (body?.data?.buf) {
+      const mime = body.mimeType ?? "text/markdown";
+      const buf = Buffer.from(body.data.buf);
+      let detected: string[];
+      if (mime === RICHTEXT_MIME) {
+        // New format: URLs come from `#link` facet URIs, not regex scanning.
+        const blocks = decodeRichTextBody(mime, buf);
+        detected = await detectAndStoreLinksFromUrls(
+          db,
+          e.event.id,
+          blocks ? extractFacetUrls(blocks) : [],
+        );
+      } else {
+        // Legacy text/markdown bodies keep the regex extraction path.
+        const content = decodeContent(mime, buf);
+        detected = await detectAndStoreLinks(db, e.event.id, content);
+      }
+      if (detected.length > 0) detectedLinks.push(...detected);
+      if (globalDb && detected.length > 0) {
+        // Record the link entities in the global entity→space index so
+        // they resolve to this space (they carry an empty stream_id in
+        // the per-space DB).
+        for (const url of detected) {
+          await globalDb.run(
+            `insert or ignore into entity_space (entity_id, space_did) values (?, ?)`,
+            [url, streamId],
           );
-        } else {
-          // Legacy text/markdown bodies keep the regex extraction path.
-          const content = decodeContent(mime, buf);
-          detected = await detectAndStoreLinks(db, e.event.id, content);
         }
-        if (detected.length > 0) detectedLinks.push(...detected);
-        if (globalDb && detected.length > 0) {
-          // Record the link entities in the global entity→space index so
-          // they resolve to this space (they carry an empty stream_id in
-          // the per-space DB).
-          for (const url of detected) {
-            await globalDb.run(
-              `insert or ignore into entity_space (entity_id, space_did) values (?, ?)`,
-              [url, streamId],
-            );
-          }
-          // Dual-write the global pending-links index so the centralized
-          // embed sweeper can find this work without iterating every
-          // per-space DB. `insert or ignore` keeps the row idempotent across
-          // re-materialisation.
-          for (const url of detected) {
-            await globalDb.run(
-              `insert or ignore into pending_links (space_did, message_id, url, created_at)
+        // Dual-write the global pending-links index so the centralized
+        // embed sweeper can find this work without iterating every
+        // per-space DB. `insert or ignore` keeps the row idempotent across
+        // re-materialisation.
+        for (const url of detected) {
+          await globalDb.run(
+            `insert or ignore into pending_links (space_did, message_id, url, created_at)
                values (?, ?, ?, ?)`,
-              [streamId, e.event.id, url, Date.now()],
-            );
-          }
+            [streamId, e.event.id, url, Date.now()],
+          );
         }
       }
-    } else if (e.event.$type === "space.roomy.message.editMessage.v0") {
-      // Re-index the edited message: the chunk's statements updated
-      // comp_content; the search worker re-reads the updated plaintext.
-      const messageId = (e.event as Record<string, unknown>).messageId as string | undefined;
-      if (messageId) {
-        enqueueIndexMessage(streamId, messageId);
-      }
-    } else if (e.event.$type === "space.roomy.message.deleteMessage.v0") {
-      // Drop the deleted message from the search index.
-      const messageId = (e.event as Record<string, unknown>).messageId as string | undefined;
-      if (messageId) {
-        enqueueDeleteMessage(messageId);
-      }
-    } else if (
-      e.event.$type === "space.roomy.message.moveMessages.v0" &&
-      "toRoomId" in e.event
-    ) {
-      // The per-event statements above only rewrote `entities.room`. The
-      // derived state (sort_idx, activity windows, read-state) is applied by
-      // `applyBundle`'s move branch — the same route createMessage takes
-      // through this function, with an empty statement list because the event
-      // SQL has already been applied. Single call site: routing moves through
-      // applyBundle here (rather than calling the helper directly) keeps ONE
-      // owner of the side effects, so they can never be applied twice.
-      const bundle: StatementBundleSuccess = {
-        status: "success",
-        event: e.event,
-        eventIdx: e.idx,
-        user: e.user,
-        statements: [],
-        dependsOn: [],
-      };
-      await applyBundle(db, bundle, { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt, createdAt: e.createdAt }, globalDb, openReadStateDb());
+    }
+  } else if (e.event.$type === "space.roomy.message.editMessage.v0") {
+    // Re-index the edited message: the chunk's statements updated
+    // comp_content; the search worker re-reads the updated plaintext.
+    const messageId = (e.event as Record<string, unknown>).messageId as string | undefined;
+    if (messageId) {
+      enqueueIndexMessage(streamId, messageId);
+    }
+  } else if (e.event.$type === "space.roomy.message.deleteMessage.v0") {
+    // Drop the deleted message from the search index.
+    const messageId = (e.event as Record<string, unknown>).messageId as string | undefined;
+    if (messageId) {
+      enqueueDeleteMessage(messageId);
+    }
+  } else if (
+    e.event.$type === "space.roomy.message.moveMessages.v0" &&
+    "toRoomId" in e.event
+  ) {
+    // The per-event statements above only rewrote `entities.room`. The
+    // derived state (sort_idx, activity windows, read-state) is applied by
+    // `applyBundle`'s move branch — the same route createMessage takes
+    // through this function, with an empty statement list because the event
+    // SQL has already been applied. Single call site: routing moves through
+    // applyBundle here (rather than calling the helper directly) keeps ONE
+    // owner of the side effects, so they can never be applied twice.
+    const bundle: StatementBundleSuccess = {
+      status: "success",
+      event: e.event,
+      eventIdx: e.idx,
+      user: e.user,
+      statements: [],
+      dependsOn: [],
+    };
+    await applyBundle(db, bundle, { isBackfill, streamId, idx: e.idx, receivedAt: e.receivedAt, createdAt: e.createdAt }, globalDb, openReadStateDb());
 
-      // Re-index every moved message: the search worker reads the message's
-      // `room` from the per-space DB, and Qdrant filters on it, so a moved
-      // message must be re-upserted to leave the source room's results.
-      const messageIds = (e.event as Record<string, unknown>).messageIds;
-      if (Array.isArray(messageIds)) {
-        for (const id of messageIds) {
-          if (typeof id === "string") enqueueIndexMessage(streamId, id);
-        }
+    // Re-index every moved message: the search worker reads the message's
+    // `room` from the per-space DB, and Qdrant filters on it, so a moved
+    // message must be re-upserted to leave the source room's results.
+    const messageIds = (e.event as Record<string, unknown>).messageIds;
+    if (Array.isArray(messageIds)) {
+      for (const id of messageIds) {
+        if (typeof id === "string") enqueueIndexMessage(streamId, id);
       }
     }
   }

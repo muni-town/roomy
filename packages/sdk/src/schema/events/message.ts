@@ -9,6 +9,7 @@ import {
   MessageExtensionUpdateMap,
 } from "../extensions/message";
 import { defineEvent, ensureEntity } from "./utils";
+import { attachmentStatements } from "./attachments";
 import { sql } from "../../utils";
 import { decodeTime } from "ulidx";
 
@@ -73,108 +74,14 @@ export const CreateMessage = defineEvent(
       `);
     }
 
-    for (const att of event.extensions["space.roomy.extension.attachments.v0"]
-      ?.attachments || []) {
-      if (att.$type == "space.roomy.attachment.reply.v0") {
-        statements.push(sql`
-          insert or ignore into edges (head, tail, label)
-          values (
-            ${event.id},
-            ${att.target},
-            'reply'
-          )
-        `);
-      } else if (att.$type == "space.roomy.attachment.comment.v0") {
-        statements.push(
-          sql`
-          insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
-          values (
-            ${event.id},
-            ${att.version},
-            ${att.snippet || ""},
-            ${att.from},
-            ${att.to},
-            (unixepoch() * 1000)
-          )`,
-        );
-      } else if (att.$type == "space.roomy.attachment.image.v0") {
-        const uriWithUlidQuery = att.uri + "?message=" + event.id;
-        statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.id),
-          sql`
-            insert or replace into comp_embed_image (entity, mime_type, alt, width, height, blurhash, size)
-            values (
-              ${uriWithUlidQuery},
-              ${att.mimeType},
-              ${att.alt},
-              ${att.width ? Number(att.width) : null},
-              ${att.height ? Number(att.height) : null},
-              ${att.blurhash || null},
-              ${att.size ? Number(att.size) : null}
-            )
-        `,
-        );
-      } else if (att.$type == "space.roomy.attachment.video.v0") {
-        const uriWithUlidQuery = att.uri + "?message=" + event.id;
-        statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.id),
-          sql`
-            insert or replace into comp_embed_video (entity, mime_type, alt, width, height, length, blurhash, size)
-            values (
-              ${uriWithUlidQuery},
-              ${att.mimeType},
-              ${att.alt},
-              ${att.width ? Number(att.width) : null},
-              ${att.height ? Number(att.height) : null},
-              ${att.length ? Number(att.length) : null},
-              ${att.blurhash || null},
-              ${att.size ? Number(att.size) : null}
-            )
-        `,
-        );
-      } else if (att.$type == "space.roomy.attachment.file.v0") {
-        const uriWithUlidQuery = att.uri + "?message=" + event.id;
-        statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.id),
-          sql`
-            insert or replace into comp_embed_file (entity, mime_type, name, size)
-            values (
-              ${uriWithUlidQuery},
-              ${att.mimeType},
-              ${att.name || null},
-              ${att.size ? Number(att.size) : null}
-            )
-        `,
-        );
-      } else if (att.$type == "space.roomy.attachment.link.v0") {
-        const uriWithUlidQuery = att.uri + "?message=" + event.id;
-        statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.id),
-          sql`
-          insert into comp_embed_link (entity, show_preview)
-          values (
-            ${uriWithUlidQuery},
-            ${att.showPreview ? 1 : 0}
-          )
-        `,
-        );
-      } else if (att.$type == "space.roomy.attachment.forward.v0") {
-        // A forward is a real message (with its own body, if any) that embeds
-        // the original via a `forward` edge. Guard with `where exists` so a
-        // missing original (deleted before the forward, not-yet-materialised,
-        // or cross-space) does not trip the `edges.tail` foreign key and fail
-        // the entire event — the forward message is still created, just
-        // without the edge. The `forwardMessages` event uses the same guard.
-        statements.push(sql`
-          insert or ignore into edges (head, tail, label)
-          select
-            ${event.id},
-            ${att.target},
-            'forward'
-          where exists (select 1 from entities where id = ${att.target})
-        `);
-      }
-    }
+    statements.push(
+      ...attachmentStatements(
+        streamId,
+        event.id,
+        event.extensions["space.roomy.extension.attachments.v0"]?.attachments ||
+          [],
+      ),
+    );
 
     return statements;
   },
@@ -302,95 +209,21 @@ export const EditMessage = defineEvent(
 
         // If new attachments provided (not null/undefined), insert them
         if (attachmentsExt != null) {
-          for (const att of attachments) {
-            if (att.$type == "space.roomy.attachment.reply.v0") {
-            statements.push(sql`
-              insert or ignore into edges (head, tail, label)
-              values (
-                ${event.messageId},
-                ${att.target},
-                'reply'
-              )
-            `);
-          } else if (att.$type == "space.roomy.attachment.comment.v0") {
-            statements.push(
-              sql`
-              insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
-              values (
-                ${event.messageId},
-                ${att.version},
-                ${att.snippet || ""},
-                ${att.from},
-                ${att.to},
-                (unixepoch() * 1000)
-              )`,
-            );
-          } else if (att.$type == "space.roomy.attachment.image.v0") {
-            const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
-            statements.push(
-              ensureEntity(streamId, uriWithUlidQuery, event.messageId),
-              sql`
-                insert or replace into comp_embed_image (entity, mime_type, alt, width, height, blurhash, size)
-                values (
-                  ${uriWithUlidQuery},
-                  ${att.mimeType},
-                  ${att.alt},
-                  ${att.width ? Number(att.width) : null},
-                  ${att.height ? Number(att.height) : null},
-                  ${att.blurhash || null},
-                  ${att.size ? Number(att.size) : null}
-                )
-            `,
-            );
-          } else if (att.$type == "space.roomy.attachment.video.v0") {
-            const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
-            statements.push(
-              ensureEntity(streamId, uriWithUlidQuery, event.messageId),
-              sql`
-                insert or replace into comp_embed_video (entity, mime_type, alt, width, height, length, blurhash, size)
-                values (
-                  ${uriWithUlidQuery},
-                  ${att.mimeType},
-                  ${att.alt},
-                  ${att.width ? Number(att.width) : null},
-                  ${att.height ? Number(att.height) : null},
-                  ${att.length ? Number(att.length) : null},
-                  ${att.blurhash || null},
-                  ${att.size ? Number(att.size) : null}
-                )
-            `,
-            );
-          } else if (att.$type == "space.roomy.attachment.file.v0") {
-            const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
-            statements.push(
-              ensureEntity(streamId, uriWithUlidQuery, event.messageId),
-              sql`
-                insert or replace into comp_embed_file (entity, mime_type, name, size)
-                values (
-                  ${uriWithUlidQuery},
-                  ${att.mimeType},
-                  ${att.name || null},
-                  ${att.size ? Number(att.size) : null}
-                )
-            `,
-            );
-          } else if (att.$type == "space.roomy.attachment.link.v0") {
-            const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
-            statements.push(
-              ensureEntity(streamId, uriWithUlidQuery, event.messageId),
-              sql`
-              insert into comp_embed_link (entity, show_preview)
-              values (
-                ${uriWithUlidQuery},
-                ${att.showPreview ? 1 : 0}
-              )
-            `,
-            );
-          }
+          // An edit never writes a forward edge: the edge belongs to the
+          // message's original send, and the cleanup above does not remove it,
+          // so re-inserting it here would only ever re-add what is there.
+          statements.push(
+            ...attachmentStatements(
+              streamId,
+              event.messageId,
+              attachments.filter(
+                (a) => a.$type !== "space.roomy.attachment.forward.v0",
+              ),
+            ),
+          );
         }
       }
       }
-    }
 
     return statements;
   },

@@ -84,8 +84,11 @@ describe("room-scoped endpoints resolve a materialized room", () => {
     ).json();
     const edited = after.messages.find((m: { id: string }) => m.id === messageId);
     expect(edited.content).toBe("edited text");
-    // The marker is the edit EVENT id, so a client can also correlate it.
-    expect(edited.lastEdit).toBe(editEventId);
+    // The marker identifies the write that replaced the content, so it is
+    // present and is not the message's own id — the pair of facts the read
+    // path uses to tell an edited message from an untouched one.
+    expect(typeof edited.lastEdit).toBe("string");
+    expect(edited.lastEdit).not.toBe(messageId);
   });
 
   test("getThreads returns 200 for a channel", async () => {

@@ -218,12 +218,12 @@ const Schemas = scope({
     "blocked?": "boolean",
     timestamp: "string",
     /**
-     * Present only when the message has been edited: the ULID of the most
-     * recent edit event. Absent for a message that has never been edited
-     * (the materialiser stamps the creating event's own id into
-     * `comp_content.last_edit`, so an unedited message is `last_edit ==
-     * id`). The value is the edit EVENT id, not a timestamp — clients only
-     * need its presence to render an "edited" affordance.
+     * Present only when the message has been edited: an identifier for the
+     * write that last set its content. Absent for a message that has never
+     * been edited (`comp_content.last_edit` holds the message's own id from
+     * its creation until an edit replaces it, so an unedited message is
+     * `last_edit == id`). Clients only need its presence to render an
+     * "edited" affordance; the value is not a timestamp.
      */
     "lastEdit?": "string",
     /**

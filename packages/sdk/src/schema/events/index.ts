@@ -6,6 +6,7 @@ export { fromBytes } from "@atcute/cbor";
 
 export { eventRegistry, getDependsOn, getMaterializer } from "./registry";
 export { defineEvent, ensureEntity, edgePayload } from "./utils";
+export { attachmentStatements, type AttachmentInput } from "./attachments";
 
 // Export event variants
 export { MessageEventVariant } from "./message";

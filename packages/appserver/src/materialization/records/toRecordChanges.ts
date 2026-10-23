@@ -59,6 +59,7 @@ import { fromBytes } from "@atcute/cbor";
 import { decodeTime } from "ulidx";
 
 import type { LoggedEvent } from "../types.ts";
+import { log } from "../../log.ts";
 import type { RecordKind, SidebarCategory } from "./recordKinds.ts";
 import {
   type OrderStamp,
@@ -148,6 +149,91 @@ export const RECORD_KINDS_FOR_EVENT: Record<EventType, readonly RecordKind[]> = 
   "space.roomy.voice.callLeft.v0": ["voiceCall"],
   "space.roomy.voice.callEnded.v0": ["voiceCall"],
 };
+
+/**
+ * The record kinds the worker applies through the projection rules instead of
+ * the event materialisers. A kind joins this set once its rules cover every op
+ * the log produces for it.
+ */
+export const CONVERTED_KINDS: ReadonlySet<RecordKind> = new Set<RecordKind>([
+  "message",
+]);
+
+/** The set the record path routes by; `_withEventPath` swaps it for a test. */
+let routedKinds: ReadonlySet<RecordKind> = CONVERTED_KINDS;
+
+/**
+ * The changes `logged` produces when it is applied as a record, or `null` when
+ * it stays on the event path.
+ *
+ * The decision is "every emitted kind is converted", not "the event mentions a
+ * converted kind". An event that also emits an unconverted kind keeps its whole
+ * change set on the event path: `createRoomLink` writes a `room` and a
+ * `message`, so routing it by the message alone would apply that message twice
+ * — once by the rule, once by the materialiser. A kind converts by joining
+ * {@link CONVERTED_KINDS}, and an event straddling two kinds converts when the
+ * last of them does.
+ *
+ * An event that emits nothing has nothing to convert, so it stays on the event
+ * path: `reorderMessage` maps to no record and its materialiser still rewrites
+ * `sort_idx` from its neighbours.
+ *
+ * {@link RECORD_KINDS_FOR_EVENT} answers first, so the adapter runs only for an
+ * event that could convert: deriving a change stamps it, which no other event
+ * needs. Its answer is then what the rules act on, and the adapter's own kinds
+ * must agree with the table — the table is tested against them.
+ *
+ * An entry the adapter cannot describe — a log row whose id is not the ULID
+ * its kind requires, say — is left to the event path rather than thrown from
+ * here: `materialize` catches a materialiser failure and records it, so one
+ * unreadable row costs its own event and not the rest of the batch.
+ */
+export function convertedChanges(
+  logged: LoggedEvent,
+  streamId: StreamDid,
+): RecordChange[] | null {
+  // The declared mapping answers whether the adapter needs to run at all: an
+  // event with no record, or with an unconverted kind among its own, will not
+  // use the changes, and deriving them stamps every one of them.
+  const declared = RECORD_KINDS_FOR_EVENT[logged.event.$type] as
+    | readonly RecordKind[]
+    | undefined;
+  if (declared === undefined || declared.length === 0) return null;
+  if (!declared.every((kind) => routedKinds.has(kind))) return null;
+
+  let changes: RecordChange[];
+  try {
+    changes = toRecordChanges(logged, streamId);
+  } catch (err) {
+    // The materialiser reports this event's failure where the batch can count
+    // it, which is what keeps one bad row from failing the whole batch.
+    log.warn(
+      `[materialize] no record for event ${logged.event.id} (${logged.event.$type}): ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return null;
+  }
+
+  return changes.every((change) => routedKinds.has(change.kind))
+    ? changes
+    : null;
+}
+
+/**
+ * Run `run` with every kind on the event path, so a test can derive one log
+ * through the event materialisers and compare the two projections. Test support
+ * only; no production caller.
+ */
+export async function _withEventPath<T>(run: () => Promise<T>): Promise<T> {
+  const outer = routedKinds;
+  routedKinds = new Set<RecordKind>();
+  try {
+    return await run();
+  } finally {
+    routedKinds = outer;
+  }
+}
 
 /**
  * Event types that map to no record, each for its own reason. A type absent from

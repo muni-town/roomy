@@ -272,13 +272,13 @@ export interface MessageDto {
   system?: boolean;
   timestamp: string;
   /**
-   * Present only when the message has been edited: the ULID of the most
-   * recent edit event (from `comp_content.last_edit`). Absent for a message
-   * that has never been edited — the materialiser stamps `last_edit` with the
-   * creating event's own id in that case, so both cases are told apart by
+   * Present only when the message has been edited: an identifier for the write
+   * that last set its content (from `comp_content.last_edit`). Absent for a
+   * message that has never been edited — the projection stamps `last_edit`
+   * with the message's own id in that case, so both cases are told apart by
    * comparing `last_edit` against the message id rather than by exposing a
-   * field that is always set. The value is the edit EVENT id, not a
-   * timestamp; clients render an "edited" affordance when it is present.
+   * field that is always set. Clients render an "edited" affordance when it is
+   * present; the value is not a timestamp.
    */
   lastEdit?: string;
   /**
@@ -883,13 +883,12 @@ export async function selectMessages(
           : r.forward_target != null
             ? new Date(decodeTime(r.id)).toISOString()
             : "",
-      // `last_edit` holds the id of the event that last wrote this content:
-      // the creating event's own id on insert, the edit event's id on every
-      // edit (see the SDK materialiser's CreateMessage / EditMessage). So
-      // "edited" is exactly `last_edit != id` — a plain `last_edit` column
-      // would mark every message as edited. Absent (not null) for an
-      // unedited message, or when there is no comp_content row at all
-      // (legacy forward references).
+      // `last_edit` identifies the write that last set this content: the
+      // message's own id on insert, the edit's ordering stamp on every edit
+      // (see the message record rule). So "edited" is exactly
+      // `last_edit != id` — a plain `last_edit` column would mark every
+      // message as edited. Absent (not null) for an unedited message, or when
+      // there is no comp_content row at all (legacy forward references).
       lastEdit:
         r.last_edit != null && r.last_edit !== r.id ? r.last_edit : undefined,
       attachments,

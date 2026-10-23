@@ -346,6 +346,58 @@ export function maintainRoomActivity(
   }
 }
 
+/** What a `message` change does to the rooms it touches. */
+export interface MessageActivityTarget {
+  readonly op: "create" | "move" | "delete";
+  readonly messageId: string;
+  /** The room the message leaves: a move's source, or the room a delete empties. */
+  readonly fromRoom?: string;
+  /** The room a move lands in. */
+  readonly toRoom?: string;
+}
+
+/**
+ * The projection-maintenance step for one `message` record change — the same
+ * rules {@link maintainRoomActivity} applies to the events that produce one.
+ *
+ * A create folds the message into its room's row on a live write and
+ * invalidates it on a replay, where the room is resolved from the row rather
+ * than trusted from the payload. A move and a delete invalidate every room
+ * whose latest message can have changed; the caller rebuilds them from the
+ * rows that remain.
+ */
+export function maintainRoomActivityForMessage(
+  target: MessageActivityTarget,
+  isBackfill: boolean,
+): { sql: string; params: unknown[] } | null {
+  switch (target.op) {
+    case "create":
+      if (isBackfill) {
+        return {
+          sql: `delete from room_activity
+                 where room_id = (select room from entities where id = ?)`,
+          params: [target.messageId],
+        };
+      }
+      return mergeRoomActivityFromMessageSql(target.messageId);
+
+    case "delete":
+      if (target.fromRoom === undefined) return null;
+      return invalidateRoomActivitySql([target.fromRoom]);
+
+    case "move": {
+      // A self-move changes nothing: the same room must not be listed twice.
+      const rooms: string[] = [];
+      if (target.fromRoom !== undefined) rooms.push(target.fromRoom);
+      if (target.toRoom !== undefined && target.toRoom !== target.fromRoom) {
+        rooms.push(target.toRoom);
+      }
+      if (rooms.length === 0) return null;
+      return invalidateRoomActivitySql(rooms);
+    }
+  }
+}
+
 /** Rebuild the projection for `roomIds` from the live tables. */
 export async function rebuildRoomActivity(
   db: DbLike,

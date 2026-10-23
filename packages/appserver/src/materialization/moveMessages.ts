@@ -28,6 +28,11 @@
  *
  * The global mentions index (`mentions.room_id`) is NOT touched here — it is
  * same event (see `MoveMessages` there).
+ *
+ * The derived-state half takes the two rooms, the moved ids and the move's
+ * instant, so both inputs feed it: the `moveMessages` event above, and a
+ * `message` record update whose destination room the record carries and whose
+ * source the caller reads from the rows first.
  */
 
 import type { DbLike } from "../db/types.ts";
@@ -59,11 +64,92 @@ interface MovedMessage {
   authorDid: string | null;
 }
 
+/** What the move's derived-state side effects need, whichever input carries them. */
+export interface MoveSideEffectsOpts {
+  streamId: StreamDid;
+  /** The room the messages leave. */
+  fromRoom: string;
+  /** The room they land in. */
+  toRoom: string;
+  messageIds: readonly Ulid[];
+  /** The move's ordering instant: the feed places the moved messages at it. */
+  movedAt: number;
+  readStateDb?: DbLike;
+  /** True for backfill/replay — skips the read-state mutations. */
+  isBackfill: boolean;
+}
+
 /**
  * Apply the move's derived-state side-effects.
  *
  * `db` is the per-space DB (both rooms live in the same space — a move is a
- * within-space operation; `writeAuth` rejects cross-space destinations).
+ * within-space operation; `writeAuth` rejects cross-space destinations). The
+ * caller has already rewritten `entities.room` and the moved messages' ordering
+ * key: this reads the post-move rows and rebuilds what the move invalidated.
+ */
+export async function applyMoveSideEffectsFor(
+  db: DbLike,
+  opts: MoveSideEffectsOpts,
+): Promise<void> {
+  const spaceId = opts.streamId;
+  const movedAt = opts.movedAt;
+
+  const moved = await readMovedMessages(db, opts.messageIds);
+  if (moved.length === 0) return;
+
+  // ── Per-space: activity feed windows ──────────────────────────────────
+  for (const m of moved) {
+    await upsertActivityItem(db, {
+      roomId: opts.toRoom,
+      spaceId,
+      messageId: m.id as Ulid,
+      timestamp: movedAt,
+    });
+  }
+  await rebuildActivityWindow(db, opts.fromRoom);
+  await rebuildActivityWindow(db, opts.toRoom);
+  // `room_activity` was invalidated for both rooms by the move's own
+  // maintenance step; restore both from the post-move tables. Also on backfill,
+  // for the same reason the windows above are.
+  await rebuildRoomActivity(db, [opts.fromRoom, opts.toRoom]);
+
+  // ── Read-state: thread activity, participation ────────────────────────
+  // Unread is not touched: a reader's count is derived from their read
+  // position and the room's message set, so moving a message between rooms
+  // changes it without anyone adjusting it. What remains here is the state
+  // the log cannot supply — which threads a user tracks, and which rooms
+  // they have spoken in.
+  //
+  // Live events only, mirroring createMessage's read-state section in
+  // `applyBundle`: a replayed move over a newer read-state would resurrect
+  // activity for a thread the user has since stopped tracking.
+  const readStateDb = opts.readStateDb;
+  if (!readStateDb || opts.isBackfill) return;
+
+  if (await isThread(db, opts.toRoom)) {
+    for (const m of moved) {
+      if (m.authorDid) {
+        await refreshThreadActivityOnMessage(
+          readStateDb,
+          opts.toRoom,
+          m.authorDid,
+          spaceId,
+          movedAt,
+        );
+      }
+    }
+  }
+
+  for (const m of moved) {
+    if (!m.authorDid) continue;
+    await upsertUserRoomParticipation(readStateDb, m.authorDid, opts.toRoom, movedAt);
+    await clearSourceParticipationIfNoneLeft(db, readStateDb, opts.fromRoom, m.authorDid);
+  }
+}
+
+/**
+ * The `moveMessages` event's side effects: re-key the moved messages at the
+ * move's instant, then rebuild what the move invalidated.
  */
 export async function applyMoveSideEffects(
   db: DbLike,
@@ -86,7 +172,6 @@ export async function applyMoveSideEffects(
   const event = e as unknown as MoveMessagesEvent;
   if (!event.room || !event.toRoomId) return;
 
-  const spaceId = opts.streamId;
   // The move's canonical instant: the server's receipt of the event, then the
   // log's ingest time, then the event's own ULID time — the same rule
   // `setMessageSortIdxByMove` keys the ordering by, so the timeline order and
@@ -104,57 +189,15 @@ export async function applyMoveSideEffects(
     opts.createdAt,
   );
 
-  const moved = await readMovedMessages(db, event.messageIds);
-  if (moved.length === 0) return;
-
-  // ── Per-space: activity feed windows ──────────────────────────────────
-  for (const m of moved) {
-    await upsertActivityItem(db, {
-      roomId: event.toRoomId,
-      spaceId,
-      messageId: m.id as Ulid,
-      timestamp: movedAt,
-    });
-  }
-  await rebuildActivityWindow(db, event.room);
-  await rebuildActivityWindow(db, event.toRoomId);
-  // `room_activity` was invalidated for both rooms by the move's own
-  // maintenance step; restore both from the post-move tables. Also on backfill,
-  // for the same reason the windows above are.
-  await rebuildRoomActivity(db, [event.room, event.toRoomId]);
-
-  // ── Read-state: thread activity, participation ────────────────────────
-  // Unread is not touched: a reader's count is derived from their read
-  // position and the room's message set, so moving a message between rooms
-  // changes it without anyone adjusting it. What remains here is the state
-  // the log cannot supply — which threads a user tracks, and which rooms
-  // they have spoken in.
-  //
-  // Live events only, mirroring createMessage's read-state section in
-  // `applyBundle`: a replayed move over a newer read-state would resurrect
-  // activity for a thread the user has since stopped tracking.
-  const readStateDb = opts.readStateDb;
-  if (!readStateDb || opts.isBackfill) return;
-
-  if (await isThread(db, event.toRoomId)) {
-    for (const m of moved) {
-      if (m.authorDid) {
-        await refreshThreadActivityOnMessage(
-          readStateDb,
-          event.toRoomId,
-          m.authorDid,
-          spaceId,
-          movedAt,
-        );
-      }
-    }
-  }
-
-  for (const m of moved) {
-    if (!m.authorDid) continue;
-    await upsertUserRoomParticipation(readStateDb, m.authorDid, event.toRoomId, movedAt);
-    await clearSourceParticipationIfNoneLeft(db, readStateDb, event.room, m.authorDid);
-  }
+  await applyMoveSideEffectsFor(db, {
+    streamId: opts.streamId,
+    fromRoom: event.room,
+    toRoom: event.toRoomId,
+    messageIds: event.messageIds,
+    movedAt,
+    readStateDb: opts.readStateDb,
+    isBackfill: opts.isBackfill,
+  });
 }
 
 /**
