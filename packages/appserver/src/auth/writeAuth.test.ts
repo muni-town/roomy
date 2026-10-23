@@ -328,6 +328,42 @@ describe("auth/writeAuth — moveMessages is admin-only", () => {
   });
 });
 
+describe("auth/writeAuth — reorderMessage is admin-only", () => {
+  function reorderEvent(roomId: string) {
+    return {
+      id: newUlid(),
+      $type: "space.roomy.message.reorderMessage.v0",
+      room: roomId,
+      messageId: newUlid(),
+      after: newUlid(),
+    };
+  }
+
+  test("an ordinary room-writer cannot reorder a message", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
+    await addEdge(db, SPACE, USER, "member");
+
+    const result = await checkWriteAuth(db, SPACE, USER, reorderEvent(CHANNEL));
+    expect(result).toBeDefined();
+    expect(result!.status).toBe(403);
+    expect(result!.message).toContain("admin");
+  });
+
+  test("a space admin can reorder a message", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, ADMIN, "admin");
+
+    const result = await checkWriteAuth(db, SPACE, ADMIN, reorderEvent(CHANNEL));
+    expect(result).toBeUndefined();
+  });
+});
+
 describe("auth/writeAuth — edit/delete author check", () => {
   async function seedMessageWithAuthor(
     db: DbLike,

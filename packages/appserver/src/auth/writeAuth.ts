@@ -108,7 +108,6 @@ const ALLOWED_TYPES: Set<string> = new Set([
  */
 const ROOM_WRITE_TYPES = new Set([
   "space.roomy.message.createMessage.v0",
-  "space.roomy.message.reorderMessage.v0",
   "space.roomy.message.forwardMessages.v0",
   "space.roomy.reaction.addReaction.v0",
   "space.roomy.reaction.removeReaction.v0",
@@ -116,10 +115,12 @@ const ROOM_WRITE_TYPES = new Set([
   "space.roomy.link.removeRoomLink.v0",
 ]);
 
-// NB: `space.roomy.message.moveMessages.v0` is deliberately NOT in
-// ROOM_WRITE_TYPES. It is a curator action (it rewrites another room's
-// timeline and both rooms' unread/activity state), so it is dispatched to
-// `checkMoveMessages` below — space admin, plus a destination-room guard.
+// NB: `space.roomy.message.moveMessages.v0` and
+// `space.roomy.message.reorderMessage.v0` are deliberately NOT in
+// ROOM_WRITE_TYPES. Both reposition content another author wrote, so they are
+// curator actions and are dispatched below: `checkMoveMessages` for a move
+// (space admin plus a destination guard), `requireSpaceAdminCheck` for a
+// reorder.
 
 /**
  * Message events that may carry a `space.roomy.attachment.reply.v0`.
@@ -975,13 +976,17 @@ export async function checkWriteAuth(
     return await checkReplyTargets(db, event);
   }
 
-  // ── Message move (space admin + destination guard) ──
+  // ── Curator actions on someone else's message (space admin) ──
   if ($type === "space.roomy.message.moveMessages.v0") {
     const roomId = event.room;
     if (typeof roomId !== "string") {
       return denied(400, "InvalidRequest", `Event is missing required 'room' field`);
     }
     return await checkMoveMessages(db, spaceId, callerDid, event, ctx);
+  }
+
+  if ($type === "space.roomy.message.reorderMessage.v0") {
+    return await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
   }
 
   // ── Room write + author check (edit/delete) ──
