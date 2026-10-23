@@ -194,6 +194,22 @@ export function maintainRoomAccess(
   return isBackfill ? invalidateSql(ids) : upsertSql(ids);
 }
 
+/**
+ * The projection step one `room` record change owes. Every room kind change
+ * affects structure that only the tables can resolve — a created entity, a
+ * changed kind, a soft-deleted row, a link edge — so the step recomputes the
+ * space's rooms rather than naming one. A replay invalidates them, as the live
+ * event path does.
+ */
+export function roomAccessStepForRoom(
+  streamId: string,
+  isBackfill: boolean,
+): { sql: string; params: unknown[] } {
+  return isBackfill
+    ? invalidateAllInSpaceSql(streamId)
+    : upsertAllInSpaceSql(streamId);
+}
+
 /** Read the projection for one room. `null` on miss. Fails soft. */
 export async function readRoomAccessProjection(
   db: DbLike,

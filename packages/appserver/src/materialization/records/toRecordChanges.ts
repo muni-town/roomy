@@ -2,10 +2,10 @@
  * The event log → `RecordChange[]` adapter.
  *
  * `docs/plans/replicable-space-workers.md` §5 WS3: 47 event types collapse onto
- * 16 record kinds, and this is where that collapse happens. Nothing consumes the
- * output yet — `getMaterializer` still runs the projection — so this file is the
- * seam a worker will be written against, and the tests are what make it safe to
- * have two descriptions of the same log in one tree.
+ * 16 record kinds, and this is where that collapse happens. A kind in
+ * {@link CONVERTED_KINDS} is applied by the projection rules; every other kind
+ * still runs its SDK materialiser, so both descriptions of the log live in this
+ * tree and the tests are what keep them equal.
  *
  * Four rules the plan fixes, and this module is only correct with all four:
  *
@@ -157,6 +157,10 @@ export const RECORD_KINDS_FOR_EVENT: Record<EventType, readonly RecordKind[]> = 
  */
 export const CONVERTED_KINDS: ReadonlySet<RecordKind> = new Set<RecordKind>([
   "message",
+  "reaction",
+  "room",
+  "spaceInfo",
+  "spaceSidebar",
 ]);
 
 /** The set the record path routes by; `_withEventPath` swaps it for a test. */
@@ -392,9 +396,9 @@ export function toRecordChanges(
       return [
         created("room", space, rkey(event.id), stamp, {
           kind: event.kind as RoomKind,
-          name: event.name ?? null,
-          avatar: event.avatar ?? null,
-          description: event.description ?? null,
+          name: event.name || null,
+          avatar: event.avatar || null,
+          description: event.description || null,
           // A thread takes its access from its parent, so it carries none.
           defaultAccess:
             event.kind === "space.roomy.thread"
@@ -509,6 +513,7 @@ export function toRecordChanges(
           target: event.reactionTo,
           user: event.reactingUser,
           reaction: event.reaction,
+          bridged: true,
         }),
       ];
 
@@ -614,9 +619,9 @@ export function toRecordChanges(
     case "space.roomy.role.createRole.v0":
       return [
         created("role", space, rkey(event.id), stamp, {
-          name: event.name ?? null,
-          avatar: event.avatar ?? null,
-          description: event.description ?? null,
+          name: event.name || null,
+          avatar: event.avatar || null,
+          description: event.description || null,
         }),
       ];
 

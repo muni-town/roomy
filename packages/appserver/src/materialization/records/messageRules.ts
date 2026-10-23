@@ -81,9 +81,11 @@ function createStatements(
 
   if (record.system !== undefined) {
     // A system message is rendered from projection state (the linked room's
-    // name) and arrives only from `createRoomLink`, which also writes a room.
-    // That event stays on the event path until the `room` kind converts.
-    throw new Error("message rule: a system message has no record rule yet");
+    // name) and arrives only from `createRoomLink`, whose `room` change writes
+    // the link edge that names the linking room. It carries no ordering key of
+    // its own — the event path never stamps a link announcement — so the rule
+    // writes only what that materialiser wrote.
+    return systemLinkStatements(change, ctx);
   }
 
   const statements: SqlStatement[] = [
@@ -132,6 +134,51 @@ function createStatements(
     orderingKey(change),
   );
   return statements;
+}
+
+/**
+ * A link announcement: an entity in the linking room, an author edge pointing
+ * at the space, and the markdown the event path renders from the linked room's
+ * current name. `last_edit` is the message's own id, as the event materialiser
+ * writes it, and no `timestamp` is set.
+ */
+function systemLinkStatements(
+  change: Extract<MessageChange, { op: "create" }>,
+  ctx: MessageRuleContext,
+): SqlStatement[] {
+  const record = change.record;
+  if (record.system === undefined) return [];
+  const link = record.system;
+  const id = change.rkey;
+  const actor = record.actor;
+  if (actor === undefined) {
+    throw new Error("message rule: a system message names its actor");
+  }
+  return [
+    sql`
+      insert into entities (id, stream_id, room)
+      values (${id}, ${ctx.streamId}, ${record.room})
+      on conflict do nothing
+    `,
+    sql`
+      insert or ignore into edges (head, tail, label)
+      select ${id}, ${ctx.streamId}, 'author'
+    `,
+    sql`
+      insert or replace into comp_content (entity, mime_type, data, last_edit)
+      values (
+        ${id},
+        'text/markdown',
+        cast((
+          '[@' || ${actor} || '](/user/' || ${actor} || ') '
+          || ${link.isCreationLink ? "created [" : "linked to ["}
+          || coalesce((select name from comp_info where entity = ${link.linkToRoom}), 'this room')
+          || '](' || ${link.linkToRoom} || '?parent=' || ${record.room} || ').'
+        ) as blob),
+        ${id}
+      )
+    `,
+  ];
 }
 
 /** An update is a content replacement (edit) or a room rewrite (move). */

@@ -1,6 +1,6 @@
 # Near-Term Plan: Read-Path Throughput and Replicable Space Workers
 
-**Status (2026-10-22):** WS1 complete — purity Steps 1–5 are merged (#338, #405, #403, #422, #436), and the acceptance oracle `src/streams/rebuildEquality.ts` is reusable (#424). WS2 mostly merged: R1/R2/R3/R6/R7 of `denormalised-read-projections.md` are in `next`; R4 was measured and deferred as below value. WS5b is written and in review (#454). WS3's record kind, op and `repo` mapping is settled (§5 WS3) and its implementation has not started; WS4 waits on WS3 plus the Rust building-blocks research, which has not been done.
+**Status (2026-10-22):** WS1 complete — purity Steps 1–5 are merged (#338, #405, #403, #422, #436), and the acceptance oracle `src/streams/rebuildEquality.ts` is reusable (#424). WS2 mostly merged: R1/R2/R3/R6/R7 of `denormalised-read-projections.md` are in `next`; R4 was measured and deferred as below value. WS5b is written and in review (#454). WS3's record kind, op and `repo` mapping is settled (§5 WS3), its adapter and the `message` kind are merged (S1, S2), and S3 is converting the remaining kinds family by family; WS4 waits on WS3 plus the Rust building-blocks research, which has not been done.
 
 **Next:** WS3 (the change-record interface) is the one gate before a Rust worker, and it is now unblocked. The companion plan is *Roomy Protocol Migration Plan: Records as Source of Truth* — muni-town/roomy#683, `docs/plans/atproto-spaces-migration-plan.md` on that branch — whose §5.1 fixes the `RecordChange` type. WS3 builds the adaptor for that model; it does not migrate the storage. See §5 WS3.
 
@@ -171,7 +171,7 @@ Work, in order. The unit is the **record object**, not the event type: 47 event 
 5. **Decide what produces no record.** `space.roomy.state.markRead.v0` is rejected at the write path (`writeAuth.ts:44-46`; `updateSeen` is the real receipt write) and read receipts stay gateway-side. The two synthetic types have no live producer (§9 Q7). None of the three becomes a record, and the adapter should say so rather than invent a representation.
 6. **Retire the SDK's event materialisers from the worker path.** `getMaterializer` has exactly one importer in the repository (`materialization/materializer.ts:33`) and no client-side user, so the worker can stop calling it. That is **not** the same as deleting it: it is exported from `@roomy-space/sdk` (`schema/index.ts:51`) and appears in the published `dist`, so removing it is a breaking change to a public package. The plan is to leave it exported, stop calling it, and decide its removal when the SDK next takes a breaking release — the migration's Stage 3 is where the event shape stops being a thing the SDK owns at all.
 
-**Acceptance:** the rebuild-equality harness passes byte-for-byte with records as the only input, **and** the worker no longer imports `getMaterializer`. The projection output is unchanged, so the golden files are unchanged — the input type and the rule's shape change, not what they produce. That last property is what makes this safe to do before the Rust port.
+**Acceptance:** the rebuild-equality harness passes byte-for-byte with records as the only input for every event type that emits a record, **and** `getMaterializer` is reached only by the types that emit none. The projection output is unchanged, so the golden files are unchanged — the input type and the rule's shape change, not what they produce. That last property is what makes this safe to do before the Rust port.
 
 **Explicitly out of scope:** replacing `stream_events` with HappyView ingest (migration Stage 1), the Open Social record model (Stage 2), moving member content to user PDSes (Stage 3). The adaptor is validated by the fact that Stages 1–3 replace its producer and leave its consumer alone.
 
@@ -179,9 +179,9 @@ Work, in order. The unit is the **record object**, not the event type: 47 event 
 
 | Slice | Content | Gate |
 | --- | --- | --- |
-| S1 | `RecordChange` type, the adapter, and the record-kind definitions. Producer wired but not consumed. | Adapter round-trip test: replaying today's corpus through the adapter and back reproduces today's projection byte-for-byte. |
+| S1 | `RecordChange` type, the adapter, and the record-kind definitions. Producer wired but not consumed. | Adapter tests: the mapping covers every registered event type, the stamp equals the projection's `sort_idx`, and each emitted change resolves against the rows the materialiser wrote. |
 | S2 | Projection rules for one record kind at a time, largest first (`message` — 6 event types, 31 statements, both non-trivial cases above). The worker switches that kind over and drops its event materialiser. | Harness byte-identical + that kind's tests. |
-| S3 | Remaining kinds; the worker stops calling `getMaterializer` (left exported, see step 6). | `grep` shows no worker-side importer; harness byte-identical. |
+| S3 | Remaining kinds, one family of records per change. Every event type that emits a record routes through the record path; `getMaterializer` stays for the types that emit none (`setHandleProvider`, `editPage`, `reorderMessage`, and the empty `markRead`), as step 6 requires. | Every type with a non-empty `RECORD_KINDS_FOR_EVENT` entry enters the record path and `convertedChanges` never returns `null` for one; the full corpus through the record path digests equal to the same corpus through `_withEventPath`; `materialize()` is reachable only for the types that emit no record. |
 
 Each slice leaves one input type per code path — the adapter sits upstream of every rule — so there is no runtime dual mode and no flag. A kind that has not been converted still reads events; a kind that has been converted reads records; the same request never sees both.
 

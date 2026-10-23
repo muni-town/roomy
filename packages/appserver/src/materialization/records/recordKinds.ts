@@ -111,6 +111,12 @@ export interface ReactionRecord {
   readonly user: Did;
   /** The emoji, or a URI describing one. */
   readonly reaction: string;
+  /**
+   * Set by the bridged add. The rule materialises the reacting user's entity
+   * only then: a local reaction is sent by a member the space already holds,
+   * while the bridged user may be an external account with no entity.
+   */
+  readonly bridged?: true;
 }
 
 /**

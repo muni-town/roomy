@@ -32,11 +32,11 @@ import { applyDeleteSideEffects, collectPendingDeletes } from "./deleteMessage.t
 import { isGlobalDbStatement } from "./statementRouting.ts";
 import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
 import {
-  applyMessageSideEffects,
-  messageDeleteRooms,
-  messageEventSteps,
-  planMessageBatch,
-} from "./records/messagePath.ts";
+  applyRecordSideEffects,
+  planBatch,
+  recordDeleteRooms,
+  recordEventSteps,
+} from "./records/recordPath.ts";
 import {
   isDebugEnabled,
   recordMaterialization,
@@ -145,18 +145,18 @@ export async function applyBatch(
     // through the record rules, and every other entry keeps its event
     // materialiser. The plans read the rooms the record rules cannot: see
     // `records/messagePath.ts`.
-    const plans = await planMessageBatch(db, chunk, streamId);
+    const plans = await planBatch(db, chunk, streamId);
 
     for (let i = 0; i < chunk.length; i++) {
       const e = chunk[i]!;
       const routed = plans[i] ?? null;
       const recordSteps = routed
-        ? messageEventSteps(routed, { streamId, isBackfill: opts.isBackfill })
+        ? recordEventSteps(routed, { streamId, isBackfill: opts.isBackfill })
         : null;
 
       // One entry's statements: the record rules' when it is routed, else the
       // event materialiser's.
-      let statements: SqlStatement[];
+      let statements: Array<SqlStatement & { derived?: "space" | "global" }>;
       let bundle: StatementBundleSuccess | undefined;
       if (recordSteps) {
         statements = recordSteps.statements;
@@ -207,6 +207,11 @@ export async function applyBatch(
       chunkSteps.push({ type: "exec", sql: `savepoint ${savepoint}`, derived: "none" });
       for (const stmt of statements) {
         const params = stmt.params;
+        // A record rule names its target; the event path's opaque materialiser
+        // SQL is still routed by what it writes.
+        const derived =
+          stmt.derived ??
+          (isGlobalDbStatement(stmt.sql) ? "global" : "space");
         chunkSteps.push({
           type: "run",
           sql: stmt.sql,
@@ -216,7 +221,7 @@ export async function applyBatch(
               : Array.isArray(params)
                 ? (params as unknown[])
                 : [params],
-          derived: isGlobalDbStatement(stmt.sql) ? "global" : "space",
+          derived,
         });
         // Maintain the global entity→space index. Every `insert
         // into entities` statement carries (id, stream_id) as its first two
@@ -244,7 +249,7 @@ export async function applyBatch(
       // same per-event transaction as the entry's own statements.
       chunkSteps.push(
         ...(recordSteps
-          ? recordSteps.activity.map(
+          ? recordSteps.projection.map(
               (step): ChunkStep => ({
                 type: "run",
                 sql: step.sql,
@@ -305,7 +310,7 @@ export async function applyBatch(
       chunk.filter((_e, i) => (plans[i] ?? null) === null),
     );
     for (const plan of plans) {
-      if (plan) for (const roomId of messageDeleteRooms(plan)) pendingDeletes.push({ roomId });
+      if (plan) for (const roomId of recordDeleteRooms(plan)) pendingDeletes.push({ roomId });
     }
 
     // Compute the max idx for this chunk — used to advance the cursor after
@@ -478,7 +483,7 @@ export async function applyBatch(
     for (let i = 0; i < chunk.length; i++) {
       const plan = plans[i] ?? null;
       if (plan) {
-        await applyMessageSideEffects(db, plan, {
+        await applyRecordSideEffects(db, plan, {
           streamId,
           isBackfill: opts.isBackfill,
           detectedLinks: stats.detectedLinks,

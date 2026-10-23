@@ -559,26 +559,34 @@ describe("`last_edit` is the one value the record model cannot reproduce", () =>
 });
 
 describe("routing is decided by the kinds an event emits", () => {
-  test("the five message events convert, and a straddling event does not", async () => {
+  test("every entry whose kinds are converted routes, including the link", async () => {
     const { entries, fx } = corpus();
     const routed = entries.filter((entry) => convertedChanges(entry, STREAM));
 
-    expect([...CONVERTED_KINDS]).toEqual(["message"]);
+    expect([...CONVERTED_KINDS].sort()).toEqual([
+      "message",
+      "reaction",
+      "room",
+      "spaceInfo",
+      "spaceSidebar",
+    ]);
     expect(
       [...new Set(routed.map((entry) => entry.event.$type))].sort(),
     ).toEqual([
+      "space.roomy.link.createRoomLink.v0",
       "space.roomy.message.createMessage.v0",
       "space.roomy.message.deleteMessage.v0",
       "space.roomy.message.editMessage.v0",
       "space.roomy.message.forwardMessages.v0",
       "space.roomy.message.moveMessages.v0",
+      "space.roomy.room.createRoom.v0",
+      "space.roomy.space.updateSpaceInfo.v0",
     ]);
 
-    // `createRoomLink` emits a `room` and a `message`; routing it on the
-    // message alone would apply that message twice. It stays on the event path
-    // and the projection still holds the system message exactly once.
+    // `createRoomLink` emits a `room` and a `message`; both kinds are
+    // converted, so the entry routes and the message is applied exactly once.
     const link = entries.find((entry) => entry.event.id === fx.linkMessage)!;
-    expect(convertedChanges(link, STREAM)).toBeNull();
+    expect(convertedChanges(link, STREAM)).not.toBeNull();
 
     const db = freshSpaceDb();
     await db.run("insert into entities (id, stream_id) values (?, ?)", [
