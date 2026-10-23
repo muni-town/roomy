@@ -1,0 +1,26 @@
+[package]
+name = "space-xrpc"
+description = "Per-space XRPC read serving for the Roomy space worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+axum = "0.8"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+base64 = { workspace = true }
+url = { workspace = true }
+rusqlite = "0.40"
+indexmap = "2"
+jsonwebtoken = "9"
+async-trait = "0.1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
