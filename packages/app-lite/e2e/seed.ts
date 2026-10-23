@@ -63,6 +63,14 @@ import {
   SEED_ROOM_2_NAME,
   SEED_ROOM_ID,
   SEED_ROOM_NAME,
+  SEED_SEARCH_MESSAGE_ID,
+  SEED_SEARCH_MESSAGE_TEXT,
+  SEED_SEARCH_ROOM_ID,
+  SEED_SEARCH_ROOM_NAME,
+  SEED_SEARCH_THREAD_ID,
+  SEED_SEARCH_THREAD_MESSAGE_ID,
+  SEED_SEARCH_THREAD_MESSAGE_TEXT,
+  SEED_SEARCH_THREAD_NAME,
   SEED_SIDEBAR_CATEGORY_ID,
   SEED_SPACE_2_CATEGORY_ID,
   SEED_SPACE_2_ID,
@@ -142,7 +150,10 @@ async function createRoom(
   roomId: string,
   name: string,
   callerDid: string = TEST_USER_DID,
-  kind: "space.roomy.channel" | "space.roomy.voice" = "space.roomy.channel",
+  kind:
+    | "space.roomy.channel"
+    | "space.roomy.voice"
+    | "space.roomy.thread" = "space.roomy.channel",
 ): Promise<void> {
   await sendEvents(
     origin,
@@ -153,6 +164,46 @@ async function createRoom(
         $type: "space.roomy.room.createRoom.v0",
         kind,
         name,
+      },
+    ],
+    callerDid,
+  );
+}
+
+/**
+ * Create a thread canonically linked from `parentRoomId`, through the real
+ * write path.
+ *
+ * The link travels in its own batch: a room and anything referencing it in
+ * one batch is rejected, which is why the client's own thread creation sends
+ * the room first and the canonical link second.
+ */
+async function createThread(
+  origin: string,
+  spaceId: string,
+  parentRoomId: string,
+  threadId: string,
+  name: string,
+  callerDid: string = TEST_USER_DID,
+): Promise<void> {
+  await createRoom(
+    origin,
+    spaceId,
+    threadId,
+    name,
+    callerDid,
+    "space.roomy.thread",
+  );
+  await sendEvents(
+    origin,
+    spaceId,
+    [
+      {
+        id: "01M3C8QTVSG74JEG1QBM3STVXB",
+        room: parentRoomId,
+        $type: "space.roomy.link.createRoomLink.v0",
+        linkToRoom: threadId,
+        isCreationLink: true,
       },
     ],
     callerDid,
@@ -398,7 +449,14 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
   const space1 = spaceDb(db, SEED_SPACE_ID);
   await space1.run(
     "update comp_space set sidebar_config = ? where entity = ?",
-    [sidebarConfig(SEED_SIDEBAR_CATEGORY_ID, [SEED_ROOM_ID, SEED_ROOM_2_ID]), SEED_SPACE_ID],
+    [
+      sidebarConfig(SEED_SIDEBAR_CATEGORY_ID, [
+        SEED_ROOM_ID,
+        SEED_ROOM_2_ID,
+        SEED_SEARCH_ROOM_ID,
+      ]),
+      SEED_SPACE_ID,
+    ],
   );
 
   const space2 = spaceDb(db, SEED_SPACE_2_ID);
@@ -449,6 +507,39 @@ export async function seedFixture(appserverOrigin: string): Promise<void> {
     SEED_LINK_MESSAGE_ID,
     SEED_ROOM_ID,
     SEED_LINK_MESSAGE_URL,
+  );
+
+  // ── Search fixtures ──────────────────────────────────────────────────
+  // A channel, a thread canonically linked under it, and one message in
+  // each. The two bodies carry different invented words, so a spec can prove
+  // a hit is the message it seeded, and that a search scoped to the thread
+  // does not reach the parent channel's message.
+  await createRoom(
+    appserverOrigin,
+    SEED_SPACE_ID,
+    SEED_SEARCH_ROOM_ID,
+    SEED_SEARCH_ROOM_NAME,
+  );
+  await createThread(
+    appserverOrigin,
+    SEED_SPACE_ID,
+    SEED_SEARCH_ROOM_ID,
+    SEED_SEARCH_THREAD_ID,
+    SEED_SEARCH_THREAD_NAME,
+  );
+  await createMessage(
+    appserverOrigin,
+    SEED_SPACE_ID,
+    SEED_SEARCH_MESSAGE_ID,
+    SEED_SEARCH_ROOM_ID,
+    SEED_SEARCH_MESSAGE_TEXT,
+  );
+  await createMessage(
+    appserverOrigin,
+    SEED_SPACE_ID,
+    SEED_SEARCH_THREAD_MESSAGE_ID,
+    SEED_SEARCH_THREAD_ID,
+    SEED_SEARCH_THREAD_MESSAGE_TEXT,
   );
 
   await createRoom(

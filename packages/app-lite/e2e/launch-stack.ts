@@ -32,9 +32,19 @@ import { createAppserver } from "../../appserver/src/appserver.ts";
 import { _setTestGetRoomyProfileRecord } from "../../appserver/src/materialization/roomyProfile.ts";
 import type { RoomyProfileRecord } from "../../appserver/src/materialization/roomyProfile.ts";
 import { _setTestGetProfiles } from "../../appserver/src/queries/profileStore.ts";
+import {
+  _resetQdrantClient,
+  _setQdrantClientForTest,
+} from "../../appserver/src/search/qdrantSearch.ts";
 import { startPdsStub, stubGetRecord } from "./pds-stub.ts";
 import { seedFixture } from "./seed.ts";
+import { FakeQdrant } from "./fake-qdrant.ts";
 import {
+  SEED_SEARCH_MESSAGE_ID,
+  SEED_SEARCH_MESSAGE_TERM,
+  SEED_SEARCH_THREAD_MESSAGE_ID,
+  SEED_SEARCH_THREAD_MESSAGE_TERM,
+  SEED_SPACE_ID,
   APP_LITE_ORIGIN,
   APP_LITE_PORT,
   APPSERVER_DID,
@@ -120,6 +130,48 @@ async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
   throw new Error(`Timed out waiting for ${url} (${lastError})`);
 }
 
+/**
+ * Wait until a seeded message is findable through the search endpoint.
+ *
+ * The index is filled by the appserver's background indexer, which drains the
+ * queue asynchronously; polling here means every spec starts against a warm
+ * index and no spec has to synchronise on one. Throws rather than continuing
+ * so a broken fake/search wiring surfaces as a launcher failure, not as
+ * specs timing out one by one.
+ */
+async function waitForSearchIndex(
+  origin: string,
+  term: string,
+  messageId: string,
+  timeoutMs = 30_000,
+): Promise<void> {
+  const url = `${origin}/xrpc/space.roomy.search.messages?spaceId=${SEED_SPACE_ID}&q=${term}`;
+  const deadline = Date.now() + timeoutMs;
+  let lastResult = "no attempt made";
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(url, {
+        headers: { "X-Test-Did": TEST_USER_DID },
+      });
+      if (resp.ok) {
+        const body = (await resp.json()) as {
+          messages?: Array<{ id: string }>;
+        };
+        if (body.messages?.some((m) => m.id === messageId)) return;
+        lastResult = `${body.messages?.length ?? 0} hits`;
+      } else {
+        lastResult = `HTTP ${resp.status}`;
+      }
+    } catch (err) {
+      lastResult = err instanceof Error ? err.message : String(err);
+    }
+    await Bun.sleep(100);
+  }
+  throw new Error(
+    `Timed out waiting for ${messageId} to be searchable as "${term}" (${lastResult})`,
+  );
+}
+
 const children: ChildProcess[] = [];
 
 function shutdown(exitCode: number): void {
@@ -174,6 +226,13 @@ async function main(): Promise<void> {
     if (!record) return null;
     return record.value as RoomyProfileRecord;
   });
+  // Message search runs against an in-process fake Qdrant, installed before
+  // the factory builds its singletons: with no `QDRANT_URL` the search route
+  // would answer 503 and the indexer would drop every job. The fake makes the
+  // indexer, the backfill sweeper and `space.roomy.search.messages` behave as
+  // they do in a Qdrant-backed deployment, without a service or a socket.
+  const qdrant = new FakeQdrant();
+  _setQdrantClientForTest(qdrant);
 
   const appserver = await createAppserver({
     port: APPSERVER_PORT,
@@ -186,8 +245,8 @@ async function main(): Promise<void> {
     // Belt-and-braces with the stubs above: the materialiser's own hydration
     // leg takes this fetcher, so nothing reaches api.bsky.app either.
     getProfiles: async () => [],
-    // HappyView / arbiter / Qdrant / Polar are all left unconfigured —
-    // each is a no-op without its env vars.
+    // HappyView / arbiter / Polar are left unconfigured — each is a no-op
+    // without its env vars. Qdrant is not: the fake above stands in for it.
   });
 
   const appserverOrigin = `http://127.0.0.1:${appserver.port}`;
@@ -195,6 +254,19 @@ async function main(): Promise<void> {
 
   // ── Fixtures ─────────────────────────────────────────────────────────
   await seedFixture(appserverOrigin);
+
+  // The indexer drains asynchronously; wait for the seeded rows to be
+  // searchable so the specs start against a warm index.
+  await waitForSearchIndex(
+    appserverOrigin,
+    SEED_SEARCH_MESSAGE_TERM,
+    SEED_SEARCH_MESSAGE_ID,
+  );
+  await waitForSearchIndex(
+    appserverOrigin,
+    SEED_SEARCH_THREAD_MESSAGE_TERM,
+    SEED_SEARCH_THREAD_MESSAGE_ID,
+  );
 
   // ── app-lite (vite dev) ──────────────────────────────────────────────
   // `VITE_*` vars reach `import.meta.env` (inlined by vite);
@@ -254,6 +326,7 @@ async function main(): Promise<void> {
     for (const child of children) child.kill("SIGTERM");
     pds.stop();
     await appserver.close();
+    _resetQdrantClient();
     rmSync(dataDir, { recursive: true, force: true });
     process.exit(0);
   };

@@ -208,3 +208,31 @@ export const SEED_OPEN_SPACE_ROOM_NAME = "open-lobby";
 export const SEED_OPEN_SPACE_MESSAGE_TEXT = "seeded message in the open space";
 /** Path to the sixth space's channel. */
 export const SEED_OPEN_SPACE_ROOM_PATH = `/${SEED_OPEN_SPACE_ID}/${SEED_OPEN_SPACE_ROOM_ID}`;
+
+/**
+ * Search fixtures: a channel, a thread under it, and one message in each.
+ *
+ * Message search is served by the launcher's in-process fake Qdrant, and the
+ * index tokenises on non-alphanumerics — so each message carries a single
+ * invented word that no other seeded text contains. `..._MESSAGE_TERM` is what
+ * a spec searches for; the message body proves the row came from the index
+ * rather than from a room-name match.
+ */
+export const SEED_SEARCH_ROOM_ID = "01M3C8QTVSG74JEG1QBM3STVX7";
+export const SEED_SEARCH_ROOM_NAME = "search-room";
+export const SEED_SEARCH_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVX8";
+export const SEED_SEARCH_MESSAGE_TERM = "zephyrquartz";
+export const SEED_SEARCH_MESSAGE_TEXT = `channel marker ${SEED_SEARCH_MESSAGE_TERM}`;
+/**
+ * The thread hangs off `SEED_SEARCH_ROOM_ID` by a canonical link, so a
+ * thread-scoped search is the thread alone and must not surface the parent
+ * channel's message.
+ */
+export const SEED_SEARCH_THREAD_ID = "01M3C8QTVSG74JEG1QBM3STVX9";
+export const SEED_SEARCH_THREAD_NAME = "search-thread";
+export const SEED_SEARCH_THREAD_MESSAGE_ID = "01M3C8QTVSG74JEG1QBM3STVXA";
+export const SEED_SEARCH_THREAD_MESSAGE_TERM = "nimbusferrite";
+export const SEED_SEARCH_THREAD_MESSAGE_TEXT = `thread marker ${SEED_SEARCH_THREAD_MESSAGE_TERM}`;
+/** Path to the search channel, and to the thread under it. */
+export const SEED_SEARCH_ROOM_PATH = `/${SEED_SPACE_ID}/${SEED_SEARCH_ROOM_ID}`;
+export const SEED_SEARCH_THREAD_PATH = `/${SEED_SPACE_ID}/${SEED_SEARCH_THREAD_ID}`;

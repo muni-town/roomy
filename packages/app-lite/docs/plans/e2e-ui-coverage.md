@@ -58,19 +58,22 @@ the messages are authored by a second account that administers it:
 
 ### Known constraints (not defects — design facts phase 2 must respect)
 
-- **`space.roomy.search.messages` needs Qdrant and 503s without it.** The
-  stack leaves `QDRANT_URL` unset, so message search is unavailable here (as it
-  is in any self-hosted deployment without Qdrant). Room/thread search
-  (`space.roomy.search.rooms`) is pure SQLite and *is* covered.
+- **`space.roomy.search.messages` runs against an in-process fake Qdrant.** The
+  launcher installs it with `_setQdrantClientForTest` before the appserver
+  factory builds its singletons (`e2e/fake-qdrant.ts`), so the indexer, the
+  backfill sweeper and the search route behave as they do in a
+  Qdrant-backed deployment without a service or a socket. The launcher then
+  waits for the seeded rows to be searchable before Playwright starts, so a
+  scoped search that finds nothing reports its scope, not a cold index. A
+  deployment without Qdrant still answers 503; that path is covered by the
+  appserver's own suite.
 - **app-lite has exactly one `data-testid`** (`send-message-button`, in
   `packages/design/.../ChatInputShell.svelte`). Everything else must key on
-  ARIA labels, `id`, `title`, `href`, `data-current`, or visible text. Two
-  gaps worth fixing *in app-lite* when phase 2 needs them:
-  - **Message rows carry no identifying attribute** — no id, no `data-*`. Rows
-    can only be addressed positionally or by their text. Adding
-    `data-message-id` to the row would make reply/edit/delete/react assertions
-    precise rather than text-scraping.
-  - The composer is reachable only via `#chat-input [contenteditable="true"]`.
+  ARIA labels, `id`, `title`, `href`, `data-current`, or visible text. Chat
+  rows carry `data-message-id` (`ChatMessage.svelte`), so the timeline is
+  addressable by message; search-result rows do not, and are addressed by their
+  body text. The composer is reachable only via
+  `#chat-input [contenteditable="true"]`.
 - **A sticky element in the message list travels inside its own row.** virtua
   absolutely-positions every row inside a fixed-height container, and the
   scroll container is not an ancestor of the row's content box, so a row's
@@ -120,9 +123,17 @@ Every test below states the observable behaviour it defends.
 |---|---|
 | the navbar exposes a search entry point | The `search` flag is honoured and the navbar searchbar renders. |
 | the directory search page renders its results UI | `/search` renders past the flag gate to its empty-term state. |
-| the space search route finds a channel by name | Route → query → appserver → rendered row, for room search. Also covers graceful degradation: it passes while the Qdrant-backed message query alongside it is 503ing. |
+| the space search route finds a channel by name | Route → query → appserver → rendered row, for room search. |
 | shows no channel section for an absent term | The results section is genuinely result-driven, not always-rendered. |
 | the space search bar is scoped to that space | The route resolved the space (its name is the placeholder). |
+
+### `search-depth.spec.ts` — message search, its scopes and the handoff into a room
+| Test | Defends |
+|---|---|
+| a space-scoped search returns the message itself, under its room | A seed → index → `space.roomy.search.messages` → rendered hit: the row carries the seeded body and the room it lives in, so a hit is attributable rather than any row at all. |
+| a thread-scoped search does not surface its parent channel's message | Searching inside a thread is the thread alone. The parent channel's message is indexed (the space-scoped search finds it), so its absence is the `roomIds` scope; the thread's own message is found in the same scope, so the empty result cannot be an unsearchable thread. |
+| clicking a result opens the room at that message and highlights it | The result row's `?message=` deep link reaches the timeline: the row the link names is the one the highlight effect marks (`.message-highlight`). |
+| the scope-expansion link widens the same search to every space | "Search in all your spaces" carries the term to the cross-space route, where the hit renders with the space it lives in — a widened search, not the space page's results reused. |
 
 ### `navigation-consistency.spec.ts` — the shell and the content agree
 | Test | Defends |
@@ -305,8 +316,6 @@ Demonstrated, not asserted, on 2026-09-25:
    neither the toolbar nor the reason. Every wait on the toolbar — the mounted
    count, the box read, the click — now carries a 5s ceiling.
 
-All breaks were reverted; the suite is green.
-
 8. **Undid the harness hook that lets the appserver read the stub PDS's
    records** (`launch-stack.ts`'s `_setTestGetRoomyProfileRecord` back to a
    constant `null`), keeping the spec. Demonstrated 2026-10-15:
@@ -372,6 +381,20 @@ All breaks were reverted; the suite is green.
    `describe`), so the two phone tests are independently scoped to what they
    defend.
 
+15. **Reverted the deep-link target** (`routes/[space]/[room]/+page.svelte`'s
+   `highlightMessage` derived forced to `undefined`, keeping the spec).
+   Demonstrated 2026-10-16:
+   → `clicking a result opens the room at that message and highlights it`
+   **failed**, waiting on
+   `[data-message-id="01M3C8QTVSG74JEG1QBM3STVX8"].message-highlight` and
+   resolving to 0 elements.
+   → The `?message=` URL assertion in the same test still **passed**: the
+   result row's link carries the param regardless. The failure isolates the
+   timeline half — ChatArea's highlight effect reading the param — which is
+   the only thing a `?message=`-less assertion would not have covered.
+
+All breaks were reverted; the suite is green.
+
 ---
 
 ## 3. Not covered yet — the phase-2 backlog
@@ -412,8 +435,8 @@ half of these — it is what the toolbar-menu gating test uses.
 - Handle settings, federations, Discord bridge, integrations — each is
   flag-gated, so each needs the flag enabled in the seeder's fixture.
 
-### D. Search depth
-- Message search — *blocked by: a Qdrant instance (or a stub) in the harness.*
+### D. Search depth — covered by `search-depth.spec.ts`
+- Message search.
 - Room search within a room-scope (`/[space]/[room]/search`).
 - Result click navigates to the message (`?message=` deep link + highlight).
 - Scope-expansion link ("Search in all your spaces").

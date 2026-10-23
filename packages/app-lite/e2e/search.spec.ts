@@ -5,13 +5,11 @@
  * point renders, and the space-scoped search route answers a query
  * end-to-end.
  *
- * Scope note: channel/thread search (`space.roomy.search.rooms`) is pure
- * SQLite and works hermetically, so it is the assertion. Message search
- * (`space.roomy.search.messages`) is Qdrant-backed and answers 503 when no
- * search service is configured — which is the case in this stack, and is what
- * a self-hosted deployment without Qdrant sees too. The room-search test
- * therefore also covers graceful degradation: the channel results still
- * render even though the message-search query alongside them is failing.
+ * Scope note: channel/thread name search (`space.roomy.search.rooms`) is pure
+ * SQLite and works hermetically, so it is the assertion here. Message search
+ * (`space.roomy.search.messages`) has its own spec (`search-depth.spec.ts`);
+ * on these pages it runs alongside, against the stack's in-process fake
+ * Qdrant, so the results list is genuinely exercising both queries.
  */
 
 import { expect, test, waitForAuthenticated } from "./spec-helpers.ts";
