@@ -22,6 +22,10 @@ import {
   membershipStatements,
 } from "./membershipRules.ts";
 import {
+  federationGrantStatements,
+  federationRequestStatements,
+} from "./federationRules.ts";
+import {
   roleGrantStatements,
   roleStatements,
   roomPermissionStatements,
@@ -101,6 +105,10 @@ export function changeStatements(
       return roleGrantStatements(change, ctx);
     case "roomPermission":
       return roomPermissionStatements(change, ctx);
+    case "federationRequest":
+      return federationRequestStatements(change, ctx);
+    case "federationGrant":
+      return federationGrantStatements(change);
     default:
       throw new Error(`No projection rule for record kind: ${kind}`);
   }

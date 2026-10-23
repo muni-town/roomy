@@ -167,6 +167,8 @@ export const CONVERTED_KINDS: ReadonlySet<RecordKind> = new Set<RecordKind>([
   "role",
   "roleGrant",
   "roomPermission",
+  "federationRequest",
+  "federationGrant",
 ]);
 
 /** The set the record path routes by; `_withEventPath` swaps it for a test. */
