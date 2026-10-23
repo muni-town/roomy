@@ -228,6 +228,7 @@ create table did_owners ( did text references dids(did), owner text not null, un
     <li><strong>comp_bans</strong> — Banned users per space (explicit deny, even for admins)</li>
     <li><strong>comp_invite</strong> — Active invite tokens per space (appserver-only; the worker swallowed errors here)</li>
     <li><strong>comp_discord_origin</strong> — Discord bridge origin tracking</li>
+    <li><strong>comp_matrix_origin</strong> — Matrix bridge origin tracking (room or message, plus the origin server timestamp)</li>
     <li><strong>comp_page_edits</strong> — Page edit history (one row per edit)</li>
     <li><strong>comp_comment</strong> — Page comments</li>
     <li><strong>comp_reaction</strong> — Message reactions (emoji per user per message)</li>

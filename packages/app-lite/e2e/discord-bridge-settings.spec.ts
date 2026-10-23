@@ -1,5 +1,6 @@
 /**
- * Discord Bridge settings → backfill status panel.
+ * Discord Bridge section of the Integrations settings page → backfill
+ * status panel.
  *
  * Defends the panel's two user-visible guarantees: rows read channel-first
  * (sidebar order, then remaining channels, then threads) and each row's state
@@ -14,6 +15,7 @@
  * used to be possible.
  */
 
+import type { Page } from "@playwright/test";
 import { expect, test, waitForAuthenticated } from "./spec-helpers.ts";
 import { BRIDGE_ORIGIN, SEED_ROOM_ID, SEED_SPACE_ID } from "./fixtures.ts";
 
@@ -41,6 +43,18 @@ function row(overrides: Record<string, unknown>): Record<string, unknown> {
     updatedAt: 1_700_000_000_000,
     ...overrides,
   };
+}
+
+/**
+ * The Discord bridge lives in a collapsible section of the Integrations page
+ * and starts collapsed. Open it and return the panel that holds its body, so
+ * selectors cannot match another section's content.
+ */
+async function openDiscordSection(page: Page) {
+  await page.goto(`/${SEED_SPACE_ID}/settings/integrations`);
+  await waitForAuthenticated(page);
+  await page.getByRole("button", { name: /^Discord/ }).click();
+  return page.getByRole("region", { name: /^Discord/ });
 }
 
 test.describe("discord bridge settings", () => {
@@ -120,10 +134,9 @@ test.describe("discord bridge settings", () => {
       });
     });
 
-    await page.goto(`/${SEED_SPACE_ID}/settings/discord-bridge`);
-    await waitForAuthenticated(page);
+    const panel = await openDiscordSection(page);
 
-    const rows = page.locator("section li");
+    const rows = panel.locator("li");
     await expect(rows).toHaveCount(5);
 
     // Order and text: the sidebar-placed channel leads with its thread nested
@@ -225,10 +238,9 @@ test.describe("discord bridge settings", () => {
       });
     });
 
-    await page.goto(`/${SEED_SPACE_ID}/settings/discord-bridge`);
-    await waitForAuthenticated(page);
+    const panel = await openDiscordSection(page);
 
-    const blockedRow = page.locator("section li", { hasText: "private-staff" });
+    const blockedRow = panel.locator("li", { hasText: "private-staff" });
     await expect(blockedRow).toHaveCount(1);
 
     // Terminal affordance naming the cause — an alert, not a spinner and not
@@ -243,7 +255,7 @@ test.describe("discord bridge settings", () => {
 
     // The summary separates the blocked channel from pending work and does
     // not claim everything synced.
-    const summary = page.locator("section button").first();
+    const summary = panel.getByRole("button", { name: /Backfill status/ });
     await expect(summary).toContainText("1 complete");
     await expect(summary).toContainText("1 pending");
     await expect(summary).toContainText("1 unreadable");

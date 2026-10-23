@@ -1,0 +1,30 @@
+# continuwuity, for the profile that runs it without encryption.
+#
+# The capability probe measures this homeserver as supporting MSC4190 (device
+# management) and MSC2409 (ephemeral typing, receipt and presence events), but
+# its transactions carry neither the to-device stream (MSC4203) nor the MSC3202
+# fields (device lists and one-time-key counts). End-to-bridge encryption needs
+# those, so the bridge runs with `e2ee = "off"` here and refuses encrypted rooms
+# rather than joining them and going silent.
+
+[global]
+server_name = "matrix.roomy.local"
+database_path = "/var/lib/continuwuity"
+port = 8008
+# A container must listen on every interface: a loopback bind is unreachable
+# from the bridge container across the compose network.
+address = "0.0.0.0"
+
+# Registration is closed; the bridge's appservice user is registered through the
+# admin room and its ghosts arrive through the appservice namespace.
+allow_registration = false
+allow_federation = false
+allow_encryption = true
+
+# Served under the container's own name; a deployment behind a reverse proxy sets
+# `[global.well_known] client` to its public origin.
+trusted_servers = []
+
+[global.well_known]
+# client = "https://matrix.roomy.example"
+# server = "matrix.roomy.example:443"

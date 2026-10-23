@@ -28,8 +28,6 @@
         return "Members";
       case "invites":
         return "Invites";
-      case "discord-bridge":
-        return "Discord Bridge";
       case "notifications":
         return "Notifications";
       case "integrations":

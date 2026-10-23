@@ -155,6 +155,17 @@ export const SEED_SPACE_2_MESSAGE_TEXT =
 export const BRIDGE_PORT = 9998;
 export const BRIDGE_ORIGIN = `http://127.0.0.1:${BRIDGE_PORT}`;
 
+/**
+ * Origin of the Matrix bridge admin API. Nothing listens here: the spec that
+ * covers the Integrations page's Matrix section fulfils these requests itself.
+ * Set on the app-lite dev server by Playwright's `webServer.env`, because the
+ * section reads it from `$env/dynamic/public` at runtime.
+ */
+export const MATRIX_BRIDGE_PORT = 9997;
+export const MATRIX_BRIDGE_ORIGIN = `http://127.0.0.1:${MATRIX_BRIDGE_PORT}`;
+/** The bridge DID the client signs admin tokens for. */
+export const MATRIX_BRIDGE_DID = "did:web:bridge.roomy.test";
+
 /** Path to the seeded channel. */
 export const SEED_ROOM_PATH = `/${SEED_SPACE_ID}/${SEED_ROOM_ID}`;
 /** Path to the second channel in the first space. */

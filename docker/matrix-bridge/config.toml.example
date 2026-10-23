@@ -1,0 +1,53 @@
+# An annotated configuration for the bridge. The container generates its own on
+# first boot (see entrypoint.sh); this file is the reference an operator reads
+# when adapting it.
+
+[homeserver]
+# Base URL of the homeserver the bridge is an appservice of.
+url = "http://homeserver:8008"
+# The server name ghosts and the appservice user live under.
+domain = "matrix.roomy.local"
+# Token the bridge presents to the homeserver.
+as_token = "generated-on-first-boot"
+# Token the homeserver presents on every transaction. The bridge verifies it.
+hs_token = "generated-on-first-boot"
+# The localpart of the appservice's own user.
+sender_localpart = "_roomy_bridge"
+
+[bridge]
+listen = "0.0.0.0:29331"
+db_path = "/data/bridge.sqlite"
+# The bridge's ATProto DID — the audience of every admin API token.
+bridge_did = "did:web:bridge.roomy.space"
+# The hostname ghost MXIDs end in, matching the registration's user namespace.
+hostname = "matrix.roomy.local"
+ghost_prefix = "_roomy"
+# How many recent Matrix messages a new portal reads before going live. The rest
+# arrives in the background.
+backfill_limit = 50
+# The deepest Matrix hierarchy level bridged as a thread. A room deeper than this
+# is flattened into the nearest channel with its path in the name.
+max_depth = 2
+
+[bridge.e2ee]
+# off | preferred | required
+#
+# `off`       never encrypt; encrypted rooms are refused at configuration time.
+# `preferred` encrypt when the capability probe passes, otherwise run without.
+# `required`  refuse to start unless the probe passes, naming what is missing.
+mode = "preferred"
+# Where the crypto store lives, defaulting to a sibling of db_path. The store is
+# the bridge device: deleting it loses every room key the bridge has received.
+# store_path = "/data/crypto-store.sqlite"
+
+[appserver]
+url = "https://api.roomy.space"
+did = "did:web:api.roomy.space"
+# The sync socket's origin, when it differs from `url` (a local appserver).
+# ws_url = "ws://127.0.0.1:8080"
+
+[atproto]
+# The PDS holding the bridge's session.
+pds_url = "https://bsky.social"
+identifier = "bridge.roomy.space"
+app_password = "an-app-password"

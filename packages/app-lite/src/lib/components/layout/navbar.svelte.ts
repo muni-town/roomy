@@ -10,7 +10,7 @@ let content = $state<Snippet | undefined>(undefined);
 let spaceInfo = $state<Snippet | undefined>(undefined);
 
 // Optional extra content rendered at the end of the space-info slot — e.g.
-// the Discord bridge status badge on the discord-bridge settings page.
+// the Discord bridge status badge on the Integrations settings page.
 // Pages set/clear this alongside their own mount lifecycle.
 let spaceInfoExtra = $state<Snippet | undefined>(undefined);
 

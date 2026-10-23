@@ -1,0 +1,29 @@
+[package]
+name = "roomy-client"
+description = "XRPC client for the Roomy appserver: queries, sendEvents, service-auth, sync socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+roomy-events.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+url.workspace = true
+base64.workspace = true
+sha2.workspace = true
+hex.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+ciborium.workspace = true
+ed25519-dalek = { version = "2.2", features = ["pkcs8", "rand_core"] }
+bs58.workspace = true
+parking_lot = "0.12"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }

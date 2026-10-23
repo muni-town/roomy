@@ -84,6 +84,20 @@ export const CreateRoom = defineEvent(
       `);
     }
 
+    const matrixOrigin =
+      event.extensions?.["space.roomy.extension.matrixOrigin.v0"];
+    if (matrixOrigin) {
+      statements.push(sql`
+        insert or ignore into comp_matrix_origin (entity, room_id, event_id, origin_server_ts)
+        values (
+          ${event.id},
+          ${matrixOrigin.roomId},
+          ${matrixOrigin.eventId ?? null},
+          ${matrixOrigin.originServerTs ?? null}
+        )
+      `);
+    }
+
     return statements;
   },
 );

@@ -128,9 +128,9 @@ time.
 `Mentions` is added to `messageExtension`, so `MessageExtensionUpdateMap`
 (`unionToMap(messageExtension, { makeAllNullable: true })`) automatically includes it —
 `editMessage` can update mentions. `MessageExtensionDeleteMap` is
-`unionToMap(type.or(DiscordMessageOrigin))` and intentionally excludes `Mentions` —
-there is no "delete mentions" semantics (editing a message replaces the body, and
-mentions are re-derived from the new body).
+`unionToMap(type.or(DiscordMessageOrigin, MatrixMessageOrigin))` and intentionally
+excludes `Mentions` — there is no "delete mentions" semantics (editing a message
+replaces the body, and mentions are re-derived from the new body).
 
 ## Frontend (app-lite) — extraction on send
 

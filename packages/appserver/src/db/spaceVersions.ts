@@ -81,9 +81,14 @@ export const SPACE_MIGRATIONS = {
   // global store, then drops the table — `data`, not a structural `up`, because
   // the rows must be read out before the DDL removes them.
   "5": { kind: "data" },
+  // `comp_matrix_origin` records the Matrix origin of a bridged room or
+  // message. It is a pure `create table if not exists` (plus index) in
+  // schema-space.sql, which is exec'd on every open, so existing space DBs
+  // gain it with no `up` and no data task.
+  "6": { kind: "structural" },
   // Next per-space schema change goes here, e.g.:
-  //   "6": { kind: "structural", up(db) { /* alter table … */ } },
-  //   "6": { kind: "data" },          // plus a task in SPACE_MIGRATION_TASKS
+  //   "7": { kind: "structural", up(db) { /* alter table … */ } },
+  //   "7": { kind: "data" },          // plus a task in SPACE_MIGRATION_TASKS
 } as const satisfies Record<string, SpaceMigrationEntry>;
 
 /**

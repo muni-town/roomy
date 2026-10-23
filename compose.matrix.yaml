@@ -1,0 +1,214 @@
+# The Roomy ↔ Matrix bridge, with its homeserver.
+#
+# Profiles:
+#   synapse       (default) Synapse + Postgres. The measured choice: the
+#                 capability probe reports every feature encryption needs —
+#                 MSC4190, MSC4203 to-device and the three MSC3202 fields — as
+#                 passing, so encrypted rooms work.
+#   continuwuity  continuwuity with an embedded database and no Postgres. It
+#                 passes MSC4190 and delivers MSC2409 ephemeral events, but a
+#                 transaction carries no to-device stream and no MSC3202 fields;
+#                 the probe therefore reports E2EE unavailable, and the bridge
+#                 refuses encrypted rooms.
+#
+#   docker compose -f compose.matrix.yaml up -d                    # Synapse
+#   docker compose -f compose.matrix.yaml --profile continuwuity up -d
+#
+# First boot is self-registering: the bridge container mints its tokens, writes
+# the homeserver's registration, and registers itself through the admin room.
+# Reusing the volume is what preserves that identity, so do not remove it.
+
+name: roomy-matrix
+
+x-bridge-base: &bridge-base
+  image: ${BRIDGE_IMAGE:-roomy-matrix-bridge:local}
+  build:
+    context: .
+    dockerfile: Dockerfile.matrix-bridge
+  restart: unless-stopped
+  volumes:
+    - bridge-data:/data
+    - bridge-config:/shared
+  environment:
+    APPSERVER_URL: ${APPSERVER_URL:-https://api.roomy.space}
+    APPSERVER_DID: ${APPSERVER_DID:-did:web:api.roomy.space}
+    ATPROTO_IDENTIFIER: ${ATPROTO_IDENTIFIER:-}
+    ATPROTO_APP_PASSWORD: ${ATPROTO_APP_PASSWORD:-}
+    BRIDGE_DID: ${BRIDGE_DID:-did:web:bridge.roomy.space}
+    PDS_URL: ${PDS_URL:-https://bsky.social}
+    BRIDGE_E2EE_MODE: ${BRIDGE_E2EE_MODE:-preferred}
+
+services:
+  # ── default: Synapse ───────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["synapse", "default"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the environment or a .env file}
+      POSTGRES_DB: synapse
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Writes the tokens, the bridge config and the appservice registration onto
+  # the volumes both other services read, then exits.
+  #
+  # It exists to break a genuine bootstrap cycle: the homeserver only learns the
+  # bridge is an appservice by reading the registration at startup, and the
+  # bridge cannot write one until the homeserver answers its capability probe.
+  # Generating the registration here — which needs no homeserver at all, only
+  # the bridge binary — lets the homeserver start with it in place, so the
+  # appservice user is registered from the first boot and nothing has to be
+  # restarted afterwards.
+  bridge-registration:
+    image: ${BRIDGE_IMAGE:-roomy-matrix-bridge:local}
+    build:
+      context: .
+      dockerfile: Dockerfile.matrix-bridge
+    profiles: ["synapse", "default"]
+    restart: "no"
+    volumes:
+      - bridge-data:/data
+      - bridge-config:/shared
+    environment:
+      BRIDGE_DID: ${BRIDGE_DID:-did:web:bridge.roomy.space}
+      HOMESERVER_URL: http://homeserver:8008
+      HOMESERVER_DOMAIN: ${HOMESERVER_DOMAIN:-matrix.roomy.local}
+      APPSERVER_URL: ${APPSERVER_URL:-https://api.roomy.space}
+      APPSERVER_DID: ${APPSERVER_DID:-did:web:api.roomy.space}
+      APPSERVER_TEST_DID: ${APPSERVER_TEST_DID:-}
+      ATPROTO_IDENTIFIER: ${ATPROTO_IDENTIFIER:-}
+      ATPROTO_APP_PASSWORD: ${ATPROTO_APP_PASSWORD:-}
+      PDS_URL: ${PDS_URL:-https://bsky.social}
+      BRIDGE_E2EE_MODE: ${BRIDGE_E2EE_MODE:-preferred}
+    command: ["registration"]
+
+  homeserver:
+    # Synapse is the default because it is the only homeserver the capability
+    # probe measures as carrying the to-device stream and the MSC3202 fields,
+    # which end-to-bridge encryption needs. See the PR body for the measurement.
+    image: matrixdotorg/synapse:latest
+    profiles: ["synapse", "default"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Synapse refuses to start when a registration it names is missing, and
+      # the appservice user is only registered if the file is there when it
+      # boots.
+      bridge-registration:
+        condition: service_completed_successfully
+    environment:
+      SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+      # The entrypoint writes the database password into Synapse's config, so
+      # this container needs the same value Postgres was given. Without it the
+      # generated `database.args.password` is empty and Synapse fails to start
+      # with `fe_sendauth: no password supplied`, which surfaces only as an
+      # unhealthy container.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the environment or a .env file}
+    volumes:
+      - synapse-data:/data
+      # The registration is written by the bridge container and read by this one,
+      # so it has to land on a volume both mount. `synapse-data` holds Synapse's
+      # own database and signing key; `bridge-config` holds only what the two
+      # containers must agree on.
+      - bridge-config:/shared
+      - ./docker/matrix-bridge/synapse-entrypoint.sh:/usr/local/bin/configure.py:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/configure.py"]
+    ports:
+      # Published so an integration test running on the host, and an operator
+      # debugging one, can reach the homeserver directly.
+      - "${MATRIX_HOMESERVER_PORT:-8008}:8008"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8008/_matrix/client/versions || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  bridge:
+    <<: *bridge-base
+    profiles: ["synapse", "default"]
+    depends_on:
+      homeserver:
+        condition: service_healthy
+    extra_hosts:
+      # The appserver and the PDS run outside this compose project; on Linux the
+      # host gateway is not a name Docker resolves on its own.
+      - "host.docker.internal:host-gateway"
+    environment:
+      APPSERVER_URL: ${APPSERVER_URL:-https://api.roomy.space}
+      APPSERVER_DID: ${APPSERVER_DID:-did:web:api.roomy.space}
+      ATPROTO_IDENTIFIER: ${ATPROTO_IDENTIFIER:-}
+      ATPROTO_APP_PASSWORD: ${ATPROTO_APP_PASSWORD:-}
+      BRIDGE_DID: ${BRIDGE_DID:-did:web:bridge.roomy.space}
+      PDS_URL: ${PDS_URL:-https://bsky.social}
+      BRIDGE_E2EE_MODE: ${BRIDGE_E2EE_MODE:-preferred}
+      HOMESERVER_URL: http://homeserver:8008
+      HOMESERVER_DOMAIN: ${HOMESERVER_DOMAIN:-matrix.roomy.local}
+      # Empty for a real deployment. The end-to-end stack sets it to the DID an
+      # APPSERVER_TEST_MODE appserver authenticates on.
+      APPSERVER_TEST_DID: ${APPSERVER_TEST_DID:-}
+      # `info` by default; `info,roomy_matrix_bridge=debug` names every event a
+      # decision was made about, which is what a bridge that moves nothing
+      # needs.
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${BRIDGE_PORT:-29331}:29331"
+
+  # ── fallback: continuwuity ─────────────────────────────────────────────────
+  continuwuity:
+    image: ghcr.io/continuwuity/continuwuity:latest
+    profiles: ["continuwuity"]
+    restart: unless-stopped
+    environment:
+      CONTINUWUITY_CONFIG: /etc/continuwuity/config.toml
+    volumes:
+      - ./docker/matrix-bridge/continuwuity.toml:/etc/continuwuity/config.toml:ro
+      - continuwuity-data:/var/lib/continuwuity
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8008/_matrix/client/versions || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  bridge-continuwuity:
+    <<: *bridge-base
+    profiles: ["continuwuity"]
+    depends_on:
+      continuwuity:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      APPSERVER_URL: ${APPSERVER_URL:-https://api.roomy.space}
+      APPSERVER_DID: ${APPSERVER_DID:-did:web:api.roomy.space}
+      ATPROTO_IDENTIFIER: ${ATPROTO_IDENTIFIER:-}
+      ATPROTO_APP_PASSWORD: ${ATPROTO_APP_PASSWORD:-}
+      BRIDGE_DID: ${BRIDGE_DID:-did:web:bridge.roomy.space}
+      PDS_URL: ${PDS_URL:-https://bsky.social}
+      # continuwuity delivers MSC2409 ephemeral events but carries neither a
+      # to-device stream (MSC4203) nor the MSC3202 fields, so encryption cannot
+      # run. `off` makes that explicit rather than discovered per room.
+      BRIDGE_E2EE_MODE: ${BRIDGE_E2EE_MODE:-off}
+      HOMESERVER_URL: http://continuwuity:8008
+      HOMESERVER_DOMAIN: ${HOMESERVER_DOMAIN:-matrix.roomy.local}
+      APPSERVER_TEST_DID: ${APPSERVER_TEST_DID:-}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${BRIDGE_PORT:-29331}:29331"
+
+volumes:
+  bridge-config:
+  bridge-data:
+  postgres-data:
+  synapse-data:
+  continuwuity-data:

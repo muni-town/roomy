@@ -1,0 +1,15 @@
+[package]
+name = "bridge-core"
+description = "Platform-neutral sans-io bridge state machine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+roomy-events.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ulid.workspace = true
+tracing.workspace = true

@@ -1,6 +1,6 @@
 import { type } from "arktype";
 import { Timestamp, Ulid, unionToMap, UserDid } from "../primitives";
-import { DiscordSnowflake } from "./room";
+import { DiscordSnowflake, MatrixRoomId } from "./room";
 
 export const AuthorOverride = type({
   $type: "'space.roomy.extension.authorOverride.v0'",
@@ -102,6 +102,22 @@ export const DiscordMessageOrigin = type({
 Used for idempotency checks and linking back to Discord.",
 );
 
+export const MatrixMessageOrigin = type({
+  $type: "'space.roomy.extension.matrixMessageOrigin.v0'",
+  roomId: MatrixRoomId.describe(
+    "The Matrix room ID the message was bridged from.",
+  ),
+  "eventId?": type.string.describe(
+    "The Matrix event ID of the original message.",
+  ),
+  "originServerTs?": type("number.integer").describe(
+    "The origin server timestamp of the Matrix event, in milliseconds since the unix epoch.",
+  ),
+}).describe(
+  "Origin metadata for messages bridged from Matrix. \
+Used for idempotency checks and linking back to Matrix.",
+);
+
 export const Attachment = type.or(
   Reply,
   Comment,
@@ -140,6 +156,7 @@ export const messageExtension = type.or(
   TimestampOverride,
   Attachments,
   DiscordMessageOrigin,
+  MatrixMessageOrigin,
   Mentions,
 );
 
@@ -159,6 +176,6 @@ Any extension not specified will be left as-is.",
 export type MessageExtensionUpdateMap = typeof MessageExtensionUpdateMap.infer;
 
 export const MessageExtensionDeleteMap = unionToMap(
-  type.or(DiscordMessageOrigin), // only the discord origin is relevant
+  type.or(DiscordMessageOrigin, MatrixMessageOrigin), // only bridge origins are relevant
 );
 export type MessageExtensionDeleteMap = typeof MessageExtensionDeleteMap.infer;

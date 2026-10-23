@@ -407,3 +407,87 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Check endpoint catalogue matches the appserver router
         run: pnpm --filter docs check:registry
+
+  # The Rust workspace is the Matrix bridge. Turbo stays JS-only: it has no
+  # notion of cargo, and a Rust job that ran inside it would rebuild the whole
+  # JS tree for every Rust change.
+  test-rust:
+    name: Test Rust
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install --profile minimal --component rustfmt,clippy
+          rustup show
+      - name: Cache the cargo registry and target dir
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      - name: The Tauri shell is not part of this workspace
+        run: |
+          # `packages/app-lite/src-tauri` has its own lockfile and its own
+          # toolchain needs. If the workspace ever pulled it in, this build would
+          # start compiling Tauri and fail on the missing system libraries.
+          if cargo metadata --no-deps --format-version 1 \
+            | jq -e '.packages[].manifest_path | select(contains("src-tauri"))' >/dev/null; then
+            echo "::error::the workspace includes packages/app-lite/src-tauri"
+            exit 1
+          fi
+
+  # The end-to-end stack: a real homeserver, a real appserver, and the bridge in
+  # a container. It runs the compose profiles the Dockerfile ships, so a broken
+  # image or a wrong registration is caught here rather than at deploy time.
+  test-matrix-bridge-e2e:
+    name: Test Matrix bridge E2E
+    runs-on: ubuntu-latest
+    needs: test-rust
+    # The stack has waits of a few minutes by design (image build, homeserver
+    # first boot). This ceiling is what turns "something stopped answering"
+    # into a failure rather than a job that runs for an hour.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install the pinned toolchain
+        run: rustup toolchain install --profile minimal
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.16.1
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build the SDK (the appserver imports its dist)
+        run: pnpm --filter @roomy-space/sdk build
+      - name: Run the stack and its integration tests
+        run: ./scripts/matrix-bridge-e2e.sh
+      - name: Upload the stack's logs and the probe result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-bridge-e2e
+          path: |
+            /tmp/matrix-bridge-e2e.log
+            /tmp/matrix-bridge-capabilities.json
+            /tmp/matrix-bridge-appserver.log

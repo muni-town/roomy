@@ -715,3 +715,17 @@ export function px(): InstanceType<typeof DirectXrpcClient> {
   if (!directXrpc) throw new Error("Not authenticated");
   return directXrpc;
 }
+
+/**
+ * A service-auth token for a service that is not the appserver — e.g. a
+ * bridge's admin API. `aud` is the service's DID; `lxm` binds the token to
+ * one method. Reuses the same `ServiceAuthClient` the XRPC client holds, so
+ * token caching and refresh work identically.
+ *
+ * Throws if the user is not authenticated.
+ */
+export function serviceAuthToken(aud: string, lxm?: string): Promise<string> {
+  const client = serviceAuth;
+  if (!client) return Promise.reject(new Error("Not authenticated"));
+  return client.getToken(aud, lxm);
+}

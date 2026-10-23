@@ -105,7 +105,32 @@ export const CONFIG = {
    * deployment's id space from another, it is not a secret.
    */
   analyticsSalt: dynamicEnv.PUBLIC_ANALYTICS_SALT || null,
+  /**
+   * DIDs of the Matrix bridges this build can talk to, comma-separated in
+   * preference order. The first is the default: every bridge admin request
+   * addresses its service-auth token to it.
+   */
+  matrixBridgeDids: (dynamicEnv.PUBLIC_MATRIX_BRIDGE_DIDS || "")
+    .split(",")
+    .map((did) => did.trim())
+    .filter((did) => did !== ""),
+  /**
+   * Admin API base URL of the default (first) Matrix bridge, e.g.
+   * `https://bridge.roomy.space`. Unset disables the Matrix section of the
+   * Integrations page with a configuration message: the client has no way to
+   * derive the base URL from a DID on its own.
+   */
+  matrixBridgeUrl:
+    (dynamicEnv.PUBLIC_MATRIX_BRIDGE_URL || "").replace(/\/+$/, "") || null,
 };
+
+/**
+ * Whether this build can talk to a Matrix bridge at all: it needs an audience
+ * DID to sign admin tokens for and a base URL to send them to. Unset disables
+ * the Matrix section of the Integrations page.
+ */
+export const MATRIX_BRIDGE_CONFIGURED =
+  CONFIG.matrixBridgeUrl !== null && CONFIG.matrixBridgeDids.length > 0;
 
 /**
  * Member limit of the free Discord Bridge tier (no Roomy Pro membership).

@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
-import { APP_LITE_ORIGIN, APP_LITE_PORT, BRIDGE_ORIGIN } from "./e2e/fixtures.ts";
+import {
+  APP_LITE_ORIGIN,
+  APP_LITE_PORT,
+  BRIDGE_ORIGIN,
+  MATRIX_BRIDGE_DID,
+  MATRIX_BRIDGE_ORIGIN,
+} from "./e2e/fixtures.ts";
 
 /**
  * Playwright config for app-lite end-to-end tests.
@@ -95,6 +101,12 @@ export default defineConfig({
       // find the bridge REST surface. Nothing listens on the origin: the spec
       // for that page fulfils the requests itself.
       PUBLIC_DISCORD_BRIDGE: BRIDGE_ORIGIN,
+      // The Matrix section of the Integrations page reads these to find the
+      // bridge's admin API. Nothing listens on the origin: the spec that covers
+      // that section fulfils the requests itself, and every other spec never
+      // opens the section.
+      PUBLIC_MATRIX_BRIDGE_DIDS: MATRIX_BRIDGE_DID,
+      PUBLIC_MATRIX_BRIDGE_URL: MATRIX_BRIDGE_ORIGIN,
       // The suite runs the full route set, so pin the target rather than
       // inheriting an exported `VITE_IOS_BUILD` from the developer's shell.
       VITE_IOS_BUILD: "",

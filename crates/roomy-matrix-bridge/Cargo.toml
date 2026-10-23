@@ -1,0 +1,48 @@
+[package]
+name = "roomy-matrix-bridge"
+description = "Bidirectional Roomy ↔ Matrix bridge: appservice, admin API, supervisor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["e2ee"]
+e2ee = ["matrix-adapter/e2ee"]
+
+[[bin]]
+name = "roomy-matrix-bridge"
+path = "src/main.rs"
+
+[dependencies]
+bridge-core.workspace = true
+matrix-adapter.workspace = true
+roomy-client.workspace = true
+roomy-events.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio.workspace = true
+tokio-stream = "0.1"
+axum = { version = "0.8", features = ["json", "http1", "tokio"] }
+toml = "1.1"
+clap = { version = "4", features = ["derive", "env"] }
+ulid.workspace = true
+ruma = { version = "0.17", default-features = false }
+hex.workspace = true
+base64.workspace = true
+sha2.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+futures-util = "0.3"
+ed25519-dalek = { version = "2.2", features = ["pkcs8", "rand_core"] }
+bs58.workspace = true
+url.workspace = true
+parking_lot = "0.12"
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }

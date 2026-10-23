@@ -163,6 +163,16 @@ create table if not exists comp_discord_origin (
 ) strict;
 create index if not exists idx_comp_discord_origin on comp_discord_origin(snowflake, guild_id);
 
+-- Bridge origin of a room or message materialised from a Matrix event. The
+-- row is keyed by the Roomy entity and never updated after creation.
+create table if not exists comp_matrix_origin (
+  entity text primary key references entities(id) on delete cascade,
+  room_id text not null,
+  event_id text,
+  origin_server_ts integer
+) strict;
+create index if not exists idx_comp_matrix_origin_room on comp_matrix_origin(room_id, event_id);
+
 create table if not exists comp_user (
   -- The DID is the entity ID for users, but it is encoded into our ID encoding,
   -- not just a normal string.

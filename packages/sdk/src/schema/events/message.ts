@@ -74,6 +74,22 @@ export const CreateMessage = defineEvent(
       `);
     }
 
+    // The origin row is immutable per message: it is written only here, and
+    // edits leave it untouched.
+    const matrixOrigin =
+      event.extensions["space.roomy.extension.matrixMessageOrigin.v0"];
+    if (matrixOrigin) {
+      statements.push(sql`
+        insert or ignore into comp_matrix_origin (entity, room_id, event_id, origin_server_ts)
+        values (
+          ${event.id},
+          ${matrixOrigin.roomId},
+          ${matrixOrigin.eventId ?? null},
+          ${matrixOrigin.originServerTs ?? null}
+        )
+      `);
+    }
+
     statements.push(
       ...attachmentStatements(
         streamId,
@@ -82,7 +98,6 @@ export const CreateMessage = defineEvent(
           [],
       ),
     );
-
     return statements;
   },
 );

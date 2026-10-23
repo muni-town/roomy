@@ -1,0 +1,39 @@
+[package]
+name = "matrix-adapter"
+description = "Matrix appservice transport, ghosts, and end-to-bridge encryption"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# End-to-bridge encryption. On by default; building without it drops
+# `matrix-sdk-crypto` and makes encrypted rooms a refused configuration rather
+# than a runtime surprise.
+default = ["e2ee"]
+e2ee = ["dep:matrix-sdk-crypto", "dep:matrix-sdk-sqlite", "dep:vodozemac", "ruma/events"]
+
+[dependencies]
+bridge-core.workspace = true
+roomy-events.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+url.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
+ruma = { version = "0.17", default-features = false, features = ["api", "appservice-api", "client-api", "events", "signatures", "rand", "unstable-msc3202"] }
+rand = "0.10"
+sha2.workspace = true
+hex.workspace = true
+base64.workspace = true
+ulid.workspace = true
+parking_lot = "0.12"
+
+matrix-sdk-crypto = { version = "0.19", optional = true }
+matrix-sdk-sqlite = { version = "0.19", optional = true, default-features = false, features = ["crypto-store", "bundled"] }
+vodozemac = { version = "0.11", optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }

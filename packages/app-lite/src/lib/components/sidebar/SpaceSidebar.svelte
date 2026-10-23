@@ -181,19 +181,13 @@
       ((meta?.isAdmin ?? false) ||
         (meta?.joinPolicy.allowMemberInvites ?? false)),
   );
-  // The bridge is a Roomy Pro feature: the tab appears for anyone whose
-  // `pro-subscription` flag is enabled. Direct navigation still works without
-  // it, and the page itself gates the Pro panel on the same flag.
-  const showDiscordBridgeTab = $derived(
-    flagsQuery.data?.flags.includes("pro-subscription") ?? false,
-  );
   const showFederationTab = $derived(meta?.isAdmin ?? false);
-  const spaceAccountMgmtEnabled = $derived(
-    flagsQuery.data?.flags.includes("space-account-management") ?? false,
-  );
-  const showIntegrationsTab = $derived(
-    spaceAccountMgmtEnabled && (meta?.isAdmin ?? false),
-  );
+  // The Integrations page is admin-only, and each section inside it gates itself
+  // (Bluesky on space-account-management, Discord on pro-subscription, Matrix on
+  // the bridge being configured). Gating the tab on those flags as well would
+  // hide the page from an admin whose deployment has neither, which is exactly
+  // the Matrix-only case.
+  const showIntegrationsTab = $derived(meta?.isAdmin ?? false);
   const settingsTabs = $derived(
     [
       { slug: "", label: "General" },
@@ -203,9 +197,6 @@
       ...(showFederationTab ? [{ slug: "federations", label: "Federation" }] : []),
       { slug: "notifications", label: "Notifications" },
       ...(showInvitesTab ? [{ slug: "invites", label: "Invites" }] : []),
-      ...(showDiscordBridgeTab
-        ? [{ slug: "discord-bridge", label: "Discord Bridge" }]
-        : []),
     ],
   );
   function isSettingsTabActive(slug: string) {

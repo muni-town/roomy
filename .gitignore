@@ -67,3 +67,7 @@ build.old
 
 # Storybook build output
 storybook-static
+
+# Rust build output. The workspace's `Cargo.toml` sets the dev profile so no
+# local `.cargo/config.toml` is needed.
+/target/

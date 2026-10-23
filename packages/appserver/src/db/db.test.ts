@@ -45,6 +45,7 @@ describe("per-space schema", () => {
       "edges",
       "comp_space",
       "comp_room",
+      "comp_matrix_origin",
       "comp_user",
       "comp_content",
       "comp_info",

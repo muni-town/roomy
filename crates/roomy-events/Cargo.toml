@@ -1,0 +1,19 @@
+[package]
+name = "roomy-events"
+description = "Typed construction and encoding of Roomy space events"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+ciborium.workspace = true
+thiserror.workspace = true
+ulid.workspace = true
+base64.workspace = true
+serde_bytes = "0.11"
+
+[dev-dependencies]
+serde_json.workspace = true

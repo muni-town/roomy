@@ -1,0 +1,83 @@
+# Roomy ↔ Matrix bridge, plus the homeserver it runs against.
+#
+# The default target is Synapse, because the capability probe measures it as the
+# only homeserver that delivers what end-to-bridge encryption needs. continuwuity
+# is built as a second target for operators who want it without encryption; see
+# compose.matrix.yaml for the profile that selects it.
+#
+#   docker build -f Dockerfile.matrix-bridge -t roomy-matrix-bridge .
+#
+# Two stages: build the workspace, then a runtime image that carries only the
+# binary, its shared libraries, and the first-boot entrypoint.
+
+# ── build ─────────────────────────────────────────────────────────────────────
+FROM rust:1.99-bookworm AS build
+
+WORKDIR /src
+
+# Compiling the dependency graph is what makes a rebuild slow (matrix-sdk-crypto
+# alone is minutes), so it is built in its own layer from the manifests and a
+# stub source tree. Editing a `.rs` file then recompiles only this workspace's
+# crates, and the dependency layer is reused.
+COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN find crates -name '*.rs' -delete \
+    && for crate in crates/*/; do \
+         mkdir -p "$crate/src" && touch "$crate/src/lib.rs"; \
+       done \
+    && printf 'fn main() {}\n' > crates/roomy-matrix-bridge/src/main.rs \
+    && cargo build --release -p roomy-matrix-bridge
+
+# The real sources, then the same build with the dependency layer already warm.
+# The stub tree is replaced wholesale rather than merged over, so no stub file
+# survives into the compile.
+COPY crates /tmp/sources
+RUN rm -rf crates \
+    && mv /tmp/sources crates \
+    && find crates -name '*.rs' -exec touch {} + \
+    && cargo build --release -p roomy-matrix-bridge
+
+# ── runtime ───────────────────────────────────────────────────────────────────
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# A distro-independent unprivileged user: the bridge holds a Matrix appservice
+# token and an ATProto app password, and neither should be readable by anything
+# else on the host.
+RUN useradd --system --create-home --home-dir /var/lib/roomy-matrix-bridge \
+        --shell /usr/sbin/nologin roomybridge \
+    && mkdir -p /data /etc/roomy-matrix-bridge \
+    && chown -R roomybridge:roomybridge /data /etc/roomy-matrix-bridge
+
+COPY --from=build /src/target/release/roomy-matrix-bridge /usr/local/bin/roomy-matrix-bridge
+COPY docker/matrix-bridge/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/matrix-bridge/config.toml.example /etc/roomy-matrix-bridge/config.toml.example
+
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENV BRIDGE_CONFIG=/data/config.toml \
+    RUST_LOG=info
+
+VOLUME ["/data"]
+EXPOSE 29331
+
+# The healthcheck asks the running bridge what it measured, rather than running
+# the probe again: the probe binds the listen address to receive the transaction
+# it provokes, so a second instance in the same container cannot start — the
+# healthcheck could only ever report unhealthy, and Docker would restart a
+# perfectly working bridge.
+#
+# `/capabilities` is the same measurement, cached from startup, and it names the
+# missing feature when encryption is unavailable.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${BRIDGE_PORT:-29331}/_roomy/admin/v1/health" || exit 1
+
+# A named volume is created root-owned from this directory's ownership at the
+# time VOLUME was declared, so `USER roomybridge` alone cannot write /data on a
+# fresh volume: the first boot would fail before it could generate a token. The
+# entrypoint starts as root only to take ownership, then drops privileges.
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["serve"]
