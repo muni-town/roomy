@@ -5,10 +5,13 @@
   let {
     open = $bindable(false),
     creating = false,
+    error = null,
     onCreate,
   }: {
     open: boolean;
     creating?: boolean;
+    /** Why the last create attempt failed, shown above the actions. */
+    error?: string | null;
     onCreate: (name: string, description: string) => void;
   } = $props();
 
@@ -44,6 +47,10 @@
       placeholder="Description (optional)"
       rows={2}
     />
+
+    {#if error}
+      <p class="text-sm text-red-600">{error}</p>
+    {/if}
 
     <div class="flex justify-end">
       <Button onclick={submit} disabled={creating || !name.trim()}>

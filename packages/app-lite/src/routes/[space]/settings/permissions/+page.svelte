@@ -55,10 +55,30 @@
   );
   let createOpen = $state(false);
   let creating = $state(false);
+  let createError = $state<string | null>(null);
   let editOpen = $state(false);
+  let editError = $state<string | null>(null);
+  let deleteError = $state<string | null>(null);
+  let membersError = $state<string | null>(null);
   let isDeleting = $state(false);
   let menuOpen = $state(false);
   let policyUpdating = $state(false);
+
+  /** Message for a failed write: the server's reason when it gave one. */
+  function failure(err: unknown, fallback: string): string {
+    return err instanceof Error && err.message ? err.message : fallback;
+  }
+
+  /**
+   * The role detail view is keyed on `selectedRoleId`, so it is rebuilt on
+   * every switch; the failures it reports belong to the role being left
+   * behind, so they go with it.
+   */
+  function selectRole(id: string | null) {
+    selectedRoleId = id;
+    deleteError = null;
+    membersError = null;
+  }
 
   async function onUpdatePolicy() {
     policyUpdating = true;
@@ -80,9 +100,12 @@
 
   async function onCreate(name: string, description: string) {
     creating = true;
+    createError = null;
     try {
       await createRole(spaceId, { name, description });
       createOpen = false;
+    } catch (e) {
+      createError = failure(e, "Failed to create role");
     } finally {
       creating = false;
     }
@@ -90,11 +113,12 @@
 
   async function onSaveEdit(name: string, description: string) {
     if (!selectedRole) return;
+    editError = null;
     try {
       await updateRole(spaceId, { roleId: selectedRole.id, name, description });
       editOpen = false;
     } catch (e) {
-      console.error("Failed to update role", e);
+      editError = failure(e, "Failed to save role");
     }
   }
 
@@ -102,11 +126,12 @@
     if (!selectedRole) return;
     if (!confirm(`Delete role "${selectedRole.name ?? selectedRole.id}"?`)) return;
     isDeleting = true;
+    deleteError = null;
     try {
       await deleteRole(spaceId, selectedRole.id);
-      selectedRoleId = null;
+      selectRole(null);
     } catch (e) {
-      console.error("Failed to delete role", e);
+      deleteError = failure(e, "Failed to delete role");
     } finally {
       isDeleting = false;
     }
@@ -130,19 +155,21 @@
 
   async function addMember(user: TypeaheadUser) {
     if (!selectedRole) return;
+    membersError = null;
     try {
       await addMemberRole(spaceId, { roleId: selectedRole.id, userDid: user.did });
     } catch (e) {
-      console.error("Failed to add member", e);
+      membersError = failure(e, "Failed to add member");
     }
   }
 
   async function removeMember(did: string) {
     if (!selectedRole) return;
+    membersError = null;
     try {
       await removeMemberRole(spaceId, { roleId: selectedRole.id, userDid: did });
     } catch (e) {
-      console.error("Failed to remove member", e);
+      membersError = failure(e, "Failed to remove member");
     }
   }
 
@@ -175,7 +202,7 @@
   {#if selectedRole}
     {#key selectedRoleId}
       <div class="space-y-6">
-        <Button variant="ghost" class="justify-start" onclick={() => (selectedRoleId = null)}>
+        <Button variant="ghost" class="justify-start" onclick={() => selectRole(null)}>
           <IconArrowLeft class="size-4" />
           Permissions
         </Button>
@@ -201,7 +228,7 @@
               {/snippet}
               <button
                 class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-base-800 dark:text-base-200 hover:bg-base-100 dark:hover:bg-base-800 transition-colors text-left"
-                onclick={() => { menuOpen = false; editOpen = true; }}
+                onclick={() => { menuOpen = false; editError = null; editOpen = true; }}
               >
                 <IconPencil class="size-4 shrink-0 text-base-500" />
                 Edit
@@ -221,6 +248,10 @@
             </Popover>
           {/if}
         </div>
+
+        {#if deleteError}
+          <p class="text-sm text-red-600">{deleteError}</p>
+        {/if}
 
         <!-- Members -->
         <div class="space-y-3">
@@ -275,6 +306,10 @@
               placeholder="Add member..."
             />
           {/if}
+
+          {#if membersError}
+            <p class="text-sm text-red-600">{membersError}</p>
+          {/if}
         </div>
 
         <!-- Channel permissions -->
@@ -315,7 +350,14 @@
           Permissions control access to channels in your space.
         </p>
         {#if isAdmin}
-          <Button variant="secondary" size="icon" onclick={() => (createOpen = true)}>
+          <Button
+            variant="secondary"
+            size="icon"
+            onclick={() => {
+              createError = null;
+              createOpen = true;
+            }}
+          >
             <IconPlus class="size-4" />
             <span class="sr-only">Create role</span>
           </Button>
@@ -330,7 +372,7 @@
             <li>
               <button
                 class="w-full flex items-center gap-3 rounded-2xl px-4 py-2.5 hover:bg-base-50 dark:hover:bg-base-800/60 text-left transition-colors"
-                onclick={() => (selectedRoleId = role.id)}
+                onclick={() => selectRole(role.id)}
               >
                 <span class="font-medium text-base-900 dark:text-base-100 flex-1">
                   {role.name}
@@ -376,9 +418,9 @@
   {/if}
 </div>
 
-<RoleCreateForm bind:open={createOpen} {creating} onCreate={onCreate} />
+<RoleCreateForm bind:open={createOpen} {creating} error={createError} onCreate={onCreate} />
 {#key selectedRoleId}
   {#if selectedRole}
-    <RoleEditForm bind:open={editOpen} role={selectedRole} onSave={onSaveEdit} />
+    <RoleEditForm bind:open={editOpen} role={selectedRole} error={editError} onSave={onSaveEdit} />
   {/if}
 {/key}

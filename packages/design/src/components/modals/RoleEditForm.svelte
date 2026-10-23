@@ -7,6 +7,7 @@
     open = $bindable(false),
     role,
     saving = false,
+    error = null,
     onSave,
   }: {
     open: boolean;
@@ -16,6 +17,8 @@
       description?: string;
     } | null;
     saving?: boolean;
+    /** Why the last save attempt failed, shown above the actions. */
+    error?: string | null;
     onSave: (name: string, description: string) => void;
   } = $props();
 
@@ -53,6 +56,10 @@
           placeholder="Role description (optional)"
         />
       </div>
+
+      {#if error}
+        <p class="text-sm text-red-600">{error}</p>
+      {/if}
 
       <div class="flex justify-end">
         <Button onclick={submit} disabled={saving || !name.trim()}>
