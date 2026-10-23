@@ -36,6 +36,33 @@ async function sendMessage(page: import("@playwright/test").Page, text: string) 
 }
 
 test.describe("sending a message", () => {
+  test("pressing Send leaves focus in the composer", async ({ page }) => {
+    await page.goto(SEED_ROOM_PATH);
+    await waitForAuthenticated(page);
+
+    const input = composer(page);
+    await expect(input).toBeVisible();
+    await input.click();
+    const text = uniqueMessage("focus kept");
+    await input.pressSequentially(text);
+
+    const send = page.getByTestId("send-message-button");
+    await expect(send).toBeVisible();
+    const box = await send.boundingBox();
+    if (!box) throw new Error("send button has no bounding box");
+
+    // A press that moved focus to the button is what closes a mobile
+    // keyboard; the refocus after the send cannot reopen it. So the editor
+    // must still hold focus between press and release, not only afterwards.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect(input).toBeFocused();
+    await page.mouse.up();
+
+    await expect(page.getByText(text)).toBeVisible();
+    await expect(input).toBeFocused();
+  });
+
   test("the sent message appears in the room", async ({ page }) => {
     await page.goto(SEED_ROOM_PATH);
     await waitForAuthenticated(page);

@@ -412,6 +412,11 @@
             {#if !isSendingMessage && canSend}
               <Button
                 data-testid="send-message-button"
+                onmousedown={(e) => {
+                  // Keep focus in the editor, so a mobile keyboard stays
+                  // open through a send instead of closing on the tap.
+                  e.preventDefault();
+                }}
                 onclick={onSend}
                 variant="primary"
                 size="icon"
