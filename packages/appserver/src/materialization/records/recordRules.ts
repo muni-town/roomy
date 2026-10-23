@@ -16,6 +16,16 @@ import type { RecordChange } from "./recordChange.ts";
 import { messageStatements } from "./messageRules.ts";
 import { reactionStatements } from "./reactionRules.ts";
 import { roomStatements } from "./roomRules.ts";
+import {
+  banStatements,
+  inviteStatements,
+  membershipStatements,
+} from "./membershipRules.ts";
+import {
+  roleGrantStatements,
+  roleStatements,
+  roomPermissionStatements,
+} from "./permissionRules.ts";
 import { spaceInfoStatements, spaceSidebarStatements } from "./spaceConfigRules.ts";
 
 /** Which database a rule statement targets. */
@@ -79,6 +89,18 @@ export function changeStatements(
       return spaceInfoStatements(change, ctx);
     case "spaceSidebar":
       return spaceSidebarStatements(change, ctx);
+    case "membership":
+      return membershipStatements(change, ctx);
+    case "ban":
+      return banStatements(change, ctx);
+    case "invite":
+      return inviteStatements(change, ctx);
+    case "role":
+      return roleStatements(change, ctx);
+    case "roleGrant":
+      return roleGrantStatements(change, ctx);
+    case "roomPermission":
+      return roomPermissionStatements(change, ctx);
     default:
       throw new Error(`No projection rule for record kind: ${kind}`);
   }

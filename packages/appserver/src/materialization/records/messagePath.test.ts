@@ -563,13 +563,11 @@ describe("routing is decided by the kinds an event emits", () => {
     const { entries, fx } = corpus();
     const routed = entries.filter((entry) => convertedChanges(entry, STREAM));
 
-    expect([...CONVERTED_KINDS].sort()).toEqual([
-      "message",
-      "reaction",
-      "room",
-      "spaceInfo",
-      "spaceSidebar",
-    ]);
+    // The corpus's kinds have converted; membership and permission kinds may
+    // convert in later families without changing this corpus's routing.
+    for (const kind of ["message", "reaction", "room", "spaceInfo", "spaceSidebar"] as const) {
+      expect(CONVERTED_KINDS.has(kind)).toBe(true);
+    }
     expect(
       [...new Set(routed.map((entry) => entry.event.$type))].sort(),
     ).toEqual([
