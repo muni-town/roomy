@@ -182,6 +182,34 @@ export async function spaceExists(spaceId: string): Promise<boolean> {
 }
 
 /**
+ * The space DIDs owning each of `entityIds`, from the global `entity_space`
+ * index. Batched form of {@link resolveSpaceForEntity}: ids absent from the
+ * map were never materialised (or are not in the index), which the caller
+ * reads the same way as a `null` from the single-id resolver.
+ */
+export async function resolveSpacesForEntities(
+  entityIds: readonly string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(entityIds)];
+  if (ids.length === 0) return out;
+
+  const global = openGlobalDb();
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const rows = await global
+      .query(
+        `select entity_id, space_did from entity_space
+          where entity_id in (${chunk.map(() => "?").join(",")})`,
+      )
+      .all<{ entity_id: string; space_did: string }>(...chunk);
+    for (const row of rows) out.set(row.entity_id, row.space_did);
+  }
+  return out;
+}
+
+/**
  * Resolve the space DID that owns `entityId` (a room or message entity) by
  * reading the global `entity_space` index, then return a handle that routes
  * requests to that space's per-space DB.

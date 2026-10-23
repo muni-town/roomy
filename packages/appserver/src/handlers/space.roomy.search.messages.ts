@@ -22,7 +22,9 @@
  * `reply.message` (the fully hydrated replied-to message) attached when the
  * target resolves and the caller can read the target's room — the client
  * renders the preview without a getMessage fetch per hit, matching how
- * forwards embed their originals.
+ * forwards embed their originals. The page's targets are resolved as one
+ * batch per target space, so the cost does not grow with the number of
+ * replies on the page.
  *
  * Display names are denormalised too: each hit carries its space name/
  * avatar and room name/kind (resolved with two batched queries per
@@ -33,9 +35,21 @@
  * unavailable without the search service.
  */
 
-import { createAccessMemo, resolveRoom, roomAccess } from "../auth/access.ts";
+import {
+  createAccessMemo,
+  resolveRoom,
+  roomAccess,
+  roomAccessMany,
+  type AccessMemo,
+} from "../auth/access.ts";
 import { federatedRoomAccess } from "../auth/federation.ts";
-import { openGlobalDb, openReadStateDb, openSpaceDb, openSpaceDbForEntity } from "../db/db.ts";
+import {
+  openGlobalDb,
+  openReadStateDb,
+  openSpaceDb,
+  openSpaceDbForEntity,
+  resolveSpacesForEntities,
+} from "../db/db.ts";
 import { selectJoinedSpaceDids } from "../queries/userSpaceMembership.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
 import { encodeSparse } from "../search/bm25.ts";
@@ -304,7 +318,7 @@ export const searchMessagesHandler: QueryHandler<
   // result carries the room/space it was found in so cross-space search
   // clients can show context and link to the hit.
   const results: SearchHit[] = [];
-  const memos = new Map<string, ReturnType<typeof createAccessMemo>>();
+  const memos = new Map<string, AccessMemo>();
   for (const { message, roomId, spaceDid } of ranked) {
     if (results.length >= limit) break;
     let memo = memos.get(spaceDid);
@@ -322,41 +336,95 @@ export const searchMessagesHandler: QueryHandler<
       ...spaceDisplay.get(spaceDid),
       ...roomDisplay.get(roomId),
     };
-    // Denormalise the reply context. Only the message id rides along when
-    // the target is unresolvable or unreadable — the client renders
-    // "Reply unavailable" instead of fetching per hit.
+    // Start every reply as id-only; the batch below upgrades the ones whose
+    // target resolves and is readable. The client renders "Reply unavailable"
+    // for the rest instead of fetching per hit.
     if (message.replyTo) {
       result.reply = { messageId: message.replyTo };
-      try {
-        const targetDb = await openSpaceDbForEntity(message.replyTo);
-        if (targetDb) {
-          let targetMemo = memos.get(spaceDid);
-          if (!targetMemo) {
-            targetMemo = createAccessMemo();
-            memos.set(spaceDid, targetMemo);
-          }
-          const targetRow = await targetDb
-            .query("select room from entities where id = ?")
-            .get<{ room: string | null }>(message.replyTo);
-          const targetRoom = targetRow?.room;
-          if (targetRoom) {
-            const targetAcc = await roomAccess(targetDb, targetRoom, userDid, targetMemo);
-            if (targetAcc.canRead) {
-              const { messages: targets } = await selectMessages(
-                targetDb,
-                { kind: "ids", ids: [message.replyTo] },
-                userDid,
-              );
-              const target = targets[0];
-              if (target) result.reply = { messageId: message.replyTo, message: target };
-            }
-          }
-        }
-      } catch (err) {
-        log.warn(`[search] reply denormalisation failed for ${message.replyTo}:`, err);
-      }
     }
     results.push(result);
+  }
+
+  // Denormalise the page's reply context as a batch: one entity→space
+  // resolution for every distinct target, then one entity→room read, one
+  // batched access decision and one `selectMessages` per target space —
+  // independent of how many hits carry a reply. Resolving per hit instead
+  // costs two worker round-trips per reply, which is the search endpoint's
+  // dominant cost on a page of replies.
+  const replyTargets = [
+    ...new Set(
+      results
+        .map((r) => r.reply?.messageId)
+        .filter((id): id is string => id !== undefined),
+    ),
+  ];
+  if (replyTargets.length > 0) {
+    const replyMessages = new Map<string, MessageDto>();
+    let targetsBySpace = new Map<string, string[]>();
+    try {
+      const spaceByTarget = await resolveSpacesForEntities(replyTargets);
+      for (const [targetId, targetSpace] of spaceByTarget) {
+        const arr = targetsBySpace.get(targetSpace) ?? [];
+        arr.push(targetId);
+        targetsBySpace.set(targetSpace, arr);
+      }
+    } catch (err) {
+      log.warn("[search] reply space resolution failed:", err);
+      targetsBySpace = new Map();
+    }
+
+    for (const [targetSpace, targetIds] of targetsBySpace) {
+      // One space's failure must not cost the other spaces their reply
+      // context: each is caught on its own, and the targets it would have
+      // resolved keep the id-only reply.
+      try {
+        const targetDb = openSpaceDb(targetSpace);
+        let targetMemo = memos.get(targetSpace);
+        if (!targetMemo) {
+          targetMemo = createAccessMemo();
+          memos.set(targetSpace, targetMemo);
+        }
+        const targetRows = await targetDb
+          .query(
+            `select id, room from entities
+              where id in (${targetIds.map(() => "?").join(",")})`,
+          )
+          .all<{ id: string; room: string | null }>(...targetIds);
+
+        const targetRoomIds = new Set<string>();
+        for (const row of targetRows) {
+          if (row.room !== null) targetRoomIds.add(row.room);
+        }
+        const access = await roomAccessMany(
+          targetDb,
+          [...targetRoomIds],
+          userDid,
+          targetMemo,
+        );
+        const readable = targetRows
+          .filter((row) => row.room !== null && access.get(row.room)?.canRead === true)
+          .map((row) => row.id);
+        if (readable.length === 0) continue;
+
+        const { messages: targets } = await selectMessages(
+          targetDb,
+          { kind: "ids", ids: readable },
+          userDid,
+        );
+        for (const target of targets) replyMessages.set(target.id, target);
+      } catch (err) {
+        log.warn(`[search] reply denormalisation failed for space ${targetSpace}:`, err);
+      }
+    }
+
+    // Ids that resolved to nothing, were unreadable, or whose space failed
+    // keep the id-only reply attached above.
+    for (const hit of results) {
+      const targetId = hit.reply?.messageId;
+      if (targetId === undefined) continue;
+      const target = replyMessages.get(targetId);
+      if (target) hit.reply = { messageId: targetId, message: target };
+    }
   }
 
   const result: SearchMessagesResult = { messages: results };

@@ -24,6 +24,7 @@ import {
   _setQdrantClientForTest,
   type QdrantClientLike,
 } from "../search/qdrantSearch.ts";
+import { metrics } from "../metrics.ts";
 import { searchMessagesHandler } from "./space.roomy.search.messages.ts";
 
 const VIEWER = UserDid.assert("did:plc:viewer");
@@ -164,11 +165,12 @@ async function seedMessage(opts: {
   authorDid: UserDid;
   body: string;
   replyTo?: string;
+  room?: string;
 }): Promise<void> {
   const space = openSpaceDb(SPACE);
   await space.run(
     "insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)",
-    [opts.msgId, SPACE, ROOM, opts.msgId],
+    [opts.msgId, SPACE, opts.room ?? ROOM, opts.msgId],
   );
   await space.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
     opts.msgId,
@@ -205,6 +207,150 @@ function installHits(messageIds: string[]): void {
     ),
   );
 }
+
+/**
+ * DB worker round-trips observed so far. Every request through a worker link
+ * observes the `roomy_db_wait_seconds` histogram, so the sum of its counts is
+ * the number of statements the handler spent — read with zero instrumentation
+ * of the handler itself.
+ */
+function dbRoundTrips(): number {
+  let total = 0;
+  for (const m of metrics.render().matchAll(
+    /^roomy_db_wait_seconds_count\{[^}]*\} (\d+)$/gm,
+  )) {
+    total += Number(m[1]);
+  }
+  return total;
+}
+
+describe("search.messages reply context is batched", () => {
+  /**
+   * Reply denormalisation used to resolve each hit's target on its own: an
+   * entity→space lookup, an entity→room read and a message hydration per
+   * reply. The page's targets are now resolved in one pass per target space,
+   * so a page of N replies must cost what a page of one reply costs.
+   */
+  test("a page of replies issues a constant number of statements", async () => {
+    await makeMember(VIEWER);
+
+    const count = 8;
+    const replyIds: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const targetId = `msg-target-${i}`;
+      const replyId = `msg-reply-${i}`;
+      replyIds.push(replyId);
+      await seedMessage({
+        msgId: targetId,
+        authorDid: VISIBLE_AUTHOR,
+        body: `target body ${i}`,
+      });
+      await seedMessage({
+        msgId: replyId,
+        authorDid: VISIBLE_AUTHOR,
+        body: `reply body ${i}`,
+        replyTo: targetId,
+      });
+      for (const id of [targetId, replyId]) {
+        await openGlobalDb().run(
+          "insert into entity_space (entity_id, space_did) values (?, ?)",
+          [id, SPACE],
+        );
+      }
+    }
+
+    /** Run the handler over `messageIds` and return its statement cost. */
+    async function measure(messageIds: string[]) {
+      installHits(messageIds);
+      const before = dbRoundTrips();
+      const result = await searchMessagesHandler(
+        { q: "body", spaceId: SPACE },
+        { did: VIEWER },
+      );
+      return { result, statements: dbRoundTrips() - before };
+    }
+
+    // Warm the process-level caches (profile store, block sets) so neither
+    // measured run pays a one-off first-call cost.
+    await measure([replyIds[0]!]);
+
+    const one = await measure([replyIds[0]!]);
+    const many = await measure(replyIds);
+
+    // Behaviour preserved: every reply resolves to its fully hydrated target.
+    expect(one.result.messages).toHaveLength(1);
+    expect(one.result.messages[0]!.reply?.message?.content).toBe("target body 0");
+    expect(many.result.messages).toHaveLength(count);
+    for (const message of many.result.messages) {
+      expect(message.reply?.messageId).toBeDefined();
+      expect(message.reply?.message?.content).toContain("target body");
+    }
+
+    // Eight replies, no meaningful extra SQL. A per-reply path costs three or
+    // more statements each, so this fails by an order of magnitude on one.
+    expect(many.statements - one.statements).toBeLessThanOrEqual(2);
+  });
+
+  test("an unresolvable or unreadable target degrades to the id alone", async () => {
+    await makeMember(VIEWER);
+    // A room whose `default_access` denies reads to a plain member.
+    const PRIVATE_ROOM = "room-private";
+    await openSpaceDb(SPACE).run(
+      "insert into entities (id, stream_id) values (?, ?)",
+      [PRIVATE_ROOM, SPACE],
+    );
+    await openSpaceDb(SPACE).run(
+      "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.channel', 'none')",
+      [PRIVATE_ROOM],
+    );
+
+    // The target of the first reply is materialised but never indexed in
+    // `entity_space`, so its owning space cannot be resolved.
+    await seedMessage({ msgId: "msg-unindexed", authorDid: VISIBLE_AUTHOR, body: "unindexed" });
+    await seedMessage({
+      msgId: "msg-unresolvable",
+      authorDid: VISIBLE_AUTHOR,
+      body: "reply to an unindexed target",
+      replyTo: "msg-unindexed",
+    });
+    // The second target resolves in this space, but lives in a room the
+    // caller cannot read.
+    await seedMessage({
+      msgId: "msg-in-private-room",
+      authorDid: VISIBLE_AUTHOR,
+      body: "secret body",
+      room: PRIVATE_ROOM,
+    });
+    await seedMessage({
+      msgId: "msg-unreadable",
+      authorDid: VISIBLE_AUTHOR,
+      body: "reply to a private-room target",
+      replyTo: "msg-in-private-room",
+    });
+    for (const id of ["msg-unresolvable", "msg-unreadable", "msg-in-private-room"]) {
+      await openGlobalDb().run(
+        "insert into entity_space (entity_id, space_did) values (?, ?)",
+        [id, SPACE],
+      );
+    }
+
+    installHits(["msg-unresolvable", "msg-unreadable"]);
+    const result = await searchMessagesHandler(
+      { q: "body", spaceId: SPACE },
+      { did: VIEWER },
+    );
+
+    // Both hits survive; neither carries a target the caller may not see.
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages.find((m) => m.id === "msg-unresolvable")!.reply).toEqual({
+      messageId: "msg-unindexed",
+    });
+    expect(result.messages.find((m) => m.id === "msg-unreadable")!.reply).toEqual({
+      messageId: "msg-in-private-room",
+    });
+    expect(JSON.stringify(result)).not.toContain("secret body");
+  });
+});
 
 describe("search.messages redacts blocked authors", () => {
   test("a blocked author's hit and reply target are redacted for an ordinary member", async () => {
