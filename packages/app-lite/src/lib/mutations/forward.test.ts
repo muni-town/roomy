@@ -2,19 +2,16 @@
  * Multi-forward ordering.
  *
  * The destination room must show the forwarded messages in the SOURCE room's
- * timeline order, oldest → newest. Two things stood in the way:
+ * timeline order, oldest → newest. The selection is kept in tap order
+ * (`toggleMessageSelection`), so a user who selects a newer message before an
+ * older one would otherwise cross-post them in that click order. Targets are
+ * therefore sorted by the source room's timeline key, and the batch is sent in
+ * that order — the log position breaks the tie between forwards sharing a
+ * millisecond, so no timestamp of the client's own is involved.
  *
- *   1. The selection is kept in tap order (`toggleMessageSelection`), so a
- *      user who selects a newer message before an older one would cross-post
- *      them in that click order.
- *   2. Every forward is minted inside the same millisecond, and a message's
- *      timeline key is its canonical time at millisecond resolution — so the
- *      forwards shared one key and the destination fell back to an arbitrary
- *      tie-break.
- *
- * These tests pin the rule that fixes both: targets are sorted by the source
- * room's timeline key, and each forward is stamped one millisecond after the
- * previous one so the destination orders them as the source did.
+ * These tests pin that order and the absence of any override: a
+ * `timestampOverride` is a space-admin extension, and a forward is an
+ * ordinary sender's write.
  *
  * Written against `node:test` + `node:assert` (available without adding a
  * dependency to app-lite; app-lite ships no test runner of its own) so the
@@ -46,18 +43,12 @@ const target = (index: number, sortIdx: string | undefined = TIMELINE[index]) =>
 interface ForwardEvent {
   id: string;
   room: string;
-  extensions: {
-    "space.roomy.extension.timestampOverride.v0": { timestamp: number };
+  extensions: Record<string, unknown> & {
     "space.roomy.extension.attachments.v0": {
       attachments: Array<{ target: string; fromRoomId: string }>;
     };
   };
 }
-
-const timestampOf = (event: Record<string, unknown>): number =>
-  (event as unknown as ForwardEvent).extensions[
-    "space.roomy.extension.timestampOverride.v0"
-  ].timestamp;
 
 const forwardedTargetOf = (event: Record<string, unknown>): string =>
   (event as unknown as ForwardEvent).extensions[
@@ -114,7 +105,6 @@ describe("orderForwardTargets", () => {
 describe("buildForwardEvents", () => {
   const FROM = "room-source";
   const TO = "room-destination";
-  const BASE = Date.parse("2026-09-27T00:00:00.000Z");
 
   test("orders the events by the source timeline, not the click order", () => {
     const events = buildForwardEvents(
@@ -122,7 +112,6 @@ describe("buildForwardEvents", () => {
       TO,
       [target(2), target(0), target(3), target(1)],
       [],
-      BASE,
     );
     assert.deepEqual(events.map(forwardedTargetOf), [
       "msg-0",
@@ -132,28 +121,30 @@ describe("buildForwardEvents", () => {
     ]);
   });
 
-  test("stamps strictly increasing canonical times, so the destination orders them", () => {
-    const events = buildForwardEvents(
-      FROM,
-      TO,
-      [target(0), target(1), target(2), target(3)],
-      [],
-      BASE,
-    );
-    const timestamps = events.map(timestampOf);
-    assert.deepEqual(timestamps, [BASE, BASE + 1, BASE + 2, BASE + 3]);
+  test("carries no timestamp override", () => {
+    // Rewriting a message's timeline position is a space-admin extension, and
+    // a forward is an ordinary sender's write. The destination order comes
+    // from the batch's log position, so nothing here needs one.
+    const events = buildForwardEvents(FROM, TO, [target(0), target(1)], []);
+    for (const event of events) {
+      assert.equal(
+        (event as unknown as ForwardEvent).extensions[
+          "space.roomy.extension.timestampOverride.v0"
+        ],
+        undefined,
+      );
+    }
   });
 
-  test("stamps the same increasing times regardless of click order", () => {
-    const ordered = buildForwardEvents(FROM, TO, [target(0), target(1)], [], BASE);
-    const reversed = buildForwardEvents(FROM, TO, [target(1), target(0)], [], BASE);
-    // Same targets in the same (timeline) order ⇒ same stamps.
-    assert.deepEqual(reversed.map(timestampOf), ordered.map(timestampOf));
-    assert.deepEqual(reversed.map(forwardedTargetOf), [ "msg-0", "msg-1" ]);
+  test("emits the same order regardless of click order", () => {
+    const ordered = buildForwardEvents(FROM, TO, [target(0), target(1)], []);
+    const reversed = buildForwardEvents(FROM, TO, [target(1), target(0)], []);
+    assert.deepEqual(reversed.map(forwardedTargetOf), ordered.map(forwardedTargetOf));
+    assert.deepEqual(reversed.map(forwardedTargetOf), ["msg-0", "msg-1"]);
   });
 
   test("each event is its own message in the destination room", () => {
-    const events = buildForwardEvents(FROM, TO, [target(0), target(1)], [], BASE);
+    const events = buildForwardEvents(FROM, TO, [target(0), target(1)], []);
     assert.equal(new Set(events.map((e) => e.id)).size, 2);
     for (const event of events) {
       assert.equal(event.room, TO);
@@ -168,7 +159,7 @@ describe("buildForwardEvents", () => {
   });
 
   test("an empty selection produces no events", () => {
-    assert.deepEqual(buildForwardEvents(FROM, TO, [], [], BASE), []);
+    assert.deepEqual(buildForwardEvents(FROM, TO, [], []), []);
   });
 });
 

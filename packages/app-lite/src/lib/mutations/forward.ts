@@ -3,7 +3,7 @@
  * room's timeline.
  *
  * Two properties have to hold for the forwards to land in the source room's
- * order, and neither is free:
+ * order:
  *
  * 1. **Source order.** The selection list is kept in the order the user
  *    tapped it (see `toggleMessageSelection`), so forwarding it verbatim
@@ -11,14 +11,13 @@
  *    the same timeline key the appserver pages a room by,
  *    `coalesce(sort_idx, id)`.
  *
- * 2. **Distinct canonical times.** A message's `sort_idx` is derived from its
- *    canonical timestamp at millisecond resolution
- *    (`materialization/sortIdx.ts`), and a client cache orders by
- *    `timestamp`. A forward burst is minted within one millisecond, so every
- *    event would share a timestamp and the destination would order them by
- *    whatever tie-break the reader applies. Each forward therefore carries an
- *    explicit `timestampOverride` one millisecond after the previous one,
- *    which is the ordering the forwards are being given.
+ * 2. **A total order within the burst.** A forward burst is minted inside one
+ *    millisecond, so every forward shares a canonical time. `sort_idx` breaks
+ *    that tie by the event's log position (`materialization/sortIdx.ts`), so
+ *    the destination orders the forwards exactly as this batch sent them —
+ *    no client-side timestamp is needed, and none is sent: `timestampOverride`
+ *    rewrites a message's timeline position, which is a space-admin
+ *    extension, not something an ordinary sender may set.
  *
  * Kept free of Svelte and the network so the rule stays unit-testable.
  */
@@ -56,27 +55,24 @@ export function orderForwardTargets(
  * Build the `createMessage` events that forward `targets` into `toRoomId`,
  * in the order they appear in the source room's timeline.
  *
- * `baseTimestamp` is the canonical time of the first forward; each subsequent
- * one is 1 ms later, so the destination pages them in exactly this order.
+ * The events carry only the forward attachment. Their order in this array is
+ * the order they reach the log, and the log position breaks the tie between
+ * forwards sharing a millisecond, so the destination pages them in exactly
+ * that order without any timestamp of the client's own.
  */
 export function buildForwardEvents(
   fromRoomId: string,
   toRoomId: string,
   targets: readonly ForwardTarget[],
   blocks: Block[],
-  baseTimestamp: number,
 ): Record<string, unknown>[] {
   const serialized = serializeBlocks(blocks);
-  return orderForwardTargets(targets).map((target, index) => ({
+  return orderForwardTargets(targets).map((target) => ({
     id: newUlid(),
     room: toRoomId,
     $type: "space.roomy.message.createMessage.v0",
     body: { mimeType: serialized.mimeType, data: toBytes(serialized.data) },
     extensions: {
-      "space.roomy.extension.timestampOverride.v0": {
-        $type: "space.roomy.extension.timestampOverride.v0",
-        timestamp: baseTimestamp + index,
-      },
       "space.roomy.extension.attachments.v0": {
         $type: "space.roomy.extension.attachments.v0",
         attachments: [

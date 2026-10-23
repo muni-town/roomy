@@ -43,7 +43,7 @@ export async function createThread({
       linkToRoom: threadId,
       isCreationLink: true,
     },
-    ...buildForwardEvents(parentRoomId, threadId, messages, [], Date.now()),
+    ...buildForwardEvents(parentRoomId, threadId, messages, []),
   ];
 
   for (let i = 0; i < events.length; i += MAX_EVENTS_PER_SEND) {

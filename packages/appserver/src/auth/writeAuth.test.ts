@@ -1094,3 +1094,203 @@ describe("auth/writeAuth — batched authorization", () => {
     expect(count() - afterPrewarm).toBe(0);
   });
 });
+
+// ── Message extension authority (author/timestamp overrides) ──────────────
+
+/**
+ * Two message extensions carry authority rather than presentation:
+ *
+ *   - `authorOverride` replaces the author the materialiser writes, so every
+ *     read path reports the overridden DID as the message's author;
+ *   - `timestampOverride` replaces the canonical ordering time, so it also
+ *     moves the message in the timeline (`sort_idx`).
+ *
+ * Both are gated on space admin, the same class `BRIDGED_TYPES` already
+ * requires — the Discord bridge writes the overrides as a space admin, so it
+ * needs no change. Everything else in `MessageExtensionMap` (attachments,
+ * mentions, origins) is presentation and stays on plain room write.
+ */
+describe("auth/writeAuth — author/timestamp overrides require space admin", () => {
+  const AUTHOR_OVERRIDE = "space.roomy.extension.authorOverride.v0";
+  const TIMESTAMP_OVERRIDE = "space.roomy.extension.timestampOverride.v0";
+
+  /** The DID a non-admin would impersonate with `authorOverride`. */
+  const IMPERSONATED = "did:plc:the-space-admin";
+
+  /** A createMessage carrying exactly the given extension map. */
+  function messageWith(
+    roomId: string,
+    extensions: Record<string, unknown>,
+  ) {
+    return {
+      id: newUlid(),
+      $type: "space.roomy.message.createMessage.v0",
+      room: roomId,
+      body: { mimeType: "text/plain", data: "hi" },
+      extensions,
+    };
+  }
+
+  const authorOverride = () => ({
+    [AUTHOR_OVERRIDE]: { $type: AUTHOR_OVERRIDE, did: IMPERSONATED },
+  });
+  const timestampOverride = (timestamp = 1_700_000_000_000) => ({
+    [TIMESTAMP_OVERRIDE]: { $type: TIMESTAMP_OVERRIDE, timestamp },
+  });
+
+  /** A space with `CHANNEL` writable by any member, and both callers seeded. */
+  async function seedSpaceWithMember(db: DbLike): Promise<void> {
+    await seedSpace(db);
+    await seedChannel(db, CHANNEL, SPACE, "readwrite");
+    await seedUser(db, USER);
+    await seedUser(db, ADMIN);
+    await addEdge(db, SPACE, USER, "member");
+    await addEdge(db, SPACE, ADMIN, "admin");
+  }
+
+  test("a non-admin cannot post as another DID", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpaceWithMember(db);
+
+    const result = await checkWriteAuth(
+      db,
+      SPACE,
+      USER,
+      messageWith(CHANNEL, authorOverride()),
+    );
+    expect(result).toBeDefined();
+    expect(result!.status).toBe(403);
+    expect(result!.message).toContain("authorOverride");
+  });
+
+  test("a non-admin cannot rewrite a message's timeline position", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpaceWithMember(db);
+
+    const result = await checkWriteAuth(
+      db,
+      SPACE,
+      USER,
+      messageWith(CHANNEL, timestampOverride()),
+    );
+    expect(result).toBeDefined();
+    expect(result!.status).toBe(403);
+    expect(result!.message).toContain("timestampOverride");
+  });
+
+  test("an admin may post as another DID", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpaceWithMember(db);
+
+    const result = await checkWriteAuth(
+      db,
+      SPACE,
+      ADMIN,
+      messageWith(CHANNEL, authorOverride()),
+    );
+    expect(result).toBeUndefined();
+  });
+
+  test("an admin may set a message's canonical time", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpaceWithMember(db);
+
+    const result = await checkWriteAuth(
+      db,
+      SPACE,
+      ADMIN,
+      messageWith(CHANNEL, timestampOverride()),
+    );
+    expect(result).toBeUndefined();
+  });
+
+  test("the denial names the extension, not just the room", async () => {
+    // A client distinguishes "cannot write here" (recoverable by a grant) from
+    // "this extension needs admin" (not recoverable by posting the same event
+    // again), so the two 403s must not read the same.
+    const { asyncDb: db } = freshDb();
+    await seedSpaceWithMember(db);
+
+    const plainDenial = await checkWriteAuth(
+      db,
+      SPACE,
+      USER,
+      messageWith(CHANNEL, {}),
+    );
+    expect(plainDenial).toBeUndefined();
+
+    const overrideDenial = await checkWriteAuth(
+      db,
+      SPACE,
+      USER,
+      messageWith(CHANNEL, { ...authorOverride(), ...timestampOverride() }),
+    );
+    expect(overrideDenial!.message).not.toContain("write access to this room");
+  });
+
+  test("a message with neither override is still an ordinary send", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpaceWithMember(db);
+
+    const result = await checkWriteAuth(
+      db,
+      SPACE,
+      USER,
+      messageWith(CHANNEL, {
+        "space.roomy.extension.attachments.v0": {
+          $type: "space.roomy.extension.attachments.v0",
+          attachments: [{ $type: "space.roomy.attachment.link.v0", uri: "https://x.test" }],
+        },
+      }),
+    );
+    expect(result).toBeUndefined();
+  });
+
+  test("an editMessage carrying an override is gated too", async () => {
+    const { asyncDb: db } = freshDb();
+    await seedSpaceWithMember(db);
+    const messageId = newUlid();
+    await db.run(
+      "insert into entities (id, stream_id, room) values (?, ?, ?)",
+      [messageId, SPACE, CHANNEL],
+    );
+    // The message is the non-admin member's own, so the author-or-admin check
+    // passes — only the extension gate can deny it.
+    await addEdge(db, messageId, USER, "author");
+
+    const result = await checkWriteAuth(db, SPACE, USER, {
+      id: newUlid(),
+      $type: "space.roomy.message.editMessage.v0",
+      room: CHANNEL,
+      messageId,
+      body: { mimeType: "text/plain", data: "edited" },
+      extensions: authorOverride(),
+    });
+    expect(result).toBeDefined();
+    expect(result!.status).toBe(403);
+    expect(result!.message).toContain("authorOverride");
+  });
+
+  test("a batch of admin overrides costs no extra access resolution", async () => {
+    // The gate reads the caller's space standing through the same per-request
+    // memo every other space-level check uses, so 50 overridden messages cost
+    // exactly what 5 do — the reason the check lives in `writeAuth` and not in
+    // a handler that would resolve access per event.
+    const { asyncDb: db, } = freshDb();
+    await seedSpaceWithMember(db);
+    const access = await spaceAccess(db, SPACE, ADMIN);
+
+    const batch = (n: number) =>
+      Array.from({ length: n }, () =>
+        messageWith(CHANNEL, { ...authorOverride(), ...timestampOverride() }),
+      );
+
+    const small = await authorizeBatch(db, batch(5), ADMIN, access);
+    const big = await authorizeBatch(db, batch(50), ADMIN, access);
+
+    expect(small.denial).toBeUndefined();
+    expect(big.denial).toBeUndefined();
+    expect(big.statements - small.statements).toBeLessThanOrEqual(2);
+    expect(big.statements).toBeLessThan(20);
+  });
+});

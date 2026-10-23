@@ -147,6 +147,46 @@ const MESSAGE_AUTHOR_TYPES = new Set([
 ]);
 
 /**
+ * Message extensions that carry authority rather than presentation, and so
+ * require space admin.
+ *
+ *   - `authorOverride` replaces the DID the materialiser writes as the
+ *     message's `author` edge, so every read path reports the overridden
+ *     identity. Without this check any room writer could post as any DID,
+ *     including a space admin's, indistinguishably from a real message.
+ *   - `timestampOverride` replaces the message's canonical ordering time and
+ *     therefore its `sort_idx` (see `materialization/sortIdx.ts`), so it can
+ *     move a message anywhere in the timeline. It is gated on its own: an
+ *     override with no author override still rewrites order.
+ *
+ * Both are the class the Discord bridge already writes as — it holds admin in
+ * the spaces it bridges — which is why `BRIDGED_TYPES`' existing rule is the
+ * one reused here rather than a second, bridge-shaped concept.
+ *
+ * Every other extension (`attachments`, `mentions`, `discordMessageOrigin`)
+ * is presentation: it changes how the caller's own message renders, not who
+ * wrote it or where it sits. Those stay on plain room write.
+ */
+const AUTHORITY_EXTENSIONS = [
+  "space.roomy.extension.authorOverride.v0",
+  "space.roomy.extension.timestampOverride.v0",
+] as const;
+
+/**
+ * Event types that can carry an authority extension.
+ *
+ * Only the two event types whose schema declares an `extensions` map *and*
+ * whose materialiser reads it. `forwardMessages` is deliberately absent: it
+ * declares no extensions, and its ordering time (`setMessageSortIdxByForward`
+ * → `messageOrderTime`) reads the override only for `createMessage`, so an
+ * override on a forward is inert.
+ */
+const EXTENSION_BEARING_TYPES = new Set([
+  "space.roomy.message.createMessage.v0",
+  "space.roomy.message.editMessage.v0",
+]);
+
+/**
  * Room management events — require space admin.
  *
  * `createRoom.v0` is handled specially below (split by `kind`): creating a
@@ -471,6 +511,47 @@ async function checkMoveMessages(
     );
   }
   return undefined;
+}
+
+/**
+ * Authorize the authority extensions on a message event.
+ *
+ * `authorOverride` and `timestampOverride` are the two extensions that change
+ * what the event means rather than how it renders, and both require space
+ * admin — see {@link AUTHORITY_EXTENSIONS}. Resolved through
+ * `requireSpaceAdminCheck`, so the caller's standing comes from the
+ * per-request access memo: gating a 50-message batch of overrides costs the
+ * one resolution the room check already made.
+ *
+ * The denial names the extension, not the room: a client can tell "you may not
+ * post here" (answered by a grant) from "this needs admin" (not answered by
+ * retrying), and they otherwise arrive as the same 403 from the same
+ * procedure.
+ */
+async function checkExtensionAuthority(
+  db: DbLike,
+  spaceId: string,
+  callerDid: string,
+  event: { $type: string; [k: string]: unknown },
+  ctx: WriteAuthContext,
+): Promise<WriteAuthResult> {
+  if (!EXTENSION_BEARING_TYPES.has(event.$type)) return undefined;
+
+  const extensions = event.extensions;
+  if (typeof extensions !== "object" || extensions === null) return undefined;
+  const map = extensions as Record<string, unknown>;
+
+  const carried = AUTHORITY_EXTENSIONS.filter((key) => map[key] != null);
+  if (carried.length === 0) return undefined;
+
+  const admin = await requireSpaceAdminCheck(db, spaceId, callerDid, ctx);
+  if (admin === undefined) return undefined;
+
+  return denied(
+    403,
+    "Forbidden",
+    `Only a space admin may set ${carried.join(" or ")}`,
+  );
 }
 
 /**
@@ -883,6 +964,14 @@ export async function checkWriteAuth(
     }
     const roomResult = await requireRoomWriteCheck(db, roomId, callerDid, ctx);
     if (roomResult) return roomResult;
+    const extensionResult = await checkExtensionAuthority(
+      db,
+      spaceId,
+      callerDid,
+      event,
+      ctx,
+    );
+    if (extensionResult) return extensionResult;
     return await checkReplyTargets(db, event);
   }
 
@@ -903,6 +992,14 @@ export async function checkWriteAuth(
     }
     const roomResult = await requireRoomWriteCheck(db, roomId, callerDid, ctx);
     if (roomResult) return roomResult;
+    const extensionResult = await checkExtensionAuthority(
+      db,
+      spaceId,
+      callerDid,
+      event,
+      ctx,
+    );
+    if (extensionResult) return extensionResult;
 
     // Additional author-or-admin check
     const messageId = event.messageId;

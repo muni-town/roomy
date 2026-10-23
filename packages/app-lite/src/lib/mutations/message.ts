@@ -330,10 +330,9 @@ export async function moveMessages(
  * the source room's timeline.
  *
  * Each destination room gets ONE `sendEvents` call carrying every forward, in
- * source order and with distinct increasing canonical timestamps — see
- * `forward.ts` for why both are required. A selection larger than the
- * endpoint's batch cap is split across calls; the timestamps keep increasing
- * across the split, so the destination order is the same either way.
+ * source order — see `forward.ts` for why that order is what the destination
+ * pages by. A selection larger than the endpoint's batch cap is split across
+ * calls, each keeping the source order.
  */
 export async function forwardMessages(
   spaceId: string,
@@ -346,13 +345,7 @@ export async function forwardMessages(
   },
 ): Promise<void> {
   if (targets.length === 0) return;
-  const events = buildForwardEvents(
-    fromRoomId,
-    toRoomId,
-    targets,
-    opts.blocks,
-    Date.now(),
-  );
+  const events = buildForwardEvents(fromRoomId, toRoomId, targets, opts.blocks);
   for (let i = 0; i < events.length; i += MAX_EVENTS_PER_SEND) {
     await sendEvents(spaceId, events.slice(i, i + MAX_EVENTS_PER_SEND));
   }

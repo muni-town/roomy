@@ -489,4 +489,3 @@ For the initial implementation, we can defer invite validation and just check th
 - **Per-DID rate limiting** — token bucket on the sendEvents endpoint
 - **HTTP body size limit** — configurable max payload size
 - **Individual per-event XRPC procedures** — `space.roomy.room.sendMessage`, `space.roomy.room.addReaction`, etc. as convenience wrappers around `sendEvents` with single-element batches and simpler input schemas
-- **Move `MessageExtensionMap` author extensions into `writeAuth`** — validate that `authorOverride` is only used by admins/bridges
