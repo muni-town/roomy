@@ -50,6 +50,7 @@ export {
   getDependsOn,
   getMaterializer,
   getSyntheticMaterializer,
+  eventRegistry,
   type MaterializeContext,
   type MaterializeFn,
   type DependsOnFn,
