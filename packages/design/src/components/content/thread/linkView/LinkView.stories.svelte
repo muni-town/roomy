@@ -69,6 +69,7 @@
   emptyMessage?: string;
   hasMore?: boolean;
   loading?: boolean;
+  error?: string;
 })}
   <div class="h-[38rem] w-full bg-base-50 dark:bg-base-950">
     <LinkView
@@ -76,6 +77,7 @@
       emptyMessage={args.emptyMessage}
       hasMore={args.hasMore}
       loading={args.loading}
+      error={args.error}
       loadMore={() => {}}
     />
   </div>
@@ -96,3 +98,5 @@
 />
 
 <Story name="Load more" args={{ links: links.slice(0, 3), hasMore: true }} {template} />
+
+<Story name="Error" args={{ links: [], error: "Failed to load links" }} {template} />

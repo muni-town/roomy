@@ -1,6 +1,15 @@
 <script lang="ts">
+  /**
+   * BoardView — the space/channel index: one row per room, ordered by latest
+   * activity, paginated by an intersection observer.
+   *
+   * The whole surface belongs to this shell — the first-load state, the error
+   * state, the empty state and the list — so a caller contributes data and
+   * nothing else.
+   */
   import { ScrollArea } from "@foxui/core";
   import BoardViewItem from "./BoardViewItem.svelte";
+  import ErrorMessage from "../../../helper/ErrorMessage.svelte";
   import type { ThreadInfo } from "./types";
 
   let {
@@ -10,6 +19,9 @@
     hideChannel = false,
     loadMore,
     hasMore = false,
+    loading = false,
+    loadingMessage = "Loading…",
+    error,
   }: {
     threads: ThreadInfo[];
     emptyMessage?: string;
@@ -21,6 +33,11 @@
     loadMore?: () => void;
     /** Whether there are more pages to load. */
     hasMore?: boolean;
+    /** First page is still in flight — renders the loading line. */
+    loading?: boolean;
+    loadingMessage?: string;
+    /** The fetch failed; rendered in place of the whole surface. */
+    error?: string;
   } = $props();
 
   let sentinel: HTMLElement | undefined = $state();
@@ -50,7 +67,13 @@
   });
 </script>
 
-{#if threads.length}
+{#if error}
+  <ErrorMessage message={error} class="h-full w-full justify-center" />
+{:else if loading && !threads.length}
+  <div class="h-full w-full flex items-center justify-center">
+    <div class="text-sm text-base-400 p-2">{loadingMessage}</div>
+  </div>
+{:else if threads.length}
   <ScrollArea class="h-full pb-4 w-full @container">
     {#each threads as thread}
       <BoardViewItem {thread} href={hrefFor(thread)} {hideChannel} />

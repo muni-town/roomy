@@ -1,8 +1,7 @@
 <script lang="ts">
-  import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
-  import { IconForward } from "@roomy/design/icons";
-  import { formatMessageTimestamp } from "@roomy/design/utils";
-  import { resolveBlobUrl } from "@roomy/design/utils";
+  import UserAvatar from "../../../user/UserAvatar.svelte";
+  import { IconForward } from "../../../../icons/index";
+  import { formatMessageTimestamp, resolveBlobUrl } from "../../../../utils/index.js";
 
   let {
     name,

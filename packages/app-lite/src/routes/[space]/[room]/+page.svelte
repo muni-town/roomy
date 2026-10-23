@@ -421,14 +421,14 @@
 
       <!-- Threads view - always rendered but visibility toggled -->
       <div class="absolute inset-0" class:hidden={channelActiveTab !== "Threads"}>
-        <ChannelBoardView />
+        <ChannelBoardView {roomId} {spaceId} />
       </div>
 
       <!-- Links view - always rendered but visibility toggled; only mounted
            when the links-view feature flag is enabled. -->
       {#if linksViewEnabled}
         <div class="absolute inset-0" class:hidden={channelActiveTab !== "Links"}>
-          <LinksView />
+          <LinksView {roomId} {spaceId} />
         </div>
       {/if}
     </div>

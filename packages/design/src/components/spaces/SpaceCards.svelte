@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { resolveBlobUrl } from "@roomy/design/utils";
-  import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
+  import { resolveBlobUrl } from "../../utils/index.js";
+  import SpaceAvatar from "./SpaceAvatar.svelte";
 
   let {
     spaces,

@@ -16,9 +16,9 @@
   import SpaceAvatar from "@roomy/design/components/spaces/SpaceAvatar.svelte";
   import UserAvatar from "@roomy/design/components/user/UserAvatar.svelte";
   import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
-  import ForwardContext from "../chat/ForwardContext.svelte";
+  import ForwardContext from "@roomy/design/components/content/thread/message/ForwardContext.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
-  import MediaEmbed from "../chat/embeds/MediaEmbed.svelte";
+  import MediaEmbed from "@roomy/design/components/content/thread/message/embeds/MediaEmbed.svelte";
   import { linkItems, mediaItems } from "../chat/attachment-views";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
   import { messageContentToPlaintext } from "../chat/messagePreview";

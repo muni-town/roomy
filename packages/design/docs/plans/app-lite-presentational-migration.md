@@ -3,8 +3,9 @@
 **Date:** 2026-09-25 (phase 2 outcome added 2026-10-13; the `MessageContent` +
 `BlocksRenderer` move merged 2026-10-20)
 **Status:** Phase 2 keystone shipped — `MessageContent` + `BlocksRenderer` moved
-into `@roomy/design` (PR #453). The thin-wrapper batch is PR #462, open for
-review, not for a worker. The phase-2 triage below names what remains.
+into `@roomy/design` (PR #453). The thin-wrapper batch reduces the wrapped data
+accessors to shells in design with data adapters in app-lite. The phase-2 triage
+below names what remains.
 **Umbrella:** "refactor presentational UI code from app-lite to `design` and set up
 storybook stories" (Meri, `#coordination`, 2026-09-25T11:52Z)
 
@@ -16,7 +17,6 @@ The pattern already exists and is the one to extend:
 > **design owns the presentational shell; app-lite wraps it with data.**
 
 Examples that predate this plan: `MessageReactions.svelte` → `design/content/thread/message/ReactionBar.svelte`,
-`MessageToolbar.svelte` → `design/content/thread/message/ToolbarShell.svelte`,
 `SpaceSidebar`'s header → `design/sidebars/SpaceHeaderShell.svelte`.
 
 Phase 1 moved the pure presentational leaves and established the Storybook
@@ -69,7 +69,7 @@ app-lite coupling. `$lib/utils` counts as coupling.
 | 6 | `welcome/WelcomeActions.svelte` | **moved** → `marketing/WelcomeActions.svelte` | Zero props; design `Button` with `href`. |
 | 7 | `welcome/FeatureDemoCards.svelte` | **moved** → `marketing/FeatureDemoCards.svelte` | Zero props; static scoped CSS. |
 | 8 | `settings/HandleDomainDialog.svelte` | **moved** → `modals/HandleDomainDialog.svelte` | Static dialog: `open` bindable + `did` prop, **copy handler injected by the app**. Renders in isolation. |
-| 9 | `chat/MessageContent.svelte` | **moved** → `content/thread/message/MessageContent.svelte` | Markdown body + the `BlocksRenderer` branch, over `renderMarkdownSanitized` and the SDK's `RICHTEXT_MIME` test. Its remaining app-side imports (`./message-body`, the tile stack) move with it; the enrichment action takes injected lookups. See "This PR". |
+| 9 | `chat/MessageContent.svelte` | **moved** → `content/thread/message/MessageContent.svelte` | Markdown body + the `BlocksRenderer` branch, over `renderMarkdownSanitized` and the SDK's `RICHTEXT_MIME` test. Its remaining app-side imports (`./message-body`, the tile stack) move with it; the enrichment action takes injected lookups. See `MessageContent` + `BlocksRenderer` below. |
 | 10 | `chat/BlocksRenderer.svelte` | **moved** → `content/thread/message/BlocksRenderer.svelte` | Largest render-logic prize (262 lines: UTF-8→UTF-16 facet offsets, facet nesting, anchor non-nesting). Import-path changes only. |
 | 11 | `seo/SeoMeta.svelte` | **rejected — not presentational** | Uses `$app/paths` `base` and `<svelte:head>`. It is route/head metadata, not a component in a design system, and Storybook has no `$app/paths` stub. |
 | 12 | `auth/HandleTypeahead.svelte` | **rejected — data-coupled** | Hardcodes a live `fetch` to `https://api.bsky.app/xrpc/app.bsky.actor.searchActorsTypeahead` plus 200 ms debounce; it is a Bluesky AppView client, not a presentational primitive. design already has `ui/user-typeahead/UserTypeahead{,List}.svelte` — the right end state is app-lite wrapping that shell. |
@@ -105,7 +105,7 @@ and the two decisions the plan parked are settled as follows.
    `setAppserverOrigin`, which already had the value. The app-lite copy is deleted,
    not aliased, and all 31 import sites point at `@roomy/design/utils`.
 
-### This PR: `MessageContent` + `BlocksRenderer` (moved)
+### `MessageContent` + `BlocksRenderer` (moved)
 
 Both moved as pure `git mv` renames, plus the minimum dependency closure they
 cannot render without. Each file's diff against its app-lite original is an
@@ -148,20 +148,35 @@ setter, not a `let` reassigned by it: `BlocksRenderer` captures the reference at
 import time for its facet walk, and a reassignment would leave it reading the
 empty array.
 
-## What moves next (remaining phase 2 candidates)
+### Thin wrappers over data accessors (done)
 
-1. **Thin wrappers over data accessors** — each imports only a query or mutation
-   hook and can take its result as a prop:
-   - `chat/MessageContext.svelte` (`$lib/queries/messages`)
-   - `chat/MessageToolbar.svelte` (`$lib/mutations/reaction`, `$lib/queries/messages`)
-   - `welcome/DiscoverSpacesSection.svelte` (`$lib/queries/spaces`)
-   - `thread/ThreadsTab.svelte`, `thread/ChannelBoardView.svelte`, `thread/LinksView.svelte`
-     (`$app/state` + `$lib/queries/*`) — move the `$app/state` room-param read up to the
-     calling page, keep the presentational body.
-   - `chat/embeds/MediaEmbed.svelte`, `chat/ForwardContext.svelte`, `welcome/SpaceCards.svelte` —
-     their only coupling was `resolveBlobUrl`, which now comes from design, so each
-     moves as soon as its own remaining props are named.
-2. **`auth/LoginModal.svelte` after the `HandleTypeahead` decision** — it owns
+The batch below moved. The rule applied throughout: **the shell owns the whole
+surface — first-load, error, empty, list and pagination — and the caller
+contributes data and callbacks.** A shell that renders only the populated state
+leaves app-lite re-implementing the rest, which is what made these "wrappers"
+rather than moves.
+
+| component | end state |
+|---|---|
+| `chat/embeds/MediaEmbed.svelte` | moved → `content/thread/message/embeds/MediaEmbed.svelte` (no props changed) |
+| `chat/ForwardContext.svelte` | moved → `content/thread/message/ForwardContext.svelte` (no props changed) |
+| `welcome/SpaceCards.svelte` | moved → `spaces/SpaceCards.svelte` (no props changed) |
+| `chat/MessageContext.svelte` | shell moved → `content/thread/message/MessageContext.svelte`; app-lite keeps a wrapper that supplies the reply preview (which fetches its target) and the thread preview text |
+| `chat/MessageToolbar.svelte` | **retired.** It was pure wiring between a `Message` and `ToolbarShell`, which design already owned; `ChatMessage` now renders `ToolbarShell` directly |
+| `welcome/DiscoverSpacesSection.svelte` | shell moved → `marketing/DiscoverSpacesSection.svelte` (frame, heading, dismiss button, scroll mask) with a `card` snippet; app-lite keeps the discoverable list, the joined-space filter and the per-card metadata fetch |
+| `thread/ThreadsTab.svelte`, `thread/ChannelBoardView.svelte`, `thread/LinksView.svelte` | reduced to data adapters over design's `BoardView` / `LinkView`. `BoardView` and `LinkView` gained the `loading` / `error` states these three were rendering themselves; each view now takes `roomId` / `spaceId` as props instead of reading `$app/state` |
+
+Two supporting moves: `normalizeMimeType` left app-lite's `lib/utils.ts` for
+`design/src/utils/mime.ts` (its only other caller, the upload mutation, imports
+it from there), and `lib/utils.ts` is gone.
+
+`MediaEmbed`, `ForwardContext` and `SpaceCards` still take a link's own URL or
+the values a caller resolved for it, so they read no route param and need no
+injection — design's `resolveBlobUrl` covers the rest.
+
+### Still to move
+
+1. **`auth/LoginModal.svelte` after the `HandleTypeahead` decision** — it owns
    `$env/dynamic/public` + `$lib/auth.svelte` + `$lib/last-login.svelte`; a
    prop-driven shell is feasible, but only once the typeahead question is settled.
 
@@ -182,10 +197,14 @@ containers: moving them would drag the app's data layer into the design system.
   `chat/MessageContextReply.svelte`, `chat/MessageReactions.svelte`,
   `chat/RoomPickerModal.svelte`, `feed/ActivityFeed.svelte`,
   `search/SearchResultsList.svelte`
+- The data adapters the phase-2 batch left behind: `welcome/DiscoverSpaces.svelte`
+  and `welcome/DiscoverSpacesSection.svelte`, `chat/MessageContext.svelte`,
+  `thread/ThreadsTab.svelte`, `thread/ChannelBoardView.svelte`,
+  `thread/LinksView.svelte`
 - Modals/forms bound to mutations: `sidebar/EditRoomModal.svelte`,
   `sidebar/RestoreRoomModal.svelte`, `layout/JoinSpaceModal.svelte`,
   `InviteModal.svelte`, `ui/ChannelPermissions.svelte`,
-  `welcome/DiscoverSpaces.svelte`, `welcome/WelcomeContent.svelte`
+  `welcome/WelcomeContent.svelte`
 
 ## Needs a design decision (not just a code move)
 
@@ -223,6 +242,11 @@ errors" is checkable rather than assumed:
 - `pnpm --filter app-lite build` and `pnpm --filter @roomy/design build`.
 - `pnpm --filter @roomy/design storybook:build` — must include the new stories.
 - `pnpm --filter @roomy/design test` (Vitest).
+
+> `app-lite build` needs headroom: `vite build` aborts with a V8 OOM at the
+> default heap on a clean `next`, so run it as
+> `NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter app-lite build`.
+> `design` has no `build` script — `storybook:build` is its build.
 
 ## Component counts
 

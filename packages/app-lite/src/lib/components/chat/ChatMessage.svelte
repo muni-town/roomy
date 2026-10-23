@@ -7,16 +7,17 @@
   import { IconCheck, IconRetry, IconX } from "@roomy/design/icons";
   import MessageContext from "./MessageContext.svelte";
   import MessageReactions from "./MessageReactions.svelte";
-  import MessageToolbar from "./MessageToolbar.svelte";
+  import ToolbarShell from "@roomy/design/components/content/thread/message/ToolbarShell.svelte";
   import SelectionTick from "@roomy/design/components/content/thread/message/SelectionTick.svelte";
-  import MediaEmbed from "./embeds/MediaEmbed.svelte";
+  import MediaEmbed from "@roomy/design/components/content/thread/message/embeds/MediaEmbed.svelte";
   import { linkItems, mediaItems } from "./attachment-views";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
-  import ForwardContext from "./ForwardContext.svelte";
+  import ForwardContext from "@roomy/design/components/content/thread/message/ForwardContext.svelte";
   import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
   import ChatInput from "./ChatInput.svelte";
   import { createMentionSearch } from "$lib/tiptap/mentions";
   import { editMessage, removeLinkEmbed } from "$lib/mutations/message";
+  import { addReaction } from "$lib/mutations/reaction";
   import { createSpaceCard } from "$lib/mutations/space-card";
   import { saveToPersonalCollection } from "$lib/mutations/semble-personal";
   import { guardedXrpc, isInsufficientScopeError } from "$lib/scope-guard";
@@ -719,18 +720,19 @@
         <!-- A tombstoned row carries no toolbar: every action on it would
              address a message whose body the viewer cannot see. -->
         {#if !isSuppressedRow}
-        <MessageToolbar
-          {spaceId}
-          {roomId}
-          {message}
-          {mergeWithPrevious}
+        <ToolbarShell
           {canEdit}
           {canDelete}
           canMove={isAdmin}
+          {mergeWithPrevious}
           bind:keepToolbarOpen
-          {onStartEdit}
-          onRequestDelete={() => onRequestDelete(message)}
-          {onForward}
+          onToggleReaction={(emoji) => addReaction(spaceId, roomId, message.id, emoji)}
+          onEdit={() => onStartEdit(message.id)}
+          onDelete={() => onRequestDelete(message)}
+          onStartThreading={() => messagingState.startThreading(message)}
+          onSelect={() => messagingState.startSelectMode(message)}
+          onReply={() => messagingState.setReplyTo(message)}
+          onForward={() => onForward([message])}
           onMove={() => onMove([message])}
           onCreateCard={
             canCreateSpaceCard && singleLink ? () => handleCreateCard() : undefined

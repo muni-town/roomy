@@ -85,7 +85,9 @@
 
   const unknown: Block[] = [
     { $type: "space.roomy.richtext.blocks#text", text: "before" },
-    { $type: "space.roomy.richtext.blocks#futureThing", payload: 1 },
+    // A block kind this build predates. The renderer's unknown-block arm is
+    // the point of the story, so the payload is deliberately off-contract.
+    { $type: "space.roomy.richtext.blocks#futureThing", payload: 1 } as unknown as Block,
     { $type: "space.roomy.richtext.blocks#text", text: "after" },
   ];
 </script>

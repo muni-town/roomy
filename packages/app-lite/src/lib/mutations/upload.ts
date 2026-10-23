@@ -1,6 +1,6 @@
 import { uploadBlob } from "@roomy-space/sdk";
 import { auth } from "$lib/auth.svelte";
-import { normalizeMimeType } from "$lib/utils";
+import { normalizeMimeType } from "@roomy/design/utils";
 
 /**
  * Upload a file (image or video) to the user's PDS and return the atblob:// URI.

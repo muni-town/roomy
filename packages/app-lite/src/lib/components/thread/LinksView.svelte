@@ -1,9 +1,7 @@
 <script lang="ts">
-  import { page } from "$app/state";
-  import { createRoomLinksQuery, type Link } from "$lib/queries/links";
-  import LinkViewShell from "@roomy/design/components/content/thread/linkView/LinkView.svelte";
+  import LinkView from "@roomy/design/components/content/thread/linkView/LinkView.svelte";
   import type { LinkInfo } from "@roomy/design/components/content/thread/linkView/types.ts";
-  import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
+  import { createRoomLinksQuery, type Link } from "$lib/queries/links";
   import { createSpaceMetadataQuery } from "$lib/queries/space-metadata";
   import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { createSpaceCard } from "$lib/mutations/space-card";
@@ -12,16 +10,26 @@
   import { showScopeDialogue } from "$lib/scope-dialogue";
   import { toast } from "@foxui/core";
 
+  /**
+   * The room's link index.
+   *
+   * A data adapter over the design grid: it runs the queries, maps each wire
+   * link to `LinkInfo`, and owns the two Semble writes (which is what gates
+   * the per-card actions). The grid itself is `@roomy/design`'s.
+   */
   let {
+    roomId,
+    spaceId,
     emptyMessage = "No links shared yet",
-  }: { emptyMessage?: string } = $props();
-
-  const roomId = $derived(page.params.room!);
-  const spaceId = $derived(page.params.space!);
+  }: {
+    roomId: string;
+    spaceId: string;
+    emptyMessage?: string;
+  } = $props();
 
   const linksQuery = createRoomLinksQuery(() => roomId);
 
-  let links = $derived<LinkInfo[]>(
+  const links = $derived<LinkInfo[]>(
     (linksQuery.data?.pages.flatMap((p) => p.links) ?? []).map(mapLink),
   );
 
@@ -38,7 +46,7 @@
     ),
   );
 
-  let hasMore = $derived(linksQuery.hasNextPage ?? false);
+  const hasMore = $derived(linksQuery.hasNextPage ?? false);
 
   function loadMore() {
     linksQuery.fetchNextPage();
@@ -145,25 +153,19 @@
   }
 </script>
 
-{#if linksQuery.isLoadingError}
-  <ErrorMessage
-    message={linksQuery.error.message}
-    class="h-full w-full justify-center"
-  />
-{:else}
-  <div class="flex flex-col h-full min-h-0">
-    <div class="flex-1 min-h-0">
-      <LinkViewShell
-        {links}
-        {emptyMessage}
-        {loadMore}
-        {hasMore}
-        loading={linksQuery.isPending && !linksQuery.data}
-        onCreateCard={canCreateSpaceCard ? handleCreateCard : undefined}
-        onSaveToCollection={canSaveToCollection
-          ? handleSaveToCollection
-          : undefined}
-      />
-    </div>
+<div class="flex flex-col h-full min-h-0">
+  <div class="flex-1 min-h-0">
+    <LinkView
+      {links}
+      {emptyMessage}
+      {loadMore}
+      {hasMore}
+      loading={linksQuery.isPending && !linksQuery.data}
+      error={linksQuery.isLoadingError ? linksQuery.error.message : undefined}
+      onCreateCard={canCreateSpaceCard ? handleCreateCard : undefined}
+      onSaveToCollection={canSaveToCollection
+        ? handleSaveToCollection
+        : undefined}
+    />
   </div>
-{/if}
+</div>

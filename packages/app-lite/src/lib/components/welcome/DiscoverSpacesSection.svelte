@@ -1,13 +1,17 @@
 <script lang="ts">
-  import { createSpacesQuery } from "$lib/queries/spaces";
-  import DiscoverSpaceCard from "./DiscoverSpaces.svelte";
-
   /**
-   * Discoverable spaces section. Hardcoded for now — surfaces a small set of
+   * Discover Spaces section. Hardcoded for now — surfaces a small set of
    * spaces the user hasn't joined yet. Uses the cached `getSpaces` query to
    * exclude spaces the user is already a member of. Each card is dismissable;
    * dismissed ids are tracked in local state so they disappear (session-only).
+   *
+   * The strip's frame is `@roomy/design`'s; this wrapper owns what is
+   * discoverable and resolves each card's metadata.
    */
+  import DiscoverSpacesSectionShell from "@roomy/design/components/marketing/DiscoverSpacesSection.svelte";
+  import DiscoverSpaceCard from "./DiscoverSpaces.svelte";
+  import { createSpacesQuery } from "$lib/queries/spaces";
+
   const DISCOVERABLE_SPACES = [
     "did:plc:4moccs43r5v2xzkynae3xk2u",
     "did:plc:gnwy2zbm3hu4gfdawzxmpb2s",
@@ -40,39 +44,8 @@
   }
 </script>
 
-{#if visible.length > 0}
-  <section class="w-full mt-4">
-    <h2 class="text-2xl font-bold px-4 text-base-900 dark:text-base-100 mb-4 lg:text-center">
-      Discover Spaces
-    </h2>
-    <div class="flex flex-col lg:items-center w-full">
-      <div
-        class="discover-cards-scroll flex gap-4 overflow-x-auto snap-x snap-mandatory max-w-full pt-4 pb-4 px-4"
-      >
-        {#each visible as spaceId (spaceId)}
-          <DiscoverSpaceCard {spaceId} onDismiss={dismiss} />
-        {/each}
-      </div>
-    </div>
-  </section>
-{/if}
-
-<style>
-  .discover-cards-scroll {
-    scroll-padding-inline: 1rem;
-    -webkit-mask-image: linear-gradient(
-      to right,
-      transparent 0,
-      black 1rem,
-      black calc(100% - 1rem),
-      transparent 100%
-    );
-    mask-image: linear-gradient(
-      to right,
-      transparent 0,
-      black 1rem,
-      black calc(100% - 1rem),
-      transparent 100%
-    );
-  }
-</style>
+<DiscoverSpacesSectionShell spaceIds={visible} onDismiss={dismiss}>
+  {#snippet card(spaceId)}
+    <DiscoverSpaceCard {spaceId} />
+  {/snippet}
+</DiscoverSpacesSectionShell>

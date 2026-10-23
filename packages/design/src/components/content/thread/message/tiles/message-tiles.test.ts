@@ -48,7 +48,7 @@ describe("findTileAddresses — prose punctuation", () => {
       [`${MINESWEEPER}!`, [MINESWEEPER]],
       [`<${MINESWEEPER}>`, [MINESWEEPER]],
     ] as const) {
-      expect(findTileAddresses(text)).toEqual([...expected], text);
+      expect(findTileAddresses(text), text).toEqual([...expected]);
     }
   });
 

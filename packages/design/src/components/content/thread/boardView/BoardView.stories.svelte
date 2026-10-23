@@ -88,6 +88,9 @@
       emptyMessage={args.emptyMessage}
       hrefFor={(t) => `#/${t.id}`}
       hasMore={args.hasMore}
+      loading={args.loading}
+      loadingMessage={args.loadingMessage}
+      error={args.error}
       loadMore={() => {}}
     />
   </div>
@@ -98,3 +101,7 @@
   args={{ threads: [], emptyMessage: "No threads yet", hasMore: false }}
   {template}
 />
+
+<Story name="Loading" args={{ threads: [], loading: true, loadingMessage: "Loading threads…" }} {template} />
+
+<Story name="Error" args={{ threads: [], error: "Failed to load threads" }} {template} />

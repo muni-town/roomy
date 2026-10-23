@@ -14,6 +14,7 @@
    */
   import { ScrollArea } from "@foxui/core";
   import LinkViewItem from "./LinkViewItem.svelte";
+  import ErrorMessage from "../../../helper/ErrorMessage.svelte";
   import { IconLink } from "../../../../icons/index";
   import type { LinkInfo } from "./types";
 
@@ -25,6 +26,7 @@
     loading = false,
     onCreateCard,
     onSaveToCollection,
+    error,
   }: {
     links: LinkInfo[];
     emptyMessage?: string;
@@ -38,6 +40,8 @@
     onCreateCard?: (link: LinkInfo) => void;
     /** Any member — per-card "Add card to my Semble". */
     onSaveToCollection?: (link: LinkInfo) => void;
+    /** The fetch failed; rendered in place of the whole surface. */
+    error?: string;
   } = $props();
 
   let sentinel: HTMLElement | undefined = $state();
@@ -72,7 +76,9 @@
   const SKELETON_COUNT = 6;
 </script>
 
-{#if loading && !links.length}
+{#if error}
+  <ErrorMessage message={error} class="h-full w-full justify-center" />
+{:else if loading && !links.length}
   <ScrollArea class="h-full pb-4 w-full @container">
     <div
       class="grid grid-cols-1 gap-3 px-1 pt-1 sm:px-2 @[34rem]:grid-cols-2 @[52rem]:grid-cols-3 @[74rem]:grid-cols-4"

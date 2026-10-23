@@ -1,5 +1,6 @@
 export { cn } from "./cn.js";
 export { resolveBlobUrl, setBlobOrigin } from "./blob.js";
+export { normalizeMimeType } from "./mime.js";
 export {
   applyThemeMode,
   initSystemThemeListener,
