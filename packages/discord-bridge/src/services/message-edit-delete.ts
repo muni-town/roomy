@@ -30,8 +30,12 @@ export async function handleMessageEdit(
 	const messageId = message.id;
 	const channelId = message.channelId;
 
-	// Only process actual user edits (not embed updates)
+	// Only process actual user edits (not embed updates). `editedTimestamp` is
+	// also the edit's identity below: it advances on every distinct edit, so
+	// two deliveries of one MESSAGE_UPDATE carry the same value and a second,
+	// later edit carries a new one.
 	if (!message.editedTimestamp) return;
+	const editStamp = message.editedTimestamp;
 
 	const guildId = message.guildId;
 	if (!guildId) return;
@@ -95,6 +99,19 @@ export async function handleMessageEdit(
 		if (!roomyRoomId) {
 			log.warn(
 				`No Roomy room for channel ${channelId} in ${spaceDid}, skipping edit`,
+			);
+			continue;
+		}
+
+		// Idempotency: one edit is claimed once per space. Discord re-delivers
+		// MESSAGE_UPDATE, and with a fresh ULID per invocation each repeat
+		// would add a second editMessage to the log. The claim is the write of
+		// (message, edit stamp) to the mapping row; a delivery that loses it is
+		// the same edit already relayed.
+		if (!repo.claimMessageEdit(spaceDid, messageId, editStamp)) {
+			log.debug(
+				`Skipping repeat delivery of edit ${editStamp} for message ${messageId} in ${spaceDid}`,
+				{ spaceDid, messageId, editStamp },
 			);
 			continue;
 		}

@@ -300,6 +300,19 @@ export const MIGRATIONS: Migration[] = [
       `);
 		},
 	},
+	{
+		version: 12,
+		name: "id_mappings_edit_stamp",
+		up(db) {
+			// Which edit of a bridged message was last relayed, stored on the
+			// message's own mapping row. Discord delivers the same
+			// MESSAGE_UPDATE more than once, and an edit relayed twice puts a
+			// second editMessage in the space's log; the row already keys the
+			// message, so the stamp rides with it rather than in a second
+			// table. NULL means no edit of this message has been relayed yet.
+			db.run("ALTER TABLE id_mappings ADD COLUMN edit_stamp INTEGER");
+		},
+	},
 ];
 
 export function runMigrations(db: Database): {

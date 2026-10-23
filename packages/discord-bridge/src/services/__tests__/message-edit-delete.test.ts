@@ -27,7 +27,12 @@ import {
 	SPACE_B,
 	THREAD,
 } from "./helpers/test-data.ts";
-import { decodeRichText, expectToBe, expectToBeDefined } from "./utils.ts";
+import {
+	decodeRichText,
+	expectToBe,
+	expectToBeDefined,
+	queuedEvents,
+} from "./utils.ts";
 
 /** Extract the editMessage event. */
 function editMessageEvent(roomy: MockRoomyGateway, spaceDid: string) {
@@ -259,6 +264,85 @@ describe("handleMessageEdit", () => {
 		expectToBe(event.messageId, forwardEvent.id);
 	});
 
+	// ED13: One edit delivered twice is relayed once. Discord re-sends
+	// MESSAGE_UPDATE for the same edit; both deliveries carry the same
+	// editedTimestamp, which is the edit's identity.
+	test("ED13: relays one event for two deliveries of the same edit", async () => {
+		repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
+		const editedTimestamp = 1_767_000_000_000;
+		const delivered = () =>
+			makeMessage({
+				id: MSG_ID_STR,
+				content: "Updated content",
+				editedTimestamp,
+			});
+
+		await handleMessageEdit(delivered(), repo, roomy);
+		await handleMessageEdit(delivered(), repo, roomy);
+
+		const edits = roomy
+			.eventsFor(SPACE_A)
+			.filter((e) => e.$type === "space.roomy.message.editMessage.v0");
+		expect(edits.length).toBe(1);
+	});
+
+	// ED14: A genuine second edit still relays — the stamp half of the key.
+	test("ED14: relays distinct edits of the same message", async () => {
+		repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
+
+		await handleMessageEdit(
+			makeMessage({
+				id: MSG_ID_STR,
+				content: "First edit",
+				editedTimestamp: 1_767_000_000_000,
+			}),
+			repo,
+			roomy,
+		);
+		await handleMessageEdit(
+			makeMessage({
+				id: MSG_ID_STR,
+				content: "Second edit",
+				editedTimestamp: 1_767_000_000_500,
+			}),
+			repo,
+			roomy,
+		);
+
+		const edits = roomy
+			.eventsFor(SPACE_A)
+			.filter((e) => e.$type === "space.roomy.message.editMessage.v0");
+		expect(edits.length).toBe(2);
+	});
+
+	// ED15: A repeat is refused before the send, so a failed first delivery's
+	// queued entry keeps its one attempt and its original payload instead of
+	// being superseded by a second event.
+	test("ED15: a repeat delivery does not consume a retry slot", async () => {
+		repo.registerMapping(SPACE_A, "message", MSG_ID_STR, ROOMY_MESSAGE_ULID);
+		const editedTimestamp = 1_767_000_000_000;
+		const delivered = () =>
+			makeMessage({
+				id: MSG_ID_STR,
+				content: "Updated content",
+				editedTimestamp,
+			});
+
+		roomy.failSends({ $type: "space.roomy.message.editMessage.v0" });
+		await handleMessageEdit(delivered(), repo, roomy);
+
+		const queued = repo.listFailedSends();
+		expect(queued.length).toBe(1);
+		expectToBe(queued[0]?.attempts, 1);
+		const queuedEventId = queuedEvents(queued[0]?.eventJson ?? "")[0]?.id;
+
+		await handleMessageEdit(delivered(), repo, roomy);
+
+		const after = repo.listFailedSends();
+		expect(after.length).toBe(1);
+		expectToBe(after[0]?.attempts, 1);
+		expect(queuedEvents(after[0]?.eventJson ?? "")[0]?.id).toBe(queuedEventId);
+	});
 });
 
 describe("handleMessageDelete", () => {
@@ -379,5 +463,4 @@ describe("handleMessageDelete", () => {
 		expectToBeDefined(event);
 		expectToBe(event.messageId, forwardEvent.id);
 	});
-
 });

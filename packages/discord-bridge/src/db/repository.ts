@@ -438,6 +438,34 @@ export class BridgeRepository {
 			.run(spaceDid, kind, discordId);
 	}
 
+	/**
+	 * Claim the edit identified by `stamp` — Discord's `editedTimestamp` for the
+	 * message — as the one about to be relayed, returning false when that same
+	 * edit was already claimed and so is a repeat delivery of one gateway
+	 * event. The claim is a single UPDATE, so two concurrent deliveries of one
+	 * event cannot both win it.
+	 *
+	 * The identity is (message, stamp): `editedTimestamp` advances on every
+	 * distinct edit, so a second delivery of the same MESSAGE_UPDATE carries
+	 * the stamp the first already claimed and is refused, while a genuinely new
+	 * edit carries a new stamp and is allowed through. Returns false when the
+	 * message has no mapping row in this space at all.
+	 */
+	claimMessageEdit(
+		spaceDid: string,
+		discordId: string,
+		stamp: number,
+	): boolean {
+		const result = this.db
+			.prepare(
+				`UPDATE id_mappings SET edit_stamp = ?
+         WHERE space_did = ? AND kind = 'message' AND discord_id = ?
+           AND (edit_stamp IS NULL OR edit_stamp <> ?)`,
+			)
+			.run(stamp, spaceDid, discordId, stamp);
+		return result.changes > 0;
+	}
+
 	// === Pending room creations (for Roomy→Discord thread sync) ===
 
 	storePendingRoomCreation(

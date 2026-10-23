@@ -62,7 +62,7 @@ src/
 | Discord event           | Roomy event                     | Notes                                            |
 | ----------------------- | ------------------------------- | ------------------------------------------------ |
 | MESSAGE_CREATE          | `createMessage.v0`              | Dedup by Discord message ID → Roomy ULID mapping |
-| MESSAGE_UPDATE          | `editMessage.v0`                | Skips if no prior mapping exists                 |
+| MESSAGE_UPDATE          | `editMessage.v0`                | Skips if no prior mapping exists; one relay per edit (`editedTimestamp`) |
 | MESSAGE_DELETE          | `deleteMessage.v0`              | Skips if no prior mapping exists                 |
 | THREAD_CREATE           | `createRoom` + `createRoomLink` | Thread auto-inherits parent channel's bridge     |
 | MESSAGE_REACTION_ADD    | `addBridgedReaction.v0`         |                                                  |

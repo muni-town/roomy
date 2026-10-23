@@ -104,6 +104,36 @@ describe("migrations", () => {
 			 VALUES ('${SPACE_A}', 'c2', 'blocked', 0, 0, 1700000000002)`,
 		);
 	});
+
+	/**
+	 * Migration 12 adds the edit stamp to `id_mappings`, which by then holds
+	 * every message mapping the bridge has. The upgrade must keep those rows
+	 * addressable and leave the stamp unset, so no message is treated as an
+	 * already-relayed edit.
+	 */
+	test("adding the edit stamp preserves existing message mappings", () => {
+		const db = new Database(":memory:");
+		for (const migration of MIGRATIONS) {
+			if (migration.version > 11) break;
+			migration.up(db);
+		}
+		db.run("CREATE TABLE schema_version (version INTEGER PRIMARY KEY)");
+		db.run("INSERT INTO schema_version (version) VALUES (11)");
+		db.run(
+			`INSERT INTO id_mappings (space_did, kind, discord_id, roomy_id, created_at)
+			 VALUES ('${SPACE_A}', 'message', 'm1', 'r1', 1700000000000)`,
+		);
+
+		runMigrations(db);
+
+		const row = db
+			.query<{ roomy_id: string; edit_stamp: number | null }, [string]>(
+				"SELECT roomy_id, edit_stamp FROM id_mappings WHERE discord_id = ?",
+			)
+			.get("m1");
+		expect(row?.roomy_id).toBe("r1");
+		expect(row?.edit_stamp).toBeNull();
+	});
 });
 
 describe("bridge_config", () => {
@@ -293,6 +323,24 @@ describe("id_mappings", () => {
 		r.unregisterMapping(SPACE_A, "user", "u1");
 		expect(r.getRoomyId(SPACE_A, "user", "u1")).toBeUndefined();
 		expect(r.getRoomyId(SPACE_B, "user", "u1")).toBe("did:x");
+	});
+
+	test("claimMessageEdit admits one stamp per message, per space", () => {
+		const r = repo();
+		r.registerMapping(SPACE_A, "message", "d1", "r-a");
+		r.registerMapping(SPACE_B, "message", "d1", "r-b");
+
+		expect(r.claimMessageEdit(SPACE_A, "d1", 1000)).toBe(true);
+		expect(r.claimMessageEdit(SPACE_A, "d1", 1000)).toBe(false);
+		// A later edit is a different stamp, so it is admitted.
+		expect(r.claimMessageEdit(SPACE_A, "d1", 2000)).toBe(true);
+		expect(r.claimMessageEdit(SPACE_A, "d1", 2000)).toBe(false);
+		// Another space's copy of the message is claimed separately.
+		expect(r.claimMessageEdit(SPACE_B, "d1", 1000)).toBe(true);
+	});
+
+	test("claimMessageEdit refuses a message with no mapping", () => {
+		expect(repo().claimMessageEdit(SPACE_A, "missing", 1000)).toBe(false);
 	});
 });
 
