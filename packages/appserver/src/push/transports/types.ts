@@ -98,7 +98,9 @@ export interface PushDeliveryOptions {
  *    report an unconfigured pipeline as a healthy one, and into `retry` would
  *    report a rollout gap as an outage.
  *  - `retry` — transient or unclassifiable failure (429/5xx/network). The
- *    dispatcher counts it failed and leaves the row in place.
+ *    dispatcher counts it failed, parks the row with a backoff, and re-attempts
+ *    it (`push/dispatcher.ts`); a row that reaches its attempt ceiling is
+ *    pruned like a `gone` one.
  *
  * `status` carries the transport's own response code where it has one, for
  * diagnostics (a Web Push 429, an APNs 503); it is null when the transport has

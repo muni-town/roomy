@@ -81,6 +81,10 @@ function freshDb(): DbLike {
     kind text not null default 'webpush',
     p256dh text not null, auth text not null,
     expiration_time integer,
+    attempts integer not null default 0,
+    retry_after integer,
+    last_error text,
+    retry_payload text,
     created_at integer not null default (unixepoch() * 1000),
     updated_at integer not null default (unixepoch() * 1000),
     primary key (user_did, endpoint)
@@ -160,7 +164,7 @@ describe("push/transport — delivery seam", () => {
     expect(pushDispatcherStats().gone).toBe(1);
   });
 
-  test("retry keeps the row and counts a failure", async () => {
+  test("retry keeps the row, counts a failure, and parks it for another attempt", async () => {
     const db = freshDb();
     stubTransport("apns", { outcome: "retry", status: 429, error: new Error("429") });
     await upsertSubscription(db, {
@@ -173,9 +177,13 @@ describe("push/transport — delivery seam", () => {
     await deliverPayload(db, USER, PAYLOAD);
 
     const rows = await db
-      .query("select endpoint from push_subscriptions where user_did = ?")
-      .all<{ endpoint: string }>(USER);
+      .query(
+        "select endpoint, attempts, retry_after from push_subscriptions where user_did = ?",
+      )
+      .all<{ endpoint: string; attempts: number; retry_after: number | null }>(USER);
     expect(rows).toHaveLength(1);
+    expect(rows[0]!.attempts).toBe(1);
+    expect(rows[0]!.retry_after).not.toBeNull();
     expect(pushDispatcherStats().failed).toBe(1);
   });
 

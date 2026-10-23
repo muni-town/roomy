@@ -224,8 +224,22 @@ export interface PushStats {
     gone: number;
     failed: number;
     digestsFired: number;
+    /** Re-attempts scheduled after a transient failure. */
+    retryScheduled: number;
+    /** Subscriptions pruned for using up their transient-failure attempts. */
+    prunedFailed: number;
   };
   totalSubscriptions: number;
+  /** Subscriptions parked in a delivery backoff; -1 if the DB read failed. */
+  pendingRetries: number;
+  /** A bounded sample of the parked subscriptions, earliest backoff first. */
+  retrying: Array<{
+    endpoint: string;
+    kind: string;
+    attempts: number;
+    retryAfter: number | null;
+    lastError: string | null;
+  }>;
 }
 
 export async function callAdminGetPushStats(agent: Agent): Promise<PushStats> {

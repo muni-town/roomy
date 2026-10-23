@@ -9,16 +9,25 @@
  * background, so push never blocks the live sendEvents/materialise path.
  *
  * Outbound push-service calls are network-bound and can be slow, so they run
- * with bounded concurrency and a self-healing backoff on 429/5xx. Subscriptions
- * that return 404/410 (the browser unsubscribed / expired) are pruned.
+ * with bounded concurrency. A transport tells three kinds of failure apart
+ * (`PushOutcome` in `transports/types.ts`): `gone` (the destination is dead —
+ * pruned), `skipped` (nothing was attempted), and `retry` (429/5xx/a dropped
+ * connection — worth another attempt). A `retry` is written to the
+ * subscription row as a backoff and re-attempted by {@link _runPushRetrySweep}
+ * at the top of every cycle; after {@link maxRetryAttempts} consecutive
+ * transient failures the row is pruned like a `gone` one, so a device that
+ * never answers does not fail forever.
  *
  * The loop serves two push kinds:
  *  - **Busy** immediate `message` pushes, emitted by `evaluatePush` and
  *    delivered in `processBatch`.
  *  - **Engaged digest** pushes — the on-event 5-message threshold is emitted by
  *    `evaluatePush` (a `digest` delivery) and delivered in `processBatch`; the
- *    1-hour time threshold is caught by the periodic {@link runDigestSweep},
+ *    1-hour time threshold is caught by the periodic {@link _runDigestSweep},
  *    which runs on every idle wake alongside the 60s poll.
+ *
+ * Each cycle also runs {@link _runPushRetrySweep} before either, so a parked
+ * subscription is re-attempted whether or not new messages are arriving.
  */
 
 import type { DbLike } from "../db/types.ts";
@@ -26,6 +35,7 @@ import { openGlobalDb, openSpaceDb } from "../db/db.ts";
 import { createHash } from "node:crypto";
 import { log } from "../log.ts";
 import { evaluatePush, resolveAuthorName } from "./evaluate.ts";
+import { maxRetryAttempts, retryBackoffMs } from "./retry.ts";
 // Transport registration: importing a transport module installs it in
 // `PUSH_TRANSPORTS`. Every transport the appserver ships must be imported here
 // (or by another module on the boot path), or a stored row naming it is counted
@@ -34,12 +44,17 @@ import "./transports/webPush.ts";
 import "./transports/apn.ts";
 import "./transports/fcm.ts";
 import "./transports/sse.ts";
-import { PUSH_TRANSPORTS, type PushTarget } from "./transports/types.ts";
+import { PUSH_TRANSPORTS, type PushOutcome } from "./transports/types.ts";
 import { WorkerLease } from "../workers/lease.ts";
 import { mapWithConcurrency } from "../concurrency.ts";
 import {
+  clearDeliveryFailure,
   pruneSubscriptionByEndpoint,
+  recordDeliveryFailure,
+  selectDueSubscriptions,
+  selectEarliestRetryAt,
   selectSubscriptions,
+  type PushSubscriptionRow,
 } from "../queries/pushSubscriptions.ts";
 import {
   markNotified,
@@ -96,6 +111,10 @@ let statsSkipped = 0;
 let statsGone = 0;
 let statsFailed = 0;
 let statsDigestsFired = 0;
+/** Re-attempts scheduled after a transient failure. */
+let statsRetryScheduled = 0;
+/** Subscriptions pruned for using up their transient-failure attempts. */
+let statsPrunedFailed = 0;
 
 /** Pending live createMessage jobs, drained FIFO. */
 const queue: PushJob[] = [];
@@ -166,6 +185,8 @@ export function pushDispatcherStats(): {
   gone: number;
   failed: number;
   digestsFired: number;
+  retryScheduled: number;
+  prunedFailed: number;
 } {
   return {
     queueDepth: queue.length,
@@ -175,6 +196,8 @@ export function pushDispatcherStats(): {
     gone: statsGone,
     failed: statsFailed,
     digestsFired: statsDigestsFired,
+    retryScheduled: statsRetryScheduled,
+    prunedFailed: statsPrunedFailed,
   };
 }
 
@@ -200,6 +223,10 @@ async function runDispatcherLoop(lease: WorkerLease): Promise<void> {
   while (!stopped) {
     try {
       const drained = await lease.runIfHeld(async () => {
+        // Re-attempts first: a row whose backoff elapsed is work the lease
+        // holder owes, and it applies whether or not live jobs are queued —
+        // a busy loop must not starve a parked device forever.
+        await _runPushRetrySweep(db);
         const batch = queue.splice(0, queue.length);
         if (batch.length > 0) {
           await processBatch(db, batch);
@@ -213,7 +240,9 @@ async function runDispatcherLoop(lease: WorkerLease): Promise<void> {
       // Another replica owns the dispatcher: its own queue and the shared
       // digest rows are its work. Keep this process's queued jobs for whoever
       // holds the lease next (this process included) and poll.
-      if (!drained) await waitForWake(IDLE_POLL_MS);
+      if (!drained) {
+        await waitForWake(await idleWaitMs(db));
+      }
     } catch (err) {
       // Outer resilience: an unexpected throw must not permanently kill the
       // process-wide loop. Log, pause, continue.
@@ -221,6 +250,23 @@ async function runDispatcherLoop(lease: WorkerLease): Promise<void> {
       await waitForWake(IDLE_POLL_MS);
     }
   }
+}
+
+/**
+ * How long the loop may idle: the poll interval, or less when a parked
+ * subscription's backoff expires sooner — otherwise a 30s backoff would wait
+ * out the full minute before its re-attempt runs.
+ */
+async function idleWaitMs(db: DbLike): Promise<number> {
+  let earliest: number | null;
+  try {
+    earliest = await selectEarliestRetryAt(db);
+  } catch {
+    // A DB error here is not worth failing the cycle: the poll re-runs it.
+    return IDLE_POLL_MS;
+  }
+  if (earliest == null) return IDLE_POLL_MS;
+  return Math.max(0, Math.min(IDLE_POLL_MS, earliest - Date.now()));
 }
 
 /**
@@ -248,6 +294,170 @@ async function processBatch(db: DbLike, batch: PushJob[]): Promise<void> {
   // Deliver each recipient's payload to all their subscription endpoints.
   await mapWithConcurrency(deliveries, CONCURRENCY, (delivery) =>
     deliverPayload(db, delivery.userDid, delivery.payload),
+  );
+}
+
+/**
+ * Re-attempt deliveries whose backoff has elapsed. Bounded by
+ * {@link SWEEP_BATCH_LIMIT} per cycle, so a large parked backlog drains
+ * gradually instead of racing out at once.
+ *
+ * The work is selected from `push_subscriptions`, not from an in-memory
+ * queue: a parked row survives a restart, and whichever replica holds the
+ * dispatcher lease picks it up.
+ */
+export async function _runPushRetrySweep(
+  db: DbLike,
+  now: number = Date.now(),
+): Promise<void> {
+  const due = await selectDueSubscriptions(db, now, SWEEP_BATCH_LIMIT);
+  if (due.length === 0) return;
+  await mapWithConcurrency(due, CONCURRENCY, async (sub) => {
+    if (sub.retryPayload == null) {
+      // The payload was cleared between scheduling and now (a re-registration,
+      // or the user unsubscribed). Nothing is owed: settle the row.
+      await clearDeliveryFailure(db, sub);
+      return;
+    }
+    const body = sub.retryPayload;
+    await attemptDelivery(db, sub, body, retryTopic(body));
+  });
+}
+
+/**
+ * The coalescing topic for a stored payload, derived from the room it names.
+ * The body is what was persisted, so the topic is re-derived rather than
+ * stored a second time. Undefined when the body carries no usable room id —
+ * the delivery still goes out, it just is not coalesced.
+ */
+function retryTopic(payload: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(payload);
+    if (typeof parsed === "object" && parsed !== null && "roomId" in parsed) {
+      const { roomId } = parsed;
+      if (typeof roomId === "string" && roomId !== "") return roomTopic(roomId);
+    }
+  } catch {
+    // A stored body we cannot parse cannot carry a topic.
+  }
+  return undefined;
+}
+
+/**
+ * Offer one payload to one stored subscription and act on the transport's
+ * verdict. This is the only place a stored row meets a transport, so the
+ * outcome policy lives here once for every transport and every path (a live
+ * delivery and a re-attempt differ only in which body they hand over).
+ *
+ *  - `delivered` — the row is settled: no failure outstanding.
+ *  - `gone` — the destination is dead; the row is pruned.
+ *  - `skipped` — nothing was attempted, so no attempt is charged. A row that
+ *    was parked is settled, because leaving its backoff in the past would make
+ *    the sweep re-select it every cycle.
+ *  - `retry` — the attempt failed transiently: park the row with a backoff,
+ *    or prune it once it has used up {@link maxRetryAttempts}.
+ */
+async function attemptDelivery(
+  db: DbLike,
+  sub: PushSubscriptionRow,
+  body: string,
+  topic: string | undefined,
+): Promise<void> {
+  const endpointLabel = sub.endpoint.slice(0, 60);
+  let service = "unknown";
+  try {
+    service = new URL(sub.endpoint).hostname;
+  } catch {
+    // Non-URL endpoint (a native device token, say) — leave "unknown".
+  }
+  const label = `kind=${sub.kind} service=${service} endpoint=${endpointLabel}…`;
+
+  const transport = PUSH_TRANSPORTS[sub.kind];
+  if (!transport) {
+    // A row stored for a transport this build doesn't run. Count it as a
+    // failure so the gap is visible instead of silently dropping pushes, and
+    // settle any backoff so the sweep does not re-select it forever.
+    await clearDeliveryFailure(db, sub);
+    statsFailed++;
+    log.warn(`[push-deliver] FAILED unknown transport ${label}`);
+    return;
+  }
+
+  let res: PushOutcome;
+  try {
+    res = await transport.deliver(
+      {
+        kind: sub.kind,
+        endpoint: sub.endpoint,
+        p256dh: sub.p256dh,
+        auth: sub.auth,
+        expirationTime: sub.expirationTime,
+      },
+      body,
+      { topic, urgency: "normal" },
+    );
+  } catch (err) {
+    // A transport must not throw; one that does is treated as a transient
+    // failure rather than killing the batch.
+    res = { outcome: "retry", status: null, error: err };
+  }
+
+  if (res.outcome === "delivered") {
+    await clearDeliveryFailure(db, sub);
+    statsDeliveredOk++;
+    log.debug(`[push-deliver] OK ${label} status=${res.status ?? "?"}`);
+    return;
+  }
+  if (res.outcome === "gone") {
+    // Destination unsubscribed / expired — prune so we never retry it.
+    await pruneSubscriptionByEndpoint(db, sub.endpoint);
+    statsGone++;
+    log.info(`[push-deliver] GONE (pruned) ${label}`);
+    return;
+  }
+  if (res.outcome === "skipped") {
+    // Nothing was attempted (an unconfigured transport, or a device it cannot
+    // reach). Counted apart from `delivered` so a pipeline that is not
+    // actually delivering never reads as healthy, and apart from `retry` so a
+    // rollout gap is not reported as an outage.
+    if (sub.retryAfter != null) await clearDeliveryFailure(db, sub);
+    statsSkipped++;
+    log.debug(`[push-deliver] SKIPPED ${label}`);
+    return;
+  }
+
+  const error = res.error instanceof Error ? res.error.message : String(res.error);
+  statsFailed++;
+  const max = maxRetryAttempts();
+  // Scheduled from the attempt this failure becomes, not the one it followed:
+  // the first failure waits the shortest backoff.
+  const attempts = await recordDeliveryFailure(
+    db,
+    sub,
+    Date.now() + retryBackoffMs(sub.attempts + 1),
+    error,
+    body,
+  );
+  if (attempts == null) {
+    // The row was pruned between the read and this write (a sibling delivery
+    // for another user row sharing the endpoint, or an unregister). There is
+    // nothing left to park or prune.
+    return;
+  }
+  if (attempts >= max) {
+    // Written off. The line is `GONE (pruned)`-shaped on purpose: to an
+    // operator both mean "this destination left the table", and the `after=`
+    // suffix says how it got there.
+    await pruneSubscriptionByEndpoint(db, sub.endpoint);
+    statsPrunedFailed++;
+    log.warn(
+      `[push-deliver] GONE (pruned, after=${attempts}) ${label} status=${res.status ?? "?"}: ${error}`,
+    );
+    return;
+  }
+  statsRetryScheduled++;
+  log.warn(
+    `[push-deliver] RETRY scheduled attempt=${attempts}/${max} ${label} status=${res.status ?? "?"}: ${error}`,
   );
 }
 
@@ -374,8 +584,11 @@ export async function _runDigestSweep(db: DbLike): Promise<void> {
     };
     const icon = iconByRoom.get(row.roomId);
     if (icon) payload.icon = icon;
-    // Mark notified regardless of delivery success so a transient push-service
-    // outage doesn't re-fire the same batch every 60s (no retry).
+    // Mark notified regardless of delivery outcome: the batch is finished as
+    // far as this table is concerned. A failed delivery is not lost — the
+    // subscription row keeps the payload and re-attempts it
+    // (`_runPushRetrySweep`) — so leaving the row due would only re-fire the
+    // same digest every sweep on top of that parked re-attempt.
     await deliverPayload(db, row.userDid, payload);
     await markNotified(db, row.userDid, row.roomId);
     statsDigestsFired++;
@@ -388,9 +601,14 @@ export async function _runDigestSweep(db: DbLike): Promise<void> {
  * and the time-based sweep. Failures are logged, never thrown to the caller.
  *
  * Each stored row names its transport in `kind` and is handed to that
- * transport as a {@link PushTarget}; the outcome (`delivered`/`gone`/`retry`)
- * drives the same pruning, counting and logging for every transport, so adding
- * one never touches this policy.
+ * transport by {@link attemptDelivery}; the outcome (`delivered`/`gone`/
+ * `skipped`/`retry`) drives the same parking, pruning, counting and logging
+ * for every transport, so adding one never touches this policy.
+ *
+ * A row already parked in backoff is still attempted: a new message is newer
+ * than the payload the park is holding, and a delivery that lands settles the
+ * row. When this attempt fails too, the parked payload is replaced with this
+ * one, so the re-attempt carries the message the user is actually waiting for.
  *
  * Exported for the transport-seam test: it is the single place a stored
  * subscription meets a transport, so a test can drive routing without the
@@ -405,64 +623,8 @@ export async function deliverPayload(
   if (subs.length === 0) return;
   const body = JSON.stringify(payload);
   const topic = roomTopic(payload.roomId);
-  await Promise.all(
-    subs.map(async (sub) => {
-      const transport = PUSH_TRANSPORTS[sub.kind];
-      if (!transport) {
-        // A row stored for a transport this build doesn't run. Count it as a
-        // failure so the gap is visible instead of silently dropping pushes.
-        statsFailed++;
-        log.warn(
-          `[push-deliver] FAILED unknown transport kind=${sub.kind} endpoint=${sub.endpoint.slice(0, 60)}…`,
-        );
-        return;
-      }
-      const target: PushTarget = {
-        kind: sub.kind,
-        endpoint: sub.endpoint,
-        p256dh: sub.p256dh,
-        auth: sub.auth,
-        expirationTime: sub.expirationTime,
-      };
-      let service = "unknown";
-      try {
-        service = new URL(sub.endpoint).hostname;
-      } catch {
-        // Non-URL endpoint (a native device token, say) — leave "unknown".
-      }
-      try {
-        const res = await transport.deliver(target, body, { topic, urgency: "normal" });
-        if (res.outcome === "gone") {
-          // Destination unsubscribed / expired — prune so we never retry it.
-          await pruneSubscriptionByEndpoint(db, sub.endpoint);
-          statsGone++;
-          log.info(`[push-deliver] GONE (pruned) kind=${sub.kind} service=${service} endpoint=${sub.endpoint.slice(0, 60)}…`);
-        } else if (res.outcome === "delivered") {
-          statsDeliveredOk++;
-          log.debug(`[push-deliver] OK kind=${sub.kind} status=${res.status ?? "?"} service=${service} endpoint=${sub.endpoint.slice(0, 60)}…`);
-        } else if (res.outcome === "skipped") {
-          // Nothing was attempted (an unconfigured transport, or a device it
-          // cannot reach). Counted apart from `delivered` so a pipeline that is
-          // not actually delivering never reads as healthy.
-          statsSkipped++;
-          log.debug(`[push-deliver] SKIPPED kind=${sub.kind} service=${service} endpoint=${sub.endpoint.slice(0, 60)}…`);
-        } else {
-          statsFailed++;
-          log.warn(
-            `[push-deliver] FAILED kind=${sub.kind} status=${res.status ?? "?"} service=${service} endpoint=${sub.endpoint.slice(0, 60)}…:`,
-            res.error instanceof Error ? res.error.message : res.error,
-          );
-        }
-      } catch (err) {
-        // A transport must not throw; one that does still must not kill the
-        // batch, so count it as a failure like any other.
-        statsFailed++;
-        log.warn(
-          `[push-deliver] FAILED (transport threw) kind=${sub.kind} service=${service} endpoint=${sub.endpoint.slice(0, 60)}…:`,
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }),
+  await mapWithConcurrency(subs, subs.length, (sub) =>
+    attemptDelivery(db, sub, body, topic),
   );
 }
 
@@ -506,4 +668,6 @@ export async function _resetPushDispatcher(): Promise<void> {
   statsGone = 0;
   statsFailed = 0;
   statsDigestsFired = 0;
+  statsRetryScheduled = 0;
+  statsPrunedFailed = 0;
 }

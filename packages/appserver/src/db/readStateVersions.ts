@@ -157,6 +157,41 @@ export const READSTATE_MIGRATIONS = {
   // readStateSchema.sql. A cache of what each user's own repos hold, read back
   // from their PDS (`materialization/blocks.ts`).
   "15": { kind: "structural" },
+  // push_subscriptions.attempts / retry_after / last_error / retry_payload —
+  // the delivery-retry state (`push/dispatcher.ts`). Declared in
+  // readStateSchema.sql for fresh DBs; the ALTERs here add them to an existing
+  // table, which `create table if not exists` leaves untouched. Existing rows
+  // start settled (0 / null / null / null), which is exactly "no attempt has
+  // failed yet".
+  "16": {
+    kind: "structural",
+    up(db: Database) {
+      const cols = db
+        .query<{ name: string }, []>(
+          "select name from pragma_table_info('push_subscriptions')",
+        )
+        .all()
+        .map((r) => r.name);
+      if (!cols.includes("attempts")) {
+        db.exec(
+          "alter table push_subscriptions add column attempts integer not null default 0",
+        );
+      }
+      if (!cols.includes("retry_after")) {
+        db.exec("alter table push_subscriptions add column retry_after integer");
+      }
+      if (!cols.includes("last_error")) {
+        db.exec("alter table push_subscriptions add column last_error text");
+      }
+      if (!cols.includes("retry_payload")) {
+        db.exec("alter table push_subscriptions add column retry_payload text");
+      }
+      db.exec(`
+        create index if not exists idx_push_subs_retry_after
+          on push_subscriptions(retry_after) where retry_after is not null
+      `);
+    },
+  },
 } as const satisfies Record<string, ReadStateMigrationEntry>;
 
 /**

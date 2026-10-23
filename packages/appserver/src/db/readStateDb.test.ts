@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("read-state schema", () => {
   test("READSTATE_SCHEMA_VERSION is exported", () => {
-    expect(READSTATE_SCHEMA_VERSION).toBe("15");
+    expect(READSTATE_SCHEMA_VERSION).toBe("16");
   });
 
   test("schema applies cleanly on a fresh database", () => {
@@ -303,6 +303,57 @@ describe("read-state schema", () => {
 
     // Re-running the ALTER on an already-migrated table is a no-op, matching
     // the migration walk on a partially-upgraded DB.
+    expect(() => entry?.up?.(db)).not.toThrow();
+  });
+
+  test("push_subscriptions gains its retry state on a pre-v16 DB, settled by default", () => {
+    const db = new Database(":memory:");
+    db.exec("pragma foreign_keys = on");
+
+    // Simulate a v15 DB: push_subscriptions with `kind` but no retry state.
+    db.exec(`
+      create table readstate_schema_version (
+        id integer primary key check (id = 1),
+        version text not null
+      ) strict;
+      insert into readstate_schema_version (id, version) values (1, '15');
+
+      create table push_subscriptions (
+        user_did        text not null,
+        endpoint        text not null,
+        kind            text not null default 'webpush',
+        p256dh          text not null,
+        auth            text not null,
+        expiration_time integer,
+        created_at      integer not null default (unixepoch() * 1000),
+        updated_at      integer not null default (unixepoch() * 1000),
+        primary key (user_did, endpoint)
+      ) strict;
+      insert into push_subscriptions (user_did, endpoint, kind, p256dh, auth)
+        values ('did:plc:existing', 'https://push.example/old', 'webpush', 'k', 'a');
+    `);
+
+    db.exec(readFileSync(SCHEMA_PATH, "utf8"));
+    const entry = readStateMigrationEntry("16");
+    expect(entry?.kind).toBe("structural");
+    expect(() => entry?.up?.(db)).not.toThrow();
+
+    // An existing subscription has no failed attempt behind it, so it starts
+    // settled: not parked, nothing owed.
+    const row = db
+      .query<
+        { attempts: number; retry_after: number | null; retry_payload: string | null },
+        []
+      >(
+        `select attempts, retry_after, retry_payload from push_subscriptions
+          where endpoint = 'https://push.example/old'`,
+      )
+      .get();
+    expect(row?.attempts).toBe(0);
+    expect(row?.retry_after).toBeNull();
+    expect(row?.retry_payload).toBeNull();
+
+    // Re-running on an already-migrated table is a no-op.
     expect(() => entry?.up?.(db)).not.toThrow();
   });
 

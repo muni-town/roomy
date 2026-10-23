@@ -104,6 +104,11 @@ import { startVoiceReconciler } from "./voice/reconciler.ts";
 import { processLiveKitWebhook } from "./voice/webhook.ts";
 import { processTestWebhook } from "./voice/testWebhook.ts";
 import { startPushDispatcher, stopPushDispatcher, pushDispatcherStats } from "./push/dispatcher.ts";
+import {
+  countPendingPushRetries,
+  selectParkedSubscriptions,
+  type PushSubscriptionRow,
+} from "./queries/pushSubscriptions.ts";
 import { startSearchIndexer, stopSearchIndexer, searchIndexerStats } from "./search/indexer.ts";
 import { startSearchBackfill, stopSearchBackfill, searchBackfillStats } from "./search/backfill.ts";
 import { schemas, type UserDid } from "@roomy-space/sdk";
@@ -600,6 +605,13 @@ const LITERAL_ENDPOINTS: Readonly<Record<string, true>> = {
 };
 
 /**
+ * How many parked push subscriptions `/health/push` lists. The count beside it
+ * is exact; the list is a sample so the route stays a diagnostic rather than a
+ * dump of every parked device.
+ */
+const PUSH_HEALTH_RETRY_SAMPLE = 10;
+
+/**
  * Normalise a request path into the `endpoint` label value.
  *
  * The label must be drawn from a bounded set: a Prometheus label set lives
@@ -1089,6 +1101,10 @@ export async function createAppserver(
   const searchQueue = metrics.gauge("roomy_search_indexer_queue", "Search indexer queue length.");
   const searchBackfilled = metrics.gauge("roomy_search_backfilled", "Search backfill progress.");
   const pushQueued = metrics.gauge("roomy_push_queued", "Push dispatcher queued messages.");
+  const pushPendingRetries = metrics.gauge(
+    "roomy_push_pending_retries",
+    "Push subscriptions parked in a delivery backoff (-1 when the DB read failed).",
+  );
 
   const server = Bun.serve({
     port,
@@ -1147,9 +1163,34 @@ export async function createAppserver(
         );
       }
       if (url.pathname === "/health/push") {
-        return new Response(JSON.stringify(pushDispatcherStats()), {
-          headers: { "content-type": "application/json", ...corsHeaders },
-        });
+        // The counters are in-memory, but the retry state is on the rows: a
+        // parked count and a sample of why is what says whether a device is
+        // being retried or has been given up on. A DB failure must not take
+        // the health route down with it.
+        let pendingRetries: number;
+        let retrying: PushSubscriptionRow[];
+        try {
+          const readState = openReadStateDb();
+          pendingRetries = await countPendingPushRetries(readState);
+          retrying = await selectParkedSubscriptions(readState, PUSH_HEALTH_RETRY_SAMPLE);
+        } catch {
+          pendingRetries = -1;
+          retrying = [];
+        }
+        return new Response(
+          JSON.stringify({
+            ...pushDispatcherStats(),
+            pendingRetries,
+            retrying: retrying.map((sub) => ({
+              endpoint: sub.endpoint.slice(0, 60),
+              kind: sub.kind,
+              attempts: sub.attempts,
+              retryAfter: sub.retryAfter,
+              lastError: sub.lastError,
+            })),
+          }),
+          { headers: { "content-type": "application/json", ...corsHeaders } },
+        );
       }
       if (url.pathname === "/health/search") {
         return new Response(
@@ -1294,6 +1335,14 @@ export async function createAppserver(
         searchBackfilled.set({}, backfill.backfilled ?? 0);
         const push = pushDispatcherStats();
         pushQueued.set({}, push.queueDepth ?? 0);
+        // The parked count is a DB read, like `roomy_embed_pending` above:
+        // an unavailable DB must not publish a lie, so the gauge is left at its
+        // last value and only a successful read updates it.
+        try {
+          pushPendingRetries.set({}, await countPendingPushRetries(openReadStateDb()));
+        } catch {
+          // DB unavailable — leave the last value.
+        }
         // `rss` is what the host charges for; `heapUsed` moves under the GC and
         // is not the billed figure, so it is not published here.
         processRss.set({}, process.memoryUsage.rss());

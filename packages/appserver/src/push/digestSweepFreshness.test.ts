@@ -46,6 +46,10 @@ function freshDb(): DbLike {
     kind text not null default 'webpush',
     p256dh text not null, auth text not null,
     expiration_time integer,
+    attempts integer not null default 0,
+    retry_after integer,
+    last_error text,
+    retry_payload text,
     created_at integer not null default (unixepoch() * 1000),
     updated_at integer not null default (unixepoch() * 1000),
     primary key (user_did, endpoint)

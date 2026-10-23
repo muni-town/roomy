@@ -135,6 +135,17 @@ create table if not exists user_thread_backfill (
 -- Web Push rows carry the push-service URL plus the RFC 8291 `p256dh`/`auth`
 -- keys; a native transport's row will carry its device token in `endpoint` and
 -- leave the keys unused.
+--
+-- `attempts`/`retry_after`/`last_error`/`retry_payload` are the delivery-retry
+-- state (`push/dispatcher.ts`). A transport reports a transient failure
+-- (`retry`: 429/5xx, a dropped connection) separately from a dead destination
+-- (`gone`), and only the former is re-attempted: `attempts` counts the
+-- consecutive transient failures, `retry_after` is the epoch-ms backoff expiry
+-- of the pending re-attempt, `last_error` is why the last one failed, and
+-- `retry_payload` is the body to send again. They live on the row so a pending
+-- re-attempt survives a restart. A delivery that lands clears all four; a
+-- subscription that reaches the attempt ceiling is pruned like a `gone` one, so
+-- a device that never answers cannot occupy a row that fails forever.
 create table if not exists push_subscriptions (
   user_did        text not null,
   endpoint        text not null,          -- push service URL / device token; unique per subscription
@@ -142,11 +153,21 @@ create table if not exists push_subscriptions (
   p256dh          text not null,
   auth            text not null,
   expiration_time integer,                -- epoch ms, nullable
+  attempts        integer not null default 0, -- consecutive transient delivery failures
+  retry_after     integer,                -- epoch ms of the pending re-attempt's backoff expiry, else null
+  last_error      text,                   -- why the last delivery attempt failed, else null
+  retry_payload   text,                   -- JSON body owed a re-attempt, else null
   created_at      integer not null default (unixepoch() * 1000),
   updated_at      integer not null default (unixepoch() * 1000),
   primary key (user_did, endpoint)
 ) strict;
 create index if not exists idx_push_subs_user on push_subscriptions(user_did);
+-- NOTE: the re-attempt index idx_push_subs_retry_after is intentionally NOT
+-- declared here. It references `retry_after`, which does not exist on a
+-- pre-v16 table; declaring it in this file would make `db.exec(schema)` throw
+-- "no such column: retry_after" on an existing DB before the v16 migration can
+-- add the column. It is created by the v16 migration (existing DBs) and by the
+-- fresh-DB path in initializeReadStateSchema (worker.ts).
 
 -- User-wide default notification level. Absent row → appserver default
 -- ('engaged', matching the copy's highlighted option).

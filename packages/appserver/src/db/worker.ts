@@ -290,6 +290,12 @@ function initializeReadStateSchema(
       create index if not exists idx_user_thread_activity_user_space
         on user_thread_activity(user_did, space_did, last_active_at desc)
     `);
+    // Same split for push_subscriptions' retry index (v16): the schema file
+    // cannot declare an index over a column absent on a pre-v16 table.
+    db.exec(`
+      create index if not exists idx_push_subs_retry_after
+        on push_subscriptions(retry_after) where retry_after is not null
+    `);
     db.exec(
       `insert into readstate_schema_version (id, version) values (1, '${expectedVersion}')`,
     );

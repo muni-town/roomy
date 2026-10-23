@@ -609,7 +609,49 @@
                 <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Total Subs</p>
                 <p class="text-sm font-medium">{pushStats.totalSubscriptions}</p>
               </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Retries Scheduled</p>
+                <p class="text-sm font-medium">{pushStats.stats.retryScheduled}</p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Pruned After Retries</p>
+                <p class="text-sm font-medium" class:text-amber-600={pushStats.stats.prunedFailed > 0} class:text-base-500={pushStats.stats.prunedFailed === 0}>
+                  {pushStats.stats.prunedFailed}
+                </p>
+              </div>
+              <div class="border border-base-200 dark:border-base-800 rounded-xl p-3 bg-white dark:bg-base-900/50">
+                <p class="text-xs text-base-400 uppercase tracking-wide mb-1">Pending Retries</p>
+                <p class="text-sm font-medium" class:text-amber-600={pushStats.pendingRetries > 0} class:text-base-500={pushStats.pendingRetries === 0}>
+                  {pushStats.pendingRetries < 0 ? "unavailable" : pushStats.pendingRetries}
+                </p>
+              </div>
             </div>
+            {#if pushStats.retrying?.length}
+              <div class="mb-3 overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead class="text-base-400 uppercase tracking-wide">
+                    <tr>
+                      <th class="text-left py-1 pr-3">Endpoint</th>
+                      <th class="text-left py-1 pr-3">Kind</th>
+                      <th class="text-left py-1 pr-3">Attempts</th>
+                      <th class="text-left py-1 pr-3">Next attempt</th>
+                      <th class="text-left py-1">Last error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each pushStats.retrying as sub}
+                      <tr class="border-t border-base-100 dark:border-base-800">
+                        <td class="py-1 pr-3 font-mono">{sub.endpoint}</td>
+                        <td class="py-1 pr-3">{sub.kind}</td>
+                        <td class="py-1 pr-3">{sub.attempts}</td>
+                        <td class="py-1 pr-3">{sub.retryAfter ? new Date(sub.retryAfter).toLocaleString() : "—"}</td>
+                        <td class="py-1 text-base-500">{sub.lastError ?? "—"}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
           {/if}
         </div>
 

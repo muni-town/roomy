@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { startAppserver } from "./helpers.ts";
+import { readStateDb, startAppserver } from "./helpers.ts";
 
 describe("Transport-level edge cases", () => {
   test("GET /blob/<did>/<cid> → graceful error (no remote backend)", async () => {
@@ -65,6 +65,31 @@ describe("Transport-level edge cases", () => {
     expect(body).toHaveProperty("enrichedTransient");
     expect(body).toHaveProperty("sweepCycles");
     expect(body).toHaveProperty("sweepThrottled");
+  });
+
+  test("GET /health/push → 200 with dispatcher stats and retry state", async () => {
+    const ctx = await startAppserver()
+    // A parked subscription is the state this route exists to surface: the
+    // dispatcher's own counters are in-memory and say nothing about which
+    // device is being retried.
+    readStateDb(ctx.db).run(
+      `insert into push_subscriptions
+         (user_did, endpoint, kind, p256dh, auth, expiration_time,
+          attempts, retry_after, last_error, retry_payload)
+       values (?, ?, 'apns', '', '', null, 2, ?, 'ECONNRESET', '{}')`,
+      ["did:plc:retry-health", "device-token-health", Date.now() - 1000],
+    );
+
+    const res = await ctx.anonFetch(`${ctx.baseUrl}/health/push`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty("deliveredOk");
+    expect(body).toHaveProperty("retryScheduled");
+    expect(body).toHaveProperty("prunedFailed");
+    expect(body.pendingRetries).toBe(1);
+    expect(body.retrying).toHaveLength(1);
+    expect(body.retrying[0].attempts).toBe(2);
+    expect(body.retrying[0].lastError).toBe("ECONNRESET");
   });
 
   test("GET /health/search → 200 with indexer + backfill stats", async () => {
