@@ -26,6 +26,11 @@ import {
   federationRequestStatements,
 } from "./federationRules.ts";
 import {
+  calendarLinkStatements,
+  profileStatements,
+  voiceCallStatements,
+} from "./accountRules.ts";
+import {
   roleGrantStatements,
   roleStatements,
   roomPermissionStatements,
@@ -109,6 +114,12 @@ export function changeStatements(
       return federationRequestStatements(change, ctx);
     case "federationGrant":
       return federationGrantStatements(change);
+    case "profile":
+      return profileStatements(change, ctx);
+    case "calendarLink":
+      return calendarLinkStatements(change, ctx);
+    case "voiceCall":
+      return voiceCallStatements(change, ctx);
     default:
       throw new Error(`No projection rule for record kind: ${kind}`);
   }

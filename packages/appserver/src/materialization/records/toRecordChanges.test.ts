@@ -43,12 +43,20 @@ import { decodeTime } from "ulidx";
 import { closeDb, openDb } from "../../db/db.ts";
 import { toAsyncDb } from "../../db/syncAdapter.ts";
 import type { DbLike } from "../../db/types.ts";
+import {
+  type TableSnapshot,
+  diffSnapshots,
+  digestOf,
+  snapshotSpaceDb,
+} from "../../streams/rebuildEquality.ts";
 import { applyBatch } from "../applyBatch.ts";
 import type { LoggedEvent } from "../types.ts";
 import {
   NO_RECORD_EVENT_TYPES,
   NO_RECORD_SYNTHETIC_EVENT_TYPES,
   RECORD_KINDS_FOR_EVENT,
+  _withEventPath,
+  convertedChanges,
   toRecordChanges,
 } from "./toRecordChanges.ts";
 import type { RecordChange } from "./recordChange.ts";
@@ -507,6 +515,32 @@ describe("the mapping covers every event type the SDK knows", () => {
   });
 });
 
+describe("every event type that emits a record routes through the rules", () => {
+  const registered = Object.keys(eventRegistry) as EventType[];
+
+  test("a non-empty mapping always converts", () => {
+    const stillOnEventPath: string[] = [];
+    for (const $type of registered) {
+      if (RECORD_KINDS_FOR_EVENT[$type].length === 0) continue;
+      if (convertedChanges(logged(sample($type, emptyFixture()), 1), STREAM) === null) {
+        stillOnEventPath.push($type);
+      }
+    }
+    expect(stillOnEventPath).toEqual([]);
+  });
+
+  test("the entries that do not convert are exactly the no-record types", () => {
+    const unmapped = registered.filter(
+      ($type) =>
+        convertedChanges(logged(sample($type, emptyFixture()), 1), STREAM) ===
+        null,
+    );
+    expect([...(unmapped as readonly string[])].sort()).toEqual(
+      Object.keys(NO_RECORD_EVENT_TYPES).sort(),
+    );
+  });
+});
+
 describe("the ordering stamp is the projection's key", () => {
   test("createMessage's stamp equals the sort_idx the materialiser wrote", async () => {
     const raw = freshSpaceDb();
@@ -647,15 +681,9 @@ interface Built {
  * The space's own entity and `comp_space` row are seeded the way `createStream`
  * writes them in production; everything else the log produces.
  */
-async function buildFixture(): Promise<Built> {
+/** The fixture's log, built once so two derivations can share it. */
+function fixtureLog(): { entries: LoggedEvent[]; fx: Fixture } {
   const fx = emptyFixture();
-  const raw = freshSpaceDb();
-  const db = toAsyncDb(raw);
-  const globalDb = toAsyncDb(freshGlobalDb());
-
-  raw.run("insert into entities (id, stream_id) values (?, ?)", [STREAM, STREAM]);
-  raw.run("insert into comp_space (entity) values (?)", [STREAM]);
-
   let idx = 0;
   const entries: LoggedEvent[] = [];
   const push = ($type: EventType, overrides: Record<string, unknown> = {}) => {
@@ -698,15 +726,27 @@ async function buildFixture(): Promise<Built> {
     }
   }
 
-  // Re-adapt: the ids above only exist once the log is complete, and the
-  // adapter is a pure function of an entry, so a second pass is exact.
-  const stats = await applyBatch(
-    db,
-    STREAM,
-    entries,
-    { isBackfill: false },
-    globalDb,
-  );
+  return { entries, fx };
+}
+
+/**
+ * Build the workspace and apply the log through the record path, or through
+ * the event path when asked.
+ */
+async function buildFixture(
+  opts: { eventPath?: boolean; log?: { entries: LoggedEvent[]; fx: Fixture } } = {},
+): Promise<Built> {
+  const { entries, fx } = opts.log ?? fixtureLog();
+  const raw = freshSpaceDb();
+  const db = toAsyncDb(raw);
+  const globalDb = toAsyncDb(freshGlobalDb());
+
+  raw.run("insert into entities (id, stream_id) values (?, ?)", [STREAM, STREAM]);
+  raw.run("insert into comp_space (entity) values (?)", [STREAM]);
+
+  const apply = () =>
+    applyBatch(db, STREAM, entries, { isBackfill: false }, globalDb);
+  const stats = await (opts.eventPath ? _withEventPath(apply) : apply());
   expect(stats.applyErrors).toBe(0);
   expect(stats.materializerErrors).toBe(0);
 
@@ -1283,5 +1323,70 @@ describe("the rules the plan fixes for individual kinds", () => {
     ] as const) {
       expect(changesFor($type)).toEqual([]);
     }
+  });
+});
+
+
+/** The tables a masked comparison leaves out: the write identity of an edit. */
+function withoutLastEdit(tables: TableSnapshot[]): TableSnapshot[] {
+  return tables.map((table) => {
+    if (table.table !== "comp_content") return table;
+    const keep = table.columns
+      .map((column, i) => (column === "last_edit" ? -1 : i))
+      .filter((i) => i >= 0);
+    return {
+      table: table.table,
+      columns: table.columns.filter((column) => column !== "last_edit"),
+      rows: table.rows.map((row) => keep.map((i) => row[i])),
+    };
+  });
+}
+
+describe("the whole registry derives one corpus the same way through both paths", () => {
+  test("every routed kind matches the event path over the fixture log", async () => {
+    const log = fixtureLog();
+    const recordPath = await buildFixture({ log });
+    const eventPath = await buildFixture({ eventPath: true, log });
+
+    const recordSpace = withoutLastEdit(await snapshotSpaceDb(recordPath.db));
+    const eventSpace = withoutLastEdit(await snapshotSpaceDb(eventPath.db));
+
+    // `comp_content.last_edit` is the one value the record model cannot carry:
+    // it is the edit event's id on the event path and the change's stamp on the
+    // record path, and only its difference from the message id is read.
+    expect(diffSnapshots(eventSpace, recordSpace).map((d) => d.table)).toEqual([]);
+    expect(digestOf(recordSpace)).toBe(digestOf(eventSpace));
+
+    // The global entity→space index is written by the same statements under
+    // both paths, so it must agree row for row.
+    expect(
+      recordPath.globalDb
+        .query("select entity_id, space_did from entity_space order by entity_id")
+        .all(),
+    ).toEqual(
+      eventPath.globalDb
+        .query("select entity_id, space_did from entity_space order by entity_id")
+        .all(),
+    );
+
+    // The federation tables differ only in the derivation clock, which neither
+    // the log nor the record carries.
+    expect(
+      recordPath.globalDb
+        .query(
+          `select space_id, federating_space_did, status, requested_by_did,
+                  message, decided_by_did, decision_message
+             from space_federations`,
+        )
+        .all(),
+    ).toEqual(
+      eventPath.globalDb
+        .query(
+          `select space_id, federating_space_did, status, requested_by_did,
+                  message, decided_by_did, decision_message
+             from space_federations`,
+        )
+        .all(),
+    );
   });
 });

@@ -88,6 +88,7 @@ export async function planBatch(
   // statements run.
   const neededRooms = new Set<string>();
   const neededParents = new Set<string>();
+  const neededCalls = new Set<string>();
   for (const changes of routed) {
     for (const change of changes ?? []) {
       if (change.kind === "message") {
@@ -101,11 +102,16 @@ export async function planBatch(
         change.record.parent === null
       ) {
         neededParents.add(String(change.rkey));
+      } else if (change.kind === "voiceCall" && change.op !== "create") {
+        // A call fact names only the call; the room is in the row the start
+        // wrote.
+        neededCalls.add(String(change.rkey));
       }
     }
   }
   const rooms = await readRooms(db, [...neededRooms]);
   const parents = await readCanonicalParents(db, [...neededParents]);
+  const calls = await readCallRooms(db, [...neededCalls]);
 
   return routed.map((changes, i) => {
     if (!changes) return null;
@@ -136,6 +142,16 @@ export async function planBatch(
         } else {
           applied.push({ change });
           parents.set(id, change.record.parent);
+        }
+      } else if (change.kind === "voiceCall") {
+        if (change.op === "create") {
+          calls.set(id, change.record.room);
+          applied.push({ change });
+        } else if (change.op === "delete") {
+          applied.push({ change, priorRoom: calls.get(id) });
+          calls.delete(id);
+        } else {
+          applied.push({ change, priorRoom: calls.get(id) });
         }
       } else {
         applied.push({ change });
@@ -182,6 +198,26 @@ async function readCanonicalParents(
     .all<{ tail: string; head: string }>([...ids]);
   for (const row of rows) parents.set(row.tail, row.head);
   return parents;
+}
+
+/**
+ * The room each call is in, from `active_calls`: a call fact names only its
+ * call, and every participant row and call-end is keyed by the room too.
+ */
+async function readCallRooms(
+  db: DbLike,
+  ids: readonly string[],
+): Promise<Map<string, string>> {
+  const rooms = new Map<string, string>();
+  if (ids.length === 0) return rooms;
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = await db
+    .query(
+      `select call_id, room_id from active_calls where call_id in (${placeholders})`,
+    )
+    .all<{ call_id: string; room_id: string }>([...ids]);
+  for (const row of rows) rooms.set(row.call_id, row.room_id);
+  return rooms;
 }
 
 /** The statements one routed entry applies, split by when they run. */
