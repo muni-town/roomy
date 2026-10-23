@@ -1,0 +1,22 @@
+[package]
+name = "space-db"
+description = "A Roomy per-space SQLite database: applies projection effects and snapshots its state"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+space-core.workspace = true
+roomy-events.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+base64.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+base64.workspace = true

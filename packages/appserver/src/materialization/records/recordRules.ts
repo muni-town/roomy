@@ -57,6 +57,8 @@ export interface RuleStatement extends SqlStatement {
  */
 export interface RuleContext {
   readonly streamId: StreamDid;
+  /** True for a replay: the projections are invalidated rather than written. */
+  readonly isBackfill: boolean;
   /** The user who sent the entry the change was derived from. */
   readonly actor: Did;
   /** The entry's id, for the rows the record model does not identify. */
@@ -132,12 +134,14 @@ export function changeStatements(
 export function entryContext(
   entry: LoggedEvent,
   streamId: StreamDid,
-  prior: { priorRoom?: string; priorParent?: string },
+  prior: { priorRoom?: string; priorParent?: string; isBackfill: boolean },
 ): RuleContext {
   return {
     streamId,
+    isBackfill: prior.isBackfill,
     actor: entry.user as Did,
     eventId: entry.event.id,
-    ...prior,
+    priorRoom: prior.priorRoom,
+    priorParent: prior.priorParent,
   };
 }

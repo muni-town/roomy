@@ -17,12 +17,21 @@ roomy-events = { path = "crates/roomy-events" }
 roomy-client = { path = "crates/roomy-client" }
 bridge-core = { path = "crates/bridge-core" }
 matrix-adapter = { path = "crates/matrix-adapter" }
+space-core = { path = "crates/space-core" }
+space-db = { path = "crates/space-db" }
+
+# The space worker opens the SQLite files the TypeScript appserver writes, so
+# the driver is `rusqlite` with the bundled amalgamation: one SQLite version,
+# built into the image, no system library to match.
+rusqlite = { version = "0.40", features = ["bundled"] }
+regex = "1.13"
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ciborium = "0.2"
 thiserror = "2.0"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "net"] }
 ulid = "3.0"
 base64 = "0.23"

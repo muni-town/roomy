@@ -1,8 +1,8 @@
 # Near-Term Plan: Read-Path Throughput and Replicable Space Workers
 
-**Status (2026-10-22):** WS1 complete — purity Steps 1–5 are merged (#338, #405, #403, #422, #436), and the acceptance oracle `src/streams/rebuildEquality.ts` is reusable (#424). WS2 mostly merged: R1/R2/R3/R6/R7 of `denormalised-read-projections.md` are in `next`; R4 was measured and deferred as below value. WS5b is written and in review (#454). WS3's record kind, op and `repo` mapping is settled (§5 WS3), its adapter and all sixteen kinds are in place (S1, S2, S3): every event type that emits a record is applied through the projection rules, and only the no-record types keep their SDK materialiser; WS4 waits on WS3 plus the Rust building-blocks research, which has not been done.
+**Status (2026-10-23):** WS1 complete — purity Steps 1–5 are merged (#338, #405, #403, #422, #436), and the acceptance oracle `src/streams/rebuildEquality.ts` is reusable (#424). WS2 mostly merged: R1/R2/R3/R6/R7 of `denormalised-read-projections.md` are in `next`; R4 was measured and deferred as below value. WS5b is written and in review (#454). WS3's record kind, op and `repo` mapping is settled (§5 WS3), its adapter and all sixteen kinds are in place (S1, S2, S3): every event type that emits a record is applied through the projection rules, and only the no-record types keep their SDK materialiser. WS4's materialisation core is written (§5 WS4): a persisted change feed, the rule layer as one ordered effect list, and three Rust crates whose per-space projection is digest-identical to the TypeScript one over the registry corpus. Its XRPC serving is a separate piece and not yet written.
 
-**Next:** WS3 (the change-record interface) is the one gate before a Rust worker, and it is now unblocked. The companion plan is *Roomy Protocol Migration Plan: Records as Source of Truth* — muni-town/roomy#683, `docs/plans/atproto-spaces-migration-plan.md` on that branch — whose §5.1 fixes the `RecordChange` type. WS3 builds the adaptor for that model; it does not migrate the storage. See §5 WS3.
+**Next:** WS4's read serving — the router and the per-space queries — builds on the materialisation core now that the feed and the rules are in place. The companion plan is *Roomy Protocol Migration Plan: Records as Source of Truth* — muni-town/roomy#683, `docs/plans/atproto-spaces-migration-plan.md` on that branch — whose §5.1 fixes the `RecordChange` type. WS3 builds the adaptor for that model; it does not migrate the storage. See §5 WS3.
 
 The storage migration itself is deliberately not scheduled. It waits for ATProto permissioned spaces to be deployed to users, because until then records cannot be the source of truth. `RecordChange` is defined now so the Rust worker is written once, against the input type the migration will hand it.
 
@@ -190,7 +190,29 @@ Each slice leaves one input type per code path — the adapter sits upstream of 
 - **Scope:** materialisation plus per-space read serving, behind a narrow interface, with the TS gateway in front.
 - **Oracle:** the rebuild-equality harness, run across both implementations, so the port is checked against TS output.
 - **Cutover, space by space:** shadow-materialise in Rust and diff against TS, then query both from the gateway and compare responses, then shift traffic, keeping a rollback path to TS.
-- Research on Rust building blocks is still pending.
+
+**Materialisation core (written).** Three crates beside the bridge workspace:
+
+| Crate | Holds |
+| --- | --- |
+| `crates/space-core` | The projection rules, sans-io: a change record plus its context in, one ordered effect list out. |
+| `crates/space-db` | A per-space SQLite database: applies a batch of effects, runs the derived steps, writes its cursor, and snapshots itself the way `rebuildEquality.ts` does. |
+| `crates/roomy-space-worker` | The loop, and the four seams it crosses: the change feed, the lease, the global sink, `/health`. |
+
+The decisions this makes, each of which the TypeScript side had to change to make true:
+
+- **One effect list per change.** `changeEffects` (`records/effects.ts`) returns a change's *complete* effects in application order — the kind's statements, the projection it maintains (`room_activity` for a message, `room_access` for a room), the `entity_space` index write for every entity it creates, and the derived steps it invalidates. `space_core::plan` is the same list. Before this, three steps lived outside the rules (the reorder key, the activity-window rebuilds, the ordering-key update) and a worker implementing only the rules would have missed them. The reorder key is now a `DerivedStep` and nothing else computes one; the window rebuilds are steps; the ordering key is the rule's own statement, written once — `applyBundle`'s duplicate writes went away.
+- **The feed is the adapter's output, persisted.** `record_changes` in the event-log DB, written by `StreamManager.sendEvents` next to the append, and rebuilt from the log by `scripts/backfill-record-changes.ts`. One entry can emit several changes, so `ord` is the emission order and `(idx, ord)` is the worker's cursor. The row carries `actor` and `event_id` as well: two rules key rows by them (the membership announcement, `comp_invite.event_ulid`, a call fact's `joined_at`), and they belong to the entry rather than to the record.
+- **The adapter is written once.** The feed stores `toRecordChanges`' output; the worker decodes rows and never sees an event. An entry that emits no record (`setHandleProvider`, `editPage`, `reorderMessage`) writes no row, so the worker's input is the record-producing registry.
+- **Schema ownership.** `space-db` compiles the appserver's own `schema-space.sql` (`include_str!`) and the worker's global sink compiles `schema-global.sql`. One schema, two writers, no generated copy to drift. `worker_cursor` is declared there beside `materialization_cursor`, one per implementation.
+- **Driver.** `rusqlite` with the bundled amalgamation: one SQLite version built into the image, and the files `bun:sqlite` writes open unchanged. No libsql.
+- **Typestate rules.** A change's op decides its body (`Create { record }`, `Update { patch }`, `Delete`), decoding checks the row's `collection` against its `kind`, and a kind with no update is a decode error rather than a rule that changes nothing.
+- **Lease.** The same conditional upsert as `workers/lease.ts`, on `worker_leases` in the global DB, keyed `space-worker:<space>`. It serialises applying, not ordering: the stamp was assigned at ingest, so a worker that loses and regains the lease resumes from its cursor and lands on the same projection.
+- **Global sink.** Global-targeted statements are returned to the caller, never applied by `space-db`. The worker writes them first (they are idempotent) and then commits the space batch with its cursor in one transaction, so a crash leaves the index at worst ahead of a batch that will be replayed.
+- **Batches.** A batch never splits a log entry, and the whole batch's statements are applied before its derived steps — the same shape as `applyBatch`'s chunk, which is what a window rebuild's inputs depend on.
+- **Parity fixtures.** `scripts/export-worker-fixtures.ts` writes, deterministically, one corpus's change feed and the digests of the two databases the TypeScript rules produce from it (`crates/space-db/tests/fixtures/`). `crates/space-db/tests/parity.rs` replays the feed through the Rust rules and requires both digests to match, and `crates/roomy-space-worker/tests/worker.rs` drains the same feed through the real loop and does the same. The comparison drops the cursor tables and columns each implementation owns (`workerSnapshot`) and the columns that are the derivation clock.
+
+**Not yet written:** the XRPC router and the per-space read queries. Materialisation is the piece that had to exist first, and none of the read work changes it.
 
 ### WS5. Gateway, leases and replicas
 

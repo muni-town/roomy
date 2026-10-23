@@ -31,6 +31,44 @@ create table if not exists stream_events (
 -- it those are full table scans of the whole event log.
 create index if not exists idx_stream_events_created_at on stream_events(created_at);
 
+-- The interim change feed: the record adapter's output, one row per change a
+-- log entry emits (`streams/recordChanges.ts`). Written by the write path in
+-- the same call as the log append, so a worker that applies change records
+-- reads them here instead of re-running the adapter over events.
+--
+-- `ord` is the emission order within an entry: one entry can emit several
+-- changes (`createRoomLink` emits a room update and a message create;
+-- `federation.remove` deletes two kinds), and `(stream_id, idx, ord)` is the
+-- total order the worker applies them in. `order_stamp` is the log's ordering
+-- key — the same value the materialiser writes to `entities.sort_idx` — so a
+-- consumer sorts by it without reading the log.
+--
+-- `actor` and `event_id` are the entry's own facts rather than the record's:
+-- the membership announcement is keyed by the join event's id,
+-- `comp_invite.event_ulid` by the invite event's, and a call fact's
+-- `joined_at` decodes the event id. `body` is the record (`create`) or patch
+-- (`update`) as JSON with bytes carried as `{"$bytes": "<base64>"}`, and null
+-- for a delete.
+--
+-- `insert or replace` makes a write idempotent, which is what lets the
+-- backfill script re-run over a stream's log. The table is derived from
+-- `stream_events` and can be rebuilt from it at any time.
+create table if not exists record_changes (
+    stream_id text not null,
+    idx integer not null,
+    ord integer not null,      -- emission order within one log entry
+    kind text not null,
+    repo text not null,
+    collection text not null,
+    rkey text not null,
+    op text not null,          -- 'create' | 'update' | 'delete'
+    order_stamp text not null,
+    actor text not null,
+    event_id text not null,
+    body text,                 -- JSON full body (create), patch (update), null (delete)
+    primary key (stream_id, idx, ord)
+) strict;
+
 -- Per-stream metadata (latest event idx, etc.)
 --
 -- `latest_event` is the highest `idx` in the stream and doubles as a rollup:

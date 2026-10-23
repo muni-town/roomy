@@ -399,6 +399,17 @@ create table if not exists materialization_cursor (
   materialized_to integer not null default -1
 ) strict;
 
+-- A space worker's progress marker: the last change-feed position applied to
+-- this DB. Written in the same transaction as the effects it covers, so a
+-- crash replays exactly the changes that were not applied. Separate from
+-- `materialization_cursor`, which is the TS materialiser's own marker — each
+-- implementation owns one and neither writes the other's.
+create table if not exists worker_cursor (
+  id integer primary key check (id = 1),
+  idx integer not null,
+  ord integer not null
+) strict;
+
 -- Denormalised read projection: the room→space→parent→access facts
 -- that `auth/access.ts:resolveRoom` re-derives per room, per request, per
 -- caller. Those three queries are 36 of the ~50 DB round-trips

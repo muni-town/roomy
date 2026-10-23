@@ -2,10 +2,11 @@
  * The record path: routing a batch's entries to the projection rules, and the
  * derived state those rules do not write themselves.
  *
- * A routed entry's statements come from {@link changeStatements}. What stays
- * here is the state that depends on the rows rather than on one record — the
- * room a message was in before a move or a delete, the parent a link clears,
- * the room a voice fact belongs to — plus the projection maintenance and the
+ * A routed entry's effects come from {@link changeEffects} — its statements,
+ * the projection it maintains and the derived steps it invalidates, in
+ * application order. What stays here is the state that depends on the rows
+ * rather than on one record — the room a message was in before a move or a
+ * delete, the parent a link clears, the room a voice fact belongs to — plus the
  * read-state and search work the event path also does after the event's own
  * SQL.
  *
@@ -16,43 +17,23 @@
  * an entry that both creates and moves a record inside one chunk sees the state
  * the earlier change produced.
  *
- * The room a message left is the one case the message rules read directly; a
- * `room` change drives `room_access` maintenance, the same step the event path
- * appended for the room lifecycle events.
+ * The room a message left is the one case the effects read directly: a delete
+ * carries no room, and a move carries only its destination.
  */
 
-import {
-  type StreamDid,
-  type Ulid,
-  RICHTEXT_MIME,
-  extractFacetUrls,
-} from "@roomy-space/sdk";
+import { type StreamDid, type Ulid } from "@roomy-space/sdk";
 import { decodeTime } from "ulidx";
 
 import type { DbLike } from "../../db/types.ts";
-import { decodeContent, decodeRichTextBody } from "../../db/content.ts";
-import {
-  detectAndStoreLinks,
-  detectAndStoreLinksFromUrls,
-} from "../../embed/enricher.ts";
 import { isThread, refreshThreadActivityOnMessage } from "../../queries/userActiveThreads.ts";
 import { upsertUserRoomParticipation } from "../../queries/userRoomParticipation.ts";
-import {
-  maintainRoomActivityForMessage,
-  type MessageActivityTarget,
-} from "../../queries/roomActivityProjection.ts";
-import { roomAccessStepForRoom } from "../../queries/roomAccessProjection.ts";
 import { enqueueDeleteMessage, enqueueIndexMessage } from "../../search/indexer.ts";
 import type { LoggedEvent } from "../types.ts";
-import { upsertActivityItem } from "../activityItem.ts";
 import { applyMoveSideEffectsFor } from "../moveMessages.ts";
 import type { RecordChange } from "./recordChange.ts";
+import { changeEffects, type Effect } from "./effects.ts";
 import { canonicalSendTime, type MessageChange } from "./messageRules.ts";
-import {
-  changeStatements,
-  entryContext,
-  type RuleStatement,
-} from "./recordRules.ts";
+import { entryContext } from "./recordRules.ts";
 import { convertedChanges } from "./toRecordChanges.ts";
 
 /** One change the record path applies, with the state its rule reads. */
@@ -80,7 +61,34 @@ export async function planBatch(
   chunk: readonly LoggedEvent[],
   streamId: StreamDid,
 ): Promise<Array<RoutedEvent | null>> {
-  const routed = chunk.map((entry) => convertedChanges(entry, streamId));
+  return await planChanges(
+    db,
+    chunk.map((entry) => ({
+      entry,
+      changes: convertedChanges(entry, streamId),
+    })),
+  );
+}
+
+/** One entry and the changes it applies through the rules. */
+export interface ChangeEntry {
+  readonly entry: LoggedEvent;
+  /** `null` when the entry stays on the event path. */
+  readonly changes: readonly RecordChange[] | null;
+}
+
+/**
+ * Plan a batch whose changes the caller already has.
+ *
+ * {@link planBatch} derives them from the log entries; a consumer reading a
+ * persisted change feed (`streams/recordChanges.ts`) already holds them, and
+ * plans from the same code so the state a rule reads is read one way.
+ */
+export async function planChanges(
+  db: DbLike,
+  batch: readonly ChangeEntry[],
+): Promise<Array<RoutedEvent | null>> {
+  const routed = batch.map((item) => item.changes);
 
   // The state the rules cannot read off the change: the source of a message
   // move and the room a message delete empties, the parent a link clears, and
@@ -157,7 +165,7 @@ export async function planBatch(
         applied.push({ change });
       }
     }
-    return { entry: chunk[i]!, changes: applied };
+    return { entry: batch[i]!.entry, changes: applied };
   });
 }
 
@@ -220,75 +228,31 @@ async function readCallRooms(
   return rooms;
 }
 
-/** The statements one routed entry applies, split by when they run. */
-export interface RecordEventSteps {
-  /** Applied in the entry's own transaction. */
-  readonly statements: RuleStatement[];
-  /** Projection maintenance, appended after the statements. */
-  readonly projection: Array<{ sql: string; params: unknown[] }>;
-}
-
-/** The SQL one routed entry applies, in order. */
-export function recordEventSteps(
+/**
+ * The effects one routed entry applies, in order.
+ *
+ * The statements carry their own target, so the caller does not route them by
+ * matching SQL text; the derived steps are what the caller applies through
+ * `derivedSteps.ts` once the entry's SQL has run.
+ */
+export function recordEntryEffects(
   routed: RoutedEvent,
   opts: { streamId: StreamDid; isBackfill: boolean },
-): RecordEventSteps {
-  const statements: RecordEventSteps["statements"] = [];
-  const projection: Array<{ sql: string; params: unknown[] }> = [];
-
+): Effect[] {
+  const effects: Effect[] = [];
   for (const { change, priorRoom, priorParent } of routed.changes) {
-    statements.push(...changeStatements(change, entryContext(routed.entry, opts.streamId, { priorRoom, priorParent })));
-
-    if (change.kind === "message") {
-      const target = activityTarget(change, priorRoom);
-      const step = target && maintainRoomActivityForMessage(target, opts.isBackfill);
-      if (step) projection.push(step);
-    } else if (change.kind === "room") {
-      projection.push(roomAccessStepForRoom(opts.streamId, opts.isBackfill));
-    }
+    effects.push(
+      ...changeEffects(
+        change,
+        entryContext(routed.entry, opts.streamId, {
+          priorRoom,
+          priorParent,
+          isBackfill: opts.isBackfill,
+        }),
+      ),
+    );
   }
-
-  return { statements, projection };
-}
-
-/** Which room a message change moves the board projection out of, and into. */
-function activityTarget(
-  change: MessageChange,
-  priorRoom: string | undefined,
-): MessageActivityTarget | null {
-  switch (change.op) {
-    case "create":
-      // A system message arrives only from a link, which the event path never
-      // folded into the room's feed; a forward reference carries no content, so
-      // the feed window and the board summary never include either.
-      return change.record.content === undefined
-        ? null
-        : { op: "create", messageId: change.rkey };
-    case "update":
-      return change.record.room === undefined
-        ? null
-        : {
-            op: "move",
-            messageId: change.rkey,
-            fromRoom: priorRoom,
-            toRoom: change.record.room,
-          };
-    case "delete":
-      return priorRoom === undefined
-        ? null
-        : { op: "delete", messageId: change.rkey, fromRoom: priorRoom };
-  }
-}
-
-/** The rooms a routed entry's deletes empty, for the window rebuild. */
-export function recordDeleteRooms(routed: RoutedEvent): string[] {
-  const rooms: string[] = [];
-  for (const { change, priorRoom } of routed.changes) {
-    if (change.kind === "message" && change.op === "delete" && priorRoom !== undefined) {
-      rooms.push(priorRoom);
-    }
-  }
-  return rooms;
+  return effects;
 }
 
 /** What the record path's side effects read from the batch. */
@@ -296,15 +260,13 @@ export interface RecordSideEffectContext {
   readonly streamId: StreamDid;
   /** True for a replay — skips the read-state writes, as the event path does. */
   readonly isBackfill: boolean;
-  /** Collects the URLs whose link cards the chunk found. */
-  readonly detectedLinks: string[];
-  readonly globalDb?: DbLike;
   readonly readStateDb?: DbLike;
 }
 
 /**
- * The side effects one routed entry owes after its SQL: activity feed, search,
- * link cards, and the read-state the log cannot supply.
+ * The side effects one routed entry owes after its SQL: search, and the
+ * read-state the log cannot supply. The per-space derived state the entry
+ * writes — its feed window, its link rows — is in its effect list.
  *
  * Runs per entry, in log order, so the read-state writes interleave with the
  * unconverted entries' exactly as they did when every entry took the event
@@ -354,13 +316,8 @@ async function applyCreate(
   const id = change.rkey;
   const timestamp = canonicalSendTime(id, record);
 
-  await upsertActivityItem(db, {
-    roomId: record.room,
-    spaceId: ctx.streamId,
-    messageId: id as unknown as Ulid,
-    timestamp,
-  });
-
+  // The room's feed window is folded in by the change's `upsertActivityItem`
+  // step, which the batch applies.
   if (!ctx.isBackfill && ctx.readStateDb) {
     // The record's author is the DID its content is attributed to, which is the
     // overridden author for a bridged message — the same DID the participation
@@ -385,44 +342,6 @@ async function applyCreate(
   // Search indexing: enqueue the message for the out-of-band indexer, which
   // re-reads the materialised rows.
   enqueueIndexMessage(ctx.streamId, id);
-
-  const content = record.content;
-  if (!content) return;
-  const buffer = Buffer.from(content.data);
-  let detected: string[];
-  if (content.mimeType === RICHTEXT_MIME) {
-    // URLs come from `#link` facet URIs, not regex scanning.
-    const blocks = decodeRichTextBody(content.mimeType, buffer);
-    detected = await detectAndStoreLinksFromUrls(
-      db,
-      id,
-      blocks ? extractFacetUrls(blocks) : [],
-    );
-  } else {
-    detected = await detectAndStoreLinks(
-      db,
-      id,
-      decodeContent(content.mimeType, buffer),
-    );
-  }
-
-  if (detected.length === 0) return;
-  ctx.detectedLinks.push(...detected);
-  if (!ctx.globalDb) return;
-  // Link entities carry an empty stream_id in the per-space DB, so the global
-  // index is what resolves them to this space; the pending-links index is what
-  // the embed sweeper walks without opening every per-space DB.
-  for (const url of detected) {
-    await ctx.globalDb.run(
-      `insert or ignore into entity_space (entity_id, space_did) values (?, ?)`,
-      [url, ctx.streamId],
-    );
-    await ctx.globalDb.run(
-      `insert or ignore into pending_links (space_did, message_id, url, created_at)
-       values (?, ?, ?, ?)`,
-      [ctx.streamId, id, url, Date.now()],
-    );
-  }
 }
 
 /**
@@ -450,6 +369,9 @@ async function applyMove(
     movedAt: decodeTime(change.orderStamp as unknown as Ulid),
     readStateDb: ctx.readStateDb,
     isBackfill: ctx.isBackfill,
+    // The change's effect list carries the feed upsert and the room-window
+    // steps, so this applies only the read-state half.
+    derived: "caller",
   });
 
   // Re-index: the search worker reads the message's `room` from the per-space

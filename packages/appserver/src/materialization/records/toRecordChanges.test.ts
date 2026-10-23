@@ -900,6 +900,9 @@ async function projectionHolds(
 }
 
 describe("the changes describe the projection the materialiser built", () => {
+  // Both of these build the whole registry's projection through the DB worker,
+  // so they take an order of magnitude longer than a rule test and need a
+  // budget that survives a loaded CI runner.
   test("the fixture exercises every event type whose projection can be built", async () => {
     const { entries } = await buildFixture();
     const types = new Set(entries.map((entry) => entry.event.$type));
@@ -910,7 +913,7 @@ describe("the changes describe the projection the materialiser built", () => {
     // types left out are excluded for projection reasons, not mapping ones; see
     // `FIXTURE_ORDER`.
     expect(missing).toEqual([]);
-  });
+  }, 30_000);
 
   test("the fixture emits all 16 kinds", async () => {
     const { changes } = await buildFixture();
@@ -1388,5 +1391,5 @@ describe("the whole registry derives one corpus the same way through both paths"
         )
         .all(),
     );
-  });
+  }, 30_000);
 });

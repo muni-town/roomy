@@ -11,6 +11,7 @@ import { encode, decode } from "@atcute/cbor";
 import type { DbLike } from "../db/types.ts";
 import type { InvalidationRouter } from "../invalidation/types.ts";
 import { applyBatch } from "../materialization/applyBatch.ts";
+import { writeRecordChanges } from "./recordChanges.ts";
 import { toAppliedEvent } from "../materialization/toAppliedEvent.ts";
 import { canonicalMessageTimestamp } from "../materialization/sortIdx.ts";
 import { pokeEmbedSweeper } from "../embed/sweeper.ts";
@@ -235,6 +236,13 @@ export class StreamManager {
           createdAt: receivedAt,
         }),
       );
+
+      // 3b. The interim change feed: the record adapter's output for this
+      //     batch, written before materialisation so a worker reading change
+      //     records never sees the projection ahead of its input. The stamps
+      //     come from the same log position and receipt the materialiser keys
+      //     `entities.sort_idx` by, so the two agree.
+      await writeRecordChanges(this.#db, streamDid, decodedEvents);
 
       // 4. Apply batch to materialize. The per-space DB is the source of
       // truth; the global DB receives membership edges + the

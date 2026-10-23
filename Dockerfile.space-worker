@@ -1,0 +1,66 @@
+# A Roomy space worker: one process, one space, materialised from the change
+# feed.
+#
+#   docker build -f Dockerfile.space-worker -t roomy-space-worker .
+#
+# Two stages: build the workspace, then a runtime image that carries only the
+# binary and the schema files it reads at compile time (both are `include_str!`
+# in the crates, so the runtime image needs nothing from the repository).
+
+# ── build ─────────────────────────────────────────────────────────────────────
+FROM rust:1.99-bookworm AS build
+
+WORKDIR /src
+
+# The dependency graph — rusqlite's bundled SQLite among it — is the slow part,
+# so it is built in its own layer from the manifests and a stub source tree.
+# Editing a `.rs` file then recompiles only this workspace's crates.
+COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY packages/appserver/src/db/schema-space.sql packages/appserver/src/db/schema-space.sql
+COPY packages/appserver/src/db/schema-global.sql packages/appserver/src/db/schema-global.sql
+RUN find crates -name '*.rs' -delete \
+    && for crate in crates/*/; do \
+         mkdir -p "$crate/src" && touch "$crate/src/lib.rs"; \
+       done \
+    && cargo build --release -p roomy-space-worker
+
+# The real sources, then the same build with the dependency layer already warm.
+COPY crates /tmp/sources
+RUN rm -rf crates \
+    && mv /tmp/sources crates \
+    && find crates -name '*.rs' -exec touch {} + \
+    && cargo build --release -p roomy-space-worker
+
+# ── runtime ───────────────────────────────────────────────────────────────────
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# The worker writes the space database and reads the event log and the global
+# database, all under one data directory. It is unprivileged: nothing it does
+# needs root, and the files it can reach are the space it owns.
+RUN useradd --system --create-home --home-dir /data \
+        --shell /usr/sbin/nologin spaceworker \
+    && mkdir -p /data \
+    && chown -R spaceworker:spaceworker /data
+
+COPY --from=build /src/target/release/roomy-space-worker /usr/local/bin/roomy-space-worker
+
+ENV SPACE_WORKER_DATA_DIR=/data \
+    SPACE_WORKER_HTTP_ADDR=0.0.0.0:8089 \
+    RUST_LOG=info
+
+USER spaceworker
+VOLUME ["/data"]
+EXPOSE 8089
+
+# The healthcheck reports what the worker last measured rather than asking it to
+# do work: `lag` and `leaseHeld` come from the loop's own snapshot, so a healthy
+# answer means the loop is running and owns the space.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:8089/health" || exit 1
+
+ENTRYPOINT ["/usr/local/bin/roomy-space-worker"]

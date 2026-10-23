@@ -28,12 +28,8 @@
  */
 import type { DbLike } from "../db/types.ts";
 import type { StreamDid, StreamIndex, Ulid, UserDid } from "@roomy-space/sdk";
-import {
-  canonicalMessageTimestamp,
-  setMessageSortIdxByForward,
-  setMessageSortIdxByReorder,
-  setMessageSortIdxByTimestamp,
-} from "./sortIdx.ts";
+import { canonicalMessageTimestamp } from "./sortIdx.ts";
+import { applyDerivedStep, reorderStep } from "./derivedSteps.ts";
 import { applyMoveSideEffects } from "./moveMessages.ts";
 import type { SqlStatement, StatementBundleSuccess } from "./types.ts";
 import { isThread, refreshThreadActivityOnMessage, upsertUserThreadActivity } from "../queries/userActiveThreads.ts";
@@ -145,21 +141,12 @@ async function applyBundleInner(
       await runStatementForTargets(db, globalDb, statement);
     }
 
-    await setMessageSortIdxByTimestamp(
-      db,
-      bundle.event,
-      opts.idx,
-      opts.receivedAt,
-      opts.createdAt,
-    );
-    await setMessageSortIdxByReorder(db, opts.streamId, bundle.event);
-    await setMessageSortIdxByForward(
-      db,
-      bundle.event,
-      opts.idx,
-      opts.receivedAt,
-      opts.createdAt,
-    );
+    // The ordering keys a create and a forward carry are written by the
+    // projection step in `applyBatch.ts`, from the same rule `sortIdx.ts`
+    // defines. What is left here is the one key that has to read its
+    // neighbours first.
+    const reorder = reorderStep(opts.streamId, bundle.event);
+    if (reorder) await applyDerivedStep(db, reorder);
 
     // Activity feed: upsert the activity item for every createMessage event
     // (including backfill, so existing rooms get populated). The timestamp is

@@ -77,6 +77,13 @@ export interface MoveSideEffectsOpts {
   readStateDb?: DbLike;
   /** True for backfill/replay — skips the read-state mutations. */
   isBackfill: boolean;
+  /**
+   * Who applies the per-space feed work. `"self"` (the event path) applies the
+   * destination upserts and both rooms' window steps here; `"caller"` is a
+   * record-routed move, whose change's effect list already carries them — so
+   * each is applied once.
+   */
+  derived?: "self" | "caller";
 }
 
 /**
@@ -97,21 +104,25 @@ export async function applyMoveSideEffectsFor(
   const moved = await readMovedMessages(db, opts.messageIds);
   if (moved.length === 0) return;
 
-  // ── Per-space: activity feed windows ──────────────────────────────────
-  for (const m of moved) {
-    await upsertActivityItem(db, {
-      roomId: opts.toRoom,
-      spaceId,
-      messageId: m.id as Ulid,
-      timestamp: movedAt,
-    });
+  // ── Per-space: the feed window and the board summary ──────────────────
+  // A record-routed move carries these steps in the change's effect list, so
+  // this applies them only for the event path.
+  if (opts.derived !== "caller") {
+    for (const m of moved) {
+      await upsertActivityItem(db, {
+        roomId: opts.toRoom,
+        spaceId,
+        messageId: m.id as Ulid,
+        timestamp: movedAt,
+      });
+    }
+    await rebuildActivityWindow(db, opts.fromRoom);
+    await rebuildActivityWindow(db, opts.toRoom);
+    // `room_activity` was invalidated for both rooms by the move's own
+    // maintenance step; restore both from the post-move tables. Also on
+    // backfill, for the same reason the windows above are.
+    await rebuildRoomActivity(db, [opts.fromRoom, opts.toRoom]);
   }
-  await rebuildActivityWindow(db, opts.fromRoom);
-  await rebuildActivityWindow(db, opts.toRoom);
-  // `room_activity` was invalidated for both rooms by the move's own
-  // maintenance step; restore both from the post-move tables. Also on backfill,
-  // for the same reason the windows above are.
-  await rebuildRoomActivity(db, [opts.fromRoom, opts.toRoom]);
 
   // ── Read-state: thread activity, participation ────────────────────────
   // Unread is not touched: a reader's count is derived from their read

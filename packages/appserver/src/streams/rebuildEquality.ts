@@ -91,6 +91,47 @@ export const READ_PATH_CACHES: Readonly<Record<string, true>> = {
   room_activity: true,
 };
 
+/**
+ * Cursors a *worker* comparison leaves out: each implementation's own progress
+ * marker in the per-space DB. The TS materialiser's is `materialization_cursor`
+ * (plus the legacy `comp_space.backfilled_to` column) and a space worker's is
+ * `worker_cursor`; neither is state the log determines, and neither
+ * implementation writes the other's.
+ *
+ * `snapshotSpaceDb` keeps them, because a rebuild of *one* implementation must
+ * reproduce its own cursor. A TS-vs-worker comparison drops them through
+ * {@link workerSnapshot}.
+ */
+export const CURSOR_TABLES: Readonly<Record<string, true>> = {
+  materialization_cursor: true,
+  worker_cursor: true,
+};
+
+/** Columns holding a cursor rather than a log-determined value. */
+export const CURSOR_COLUMNS: Readonly<Record<string, true>> = {
+  backfilled_to: true,
+};
+
+/**
+ * A snapshot with the cursor tables and columns dropped, for comparing two
+ * implementations' projections of the same log.
+ */
+export function workerSnapshot(tables: TableSnapshot[]): TableSnapshot[] {
+  const out: TableSnapshot[] = [];
+  for (const table of tables) {
+    if (CURSOR_TABLES[table.table]) continue;
+    const keep = table.columns
+      .map((column, i) => (CURSOR_COLUMNS[column] ? -1 : i))
+      .filter((i) => i >= 0);
+    out.push({
+      table: table.table,
+      columns: table.columns.filter((column) => !CURSOR_COLUMNS[column]),
+      rows: table.rows.map((row) => keep.map((i) => row[i])),
+    });
+  }
+  return out;
+}
+
 /** One table's rows, as read out of a per-space DB. */
 export interface TableSnapshot {
   table: string;

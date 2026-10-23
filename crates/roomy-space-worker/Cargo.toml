@@ -1,0 +1,22 @@
+[package]
+name = "roomy-space-worker"
+description = "Materialises one Roomy space's database from the persisted change feed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+space-core.workspace = true
+space-db.workspace = true
+roomy-events.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

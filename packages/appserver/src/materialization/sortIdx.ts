@@ -126,62 +126,6 @@ export function messageSortIdxKey(
 }
 
 /**
- * Set `entities.sort_idx` for a freshly-created message.
- *
- * No-op if the entity row is missing (materialiser failed earlier in the
- * batch) or if a sort_idx is already set — a message is keyed once, by the
- * event that created it.
- */
-export async function setMessageSortIdxByTimestamp(
-  db: DbLike,
-  event: Event,
-  idx: StreamIndex | number,
-  receivedAt?: number | null,
-  createdAt?: number | null,
-): Promise<void> {
-  if (event.$type !== "space.roomy.message.createMessage.v0") return;
-
-  const sortIdx = messageSortIdxKey(event, idx, receivedAt, createdAt);
-  // No SELECT needed: the entity was just created by ensureEntity in the same
-  // savepoint with sort_idx = NULL. If the row is missing or sort_idx is
-  // already set, this UPDATE is a no-op.
-  await db.run("update entities set sort_idx = ? where id = ? and sort_idx is null", sortIdx, event.id);
-}
-
-/**
- * Set `entities.sort_idx` for a forward-reference entity created by a
- * `forwardMessages` event, using the forward's ordering time — it is new
- * content arriving now, so it belongs at the top of the destination.
- *
- * The forwarded original stays where it is; the forward-reference entity is a
- * new row in the destination room, so it is ordered like a new message — at
- * the top of that room's timeline, matching the forward-as-embed
- * representation (createMessage + forward attachment). Copying the original
- * message's sort_idx here instead would place a forward of an old message deep
- * in history — outside the first getMessages page — so it would flash in via
- * the WS diff and vanish on the next refetch.
- *
- * No-op if the entity row is missing (materialiser failed earlier in the
- * batch) or if a sort_idx is already set.
- */
-export async function setMessageSortIdxByForward(
-  db: DbLike,
-  event: Event,
-  idx: StreamIndex | number,
-  receivedAt?: number | null,
-  createdAt?: number | null,
-): Promise<void> {
-  if (event.$type !== "space.roomy.message.forwardMessages.v0") return;
-
-  const sortIdx = orderKey(messageOrderTime(event, receivedAt, createdAt), idx);
-  await db.run(
-    "update entities set sort_idx = ? where id = ? and sort_idx is null",
-    sortIdx,
-    event.id,
-  );
-}
-
-/**
  * Set `entities.sort_idx` for messages moved by a `moveMessages` event.
  *
  * Ordering policy — a moved message sorts at the TOP of the destination
@@ -191,8 +135,8 @@ export async function setMessageSortIdxByForward(
  * original `sort_idx` would be buried according to its ORIGINAL send time, so
  * moving an old message into a busy channel would put it outside the
  * newest-50 page: it would flash into connected clients via the WS `add` diff
- * and vanish on the next refetch. That is the same reasoning
- * `setMessageSortIdxByForward` above applies to a forward of an old message.
+ * and vanish on the next refetch. A forward reference is keyed the same way,
+ * by the projection step in `applyBatch.ts`.
  *
  * `comp_content.timestamp` is deliberately NOT rewritten: the message's
  * original send time is its identity, and the client renders timestamps from
@@ -229,23 +173,22 @@ export async function setMessageSortIdxByMove(
 }
 
 /**
- * Set `entities.sort_idx` for a message moved by a `reorderMessage` event,
- * placing it lexicographically between the entity referenced by `after` and
- * whichever entity currently sorts immediately after that one.
+ * Set `entities.sort_idx` for a message a `reorderMessage` places between its
+ * neighbours, lexicographically after `after` and before whichever entity
+ * currently sorts immediately after it.
  *
- * Only invoked for `space.roomy.message.reorderMessage.v0` events that carry
- * an `after` field.
+ * The one ordering key that cannot be carried on a record: its value depends on
+ * the rows around it, so it is computed here, from the neighbours the entry
+ * names.
  */
 export async function setMessageSortIdxByReorder(
   db: DbLike,
   streamId: StreamDid,
-  event: Event,
+  named: string,
+  afterNamed: string,
 ): Promise<void> {
-  if (event.$type !== "space.roomy.message.reorderMessage.v0") return;
-  if (!event.after) return;
-
-  const messageId = event.messageId as Ulid;
-  const after = event.after as Ulid;
+  const messageId = named as Ulid;
+  const after = afterNamed as Ulid;
 
   const existing = await db
     .query("select sort_idx from entities where id = ?")

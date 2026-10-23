@@ -34,9 +34,10 @@ import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
 import {
   applyRecordSideEffects,
   planBatch,
-  recordDeleteRooms,
-  recordEventSteps,
+  recordEntryEffects,
 } from "./records/recordPath.ts";
+import type { DerivedStep } from "./records/effects.ts";
+import { applyDerivedStep } from "./derivedSteps.ts";
 import {
   isDebugEnabled,
   recordMaterialization,
@@ -140,6 +141,9 @@ export async function applyBatch(
     // mangled savepoint id so the execution loop can write it after the
     // event's per-space/global steps succeed.
     const membershipIntents = new Map<string, MembershipIntent>();
+    // The derived steps each entry's changes carry, applied after the chunk's
+    // SQL (see `records/effects.ts`).
+    const derivedSteps: DerivedStep[][] = chunk.map(() => []);
 
     // Route the chunk: an entry whose every emitted kind is converted applies
     // through the record rules, and every other entry keeps its event
@@ -150,16 +154,31 @@ export async function applyBatch(
     for (let i = 0; i < chunk.length; i++) {
       const e = chunk[i]!;
       const routed = plans[i] ?? null;
-      const recordSteps = routed
-        ? recordEventSteps(routed, { streamId, isBackfill: opts.isBackfill })
-        : null;
+      const effects = routed
+        ? recordEntryEffects(routed, { streamId, isBackfill: opts.isBackfill })
+        : [];
+      derivedSteps[i] = effects.filter(
+        (effect): effect is DerivedStep => effect.effect !== "sql",
+      );
 
       // One entry's statements: the record rules' when it is routed, else the
       // event materialiser's.
       let statements: Array<SqlStatement & { derived?: "space" | "global" }>;
       let bundle: StatementBundleSuccess | undefined;
-      if (recordSteps) {
-        statements = recordSteps.statements;
+      if (routed) {
+        statements = effects.flatMap((effect) =>
+          effect.effect === "sql"
+            ? [
+                {
+                  sql: effect.sql,
+                  // The effect layer binds positionally; `SqlStatement` also
+                  // admits the named form, which no rule uses.
+                  params: effect.params as unknown as SqlStatement["params"],
+                  derived: effect.target,
+                },
+              ]
+            : [],
+        );
       } else {
         const materialised = materialize(
           e.event,
@@ -223,13 +242,13 @@ export async function applyBatch(
                 : [params],
           derived,
         });
-        // Maintain the global entity→space index. Every `insert
-        // into entities` statement carries (id, stream_id) as its first two
-        // params; record the mapping so `openSpaceDbForEntity` can resolve
-        // which per-space DB a room/message id lives in. Skip entities with
-        // an empty stream_id (e.g. link entities) — they are never resolved
+        // Maintain the global entity→space index. A record-routed entry names
+        // that write in its effect list; the event path's opaque materialiser
+        // SQL is scanned here. Every `insert into entities` statement carries
+        // (id, stream_id) as its first two params. Entities with an empty
+        // stream_id (e.g. link entities) are skipped — they are never resolved
         // via openSpaceDbForEntity.
-        if (stmt.sql.trim().startsWith("insert into entities")) {
+        if (!routed && stmt.sql.trim().startsWith("insert into entities")) {
           const p = Array.isArray(params) ? params : [params];
           const id = p[0];
           const sid = p[1];
@@ -244,21 +263,13 @@ export async function applyBatch(
         }
       }
 
-      // Projection maintenance for this entry: the record path's activity step,
-      // or the event path's ordering key and read projections, all inside the
-      // same per-event transaction as the entry's own statements.
-      chunkSteps.push(
-        ...(recordSteps
-          ? recordSteps.projection.map(
-              (step): ChunkStep => ({
-                type: "run",
-                sql: step.sql,
-                params: step.params,
-                derived: "space",
-              }),
-            )
-          : eventProjectionSteps(e, streamId, opts.isBackfill)),
-      );
+      // The event path's projection maintenance — the ordering key and the read
+      // projections — inside the same per-event transaction as the entry's own
+      // statements. A record-routed entry carries the same steps in its effect
+      // list instead.
+      if (!routed) {
+        chunkSteps.push(...eventProjectionSteps(e, streamId, opts.isBackfill));
+      }
       chunkSteps.push({ type: "exec", sql: `release ${savepoint}`, derived: "none" });
 
       stats.applied++;
@@ -309,9 +320,6 @@ export async function applyBatch(
     const pendingDeletes = collectPendingDeletes(
       chunk.filter((_e, i) => (plans[i] ?? null) === null),
     );
-    for (const plan of plans) {
-      if (plan) for (const roomId of recordDeleteRooms(plan)) pendingDeletes.push({ roomId });
-    }
 
     // Compute the max idx for this chunk — used to advance the cursor after
     // the chunk is processed (whether it succeeded or failed).
@@ -486,8 +494,6 @@ export async function applyBatch(
         await applyRecordSideEffects(db, plan, {
           streamId,
           isBackfill: opts.isBackfill,
-          detectedLinks: stats.detectedLinks,
-          globalDb,
           readStateDb: openReadStateDb(),
         });
       } else {
@@ -499,6 +505,21 @@ export async function applyBatch(
           stats.detectedLinks,
           globalDb,
         );
+      }
+
+      // The change's derived steps, after the SQL and the side effects that
+      // describe the same entry: a recomputed window reads the rows both wrote.
+      for (const step of derivedSteps[i]!) {
+        try {
+          const stored = await applyDerivedStep(db, step, globalDb);
+          if (stored.length > 0) stats.detectedLinks.push(...stored);
+        } catch (err) {
+          // Derived state, not correctness: a failed rebuild must not fail the
+          // batch, and the window self-heals on the room's next write.
+          log.warn(
+            `[materialize] derived step ${step.effect} failed for ${streamId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     }
 
