@@ -27,6 +27,7 @@
   import { settingsBar } from "$lib/components/layout/settings-bar.svelte";
   import { requireAuth } from "$lib/components/layout/auth-guard.svelte";
   import LoginModal from "$lib/components/auth/LoginModal.svelte";
+  import AuthDiagnostics from "$lib/components/auth/AuthDiagnostics.svelte";
   import LoadingSpinner from "@roomy/design/components/helper/LoadingSpinner.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { Toaster as FxUIToaster } from "@foxui/core";
@@ -251,6 +252,7 @@
         >
           Reload
         </button>
+        <AuthDiagnostics />
       </div>
     </div>
   {:else if auth.initializing && !auth.authenticated && requireAuth.value}

@@ -1,0 +1,20 @@
+diff --git a/dist/browser-runtime-implementation.js b/dist/browser-runtime-implementation.js
+index c3103be0e89b57acb3c936e2308a46274bc01abe..0d32a86f13bb62df8be8006319ca914819613d82 100644
+--- a/dist/browser-runtime-implementation.js
++++ b/dist/browser-runtime-implementation.js
+@@ -27,7 +27,14 @@ class BrowserRuntimeImplementation {
+         }
+     }
+     async createKey(algs) {
+-        return jwk_webcrypto_1.WebcryptoKey.generate(algs);
++        // Patched by Roomy: a DPoP key is generated non-extractable by default,
++        // which makes the session impossible to snapshot outside the webview's
++        // IndexedDB. A shell that keeps its session in the shell's own store
++        // raises `__ROOMY_EXPORTABLE_DPOP_KEY__` so the private key can be
++        // exported as JWK; every other build keeps the default.
++        return jwk_webcrypto_1.WebcryptoKey.generate(algs, undefined, {
++            extractable: globalThis.__ROOMY_EXPORTABLE_DPOP_KEY__ === true,
++        });
+     }
+     getRandomValues(byteLength) {
+         return crypto.getRandomValues(new Uint8Array(byteLength));

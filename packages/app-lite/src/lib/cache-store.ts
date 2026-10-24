@@ -46,6 +46,16 @@ import {
  */
 export const NATIVE_STORE_FILE = "roomy-query-cache.json";
 
+/**
+ * The OAuth session's own file — the other half of the rule above.
+ *
+ * Its consumer is the SDK (`native-session.ts`), which keeps a second copy of
+ * the session here so a launch that lost the webview's IndexedDB still
+ * restores. Separate from the cache's file for the reason stated there:
+ * nothing that spills or grows may be able to take the session with it.
+ */
+export const NATIVE_SESSION_STORE_FILE = "roomy-oauth-session.json";
+
 /** Is this the Tauri shell rather than a browser tab? */
 export function isShell(): boolean {
   return typeof window !== "undefined" && "__TAURI__" in window;
@@ -142,29 +152,67 @@ const NATIVE_STORE_OPEN_TIMEOUT_MS = 2_000;
  * Open the shell's native store, or `null` when there is none.
  *
  * A shell that pins `native` is asked for its store even without the
- * `__TAURI__` global: the pin is the build saying it is one. The plugin is
- * imported dynamically, the way `native-push.ts` reaches its plugin — this
- * module is in the web build's graph too, where the plugin's `invoke()` IPC has
- * no shell behind it and must never be evaluated, and a static import cannot
- * express that. Nothing here throws or hangs: a store that cannot be opened, or
- * that never answers, is the no-native-store case, which {@link chooseCacheStore}
- * handles.
+ * `__TAURI__` global: the pin is the build saying it is one. Nothing here
+ * throws or hangs: a store that cannot be opened, or that never answers, is the
+ * no-native-store case, which {@link chooseCacheStore} handles.
  */
 export async function openNativeStore(
   preference: CacheStorePreference = cacheStorePreference(),
 ): Promise<TauriStoreLike | null> {
   if (!isShell() && preference !== "native") return null;
   try {
-    const { Store } = await import("@tauri-apps/plugin-store");
-    return await raceTimeout(
-      Store.load(NATIVE_STORE_FILE),
-      NATIVE_STORE_OPEN_TIMEOUT_MS,
-      `cache: native store did not open within ${NATIVE_STORE_OPEN_TIMEOUT_MS}ms`,
-    );
+    return await openShellStore(NATIVE_STORE_FILE);
   } catch (err) {
     console.warn("cache: native store unavailable; using a web store", err);
     return null;
   }
+}
+
+/**
+ * One plugin load, one bounded wait.
+ *
+ * The plugin is imported dynamically, the way `native-push.ts` reaches its
+ * plugin: this module is in the web build's graph too, where the plugin's
+ * `invoke()` IPC has no shell behind it and must never be evaluated, and a
+ * static import cannot express that.
+ */
+async function openShellStore(file: string): Promise<TauriStoreLike> {
+  const { Store } = await import("@tauri-apps/plugin-store");
+  return await raceTimeout(
+    Store.load(file),
+    NATIVE_STORE_OPEN_TIMEOUT_MS,
+    `native store ${file} did not open within ${NATIVE_STORE_OPEN_TIMEOUT_MS}ms`,
+  );
+}
+
+/** The page's one session store; see {@link openNativeSessionStore}. */
+let sessionStore: Promise<TauriStoreLike | null> | undefined;
+
+/**
+ * The store the OAuth session is mirrored into, opened once per page and only
+ * on the shell.
+ *
+ * `undefined` answers "there is no shell here" — a web build, where the session
+ * lives in the webview and always has. `null` answers "there is a shell and no
+ * store in it": the plugin is missing, or it never answered. The SDK treats
+ * those as different facts (`nativeSessionStore` in the SDK's options), because
+ * only the second one means a shell meant to keep a session and could not.
+ *
+ * Opening is memoised: the file is a singleton on the shell's side, and the
+ * login path would otherwise open it a second time on the same page.
+ */
+export async function openNativeSessionStore(): Promise<
+  TauriStoreLike | null | undefined
+> {
+  if (!isShell() && cacheStorePreference() !== "native") return undefined;
+  sessionStore ??= openShellStore(NATIVE_SESSION_STORE_FILE).catch((err) => {
+    console.warn(
+      "auth: native session store unavailable; the session stays in the webview",
+      err,
+    );
+    return null;
+  });
+  return sessionStore;
 }
 
 /**

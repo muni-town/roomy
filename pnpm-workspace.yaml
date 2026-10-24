@@ -17,4 +17,5 @@ onlyBuiltDependencies:
   - node
 
 patchedDependencies:
+  "@atproto/oauth-client-browser@0.3.42": patches/@atproto__oauth-client-browser@0.3.42.patch
   "@discordeno/gateway": patches/@discordeno__gateway.patch

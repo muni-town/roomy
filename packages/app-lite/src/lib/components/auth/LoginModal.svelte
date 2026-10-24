@@ -11,6 +11,7 @@
   import Button from "@roomy/design/components/ui/button/Button.svelte";
   import Input from "@roomy/design/components/ui/input/Input.svelte";
   import HandleTypeahead from "./HandleTypeahead.svelte";
+  import AuthDiagnostics from "./AuthDiagnostics.svelte";
   import { login } from "$lib/auth.svelte";
   import { lastLogin, loadLastLogin } from "$lib/last-login.svelte";
   import { resolveBlobUrl } from "@roomy/design/utils";
@@ -340,5 +341,6 @@
         </div>
       </form>
     {/if}
+    <AuthDiagnostics />
   </Box>
 </div>

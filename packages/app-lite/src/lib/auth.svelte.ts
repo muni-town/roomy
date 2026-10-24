@@ -3,6 +3,8 @@ import {
   initSession,
   login as sdkLogin,
   logout as sdkLogout,
+  type Diagnostic,
+  type InitSessionOptions,
   type OAuthSession,
 } from "@roomy-space/sdk/browser";
 import { transport } from "@roomy-space/sdk";
@@ -30,6 +32,7 @@ import {
 import { scheduleAutoReload } from "./error-recovery";
 import { pxUnauth } from "./client";
 import { clearPersistedCache } from "./client";
+import { openNativeSessionStore } from "./cache-store";
 import { setAppserverOrigin } from "./appserver-origin";
 import { subscribeIfAlreadyPermitted, clearPushSubscription } from "./push.svelte";
 import { saveLastLogin } from "./last-login.svelte";
@@ -216,6 +219,41 @@ async function trackGrant(oauthSession: OAuthSession) {
  */
 const INIT_TIMEOUT_MS = 15_000;
 
+/**
+ * Startup and storage diagnostics from the session's native mirror. The line
+ * `restoreNativeSession` logs names the three facts that separate the two ways
+ * a launch comes back signed out — whether a session was present, whether the
+ * shell's own copy was, and which error `init()` raised — and none of them is a
+ * token, a key or a DID. `console.info` is what Faro ships to the log store
+ * (`telemetry/faro.ts`), which is the only place a TestFlight build can be
+ * read from.
+ */
+const sessionDiagnostic: Diagnostic = (message, detail) => {
+  if (detail === undefined) console.info(message);
+  else console.info(message, detail);
+};
+
+/**
+ * The options every OAuth entry point shares: the client identity, the stable
+ * dev-loopback client id (`CLIENT_ID_SCOPE` — the PDS records the client id
+ * with the authorization request, so the callback and every later refresh must
+ * rebuild the identical one; the per-login `scope` selects the subset shown on
+ * the consent screen), and the shell's store for the session's own copy.
+ */
+async function sessionOptions(scope: string): Promise<InitSessionOptions> {
+  return {
+    happyviewEndpoint: CONFIG.happyviewEndpoint,
+    clientKey: CONFIG.happyviewClientKey,
+    clientId: CONFIG.oauthClientId,
+    port: CONFIG.port,
+    handleResolverUrl: CONFIG.handleResolverUrl,
+    scope,
+    clientIdScope: CLIENT_ID_SCOPE,
+    nativeSessionStore: await openNativeSessionStore(),
+    onDiagnostic: sessionDiagnostic,
+  };
+}
+
 export async function init() {
   // The real init work, raced against a watchdog below. Kept separate so the
   // watchdog can fire without aborting the (possibly still-in-flight) exchange,
@@ -238,19 +276,7 @@ export async function init() {
     // the address bar (dropping the query) as it processes the callback, so
     // the signal is gone by the time the session resolves.
     const oauthCallback = hasOAuthCallbackParams(location.search);
-    const result = await initSession({
-      happyviewEndpoint: CONFIG.happyviewEndpoint,
-      clientKey: CONFIG.happyviewClientKey,
-      clientId: CONFIG.oauthClientId,
-      port: CONFIG.port,
-      handleResolverUrl: CONFIG.handleResolverUrl,
-      scope: SCOPE_SETS.base,
-      // Stable dev-loopback client-id scope (see CLIENT_ID_SCOPE): the PDS
-      // records the client id with the authorization request, so the callback
-      // must rebuild the identical one. The per-login `scope` above selects
-      // the subset shown on the consent screen.
-      clientIdScope: CLIENT_ID_SCOPE,
-    });
+    const result = await initSession(await sessionOptions(SCOPE_SETS.base));
     if (result) {
       session = result.session;
       agent = result.agent;
@@ -401,15 +427,7 @@ export async function login(handle: string) {
   // The OAuth `state` is the client's own CSRF token, never a transport for
   // this path (see `return-url.ts`).
   rememberReturnUrl(currentReturnUrl());
-  const result = await sdkLogin(handle, {
-    happyviewEndpoint: CONFIG.happyviewEndpoint,
-    clientKey: CONFIG.happyviewClientKey,
-    clientId: CONFIG.oauthClientId,
-    port: CONFIG.port,
-    handleResolverUrl: CONFIG.handleResolverUrl,
-    scope: reconcile,
-    clientIdScope: CLIENT_ID_SCOPE,
-  });
+  const result = await sdkLogin(handle, await sessionOptions(reconcile));
 
   if (result) {
     // Tauri: sdkLogin resolves in place (no page navigation, so `init()`'s
@@ -541,15 +559,7 @@ export async function requestScopeExpansion(
         `deployed web or desktop build), not the dev loopback client.`,
     );
   }
-  const result = await sdkLogin(identity, {
-    happyviewEndpoint: CONFIG.happyviewEndpoint,
-    clientKey: CONFIG.happyviewClientKey,
-    clientId: CONFIG.oauthClientId,
-    handleResolverUrl: CONFIG.handleResolverUrl,
-    port: CONFIG.port,
-    scope,
-    clientIdScope: CLIENT_ID_SCOPE,
-  });
+  const result = await sdkLogin(identity, await sessionOptions(scope));
   if (result) {
     // Tauri: sdkLogin resolves in-place (no page navigation), so `init()`'s
     // navigation never runs. Wire up the session like `login()` does and

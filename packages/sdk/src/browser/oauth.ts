@@ -44,6 +44,16 @@ import type { OAuthSession as AtprotoOAuthSession } from "@atproto/oauth-client-
 import { HappyViewBrowserClient } from "@happyview/oauth-client-browser";
 import type { HappyViewSession } from "@happyview/oauth-client-browser";
 import { authorizeRequestOptions } from "./oauth-options";
+import {
+  NativeSessionMirror,
+  clientSessionStore,
+  enableExportableDpopKeys,
+  nativeSnapshotPresent,
+  recordLaunchDiagnostic,
+  restoreNativeSession,
+} from "./native-session";
+import type { Diagnostic } from "../cache/persister";
+import type { TauriStoreLike } from "./tauri-store-persister";
 
 // Declares necessary parts of tauri JS API exposed through `window.__TAURI__`.
 // (available when `withGlobalTauri` is enabled in config.tauri.json)
@@ -72,6 +82,12 @@ declare global {
       };
     };
   }
+  /**
+   * Read by the patched `@atproto/oauth-client-browser` runtime when it creates
+   * a DPoP key (see `native-session.ts` and `patches/`). Raised only by a shell
+   * that mirrors its session into a native store.
+   */
+  var __ROOMY_EXPORTABLE_DPOP_KEY__: boolean | undefined;
 }
 
 /**
@@ -417,6 +433,20 @@ export interface CreateOAuthClientOptions extends HappyViewClientOptions {
    * is already stable.
    */
   clientIdScope?: string;
+  /**
+   * The shell's native store, for a second copy of the OAuth session.
+   *
+   * Absent off the shell. `null` when the caller IS a shell that could not open
+   * a store — the difference matters: absent means the webview's own storage is
+   * the session's only home (nothing to do), while `null` means the shell was
+   * asked to keep one and has nowhere to put it, which is worth reporting.
+   *
+   * See `native-session.ts` for why the session needs a copy outside the
+   * webview and what mirroring it costs.
+   */
+  nativeSessionStore?: TauriStoreLike | null;
+  /** Diagnostic sink for the native session mirror. Silent by default. */
+  onDiagnostic?: Diagnostic;
 }
 
 /** Default scope for SDK consumers that don't pass an explicit scope. */
@@ -567,9 +597,38 @@ async function createHappyViewClient(
 }
 
 /**
+ * The mirror each legacy client was built with, so `initSession` restores
+ * through the same object whose hooks the client already holds. Keyed by the
+ * client rather than rebuilt: a second mirror over the same store would work,
+ * but the hooks are bound at construction and only one of them can be the one
+ * the client calls.
+ */
+const nativeSessionMirrors = new WeakMap<BrowserOAuthClient, NativeSessionMirror>();
+
+/**
+ * The mirror for this client, or `null` when the caller is not a shell keeping
+ * a native copy of its session.
+ */
+function createSessionMirror(
+  opts: CreateOAuthClientOptions,
+): NativeSessionMirror | null {
+  if (opts.nativeSessionStore === undefined) return null;
+  // Before the client exists: the key is generated during `authorize()`, and a
+  // key that was created non-extractable can never be snapshotted.
+  enableExportableDpopKeys();
+  return new NativeSessionMirror({
+    store: opts.nativeSessionStore,
+    onDiagnostic: opts.onDiagnostic,
+  });
+}
+
+/**
  * Legacy fallback (pre-HappyView): a direct-PDS `@atproto/oauth-client-browser`
  * public client. Dev builds a loopback client id; deployed builds fetch the
  * served metadata; Tauri fetches the native metadata and deep-links back.
+ *
+ * A shell that supplied a native store gets a mirror of its session here, wired
+ * through the client's own update/delete hooks (`native-session.ts`).
  */
 async function createLegacyClient(
   opts: CreateOAuthClientOptions,
@@ -582,6 +641,8 @@ async function createLegacyClient(
   // id and ignore this.
   const clientIdScope = opts.clientIdScope ?? scope;
   const tauri = window.__TAURI__;
+  const mirror = createSessionMirror(opts);
+  const hooks = mirror?.hooks ?? {};
 
   // Desktop always uses the native deep-link document regardless of clientId overrides.
   if (tauri) {
@@ -589,11 +650,15 @@ async function createLegacyClient(
       "https://roomy.space/oauth-client-native.json",
     );
     const clientMetadata = await req.json();
-    return new BrowserOAuthClient({
-      clientMetadata,
-      handleResolver: createRoomyHandleResolver(opts),
-      responseMode: "query",
-    });
+    return trackMirror(
+      new BrowserOAuthClient({
+        clientMetadata,
+        handleResolver: createRoomyHandleResolver(opts),
+        responseMode: "query",
+        ...hooks,
+      }),
+      mirror,
+    );
   }
 
   // Deployed: fetch the client metadata document (its URL is the client_id).
@@ -602,11 +667,15 @@ async function createLegacyClient(
       headers: [["accept", "application/json"]],
     });
     const clientMetadata = await resp.json();
-    return new BrowserOAuthClient({
-      clientMetadata,
-      handleResolver: createRoomyHandleResolver(opts),
-      responseMode: "query",
-    });
+    return trackMirror(
+      new BrowserOAuthClient({
+        clientMetadata,
+        handleResolver: createRoomyHandleResolver(opts),
+        responseMode: "query",
+        ...hooks,
+      }),
+      mirror,
+    );
   }
 
   // Development: loopback client. The PDS derives this client's metadata
@@ -624,15 +693,28 @@ async function createLegacyClient(
   const clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(clientIdScope)}`;
   assertLoopbackClientIdLength(clientId);
 
-  return new BrowserOAuthClient({
-    clientMetadata: {
-      ...atprotoLoopbackClientMetadata(buildLoopbackClientId(baseUrl)),
-      redirect_uris: [redirectUri],
-      scope: clientIdScope,
-      client_id: clientId,
-    },
-    handleResolver: createRoomyHandleResolver(opts),
-  });
+  return trackMirror(
+    new BrowserOAuthClient({
+      clientMetadata: {
+        ...atprotoLoopbackClientMetadata(buildLoopbackClientId(baseUrl)),
+        redirect_uris: [redirectUri],
+        scope: clientIdScope,
+        client_id: clientId,
+      },
+      handleResolver: createRoomyHandleResolver(opts),
+      ...hooks,
+    }),
+    mirror,
+  );
+}
+
+/** Remember the mirror a client was built with; see {@link nativeSessionMirrors}. */
+function trackMirror(
+  client: BrowserOAuthClient,
+  mirror: NativeSessionMirror | null,
+): BrowserOAuthClient {
+  if (mirror) nativeSessionMirrors.set(client, mirror);
+  return client;
 }
 
 // ── Proxied agent ─────────────────────────────────────────────────────────
@@ -712,16 +794,49 @@ function toLoginResult(result: { session: OAuthSession }): LoginResult {
  * Try to restore an existing session (e.g. after a page reload or redirect
  * back from the PDS). Returns `{ session, agent }` if a session was found, or
  * `null` if the user is not authenticated.
+ *
+ * In a shell that supplied a native store, the stored copy of the session is
+ * seeded into the client before `init()` runs (see `native-session.ts`).
  */
 export async function initSession(
   opts: InitSessionOptions = {},
 ): Promise<LoginResult | null> {
-  const client = await createOAuthClient(opts);
+  let reported = false;
+  try {
+    const client = await createOAuthClient(opts);
 
-  const result = await client.init();
+    if (!(client instanceof HappyViewBrowserClient)) {
+      const mirror = nativeSessionMirrors.get(client);
+      if (mirror) {
+        // The mirror records the launch's outcome itself, on every path.
+        reported = true;
+        const result = await restoreNativeSession(
+          client,
+          clientSessionStore(client),
+          mirror,
+        );
+        return result?.session ? toLoginResult(result) : null;
+      }
+    }
 
-  if (result?.session) return toLoginResult(result);
-  return null;
+    const result = await client.init();
+
+    if (result?.session) return toLoginResult(result);
+    return null;
+  } catch (err) {
+    // A launch that fails before a client exists — the metadata document is
+    // unreachable, the client cannot be built — has no mirror to record it,
+    // and a shell has no log a tester can read. Record what this launch found
+    // so the sign-in screen can show it.
+    if (!reported) {
+      await recordLaunchDiagnostic(opts.nativeSessionStore, {
+        session: false,
+        nativeSnapshot: await nativeSnapshotPresent(opts.nativeSessionStore),
+        error: err,
+      });
+    }
+    throw err;
+  }
 }
 
 /**
