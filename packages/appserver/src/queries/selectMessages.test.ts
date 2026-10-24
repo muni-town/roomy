@@ -1422,3 +1422,75 @@ describe("selectMessages attachments", () => {
     expect(m.replyTo).toBeUndefined();
   });
 });
+
+describe("selectMessages attachment-encoded links", () => {
+  test("an attachment-only link resolves its card from the canonical store key", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const msgId = newUlid();
+    const url = "https://example.com/article";
+    // Exactly what the SDK message materialiser stores for a `link.v0`
+    // attachment: the entity id is the URL plus Roomy's message encoding.
+    const entityId = `${url}?message=${msgId}`;
+
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      STREAM,
+      STREAM,
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      USER,
+      STREAM,
+    ]);
+    await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      msgId,
+      STREAM,
+      roomId,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      msgId,
+      USER,
+    ]);
+    // The message's entire payload is the link attachment: no body URLs.
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit) values (?, 'text/markdown', ?, ?)",
+      [msgId, Buffer.from(""), msgId],
+    );
+    await db.run("insert into entities (id, stream_id, room) values (?, '', ?)", [
+      entityId,
+      msgId,
+    ]);
+    await db.run(
+      "insert into comp_embed_link (entity, show_preview) values (?, 1)",
+      [entityId],
+    );
+
+    // The enricher keys the store by the bare URL, never the entity id.
+    const globalDb = await openGlobalDb();
+    await writeSettledLinkEmbed(
+      globalDb,
+      url,
+      JSON.stringify({ t: "Article" }),
+      1,
+    );
+
+    const { messages } = await selectMessages(
+      db,
+      {
+        kind: "room",
+        roomId,
+        limit: 10,
+        cursor: null,
+      },
+      undefined,
+      globalDb,
+    );
+
+    expect(messages).toHaveLength(1);
+    const linkEmbeds = messages[0]!.linkEmbeds;
+    expect(linkEmbeds).toHaveLength(1);
+    // The display URL stays the entity id: the client's dismiss/re-add toggle
+    // compares it against the attachment `uri` it sends in the edit.
+    expect(linkEmbeds[0]!.url).toBe(entityId);
+    expect(linkEmbeds[0]!.embed).toEqual({ t: "Article" });
+  });
+});

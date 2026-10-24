@@ -19,8 +19,9 @@ import { rebuildActivityWindow } from "./roomDerivedState.ts";
 import { setMessageSortIdxByReorder } from "./sortIdx.ts";
 
 /**
- * Apply one derived step. Returns the URLs the step newly stored, which is what
- * the write path offers the embed sweeper; every other step returns nothing.
+ * Apply one derived step. Returns the URLs the write path offers the embed
+ * sweeper: the ones whose `comp_embed_link` row the step newly stored, and —
+ * for a link attachment — the ones it queued. Every other step returns nothing.
  */
 export async function applyDerivedStep(
   db: DbLike,
@@ -53,6 +54,32 @@ export async function applyDerivedStep(
       return [];
     case "storeLinks":
       return await storeLinks(db, globalDb, step.spaceId, step.messageId, step.urls);
+    case "queueLinkAttachments":
+      await queueLinks(globalDb, step.spaceId, step.messageId, step.urls);
+      return [...step.urls];
+  }
+}
+
+/**
+ * Queue URLs for the embed sweeper without writing link rows.
+ *
+ * An attachment's entity already exists under its per-message id, so only the
+ * global pending-links index is written; `insert or ignore` collapses a URL the
+ * message body also names into the row the body step stored.
+ */
+async function queueLinks(
+  globalDb: DbLike | undefined,
+  spaceId: StreamDid,
+  messageId: string,
+  urls: readonly string[],
+): Promise<void> {
+  if (!globalDb) return;
+  for (const url of new Set(urls)) {
+    await globalDb.run(
+      `insert or ignore into pending_links (space_did, message_id, url, created_at)
+       values (?, ?, ?, ?)`,
+      [spaceId, messageId, url, Date.now()],
+    );
   }
 }
 

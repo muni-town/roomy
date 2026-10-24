@@ -199,6 +199,38 @@ describe("embed retry-with-backoff (storeEmbedData)", () => {
     ]);
     expect(got).toEqual(["https://held.example"]);
   });
+
+  test("filterPendingUrls hands back a link attachment's canonical URL, not its entity id", async () => {
+    // A `link.v0` attachment's entity id carries the message encoding, but the
+    // sweeper stores under the bare URL — the key every read looks up. Poking
+    // it with the entity id would fetch and store a row nothing resolves.
+    const { db: spaceDb, asyncDb } = freshDb();
+    const { asyncDb: globalAsyncDb } = freshGlobalDb();
+    const url = "https://attached.example/1";
+    seedLink(spaceDb, `${url}?message=01MSGA00000000000000000000`);
+
+    const got = await filterPendingUrls(asyncDb, globalAsyncDb, [
+      `${url}?message=01MSGA00000000000000000000`,
+    ]);
+
+    expect(got).toEqual([url]);
+  });
+
+  test("filterPendingUrls treats an attachment link as enriched once its canonical URL is stored", async () => {
+    const { db: spaceDb, asyncDb } = freshDb();
+    const { asyncDb: globalAsyncDb } = freshGlobalDb();
+    const url = "https://attached.example/2";
+    seedLink(spaceDb, `${url}?message=01MSGB00000000000000000000`);
+    await storeEmbedData(globalAsyncDb, url, { status: "ok", embed: EMBED });
+
+    const got = await filterPendingUrls(asyncDb, globalAsyncDb, [
+      `${url}?message=01MSGB00000000000000000000`,
+    ]);
+
+    // The store row is under the canonical key, so the read-driven
+    // prioritisation must not re-poke it under the entity id.
+    expect(got).toEqual([]);
+  });
 });
 
 describe("global pending_links index (findPendingLinks / countPendingLinks)", () => {

@@ -183,6 +183,23 @@ describe("listLinks", () => {
     expect(bare!.embed_json).toBeNull();
   });
 
+  test("hydrateLinkEmbeds resolves an attachment-encoded row from the canonical key", async () => {
+    const { db, store, asyncDb, storeAsync } = freshDbWithStore();
+    const msgA = "01MSGA0000000000000000000000".slice(0, 26);
+    const url = "https://attached.example/1";
+    // A `link.v0` attachment's entity id carries the message encoding; the
+    // store row is keyed by the bare URL.
+    seedLinkMessage(db, { msgId: msgA, roomId: ROOM_A, url: `${url}?message=${msgA}` });
+    seedStoreEmbed(store, url);
+
+    const { links } = await listLinks(asyncDb, { kind: "room", roomId: ROOM_A });
+    await hydrateLinkEmbeds(storeAsync, links);
+
+    expect(links).toHaveLength(1);
+    expect(links[0]!.url).toBe(`${url}?message=${msgA}`);
+    expect(links[0]!.embed_json).toContain("Fancy Title");
+  });
+
   test("listLinks leaves rows unhydrated without a store handle", async () => {
     // A caller with no global handle (a raw per-space adapter, or a process
     // with no pool) still gets the page — the cards are simply absent, which

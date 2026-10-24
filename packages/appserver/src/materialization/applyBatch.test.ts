@@ -1272,6 +1272,101 @@ describe("applyBatch — link embed dismissal via editMessage", () => {
   });
 });
 
+describe("applyBatch — attachment link enrichment queue", () => {
+  /** A channel to post into; the space + room entities the materialiser needs. */
+  function seedChannel(db: Database): string {
+    seedSpace(db, STREAM);
+    const channelId = newUlid();
+    db.run("insert into entities (id, stream_id) values (?, ?)", [channelId, STREAM]);
+    db.run(
+      "insert into comp_room (entity, label, default_access) values (?, 'space.roomy.channel', 'readwrite')",
+      [channelId],
+    );
+    return channelId;
+  }
+
+  function createWithLink(
+    channelId: string,
+    msgId: string,
+    bodyText: string,
+    url: string,
+  ): Event {
+    return {
+      $type: "space.roomy.message.createMessage.v0",
+      id: msgId,
+      room: channelId,
+      body: {
+        mimeType: "text/markdown",
+        data: { buf: new TextEncoder().encode(bodyText) },
+      },
+      extensions: {
+        "space.roomy.extension.attachments.v0": {
+          $type: "space.roomy.extension.attachments.v0",
+          attachments: [
+            { $type: "space.roomy.attachment.link.v0", uri: url, showPreview: true },
+          ],
+        },
+      },
+    } as unknown as Event;
+  }
+
+  test("a message whose only payload is a link attachment queues its canonical URL", async () => {
+    const { db, asyncDb } = freshDb();
+    const { db: globalRaw, asyncDb: globalDb } = freshGlobalDb();
+    const channelId = seedChannel(db);
+    const msgId = newUlid();
+    const url = "https://example.com/attachment-only";
+
+    const stats = await applyBatch(
+      asyncDb,
+      STREAM,
+      [decoded(createWithLink(channelId, msgId, "", url), 1)],
+      { isBackfill: true },
+      globalDb,
+    );
+    expect(stats.applyErrors).toBe(0);
+
+    // The sweeper fetches `pending_links.url` and the store is keyed by it, so
+    // the queue must hold the bare URL — the entity's `?message=` encoding is
+    // a per-message id, not something the enricher can fetch.
+    const queued = globalRaw
+      .query("select url from pending_links where space_did = ? and message_id = ?")
+      .all(STREAM, msgId) as Array<{ url: string }>;
+    expect(queued.map((r) => r.url)).toEqual([url]);
+  });
+
+  test("a body URL plus an attachment of the same URL queues one row", async () => {
+    const { db, asyncDb } = freshDb();
+    const { db: globalRaw, asyncDb: globalDb } = freshGlobalDb();
+    const channelId = seedChannel(db);
+    const msgId = newUlid();
+    const url = "https://example.com/in-both-places";
+
+    const stats = await applyBatch(
+      asyncDb,
+      STREAM,
+      [decoded(createWithLink(channelId, msgId, `see ${url}`, url), 1)],
+      { isBackfill: true },
+      globalDb,
+    );
+    expect(stats.applyErrors).toBe(0);
+
+    const queued = globalRaw
+      .query("select url from pending_links where space_did = ? and message_id = ?")
+      .all(STREAM, msgId) as Array<{ url: string }>;
+    expect(queued.map((r) => r.url)).toEqual([url]);
+
+    // Both representations still exist in the per-space projection: the body
+    // row under the bare URL, the attachment under its per-message entity id.
+    // Only the queue dedupes them.
+    const entities = (db.query("select entity from comp_embed_link").all() as Array<{
+      entity: string;
+    }>).map((r) => r.entity);
+    expect(entities).toContain(url);
+    expect(entities).toContain(`${url}?message=${msgId}`);
+  });
+});
+
 describe("applyBatch — activity item canonical timestamps", () => {
   // Bridged messages carry a timestampOverride extension (the original Discord
   // send time), but their ULIDs encode bridge-ingestion time. Ordering the

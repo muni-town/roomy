@@ -29,6 +29,7 @@ import { decodeTime } from "ulidx";
 
 import { decodeContent, decodeRichTextBody } from "../../db/content.ts";
 import { extractUrls } from "../../embed/enricher.ts";
+import { linkAttachmentUrls } from "../../queries/links.ts";
 import { maintainRoomActivityForMessage } from "../../queries/roomActivityProjection.ts";
 import { roomAccessStepForRoom } from "../../queries/roomAccessProjection.ts";
 import { canonicalSendTime, type MessageChange } from "./messageRules.ts";
@@ -72,6 +73,19 @@ export type DerivedStep =
   | {
       /** The link entities and `comp_embed_link` rows a message's content names. */
       readonly effect: "storeLinks";
+      readonly spaceId: StreamDid;
+      readonly messageId: string;
+      readonly urls: readonly string[];
+    }
+  | {
+      /**
+       * A message's link attachments, queued for the embed sweeper under their
+       * canonical URLs. The materialiser already wrote their per-message
+       * entities (`uri?message=<id>`) and `comp_embed_link` rows, so this step
+       * queues only — writing a bare-URL entity here would list the same
+       * attachment twice.
+       */
+      readonly effect: "queueLinkAttachments";
       readonly spaceId: StreamDid;
       readonly messageId: string;
       readonly urls: readonly string[];
@@ -195,6 +209,20 @@ function derivedStepsFor(
           spaceId: ctx.streamId,
           messageId: id,
           urls,
+        });
+      }
+      // A link attachment materialises as its own entity (`uri?message=<id>`)
+      // with its own `comp_embed_link` row, so `linksIn` never sees it: a
+      // message whose entire payload is a link — a bridged embed, say — has no
+      // other source of enrichment. Queue its canonical URL beside the body
+      // URLs; the sweeper fetches the URL the reads resolve the embed under.
+      const attachmentUrls = linkAttachmentUrls(record.extensions);
+      if (attachmentUrls.length > 0) {
+        steps.push({
+          effect: "queueLinkAttachments",
+          spaceId: ctx.streamId,
+          messageId: id,
+          urls: attachmentUrls,
         });
       }
       break;

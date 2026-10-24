@@ -20,6 +20,7 @@ import {
   type AttachmentDto,
   type EmbedRow,
 } from "./selectMessages.ts";
+import { canonicalUrl } from "./links.ts";
 import { hydrateProfiles } from "./profileStore.ts";
 import { selectJoinedSpaceDids } from "./userSpaceMembership.ts";
 import { deriveUnreadCounts } from "./readPositions.ts";
@@ -400,10 +401,12 @@ export async function selectActivityFeed(
     if (attachments && attachments.length > 0) {
       // Link entries take their enrichment from the global store, which the
       // per-space query above cannot reach — applied here, where both halves
-      // are in hand.
+      // are in hand. The store is keyed by the canonical url; the entry's own
+      // `url` keeps Roomy's `?message=<id>` encoding, which is what the
+      // client's dismiss/re-add toggle matches on.
       const resolved = attachments.map((a): AttachmentDto => {
         if (a.$type !== "space.roomy.attachment.link.v0") return a;
-        const embed = linkEmbedDataMap.get(a.url);
+        const embed = linkEmbedDataMap.get(canonicalUrl(a.url));
         return embed != null ? { $type: a.$type, url: a.url, embed } : a;
       });
       const { media, linkEmbeds } = deriveAttachmentViews(resolved);
@@ -659,7 +662,7 @@ async function batchFetchEmbeds(
     // The link variant's `embed` is filled from the global store by the
     // caller, which is the only place that holds it.
     arr.push(attachmentFromEmbedRow(e, NO_EMBED_DATA));
-    if (e.kind === "link") linkUrls.add(e.url);
+    if (e.kind === "link") linkUrls.add(canonicalUrl(e.url));
   }
 
   return { attachmentsByMsg, linkUrls };

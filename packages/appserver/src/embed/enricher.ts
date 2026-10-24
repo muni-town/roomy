@@ -17,6 +17,7 @@ import {
   writeSettledLinkEmbed,
   writeTransientLinkEmbed,
 } from "./store.ts";
+import { canonicalUrl } from "../queries/links.ts";
 
 /**
  * In-flight dedup: maps a URL to the enrichment promise currently fetching
@@ -123,13 +124,19 @@ export async function fetchEmbedData(
 /**
  * Of the given URLs, return those that are still pending enrichment — held by
  * a `comp_embed_link` row in `spaceDb` but with no row yet in the global
- * `link_embeds` store.
+ * `link_embeds` store. Returned URLs are the store's keys, so a caller that
+ * pokes the sweeper with them cannot fetch one the read paths would miss.
  *
  * Two queries rather than one join: which links a message contains is
  * log-derived and stays per-space, while the enriched metadata is a function of
  * an outbound fetch and lives in the global DB — separate files, so no single
  * statement can span them. The per-space side narrows the candidates; the store
  * lookup then drops the ones already attempted.
+ *
+ * The two sides are keyed differently: a link attachment's entity id carries
+ * Roomy's `?message=<id>` encoding, while the store is keyed by the canonical
+ * URL. The per-space query matches the entity id it is given; the store query
+ * and the result use {@link canonicalUrl}.
  *
  * Used by the sweeper to prioritise freshly-detected links without re-fetching
  * ones that are already enriched (e.g. a popular URL reposted).
@@ -147,7 +154,7 @@ export async function filterPendingUrls(
     )
     .all<{ entity: string }>([...urls]);
   if (rows.length === 0) return [];
-  const held = rows.map((r) => r.entity);
+  const held = [...new Set(rows.map((r) => canonicalUrl(r.entity)))];
   return filterUnevaluatedUrls(globalDb, held);
 }
 

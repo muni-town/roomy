@@ -30,6 +30,7 @@
 
 import type { DbLike } from "../db/types.ts";
 import { selectEmbedJsonByUrl } from "../embed/store.ts";
+import { canonicalUrl } from "./links.ts";
 import { decodeContent } from "../db/content.ts";
 import { stripNulls } from "../xrpc/strip-nulls.ts";
 import { hydrateProfiles, resolveProfiles } from "./profileStore.ts";
@@ -146,7 +147,10 @@ export interface EmbedRow {
  * The row's `kind` is which component table it came from, and it is what
  * supplies the entry's `$type` — the tag a renderer dispatches on and the one
  * thing the flat `media` shape could not carry. The link variant takes its
- * enriched metadata from the global store, keyed by URL.
+ * enriched metadata from the global store, which is keyed by the CANONICAL
+ * URL, while an attachment's entity id carries Roomy's `?message=<id>`
+ * encoding; the entry's `url` stays that entity id, since the client's
+ * dismiss/re-add toggle matches on it.
  */
 export function attachmentFromEmbedRow(
   row: EmbedRow,
@@ -185,7 +189,7 @@ export function attachmentFromEmbedRow(
         size: row.size ?? undefined,
       }) as AttachmentDto;
     case "link": {
-      const embed = linkEmbedData.get(row.url);
+      const embed = linkEmbedData.get(canonicalUrl(row.url));
       return {
         $type: "space.roomy.attachment.link.v0",
         url: row.url,
@@ -738,11 +742,14 @@ export async function selectMessages(
   // from there by the URLs this page holds rather than joined to the
   // per-space rows above — the two are separate DBs, so no statement can span
   // them.
+  //
+  // The store is keyed by the CANONICAL url, while a link attachment's entity
+  // id carries Roomy's `?message=<id>` encoding (see the SDK message
+  // materialiser). Look up by canonical; keep the entity id for display, since
+  // the client matches its dismiss/re-add toggle against it.
   const linkUrls = new Set<string>();
   for (const e of embedRows) {
-    if (e.kind === "link") {
-      linkUrls.add(e.url);
-    }
+    if (e.kind === "link") linkUrls.add(canonicalUrl(e.url));
   }
 
   const linkEmbedDataMap = new Map<string, Record<string, unknown> | null>();

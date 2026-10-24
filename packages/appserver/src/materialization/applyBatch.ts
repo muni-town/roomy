@@ -46,6 +46,7 @@ import {
   detectAndStoreLinks,
   detectAndStoreLinksFromUrls,
 } from "../embed/enricher.ts";
+import { linkAttachmentUrls } from "../queries/links.ts";
 import { openReadStateDb } from "../db/db.ts";
 import { recordSpaceStats, selectMemberCount } from "../queries/spaceStats.ts";
 import { maintainRoomAccess } from "../queries/roomAccessProjection.ts";
@@ -695,13 +696,14 @@ async function applyEventSideEffects(
     // synchronous search work happens here.
     enqueueIndexMessage(streamId, e.event.id);
 
-    const body = (e.event as Record<string, unknown>).body as
+    const event = e.event as Record<string, unknown>;
+    const body = event.body as
       | { mimeType?: string; data?: { buf: Uint8Array } }
       | undefined;
+    let detected: string[] = [];
     if (body?.data?.buf) {
       const mime = body.mimeType ?? "text/markdown";
       const buf = Buffer.from(body.data.buf);
-      let detected: string[];
       if (mime === RICHTEXT_MIME) {
         // New format: URLs come from `#link` facet URIs, not regex scanning.
         const blocks = decodeRichTextBody(mime, buf);
@@ -712,31 +714,41 @@ async function applyEventSideEffects(
         );
       } else {
         // Legacy text/markdown bodies keep the regex extraction path.
-        const content = decodeContent(mime, buf);
-        detected = await detectAndStoreLinks(db, e.event.id, content);
+        detected = await detectAndStoreLinks(db, e.event.id, decodeContent(mime, buf));
       }
-      if (detected.length > 0) detectedLinks.push(...detected);
-      if (globalDb && detected.length > 0) {
-        // Record the link entities in the global entity→space index so
-        // they resolve to this space (they carry an empty stream_id in
-        // the per-space DB).
-        for (const url of detected) {
-          await globalDb.run(
-            `insert or ignore into entity_space (entity_id, space_did) values (?, ?)`,
-            [url, streamId],
-          );
-        }
-        // Dual-write the global pending-links index so the centralized
-        // embed sweeper can find this work without iterating every
-        // per-space DB. `insert or ignore` keeps the row idempotent across
-        // re-materialisation.
-        for (const url of detected) {
-          await globalDb.run(
-            `insert or ignore into pending_links (space_did, message_id, url, created_at)
-               values (?, ?, ?, ?)`,
-            [streamId, e.event.id, url, Date.now()],
-          );
-        }
+    }
+    // A link attachment is materialised as its own entity (`uri?message=<id>`),
+    // so body scanning never sees it: a message whose entire payload is a link
+    // (a bridged embed, say) has no other source. The canonical URL is what the
+    // embed store is keyed by, and it is the same URL body detection records,
+    // so the two collapse to one row here.
+    const attachmentUrls = linkAttachmentUrls(
+      event.extensions as Record<string, unknown> | undefined,
+    );
+    if (detected.length > 0) detectedLinks.push(...detected);
+    if (attachmentUrls.length > 0) detectedLinks.push(...attachmentUrls);
+    if (globalDb) {
+      // Record the body link entities in the global entity→space index so they
+      // resolve to this space (they carry an empty stream_id in the per-space
+      // DB). Attachment entities are per-message (`?message=`) and have no
+      // stable global id, so only body URLs are indexed.
+      for (const url of detected) {
+        await globalDb.run(
+          `insert or ignore into entity_space (entity_id, space_did) values (?, ?)`,
+          [url, streamId],
+        );
+      }
+      // Dual-write the global pending-links index so the centralized embed
+      // sweeper can find this work without iterating every per-space DB.
+      // `insert or ignore` keeps the row idempotent across re-materialisation
+      // and collapses an attachment link whose canonical URL was already
+      // detected in the body.
+      for (const url of new Set([...detected, ...attachmentUrls])) {
+        await globalDb.run(
+          `insert or ignore into pending_links (space_did, message_id, url, created_at)
+           values (?, ?, ?, ?)`,
+          [streamId, e.event.id, url, Date.now()],
+        );
       }
     }
   } else if (e.event.$type === "space.roomy.message.editMessage.v0") {

@@ -177,11 +177,12 @@ export async function listLinks(
 /**
  * Fill each row's `embed_json` from the global `link_embeds` store.
  *
- * Keyed by the row's own `url`, exactly as the store's own key: a link
- * entity's id IS the URL the enricher wrote. Call AFTER deduping — the page
- * over-fetches by one row and collapses attachment-encoded duplicates, so this
- * binds the URLs that are actually served rather than every raw row the query
- * returned.
+ * The store is keyed by the canonical URL, while a body-URL row's `url` is
+ * that same bare URL and an attachment link's is `url?message=<id>`. Look up
+ * by {@link canonicalUrl}; the row keeps its own `url` for display and for
+ * paging. Call AFTER deduping — the page over-fetches by one row and collapses
+ * attachment-encoded duplicates, so this binds the URLs that are actually
+ * served rather than every raw row the query returned.
  *
  * A row with no store entry keeps a null `embed_json`, which the handlers read
  * as "no card" — the correct render for a URL the enricher has not reached.
@@ -191,10 +192,11 @@ export async function hydrateLinkEmbeds(
   rows: RawLinkRow[],
 ): Promise<void> {
   if (rows.length === 0) return;
-  const stored = await selectEmbedJsonByUrl(globalDb, rows.map((r) => r.url));
-  for (const row of rows) {
-    row.embed_json = stored.get(row.url) ?? null;
-  }
+  const canonical = rows.map((r) => canonicalUrl(r.url));
+  const stored = await selectEmbedJsonByUrl(globalDb, canonical);
+  rows.forEach((row, i) => {
+    row.embed_json = stored.get(canonical[i]!) ?? null;
+  });
 }
 
 /**
@@ -208,6 +210,30 @@ const MESSAGE_SUFFIX = /[?&]message=[0-9A-HJKMNP-TV-Z]{26}$/;
 
 export function canonicalUrl(url: string): string {
   return url.replace(MESSAGE_SUFFIX, "");
+}
+
+/**
+ * Canonical URLs of the `space.roomy.attachment.link.v0` attachments a message
+ * carries. An attachment link materialises as its own entity with the message
+ * id encoded into the URL (`?message=<ulid>`), while the embed store is keyed
+ * by the bare URL, so the encoding must not reach the enrichment queue.
+ */
+export function linkAttachmentUrls(
+  extensions: Readonly<Record<string, unknown>> | undefined,
+): string[] {
+  const attachments = (
+    extensions?.["space.roomy.extension.attachments.v0"] as
+      | { attachments?: ReadonlyArray<{ $type?: string; uri?: string }> }
+      | undefined
+  )?.attachments;
+  if (!attachments) return [];
+  const urls: string[] = [];
+  for (const att of attachments) {
+    if (att.$type === "space.roomy.attachment.link.v0" && typeof att.uri === "string") {
+      urls.push(canonicalUrl(att.uri));
+    }
+  }
+  return urls;
 }
 
 /**
