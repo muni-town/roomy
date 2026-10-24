@@ -20,6 +20,10 @@
  *  - `apns`/`fcm` register a platform device token in `endpoint` and carry no
  *    keys. Keys sent alongside one are dropped rather than stored, so a row's
  *    columns describe exactly one transport.
+ *  - `sse` registers an application that holds a stream open (see
+ *    `push/transports/sse.ts`). `endpoint` is a random id, validated by
+ *    `isSecureId`. A did can request up to `MAX_SSE_SUBSCRIPTIONS_PER_USER`
+ *     of them with the oldest being evicted.
  *
  * An unknown `kind` is rejected: it would be stored and then counted as a
  * failure by the dispatcher on every delivery, which hides a typo behind a
@@ -27,7 +31,10 @@
  */
 
 import { openReadStateDb } from "../db/db.ts";
-import { upsertSubscription } from "../queries/pushSubscriptions.ts";
+import {
+  evictOldestSseSubscriptions,
+  upsertSubscription,
+} from "../queries/pushSubscriptions.ts";
 import {
   PUSH_TRANSPORT_KINDS,
   isPushTransportKind,
@@ -42,6 +49,9 @@ interface RegisterSubscriptionBody {
   keys?: unknown;
   expirationTime?: unknown;
 }
+
+const MAX_SSE_SUBSCRIPTIONS_PER_USER = 10;
+const SECURE_ID_PATTERN = /^[A-Za-z0-9_-]{22,64}$/;
 
 export const registerSubscriptionHandler: ProcedureHandler<
   RegisterSubscriptionBody,
@@ -68,6 +78,30 @@ export const registerSubscriptionHandler: ProcedureHandler<
       400,
       "InvalidRequest",
       `Field 'kind' must be one of: ${PUSH_TRANSPORT_KINDS.join(", ")}`,
+    );
+  }
+
+
+  // * TODO: this is underspecified. The length floor does not guarantee a bit
+  // * count, because the alphabet is not pinned: 22 hex characters is only 88
+  // * bits. Decide what the client generates (a UUIDv4, or 16+ random bytes as
+  // * base64url) and tighten the pattern to exactly that. A distinct-character
+  // * count also cannot prove randomness, only reject obvious junk. If that is not
+  // * enough, the server could issue the id at registration instead.
+  /*
+   * Whether `value` is a suffucuently high entrpoy random identifier.
+   *
+   * Shape: 22 to 64 characters from `A-Za-z0-9_-`. That admits a UUID (36), 16
+   * random bytes as base64url (22) and 32 random bytes as base64url (43). And
+   * at least {@link MIN_DISTINCT_CHARACTERS} different characters.
+   */
+  if (kind === "sse" && (typeof body.endpoint !== 'string' ||
+    !SECURE_ID_PATTERN.test(body.endpoint) ||
+    new Set(body.endpoint).size < 10)) {
+    throw new XrpcError(
+      400,
+      "InvalidRequest",
+      "Field 'endpoint' must be a client-generated random id for kind 'sse'",
     );
   }
 
@@ -123,4 +157,12 @@ export const registerSubscriptionHandler: ProcedureHandler<
     expirationTime:
       typeof expirationTimeRaw === "number" ? expirationTimeRaw : null,
   });
+
+  if (kind === "sse") {
+    await evictOldestSseSubscriptions(
+      db,
+      userDid,
+      MAX_SSE_SUBSCRIPTIONS_PER_USER,
+    );
+  }
 };
