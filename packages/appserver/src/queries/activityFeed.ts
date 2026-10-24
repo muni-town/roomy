@@ -146,6 +146,58 @@ const ACTIVITY_ITEM_COLUMNS = `
 const NOT_DELETED = "(cr.deleted is null or cr.deleted = 0)";
 
 /**
+ * Spaces whose DBs are queried at once by one feed request. A request fans out
+ * over every joined space, so without a bound a user in many spaces would open
+ * a connection per space in one call and evict the rest from the worker's
+ * per-space cache (`DEFAULT_MAX_SPACE_DBS` in `db/bounds.ts`), which is what
+ * serves every other space on that worker.
+ */
+export const SPACE_FANOUT_CONCURRENCY = 8;
+
+/**
+ * Run `fn` over `items` with at most `limit` invocations in flight, returning
+ * the results in input order. A rejection stops the result but not the calls
+ * already running: like the serial loops it replaces, a space that fails fails
+ * the whole feed.
+ */
+export async function mapBounded<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (next < items.length) {
+        const i = next++;
+        results[i] = await fn(items[i]!);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * Where the fan-out gets a space's handle. Production always opens the real
+ * per-space DB; a test overrides it to count the calls in flight (see
+ * `_setTestSpaceDbOpener`).
+ */
+let spaceDbFor: (spaceDid: string) => DbLike = openSpaceDb;
+
+/**
+ * Test-only: observe or substitute the per-space handles the fan-out reads.
+ * Pass null to restore `openSpaceDb`.
+ */
+export function _setTestSpaceDbOpener(
+  fn: ((spaceDid: string) => DbLike) | null,
+): void {
+  spaceDbFor = fn ?? openSpaceDb;
+}
+
+/**
  * Select the activity feed by fanning out to per-space DBs.
  *
  * `mainDb` is the READ-STATE handle, used ONLY for the read-state watermark
@@ -164,7 +216,12 @@ export async function selectActivityFeed(
    * links.
    */
   linkEmbedDb?: DbLike | null,
-): Promise<{ feed: ActivityFeedItem[]; cursor: string | null }> {
+): Promise<{
+  feed: ActivityFeedItem[];
+  cursor: string | null;
+  /** Space DBs the fan-out covered, whether or not they held any rows. */
+  spaceCount: number;
+}> {
   // Step 0: determine the set of space DIDs from durable membership intent.
   let spaceDids: string[];
   if (scope.spaceId) {
@@ -173,14 +230,14 @@ export async function selectActivityFeed(
     spaceDids = await selectJoinedSpaceDids(mainDb, userDid);
   }
 
-  if (spaceDids.length === 0) return { feed: [], cursor: null };
+  if (spaceDids.length === 0) return { feed: [], cursor: null, spaceCount: 0 };
 
   // Step 1: fan out to per-space DBs, fetching a page of rows per space
-  // (newest first) so we can merge and paginate globally.
-  const allRows: ActivityItemRow[] = [];
-  for (const spaceDid of spaceDids) {
-    const spaceDb = openSpaceDb(spaceDid);
-    const rows = await spaceDb
+  // (newest first) so we can merge and paginate globally. The per-space pages
+  // are independent, so they are fetched concurrently — bounded, because each
+  // one opens that space's DB on the worker.
+  const pages = await mapBounded(spaceDids, SPACE_FANOUT_CONCURRENCY, (spaceDid) =>
+    spaceDbFor(spaceDid)
       .query(
         `select ${ACTIVITY_ITEM_COLUMNS}
          from activity_item ai
@@ -189,11 +246,11 @@ export async function selectActivityFeed(
          order by ai.last_activity_at desc, ai.room_id desc
          limit ?`,
       )
-      .all<ActivityItemRow>([spaceDid, scope.limit + 1]);
-    allRows.push(...rows);
-  }
+      .all<ActivityItemRow>([spaceDid, scope.limit + 1]),
+  );
+  const allRows: ActivityItemRow[] = pages.flat();
 
-  if (allRows.length === 0) return { feed: [], cursor: null };
+  if (allRows.length === 0) return { feed: [], cursor: null, spaceCount: spaceDids.length };
 
   // Step 2: merge + sort (newest-first, tie-break by room id descending).
   allRows.sort((a, b) => {
@@ -222,7 +279,7 @@ export async function selectActivityFeed(
   // Step 4: paginate.
   const hasMore = filtered.length > scope.limit;
   const pageRows = hasMore ? filtered.slice(0, scope.limit) : filtered;
-  if (pageRows.length === 0) return { feed: [], cursor: null };
+  if (pageRows.length === 0) return { feed: [], cursor: null, spaceCount: spaceDids.length };
 
   // The author DIDs hidden from this viewer by a block, in either direction.
   // Resolved once for the page so the message fetch below drops a hidden
@@ -240,16 +297,20 @@ export async function selectActivityFeed(
     }
     arr.push(r);
   }
-  for (const [spaceDid, rows] of bySpace) {
+  // Spaces are fetched concurrently, bounded for the same reason as step 1.
+  // A space with no message IDs is skipped rather than queried, as before.
+  const fetchedBySpace = await mapBounded([...bySpace], SPACE_FANOUT_CONCURRENCY, async ([spaceDid, rows]) => {
     const msgIds: string[] = [];
     for (const r of rows) {
       for (const e of parseRecentMessageIds(r.recent_message_ids)) {
         msgIds.push(e.id);
       }
     }
-    if (msgIds.length === 0) continue;
-    const spaceDb = openSpaceDb(spaceDid);
-    const fetched = await batchFetchMessages(spaceDb, msgIds, hidden);
+    if (msgIds.length === 0) return null;
+    return batchFetchMessages(spaceDbFor(spaceDid), msgIds, hidden);
+  });
+  for (const fetched of fetchedBySpace) {
+    if (fetched === null) continue;
     for (const [k, v] of fetched) messagesData.set(k, v);
   }
 
@@ -306,13 +367,16 @@ export async function selectActivityFeed(
   const attachmentsByMsg = new Map<string, Array<AttachmentDto>>();
   const pageLinkUrls = new Set<string>();
   const reactionsByMsg = new Map<string, Array<{ emoji: string; count: number; myReactionId?: string }>>();
-  for (const [spaceDid, lastMsgIds] of lastMsgIdsBySpace) {
-    const spaceDb = openSpaceDb(spaceDid);
-    const { attachmentsByMsg: a, linkUrls } = await batchFetchEmbeds(spaceDb, lastMsgIds);
-    for (const [k, v] of a) attachmentsByMsg.set(k, v);
-    for (const u of linkUrls) pageLinkUrls.add(u);
-    const rxn = await batchFetchReactions(spaceDb, lastMsgIds, userDid);
-    for (const [k, v] of rxn) reactionsByMsg.set(k, v);
+  const hydrated = await mapBounded([...lastMsgIdsBySpace], SPACE_FANOUT_CONCURRENCY, async ([spaceDid, lastMsgIds]) => {
+    const spaceDb = spaceDbFor(spaceDid);
+    const embeds = await batchFetchEmbeds(spaceDb, lastMsgIds);
+    const reactions = await batchFetchReactions(spaceDb, lastMsgIds, userDid);
+    return { embeds, reactions };
+  });
+  for (const { embeds, reactions } of hydrated) {
+    for (const [k, v] of embeds.attachmentsByMsg) attachmentsByMsg.set(k, v);
+    for (const u of embeds.linkUrls) pageLinkUrls.add(u);
+    for (const [k, v] of reactions) reactionsByMsg.set(k, v);
   }
 
   // The enrichment is global and keyed by URL, so one lookup covers every
@@ -358,7 +422,7 @@ export async function selectActivityFeed(
     cursor = `${last.last_activity_at}::${last.room_id}`;
   }
 
-  return { feed, cursor };
+  return { feed, cursor, spaceCount: spaceDids.length };
 }
 
 // ─── Batch fetch helpers ─────────────────────────────────────────────────
@@ -484,20 +548,26 @@ async function batchFetchUnreadCounts(
   // read (`deriveUnreadCounts`).
   const hidden = await hiddenBy(userDid);
 
-  for (const [spaceDid, spaceRows] of rowsBySpace) {
+  // One range count per space, concurrent and bounded like the other
+  // per-space passes in this query.
+  const perSpace = await mapBounded([...rowsBySpace], SPACE_FANOUT_CONCURRENCY, async ([spaceDid, spaceRows]) => {
     const spaceRoomIds = spaceRows
       .map((r) => r.room_id)
       .filter((id) => watermarks.has(id));
-    if (spaceRoomIds.length === 0) continue;
+    if (spaceRoomIds.length === 0) return null;
     const counts = await deriveUnreadCounts(
-      openSpaceDb(spaceDid),
+      spaceDbFor(spaceDid),
       spaceRoomIds.map((roomId) => ({
         roomId,
         seenUpTo: watermarks.get(roomId)!,
         hidden,
       })),
     );
-    spaceRoomIds.forEach((roomId, i) => result.set(roomId, counts[i] ?? 0));
+    return { spaceRoomIds, counts };
+  });
+  for (const entry of perSpace) {
+    if (entry === null) continue;
+    entry.spaceRoomIds.forEach((roomId, i) => result.set(roomId, entry.counts[i] ?? 0));
   }
 
   return result;

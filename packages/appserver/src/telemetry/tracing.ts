@@ -124,13 +124,25 @@ export function initTracing(env: NodeJS.ProcessEnv = process.env): boolean {
   return true;
 }
 
-const tracer: Tracer = trace.getTracer(SERVICE_NAME);
+/**
+ * The tracer `withSpan` opens spans with. Tests substitute their own so a
+ * handler's span and its attributes can be asserted without installing a
+ * process-global provider — registration is one-shot per process, so a second
+ * test file doing that would capture or silence the first one's spans.
+ */
+let tracer: Tracer = trace.getTracer(SERVICE_NAME);
+
+/** Test-only: replace `withSpan`'s tracer, or pass null to restore it. */
+export function _setTestSpanTracer(replacement: Tracer | null): void {
+  tracer = replacement ?? trace.getTracer(SERVICE_NAME);
+}
 
 /** True when a tracer provider is installed (spans are being recorded). */
 export const isTracingEnabled = (): boolean => provider !== null;
 
 /** The tracer handlers use for ad-hoc `setAttribute`/`addEvent` calls. */
 export { tracer };
+
 /**
  * Run `fn` inside a span. The span is ended (and errors recorded) in a
  * finally block, so a throwing handler still produces a span carrying the

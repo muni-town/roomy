@@ -9,6 +9,12 @@
  * the item previews the newest surviving message instead.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { Tracer } from "@opentelemetry/api";
+import {
+  BasicTracerProvider,
+  type ReadableSpan,
+  type SpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 import { StreamDid, UserDid, newUlid } from "@roomy-space/sdk";
 
 import { closeDb, openDb, openGlobalDb, openReadStateDb, openSpaceDb } from "../db/db.ts";
@@ -19,7 +25,9 @@ import {
   refreshBlockSet,
 } from "../queries/userBlocks.ts";
 import { setFlagGlobal } from "../queries/featureFlags.ts";
+import { _setTestSpanTracer } from "../telemetry/tracing.ts";
 import { getActivityFeedHandler } from "./space.roomy.space.getActivityFeed.ts";
+
 
 const VIEWER = UserDid.assert("did:plc:viewer");
 const AUTHOR = UserDid.assert("did:plc:author");
@@ -183,5 +191,47 @@ describe("getActivityFeed redacts a blocked author", () => {
     expect(json).toContain(VISIBLE_BODY);
     expect(json).toContain(VISIBLE_NAME);
     expect(result.feed[0]!.messages.map((m) => m.id)).toEqual([visibleMessageId]);
+  });
+});
+
+describe("getActivityFeed tracing", () => {
+  /**
+   * A tracer recording every span into `spans`, passed through the same
+   * `withSpan` the handler uses. It is installed through the tracing helper's
+   * seam rather than the OTel global: global registration is one-shot per
+   * process, so claiming it here would silence the telemetry suite.
+   */
+  function recordingTracer(spans: ReadableSpan[]): Tracer {
+    const processor: SpanProcessor = {
+      onStart: () => {},
+      onEnd: (span) => spans.push(span),
+      shutdown: async () => {},
+      forceFlush: async () => {},
+    };
+    return new BasicTracerProvider({ spanProcessors: [processor] }).getTracer("test");
+  }
+
+  test("emits a span naming the handler, carrying the fan-out's space count", async () => {
+    await makeMember(VIEWER);
+    const spans: ReadableSpan[] = [];
+    _setTestSpanTracer(recordingTracer(spans));
+
+    try {
+      await feed();
+    } finally {
+      _setTestSpanTracer(null);
+    }
+
+    const span = spans.find((s) => s.name === "space.roomy.space.getActivityFeed");
+    expect(span).toBeDefined();
+    expect(span!.attributes["roomy.space_id"]).toBe(SPACE);
+    expect(span!.attributes["roomy.limit"]).toBe(50);
+    // One requested space was read by the fan-out.
+    expect(span!.attributes["roomy.space_count"]).toBe(1);
+    expect(span!.attributes["roomy.visible_item_count"]).toBe(1);
+    // The phases under it are attributable, rather than one opaque duration.
+    const childNames = spans.map((s) => s.name);
+    expect(childNames).toContain("getActivityFeed.select");
+    expect(childNames).toContain("getActivityFeed.roomAccess");
   });
 });
