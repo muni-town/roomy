@@ -1,15 +1,16 @@
 //! HTTP queries, `sendEvents`, and the sync socket.
 
-use std::time::Duration;
+use std::sync::Arc;
 
 use base64::Engine as _;
-use futures_util::{SinkExt, StreamExt};
 use roomy_events::{Did, Event, EventBatch};
 use serde::{Deserialize, Serialize};
-use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 use crate::auth::ServiceAuth;
 use crate::error::ClientError;
+use crate::transport::{
+    call, call_empty, urlencode, HttpMethod, HttpRequest, HttpTransport, SyncSocket, Transport,
+};
 use crate::MAX_EVENTS_PER_BATCH;
 
 /// A member as `space.roomy.space.getMembers` reports it.
@@ -75,9 +76,7 @@ impl SyncEvent {
 
 /// A subscribed stream: the socket plus its request envelope.
 pub struct SyncSubscription {
-    socket: tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
+    socket: Box<dyn SyncSocket>,
     stream_did: Did,
 }
 
@@ -90,11 +89,11 @@ impl SyncSubscription {
     /// it is skipped here rather than surfaced for every caller to ignore.
     pub async fn next_batch(&mut self) -> Option<Result<Vec<SyncEvent>, ClientError>> {
         loop {
-            let frame = match self.socket.next().await {
-                None => return None,
-                Some(Ok(WsMessage::Binary(bytes))) => bytes,
-                Some(Ok(WsMessage::Close(_))) | Some(Err(_)) => return None,
-                Some(Ok(_)) => continue,
+            let frame = match self.socket.next_frame().await {
+                Ok(Some(frame)) => frame,
+                // A closed socket and a failed read both end the stream: the
+                // caller reconnects either way.
+                Ok(None) | Err(_) => return None,
             };
 
             // A frame is two concatenated CBOR values: a header object and a
@@ -129,14 +128,11 @@ impl SyncSubscription {
             cursor,
         })
         .expect("subscription serialises");
+        let text = String::from_utf8(payload).expect("subscription is UTF-8");
         self.socket
-            .send(WsMessage::Text(
-                String::from_utf8(payload)
-                    .expect("subscription is UTF-8")
-                    .into(),
-            ))
+            .send_text(text)
             .await
-            .map_err(|error| ClientError::Sync(format!("could not subscribe: {error}")))
+            .map_err(|error| ClientError::Sync(error.to_string()))
     }
 }
 
@@ -243,10 +239,10 @@ struct FrameHeader {
 /// A client for one appserver.
 #[derive(Debug, Clone)]
 pub struct AppserverClient {
-    http: reqwest::Client,
+    transport: Arc<dyn Transport>,
     base_url: String,
     did: Did,
-    service_auth: std::sync::Arc<ServiceAuth>,
+    service_auth: Arc<ServiceAuth>,
     access_jwt: String,
     /// When set, requests identify the caller with `X-Test-Did` instead of a
     /// real service-auth JWT.
@@ -267,14 +263,28 @@ impl AppserverClient {
     pub fn new(
         base_url: impl Into<String>,
         did: Did,
-        service_auth: std::sync::Arc<ServiceAuth>,
+        service_auth: Arc<ServiceAuth>,
         access_jwt: impl Into<String>,
     ) -> Self {
+        Self::with_transport(
+            base_url,
+            did,
+            service_auth,
+            access_jwt,
+            Arc::new(HttpTransport::new()),
+        )
+    }
+
+    /// Call over `transport` instead of a live connection.
+    pub fn with_transport(
+        base_url: impl Into<String>,
+        did: Did,
+        service_auth: Arc<ServiceAuth>,
+        access_jwt: impl Into<String>,
+        transport: Arc<dyn Transport>,
+    ) -> Self {
         Self {
-            http: reqwest::Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .expect("HTTP client builds"),
+            transport,
             base_url: base_url.into().trim_end_matches('/').to_string(),
             did,
             service_auth,
@@ -306,15 +316,15 @@ impl AppserverClient {
         self
     }
 
-    /// Apply the identity a request carries.
+    /// The identity header a request carries.
     ///
     /// In test mode the caller is named by `X-Test-Did`; otherwise the token is
     /// a bearer credential. Both cannot be sent at once, because a bearer token
     /// that is not a JWT is refused before the header is even read.
-    fn authorize(&self, builder: reqwest::RequestBuilder, token: &str) -> reqwest::RequestBuilder {
+    fn auth_header(&self, token: String) -> (&'static str, String) {
         match &self.test_did {
-            Some(_) => builder.header("X-Test-Did", token),
-            None => builder.bearer_auth(token),
+            Some(_) => ("X-Test-Did", token),
+            None => ("Authorization", format!("Bearer {token}")),
         }
     }
 
@@ -355,28 +365,17 @@ impl AppserverClient {
     async fn post_events(&self, batch: &EventBatch) -> Result<(), ClientError> {
         const NSID: &str = "space.roomy.space.sendEvents";
         let token = self.token_for(NSID).await?;
-
-        let url = format!("{}/xrpc/{NSID}", self.base_url);
-        let response = self
-            .authorize(self.http.post(&url), &token)
-            .json(&batch.to_json())
-            .send()
-            .await
-            .map_err(|source| ClientError::Transport {
-                method: NSID.into(),
-                source,
-            })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(ClientError::Xrpc {
-                nsid: NSID.into(),
-                error: status.to_string(),
-                message: body,
-            });
-        }
-        Ok(())
+        let request = HttpRequest {
+            nsid: NSID,
+            method: HttpMethod::Post,
+            url: format!("{}/xrpc/{NSID}", self.base_url),
+            headers: vec![
+                self.auth_header(token),
+                ("content-type", "application/json".to_string()),
+            ],
+            body: Some(serde_json::to_vec(&batch.to_json()).expect("an event batch serialises")),
+        };
+        call_empty(self.transport.as_ref(), request).await
     }
 
     /// Read one space's members, which is how the bridge answers "is this
@@ -384,38 +383,18 @@ impl AppserverClient {
     pub async fn get_members(&self, space_did: &Did) -> Result<MembersResponse, ClientError> {
         const NSID: &str = "space.roomy.space.getMembers";
         let token = self.token_for(NSID).await?;
-
-        let url = format!(
-            "{}/xrpc/{NSID}?spaceId={}",
-            self.base_url,
-            urlencode(space_did.as_str())
-        );
-        let response = self
-            .authorize(self.http.get(&url), &token)
-            .send()
-            .await
-            .map_err(|source| ClientError::Transport {
-                method: NSID.into(),
-                source,
-            })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(ClientError::Xrpc {
-                nsid: NSID.into(),
-                error: status.to_string(),
-                message: body,
-            });
-        }
-
-        response
-            .json::<MembersResponse>()
-            .await
-            .map_err(|error| ClientError::Decode {
-                nsid: NSID.into(),
-                message: error.to_string(),
-            })
+        let request = HttpRequest {
+            nsid: NSID,
+            method: HttpMethod::Get,
+            url: format!(
+                "{}/xrpc/{NSID}?spaceId={}",
+                self.base_url,
+                urlencode(space_did.as_str())
+            ),
+            headers: vec![self.auth_header(token)],
+            body: None,
+        };
+        call(self.transport.as_ref(), request).await
     }
 
     /// Open the sync socket and subscribe to one stream.
@@ -437,9 +416,11 @@ impl AppserverClient {
             urlencode(&ticket)
         );
 
-        let (socket, _response) = tokio_tungstenite::connect_async(&url)
+        let socket = self
+            .transport
+            .connect(&url)
             .await
-            .map_err(|error| ClientError::Sync(format!("could not connect: {error}")))?;
+            .map_err(|error| ClientError::Sync(error.to_string()))?;
 
         let mut subscription = SyncSubscription {
             socket,
@@ -453,41 +434,25 @@ impl AppserverClient {
     pub async fn connection_ticket(&self) -> Result<String, ClientError> {
         const NSID: &str = "space.roomy.auth.getConnectionTicket";
         let token = self.token_for(NSID).await?;
-
-        let url = format!("{}/xrpc/{NSID}", self.base_url);
-        // A procedure, not a query: the appserver answers GET with 405.
-        let response = self
-            .authorize(self.http.post(&url), &token)
-            .json(&serde_json::json!({}))
-            .send()
-            .await
-            .map_err(|source| ClientError::Transport {
-                method: NSID.into(),
-                source,
-            })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(ClientError::Xrpc {
-                nsid: NSID.into(),
-                error: status.to_string(),
-                message: body,
-            });
-        }
+        let request = HttpRequest {
+            nsid: NSID,
+            method: HttpMethod::Post,
+            url: format!("{}/xrpc/{NSID}", self.base_url),
+            headers: vec![
+                self.auth_header(token),
+                ("content-type", "application/json".to_string()),
+            ],
+            // A procedure, not a query: the appserver answers GET with 405.
+            body: Some(b"{}".to_vec()),
+        };
 
         #[derive(Deserialize)]
         struct Ticket {
             ticket: String,
         }
-        response
-            .json::<Ticket>()
+        call::<Ticket>(self.transport.as_ref(), request)
             .await
             .map(|ticket| ticket.ticket)
-            .map_err(|error| ClientError::Decode {
-                nsid: NSID.into(),
-                message: error.to_string(),
-            })
     }
 
     /// Upload bytes to the bridge account's PDS and return the `atblob://` ref
@@ -500,29 +465,16 @@ impl AppserverClient {
     ) -> Result<String, ClientError> {
         const NSID: &str = "com.atproto.repo.uploadBlob";
         let base = self.pds_url.as_deref().unwrap_or(&self.base_url);
-        let url = format!("{base}/xrpc/{NSID}");
-        let response = self
-            .http
-            .post(&url)
-            .bearer_auth(&self.access_jwt)
-            .header("content-type", content_type)
-            .body(bytes)
-            .send()
-            .await
-            .map_err(|source| ClientError::Transport {
-                method: NSID.into(),
-                source,
-            })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(ClientError::Xrpc {
-                nsid: NSID.into(),
-                error: status.to_string(),
-                message: body,
-            });
-        }
+        let request = HttpRequest {
+            nsid: NSID,
+            method: HttpMethod::Post,
+            url: format!("{base}/xrpc/{NSID}"),
+            headers: vec![
+                ("Authorization", format!("Bearer {}", self.access_jwt)),
+                ("content-type", content_type.to_string()),
+            ],
+            body: Some(bytes),
+        };
 
         #[derive(Deserialize)]
         struct BlobResponse {
@@ -539,33 +491,13 @@ impl AppserverClient {
             link: String,
         }
 
-        let blob = response
-            .json::<BlobResponse>()
-            .await
-            .map_err(|error| ClientError::Decode {
-                nsid: NSID.into(),
-                message: error.to_string(),
-            })?;
+        let blob: BlobResponse = call(self.transport.as_ref(), request).await?;
         Ok(format!(
             "atblob://{}/{}",
             did.as_str(),
             blob.blob.reference.link
         ))
     }
-}
-
-/// Percent-encode a query value.
-fn urlencode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            other => out.push_str(&format!("%{other:02X}")),
-        }
-    }
-    out
 }
 
 #[cfg(test)]

@@ -6,14 +6,16 @@
 //! token minted for one method is not usable for another — which is why the
 //! cache is keyed by both.
 
-use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ClientError;
+use crate::transport::{call, urlencode, HttpMethod, HttpRequest, HttpTransport, Transport};
 
 /// The credentials the bridge authenticates to its PDS with.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +55,7 @@ const REQUESTED_LIFETIME_SEC: u64 = 300;
 /// Mints and caches service-auth tokens.
 #[derive(Debug)]
 pub struct ServiceAuth {
-    http: reqwest::Client,
+    transport: Arc<dyn Transport>,
     /// The PDS base URL, e.g. `https://bsky.social`.
     pds_url: String,
     cache: Mutex<HashMap<(String, Option<String>), CachedToken>>,
@@ -61,8 +63,13 @@ pub struct ServiceAuth {
 
 impl ServiceAuth {
     pub fn new(pds_url: impl Into<String>) -> Self {
+        Self::with_transport(pds_url, Arc::new(HttpTransport::new()))
+    }
+
+    /// Mint tokens over `transport` instead of a live connection.
+    pub fn with_transport(pds_url: impl Into<String>, transport: Arc<dyn Transport>) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            transport,
             pds_url: pds_url.into().trim_end_matches('/').to_string(),
             cache: Mutex::new(HashMap::new()),
         }
@@ -79,38 +86,21 @@ impl ServiceAuth {
             password: &'a str,
         }
 
-        let url = format!("{}/xrpc/com.atproto.server.createSession", self.pds_url);
-        let response = self
-            .http
-            .post(&url)
-            .json(&Body {
-                identifier: &credentials.identifier,
-                password: &credentials.app_password,
-            })
-            .send()
-            .await
-            .map_err(|source| ClientError::Transport {
-                method: "com.atproto.server.createSession".into(),
-                source,
-            })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(ClientError::Xrpc {
-                nsid: "com.atproto.server.createSession".into(),
-                error: status.to_string(),
-                message: body,
-            });
-        }
-
-        response
-            .json::<Session>()
-            .await
-            .map_err(|source| ClientError::Transport {
-                method: "com.atproto.server.createSession".into(),
-                source,
-            })
+        const NSID: &str = "com.atproto.server.createSession";
+        let request = HttpRequest {
+            nsid: NSID,
+            method: HttpMethod::Post,
+            url: format!("{}/xrpc/{NSID}", self.pds_url),
+            headers: vec![("content-type", "application/json".to_string())],
+            body: Some(
+                serde_json::to_vec(&Body {
+                    identifier: &credentials.identifier,
+                    password: &credentials.app_password,
+                })
+                .expect("credentials serialise"),
+            ),
+        };
+        call(self.transport.as_ref(), request).await
     }
 
     /// Mint a token for `aud`, optionally scoped to one method.
@@ -135,37 +125,35 @@ impl ServiceAuth {
             url.push_str(&format!("&lxm={}", urlencode(lxm)));
         }
 
-        let response = self
-            .http
-            .get(&url)
-            .bearer_auth(access_jwt)
-            .send()
-            .await
-            .map_err(|source| ClientError::Transport {
-                method: "com.atproto.server.getServiceAuth".into(),
-                source,
-            })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(ClientError::ServiceAuth {
-                aud: aud.to_string(),
-                reason: format!("PDS answered {status}: {body}"),
-            });
-        }
+        const NSID: &str = "com.atproto.server.getServiceAuth";
+        let request = HttpRequest {
+            nsid: NSID,
+            method: HttpMethod::Get,
+            url,
+            headers: vec![("Authorization", format!("Bearer {access_jwt}"))],
+            body: None,
+        };
 
         #[derive(Deserialize)]
         struct Minted {
             token: String,
         }
-        let minted = response
-            .json::<Minted>()
-            .await
-            .map_err(|source| ClientError::Transport {
-                method: "com.atproto.server.getServiceAuth".into(),
-                source,
-            })?;
+        let minted: Minted = match call(self.transport.as_ref(), request).await {
+            Ok(minted) => minted,
+            // The PDS refusing a mint is a credential problem, not a method
+            // problem, so it keeps the variant that says so.
+            Err(ClientError::Xrpc {
+                error: status,
+                message,
+                ..
+            }) => {
+                return Err(ClientError::ServiceAuth {
+                    aud: aud.to_string(),
+                    reason: format!("PDS answered {status}: {message}"),
+                })
+            }
+            Err(other) => return Err(other),
+        };
 
         let expires_at = Instant::now()
             + decode_lifetime(&minted.token).unwrap_or(Duration::from_secs(REQUESTED_LIFETIME_SEC));
@@ -219,20 +207,6 @@ fn unix_now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// Percent-encode a query value.
-fn urlencode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            other => out.push_str(&format!("%{other:02X}")),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,13 +228,5 @@ mod tests {
     fn a_malformed_token_has_no_lifetime() {
         assert!(decode_lifetime("not-a-jwt").is_none());
         assert!(decode_lifetime("a.b.c").is_none());
-    }
-
-    #[test]
-    fn query_values_are_percent_encoded() {
-        assert_eq!(
-            urlencode("did:web:api.roomy.space"),
-            "did%3Aweb%3Aapi.roomy.space"
-        );
     }
 }

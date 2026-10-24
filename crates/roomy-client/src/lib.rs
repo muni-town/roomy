@@ -12,13 +12,20 @@
 //! * **The sync socket.** A long-lived WebSocket that authenticates with a
 //!   short-lived ticket, subscribes to a space stream, and yields the events
 //!   the bridge relays to Matrix.
+//!
+//! Everything that leaves the process goes through one [`Transport`], so a
+//! test supplies its own adapter and drives every call without a network.
 
 pub mod auth;
 pub mod error;
+pub mod transport;
 pub mod xrpc;
 
 pub use auth::{ServiceAuth, SessionCredentials};
-pub use error::ClientError;
+pub use error::{ClientError, TransportError};
+pub use transport::{
+    BoxFuture, HttpMethod, HttpRequest, HttpResponse, HttpTransport, SyncSocket, Transport,
+};
 pub use xrpc::{AppserverClient, MembersResponse, SyncEvent, SyncSubscription};
 
 /// The appserver's per-batch cap on `sendEvents`.

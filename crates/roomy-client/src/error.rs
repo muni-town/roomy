@@ -2,6 +2,25 @@
 
 use thiserror::Error;
 
+/// A call that never produced a response.
+///
+/// It carries a message rather than the HTTP library's error type because
+/// every adapter constructs it — the live transport and a test's in equal
+/// measure — and only the live one has a library error to wrap.
+#[derive(Debug, Clone, Error)]
+#[error("{message}")]
+pub struct TransportError {
+    message: String,
+}
+
+impl TransportError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
 /// Something the appserver or the PDS rejected, or a transport failure.
 #[derive(Debug, Error)]
 pub enum ClientError {
@@ -10,7 +29,7 @@ pub enum ClientError {
     Transport {
         method: String,
         #[source]
-        source: reqwest::Error,
+        source: TransportError,
     },
 
     /// The appserver answered with an XRPC error.
