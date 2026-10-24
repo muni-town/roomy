@@ -246,6 +246,11 @@ jobs:
           # frontend is built (see packages/app-lite/scripts/build-target.mjs);
           # the desktop/Android/web builds leave it unset and keep the page.
           VITE_IOS_BUILD: "1"
+          # The shell's console logs and errors go to the same Faro collector
+          # as the web build. app-lite is a static SPA, so PUBLIC_FARO_URL is
+          # inlined at build time; the collector's CORS allows this webview's
+          # origin (`tauri://localhost`).
+          PUBLIC_FARO_URL: https://telemetry.roomy.space/collect
 
       # The exclusion is a property of the built bundle, which no type checker
       # or unit test can see, so assert it on the artifact the IPA is bundled
