@@ -8,8 +8,9 @@
   import ActivityFeedSkeleton from "@roomy/design/components/content/feed/ActivityFeedSkeleton.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
   import MediaEmbed from "@roomy/design/components/content/thread/message/embeds/MediaEmbed.svelte";
-  import { linkItems, mediaItems } from "../chat/attachment-views";
+  import { linkItems, mediaItems, tileItems } from "../chat/attachment-views";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
+  import TileEmbed from "@roomy/design/components/content/thread/message/tiles/TileEmbed.svelte";
   import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
   import { prefetchInternalLinkSummaries } from "../chat/prefetch-link-summaries";
@@ -247,6 +248,14 @@
                   <div class="flex flex-col gap-2 mt-1">
                     {#each linkItems(last.attachments) as link (link.url)}
                       <LinkCard url={link.url} embed={link.embed} />
+                    {/each}
+                  </div>
+                {/if}
+
+                {#if last.attachments && tileItems(last.attachments).length > 0}
+                  <div class="flex flex-col">
+                    {#each tileItems(last.attachments) as tile (tile.url)}
+                      <TileEmbed uri={tile.url} data={tile.data} />
                     {/each}
                   </div>
                 {/if}

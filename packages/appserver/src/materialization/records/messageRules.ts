@@ -290,6 +290,7 @@ function attachmentUpdateStatements(
     sql`delete from comp_embed_video where entity like ${suffix}`,
     sql`delete from comp_embed_file where entity like ${suffix}`,
     sql`delete from comp_embed_link where entity like ${suffix}`,
+    sql`delete from comp_embed_tile where entity like ${suffix}`,
     sql`delete from comp_comment where entity = ${messageId}`,
     sql`delete from edges where head = ${messageId} and label = 'reply'`,
     // Media entities carry the message as their room.

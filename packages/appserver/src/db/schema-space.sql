@@ -269,6 +269,14 @@ create table if not exists comp_embed_link (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 
+create table if not exists comp_embed_tile (
+  entity text primary key references entities(id) on delete cascade, -- <tile AT-URI>?message=<messageId>
+  tile_uri text not null, -- the bare tile AT-URI, as the client's parser expects
+  data text, -- JSON handed to the tile; null when the attachment carried none
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
 create table if not exists comp_last_read (
   entity text primary key references entities(id) on delete cascade,
   last_read integer not null,

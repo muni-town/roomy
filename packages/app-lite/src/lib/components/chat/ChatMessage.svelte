@@ -10,8 +10,9 @@
   import ToolbarShell from "@roomy/design/components/content/thread/message/ToolbarShell.svelte";
   import SelectionTick from "@roomy/design/components/content/thread/message/SelectionTick.svelte";
   import MediaEmbed from "@roomy/design/components/content/thread/message/embeds/MediaEmbed.svelte";
-  import { linkItems, mediaItems } from "./attachment-views";
+  import { linkItems, mediaItems, tileItems } from "./attachment-views";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
+  import TileEmbed from "@roomy/design/components/content/thread/message/tiles/TileEmbed.svelte";
   import ForwardContext from "@roomy/design/components/content/thread/message/ForwardContext.svelte";
   import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
   import ChatInput from "./ChatInput.svelte";
@@ -713,6 +714,17 @@
         {@const media = mediaItems(shownAttachments)}
         {#if media.length > 0}
           <MediaEmbed media={media} />
+        {/if}
+      {/snippet}
+
+      {#snippet tiles()}
+        {@const tiles = tileItems(shownAttachments)}
+        {#if tiles.length > 0}
+          <div class="flex flex-col">
+            {#each tiles as tile (tile.url)}
+              <TileEmbed uri={tile.url} data={tile.data} />
+            {/each}
+          </div>
         {/if}
       {/snippet}
 

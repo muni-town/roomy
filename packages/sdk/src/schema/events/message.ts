@@ -216,6 +216,7 @@ export const EditMessage = defineEvent(
           sql`delete from comp_embed_video where entity like ${messageIdSuffix}`,
           sql`delete from comp_embed_file where entity like ${messageIdSuffix}`,
           sql`delete from comp_embed_link where entity like ${messageIdSuffix}`,
+          sql`delete from comp_embed_tile where entity like ${messageIdSuffix}`,
           sql`delete from comp_comment where entity = ${event.messageId}`,
           sql`delete from edges where head = ${event.messageId} and label = 'reply'`,
           // Clean up orphaned entities (media entities have room = messageId)

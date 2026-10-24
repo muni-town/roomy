@@ -589,10 +589,11 @@ const NO_EMBED_DATA: ReadonlyMap<string, Record<string, unknown> | null> = new M
  * Batch-fetch the attachments of a set of message IDs.
  *
  * Mirrors the embed query in `selectMessages.ts` — a single UNION ALL across
- * comp_embed_image / _video / _file / _link joined to `entities` (whose `room`
- * points at the owning message), each branch tagging its rows with the kind
- * they came from. That tag becomes each entry's `$type`, exactly as it does on
- * the message read path, so both surfaces hand out the same attachment list.
+ * comp_embed_image / _video / _file / _link / _tile joined to `entities`
+ * (whose `room` points at the owning message), each branch tagging its rows
+ * with the kind they came from. That tag becomes each entry's `$type`, exactly
+ * as it does on the message read path, so both surfaces hand out the same
+ * attachment list.
  *
  * The per-space side supplies the link and media rows; the enrichment for the
  * link URLs comes from the global `link_embeds` store, so the URLs are returned
@@ -616,7 +617,7 @@ async function batchFetchEmbeds(
               ei.mime_type as mime_type, ei.alt as alt,
               ei.width as width, ei.height as height,
               ei.blurhash as blurhash, ei.size as size,
-              null as length, null as name
+              null as length, null as name, null as data
          from comp_embed_image ei
          join entities e on e.id = ei.entity
         where e.room in (${idPh})
@@ -625,7 +626,7 @@ async function batchFetchEmbeds(
               ev.mime_type as mime_type, ev.alt as alt,
               ev.width as width, ev.height as height,
               ev.blurhash as blurhash, ev.size as size,
-              ev.length as length, null as name
+              ev.length as length, null as name, null as data
          from comp_embed_video ev
          join entities e on e.id = ev.entity
         where e.room in (${idPh})
@@ -634,7 +635,7 @@ async function batchFetchEmbeds(
               ef.mime_type as mime_type, null as alt,
               null as width, null as height,
               null as blurhash, ef.size as size,
-              null as length, ef.name as name
+              null as length, ef.name as name, null as data
          from comp_embed_file ef
          join entities e on e.id = ef.entity
         where e.room in (${idPh})
@@ -643,15 +644,24 @@ async function batchFetchEmbeds(
               'text/uri-list' as mime_type, null as alt,
               null as width, null as height,
               null as blurhash, null as size,
-              null as length, null as name
+              null as length, null as name, null as data
          from comp_embed_link el
          join entities e on e.id = el.entity
         where e.room in (${idPh})
-          and el.show_preview = 1`,
+          and el.show_preview = 1
+       union all
+       select e.room as message_id, 'tile' as kind, et.tile_uri as url,
+              null as mime_type, null as alt,
+              null as width, null as height,
+              null as blurhash, null as size,
+              null as length, null as name, et.data as data
+         from comp_embed_tile et
+         join entities e on e.id = et.entity
+        where e.room in (${idPh})`,
     )
     // Each UNION branch has its own `where ... in (${idPh})` — bind ids
-    // once per branch (4× total). bun:sqlite has no positional reuse here.
-    .all<EmbedRow>([...messageIds, ...messageIds, ...messageIds, ...messageIds]);
+    // once per branch (5× total). bun:sqlite has no positional reuse here.
+    .all<EmbedRow>([...messageIds, ...messageIds, ...messageIds, ...messageIds, ...messageIds]);
 
   for (const e of embedRows) {
     let arr = attachmentsByMsg.get(e.message_id);

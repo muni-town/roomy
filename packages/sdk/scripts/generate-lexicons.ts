@@ -32,6 +32,7 @@
  *   - `{ enum: [...] }` (no type)                 → lex string with knownValues (string literal union)
  *   - `{ type: "number" }`, `{ type: "integer" }` → lex integer
  *   - `{ type: "boolean" }`                       → lex boolean
+ *   - `{}` (arktype `unknown`)                    → lex unknown
  *   - `{ type: "array", items: <recursive> }`     → lex array
  *   - `{ type: "object", properties, required }`  → extracted to a named def, referenced
  *   - `{ anyOf: [<T>, { type: "null" }] }`        → <T>, omitted from `required`
@@ -66,6 +67,7 @@ type LexSlot =
   | { type: "string"; knownValues?: string[] }
   | { type: "integer" }
   | { type: "boolean" }
+  | { type: "unknown" }
   | { type: "array"; items: LexSlot }
   | { type: "ref"; ref: string }
   /**
@@ -203,6 +205,10 @@ function convertSlot(
   }
   const s = schema as Record<string, unknown>;
 
+  // An empty schema is arktype's `unknown` — arbitrary JSON. The lexicon has
+  // a type for exactly that.
+  if (Object.keys(s).length === 0) return { type: "unknown" };
+
   // Nullable union: anyOf containing a `{ type: "null" }` branch.
   if (Array.isArray(s["anyOf"])) {
     const branches = s["anyOf"] as Array<Record<string, unknown>>;
@@ -234,6 +240,8 @@ function convertSlot(
     if (!rawDef) {
       throw new Error(`${nsid}: ${path} → unresolved $defs entry ${defKey}`);
     }
+    // A hoisted `unknown`: an empty schema with no members to extract.
+    if (Object.keys(rawDef).length === 0) return { type: "unknown" };
     // Enum-style `$defs` entries (e.g. a string-literal union hoisted by a
     // `scope` type) are inlined at the reference site as knownValues — the
     // same conversion as an inline `{ enum: [...] }` slot; they never need a

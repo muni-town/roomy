@@ -178,6 +178,21 @@ const Schemas = scope({
   },
 
   /**
+   * A Web Tile, rendered from its own record.
+   *
+   * `url` is the tile's bare AT-URI (`at://<did:plc:…>/ing.dasl.masl/<rkey>`) —
+   * the projection strips the entity key's `?message=` suffix, because a tile
+   * address is a record address and a query makes it unparseable. `data` is
+   * the JSON the attachment carried, handed to the tile on load; absent when
+   * the attachment carried none.
+   */
+  AttachmentTile: {
+    $type: "'space.roomy.attachment.tile.v0'",
+    url: "string",
+    "data?": "unknown",
+  },
+
+  /**
    * One entry per attachment on a message, discriminated by `$type`.
    *
    * The kind set is the read path's, not the write path's: the materialiser
@@ -185,7 +200,7 @@ const Schemas = scope({
    * no query in the tree reads that table, so a comment never reaches a client
    * and has no variant here.
    */
-  AttachmentDto: "AttachmentReply | AttachmentForward | AttachmentImage | AttachmentVideo | AttachmentFile | AttachmentLink",
+  AttachmentDto: "AttachmentReply | AttachmentForward | AttachmentImage | AttachmentVideo | AttachmentFile | AttachmentLink | AttachmentTile",
 
   Message: {
     id: "string",
@@ -266,5 +281,6 @@ export const AttachmentImage = Schemas.AttachmentImage;
 export const AttachmentVideo = Schemas.AttachmentVideo;
 export const AttachmentFile = Schemas.AttachmentFile;
 export const AttachmentLink = Schemas.AttachmentLink;
+export const AttachmentTile = Schemas.AttachmentTile;
 export const AttachmentDto = Schemas.AttachmentDto;
 export const Message = Schemas.Message;

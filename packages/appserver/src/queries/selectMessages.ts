@@ -121,17 +121,32 @@ export type AttachmentDto =
       $type: "space.roomy.attachment.link.v0";
       url: string;
       embed?: Record<string, unknown>;
+    }
+  | {
+      $type: "space.roomy.attachment.tile.v0";
+      /** The tile's bare AT-URI, which is the only address it answers to. */
+      url: string;
+      /** The JSON the tile is handed on load; absent when the attachment carried none. */
+      data?: unknown;
     };
 
-/** The four embed component tables a row can come from, tagged in the UNION. */
-export type EmbedKind = "image" | "video" | "file" | "link";
+/**
+ * The embed component tables a row can come from, tagged in the UNION.
+ * `comp_embed_tile` is not media: it carries a tile address and its payload.
+ */
+export type EmbedKind = "image" | "video" | "file" | "link" | "tile";
 
 /** An embed row as the batch query returns it: one row per attachment. */
 export interface EmbedRow {
   message_id: string;
   kind: EmbedKind;
+  /** The attachment's address: a blob URI, a link URL, or a tile AT-URI. */
   url: string;
-  mime_type: string;
+  /**
+   * MIME type of the blob. Null only for a tile row, which carries no blob —
+   * the loader resolves the tile's resources from its own PDS.
+   */
+  mime_type: string | null;
   alt: string | null;
   width: number | null;
   height: number | null;
@@ -139,6 +154,8 @@ export interface EmbedRow {
   size: number | null;
   length: number | null;
   name: string | null;
+  /** A tile's JSON payload as stored; null for every other kind. */
+  data: string | null;
 }
 
 /**
@@ -161,7 +178,7 @@ export function attachmentFromEmbedRow(
       return stripNulls({
         $type: "space.roomy.attachment.image.v0",
         url: row.url,
-        type: row.mime_type,
+        type: row.mime_type ?? "",
         alt: row.alt ?? undefined,
         width: row.width ?? undefined,
         height: row.height ?? undefined,
@@ -172,7 +189,7 @@ export function attachmentFromEmbedRow(
       return stripNulls({
         $type: "space.roomy.attachment.video.v0",
         url: row.url,
-        type: row.mime_type,
+        type: row.mime_type ?? "",
         alt: row.alt ?? undefined,
         width: row.width ?? undefined,
         height: row.height ?? undefined,
@@ -184,7 +201,7 @@ export function attachmentFromEmbedRow(
       return stripNulls({
         $type: "space.roomy.attachment.file.v0",
         url: row.url,
-        type: row.mime_type,
+        type: row.mime_type ?? "",
         name: row.name ?? undefined,
         size: row.size ?? undefined,
       }) as AttachmentDto;
@@ -195,6 +212,27 @@ export function attachmentFromEmbedRow(
         url: row.url,
         ...(embed != null ? { embed } : {}),
       };
+    }
+    case "tile": {
+      // The row's `url` is the bare AT-URI (`comp_embed_tile.tile_uri`), not the
+      // `?message=`-suffixed entity key, so it parses as a record address.
+      //
+      // A payload the writer produced is always valid JSON. A row that is not
+      // — written by an older or a wrong writer — loses its payload, not the
+      // attachment: the tile still renders, it just has no data.
+      let data: unknown;
+      if (row.data != null) {
+        try {
+          data = JSON.parse(row.data);
+        } catch {
+          data = undefined;
+        }
+      }
+      return stripNulls({
+        $type: "space.roomy.attachment.tile.v0",
+        url: row.url,
+        data,
+      }) as AttachmentDto;
     }
   }
 }
@@ -659,20 +697,23 @@ export async function selectMessages(
     ? []
     : await db
         .query(
-      // entities.room = messageId for embed entities; UNION across the four
+      // entities.room = messageId for embed entities; UNION across the five
       // embed component tables. comp_embed_link has no media metadata — fall
       // back to nulls and "text/uri-list" mime type. Image/video share
       // width/height/blurhash/size; video adds length; file adds name.
+      // comp_embed_tile is not media at all: its `url` is the bare tile AT-URI
+      // (`tile_uri`, not the suffixed entity key) and its `data` is the payload
+      // column the other branches leave null.
       //
       // `kind` names which table a row came from, so the one list this feeds
       // can tag each entry with the attachment `$type` it came from. The UNION
-      // order (image, video, file, link) is the order both that list and the
-      // derived `media` view carry.
+      // order (image, video, file, link, tile) is the order both that list and
+      // the derived `media` view carry.
       `select e.room as message_id, 'image' as kind, ei.entity as url,
               ei.mime_type as mime_type, ei.alt as alt,
               ei.width as width, ei.height as height,
               ei.blurhash as blurhash, ei.size as size,
-              null as length, null as name
+              null as length, null as name, null as data
          from comp_embed_image ei
          join entities e on e.id = ei.entity
         where e.room in (${idPh})
@@ -681,7 +722,7 @@ export async function selectMessages(
               ev.mime_type as mime_type, ev.alt as alt,
               ev.width as width, ev.height as height,
               ev.blurhash as blurhash, ev.size as size,
-              ev.length as length, null as name
+              ev.length as length, null as name, null as data
          from comp_embed_video ev
          join entities e on e.id = ev.entity
         where e.room in (${idPh})
@@ -690,7 +731,7 @@ export async function selectMessages(
               ef.mime_type as mime_type, null as alt,
               null as width, null as height,
               null as blurhash, ef.size as size,
-              null as length, ef.name as name
+              null as length, ef.name as name, null as data
          from comp_embed_file ef
          join entities e on e.id = ef.entity
         where e.room in (${idPh})
@@ -699,15 +740,24 @@ export async function selectMessages(
               'text/uri-list' as mime_type, null as alt,
               null as width, null as height,
               null as blurhash, null as size,
-              null as length, null as name
+              null as length, null as name, null as data
          from comp_embed_link el
          join entities e on e.id = el.entity
           where e.room in (${idPh})
-            and el.show_preview = 1`,
+            and el.show_preview = 1
+       union all
+       select e.room as message_id, 'tile' as kind, et.tile_uri as url,
+              null as mime_type, null as alt,
+              null as width, null as height,
+              null as blurhash, null as size,
+              null as length, null as name, et.data as data
+         from comp_embed_tile et
+         join entities e on e.id = et.entity
+        where e.room in (${idPh})`,
       )
       // Each UNION branch has its own `where ... in (${idPh})` — bind ids
-      // once per branch (4× total). bun:sqlite has no positional reuse here.
-      .all<EmbedRow>([...liveIds, ...liveIds, ...liveIds, ...liveIds]);
+      // once per branch (5× total). bun:sqlite has no positional reuse here.
+      .all<EmbedRow>([...liveIds, ...liveIds, ...liveIds, ...liveIds, ...liveIds]);
 
   // ── Step 4: assemble ──────────────────────────────────────────────────
   const reactionMap = new Map<string, Map<string, Set<string>>>();

@@ -4,15 +4,23 @@
 **Status:** Milestone A shipped (`7aef4ba2c`, #440) — a standalone tile renders
 from its AT-URI, through a `TileMothership` and an `ATTileLoader` against the
 DASL project's shared loading server, with no loading domain of Roomy's own
-(§8.1, §11.3). Step B0 of Milestone B is in flight: the message DTO becomes one
-`attachments` list (§4.6, §11.1). This is the current plan for Web Tiles in
-Roomy. `docs/plans/web-tiles-roomy-feasibility.md` is the earlier feasibility
-read, kept as a historical record; §0 below states which of its conclusions
-still hold.
-**Next:** Milestone B (§11.1) — the tile attachment, once its step B0 has
-landed: `space.roomy.attachment.tile.v0` carries the tile's AT-URI and a
-payload; the create and edit materialisers write it, the `attachments` list B0
-introduces carries it to the client, and a renderer loads it.
+(§8.1, §11.3). Step B0 shipped (#457): the message DTO is one `attachments`
+list (§4.6, §11.1). Milestone B — the tile attachment — shipped with this
+change: `space.roomy.attachment.tile.v0` carries the tile's AT-URI and payload
+through the closed union, the create and edit materialisers, the unified
+`attachments` read path (room reads, the activity feed, search), and a renderer
+that loads the tile and hands it the payload over the tiles data-passing
+protocol. This is the current plan for Web Tiles in Roomy.
+`docs/plans/web-tiles-roomy-feasibility.md` is the earlier feasibility read,
+kept as a historical record; §0 below states which of its conclusions still
+hold.
+**Next:** feature 1's resolution path (§11.2): AT-URI recognition → manifest
+resolution in the appserver → a tile entry in the unified `attachments`
+projection, so a Bluesky post that carries a tile address renders as a tile
+rather than a link. Milestone B's payload delivery is complete in the
+host→tile direction (an attachment's `data` reaches the loaded tile); the
+tile→host direction (`tiles-protocol-up-data-payload`) has no reader and is not
+part of B.
 **Scope of the funded stint:** two weeks, two features (§5, §6), plus a
 30-day engagement write-up (§10).
 **Verified against:** `origin/next` @ `4276631e`.
@@ -1429,6 +1437,35 @@ blobs the tile fetches through its own manifest — which milestone A already
 proves works, and which costs the event log nothing. Worth an explicit bound in
 the new variant's `.describe()` plus an appserver-side rejection, rather than
 discovering the problem at scale. This is item 12 in §13.
+
+**As shipped.** The variant is `space.roomy.attachment.tile.v0`
+(`{ uri, data? }`), added to the closed `Attachment` union. Its rows are
+`comp_embed_tile` (`entity` = `<tile AT-URI>?message=<messageId>`, `tile_uri` =
+the bare AT-URI, `data` = the payload as JSON text, or NULL). The bare URI
+matters: the projection's `url` for a tile goes straight into
+`parseTileAddress()`, which rejects a query suffix, so the entity key's
+`?message=` must not leak into it. The read path's embed UNION carries a fifth
+branch, in both `selectMessages.ts` and the activity feed's copy of it, and a
+tile contributes to neither the derived `media` nor `linkEmbeds`.
+
+On the edit path, the shared `attachmentStatements` expansion covers the create
+and the replace branch; the two wholesale-replace cleanups
+(`materialization/records/messageRules.ts` and `schema/events/message.ts`) delete
+`comp_embed_tile` alongside the other kinds, so a tile does not survive a
+replacement; and the link-only preview toggle is not entered by an edit that
+carries a tile, so a link-only edit leaves one in place.
+
+**Delivering the payload.** `@dasl/tile-loader@2.0.0` has no high-level data
+send, but the shuttle it loads forwards `tiles-protocol-down-*` actions to the
+tile's frame (after the frame has loaded), so
+`registerShuttleFrame` → `startShuttle` → `sendToShuttle(id,
+"tiles-protocol-down-data-payload", data)` is the whole path. The loader's own
+`renderCard`/`renderContent` pair cannot be used for a data-carrying tile:
+`renderContent`'s frame is registered under a shuttle id it does not expose, so
+the card and frame are built by `TileEmbed` from the manifest for that case,
+and the payload is sent on the tile's `load` event (the loader's host-side
+signal that the worker is ready). Tile→host (`tiles-protocol-up-data-payload`)
+is unread, and out of scope.
 
 **What this does not change.** The tile still receives its payload over
 `tp-data` (§7.1): the attachment is the *transport* into Roomy's own data model,

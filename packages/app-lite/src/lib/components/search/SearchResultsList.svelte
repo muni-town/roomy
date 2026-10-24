@@ -19,8 +19,9 @@
   import ForwardContext from "@roomy/design/components/content/thread/message/ForwardContext.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
   import MediaEmbed from "@roomy/design/components/content/thread/message/embeds/MediaEmbed.svelte";
-  import { linkItems, mediaItems } from "../chat/attachment-views";
+  import { linkItems, mediaItems, tileItems } from "../chat/attachment-views";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
+  import TileEmbed from "@roomy/design/components/content/thread/message/tiles/TileEmbed.svelte";
   import { messageContentToPlaintext } from "../chat/messagePreview";
   import { messageHasVisibleContent } from "@roomy/design/utils";
   import {
@@ -473,6 +474,17 @@
                       {@const media = mediaItems((isForward ? original?.attachments : m.attachments) ?? [])}
                       {#if media.length > 0}
                         <MediaEmbed {media} />
+                      {/if}
+                    {/snippet}
+
+                    {#snippet tiles()}
+                      {@const tiles = tileItems((isForward ? original?.attachments : m.attachments) ?? [])}
+                      {#if tiles.length > 0}
+                        <div class="flex flex-col">
+                          {#each tiles as tile (tile.url)}
+                            <TileEmbed uri={tile.url} data={tile.data} />
+                          {/each}
+                        </div>
                       {/if}
                     {/snippet}
 

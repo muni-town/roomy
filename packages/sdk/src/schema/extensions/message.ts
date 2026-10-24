@@ -90,6 +90,26 @@ export const Forward = type({
   "Marks the message as a forward of the target message, rendered as an embed.",
 );
 
+/**
+ * A Web Tile attached to the message.
+ *
+ * The tile is an `ing.dasl.masl` record, so its only address is that record's
+ * AT-URI. `data` is the JSON the tile is handed once loaded, over the tiles
+ * data-passing protocol; it is the message author's, not the tile's, and the
+ * tile has no other channel to the host.
+ *
+ * There is no `title`: the tile's own manifest names it.
+ */
+export const TileAttachment = type({
+  $type: "'space.roomy.attachment.tile.v0'",
+  uri: type.string.describe(
+    "AT-URI of the Web Tile: at://<did:plc:…>/ing.dasl.masl/<rkey>.",
+  ),
+  "data?": type("unknown").describe(
+    "Arbitrary JSON handed to the tile through the data-passing protocol.",
+  ),
+}).describe("A Web Tile attached to the message, with the data it renders.");
+
 export const DiscordMessageOrigin = type({
   $type: "'space.roomy.extension.discordMessageOrigin.v0'",
   snowflake: DiscordSnowflake.describe("The Discord message snowflake ID."),
@@ -126,6 +146,7 @@ export const Attachment = type.or(
   FileAttachment,
   LinkAttachment,
   Forward,
+  TileAttachment,
 );
 export type Attachment = typeof Attachment.infer;
 

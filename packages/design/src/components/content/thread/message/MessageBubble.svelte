@@ -55,6 +55,7 @@
     content,
     media,
     linkEmbeds,
+    tiles,
     forwardEmbed,
     toolbar,
     reactions,
@@ -127,6 +128,8 @@
     content?: Snippet;
     media?: Snippet;
     linkEmbeds?: Snippet;
+    /** Renders Web Tile attachments, below the body and its media. */
+    tiles?: Snippet;
     /** Renders a forward embed (a quoted copy of the original message). */
     forwardEmbed?: Snippet;
     toolbar?: Snippet;
@@ -500,6 +503,11 @@
         <!-- Media -->
         {#if media}
           {@render media()}
+        {/if}
+
+        <!-- Web Tile attachments -->
+        {#if tiles}
+          {@render tiles()}
         {/if}
       {/if}
     </div>

@@ -187,6 +187,27 @@
         }
       }
     },
+    "attachmentTile": {
+      "type": "object",
+      "required": [
+        "$type",
+        "url"
+      ],
+      "properties": {
+        "$type": {
+          "type": "string",
+          "knownValues": [
+            "space.roomy.attachment.tile.v0"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "data": {
+          "type": "unknown"
+        }
+      }
+    },
     "attachmentVideo": {
       "type": "object",
       "required": [
@@ -344,6 +365,7 @@
               "#attachmentImage",
               "#attachmentLink",
               "#attachmentReply",
+              "#attachmentTile",
               "#attachmentVideo"
             ]
           }
@@ -486,6 +508,7 @@
               "#attachmentImage",
               "#attachmentLink",
               "#attachmentReply",
+              "#attachmentTile",
               "#attachmentVideo"
             ]
           }

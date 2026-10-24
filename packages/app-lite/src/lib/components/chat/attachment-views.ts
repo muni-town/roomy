@@ -8,9 +8,10 @@
  * attachment kind gets one arm here, in one switch, instead of a new field on
  * the message DTO and a new branch at every call site.
  *
- * The two functions return the shapes the existing renderers already take —
- * `MediaEmbed`'s list and `LinkCard`'s per-entry fields — so the split between
- * `media` and `linkEmbeds` lives here, once, rather than in each template.
+ * The functions return the shapes the existing renderers already take —
+ * `MediaEmbed`'s list, `LinkCard`'s per-entry fields, and `TileEmbed`'s
+ * `{ url, data }` — so the split between `media`, `linkEmbeds` and tiles lives
+ * here, once, rather than in each template.
  *
  * The MIME-type filter the media renderer used to do is not reproduced: it
  * existed because a link reached `media` as a `text/uri-list` row and would
@@ -35,6 +36,14 @@ export type MediaItem = {
 export type LinkItem = {
   url: string;
   embed?: LinkEmbedData;
+};
+
+/** An entry `TileEmbed` renders: the tile's address and the data it is handed. */
+export type TileItem = {
+  /** The tile's bare AT-URI. */
+  url: string;
+  /** The JSON handed to the tile on load; absent when the attachment carried none. */
+  data?: unknown;
 };
 
 /**
@@ -71,6 +80,19 @@ export function linkItems(attachments: readonly Attachment[]): LinkItem[] {
     out.push({
       url: a.url,
       ...(a.embed != null ? { embed: a.embed as LinkEmbedData } : {}),
+    });
+  }
+  return out;
+}
+
+/** The Web Tile entries of an attachment list, in the order the message carries them. */
+export function tileItems(attachments: readonly Attachment[]): TileItem[] {
+  const out: TileItem[] = [];
+  for (const a of attachments) {
+    if (a.$type !== "space.roomy.attachment.tile.v0") continue;
+    out.push({
+      url: a.url,
+      ...(a.data !== undefined ? { data: a.data } : {}),
     });
   }
   return out;

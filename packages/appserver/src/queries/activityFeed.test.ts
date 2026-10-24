@@ -35,6 +35,9 @@ const THREAD_A = "01THREADA00000000000000000".slice(0, 26);
 const THREAD_B = "01THREADB00000000000000000".slice(0, 26);
 const THREAD_C = "01THREADC00000000000000000".slice(0, 26);
 
+/** A tile attachment's record address. */
+const TILE_URI = "at://did:plc:ti1e0wner0000000000000/ing.dasl.masl/3kabc";
+
 let msgCounter = 0;
 
 /**
@@ -260,6 +263,46 @@ describe("selectActivityFeed", () => {
       expect(feed[0]!.messages[0]!.author.did).toBe(USER);
       expect(feed[0]!.lastActivityAt).toBe(new Date(ts).toISOString());
       expect(cursor).toBeNull();
+    });
+
+    test("the latest message carries its tile attachment", async () => {
+      const { readState } = setup();
+      await seedSpace(SPACE);
+      await seedUser(SPACE, USER);
+      await seedJoinedSpace(USER, SPACE);
+      await seedRoom(SPACE, CHANNEL, "space.roomy.channel", "general");
+
+      const ts = 1_717_536_000_000;
+      const msgId = await postMessage(SPACE, CHANNEL, USER, ts);
+      // The entity key carries the message suffix; `tile_uri` is the bare
+      // address the client's parser accepts.
+      const db = openSpaceDb(SPACE);
+      const scoped = `${TILE_URI}?message=${msgId}`;
+      await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+        scoped,
+        SPACE,
+        msgId,
+      ]);
+      await db.run(
+        "insert into comp_embed_tile (entity, tile_uri, data) values (?, ?, ?)",
+        [scoped, TILE_URI, JSON.stringify({ rows: [1] })],
+      );
+      await seedActivityItem(SPACE, CHANNEL, 0, ts, [msgId], "general", "Test Space");
+
+      const { feed } = await selectActivityFeed(readState, USER, {
+        limit: 50,
+        cursor: null,
+      });
+
+      // The feed duplicates the message read path's embed UNION, so a kind
+      // missing there would preview in a room but not on the feed.
+      expect(feed[0]!.messages[0]!.attachments).toEqual([
+        {
+          $type: "space.roomy.attachment.tile.v0",
+          url: TILE_URI,
+          data: { rows: [1] },
+        },
+      ]);
     });
 
     test("includes parent channel info for thread items", async () => {

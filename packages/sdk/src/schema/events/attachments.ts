@@ -67,6 +67,11 @@ export type AttachmentInput =
       $type: "space.roomy.attachment.forward.v0";
       target: string;
       fromRoomId: string;
+    }
+  | {
+      $type: "space.roomy.attachment.tile.v0";
+      uri: string;
+      data?: unknown;
     };
 
 /**
@@ -182,6 +187,26 @@ export function attachmentStatements(
             ${uriWithUlidQuery},
             ${att.showPreview ? 1 : 0}
           )
+        `,
+        );
+        break;
+      }
+
+      case "space.roomy.attachment.tile.v0": {
+        // The entity key carries the message suffix like every other embed
+        // row's, but `tile_uri` holds the bare address: the read path hands
+        // that straight to the client, and a tile address is a record address
+        // — a `?message=` query makes it one that no longer parses.
+        const uriWithUlidQuery = att.uri + "?message=" + messageId;
+        statements.push(
+          ensureEntity(streamId, uriWithUlidQuery, messageId),
+          sql`
+            insert or replace into comp_embed_tile (entity, tile_uri, data)
+            values (
+              ${uriWithUlidQuery},
+              ${att.uri},
+              ${att.data === undefined ? null : JSON.stringify(att.data)}
+            )
         `,
         );
         break;

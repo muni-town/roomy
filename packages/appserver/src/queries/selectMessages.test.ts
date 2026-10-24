@@ -1077,11 +1077,15 @@ describe("selectMessages attachments", () => {
   const VIDEO_URL = "01VIDEO0000000000000000000";
   const FILE_URL = "01FILE00000000000000000000";
   const LINK_URL = "https://example.com/article";
+  /** A tile attachment's entity key carries the message suffix, `tile_uri` does not. */
+  const TILE_URL =
+    "at://did:plc:ti1e0wner0000000000000/ing.dasl.masl/3kabc";
+  const TILE_DATA = { rows: [1, 2], title: "a tile" };
 
   /**
    * Seed one message carrying a reply edge and one embed row of every kind
-   * (image, video, file, link), with the link enriched in the global store.
-   * Returns the message id.
+   * (image, video, file, link, tile), with the link enriched in the global
+   * store. Returns the message id.
    */
   async function seedAllKinds(
     db: DbLike,
@@ -1157,6 +1161,16 @@ describe("selectMessages attachments", () => {
       JSON.stringify({ t: "A title" }),
       1,
     );
+    // A tile is keyed like the other embed rows but stores the bare address,
+    // which is the only form its loader parses.
+    const scopedTile = `${TILE_URL}?message=${id}`;
+    await embed(scopedTile, () =>
+      db.run("insert into comp_embed_tile (entity, tile_uri, data) values (?, ?, ?)", [
+        scopedTile,
+        TILE_URL,
+        JSON.stringify(TILE_DATA),
+      ]),
+    );
     return id;
   }
 
@@ -1195,13 +1209,14 @@ describe("selectMessages attachments", () => {
 
     // The reply and forward edges are addressed by id, not by url, so they
     // lead the list; the embed rows follow in the query's kind order
-    // (image, video, file, link).
+    // (image, video, file, link, tile).
     expect(m.attachments.map((a) => a.$type)).toEqual([
       "space.roomy.attachment.reply.v0",
       "space.roomy.attachment.image.v0",
       "space.roomy.attachment.video.v0",
       "space.roomy.attachment.file.v0",
       "space.roomy.attachment.link.v0",
+      "space.roomy.attachment.tile.v0",
     ]);
 
     // Each entry carries what its renderer needs — this is what a renderer
@@ -1239,6 +1254,14 @@ describe("selectMessages attachments", () => {
       url: LINK_URL,
       embed: { t: "A title" },
     });
+    // A tile's `url` is the bare record address (the entity key's
+    // `?message=` suffix would make it unparseable as a tile), and its payload
+    // arrives parsed.
+    expect(m.attachments[5]).toEqual({
+      $type: "space.roomy.attachment.tile.v0",
+      url: TILE_URL,
+      data: TILE_DATA,
+    });
     expect(m.attachments[0]).toEqual({
       $type: "space.roomy.attachment.reply.v0",
       messageId: parentId,
@@ -1246,7 +1269,9 @@ describe("selectMessages attachments", () => {
 
     // The derived views are what the per-kind fields held before the list
     // existed: a link reaches `media` as a `text/uri-list` row (the media
-    // renderers filter it out by MIME type) as well as `linkEmbeds`.
+    // renderers filter it out by MIME type) as well as `linkEmbeds`. A tile is
+    // neither — it is rendered from its own record, so it appears in the list
+    // and in neither view.
     expect(m.media).toEqual([
       { url: IMAGE_URL, type: "image/png", alt: "a picture", width: 10, height: 20, blurhash: "LKO2x", size: 42 },
       { url: VIDEO_URL, type: "video/mp4", alt: "a clip", width: 640, height: 480, blurhash: "LKO2", size: 999, length: 30 },
@@ -1302,6 +1327,55 @@ describe("selectMessages attachments", () => {
     expect(m.attachments).toEqual([]);
     expect(m.media).toEqual([]);
     expect(m.linkEmbeds).toEqual([]);
+  });
+
+  test("a tile whose stored payload is not JSON keeps the attachment and drops the payload", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const id = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      id,
+      STREAM,
+      roomId,
+      "01",
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      id,
+      AUTHOR,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [id, Buffer.from("body"), id, 1_700_000_000_000],
+    );
+    const scopedTile = `${TILE_URL}?message=${id}`;
+    await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      scopedTile,
+      STREAM,
+      id,
+    ]);
+    // The writer can only produce valid JSON; a row like this one is what a
+    // future or wrong writer would leave. A read must not fail on it.
+    await db.run("insert into comp_embed_tile (entity, tile_uri, data) values (?, ?, ?)", [
+      scopedTile,
+      TILE_URL,
+      "{not json",
+    ]);
+
+    const { messages } = await selectMessages(db, {
+      kind: "room",
+      roomId,
+      limit: 10,
+      cursor: null,
+    });
+    const m = messages.find((x) => x.id === id)!;
+
+    expect(m.attachments).toEqual([
+      { $type: "space.roomy.attachment.tile.v0", url: TILE_URL },
+    ]);
   });
 
   test("a forward carries the original as an attachment, and the derived forward view is that entry", async () => {

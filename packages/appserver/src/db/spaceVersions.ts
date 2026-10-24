@@ -86,9 +86,14 @@ export const SPACE_MIGRATIONS = {
   // schema-space.sql, which is exec'd on every open, so existing space DBs
   // gain it with no `up` and no data task.
   "6": { kind: "structural" },
+  // `comp_embed_tile` records a Web Tile attachment: the tile's AT-URI and the
+  // JSON payload it renders. Like v6 it is a pure `create table if not
+  // exists` in schema-space.sql, exec'd on every open, so existing space DBs
+  // gain it with no `up` and no data task.
+  "7": { kind: "structural" },
   // Next per-space schema change goes here, e.g.:
-  //   "7": { kind: "structural", up(db) { /* alter table … */ } },
-  //   "7": { kind: "data" },          // plus a task in SPACE_MIGRATION_TASKS
+  //   "8": { kind: "structural", up(db) { /* alter table … */ } },
+  //   "8": { kind: "data" },          // plus a task in SPACE_MIGRATION_TASKS
 } as const satisfies Record<string, SpaceMigrationEntry>;
 
 /**
