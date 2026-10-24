@@ -315,6 +315,9 @@ pub struct EncryptedContent {
 pub enum CryptoError {
     #[error("crypto store error: {0}")]
     Store(String),
+    /// The homeserver call that carries keys failed.
+    #[error(transparent)]
+    Transport(#[from] crate::transport::TransportError),
     #[error("no Megolm session for this room yet")]
     SessionNotShared,
     #[error("could not encrypt: {0}")]
@@ -327,26 +330,27 @@ pub enum CryptoError {
 ///
 /// `matrix-sdk-crypto` is sans-io: it emits `OutgoingRequest`s and needs each
 /// one's server response fed back through `mark_request_as_sent`. This type is
-/// that transport. Without it a bridge still creates Megolm sessions, but the
-/// keys they need are never uploaded or shared, so every message it encrypts is
+/// that pump. Without it a bridge still creates Megolm sessions, but the keys
+/// they need are never uploaded or shared, so every message it encrypts is
 /// undecryptable by the room — and the failure is silent, which is why the pump
 /// belongs on the send path rather than behind an option.
 ///
 /// Each request is sent as the JSON the crypto crate itself serialises, and each
-/// response is parsed with ruma's `IncomingResponseExt`. Building the URL through
-/// ruma's `OutgoingRequestExt` is not used here: it needs the homeserver's
-/// supported-version set up front and refuses the request when an endpoint's
-/// version is not advertised, which turns a version disagreement into a bridge
-/// that never shares a key. The paths below are the stable `/v3` client API.
+/// response is read back by the transport with ruma's `IncomingResponseExt`.
+/// Building the URL through ruma's `OutgoingRequestExt` is not used here: it
+/// needs the homeserver's supported-version set up front and refuses the request
+/// when an endpoint's version is not advertised, which turns a version
+/// disagreement into a bridge that never shares a key. The paths are the stable
+/// `/v3` client API.
 pub struct CryptoTransport {
-    client: crate::appservice::HomeserverClient,
+    client: crate::transport::HomeserverClient,
     user_id: OwnedUserId,
     device_id: OwnedDeviceId,
 }
 
 impl CryptoTransport {
     pub fn new(
-        client: crate::appservice::HomeserverClient,
+        client: crate::transport::HomeserverClient,
         user_id: &ruma::UserId,
         device_id: &DeviceId,
     ) -> Self {
@@ -375,60 +379,37 @@ impl CryptoTransport {
                     // The keys go out exactly as the crypto machine holds them:
                     // the `Raw` wrappers serialise to the bytes the homeserver
                     // verifies signatures over, so they must not be re-encoded.
-                    // `user_id` is not optional here: an appservice that names
-                    // only a device makes Synapse resolve the device for the
-                    // wrong user and answer 500. Naming both is the form the
-                    // client API documents for appservice device auth.
-                    let url = format!(
-                        "{}/_matrix/client/v3/keys/upload?user_id={}&device_id={}",
-                        self.client.base_url(),
-                        percent_encode(self.user_id.as_str()),
-                        percent_encode(self.device_id.as_str())
-                    );
                     let payload = serde_json::json!({
                         "device_keys": body.device_keys,
                         "one_time_keys": body.one_time_keys,
                         "fallback_keys": body.fallback_keys,
                     });
                     match self
-                        .post_value::<ruma::api::client::keys::upload_keys::v3::Response>(
-                            &url, &payload,
-                        )
+                        .client
+                        .upload_keys(self.user_id.as_str(), self.device_id.as_str(), &payload)
                         .await
                     {
                         Ok(response) => machine.mark_request_as_sent(&request_id, &response).await,
-                        Err(error) => Err(error),
+                        Err(error) => Err(error.into()),
                     }
                 }
                 AnyOutgoingRequest::KeysQuery(body) => {
-                    let url = format!("{}/_matrix/client/v3/keys/query", self.client.base_url());
                     // The crypto crate's query type carries a `Duration`
                     // timeout; the wire format expresses it in milliseconds.
                     let payload = serde_json::json!({
                         "timeout": body.timeout.map(|timeout| timeout.as_millis() as u64),
                         "device_keys": body.device_keys,
                     });
-                    match self
-                        .post_value::<ruma::api::client::keys::get_keys::v3::Response>(
-                            &url, &payload,
-                        )
-                        .await
-                    {
+                    match self.client.query_keys(&payload).await {
                         Ok(response) => machine.mark_request_as_sent(&request_id, &response).await,
-                        Err(error) => Err(error),
+                        Err(error) => Err(error.into()),
                     }
                 }
                 AnyOutgoingRequest::KeysClaim(body) => {
-                    let url = format!("{}/_matrix/client/v3/keys/claim", self.client.base_url());
                     let payload = serde_json::json!({ "one_time_keys": body.one_time_keys });
-                    match self
-                        .post_value::<ruma::api::client::keys::claim_keys::v3::Response>(
-                            &url, &payload,
-                        )
-                        .await
-                    {
+                    match self.client.claim_keys(&payload).await {
                         Ok(response) => machine.mark_request_as_sent(&request_id, &response).await,
-                        Err(error) => Err(error),
+                        Err(error) => Err(error.into()),
                     }
                 }
                 AnyOutgoingRequest::ToDeviceRequest(body) => {
@@ -442,25 +423,17 @@ impl CryptoTransport {
                         .ok_or_else(|| {
                             CryptoError::Decode("to-device request has no event type".into())
                         })?;
-                    let url = format!(
-                        "{}/_matrix/client/v3/sendToDevice/{}/{}",
-                        self.client.base_url(),
-                        percent_encode(event_type),
-                        percent_encode(body.txn_id.as_str())
-                    );
-                    let payload = serde_json::json!({ "messages": encoded.get("messages") });
+                    let messages = encoded
+                        .get("messages")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
                     match self
-                        .put_value::<ruma::api::client::to_device::send_event_to_device::v3::Response>(
-                            &url, &payload,
-                        )
+                        .client
+                        .send_to_device(event_type, body.txn_id.as_str(), &messages)
                         .await
                     {
-                        Ok(response) => {
-                            machine
-                                .mark_request_as_sent(&request_id, &response)
-                                .await
-                        }
-                        Err(error) => Err(error),
+                        Ok(response) => machine.mark_request_as_sent(&request_id, &response).await,
+                        Err(error) => Err(error.into()),
                     }
                 }
                 // Cross-signing and in-room verification traffic needs a human
@@ -485,67 +458,138 @@ impl CryptoTransport {
 
         Ok(sent)
     }
-
-    async fn post_value<T>(&self, url: &str, body: &Value) -> Result<T, CryptoError>
-    where
-        T: ruma::api::IncomingResponseExt,
-    {
-        self.send(reqwest::Method::POST, url, body).await
-    }
-
-    async fn put_value<T>(&self, url: &str, body: &Value) -> Result<T, CryptoError>
-    where
-        T: ruma::api::IncomingResponseExt,
-    {
-        self.send(reqwest::Method::PUT, url, body).await
-    }
-
-    async fn send<T>(
-        &self,
-        method: reqwest::Method,
-        url: &str,
-        body: &Value,
-    ) -> Result<T, CryptoError>
-    where
-        T: ruma::api::IncomingResponseExt,
-    {
-        let response = self
-            .client
-            .request(method, url)
-            .json(body)
-            .send()
-            .await
-            .map_err(|error| CryptoError::Store(format!("{url}: {error}")))?;
-
-        let status = response.status();
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|error| CryptoError::Store(format!("{url}: {error}")))?;
-
-        let http_response = ruma::exports::http::Response::builder()
-            .status(status.as_u16())
-            .body(bytes.as_ref())
-            .map_err(|error| CryptoError::Store(format!("{url}: {error}")))?;
-
-        T::try_from_http_response(http_response)
-            .map_err(|error| CryptoError::Store(format!("{url}: {error:?}")))
-    }
 }
 
 fn decode_error(error: serde_json::Error) -> CryptoError {
     CryptoError::Decode(error.to_string())
 }
 
-fn percent_encode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            other => out.push_str(&format!("%{other:02X}")),
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    use crate::transport::{fake_client, Body, FakeHomeserver, FakeResponse, Method};
+
+    #[tokio::test]
+    async fn the_crypto_wire_goes_through_the_transport() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Post,
+            "/_matrix/client/v3/keys/upload",
+            FakeResponse::ok(json!({ "one_time_key_counts": { "signed_curve25519": 3 } })),
+        );
+        fake.route(
+            Method::Post,
+            "/_matrix/client/v3/keys/query",
+            FakeResponse::ok(json!({ "device_keys": {}, "failures": {} })),
+        );
+        fake.route(
+            Method::Put,
+            "/_matrix/client/v3/sendToDevice/m.room_key/",
+            FakeResponse::ok(json!({})),
+        );
+
+        let client = fake_client(&fake);
+
+        // The upload names both the user and the device: an appservice that
+        // names only a device resolves it for the wrong user.
+        let uploaded = client
+            .upload_keys(
+                "@_roomy_bridge:hs.test",
+                "DEVICE",
+                &json!({ "device_keys": { "user_id": "@_roomy_bridge:hs.test" } }),
+            )
+            .await
+            .expect("the fake accepts the upload");
+        assert_eq!(uploaded.one_time_key_counts.len(), 1);
+
+        client
+            .query_keys(&json!({ "device_keys": {} }))
+            .await
+            .expect("the fake answers the query");
+        client
+            .send_to_device("m.room_key", "txn-1", &json!({ "@alice:hs.test": {} }))
+            .await
+            .expect("the fake accepts the to-device message");
+
+        let requests = fake.requests();
+        assert_eq!(
+            requests[0].url,
+            "http://hs.test/_matrix/client/v3/keys/upload?user_id=%40_roomy_bridge%3Ahs.test&device_id=DEVICE"
+        );
+        assert_eq!(
+            requests[2].url,
+            "http://hs.test/_matrix/client/v3/sendToDevice/m.room_key/txn-1"
+        );
+        assert_eq!(
+            requests[2].body,
+            Body::Json(json!({ "messages": { "@alice:hs.test": {} } })),
+            "the transport wraps the messages in the body the endpoint takes"
+        );
+        assert_eq!(requests[0].token.as_deref(), Some("as-secret"));
     }
-    out
+
+    #[tokio::test]
+    async fn a_refused_key_upload_is_a_refusal_carrying_its_status() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Post,
+            "/_matrix/client/v3/keys/upload",
+            FakeResponse::refusing(400, "M_UNKNOWN_DEVICE"),
+        );
+
+        let error = fake_client(&fake)
+            .upload_keys("@_roomy_bridge:hs.test", "DEVICE", &json!({}))
+            .await
+            .expect_err("the fake refuses the upload");
+
+        assert_eq!(error.status(), Some(400));
+        assert!(error.is_permanent());
+    }
+
+    #[tokio::test]
+    async fn the_pump_sends_the_device_key_upload_the_machine_asks_for() {
+        use ruma::OwnedUserId;
+
+        let user = OwnedUserId::try_from("@_roomy_bridge:hs.test").expect("a user id");
+        let device = DeviceId::new();
+        let store_path =
+            std::env::temp_dir().join(format!("roomy-crypto-test-{}", ulid::Ulid::generate()));
+        let machine = CryptoMachine::open(&user, &device, &store_path)
+            .await
+            .expect("a crypto store opens offline");
+
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Post,
+            "/_matrix/client/v3/keys/upload",
+            FakeResponse::ok(json!({ "one_time_key_counts": {} })),
+        );
+
+        let transport =
+            CryptoTransport::new(fake_client(&fake), machine.user_id(), machine.device_id());
+        let sent = transport.pump(&machine).await.expect("the pump runs");
+
+        assert!(sent >= 1, "a fresh device asks for a key upload");
+
+        let upload = fake
+            .requests()
+            .into_iter()
+            .find(|request| request.url.contains("/_matrix/client/v3/keys/upload"))
+            .expect("the pump sent the upload the machine asked for");
+        assert!(upload.url.contains("user_id=%40_roomy_bridge%3Ahs.test"));
+        assert!(upload
+            .url
+            .contains(&format!("device_id={}", machine.device_id())));
+        let Body::Json(body) = upload.body else {
+            panic!("a key upload carries JSON");
+        };
+        assert!(
+            body.get("device_keys").is_some(),
+            "the machine's own device keys went out, not a re-encoding of them"
+        );
+
+        let _ = std::fs::remove_dir_all(&store_path);
+    }
 }

@@ -1,4 +1,4 @@
-//! Sending to Matrix, and reading a room's history.
+//! Sending to Matrix.
 //!
 //! Two things make sending non-obvious:
 //!
@@ -14,12 +14,11 @@ use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
 
-use bridge_core::BackfillCursor;
 use parking_lot::Mutex;
 
 use serde_json::{json, Value};
 
-use crate::appservice::{HomeserverClient, HomeserverError};
+use crate::transport::{HomeserverClient, TransportError};
 
 /// A content object plus how it must be sent.
 #[derive(Debug, Clone, PartialEq)]
@@ -130,189 +129,17 @@ impl MatrixSendError {
     }
 }
 
-impl From<HomeserverError> for MatrixSendError {
-    fn from(error: HomeserverError) -> Self {
-        match &error {
-            // A 4xx names the event as the problem. 429 is the exception: the
-            // homeserver is asking for a later attempt, not refusing the event.
-            HomeserverError::Rejected { status, .. }
-                if (400..500).contains(status) && *status != 429 =>
-            {
-                MatrixSendError::Rejected(error.to_string())
-            }
-            _ => MatrixSendError::Transient(error.to_string()),
+/// The transport's verdict decides: a refusal names the request as the problem
+/// and a repeat would earn the same answer, while an unreachable homeserver or
+/// an unreadable answer is worth another attempt.
+impl From<TransportError> for MatrixSendError {
+    fn from(error: TransportError) -> Self {
+        let message = error.to_string();
+        if error.is_permanent() {
+            MatrixSendError::Rejected(message)
+        } else {
+            MatrixSendError::Transient(message)
         }
-    }
-}
-
-/// The URL a send goes to.
-///
-/// A redaction is its own endpoint: `PUT /rooms/{room}/redact/{event}`. Posting
-/// it through `/send/m.room.redaction/` is refused with `M_UNRECOGNIZED`, so
-/// routing it as an ordinary event type silently breaks every delete.
-fn send_url(
-    base_url: &str,
-    room_id: &str,
-    as_user: Option<&str>,
-    content: &OutgoingContent,
-    txn_id: &str,
-) -> Result<String, HomeserverError> {
-    let mut url = match content.event_type.as_str() {
-        "m.room.redaction" => {
-            let target = content
-                .content
-                .get("redacts")
-                .and_then(|value| value.as_str())
-                .ok_or_else(|| HomeserverError::Rejected {
-                    url: format!("m.room.redaction for room {room_id}"),
-                    status: 0,
-                    body: "a redaction names no event".to_string(),
-                })?;
-            format!(
-                "{}/_matrix/client/v3/rooms/{}/redact/{}/{}",
-                base_url,
-                percent_encode(room_id),
-                percent_encode(target),
-                percent_encode(txn_id)
-            )
-        }
-        event_type => format!(
-            "{}/_matrix/client/v3/rooms/{}/send/{}/{}",
-            base_url,
-            percent_encode(room_id),
-            percent_encode(event_type),
-            percent_encode(txn_id)
-        ),
-    };
-    if let Some(user) = as_user {
-        url.push_str(&format!("?user_id={}", percent_encode(user)));
-    }
-    Ok(url)
-}
-
-impl HomeserverClient {
-    /// Send one event into a room, optionally as a ghost user.
-    ///
-    /// `txn_id` makes the send idempotent: the homeserver deduplicates on
-    /// `(user, txn_id)`, so a retried send does not post a duplicate message.
-    pub async fn send_event(
-        &self,
-        room_id: &str,
-        as_user: Option<&str>,
-        event_type: &str,
-        content: &Value,
-        txn_id: &str,
-    ) -> Result<String, HomeserverError> {
-        let url = send_url(
-            self.base_url(),
-            room_id,
-            as_user,
-            &OutgoingContent {
-                event_type: event_type.to_string(),
-                content: content.clone(),
-            },
-            txn_id,
-        )?;
-
-        #[derive(serde::Deserialize)]
-        struct Sent {
-            #[serde(rename = "event_id")]
-            event_id: String,
-        }
-        // Both endpoints are `PUT`: `POST /send/…` answers `M_UNRECOGNIZED`,
-        // which is what an outbound message looked like before this was right.
-        self.put_json::<Sent>(&url, content)
-            .await
-            .map(|sent| sent.event_id)
-    }
-
-    /// Fetch a page of a room's history, newest first.
-    ///
-    /// `/messages` walks backwards from `from`, which is what a backfill wants:
-    /// the recent window is the first page, and each subsequent page is older.
-    /// Returns the page's events and the token for the next, older page — `None`
-    /// when the start of the room has been reached.
-    pub async fn backfill(
-        &self,
-        room_id: &str,
-        from: Option<&BackfillCursor>,
-        limit: u32,
-    ) -> Result<(Vec<Value>, Option<BackfillCursor>), HomeserverError> {
-        let mut url = format!(
-            "{}/_matrix/client/v3/rooms/{}/messages?dir=b&limit={}",
-            self.base_url(),
-            percent_encode(room_id),
-            limit
-        );
-        match from {
-            Some(token) => url.push_str(&format!("&from={}", percent_encode(token.as_str()))),
-            // With no token the homeserver starts at the room's live edge,
-            // which is the correct place for the first page of a recent window.
-            None => url.push_str("&from="),
-        }
-
-        #[derive(serde::Deserialize)]
-        struct Page {
-            #[serde(default)]
-            chunk: Vec<Value>,
-            #[serde(default)]
-            end: Option<String>,
-        }
-        let page = self.get_json::<Page>(&url).await?;
-
-        // `/messages` answers in reverse-chronological order. Roomy's history
-        // has to be written oldest-first or the backfilled messages land in the
-        // wrong order within the batch.
-        let mut events = page.chunk;
-        events.reverse();
-        // An unreadable token ends the walk: the next page cannot be addressed,
-        // and pretending the history is complete would silently drop it.
-        let next = page.end.as_deref().and_then(|end| {
-            BackfillCursor::parse(end)
-                .inspect_err(|_| tracing::warn!(token = %end, "unreadable backfill token"))
-                .ok()
-        });
-        Ok((events, next))
-    }
-
-    /// Whether a room is encrypted, from its `m.room.encryption` state event.
-    ///
-    /// Read from the room's state rather than remembered at portal creation: a
-    /// room can be turned on mid-life, and an admin-created portal is not the
-    /// only writer of that event.
-    pub async fn room_encrypted(&self, room_id: &str) -> Result<bool, HomeserverError> {
-        let url = format!(
-            "{}/_matrix/client/v3/rooms/{}/state/m.room.encryption",
-            self.base_url(),
-            percent_encode(room_id)
-        );
-        match self.get_json::<Value>(&url).await {
-            Ok(state) => Ok(state
-                .get("algorithm")
-                .and_then(|algorithm| algorithm.as_str())
-                .is_some()),
-            // A room with no encryption state answers 404, which is "not
-            // encrypted" rather than a failure to find out.
-            Err(HomeserverError::Rejected { .. }) => Ok(false),
-            Err(error) => Err(error),
-        }
-    }
-
-    /// A room's joined members, which the crypto layer needs to share a key.
-    pub async fn joined_members(&self, room_id: &str) -> Result<Vec<String>, HomeserverError> {
-        let url = format!(
-            "{}/_matrix/client/v3/rooms/{}/joined_members",
-            self.base_url(),
-            percent_encode(room_id)
-        );
-        #[derive(serde::Deserialize)]
-        struct Joined {
-            #[serde(default)]
-            joined: std::collections::BTreeMap<String, Value>,
-        }
-        self.get_json::<Joined>(&url)
-            .await
-            .map(|joined| joined.joined.into_keys().collect())
     }
 }
 
@@ -411,20 +238,6 @@ pub fn media_content(body: &str, mxc_uri: &str, mime_type: &str) -> OutgoingCont
     }
 }
 
-/// Percent-encode a path segment.
-fn percent_encode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            other => out.push_str(&format!("%{other:02X}")),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -461,51 +274,6 @@ mod tests {
             content.content["m.relates_to"]["m.in_reply_to"]["event_id"],
             "$root"
         );
-    }
-
-    #[test]
-    fn a_redaction_targets_the_redact_endpoint() {
-        // `/send/m.room.redaction/` answers M_UNRECOGNIZED, which is how every
-        // delete was silently dropped before this was routed correctly.
-        let url = send_url(
-            "http://hs:8008",
-            "!room:example.org",
-            None,
-            &redaction_content("$target", None),
-            "txn",
-        )
-        .expect("the redaction names its target");
-        assert_eq!(
-            url,
-            "http://hs:8008/_matrix/client/v3/rooms/%21room%3Aexample.org/redact/%24target/txn",
-            "a redaction goes to /redact/<event>, not /send/<type>"
-        );
-    }
-
-    #[test]
-    fn an_ordinary_message_targets_the_send_endpoint() {
-        let url = send_url(
-            "http://hs:8008",
-            "!room:example.org",
-            Some("@alice:example.org"),
-            &text_content("hi"),
-            "txn",
-        )
-        .expect("a message needs no target");
-        assert_eq!(
-            url,
-            "http://hs:8008/_matrix/client/v3/rooms/%21room%3Aexample.org/send/m.room.message/txn\
-             ?user_id=%40alice%3Aexample.org"
-        );
-    }
-
-    #[test]
-    fn a_redaction_without_a_target_is_refused() {
-        let broken = OutgoingContent {
-            event_type: "m.room.redaction".into(),
-            content: json!({}),
-        };
-        assert!(send_url("http://hs:8008", "!room:example.org", None, &broken, "txn").is_err());
     }
 
     #[test]

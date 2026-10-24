@@ -352,7 +352,11 @@ async fn serve(config: Config) -> std::process::ExitCode {
             // room's other devices cannot claim a session with this one, and a
             // device the homeserver does not have cannot hold keys at all.
             if let Err(error) = homeserver
-                .ensure_device(machine.user_id().as_str(), machine.device_id().as_str())
+                .ensure_device(
+                    machine.user_id().as_str(),
+                    machine.device_id().as_str(),
+                    "Roomy bridge",
+                )
                 .await
             {
                 tracing::warn!(%error, "could not create the bridge device");

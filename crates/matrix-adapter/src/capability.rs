@@ -33,6 +33,8 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
+use crate::transport::HomeserverClient;
+
 /// The `ephemeral` field names a homeserver may use.
 pub const EPHEMERAL_KEYS: &[&str] = &["ephemeral", "de.sorunome.msc2409.ephemeral"];
 
@@ -289,9 +291,7 @@ impl TransactionObserver {
 
 /// Runs the probe against a live homeserver.
 pub struct CapabilityProbe {
-    http: reqwest::Client,
-    base_url: String,
-    as_token: crate::appservice::AsToken,
+    homeserver: HomeserverClient,
     /// The appservice's own user, whose device the MSC4190 check creates.
     sender_localpart: String,
     domain: String,
@@ -300,16 +300,13 @@ pub struct CapabilityProbe {
 
 impl CapabilityProbe {
     pub fn new(
-        base_url: impl Into<String>,
-        as_token: crate::appservice::AsToken,
+        homeserver: HomeserverClient,
         sender_localpart: impl Into<String>,
         domain: impl Into<String>,
         observer: TransactionObserver,
     ) -> Self {
         Self {
-            http: reqwest::Client::new(),
-            base_url: base_url.into().trim_end_matches('/').to_string(),
-            as_token,
+            homeserver,
             sender_localpart: sender_localpart.into(),
             domain: domain.into(),
             observer,
@@ -318,7 +315,7 @@ impl CapabilityProbe {
 
     /// Measure the homeserver.
     pub async fn run(&self) -> HomeserverCapabilities {
-        let server_version = self.versions().await;
+        let server_version = self.server_version().await;
         let msc4190_devices = self.probe_device_management().await;
         let msc2409_ephemeral = self.probe_ephemeral();
         let msc4203_to_device = self.probe_to_device();
@@ -339,14 +336,11 @@ impl CapabilityProbe {
         }
     }
 
-    async fn versions(&self) -> Option<String> {
-        let url = format!("{}/_matrix/client/versions", self.base_url);
-        let response = self.http.get(&url).send().await.ok()?;
-        if !response.status().is_success() {
-            return None;
-        }
-        let body: serde_json::Value = response.json().await.ok()?;
-        body.get("server_version")
+    /// What the homeserver reports about itself, for the report.
+    async fn server_version(&self) -> Option<String> {
+        let versions = self.homeserver.versions().await.ok()?;
+        versions
+            .get("server_version")
             .and_then(|value| value.as_str())
             .map(str::to_string)
     }
@@ -359,51 +353,22 @@ impl CapabilityProbe {
     async fn probe_device_management(&self) -> MscStatus {
         let user_id = format!("@{}:{}", self.sender_localpart, self.domain);
         let device_id = format!("ROOMYPROBE{}", ulid::Ulid::generate());
-        let url = format!(
-            "{}/_matrix/client/v3/devices/{}?user_id={}",
-            self.base_url, device_id, user_id
-        );
 
-        let response = self
-            .http
-            .put(&url)
-            .bearer_auth(&self.as_token)
-            .json(&serde_json::json!({ "display_name": "roomy bridge capability probe" }))
-            .send()
-            .await;
-
-        let status = match response {
-            Ok(response) => response.status(),
-            Err(error) => {
-                return MscStatus::Fail {
-                    evidence: format!("PUT /devices could not be reached: {error}"),
+        match self
+            .homeserver
+            .ensure_device(&user_id, &device_id, "roomy bridge capability probe")
+            .await
+        {
+            Ok(()) => {
+                // Remove the probe device so repeated runs do not accumulate them.
+                let _ = self.homeserver.delete_device(&user_id, &device_id).await;
+                MscStatus::Pass {
+                    evidence: "PUT /devices answered HTTP 200 and the device was created".into(),
                 }
             }
-        };
-
-        if !status.is_success() {
-            return MscStatus::Fail {
-                evidence: format!(
-                    "PUT /devices answered HTTP {status} — an appservice without MSC4190 \
-                     cannot create devices"
-                ),
-            };
-        }
-
-        // Remove the probe device so repeated runs do not accumulate them.
-        let delete_url = format!(
-            "{}/_matrix/client/v3/devices/{}?user_id={}",
-            self.base_url, device_id, user_id
-        );
-        let _ = self
-            .http
-            .delete(&delete_url)
-            .bearer_auth(&self.as_token)
-            .send()
-            .await;
-
-        MscStatus::Pass {
-            evidence: format!("PUT /devices answered HTTP {status} and the device was created"),
+            Err(error) => MscStatus::Fail {
+                evidence: format!("PUT /devices could not create a device: {error}"),
+            },
         }
     }
 
@@ -506,6 +471,101 @@ pub fn transaction_to_device(body: &serde_json::Value) -> Vec<serde_json::Value>
 mod tests {
     use super::*;
     use serde_json::json;
+
+    use crate::transport::{fake_client, FakeHomeserver, FakeResponse, Method};
+
+    #[tokio::test]
+    async fn the_probe_creates_a_device_as_the_appservice_user_and_removes_it() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Get,
+            "/_matrix/client/versions",
+            FakeResponse::ok(json!({ "server_version": "Synapse/1.99", "versions": [] })),
+        );
+        fake.route(
+            Method::Put,
+            "/_matrix/client/v3/devices/",
+            FakeResponse::ok(json!({})),
+        );
+        fake.route(
+            Method::Delete,
+            "/_matrix/client/v3/devices/",
+            FakeResponse::ok(json!({})),
+        );
+
+        let capabilities = CapabilityProbe::new(
+            fake_client(&fake),
+            "_roomy_bridge",
+            "hs.test",
+            TransactionObserver::new(),
+        )
+        .run()
+        .await;
+
+        assert!(capabilities.msc4190_devices.passed());
+        assert_eq!(capabilities.server_version.as_deref(), Some("Synapse/1.99"));
+        // The stream checks rest on transactions, and none arrived.
+        assert!(!capabilities.msc2409_ephemeral.passed());
+
+        let requests = fake.requests();
+        assert_eq!(requests[0].url, "http://hs.test/_matrix/client/versions");
+        assert!(
+            requests[1]
+                .url
+                .contains("/_matrix/client/v3/devices/ROOMYPROBE"),
+            "the probe creates a device of its own: {}",
+            requests[1].url
+        );
+        assert!(
+            requests[1]
+                .url
+                .contains("user_id=%40_roomy_bridge%3Ahs.test"),
+            "the device belongs to the appservice's own user: {}",
+            requests[1].url
+        );
+        assert_eq!(requests[2].method, Method::Delete);
+        assert!(
+            requests[2].url.contains("/ROOMYPROBE"),
+            "the probe removes the device it created: {}",
+            requests[2].url
+        );
+    }
+
+    #[tokio::test]
+    async fn a_refused_device_creation_reports_the_status_it_answered() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Get,
+            "/_matrix/client/versions",
+            FakeResponse::ok(json!({})),
+        );
+        fake.route(
+            Method::Put,
+            "/_matrix/client/v3/devices/",
+            FakeResponse::refusing(403, "M_FORBIDDEN"),
+        );
+
+        let capabilities = CapabilityProbe::new(
+            fake_client(&fake),
+            "_roomy_bridge",
+            "hs.test",
+            TransactionObserver::new(),
+        )
+        .run()
+        .await;
+
+        assert!(!capabilities.msc4190_devices.passed());
+        assert!(
+            capabilities.msc4190_devices.evidence().contains("403"),
+            "the evidence names the status: {}",
+            capabilities.msc4190_devices.evidence()
+        );
+        assert_eq!(
+            fake.requests().len(),
+            2,
+            "a refused creation has nothing to remove"
+        );
+    }
 
     fn all_pass() -> HomeserverCapabilities {
         HomeserverCapabilities {

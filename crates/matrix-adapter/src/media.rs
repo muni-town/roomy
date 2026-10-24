@@ -9,9 +9,14 @@
 //! other's authenticated media — both proxies require credentials the receiving
 //! platform does not have.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::appservice::AsToken;
+use crate::transport::{
+    percent_encode, Exchange, HomeserverClient, HttpExchange, Transport, TransportError,
+};
 
 /// A Matrix content URI, `mxc://<server>/<media id>`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -70,13 +75,16 @@ pub struct MediaBytes {
 }
 
 /// Downloads and uploads media.
+///
+/// Two origins are involved — the homeserver, which holds `mxc://` items, and
+/// the appserver's blob proxy, which holds the bytes a Roomy attachment
+/// references — and both speak through the same exchange. The bridge holds one
+/// connection pool, and a failure on either side is classified in one place.
 #[derive(Debug, Clone)]
 pub struct MediaStore {
-    http: reqwest::Client,
-    homeserver_url: String,
-    as_token: AsToken,
-    /// The appserver's blob proxy base, used to resolve `atblob://` refs.
-    appserver_url: String,
+    homeserver: HomeserverClient,
+    /// The appserver's blob proxy, which takes no token.
+    proxy: Transport,
 }
 
 impl MediaStore {
@@ -85,71 +93,43 @@ impl MediaStore {
         as_token: AsToken,
         appserver_url: impl Into<String>,
     ) -> Self {
-        Self {
-            http: reqwest::Client::new(),
-            homeserver_url: homeserver_url.into().trim_end_matches('/').to_string(),
+        Self::with_exchange(
+            homeserver_url,
             as_token,
-            appserver_url: appserver_url.into().trim_end_matches('/').to_string(),
+            appserver_url,
+            Arc::new(HttpExchange::new()),
+        )
+    }
+
+    /// A store over an arbitrary exchange, which is how a fake homeserver takes
+    /// the place of the network.
+    pub fn with_exchange(
+        homeserver_url: impl Into<String>,
+        as_token: AsToken,
+        appserver_url: impl Into<String>,
+        exchange: Arc<dyn Exchange>,
+    ) -> Self {
+        Self {
+            homeserver: HomeserverClient::with_exchange(homeserver_url, as_token, exchange.clone()),
+            proxy: Transport::with_exchange(appserver_url, None, exchange),
         }
     }
 
     /// Fetch a Matrix media item.
     pub async fn download_mxc(&self, uri: &MxcUri) -> Result<MediaBytes, MediaError> {
-        // Authenticated media (MSC3916) is the only path a current Synapse
-        // serves; the unauthenticated v3 path answers 404.
-        let url = format!(
-            "{}/_matrix/client/v1/media/download/{}/{}",
-            self.homeserver_url,
-            uri.server(),
-            uri.media_id()
-        );
-        let response = self
-            .http
-            .get(&url)
-            .query(&[("allow_redirects", "true")])
-            .bearer_auth(&self.as_token)
-            .send()
-            .await
-            .map_err(|source| MediaError::Transport {
-                url: url.clone(),
-                source,
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(MediaError::Rejected {
-                url,
-                status: status.as_u16(),
-                body,
-            });
-        }
-
-        let mime_type = response
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("application/octet-stream")
-            .to_string();
-        let name = response
-            .headers()
-            .get(reqwest::header::CONTENT_DISPOSITION)
-            .and_then(|value| value.to_str().ok())
-            .and_then(parse_filename);
-
-        let data = response
-            .bytes()
-            .await
-            .map_err(|source| MediaError::Transport {
-                url: uri.as_str().to_string(),
-                source,
-            })?
-            .to_vec();
-
+        let download = self
+            .homeserver
+            .download_media(uri.server(), uri.media_id())
+            .await?;
         Ok(MediaBytes {
-            mime_type,
-            data,
-            name,
+            mime_type: download
+                .content_type
+                .unwrap_or_else(|| "application/octet-stream".to_string()),
+            name: download
+                .content_disposition
+                .as_deref()
+                .and_then(parse_filename),
+            data: download.data,
         })
     }
 
@@ -158,92 +138,31 @@ impl MediaStore {
     pub async fn download_blob(&self, uri: &str) -> Result<MediaBytes, MediaError> {
         let rest = uri.strip_prefix("atblob://").ok_or(MediaError::NotAtblob)?;
         let (did, cid) = rest.split_once('/').ok_or(MediaError::NotAtblob)?;
-        let url = format!(
-            "{}/blob/{}/{}",
-            self.appserver_url,
-            percent_encode(did),
-            percent_encode(cid)
-        );
-
-        let response =
-            self.http
-                .get(&url)
-                .send()
-                .await
-                .map_err(|source| MediaError::Transport {
-                    url: url.clone(),
-                    source,
-                })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            return Err(MediaError::Rejected {
-                url,
-                status: status.as_u16(),
-                body: response.text().await.unwrap_or_default(),
-            });
-        }
-
-        let mime_type = response
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("application/octet-stream")
-            .to_string();
-        let data = response
-            .bytes()
-            .await
-            .map_err(|source| MediaError::Transport {
-                url: uri.to_string(),
-                source,
-            })?
-            .to_vec();
+        let response = self
+            .proxy
+            .get(&format!(
+                "/blob/{}/{}",
+                percent_encode(did),
+                percent_encode(cid)
+            ))
+            .await?;
 
         Ok(MediaBytes {
-            mime_type,
-            data,
+            mime_type: response
+                .content_type
+                .unwrap_or_else(|| "application/octet-stream".to_string()),
+            data: response.body,
             name: None,
         })
     }
 
     /// Upload bytes to the homeserver and return their `mxc://` URI.
     pub async fn upload_to_matrix(&self, bytes: &MediaBytes) -> Result<MxcUri, MediaError> {
-        let url = format!("{}/_matrix/media/v3/upload", self.homeserver_url);
-        let response = self
-            .http
-            .post(&url)
-            .bearer_auth(&self.as_token)
-            .header("content-type", &bytes.mime_type)
-            .body(bytes.data.clone())
-            .send()
-            .await
-            .map_err(|source| MediaError::Transport {
-                url: url.clone(),
-                source,
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            return Err(MediaError::Rejected {
-                url,
-                status: status.as_u16(),
-                body: response.text().await.unwrap_or_default(),
-            });
-        }
-
-        #[derive(Deserialize)]
-        struct Uploaded {
-            #[serde(rename = "content_uri")]
-            content_uri: String,
-        }
-        let uploaded = response
-            .json::<Uploaded>()
-            .await
-            .map_err(|error| MediaError::Decode {
-                url,
-                message: error.to_string(),
-            })?;
-        MxcUri::parse(uploaded.content_uri)
+        let content_uri = self
+            .homeserver
+            .upload_media(&bytes.mime_type, &bytes.data)
+            .await?;
+        MxcUri::parse(content_uri)
     }
 }
 
@@ -257,20 +176,6 @@ fn parse_filename(header: &str) -> Option<String> {
     (!rest.is_empty()).then(|| rest.to_string())
 }
 
-/// Percent-encode a path segment.
-fn percent_encode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            other => out.push_str(&format!("%{other:02X}")),
-        }
-    }
-    out
-}
-
 /// Media could not be moved.
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
@@ -278,25 +183,138 @@ pub enum MediaError {
     NotMxc,
     #[error("not an atblob:// reference")]
     NotAtblob,
-    #[error("transport error fetching {url}: {source}")]
-    Transport {
-        url: String,
-        #[source]
-        source: reqwest::Error,
-    },
-    #[error("{url} answered HTTP {status}: {body}")]
-    Rejected {
-        url: String,
-        status: u16,
-        body: String,
-    },
-    #[error("{url} returned an unreadable body: {message}")]
-    Decode { url: String, message: String },
+    #[error(transparent)]
+    Transport(#[from] TransportError),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transport::{FakeHomeserver, FakeResponse, Method};
+
+    fn store(fake: &FakeHomeserver) -> MediaStore {
+        let exchange: Arc<dyn Exchange> = Arc::new(fake.clone());
+        MediaStore::with_exchange(
+            "http://hs.test",
+            AsToken::parse("as-secret").unwrap(),
+            "http://app.test",
+            exchange,
+        )
+    }
+
+    #[tokio::test]
+    async fn a_media_download_keeps_its_type_its_name_and_its_bytes() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Get,
+            "/_matrix/client/v1/media/download/matrix.example.org/abc123",
+            FakeResponse::bytes(200, "image/png", b"\x89PNG")
+                .named("attachment; filename=\"photo.png\""),
+        );
+
+        let bytes = store(&fake)
+            .download_mxc(&MxcUri::parse("mxc://matrix.example.org/abc123").unwrap())
+            .await
+            .expect("the fake serves the media");
+
+        assert_eq!(bytes.mime_type, "image/png");
+        assert_eq!(bytes.name.as_deref(), Some("photo.png"));
+        assert_eq!(bytes.data, b"\x89PNG");
+
+        // Authenticated media (MSC3916) is the only path a current Synapse
+        // serves, and the redirect flag is part of the request.
+        let request = fake.only_request();
+        assert_eq!(request.token.as_deref(), Some("as-secret"));
+        assert!(
+            request.url.contains("allow_redirects=true"),
+            "{}",
+            request.url
+        );
+    }
+
+    #[tokio::test]
+    async fn a_refused_download_is_a_refusal_not_bytes() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Get,
+            "/media/download/",
+            FakeResponse::refusing(404, "M_NOT_FOUND"),
+        );
+
+        let error = store(&fake)
+            .download_mxc(&MxcUri::parse("mxc://matrix.example.org/missing").unwrap())
+            .await
+            .expect_err("the fake refuses");
+
+        let MediaError::Transport(refused) = error else {
+            panic!("expected the homeserver's refusal, got {error}");
+        };
+        assert_eq!(refused.status(), Some(404));
+    }
+
+    #[tokio::test]
+    async fn an_upload_returns_the_uri_the_homeserver_minted() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Post,
+            "/_matrix/media/v3/upload",
+            FakeResponse::ok(serde_json::json!({ "content_uri": "mxc://hs.test/uploaded" })),
+        );
+
+        let bytes = MediaBytes {
+            mime_type: "text/plain".into(),
+            data: b"hello".to_vec(),
+            name: None,
+        };
+        let uri = store(&fake)
+            .upload_to_matrix(&bytes)
+            .await
+            .expect("the fake accepts the upload");
+
+        assert_eq!(uri.as_str(), "mxc://hs.test/uploaded");
+        let request = fake.only_request();
+        assert_eq!(
+            request.body,
+            crate::transport::Body::Bytes {
+                content_type: "text/plain".into(),
+                data: b"hello".to_vec(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn an_atblob_reference_is_fetched_through_the_appserver_proxy() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Get,
+            "http://app.test/blob/did%3Aplc%3Aalice/bafyrei",
+            FakeResponse::bytes(200, "application/pdf", b"%PDF"),
+        );
+
+        let bytes = store(&fake)
+            .download_blob("atblob://did:plc:alice/bafyrei")
+            .await
+            .expect("the proxied blob is served");
+
+        assert_eq!(bytes.mime_type, "application/pdf");
+        assert_eq!(bytes.data, b"%PDF");
+        assert_eq!(
+            fake.only_request().token,
+            None,
+            "the appserver proxy takes no appservice token"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reference_that_is_not_an_atblob_is_refused_before_any_request() {
+        let fake = FakeHomeserver::new();
+        let error = store(&fake)
+            .download_blob("https://example.org/file.png")
+            .await
+            .expect_err("not an atblob reference");
+        assert!(matches!(error, MediaError::NotAtblob));
+        assert!(fake.requests().is_empty());
+    }
 
     #[test]
     fn an_mxc_uri_splits_into_its_parts() {

@@ -147,8 +147,10 @@ async fn capabilities(State(state): State<AdminState>) -> Response {
     // report "unavailable" forever on a homeserver that started working the
     // moment its first transaction arrived.
     let measured = matrix_adapter::CapabilityProbe::new(
-        state.homeserver_url.as_str(),
-        state.as_token.clone(),
+        matrix_adapter::HomeserverClient::new(
+            state.homeserver_url.as_str(),
+            state.as_token.clone(),
+        ),
         state.sender_localpart.as_str(),
         state.domain.as_str(),
         state.observer.clone(),

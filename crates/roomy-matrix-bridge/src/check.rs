@@ -28,7 +28,9 @@ use axum::{
     routing::put,
     Json, Router,
 };
-use matrix_adapter::{AsToken, CapabilityProbe, HsToken, TransactionObserver};
+use matrix_adapter::{
+    AsToken, CapabilityProbe, HomeserverClient, HsToken, TransactionObserver, TransportError,
+};
 
 use crate::config::Config;
 
@@ -77,6 +79,23 @@ pub async fn run(config: &Config) -> std::process::ExitCode {
 /// The listener is bound to the configured address and released once the
 /// measurement ends, so the caller can bind the same address afterwards.
 pub async fn measure(config: &Config) -> Option<matrix_adapter::HomeserverCapabilities> {
+    let (as_token, hs_token) = match (
+        AsToken::parse(config.homeserver.as_token.clone()),
+        HsToken::parse(config.homeserver.hs_token.clone()),
+    ) {
+        (Ok(as_token), Ok(hs_token)) => (as_token, hs_token),
+        (Err(error), _) => {
+            eprintln!("homeserver.as_token: {error}");
+            return None;
+        }
+        (_, Err(error)) => {
+            eprintln!("homeserver.hs_token: {error}");
+            return None;
+        }
+    };
+    let homeserver = HomeserverClient::new(&config.homeserver.url, as_token);
+    let sender = sender_mxid(config);
+
     let listener = match tokio::net::TcpListener::bind(&config.bridge.listen).await {
         Ok(listener) => listener,
         Err(error) => {
@@ -94,22 +113,7 @@ pub async fn measure(config: &Config) -> Option<matrix_adapter::HomeserverCapabi
 
     // The room is created before the server starts, so the capture can tell this
     // homeserver's transaction from another's.
-    let probe_room = create_probe_room(config).await?;
-
-    let (as_token, hs_token) = match (
-        AsToken::parse(config.homeserver.as_token.clone()),
-        HsToken::parse(config.homeserver.hs_token.clone()),
-    ) {
-        (Ok(as_token), Ok(hs_token)) => (as_token, hs_token),
-        (Err(error), _) => {
-            eprintln!("homeserver.as_token: {error}");
-            return None;
-        }
-        (_, Err(error)) => {
-            eprintln!("homeserver.hs_token: {error}");
-            return None;
-        }
-    };
+    let probe_room = create_probe_room(&homeserver, &sender).await?;
 
     let observer = TransactionObserver::new();
     let app = Router::new()
@@ -129,7 +133,7 @@ pub async fn measure(config: &Config) -> Option<matrix_adapter::HomeserverCapabi
     });
 
     tracing::info!(%bound, "probe endpoint listening; provoking a transaction");
-    provoke_streams(config, &probe_room, &observer).await;
+    provoke_streams(&homeserver, &sender, &probe_room, &observer).await;
     handle.abort();
 
     if observer.last().is_none() {
@@ -143,8 +147,7 @@ pub async fn measure(config: &Config) -> Option<matrix_adapter::HomeserverCapabi
 
     Some(
         CapabilityProbe::new(
-            &config.homeserver.url,
-            as_token,
+            homeserver,
             &config.homeserver.sender_localpart,
             &config.homeserver.domain,
             observer,
@@ -154,10 +157,23 @@ pub async fn measure(config: &Config) -> Option<matrix_adapter::HomeserverCapabi
     )
 }
 
+/// The appservice's own MXID, which is the user every probe call speaks as.
+fn sender_mxid(config: &Config) -> String {
+    format!(
+        "@{}:{}",
+        config.homeserver.sender_localpart, config.homeserver.domain
+    )
+}
+
 /// Send the stimulus, then wait for the homeserver to push the resulting
 /// transactions back at this process.
-async fn provoke_streams(config: &Config, probe_room: &str, observer: &TransactionObserver) {
-    let probe_device = queue_to_device(config).await;
+async fn provoke_streams(
+    homeserver: &HomeserverClient,
+    sender: &str,
+    probe_room: &str,
+    observer: &TransactionObserver,
+) {
+    let probe_device = queue_to_device(homeserver, sender).await;
     if probe_device.is_none() {
         tracing::warn!(
             "could not queue a to-device message; the MSC3202 fields may be unobservable"
@@ -167,17 +183,17 @@ async fn provoke_streams(config: &Config, probe_room: &str, observer: &Transacti
     // The bridge does not relay typing or receipts, but the report says whether
     // the homeserver pushes them, so the stream has to be provoked to be
     // measured at all.
-    if !send_typing(config, probe_room).await {
+    if !send_typing(homeserver, sender, probe_room).await {
         tracing::warn!(%probe_room, "could not send a typing notification; MSC2409 may be unobservable");
     }
-    if !send_probe_message(config, probe_room).await {
-        tracing::warn!(%probe_room, "could not send the probe message");
+    if !send_probe_message(homeserver, sender, probe_room).await {
+        tracing::warn!("could not send the probe message");
     }
     wait_for_streams(observer).await;
     // After the wait, not before: the to-device message the device exists for is
     // what the measurement is waiting to see in a transaction.
     if let Some(device_id) = probe_device {
-        delete_probe_device(config, &device_id).await;
+        delete_probe_device(homeserver, sender, &device_id).await;
     }
 }
 
@@ -217,25 +233,14 @@ async fn wait_for_streams(observer: &TransactionObserver) {
 /// MSC2409 turns this into an `m.typing` entry in the transaction's `ephemeral`
 /// array. A homeserver that does not simply never sends the key, which is what
 /// the probe reports.
-async fn send_typing(config: &Config, probe_room: &str) -> bool {
-    let sender = format!(
-        "@{}:{}",
-        config.homeserver.sender_localpart, config.homeserver.domain
-    );
-    let url = format!(
-        "{}/_matrix/client/v3/rooms/{}/typing/{}?user_id={}",
-        config.homeserver.url.trim_end_matches('/'),
-        percent_encode(probe_room),
-        percent_encode(&sender),
-        percent_encode(&sender),
-    );
-    let response = reqwest::Client::new()
-        .put(&url)
-        .bearer_auth(&config.homeserver.as_token)
-        .json(&serde_json::json!({ "typing": true, "timeout": 20_000 }))
-        .send()
-        .await;
-    matches!(response, Ok(response) if response.status().is_success())
+async fn send_typing(homeserver: &HomeserverClient, sender: &str, probe_room: &str) -> bool {
+    match homeserver.typing(probe_room, sender, true).await {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::debug!(%error, %probe_room, "could not send a typing notification");
+            false
+        }
+    }
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
@@ -313,74 +318,36 @@ const PROBE_SIGNATURE: &str =
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 /// Create the room the probe sends into, as the appservice's own user.
-async fn create_probe_room(config: &Config) -> Option<String> {
-    let http = reqwest::Client::new();
-    let base = config.homeserver.url.trim_end_matches('/');
-    let sender = format!(
-        "@{}:{}",
-        config.homeserver.sender_localpart, config.homeserver.domain
-    );
-
-    let mut response = None;
+async fn create_probe_room(homeserver: &HomeserverClient, sender: &str) -> Option<String> {
     for attempt in 0..CONNECT_ATTEMPTS {
-        let requested = http
-            .post(format!("{base}/_matrix/client/v3/createRoom"))
-            .bearer_auth(&config.homeserver.as_token)
-            .query(&[("user_id", sender.as_str())])
-            .json(&serde_json::json!({ "name": "roomy bridge capability probe" }))
-            .send()
+        let created = homeserver
+            .create_room_as(
+                Some(sender),
+                &serde_json::json!({ "name": "roomy bridge capability probe" }),
+            )
             .await;
 
-        // A transport error is the retryable case: the homeserver is not up, or
-        // its name does not resolve yet. An HTTP response — even a refusal — is
-        // a measurement and is reported as one.
-        match requested {
-            Ok(answer) => {
-                response = Some(Ok(answer));
-                break;
+        match created {
+            Ok(room_id) => {
+                tracing::info!(%room_id, "probe room created");
+                return Some(room_id);
             }
-            Err(error) if attempt + 1 == CONNECT_ATTEMPTS => {
-                response = Some(Err(error));
-                break;
-            }
-            Err(error) => {
-                tracing::debug!(%error, attempt, "homeserver not reachable yet; retrying");
+            // A transport error is the retryable case: the homeserver is not up,
+            // or its name does not resolve yet. An HTTP response — even a
+            // refusal — is a measurement and is reported as one.
+            Err(TransportError::Transport { .. }) if attempt + 1 < CONNECT_ATTEMPTS => {
+                tracing::debug!(attempt, "homeserver not reachable yet; retrying");
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
-        }
-    }
-
-    match response.expect("the loop always sets a response") {
-        Ok(response) if response.status().is_success() => {
-            match response.json::<serde_json::Value>().await {
-                Ok(body) => match body.get("room_id").and_then(|value| value.as_str()) {
-                    Some(room_id) => {
-                        tracing::info!(%room_id, "probe room created");
-                        Some(room_id.to_string())
-                    }
-                    None => {
-                        eprintln!("the homeserver created a room without returning its id");
-                        None
-                    }
-                },
-                Err(error) => {
-                    eprintln!("could not read the created room: {error}");
-                    None
-                }
+            Err(error) => {
+                eprintln!(
+                    "could not create a probe room: {error}; the appservice token may be wrong"
+                );
+                return None;
             }
         }
-        Ok(response) => {
-            eprintln!(
-                "could not create a probe room (HTTP {}); the appservice token may be wrong",
-                response.status()
-            );
-            None
-        }
-        Err(error) => {
-            eprintln!("could not reach the homeserver at {base}: {error}");
-            None
-        }
     }
+    None
 }
 
 /// Queue a to-device message for the bridge device.
@@ -390,27 +357,16 @@ async fn create_probe_room(config: &Config) -> Option<String> {
 /// such traffic. Sending one to-device message to the appservice's own device
 /// gives the measurement something to observe — which is the same event an
 /// encrypted room produces when another device shares a room key.
-async fn queue_to_device(config: &Config) -> Option<String> {
-    let http = reqwest::Client::new();
-    let base = config.homeserver.url.trim_end_matches('/');
-    let sender = format!(
-        "@{}:{}",
-        config.homeserver.sender_localpart, config.homeserver.domain
-    );
-
+async fn queue_to_device(homeserver: &HomeserverClient, sender: &str) -> Option<String> {
     // A device of this run's own, so a previous run's keys and one-time keys
     // cannot collide with this one's: a homeserver refuses an upload that
     // reuses an existing one-time key id.
     let device_id = probe_device_id();
-    let created = http
-        .put(format!(
-            "{base}/_matrix/client/v3/devices/{device_id}?user_id={sender}"
-        ))
-        .bearer_auth(&config.homeserver.as_token)
-        .json(&serde_json::json!({ "display_name": "roomy bridge capability probe" }))
-        .send()
-        .await;
-    if !matches!(&created, Ok(response) if response.status().is_success()) {
+    if let Err(error) = homeserver
+        .ensure_device(sender, &device_id, "roomy bridge capability probe")
+        .await
+    {
+        tracing::warn!(%error, "the probe could not create a device");
         return None;
     }
 
@@ -420,49 +376,38 @@ async fn queue_to_device(config: &Config) -> Option<String> {
     // message alone produces a transaction that carries the to-device field and
     // none of the MSC3202 ones. This is the same call an `OlmMachine` makes when
     // the bridge starts, so it is not a synthetic probe-only path.
-    let keys_uploaded = http
-        .post(format!(
-            "{base}/_matrix/client/v3/keys/upload?user_id={sender}&device_id={device_id}"
-        ))
-        .bearer_auth(&config.homeserver.as_token)
-        .json(&serde_json::json!({
-            "device_keys": {
-                "user_id": sender,
-                "device_id": device_id,
-                "algorithms": ["m.olm.v1.curve25519-aes-sha2", "m.megolm.v1.aes-sha2"],
-                // Real key material, of the right length. A homeserver accepts
-                // any bytes here, but the bridge's own `OlmMachine` reads this
-                // device's keys back from `/keys/query` and cannot decode a key
-                // that is not 32 base64 bytes.
-                "keys": {
-                    format!("curve25519:{device_id}"): PROBE_CURVE25519,
-                    format!("ed25519:{device_id}"): PROBE_ED25519,
-                },
-                "signatures": {
-                    sender.clone(): {
-                        format!("ed25519:{device_id}"): PROBE_SIGNATURE,
-                    },
-                },
+    let device_keys = serde_json::json!({
+        "user_id": sender,
+        "device_id": device_id,
+        "algorithms": ["m.olm.v1.curve25519-aes-sha2", "m.megolm.v1.aes-sha2"],
+        // Real key material, of the right length. A homeserver accepts
+        // any bytes here, but the bridge's own `OlmMachine` reads this
+        // device's keys back from `/keys/query` and cannot decode a key
+        // that is not 32 base64 bytes.
+        "keys": {
+            format!("curve25519:{device_id}"): PROBE_CURVE25519,
+            format!("ed25519:{device_id}"): PROBE_ED25519,
+        },
+        "signatures": {
+            (sender): {
+                format!("ed25519:{device_id}"): PROBE_SIGNATURE,
             },
-        }))
-        .send()
-        .await;
-    match keys_uploaded {
-        Ok(response) if response.status().is_success() => {}
-        Ok(response) => {
-            // Not fatal: MSC2409 is still measurable, and a homeserver that
-            // refuses the upload is one an `OlmMachine` could not run on either.
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            tracing::warn!(
-                %status,
-                body = %body,
-                "the probe could not upload device keys; MSC3202 may read as absent"
-            );
-        }
-        Err(error) => {
-            tracing::warn!(%error, "the probe could not upload device keys");
-        }
+        },
+    });
+    if let Err(error) = homeserver
+        .upload_keys(
+            sender,
+            &device_id,
+            &serde_json::json!({ "device_keys": device_keys }),
+        )
+        .await
+    {
+        // Not fatal: MSC2409 is still measurable, and a homeserver that
+        // refuses the upload is one an `OlmMachine` could not run on either.
+        tracing::warn!(
+            %error,
+            "the probe could not upload device keys; MSC3202 may read as absent"
+        );
     }
 
     // One-time keys, which a real `OlmMachine` uploads alongside its device
@@ -477,7 +422,7 @@ async fn queue_to_device(config: &Config) -> Option<String> {
                 serde_json::json!({
                     "key": PROBE_CURVE25519,
                     "signatures": {
-                        sender.clone(): {
+                        (sender): {
                             format!("ed25519:{device_id}"): PROBE_SIGNATURE,
                         },
                     },
@@ -485,54 +430,39 @@ async fn queue_to_device(config: &Config) -> Option<String> {
             )
         })
         .collect::<serde_json::Map<_, _>>();
-    let otks_uploaded = http
-        .post(format!(
-            "{base}/_matrix/client/v3/keys/upload?user_id={sender}&device_id={device_id}"
-        ))
-        .bearer_auth(&config.homeserver.as_token)
-        .json(&serde_json::json!({ "one_time_keys": one_time_keys }))
-        .send()
-        .await;
-    match otks_uploaded {
-        Ok(response) if response.status().is_success() => {}
-        Ok(response) => {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            tracing::warn!(
-                %status,
-                body = %body,
-                "the probe could not upload one-time keys; MSC3202 may read as absent"
-            );
-        }
-        Err(error) => {
-            tracing::warn!(%error, "the probe could not upload one-time keys");
-        }
+    if let Err(error) = homeserver
+        .upload_keys(
+            sender,
+            &device_id,
+            &serde_json::json!({ "one_time_keys": one_time_keys }),
+        )
+        .await
+    {
+        tracing::warn!(
+            %error,
+            "the probe could not upload one-time keys; MSC3202 may read as absent"
+        );
     }
 
     let txn_id = ulid::Ulid::generate().to_string();
-    let response = http
-        .put(format!(
-            "{base}/_matrix/client/v3/sendToDevice/m.room_key_request/{txn_id}"
-        ))
-        .bearer_auth(&config.homeserver.as_token)
-        .json(&serde_json::json!({
-            "messages": {
-                sender.clone(): {
-                    device_id.clone(): {
-                        "action": "request",
-                        "requesting_device_id": device_id.clone(),
-                        "request_id": ulid::Ulid::generate().to_string(),
-                    }
-                }
+    let messages = serde_json::json!({
+        (sender): {
+            device_id.clone(): {
+                "action": "request",
+                "requesting_device_id": device_id.clone(),
+                "request_id": ulid::Ulid::generate().to_string(),
             }
-        }))
-        .send()
-        .await;
-
-    if matches!(response, Ok(response) if response.status().is_success()) {
-        Some(device_id)
-    } else {
-        None
+        }
+    });
+    match homeserver
+        .send_to_device("m.room_key_request", &txn_id, &messages)
+        .await
+    {
+        Ok(_) => Some(device_id),
+        Err(error) => {
+            tracing::warn!(%error, "the probe could not queue a to-device message");
+            None
+        }
     }
 }
 
@@ -547,59 +477,27 @@ fn probe_device_id() -> String {
 /// The probe runs on every start and on every `/capabilities` request; leaving a
 /// device behind per run would grow the bridge user's device list without bound
 /// and make each run's one-time keys collide with the last.
-async fn delete_probe_device(config: &Config, device_id: &str) {
-    let base = config.homeserver.url.trim_end_matches('/');
-    let sender = format!(
-        "@{}:{}",
-        config.homeserver.sender_localpart, config.homeserver.domain
-    );
-    let deleted = reqwest::Client::new()
-        .delete(format!(
-            "{base}/_matrix/client/v3/devices/{device_id}?user_id={sender}"
-        ))
-        .bearer_auth(&config.homeserver.as_token)
-        .send()
-        .await;
-    if !matches!(&deleted, Ok(response) if response.status().is_success()) {
-        tracing::debug!(device_id, "could not remove the probe's device");
+async fn delete_probe_device(homeserver: &HomeserverClient, sender: &str, device_id: &str) {
+    if let Err(error) = homeserver.delete_device(sender, device_id).await {
+        tracing::debug!(%error, device_id, "could not remove the probe's device");
     }
 }
 
 /// Send a message into the probe room, which is what makes the homeserver push.
-async fn send_probe_message(config: &Config, room_id: &str) -> bool {
-    let http = reqwest::Client::new();
-    let base = config.homeserver.url.trim_end_matches('/');
-    let sender = format!(
-        "@{}:{}",
-        config.homeserver.sender_localpart, config.homeserver.domain
-    );
+async fn send_probe_message(homeserver: &HomeserverClient, sender: &str, room_id: &str) -> bool {
     let txn_id = ulid::Ulid::generate().to_string();
+    let content = serde_json::json!({
+        "msgtype": "m.text",
+        "body": "roomy bridge capability probe",
+    });
 
-    let response = http
-        .put(format!(
-            "{base}/_matrix/client/v3/rooms/{}/send/m.room.message/{txn_id}",
-            percent_encode(room_id)
-        ))
-        .bearer_auth(&config.homeserver.as_token)
-        .query(&[("user_id", sender.as_str())])
-        .json(&serde_json::json!({
-            "msgtype": "m.text",
-            "body": "roomy bridge capability probe",
-        }))
-        .send()
-        .await;
-
-    match response {
-        Ok(response) if response.status().is_success() => {
-            tracing::info!(%room_id, "probe message sent");
+    match homeserver
+        .send_event(room_id, Some(sender), "m.room.message", &content, &txn_id)
+        .await
+    {
+        Ok(event_id) => {
+            tracing::info!(%room_id, %event_id, "probe message sent");
             true
-        }
-        Ok(response) => {
-            eprintln!(
-                "could not send into the probe room (HTTP {})",
-                response.status()
-            );
-            false
         }
         Err(error) => {
             eprintln!("could not send into the probe room: {error}");
@@ -608,24 +506,63 @@ async fn send_probe_message(config: &Config, room_id: &str) -> bool {
     }
 }
 
-/// Percent-encode a path segment.
-fn percent_encode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            other => out.push_str(&format!("%{other:02X}")),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    use std::sync::Arc;
+
+    use matrix_adapter::{Body, FakeHomeserver, FakeResponse, HomeserverClient, Method};
+
+    #[tokio::test]
+    async fn the_probe_stimulus_goes_through_the_transport() {
+        let fake = FakeHomeserver::new();
+        fake.route(
+            Method::Put,
+            "/_matrix/client/v3/devices/",
+            FakeResponse::ok(json!({})),
+        );
+        fake.route(
+            Method::Post,
+            "/_matrix/client/v3/keys/upload",
+            FakeResponse::ok(json!({ "one_time_key_counts": {} })),
+        );
+        fake.route(
+            Method::Put,
+            "/_matrix/client/v3/sendToDevice/m.room_key_request/",
+            FakeResponse::ok(json!({})),
+        );
+
+        let homeserver = HomeserverClient::with_exchange(
+            "http://hs.test",
+            AsToken::parse("as-secret").unwrap(),
+            Arc::new(fake.clone()),
+        );
+        let device = queue_to_device(&homeserver, "@_roomy_bridge:hs.test")
+            .await
+            .expect("the fake accepts every stimulus call");
+
+        let requests = fake.requests();
+        assert_eq!(
+            requests.len(),
+            4,
+            "a device, its keys, its one-time keys, then the to-device message: {:?}",
+            fake.urls()
+        );
+        assert_eq!(
+            requests[1].url, requests[2].url,
+            "both key uploads go to the same endpoint, once per key kind"
+        );
+
+        let Body::Json(to_device) = requests[3].body.clone() else {
+            panic!("a to-device message carries JSON");
+        };
+        assert!(
+            to_device["messages"]["@_roomy_bridge:hs.test"][device.as_str()].is_object(),
+            "the message is addressed to the appservice user's own device: {to_device}"
+        );
+    }
 
     #[test]
     fn a_transaction_must_mention_the_probe_room() {
