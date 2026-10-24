@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::dedupe::{Mapping, MappingKind};
 use crate::ids::{
     BackfillCursor, GhostDid, GhostMxid, MatrixEventId, MatrixRoomId, RoomyEventId, RoomyRoomId,
 };
@@ -169,6 +170,37 @@ pub enum MatrixOp {
     },
 }
 
+impl MatrixOp {
+    /// The id pairing this op's write establishes, given the Roomy event that
+    /// caused it and the Matrix event id the homeserver returned.
+    ///
+    /// The Matrix id only exists once the op has been sent, so this pairing
+    /// cannot be decided before the write; what lives here is the other half —
+    /// which kind of pairing the op creates. `None` means the op writes no
+    /// Matrix event of its own: a ghost join is membership, not conversation,
+    /// and recording it would suppress a Matrix event that never existed.
+    pub fn pairing(
+        &self,
+        roomy_id: &str,
+        matrix_id: impl Into<String>,
+        created_at: Millis,
+    ) -> Option<Mapping> {
+        let kind = match self {
+            MatrixOp::Send { .. } => MappingKind::Message,
+            MatrixOp::Edit { .. } => MappingKind::Edit,
+            MatrixOp::Redact { .. } => MappingKind::Redaction,
+            MatrixOp::React { .. } | MatrixOp::Unreact { .. } => MappingKind::Reaction,
+            MatrixOp::JoinAsGhost { .. } => return None,
+        };
+        Some(Mapping {
+            kind,
+            matrix_id: matrix_id.into(),
+            roomy_id: roomy_id.to_string(),
+            created_at,
+        })
+    }
+}
+
 /// Media uploaded to the homeserver.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MatrixMedia {
@@ -259,5 +291,33 @@ mod tests {
     #[test]
     fn an_empty_batch_produces_no_chunks() {
         assert!(OpBatch::new().chunks().is_empty());
+    }
+
+    #[test]
+    fn a_matrix_op_names_the_pairing_its_write_creates() {
+        let send = MatrixOp::Send {
+            matrix_room_id: MatrixRoomId::parse("!room:example.org").unwrap(),
+            sender: None,
+            body: "hi".into(),
+            media: vec![],
+            reply_to: None,
+        };
+        let mapping = send
+            .pairing("01J9ZQ9W3N7Q4Z6ZC0W4Y4T0AB", "$sent", 7)
+            .unwrap();
+        assert_eq!(mapping.kind, MappingKind::Message);
+        assert_eq!(mapping.matrix_id, "$sent");
+        assert_eq!(mapping.roomy_id, "01J9ZQ9W3N7Q4Z6ZC0W4Y4T0AB");
+        assert_eq!(mapping.created_at, 7);
+
+        // A ghost join writes membership, not a Matrix event of its own: a
+        // pairing here would suppress an event that never existed.
+        let join = MatrixOp::JoinAsGhost {
+            matrix_room_id: MatrixRoomId::parse("!room:example.org").unwrap(),
+            mxid: GhostMxid::parse("@_roomy_alice:example.org").unwrap(),
+            display_name: None,
+            avatar_url: None,
+        };
+        assert_eq!(join.pairing("01J9ZQ9W3N7Q4Z6ZC0W4Y4T0AB", "$join", 7), None);
     }
 }

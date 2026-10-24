@@ -24,7 +24,7 @@ use crate::dedupe::{Dedupe, EchoDecision, MappingKind};
 use crate::ids::{GhostDid, GhostMxid, MatrixEventId, MatrixRoomId, RoomyEventId, RoomyRoomId};
 use crate::op::{MatrixOrigin, MediaRef, Op};
 use crate::portal::Portal;
-use crate::state::{Rejection, Step};
+use crate::state::Rejection;
 use crate::Millis;
 
 /// A message body as it arrived, with the formatted variant when the sender
@@ -160,23 +160,39 @@ impl EditOrder {
     }
 }
 
-/// Translate one incoming event into Roomy ops.
+/// One thing to write for an accepted input, and the pairing it establishes.
 ///
-/// The caller gets an [`Step`] rather than an op list: an empty vector would
-/// make "the bridge already applied this" indistinguishable from "this event
-/// means nothing to Roomy", and a caller that ignored that would re-post a
-/// redelivered transaction.
+/// A decision carries no id and no timestamp: [`crate::step`] mints the Roomy
+/// event id and records the pairing, so translation stays a pure function of
+/// the event and the machine's memory.
+#[derive(Debug)]
+pub(crate) struct Decision {
+    pub(crate) op: Op,
+    pub(crate) kind: MappingKind,
+}
+
+impl Decision {
+    fn write(op: Op, kind: MappingKind) -> Self {
+        Self { op, kind }
+    }
+}
+
+/// Translate one incoming event into the writes it implies.
+///
+/// The caller gets a `Result` rather than an empty vector: "the bridge already
+/// applied this" must be distinguishable from "this event means nothing to
+/// Roomy", or a caller would re-post a redelivered transaction.
 pub(crate) fn translate(
     event: &IncomingEvent,
     portal: &Portal,
     ghost_did: &GhostDid,
     dedupe: &Dedupe,
     edits: &mut EditOrder,
-) -> Step {
+) -> Result<Vec<Decision>, Rejection> {
     match dedupe.classify_matrix(event.event_id.as_str(), None) {
         EchoDecision::Relay => {}
-        EchoDecision::Echo => return Step::Rejected(Rejection::Echo),
-        EchoDecision::Duplicate => return Step::Rejected(Rejection::Duplicate),
+        EchoDecision::Echo => return Err(Rejection::Echo),
+        EchoDecision::Duplicate => return Err(Rejection::Duplicate),
     }
 
     let origin = MatrixOrigin {
@@ -214,29 +230,32 @@ pub(crate) fn translate(
                 .and_then(|target| dedupe.roomy_id(MappingKind::Message, target.as_str()))
                 .and_then(|roomy_id| RoomyEventId::parse(roomy_id).ok());
 
-            Step::Accepted(vec![Op::Send {
-                roomy_room_id: target_room,
-                author: ghost_did.clone(),
-                body: markdown_body(body),
-                attachments: media
-                    .iter()
-                    .map(|item| MediaRef {
-                        // The adapter uploads and rewrites this to an
-                        // `atblob://` ref before the op reaches the appserver.
-                        uri: item.mxc_uri.clone(),
-                        mime_type: item.mime_type.clone(),
-                        name: item.name.clone(),
-                        size: item.size,
-                    })
-                    .collect(),
-                reply_to: reply_target,
-                timestamp: event.origin_server_ts,
-                origin: Some(origin),
-            }])
+            Ok(vec![Decision::write(
+                Op::Send {
+                    roomy_room_id: target_room,
+                    author: ghost_did.clone(),
+                    body: markdown_body(body),
+                    attachments: media
+                        .iter()
+                        .map(|item| MediaRef {
+                            // The adapter uploads and rewrites this to an
+                            // `atblob://` ref before the op reaches the appserver.
+                            uri: item.mxc_uri.clone(),
+                            mime_type: item.mime_type.clone(),
+                            name: item.name.clone(),
+                            size: item.size,
+                        })
+                        .collect(),
+                    reply_to: reply_target,
+                    timestamp: event.origin_server_ts,
+                    origin: Some(origin),
+                },
+                MappingKind::Message,
+            )])
         }
         IncomingKind::Edit { target, body } => {
             if !edits.accepts(&event.room_id, target, event.origin_server_ts) {
-                return Step::Rejected(Rejection::Superseded);
+                return Err(Rejection::Superseded);
             }
             let Some(roomy_target) = dedupe
                 .roomy_id(MappingKind::Message, target.as_str())
@@ -244,26 +263,32 @@ pub(crate) fn translate(
             else {
                 // An edit for a message the space does not have is not
                 // representable: Roomy has no message to edit.
-                return Step::Rejected(Rejection::NotBridged);
+                return Err(Rejection::NotBridged);
             };
             edits.record(&event.room_id, target, event.origin_server_ts);
-            Step::Accepted(vec![Op::Edit {
-                roomy_room_id: portal.roomy_room_id.clone(),
-                target: roomy_target,
-                body: markdown_body(body),
-                timestamp: event.origin_server_ts,
-            }])
+            Ok(vec![Decision::write(
+                Op::Edit {
+                    roomy_room_id: portal.roomy_room_id.clone(),
+                    target: roomy_target,
+                    body: markdown_body(body),
+                    timestamp: event.origin_server_ts,
+                },
+                MappingKind::Edit,
+            )])
         }
         IncomingKind::Redaction { target, reason } => {
             if let Some(roomy_target) = dedupe
                 .roomy_id(MappingKind::Message, target.as_str())
                 .and_then(|roomy_id| RoomyEventId::parse(roomy_id).ok())
             {
-                return Step::Accepted(vec![Op::Redact {
-                    roomy_room_id: portal.roomy_room_id.clone(),
-                    target: roomy_target,
-                    reason: reason.clone(),
-                }]);
+                return Ok(vec![Decision::write(
+                    Op::Redact {
+                        roomy_room_id: portal.roomy_room_id.clone(),
+                        target: roomy_target,
+                        reason: reason.clone(),
+                    },
+                    MappingKind::Redaction,
+                )]);
             }
             if let Some(reaction_id) = dedupe
                 .roomy_id(MappingKind::Reaction, target.as_str())
@@ -271,28 +296,34 @@ pub(crate) fn translate(
             {
                 // Redacting the *reaction* removes it; the message it annotated
                 // is untouched.
-                return Step::Accepted(vec![Op::Unreact {
-                    roomy_room_id: portal.roomy_room_id.clone(),
-                    reaction_id,
-                    author: ghost_did.clone(),
-                }]);
+                return Ok(vec![Decision::write(
+                    Op::Unreact {
+                        roomy_room_id: portal.roomy_room_id.clone(),
+                        reaction_id,
+                        author: ghost_did.clone(),
+                    },
+                    MappingKind::Reaction,
+                )]);
             }
-            Step::Rejected(Rejection::NotBridged)
+            Err(Rejection::NotBridged)
         }
         IncomingKind::Reaction { target, key } => {
             let Some(roomy_target) = dedupe
                 .roomy_id(MappingKind::Message, target.as_str())
                 .and_then(|roomy_id| RoomyEventId::parse(roomy_id).ok())
             else {
-                return Step::Rejected(Rejection::NotBridged);
+                return Err(Rejection::NotBridged);
             };
-            Step::Accepted(vec![Op::React {
-                roomy_room_id: portal.roomy_room_id.clone(),
-                target: roomy_target,
-                emoji: key.clone(),
-                author: ghost_did.clone(),
-                origin: Some(origin),
-            }])
+            Ok(vec![Decision::write(
+                Op::React {
+                    roomy_room_id: portal.roomy_room_id.clone(),
+                    target: roomy_target,
+                    emoji: key.clone(),
+                    author: ghost_did.clone(),
+                    origin: Some(origin),
+                },
+                MappingKind::Reaction,
+            )])
         }
     }
 }
@@ -480,8 +511,8 @@ mod tests {
     /// The accepted ops, failing the test on any rejection.
     fn ops(event: &IncomingEvent, dedupe: &Dedupe, edits: &mut EditOrder) -> Vec<Op> {
         match translate(event, &portal(), &ghost(), dedupe, edits) {
-            Step::Accepted(ops) => ops,
-            Step::Rejected(reason) => panic!("unexpected rejection: {reason:?}"),
+            Ok(decisions) => decisions.into_iter().map(|decision| decision.op).collect(),
+            Err(reason) => panic!("unexpected rejection: {reason:?}"),
         }
     }
 
@@ -542,8 +573,9 @@ mod tests {
                 &ghost(),
                 &dedupe,
                 &mut edits
-            ),
-            Step::Rejected(Rejection::Duplicate)
+            )
+            .unwrap_err(),
+            Rejection::Duplicate
         );
     }
 
@@ -614,8 +646,8 @@ mod tests {
         };
         older.origin_server_ts = 1_000;
         assert_eq!(
-            translate(&older, &portal(), &ghost(), &dedupe, &mut edits),
-            Step::Rejected(Rejection::Superseded)
+            translate(&older, &portal(), &ghost(), &dedupe, &mut edits).unwrap_err(),
+            Rejection::Superseded
         );
     }
 
@@ -629,8 +661,8 @@ mod tests {
             body: Body::plain("x"),
         };
         assert_eq!(
-            translate(&event, &portal(), &ghost(), &dedupe, &mut edits),
-            Step::Rejected(Rejection::NotBridged)
+            translate(&event, &portal(), &ghost(), &dedupe, &mut edits).unwrap_err(),
+            Rejection::NotBridged
         );
     }
 

@@ -413,17 +413,11 @@ impl Supervisor {
         // Every send is recorded, not only reactions. The Matrix event the
         // bridge wrote comes back through `/transactions`, and the id map is
         // what makes it recognisable as the bridge's own; for a reaction it is
-        // also what lets a removal redact the right Matrix event.
-        if let Some(kind) = outbound_mapping_kind(&op) {
-            self.record_mapping(
-                portal.space(),
-                Mapping {
-                    kind,
-                    matrix_id: matrix_event_id,
-                    roomy_id: event.id.as_str().to_string(),
-                    created_at: now_ms(),
-                },
-            );
+        // also what lets a removal redact the right Matrix event. The Matrix id
+        // only exists now that the homeserver has answered, which is why this
+        // pairing is recorded here rather than decided by `step`.
+        if let Some(mapping) = op.pairing(event.id.as_str(), matrix_event_id, now_ms()) {
+            self.record_mapping(portal.space(), &mapping);
         }
 
         Ok(true)
@@ -431,9 +425,14 @@ impl Supervisor {
 
     /// Record an id pairing in memory and in the database, so echo suppression
     /// and edit/redaction resolution both survive a restart.
-    fn record_mapping(&self, space_did: &SpaceDid, mapping: Mapping) {
+    fn record_mapping(&self, space_did: &SpaceDid, mapping: &Mapping) {
         self.state.lock().record_mapping(mapping.clone());
-        if let Err(error) = self.db.lock().put_mapping(space_did.as_str(), &mapping) {
+        self.persist_mapping(space_did, mapping);
+    }
+
+    /// Persist a pairing the machine already holds in memory.
+    fn persist_mapping(&self, space_did: &SpaceDid, mapping: &Mapping) {
+        if let Err(error) = self.db.lock().put_mapping(space_did.as_str(), mapping) {
             tracing::warn!(%error, "could not persist an id mapping");
         }
     }
@@ -719,24 +718,19 @@ impl Supervisor {
                         portal: &portal,
                         ghost: &ghost,
                     },
+                    now_ms(),
                 )
             };
-            let Step::Accepted(ops) = step else {
+            let Step::Accepted(writes) = step else {
                 continue;
             };
-            for op in ops {
-                let event_id = roomy_events::Ulid::new();
+            for write in writes {
                 let Some(roomy_event) =
-                    crate::relay::build_event(&event_id, &portal.roomy_room_id, &op)
+                    crate::relay::build_event(write.id(), &portal.roomy_room_id, write.op())
                 else {
                     continue;
                 };
-                self.state.lock().record_mapping(Mapping {
-                    kind: crate::relay::mapping_kind_of(&op),
-                    matrix_id: incoming_event.event_id.as_str().to_string(),
-                    roomy_id: event_id.as_str().to_string(),
-                    created_at: now_ms(),
-                });
+                self.persist_mapping(&space_did, write.mapping());
                 built.push(roomy_event);
             }
         }
@@ -757,22 +751,6 @@ pub struct BackfillStep {
     pub messages: u64,
     /// Messages this step wrote into Roomy.
     pub relayed: usize,
-}
-
-/// The id-pairing kind a Matrix op records.
-///
-/// `None` for an op that writes no Matrix event of its own (a ghost join is
-/// membership, not conversation).
-fn outbound_mapping_kind(op: &MatrixOp) -> Option<bridge_core::MappingKind> {
-    match op {
-        MatrixOp::Send { .. } => Some(bridge_core::MappingKind::Message),
-        MatrixOp::Edit { .. } => Some(bridge_core::MappingKind::Edit),
-        MatrixOp::Redact { .. } => Some(bridge_core::MappingKind::Redaction),
-        MatrixOp::React { .. } | MatrixOp::Unreact { .. } => {
-            Some(bridge_core::MappingKind::Reaction)
-        }
-        MatrixOp::JoinAsGhost { .. } => None,
-    }
 }
 
 /// The Roomy author an event is attributed to, if it has one.

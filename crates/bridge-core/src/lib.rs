@@ -37,7 +37,7 @@ pub use portal::{
     EncryptionDevice, MissingFeature, Portal, PortalEncryption, PortalKind, PortalState,
 };
 pub use retry::{Due, Outbox, Pending, RetryPolicy};
-pub use state::{step, BridgeState, Input, Rejection, Step};
+pub use state::{step, BridgeState, DecidedWrite, Input, Rejection, Step};
 pub use storage::{
     Clock, InMemoryStorage, Storage, StorageError, StoredMessage, SystemClock, VirtualClock,
 };

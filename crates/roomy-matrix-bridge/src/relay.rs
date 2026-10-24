@@ -16,7 +16,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use bridge_core::{
-    step, BridgeState, GhostDid, IncomingEvent, IncomingKind, Input, Mapping, MappingKind,
+    step, BridgeState, GhostDid, IncomingEvent, IncomingKind, Input, Mapping, RoomyEventId,
     RoomyRoomId, SpaceDid, Step,
 };
 use matrix_adapter::transaction::{ToDeviceMessage, Transaction};
@@ -145,11 +145,10 @@ impl RelayState {
         self.supervisor.enqueue_events(space_did, events);
     }
 
-    /// Record an id pairing in memory and in the database, so echo suppression
-    /// and edit/redaction resolution both survive a restart.
-    fn record_mapping(&self, space_did: &SpaceDid, mapping: Mapping) {
-        self.state.lock().record_mapping(mapping.clone());
-        if let Err(error) = self.db.lock().put_mapping(space_did.as_str(), &mapping) {
+    /// Persist a pairing the machine recorded when it accepted an op, so echo
+    /// suppression and edit/redaction resolution both survive a restart.
+    fn persist_mapping(&self, space_did: &SpaceDid, mapping: &Mapping) {
+        if let Err(error) = self.db.lock().put_mapping(space_did.as_str(), mapping) {
             tracing::warn!(%error, "could not persist an id mapping");
         }
     }
@@ -224,6 +223,7 @@ impl RelayState {
         self.host_media(&mut event).await;
 
         let ghost = GhostDid::from(&event.sender);
+        let now = self.clock.now_ms();
         let outcome = {
             let mut state = self.state.lock();
             step(
@@ -233,9 +233,10 @@ impl RelayState {
                     portal: &portal,
                     ghost: &ghost,
                 },
+                now,
             )
         };
-        let Step::Accepted(ops) = outcome else {
+        let Step::Accepted(writes) = outcome else {
             if let Step::Rejected(reason) = outcome {
                 tracing::debug!(
                     event = %event.event_id,
@@ -253,7 +254,7 @@ impl RelayState {
             event = %event.event_id,
             room = %event.room_id,
             sender = %event.sender,
-            ops = ops.len(),
+            ops = writes.len(),
             "relaying an inbound event"
         );
 
@@ -261,28 +262,17 @@ impl RelayState {
             Ok(did) => did,
             Err(_) => return,
         };
-        let now = self.clock.now_ms();
 
-        for op in ops {
-            let event_id = Ulid::new();
-            let roomy_id = event_id.as_str().to_string();
-
-            let built = build_event(&event_id, &portal.roomy_room_id, &op);
+        for write in writes {
+            let built = build_event(write.id(), &portal.roomy_room_id, write.op());
             let Some(built) = built else { continue };
 
-            // The id pairing is what makes an echo suppressible and an edit
-            // resolvable, so it is recorded as the event is enqueued rather
-            // than after the appserver confirms: a confirmation arrives after
-            // the homeserver may already have re-delivered the same event.
-            self.record_mapping(
-                &space_did,
-                Mapping {
-                    kind: mapping_kind_of(&op),
-                    matrix_id: event.event_id.as_str().to_string(),
-                    roomy_id: roomy_id.clone(),
-                    created_at: now,
-                },
-            );
+            // The machine recorded the pairing when it accepted the op, and
+            // recorded it before this enqueue rather than after the appserver
+            // confirms: a confirmation arrives after the homeserver may already
+            // have re-delivered the same event. Persisting it is what makes the
+            // suppression survive a restart.
+            self.persist_mapping(&space_did, write.mapping());
 
             self.enqueue_roomy(space_did_parsed.clone(), vec![built]);
         }
@@ -334,21 +324,11 @@ async fn host_attachments(
     }
 }
 
-/// Map an op to the kind of id pairing it records.
-pub fn mapping_kind_of(op: &bridge_core::Op) -> MappingKind {
-    match op {
-        bridge_core::Op::React { .. } | bridge_core::Op::Unreact { .. } => MappingKind::Reaction,
-        bridge_core::Op::CreateRoom { .. } => MappingKind::Room,
-        bridge_core::Op::Edit { .. } => MappingKind::Edit,
-        bridge_core::Op::Redact { .. } => MappingKind::Redaction,
-        _ => MappingKind::Message,
-    }
-}
-
 /// Build the Roomy event for one op.
-pub fn build_event(id: &Ulid, room: &RoomyRoomId, op: &bridge_core::Op) -> Option<Event> {
+pub fn build_event(id: &RoomyEventId, room: &RoomyRoomId, op: &bridge_core::Op) -> Option<Event> {
     use roomy_events::extensions::{AuthorOverride, MatrixMessageOrigin, TimestampOverride};
 
+    let event_ulid = id.to_ulid().ok()?;
     let room_ulid = Ulid::parse(room.as_str().to_string()).ok()?;
 
     match op {
@@ -428,7 +408,7 @@ pub fn build_event(id: &Ulid, room: &RoomyRoomId, op: &bridge_core::Op) -> Optio
             }
 
             Some(Event::in_room(
-                id.clone(),
+                event_ulid.clone(),
                 room_ulid,
                 EventKind::CreateMessage(roomy_events::CreateMessage {
                     body: Content::markdown(body),
@@ -437,7 +417,7 @@ pub fn build_event(id: &Ulid, room: &RoomyRoomId, op: &bridge_core::Op) -> Optio
             ))
         }
         bridge_core::Op::Edit { target, body, .. } => Some(Event::in_room(
-            id.clone(),
+            event_ulid.clone(),
             room_ulid,
             EventKind::EditMessage(roomy_events::EditMessage {
                 message_id: target.to_ulid().ok()?,
@@ -447,7 +427,7 @@ pub fn build_event(id: &Ulid, room: &RoomyRoomId, op: &bridge_core::Op) -> Optio
             }),
         )),
         bridge_core::Op::Redact { target, reason, .. } => Some(Event::in_room(
-            id.clone(),
+            event_ulid.clone(),
             room_ulid,
             EventKind::DeleteMessage(roomy_events::DeleteMessage {
                 message_id: target.to_ulid().ok()?,
@@ -470,7 +450,7 @@ pub fn build_event(id: &Ulid, room: &RoomyRoomId, op: &bridge_core::Op) -> Optio
                 });
             }
             Some(Event::in_room(
-                id.clone(),
+                event_ulid.clone(),
                 room_ulid,
                 EventKind::AddBridgedReaction(roomy_events::AddBridgedReaction {
                     reaction_to: target.to_ulid().ok()?,
@@ -485,7 +465,7 @@ pub fn build_event(id: &Ulid, room: &RoomyRoomId, op: &bridge_core::Op) -> Optio
             author,
             ..
         } => Some(Event::in_room(
-            id.clone(),
+            event_ulid.clone(),
             room_ulid,
             EventKind::RemoveBridgedReaction(roomy_events::RemoveBridgedReaction {
                 reaction_id: reaction_id.to_ulid().ok()?,
@@ -502,7 +482,7 @@ pub fn build_event(id: &Ulid, room: &RoomyRoomId, op: &bridge_core::Op) -> Optio
                 bridge_core::RoomyRoomKind::Category => roomy_events::RoomKind::Category,
             };
             Some(Event::in_space(
-                id.clone(),
+                event_ulid.clone(),
                 EventKind::CreateRoom(roomy_events::CreateRoom {
                     kind: room_kind,
                     default_access: None,
@@ -524,7 +504,7 @@ pub fn build_event(id: &Ulid, room: &RoomyRoomId, op: &bridge_core::Op) -> Optio
             display_name,
             avatar_uri,
         } => Some(Event::in_space(
-            id.clone(),
+            event_ulid.clone(),
             EventKind::UpdateProfile(roomy_events::UpdateProfile {
                 did: Did::parse(did.as_str().to_string()).ok()?,
                 name: display_name.clone(),
@@ -556,8 +536,8 @@ mod tests {
         GhostDid::parse("did:matrix:%40alice%3Aexample.org").unwrap()
     }
 
-    fn id() -> Ulid {
-        Ulid::parse("01J9ZQ9W3N7Q4Z6ZC0W4Y4T0CD").unwrap()
+    fn id() -> bridge_core::RoomyEventId {
+        bridge_core::RoomyEventId::parse("01J9ZQ9W3N7Q4Z6ZC0W4Y4T0CD").unwrap()
     }
 
     #[test]
@@ -828,19 +808,20 @@ mod tests {
             created_at: 0,
         };
         let mut state = BridgeState::new();
-        let Step::Accepted(ops) = step(
+        let Step::Accepted(writes) = step(
             &mut state,
             Input::Matrix {
                 event: &event,
                 portal: &portal,
                 ghost: &GhostDid::from(&event.sender),
             },
+            0,
         ) else {
             panic!("the message is not an echo");
         };
-        let json = ops
+        let json = writes
             .iter()
-            .find_map(|op| build_event(&id(), &room(), op))
+            .find_map(|write| build_event(write.id(), &room(), write.op()))
             .expect("the message becomes a Roomy event")
             .to_json();
         assert_eq!(json["$type"], roomy_events::nsid::CREATE_MESSAGE);

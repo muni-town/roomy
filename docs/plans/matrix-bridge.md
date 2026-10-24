@@ -142,8 +142,10 @@ Applied to the public surface of every crate, not as an afterthought:
     downgraded to plaintext; `EncryptingSender` also fails closed when the room's
     encryption state cannot be read.
   - Inbound op application: `bridge_core::step` returns
-    `Step::Accepted(Vec<Op>)` or `Step::Rejected(Echo | Duplicate | Superseded |
-    NotBridged)`, so a caller cannot silently ignore a rejection.
+    `Step::Accepted(Vec<DecidedWrite>)` or `Step::Rejected(Echo | Duplicate |
+    Superseded | NotBridged)`, so a caller cannot silently ignore a rejection;
+    each decided write carries its Roomy event id and its id pairing, so a
+    caller cannot apply an op without the pairing that suppresses its echo.
 - **Small interfaces.** `bridge-core` exposes one entry point,
   `step(state, input) -> Step`, over `BridgeState`; concrete enums over trait
   objects except at the two boundaries that genuinely need them (`Storage`,

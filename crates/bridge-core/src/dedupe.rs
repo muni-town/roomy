@@ -92,15 +92,6 @@ impl Dedupe {
             .map(|mapping| mapping.matrix_id.as_str())
     }
 
-    /// Remove a pairing, for a redaction that should stop suppressing.
-    pub fn forget(&mut self, kind: MappingKind, matrix_id: &str) -> Option<Mapping> {
-        let mapping = self.by_matrix.remove(&(kind, matrix_id.to_string()))?;
-        self.written.remove(mapping.matrix_id.as_str());
-        self.by_roomy
-            .remove(&(mapping.kind, mapping.roomy_id.clone()));
-        Some(mapping)
-    }
-
     /// Whether a Matrix event is one the bridge produced.
     ///
     /// Two independent signals, either of which is sufficient. The id map is
@@ -239,22 +230,6 @@ mod tests {
         assert_eq!(
             dedupe.roomy_id(MappingKind::Message, "$evt"),
             Some("01J9ZQ9W3N7Q4Z6ZC0W4Y4T0AB")
-        );
-    }
-
-    #[test]
-    fn forgetting_a_pair_clears_both_directions() {
-        let mut dedupe = Dedupe::default();
-        dedupe.record(mapping(
-            MappingKind::Message,
-            "$evt",
-            "01J9ZQ9W3N7Q4Z6ZC0W4Y4T0AB",
-        ));
-        dedupe.forget(MappingKind::Message, "$evt");
-        assert_eq!(dedupe.classify_matrix("$evt", None), EchoDecision::Relay);
-        assert_eq!(
-            dedupe.matrix_id(MappingKind::Message, "01J9ZQ9W3N7Q4Z6ZC0W4Y4T0AB"),
-            None
         );
     }
 }
