@@ -673,18 +673,27 @@ impl BridgeDb {
             .map_err(DbError::Sqlite)
     }
 
-    /// Sends due to be retried at `now`.
-    pub fn due_failed_sends(&self, now: i64, limit: usize) -> Result<Vec<FailedSendRow>, DbError> {
+    /// Sends due to be retried at `now`, oldest first.
+    ///
+    /// Entries that have spent their attempt budget are excluded: they are
+    /// parked, kept for inspection and requeue, not offered again. `rowid`
+    /// breaks ties so batches queued together keep their insertion order.
+    pub fn due_failed_sends(
+        &self,
+        now: i64,
+        max_attempts: u32,
+        limit: usize,
+    ) -> Result<Vec<FailedSendRow>, DbError> {
         let mut statement = self
             .connection
             .prepare(
                 "select id, space_did, op, attempts, next_attempt_at, last_error
-                 from failed_sends where next_attempt_at <= ?1
-                 order by next_attempt_at limit ?2",
+                 from failed_sends where next_attempt_at <= ?1 and attempts < ?2
+                 order by next_attempt_at, rowid limit ?3",
             )
             .map_err(DbError::Sqlite)?;
         let rows = statement
-            .query_map(params![now, limit as i64], |row| {
+            .query_map(params![now, max_attempts as i64, limit as i64], |row| {
                 Ok(FailedSendRow {
                     id: row.get(0)?,
                     space_did: row.get(1)?,
@@ -696,6 +705,40 @@ impl BridgeDb {
             })
             .map_err(DbError::Sqlite)?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(DbError::Sqlite)
+    }
+
+    /// When the next retryable send falls due, or `None` when the queue holds
+    /// nothing left to retry.
+    pub fn next_failed_send_at(&self, max_attempts: u32) -> Result<Option<i64>, DbError> {
+        self.connection
+            .query_row(
+                "select min(next_attempt_at) from failed_sends where attempts < ?1",
+                params![max_attempts as i64],
+                |row| row.get(0),
+            )
+            .map_err(DbError::Sqlite)
+    }
+
+    /// One queued send, by id.
+    pub fn failed_send(&self, id: &str) -> Result<Option<FailedSendRow>, DbError> {
+        self.connection
+            .query_row(
+                "select id, space_did, op, attempts, next_attempt_at, last_error
+                 from failed_sends where id = ?1",
+                params![id],
+                |row| {
+                    Ok(FailedSendRow {
+                        id: row.get(0)?,
+                        space_did: row.get(1)?,
+                        op: row.get(2)?,
+                        attempts: row.get(3)?,
+                        next_attempt_at: row.get(4)?,
+                        last_error: row.get(5)?,
+                    })
+                },
+            )
+            .optional()
             .map_err(DbError::Sqlite)
     }
 
@@ -1129,10 +1172,54 @@ mod tests {
             created_at: 0,
         })
         .unwrap();
-        assert!(db.due_failed_sends(50, 10).unwrap().is_empty());
-        assert_eq!(db.due_failed_sends(150, 10).unwrap().len(), 1);
+        assert!(db.due_failed_sends(50, 10, 10).unwrap().is_empty());
+        assert_eq!(db.due_failed_sends(150, 10, 10).unwrap().len(), 1);
+        assert_eq!(db.next_failed_send_at(10).unwrap(), Some(100));
 
         db.clear_failed_send("s1").unwrap();
-        assert!(db.due_failed_sends(150, 10).unwrap().is_empty());
+        assert!(db.due_failed_sends(150, 10, 10).unwrap().is_empty());
+        assert_eq!(db.next_failed_send_at(10).unwrap(), None);
+    }
+
+    #[test]
+    fn a_parked_send_is_neither_due_nor_scheduled() {
+        let db = db();
+        db.put_failed_send(&FailedSendWrite {
+            id: "s1",
+            space_did: "did:plc:space",
+            payload: "[]",
+            attempts: 3,
+            next_attempt_at: 100,
+            last_error: Some("500"),
+            created_at: 0,
+        })
+        .unwrap();
+        assert!(db.due_failed_sends(1_000, 3, 10).unwrap().is_empty());
+        assert_eq!(db.next_failed_send_at(3).unwrap(), None);
+        assert_eq!(db.failed_send("s1").unwrap().unwrap().attempts, 3);
+    }
+
+    #[test]
+    fn sends_queued_together_keep_their_insertion_order() {
+        let db = db();
+        for id in ["b", "a"] {
+            db.put_failed_send(&FailedSendWrite {
+                id,
+                space_did: "did:plc:space",
+                payload: "[]",
+                attempts: 1,
+                next_attempt_at: 100,
+                last_error: None,
+                created_at: 0,
+            })
+            .unwrap();
+        }
+        let ids: Vec<_> = db
+            .due_failed_sends(100, 10, 10)
+            .unwrap()
+            .into_iter()
+            .map(|row| row.id)
+            .collect();
+        assert_eq!(ids, vec!["b", "a"]);
     }
 }

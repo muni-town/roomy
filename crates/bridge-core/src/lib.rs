@@ -36,7 +36,7 @@ pub use op::{MatrixMedia, MatrixOp, MatrixOrigin, MediaRef, Op, OpBatch, RoomyRo
 pub use portal::{
     EncryptionDevice, MissingFeature, Portal, PortalEncryption, PortalKind, PortalState,
 };
-pub use retry::{Due, Outbox, Pending, RetryPolicy};
+pub use retry::{Due, Outbox, Pending, RetryPolicy, RetryState};
 pub use state::{step, BridgeState, DecidedWrite, Input, Rejection, Step};
 pub use storage::{
     Clock, InMemoryStorage, Storage, StorageError, StoredMessage, SystemClock, VirtualClock,

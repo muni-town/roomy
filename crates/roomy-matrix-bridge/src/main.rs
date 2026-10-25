@@ -16,6 +16,7 @@ mod db;
 #[cfg(feature = "e2ee")]
 mod encrypting_sender;
 mod outbound;
+mod outbox;
 mod probe;
 mod relay;
 mod server;
@@ -27,6 +28,7 @@ use bridge_core::{BridgeState, MatrixDeviceId, MissingFeature, SpaceDid};
 use clap::Parser;
 use config::{Config, E2eeMode};
 use matrix_adapter::{AsToken, HsToken, Tokens};
+use outbox::Outbox;
 use probe::ProbeState;
 use supervisor::EncryptionSupport;
 
@@ -406,6 +408,13 @@ async fn serve(config: Config) -> std::process::ExitCode {
         encryption: encryption.clone(),
     });
     let supervisor = Arc::new(supervisor);
+    // One queue, one policy, one durability rule for everything bound for the
+    // appserver — inbound transactions and backfilled history alike.
+    let writer_outbox = Arc::new(outbox::Outbox::new(
+        db.clone(),
+        bridge_core::RetryPolicy::default(),
+        clock.clone(),
+    ));
     let relay = relay::Relay::new(relay::RelayDeps {
         db: db.clone(),
         supervisor: supervisor.clone(),
@@ -418,7 +427,7 @@ async fn serve(config: Config) -> std::process::ExitCode {
         clock,
     });
 
-    let writer = tokio::spawn(writer_task(writer_rx, appserver.clone(), db.clone()));
+    let writer = tokio::spawn(writer_task(writer_rx, appserver.clone(), writer_outbox));
     let outbound = tokio::spawn(outbound_task(
         supervisor.clone(),
         appserver.clone(),
@@ -480,142 +489,80 @@ async fn serve(config: Config) -> std::process::ExitCode {
 
 /// Drain the relay's queue into the appserver.
 ///
-/// A failed batch is retried with the outbox's backoff rather than dropped: a
-/// relay that loses events on a transient appserver error silently diverges the
-/// two sides, which is the one failure mode a bridge cannot recover from.
+/// The queue is durable, so a batch outlives a restart, and its schedule is
+/// the outbox's: the loop waits for the next batch to fall due rather than
+/// polling. A failed batch is retried with backoff rather than dropped — a
+/// relay that loses events on a transient appserver error silently diverges
+/// the two sides, which is the one failure mode a bridge cannot recover from.
 async fn writer_task(
     mut receiver: tokio::sync::mpsc::UnboundedReceiver<(
         roomy_events::Did,
         Vec<roomy_events::Event>,
     )>,
     appserver: Arc<roomy_client::AppserverClient>,
-    db: Arc<parking_lot::Mutex<db::BridgeDb>>,
+    queue: Arc<Outbox>,
 ) {
-    let outbox = bridge_core::Outbox::new(bridge_core::RetryPolicy::default());
-
     loop {
-        // A short poll keeps the outbox's schedule honest without a second task.
-        let job =
-            tokio::time::timeout(std::time::Duration::from_millis(200), receiver.recv()).await;
-
-        match job {
-            Ok(Some((space_did, events))) => {
-                deliver(&appserver, &db, &outbox, &space_did, events).await;
-            }
-            Ok(None) => return,
-            Err(_elapsed) => {}
-        }
-
-        // Retry whatever is due. A bridge that only retried on the next inbound
-        // message would stall its own retries during a quiet period, which is
-        // exactly when a homeserver outage is most likely to go unnoticed.
-        retry_due(&appserver, &db, now_ms()).await;
-    }
-}
-
-/// Send one batch, recording a failure for retry.
-async fn deliver(
-    appserver: &roomy_client::AppserverClient,
-    db: &parking_lot::Mutex<db::BridgeDb>,
-    outbox: &bridge_core::Outbox,
-    space_did: &roomy_events::Did,
-    events: Vec<roomy_events::Event>,
-) {
-    let Some(first) = events.first().map(|event| event.id.as_str().to_string()) else {
-        return;
-    };
-    match appserver.send_events(space_did, events.clone()).await {
-        Ok(()) => {
-            let _ = db.lock().clear_failed_send(&first);
-        }
-        Err(error) => {
-            tracing::warn!(%error, id = %first, "sendEvents failed; queuing for retry");
-            // The appserver treats a repeated ULID as a no-op, so re-sending is
-            // safe: an event that already landed is not written twice. The
-            // events are the payload because a batch is the smallest unit the
-            // appserver accepts.
-            let payload = serde_json::to_string(
-                &events
-                    .iter()
-                    .map(|event| event.to_json())
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap_or_default();
-            let _ = db.lock().put_failed_send(&db::FailedSendWrite {
-                id: &first,
-                space_did: space_did.as_str(),
-                payload: &payload,
-                attempts: 1,
-                next_attempt_at: now_ms() + outbox.policy().delay_for(1),
-                last_error: Some(&error.to_string()),
-                created_at: now_ms(),
-            });
-        }
-    }
-}
-
-/// Re-send every failed batch that is due.
-async fn retry_due(
-    appserver: &roomy_client::AppserverClient,
-    db: &parking_lot::Mutex<db::BridgeDb>,
-    now: i64,
-) {
-    let due = match db.lock().due_failed_sends(now, 10) {
-        Ok(due) => due,
-        Err(error) => {
-            tracing::warn!(%error, "could not read the retry queue");
-            return;
-        }
-    };
-
-    let policy = bridge_core::RetryPolicy::default();
-    for row in due {
-        let events: Vec<roomy_events::Event> =
-            match serde_json::from_str::<Vec<serde_json::Value>>(&row.op)
-                .ok()
-                .and_then(|values| {
-                    values
-                        .into_iter()
-                        .map(roomy_events::Event::from_json)
-                        .collect::<Result<Vec<_>, _>>()
-                        .ok()
-                }) {
-                Some(events) => events,
-                None => {
-                    // A row whose payload cannot be read would fail identically
-                    // forever, so it is dropped rather than retried.
-                    tracing::error!(id = %row.id, "dropping an unreadable retry payload");
-                    let _ = db.lock().clear_failed_send(&row.id);
-                    continue;
-                }
-            };
-
-        let Ok(space_did) = roomy_events::Did::parse(row.space_did.clone()) else {
-            let _ = db.lock().clear_failed_send(&row.id);
+        if let Err(error) = queue.drain(&*appserver).await {
+            tracing::warn!(%error, "could not drain the outbox");
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             continue;
+        }
+
+        let wait = match queue.wait() {
+            Ok(wait) => wait,
+            Err(error) => {
+                tracing::warn!(%error, "could not read the outbox schedule");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
         };
 
-        match appserver.send_events(&space_did, events).await {
-            Ok(()) => {
-                tracing::info!(id = %row.id, "retry succeeded");
-                let _ = db.lock().clear_failed_send(&row.id);
-            }
-            Err(error) => {
-                let attempts = row.attempts.saturating_add(1);
-                if attempts >= policy.max_attempts {
-                    tracing::error!(id = %row.id, %error, "retry budget spent; parking the batch");
+        match next_work(&mut receiver, wait).await {
+            Wake::Batch(space_did, events) => {
+                if let Err(error) = queue.enqueue(&space_did, events) {
+                    tracing::error!(%error, "could not queue a batch for the appserver");
                 }
-                let _ = db.lock().put_failed_send(&db::FailedSendWrite {
-                    id: &row.id,
-                    space_did: &row.space_did,
-                    payload: &row.op,
-                    attempts,
-                    next_attempt_at: now + policy.delay_for(attempts),
-                    last_error: Some(&error.to_string()),
-                    created_at: now_ms(),
-                });
             }
+            Wake::Retry => {}
+            Wake::Closed => return,
         }
+    }
+}
+
+/// What woke the writer.
+enum Wake {
+    /// A new batch arrived from the relay.
+    Batch(roomy_events::Did, Vec<roomy_events::Event>),
+    /// The next queued batch's retry time arrived; the drain above sends it.
+    Retry,
+    /// Every producer is gone.
+    Closed,
+}
+
+/// Wait for a new batch or for the queue's next due time, whichever comes
+/// first. `None` from `wait` means nothing is retryable, so only a batch can
+/// produce work.
+async fn next_work(
+    receiver: &mut tokio::sync::mpsc::UnboundedReceiver<(
+        roomy_events::Did,
+        Vec<roomy_events::Event>,
+    )>,
+    wait: Option<std::time::Duration>,
+) -> Wake {
+    fn wake(job: Option<(roomy_events::Did, Vec<roomy_events::Event>)>) -> Wake {
+        match job {
+            Some((space_did, events)) => Wake::Batch(space_did, events),
+            None => Wake::Closed,
+        }
+    }
+
+    let Some(after) = wait else {
+        return wake(receiver.recv().await);
+    };
+    tokio::select! {
+        job = receiver.recv() => wake(job),
+        _ = tokio::time::sleep(after) => Wake::Retry,
     }
 }
 
