@@ -12,7 +12,7 @@
 import type { Did, SqlStatement, StreamDid } from "@roomy-space/sdk";
 
 import type { LoggedEvent } from "../types.ts";
-import type { RecordChange } from "./recordChange.ts";
+import { type RecordChange, decidedAtFor } from "./recordChange.ts";
 import { messageStatements } from "./messageRules.ts";
 import { reactionStatements } from "./reactionRules.ts";
 import { roomStatements } from "./roomRules.ts";
@@ -63,6 +63,12 @@ export interface RuleContext {
   readonly actor: Did;
   /** The entry's id, for the rows the record model does not identify. */
   readonly eventId: string;
+  /**
+   * The instant the log assigns the entry, in epoch milliseconds: the time half
+   * of the ordering stamp every change from it carries. Rules stamp
+   * `created_at`/`updated_at` from it, so a replay reproduces the live write.
+   */
+  readonly decidedAt: number;
   readonly priorRoom?: string;
   readonly priorParent?: string;
 }
@@ -141,6 +147,14 @@ export function entryContext(
     isBackfill: prior.isBackfill,
     actor: entry.user as Did,
     eventId: entry.event.id,
+    // Every change from one entry carries the entry's ordering stamp, so the
+    // stamp's time half is the entry's instant.
+    decidedAt: decidedAtFor(
+      entry.event,
+      entry.idx,
+      entry.receivedAt,
+      entry.createdAt,
+    ),
     priorRoom: prior.priorRoom,
     priorParent: prior.priorParent,
   };

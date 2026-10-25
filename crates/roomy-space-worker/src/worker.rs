@@ -1,8 +1,11 @@
 //! The materialisation loop.
 //!
 //! One iteration is: hold the lease, read a batch of changes from the cursor,
-//! plan it against the rows the space DB holds, apply the space half and the
-//! cursor in one transaction, then hand the global half to the sink.
+//! plan it against the rows the space DB holds, hand the global half to the
+//! sink, then commit the space half and the cursor in one transaction. The
+//! global index may be one batch ahead of the space projection after a crash —
+//! every global statement is idempotent, so the replay rewrites it — and is
+//! never behind it.
 //!
 //! Three things it deliberately does not do:
 //!
@@ -11,18 +14,25 @@
 //!    accumulates it.
 //!  * **Re-materialisation from the log.** The feed is the input; a worker with
 //!    a stale DB resumes from its cursor and a worker with a corrupt one is
-//!    rebuilt by replaying the feed from zero, which is the same code path.
+//!    rebuilt by replaying the feed from zero. A rebuild plans in
+//!    [`PlanMode::Backfill`], which invalidates the read-path projections
+//!    instead of maintaining them, so a database being rebuilt never answers a
+//!    read from a half-replayed projection.
 //!  * **Serving reads.** The router is a separate crate; this one materialises.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use space_core::change::{decode_row, DecodeError};
+use space_core::change::DecodeError;
 use space_core::ids::SpaceDid;
-use space_db::plan::{plan_batch, EntryChanges};
+use space_core::PlanMode;
+use space_db::plan::{group_entries, plan_batch};
 use space_db::{DbError, SpaceDb};
+use space_feed::{ChangeFeed, Cursor, FeedError};
 
-use crate::feed::{ChangeFeed, FeedError};
-use crate::lease::{Lease, LeaseError};
+use crate::cancel::Cancel;
+use crate::clock::Clock;
+use crate::lease::{Lease, LeaseError, LeaseGrant};
+use crate::signal::{SignalSink, SpaceSignal};
 use crate::sink::{GlobalSink, SinkError};
 
 /// What one iteration did.
@@ -59,11 +69,17 @@ pub enum WorkerError {
         idx: i64,
         source: space_core::RuleError,
     },
+    #[error("starting an actor: {0}")]
+    Spawn(String),
+    /// The lease moved to another worker while this batch was in flight, so the
+    /// batch was refused rather than written over the new owner's projection.
+    #[error("fenced out at epoch {granted} (stored {stored})")]
+    Fenced { granted: i64, stored: i64 },
 }
 
 /// What a worker is built from: the four seams, the space it owns, and the
 /// policy of the loop itself.
-pub struct WorkerParts<F: ChangeFeed, L: Lease, S: GlobalSink> {
+pub struct WorkerParts<F: ChangeFeed, L: Lease, S: GlobalSink, N: SignalSink> {
     pub space: SpaceDid,
     /// This process's identity on the lease row.
     pub holder: String,
@@ -71,37 +87,54 @@ pub struct WorkerParts<F: ChangeFeed, L: Lease, S: GlobalSink> {
     pub lease_ttl: Duration,
     /// The most changes one batch may hold.
     pub batch_limit: usize,
+    /// Whether this worker is the live write path or a rebuild. A rebuild
+    /// invalidates the read-path projections rather than writing them.
+    pub mode: PlanMode,
     pub feed: F,
     pub lease: L,
     pub sink: S,
+    /// Where the post-commit signals go.
+    pub signals: N,
+    /// The lease's instants.
+    pub clock: std::sync::Arc<dyn Clock>,
+    /// The supervisor's stop signal for this space.
+    pub cancel: Cancel,
     pub db: SpaceDb,
 }
 
 /// The materialisation loop for one space.
-pub struct Worker<F: ChangeFeed, L: Lease, S: GlobalSink> {
+pub struct Worker<F: ChangeFeed, L: Lease, S: GlobalSink, N: SignalSink> {
     space: SpaceDid,
     holder: String,
     lease_ttl: Duration,
     batch_limit: usize,
+    mode: PlanMode,
     feed: F,
     lease: L,
     sink: S,
+    signals: N,
+    clock: std::sync::Arc<dyn Clock>,
+    cancel: Cancel,
     db: SpaceDb,
     /// The last failure, for `/health`. A failed batch leaves the cursor where
     /// it was, so the next iteration retries it.
     last_error: Option<String>,
 }
 
-impl<F: ChangeFeed, L: Lease, S: GlobalSink> Worker<F, L, S> {
-    pub fn new(parts: WorkerParts<F, L, S>) -> Self {
+impl<F: ChangeFeed, L: Lease, S: GlobalSink, N: SignalSink> Worker<F, L, S, N> {
+    pub fn new(parts: WorkerParts<F, L, S, N>) -> Self {
         Self {
             space: parts.space,
             holder: parts.holder,
             lease_ttl: parts.lease_ttl,
             batch_limit: parts.batch_limit,
+            mode: parts.mode,
             feed: parts.feed,
             lease: parts.lease,
             sink: parts.sink,
+            signals: parts.signals,
+            clock: parts.clock,
+            cancel: parts.cancel,
             db: parts.db,
             last_error: None,
         }
@@ -115,11 +148,31 @@ impl<F: ChangeFeed, L: Lease, S: GlobalSink> Worker<F, L, S> {
         self.last_error.as_deref()
     }
 
-    /// Whether this process holds the lease right now.
-    pub fn holds_lease(&mut self) -> Result<bool, WorkerError> {
-        Ok(self
-            .lease
-            .acquire(&self.space, &self.holder, self.lease_ttl)?)
+    /// What this worker plans in: the live path, or a rebuild's backfill.
+    pub fn mode(&self) -> PlanMode {
+        self.mode
+    }
+
+    /// Switch between the live path and a rebuild. A supervisor sets this while
+    /// a space is being replayed from zero and clears it once the replay has
+    /// caught up to the feed.
+    pub fn set_mode(&mut self, mode: PlanMode) {
+        self.mode = mode;
+    }
+
+    /// Whether this process holds the lease right now, and under which epoch.
+    pub fn holds_lease(&mut self) -> Result<LeaseGrant, WorkerError> {
+        Ok(self.lease.acquire(
+            &self.space,
+            &self.holder,
+            self.clock.now_ms(),
+            self.lease_ttl,
+        )?)
+    }
+
+    /// The supervisor's stop signal for this space.
+    pub fn cancelled(&self) -> bool {
+        self.cancel.is_cancelled()
     }
 
     /// The cursor the projection has been advanced to.
@@ -149,48 +202,36 @@ impl<F: ChangeFeed, L: Lease, S: GlobalSink> Worker<F, L, S> {
     }
 
     fn run_step(&mut self) -> Result<Progress, WorkerError> {
-        if !self
-            .lease
-            .acquire(&self.space, &self.holder, self.lease_ttl)?
-        {
+        if self.cancel.is_cancelled() {
+            return Ok(Progress::Idle {
+                cursor: self.db.cursor()?.unwrap_or((-1, -1)),
+            });
+        }
+        let grant = self.lease.acquire(
+            &self.space,
+            &self.holder,
+            self.clock.now_ms(),
+            self.lease_ttl,
+        )?;
+        if !grant.held {
             return Ok(Progress::NotLeased);
         }
 
         let cursor = self.db.cursor()?.unwrap_or((-1, -1));
-        let rows = self.feed.batch(&self.space, cursor, self.batch_limit)?;
+        let rows = self
+            .feed
+            .batch(&self.space, Cursor::from(cursor), self.batch_limit)?;
         if rows.is_empty() {
             return Ok(Progress::Idle { cursor });
         }
 
-        let mut entries: Vec<EntryChanges> = Vec::new();
-        let mut changes = 0;
-        for row in &rows {
-            let change = decode_row(row).map_err(|source| WorkerError::Decode {
-                idx: row.idx,
-                source,
-            })?;
-            let actor =
-                roomy_events::Did::parse(row.actor.clone()).map_err(|_| WorkerError::Decode {
-                    idx: row.idx,
-                    source: DecodeError::Did,
-                })?;
-            changes += 1;
+        let entries = group_entries(&rows).map_err(|error| WorkerError::Decode {
+            idx: error.idx,
+            source: error.source,
+        })?;
+        let changes = rows.len();
 
-            // Rows that share an entry are planned together: they came from one
-            // log entry, share its actor, and are applied in emission order.
-            match entries.last_mut() {
-                Some(entry) if entry.idx == row.idx => entry.changes.push(change),
-                _ => entries.push(EntryChanges {
-                    idx: row.idx,
-                    changes: vec![change],
-                    actor,
-                    event_id: row.event_id.clone(),
-                    order_stamp: row.order_stamp.clone(),
-                }),
-            }
-        }
-
-        let planned = plan_batch(self.db.connection(), &self.space, &entries, now_ms()).map_err(
+        let planned = plan_batch(self.db.connection(), &self.space, &entries, self.mode).map_err(
             |source| match source {
                 DbError::Rule(source) => WorkerError::Plan {
                     idx: entries.first().map(|entry| entry.idx).unwrap_or(-1),
@@ -203,11 +244,28 @@ impl<F: ChangeFeed, L: Lease, S: GlobalSink> Worker<F, L, S> {
         let last = rows.last().expect("a non-empty batch has a last row");
         let next_cursor = (last.idx, last.ord);
 
-        // The global half is written first and is idempotent, so a crash
-        // between the two databases replays harmlessly rather than leaving the
-        // space ahead of the index that resolves it.
-        let globals = self.db.apply_batch(&planned, next_cursor)?;
-        self.sink.apply(&globals)?;
+        // The global half goes first: it is idempotent, so a crash between the
+        // two databases replays harmlessly, and writing it first is what keeps
+        // the index from ever being behind a committed space projection. The
+        // space half stays uncommitted until the sink has accepted, so a sink
+        // failure leaves the cursor where it was and the same changes are read
+        // again.
+        let batch = self
+            .db
+            .begin_batch(&planned, next_cursor, grant.epoch)
+            .map_err(|error| match error {
+                DbError::Fenced { granted, stored } => WorkerError::Fenced { granted, stored },
+                other => WorkerError::Db(other),
+            })?;
+        self.sink.apply(batch.globals())?;
+        batch.commit()?;
+        // After the commit: a listener that reacts to this signal reads the
+        // rows it is about.
+        self.signals.signal(&SpaceSignal {
+            space: self.space.clone(),
+            cursor: next_cursor,
+            entries: entries.len(),
+        });
 
         Ok(Progress::Applied {
             cursor: next_cursor,
@@ -216,18 +274,20 @@ impl<F: ChangeFeed, L: Lease, S: GlobalSink> Worker<F, L, S> {
         })
     }
 
-    /// Give the lease back, if this process still holds it.
+    /// Give the lease back, if this process still holds it, and flush anything
+    /// the signal sink is holding.
     pub fn release(&mut self) {
         if let Err(error) = self.lease.release(&self.space, &self.holder) {
             tracing::warn!(%error, "releasing the lease");
         }
+        self.signals.flush();
     }
 
     /// What `/health` reports.
     pub fn health(&mut self) -> crate::health::Health {
         let cursor = self.cursor().unwrap_or((-1, -1));
         let lag = self.lag().unwrap_or(-1);
-        let lease_held = self.holds_lease().unwrap_or(false);
+        let lease_held = self.holds_lease().map(|grant| grant.held).unwrap_or(false);
         crate::health::Health {
             space: self.space.as_str().to_string(),
             cursor,
@@ -237,11 +297,4 @@ impl<F: ChangeFeed, L: Lease, S: GlobalSink> Worker<F, L, S> {
             last_error: self.last_error.clone(),
         }
     }
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_millis() as i64)
-        .unwrap_or(0)
 }

@@ -68,4 +68,11 @@ export interface LoggedEvent extends DecodedStreamEvent {
 export interface MaterializeOpts {
   streamId: StreamDid;
   user: UserDid;
+  /**
+   * The instant the log assigns the entry, in epoch milliseconds. A materialiser
+   * stamps the rows it writes from it, so a replay reproduces the live write.
+   * A caller that omits it gets wall-clock time, which only a caller with no
+   * log behind it can want.
+   */
+  decidedAt?: number;
 }

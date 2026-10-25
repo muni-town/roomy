@@ -87,6 +87,8 @@ pub enum DerivedStep {
         space_id: SpaceDid,
         message_id: String,
         urls: Vec<String>,
+        /// The instant the log assigns the change: the rows' clock stamp.
+        decided_at_ms: i64,
     },
     /// Key a message between its neighbours: the one ordering key whose value
     /// depends on the rows around it.

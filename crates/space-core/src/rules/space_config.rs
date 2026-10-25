@@ -24,44 +24,93 @@ pub fn space_info_effects(record: impl Into<SpaceInfoPatch>, ctx: &RuleContext) 
     let mut effects = vec![
         // The entry's own entity, kept because the event path writes it and the
         // global entity→space index records it.
-        ensure_entity(&ctx.stream_id, &ctx.event_id, None),
-        ensure_entity(&ctx.stream_id, stream, None),
+        ensure_entity(&ctx.stream_id, &ctx.event_id, None, ctx.decided_at_ms),
+        ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
         Effect::space(
-            "insert into comp_space (entity) values (?) on conflict do nothing",
-            vec![Value::text(stream)],
+            "insert into comp_space (entity, created_at, updated_at)
+             values (?, ?, ?) on conflict do nothing",
+            vec![
+                Value::text(stream),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ),
     ];
 
     if let Some(name) = &patch.name {
         effects.push(Effect::space(
-            "insert into comp_info (entity, name) values (?, ?)
+            "insert into comp_info (entity, name, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set name = excluded.name",
-            vec![Value::text(stream), Value::opt_text(name.clone())],
+            vec![
+                Value::text(stream),
+                Value::opt_text(name.clone()),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ));
     }
     if let Some(avatar) = &patch.avatar {
         effects.push(Effect::space(
-            "insert into comp_info (entity, avatar) values (?, ?)
+            "insert into comp_info (entity, avatar, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set avatar = excluded.avatar",
-            vec![Value::text(stream), Value::opt_text(avatar.clone())],
+            vec![
+                Value::text(stream),
+                Value::opt_text(avatar.clone()),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ));
     }
     if let Some(description) = &patch.description {
         effects.push(Effect::space(
-            "insert into comp_info (entity, description) values (?, ?)
+            "insert into comp_info (entity, description, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set description = excluded.description",
-            vec![Value::text(stream), Value::opt_text(description.clone())],
+            vec![
+                Value::text(stream),
+                Value::opt_text(description.clone()),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ));
     }
 
     if let Some(allow) = &patch.allow_public_join {
-        effects.push(policy_effect(stream, "allow_public_join", *allow));
+        effects.push(policy_effect(
+            stream,
+            "allow_public_join",
+            *allow,
+            ctx.decided_at_ms,
+        ));
     }
     if let Some(allow) = &patch.allow_member_invites {
-        effects.push(policy_effect(stream, "allow_member_invites", *allow));
+        effects.push(policy_effect(
+            stream,
+            "allow_member_invites",
+            *allow,
+            ctx.decided_at_ms,
+        ));
     }
+    // The space's own name and avatar are denormalised into every feed row it
+    // holds, so a space rename re-derives them.
+    if patch.name.is_some() || patch.avatar.is_some() {
+        effects.push(Effect::space(
+            "update activity_item
+                set space_name = (select name from comp_info where entity = activity_item.space_id),
+                    space_avatar = (select avatar from comp_info where entity = activity_item.space_id)",
+            Vec::new(),
+        ));
+    }
+
     if let Some(suggest) = &patch.suggest_to_others {
-        effects.push(policy_effect(stream, "suggest_to_others", *suggest));
+        effects.push(policy_effect(
+            stream,
+            "suggest_to_others",
+            *suggest,
+            ctx.decided_at_ms,
+        ));
     }
 
     effects
@@ -69,24 +118,40 @@ pub fn space_info_effects(record: impl Into<SpaceInfoPatch>, ctx: &RuleContext) 
 
 /// One three-valued join-policy column: `null` is "not answered", which every
 /// reader distinguishes from `0`.
-fn policy_effect(stream: &str, column: &'static str, value: Option<bool>) -> Effect {
+fn policy_effect(
+    stream: &str,
+    column: &'static str,
+    value: Option<bool>,
+    decided_at_ms: i64,
+) -> Effect {
     // The column is chosen here, not from the record, so the statement stays a
     // `&'static str` per column.
     let sql: &'static str = match column {
         "allow_public_join" => {
-            "insert into comp_space (entity, allow_public_join) values (?, ?)
+            "insert into comp_space (entity, allow_public_join, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set allow_public_join = excluded.allow_public_join"
         }
         "allow_member_invites" => {
-            "insert into comp_space (entity, allow_member_invites) values (?, ?)
+            "insert into comp_space (entity, allow_member_invites, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set allow_member_invites = excluded.allow_member_invites"
         }
         _ => {
-            "insert into comp_space (entity, suggest_to_others) values (?, ?)
+            "insert into comp_space (entity, suggest_to_others, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set suggest_to_others = excluded.suggest_to_others"
         }
     };
-    Effect::space(sql, vec![Value::text(stream), Value::opt_flag(value)])
+    Effect::space(
+        sql,
+        vec![
+            Value::text(stream),
+            Value::opt_flag(value),
+            Value::Integer(decided_at_ms),
+            Value::Integer(decided_at_ms),
+        ],
+    )
 }
 
 /// `spaceSidebar` — the space's sidebar ordering. Both sidebar versions

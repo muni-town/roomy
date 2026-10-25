@@ -418,6 +418,15 @@ create table if not exists worker_cursor (
   ord integer not null
 ) strict;
 
+-- The lease epoch the last applied batch carried. A worker that lost its lease
+-- while a batch was in flight finds a newer epoch here and refuses to commit,
+-- which is what stops a paused writer from landing over a projection another
+-- worker has since advanced.
+create table if not exists worker_fence (
+  id integer primary key check (id = 1),
+  epoch integer not null
+) strict;
+
 -- Denormalised read projection: the room→space→parent→access facts
 -- that `auth/access.ts:resolveRoom` re-derives per room, per request, per
 -- caller. Those three queries are 36 of the ~50 DB round-trips

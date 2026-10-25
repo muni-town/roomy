@@ -26,17 +26,19 @@ For private spaces, an inviteToken matching a valid invite is required.",
 
 export const JoinSpace = defineEvent(
   JoinSpaceSchema,
-  ({ streamId, user, event }) => [
+  ({ streamId, user, event, decidedAt }) => {
+    const at = decidedAt ?? Date.now();
+    return [
     // Ensure the joining user entity exists before referencing it in edges
-    ensureEntity(streamId, user),
+    ensureEntity(streamId, user, undefined, at),
     // Ensure the space entity exists (it is the stream root; idempotent).
-    ensureEntity(streamId, streamId),
+    ensureEntity(streamId, streamId, undefined, at),
     // Membership (head = user DID, tail = space DID). Routed to the global
     // DB by the appserver, so joining here is what tracks membership.
     // Idempotent — a re-join must not duplicate the edge.
     sql`
-      insert or ignore into edges (head, tail, label)
-      values (${user}, ${streamId}, 'joinedSpace')
+      insert or ignore into edges (head, tail, label, created_at, updated_at)
+      values (${user}, ${streamId}, 'joinedSpace', ${at}, ${at})
     `,
     // A re-join clears any previous leave marker.
     sql`
@@ -46,7 +48,7 @@ export const JoinSpace = defineEvent(
     // Insert member edge, using admin permission if an 'admin' edge exists for this user.
     // This ensures that admins who leave and rejoin retain their admin status.
     sql`
-      insert into edges (head, tail, label, payload)
+      insert into edges (head, tail, label, payload, created_at, updated_at)
       select
         ${streamId},
         ${user},
@@ -56,7 +58,9 @@ export const JoinSpace = defineEvent(
           where head = ${streamId}
             and tail = ${user}
             and label = 'admin'
-        ) then '{"can":"admin"}' else '{"can":"post"}' end
+        ) then '{"can":"admin"}' else '{"can":"post"}' end,
+        ${at},
+        ${at}
       where not exists (
         select 1 from edges
         where head = ${streamId}
@@ -66,7 +70,7 @@ export const JoinSpace = defineEvent(
     `,
     // Create a system message announcing the member joining
     sql`
-      insert into entities (id, stream_id, room)
+      insert into entities (id, stream_id, room, created_at, updated_at)
       values (
         ${event.id},
         ${streamId},
@@ -76,26 +80,35 @@ export const JoinSpace = defineEvent(
             where label = 'space.roomy.channel' and deleted = 0 and e.stream_id = ${streamId}
             order by entity
             limit 1
-        )
+        ),
+        ${at},
+        ${at}
       ) on conflict do nothing
     `,
     // Set author on the system message to be the stream itself
     sql`
-        insert or replace into edges (head, tail, label)
+        insert or replace into edges (head, tail, label, created_at, updated_at)
         select
           ${event.id},
           ${streamId},
-          'author'
+          'author',
+          ${at},
+          ${at}
       `,
     sql`
-      insert or replace into comp_content (entity, mime_type, data, last_edit)
+      insert or replace into comp_content (
+        entity, mime_type, data, last_edit, created_at, updated_at
+      )
       values (
         ${event.id},
         'text/markdown',
         cast(('[@' || ${user} || '](/user/' || ${user} || ') joined the space.') as blob),
-        ${event.id}
+        ${event.id},
+        ${at},
+        ${at}
     )`,
-  ],
+    ];
+  },
 );
 
 const LeaveSpaceSchema = type({
@@ -108,7 +121,9 @@ This will remove you from the member list.",
 
 export const LeaveSpace = defineEvent(
   LeaveSpaceSchema,
-  ({ streamId, user }) => [
+  ({ streamId, user, decidedAt }) => {
+    const at = decidedAt ?? Date.now();
+    return [
     sql`
       delete from edges
       where
@@ -128,10 +143,11 @@ export const LeaveSpace = defineEvent(
     // space (with isMember = false). Routed to the global DB alongside the
     // joinedSpace edge. Idempotent.
     sql`
-      insert or ignore into edges (head, tail, label)
-      values (${user}, ${streamId}, 'leftSpace')
+      insert or ignore into edges (head, tail, label, created_at, updated_at)
+      values (${user}, ${streamId}, 'leftSpace', ${at}, ${at})
     `,
-  ],
+    ];
+  },
 );
 
 const UpdateSpaceInfoSchema = type({
@@ -150,7 +166,8 @@ This is used to set things like the name, icon, description, and join policy for
 
 export const UpdateSpaceInfo = defineEvent(
   UpdateSpaceInfoSchema,
-  ({ streamId, event }) => {
+  ({ streamId, event, decidedAt }) => {
+    const at = decidedAt ?? Date.now();
     const infoUpdates = [
       { key: "name", value: event.name },
       { key: "avatar", value: event.avatar },
@@ -180,28 +197,30 @@ export const UpdateSpaceInfo = defineEvent(
       // (the join-space materializer writes joinedSpace to the global DB,
       // not comp_space). getMetadata would 404.
       sql`
-        insert into comp_space (entity)
-        values (${streamId})
+        insert into comp_space (entity, created_at, updated_at)
+        values (${streamId}, ${at}, ${at})
         on conflict do nothing
       `,
       setInfoUpdates.length > 0
         ? {
-            sql: `insert into comp_info (entity, ${setInfoUpdates.map((x) => x.key).join(", ")})
-            VALUES (:entity, ${setInfoUpdates.map((x) => `:${x.key}`)})
+            sql: `insert into comp_info (entity, ${setInfoUpdates.map((x) => x.key).join(", ")}, created_at, updated_at)
+            VALUES (:entity, ${setInfoUpdates.map((x) => `:${x.key}`)}, :at, :at)
             on conflict do update set ${setInfoUpdates.map((x) => `${x.key} = :${x.key}`)}`,
             params: Object.fromEntries([
               [":entity", streamId],
+              [":at", at],
               ...setInfoUpdates.map((x) => [":" + x.key, x.value]),
             ]),
           }
         : undefined,
       setSpaceUpdates.length > 0
         ? {
-            sql: `insert into comp_space (entity, ${setSpaceUpdates.map((x) => x.key).join(", ")})
-            VALUES (:entity, ${setSpaceUpdates.map((x) => `:${x.key}`)})
+            sql: `insert into comp_space (entity, ${setSpaceUpdates.map((x) => x.key).join(", ")}, created_at, updated_at)
+            VALUES (:entity, ${setSpaceUpdates.map((x) => `:${x.key}`)}, :at, :at)
             on conflict do update set ${setSpaceUpdates.map((x) => `${x.key} = :${x.key}`)}`,
             params: Object.fromEntries([
               [":entity", streamId],
+              [":at", at],
               ...setSpaceUpdates.map((x) => [
                 ":" + x.key,
                 typeof x.value === "boolean" ? (x.value ? 1 : 0) : null,
@@ -303,11 +322,11 @@ const BanAccountSchema = type({
 
 export const BanAccount = defineEvent(
   BanAccountSchema,
-  ({ streamId, event: { userDid } }) => {
+  ({ streamId, event: { userDid }, decidedAt }) => {
     return [
       sql`
-      insert into comp_bans (entity, user_did)
-      values (${streamId}, ${userDid})
+      insert into comp_bans (entity, user_did, created_at)
+      values (${streamId}, ${userDid}, ${decidedAt ?? Date.now()})
     `,
     ];
   },
@@ -337,29 +356,34 @@ const AddAdminSchema = type({
   userDid: UserDid.describe("The user to add as an admin."),
 }).describe("Add an admin to the space");
 
-export const AddAdmin = defineEvent(AddAdminSchema, ({ streamId, event }) => {
+export const AddAdmin = defineEvent(AddAdminSchema, ({ streamId, event, decidedAt }) => {
+  const at = decidedAt ?? Date.now();
   return [
     // Ensure the space entity and admin user entity exist before inserting edges
-    ensureEntity(streamId, streamId),
-    ensureEntity(streamId, event.userDid),
+    ensureEntity(streamId, streamId, undefined, at),
+    ensureEntity(streamId, event.userDid, undefined, at),
     sql`
-      insert or replace into edges (head, tail, label, payload)
+      insert or replace into edges (head, tail, label, payload, created_at, updated_at)
       values (
         ${streamId},
         ${event.userDid},
         'member',
         ${edgePayload({
           can: "admin",
-        })}
+        })},
+        ${at},
+        ${at}
       )
     `,
     // Track admin status in a separate edge so it survives leave/rejoin
     sql`
-      insert or ignore into edges (head, tail, label)
+      insert or ignore into edges (head, tail, label, created_at, updated_at)
       values (
         ${streamId},
         ${event.userDid},
-        'admin'
+        'admin',
+        ${at},
+        ${at}
       )
     `,
   ];

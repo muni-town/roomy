@@ -1,8 +1,52 @@
 # Provisional Plan: Rust Core Appserver
 
-**Status (2026-10-23):** Provisional, for review. Nothing in this plan is implemented
-beyond the space worker's materialisation core (PR #530) and the per-space read
-router (`crates/space-xrpc`, #531). The design questions in §7 are open.
+**Status (2026-10-24):** In progress on `hedgehog/rust-core-appserver`.
+Implemented so far: the space worker's materialisation core (PR #530), the per-space
+read router (`crates/space-xrpc`, #531), **M0** — global-first commit ordering with a
+crash-between-commits replay test, a real `PlanMode` for rebuilds, derivation time
+removed from materialisation (every stamp comes from the change's ordering stamp), one
+exclusion manifest shared by the TypeScript oracle, the Rust digest and the exporter,
+and reproducible fixtures — and **M1**: `crates/space-feed` (cursor, SQLite feed, and
+the HTTP-pull feed), `roomy-space-worker` as a library with injected clock,
+cancellation and signal seams plus a supervisor that owns N spaces, and `space-xrpc`
+resolving requests through a bounded `SpaceRegistry` over many spaces — and **M2**:
+`roomy-auth` (signed, self-contained, one-shot connection tickets), `roomy-sync` (the
+sans-io session core and its axum adapter), `roomy-gateway` (health, metrics, the ticket
+endpoint, the socket plane, and the worker's reads mounted unchanged), and the
+`roomy-appserver` binary with `--role all|gateway|worker`. **M3** is complete: all
+twenty-four per-space NSIDs are served — space, room and message reads, roles and
+invites, bridge tokens, federation, voice state and search — along with the four
+gateway-owned fan-outs (activity feed, mentions, profiles, link metadata) and the
+response cache (keyed by nsid, canonical params and caller; TTL-bounded; evicted by
+signals). An absent space is answered from an empty one rather than a 404, which is
+what makes the access decisions match. The read differential covers 237 cases across
+every served NSID, the caller matrix, unknown and malformed ids, pagination edges and
+the read-state header, all byte-identical. **M4** is complete and gated: `roomy-ingest`
+validates, authorizes, adapts and appends a `sendEvents` batch in one transaction, the
+gateway answers `sendEvents` and `roomUpdateSeen`, and the write differential replays a
+sixteen-case corpus — accepted single and batched writes, every schema refusal, the
+authorization matrix and the anonymous call — against the appserver, requiring the same
+status, the same bytes and the same log rows. **M5** has its fencing epoch —
+the lease's epoch advances on takeover, the batch carries it, and a commit whose
+epoch is older than the stored one is refused — with a test for the refusal. Split
+mode now works end to end: one process serves `/internal/feed/{space}` behind a
+shared secret, a worker elsewhere pulls that feed and materialises the same
+projection as a worker reading the log's file, and a process's workers feed the
+same signal sink its sockets subscribe to, and a worker elsewhere relays its
+signals to the gateway's internal endpoint, which publishes them to the same
+sink. Replicated reads are in place: a follower replays the same log into its own
+projection without taking the lease, keeps its own global copy for entity
+resolution, and answers the owner's requests identically. What remains is the
+simulation harness that asserts the distributed invariants (L7). M6 and M7 are not started.
+
+Evaluation layers: **L1** (pure properties over `space-core`), **L3** (batch/replay
+equivalence, crashing after the global half at every commit point), **L4** (the
+read differential, for all twenty-four per-space NSIDs) and **L5** (the write
+differential, over `sendEvents`) and **L7** (a two-node fault schedule over one log)
+are implemented and run in CI; **L8**'s mechanism — mirror a live read, compare, record
+the divergence — is in the gateway and runs in its tests, but it has not been run
+against production traffic. **L10** is the budget harness in `roomy-appserver`'s
+tests, run on demand. **L2** is the parity fixture. L6 and L9 are not implemented.
 
 **Scope.** The Rust rewrite of the appserver's core: the gateway (XRPC edge,
 WebSocket connection plane, auth, user-scoped and cross-space reads, write

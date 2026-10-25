@@ -44,6 +44,11 @@ export interface MessageRuleContext {
   /** The space the record belongs to. */
   readonly streamId: StreamDid;
   /**
+   * The instant the log assigns the entry, in epoch milliseconds. Rows written
+   * here stamp their clock columns from it.
+   */
+  readonly decidedAt: number;
+  /**
    * The room the message was in before this change. A move names only its
    * destination and a delete names no room at all, so the rule that rebuilds
    * the room it left gets it from here.
@@ -89,7 +94,7 @@ function createStatements(
   }
 
   const statements: SqlStatement[] = [
-    ensureEntity(ctx.streamId, id, record.room),
+    ensureEntity(ctx.streamId, id, record.room, ctx.decidedAt),
   ];
 
   if (record.forwardOf !== undefined) {
@@ -98,11 +103,13 @@ function createStatements(
     // which the read path follows.
     for (const target of record.forwardOf) {
       statements.push(sql`
-        insert or ignore into edges (head, tail, label)
+        insert or ignore into edges (head, tail, label, created_at, updated_at)
         select
           ${id},
           ${target},
-          'forward'
+          'forward',
+          ${ctx.decidedAt},
+          ${ctx.decidedAt}
         where exists (select 1 from entities where id = ${target})
       `);
     }
@@ -112,25 +119,36 @@ function createStatements(
 
   statements.push(
     sql`
-      insert or replace into comp_content (entity, mime_type, data, last_edit, timestamp)
+      insert or replace into comp_content (
+        entity, mime_type, data, last_edit, timestamp, created_at, updated_at
+      )
       values (
         ${id},
         ${record.content.mimeType},
         ${record.content.data},
         ${id},
-        ${canonicalSendTime(id, record)}
+        ${canonicalSendTime(id, record)},
+        ${ctx.decidedAt},
+        ${ctx.decidedAt}
       )`,
     // The author is the record's own: a bridged message is attributed to the
     // author the bridge overrode, which is the DID the record carries.
-    ensureEntity(ctx.streamId, record.author),
+    ensureEntity(ctx.streamId, record.author, undefined, ctx.decidedAt),
     sql`
-      insert or replace into edges (head, tail, label)
+      insert or replace into edges (head, tail, label, created_at, updated_at)
       select
         ${id},
         ${record.author},
-        'author'
+        'author',
+        ${ctx.decidedAt},
+        ${ctx.decidedAt}
     `,
-    ...attachmentStatements(ctx.streamId, id, attachmentsOf(record.extensions)),
+    ...attachmentStatements(
+      ctx.streamId,
+      id,
+      attachmentsOf(record.extensions),
+      ctx.decidedAt,
+    ),
     orderingKey(change),
   );
   return statements;
@@ -156,16 +174,18 @@ function systemLinkStatements(
   }
   return [
     sql`
-      insert into entities (id, stream_id, room)
-      values (${id}, ${ctx.streamId}, ${record.room})
+      insert into entities (id, stream_id, room, created_at, updated_at)
+      values (${id}, ${ctx.streamId}, ${record.room}, ${ctx.decidedAt}, ${ctx.decidedAt})
       on conflict do nothing
     `,
     sql`
-      insert or ignore into edges (head, tail, label)
-      select ${id}, ${ctx.streamId}, 'author'
+      insert or ignore into edges (head, tail, label, created_at, updated_at)
+      select ${id}, ${ctx.streamId}, 'author', ${ctx.decidedAt}, ${ctx.decidedAt}
     `,
     sql`
-      insert or replace into comp_content (entity, mime_type, data, last_edit)
+      insert or replace into comp_content (
+        entity, mime_type, data, last_edit, created_at, updated_at
+      )
       values (
         ${id},
         'text/markdown',
@@ -175,7 +195,9 @@ function systemLinkStatements(
           || coalesce((select name from comp_info where entity = ${link.linkToRoom}), 'this room')
           || '](' || ${link.linkToRoom} || '?parent=' || ${record.room} || ').'
         ) as blob),
-        ${id}
+        ${id},
+        ${ctx.decidedAt},
+        ${ctx.decidedAt}
       )
     `,
   ];
@@ -217,7 +239,9 @@ function updateStatements(
     `);
   }
 
-  statements.push(...attachmentUpdateStatements(ctx.streamId, id, patch.extensions));
+  statements.push(
+    ...attachmentUpdateStatements(ctx.streamId, id, patch.extensions, ctx.decidedAt),
+  );
   return statements;
 }
 
@@ -230,6 +254,7 @@ function attachmentUpdateStatements(
   streamId: StreamDid,
   messageId: Rkey,
   extensions: Readonly<Record<string, unknown>> | null | undefined,
+  at: number,
 ): SqlStatement[] {
   if (extensions === undefined) return [];
   // `null` is "remove every attachment"; a map without the key means the edit
@@ -260,7 +285,7 @@ function attachmentUpdateStatements(
     for (const att of linkAttachments) {
       const scoped = att.uri + "?message=" + messageId;
       statements.push(
-        ensureEntity(streamId, scoped, messageId),
+        ensureEntity(streamId, scoped, messageId, at),
         sql`
           update comp_embed_link set show_preview = ${att.showPreview ? 1 : 0}
           where entity in (
@@ -270,8 +295,8 @@ function attachmentUpdateStatements(
           )
         `,
         sql`
-          insert into comp_embed_link (entity, show_preview)
-          select ${scoped}, ${att.showPreview ? 1 : 0}
+          insert into comp_embed_link (entity, show_preview, created_at, updated_at)
+          select ${scoped}, ${att.showPreview ? 1 : 0}, ${at}, ${at}
           where not exists (
             select 1 from entities e
             join comp_embed_link el on el.entity = e.id
@@ -308,6 +333,7 @@ function attachmentUpdateStatements(
         attachments.filter(
           (a) => a.$type !== "space.roomy.attachment.forward.v0",
         ),
+        at,
       ),
     );
   }

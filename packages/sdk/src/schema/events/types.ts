@@ -15,6 +15,16 @@ export interface MaterializeContext<T extends { $type: string }> {
   streamId: typeof StreamDid.infer;
   user: typeof UserDid.infer;
   event: Event<T["$type"]>;
+  /**
+   * The instant the log assigns this entry, in epoch milliseconds: the time
+   * half of its ordering stamp.
+   *
+   * A materialiser that writes a time — a federation decision, an entity's
+   * `created_at` — takes it from here so a replay reproduces the live write.
+   * A caller that does not supply one gets wall-clock time, which is only
+   * correct for a projection nothing replays.
+   */
+  decidedAt?: number;
 }
 /** Materializer function type */
 

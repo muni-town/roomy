@@ -74,8 +74,17 @@ function freshSpaceDb(): Database {
   const db = new Database(":memory:");
   db.exec("pragma foreign_keys = on");
   db.exec(readFileSync(SCHEMA_PATH, "utf8"));
-  db.run("insert into entities (id, stream_id) values (?, ?)", [STREAM, STREAM]);
-  db.run("insert into comp_space (entity) values (?)", [STREAM]);
+  // Seeded with the corpus's receipt instant: the projection is compared with a
+  // replay of the same log, and a wall-clock seed would make the comparison
+  // depend on when it ran.
+  db.run(
+    "insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)",
+    [STREAM, STREAM, CORPUS_RECEIVED_AT, CORPUS_RECEIVED_AT],
+  );
+  db.run(
+    "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+    [STREAM, CORPUS_RECEIVED_AT, CORPUS_RECEIVED_AT],
+  );
   return db;
 }
 

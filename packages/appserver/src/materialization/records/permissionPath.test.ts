@@ -257,11 +257,16 @@ async function derive(
 ): Promise<Derived> {
   const db = freshSpaceDb();
   const globalDb = freshGlobalDb();
-  await db.run("insert into entities (id, stream_id) values (?, ?)", [
+  await db.run("insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)", [
     STREAM,
     STREAM,
+    RECEIVED_AT,
+    RECEIVED_AT,
   ]);
-  await db.run("insert into comp_space (entity) values (?)", [STREAM]);
+  await db.run(
+      "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+      [STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
 
   const apply = () =>
     applyBatch(db, STREAM, entries, { isBackfill: opts.isBackfill }, toAsyncDb(globalDb));
@@ -328,11 +333,14 @@ describe("the corpus exercises each converted kind's ops", () => {
     const { entries, fx } = corpus();
     const db = freshSpaceDb();
     const globalDb = freshGlobalDb();
-    await db.run("insert into entities (id, stream_id) values (?, ?)", [
-      STREAM,
-      STREAM,
-    ]);
-    await db.run("insert into comp_space (entity) values (?)", [STREAM]);
+    await db.run(
+      "insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)",
+      [STREAM, STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
+    await db.run(
+      "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+      [STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
     await applyBatch(db, STREAM, entries, { isBackfill: false }, toAsyncDb(globalDb));
 
     // OTHER was granted and demoted; USER left and rejoined.

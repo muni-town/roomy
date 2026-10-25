@@ -24,7 +24,8 @@ It can also be used by a user to set a space-specific profile.",
 
 export const SetUserProfile = defineEvent(
   SetUserProfileSchema,
-  ({ streamId, event }) => {
+  ({ streamId, event, decidedAt }) => {
+    const at = decidedAt ?? Date.now();
     const updates = [
       { key: "name", value: event.name },
       { key: "avatar", value: event.avatar },
@@ -33,14 +34,15 @@ export const SetUserProfile = defineEvent(
     const setUpdates = updates.filter((x) => x.value !== undefined);
 
     const statements: (SqlStatement | undefined)[] = [
-      ensureEntity(streamId, event.did),
+      ensureEntity(streamId, event.did, undefined, at),
       setUpdates.length > 0
         ? {
-            sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
-            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)})
+            sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")}, created_at, updated_at)
+            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)}, :at, :at)
             on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
             params: Object.fromEntries([
               [":entity", event.did],
+              [":at", at],
               ...setUpdates.map((x) => [
                 ":" + x.key,
                 "value" in x ? x.value : undefined,
@@ -57,8 +59,8 @@ export const SetUserProfile = defineEvent(
     if (discordOrigin?.handle) {
       statements.push(
         sql`
-          INSERT INTO comp_user (did, handle)
-          VALUES (${event.did}, ${discordOrigin.handle})
+          INSERT INTO comp_user (did, handle, created_at, updated_at)
+          VALUES (${event.did}, ${discordOrigin.handle}, ${at}, ${at})
           ON CONFLICT(did) DO UPDATE SET handle = ${discordOrigin.handle}
         `,
       );

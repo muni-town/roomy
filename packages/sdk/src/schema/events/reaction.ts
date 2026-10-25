@@ -16,15 +16,20 @@ const AddReactionSchema = type({
 
 export const AddReaction = defineEvent(
   AddReactionSchema,
-  ({ event, user }) => {
+  ({ event, user, decidedAt }) => {
+    const at = decidedAt ?? Date.now();
     return [
       sql`
-        insert or replace into comp_reaction (entity, user, reaction, reaction_id)
+        insert or replace into comp_reaction (
+          entity, user, reaction, reaction_id, created_at, updated_at
+        )
         values (
           ${event.reactionTo},
           ${user},
           ${event.reaction},
-          ${event.id}
+          ${event.id},
+          ${at},
+          ${at}
         )
       `,
     ];
@@ -72,20 +77,25 @@ This is used for bridging reactions from other platforms.",
 
 export const AddBridgedReaction = defineEvent(
   AddBridgedReactionSchema,
-  ({ streamId, event }) => {
+  ({ streamId, event, decidedAt }) => {
     // Ignore Discord custom emoji reactions (<:name:id> or <a:name:id>)
     if (/^<a?:\w+:\d+>$/.test(event.reaction)) {
       return [];
     }
+    const at = decidedAt ?? Date.now();
     return [
-      ensureEntity(streamId, event.reactingUser),
+      ensureEntity(streamId, event.reactingUser, undefined, at),
       sql`
-        insert or replace into comp_reaction (entity, user, reaction, reaction_id)
+        insert or replace into comp_reaction (
+          entity, user, reaction, reaction_id, created_at, updated_at
+        )
         values (
           ${event.reactionTo},
           ${event.reactingUser},
           ${event.reaction},
-          ${event.id}
+          ${event.id},
+          ${at},
+          ${at}
         )
       `,
     ];

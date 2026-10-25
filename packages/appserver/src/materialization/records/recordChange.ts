@@ -28,6 +28,7 @@
 
 import { type Did, type Event, type StreamIndex } from "@roomy-space/sdk";
 
+import { decodeTime } from "ulidx";
 import { messageSortIdxKey } from "../sortIdx.ts";
 import {
   RECORD_KINDS,
@@ -208,4 +209,26 @@ export function stampFor(
   createdAt?: number,
 ): OrderStamp {
   return orderStamp(messageSortIdxKey(event, idx, receivedAt, createdAt));
+}
+
+/**
+ * The instant the log assigns an entry, in epoch milliseconds: the time half of
+ * the ordering stamp it carries.
+ *
+ * An entry the adapter cannot describe — its id is not a ULID, so no stamp can
+ * be derived for it — falls back to the log's own receipt time, which is the
+ * instant the log did assign. Deterministic either way: a replay reads the same
+ * values from the same rows.
+ */
+export function decidedAtFor(
+  event: Event,
+  idx: StreamIndex | number,
+  receivedAt?: number,
+  createdAt?: number,
+): number {
+  try {
+    return decodeTime(stampFor(event, idx, receivedAt, createdAt) as never);
+  } catch {
+    return createdAt ?? receivedAt ?? 0;
+  }
 }

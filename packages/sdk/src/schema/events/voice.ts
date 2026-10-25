@@ -29,12 +29,18 @@ const CallStartedSchema = type({
   source: CallFactSource,
 }).describe("A call started in this room. A room has at most one active call.");
 
-export const CallStarted = defineEvent(CallStartedSchema, ({ streamId, event }) => {
+export const CallStarted = defineEvent(CallStartedSchema, ({ streamId, event, decidedAt }) => {
   if (!event.room) throw new Error("No room for call fact");
   return [
     sql`
-      insert into active_calls (room_id, call_id, started_at, source)
-      values (${event.room}, ${event.callId}, ${decodeTime(event.id)}, ${event.source})
+      insert into active_calls (room_id, call_id, started_at, source, created_at)
+      values (
+        ${event.room},
+        ${event.callId},
+        ${decodeTime(event.id)},
+        ${event.source},
+        ${decidedAt ?? Date.now()}
+      )
       on conflict (room_id) do update set
         started_at = excluded.started_at,
         source = excluded.source

@@ -66,6 +66,7 @@ export async function upsertActivityItem(
       JSON.stringify(capped),
       opts.roomId,
     );
+    await refreshActivityMeta(db, opts.roomId);
   } else {
     // Slow path: first message in this room — fetch all metadata.
     await insertActivityItem(db, opts);
@@ -126,5 +127,58 @@ async function insertActivityItem(
     roomMeta?.room_name ?? null,
     roomMeta?.space_name ?? null,
     roomMeta?.space_avatar ?? null,
+  );
+}
+
+/**
+ * Refresh the rows one feed entry denormalises, from the current rows.
+ *
+ * A feed row's window is the message set; its names are the room's, the space's
+ * and the parent channel's *current* names. Writing them only on the first
+ * insert would make the projection depend on how the log was batched — a message
+ * applied before its room's rename would keep the old name for ever — so every
+ * write to the window refreshes them.
+ */
+export async function refreshActivityMeta(
+  db: DbLike,
+  roomId: string,
+): Promise<void> {
+  await db.run(
+    `update activity_item
+        set room_name = (select name from comp_info where entity = activity_item.room_id),
+            space_name = (
+              select name from comp_info where entity = activity_item.space_id
+            ),
+            space_avatar = (
+              select avatar from comp_info where entity = activity_item.space_id
+            ),
+            parent_channel_id = (
+              select p.head from edges p
+               where p.tail = activity_item.room_id
+                 and p.label = 'link'
+                 and coalesce(json_extract(p.payload, '$.canonical_parent'), 0) = 1
+            ),
+            parent_channel_name = (
+              select pi.name from edges p
+                join comp_info pi on pi.entity = p.head
+               where p.tail = activity_item.room_id
+                 and p.label = 'link'
+                 and coalesce(json_extract(p.payload, '$.canonical_parent'), 0) = 1
+            )
+      where room_id = ?`,
+    [roomId],
+  );
+}
+
+/** Refresh every feed row in the space: a space rename names them all. */
+export async function refreshSpaceActivityMeta(db: DbLike): Promise<void> {
+  await db.run(
+    `update activity_item
+        set space_name = (
+              select name from comp_info where entity = activity_item.space_id
+            ),
+            space_avatar = (
+              select avatar from comp_info where entity = activity_item.space_id
+            )`,
   );
 }

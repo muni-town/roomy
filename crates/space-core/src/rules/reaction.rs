@@ -18,16 +18,25 @@ pub fn create_effects(
 ) -> Vec<Effect> {
     let mut effects: Vec<Effect> = Vec::new();
     if record.bridged {
-        effects.push(ensure_entity(&ctx.stream_id, record.user.as_str(), None));
+        effects.push(ensure_entity(
+            &ctx.stream_id,
+            record.user.as_str(),
+            None,
+            ctx.decided_at_ms,
+        ));
     }
     effects.push(Effect::space(
-        "insert or replace into comp_reaction (entity, user, reaction, reaction_id)
-         values (?, ?, ?, ?)",
+        "insert or replace into comp_reaction (
+           entity, user, reaction, reaction_id, created_at, updated_at
+         )
+         values (?, ?, ?, ?, ?, ?)",
         vec![
             Value::text(&record.target),
             Value::text(record.user.as_str()),
             Value::text(&record.reaction),
             Value::text(base.rkey.as_str()),
+            Value::Integer(ctx.decided_at_ms),
+            Value::Integer(ctx.decided_at_ms),
         ],
     ));
     effects

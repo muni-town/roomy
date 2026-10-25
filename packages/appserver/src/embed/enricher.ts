@@ -547,6 +547,7 @@ export async function detectAndStoreLinks(
   db: DbLike,
   messageId: string,
   content: string,
+  at: number,
 ): Promise<string[]> {
   const urls = extractUrls(content);
   if (urls.length === 0) return [];
@@ -555,16 +556,16 @@ export async function detectAndStoreLinks(
   for (const url of urls) {
     // Ensure the entity row exists (room = messageId so it's scoped to this message)
     await db.run(
-      `insert or ignore into entities (id, stream_id, room, created_at)
-       values (?, '', ?, (unixepoch() * 1000))`,
-      [url, messageId],
+      `insert or ignore into entities (id, stream_id, room, created_at, updated_at)
+       values (?, '', ?, ?, ?)`,
+      [url, messageId, at, at],
     );
     // Insert into comp_embed_link if not already present. Track newly-inserted
     // rows (changes > 0) so only genuinely-new links get prioritised.
     const res = await db.run(
       `insert or ignore into comp_embed_link (entity, show_preview, created_at, updated_at)
-       values (?, 1, (unixepoch() * 1000), (unixepoch() * 1000))`,
-      [url],
+       values (?, 1, ?, ?)`,
+      [url, at, at],
     );
     if (res.changes > 0) detected.push(url);
   }
@@ -583,6 +584,7 @@ export async function detectAndStoreLinksFromUrls(
   db: DbLike,
   messageId: string,
   urls: string[],
+  at: number,
 ): Promise<string[]> {
   if (urls.length === 0) return [];
 
@@ -590,16 +592,16 @@ export async function detectAndStoreLinksFromUrls(
   for (const url of urls) {
     // Ensure the entity row exists (room = messageId so it's scoped to this message)
     await db.run(
-      `insert or ignore into entities (id, stream_id, room, created_at)
-       values (?, '', ?, (unixepoch() * 1000))`,
-      [url, messageId],
+      `insert or ignore into entities (id, stream_id, room, created_at, updated_at)
+       values (?, '', ?, ?, ?)`,
+      [url, messageId, at, at],
     );
     // Insert into comp_embed_link if not already present. Track newly-inserted
     // rows (changes > 0) so only genuinely-new links get prioritised.
     const res = await db.run(
       `insert or ignore into comp_embed_link (entity, show_preview, created_at, updated_at)
-       values (?, 1, (unixepoch() * 1000), (unixepoch() * 1000))`,
-      [url],
+       values (?, 1, ?, ?)`,
+      [url, at, at],
     );
     if (res.changes > 0) detected.push(url);
   }

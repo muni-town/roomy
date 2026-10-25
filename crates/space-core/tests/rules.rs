@@ -107,6 +107,58 @@ fn a_message_create_writes_its_content_author_and_order_key() {
 }
 
 #[test]
+fn a_backfill_invalidates_the_read_path_projections_instead_of_writing_them() {
+    let change = RecordChange::Create {
+        base: base(RecordKind::Message, "01HF7YAT000000000000000010"),
+        record: message("hello", "room-1"),
+    };
+    let live = plan(&change, &ctx()).expect("planned");
+    let backfill = plan(
+        &change,
+        &RuleContext {
+            is_backfill: true,
+            ..ctx()
+        },
+    )
+    .expect("planned");
+
+    // A live write folds the message into its room's feed row; a replay deletes
+    // it instead, so a read rebuilds it from the rows the replay has written.
+    assert!(writes_to(&live, "insert into room_activity"));
+    assert!(writes_to(&backfill, "delete from room_activity"));
+    assert!(!writes_to(&backfill, "insert into room_activity"));
+
+    // The same choice, on the other read-path projection: a room change
+    // recomputes `room_access` live and invalidates the space's rows on a
+    // replay.
+    let room_change = RecordChange::Create {
+        base: base(RecordKind::Room, "01HF7YAT000000000000000020"),
+        record: RecordBody::Room(RoomRecord {
+            kind: "space.roomy.channel".to_string(),
+            name: Some("general".to_string()),
+            avatar: None,
+            description: None,
+            default_access: Some("readwrite".to_string()),
+            deleted: false,
+            parent: None,
+            discord_origin: None,
+        }),
+    };
+    let live = plan(&room_change, &ctx()).expect("planned");
+    let backfill = plan(
+        &room_change,
+        &RuleContext {
+            is_backfill: true,
+            ..ctx()
+        },
+    )
+    .expect("planned");
+    assert!(writes_to(&live, "insert into room_access"));
+    assert!(writes_to(&backfill, "delete from room_access"));
+    assert!(!writes_to(&backfill, "insert into room_access"));
+}
+
+#[test]
 fn a_message_delete_removes_forward_references_first_and_rebuilds_the_window() {
     let ctx = RuleContext {
         prior_room: Some("room-1".to_string()),
@@ -231,7 +283,10 @@ fn a_membership_join_writes_both_edge_sets_and_the_announcement() {
     assert!(global.iter().any(|sql| sql.contains("'joinedSpace'")));
     assert!(global.iter().any(|sql| sql.contains("'leftSpace'")));
     // The announcement is keyed by the entry's id and lands in the first channel.
-    assert!(writes_to(&effects, "into entities (id, stream_id, room)"));
+    assert!(writes_to(
+        &effects,
+        "into entities (id, stream_id, room, created_at, updated_at)"
+    ));
     let announcement = statements(&effects)
         .into_iter()
         .find(|(sql, _, _)| sql.contains("joined the space"))

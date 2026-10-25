@@ -24,22 +24,13 @@
     "space_federations",
     "voice_projected_calls"
   ],
-  "globalClockColumns": [
-    "created_at",
-    "updated_at",
-    "fetched_at",
-    "synced_at",
-    "retry_after",
-    "requested_at",
-    "decided_at"
-  ],
   "counts": {
     "events": 48,
     "changes": 51
   },
   "expected": {
-    "spaceDigest": "d1012b70c11e7d96fcfb3db9cec1a429ad74690334c833a416d5e0d09fb35464",
-    "globalDigest": "69508e6cc6b913354b3d793b9b73feeeceebff458f8d70672a93a7060bb98c50"
+    "spaceDigest": "f13fc1c4707b07155f134e3a95d66676fa5e42c59c228ccb8071ab91faff528b",
+    "globalDigest": "18e6e683759e22bb228a98d02fbcddd9110a542d14f638b560e153e724f66fc6"
   },
   "changes": [
     {

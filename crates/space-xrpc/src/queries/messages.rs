@@ -13,6 +13,7 @@ use crate::dto::{
     Attachment, ForwardedFrom, FullMessage, LinkEmbedDto, MediaDto, MessageDto, ReactionDto,
 };
 use crate::ids::ulid_time_ms;
+use crate::queries::links::canonical_url;
 use crate::store::{GlobalStores, ProfileFields};
 use crate::time::iso_from_ms;
 
@@ -285,7 +286,7 @@ fn attachment_from_embed(
         },
         EmbedKind::Link => Attachment::Link {
             url: row.url.clone(),
-            embed: link_embeds.get(&row.url).cloned().flatten(),
+            embed: link_embeds.get(canonical_url(&row.url)).cloned().flatten(),
         },
     }
 }
@@ -517,12 +518,15 @@ pub fn select_messages(
     let live_ids: Vec<String> = base_rows.iter().map(|row| row.id.clone()).collect();
     let id_ph = live_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
 
+    // `created_at asc, reaction_id asc` is the oracle's order: reactions are
+    // grouped in the order they were made, and the id breaks a tie.
     let reaction_rows: Vec<(String, String, String, String)> = if live_ids.is_empty() {
         Vec::new()
     } else {
         let mut stmt = conn.prepare(&format!(
             "select entity, reaction, user, reaction_id from comp_reaction
-              where entity in ({id_ph})"
+              where entity in ({id_ph})
+              order by created_at asc, reaction_id asc"
         ))?;
         let rows = stmt
             .query_map(rusqlite::params_from_iter(live_ids.iter()), |row| {
@@ -622,18 +626,20 @@ pub fn select_messages(
         }
     }
 
-    // Enriched link cards, keyed by URL from the global store.
+    // Enriched link cards, keyed by the canonical URL: the store holds one row
+    // per bare URL, while an attachment carries the message id in its own.
     let mut link_embeds: HashMap<String, Option<Box<serde_json::value::RawValue>>> = HashMap::new();
     for row in embed_rows.iter().filter(|r| r.kind == EmbedKind::Link) {
-        if link_embeds.contains_key(&row.url) {
+        let canonical = canonical_url(&row.url);
+        if link_embeds.contains_key(canonical) {
             continue;
         }
         // Raw, so the stored card's key order survives serialisation exactly
         // as `JSON.parse` → `JSON.stringify` preserves it in the appserver.
         let parsed = stores
-            .link_embed_json(&row.url)
+            .link_embed_json(canonical)
             .and_then(|raw| serde_json::from_str::<Box<serde_json::value::RawValue>>(&raw).ok());
-        link_embeds.insert(row.url.clone(), parsed);
+        link_embeds.insert(canonical.to_owned(), parsed);
     }
 
     let mut attachments_map: IndexMap<String, Vec<Attachment>> = IndexMap::new();

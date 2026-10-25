@@ -40,7 +40,7 @@ export function federationRequestStatements(
             ${record.federatingSpace},
             'pending',
             ${record.requestedBy},
-            ${Date.now()},
+            ${ctx.decidedAt},
             ${record.message}
           )
           on conflict(space_id, federating_space_did) do update set
@@ -61,7 +61,7 @@ export function federationRequestStatements(
           update space_federations set
             status = ${patch.status},
             decided_by_did = ${patch.decidedBy},
-            decided_at = ${Date.now()},
+            decided_at = ${ctx.decidedAt},
             decision_message = ${patch.message}
           where space_id = ${ctx.streamId}
             and federating_space_did = ${change.rkey}
@@ -76,7 +76,7 @@ export function federationRequestStatements(
           update space_federations set
             status = 'removed',
             decided_by_did = ${ctx.actor},
-            decided_at = ${Date.now()}
+            decided_at = ${ctx.decidedAt}
           where space_id = ${ctx.streamId}
             and federating_space_did = ${change.rkey}
         `),

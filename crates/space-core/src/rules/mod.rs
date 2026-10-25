@@ -238,11 +238,17 @@ fn delete_effects(
 
 /// The statement every rule uses to make sure an entity row exists.
 ///
-/// `created_at` is the entity's own ULID time, or the derivation instant for an
-/// id that is not a ULID (a URL, a DID) — a clock column, so not a value any
-/// two derivations are compared on.
-pub(crate) fn ensure_entity(stream_id: &SpaceDid, entity_id: &str, room: Option<&str>) -> Effect {
-    let created_at = crate::time::ulid_time_ms(entity_id).unwrap_or(0);
+/// `created_at` is the entity's own ULID time — a record names its own creation
+/// instant — or, for an id that is not a ULID (a URL, a DID), the instant the
+/// log assigns the change. Both are values the log determines, so a replay
+/// writes the same row.
+pub(crate) fn ensure_entity(
+    stream_id: &SpaceDid,
+    entity_id: &str,
+    room: Option<&str>,
+    decided_at_ms: i64,
+) -> Effect {
+    let created_at = crate::time::ulid_time_ms(entity_id).unwrap_or(decided_at_ms);
     ensure_entity_at(stream_id, entity_id, room, created_at)
 }
 
@@ -253,8 +259,8 @@ pub(crate) fn ensure_entity_at(
     created_at: i64,
 ) -> Effect {
     Effect::space(
-        "insert into entities (id, stream_id, room, created_at)
-         values (?, ?, ?, ?)
+        "insert into entities (id, stream_id, room, created_at, updated_at)
+         values (?, ?, ?, ?, ?)
          on conflict(id) do update set
            room = coalesce(entities.room, excluded.room),
            updated_at = case
@@ -266,6 +272,7 @@ pub(crate) fn ensure_entity_at(
             Value::text(entity_id),
             Value::text(stream_id.as_str()),
             Value::opt_text(room),
+            Value::Integer(created_at),
             Value::Integer(created_at),
         ],
     )

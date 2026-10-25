@@ -143,9 +143,11 @@ pub fn build_link_rows(stores: &dyn GlobalStores, deduped: Vec<RawLinkRow>) -> V
     deduped
         .into_iter()
         .map(|row| {
-            let embed = stores.link_embed_json(&row.url).and_then(|raw| {
-                serde_json::from_str::<Box<serde_json::value::RawValue>>(&raw).ok()
-            });
+            let embed = stores
+                .link_embed_json(canonical_url(&row.url))
+                .and_then(|raw| {
+                    serde_json::from_str::<Box<serde_json::value::RawValue>>(&raw).ok()
+                });
             LinkRow {
                 url: row.url,
                 room_id: row.room_id,

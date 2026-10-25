@@ -23,8 +23,9 @@ const CreateMessageSchema = type({
 
 export const CreateMessage = defineEvent(
   CreateMessageSchema,
-  ({ streamId, user, event }) => {
+  ({ streamId, user, event, decidedAt }) => {
     if (!event.room) throw new Error("No room for message");
+    const at = decidedAt ?? Date.now();
 
     const bodyData = (event.body.data as { buf: Uint8Array }).buf;
 
@@ -40,37 +41,45 @@ export const CreateMessage = defineEvent(
       : decodeTime(event.id);
 
     const statements = [
-      ensureEntity(streamId, event.id, event.room),
+      ensureEntity(streamId, event.id, event.room, at),
       sql`
-        insert or replace into comp_content (entity, mime_type, data, last_edit, timestamp)
+        insert or replace into comp_content (
+          entity, mime_type, data, last_edit, timestamp, created_at, updated_at
+        )
         values (
           ${event.id},
           ${event.body.mimeType},
           ${bodyData},
           ${event.id},
-          ${canonicalTimestamp}
+          ${canonicalTimestamp},
+          ${at},
+          ${at}
         )`,
     ];
 
     if (!overrideAuthorExt) {
       // normal messages - create 'author' edge
-      statements.push(ensureEntity(streamId, user));
+      statements.push(ensureEntity(streamId, user, undefined, at));
       statements.push(sql`
-        insert or replace into edges (head, tail, label)
+        insert or replace into edges (head, tail, label, created_at, updated_at)
         select
           ${event.id},
           ${user},
-          'author'
+          'author',
+          ${at},
+          ${at}
       `);
     } else {
       // for bridged messages, use the overridden author, not the actual one
-      statements.push(ensureEntity(streamId, overrideAuthorExt));
+      statements.push(ensureEntity(streamId, overrideAuthorExt, undefined, at));
       statements.push(sql`
-        insert or replace into edges (head, tail, label)
+        insert or replace into edges (head, tail, label, created_at, updated_at)
         select
           ${event.id},
           ${overrideAuthorExt},
-          'author'
+          'author',
+          ${at},
+          ${at}
       `);
     }
 
@@ -96,6 +105,7 @@ export const CreateMessage = defineEvent(
         event.id,
         event.extensions["space.roomy.extension.attachments.v0"]?.attachments ||
           [],
+        at,
       ),
     );
     return statements;
@@ -115,11 +125,12 @@ If mimeType is text/x-dmp-diff, this is a diff-match-patch diff to apply to the 
 
 export const EditMessage = defineEvent(
   EditMessageSchema,
-  ({ streamId, event }) => {
+  ({ streamId, event, decidedAt }) => {
     if (!event.room) {
       console.warn("Edit event missing room");
       return [];
     }
+    const at = decidedAt ?? Date.now();
 
     const editBodyData = (event.body.data as { buf: Uint8Array }).buf;
     const statements = [
@@ -180,7 +191,7 @@ export const EditMessage = defineEvent(
         for (const att of linkAtts) {
           const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
           statements.push(
-            ensureEntity(streamId, uriWithUlidQuery, event.messageId),
+            ensureEntity(streamId, uriWithUlidQuery, event.messageId, at),
             // Flip show_preview on any existing link row for this URL+message
             // (both the bare-URL enricher encoding and the explicit
             // `?message=` encoding are scoped to the message room).
@@ -195,8 +206,8 @@ export const EditMessage = defineEvent(
             // Ensure a row exists so the toggle persists even if the link
             // hasn't been enriched yet.
             sql`
-              insert into comp_embed_link (entity, show_preview)
-              select ${uriWithUlidQuery}, ${att.showPreview ? 1 : 0}
+              insert into comp_embed_link (entity, show_preview, created_at, updated_at)
+              select ${uriWithUlidQuery}, ${att.showPreview ? 1 : 0}, ${at}, ${at}
               where not exists (
                 select 1 from entities e
                 join comp_embed_link el on el.entity = e.id
@@ -235,6 +246,7 @@ export const EditMessage = defineEvent(
               attachments.filter(
                 (a) => a.$type !== "space.roomy.attachment.forward.v0",
               ),
+              at,
             ),
           );
         }
@@ -341,7 +353,7 @@ const ForwardMessagesSchema = type({
  */
 export const ForwardMessages = defineEvent(
   ForwardMessagesSchema,
-  ({ streamId, event }) => {
+  ({ streamId, event, decidedAt }) => {
     if (!event.room) {
       console.warn("Forward event missing room");
       return [];
@@ -352,7 +364,7 @@ export const ForwardMessages = defineEvent(
     // event.id serves as the forward reference entity ULID
     return event.messageIds.flatMap((msgId) => [
       // Ensure the forwarded reference entity exists in the target (destination) room
-      ensureEntity(streamId, event.id, event.room),
+      ensureEntity(streamId, event.id, event.room, decidedAt),
       // Create forward edge: head = forward reference (event.id), tail = original
       // message. Guard with `where exists` so a missing original (deleted before
       // the forward, not-yet-materialised, or cross-space) does not trip the
@@ -360,11 +372,13 @@ export const ForwardMessages = defineEvent(
       // is still recorded, just without the edge. In the normal case the
       // original is already materialised and the edge is created as expected.
       sql`
-        insert or ignore into edges (head, tail, label)
+        insert or ignore into edges (head, tail, label, created_at, updated_at)
         select
           ${event.id},
           ${msgId},
-          'forward'
+          'forward',
+          ${decidedAt ?? Date.now()},
+          ${decidedAt ?? Date.now()}
         where exists (select 1 from entities where id = ${msgId})
       `,
     ]);

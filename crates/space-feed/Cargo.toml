@@ -1,0 +1,15 @@
+[package]
+name = "space-feed"
+description = "The change feed a space worker materialises from: cursor, SQLite and HTTP-pull implementations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+space-core.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq = "2"

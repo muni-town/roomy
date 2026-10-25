@@ -9,7 +9,8 @@
 //!
 //! A relationship is never removed from the set: a removal marks it `removed`,
 //! which is why the record's delete is a status update. The decision instant is
-//! the derivation's own clock and is not a value the log determines.
+//! the change's own: the time half of the entry's ordering stamp, which the log
+//! assigned at ingest and a replay reproduces.
 
 use crate::change::{
     ChangeBase, FederationGrantPatch, FederationRequestPatch, FederationRequestRecord, RecordChange,
@@ -36,7 +37,7 @@ pub fn request_create_effects(record: &FederationRequestRecord, ctx: &RuleContex
             Value::text(ctx.stream_id.as_str()),
             Value::text(&record.federating_space),
             Value::text(record.requested_by.as_str()),
-            Value::Integer(ctx.now_ms),
+            Value::Integer(ctx.decided_at_ms),
             Value::opt_text(record.message.clone()),
         ],
     )]
@@ -59,7 +60,7 @@ pub fn request_update_effects(
         vec![
             Value::text(&patch.status),
             Value::text(patch.decided_by.as_str()),
-            Value::Integer(ctx.now_ms),
+            Value::Integer(ctx.decided_at_ms),
             Value::opt_text(patch.message.clone()),
             Value::text(ctx.stream_id.as_str()),
             Value::text(base.rkey.as_str()),
@@ -78,7 +79,7 @@ pub fn request_delete_effects(change: &RecordChange, ctx: &RuleContext) -> Vec<E
            and federating_space_did = ?",
         vec![
             Value::text(ctx.actor.as_str()),
-            Value::Integer(ctx.now_ms),
+            Value::Integer(ctx.decided_at_ms),
             Value::text(ctx.stream_id.as_str()),
             Value::text(change.base().rkey.as_str()),
         ],

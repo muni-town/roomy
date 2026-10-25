@@ -34,6 +34,8 @@ import {
   buildCorpus,
 } from "../src/materialization/records/corpus.ts";
 import {
+  GLOBAL_TABLES as GLOBAL_TABLES_FROM_MANIFEST,
+  clockColumnsFor,
   digestOf,
   snapshotSpaceDb,
   workerSnapshot,
@@ -56,39 +58,11 @@ const outDir = args.includes("--out")
 const FIXED_ULID_TIME = 1_700_000_000_000;
 
 /**
- * Clock columns: the derivation's own instant rather than a value the log
- * determines (`rebuildEquality.ts`).
+ * The exclusions and the compared global tables come from the one manifest the
+ * oracle, the Rust digest and this exporter share
+ * (`src/db/oracle-exclusions.json`).
  */
-const CLOCK_COLUMNS: Readonly<Record<string, true>> = {
-  created_at: true,
-  updated_at: true,
-  fetched_at: true,
-  synced_at: true,
-  retry_after: true,
-};
-
-/**
- * The global tables a worker's projection is compared over: the ones the
- * projection rules write. The rest of the global DB is index and dashboard
- * state the gateway owns — profiles, link embeds, mentions, the member-count
- * aggregate, the search cursors and the lease rows.
- */
-const GLOBAL_TABLES: readonly string[] = [
-  "edges",
-  "entity_space",
-  "federation_receiver_permissions",
-  "federation_room_permissions",
-  "pending_links",
-  "space_federations",
-  "voice_projected_calls",
-];
-
-/** Federation decision instants are the derivation clock, not the log's. */
-const GLOBAL_CLOCK_COLUMNS: Readonly<Record<string, true>> = {
-  ...CLOCK_COLUMNS,
-  requested_at: true,
-  decided_at: true,
-};
+const GLOBAL_TABLES: readonly string[] = GLOBAL_TABLES_FROM_MANIFEST;
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
@@ -114,9 +88,8 @@ async function globalSnapshot(db: Database): Promise<TableSnapshot[]> {
     const info = db
       .query<{ name: string }, []>(`select name from pragma_table_info('${table}')`)
       .all();
-    const columns = info
-      .map((c) => c.name)
-      .filter((c) => !GLOBAL_CLOCK_COLUMNS[c]);
+    const dropped = clockColumnsFor(table);
+    const columns = info.map((c) => c.name).filter((c) => !dropped[c]);
     const rows = db
       .query<Record<string, unknown>, []>(
         `select ${columns.map((c) => `"${c}"`).join(", ")} from "${table}"`,
@@ -167,11 +140,16 @@ async function writeFixture(id: string): Promise<{
       join(__dirname, "..", "src", "db", "schema-space.sql"),
     ).text()),
   );
-  spaceRaw.run("insert into entities (id, stream_id) values (?, ?)", [
-    CORPUS_STREAM,
-    CORPUS_STREAM,
-  ]);
-  spaceRaw.run("insert into comp_space (entity) values (?)", [CORPUS_STREAM]);
+  // The pre-materialisation rows a space has before its first event: stamped
+  // with the fixture's receipt instant, so the projection is reproducible.
+  spaceRaw.run(
+    "insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)",
+    [CORPUS_STREAM, CORPUS_STREAM, CORPUS_RECEIVED_AT, CORPUS_RECEIVED_AT],
+  );
+  spaceRaw.run(
+    "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+    [CORPUS_STREAM, CORPUS_RECEIVED_AT, CORPUS_RECEIVED_AT],
+  );
 
   const globalRaw = new Database(":memory:");
   globalRaw.exec("pragma foreign_keys = on");
@@ -194,6 +172,12 @@ async function writeFixture(id: string): Promise<{
     );
   }
 
+  if (process.env.ROOMY_DUMP_SNAPSHOT) {
+    writeFileSync(
+      process.env.ROOMY_DUMP_SNAPSHOT,
+      JSON.stringify(workerSnapshot(await snapshotSpaceDb(toAsyncDb(spaceRaw))), null, 1),
+    );
+  }
   const spaceDigest = digestOf(
     workerSnapshot(await snapshotSpaceDb(toAsyncDb(spaceRaw))),
   );
@@ -214,7 +198,6 @@ async function writeFixture(id: string): Promise<{
           compSpace: [[CORPUS_STREAM]],
         },
         globalTables: GLOBAL_TABLES,
-        globalClockColumns: Object.keys(GLOBAL_CLOCK_COLUMNS),
         counts: { events: entries.length, changes: changes.length },
         expected: { spaceDigest, globalDigest },
         changes,

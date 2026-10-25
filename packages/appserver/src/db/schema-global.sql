@@ -290,6 +290,9 @@ create table if not exists worker_leases (
   name       text primary key,
   holder     text not null,
   expires_at integer not null,
+  -- The fencing epoch: it advances when a different holder takes the lease, and
+  -- a batch carrying an older epoch is refused. Loops here ignore it.
+  epoch      integer not null default 1,
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 

@@ -34,9 +34,13 @@ export function spaceInfoStatements(
   const statements: RuleStatement[] = [
     // The event's own entity, kept because the event path writes it and the
     // global entity→space index records it.
-    space(ensureEntity(stream, ctx.eventId)),
-    space(ensureEntity(stream, stream)),
-    space(sql`insert into comp_space (entity) values (${stream}) on conflict do nothing`),
+    space(ensureEntity(stream, ctx.eventId, undefined, ctx.decidedAt)),
+    space(ensureEntity(stream, stream, undefined, ctx.decidedAt)),
+    space(sql`
+      insert into comp_space (entity, created_at, updated_at)
+      values (${stream}, ${ctx.decidedAt}, ${ctx.decidedAt})
+      on conflict do nothing
+    `),
   ];
 
   const info = [
@@ -48,11 +52,22 @@ export function spaceInfoStatements(
     const columns = info.map((field) => field.key);
     statements.push(
       space({
-        sql: `insert into comp_info (entity, ${columns.join(", ")})
-          values (?, ${columns.map(() => "?").join(", ")})
+        sql: `insert into comp_info (entity, ${columns.join(", ")}, created_at, updated_at)
+          values (?, ${columns.map(() => "?").join(", ")}, ?, ?)
           on conflict do update set ${columns.map((c) => `${c} = excluded.${c}`).join(", ")}`,
-        params: [stream, ...info.map((field) => field.value)],
+        params: [stream, ...info.map((field) => field.value), ctx.decidedAt, ctx.decidedAt],
       }),
+    );
+  }
+
+  // The space's name and avatar are denormalised into every feed row it holds.
+  if (patch.name !== undefined || patch.avatar !== undefined) {
+    statements.push(
+      space(sql`
+        update activity_item
+            set space_name = (select name from comp_info where entity = activity_item.space_id),
+                space_avatar = (select avatar from comp_info where entity = activity_item.space_id)
+      `),
     );
   }
 
@@ -65,14 +80,16 @@ export function spaceInfoStatements(
     const columns = policy.map((field) => field.key);
     statements.push(
       space({
-        sql: `insert into comp_space (entity, ${columns.join(", ")})
-          values (?, ${columns.map(() => "?").join(", ")})
+        sql: `insert into comp_space (entity, ${columns.join(", ")}, created_at, updated_at)
+          values (?, ${columns.map(() => "?").join(", ")}, ?, ?)
           on conflict do update set ${columns.map((c) => `${c} = excluded.${c}`).join(", ")}`,
         params: [
           stream,
           ...policy.map((field) =>
             field.value === null ? null : field.value ? 1 : 0,
           ),
+          ctx.decidedAt,
+          ctx.decidedAt,
         ],
       }),
     );

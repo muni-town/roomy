@@ -18,6 +18,30 @@ use roomy_events::Did;
 
 use crate::ids::SpaceDid;
 
+/// Whether a batch is the live write path or a replay.
+///
+/// A rebuild runs the same rules over the same log, but it must not write the
+/// rows reads populate: a live space is being read while it is rebuilt, and a
+/// projection written from the middle of a replay would answer a read with a
+/// partial view. [`PlanMode::Backfill`] invalidates them instead, and the next
+/// read rebuilds them from the rows that are there — the same choice the
+/// TypeScript materialiser makes for its backfill path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlanMode {
+    /// The live write path: read-path projections are maintained as changes land.
+    #[default]
+    Live,
+    /// A replay into a database that is being rebuilt: read-path projections are
+    /// invalidated rather than written.
+    Backfill,
+}
+
+impl PlanMode {
+    pub fn is_backfill(self) -> bool {
+        matches!(self, PlanMode::Backfill)
+    }
+}
+
 /// The context of one change.
 #[derive(Debug, Clone)]
 pub struct RuleContext {
@@ -33,17 +57,23 @@ pub struct RuleContext {
     pub prior_room: Option<String>,
     /// The room a link's `parent` pointed at before this change.
     pub prior_parent: Option<String>,
-    /// The derivation instant, in epoch milliseconds.
+    /// The instant the log assigns this change, in epoch milliseconds: the time
+    /// half of the entry's ordering stamp.
     ///
-    /// Only the federation rules record it (`requested_at`, `decided_at`), and
-    /// neither value is determined by the log — the same exception the
-    /// TypeScript rules make with `Date.now()`, which is why both are excluded
-    /// from a cross-implementation digest.
-    pub now_ms: i64,
+    /// An ordering stamp is assigned at ingest and travels with the change, so
+    /// this is a value the log determines and a replay reproduces exactly. It
+    /// is what the rules stamp `created_at`, `updated_at` and the federation
+    /// decision instants with; nothing in materialisation reads a clock.
+    pub decided_at_ms: i64,
 }
 
 impl RuleContext {
-    pub fn new(stream_id: SpaceDid, actor: Did, event_id: impl Into<String>, now_ms: i64) -> Self {
+    pub fn new(
+        stream_id: SpaceDid,
+        actor: Did,
+        event_id: impl Into<String>,
+        decided_at_ms: i64,
+    ) -> Self {
         Self {
             stream_id,
             is_backfill: false,
@@ -51,7 +81,7 @@ impl RuleContext {
             event_id: event_id.into(),
             prior_room: None,
             prior_parent: None,
-            now_ms,
+            decided_at_ms,
         }
     }
 }

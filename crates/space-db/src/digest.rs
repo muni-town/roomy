@@ -21,29 +21,62 @@ use rusqlite::Connection;
 use serde_json::{json, Map, Value as Json};
 use sha2::{Digest as _, Sha256};
 
-/// Columns carrying the derivation's instant rather than a value the log
-/// determines (`CLOCK_COLUMNS`).
-const CLOCK_COLUMNS: [&str; 5] = [
-    "created_at",
-    "updated_at",
-    "fetched_at",
-    "synced_at",
-    "retry_after",
-];
+/// The exclusions, read from the one manifest the TypeScript oracle, this
+/// digest and the fixture exporter share
+/// (`packages/appserver/src/db/oracle-exclusions.json`).
+const EXCLUSIONS: &str = include_str!("../../../packages/appserver/src/db/oracle-exclusions.json");
 
-/// Tables holding no derived state at all (`NON_DERIVED_TABLES`).
-const NON_DERIVED_TABLES: [&str; 2] = ["space_schema_version", "space_schema_migrations"];
+/// The parsed manifest. Parsed once: it is a compile-time constant.
+fn exclusions() -> &'static serde_json::Value {
+    use std::sync::OnceLock;
+    static PARSED: OnceLock<serde_json::Value> = OnceLock::new();
+    PARSED.get_or_init(|| {
+        serde_json::from_str(EXCLUSIONS).expect("the exclusion manifest is valid JSON")
+    })
+}
 
-/// Cursor tables each implementation owns and the other never writes
-/// (`CURSOR_TABLES`).
-const CURSOR_TABLES: [&str; 2] = ["materialization_cursor", "worker_cursor"];
+fn names(key: &str) -> Vec<String> {
+    exclusions()
+        .get(key)
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
-/// Columns holding a cursor rather than a log-determined value
-/// (`CURSOR_COLUMNS`).
-const CURSOR_COLUMNS: [&str; 1] = ["backfilled_to"];
+fn contains(list: &[String], value: &str) -> bool {
+    list.iter().any(|item| item == value)
+}
+
+/// The clock columns dropped from `table`: the global list plus the table's
+/// own.
+fn clock_columns(table: &str) -> Vec<String> {
+    let mut columns = names("clockColumns");
+    if let Some(per_table) = exclusions()
+        .get("tableClockColumns")
+        .and_then(|value| value.get(table))
+        .and_then(|value| value.as_array())
+    {
+        columns.extend(
+            per_table
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_string)),
+        );
+    }
+    columns
+}
+
+/// The global tables a projection is compared over.
+pub fn global_tables() -> Vec<String> {
+    names("globalTables")
+}
 
 /// One table's rows, as read out of a per-space database.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct TableSnapshot {
     pub table: String,
     /// The table's columns in declaration order, clock columns dropped.
@@ -71,20 +104,35 @@ pub fn snapshot_db(conn: &Connection) -> Result<Vec<TableSnapshot>, rusqlite::Er
         let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
         rows.collect::<Result<_, _>>()?
     };
+    let non_derived = names("nonDerivedTables");
+    let tables: Vec<String> = tables
+        .into_iter()
+        .filter(|table| !contains(&non_derived, table))
+        .collect();
+    snapshot_tables(conn, &tables)
+}
 
+/// Read `tables` out of one database, in the oracle's encoding.
+///
+/// The global DB is compared over the tables the manifest names
+/// ([`global_tables`]) rather than over every table it holds: the rest is index,
+/// profile, embed and lease state the gateway owns.
+pub fn snapshot_tables(
+    conn: &Connection,
+    tables: &[String],
+) -> Result<Vec<TableSnapshot>, rusqlite::Error> {
     let mut out: Vec<TableSnapshot> = Vec::new();
     for table in tables {
-        if NON_DERIVED_TABLES.contains(&table.as_str()) {
-            continue;
-        }
+        let table = table.clone();
         let all_columns: Vec<String> = {
             let mut statement = conn.prepare("select name from pragma_table_info(?1)")?;
             let rows = statement.query_map([&table], |row| row.get::<_, String>(0))?;
             rows.collect::<Result<_, _>>()?
         };
+        let dropped = clock_columns(&table);
         let columns: Vec<String> = all_columns
             .into_iter()
-            .filter(|column| !CLOCK_COLUMNS.contains(&column.as_str()))
+            .filter(|column| !contains(&dropped, column))
             .collect();
 
         let select = format!(
@@ -177,16 +225,18 @@ pub fn digest_of(tables: &[TableSnapshot]) -> String {
 /// A snapshot with the cursor tables and columns dropped, for comparing two
 /// implementations' projections of the same log.
 pub fn worker_snapshot(tables: &[TableSnapshot]) -> Vec<TableSnapshot> {
+    let cursor_tables = names("cursorTables");
+    let cursor_columns = names("cursorColumns");
     let mut out: Vec<TableSnapshot> = Vec::new();
     for table in tables {
-        if CURSOR_TABLES.contains(&table.table.as_str()) {
+        if contains(&cursor_tables, &table.table) {
             continue;
         }
         let keep: Vec<usize> = table
             .columns
             .iter()
             .enumerate()
-            .filter(|(_, column)| !CURSOR_COLUMNS.contains(&column.as_str()))
+            .filter(|(_, column)| !contains(&cursor_columns, column))
             .map(|(index, _)| index)
             .collect();
         if keep.len() == table.columns.len() {

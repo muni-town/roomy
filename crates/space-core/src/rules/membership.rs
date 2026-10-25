@@ -26,24 +26,31 @@ pub fn join_effects(
     let stream = ctx.stream_id.as_str();
     let _ = base;
     vec![
-        ensure_entity(&ctx.stream_id, user, None),
-        ensure_entity(&ctx.stream_id, stream, None),
+        ensure_entity(&ctx.stream_id, user, None, ctx.decided_at_ms),
+        ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
         Effect::global(
-            "insert or ignore into edges (head, tail, label) values (?, ?, 'joinedSpace')",
-            vec![Value::text(user), Value::text(stream)],
+            "insert or ignore into edges (head, tail, label, created_at, updated_at)
+             values (?, ?, 'joinedSpace', ?, ?)",
+            vec![
+                Value::text(user),
+                Value::text(stream),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ),
         Effect::global(
             "delete from edges where head = ? and tail = ? and label = 'leftSpace'",
             vec![Value::text(user), Value::text(stream)],
         ),
         Effect::space(
-            "insert into edges (head, tail, label, payload)
+            "insert into edges (head, tail, label, payload, created_at, updated_at)
              select
                ?, ?,
                'member',
                case when exists (
                  select 1 from edges where head = ? and tail = ? and label = 'admin'
-               ) then '{\"can\":\"admin\"}' else '{\"can\":\"post\"}' end
+               ) then '{\"can\":\"admin\"}' else '{\"can\":\"post\"}' end,
+               ?, ?
              where not exists (
                select 1 from edges where head = ? and tail = ? and label = 'member'
              )",
@@ -52,6 +59,8 @@ pub fn join_effects(
                 Value::text(user),
                 Value::text(stream),
                 Value::text(user),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
                 Value::text(stream),
                 Value::text(user),
             ],
@@ -59,7 +68,7 @@ pub fn join_effects(
         // The announcement: an entity in the space's first live channel, an
         // author edge on the space, and a markdown body naming the joiner.
         Effect::space(
-            "insert into entities (id, stream_id, room)
+            "insert into entities (id, stream_id, room, created_at, updated_at)
              values (
                ?, ?,
                (
@@ -68,26 +77,46 @@ pub fn join_effects(
                    where label = 'space.roomy.channel' and deleted = 0 and e.stream_id = ?
                    order by entity
                    limit 1
-               )
+               ),
+               ?, ?
              ) on conflict do nothing",
             vec![
                 Value::text(&ctx.event_id),
                 Value::text(stream),
                 Value::text(stream),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
             ],
         ),
         Effect::space(
-            "insert or replace into edges (head, tail, label) select ?, ?, 'author'",
-            vec![Value::text(&ctx.event_id), Value::text(stream)],
+            "insert or replace into edges (head, tail, label, created_at, updated_at)
+             select ?, ?, 'author', ?, ?",
+            vec![
+                Value::text(&ctx.event_id),
+                Value::text(stream),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ),
         Effect::space(
-            "insert or replace into comp_content (entity, mime_type, data, last_edit)
-             values (?, 'text/markdown', cast(('[@' || ? || '](/user/' || ? || ') joined the space.') as blob), ?)",
+            "insert or replace into comp_content (
+               entity, mime_type, data, last_edit, created_at, updated_at
+             )
+             values (
+               ?,
+               'text/markdown',
+               cast(('[@' || ? || '](/user/' || ? || ') joined the space.') as blob),
+               ?,
+               ?,
+               ?
+             )",
             vec![
                 Value::text(&ctx.event_id),
                 Value::text(user),
                 Value::text(user),
                 Value::text(&ctx.event_id),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
             ],
         ),
     ]
@@ -100,16 +129,27 @@ pub fn admin_effects(base: &ChangeBase, patch: &MembershipPatch, ctx: &RuleConte
     let user = base.rkey.as_str();
     if patch.can == "admin" {
         return vec![
-            ensure_entity(&ctx.stream_id, stream, None),
-            ensure_entity(&ctx.stream_id, user, None),
+            ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
+            ensure_entity(&ctx.stream_id, user, None, ctx.decided_at_ms),
             Effect::space(
-                "insert or replace into edges (head, tail, label, payload)
-                 values (?, ?, 'member', '{\"can\":\"admin\"}')",
-                vec![Value::text(stream), Value::text(user)],
+                "insert or replace into edges (head, tail, label, payload, created_at, updated_at)
+                 values (?, ?, 'member', '{\"can\":\"admin\"}', ?, ?)",
+                vec![
+                    Value::text(stream),
+                    Value::text(user),
+                    Value::Integer(ctx.decided_at_ms),
+                    Value::Integer(ctx.decided_at_ms),
+                ],
             ),
             Effect::space(
-                "insert or ignore into edges (head, tail, label) values (?, ?, 'admin')",
-                vec![Value::text(stream), Value::text(user)],
+                "insert or ignore into edges (head, tail, label, created_at, updated_at)
+                 values (?, ?, 'admin', ?, ?)",
+                vec![
+                    Value::text(stream),
+                    Value::text(user),
+                    Value::Integer(ctx.decided_at_ms),
+                    Value::Integer(ctx.decided_at_ms),
+                ],
             ),
         ];
     }
@@ -141,8 +181,14 @@ pub fn leave_effects(change: &RecordChange, ctx: &RuleContext) -> Vec<Effect> {
             vec![Value::text(user), Value::text(stream)],
         ),
         Effect::global(
-            "insert or ignore into edges (head, tail, label) values (?, ?, 'leftSpace')",
-            vec![Value::text(user), Value::text(stream)],
+            "insert or ignore into edges (head, tail, label, created_at, updated_at)
+             values (?, ?, 'leftSpace', ?, ?)",
+            vec![
+                Value::text(user),
+                Value::text(stream),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ),
     ]
 }
@@ -150,10 +196,11 @@ pub fn leave_effects(change: &RecordChange, ctx: &RuleContext) -> Vec<Effect> {
 pub fn ban_create_effects(base: &ChangeBase, record: &BanRecord, ctx: &RuleContext) -> Vec<Effect> {
     let _ = base;
     vec![Effect::space(
-        "insert into comp_bans (entity, user_did) values (?, ?)",
+        "insert into comp_bans (entity, user_did, created_at) values (?, ?, ?)",
         vec![
             Value::text(ctx.stream_id.as_str()),
             Value::text(record.user.as_str()),
+            Value::Integer(ctx.decided_at_ms),
         ],
     )]
 }
@@ -175,13 +222,16 @@ pub fn invite_create_effects(
 ) -> Vec<Effect> {
     let _ = base;
     vec![Effect::space(
-        "insert or ignore into comp_invite (entity, token, created_by_did, event_ulid)
-         values (?, ?, ?, ?)",
+        "insert or ignore into comp_invite (
+           entity, token, created_by_did, event_ulid, created_at
+         )
+         values (?, ?, ?, ?, ?)",
         vec![
             Value::text(ctx.stream_id.as_str()),
             Value::text(&record.token),
             Value::text(record.created_by.as_str()),
             Value::text(&ctx.event_id),
+            Value::Integer(ctx.decided_at_ms),
         ],
     )]
 }

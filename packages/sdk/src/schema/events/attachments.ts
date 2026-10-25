@@ -88,6 +88,8 @@ export function attachmentStatements(
   streamId: string,
   messageId: string,
   attachments: readonly AttachmentInput[],
+  /** The instant the log assigns the entry: the created/updated stamp. */
+  at: number,
 ): SqlStatement[] {
   const statements: SqlStatement[] = [];
 
@@ -95,11 +97,13 @@ export function attachmentStatements(
     switch (att.$type) {
       case "space.roomy.attachment.reply.v0":
         statements.push(sql`
-          insert or ignore into edges (head, tail, label)
+          insert or ignore into edges (head, tail, label, created_at, updated_at)
           values (
             ${messageId},
             ${att.target},
-            'reply'
+            'reply',
+            ${at},
+            ${at}
           )
         `);
         break;
@@ -107,14 +111,15 @@ export function attachmentStatements(
       case "space.roomy.attachment.comment.v0":
         statements.push(
           sql`
-          insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
+          insert into comp_comment (entity, version, snippet, idx_from, idx_to, created_at, updated_at)
           values (
             ${messageId},
             ${att.version},
             ${att.snippet || ""},
             ${att.from},
             ${att.to},
-            (unixepoch() * 1000)
+            ${at},
+            ${at}
           )`,
         );
         break;
@@ -122,9 +127,12 @@ export function attachmentStatements(
       case "space.roomy.attachment.image.v0": {
         const uriWithUlidQuery = att.uri + "?message=" + messageId;
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, messageId),
+          ensureEntity(streamId, uriWithUlidQuery, messageId, at),
           sql`
-            insert or replace into comp_embed_image (entity, mime_type, alt, width, height, blurhash, size)
+            insert or replace into comp_embed_image (
+              entity, mime_type, alt, width, height, blurhash, size,
+              created_at, updated_at
+            )
             values (
               ${uriWithUlidQuery},
               ${att.mimeType},
@@ -132,7 +140,9 @@ export function attachmentStatements(
               ${att.width ? Number(att.width) : null},
               ${att.height ? Number(att.height) : null},
               ${att.blurhash || null},
-              ${att.size ? Number(att.size) : null}
+              ${att.size ? Number(att.size) : null},
+              ${at},
+              ${at}
             )
         `,
         );
@@ -142,9 +152,12 @@ export function attachmentStatements(
       case "space.roomy.attachment.video.v0": {
         const uriWithUlidQuery = att.uri + "?message=" + messageId;
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, messageId),
+          ensureEntity(streamId, uriWithUlidQuery, messageId, at),
           sql`
-            insert or replace into comp_embed_video (entity, mime_type, alt, width, height, length, blurhash, size)
+            insert or replace into comp_embed_video (
+              entity, mime_type, alt, width, height, length, blurhash, size,
+              created_at, updated_at
+            )
             values (
               ${uriWithUlidQuery},
               ${att.mimeType},
@@ -153,7 +166,9 @@ export function attachmentStatements(
               ${att.height ? Number(att.height) : null},
               ${att.length ? Number(att.length) : null},
               ${att.blurhash || null},
-              ${att.size ? Number(att.size) : null}
+              ${att.size ? Number(att.size) : null},
+              ${at},
+              ${at}
             )
         `,
         );
@@ -163,14 +178,18 @@ export function attachmentStatements(
       case "space.roomy.attachment.file.v0": {
         const uriWithUlidQuery = att.uri + "?message=" + messageId;
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, messageId),
+          ensureEntity(streamId, uriWithUlidQuery, messageId, at),
           sql`
-            insert or replace into comp_embed_file (entity, mime_type, name, size)
+            insert or replace into comp_embed_file (
+              entity, mime_type, name, size, created_at, updated_at
+            )
             values (
               ${uriWithUlidQuery},
               ${att.mimeType},
               ${att.name || null},
-              ${att.size ? Number(att.size) : null}
+              ${att.size ? Number(att.size) : null},
+              ${at},
+              ${at}
             )
         `,
         );
@@ -180,12 +199,14 @@ export function attachmentStatements(
       case "space.roomy.attachment.link.v0": {
         const uriWithUlidQuery = att.uri + "?message=" + messageId;
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, messageId),
+          ensureEntity(streamId, uriWithUlidQuery, messageId, at),
           sql`
-          insert into comp_embed_link (entity, show_preview)
+          insert into comp_embed_link (entity, show_preview, created_at, updated_at)
           values (
             ${uriWithUlidQuery},
-            ${att.showPreview ? 1 : 0}
+            ${att.showPreview ? 1 : 0},
+            ${at},
+            ${at}
           )
         `,
         );
@@ -214,11 +235,13 @@ export function attachmentStatements(
 
       case "space.roomy.attachment.forward.v0":
         statements.push(sql`
-          insert or ignore into edges (head, tail, label)
+          insert or ignore into edges (head, tail, label, created_at, updated_at)
           select
             ${messageId},
             ${att.target},
-            'forward'
+            'forward',
+            ${at},
+            ${at}
           where exists (select 1 from entities where id = ${att.target})
         `);
         break;

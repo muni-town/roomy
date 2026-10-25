@@ -1,8 +1,13 @@
-//! Serve one space's XRPC reads for manual verification.
+//! Serve per-space XRPC reads for manual verification.
 //!
 //! ```text
-//! space-xrpc-serve --db data/spaces/<spaceDid>.sqlite [--global-db data/global.sqlite] [--port 8090]
+//! space-xrpc-serve --spaces-dir data/spaces [--global-db data/global.sqlite] [--port 8090]
+//! space-xrpc-serve --db data/spaces/<spaceDid>.sqlite
 //! ```
+//!
+//! A directory is served through the registry: `spaceId` names a space and a
+//! room or message id resolves through the global `entity_space` index. A single
+//! `--db` serves just that space.
 //!
 //! `SPACE_WORKER_TEST_MODE=true` enables `X-Test-Did`; otherwise
 //! `SPACE_WORKER_GATEWAY_DID`, `SPACE_WORKER_DID` and
@@ -10,7 +15,8 @@
 
 use std::sync::Arc;
 
-use space_xrpc::state::{SpaceDb, XrpcState};
+use space_xrpc::registry::{FixedSpaces, SpaceRegistry, SpaceResolver};
+use space_xrpc::state::{SpaceReadDb, XrpcState};
 use space_xrpc::store::{GlobalStores, SqliteGlobalStores};
 use space_xrpc::verify::verifier_from_env;
 
@@ -24,7 +30,9 @@ async fn main() {
         .init();
 
     let mut db_path: Option<String> = None;
+    let mut spaces_dir: Option<String> = None;
     let mut global_path: Option<String> = None;
+    let mut max_open: usize = 256;
     let mut port: u16 = 8090;
     let mut bind = "127.0.0.1".to_owned();
 
@@ -32,6 +40,13 @@ async fn main() {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--db" => db_path = args.next(),
+            "--spaces-dir" => spaces_dir = args.next(),
+            "--max-open" => {
+                max_open = args
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or_else(|| usage("--max-open needs a number"))
+            }
             "--global-db" => global_path = args.next(),
             "--port" => {
                 port = args
@@ -49,17 +64,47 @@ async fn main() {
         }
     }
 
-    let db_path = db_path.unwrap_or_else(|| usage("--db is required"));
-    let db = match SpaceDb::open_readonly(&db_path) {
-        Ok(db) => Arc::new(db),
-        Err(err) => {
-            eprintln!("cannot open {db_path}: {err}");
-            std::process::exit(1);
-        }
-    };
     let verifier = verifier_from_env().unwrap_or_else(|err| usage(&err));
+    let (spaces, placeholder): (Arc<dyn SpaceResolver>, Arc<SpaceReadDb>) =
+        match (spaces_dir, db_path) {
+            (Some(dir), None) => {
+                let registry = SpaceRegistry::new(
+                    &dir,
+                    global_path.clone().map(std::path::PathBuf::from),
+                    max_open,
+                );
+                let first = registry.open_spaces().first().cloned().or_else(|| {
+                    std::fs::read_dir(&dir).ok().and_then(|entries| {
+                        entries.filter_map(|entry| entry.ok()).find_map(|entry| {
+                            entry
+                                .path()
+                                .file_stem()
+                                .map(|stem| stem.to_string_lossy().into_owned())
+                        })
+                    })
+                });
+                let placeholder = match first.and_then(|space| registry.resolve_space(&space)) {
+                    Some(db) => db,
+                    None => usage(&format!("no space database under {dir}")),
+                };
+                (Arc::new(registry), placeholder)
+            }
+            (None, Some(path)) => {
+                let db = match SpaceReadDb::open_readonly(&path) {
+                    Ok(db) => Arc::new(db),
+                    Err(err) => {
+                        eprintln!("cannot open {path}: {err}");
+                        std::process::exit(1);
+                    }
+                };
+                let space = space_xrpc::registry::space_of_path(std::path::Path::new(&path));
+                let fixed = FixedSpaces::new([(space, Arc::clone(&db))]);
+                (Arc::new(fixed), db)
+            }
+            _ => usage("pass exactly one of --db or --spaces-dir"),
+        };
 
-    let mut state = XrpcState::new(db, verifier);
+    let mut state = XrpcState::new(placeholder, verifier).with_spaces(spaces);
     if let Some(path) = global_path {
         match SqliteGlobalStores::open(&path) {
             Ok(stores) => {

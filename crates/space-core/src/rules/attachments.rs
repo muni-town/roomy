@@ -82,31 +82,50 @@ pub fn attachment_effects(
     stream_id: &SpaceDid,
     message_id: &str,
     attachments: &[Attachment],
+    decided_at_ms: i64,
 ) -> Vec<Effect> {
     let mut effects: Vec<Effect> = Vec::new();
     for attachment in attachments {
         match attachment.kind.as_str() {
             "space.roomy.attachment.reply.v0" => effects.push(Effect::space(
-                "insert or ignore into edges (head, tail, label) values (?, ?, 'reply')",
-                vec![Value::text(message_id), Value::text(&attachment.target)],
+                "insert or ignore into edges (head, tail, label, created_at, updated_at)
+                 values (?, ?, 'reply', ?, ?)",
+                vec![
+                    Value::text(message_id),
+                    Value::text(&attachment.target),
+                    Value::Integer(decided_at_ms),
+                    Value::Integer(decided_at_ms),
+                ],
             )),
             "space.roomy.attachment.comment.v0" => effects.push(Effect::space(
-                "insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
-                 values (?, ?, ?, ?, ?, (unixepoch() * 1000))",
+                "insert into comp_comment (
+                   entity, version, snippet, idx_from, idx_to, created_at, updated_at
+                 )
+                 values (?, ?, ?, ?, ?, ?, ?)",
                 vec![
                     Value::text(message_id),
                     Value::text(&attachment.version),
                     Value::text(&attachment.snippet),
                     Value::Integer(attachment.from),
                     Value::Integer(attachment.to),
+                    Value::Integer(decided_at_ms),
+                    Value::Integer(decided_at_ms),
                 ],
             )),
             "space.roomy.attachment.image.v0" => {
                 let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(stream_id, &scoped, Some(message_id)));
+                effects.push(ensure_entity(
+                    stream_id,
+                    &scoped,
+                    Some(message_id),
+                    decided_at_ms,
+                ));
                 effects.push(Effect::space(
-                    "insert or replace into comp_embed_image (entity, mime_type, alt, width, height, blurhash, size)
-                     values (?, ?, ?, ?, ?, ?, ?)",
+                    "insert or replace into comp_embed_image (
+                       entity, mime_type, alt, width, height, blurhash, size,
+                       created_at, updated_at
+                     )
+                     values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     vec![
                         Value::text(scoped),
                         Value::text(&attachment.mime_type),
@@ -115,15 +134,25 @@ pub fn attachment_effects(
                         Value::opt_int(attachment.height),
                         Value::opt_text(attachment.blurhash.clone()),
                         Value::opt_int(attachment.size),
+                        Value::Integer(decided_at_ms),
+                        Value::Integer(decided_at_ms),
                     ],
                 ));
             }
             "space.roomy.attachment.video.v0" => {
                 let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(stream_id, &scoped, Some(message_id)));
+                effects.push(ensure_entity(
+                    stream_id,
+                    &scoped,
+                    Some(message_id),
+                    decided_at_ms,
+                ));
                 effects.push(Effect::space(
-                    "insert or replace into comp_embed_video (entity, mime_type, alt, width, height, length, blurhash, size)
-                     values (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "insert or replace into comp_embed_video (
+                       entity, mime_type, alt, width, height, length, blurhash, size,
+                       created_at, updated_at
+                     )
+                     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     vec![
                         Value::text(scoped),
                         Value::text(&attachment.mime_type),
@@ -133,41 +162,62 @@ pub fn attachment_effects(
                         Value::opt_int(attachment.length),
                         Value::opt_text(attachment.blurhash.clone()),
                         Value::opt_int(attachment.size),
+                        Value::Integer(decided_at_ms),
+                        Value::Integer(decided_at_ms),
                     ],
                 ));
             }
             "space.roomy.attachment.file.v0" => {
                 let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(stream_id, &scoped, Some(message_id)));
+                effects.push(ensure_entity(
+                    stream_id,
+                    &scoped,
+                    Some(message_id),
+                    decided_at_ms,
+                ));
                 effects.push(Effect::space(
-                    "insert or replace into comp_embed_file (entity, mime_type, name, size)
-                     values (?, ?, ?, ?)",
+                    "insert or replace into comp_embed_file (
+                       entity, mime_type, name, size, created_at, updated_at
+                     )
+                     values (?, ?, ?, ?, ?, ?)",
                     vec![
                         Value::text(scoped),
                         Value::text(&attachment.mime_type),
                         Value::opt_text(attachment.name.clone()),
                         Value::opt_int(attachment.size),
+                        Value::Integer(decided_at_ms),
+                        Value::Integer(decided_at_ms),
                     ],
                 ));
             }
             "space.roomy.attachment.link.v0" => {
                 let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(stream_id, &scoped, Some(message_id)));
+                effects.push(ensure_entity(
+                    stream_id,
+                    &scoped,
+                    Some(message_id),
+                    decided_at_ms,
+                ));
                 effects.push(Effect::space(
-                    "insert into comp_embed_link (entity, show_preview) values (?, ?)",
+                    "insert into comp_embed_link (entity, show_preview, created_at, updated_at)
+                     values (?, ?, ?, ?)",
                     vec![
                         Value::text(scoped),
                         Value::Integer(i64::from(attachment.show_preview)),
+                        Value::Integer(decided_at_ms),
+                        Value::Integer(decided_at_ms),
                     ],
                 ));
             }
             "space.roomy.attachment.forward.v0" => effects.push(Effect::space(
-                "insert or ignore into edges (head, tail, label)
-                 select ?, ?, 'forward'
+                "insert or ignore into edges (head, tail, label, created_at, updated_at)
+                 select ?, ?, 'forward', ?, ?
                  where exists (select 1 from entities where id = ?)",
                 vec![
                     Value::text(message_id),
                     Value::text(&attachment.target),
+                    Value::Integer(decided_at_ms),
+                    Value::Integer(decided_at_ms),
                     Value::text(&attachment.target),
                 ],
             )),
@@ -188,6 +238,7 @@ pub fn attachment_update_effects(
     stream_id: &SpaceDid,
     message_id: &str,
     carried: &Option<Option<serde_json::Value>>,
+    decided_at_ms: i64,
 ) -> Vec<Effect> {
     let Some(carried) = carried else {
         return Vec::new();
@@ -211,7 +262,12 @@ pub fn attachment_update_effects(
         let mut effects: Vec<Effect> = Vec::new();
         for attachment in link_attachments {
             let scoped = format!("{}?message={}", attachment.uri, message_id);
-            effects.push(ensure_entity(stream_id, &scoped, Some(message_id)));
+            effects.push(ensure_entity(
+                stream_id,
+                &scoped,
+                Some(message_id),
+                decided_at_ms,
+            ));
             effects.push(Effect::space(
                 "update comp_embed_link set show_preview = ?
                   where entity in (
@@ -226,8 +282,8 @@ pub fn attachment_update_effects(
                 ],
             ));
             effects.push(Effect::space(
-                "insert into comp_embed_link (entity, show_preview)
-                 select ?, ?
+                "insert into comp_embed_link (entity, show_preview, created_at, updated_at)
+                 select ?, ?, ?, ?
                  where not exists (
                    select 1 from entities e
                    join comp_embed_link el on el.entity = e.id
@@ -236,6 +292,8 @@ pub fn attachment_update_effects(
                 vec![
                     Value::text(scoped),
                     Value::flag(attachment.show_preview),
+                    Value::Integer(decided_at_ms),
+                    Value::Integer(decided_at_ms),
                     Value::text(message_id),
                     Value::text(&attachment.uri),
                     Value::text(message_id),
@@ -285,7 +343,12 @@ pub fn attachment_update_effects(
             .into_iter()
             .filter(|a| a.kind != "space.roomy.attachment.forward.v0")
             .collect();
-        effects.extend(attachment_effects(stream_id, message_id, &replacements));
+        effects.extend(attachment_effects(
+            stream_id,
+            message_id,
+            &replacements,
+            decided_at_ms,
+        ));
     }
     effects
 }

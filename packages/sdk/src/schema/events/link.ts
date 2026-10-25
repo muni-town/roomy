@@ -14,7 +14,8 @@ const CreateRoomLinkSchema = type({
 
 export const CreateRoomLink = defineEvent(
   CreateRoomLinkSchema,
-  ({ streamId, event, user }) => {
+  ({ streamId, event, user, decidedAt }) => {
+    const at = decidedAt ?? Date.now();
     return [
       // Idempotent: the canonical_parent payload ("first link wins") is
       // computed from the current edge count, so re-applying the same
@@ -25,7 +26,7 @@ export const CreateRoomLink = defineEvent(
       // instead re-evaluate the subquery each pass, so its second pass sees
       // the row from the first and sets canonical_parent to 0.
       sql`
-          insert into edges (head, tail, label, payload)
+          insert into edges (head, tail, label, payload, created_at, updated_at)
           values (
             ${event.room},
             ${event.linkToRoom},
@@ -36,25 +37,31 @@ export const CreateRoomLink = defineEvent(
               WHERE head = ${event.room}
                 AND tail = ${event.linkToRoom}
                 AND label = 'link'
-            ))
+            )),
+            ${at},
+            ${at}
           )
           on conflict (head, tail, label) do nothing
         `,
       // create system message announcing the link
       sql`
-        insert into entities (id, stream_id, room)
+        insert into entities (id, stream_id, room, created_at, updated_at)
         values (
           ${event.id},
           ${streamId},
-          ${event.room}
+          ${event.room},
+          ${at},
+          ${at}
         ) on conflict do nothing
       `,
       sql`
-          insert or ignore into edges (head, tail, label)
+          insert or ignore into edges (head, tail, label, created_at, updated_at)
           select
             ${event.id},
             ${streamId},
-            'author'
+            'author',
+            ${at},
+            ${at}
         `,
       // 'linked to' is probably not what we want, but this is not a user facing affordance for now
       //
@@ -64,12 +71,16 @@ export const CreateRoomLink = defineEvent(
       // read time from the global profile store, so we never bake a missing or
       // stale handle into the stored message.
       sql`
-        insert or replace into comp_content (entity, mime_type, data, last_edit)
+        insert or replace into comp_content (
+          entity, mime_type, data, last_edit, created_at, updated_at
+        )
         values (
           ${event.id},
           'text/markdown',
           cast(('[@' || ${user} || '](/user/' || ${user} || ') ' || ${event.isCreationLink ? "created [" : "linked to ["} || coalesce((select name from comp_info where entity = ${event.linkToRoom}), 'this room') || '](' || ${event.linkToRoom} || '?parent=' || ${event.room} || ').') as blob),
-          ${event.id}
+          ${event.id},
+          ${at},
+          ${at}
       )
       `,
     ];

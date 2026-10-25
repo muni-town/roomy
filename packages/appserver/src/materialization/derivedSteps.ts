@@ -14,6 +14,7 @@ import type { Event, StreamDid, Ulid } from "@roomy-space/sdk";
 import type { DbLike } from "../db/types.ts";
 import { upsertActivityItem } from "./activityItem.ts";
 import { rebuildRoomActivity } from "../queries/roomActivityProjection.ts";
+import { refreshActivityMeta } from "./activityItem.ts";
 import type { DerivedStep } from "./records/effects.ts";
 import { rebuildActivityWindow } from "./roomDerivedState.ts";
 import { setMessageSortIdxByReorder } from "./sortIdx.ts";
@@ -32,8 +33,11 @@ export async function applyDerivedStep(
     case "rebuildActivityWindow":
       // The `activity_item` window and the `room_activity` summary both
       // describe the room whose message set just changed, so one step keeps
-      // both in step with the rows that remain.
+      // both in step with the rows that remain. The row's names are the current
+      // ones — a rename rebuilds the row it renamed rather than leaving the old
+      // name in the feed.
       await rebuildActivityWindow(db, step.roomId);
+      await refreshActivityMeta(db, step.roomId);
       await rebuildRoomActivity(db, [step.roomId]);
       return [];
     case "upsertActivityItem":
@@ -53,7 +57,14 @@ export async function applyDerivedStep(
       );
       return [];
     case "storeLinks":
-      return await storeLinks(db, globalDb, step.spaceId, step.messageId, step.urls);
+      return await storeLinks(
+        db,
+        globalDb,
+        step.spaceId,
+        step.messageId,
+        step.urls,
+        step.at,
+      );
     case "queueLinkAttachments":
       await queueLinks(globalDb, step.spaceId, step.messageId, step.urls);
       return [...step.urls];
@@ -97,20 +108,21 @@ async function storeLinks(
   spaceId: StreamDid,
   messageId: string,
   urls: readonly string[],
+  at: number,
 ): Promise<string[]> {
   const stored: string[] = [];
   for (const url of urls) {
     // The link entity is scoped to the message: `room` holds the message id so
     // a read can find a message's links by it.
     await db.run(
-      `insert or ignore into entities (id, stream_id, room, created_at)
-       values (?, '', ?, (unixepoch() * 1000))`,
-      [url, messageId],
+      `insert or ignore into entities (id, stream_id, room, created_at, updated_at)
+       values (?, '', ?, ?, ?)`,
+      [url, messageId, at, at],
     );
     const inserted = await db.run(
       `insert or ignore into comp_embed_link (entity, show_preview, created_at, updated_at)
-       values (?, 1, (unixepoch() * 1000), (unixepoch() * 1000))`,
-      [url],
+       values (?, 1, ?, ?)`,
+      [url, at, at],
     );
     if (inserted.changes > 0) stored.push(url);
   }

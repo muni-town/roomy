@@ -741,8 +741,17 @@ async function buildFixture(
   const db = toAsyncDb(raw);
   const globalDb = toAsyncDb(freshGlobalDb());
 
-  raw.run("insert into entities (id, stream_id) values (?, ?)", [STREAM, STREAM]);
-  raw.run("insert into comp_space (entity) values (?)", [STREAM]);
+  raw.run("insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)", [
+    STREAM,
+    STREAM,
+    RECEIVED_AT,
+    RECEIVED_AT,
+  ]);
+  raw.run("insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)", [
+    STREAM,
+    RECEIVED_AT,
+    RECEIVED_AT,
+  ]);
 
   const apply = () =>
     applyBatch(db, STREAM, entries, { isBackfill: false }, globalDb);
@@ -1357,7 +1366,18 @@ describe("the whole registry derives one corpus the same way through both paths"
     // `comp_content.last_edit` is the one value the record model cannot carry:
     // it is the edit event's id on the event path and the change's stamp on the
     // record path, and only its difference from the message id is read.
-    expect(diffSnapshots(eventSpace, recordSpace).map((d) => d.table)).toEqual([]);
+    const diverging = diffSnapshots(eventSpace, recordSpace);
+    // Name the tables and the rows that differ, not just that something did.
+    const detail = diverging.map((d) => {
+      const before = new Set(d.before.map((row) => JSON.stringify(row)));
+      const after = new Set(d.after.map((row) => JSON.stringify(row)));
+      return {
+        table: d.table,
+        onlyEventPath: d.before.filter((row) => !after.has(JSON.stringify(row))).slice(0, 3),
+        onlyRecordPath: d.after.filter((row) => !before.has(JSON.stringify(row))).slice(0, 3),
+      };
+    });
+    expect(detail).toEqual([]);
     expect(digestOf(recordSpace)).toBe(digestOf(eventSpace));
 
     // The global entity→space index is written by the same statements under

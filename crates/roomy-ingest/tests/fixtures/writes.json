@@ -1,0 +1,1124 @@
+{
+  "space": "did:web:space.example",
+  "cases": [
+    {
+      "name": "valid.message",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3RG000000000000000V",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "aGVsbG8="
+              }
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "body": "",
+      "events": [
+        {
+          "idx": 0,
+          "user": "did:plc:member",
+          "eventType": "space.roomy.message.createMessage.v0",
+          "createdAt": 1792884841000,
+          "receivedAt": 1792884841231
+        }
+      ],
+      "changes": [
+        {
+          "idx": 0,
+          "ord": 0,
+          "kind": "message",
+          "repo": "did:plc:member",
+          "collection": "space.roomy.room.message",
+          "rkey": "01HF7YB3RG000000000000000V",
+          "op": "create",
+          "orderStamp": "01M5R476RF0000000000000000",
+          "actor": "did:plc:member",
+          "eventId": "01HF7YB3RG000000000000000V",
+          "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"aGVsbG8=\"}},\"extensions\":{}}"
+        }
+      ]
+    },
+    {
+      "name": "valid.batch-of-two",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3RH000000000000000W",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "Zmlyc3Q="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RJ000000000000000X",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "c2Vjb25k"
+              }
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "body": "",
+      "events": [
+        {
+          "idx": 1,
+          "user": "did:plc:member",
+          "eventType": "space.roomy.message.createMessage.v0",
+          "createdAt": 1792884841000,
+          "receivedAt": 1792884841350
+        },
+        {
+          "idx": 2,
+          "user": "did:plc:member",
+          "eventType": "space.roomy.message.createMessage.v0",
+          "createdAt": 1792884841000,
+          "receivedAt": 1792884841350
+        }
+      ],
+      "changes": [
+        {
+          "idx": 1,
+          "ord": 0,
+          "kind": "message",
+          "repo": "did:plc:member",
+          "collection": "space.roomy.room.message",
+          "rkey": "01HF7YB3RH000000000000000W",
+          "op": "create",
+          "orderStamp": "01M5R476W60000000000000001",
+          "actor": "did:plc:member",
+          "eventId": "01HF7YB3RH000000000000000W",
+          "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"Zmlyc3Q=\"}},\"extensions\":{}}"
+        },
+        {
+          "idx": 2,
+          "ord": 0,
+          "kind": "message",
+          "repo": "did:plc:member",
+          "collection": "space.roomy.room.message",
+          "rkey": "01HF7YB3RJ000000000000000X",
+          "op": "create",
+          "orderStamp": "01M5R476W60000000000000002",
+          "actor": "did:plc:member",
+          "eventId": "01HF7YB3RJ000000000000000X",
+          "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"c2Vjb25k\"}},\"extensions\":{}}"
+        }
+      ]
+    },
+    {
+      "name": "valid.reaction",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3RK000000000000000Y",
+            "$type": "space.roomy.reaction.addReaction.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "reactionTo": "01HF7YAT010000000000000001",
+            "reaction": "👍"
+          }
+        ]
+      },
+      "status": 200,
+      "body": "",
+      "events": [
+        {
+          "idx": 3,
+          "user": "did:plc:member",
+          "eventType": "space.roomy.reaction.addReaction.v0",
+          "createdAt": 1792884841000,
+          "receivedAt": 1792884841550
+        }
+      ],
+      "changes": [
+        {
+          "idx": 3,
+          "ord": 0,
+          "kind": "reaction",
+          "repo": "did:plc:member",
+          "collection": "space.roomy.room.reaction",
+          "rkey": "01HF7YB3RK000000000000000Y",
+          "op": "create",
+          "orderStamp": "01M5R4772E0000000000000003",
+          "actor": "did:plc:member",
+          "eventId": "01HF7YB3RK000000000000000Y",
+          "body": "{\"target\":\"01HF7YAT010000000000000001\",\"user\":\"did:plc:member\",\"reaction\":\"👍\"}"
+        }
+      ]
+    },
+    {
+      "name": "valid.create-room",
+      "caller": "did:plc:admin",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3RM000000000000000Z",
+            "$type": "space.roomy.room.createRoom.v0",
+            "extensions": {},
+            "kind": "space.roomy.channel",
+            "name": "A new channel"
+          }
+        ]
+      },
+      "status": 200,
+      "body": "",
+      "events": [
+        {
+          "idx": 4,
+          "user": "did:plc:admin",
+          "eventType": "space.roomy.room.createRoom.v0",
+          "createdAt": 1792884841000,
+          "receivedAt": 1792884841638
+        }
+      ],
+      "changes": [
+        {
+          "idx": 4,
+          "ord": 0,
+          "kind": "room",
+          "repo": "did:web:space.example",
+          "collection": "space.roomy.space.room",
+          "rkey": "01HF7YB3RM000000000000000Z",
+          "op": "create",
+          "orderStamp": "01M5R477560000000000000004",
+          "actor": "did:plc:admin",
+          "eventId": "01HF7YB3RM000000000000000Z",
+          "body": "{\"kind\":\"space.roomy.channel\",\"name\":\"A new channel\",\"avatar\":null,\"description\":null,\"defaultAccess\":\"readwrite\",\"deleted\":false,\"parent\":null}"
+        }
+      ]
+    },
+    {
+      "name": "invalid.not-an-object",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          "not an event"
+        ]
+      },
+      "status": 400,
+      "body": "{\"error\":\"InvalidRequest\",\"message\":\"space.roomy.space.sendEvents input validation failed: events[0] must be an object (was a string)\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "invalid.missing-type",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YBDH00000000000000010"
+          }
+        ]
+      },
+      "status": 400,
+      "body": "{\"error\":\"InvalidRequest\",\"message\":\"Event at index 0 is invalid: $type must be \\\"space.roomy.federation.remove.v0\\\", \\\"space.roomy.federation.request.v0\\\", \\\"space.roomy.federation.respond.v0\\\", \\\"space.roomy.federation.setReceiverPermission.v0\\\", \\\"space.roomy.federation.setRoomPermission.v0\\\", \\\"space.roomy.link.createRoomLink.v0\\\", \\\"space.roomy.link.removeRoomLink.v0\\\", \\\"space.roomy.message.createMessage.v0\\\", \\\"space.roomy.message.deleteMessage.v0\\\", \\\"space.roomy.message.editMessage.v0\\\", \\\"space.roomy.message.forwardMessages.v0\\\", \\\"space.roomy.message.moveMessages.v0\\\", \\\"space.roomy.message.reorderMessage.v0\\\", \\\"space.roomy.openmeet.configure.v0\\\", \\\"space.roomy.page.editPage.v0\\\", \\\"space.roomy.reaction.addBridgedReaction.v0\\\", \\\"space.roomy.reaction.addReaction.v0\\\", \\\"space.roomy.reaction.removeBridgedReaction.v0\\\", \\\"space.roomy.reaction.removeReaction.v0\\\", \\\"space.roomy.role.addMemberRole.v0\\\", \\\"space.roomy.role.createRole.v0\\\", \\\"space.roomy.role.deleteRole.v0\\\", \\\"space.roomy.role.removeMemberRole.v0\\\", \\\"space.roomy.role.setRoleRoomPermission.v0\\\", \\\"space.roomy.role.updateRole.v0\\\", \\\"space.roomy.room.createRoom.v0\\\", \\\"space.roomy.room.deleteRoom.v0\\\", \\\"space.roomy.room.restoreRoom.v0\\\", \\\"space.roomy.room.updateRoom.v0\\\", \\\"space.roomy.space.addAdmin.v0\\\", \\\"space.roomy.space.banAccount.v0\\\", \\\"space.roomy.space.createInvite.v0\\\", \\\"space.roomy.space.joinSpace.v0\\\", \\\"space.roomy.space.leaveSpace.v0\\\", \\\"space.roomy.space.removeAdmin.v0\\\", \\\"space.roomy.space.revokeInvite.v0\\\", \\\"space.roomy.space.setHandleProvider.v0\\\", \\\"space.roomy.space.unbanAccount.v0\\\", \\\"space.roomy.space.updateSidebar.v0\\\", \\\"space.roomy.space.updateSidebar.v1\\\", \\\"space.roomy.space.updateSpaceInfo.v0\\\", \\\"space.roomy.state.markRead.v0\\\", \\\"space.roomy.user.updateProfile.v0\\\", \\\"space.roomy.voice.callEnded.v0\\\", \\\"space.roomy.voice.callJoined.v0\\\", \\\"space.roomy.voice.callLeft.v0\\\" or \\\"space.roomy.voice.callStarted.v0\\\" (was undefined)\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "invalid.unknown-type",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3RN0000000000000011",
+            "$type": "space.roomy.nope.v0",
+            "extensions": {}
+          }
+        ]
+      },
+      "status": 400,
+      "body": "{\"error\":\"InvalidRequest\",\"message\":\"Event at index 0 is invalid: $type must be \\\"space.roomy.federation.remove.v0\\\", \\\"space.roomy.federation.request.v0\\\", \\\"space.roomy.federation.respond.v0\\\", \\\"space.roomy.federation.setReceiverPermission.v0\\\", \\\"space.roomy.federation.setRoomPermission.v0\\\", \\\"space.roomy.link.createRoomLink.v0\\\", \\\"space.roomy.link.removeRoomLink.v0\\\", \\\"space.roomy.message.createMessage.v0\\\", \\\"space.roomy.message.deleteMessage.v0\\\", \\\"space.roomy.message.editMessage.v0\\\", \\\"space.roomy.message.forwardMessages.v0\\\", \\\"space.roomy.message.moveMessages.v0\\\", \\\"space.roomy.message.reorderMessage.v0\\\", \\\"space.roomy.openmeet.configure.v0\\\", \\\"space.roomy.page.editPage.v0\\\", \\\"space.roomy.reaction.addBridgedReaction.v0\\\", \\\"space.roomy.reaction.addReaction.v0\\\", \\\"space.roomy.reaction.removeBridgedReaction.v0\\\", \\\"space.roomy.reaction.removeReaction.v0\\\", \\\"space.roomy.role.addMemberRole.v0\\\", \\\"space.roomy.role.createRole.v0\\\", \\\"space.roomy.role.deleteRole.v0\\\", \\\"space.roomy.role.removeMemberRole.v0\\\", \\\"space.roomy.role.setRoleRoomPermission.v0\\\", \\\"space.roomy.role.updateRole.v0\\\", \\\"space.roomy.room.createRoom.v0\\\", \\\"space.roomy.room.deleteRoom.v0\\\", \\\"space.roomy.room.restoreRoom.v0\\\", \\\"space.roomy.room.updateRoom.v0\\\", \\\"space.roomy.space.addAdmin.v0\\\", \\\"space.roomy.space.banAccount.v0\\\", \\\"space.roomy.space.createInvite.v0\\\", \\\"space.roomy.space.joinSpace.v0\\\", \\\"space.roomy.space.leaveSpace.v0\\\", \\\"space.roomy.space.removeAdmin.v0\\\", \\\"space.roomy.space.revokeInvite.v0\\\", \\\"space.roomy.space.setHandleProvider.v0\\\", \\\"space.roomy.space.unbanAccount.v0\\\", \\\"space.roomy.space.updateSidebar.v0\\\", \\\"space.roomy.space.updateSidebar.v1\\\", \\\"space.roomy.space.updateSpaceInfo.v0\\\", \\\"space.roomy.state.markRead.v0\\\", \\\"space.roomy.user.updateProfile.v0\\\", \\\"space.roomy.voice.callEnded.v0\\\", \\\"space.roomy.voice.callJoined.v0\\\", \\\"space.roomy.voice.callLeft.v0\\\" or \\\"space.roomy.voice.callStarted.v0\\\" (was \\\"space.roomy.nope.v0\\\")\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "invalid.oversized",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3RP0000000000000012",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMA=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RQ0000000000000013",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMQ=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RR0000000000000014",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMg=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RS0000000000000015",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMw=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RT0000000000000016",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNA=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RV0000000000000017",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNQ=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RW0000000000000018",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNg=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RX0000000000000019",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNw=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RY000000000000001A",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgOA=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3RZ000000000000001B",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgOQ=="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S0000000000000001C",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTA="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S1000000000000001D",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTE="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S2000000000000001E",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTI="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S3000000000000001F",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTM="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S4000000000000001G",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTQ="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S5000000000000001H",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTU="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S6000000000000001J",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTY="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S7000000000000001K",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTc="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S8000000000000001M",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTg="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3S9000000000000001N",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMTk="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SA000000000000001P",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjA="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SB000000000000001Q",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjE="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SC000000000000001R",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjI="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SD000000000000001S",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjM="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SE000000000000001T",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjQ="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SF000000000000001V",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjU="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SG000000000000001W",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjY="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SH000000000000001X",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjc="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SJ000000000000001Y",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjg="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SK000000000000001Z",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMjk="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SM0000000000000020",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzA="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SN0000000000000021",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzE="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SP0000000000000022",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzI="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SQ0000000000000023",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzM="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SR0000000000000024",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzQ="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SS0000000000000025",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzU="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3ST0000000000000026",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzY="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SV0000000000000027",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzc="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SW0000000000000028",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzg="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SX0000000000000029",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgMzk="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SY000000000000002A",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDA="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3SZ000000000000002B",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDE="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T0000000000000002C",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDI="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T1000000000000002D",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDM="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T2000000000000002E",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDQ="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T3000000000000002F",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDU="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T4000000000000002G",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDY="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T5000000000000002H",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDc="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T6000000000000002J",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDg="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T7000000000000002K",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNDk="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3T8000000000000002M",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3ZlcmZsb3cgNTA="
+              }
+            }
+          }
+        ]
+      },
+      "status": 400,
+      "body": "{\"error\":\"InvalidRequest\",\"message\":\"space.roomy.space.sendEvents input validation failed: events must be at most length 50 (was 51)\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "invalid.missing-spaceId",
+      "caller": "did:plc:member",
+      "request": {
+        "events": [
+          {
+            "id": "01HF7YB3T9000000000000002N",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "bm8gc3BhY2U="
+              }
+            }
+          }
+        ]
+      },
+      "status": 400,
+      "body": "{\"error\":\"InvalidRequest\",\"message\":\"space.roomy.space.sendEvents input validation failed: spaceId must be a string (was missing)\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "invalid.empty-events",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": []
+      },
+      "status": 400,
+      "body": "{\"error\":\"InvalidRequest\",\"message\":\"space.roomy.space.sendEvents input validation failed: events must be non-empty\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "unauthorized.outsider",
+      "caller": "did:plc:outsider",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3TA000000000000002P",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "b3V0c2lkZXI="
+              }
+            }
+          }
+        ]
+      },
+      "status": 403,
+      "body": "{\"error\":\"Forbidden\",\"message\":\"Caller does not have write access to this room\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "unauthorized.no-write-room",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3TB000000000000002Q",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C02",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "cmVhZCBvbmx5"
+              }
+            }
+          }
+        ]
+      },
+      "status": 403,
+      "body": "{\"error\":\"Forbidden\",\"message\":\"Caller does not have write access to this room\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "unauthorized.banned",
+      "caller": "did:plc:banned",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3TC000000000000002R",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "YmFubmVk"
+              }
+            }
+          }
+        ]
+      },
+      "status": 403,
+      "body": "{\"error\":\"Forbidden\",\"message\":\"Caller is banned from this space\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "unauthorized.create-room",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3TD000000000000002S",
+            "$type": "space.roomy.room.createRoom.v0",
+            "extensions": {},
+            "kind": "space.roomy.channel",
+            "name": "Not allowed"
+          }
+        ]
+      },
+      "status": 403,
+      "body": "{\"error\":\"Forbidden\",\"message\":\"Caller is not a space admin\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "anonymous",
+      "caller": null,
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3TE000000000000002T",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "YW5vbnltb3Vz"
+              }
+            }
+          }
+        ]
+      },
+      "status": 401,
+      "body": "{\"error\":\"AuthRequired\",\"message\":\"Authentication required\"}",
+      "events": [],
+      "changes": []
+    },
+    {
+      "name": "duplicate.event-id",
+      "caller": "did:plc:member",
+      "request": {
+        "spaceId": "did:web:space.example",
+        "events": [
+          {
+            "id": "01HF7YB3TF000000000000002V",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "dHdpY2U="
+              }
+            }
+          },
+          {
+            "id": "01HF7YB3TF000000000000002V",
+            "$type": "space.roomy.message.createMessage.v0",
+            "extensions": {},
+            "room": "01JC0000000000000000000C01",
+            "body": {
+              "mimeType": "text/plain",
+              "data": {
+                "$bytes": "dHdpY2U="
+              }
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "body": "",
+      "events": [
+        {
+          "idx": 5,
+          "user": "did:plc:member",
+          "eventType": "space.roomy.message.createMessage.v0",
+          "createdAt": 1792884841000,
+          "receivedAt": 1792884841752
+        },
+        {
+          "idx": 6,
+          "user": "did:plc:member",
+          "eventType": "space.roomy.message.createMessage.v0",
+          "createdAt": 1792884841000,
+          "receivedAt": 1792884841752
+        }
+      ],
+      "changes": [
+        {
+          "idx": 5,
+          "ord": 0,
+          "kind": "message",
+          "repo": "did:plc:member",
+          "collection": "space.roomy.room.message",
+          "rkey": "01HF7YB3TF000000000000002V",
+          "op": "create",
+          "orderStamp": "01M5R4778R0000000000000005",
+          "actor": "did:plc:member",
+          "eventId": "01HF7YB3TF000000000000002V",
+          "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"dHdpY2U=\"}},\"extensions\":{}}"
+        },
+        {
+          "idx": 6,
+          "ord": 0,
+          "kind": "message",
+          "repo": "did:plc:member",
+          "collection": "space.roomy.room.message",
+          "rkey": "01HF7YB3TF000000000000002V",
+          "op": "create",
+          "orderStamp": "01M5R4778R0000000000000006",
+          "actor": "did:plc:member",
+          "eventId": "01HF7YB3TF000000000000002V",
+          "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"dHdpY2U=\"}},\"extensions\":{}}"
+        }
+      ]
+    }
+  ]
+}

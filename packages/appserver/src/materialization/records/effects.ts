@@ -76,6 +76,8 @@ export type DerivedStep =
       readonly spaceId: StreamDid;
       readonly messageId: string;
       readonly urls: readonly string[];
+      /** The instant the log assigns the change: the rows' clock stamp. */
+      readonly at: number;
     }
   | {
       /**
@@ -209,6 +211,7 @@ function derivedStepsFor(
           spaceId: ctx.streamId,
           messageId: id,
           urls,
+          at: ctx.decidedAt,
         });
       }
       // A link attachment materialises as its own entity (`uri?message=<id>`)

@@ -52,18 +52,18 @@ function joinStatements(
   const user = change.record.user;
   const stream = ctx.streamId;
   return [
-    space(ensureEntity(stream, user)),
-    space(ensureEntity(stream, stream)),
+    space(ensureEntity(stream, user, undefined, ctx.decidedAt)),
+    space(ensureEntity(stream, stream, undefined, ctx.decidedAt)),
     global(sql`
-      insert or ignore into edges (head, tail, label)
-      values (${user}, ${stream}, 'joinedSpace')
+      insert or ignore into edges (head, tail, label, created_at, updated_at)
+      values (${user}, ${stream}, 'joinedSpace', ${ctx.decidedAt}, ${ctx.decidedAt})
     `),
     global(sql`
       delete from edges
       where head = ${user} and tail = ${stream} and label = 'leftSpace'
     `),
     space(sql`
-      insert into edges (head, tail, label, payload)
+      insert into edges (head, tail, label, payload, created_at, updated_at)
       select
         ${stream},
         ${user},
@@ -73,7 +73,9 @@ function joinStatements(
           where head = ${stream}
             and tail = ${user}
             and label = 'admin'
-        ) then '{"can":"admin"}' else '{"can":"post"}' end
+        ) then '{"can":"admin"}' else '{"can":"post"}' end,
+        ${ctx.decidedAt},
+        ${ctx.decidedAt}
       where not exists (
         select 1 from edges
         where head = ${stream}
@@ -84,7 +86,7 @@ function joinStatements(
     // The announcement: an entity in the space's first live channel, an author
     // edge on the space, and a markdown body naming the joiner.
     space(sql`
-      insert into entities (id, stream_id, room)
+      insert into entities (id, stream_id, room, created_at, updated_at)
       values (
         ${ctx.eventId},
         ${stream},
@@ -94,20 +96,26 @@ function joinStatements(
             where label = 'space.roomy.channel' and deleted = 0 and e.stream_id = ${stream}
             order by entity
             limit 1
-        )
+        ),
+        ${ctx.decidedAt},
+        ${ctx.decidedAt}
       ) on conflict do nothing
     `),
     space(sql`
-      insert or replace into edges (head, tail, label)
-      select ${ctx.eventId}, ${stream}, 'author'
+      insert or replace into edges (head, tail, label, created_at, updated_at)
+      select ${ctx.eventId}, ${stream}, 'author', ${ctx.decidedAt}, ${ctx.decidedAt}
     `),
     space(sql`
-      insert or replace into comp_content (entity, mime_type, data, last_edit)
+      insert or replace into comp_content (
+        entity, mime_type, data, last_edit, created_at, updated_at
+      )
       values (
         ${ctx.eventId},
         'text/markdown',
         cast(('[@' || ${user} || '](/user/' || ${user} || ') joined the space.') as blob),
-        ${ctx.eventId}
+        ${ctx.eventId},
+        ${ctx.decidedAt},
+        ${ctx.decidedAt}
       )
     `),
   ];
@@ -120,15 +128,18 @@ function addAdminStatements(
 ): RuleStatement[] {
   const stream = ctx.streamId;
   return [
-    space(ensureEntity(stream, stream)),
-    space(ensureEntity(stream, user)),
+    space(ensureEntity(stream, stream, undefined, ctx.decidedAt)),
+    space(ensureEntity(stream, user, undefined, ctx.decidedAt)),
     space(sql`
-      insert or replace into edges (head, tail, label, payload)
-      values (${stream}, ${user}, 'member', '{"can":"admin"}')
+      insert or replace into edges (head, tail, label, payload, created_at, updated_at)
+      values (
+        ${stream}, ${user}, 'member', '{"can":"admin"}',
+        ${ctx.decidedAt}, ${ctx.decidedAt}
+      )
     `),
     space(sql`
-      insert or ignore into edges (head, tail, label)
-      values (${stream}, ${user}, 'admin')
+      insert or ignore into edges (head, tail, label, created_at, updated_at)
+      values (${stream}, ${user}, 'admin', ${ctx.decidedAt}, ${ctx.decidedAt})
     `),
   ];
 }
@@ -167,8 +178,8 @@ function leaveStatements(user: string, ctx: RuleContext): RuleStatement[] {
       where head = ${user} and tail = ${stream} and label = 'joinedSpace'
     `),
     global(sql`
-      insert or ignore into edges (head, tail, label)
-      values (${user}, ${stream}, 'leftSpace')
+      insert or ignore into edges (head, tail, label, created_at, updated_at)
+      values (${user}, ${stream}, 'leftSpace', ${ctx.decidedAt}, ${ctx.decidedAt})
     `),
   ];
 }
@@ -181,8 +192,8 @@ export function banStatements(
   if (change.op === "create") {
     return [
       space(sql`
-        insert into comp_bans (entity, user_did)
-        values (${ctx.streamId}, ${change.record.user})
+        insert into comp_bans (entity, user_did, created_at)
+        values (${ctx.streamId}, ${change.record.user}, ${ctx.decidedAt})
       `),
     ];
   }
@@ -203,8 +214,11 @@ export function inviteStatements(
     const record = change.record;
     const statements: SqlStatement[] = [
       sql`
-        insert or ignore into comp_invite (entity, token, created_by_did, event_ulid)
-        values (${ctx.streamId}, ${record.token}, ${record.createdBy}, ${ctx.eventId})
+        insert or ignore into comp_invite (entity, token, created_by_did, event_ulid, created_at)
+        values (
+          ${ctx.streamId}, ${record.token}, ${record.createdBy}, ${ctx.eventId},
+          ${ctx.decidedAt}
+        )
       `,
     ];
     return statements.map(space);

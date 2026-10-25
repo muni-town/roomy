@@ -20,7 +20,7 @@ use space_core::change::{decode_row, FeedRow, RecordChange};
 use space_core::ids::SpaceDid;
 use space_core::time;
 use space_db::plan::{apply_plan, plan_batch, EntryChanges};
-use space_db::{digest_of, snapshot_db, worker_snapshot, SpaceDb};
+use space_db::{digest_of, snapshot_db, snapshot_tables, worker_snapshot, SpaceDb};
 
 const GLOBAL_SCHEMA: &str = include_str!("../../../packages/appserver/src/db/schema-global.sql");
 
@@ -33,8 +33,6 @@ struct Fixture {
     space_seed: SpaceSeed,
     #[serde(rename = "globalTables")]
     global_tables: Vec<String>,
-    #[serde(rename = "globalClockColumns")]
-    global_clock_columns: Vec<String>,
     expected: Expected,
     changes: Vec<FeedRow>,
 }
@@ -84,16 +82,17 @@ fn every_fixture_projects_to_the_typescript_digests() {
         for (id, stream_id) in &fixture.space_seed.entities {
             db.connection()
                 .execute(
-                    "insert into entities (id, stream_id) values (?, ?)",
-                    rusqlite::params![id, stream_id],
+                    "insert into entities (id, stream_id, created_at, updated_at)
+                     values (?, ?, ?, ?)",
+                    rusqlite::params![id, stream_id, fixture.received_at, fixture.received_at],
                 )
                 .expect("seeding an entity");
         }
         for (entity,) in &fixture.space_seed.comp_space {
             db.connection()
                 .execute(
-                    "insert into comp_space (entity) values (?)",
-                    rusqlite::params![entity],
+                    "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+                    rusqlite::params![entity, fixture.received_at, fixture.received_at],
                 )
                 .expect("seeding the space row");
         }
@@ -124,7 +123,9 @@ fn every_fixture_projects_to_the_typescript_digests() {
             })
             .collect();
 
-        let planned = plan_batch(db.connection(), &stream, &batch, fixture.received_at)
+        // The fixture is the live write path's projection: the TypeScript
+        // corpus is materialised as the appserver materialises a live space.
+        let planned = plan_batch(db.connection(), &stream, &batch, space_core::PlanMode::Live)
             .unwrap_or_else(|err| panic!("{name}: planning failed: {err}"));
 
         // The effects and steps are planned once and applied in the batch's
@@ -155,12 +156,15 @@ fn every_fixture_projects_to_the_typescript_digests() {
         let space_digest = digest_of(&worker_snapshot(
             &snapshot_db(db.connection()).expect("space snapshot"),
         ));
-        let global_digest = digest_of(&global_snapshot(
-            &global,
-            &fixture.global_tables,
-            &fixture.global_clock_columns,
-        ));
+        let global_digest = digest_of(
+            &snapshot_tables(&global, &fixture.global_tables)
+                .unwrap_or_else(|err| panic!("{name}: global snapshot failed: {err}")),
+        );
 
+        if let Ok(path) = std::env::var("ROOMY_DUMP_SNAPSHOT") {
+            let rust = worker_snapshot(&snapshot_db(db.connection()).expect("snapshot"));
+            std::fs::write(path, serde_json::to_string_pretty(&rust).unwrap()).expect("dump");
+        }
         assert_eq!(
             space_digest, fixture.expected.space_digest,
             "{name}: the space projection does not match the TypeScript one"
@@ -169,72 +173,6 @@ fn every_fixture_projects_to_the_typescript_digests() {
             global_digest, fixture.expected.global_digest,
             "{name}: the global projection does not match the TypeScript one"
         );
-    }
-}
-
-/// The global tables a projection is compared over, in the oracle's encoding.
-fn global_snapshot(
-    global: &Connection,
-    tables: &[String],
-    clock_columns: &[String],
-) -> Vec<space_db::TableSnapshot> {
-    let mut out: Vec<space_db::TableSnapshot> = Vec::new();
-    for table in tables {
-        let all_columns: Vec<String> = {
-            let mut statement = global
-                .prepare("select name from pragma_table_info(?1)")
-                .expect("table info");
-            let rows = statement
-                .query_map([table], |row| row.get::<_, String>(0))
-                .expect("columns query");
-            rows.collect::<Result<_, _>>().expect("columns")
-        };
-        let columns: Vec<String> = all_columns
-            .into_iter()
-            .filter(|column| !clock_columns.contains(column))
-            .collect();
-        let select = format!(
-            "select {} from \"{}\"",
-            columns
-                .iter()
-                .map(|column| format!("\"{column}\""))
-                .collect::<Vec<_>>()
-                .join(", "),
-            table
-        );
-        let mut statement = global.prepare(&select).expect("select prepares");
-        let mut rows: Vec<Vec<serde_json::Value>> = Vec::new();
-        let mut cursor = statement.query([]).expect("query runs");
-        while let Some(row) = cursor.next().expect("row") {
-            let mut values: Vec<serde_json::Value> = Vec::new();
-            for index in 0..columns.len() {
-                let value = row.get_ref(index).expect("value");
-                values.push(value_to_json(value));
-            }
-            rows.push(values);
-        }
-        rows.sort_by_key(|row| serde_json::Value::Array(row.clone()).to_string());
-        out.push(space_db::TableSnapshot {
-            table: table.clone(),
-            columns,
-            rows,
-        });
-    }
-    out
-}
-
-fn value_to_json(value: rusqlite::types::ValueRef<'_>) -> serde_json::Value {
-    use base64::Engine as _;
-    use rusqlite::types::ValueRef;
-    match value {
-        ValueRef::Null => serde_json::Value::Null,
-        ValueRef::Integer(value) => serde_json::json!(value),
-        ValueRef::Real(value) if value.fract() == 0.0 => serde_json::json!(value as i64),
-        ValueRef::Real(value) => serde_json::json!(value),
-        ValueRef::Text(bytes) => serde_json::Value::String(String::from_utf8_lossy(bytes).into()),
-        ValueRef::Blob(bytes) => serde_json::json!({
-            "$bytes": base64::engine::general_purpose::STANDARD.encode(bytes)
-        }),
     }
 }
 

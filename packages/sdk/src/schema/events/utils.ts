@@ -45,8 +45,13 @@ export function ensureEntity(
   streamId: string,
   entityId: string,
   room?: string,
+  /**
+   * The instant the log assigns the entry, for an id that is not a ULID. A
+   * ULID names its own creation instant, so this is only the fallback.
+   */
+  decidedAt?: number,
 ): SqlStatement {
-  let unixTimeMs = Date.now();
+  let unixTimeMs = decidedAt ?? Date.now();
 
   try {
     // Try to decode timestamp from ULID
@@ -54,11 +59,12 @@ export function ensureEntity(
   } catch (_) {}
 
   return sql`
-    insert into entities (id, stream_id, room, created_at)
+    insert into entities (id, stream_id, room, created_at, updated_at)
     values (
       ${entityId},
       ${streamId},
       ${room ? room : undefined},
+      ${unixTimeMs},
       ${unixTimeMs}
     )
     on conflict(id) do update set

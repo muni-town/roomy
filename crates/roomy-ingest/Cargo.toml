@@ -1,0 +1,22 @@
+[package]
+name = "roomy-ingest"
+description = "The write ingress: event validation, authorization, and the log append"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+ciborium.workspace = true
+roomy-events.workspace = true
+space-core.workspace = true
+space-xrpc.workspace = true
+roomy-readstate.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

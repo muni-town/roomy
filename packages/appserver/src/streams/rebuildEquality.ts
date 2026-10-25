@@ -56,28 +56,46 @@
  */
 
 import { createHash } from "node:crypto";
+import EXCLUSIONS from "../db/oracle-exclusions.json";
 import type { StreamDid } from "@roomy-space/sdk";
 import type { DbLike } from "../db/types.ts";
 import { reMaterializeFromLocalEvents } from "./reMaterialize.ts";
 
 /**
- * Columns that carry the derivation's own instant rather than a value the log
- * determines (plan §3.4). Two derivations are expected to differ in these and
- * only these.
+ * The exclusions, read from the one manifest every implementation shares
+ * (`db/oracle-exclusions.json`): the TypeScript oracle, the Rust worker's
+ * digest and the fixture exporter.
+ *
+ * `CLOCK_COLUMNS` are the names dropped from every table — written by fetchers
+ * and retry schedulers, never by materialisation. `TABLE_CLOCK_COLUMNS` are
+ * dropped from one table each: rows the read path or a derived step stamps with
+ * the derivation instant. Materialisation stamps its clock columns from the
+ * change's ordering stamp, so those tables are compared in full.
  */
-export const CLOCK_COLUMNS: Readonly<Record<string, true>> = {
-  created_at: true,
-  updated_at: true,
-  fetched_at: true,
-  synced_at: true,
-  retry_after: true,
-};
+export const CLOCK_COLUMNS: Readonly<Record<string, true>> = Object.fromEntries(
+  EXCLUSIONS.clockColumns.map((column) => [column, true as const]),
+);
+
+/** Clock columns dropped from one table only. */
+export const TABLE_CLOCK_COLUMNS: Readonly<
+  Record<string, Readonly<Record<string, true>>>
+> = Object.fromEntries(
+  Object.entries(EXCLUSIONS.tableClockColumns).map(([table, columns]) => [
+    table,
+    Object.fromEntries(columns.map((column) => [column, true as const])),
+  ]),
+);
+
+/** Every clock column dropped from `table`, by name. */
+export function clockColumnsFor(table: string): Readonly<Record<string, true>> {
+  return { ...CLOCK_COLUMNS, ...(TABLE_CLOCK_COLUMNS[table] ?? {}) };
+}
 
 /** Tables in a per-space DB that are not derived state at all. */
-export const NON_DERIVED_TABLES: Readonly<Record<string, true>> = {
-  space_schema_version: true,
-  space_schema_migrations: true,
-};
+export const NON_DERIVED_TABLES: Readonly<Record<string, true>> =
+  Object.fromEntries(
+    EXCLUSIONS.nonDerivedTables.map((table) => [table, true as const]),
+  );
 
 /**
  * The documented read-path caches (plan §3.3). They hold values the log
@@ -102,15 +120,17 @@ export const READ_PATH_CACHES: Readonly<Record<string, true>> = {
  * reproduce its own cursor. A TS-vs-worker comparison drops them through
  * {@link workerSnapshot}.
  */
-export const CURSOR_TABLES: Readonly<Record<string, true>> = {
-  materialization_cursor: true,
-  worker_cursor: true,
-};
+export const CURSOR_TABLES: Readonly<Record<string, true>> = Object.fromEntries(
+  EXCLUSIONS.cursorTables.map((table) => [table, true as const]),
+);
 
 /** Columns holding a cursor rather than a log-determined value. */
-export const CURSOR_COLUMNS: Readonly<Record<string, true>> = {
-  backfilled_to: true,
-};
+export const CURSOR_COLUMNS: Readonly<Record<string, true>> = Object.fromEntries(
+  EXCLUSIONS.cursorColumns.map((column) => [column, true as const]),
+);
+
+/** The global tables a worker's projection is compared over. */
+export const GLOBAL_TABLES: readonly string[] = EXCLUSIONS.globalTables;
 
 /**
  * A snapshot with the cursor tables and columns dropped, for comparing two
@@ -207,9 +227,10 @@ export async function snapshotSpaceDb(
     const info = await spaceDb
       .query(`select name from pragma_table_info('${name}')`)
       .all<{ name: string }>();
+    const dropped = clockColumnsFor(name);
     const columns = info
       .map((c) => c.name)
-      .filter((c) => !CLOCK_COLUMNS[c]);
+      .filter((c) => !dropped[c]);
     const read = await spaceDb
       .query(`select ${columns.map((c) => `"${c}"`).join(", ")} from "${name}"`)
       .all<Record<string, unknown>>();

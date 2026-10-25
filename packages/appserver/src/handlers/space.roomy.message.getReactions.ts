@@ -75,7 +75,7 @@ export const getReactionsHandler: QueryHandler<
        left join comp_user u on u.did = r.user
        left join comp_info i on i.entity = r.user
        where r.entity = ?
-       order by r.created_at asc`,
+       order by r.created_at asc, r.reaction_id asc`,
     )
     .all<{
       reaction: string;

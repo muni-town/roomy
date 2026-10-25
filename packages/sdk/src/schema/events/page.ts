@@ -20,14 +20,15 @@ The content can either fully replace the previous content, or if mimeType is 'te
 
 export const EditPage = defineEvent(
   EditPageSchema,
-  ({ user, streamId, event }) => {
+  ({ user, streamId, event, decidedAt }) => {
     if (!event.room) {
       console.warn("Edit event missing room");
       return [];
     }
+    const at = decidedAt ?? Date.now();
 
     return [
-      ensureEntity(streamId, event.id, event.room),
+      ensureEntity(streamId, event.id, event.room, at),
       sql`
         insert into comp_page_edits (edit_id, entity, mime_type, event, user_id)
         values (
@@ -40,21 +41,25 @@ export const EditPage = defineEvent(
       `,
       event.body.mimeType == "text/x-dmp-patch"
         ? sql`
-          insert into comp_content (entity, mime_type, data)
+          insert into comp_content (entity, mime_type, data, created_at, updated_at)
           values (
             ${event.room},
             'text/markdown',
-            cast(apply_dmp_patch('', ${new TextDecoder().decode(fromBytes(event.body.data))}) as blob)
+            cast(apply_dmp_patch('', ${new TextDecoder().decode(fromBytes(event.body.data))}) as blob),
+            ${at},
+            ${at}
           )
           on conflict do update set
             event = cast(apply_dmp_patch(cast(event as text), ${new TextDecoder().decode(fromBytes(event.body.data))}) as blob)
         `
         : sql`
-          insert into comp_content (entity, mime_type, data)
+          insert into comp_content (entity, mime_type, data, created_at, updated_at)
           values (
             ${event.room},
             ${event.body.mimeType},
-            ${event.body.data}
+            ${event.body.data},
+            ${at},
+            ${at}
           )
           on conflict do update
           set

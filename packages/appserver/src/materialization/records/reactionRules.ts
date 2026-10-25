@@ -31,11 +31,20 @@ export function reactionStatements(
   const record = change.record;
   const statements: SqlStatement[] = [];
   if (record.bridged === true) {
-    statements.push(ensureEntity(ctx.streamId, record.user));
+    statements.push(ensureEntity(ctx.streamId, record.user, undefined, ctx.decidedAt));
   }
   statements.push(sql`
-    insert or replace into comp_reaction (entity, user, reaction, reaction_id)
-    values (${record.target}, ${record.user}, ${record.reaction}, ${change.rkey})
+    insert or replace into comp_reaction (
+      entity, user, reaction, reaction_id, created_at, updated_at
+    )
+    values (
+      ${record.target},
+      ${record.user},
+      ${record.reaction},
+      ${change.rkey},
+      ${ctx.decidedAt},
+      ${ctx.decidedAt}
+    )
   `);
   return statements.map(space);
 }

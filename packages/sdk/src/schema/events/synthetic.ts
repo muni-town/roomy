@@ -85,12 +85,14 @@ const SpaceMetaSyntheticSchema = type({
 
 export const SpaceMetaSynthetic = defineEvent(
   SpaceMetaSyntheticSchema,
-  ({ streamId, event }) => {
+  ({ streamId, event, decidedAt }) => {
     // Get the inferred type with proper typing
     // Use unknown to bypass the type mismatch since this is a synthetic event
     const data = event as unknown as typeof SpaceMetaSyntheticSchema.infer;
     const statements: SqlStatement[] = [];
-    const timestamp = Date.now();
+    // The instant the log assigns the entry. A synthetic event is a log entry
+    // like any other: a replay must write the same rows.
+    const timestamp = decidedAt ?? Date.now();
 
     // Ensure space entity exists
     statements.push(sql`
@@ -159,10 +161,9 @@ export const SpaceMetaSynthetic = defineEvent(
       const sidebarJson = JSON.stringify(
         Array.isArray(sidebar) ? { categories: sidebar } : sidebar,
       );
-      console.log("Materialising synthetic sidebar", { sidebar, sidebarJson });
       statements.push(sql`
-        insert into comp_space (entity, sidebar_config, updated_at)
-        values (${streamId}, ${sidebarJson}, ${timestamp})
+        insert into comp_space (entity, sidebar_config, created_at, updated_at)
+        values (${streamId}, ${sidebarJson}, ${timestamp}, ${timestamp})
         on conflict(entity) do update set
           sidebar_config = excluded.sidebar_config,
           updated_at = excluded.updated_at
@@ -376,10 +377,10 @@ const ProfileSyntheticSchema = type({
 
 export const ProfileSynthetic = defineEvent(
   ProfileSyntheticSchema,
-  ({ streamId, event }) => {
+  ({ streamId, event, decidedAt }) => {
     const data = event as unknown as typeof ProfileSyntheticSchema.infer;
     const statements: SqlStatement[] = [];
-    const timestamp = Date.now();
+    const timestamp = decidedAt ?? Date.now();
 
     // Ensure user entity exists
     statements.push(sql`

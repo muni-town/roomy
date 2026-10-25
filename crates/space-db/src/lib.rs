@@ -20,7 +20,8 @@ mod digest;
 pub mod plan;
 
 pub use digest::{
-    diff_snapshots, digest_of, snapshot_db, worker_snapshot, TableDivergence, TableSnapshot,
+    diff_snapshots, digest_of, global_tables, snapshot_db, snapshot_tables, worker_snapshot,
+    TableDivergence, TableSnapshot,
 };
 pub use plan::{apply_plan, plan_batch, EntryChanges, PlannedEntry};
 pub use to_sql as value_to_sql;
@@ -43,6 +44,13 @@ pub enum DbError {
     Step(String),
     #[error("{0}")]
     Rule(#[from] space_core::RuleError),
+    #[error("{0} is not an ordering stamp")]
+    Stamp(String),
+    /// A batch carried an epoch older than the one already written: another
+    /// worker has taken the space since this one last held the lease, so this
+    /// batch must not land.
+    #[error("fenced out: epoch {granted} is older than the stored epoch {stored}")]
+    Fenced { granted: i64, stored: i64 },
 }
 
 /// A per-space database.
@@ -129,19 +137,25 @@ impl SpaceDb {
         Ok(globals)
     }
 
-    /// Apply a planned batch and advance the worker's cursor in one transaction.
+    /// Begin a planned batch: apply its space statements and derived steps, and
+    /// hold the result in an open transaction until [`PendingBatch::commit`].
     ///
-    /// The cursor is written inside the same transaction as the effects, so a
-    /// crash either applied both or neither: the changes the cursor covers are
-    /// exactly the changes the projection holds. Global-targeted statements are
-    /// returned for the caller's sink — they live in another database, so they
-    /// cannot join this transaction.
-    pub fn apply_batch(
+    /// The cursor is written by `commit`, in the same transaction as the
+    /// effects, so a crash either applied both or neither: the changes the
+    /// cursor covers are exactly the changes the projection holds.
+    /// Global-targeted statements — including the ones a derived step produced
+    /// — are collected on the batch and handed to the caller's sink *before*
+    /// `commit`, because they live in another database and cannot join this
+    /// transaction. Dropping the batch rolls it back, which is what a crash
+    /// between the two writes looks like.
+    pub fn begin_batch(
         &mut self,
         planned: &[plan::PlannedEntry],
         cursor: (i64, i64),
-    ) -> Result<Vec<SqlEffect>, DbError> {
+        epoch: i64,
+    ) -> Result<PendingBatch<'_>, DbError> {
         let (statements, steps) = plan::flatten(planned);
+        let stream_id = self.stream_id.clone();
         let transaction = self.conn.transaction()?;
         let mut globals: Vec<SqlEffect> = Vec::new();
 
@@ -158,16 +172,28 @@ impl SpaceDb {
             }
         }
         for step in steps {
-            globals.extend(derived::apply_step(&transaction, &self.stream_id, step)?);
+            globals.extend(derived::apply_step(&transaction, &stream_id, step)?);
         }
 
-        transaction.execute(
-            "insert into worker_cursor (id, idx, ord) values (1, ?, ?)
-             on conflict (id) do update set idx = excluded.idx, ord = excluded.ord",
-            rusqlite::params![cursor.0, cursor.1],
-        )?;
-        transaction.commit()?;
-        Ok(globals)
+        Ok(PendingBatch {
+            transaction,
+            cursor,
+            epoch,
+            globals,
+        })
+    }
+
+    /// The epoch of the last batch written to this space, or 0 before the
+    /// first one. A worker compares it to its lease to learn whether it is
+    /// stale before doing any work.
+    pub fn fence(&self) -> Result<i64, DbError> {
+        let epoch: Option<i64> = self
+            .conn
+            .query_row("select epoch from worker_fence where id = 1", [], |row| {
+                row.get(0)
+            })
+            .ok();
+        Ok(epoch.unwrap_or(0))
     }
 
     /// The worker's cursor, or `None` before the first batch.
@@ -191,6 +217,68 @@ impl SpaceDb {
     /// SHA-256 over the snapshot, comparable with `digestOf` in TypeScript.
     pub fn digest(&self) -> Result<String, DbError> {
         Ok(digest_of(&self.snapshot()?))
+    }
+}
+
+/// A planned batch applied to an open transaction, not yet committed.
+///
+/// The order the worker has to follow is: apply the global half through the
+/// sink, then [`commit`](PendingBatch::commit). Global first, because the
+/// global index may be ahead of a space batch that will be replayed — every
+/// statement is idempotent, so replay rewrites the same rows — and must never
+/// be behind a committed space projection. If the sink fails, or the process
+/// dies before the commit, dropping this batch rolls the space transaction back
+/// so the cursor stays where it was and the same changes are read again.
+pub struct PendingBatch<'db> {
+    transaction: rusqlite::Transaction<'db>,
+    cursor: (i64, i64),
+    /// The lease epoch this batch was planned under.
+    epoch: i64,
+    globals: Vec<SqlEffect>,
+}
+
+impl PendingBatch<'_> {
+    /// The statements destined for the global database, in emission order.
+    pub fn globals(&self) -> &[SqlEffect] {
+        &self.globals
+    }
+
+    /// Advance the cursor and commit the space half.
+    ///
+    /// The fence is checked in the same transaction that writes it, so a worker
+    /// whose lease expired during the batch cannot land it: the takeover's
+    /// epoch is already stored, and this batch is older. Nothing of the batch
+    /// survives the refusal — the transaction is dropped uncommitted.
+    pub fn commit(self) -> Result<(), DbError> {
+        let stored = self.fence_stored()?;
+        if self.epoch < stored {
+            return Err(DbError::Fenced {
+                granted: self.epoch,
+                stored,
+            });
+        }
+        self.transaction.execute(
+            "insert into worker_fence (id, epoch) values (1, ?)
+             on conflict (id) do update set epoch = excluded.epoch",
+            rusqlite::params![self.epoch],
+        )?;
+        self.transaction.execute(
+            "insert into worker_cursor (id, idx, ord) values (1, ?, ?)
+             on conflict (id) do update set idx = excluded.idx, ord = excluded.ord",
+            rusqlite::params![self.cursor.0, self.cursor.1],
+        )?;
+        self.transaction.commit()?;
+        Ok(())
+    }
+
+    fn fence_stored(&self) -> Result<i64, DbError> {
+        let stored: Option<i64> = self
+            .transaction
+            .query_row("select epoch from worker_fence where id = 1", [], |row| {
+                row.get(0)
+            })
+            .ok();
+        Ok(stored.unwrap_or(0))
     }
 }
 

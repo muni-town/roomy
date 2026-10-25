@@ -422,11 +422,16 @@ async function derive(
 ): Promise<Derived> {
   const db = freshSpaceDb();
   const globalDb = freshGlobalDb();
-  await db.run("insert into entities (id, stream_id) values (?, ?)", [
+  await db.run("insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)", [
     STREAM,
     STREAM,
+    RECEIVED_AT,
+    RECEIVED_AT,
   ]);
-  await db.run("insert into comp_space (entity) values (?)", [STREAM]);
+  await db.run(
+      "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+      [STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
   await db.run(
     `insert into comp_page_edits (edit_id, entity, mime_type, data, user_id)
      values (?, ?, 'text/markdown', x'', ?)`,
@@ -535,11 +540,14 @@ describe("`last_edit` is the one value the record model cannot reproduce", () =>
   test("it is the write's identity: an edit event's id, or the change's stamp", async () => {
     const { entries, fx } = corpus();
     const db = freshSpaceDb();
-    await db.run("insert into entities (id, stream_id) values (?, ?)", [
-      STREAM,
-      STREAM,
-    ]);
-    await db.run("insert into comp_space (entity) values (?)", [STREAM]);
+    await db.run(
+      "insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)",
+      [STREAM, STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
+    await db.run(
+      "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+      [STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
     await applyBatch(db, STREAM, entries, { isBackfill: false });
 
     // `plain` was edited twice, `attached` once, and the rest never.
@@ -587,11 +595,14 @@ describe("routing is decided by the kinds an event emits", () => {
     expect(convertedChanges(link, STREAM)).not.toBeNull();
 
     const db = freshSpaceDb();
-    await db.run("insert into entities (id, stream_id) values (?, ?)", [
-      STREAM,
-      STREAM,
-    ]);
-    await db.run("insert into comp_space (entity) values (?)", [STREAM]);
+    await db.run(
+      "insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)",
+      [STREAM, STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
+    await db.run(
+      "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+      [STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
     await applyBatch(db, STREAM, entries, { isBackfill: false });
     const rows = await db
       .query("select count(*) as n from entities where id = ?")
@@ -657,11 +668,14 @@ describe("an entry the adapter cannot describe", () => {
     ];
 
     const db = freshSpaceDb();
-    await db.run("insert into entities (id, stream_id) values (?, ?)", [
-      STREAM,
-      STREAM,
-    ]);
-    await db.run("insert into comp_space (entity) values (?)", [STREAM]);
+    await db.run(
+      "insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)",
+      [STREAM, STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
+    await db.run(
+      "insert into comp_space (entity, created_at, updated_at) values (?, ?, ?)",
+      [STREAM, RECEIVED_AT, RECEIVED_AT],
+    );
     const stats = await applyBatch(db, STREAM, entries, { isBackfill: false });
 
     expect(stats.failed).toEqual([]);

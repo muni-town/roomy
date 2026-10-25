@@ -304,6 +304,85 @@ describe("global schema v9 — mentions.kind column", () => {
   });
 });
 
+describe("global schema v14 — worker_leases.epoch", () => {
+  test("an existing DB gains the column in place, keeping its lease rows", async () => {
+    // `create table if not exists` cannot add a column to a table that already
+    // exists, so an upgraded DB needs the v14 `up`; without it the column only
+    // ever appears when the space worker opens the file itself.
+    const dir = mkdtempSync(join(tmpdir(), "roomy-global-schema-v14-"));
+    cleanup.push(dir);
+    const globalPath = join(dir, "global.sqlite");
+    const old = new Database(globalPath, { create: true });
+    old.exec(readFileSync(GLOBAL_SCHEMA_PATH, "utf8"));
+    old.exec("alter table worker_leases drop column epoch");
+    old.run(
+      "insert into worker_leases (name, holder, expires_at) values ('sweeper', 'holder-a', 9000)",
+    );
+    old.run("insert into global_schema_version (id, version) values (1, '13')");
+    old.close();
+
+    const pool = new DatabasePool(1, join(THIS_DIR, "worker.ts"));
+    try {
+      await pool.init({
+        readStateDbPath: ":memory:",
+        eventsDbPath: ":memory:",
+        globalDbPath: globalPath,
+        spacesDir: join(dir, "spaces"),
+        readStateSchemaVersion: READSTATE_SCHEMA_VERSION,
+        spaceSchemaVersion: SPACE_SCHEMA_VERSION,
+        globalSchemaVersion: GLOBAL_SCHEMA_VERSION,
+      });
+
+      const global = pool.global();
+      const lease = await global
+        .query("select holder, epoch from worker_leases where name = 'sweeper'")
+        .get<{ holder: string; epoch: number }>();
+      expect(lease).toEqual({ holder: "holder-a", epoch: 1 });
+      const version = await global
+        .query("select version from global_schema_version where id = 1")
+        .get<{ version: string }>();
+      expect(version?.version).toBe(GLOBAL_SCHEMA_VERSION);
+    } finally {
+      await pool.close();
+    }
+  });
+
+  test("the migration is a no-op when the space worker already added the column", async () => {
+    // A worker that took a lease first adds the column itself. The boot `up`
+    // then runs against a DB that already has it, and must not throw: the
+    // column is checked before the ALTER.
+    const dir = mkdtempSync(join(tmpdir(), "roomy-global-schema-v14-ready-"));
+    cleanup.push(dir);
+    const globalPath = join(dir, "global.sqlite");
+    const alreadyHealed = new Database(globalPath, { create: true });
+    alreadyHealed.exec(readFileSync(GLOBAL_SCHEMA_PATH, "utf8"));
+    alreadyHealed.run(
+      "insert into global_schema_version (id, version) values (1, '13')",
+    );
+    alreadyHealed.close();
+
+    const pool = new DatabasePool(1, join(THIS_DIR, "worker.ts"));
+    try {
+      await pool.init({
+        readStateDbPath: ":memory:",
+        eventsDbPath: ":memory:",
+        globalDbPath: globalPath,
+        spacesDir: join(dir, "spaces"),
+        readStateSchemaVersion: READSTATE_SCHEMA_VERSION,
+        spaceSchemaVersion: SPACE_SCHEMA_VERSION,
+        globalSchemaVersion: GLOBAL_SCHEMA_VERSION,
+      });
+      const global = pool.global();
+      const version = await global
+        .query("select version from global_schema_version where id = 1")
+        .get<{ version: string }>();
+      expect(version?.version).toBe(GLOBAL_SCHEMA_VERSION);
+    } finally {
+      await pool.close();
+    }
+  });
+});
+
 describe("mentions.message_id index", () => {
   test("an existing global DB gains the index at boot, with no version bump", async () => {
     // The index is additive DDL, not a migration: the worker re-execs the whole

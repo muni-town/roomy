@@ -64,30 +64,53 @@ pub fn profile_effects(
     ctx: &RuleContext,
 ) -> Vec<Effect> {
     let subject = base.repo.as_str();
-    let mut effects = vec![ensure_entity(&ctx.stream_id, subject, None)];
+    let mut effects = vec![ensure_entity(
+        &ctx.stream_id,
+        subject,
+        None,
+        ctx.decided_at_ms,
+    )];
 
     let mut wrote_info = false;
     if fields.name.is_some() {
         effects.push(Effect::space(
-            "insert into comp_info (entity, name) values (?, ?)
+            "insert into comp_info (entity, name, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set name = excluded.name",
-            vec![Value::text(subject), text_of(&fields.name)],
+            vec![
+                Value::text(subject),
+                text_of(&fields.name),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ));
         wrote_info = true;
     }
     if fields.avatar.is_some() {
         effects.push(Effect::space(
-            "insert into comp_info (entity, avatar) values (?, ?)
+            "insert into comp_info (entity, avatar, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set avatar = excluded.avatar",
-            vec![Value::text(subject), text_of(&fields.avatar)],
+            vec![
+                Value::text(subject),
+                text_of(&fields.avatar),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ));
         wrote_info = true;
     }
     if fields.description.is_some() {
         effects.push(Effect::space(
-            "insert into comp_info (entity, description) values (?, ?)
+            "insert into comp_info (entity, description, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set description = excluded.description",
-            vec![Value::text(subject), text_of(&fields.description)],
+            vec![
+                Value::text(subject),
+                text_of(&fields.description),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ));
         wrote_info = true;
     }
@@ -95,11 +118,14 @@ pub fn profile_effects(
 
     if let Some(handle) = fields.handle {
         effects.push(Effect::space(
-            "insert into comp_user (did, handle) values (?, ?)
+            "insert into comp_user (did, handle, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(did) do update set handle = ?",
             vec![
                 Value::text(subject),
                 Value::text(handle),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
                 Value::text(handle),
             ],
         ));
@@ -140,8 +166,8 @@ pub fn call_create_effects(
     let room = record.room.as_str();
     vec![
         Effect::space(
-            "insert into active_calls (room_id, call_id, started_at, source)
-             values (?, ?, ?, ?)
+            "insert into active_calls (room_id, call_id, started_at, source, created_at)
+             values (?, ?, ?, ?, ?)
              on conflict (room_id) do update set
                started_at = excluded.started_at,
                source = excluded.source",
@@ -150,6 +176,7 @@ pub fn call_create_effects(
                 Value::text(call_id),
                 Value::Integer(record.started_at),
                 Value::text(&record.source),
+                Value::Integer(ctx.decided_at_ms),
             ],
         ),
         // A new call supersedes every participant recorded for the previous

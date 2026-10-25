@@ -42,6 +42,9 @@ export function materialize(
 
   try {
     const statements = handler({
+      // A caller with no log behind it (a test, a direct SDK use) gets
+      // wall-clock time; every appserver path supplies the entry's instant.
+      decidedAt: Date.now(),
       ...opts,
       event,
     } as Parameters<typeof handler>[0]);

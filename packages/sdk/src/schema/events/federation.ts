@@ -30,13 +30,13 @@ const FederationRequestSchema = type({
 
 export const FederationRequest = defineEvent(
   FederationRequestSchema,
-  ({ streamId, user, event }) => [
+  ({ streamId, user, event, decidedAt }) => [
     sql`
       insert into space_federations (
         space_id, federating_space_did, status,
         requested_by_did, requested_at, message
       )
-      values (${streamId}, ${event.federatingSpaceDid}, 'pending', ${user}, ${Date.now()}, ${event.message ?? null})
+      values (${streamId}, ${event.federatingSpaceDid}, 'pending', ${user}, ${decidedAt ?? Date.now()}, ${event.message ?? null})
       on conflict(space_id, federating_space_did) do update set
         status = case
           when space_federations.status = 'removed' then 'pending'
@@ -66,7 +66,7 @@ const FederationRespondSchema = type({
 
 export const FederationRespond = defineEvent(
   FederationRespondSchema,
-  ({ streamId, user, event }) => [
+  ({ streamId, user, event, decidedAt }) => [
     // Only a request that is actually awaiting a decision may be decided.
     // Guarding on `status = 'pending'` makes this a no-op for any other
     // state (already active/rejected/removed) — even if an event bypasses
@@ -76,7 +76,7 @@ export const FederationRespond = defineEvent(
       update space_federations set
         status = ${event.approve ? "active" : "rejected"},
         decided_by_did = ${user},
-        decided_at = ${Date.now()},
+        decided_at = ${decidedAt ?? Date.now()},
         decision_message = ${event.message ?? null}
       where space_id = ${streamId}
         and federating_space_did = ${event.federatingSpaceDid}
@@ -97,12 +97,12 @@ const FederationRemoveSchema = type({
 
 export const FederationRemove = defineEvent(
   FederationRemoveSchema,
-  ({ streamId, user, event }) => [
+  ({ streamId, user, event, decidedAt }) => [
     sql`
       update space_federations set
         status = 'removed',
         decided_by_did = ${user},
-        decided_at = ${Date.now()}
+        decided_at = ${decidedAt ?? Date.now()}
       where space_id = ${streamId}
         and federating_space_did = ${event.federatingSpaceDid}
     `,

@@ -36,7 +36,9 @@ export function profileStatements(
   }
 
   const patch = change.record;
-  const statements: RuleStatement[] = [space(ensureEntity(ctx.streamId, change.repo))];
+  const statements: RuleStatement[] = [
+    space(ensureEntity(ctx.streamId, change.repo, undefined, ctx.decidedAt)),
+  ];
 
   const info = [
     { key: "name", value: patch.name },
@@ -47,10 +49,15 @@ export function profileStatements(
     const columns = info.map((field) => field.key);
     statements.push(
       space({
-        sql: `insert into comp_info (entity, ${columns.join(", ")})
-          values (?, ${columns.map(() => "?").join(", ")})
+        sql: `insert into comp_info (entity, ${columns.join(", ")}, created_at, updated_at)
+          values (?, ${columns.map(() => "?").join(", ")}, ?, ?)
           on conflict do update set ${columns.map((c) => `${c} = excluded.${c}`).join(", ")}`,
-        params: [change.repo, ...info.map((field) => field.value)],
+        params: [
+          change.repo,
+          ...info.map((field) => field.value),
+          ctx.decidedAt,
+          ctx.decidedAt,
+        ],
       }),
     );
   }
@@ -58,8 +65,8 @@ export function profileStatements(
   if (patch.handle !== undefined) {
     statements.push(
       space(sql`
-        insert into comp_user (did, handle)
-        values (${change.repo}, ${patch.handle})
+        insert into comp_user (did, handle, created_at, updated_at)
+        values (${change.repo}, ${patch.handle}, ${ctx.decidedAt}, ${ctx.decidedAt})
         on conflict(did) do update set handle = ${patch.handle}
       `),
     );
@@ -98,8 +105,14 @@ export function voiceCallStatements(
       const room = record.room;
       return [
         space(sql`
-          insert into active_calls (room_id, call_id, started_at, source)
-          values (${room}, ${change.rkey}, ${record.startedAt}, ${record.source})
+          insert into active_calls (room_id, call_id, started_at, source, created_at)
+          values (
+            ${room},
+            ${change.rkey},
+            ${record.startedAt},
+            ${record.source},
+            ${ctx.decidedAt}
+          )
           on conflict (room_id) do update set
             started_at = excluded.started_at,
             source = excluded.source

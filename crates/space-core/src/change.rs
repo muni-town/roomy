@@ -139,7 +139,11 @@ impl RecordChange {
 }
 
 /// One row of the feed, as the table holds it.
-#[derive(Debug, Clone, Deserialize)]
+///
+/// The field names are the wire contract both directions: the SQLite feed reads
+/// them from `record_changes`, the HTTP feed serves them, and a worker parses
+/// them back.
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct FeedRow {
     #[serde(rename = "streamId")]
     pub stream_id: String,

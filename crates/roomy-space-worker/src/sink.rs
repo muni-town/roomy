@@ -2,20 +2,22 @@
 //!
 //! A change's global half — membership edges, the entity→space index, the
 //! federation tables, the call index — lives in the global database, a different
-//! file from the space's own. The worker applies the space half in a
-//! transaction and hands these statements here, so the two databases never have
-//! to be opened by one connection and the space projection stays the unit of
+//! file from the space's own. The worker hands these statements here while the
+//! space half is applied but uncommitted, so the two databases never have to be
+//! opened by one connection and the space projection stays the unit of
 //! atomicity.
 //!
 //! The statements are idempotent (upserts and deletes by key), which is what
 //! makes a crash between the two writes harmless: the batch is replayed and the
-//! same rows are written again.
+//! same rows are written again. The sink is written first, so the index may be
+//! ahead of a space batch that is about to be replayed, and is never behind a
+//! committed space projection.
 
 use rusqlite::Connection;
 use space_core::effects::SqlEffect;
 
 /// Applies the statements a change aimed at the global database.
-pub trait GlobalSink {
+pub trait GlobalSink: Send {
     fn apply(&mut self, statements: &[SqlEffect]) -> Result<(), SinkError>;
 }
 

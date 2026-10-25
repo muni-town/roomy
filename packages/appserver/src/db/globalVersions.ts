@@ -98,9 +98,29 @@ export const GLOBAL_MIGRATIONS = {
       );
     },
   },
+  // worker_leases.epoch: the fencing epoch the space workers take with a lease
+  // and stamp on every batch. schema-global.sql declares the column for fresh
+  // DBs, but `create table if not exists` is a no-op on the table an existing
+  // DB already has, so the column needs this ALTER. The worker that takes
+  // leases adds the column itself when it finds it absent, so the check keeps
+  // this idempotent regardless of which runtime opened the file first.
+  "14": {
+    kind: "structural",
+    up: (db) => {
+      const hasEpoch = db
+        .query(
+          "select count(*) as n from pragma_table_info('worker_leases') where name = 'epoch'",
+        )
+        .get() as { n: number } | null;
+      if ((hasEpoch?.n ?? 0) > 0) return;
+      db.exec(
+        "alter table worker_leases add column epoch integer not null default 1",
+      );
+    },
+  },
   // Next global schema change goes here, e.g.:
-  //   "14": { kind: "structural" },   // table added to schema-global.sql
-  //   "14": { kind: "data" },         // plus a task in GLOBAL_MIGRATION_TASKS
+  //   "15": { kind: "structural" },   // table added to schema-global.sql
+  //   "15": { kind: "data" },         // plus a task in GLOBAL_MIGRATION_TASKS
 } as const satisfies Record<string, GlobalMigrationEntry>;
 
 /**

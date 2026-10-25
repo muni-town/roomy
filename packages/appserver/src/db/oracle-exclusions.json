@@ -1,0 +1,38 @@
+{
+  "$comment": [
+    "The one exclusion list the rebuild-equality oracle applies, consumed by the",
+    "TypeScript appserver (streams/rebuildEquality.ts), the Rust worker",
+    "(crates/space-db/src/digest.rs) and the fixture exporter",
+    "(scripts/export-worker-fixtures.ts). A value the log determines must not be",
+    "listed here: the digests exist to compare derivations of the same log, and a",
+    "column listed here is a column nothing checks.",
+    "",
+    "`clockColumns` are dropped from every table. They are written by fetchers and",
+    "retry schedulers, not by materialisation.",
+    "",
+    "`tableClockColumns` are dropped from one table only: rows the read path or a",
+    "derived step stamps with the derivation instant rather than with the",
+    "change's own instant. Materialisation stamps its clock columns from the",
+    "change (the change's `orderStamp` time half), so those tables are compared",
+    "in full."
+  ],
+  "clockColumns": ["fetched_at", "synced_at", "retry_after"],
+  "tableClockColumns": {
+    "activity_item": ["created_at", "updated_at"],
+    "comp_last_read": ["created_at", "updated_at"],
+    "pending_links": ["created_at"],
+    "voice_projected_calls": ["created_at"]
+  },
+  "nonDerivedTables": ["space_schema_version", "space_schema_migrations"],
+  "cursorTables": ["materialization_cursor", "worker_cursor", "worker_fence"],
+  "cursorColumns": ["backfilled_to"],
+  "globalTables": [
+    "edges",
+    "entity_space",
+    "federation_receiver_permissions",
+    "federation_room_permissions",
+    "pending_links",
+    "space_federations",
+    "voice_projected_calls"
+  ]
+}

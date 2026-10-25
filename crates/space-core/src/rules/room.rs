@@ -18,26 +18,30 @@ use crate::rules::ensure_entity;
 pub fn create_effects(base: &ChangeBase, record: &RoomRecord, ctx: &RuleContext) -> Vec<Effect> {
     let id = base.rkey.as_str();
     let mut effects = vec![
-        ensure_entity(&ctx.stream_id, id, None),
+        ensure_entity(&ctx.stream_id, id, None, ctx.decided_at_ms),
         Effect::space(
-            "insert into comp_info (entity, name, avatar, description)
-             values (?, ?, ?, ?)
+            "insert into comp_info (entity, name, avatar, description, created_at, updated_at)
+             values (?, ?, ?, ?, ?, ?)
              on conflict do nothing",
             vec![
                 Value::text(id),
                 Value::opt_text(record.name.clone()),
                 Value::opt_text(record.avatar.clone()),
                 Value::opt_text(record.description.clone()),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
             ],
         ),
         Effect::space(
-            "insert into comp_room (entity, label, default_access)
-             values (?, ?, ?)
+            "insert into comp_room (entity, label, default_access, created_at, updated_at)
+             values (?, ?, ?, ?, ?)
              on conflict do nothing",
             vec![
                 Value::text(id),
                 Value::text(&record.kind),
                 Value::opt_text(record.default_access.clone()),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
             ],
         ),
     ];
@@ -53,6 +57,7 @@ pub fn create_effects(base: &ChangeBase, record: &RoomRecord, ctx: &RuleContext)
             ],
         ));
     }
+    effects.push(refresh_activity_meta_statement(id));
     effects
 }
 
@@ -75,7 +80,7 @@ pub fn update_effects(base: &ChangeBase, patch: &RoomPatch, ctx: &RuleContext) -
         ));
     }
 
-    effects.extend(info_effects(id, patch));
+    effects.extend(info_effects(id, patch, ctx.decided_at_ms));
 
     if let Some(deleted) = patch.deleted {
         effects.push(Effect::space(
@@ -86,7 +91,36 @@ pub fn update_effects(base: &ChangeBase, patch: &RoomPatch, ctx: &RuleContext) -
     if let Some(parent) = &patch.parent {
         effects.extend(parent_effects(id, parent.as_deref(), ctx));
     }
+    // A rename, a re-parent or a soft delete changes names the feed row
+    // denormalises. Refreshing them here is what makes the projection a
+    // function of the log rather than of the order it was batched in.
+    effects.push(refresh_activity_meta_statement(id));
     effects
+}
+
+/// The statement that re-derives one room's denormalised feed names.
+pub(crate) fn refresh_activity_meta_statement(room_id: &str) -> Effect {
+    Effect::space(
+        "update activity_item
+            set room_name = (select name from comp_info where entity = activity_item.room_id),
+                space_name = (select name from comp_info where entity = activity_item.space_id),
+                space_avatar = (select avatar from comp_info where entity = activity_item.space_id),
+                parent_channel_id = (
+                  select p.head from edges p
+                   where p.tail = activity_item.room_id
+                     and p.label = 'link'
+                     and coalesce(json_extract(p.payload, '$.canonical_parent'), 0) = 1
+                ),
+                parent_channel_name = (
+                  select pi.name from edges p
+                    join comp_info pi on pi.entity = p.head
+                   where p.tail = activity_item.room_id
+                     and p.label = 'link'
+                     and coalesce(json_extract(p.payload, '$.canonical_parent'), 0) = 1
+                )
+          where room_id = ?",
+        vec![Value::text(room_id)],
+    )
 }
 
 /// The `comp_info` fields a patch carries.
@@ -94,28 +128,46 @@ pub fn update_effects(base: &ChangeBase, patch: &RoomPatch, ctx: &RuleContext) -
 /// One statement per present field rather than one statement with a dynamic
 /// column list: the rows it leaves behind are the same, and a fixed statement
 /// is what this crate can hand to an executor.
-fn info_effects(id: &str, patch: &RoomPatch) -> Vec<Effect> {
+fn info_effects(id: &str, patch: &RoomPatch, decided_at_ms: i64) -> Vec<Effect> {
     let mut effects: Vec<Effect> = Vec::new();
     // Written out per column so each statement is fixed.
     if let Some(name) = &patch.name {
         effects.push(Effect::space(
-            "insert into comp_info (entity, name) values (?, ?)
+            "insert into comp_info (entity, name, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set name = excluded.name",
-            vec![Value::text(id), Value::opt_text(name.clone())],
+            vec![
+                Value::text(id),
+                Value::opt_text(name.clone()),
+                Value::Integer(decided_at_ms),
+                Value::Integer(decided_at_ms),
+            ],
         ));
     }
     if let Some(avatar) = &patch.avatar {
         effects.push(Effect::space(
-            "insert into comp_info (entity, avatar) values (?, ?)
+            "insert into comp_info (entity, avatar, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set avatar = excluded.avatar",
-            vec![Value::text(id), Value::opt_text(avatar.clone())],
+            vec![
+                Value::text(id),
+                Value::opt_text(avatar.clone()),
+                Value::Integer(decided_at_ms),
+                Value::Integer(decided_at_ms),
+            ],
         ));
     }
     if let Some(description) = &patch.description {
         effects.push(Effect::space(
-            "insert into comp_info (entity, description) values (?, ?)
+            "insert into comp_info (entity, description, created_at, updated_at)
+             values (?, ?, ?, ?)
              on conflict(entity) do update set description = excluded.description",
-            vec![Value::text(id), Value::opt_text(description.clone())],
+            vec![
+                Value::text(id),
+                Value::opt_text(description.clone()),
+                Value::Integer(decided_at_ms),
+                Value::Integer(decided_at_ms),
+            ],
         ));
     }
     effects
@@ -138,14 +190,15 @@ fn parent_effects(room_id: &str, parent: Option<&str>, ctx: &RuleContext) -> Vec
             )],
         },
         Some(parent) => vec![Effect::space(
-            "insert into edges (head, tail, label, payload)
+            "insert into edges (head, tail, label, payload, created_at, updated_at)
              values (
                ?, ?, 'link',
                json_object('canonical_parent', (
                  SELECT COUNT(*) = 0
                  FROM edges
                  WHERE head = ? AND tail = ? AND label = 'link'
-               ))
+               )),
+               ?, ?
              )
              on conflict (head, tail, label) do nothing",
             vec![
@@ -153,6 +206,8 @@ fn parent_effects(room_id: &str, parent: Option<&str>, ctx: &RuleContext) -> Vec
                 Value::text(room_id),
                 Value::text(parent),
                 Value::text(room_id),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
             ],
         )],
     }

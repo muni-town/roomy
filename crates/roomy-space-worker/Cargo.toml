@@ -1,6 +1,6 @@
 [package]
 name = "roomy-space-worker"
-description = "Materialises one Roomy space's database from the persisted change feed"
+description = "Embeds the Roomy space worker: materialisation loops and the supervisor that owns them"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 space-core.workspace = true
 space-db.workspace = true
+space-feed.workspace = true
 roomy-events.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
@@ -17,6 +18,8 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tokio.workspace = true
+ureq = "2"
 
 [dev-dependencies]
 tempfile = "3"
+serde_json.workspace = true

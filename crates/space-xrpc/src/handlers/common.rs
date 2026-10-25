@@ -4,7 +4,7 @@ use axum::http::HeaderMap;
 use rusqlite::Connection;
 
 use crate::error::XrpcError;
-use crate::ids::{CallerDid, Nsid, SpaceDid};
+use crate::ids::{CallerDid, Nsid};
 use crate::read_positions::{ReadPositions, HEADER};
 use crate::state::XrpcState;
 
@@ -59,6 +59,12 @@ pub fn unread_count(
     Ok(count)
 }
 
-pub fn parse_space(params: &crate::params::Params) -> Result<SpaceDid, XrpcError> {
-    SpaceDid::try_from(params.require_string("spaceId")?)
+/// The `spaceId` a per-space read names.
+///
+/// It is an identifier, not a validated DID: the appserver resolves whatever the
+/// caller sent, and a space that does not exist is answered from an empty one.
+/// Rejecting a malformed id here would answer a 400 the appserver answers 404 or
+/// 403.
+pub fn parse_space(params: &crate::params::Params) -> Result<String, XrpcError> {
+    params.require_string("spaceId")
 }

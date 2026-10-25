@@ -16,11 +16,11 @@ The token is a client-generated random string that can be shared to allow others
 
 export const CreateInvite = defineEvent(
   CreateInviteSchema,
-  ({ streamId, event, user }) => {
+  ({ streamId, event, user, decidedAt }) => {
     return [
       sql`
-        insert or ignore into comp_invite (entity, token, created_by_did, event_ulid)
-        values (${streamId}, ${event.token}, ${user}, ${event.id})
+        insert or ignore into comp_invite (entity, token, created_by_did, event_ulid, created_at)
+        values (${streamId}, ${event.token}, ${user}, ${event.id}, ${decidedAt ?? Date.now()})
       `,
     ];
   },

@@ -28,6 +28,7 @@ import type {
 import { materialize } from "./materializer.ts";
 import { applyBundle, getSavepointMutex } from "./applyBundle.ts";
 import { messageSortIdxKey } from "./sortIdx.ts";
+import { decidedAtFor } from "./records/recordChange.ts";
 import { applyDeleteSideEffects, collectPendingDeletes } from "./deleteMessage.ts";
 import { isGlobalDbStatement } from "./statementRouting.ts";
 import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
@@ -51,6 +52,7 @@ import { openReadStateDb } from "../db/db.ts";
 import { recordSpaceStats, selectMemberCount } from "../queries/spaceStats.ts";
 import { maintainRoomAccess } from "../queries/roomAccessProjection.ts";
 import { maintainRoomActivity } from "../queries/roomActivityProjection.ts";
+import { refreshActivityMetaStatement } from "./records/roomRules.ts";
 import {
   classifyMembershipEvent,
   setUserSpaceMembership,
@@ -59,6 +61,7 @@ import {
 import { decodeContent, decodeRichTextBody } from "../db/content.ts";
 import { enqueueIndexMessage, enqueueDeleteMessage } from "../search/indexer.ts";
 import { RICHTEXT_MIME, extractFacetUrls } from "@roomy-space/sdk";
+
 
 import { log } from "../log.ts";
 const MAX_TRACKED_FAILURES = 100;
@@ -162,6 +165,10 @@ export async function applyBatch(
         (effect): effect is DerivedStep => effect.effect !== "sql",
       );
 
+      // The instant the log assigns this entry: what a rule or a materialiser
+      // stamps the rows it writes with, so a replay reproduces them.
+      const decidedAt = decidedAtFor(e.event, e.idx, e.receivedAt, e.createdAt);
+
       // One entry's statements: the record rules' when it is routed, else the
       // event materialiser's.
       let statements: Array<SqlStatement & { derived?: "space" | "global" }>;
@@ -183,7 +190,11 @@ export async function applyBatch(
       } else {
         const materialised = materialize(
           e.event,
-          { streamId, user: e.user },
+          {
+            streamId,
+            user: e.user,
+            decidedAt,
+          },
           e.idx,
         );
 
@@ -549,12 +560,14 @@ export async function applyBatch(
   // materialization_cursor is advanced per-chunk (above), so it already
   // reflects progress. This cursor is kept for backwards compatibility
   // and only exists for streams that have a comp_space row.
+  //
+  // `updated_at` is deliberately not touched: the row's clock columns record
+  // the last *change* the log made to it, and advancing a cursor is not one.
   await db.transaction([
     {
       type: "run",
       sql: `update comp_space
-           set backfilled_to = ?,
-               updated_at = (unixepoch() * 1000)
+           set backfilled_to = ?
            where entity = ?
              and (backfilled_to is null or backfilled_to < ?)`,
       params: [latestIdx, streamId, latestIdx],
@@ -654,6 +667,34 @@ function eventProjectionSteps(
     });
   }
 
+  // A room or space rename changes names the feed rows denormalise. Both paths
+  // run the same statement, so the projection does not depend on which one
+  // applied the change.
+  if (
+    e.event.$type === "space.roomy.room.createRoom.v0" ||
+    e.event.$type === "space.roomy.room.updateRoom.v0"
+  ) {
+    const roomId = (e.event as Record<string, unknown>).id;
+    if (typeof roomId === "string" && roomId !== "") {
+      steps.push({
+        type: "run",
+        sql: refreshActivityMetaStatement(roomId).sql,
+        params: refreshActivityMetaStatement(roomId).params as unknown[],
+        derived: "space",
+      });
+    }
+  }
+  if (e.event.$type === "space.roomy.space.updateSpaceInfo.v0") {
+    steps.push({
+      type: "run",
+      sql: `update activity_item
+                set space_name = (select name from comp_info where entity = activity_item.space_id),
+                    space_avatar = (select avatar from comp_info where entity = activity_item.space_id)`,
+      params: [],
+      derived: "space",
+    });
+  }
+
   return steps;
 }
 
@@ -675,6 +716,8 @@ async function applyEventSideEffects(
   globalDb?: DbLike,
 ): Promise<void> {
   if (e.event.$type === "space.roomy.message.createMessage.v0" && (e.event as Record<string, unknown>).room) {
+    // The instant the log assigned this entry, for the rows this writes.
+    const decidedAt = decidedAtFor(e.event, e.idx, e.receivedAt, e.createdAt);
     const bundle: StatementBundleSuccess = {
       status: "success",
       event: e.event,
@@ -711,10 +754,12 @@ async function applyEventSideEffects(
           db,
           e.event.id,
           blocks ? extractFacetUrls(blocks) : [],
+          decidedAt,
         );
       } else {
         // Legacy text/markdown bodies keep the regex extraction path.
-        detected = await detectAndStoreLinks(db, e.event.id, decodeContent(mime, buf));
+        const content = decodeContent(mime, buf);
+        detected = await detectAndStoreLinks(db, e.event.id, content, decidedAt);
       }
     }
     // A link attachment is materialised as its own entity (`uri?message=<id>`),

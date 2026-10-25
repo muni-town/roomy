@@ -47,15 +47,26 @@ pub fn create_effects(
     }
 
     let id = base.rkey.as_str();
-    let mut effects = vec![ensure_entity(&ctx.stream_id, id, Some(&record.room))];
+    let mut effects = vec![ensure_entity(
+        &ctx.stream_id,
+        id,
+        Some(&record.room),
+        ctx.decided_at_ms,
+    )];
 
     if let Some(forward_of) = &record.forward_of {
         for target in forward_of {
             effects.push(Effect::space(
-                "insert or ignore into edges (head, tail, label)
-                 select ?, ?, 'forward'
+                "insert or ignore into edges (head, tail, label, created_at, updated_at)
+                 select ?, ?, 'forward', ?, ?
                  where exists (select 1 from entities where id = ?)",
-                vec![Value::text(id), Value::text(target), Value::text(target)],
+                vec![
+                    Value::text(id),
+                    Value::text(target),
+                    Value::Integer(ctx.decided_at_ms),
+                    Value::Integer(ctx.decided_at_ms),
+                    Value::text(target),
+                ],
             ));
         }
         effects.push(ordering_key(id, &base.order_stamp));
@@ -68,27 +79,43 @@ pub fn create_effects(
     })?;
 
     effects.push(Effect::space(
-        "insert or replace into comp_content (entity, mime_type, data, last_edit, timestamp)
-         values (?, ?, ?, ?, ?)",
+        "insert or replace into comp_content (
+           entity, mime_type, data, last_edit, timestamp, created_at, updated_at
+         )
+         values (?, ?, ?, ?, ?, ?, ?)",
         vec![
             Value::text(id),
             Value::text(&content.mime_type),
             Value::Blob(content.data.clone()),
             Value::text(id),
             Value::Integer(canonical_send_time(id, record)),
+            Value::Integer(ctx.decided_at_ms),
+            Value::Integer(ctx.decided_at_ms),
         ],
     ));
     // The author is the record's own: a bridged message is attributed to the
     // author the bridge overrode, which is the DID the record carries.
-    effects.push(ensure_entity(&ctx.stream_id, record.author.as_str(), None));
+    effects.push(ensure_entity(
+        &ctx.stream_id,
+        record.author.as_str(),
+        None,
+        ctx.decided_at_ms,
+    ));
     effects.push(Effect::space(
-        "insert or replace into edges (head, tail, label) select ?, ?, 'author'",
-        vec![Value::text(id), Value::text(record.author.as_str())],
+        "insert or replace into edges (head, tail, label, created_at, updated_at)
+         select ?, ?, 'author', ?, ?",
+        vec![
+            Value::text(id),
+            Value::text(record.author.as_str()),
+            Value::Integer(ctx.decided_at_ms),
+            Value::Integer(ctx.decided_at_ms),
+        ],
     ));
     effects.extend(attachment_effects(
         &ctx.stream_id,
         id,
         &attachments_of(record.extensions.as_ref()),
+        ctx.decided_at_ms,
     ));
     effects.push(ordering_key(id, &base.order_stamp));
     Ok(effects)
@@ -114,19 +141,30 @@ fn system_link_effects(
 
     Ok(vec![
         Effect::space(
-            "insert into entities (id, stream_id, room) values (?, ?, ?) on conflict do nothing",
+            "insert into entities (id, stream_id, room, created_at, updated_at)
+             values (?, ?, ?, ?, ?) on conflict do nothing",
             vec![
                 Value::text(id),
                 Value::text(ctx.stream_id.as_str()),
                 Value::text(&record.room),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
             ],
         ),
         Effect::space(
-            "insert or ignore into edges (head, tail, label) select ?, ?, 'author'",
-            vec![Value::text(id), Value::text(ctx.stream_id.as_str())],
+            "insert or ignore into edges (head, tail, label, created_at, updated_at)
+             select ?, ?, 'author', ?, ?",
+            vec![
+                Value::text(id),
+                Value::text(ctx.stream_id.as_str()),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
+            ],
         ),
         Effect::space(
-            "insert or replace into comp_content (entity, mime_type, data, last_edit)
+            "insert or replace into comp_content (
+               entity, mime_type, data, last_edit, created_at, updated_at
+             )
              values (
                ?,
                'text/markdown',
@@ -136,6 +174,8 @@ fn system_link_effects(
                  || coalesce((select name from comp_info where entity = ?), 'this room')
                  || '](' || ? || '?parent=' || ? || ').'
                ) as blob),
+               ?,
+               ?,
                ?
              )",
             vec![
@@ -151,6 +191,8 @@ fn system_link_effects(
                 Value::text(&link.link_to_room),
                 Value::text(&record.room),
                 Value::text(id),
+                Value::Integer(ctx.decided_at_ms),
+                Value::Integer(ctx.decided_at_ms),
             ],
         ),
     ])
@@ -202,6 +244,7 @@ pub fn update_effects(
         &ctx.stream_id,
         id,
         &patch.extensions,
+        ctx.decided_at_ms,
     ));
     Ok(effects)
 }
@@ -315,6 +358,7 @@ pub fn derived_steps(change: &RecordChange, ctx: &RuleContext) -> Vec<DerivedSte
                     space_id: ctx.stream_id.clone(),
                     message_id,
                     urls,
+                    decided_at_ms: ctx.decided_at_ms,
                 });
             }
         }

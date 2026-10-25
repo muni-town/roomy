@@ -60,6 +60,7 @@ import {
 } from "../embed/sweeper.ts";
 import {
   CLOCK_COLUMNS,
+  TABLE_CLOCK_COLUMNS,
   READ_PATH_CACHES,
   materialiseAndDiff,
   materialiseFromLog,
@@ -279,18 +280,32 @@ describe("materialisation purity", () => {
     // names are pinned first: widening the list is how a log-determined value
     // would get hidden, so it has to be an explicit edit here as well.
     expect(Object.keys(CLOCK_COLUMNS)).toEqual([
-      "created_at",
-      "updated_at",
       "fetched_at",
       "synced_at",
       "retry_after",
     ]);
+    expect(
+      Object.fromEntries(
+        Object.entries(TABLE_CLOCK_COLUMNS).map(([table, columns]) => [
+          table,
+          Object.keys(columns),
+        ]),
+      ),
+    ).toEqual({
+      activity_item: ["created_at", "updated_at"],
+      comp_last_read: ["created_at", "updated_at"],
+      pending_links: ["created_at"],
+      voice_projected_calls: ["created_at"],
+    });
 
-    // Then the behaviour, on one column. `entities.created_at` for a non-ULID
-    // id (a DID) is `Date.now()` at materialisation (SDK `ensureEntity`), so it
-    // must land inside the window of the call that wrote it — not at the log's
-    // receipt instant, which is what a log-determined value would be. The
-    // column is absent from every snapshot, so it is read directly.
+    // Then the behaviour, from both sides of the line.
+    //
+    // `entities.created_at` for a non-ULID id (a DID) is the instant the log
+    // assigned the change — the ordering stamp's time half — so it is compared
+    // by the digest and must not have come from the wall clock that ran it.
+    // `activity_item.updated_at` is a derived step's own stamp, so it is
+    // excluded, and this is the column that would catch the exclusion list
+    // shrinking over a value nothing determines.
     await seedEvent(
       router,
       parse({
@@ -309,8 +324,13 @@ describe("materialisation purity", () => {
     const row = await router.forSpace!(streamDid)
       .query("select created_at from entities where id = ?")
       .get<{ created_at: number }>(streamDid);
-    expect(row!.created_at).toBeGreaterThanOrEqual(before);
-    expect(row!.created_at).toBeLessThanOrEqual(after);
+    expect(row!.created_at).toBeLessThan(before);
+    expect(row!.created_at).toBeGreaterThan(0);
+
+    // And the column is inside the digest: a snapshot of this space carries it.
+    const snapshot = await snapshotSpaceDb(router.forSpace!(streamDid));
+    const entities = snapshot.find((table) => table.table === "entities");
+    expect(entities?.columns).toContain("created_at");
   });
 
   /**

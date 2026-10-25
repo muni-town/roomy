@@ -283,6 +283,29 @@ pub fn room_access(
     })
 }
 
+/// `requireSpaceAccess` from `src/xrpc/authGuards.ts`: membership or admin,
+/// with no public-join allowance.
+///
+/// This is the stricter sibling of [`require_space_read`]: a space that anyone
+/// may read is still not a space anyone may act on — starting a call, listing
+/// bridge grants, reading federation state.
+pub fn require_space_access(
+    conn: &Connection,
+    space_id: &str,
+    did: Option<&str>,
+) -> Result<SpaceAccess, XrpcError> {
+    let access = space_access(conn, space_id, did)?;
+    if access.is_banned {
+        return Err(XrpcError::forbidden("Caller is banned from this space"));
+    }
+    if !access.is_member && !access.is_admin {
+        return Err(XrpcError::forbidden(
+            "Caller is neither a member nor an admin of this space",
+        ));
+    }
+    Ok(access)
+}
+
 /// `requireSpaceRead` from `src/xrpc/authGuards.ts`.
 pub fn require_space_read(
     conn: &Connection,

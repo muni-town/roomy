@@ -19,6 +19,15 @@ bridge-core = { path = "crates/bridge-core" }
 matrix-adapter = { path = "crates/matrix-adapter" }
 space-core = { path = "crates/space-core" }
 space-db = { path = "crates/space-db" }
+space-feed = { path = "crates/space-feed" }
+roomy-space-worker = { path = "crates/roomy-space-worker" }
+roomy-auth = { path = "crates/roomy-auth" }
+roomy-sync = { path = "crates/roomy-sync" }
+roomy-gateway = { path = "crates/roomy-gateway" }
+roomy-appserver = { path = "crates/roomy-appserver" }
+space-xrpc = { path = "crates/space-xrpc" }
+roomy-readstate = { path = "crates/roomy-readstate" }
+roomy-ingest = { path = "crates/roomy-ingest" }
 
 # The space worker opens the SQLite files the TypeScript appserver writes, so
 # the driver is `rusqlite` with the bundled amalgamation: one SQLite version,

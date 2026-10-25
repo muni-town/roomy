@@ -1,0 +1,40 @@
+[package]
+name = "roomy-gateway"
+description = "The gateway's HTTP and WebSocket composition: routing, tickets, session plane, health"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+roomy-auth.workspace = true
+roomy-sync.workspace = true
+roomy-space-worker.workspace = true
+space-core.workspace = true
+space-xrpc.workspace = true
+axum = { version = "0.8", features = ["ws"] }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+futures-util = "0.3"
+http-body-util = "0.1"
+url = "2"
+async-trait = "0.1"
+roomy-readstate.workspace = true
+roomy-ingest.workspace = true
+# The gateway is the edge: link unfurling and profile resolution are outbound
+# HTTP, so the client is part of this crate and of no worker.
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "charset", "http2", "query"] }
+regex = { workspace = true }
+# The internal feed reads the event log this process owns.
+rusqlite.workspace = true
+
+[dev-dependencies]
+space-db.workspace = true
+space-feed.workspace = true
+tokio-tungstenite = "0.28"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+tempfile = "3"

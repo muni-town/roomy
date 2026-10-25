@@ -57,21 +57,29 @@ const CreateRoomSchema = type({
 
 export const CreateRoom = defineEvent(
   CreateRoomSchema,
-  ({ streamId, event }) => {
+  ({ streamId, event, decidedAt }) => {
+    const at = decidedAt ?? Date.now();
     const access =
       event.kind === "space.roomy.thread"
         ? null
         : (event.defaultAccess ?? "readwrite");
     const statements = [
-      ensureEntity(streamId, event.id),
+      ensureEntity(streamId, event.id, undefined, at),
       sql`
-        insert into comp_info ( entity, name, avatar, description)
-        values ( ${event.id}, ${event.name || null}, ${event.avatar || null}, ${event.description || null})
+        insert into comp_info ( entity, name, avatar, description, created_at, updated_at)
+        values (
+          ${event.id},
+          ${event.name || null},
+          ${event.avatar || null},
+          ${event.description || null},
+          ${at},
+          ${at}
+        )
         on conflict do nothing
       `,
       sql`
-        insert into comp_room ( entity, label, default_access )
-        values ( ${event.id}, ${event.kind}, ${access} ) on conflict do nothing
+        insert into comp_room ( entity, label, default_access, created_at, updated_at )
+        values ( ${event.id}, ${event.kind}, ${access}, ${at}, ${at} ) on conflict do nothing
       `,
     ];
 
@@ -113,7 +121,7 @@ const UpdateRoomSchema = type({
     "Allows you to set the room kind, basic information, or to change it's parent",
   );
 
-export const UpdateRoom = defineEvent(UpdateRoomSchema, ({ event }) => {
+export const UpdateRoom = defineEvent(UpdateRoomSchema, ({ event, decidedAt }) => {
   const updates = [
     { key: "name", value: event.name },
     { key: "avatar", value: event.avatar },
@@ -139,11 +147,12 @@ export const UpdateRoom = defineEvent(UpdateRoomSchema, ({ event }) => {
     // Update the room info
     setUpdates.length > 0
       ? {
-          sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
-            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)})
+          sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")}, created_at, updated_at)
+            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)}, :at, :at)
             on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
           params: Object.fromEntries([
             [":entity", event.roomId],
+            [":at", decidedAt ?? Date.now()],
             ...setUpdates.map((x) => [
               ":" + x.key,
               "value" in x ? x.value : undefined,

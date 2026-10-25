@@ -688,8 +688,12 @@ export async function selectMessages(
     ? []
     : await db
         .query(
+          // Reactor order is part of the answer: a summary's emoji list follows
+          // the order the reactions were made, and the id breaks a tie, so two
+          // implementations scanning the same rows agree.
           `select entity, reaction, user, reaction_id from comp_reaction
-            where entity in (${idPh})`,
+            where entity in (${idPh})
+            order by created_at asc, reaction_id asc`,
         )
         .all<{ entity: string; reaction: string; user: string; reaction_id: string }>([...liveIds]);
 
