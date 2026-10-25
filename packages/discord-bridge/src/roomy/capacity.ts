@@ -1,6 +1,6 @@
 /**
- * Per-guild capacity enforcement for bridged spaces (Roomy Pro bridge
- * tokens).
+ * Per-guild capacity enforcement for bridged spaces: the free-tier floor
+ * every space gets, plus any Roomy Pro bridge-token capacity on top.
  *
  * The bridge queries `space.roomy.admin.getSpaceMembership` (appserver) with
  * the bridged guild's current member count. The appserver answers whether
@@ -18,6 +18,11 @@
  * gate path (message ingestion, room creation, profile sync) hits the cache;
  * the sweep and member-change triggers force a refresh.
  *
+ * Capacity floor (free tier): the appserver always reports at least the
+ * free-tier capacity, so every bridged space enforces a limit — a grant-less
+ * space hard-stops at 2x the free-tier capacity (100 members), a Pro-granted
+ * space at 2x its granted capacity (2000 for the default 1000).
+ *
  * Failure semantics (fail-safe, never fail-closed on transient errors):
  * - `stale` response (Polar unreachable, appserver served cached state):
  *   keep the previous decision.
@@ -27,16 +32,6 @@
  *   (fail-open) and log — a transient error must not halt a healthy bridge.
  * - 503 (billing not configured): treated as enabled — there is no capacity
  *   to enforce.
- *
- * Fail-open observability (grant-less spaces): a space that is over its
- * capacity but has no bridge-token grants has nothing to enforce, so the
- * bridge fails open (see the branch in `check`). The grant set only changes
- * when a grant ships, so that condition is logged on state transition —
- * once when a (guild, space) tuple enters the fail-open state and once when
- * it leaves — instead of on every ~5-minute sweep. The steady state stays
- * queryable through a single throttled summary line naming every tuple
- * currently failing open: at most one per summary interval for the whole
- * process, regardless of how many tuples or sweeps there are.
  */
 
 import { createLogger } from "../logger.ts";
@@ -45,11 +40,6 @@ const log = createLogger("capacity");
 
 /** Default decision cache TTL: 300s per the capacity contract. */
 export const CAPACITY_TTL_MS = 300_000;
-
-/** How often the process-wide "tuples failing open" summary line may be
- *  emitted: 1h. One line per interval regardless of how many (guild, space)
- *  tuples are failing open or how often the sweep runs. */
-export const FAIL_OPEN_SUMMARY_INTERVAL_MS = 3_600_000;
 
 /** Multiplier of maxMembers at which bridging is hard-stopped. */
 export const HARD_STOP_MULTIPLIER = 2;
@@ -138,10 +128,6 @@ export function resetCapacityGate(): void {
 export interface CapacityServiceOptions {
 	/** Decision cache TTL in ms. Default 300s. */
 	ttlMs?: number;
-	/** Minimum interval between process-wide "tuples failing open" summary
-	 *  lines, in ms. Default 1h. Transitions are never throttled; only the
-	 *  steady-state reminder is. */
-	failOpenSummaryIntervalMs?: number;
 	/** Ops kill switch (BRIDGE_CAPACITY_KILL_SWITCH): when true, capacity
 	 *  enforcement is disabled globally — every (guild, space) passes.
 	 *  Emergency manual re-enable; no XRPC checks are performed. */
@@ -167,7 +153,6 @@ export class CapacityService implements CapacityGate {
 	#client: MembershipClient;
 	#memberCount: MemberCountProvider;
 	#ttlMs: number;
-	#failOpenSummaryIntervalMs: number;
 	#killSwitch: boolean;
 	#killSwitchLogged = false;
 	#onStateChange?: CapacityServiceOptions["onStateChange"];
@@ -176,13 +161,6 @@ export class CapacityService implements CapacityGate {
 		string,
 		{ decision: CapacityDecision; expiresAt: number }
 	>();
-	/** (guild, space) tuples currently in the grant-less fail-open state.
-	 *  Drives transition logging: a tuple enters on the first sweep that sees
-	 *  `overLimit && no grants` and leaves when the grant set changes (or the
-	 *  space stops being over its limit). */
-	#failOpen = new Map<string, { guildId: string; spaceDid: string }>();
-	/** Timestamp of the last steady-state summary line (process-wide). */
-	#lastFailOpenSummaryAt = 0;
 
 	constructor(
 		client: MembershipClient,
@@ -192,8 +170,6 @@ export class CapacityService implements CapacityGate {
 		this.#client = client;
 		this.#memberCount = memberCount;
 		this.#ttlMs = opts.ttlMs ?? CAPACITY_TTL_MS;
-		this.#failOpenSummaryIntervalMs =
-			opts.failOpenSummaryIntervalMs ?? FAIL_OPEN_SUMMARY_INTERVAL_MS;
 		this.#killSwitch = opts.killSwitch ?? false;
 		this.#onStateChange = opts.onStateChange;
 		this.#onUsageChange = opts.onUsageChange;
@@ -269,21 +245,6 @@ export class CapacityService implements CapacityGate {
 			);
 		}
 
-		// No grants → no capacity provisioned for the space: nothing to
-		// enforce. Fail open so bridges set up before Roomy Pro checkout
-		// flows existed keep running; enforcement begins as soon as the
-		// first grant ships (the periodic sweep re-checks).
-		//
-		// The grant set changes only when a grant ships, so log the fail-open
-		// state on transition rather than on every sweep (see
-		// `#noteFailOpen`). The effect on `membership` is unchanged.
-		if (membership.overLimit && membership.tokens.length === 0) {
-			this.#noteFailOpen(key, guildId, spaceDid, membership.memberCount);
-			membership = { ...membership, overLimit: false };
-		} else {
-			this.#noteFailOpenCleared(key, guildId, spaceDid, membership);
-		}
-
 		if (membership.stale) {
 			log.warn(
 				`capacity: stale membership for ${spaceDid} (Polar unreachable); keeping previous decision`,
@@ -304,100 +265,14 @@ export class CapacityService implements CapacityGate {
 		return decision.enabled;
 	}
 
-	/**
-	 * Record that (guild, space) is in the grant-less fail-open state.
-	 * Warns once on entry — a repeated sweep with unchanged state stays
-	 * silent — then keeps the steady state observable with at most one
-	 * process-wide summary line per summary interval naming every tuple
-	 * currently failing open.
-	 */
-	#noteFailOpen(
-		key: string,
-		guildId: string,
-		spaceDid: string,
-		memberCount: number,
-	): void {
-		const now = Date.now();
-		const firstEntry = !this.#failOpen.has(key);
-		this.#failOpen.set(key, { guildId, spaceDid });
-
-		if (firstEntry) {
-			// Start the summary clock here: the transition line already
-			// reports this tuple, so the steady-state reminder only resumes
-			// after a full interval.
-			this.#lastFailOpenSummaryAt = now;
-			log.warn(
-				`capacity: ${spaceDid} has no bridge-token grants; no capacity to enforce — failing open`,
-				{
-					guildId,
-					spaceDid,
-					memberCount,
-					failOpen: true,
-					failOpenSince: new Date(now).toISOString(),
-				},
-			);
-			return;
-		}
-
-		if (now - this.#lastFailOpenSummaryAt < this.#failOpenSummaryIntervalMs) {
-			return;
-		}
-		this.#lastFailOpenSummaryAt = now;
-		log.warn(
-			`capacity: ${this.#failOpen.size} (guild, space) ${this.#failOpen.size === 1 ? "pair is" : "pairs are"} failing open — over capacity with no bridge-token grants; still no capacity to enforce`,
-			{
-				failOpen: true,
-				failOpenCount: this.#failOpen.size,
-				pairs: [...this.#failOpen.values()],
-			},
-		);
-	}
-
-	/**
-	 * Record that (guild, space) left the grant-less fail-open state: a
-	 * grant shipped (enforcement now applies) or the space dropped back
-	 * under its capacity. Silent for a tuple that is not currently tracked as
-	 * failing open, so the sweep cannot flood the log for healthy spaces.
-	 */
-	#noteFailOpenCleared(
-		key: string,
-		guildId: string,
-		spaceDid: string,
-		membership: SpaceMembership,
-	): void {
-		// A membership query that could not complete (stale = appserver
-		// served cached state because Polar was unreachable) is not evidence
-		// of a state change; `check` already logs and keeps the previous
-		// decision there, so keep the tuple tracked and stay silent.
-		if (membership.stale) return;
-		if (!this.#failOpen.delete(key)) return;
-		log.warn(
-			`capacity: ${spaceDid} no longer fails open (guild ${guildId}) — ${
-				membership.tokens.length > 0
-					? "bridge-token grants are present; capacity enforcement applies"
-					: "member count is within the space's capacity"
-			}`,
-			{
-				guildId,
-				spaceDid,
-				memberCount: membership.memberCount,
-				maxMembers: membership.maxMembers,
-				overLimit: membership.overLimit,
-				grantCount: membership.tokens.length,
-				failOpen: false,
-			},
-		);
-	}
-
 	#store(
 		guildId: string,
 		spaceDid: string,
 		membership: SpaceMembership,
 	): CapacityDecision {
 		// Hard-stop only when the appserver reports over the limit AND the
-		// member count reaches 2x capacity. Under the limit (or fail-open —
-		// no grants, kill switch, transient errors) hardStop is never set,
-		// so the pre-existing fail-open/fail-safe semantics are preserved.
+		// member count reaches 2x capacity. Under the limit hardStop is never
+		// set; the kill switch and transient errors never reach #store.
 		const hardStop =
 			membership.overLimit &&
 			membership.memberCount >= HARD_STOP_MULTIPLIER * membership.maxMembers;

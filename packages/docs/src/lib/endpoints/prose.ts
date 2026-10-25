@@ -484,7 +484,7 @@ export const prose: Record<string, EndpointProse> = {
   },
   "space.roomy.space.revokeBridgeToken": {
     description:
-      "Revokes the caller's bridge-token grant for a space. Grantor only — a non-grantor gets 403 (this procedure is how the grantor frees their one active grant). A spent grant (bridged guild exceeded 100 members) is PERMANENT and cannot be revoked — 409.",
+      "Revokes the caller's bridge-token grant for a space. Grantor only — a non-grantor gets 403 (this procedure is how the grantor frees their one active grant). A spent grant (bridged guild exceeded 100 members) is PERMANENT — it is locked to that guild and cannot be revoked or moved elsewhere — 409.",
     auth: "Authenticated. Grantor only.",
   },
   "space.roomy.space.getBridgeTokens": {
@@ -957,10 +957,11 @@ export const prose: Record<string, EndpointProse> = {
   },
   "space.roomy.admin.getSpaceMembership": {
     description:
-      "Returns the bridge-token capacity picture for one space: every grant, its live Polar-derived capacity, spend state, and the space's maxMembers (Σ valid capacities) vs current member count. The Discord bridge polls this endpoint to decide whether bridging may continue: overLimit (memberCount > maxMembers) means the bridge must halt.",
+      "Returns the bridge-token capacity picture for one space: every grant, its live Polar-derived capacity, spend state, and the space's maxMembers (the free-tier floor, or the Σ of live grant capacities) vs current member count. The Discord bridge polls this endpoint to decide whether bridging may continue: overLimit (memberCount > maxMembers) means the bridge must halt.",
     auth: "Admin allowlist (APPSERVER_ADMIN_DIDS).",
     notes: [
       "Per-grant processing (read-time validity): Polar validity check per grantor (300s TTL cache).",
+      "maxMembers is never 0: a space with no live grant still reports the free-tier floor, so every bridged guild has a limit. Spending a grant (>100 members, permanent) locks the token to that guild without reducing its capacity.",
     ],
   },
   "space.roomy.admin.reconcileProMembers": {

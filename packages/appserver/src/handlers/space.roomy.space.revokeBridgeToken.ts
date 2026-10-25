@@ -4,8 +4,9 @@
  * Revokes the caller's bridge-token grant for a space. Grantor only — a
  * non-grantor gets 403 (this procedure is how the grantor frees their one
  * active grant, so anything else is an integrity violation). A spent grant
- * (bridged guild exceeded 100 members) is PERMANENT and cannot be revoked —
- * 409. Otherwise the grant row is deleted.
+ * (bridged guild exceeded 100 members) is PERMANENT — it is locked to that
+ * guild and cannot be revoked or moved elsewhere — 409. Otherwise the grant
+ * row is deleted.
  */
 
 import { openReadStateDb, openSpaceDb } from "../db/db.ts";

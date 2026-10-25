@@ -135,8 +135,9 @@ export const MATRIX_BRIDGE_CONFIGURED =
 /**
  * Member limit of the free Discord Bridge tier (no Roomy Pro membership).
  * Mirrors the "up to 50 members" tier copy in the design system's
- * PricingTiers and the subscription page; the bridge enforces the Pro
- * capacity server-side, while this constant is only for UI copy on the
- * space's bridge settings.
+ * PricingTiers and the subscription page. The appserver enforces this as the
+ * capacity floor for a space with no live bridge-token grant
+ * (FREE_BRIDGE_CAPACITY in space.roomy.admin.getSpaceMembership.ts); the
+ * bridge halts free-tier sync at 2x this, 100 members.
  */
 export const FREE_BRIDGE_MEMBER_LIMIT = 50;

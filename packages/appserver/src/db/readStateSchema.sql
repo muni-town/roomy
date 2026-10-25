@@ -241,7 +241,10 @@ create index if not exists idx_ff_assignments_flag
 -- one bridge token to a space; the grant powers a guild-space bridge up to
 -- the granted capacity. One active grant per user (primary key = grantor
 -- DID). `spent_at` is set when the bridged guild's member count exceeds 100
--- and is PERMANENT — a spent grant can neither be revoked nor re-granted.
+-- and is PERMANENT — a spent grant is locked to that guild and can neither be
+-- revoked nor re-granted; its capacity is unaffected (the grant keeps the
+-- space's limit at the grantor's live capacity, so a spent token does not
+-- drop the space to the free-tier floor).
 -- `capacity_snapshot` is the grant-time capacity (for display; live
 -- capacity is re-resolved from Polar at read time). The grant row persists
 -- across subscription lapses/cancellations — read-time validity is decided

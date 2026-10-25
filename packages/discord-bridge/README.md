@@ -230,14 +230,18 @@ fails.
 | `SYSTEM_CHANNEL`           | *(unset)*                    | Channel ULID for admin system messages; both must be set to enable               |
 | `BRIDGE_CAPACITY_KILL_SWITCH` | `false`                   | `true`/`1` disables per-guild capacity checks globally (emergency re-enable)      |
 
-## Capacity enforcement (Roomy Pro)
+## Capacity enforcement
 
-Bridged (guild, space) tuples are checked against `space.roomy.admin.getSpaceMembership`, which reports the space's member count vs its token capacity (`maxMembers`). Decisions are cached for 300s per tuple; the bridge re-checks at startup, every 5 minutes, and on `guildMemberAdd`/`guildMemberRemove`.
+Bridged (guild, space) tuples are checked against `space.roomy.admin.getSpaceMembership`, which reports the space's member count vs its member capacity (`maxMembers`). Decisions are cached for 300s per tuple; the bridge re-checks at startup, every 5 minutes, and on `guildMemberAdd`/`guildMemberRemove`.
+
+`maxMembers` is the free-tier floor (50), raised to the granted capacity when the space has a live Roomy Pro bridge-token grant (1000 for a Roomy Pro subscription). Every bridged space therefore has a limit; there is no unlimited/fail-open tier.
 
 Two thresholds drive the policy:
 
 - **Over the capacity threshold** (`memberCount > maxMembers`): sync **continues**, but the bridge posts a notice to the admin system channel (`SYSTEM_SPACE`/`SYSTEM_CHANNEL`) — bridging is at risk, not yet paused.
-- **Hard stop** (`memberCount >= 2x maxMembers`): ALL sync for the tuple halts (messages, edits, room/thread creation, profile sync, backfill) and the guild owner is DMed. Sync resumes automatically once a later check finds the member count back below 2x capacity.
+- **Hard stop** (`memberCount >= 2x maxMembers`): ALL sync for the tuple halts (messages, edits, room/thread creation, profile sync, backfill) and the guild owner is DMed. Sync resumes automatically once a later check finds the member count back below 2x capacity. That is 100 members on the free tier and 2000 on Roomy Pro.
+
+Spending a token (below) does **not** lower `maxMembers`: a spent grant keeps powering its bridge from the grantor's live capacity.
 
 System messages are sent as the bridge's ATProto account, so that account must be a member of `SYSTEM_SPACE` with write access to `SYSTEM_CHANNEL`. If either env var is unset, notifications are disabled and enforcement proceeds silently.
 
