@@ -1079,7 +1079,7 @@ describe("selectMessages attachments", () => {
   const LINK_URL = "https://example.com/article";
   /** A tile attachment's entity key carries the message suffix, `tile_uri` does not. */
   const TILE_URL =
-    "at://did:plc:ti1e0wner0000000000000/ing.dasl.masl/3kabc";
+    "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/ing.dasl.masl/3kabc";
   const TILE_DATA = { rows: [1, 2], title: "a tile" };
 
   /**

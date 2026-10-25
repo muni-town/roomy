@@ -36,7 +36,7 @@ const THREAD_B = "01THREADB00000000000000000".slice(0, 26);
 const THREAD_C = "01THREADC00000000000000000".slice(0, 26);
 
 /** A tile attachment's record address. */
-const TILE_URI = "at://did:plc:ti1e0wner0000000000000/ing.dasl.masl/3kabc";
+const TILE_URI = "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/ing.dasl.masl/3kabc";
 
 let msgCounter = 0;
 

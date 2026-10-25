@@ -56,6 +56,9 @@ import { _setTestGetRoomyProfileRecord } from "../../../../packages/appserver/sr
 
 const HERE = new URL(".", import.meta.url).pathname;
 
+/** The tile both corpora attach: one address, so the read and write fixtures agree. */
+const TILE_URI = "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/ing.dasl.masl/3ktile";
+
 // ─── ULIDs (Crockford base32, timestamp prefix) ──────────────────────────
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
@@ -428,6 +431,20 @@ async function seed(db: Database): Promise<SeedIds> {
     `insert into comp_embed_image (entity, mime_type, size, width, height, alt)
      values (?, 'image/png', 1234, 64, 48, 'a picture')`,
     [image],
+  );
+
+  // A Web Tile on m2, beside the link: its entity key carries the message
+  // suffix like every other embed row's, `tile_uri` keeps the bare address the
+  // client's parser takes, and `data` is the payload as stored.
+  const tileUri = TILE_URI;
+  const tileEntity = `${tileUri}?message=${m2}`;
+  await spaceDb(db, SPACE).run(
+    "insert into entities (id, stream_id, room) values (?, ?, ?)",
+    [tileEntity, SPACE, m2],
+  );
+  await spaceDb(db, SPACE).run(
+    "insert into comp_embed_tile (entity, tile_uri, data) values (?, ?, ?)",
+    [tileEntity, tileUri, JSON.stringify({ title: "A tile", rows: [1, 2] })],
   );
 
   // A link on m2, plus its attachment-encoded duplicate.

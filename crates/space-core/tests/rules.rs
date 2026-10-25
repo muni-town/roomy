@@ -106,6 +106,88 @@ fn a_message_create_writes_its_content_author_and_order_key() {
     )));
 }
 
+/// The attachments extension a message carries a tile under.
+fn tile_extensions(uri: &str, data: Option<serde_json::Value>) -> serde_json::Value {
+    let mut attachment = serde_json::json!({
+        "$type": "space.roomy.attachment.tile.v0",
+        "uri": uri,
+    });
+    if let Some(data) = data {
+        attachment["data"] = data;
+    }
+    serde_json::json!({
+        "space.roomy.extension.attachments.v0": {
+            "$type": "space.roomy.extension.attachments.v0",
+            "attachments": [attachment],
+        }
+    })
+}
+
+#[test]
+fn a_message_create_writes_a_tile_row_with_the_bare_address_and_its_payload() {
+    let uri = "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/ing.dasl.masl/3ktile";
+    let change = RecordChange::Create {
+        base: base(RecordKind::Message, "01HF7YAT000000000000000010"),
+        record: RecordBody::Message(MessageRecord {
+            room: "room-1".to_string(),
+            author: Did::parse(ACTOR).expect("author"),
+            actor: None,
+            extensions: Some(tile_extensions(uri, Some(serde_json::json!({ "n": 2 })))),
+            content: Some(MessageContent {
+                mime_type: "text/markdown".to_string(),
+                data: b"hi".to_vec(),
+            }),
+            system: None,
+            forward_of: None,
+        }),
+    };
+    let effects = plan(&change, &ctx()).expect("planned");
+
+    let insert = statements(&effects)
+        .into_iter()
+        .find(|(sql, _, _)| sql.contains("into comp_embed_tile"))
+        .expect("a tile row");
+    // The entity key carries the message suffix; `tile_uri` does not, because
+    // the read path hands it straight to the client's address parser.
+    assert_eq!(
+        insert.2,
+        &[
+            Value::text(format!("{uri}?message=01HF7YAT000000000000000010")),
+            Value::text(uri),
+            Value::text("{\"n\":2}"),
+        ]
+    );
+}
+
+#[test]
+fn a_message_edit_that_replaces_attachments_clears_the_tile_row() {
+    let change = RecordChange::Update {
+        base: base(RecordKind::Message, "01HF7YAT000000000000000010"),
+        patch: RecordPatch::Message(MessagePatch {
+            room: None,
+            content: None,
+            extensions: Some(Some(serde_json::json!({
+                "space.roomy.extension.attachments.v0": {
+                    "$type": "space.roomy.extension.attachments.v0",
+                    "attachments": [{
+                        "$type": "space.roomy.attachment.link.v0",
+                        "uri": "https://example.com/a",
+                    }],
+                }
+            }))),
+        }),
+    };
+    let effects = plan(&change, &ctx()).expect("planned");
+
+    // A tile left out of the wholesale-replace cleanup would survive an edit
+    // that replaced it with anything else.
+    assert!(writes_to(&effects, "delete from comp_embed_tile"));
+    // The replacement carries no tile, so no row is written for the new one.
+    assert!(!statements(&effects)
+        .iter()
+        .any(|(sql, _, _)| sql.contains("into comp_embed_tile")));
+}
+
 #[test]
 fn a_backfill_invalidates_the_read_path_projections_instead_of_writing_them() {
     let change = RecordChange::Create {

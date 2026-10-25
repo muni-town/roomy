@@ -116,14 +116,25 @@
     }
   }
 
+  /** Detaches what `openTile` attached, so a teardown leaves no listener behind. */
+  let detach: (() => void) | undefined;
+
   /**
    * Replace the card with the tile's frame and hand it the payload.
    *
    * `registerShuttleFrame` is what addresses the frame afterwards: the
    * mothership posts `{ id, action, payload }` into it, and the shuttle
-   * forwards that down to the tile. The tile's `load` event is the loader's
-   * host-side signal that the worker is ready — the tile-side equivalent of
-   * signalling `tiles-protocol-up-data-ready`.
+   * forwards that down to the tile.
+   *
+   * The payload goes down on two signals, because the tile decides when it can
+   * accept one and the loader exposes nothing for that. The loader's `load`
+   * event is the worker being ready: early enough that the shuttle holds the
+   * message until the tile's frame has loaded, but not late enough — the tile's
+   * own handlers may not exist yet. `tiles-protocol-up-data-ready` is the tile
+   * calling `listen()`, which is the tile saying they do. `data.js` dispatches
+   * to the handlers registered at the instant the message arrives and buffers
+   * nothing, so answering both is what keeps a tile that registers its handler
+   * in a `load` callback of its own from rendering with no data at all.
    */
   function openTile() {
     const m = mothership;
@@ -140,9 +151,25 @@
     ifr.style.border = "none";
 
     const id = m.registerShuttleFrame(ifr, t);
-    t.addEventListener("load", () => {
+    // The same payload on both signals: a tile that never calls `listen()` is
+    // still handed one, and a tile that calls it twice is handed it twice,
+    // which the protocol's handlers tolerate.
+    const deliver = () =>
       m.sendToShuttle(id, "tiles-protocol-down-data-payload", data);
-    });
+    const onReady = (ev: MessageEvent) => {
+      // Upstream protocol messages reach this page from the shuttle's own
+      // window, so the frame that sent it is what identifies the tile.
+      if (ev.source !== ifr.contentWindow) return;
+      const action = (ev.data as { action?: unknown } | null)?.action;
+      if (action !== "tiles-protocol-up-data-ready") return;
+      deliver();
+    };
+    t.addEventListener("load", deliver);
+    window.addEventListener("message", onReady);
+    detach = () => {
+      t.removeEventListener("load", deliver);
+      window.removeEventListener("message", onReady);
+    };
     ifr.addEventListener("load", () => m.startShuttle(id));
 
     el.replaceChildren(ifr);
@@ -189,6 +216,7 @@
     })();
     return () => {
       cancelled = true;
+      detach?.();
       for (const url of blobUrls) URL.revokeObjectURL(url);
     };
   });

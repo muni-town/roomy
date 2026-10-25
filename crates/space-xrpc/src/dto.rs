@@ -115,6 +115,12 @@ pub enum Attachment {
         #[serde(skip_serializing_if = "Option::is_none")]
         embed: Option<Box<RawValue>>,
     },
+    #[serde(rename = "space.roomy.attachment.tile.v0")]
+    Tile {
+        url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        data: Option<Box<RawValue>>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]

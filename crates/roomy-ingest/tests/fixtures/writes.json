@@ -28,8 +28,8 @@
           "idx": 0,
           "user": "did:plc:member",
           "eventType": "space.roomy.message.createMessage.v0",
-          "createdAt": 1792884841000,
-          "receivedAt": 1792884841231
+          "createdAt": 1792891941000,
+          "receivedAt": 1792891941044
         }
       ],
       "changes": [
@@ -41,7 +41,7 @@
           "collection": "space.roomy.room.message",
           "rkey": "01HF7YB3RG000000000000000V",
           "op": "create",
-          "orderStamp": "01M5R476RF0000000000000000",
+          "orderStamp": "01M5RAZW5M0000000000000000",
           "actor": "did:plc:member",
           "eventId": "01HF7YB3RG000000000000000V",
           "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"aGVsbG8=\"}},\"extensions\":{}}"
@@ -87,15 +87,15 @@
           "idx": 1,
           "user": "did:plc:member",
           "eventType": "space.roomy.message.createMessage.v0",
-          "createdAt": 1792884841000,
-          "receivedAt": 1792884841350
+          "createdAt": 1792891941000,
+          "receivedAt": 1792891941128
         },
         {
           "idx": 2,
           "user": "did:plc:member",
           "eventType": "space.roomy.message.createMessage.v0",
-          "createdAt": 1792884841000,
-          "receivedAt": 1792884841350
+          "createdAt": 1792891941000,
+          "receivedAt": 1792891941128
         }
       ],
       "changes": [
@@ -107,7 +107,7 @@
           "collection": "space.roomy.room.message",
           "rkey": "01HF7YB3RH000000000000000W",
           "op": "create",
-          "orderStamp": "01M5R476W60000000000000001",
+          "orderStamp": "01M5RAZW880000000000000001",
           "actor": "did:plc:member",
           "eventId": "01HF7YB3RH000000000000000W",
           "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"Zmlyc3Q=\"}},\"extensions\":{}}"
@@ -120,7 +120,7 @@
           "collection": "space.roomy.room.message",
           "rkey": "01HF7YB3RJ000000000000000X",
           "op": "create",
-          "orderStamp": "01M5R476W60000000000000002",
+          "orderStamp": "01M5RAZW880000000000000002",
           "actor": "did:plc:member",
           "eventId": "01HF7YB3RJ000000000000000X",
           "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"c2Vjb25k\"}},\"extensions\":{}}"
@@ -150,8 +150,8 @@
           "idx": 3,
           "user": "did:plc:member",
           "eventType": "space.roomy.reaction.addReaction.v0",
-          "createdAt": 1792884841000,
-          "receivedAt": 1792884841550
+          "createdAt": 1792891941000,
+          "receivedAt": 1792891941165
         }
       ],
       "changes": [
@@ -163,7 +163,7 @@
           "collection": "space.roomy.room.reaction",
           "rkey": "01HF7YB3RK000000000000000Y",
           "op": "create",
-          "orderStamp": "01M5R4772E0000000000000003",
+          "orderStamp": "01M5RAZW9D0000000000000003",
           "actor": "did:plc:member",
           "eventId": "01HF7YB3RK000000000000000Y",
           "body": "{\"target\":\"01HF7YAT010000000000000001\",\"user\":\"did:plc:member\",\"reaction\":\"👍\"}"
@@ -192,8 +192,8 @@
           "idx": 4,
           "user": "did:plc:admin",
           "eventType": "space.roomy.room.createRoom.v0",
-          "createdAt": 1792884841000,
-          "receivedAt": 1792884841638
+          "createdAt": 1792891941000,
+          "receivedAt": 1792891941180
         }
       ],
       "changes": [
@@ -205,7 +205,7 @@
           "collection": "space.roomy.space.room",
           "rkey": "01HF7YB3RM000000000000000Z",
           "op": "create",
-          "orderStamp": "01M5R477560000000000000004",
+          "orderStamp": "01M5RAZW9W0000000000000004",
           "actor": "did:plc:admin",
           "eventId": "01HF7YB3RM000000000000000Z",
           "body": "{\"kind\":\"space.roomy.channel\",\"name\":\"A new channel\",\"avatar\":null,\"description\":null,\"defaultAccess\":\"readwrite\",\"deleted\":false,\"parent\":null}"
@@ -1080,15 +1080,15 @@
           "idx": 5,
           "user": "did:plc:member",
           "eventType": "space.roomy.message.createMessage.v0",
-          "createdAt": 1792884841000,
-          "receivedAt": 1792884841752
+          "createdAt": 1792891941000,
+          "receivedAt": 1792891941247
         },
         {
           "idx": 6,
           "user": "did:plc:member",
           "eventType": "space.roomy.message.createMessage.v0",
-          "createdAt": 1792884841000,
-          "receivedAt": 1792884841752
+          "createdAt": 1792891941000,
+          "receivedAt": 1792891941247
         }
       ],
       "changes": [
@@ -1100,7 +1100,7 @@
           "collection": "space.roomy.room.message",
           "rkey": "01HF7YB3TF000000000000002V",
           "op": "create",
-          "orderStamp": "01M5R4778R0000000000000005",
+          "orderStamp": "01M5RAZWBZ0000000000000005",
           "actor": "did:plc:member",
           "eventId": "01HF7YB3TF000000000000002V",
           "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"dHdpY2U=\"}},\"extensions\":{}}"
@@ -1113,7 +1113,7 @@
           "collection": "space.roomy.room.message",
           "rkey": "01HF7YB3TF000000000000002V",
           "op": "create",
-          "orderStamp": "01M5R4778R0000000000000006",
+          "orderStamp": "01M5RAZWBZ0000000000000006",
           "actor": "did:plc:member",
           "eventId": "01HF7YB3TF000000000000002V",
           "body": "{\"room\":\"01JC0000000000000000000C01\",\"author\":\"did:plc:member\",\"content\":{\"mimeType\":\"text/plain\",\"data\":{\"$bytes\":\"dHdpY2U=\"}},\"extensions\":{}}"

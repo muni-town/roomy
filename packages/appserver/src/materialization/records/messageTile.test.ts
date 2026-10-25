@@ -46,8 +46,8 @@ const GLOBAL_SCHEMA_PATH = join(
 const STREAM = StreamDid.assert("did:web:message-tile.example");
 const USER = UserDid.assert("did:plc:tile-path-user");
 
-const TILE = "at://did:plc:ti1e0wner0000000000000/ing.dasl.masl/3kabc";
-const OTHER_TILE = "at://did:plc:ti1e0wner0000000000000/ing.dasl.masl/3kdef";
+const TILE = "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/ing.dasl.masl/3kabc";
+const OTHER_TILE = "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/ing.dasl.masl/3kdef";
 const LINK = "https://example.com/embed";
 
 beforeEach(() => {

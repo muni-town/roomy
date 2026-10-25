@@ -256,7 +256,9 @@ struct EmbedRow {
     message_id: String,
     kind: EmbedKind,
     url: String,
-    mime_type: String,
+    /// Null for a tile row, which carries no blob — the loader resolves the
+    /// tile's resources from its own PDS.
+    mime_type: Option<String>,
     alt: Option<String>,
     width: Option<i64>,
     height: Option<i64>,
@@ -264,6 +266,8 @@ struct EmbedRow {
     size: Option<i64>,
     length: Option<i64>,
     name: Option<String>,
+    /// A tile's JSON payload as stored; `None` for every other kind.
+    data: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -272,6 +276,7 @@ enum EmbedKind {
     Video,
     File,
     Link,
+    Tile,
 }
 
 // ─── Request ──────────────────────────────────────────────────────────────
@@ -582,7 +587,7 @@ async fn run(
                         ei.mime_type as mime_type, ei.alt as alt,
                         ei.width as width, ei.height as height,
                         ei.blurhash as blurhash, ei.size as size,
-                        null as length, null as name
+                        null as length, null as name, null as data
                    from comp_embed_image ei
                    join entities e on e.id = ei.entity
                   where e.room in (select value from json_each(?1))
@@ -591,7 +596,7 @@ async fn run(
                         ev.mime_type as mime_type, ev.alt as alt,
                         ev.width as width, ev.height as height,
                         ev.blurhash as blurhash, ev.size as size,
-                        ev.length as length, null as name
+                        ev.length as length, null as name, null as data
                    from comp_embed_video ev
                    join entities e on e.id = ev.entity
                   where e.room in (select value from json_each(?1))
@@ -600,7 +605,7 @@ async fn run(
                         ef.mime_type as mime_type, null as alt,
                         null as width, null as height,
                         null as blurhash, ef.size as size,
-                        null as length, ef.name as name
+                        null as length, ef.name as name, null as data
                    from comp_embed_file ef
                    join entities e on e.id = ef.entity
                   where e.room in (select value from json_each(?1))
@@ -609,11 +614,20 @@ async fn run(
                         'text/uri-list' as mime_type, null as alt,
                         null as width, null as height,
                         null as blurhash, null as size,
-                        null as length, null as name
+                        null as length, null as name, null as data
                    from comp_embed_link el
                    join entities e on e.id = el.entity
                   where e.room in (select value from json_each(?1))
-                    and el.show_preview = 1",
+                    and el.show_preview = 1
+                 union all
+                 select e.room as message_id, 'tile' as kind, et.tile_uri as url,
+                        null as mime_type, null as alt,
+                        null as width, null as height,
+                        null as blurhash, null as size,
+                        null as length, null as name, et.data as data
+                   from comp_embed_tile et
+                   join entities e on e.id = et.entity
+                  where e.room in (select value from json_each(?1))",
             )?;
             let mut mapped = statement.query_map([id_json.as_str()], |row| {
                 let kind: String = row.get(1)?;
@@ -623,6 +637,7 @@ async fn run(
                         "image" => EmbedKind::Image,
                         "video" => EmbedKind::Video,
                         "file" => EmbedKind::File,
+                        "tile" => EmbedKind::Tile,
                         _ => EmbedKind::Link,
                     },
                     url: row.get(2)?,
@@ -634,6 +649,7 @@ async fn run(
                     size: row.get(8)?,
                     length: row.get(9)?,
                     name: row.get(10)?,
+                    data: row.get(11)?,
                 })
             })?;
             let mut rows = Vec::new();
@@ -870,7 +886,7 @@ fn attachment_from_embed_row(row: &EmbedRow) -> Attachment {
     match row.kind {
         EmbedKind::Image => Attachment::Image {
             url: row.url.clone(),
-            media_type: row.mime_type.clone(),
+            media_type: row.mime_type.clone().unwrap_or_default(),
             alt: row.alt.clone(),
             width: row.width,
             height: row.height,
@@ -879,7 +895,7 @@ fn attachment_from_embed_row(row: &EmbedRow) -> Attachment {
         },
         EmbedKind::Video => Attachment::Video {
             url: row.url.clone(),
-            media_type: row.mime_type.clone(),
+            media_type: row.mime_type.clone().unwrap_or_default(),
             alt: row.alt.clone(),
             width: row.width,
             height: row.height,
@@ -889,13 +905,23 @@ fn attachment_from_embed_row(row: &EmbedRow) -> Attachment {
         },
         EmbedKind::File => Attachment::File {
             url: row.url.clone(),
-            media_type: row.mime_type.clone(),
+            media_type: row.mime_type.clone().unwrap_or_default(),
             name: row.name.clone(),
             size: row.size,
         },
         EmbedKind::Link => Attachment::Link {
             url: row.url.clone(),
             embed: None,
+        },
+        // Unlike a link card, the payload is not enrichment: it is the
+        // attachment's own bytes, so the feed carries it exactly as the
+        // message read does. A payload that is not JSON costs the attachment
+        // its `data`, not its place.
+        EmbedKind::Tile => Attachment::Tile {
+            url: row.url.clone(),
+            data: row.data.as_deref().and_then(|text| {
+                serde_json::from_str::<Box<serde_json::value::RawValue>>(text).ok()
+            }),
         },
     }
 }
@@ -979,6 +1005,8 @@ fn derive_attachment_views(attachments: &[Attachment]) -> (Vec<MediaDto>, Vec<Li
                 length: None,
                 name: name.clone(),
             }),
+            // A tile is not media, and neither derived view carries it.
+            Attachment::Tile { .. } => {}
             Attachment::Reply { .. } | Attachment::Forward { .. } => {}
         }
     }

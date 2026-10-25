@@ -10,7 +10,10 @@ change: `space.roomy.attachment.tile.v0` carries the tile's AT-URI and payload
 through the closed union, the create and edit materialisers, the unified
 `attachments` read path (room reads, the activity feed, search), and a renderer
 that loads the tile and hands it the payload over the tiles data-passing
-protocol. This is the current plan for Web Tiles in Roomy.
+protocol. The write path bounds what a tile may cost the log — an
+`ing.dasl.masl` address and 8192 bytes of payload, refused by `parseEvent` — and
+both implementations project the attachment (§11.1). This is the current plan
+for Web Tiles in Roomy.
 `docs/plans/web-tiles-roomy-feasibility.md` is the earlier feasibility read,
 kept as a historical record; §0 below states which of its conclusions still
 hold.
@@ -1462,10 +1465,37 @@ tile's frame (after the frame has loaded), so
 "tiles-protocol-down-data-payload", data)` is the whole path. The loader's own
 `renderCard`/`renderContent` pair cannot be used for a data-carrying tile:
 `renderContent`'s frame is registered under a shuttle id it does not expose, so
-the card and frame are built by `TileEmbed` from the manifest for that case,
-and the payload is sent on the tile's `load` event (the loader's host-side
-signal that the worker is ready). Tile→host (`tiles-protocol-up-data-payload`)
-is unread, and out of scope.
+the card and frame are built by `TileEmbed` from the manifest for that case.
+
+The payload goes down on **two** signals, because the tile decides when it can
+accept one and the loader exposes no promise for that. The loader's `load`
+event is the worker being ready — the shuttle holds the message until the tile's
+frame has loaded — but the tile's own handlers may not exist yet at that point.
+`tiles-protocol-up-data-ready` is the tile's `listen()`, which is it saying they
+do. `data.js` dispatches to the handlers registered at the instant the message
+arrives and buffers nothing, so a tile that registers its handler inside its own
+`load` callback has to be answered on the second signal or it renders with no
+data at all. Tile→host (`tiles-protocol-up-data-payload`) is unread, and out of
+scope.
+
+**What the write path refuses.** A tile's address and payload are record fields,
+so they are checked where every other field is: `parseEvent`, the gate
+`sendEvents` runs before anything reaches the log. The address must be
+`at://<did:plc:…>/ing.dasl.masl/<rkey>` — the loader resolves a DID to a PDS
+through `plc.directory` and has no `did:web` arm, so any other repository names a
+tile nothing can load. The payload must serialise to at most
+`MAX_TILE_DATA_BYTES` (8192) bytes of UTF-8, measured after `JSON.stringify`
+because that is what the record holds. A refusal is a 400 for the batch, and
+nothing is written: the alternative is a malformed or oversized field sitting in
+every replica for the life of the space. Content that does not fit belongs in
+the tile's own record and blobs, which cost the log nothing.
+
+**The two implementations.** The Rust core carries the same three pieces: the
+rule that writes the `comp_embed_tile` row (and the wholesale-replace cleanup
+that deletes it), the read path's fifth embed branch, and the DTO's tile variant.
+`crates/space-xrpc/tests/fixtures/generate.ts` seeds a tile on a message, so
+`parity.rs` compares the tile's DTO — bare address and parsed payload — between
+the two, and a kind that one side learns alone fails the fixture.
 
 **What this does not change.** The tile still receives its payload over
 `tp-data` (§7.1): the attachment is the *transport* into Roomy's own data model,
@@ -1685,14 +1715,13 @@ milestone A.
     (`voice-chat`, `semble-integration`, `links-view`, `user-blocks` —
     `packages/appserver/src/featureFlags.ts:20-60`) all gate UI that changes the
     shape of a room or a message; a tile attachment is content, like an image.
-12. **Whether the tile payload needs a declared size bound**: yes, and the point
-    is what travels at all. Only *references* belong in the event log — a tile's
-    AT-URI (and CID) plus a small structured payload; the tile's own content lives
-    in an `ing.dasl.masl` record on a PDS, with its resources as ATProto blobs
-    (§2.1, §8.2). The log is the source of truth and is replicated in full, so a
-    bound in the new variant's `.describe()` plus an appserver-side rejection is
-    cheap insurance against the one case where someone attaches the content
-    itself.
+12. **Whether the tile payload needs a declared size bound** (§11.1): settled —
+    yes, and the point is what travels at all. Only *references* belong in the
+    event log — a tile's AT-URI (and CID) plus a small structured payload; the
+    tile's own content lives in an `ing.dasl.masl` record on a PDS, with its
+    resources as ATProto blobs (§2.1, §8.2). `MAX_TILE_DATA_BYTES` (8192) is
+    enforced in `TileAttachment`, which is where `parseEvent` checks it, so the
+    appserver refuses the batch with a 400 and the log never sees the bytes.
 13. **Explicit embed intent at create** (§5.3): the create path is implied today
     — the body is scanned and every URL gets `show_preview = 1`, and
     `showPreview` is only ever seen on the edit path. Attaching link attachments

@@ -16,8 +16,8 @@ import assert from "node:assert/strict";
 import { linkItems, mediaItems, tileItems } from "./attachment-views.ts";
 import type { Message } from "$lib/queries/messages";
 
-const TILE = "at://did:plc:ti1e0wner0000000000000/ing.dasl.masl/3kabc";
-const OTHER_TILE = "at://did:plc:ti1e0wner0000000000000/ing.dasl.masl/3kdef";
+const TILE = "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/ing.dasl.masl/3kabc";
+const OTHER_TILE = "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/ing.dasl.masl/3kdef";
 
 type Attachments = Message["attachments"];
 

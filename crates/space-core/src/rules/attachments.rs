@@ -32,6 +32,9 @@ pub struct Attachment {
     pub snippet: String,
     pub from: i64,
     pub to: i64,
+    /// The tile payload, serialised as it will be stored. `None` when the
+    /// attachment carried none.
+    pub data: Option<String>,
 }
 
 impl Attachment {
@@ -61,6 +64,10 @@ impl Attachment {
             snippet: text("snippet").unwrap_or_default(),
             from: number("from").unwrap_or(0),
             to: number("to").unwrap_or(0),
+            data: value
+                .get("data")
+                .filter(|d| !d.is_null())
+                .and_then(|d| serde_json::to_string(d).ok()),
         }
     }
 }
@@ -209,6 +216,29 @@ pub fn attachment_effects(
                     ],
                 ));
             }
+            "space.roomy.attachment.tile.v0" => {
+                // The entity key carries the message suffix like every other
+                // embed row's, but `tile_uri` holds the bare address: the read
+                // path hands that straight to the client, and a tile address is
+                // a record address — a `?message=` query makes it one that no
+                // longer parses.
+                let scoped = format!("{}?message={}", attachment.uri, message_id);
+                effects.push(ensure_entity(
+                    stream_id,
+                    &scoped,
+                    Some(message_id),
+                    decided_at_ms,
+                ));
+                effects.push(Effect::space(
+                    "insert or replace into comp_embed_tile (entity, tile_uri, data)
+                     values (?, ?, ?)",
+                    vec![
+                        Value::text(scoped),
+                        Value::text(&attachment.uri),
+                        Value::opt_text(attachment.data.clone()),
+                    ],
+                ));
+            }
             "space.roomy.attachment.forward.v0" => effects.push(Effect::space(
                 "insert or ignore into edges (head, tail, label, created_at, updated_at)
                  select ?, ?, 'forward', ?, ?
@@ -319,6 +349,10 @@ pub fn attachment_update_effects(
         ),
         Effect::space(
             "delete from comp_embed_link where entity like ?",
+            vec![Value::text(suffix.clone())],
+        ),
+        Effect::space(
+            "delete from comp_embed_tile where entity like ?",
             vec![Value::text(suffix)],
         ),
         Effect::space(

@@ -90,6 +90,68 @@ export const Forward = type({
   "Marks the message as a forward of the target message, rendered as an embed.",
 );
 
+/** The collection a Web Tile's manifest is published under. */
+export const TILE_COLLECTION = "ing.dasl.masl";
+
+/**
+ * The most a tile's `data` may serialise to, in UTF-8 bytes.
+ *
+ * The payload rides inside the message event, and the event log is the source
+ * of truth: it is replicated in full and kept for the life of the space, so
+ * every byte here is a byte in every backup forever. The cap is what keeps that
+ * bounded — the tile itself is a record on a PDS with its resources as blobs,
+ * and costs the log nothing.
+ */
+export const MAX_TILE_DATA_BYTES = 8192;
+
+/**
+ * A Web Tile address: the manifest record's AT-URI.
+ *
+ * Only `did:plc:` repositories are accepted. The loader resolves the DID to a
+ * PDS through `plc.directory` and has no arm for `did:web`, so an address under
+ * any other method is one nothing can load — and a write is the only place that
+ * is cheap to refuse.
+ */
+const TILE_AT_URI = /^at:\/\/did:plc:[a-z2-7]+\/ing\.dasl\.masl\/[A-Za-z0-9._~:-]+$/;
+
+export const TileUri = type.string
+  .narrow((v, ctx) =>
+    TILE_AT_URI.test(v)
+      ? true
+      : ctx.mustBe(
+          `a tile address: at://<did:plc:…>/${TILE_COLLECTION}/<rkey>`,
+        ),
+  )
+  .describe(`AT-URI of the Web Tile: at://<did:plc:…>/${TILE_COLLECTION}/<rkey>.`);
+
+/**
+ * The JSON a tile is handed, bounded to what the event log will carry.
+ *
+ * Measured after serialisation, because that is what the record holds: a value
+ * is accepted or refused on the bytes it will cost, not on how large it looks
+ * in memory.
+ */
+const TileData = type("unknown")
+  .narrow((data, ctx) => {
+    if (data === undefined) return true;
+    let encoded: string | undefined;
+    try {
+      encoded = JSON.stringify(data);
+    } catch {
+      return ctx.mustBe("JSON-serialisable");
+    }
+    if (encoded === undefined) return ctx.mustBe("JSON-serialisable");
+    const bytes = new TextEncoder().encode(encoded).length;
+    return (
+      bytes <= MAX_TILE_DATA_BYTES ||
+      ctx.mustBe(`at most ${MAX_TILE_DATA_BYTES} bytes of JSON`)
+    );
+  })
+  .describe(
+    "Arbitrary JSON handed to the tile through the data-passing protocol, \
+serialising to at most 8192 bytes.",
+  );
+
 /**
  * A Web Tile attached to the message.
  *
@@ -102,12 +164,8 @@ export const Forward = type({
  */
 export const TileAttachment = type({
   $type: "'space.roomy.attachment.tile.v0'",
-  uri: type.string.describe(
-    "AT-URI of the Web Tile: at://<did:plc:…>/ing.dasl.masl/<rkey>.",
-  ),
-  "data?": type("unknown").describe(
-    "Arbitrary JSON handed to the tile through the data-passing protocol.",
-  ),
+  uri: TileUri,
+  "data?": TileData,
 }).describe("A Web Tile attached to the message, with the data it renders.");
 
 export const DiscordMessageOrigin = type({
