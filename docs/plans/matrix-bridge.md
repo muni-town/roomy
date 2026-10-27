@@ -1,7 +1,7 @@
 # Roomy ↔ Matrix Bridge — Plan
 
 **Date:** 2026-10-22
-**Status:** Draft — implementation in the same PR that adds this document.
+**Status:** Implemented — #516 merged every milestone in §16 (crates, `bridge-core`, `matrix-adapter`, the bridge binary, the Roomy extensions and schema bump, E2EE, backfill, Integrations UI, deployment image). §18 lists what stays out of scope; the `authorOverride`/`timestampOverride` authorization gap it recorded is closed (#509).
 **Scope:** one PR: plan, Rust crates, homeserver-side appservice, app-lite
 Integrations UI, deployment image, E2E.
 
@@ -264,12 +264,10 @@ suppression and idempotency survive a bridge DB loss, and it is what a future
 Matrix client/bridge needs to link back to the origin room. Without it a
 re-materialisation silently drops the mapping and the bridge starts echoing.
 
-**Out of scope, filed separately:** `authorOverride` and `timestampOverride`
-are currently accepted from any member with room write access
-(`packages/appserver/src/auth/writeAuth.ts` never inspects `extensions`, and
-`materialization/toAppliedEvent.ts` applies the override unconditionally), so
-any member can post as any DID. That is an appserver auth fix with its own
-test matrix and its own PR.
+**Authorization of the overrides:** `authorOverride` and
+`timestampOverride` are admin-gated as of #509 — `writeAuth.ts` requires space
+admin for both event types, so accepting them here does not widen what a
+member can do.
 
 ## 8. Structure mapping
 
@@ -492,7 +490,7 @@ Integrations
 | Ghost joins cost on large rooms | lazy join on first message, plus an explicit cap with a warning |
 | Ghost DID scheme is unusual | percent-encoding is reversible and validated by the same DID rule as ATProto; display layer decodes |
 | One PR is large | milestones are sequential commits on one branch; the PR opens when E2E is green |
-| `authorOverride` is currently unguarded | the bridge requires space admin; the upstream fix is a separate task |
+| `authorOverride` reachable by non-admins | closed by #509: `writeAuth.ts` requires space admin for `authorOverride` and `timestampOverride` |
 
 ## 18. Out of scope
 
@@ -500,5 +498,5 @@ Integrations
 - Per-ghost encryption devices (MSC4190/MSC4326) and key-backup import.
 - Bridging Roomy voice rooms to Matrix calls.
 - Running the appservice in WASM (see §3); `bridge-core` stays portable.
-- Fixing the Discord bridge's unauthenticated admin API or the
-  `authorOverride` authorization hole — both filed as separate tasks.
+- Fixing the Discord bridge's unauthenticated admin API — filed as a separate
+  task.
