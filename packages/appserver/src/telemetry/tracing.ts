@@ -39,9 +39,11 @@ import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-ho
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
+  ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
+import { resolveEnvName } from "./build.ts";
 
 const SERVICE_NAME = "appserver";
 
@@ -97,6 +99,9 @@ export function initTracing(env: NodeJS.ProcessEnv = process.env): boolean {
 
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: SERVICE_NAME,
+    // Read from the `env` argument, not `process.env`: a test that inits
+    // tracing with an explicit env expects the whole resource to follow it.
+    [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: resolveEnvName(env),
     ...(process.env.RAILWAY_SERVICE_NAME
       ? { [ATTR_SERVICE_VERSION]: process.env.RAILWAY_SERVICE_NAME }
       : {}),

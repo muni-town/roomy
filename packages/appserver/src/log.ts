@@ -2,7 +2,7 @@
  * Structured leveled logger gated by the `LOG_LEVEL` env var.
  *
  * Emits one JSON object per line to stdout:
- *   {ts, level, scope, msg, ...fields, error?, build_id, service}
+ *   {ts, level, scope, msg, ...fields, error?, build_id, service, env}
  *
  * Why this exists: best-effort paths (embed fetch failures, per-DID backfill
  * progress, per-stream subscribe debug) can emit thousands of lines per
@@ -28,7 +28,7 @@
  */
 
 import { createLokiSink, type LokiSink } from "./telemetry/loki.ts";
-import { resolveBuildId } from "./telemetry/build.ts";
+import { resolveBuildId, resolveEnvName } from "./telemetry/build.ts";
 import { currentTraceContext } from "./telemetry/tracing.ts";
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 } as const;
@@ -94,6 +94,9 @@ function emit(level: LogLevel, args: unknown[]): void {
   if (LEVELS[level] < LEVELS[resolveLevel()]) return;
 
   const { scope, msg, fields, error } = parseArgs(args);
+  // Resolved once: the record and the stream labels both carry it, and the
+  // chain is on the per-record path.
+  const env = resolveEnvName();
   const record: Record<string, unknown> = {
     ts: new Date().toISOString(),
     level,
@@ -102,6 +105,7 @@ function emit(level: LogLevel, args: unknown[]): void {
     ...fields,
     build_id: resolveBuildId(),
     service: SERVICE,
+    env,
   };
   if (error) {
     record.error = {
@@ -127,6 +131,7 @@ function emit(level: LogLevel, args: unknown[]): void {
     service_name: SERVICE,
     level,
     scope,
+    env,
   };
   const replicaId = process.env.RAILWAY_REPLICA_ID;
   if (replicaId) labels.replica_id = replicaId;

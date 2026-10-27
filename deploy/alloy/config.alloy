@@ -22,6 +22,13 @@
 //                               appserver:8080 (set in the Dockerfile ENV;
 //                               override on Railway). Scheme is http, path
 //                               is /metrics.
+//   - APPSERVER_STAGING_METRICS_URL
+//                               the same shape, for the staging appserver.
+//                               Unset (or empty) means the staging scrape
+//                               component has no targets at all — see the
+//                               `prometheus.scrape "appserver_staging"`
+//                               block for why this is gated rather than
+//                               given a coalesce placeholder.
 //   - ALLOY_LOG_LEVEL           default `info`.
 //
 // Traces → Grafana Cloud Tempo (OTLP/HTTP):
@@ -108,13 +115,50 @@ loki.source.api "apps" {
 // The appserver exposes /metrics (request latency, DB pool queue depth,
 // cache hit rate, embed backlog, DB timeouts). Scrape it over the Railway
 // private network and remote-write to Mimir.
+//
+// Two scrape components, one per environment, because a scrape target's
+// labels are fixed for the life of the component: `env` is a target label
+// here (it becomes a metric label on every series the target produces), so
+// production and staging need a component each rather than one list of
+// targets with a shared label.
+//
+// `build_id` is deliberately absent: one series set per deploy is never
+// reclaimed, and the build identity stays in the log line and the trace
+// resource where it costs no cardinality.
 prometheus.scrape "appserver" {
 	// __address__ must be host:port only (no scheme or path) — Prometheus
 	// rejects a full URL here. The scheme defaults to http and the path is
 	// set via metrics_path below.
 	targets = [{
 		__address__ = sys.env("APPSERVER_METRICS_URL"),
+		env         = "production",
 	}]
+	metrics_path = "/metrics"
+	forward_to   = [prometheus.remote_write.mimir.receiver]
+}
+
+// Staging is optional. The `coalesce` placeholder convention from the Tempo
+// block applies, but the gating has to be a *drop* rather than an endpoint
+// that merely fails: an unset variable left as a live scrape target would
+// show up in Mimir as `up == 0` for a deployment that does not exist,
+// erroring on every scrape interval. So the placeholder address is dropped
+// by a relabel rule, leaving the scrape component with an empty target list
+// — nothing scraped, nothing reported, and the collector still loads.
+discovery.relabel "appserver_staging" {
+	targets = [{
+		__address__ = coalesce(sys.env("APPSERVER_STAGING_METRICS_URL"), "staging-not-configured"),
+		env         = "staging",
+	}]
+
+	rule {
+		source_labels = ["__address__"]
+		regex         = "staging-not-configured"
+		action        = "drop"
+	}
+}
+
+prometheus.scrape "appserver_staging" {
+	targets      = discovery.relabel.appserver_staging.output
 	metrics_path = "/metrics"
 	forward_to   = [prometheus.remote_write.mimir.receiver]
 }

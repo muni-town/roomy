@@ -25,3 +25,24 @@ export function resolveBuildId(): string {
   if (sha) return sha;
   return "unknown";
 }
+
+/**
+ * Deployment environment name: `APP_ENV` → `RAILWAY_ENVIRONMENT_NAME` →
+ * `"unknown"`, lowercased.
+ *
+ * Same absent-not-empty rule as `resolveBuildId`: a trimmed value that is
+ * falsy falls through, so a whitespace-only variable can never become an
+ * empty `env` label. Lowercasing folds `Staging` and `staging` into one
+ * stream — Loki labels are exact-match, and two casings of one environment
+ * is the split this whole mechanism exists to prevent.
+ *
+ * Called once per log record; the chain is inline so it allocates nothing
+ * beyond the trim/lowercase on the value that survives.
+ */
+export function resolveEnvName(env: NodeJS.ProcessEnv = process.env): string {
+  const appEnv = env.APP_ENV?.trim();
+  if (appEnv) return appEnv.toLowerCase();
+  const railwayEnv = env.RAILWAY_ENVIRONMENT_NAME?.trim();
+  if (railwayEnv) return railwayEnv.toLowerCase();
+  return "unknown";
+}

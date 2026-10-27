@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
 import { log, _setLokiSink } from "./log.ts";
-import { resolveBuildId } from "./telemetry/build.ts";
+import { resolveBuildId, resolveEnvName } from "./telemetry/build.ts";
 import type { LokiSink } from "./telemetry/loki.ts";
 
 let origLogLevel: string | undefined;
@@ -17,6 +17,8 @@ let origGitSha: string | undefined;
 let origAlloyUrl: string | undefined;
 let origReplicaId: string | undefined;
 let origServiceName: string | undefined;
+let origAppEnv: string | undefined;
+let origRailwayEnvName: string | undefined;
 let stdoutSpy: ReturnType<typeof vi.spyOn>;
 let stderrSpy: ReturnType<typeof vi.spyOn>;
 let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -45,11 +47,15 @@ beforeEach(() => {
   origAlloyUrl = process.env.ALLOY_URL;
   origReplicaId = process.env.RAILWAY_REPLICA_ID;
   origServiceName = process.env.RAILWAY_SERVICE_NAME;
+  origAppEnv = process.env.APP_ENV;
+  origRailwayEnvName = process.env.RAILWAY_ENVIRONMENT_NAME;
   delete process.env.BUILD_ID;
   delete process.env.RAILWAY_GIT_COMMIT_SHA;
   delete process.env.ALLOY_URL;
   delete process.env.RAILWAY_REPLICA_ID;
   delete process.env.RAILWAY_SERVICE_NAME;
+  delete process.env.APP_ENV;
+  delete process.env.RAILWAY_ENVIRONMENT_NAME;
   process.env.LOG_LEVEL = "info";
 
   stdoutSpy = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -78,10 +84,14 @@ afterEach(() => {
   else process.env.RAILWAY_REPLICA_ID = origReplicaId;
   if (origServiceName === undefined) delete process.env.RAILWAY_SERVICE_NAME;
   else process.env.RAILWAY_SERVICE_NAME = origServiceName;
+  if (origAppEnv === undefined) delete process.env.APP_ENV;
+  else process.env.APP_ENV = origAppEnv;
+  if (origRailwayEnvName === undefined) delete process.env.RAILWAY_ENVIRONMENT_NAME;
+  else process.env.RAILWAY_ENVIRONMENT_NAME = origRailwayEnvName;
 });
 
 describe("structured JSON output", () => {
-  test("info line emits one valid JSON object with ts/level/scope/msg/build_id/service", () => {
+  test("info line emits one valid JSON object with ts/level/scope/msg/build_id/service/env", () => {
     log.info("startup", "appserver ready", { port: 8080 });
 
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -94,6 +104,7 @@ describe("structured JSON output", () => {
     expect(parsed.port).toBe(8080);
     expect(parsed.build_id).toBe("unknown");
     expect(parsed.service).toBe("appserver");
+    expect(parsed.env).toBe("unknown");
   });
 
   test("[scope] prefix becomes the scope field", () => {
@@ -214,18 +225,86 @@ describe("Loki sink wiring", () => {
     expect(parsed.build_id).toBe("unknown");
   });
 
-  test("RAILWAY_REPLICA_ID and RAILWAY_SERVICE_NAME become stream labels", () => {
+  test("RAILWAY_REPLICA_ID, RAILWAY_SERVICE_NAME and env become stream labels", () => {
     process.env.RAILWAY_REPLICA_ID = "replica-1";
     process.env.RAILWAY_SERVICE_NAME = "appserver-prod";
+    process.env.RAILWAY_ENVIRONMENT_NAME = "production";
     log.info("startup", "ready");
 
     const rec = mockSink.records[0]!;
     expect(rec.labels.replica_id).toBe("replica-1");
     expect(rec.labels.railway_service_name).toBe("appserver-prod");
+    expect(rec.labels.env).toBe("production");
+    // Same value on the JSON line: the stream label says which environment,
+    // the line keeps build_id where it costs no cardinality.
+    expect(JSON.parse(rec.line).env).toBe("production");
+  });
+
+  test("env is a stream label even with nothing set", () => {
+    log.info("startup", "ready");
+    expect(mockSink.records[0]!.labels.env).toBe("unknown");
   });
 
   test("gated records are not pushed to the Loki sink", () => {
     log.debug("startup", "verbose");
     expect(mockSink.records).toHaveLength(0);
+  });
+});
+
+describe("env fallback chain", () => {
+  test("APP_ENV wins over RAILWAY_ENVIRONMENT_NAME", () => {
+    process.env.APP_ENV = "staging";
+    process.env.RAILWAY_ENVIRONMENT_NAME = "production";
+    expect(resolveEnvName()).toBe("staging");
+  });
+
+  test("RAILWAY_ENVIRONMENT_NAME is the fallback", () => {
+    process.env.RAILWAY_ENVIRONMENT_NAME = "production";
+    expect(resolveEnvName()).toBe("production");
+  });
+
+  test("unknown when neither is set", () => {
+    expect(resolveEnvName()).toBe("unknown");
+  });
+
+  test("empty APP_ENV falls through to RAILWAY_ENVIRONMENT_NAME", () => {
+    process.env.APP_ENV = "";
+    process.env.RAILWAY_ENVIRONMENT_NAME = "production";
+    expect(resolveEnvName()).toBe("production");
+  });
+
+  test("whitespace-only APP_ENV falls through, never an empty label", () => {
+    process.env.APP_ENV = "   ";
+    process.env.RAILWAY_ENVIRONMENT_NAME = "production";
+    expect(resolveEnvName()).toBe("production");
+  });
+
+  test("whitespace-only APP_ENV with nothing else yields unknown", () => {
+    process.env.APP_ENV = " \t\n ";
+    expect(resolveEnvName()).toBe("unknown");
+  });
+
+  test("empty RAILWAY_ENVIRONMENT_NAME alone yields unknown", () => {
+    process.env.RAILWAY_ENVIRONMENT_NAME = "";
+    expect(resolveEnvName()).toBe("unknown");
+  });
+
+  test("mixed case is lowercased", () => {
+    process.env.APP_ENV = "Staging";
+    expect(resolveEnvName()).toBe("staging");
+    delete process.env.APP_ENV;
+    process.env.RAILWAY_ENVIRONMENT_NAME = "PRODUCTION";
+    expect(resolveEnvName()).toBe("production");
+  });
+
+  test("values are trimmed", () => {
+    process.env.APP_ENV = "  Staging\n";
+    expect(resolveEnvName()).toBe("staging");
+  });
+
+  test("reads the env object it is given, not process.env", () => {
+    process.env.APP_ENV = "production";
+    expect(resolveEnvName({ APP_ENV: "staging" })).toBe("staging");
+    expect(resolveEnvName({})).toBe("unknown");
   });
 });

@@ -27,6 +27,7 @@ The config is **baked into the image** so no Railway volume is required.
    | `GRAFANA_CLOUD_TEMPO_ID` | Grafana Cloud instance ID (OTLP basic-auth user). Required *with* `_URL`/`_TOKEN` to ship spans. |
    | `GRAFANA_CLOUD_TEMPO_TOKEN` | Grafana Cloud access policy token (OTLP basic-auth pass). |
    | `APPSERVER_METRICS_URL` | appserver scrape target as **host:port** (no scheme/path). On Railway this must be `<service-name>.railway.internal:8080` — Railway's private DNS uses the `.railway.internal` suffix, so the Dockerfile default `appserver:8080` does **not** resolve there. Short/bare names only work in the dev compose network (where the container is actually named `alloy`/`appserver`). Scheme is http, path is `/metrics`. |
+   | `APPSERVER_STAGING_METRICS_URL` | Same shape, for the **staging** appserver. Optional: unset, the staging scrape component gets no targets at all (`discovery.relabel` drops its placeholder), so nothing is scraped and no `up == 0` series is produced for a deployment that does not exist. |
    | `FARO_CORS_ORIGINS` | Comma-separated browser origins allowed to POST Faro telemetry (default `https://roomy.space` — the SPA origin) |
    | `FARO_API_KEY` | Optional Faro API key (default unset) |
 3. **Networking → Private networking** — ensure this service is on the
@@ -42,6 +43,25 @@ The config is **baked into the image** so no Railway volume is required.
 > (`otlp-gateway-prod-<region>.grafana.net/otlp`). Create an Access Policy
 > token for the password; use the instance ID as the user. The same token
 > works for Loki, Mimir, and Tempo if the policy grants all three signals.
+
+## Environments
+
+Every signal carries `env`: it is a stream label on logs, a field on the JSON
+line, the `deployment.environment.name` resource attribute on traces, and a
+target label on scraped metrics (which makes it a label on every series). The
+value comes from `APP_ENV`, then `RAILWAY_ENVIRONMENT_NAME`, then `unknown`,
+lowercased. It exists so that "which deployment produced this?" is answered by
+the telemetry rather than inferred from a Railway service name: without it,
+two environments posting to the same Loki tenant merge into one stream, and
+the difference is only in the line text — unrecoverable after the fact.
+`build_id` stays out of every label position for the opposite reason: one
+stream (or one series set) per deploy is never reclaimed.
+
+Staging therefore needs **its own Alloy, in its own Railway project**. The
+Loki push receiver on port 3100 has no authentication and is reachable only on
+the project's private network, so it is per-project by construction — a
+staging app pointing at production's collector would be both a telemetry merge
+and an open ingest path into the production log store.
 
 ## Traces
 
@@ -209,7 +229,7 @@ network — no stdout pipes or sidecar forwarders.
   `http://alloy.railway.internal:3100/loki/api/v1/push` (Railway — the
   `.railway.internal` suffix is required). There is **no default in code**:
   unset means stdout only. Every structured log record is batched (500 / 2s)
-  and POSTed with stream labels `service_name`, `level`, `scope` (plus
+  and POSTed with stream labels `service_name`, `level`, `scope`, `env` (plus
   Railway replica labels when present).
 - **app-lite** — ships logs from the browser via Faro, not the
   Alloy collector.
