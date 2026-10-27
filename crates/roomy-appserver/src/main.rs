@@ -34,6 +34,12 @@
 //! ROOMY_TS_ORIGIN      —               the TypeScript appserver; when set, spaces
 //!                                     not yet cut over are proxied to it
 //! ROOMY_SHADOW_PERCENT 0               how many eligible reads to mirror to it
+//! ALLOY_URL            —               the Alloy Loki push URL; unset logs to
+//!                                     stdout only
+//! APP_ENV              —               the `env` log label; falls back to
+//!                                     RAILWAY_ENVIRONMENT_NAME, then `unknown`
+//! BUILD_ID             —               the `build_id` log field; `unknown` when
+//!                                     unset (the image bakes it from the commit)
 //! ```
 
 use std::net::SocketAddr;
@@ -57,6 +63,12 @@ use space_feed::ChangeFeed;
 use space_xrpc::registry::{SpaceRegistry, SpaceResolver};
 use space_xrpc::state::{SpaceReadDb, XrpcState};
 use space_xrpc::verify::{GatewayServiceAuth, TestMode};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+
+mod loki;
+
+use loki::{LokiLayer, LokiSink};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Role {
@@ -90,11 +102,16 @@ struct Config {
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
+    // The format layer writes the line an operator reads in `docker logs`, and
+    // the Loki layer writes the same events to Grafana when `ALLOY_URL` names an
+    // Alloy. Unset, the layer is disabled and costs a branch.
+    let loki = LokiSink::from_env();
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(tracing_subscriber::fmt::layer())
+        .with(LokiLayer::new(loki.clone()))
         .init();
 
     let config = match Config::from_env() {
@@ -105,7 +122,7 @@ fn main() {
         }
     };
 
-    if let Err(error) = run(config) {
+    if let Err(error) = run(config, loki) {
         tracing::error!(%error, "appserver");
         std::process::exit(1);
     }
@@ -226,11 +243,14 @@ impl Config {
     }
 }
 
-fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+fn run(config: Config, loki: Option<Arc<LokiSink>>) -> Result<(), Box<dyn std::error::Error>> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
     runtime.block_on(async move {
+        // The sink's HTTP client lives on this runtime, so the flusher does too.
+        let flusher = loki.as_ref().and_then(|sink| sink.spawn());
+
         // One sink for the process: a worker's committed batch and the sockets
         // that must be woken share it, whether or not the two roles are the same
         // binary invocation.
@@ -267,6 +287,16 @@ fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 
         if let Some(supervisor) = supervisor {
             supervisor.stop();
+        }
+
+        // ctrl-c, or the gateway's graceful shutdown after it: take the queue's
+        // tail and the last few log lines with us, bounded so a dead Alloy cannot
+        // hold the exit open.
+        if let Some(sink) = loki.as_ref() {
+            sink.flush(loki::SHUTDOWN_FLUSH).await;
+        }
+        if let Some(flusher) = flusher {
+            flusher.abort();
         }
         Ok(())
     })

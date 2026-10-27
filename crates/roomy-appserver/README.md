@@ -42,9 +42,37 @@ directory.
 | `ROOMY_SIGNAL_URL` | — | A worker's signal relay: the gateway that serves the sockets |
 | `ROOMY_TS_ORIGIN` | — | The TypeScript appserver. Set, and spaces not cut over are proxied to it |
 | `ROOMY_SHADOW_PERCENT` | `0` | How many eligible reads are mirrored to it for comparison |
+| `ALLOY_URL` | — | The Alloy Loki push URL (`http://<alloy>:3100/loki/api/v1/push`). Unset: stdout only |
+| `APP_ENV` | — | The `env` log label; falls back to `RAILWAY_ENVIRONMENT_NAME`, then `unknown` |
+| `BUILD_ID` | `unknown` | The `build_id` field of every log line (the image bakes the commit into it) |
+| `RUST_LOG` | `info` | Which events exist at all: the filter both log destinations share |
 
 `ROOMY_FEED_URL` and `ROOMY_SIGNAL_URL` are for the worker role; a gateway reads the
 log it owns and fans signals out locally.
+
+## Logs
+
+Two destinations, one set of events. The `fmt` layer writes a line to stdout, which
+is what `docker logs` shows; when `ALLOY_URL` is set the Loki layer pushes the same
+events to Alloy in process — the container's stdout is not collected into Grafana, so
+without the second destination a deployed process is invisible there.
+
+The Loki stream carries `service_name` (`space-worker`), `env`, `level` and `scope`,
+and the line is one JSON object:
+
+```json
+{"ts":"2026-10-27T12:00:00.000Z","level":"info","scope":"materialise","msg":"applied","idx":42,"build_id":"abc1234"}
+```
+
+`scope` is a fixed set — `startup`, `materialise`, `feed`, `lease`, `signal`,
+`gateway`, `other` — folded from the event's target, so it is a label value and not a
+module path. `build_id` is in the line and not in the labels: a label that changes on
+every deploy splits the stream once per release.
+
+The sink is bounded (10 000 records, oldest dropped) and batches (500 records or two
+seconds). A failed push is retried with exponential backoff from one second to one
+minute; every error is swallowed, so a dead Alloy loses log lines and nothing else.
+On ctrl-c the queue gets five seconds to drain.
 
 ## The three deployment shapes
 
