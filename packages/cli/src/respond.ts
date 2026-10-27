@@ -8,11 +8,14 @@ import {
   THINKING_MARKER,
   buildReplyBlocks,
   buildThinkingBlocks,
+  parseTileDirectives,
   plaintextOf,
   isMessageId,
   readMessages,
+  sendMessage,
   sendReply,
   type MessageInfo,
+  type TileDirective,
 } from "./messages.js";
 import { FileLock, QueueStore, bootHeal, type QueueJob } from "./queue.js";
 import { PostChain, errorText } from "./postChain.js";
@@ -440,9 +443,22 @@ async function runMentionJob(
       traceThreadId: trace.kind === "thread" ? trace.id : undefined,
     });
   }
+  // A `tile:` directive in the answer is an attachment, not body text. Read the
+  // directives out once, here, so no posting path below both attaches the tile
+  // and repeats its address. A directive that cannot be parsed is left in the
+  // text and the answer still goes out: losing a finished turn over a malformed
+  // attachment line is the worse failure.
+  let answerText = reply.answer;
+  let tiles: TileDirective[] = [];
+  try {
+    ({ text: answerText, tiles } = parseTileDirectives(reply.answer));
+  } catch (error) {
+    log(`tile directive ignored: ${errorText(error)}`);
+  }
   // `runOmp` rejects on a failed turn, so reaching here means a successful turn
-  // that produced no text. Do not post an empty message.
-  if (!reply.answer.trim()) {
+  // that produced no text. An answer that is only a tile directive still has
+  // something to post.
+  if (!answerText.trim() && tiles.length === 0) {
     log("empty reply — not posting");
     return;
   }
@@ -460,7 +476,7 @@ async function runMentionJob(
   const traceLink =
     trace.kind === "thread" ? `\n\n---\n💭 trace: ${ROOMY_APP_URL}/${spaceId}/${trace.id}` : "";
   if (streamThinking && streamedThinking) {
-    const { messageId } = await sendReply(xrpc, spaceId, roomId, `${reply.answer}${traceLink}`, undefined, parent);
+    const { messageId } = await sendMessage(xrpc, spaceId, roomId, `${answerText}${traceLink}`, { parent, tiles });
     log(`replied ${messageId} (answer; thinking ${trace.kind === "thread" ? `in trace thread ${trace.id}` : "streamed in room"})`);
     return;
   }
@@ -470,19 +486,16 @@ async function runMentionJob(
     // Traces go to the trace room even when not streamed: post the trace
     // there and the clean answer (with a link) in the channel.
     await sendReply(xrpc, spaceId, trace.id, thinking, buildThinkingBlocks(thinking));
-    const { messageId } = await sendReply(xrpc, spaceId, roomId, `${reply.answer}${traceLink}`, undefined, parent);
+    const { messageId } = await sendMessage(xrpc, spaceId, roomId, `${answerText}${traceLink}`, { parent, tiles });
     log(`replied ${messageId} (answer; thinking in trace thread ${trace.id})`);
     return;
   }
-  const blocks = buildReplyBlocks(reply.answer, postThinking ? thinking : undefined);
-  const { messageId } = await sendReply(
-    xrpc,
-    spaceId,
-    roomId,
-    reply.answer,
-    blocks.length > 0 ? blocks : undefined,
+  const blocks = buildReplyBlocks(answerText, postThinking ? thinking : undefined);
+  const { messageId } = await sendMessage(xrpc, spaceId, roomId, answerText, {
+    ...(blocks.length > 0 ? { blocks } : {}),
     parent,
-  );
+    tiles,
+  });
   log(`replied ${messageId}${postThinking ? " (with thinking)" : ""}`);
 }
 

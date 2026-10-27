@@ -303,3 +303,161 @@ describe("sendMessage --parent validation", () => {
     expect(sendEventsCalls).toBe(1);
   });
 });
+
+/** The tile attachments an event carries, in order. */
+function tilesOf(event: unknown): Record<string, unknown>[] {
+  if (typeof event !== "object" || event === null || !("extensions" in event)) {
+    return [];
+  }
+  const extensions = event.extensions;
+  if (typeof extensions !== "object" || extensions === null) return [];
+  const ext = (extensions as Record<string, unknown>)["space.roomy.extension.attachments.v0"];
+  if (typeof ext !== "object" || ext === null || !("attachments" in ext)) return [];
+  const attachments = ext.attachments;
+  if (!Array.isArray(attachments)) return [];
+  return attachments.filter(
+    (a): a is Record<string, unknown> =>
+      typeof a === "object" &&
+      a !== null &&
+      (a as Record<string, unknown>).$type === "space.roomy.attachment.tile.v0",
+  );
+}
+
+/** The decoded markdown body of a sent event. */
+function bodyTextOf(event: unknown): string {
+  if (typeof event !== "object" || event === null || !("body" in event)) {
+    throw new Error("the event carries no body");
+  }
+  const body = event.body;
+  if (typeof body !== "object" || body === null) {
+    throw new Error("the event's body is not an object");
+  }
+  if (!("mimeType" in body) || body.mimeType !== "text/markdown") {
+    throw new Error("the event's body is not markdown");
+  }
+  if (!("data" in body)) {
+    throw new Error("the event's body carries no bytes");
+  }
+  const data = body.data;
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !("$bytes" in data) ||
+    typeof data.$bytes !== "string"
+  ) {
+    throw new Error("the event's body is not base64 bytes");
+  }
+  return Buffer.from(data.$bytes, "base64").toString("utf8");
+}
+
+const MERMAID_TILE = "at://did:plc:jtr6gfjihk5gtgnpczdvw26r/ing.dasl.masl/3myo243jeln2w";
+
+describe("tile directives", () => {
+  test("a directive becomes an attachment and leaves the body", async () => {
+    const { xrpc, sent } = fakeMessages();
+    const body = [
+      "Two architectures, side by side.",
+      "",
+      `tile: ${MERMAID_TILE} payload: { "mermaid": "flowchart TB\\n  A --> B" }`,
+      "",
+      "The second is the fix.",
+    ].join("\n");
+
+    await sendMessage(xrpc, "space:test", "room:test", body);
+
+    const event = sent[0]!.events[0];
+    expect(tilesOf(event)).toEqual([
+      {
+        $type: "space.roomy.attachment.tile.v0",
+        uri: MERMAID_TILE,
+        data: { mermaid: "flowchart TB\n  A --> B" },
+      },
+    ]);
+    // Neither the address nor the payload is repeated in the body.
+    expect(bodyTextOf(event)).toBe(
+      "Two architectures, side by side.\n\n\nThe second is the fix.",
+    );
+  });
+
+  test("a payload written over several lines is read to its closing line", async () => {
+    const { xrpc, sent } = fakeMessages();
+    const body = [
+      `tile: ${MERMAID_TILE} payload: {`,
+      '  "mermaid": "flowchart TB\\n  A --> B"',
+      "}",
+      "after",
+    ].join("\n");
+
+    await sendMessage(xrpc, "space:test", "room:test", body);
+
+    const event = sent[0]!.events[0];
+    expect(tilesOf(event)[0]?.data).toEqual({ mermaid: "flowchart TB\n  A --> B" });
+    expect(bodyTextOf(event)).toBe("after");
+  });
+
+  test("a directive without a payload attaches the tile alone", async () => {
+    const { xrpc, sent } = fakeMessages();
+
+    await sendMessage(xrpc, "space:test", "room:test", `tile: ${MERMAID_TILE}`);
+
+    expect(tilesOf(sent[0]!.events[0])).toEqual([
+      { $type: "space.roomy.attachment.tile.v0", uri: MERMAID_TILE },
+    ]);
+  });
+
+  test("a tile and a reply ride the same message", async () => {
+    const { xrpc, sent } = fakeMessages();
+
+    await sendMessage(xrpc, "space:test", "room:test", `tile: ${MERMAID_TILE}`, {
+      parent: "01MSG",
+    });
+
+    const event = sent[0]!.events[0];
+    expect(replyTargetOf(event)).toBe("01MSG");
+    expect(tilesOf(event)).toHaveLength(1);
+  });
+
+  test("a body that is not a tile address is refused before sending", async () => {
+    const { xrpc, sent } = fakeMessages();
+
+    for (const uri of [
+      "https://example.com/tile",
+      "at://did:web:example.com/ing.dasl.masl/3abc",
+      "at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/space.roomy.tile/3abc",
+    ]) {
+      await expect(
+        sendMessage(xrpc, "space:test", "room:test", `tile: ${uri} payload: {}`),
+      ).rejects.toThrow(/is not a tile address/);
+    }
+    expect(sent).toHaveLength(0);
+  });
+
+  test("a payload over the log's byte cap is refused before sending", async () => {
+    const { xrpc, sent } = fakeMessages();
+    const payload = JSON.stringify({ mermaid: "x".repeat(8192) });
+
+    await expect(
+      sendMessage(xrpc, "space:test", "room:test", `tile: ${MERMAID_TILE} payload: ${payload}`),
+    ).rejects.toThrow(/over the 8192-byte limit/);
+    expect(sent).toHaveLength(0);
+  });
+
+  test("an unparseable payload is refused rather than posted as text", async () => {
+    const { xrpc, sent } = fakeMessages();
+
+    await expect(
+      sendMessage(xrpc, "space:test", "room:test", `tile: ${MERMAID_TILE} payload: { "mermaid": }`),
+    ).rejects.toThrow(/payload is not JSON/);
+    expect(sent).toHaveLength(0);
+  });
+
+  test("a blocks body is not scanned for directives", async () => {
+    const { xrpc, sent } = fakeMessages();
+
+    await sendMessage(xrpc, "space:test", "room:test", `tile: ${MERMAID_TILE}`, {
+      blocks: [{ $type: "space.roomy.richtext.blocks#text", text: "hi" }],
+    });
+
+    expect(tilesOf(sent[0]!.events[0])).toEqual([]);
+  });
+});

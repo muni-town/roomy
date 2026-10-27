@@ -1,4 +1,4 @@
-import { newUlid, toBytes, transport, utf8ByteLength, deserializeBody, blocksToPlaintext } from "@roomy-space/sdk";
+import { newUlid, toBytes, transport, utf8ByteLength, deserializeBody, blocksToPlaintext, MAX_TILE_DATA_BYTES } from "@roomy-space/sdk";
 import type { Block } from "@roomy-space/sdk";
 type DirectXrpcClient = InstanceType<typeof transport.DirectXrpcClient>;
 
@@ -71,9 +71,109 @@ export async function isMessageId(
   }
 }
 
+/**
+ * A Web Tile a message body attaches.
+ *
+ * The wire shape is a `space.roomy.attachment.tile.v0` attachment; a `tile:`
+ * directive is how one is written in text:
+ *
+ *     tile: at://did:plc:…/ing.dasl.masl/<rkey> payload: { "mermaid": "…" }
+ *
+ * `data` is the JSON the tile is handed once it loads, and `payload:` may span
+ * lines. The directive is removed from the body — the attachment is what
+ * renders, so leaving the address in the text would show it twice. Only a
+ * markdown body is scanned: a blocks body is the caller's document, and a
+ * caller that wants a tile there attaches it through `SendOptions.tiles`.
+ */
+export interface TileDirective {
+  /** The tile manifest's AT-URI: `at://<did:plc:…>/ing.dasl.masl/<rkey>`. */
+  uri: string;
+  /** JSON handed to the tile; absent when the directive carried no payload. */
+  data?: unknown;
+}
+
+/**
+ * The directive in a body: `tile:` then the address, then an optional
+ * `payload:` whose JSON runs to the end of the line (and beyond, if the text
+ * that follows is how it closes).
+ */
+const TILE_DIRECTIVE = /^[ \t]*tile:[ \t]*(\S+)[ \t]*(?:payload:[ \t]*([\s\S]*))?$/;
+
+/**
+ * A tile address, mirroring the write schema's `TileUri` so a malformed
+ * directive fails here instead of taking the whole `sendEvents` batch down
+ * with a 400 the caller cannot attribute. The appserver stays the authority.
+ */
+const TILE_ADDRESS = /^at:\/\/did:plc:[a-z2-7]+\/ing\.dasl\.masl\/[A-Za-z0-9._~:-]+$/;
+
+/**
+ * Read `tile:` directives out of a body, leaving the text they were written
+ * in.
+ *
+ * A directive that cannot become an attachment (not a tile address, no JSON
+ * payload, a payload over the log's byte cap) throws rather than being
+ * silently dropped: the caller learns before any event is sent.
+ */
+export function parseTileDirectives(text: string): {
+  text: string;
+  tiles: TileDirective[];
+} {
+  const lines = text.split("\n");
+  const kept: string[] = [];
+  const tiles: TileDirective[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const head = TILE_DIRECTIVE.exec(lines[i] ?? "");
+    if (!head) {
+      kept.push(lines[i] ?? "");
+      continue;
+    }
+    const uri = head[1] ?? "";
+    if (!TILE_ADDRESS.test(uri)) {
+      throw new Error(
+        `tile directive: ${uri} is not a tile address ` +
+          `(at://<did:plc:…>/ing.dasl.masl/<rkey>)`,
+      );
+    }
+    // A payload runs past this line when it is a JSON object or array written
+    // over several lines; the first line at which it parses is its last.
+    let payload = head[2]?.trim() ?? "";
+    if (payload === "") {
+      tiles.push({ uri });
+      continue;
+    }
+    let data: unknown;
+    let end = i;
+    for (;;) {
+      try {
+        data = JSON.parse(payload);
+        break;
+      } catch {
+        end += 1;
+        if (end >= lines.length) {
+          throw new Error(
+            `tile directive for ${uri}: payload is not JSON ` +
+              `(${JSON.stringify(payload.slice(0, 80))}…)`,
+          );
+        }
+        payload += `\n${lines[end] ?? ""}`;
+      }
+    }
+    const bytes = utf8ByteLength(JSON.stringify(data) ?? "");
+    if (bytes > MAX_TILE_DATA_BYTES) {
+      throw new Error(
+        `tile directive for ${uri}: payload is ${bytes} bytes, ` +
+          `over the ${MAX_TILE_DATA_BYTES}-byte limit`,
+      );
+    }
+    tiles.push({ uri, data });
+    i = end;
+  }
+  return { text: kept.join("\n").trim(), tiles };
+}
+
 export interface SendOptions {
-  /** Rich-text blocks body (new format). When set, `text` is ignored and the
-   *  wire body is the blocks+facets document. */
+  /** Rich-text blocks body (new format). When set, the text body is replaced
+   *  by this blocks+facets document. */
   blocks?: Block[];
   /**
    * Message id this message replies to. The reply is attached as a
@@ -81,6 +181,8 @@ export interface SendOptions {
    * Must name a message — `sendMessage` rejects anything else locally.
    */
   parent?: string;
+  /** Web Tiles to attach, in addition to any `tile:` directives in the body. */
+  tiles?: TileDirective[];
 }
 
 /**
@@ -115,6 +217,9 @@ export async function sendMessage(
       );
     }
   }
+  const parsed = opts.blocks
+    ? { text, tiles: [] as TileDirective[] }
+    : parseTileDirectives(text);
   const messageId = newUlid();
   const body = opts.blocks
     ? {
@@ -130,23 +235,35 @@ export async function sendMessage(
       }
     : {
         mimeType: "text/markdown",
-        data: toBytes(new TextEncoder().encode(text)),
+        data: toBytes(new TextEncoder().encode(parsed.text)),
       };
+
+  const attachments: Record<string, unknown>[] = [];
+  if (opts.parent) {
+    attachments.push({
+      $type: "space.roomy.attachment.reply.v0",
+      target: opts.parent,
+    });
+  }
+  for (const tile of [...(opts.tiles ?? []), ...parsed.tiles]) {
+    attachments.push({
+      $type: "space.roomy.attachment.tile.v0",
+      uri: tile.uri,
+      ...(tile.data === undefined ? {} : { data: tile.data }),
+    });
+  }
 
   const event = {
     id: messageId,
     room: roomId,
     $type: "space.roomy.message.createMessage.v0" as const,
     body,
-    extensions: opts.parent
-      ? {
-          "space.roomy.extension.attachments.v0": {
-            attachments: [
-              { $type: "space.roomy.attachment.reply.v0", target: opts.parent },
-            ],
-          },
-        }
-      : {},
+    extensions:
+      attachments.length > 0
+        ? {
+            "space.roomy.extension.attachments.v0": { attachments },
+          }
+        : {},
   };
 
   await xrpc.procedure("space.roomy.space.sendEvents", {

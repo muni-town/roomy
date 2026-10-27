@@ -98,6 +98,20 @@ roomy-cli send --space <space-did> --room <room-id> \
   --mention <did> --mention-label <handle> --text "your message"
 ```
 
+Attach a **Web Tile** by writing its address into the message on a `tile:`
+line. The line becomes a `space.roomy.attachment.tile.v0` attachment and is
+removed from the body; `payload:` is the JSON the tile is handed when it loads
+(at most 8192 bytes, and it may span lines):
+
+```bash
+roomy-cli send --space <space-did> --room <room-id> --text 'Compare:
+
+tile: at://did:plc:…/ing.dasl.masl/<rkey> payload: { "mermaid": "flowchart TB\\n  A --> B" }'
+```
+
+A directive that is not a tile address, or whose payload is not JSON or is over
+the cap, is rejected before anything is sent.
+
 ### `read`
 
 Read recent messages from a room. If `--room` is omitted, reads the space's
