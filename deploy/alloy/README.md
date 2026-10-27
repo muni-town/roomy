@@ -26,8 +26,8 @@ The config is **baked into the image** so no Railway volume is required.
    | `GRAFANA_CLOUD_TEMPO_URL` | OTLP gateway base URL, e.g. `https://otlp-gateway-prod-<region>.grafana.net/otlp` (the exporter appends `/v1/traces`). Optional: unset → the exporter points at a placeholder and spans are dropped after retry; logs/metrics are unaffected. **Set all three Tempo vars or none** — a URL with placeholder credentials just 401s. |
    | `GRAFANA_CLOUD_TEMPO_ID` | Grafana Cloud instance ID (OTLP basic-auth user). Required *with* `_URL`/`_TOKEN` to ship spans. |
    | `GRAFANA_CLOUD_TEMPO_TOKEN` | Grafana Cloud access policy token (OTLP basic-auth pass). |
-   | `APPSERVER_METRICS_URL` | appserver scrape target as **host:port** (no scheme/path). On Railway this must be `<service-name>.railway.internal:8080` — Railway's private DNS uses the `.railway.internal` suffix, so the Dockerfile default `appserver:8080` does **not** resolve there. Short/bare names only work in the dev compose network (where the container is actually named `alloy`/`appserver`). Scheme is http, path is `/metrics`. |
-   | `APPSERVER_STAGING_METRICS_URL` | Same shape, for the **staging** appserver. Optional: unset, the staging scrape component gets no targets at all (`discovery.relabel` drops its placeholder), so nothing is scraped and no `up == 0` series is produced for a deployment that does not exist. |
+   | `APPSERVER_METRICS_URL` | appserver scrape target as **host:port** (no scheme/path). On Railway this must be `<service-name>.railway.internal:8080` — Railway's private DNS uses the `.railway.internal` suffix, so the Dockerfile default `appserver:8080` does **not** resolve there. Short/bare names only work in the dev compose network (where the container is actually named `alloy`/`appserver`). Scheme is http, path is `/metrics`. An empty value drops the target (`discovery.relabel`), so the collector scrapes nothing instead of reporting a dead `up == 0` for a deployment that does not exist. |
+   | `ALLOY_ENV` | This collector's environment — the `env` label on scraped metrics and on browser records. Default `production`; set it to `staging` on the staging collector. Trimmed and lowercased, and an empty or whitespace-only value counts as unset. |
    | `FARO_CORS_ORIGINS` | Comma-separated browser origins allowed to POST Faro telemetry (default `https://roomy.space` — the SPA origin) |
    | `FARO_API_KEY` | Optional Faro API key (default unset) |
 3. **Networking → Private networking** — ensure this service is on the
@@ -46,18 +46,33 @@ The config is **baked into the image** so no Railway volume is required.
 
 ## Environments
 
-Every signal carries `env`: it is a stream label on logs, a field on the JSON
-line, the `deployment.environment.name` resource attribute on traces, and a
-target label on scraped metrics (which makes it a label on every series). The
-value comes from `APP_ENV`, then `RAILWAY_ENVIRONMENT_NAME`, then `unknown`,
-lowercased. It exists so that "which deployment produced this?" is answered by
-the telemetry rather than inferred from a Railway service name: without it,
-two environments posting to the same Loki tenant merge into one stream, and
-the difference is only in the line text — unrecoverable after the fact.
-`build_id` stays out of every label position for the opposite reason: one
-stream (or one series set) per deploy is never reclaimed.
+Every signal carries `env`. **Logs and traces** carry the application's own
+value: a stream label and a field on the JSON line, and the
+`deployment.environment.name` resource attribute on spans. The app derives it
+from `APP_ENV`, then `RAILWAY_ENVIRONMENT_NAME`, then `unknown`.
 
-Staging therefore needs **its own Alloy, in its own Railway project**. The
+**Metrics and browser records** carry the **collector's** environment instead,
+from `ALLOY_ENV` (default `production`): `env` is a target label on the scrape
+(so a label on every series) and a constant stream label on the Faro path.
+Neither signal has an application value to inherit — the collector scrapes a
+host it was pointed at, and the SPA is one build serving several deployments,
+so the collector's identity is the only thing that knows which environment
+produced them. Normalization is the same on both sides (trim; empty or
+whitespace-only counts as unset; lowercase), so `env` is one dimension across
+all four signals.
+
+It exists so that "which deployment produced this?" is answered by the
+telemetry rather than inferred from a Railway service name: without it, two
+environments posting to the same Loki tenant merge into one stream, and the
+difference is only in the line text — unrecoverable after the fact. `build_id`
+stays out of every label position for the opposite reason: one stream (or one
+series set) per deploy is never reclaimed.
+
+Staging therefore needs **its own Alloy, in its own Railway project**, with
+`ALLOY_ENV=staging` and `APPSERVER_METRICS_URL` pointed at the staging
+appserver. The image and the config are shared between the two collectors;
+only those two variables differ, which is what keeps staging metrics from
+being labelled — or a staging target reported — as production. The
 Loki push receiver on port 3100 has no authentication and is reachable only on
 the project's private network, so it is per-project by construction — a
 staging app pointing at production's collector would be both a telemetry merge

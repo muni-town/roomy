@@ -21,14 +21,17 @@
 //                               appserver.railway.internal:8080. Default
 //                               appserver:8080 (set in the Dockerfile ENV;
 //                               override on Railway). Scheme is http, path
-//                               is /metrics.
-//   - APPSERVER_STAGING_METRICS_URL
-//                               the same shape, for the staging appserver.
-//                               Unset (or empty) means the staging scrape
-//                               component has no targets at all — see the
-//                               `prometheus.scrape "appserver_staging"`
-//                               block for why this is gated rather than
-//                               given a coalesce placeholder.
+//                               is /metrics. An empty value leaves the
+//                               collector with nothing to scrape — see the
+//                               `discovery.relabel "appserver"` block.
+//   - ALLOY_ENV                 this collector's environment: the `env`
+//                               label on scraped metrics and on browser
+//                               records. Default `production`; trimmed and
+//                               lowercased, and an empty or whitespace-only
+//                               value counts as unset. Same normalization
+//                               as the app's `env` (see
+//                               packages/appserver/src/telemetry/build.ts)
+//                               so both halves share one dimension.
 //   - ALLOY_LOG_LEVEL           default `info`.
 //
 // Traces → Grafana Cloud Tempo (OTLP/HTTP):
@@ -116,49 +119,39 @@ loki.source.api "apps" {
 // cache hit rate, embed backlog, DB timeouts). Scrape it over the Railway
 // private network and remote-write to Mimir.
 //
-// Two scrape components, one per environment, because a scrape target's
-// labels are fixed for the life of the component: `env` is a target label
-// here (it becomes a metric label on every series the target produces), so
-// production and staging need a component each rather than one list of
-// targets with a shared label.
+// One scrape target, one environment: `env` belongs to the collector, not to
+// the target. A staging collector is the same image and the same config with
+// a different ALLOY_ENV and a different APPSERVER_METRICS_URL, so it cannot
+// publish staging series labelled `production` (or a dead target labelled
+// `production`) — the environment is a property of who is scraping.
 //
 // `build_id` is deliberately absent: one series set per deploy is never
 // reclaimed, and the build identity stays in the log line and the trace
 // resource where it costs no cardinality.
-prometheus.scrape "appserver" {
+//
+// The relabel stage exists to drop an empty address. The Dockerfile sets
+// APPSERVER_METRICS_URL, so this only fires if someone overrides it with
+// ""; a target with no address would otherwise be reported as `up == 0`
+// for a deployment that does not exist, erroring on every scrape interval.
+// The regex is fully anchored, so `^$` matches only the empty address.
+discovery.relabel "appserver" {
 	// __address__ must be host:port only (no scheme or path) — Prometheus
 	// rejects a full URL here. The scheme defaults to http and the path is
 	// set via metrics_path below.
 	targets = [{
 		__address__ = sys.env("APPSERVER_METRICS_URL"),
-		env         = "production",
-	}]
-	metrics_path = "/metrics"
-	forward_to   = [prometheus.remote_write.mimir.receiver]
-}
-
-// Staging is optional. The `coalesce` placeholder convention from the Tempo
-// block applies, but the gating has to be a *drop* rather than an endpoint
-// that merely fails: an unset variable left as a live scrape target would
-// show up in Mimir as `up == 0` for a deployment that does not exist,
-// erroring on every scrape interval. So the placeholder address is dropped
-// by a relabel rule, leaving the scrape component with an empty target list
-// — nothing scraped, nothing reported, and the collector still loads.
-discovery.relabel "appserver_staging" {
-	targets = [{
-		__address__ = coalesce(sys.env("APPSERVER_STAGING_METRICS_URL"), "staging-not-configured"),
-		env         = "staging",
+		env         = coalesce(string.to_lower(string.trim_space(sys.env("ALLOY_ENV"))), "production"),
 	}]
 
 	rule {
 		source_labels = ["__address__"]
-		regex         = "staging-not-configured"
+		regex         = "^$"
 		action        = "drop"
 	}
 }
 
-prometheus.scrape "appserver_staging" {
-	targets      = discovery.relabel.appserver_staging.output
+prometheus.scrape "appserver" {
+	targets      = discovery.relabel.appserver.output
 	metrics_path = "/metrics"
 	forward_to   = [prometheus.remote_write.mimir.receiver]
 }
@@ -206,6 +199,17 @@ otelcol.exporter.loki "apps" {
 //   - FARO_API_KEY        Faro API key, default "" (unset)
 loki.process "frontend" {
 	forward_to = [loki.write.cloud.receiver]
+
+	// Browser records carry no environment of their own — the SPA is built
+	// once and served from several places, and nothing in the agent's payload
+	// identifies the deployment. The collector knows which one it is, so
+	// `env` is stamped here as a constant. Same normalization as the scrape
+	// target above, and as the app's `env`.
+	stage.static_labels {
+		values = {
+			env = coalesce(string.to_lower(string.trim_space(sys.env("ALLOY_ENV"))), "production"),
+		}
+	}
 
 	stage.logfmt {
 		mapping = {"service_name" = "app_name", kind = ""}
