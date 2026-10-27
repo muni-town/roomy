@@ -41,6 +41,51 @@ function validateOrReject(
   return { ok: true, data: result };
 }
 
+/**
+ * Identity of a failed request, filled in from values the router already
+ * holds: the verified caller and the `spaceId` the request named. Both are
+ * public identifiers — nothing else from the auth context, the body, or the
+ * headers is kept. Fields are only ever added, never set to `undefined`, so
+ * the error line of a request that failed before auth carries no identity
+ * keys at all.
+ */
+interface FailureIdentity {
+  did?: string;
+  spaceId?: string;
+}
+
+const DID_PATTERN = /^did:[a-z]+:[A-Za-z0-9._:%-]+$/;
+const MAX_DID_LENGTH = 2048;
+
+/** The `spaceId` a request names, when that value is an identifier. */
+function spaceIdOf(source: unknown): string | undefined {
+  if (typeof source !== "object" || source === null) return undefined;
+  const value = (source as Record<string, unknown>)["spaceId"];
+  return typeof value === "string" &&
+    value.length <= MAX_DID_LENGTH &&
+    DID_PATTERN.test(value)
+    ? value
+    : undefined;
+}
+
+/**
+ * Record who made a request and the space it named, for the error line if the
+ * request fails. Identity is recorded only for an authenticated caller: the
+ * `spaceId` of an anonymous request is text the caller chose and the server
+ * never checked, so it attributes nothing. A DID-shaped `spaceId` is required
+ * for the same reason — an arbitrary string is not a space.
+ */
+function recordIdentity(
+  identity: FailureIdentity,
+  auth: AuthCtx,
+  source: unknown,
+): void {
+  if (auth.did === null) return;
+  identity.did = auth.did;
+  const spaceId = spaceIdOf(source);
+  if (spaceId !== undefined) identity.spaceId = spaceId;
+}
+
 function validateOutputOrThrow(
   schema: import("arktype").Type<any, any>,
   data: unknown,
@@ -181,6 +226,8 @@ export class XrpcRouter {
         }
       }
 
+      const identity: FailureIdentity = {};
+
       try {
         if (route.kind === "query") {
           if (req.method !== "GET") {
@@ -203,6 +250,7 @@ export class XrpcRouter {
             if (!v.ok) return v.response;
             params = v.data;
           }
+          recordIdentity(identity, auth, params);
           // ── Response cache (lookup) ──────────────────────────────────
           // Only consult the cache for the configured cacheable set. Auth
           // has already run (above), so the resolved DID in the key is the
@@ -262,6 +310,7 @@ export class XrpcRouter {
             if (!v.ok) return v.response;
             validatedBody = v.data;
           }
+          recordIdentity(identity, auth, validatedBody);
           const result = await route.handler(
             params,
             auth,
@@ -334,7 +383,11 @@ export class XrpcRouter {
           return undefined;
         }
       } catch (err) {
-        log.error(`[xrpc] ${req.method} ${url.pathname} failed:`, err instanceof Error ? err.message : err);
+        log.error(
+          `[xrpc] ${req.method} ${url.pathname} failed:`,
+          err instanceof Error ? err.message : err,
+          identity,
+        );
         if (err instanceof Error && err.stack) {
           log.error(err.stack);
         }

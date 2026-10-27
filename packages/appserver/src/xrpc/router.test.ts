@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, vi } from "bun:test";
 import { type } from "arktype";
 import { XrpcRouter } from "./router.ts";
+import { XrpcError } from "./errors.ts";
 import type { AuthCtx } from "./types.ts";
 
 const stubAuth = async (_req: Request): Promise<AuthCtx> => ({
@@ -186,5 +187,125 @@ describe("XrpcRouter authenticated-request observer", () => {
     await call(router, "http://x/xrpc/test.query");
 
     expect(seen).toEqual([]);
+  });
+});
+
+describe("XrpcRouter error attribution", () => {
+  /** The `[xrpc]` error record emitted for the last failed request. */
+  function xrpcErrors(spy: {
+    mock: { calls: unknown[][] };
+  }): Record<string, unknown>[] {
+    return spy.mock.calls
+      .map((c) => JSON.parse(c[0] as string) as Record<string, unknown>)
+      .filter((r) => r["scope"] === "xrpc");
+  }
+
+  test("a failure inside a handler logs the caller and the space it named", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const router = build((r) =>
+        r.query("test.query", {
+          handler: async () => {
+            throw new XrpcError(403, "Forbidden", "no read access");
+          },
+        }),
+      );
+
+      const res = await call(
+        router,
+        "http://x/xrpc/test.query?spaceId=did:plc:spaceone",
+      );
+      expect(res.status).toBe(403);
+
+      const [record, ...rest] = xrpcErrors(spy);
+      expect(rest).toHaveLength(0);
+      expect(record).toMatchObject({
+        level: "error",
+        scope: "xrpc",
+        msg: "GET /xrpc/test.query failed: no read access",
+        did: "did:plc:test",
+        spaceId: "did:plc:spaceone",
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("a failure inside a procedure logs the space named in the body", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const Input = type({ spaceId: "string" });
+      const router = build((r) =>
+        r.procedure("test.proc", {
+          inputSchema: Input,
+          handler: async () => {
+            throw new XrpcError(403, "Forbidden", "not a member");
+          },
+        }),
+      );
+
+      await call(router, "http://x/xrpc/test.proc", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ spaceId: "did:plc:spacetwo" }),
+      });
+
+      expect(xrpcErrors(spy)[0]).toMatchObject({
+        did: "did:plc:test",
+        spaceId: "did:plc:spacetwo",
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("a request that fails before auth logs no identity fields", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const router = new XrpcRouter(async () => ({ did: null })).query(
+        "test.query",
+        {
+          handler: async () => {
+            throw new XrpcError(401, "AuthRequired", "Authentication required");
+          },
+        },
+      );
+
+      const res = await call(
+        router,
+        "http://x/xrpc/test.query?spaceId=did:plc:spaceone",
+      );
+      expect(res.status).toBe(401);
+
+      const record = xrpcErrors(spy)[0]!;
+      expect(record["msg"]).toBe(
+        "GET /xrpc/test.query failed: Authentication required",
+      );
+      expect("did" in record).toBe(false);
+      expect("spaceId" in record).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("a spaceId that is not a DID is not logged", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const router = build((r) =>
+        r.query("test.query", {
+          handler: async () => {
+            throw new XrpcError(500, "InternalServerError", "boom");
+          },
+        }),
+      );
+
+      await call(router, "http://x/xrpc/test.query?spaceId=not-a-did");
+
+      const record = xrpcErrors(spy)[0]!;
+      expect(record["did"]).toBe("did:plc:test");
+      expect("spaceId" in record).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
