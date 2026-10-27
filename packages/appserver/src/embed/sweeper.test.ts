@@ -561,8 +561,6 @@ describe("embed sweeper invalidation room resolution", () => {
     await globalDb.run("delete from pending_links where url = ?", [url]);
 
     const realFetch = globalThis.fetch;
-    const realFlag = process.env.EMBED_TILE_RESOLUTION;
-    process.env.EMBED_TILE_RESOLUTION = "on";
     const calls = { og: 0, appview: 0 };
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const target = String(input);
@@ -612,8 +610,6 @@ describe("embed sweeper invalidation room resolution", () => {
       }
     } finally {
       globalThis.fetch = realFetch;
-      if (realFlag === undefined) delete process.env.EMBED_TILE_RESOLUTION;
-      else process.env.EMBED_TILE_RESOLUTION = realFlag;
       _resetEmbedSweeper();
     }
   }, { timeout: 30_000 });

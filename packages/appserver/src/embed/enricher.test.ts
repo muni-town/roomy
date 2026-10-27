@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -481,17 +481,9 @@ function stubFetch(appView: () => Response, ogHtml = "<html></html>") {
 
 describe("tile resolution in the embed store", () => {
   const realFetch = globalThis.fetch;
-  // Resolution is a deployment decision, off unless asked for; these are the
-  // tests of what it does when it IS asked for.
-  const realFlag = process.env.EMBED_TILE_RESOLUTION;
-  beforeEach(() => {
-    process.env.EMBED_TILE_RESOLUTION = "on";
-  });
   afterEach(() => {
     globalThis.fetch = realFetch;
     _resetTileCachesForTest();
-    if (realFlag === undefined) delete process.env.EMBED_TILE_RESOLUTION;
-    else process.env.EMBED_TILE_RESOLUTION = realFlag;
   });
 
   test("filterPendingUrls picks up an enriched URL whose tile was never resolved", async () => {
@@ -599,41 +591,6 @@ describe("tile resolution in the embed store", () => {
     const row = dataRow(db, POST_URL)!;
     expect(row.retry_after).not.toBeNull();
     expect(JSON.parse(row.embed_json!)).toHaveProperty("tile");
-  });
-
-  test("with resolution switched off, a mapped URL takes the pre-tile path", async () => {
-    // The deployment switch: no AppView call, no tile stored, and the row's
-    // tile_version left at 0 so the first read after the switch still queues it.
-    delete process.env.EMBED_TILE_RESOLUTION;
-    const { db, asyncDb } = freshGlobalDb();
-    const calls = stubFetch(
-      () => new Response(appViewBody(), { status: 200 }),
-      '<html><head><meta property="og:title" content="A page" /></head></html>',
-    );
-
-    const outcome = await enrichLinkAcrossSpaces(asyncDb, POST_URL);
-
-    expect(outcome.status).toBe("ok");
-    expect(calls.appview).toBe(0);
-    const stored = JSON.parse(dataRow(db, POST_URL)!.embed_json!) as Embed;
-    expect(stored.tile).toBeUndefined();
-    expect(
-      db
-        .query<{ tile_version: number | null }, [string]>(
-          "select tile_version from link_embeds where url = ?",
-        )
-        .get(POST_URL)!.tile_version ?? 0,
-    ).toBe(0);
-  });
-
-  test("with resolution switched off, an enriched tile URL is not re-queued", async () => {
-    delete process.env.EMBED_TILE_RESOLUTION;
-    const { db: spaceDb, asyncDb } = freshDb();
-    const { asyncDb: globalAsyncDb } = freshGlobalDb();
-    seedLink(spaceDb, POST_URL);
-    await storeEmbedData(globalAsyncDb, POST_URL, { status: "ok", embed: EMBED });
-
-    expect(await filterPendingUrls(asyncDb, globalAsyncDb, [POST_URL])).toEqual([]);
   });
 
   test("a URL no tile mapping claims is untouched by the tile half", async () => {

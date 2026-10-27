@@ -11,7 +11,7 @@
  * index, the sweeper, the store — is the deployed code.
  */
 
-import { afterEach, beforeAll, afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { newUlid } from "@roomy-space/sdk";
 import { openGlobalDb } from "../db/db.ts";
 import {
@@ -38,16 +38,6 @@ const POST_URL = `https://bsky.app/profile/${POST_DID}/post/3ke2e`;
 const POST_URI = `at://${POST_DID}/app.bsky.feed.post/3ke2e`;
 
 const realFetch = globalThis.fetch;
-// Tile resolution is off unless a deployment asks for it; this is the suite of
-// what happens when it does.
-const realFlag = process.env.EMBED_TILE_RESOLUTION;
-beforeAll(() => {
-  process.env.EMBED_TILE_RESOLUTION = "on";
-});
-afterAll(() => {
-  if (realFlag === undefined) delete process.env.EMBED_TILE_RESOLUTION;
-  else process.env.EMBED_TILE_RESOLUTION = realFlag;
-});
 
 /** Route outbound fetches: the AppView answers `getPosts`, the page yields no OG. */
 function stubNetwork(): { og: number; appview: number } {

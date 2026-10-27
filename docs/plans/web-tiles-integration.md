@@ -23,7 +23,9 @@ projection of the post, carried in the link's embed payload. Recognition and
 resolution live in `packages/appserver/src/embed/tiles.ts`, the tile in
 `packages/appserver/tiles/bluesky-post/`, and `link_embeds.tile_version` makes
 the resolution retroactive — a message materialised before it renders richly on
-its next read, with no event rewritten and no backfill pass.
+its next read, with no event rewritten and no backfill pass. The appserver
+resolves every link a tile mapping claims; the per-user `web-tiles-link`
+feature flag is the only switch, and it decides rendering, not resolution.
 **Next:** feature 2, the room-context tile (§6, §11.2 phase 2), then the
 calendar context type (§11.2 phase 3). Milestone B's payload delivery is
 complete in the host→tile direction (an attachment's `data`, and now a link

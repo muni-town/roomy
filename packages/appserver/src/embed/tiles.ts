@@ -53,21 +53,6 @@ export const TILE_MAPPING: Record<string, string> = {
 };
 
 /**
- * Whether the appserver resolves tiles at all.
- *
- * Off unless `EMBED_TILE_RESOLUTION` says otherwise: a tile is a renderer of
- * someone else's record loaded from a third-party loading server, so the
- * outbound work and the stored payloads stay switched off until a deployment
- * decides it wants them. Turning it on is retroactive — rows keep
- * `tile_version = 0` while it is off, so the first read after the switch
- * queues every URL the mapping claims.
- */
-export function tileResolutionEnabled(): boolean {
-  const raw = (process.env.EMBED_TILE_RESOLUTION ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "on" || raw === "true" || raw === "yes";
-}
-
-/**
  * The AppView tile data is read from. Unauthenticated: the payload must never
  * carry a viewer, so no session is used and the response is the same for
  * every reader. Overridable so a test can point it at a stub.

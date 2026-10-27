@@ -28,7 +28,6 @@ import {
   TILE_RESOLVER_VERSION,
   recogniseTileUrl,
   resolveTileForUrl,
-  tileResolutionEnabled,
   type TileResolution,
 } from "./tiles.ts";
 import { canonicalUrl } from "../queries/links.ts";
@@ -174,9 +173,6 @@ export async function filterPendingUrls(
   if (rows.length === 0) return [];
   const held = [...new Set(rows.map((r) => canonicalUrl(r.entity)))];
   const state = await selectLinkEmbedState(globalDb, held);
-  // With resolution switched off a row is the whole story again: the store's
-  // original rule, "never attempted".
-  if (!tileResolutionEnabled()) return held.filter((url) => !state.has(url));
   return held.filter((url) => {
     const known = state.get(url);
     if (!known) return true;
@@ -206,7 +202,6 @@ export async function enqueueStaleTiles(
   globalDb: DbLike,
   entries: ReadonlyArray<{ url: string; spaceDid: string; messageId: string }>,
 ): Promise<string[]> {
-  if (!tileResolutionEnabled()) return [];
   const candidates = entries.filter(
     (e) => recogniseTileUrl(canonicalUrl(e.url)) !== null,
   );
@@ -569,10 +564,9 @@ async function resolveUrl(
   url: string,
   signal?: AbortSignal,
 ): Promise<EnrichOutcome> {
-  // A URL is on the tile path when a mapping claims it AND the deployment has
-  // switched resolution on. Off, this is the pre-tile pipeline exactly: the
-  // OpenGraph half is always owed and no row is consulted.
-  const onTilePath = recogniseTileUrl(url) !== null && tileResolutionEnabled();
+  // A URL is on the tile path when a tile mapping claims it; every URL owes
+  // its OpenGraph half, and only a tile-path URL consults the stored row.
+  const onTilePath = recogniseTileUrl(url) !== null;
   const state = onTilePath ? (await selectLinkEmbedState(db, [url])).get(url) : undefined;
 
   // The OpenGraph half is owed unless the row already holds its result: no row
