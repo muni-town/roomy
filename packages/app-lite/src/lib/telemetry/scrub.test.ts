@@ -75,6 +75,7 @@ describe("scrubTelemetryItem", () => {
       meta: { page: { url: "https://roomy.space/space/did:plc:x" } },
     });
 
+    assert.ok(item, "a log line is not dropped");
     assert.ok(!item.payload.message.includes("https://"));
     assert.ok(item.payload.message.includes("bsky.social"));
     assert.equal(item.payload.level, "warn");
@@ -95,6 +96,7 @@ describe("scrubTelemetryItem", () => {
       meta: { browser: { name: "Chrome" } },
     });
 
+    assert.ok(item, "a real exception is not dropped");
     assert.ok(!item.payload.value.includes("https://"));
     assert.ok(item.payload.value.includes("bsky.social"));
     assert.equal(item.payload.stacktrace.frames[0]!.filename, "bsky.social");
@@ -111,11 +113,57 @@ describe("scrubTelemetryItem", () => {
       payload: { message: "ok", count: 3, flag: false, missing: null, when, err },
     });
 
+    assert.ok(item);
     assert.equal(item.payload.count, 3);
     assert.equal(item.payload.flag, false);
     assert.equal(item.payload.missing, null);
     assert.equal(item.payload.when, when);
     assert.equal(item.payload.err, err);
+  });
+
+  test("drops both ResizeObserver loop warnings", () => {
+    for (const message of [
+      "ResizeObserver loop completed with undelivered notifications.",
+      "ResizeObserver loop limit exceeded",
+    ]) {
+      const item = scrubTelemetryItem({
+        type: "exception",
+        payload: { type: "Error", value: message, timestamp: "2026-10-27T00:00:00.000Z" },
+        meta: {},
+      });
+      assert.equal(item, null, `${message} is dropped`);
+    }
+  });
+
+  test("drops a layout warning carried as the message when value is absent", () => {
+    const item = scrubTelemetryItem({
+      type: "exception",
+      payload: { message: "ResizeObserver loop limit exceeded" },
+    });
+    assert.equal(item, null);
+  });
+
+  test("keeps an exception that only mentions ResizeObserver", () => {
+    const lookalike = "ResizeObserver loop limit exceeded while rendering the thread list";
+    const item = scrubTelemetryItem({
+      type: "exception",
+      payload: { type: "Error", value: lookalike, timestamp: "2026-10-27T00:00:00.000Z" },
+      meta: {},
+    });
+
+    assert.ok(item, "a lookalike is not dropped");
+    assert.equal(item.payload.value, lookalike);
+  });
+
+  test("keeps a log line quoting the warning", () => {
+    const line = "dropped ResizeObserver loop limit exceeded";
+    const item = scrubTelemetryItem({
+      type: "log",
+      payload: { message: line, level: "debug" },
+    });
+
+    assert.ok(item, "a log line is not dropped");
+    assert.equal(item.payload.message, line);
   });
 });
 

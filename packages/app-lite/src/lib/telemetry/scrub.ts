@@ -79,15 +79,52 @@ function scrubValue(value: unknown, seen = new WeakMap<object, unknown>()): unkn
 }
 
 /**
+ * Exception messages browsers raise about their own layout work. Chrome fires
+ * them on `window.onerror` when a `ResizeObserver` callback triggers another
+ * layout pass, which is a warning about the page's own rendering, not a defect
+ * the app can act on; they are the bulk of the exception corpus and would
+ * drown the failures that matter.
+ *
+ * Exact messages, not a pattern over `ResizeObserver`: a real error whose text
+ * merely mentions the API (a callback that threw, say) is a different event.
+ */
+const LAYOUT_WARNING_MESSAGES: Record<string, true> = {
+  "ResizeObserver loop completed with undelivered notifications.": true,
+  "ResizeObserver loop limit exceeded": true,
+};
+
+/**
+ * The text an exception payload carries: its `value`, or the `message` when a
+ * push arrived without one.
+ */
+function exceptionText(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null) return undefined;
+  const value: unknown = Reflect.get(payload, "value");
+  if (typeof value === "string" && value !== "") return value;
+  const message: unknown = Reflect.get(payload, "message");
+  return typeof message === "string" ? message : undefined;
+}
+
+/**
  * Scrub a Faro transport item's payload — log messages, exception values and
  * stack frames, and log context — leaving `meta` (page URL, browser, session)
  * alone, since that is first-party data the dashboards read.
+ *
+ * Returns `null` for a browser layout warning ({@link LAYOUT_WARNING_MESSAGES}),
+ * which drops the item: `beforeSend` treats `null` as "do not send", so the
+ * filter lives at this single transport boundary rather than at a call site.
  *
  * Declared structurally and generically so this module stays free of the
  * telemetry SDK: only string leaves are rewritten, so each field keeps the
  * type it arrived with.
  */
-export function scrubTelemetryItem<T extends { payload: unknown }>(item: T): T {
+export function scrubTelemetryItem<T extends { type: string; payload: unknown }>(
+  item: T,
+): T | null {
+  if (item.type === "exception") {
+    const text = exceptionText(item.payload);
+    if (text !== undefined && Object.hasOwn(LAYOUT_WARNING_MESSAGES, text)) return null;
+  }
   return { ...item, payload: scrubValue(item.payload) as T["payload"] };
 }
 

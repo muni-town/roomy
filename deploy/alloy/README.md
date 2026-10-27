@@ -58,12 +58,16 @@ Alloy forwards OTLP traces to Grafana Cloud Tempo (`otelcol.exporter.otlphttp
   pivot log → trace.
 - **discord-bridge** — not instrumented: it ships logs only (the SDK's
   `src/otel.ts` tracer is a no-op without a registered provider).
-- **app-lite** — the Faro receiver forwards browser traces to Tempo as well,
-  but only once `faro.ts` registers `TracingInstrumentation` (it currently
-  loads just console + error instrumentation).
+- **app-lite** — **instrumented**: the browser agent registers console, error,
+  session, web-vitals (LCP/CLS/INP/FCP/TTFB) and tracing instrumentation, and
+  the Faro receiver forwards the spans to Tempo. Requires `PUBLIC_FARO_URL`
+  **and** the Tempo vars above to be set — with `PUBLIC_FARO_URL` unset the
+  client loads no telemetry SDK at all; with the Tempo vars unset the receiver
+  still accepts the spans and the exporter drops them.
 
 To visualise: in Grafana pick the Tempo (traces) data source and search by
-service `appserver`, or jump straight from any log line's `trace_id`.
+service `appserver` (server spans) or `roomy-app-lite` (browser spans), or jump
+straight from any log line's `trace_id`.
 
 Because Tempo vars are optional, an unconfigured collector still loads and
 keeps shipping logs/metrics; spans retry against `127.0.0.1:1` for up to
@@ -213,8 +217,9 @@ network — no stdout pipes or sidecar forwarders.
 app-lite is a static SPA (no server stdout): set `PUBLIC_FARO_URL` on the
 app-lite service to the collector's Faro endpoint — **the path is required**,
 e.g. `https://<alloy-domain>.up.railway.app/collect`. The Faro browser agent
-POSTs console logs + errors to the `faro.receiver` here. Because app-lite is
-built with `adapter-static`, `PUBLIC_FARO_URL` is **inlined at build time**
+POSTs console logs, errors, web-vitals measurements and spans to the
+`faro.receiver` here. Because app-lite is built with `adapter-static`,
+`PUBLIC_FARO_URL` is **inlined at build time**
 (see `Dockerfile.app-lite`) — changing it requires a rebuild, and it must be
 passed as a build arg/`ARG`, not just a runtime variable. See
 `packages/app-lite/src/lib/telemetry/faro.ts`.

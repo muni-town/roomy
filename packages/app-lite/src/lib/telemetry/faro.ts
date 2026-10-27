@@ -2,16 +2,18 @@
  * Grafana Faro browser telemetry (frontend log collection + session + user).
  *
  * app-lite is a static SPA — there is no server stdout to collect, so
- * client-side logs/errors are shipped via the Faro browser agent to an
+ * client-side logs/errors/spans are shipped via the Faro browser agent to an
  * Alloy `faro.receiver` (production: deploy/alloy/config.alloy, dev:
- * compose.yaml) which forwards to Loki. The agent POSTs to `<url>/collect`;
- * PUBLIC_FARO_URL should include the path (e.g. http://127.0.0.1:12345/collect).
+ * compose.yaml) which forwards logs to Loki and browser spans to Tempo. The
+ * agent POSTs to `<url>/collect`; PUBLIC_FARO_URL should include the path
+ * (e.g. http://127.0.0.1:12345/collect).
  *
  * Initialization is a no-op unless PUBLIC_FARO_URL is set — dev/build
  * default is disabled (zero network, zero errors, SDK never loaded).
  * Browser-only: guards against SSR/prerender via $app/environment.
  *
- * Scope: console.* interception + error instrumentation, plus the session
+ * Scope: console.* interception, error instrumentation, web vitals
+ * (LCP/CLS/INP/FCP/TTFB) and browser tracing, plus the session
  * (`SessionInstrumentation`) that names a visit. Every signal then carries a
  * session id, so signals group per visit and time-in-app is readable as
  * first→last event per id — Faro emits no `session_end`, so the duration is
@@ -55,11 +57,25 @@ export function initFaro(): void {
   if (!browser || initialized || !CONFIG.faroUrl) return;
   initialized = true;
 
-  // Dynamic import keeps @grafana/faro-web-sdk out of the main bundle when
+  // Dynamic imports keep the telemetry SDKs out of the main bundle when
   // telemetry is disabled (the default) — zero payload cost for the 99% of
   // deployments that run without PUBLIC_FARO_URL.
-  void import("@grafana/faro-web-sdk").then(
-    ({ initializeFaro, ConsoleInstrumentation, ErrorsInstrumentation, SessionInstrumentation }) => {
+  void Promise.all([
+    import("@grafana/faro-web-sdk"),
+    // Browser spans (page load, fetches): exported to the collector's
+    // `faro.receiver`, which forwards them to Tempo.
+    import("@grafana/faro-web-tracing"),
+  ]).then(
+    ([
+      {
+        initializeFaro,
+        ConsoleInstrumentation,
+        ErrorsInstrumentation,
+        SessionInstrumentation,
+        WebVitalsInstrumentation,
+      },
+      { TracingInstrumentation },
+    ]) => {
       faroInstance = initializeFaro({
         url: CONFIG.faroUrl!,
         app: {
@@ -90,6 +106,12 @@ export function initFaro(): void {
           // Names the visit: sets the session meta carried by every signal and
           // emits session_start / session_resume.
           new SessionInstrumentation(),
+          // Reports LCP, CLS, INP, FCP and TTFB as measurements, so page speed
+          // is visible per session instead of inferred from log timing.
+          new WebVitalsInstrumentation(),
+          // Emits spans for navigations and fetches, and stamps the trace
+          // context onto logs and errors so they join the same trace.
+          new TracingInstrumentation(),
         ],
       });
       if (pendingUser !== undefined) faroInstance.api.setUser({ id: pendingUser });
