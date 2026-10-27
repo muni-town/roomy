@@ -14,8 +14,10 @@ import { describe, it, expect } from "vitest";
 import { findTileAddresses } from "./at-uri.js";
 import {
   MAX_TILES_PER_MESSAGE,
+  planMessageTiles,
   tileAddressesInBlocks,
   tileAddressesInMarkdown,
+  tileRenderKey,
 } from "./message-tiles.js";
 
 const MINESWEEPER = "at://did:plc:izttpdp3l6vss5crelt5kcux/ing.dasl.masl/3mcjwwoqjqs2v";
@@ -159,5 +161,57 @@ describe("tileAddressesInMarkdown", () => {
 describe("MAX_TILES_PER_MESSAGE", () => {
   it("caps the tiles one message renders", () => {
     expect(MAX_TILES_PER_MESSAGE).toBe(4);
+  });
+});
+
+describe("planMessageTiles", () => {
+  const TILE = "at://did:plc:izttpdp3l6vss5crelt5kcux/ing.dasl.masl/3bluesky";
+  const post = (text: string) => ({ post: { text } });
+
+  it("counts a body address and a link's tile against one cap", () => {
+    const body = ["at://did:plc:a/ing.dasl.masl/1", "at://did:plc:a/ing.dasl.masl/2"];
+    const links = [
+      { url: TILE, data: post("one") },
+      { url: TILE, data: post("two") },
+      { url: TILE, data: post("three") },
+    ];
+
+    const plan = planMessageTiles(body, links);
+
+    // Two from the body, so only two links fit inside the four-tile cap.
+    expect(plan.addresses).toEqual(body);
+    expect(plan.linkTiles.size).toBe(2);
+    expect(plan.linkTiles.has(tileRenderKey(TILE, post("one")))).toBe(true);
+    expect(plan.linkTiles.has(tileRenderKey(TILE, post("three")))).toBe(false);
+  });
+
+  it("keeps two posts rendered by the same tile apart", () => {
+    // One tile record renders many posts: deduping on the address alone would
+    // merge them into a single card.
+    const plan = planMessageTiles([], [
+      { url: TILE, data: post("one") },
+      { url: TILE, data: post("two") },
+    ]);
+    expect(plan.linkTiles.size).toBe(2);
+  });
+
+  it("collapses the same render reached from the body and from a link", () => {
+    const plan = planMessageTiles([TILE], [{ url: TILE }]);
+    expect(plan.addresses).toEqual([TILE]);
+    expect(plan.linkTiles.size).toBe(0);
+  });
+
+  it("renders nothing past the cap", () => {
+    const body = Array.from(
+      { length: MAX_TILES_PER_MESSAGE + 2 },
+      (_, i) => `at://did:plc:a/ing.dasl.masl/${i}`,
+    );
+    const plan = planMessageTiles(body, [{ url: TILE, data: post("one") }]);
+    expect(plan.addresses).toHaveLength(MAX_TILES_PER_MESSAGE);
+    expect(plan.linkTiles.size).toBe(0);
+  });
+
+  it("a message with no tiles plans nothing", () => {
+    expect(planMessageTiles([], [])).toEqual({ addresses: [], linkTiles: new Set() });
   });
 });

@@ -3,6 +3,13 @@
  * metadata via the in-appserver OG + oEmbed pipeline, and caches results in the
  * global `link_embeds` store (see `./store.ts`).
  *
+ * A URL can owe two independent pieces of work — an OpenGraph fetch and a tile
+ * resolution (`./tiles.ts`) — and both land in the same stored embed payload.
+ * They succeed, fail and retry separately: a URL whose origin refuses scrapers
+ * still renders its tile, and a tile that will not resolve never costs the
+ * OpenGraph card. The pair is composed here, once, so the store holds one row
+ * per URL rather than one per source.
+ *
  * Enrichment is best-effort and non-blocking — failures are settled (or
  * scheduled for retry) but never crash the materialization pipeline.
  */
@@ -11,18 +18,26 @@ import type { DbLike } from "../db/types.ts";
 import type { Embed } from "./types.ts";
 import { probeLinkMetadata } from "./metadata.ts";
 import {
-  filterUnevaluatedUrls,
   selectAttempts,
+  selectLinkEmbedState,
   settleLinkEmbeds,
   writeSettledLinkEmbed,
   writeTransientLinkEmbed,
 } from "./store.ts";
+import {
+  TILE_RESOLVER_VERSION,
+  recogniseTileUrl,
+  resolveTileForUrl,
+  tileResolutionEnabled,
+  type TileResolution,
+} from "./tiles.ts";
 import { canonicalUrl } from "../queries/links.ts";
 
 /**
  * In-flight dedup: maps a URL to the enrichment promise currently fetching
- * it. Concurrent `enrichLink(url)` calls share a single network request and
- * a single DB write. The entry is cleared once the promise settles.
+ * it. Concurrent `enrichLinkAcrossSpaces(url)` calls share a single network
+ * request and a single DB write. The entry is cleared once the promise
+ * settles.
  *
  * Without this, each SpaceMaterializer independently re-fetches the same
  * global pending list on every event batch, so one URL produces many
@@ -122,24 +137,27 @@ export async function fetchEmbedData(
 // ─── Database helpers ────────────────────────────────────────────────────
 
 /**
- * Of the given URLs, return those that are still pending enrichment — held by
- * a `comp_embed_link` row in `spaceDb` but with no row yet in the global
- * `link_embeds` store. Returned URLs are the store's keys, so a caller that
- * pokes the sweeper with them cannot fetch one the read paths would miss.
+ * Of the given URLs, return those that still owe enrichment — held by a
+ * `comp_embed_link` row in `spaceDb` and either never attempted, or recognised
+ * as a tile URL whose tile is missing or was resolved by an older resolver.
+ * Returned URLs are the store's keys, so a caller that pokes the sweeper with
+ * them cannot fetch one the read paths would miss.
  *
  * Two queries rather than one join: which links a message contains is
  * log-derived and stays per-space, while the enriched metadata is a function of
  * an outbound fetch and lives in the global DB — separate files, so no single
  * statement can span them. The per-space side narrows the candidates; the store
- * lookup then drops the ones already attempted.
+ * lookup then drops the ones with nothing left to do.
+ *
+ * "Nothing left to do" is not the same as "has a row": a URL enriched before
+ * tiles existed has an OpenGraph row and a tile it has never resolved, which is
+ * exactly the retroactive case — every historical post link in a space becomes
+ * a tile on its next read, with no rewrite and no backfill pass.
  *
  * The two sides are keyed differently: a link attachment's entity id carries
  * Roomy's `?message=<id>` encoding, while the store is keyed by the canonical
  * URL. The per-space query matches the entity id it is given; the store query
  * and the result use {@link canonicalUrl}.
- *
- * Used by the sweeper to prioritise freshly-detected links without re-fetching
- * ones that are already enriched (e.g. a popular URL reposted).
  */
 export async function filterPendingUrls(
   spaceDb: DbLike,
@@ -155,7 +173,62 @@ export async function filterPendingUrls(
     .all<{ entity: string }>([...urls]);
   if (rows.length === 0) return [];
   const held = [...new Set(rows.map((r) => canonicalUrl(r.entity)))];
-  return filterUnevaluatedUrls(globalDb, held);
+  const state = await selectLinkEmbedState(globalDb, held);
+  // With resolution switched off a row is the whole story again: the store's
+  // original rule, "never attempted".
+  if (!tileResolutionEnabled()) return held.filter((url) => !state.has(url));
+  return held.filter((url) => {
+    const known = state.get(url);
+    if (!known) return true;
+    return (
+      recogniseTileUrl(url) !== null &&
+      known.tileVersion < TILE_RESOLVER_VERSION
+    );
+  });
+}
+
+/**
+ * Queue the tile half of the URLs a read has just served.
+ *
+ * Demand-driven rather than a backfill: a message that links a Bluesky post
+ * resolves its tile on the next sweep after someone reads it, so an old
+ * message needs no rewrite, no migration and no deploy-time pass over the log.
+ * The row is `insert or ignore`d into the same global `pending_links` index the
+ * write path uses, so a page of 50 messages linking one post asks once and the
+ * sweeper's existing retry schedule bounds the work.
+ *
+ * Only URLs a tile mapping claims and whose row has no tile at the current
+ * resolver version are queued; everything else is a no-op, which is what makes
+ * this safe to call on every read. Returns the URLs queued, for the caller to
+ * poke the sweeper with.
+ */
+export async function enqueueStaleTiles(
+  globalDb: DbLike,
+  entries: ReadonlyArray<{ url: string; spaceDid: string; messageId: string }>,
+): Promise<string[]> {
+  if (!tileResolutionEnabled()) return [];
+  const candidates = entries.filter(
+    (e) => recogniseTileUrl(canonicalUrl(e.url)) !== null,
+  );
+  if (candidates.length === 0) return [];
+
+  const state = await selectLinkEmbedState(
+    globalDb,
+    candidates.map((e) => canonicalUrl(e.url)),
+  );
+  const queued = new Set<string>();
+  for (const entry of candidates) {
+    const url = canonicalUrl(entry.url);
+    const known = state.get(url);
+    if (known && known.tileVersion >= TILE_RESOLVER_VERSION) continue;
+    await globalDb.run(
+      `insert or ignore into pending_links (space_did, message_id, url, created_at)
+       values (?, ?, ?, ?)`,
+      [entry.spaceDid, entry.messageId, url, Date.now()],
+    );
+    queued.add(url);
+  }
+  return [...queued];
 }
 
 /**
@@ -277,25 +350,46 @@ export function maxTransientAttempts(): number {
 }
 
 /**
+ * The parts of a row a caller composes itself, when more than the OpenGraph
+ * fetch contributed to it.
+ */
+export interface EmbedComposition {
+  /**
+   * The payload to store. Defaults to the fetched embed on success and to null
+   * otherwise — what a caller that only ever fetched OpenGraph data means.
+   */
+  embedJson?: string | null;
+  /**
+   * The tile resolver version to stamp, or 0 for a row with no tile work.
+   * A version below `TILE_RESOLVER_VERSION` reopens the row's tile half.
+   */
+  tileVersion?: number;
+}
+
+/**
  * Persist the outcome of an embed fetch, including retry scheduling for
  * transient failures.
  *
  * - `ok` / `definitive`: write the embed (or null) and clear retry state —
  *   the URL is settled and leaves the pending set.
- * - `transient`: write a null embed, bump `attempts`, and set `retry_after`
- *   to now + exponential backoff so the sweeper re-queues it later rather
- *   than abandoning it (or hammering the service immediately).
+ * - `transient`: write the composed embed, bump `attempts`, and set
+ *   `retry_after` to now + exponential backoff so the sweeper re-queues it
+ *   later rather than abandoning it (or hammering the service immediately).
  *
  * A transient failure that reaches {@link maxTransientAttempts} is the
  * exception to the last rule: the URL is settled here exactly like a
- * definitive failure (null embed, retry state cleared) so it leaves the
- * pending set, and `true` is returned so the caller can report it as an
- * abandoned host rather than a no-data page. Retrying such a URL again is
- * what a permanently-dead host would otherwise do forever.
+ * definitive failure (retry state cleared) so it leaves the pending set, and
+ * `true` is returned so the caller can report it as an abandoned host rather
+ * than a no-data page. Retrying such a URL again is what a permanently-dead
+ * host would otherwise do forever.
+ *
+ * The attempt count is shared by both halves of a row: a tile that will not
+ * resolve spends the same budget as an origin that will not answer, because
+ * from the row's point of view both are "this URL is not finishing".
  *
  * Uses UPSERT (`on conflict do update`) so `created_at` is preserved across
  * re-fetches. The transient path reads the existing attempt count first
- * (safe: `enrichLink` dedups per-URL so there is no concurrent writer).
+ * (safe: the enrichment dedups per URL so there is no concurrent writer).
  *
  * Returns whether the row was settled by the attempt ceiling.
  */
@@ -303,25 +397,36 @@ export async function storeEmbedData(
   db: DbLike,
   url: string,
   result: FetchResult,
+  composition: EmbedComposition = {},
 ): Promise<boolean> {
+  const embedJson =
+    composition.embedJson !== undefined
+      ? composition.embedJson
+      : result.status === "ok"
+        ? JSON.stringify(result.embed)
+        : null;
+  const tileVersion = composition.tileVersion ?? 0;
+
   if (result.status === "transient") {
     const attempts = (await selectAttempts(db, url)) + 1;
     if (attempts >= maxTransientAttempts()) {
       // The ceiling: settle it like a definitive failure. `attempts` is kept
       // (rather than reset) so the row records how many tries the host got.
-      await writeSettledLinkEmbed(db, url, null, attempts);
+      await writeSettledLinkEmbed(db, url, embedJson, attempts, tileVersion);
       return true;
     }
-    await writeTransientLinkEmbed(db, url, attempts, Date.now() + backoffMs(attempts));
+    await writeTransientLinkEmbed(
+      db,
+      url,
+      embedJson,
+      attempts,
+      Date.now() + backoffMs(attempts),
+      tileVersion,
+    );
     return false;
   }
   // Success or definitive failure — settled, no retry.
-  await writeSettledLinkEmbed(
-    db,
-    url,
-    result.status === "ok" ? JSON.stringify(result.embed) : null,
-    0,
-  );
+  await writeSettledLinkEmbed(db, url, embedJson, 0, tileVersion);
   return false;
 }
 
@@ -361,82 +466,83 @@ export async function settleOverCeiling(
 }
 
 /**
- * Enrich a single URL: fetch embed data and store it in the global
- * `link_embeds` store.
+ * What one URL's enrichment produced.
  *
- * Deduplicated via `inFlightLinks` — concurrent calls for the same URL
- * share one fetch + one write.
+ * Two independent halves produce it, so the statuses say what the ROW is worth
+ * as well as what happened:
  *
- * Returns the embed that was stored — non-null on success, `null` on a
- * non-DB failure (the fetch returned a definitive/transient `FetchResult`;
- * fetch-layer network errors are handled inside `fetchEmbedData` and never
- * reach here). A DB write failure (e.g. `storeEmbedData` throwing
- * `SQLITE_IOERR_VNODE`) is RE-THROWN so the sweeper can detect a failing DB
- * and back off rather than fetch a batch of links only to fail every write.
- * The sweeper is the sole caller and catches this; any other caller must
- * catch too. Callers can use the non-null return to decide whether to push an
- * invalidation: only successes carry new data worth streaming to clients,
- * so skipping failed (null) results avoids spamming no-op diffs while the
- * backfill backlog drains.
+ *   - `ok`: the row is settled and has something to render.
+ *   - `definitive`: settled, nothing to render (the origin has no metadata and
+ *     no tile claims the URL, or the AppView says the record is gone).
+ *   - `abandoned`: settled by the attempt ceiling — the host has used every
+ *     retry the schedule allows.
+ *   - `transient`: not settled, nothing new; the caller keeps the row pending
+ *     and retries after a backoff.
+ *   - `partial`: not settled, but new data was stored (one half resolved while
+ *     the other is still owed a retry). The caller should announce the data and
+ *     still keep the row pending.
+ *   - `noop`: neither half owed anything — the row was already settled when it
+ *     was selected. The caller drops the pending entry.
  */
-export async function enrichLink(
-  db: DbLike,
-  url: string,
-  signal?: AbortSignal,
-): Promise<EnrichOutcome> {
-  const existing = inFlightLinks.get(url);
-  if (existing) return existing;
+export type EnrichOutcome =
+  | { status: "ok"; embed: Embed }
+  | { status: "partial"; embed: Embed }
+  | { status: "definitive"; embed: null }
+  | { status: "abandoned"; embed: null }
+  | { status: "transient"; embed: null }
+  | { status: "noop"; embed: null };
 
-  const promise = (async () => {
-    try {
-      const result = await fetchEmbedData(url, signal);
-      const abandoned = await storeEmbedData(db, url, result);
-      if (result.status === "ok") return { status: "ok" as const, embed: result.embed };
-      // A transient failure that hit the attempt ceiling is settled for good;
-      // report it as abandoned so the caller doesn't keep the link pending.
-      if (abandoned) return { status: "abandoned" as const, embed: null };
-      return { status: result.status, embed: null };
-    } catch (err) {
-      // fetchEmbedData handles its own network errors (returns a
-      // FetchResult), so a throw here is a DB write failure (e.g.
-      // SQLITE_IOERR_VNODE under I/O pressure). Rethrow so the sweeper can
-      // back off a failing DB rather than hammer it. The `finally` clears the
-      // in-flight entry so a later retry actually re-fetches.
-      throw err;
-    } finally {
-      inFlightLinks.delete(url);
-    }
-  })();
+/** The stored payload of a row, or null when it has none or is unparseable. */
+function parseStoredEmbed(embedJson: string | null): Embed | null {
+  if (!embedJson) return null;
+  try {
+    const parsed = JSON.parse(embedJson) as unknown;
+    return typeof parsed === "object" && parsed !== null ? (parsed as Embed) : null;
+  } catch {
+    return null;
+  }
+}
 
-  inFlightLinks.set(url, promise);
-  return promise;
+/**
+ * Whether a stored payload says anything a card can draw.
+ *
+ * A row can hold an envelope with neither OpenGraph fields nor a tile — the
+ * shape left behind when a tile for a deleted record is retracted. Storing that
+ * would render an empty card, so it is written as no data instead.
+ */
+function hasCardData(embed: Embed | null): boolean {
+  if (!embed) return false;
+  return Boolean(
+    embed.tile ||
+      embed.t ||
+      embed.d ||
+      embed.p ||
+      embed.au ||
+      embed.footer ||
+      embed.imgs?.length ||
+      embed.vid ||
+      embed.thumb,
+  );
 }
 
 /**
  * Enrich a single URL into the global store, where every space that shared it
  * reads the result.
  *
- * A URL is pending in one row per (space, message) in `pending_links`, so the
- * sweeper selects the same URL several times in a batch; the
- * {@link inFlightLinks} dedup means the fetch happens once and the single
- * global write settles it for all of them.
+ * Resolves the two halves the row can owe — the OpenGraph fetch and, for a URL
+ * a tile mapping claims, the tile — and writes what they produced as one
+ * payload. Which halves are owed comes from the row itself: a settled row owes
+ * only a stale tile, which is what makes resolution retroactive without
+ * re-fetching every page a space has ever linked.
  *
- * Returns the fetch outcome — `{ status, embed }` where `status` is
- * `"ok"` (embed stored), `"definitive"` (settled: no data / stable 4xx — the
- * caller should drop the link from the pending set), `"transient"`
- * (timeout / 5xx / 429 / network — the caller should keep it pending and
- * retry later), or `"abandoned"` (transient failures hit the attempt ceiling,
- * so the link is settled for good and the caller should drop it too).
- * `embed` is non-null only on `"ok"`. A DB write failure (e.g.
- * `storeEmbedData` throwing) is RE-THROWN so the sweeper can detect a failing
- * DB and back off.
+ * A URL is pending in one `pending_links` row per (space, message), so the
+ * sweeper selects the same URL several times in a batch; the in-flight dedup
+ * means the fetches happen once and the single global write settles it for all
+ * of them.
+ *
+ * A DB write failure (e.g. `storeEmbedData` throwing) is RE-THROWN so the
+ * sweeper can detect a failing DB and back off.
  */
-export type EnrichOutcome =
-  | { status: "ok"; embed: Embed }
-  | { status: "definitive"; embed: null }
-  | { status: "abandoned"; embed: null }
-  | { status: "transient"; embed: null };
-
 export async function enrichLinkAcrossSpaces(
   globalDb: DbLike,
   url: string,
@@ -447,11 +553,7 @@ export async function enrichLinkAcrossSpaces(
 
   const promise = (async () => {
     try {
-      const result = await fetchEmbedData(url, signal);
-      const abandoned = await storeEmbedData(globalDb, url, result);
-      if (result.status === "ok") return { status: "ok" as const, embed: result.embed };
-      if (abandoned) return { status: "abandoned" as const, embed: null };
-      return { status: result.status, embed: null };
+      return await resolveUrl(globalDb, url, signal);
     } finally {
       inFlightLinks.delete(url);
     }
@@ -461,6 +563,92 @@ export async function enrichLinkAcrossSpaces(
   return promise;
 }
 
+/** The body of one URL's enrichment. See {@link enrichLinkAcrossSpaces}. */
+async function resolveUrl(
+  db: DbLike,
+  url: string,
+  signal?: AbortSignal,
+): Promise<EnrichOutcome> {
+  // A URL is on the tile path when a mapping claims it AND the deployment has
+  // switched resolution on. Off, this is the pre-tile pipeline exactly: the
+  // OpenGraph half is always owed and no row is consulted.
+  const onTilePath = recogniseTileUrl(url) !== null && tileResolutionEnabled();
+  const state = onTilePath ? (await selectLinkEmbedState(db, [url])).get(url) : undefined;
+
+  // The OpenGraph half is owed unless the row already holds its result: no row
+  // at all (never attempted), a row with a retry window (an unpaid transient
+  // failure), or a row that settled with no payload — a URL the page yielded
+  // nothing for, which the pending index can still ask about again. A row that
+  // settled WITH data owes only a stale tile.
+  //
+  // Off the tile path there is no row in hand, which lands on "owed": a URL
+  // the sweeper selected owes its OpenGraph fetch, exactly as before tiles.
+  const ogOwed =
+    state === undefined || state.embedJson === null || state.retryAfter !== null;
+  const tileOwed =
+    onTilePath && (state?.tileVersion ?? 0) < TILE_RESOLVER_VERSION;
+  if (!ogOwed && !tileOwed) return { status: "noop", embed: null };
+
+  let embed = parseStoredEmbed(state?.embedJson ?? null);
+  let tileVersion = state?.tileVersion ?? 0;
+
+  const [og, tile] = await Promise.all([
+    ogOwed ? fetchEmbedData(url, signal) : Promise.resolve(null),
+    tileOwed ? resolveTileForUrl(url, signal) : Promise.resolve(null),
+  ]);
+
+  if (og?.status === "ok") {
+    // The fetched payload replaces the stored OpenGraph fields; the tile is the
+    // other half's and survives.
+    embed = { ...og.embed, ...(embed?.tile ? { tile: embed.tile } : {}) } as Embed;
+  }
+
+  if (tile?.status === "ok") {
+    embed = {
+      ...(embed ?? { v: "1", ts: new Date().toISOString(), ty: "link" }),
+      tile: tile.tile,
+    } as Embed;
+    tileVersion = TILE_RESOLVER_VERSION;
+  } else if (tile?.status === "definitive") {
+    // The record is gone: no attempt can bring it back, so the row is stamped
+    // and any tile it still holds is retracted rather than left stale.
+    tileVersion = TILE_RESOLVER_VERSION;
+    if (embed?.tile) {
+      const { tile: _dropped, ...rest } = embed;
+      embed = rest as Embed;
+    }
+  }
+
+  if (!hasCardData(embed)) embed = null;
+  const embedJson = embed ? JSON.stringify(embed) : null;
+
+  const ogSettled = og === null || og.status !== "transient";
+  const tileSettled = tile === null || (tile as TileResolution).status !== "transient";
+  const produced = og?.status === "ok" || tile?.status === "ok";
+
+  if (!ogSettled || !tileSettled) {
+    const settledByCeiling = await storeEmbedData(
+      db,
+      url,
+      { status: "transient" },
+      { embedJson, tileVersion },
+    );
+    if (!settledByCeiling) {
+      return produced && embed
+        ? { status: "partial", embed }
+        : { status: "transient", embed: null };
+    }
+    // The ceiling settled the row: fall through to the settled answer, so the
+    // data it holds is still announced.
+    return embed
+      ? { status: "ok", embed }
+      : { status: "abandoned", embed: null };
+  }
+
+  await writeSettledLinkEmbed(db, url, embedJson, 0, tileVersion);
+  return embed ? { status: "ok", embed } : { status: "definitive", embed: null };
+}
+
 // Bulk pending-link enrichment is owned by the centralized sweeper
 // (see `embed/sweeper.ts`). There is intentionally no per-call
 // `enrichPendingLinks` here — it was the root cause of the over-fetching bug
@@ -468,8 +656,8 @@ export async function enrichLinkAcrossSpaces(
 
 /**
  * Number of enrichments currently in flight (one shared fetch per URL via
- * {@link enrichLink}'s dedup). Exposed for the `/health/embed` endpoint so
- * operators can see sweep pressure without scraping logs.
+ * {@link enrichLinkAcrossSpaces}'s dedup). Exposed for the `/health/embed`
+ * endpoint so operators can see sweep pressure without scraping logs.
  */
 export function inFlightCount(): number {
   return inFlightLinks.size;

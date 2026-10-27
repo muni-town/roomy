@@ -55,6 +55,11 @@ export const FEATURE_FLAGS: readonly FeatureFlagDef[] = [
       "Per-user blocking: the Block action on a profile, behind enforcement on the read path",
   },
   {
+    key: "web-tiles-link",
+    description:
+      "Link-resolved Web Tiles: a Bluesky post link renders the post through a sandboxed tile instead of its OpenGraph card",
+  },
+  {
     key: "voice-chat",
     description:
       "Voice rooms: the sidebar's call list and the room's call panel",

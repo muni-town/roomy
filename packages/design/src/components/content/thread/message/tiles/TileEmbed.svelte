@@ -29,6 +29,7 @@
     classifyTileError,
     TILE_ACTIVITY_EVENT,
     type TileActivityDetail,
+    type TileErrorReason,
     type TileSurface,
   } from "./tile-activity.js";
 
@@ -45,9 +46,15 @@
      * is passed in and travels with each activity announcement.
      */
     surface?: TileSurface;
+    /**
+     * Called when the tile could not be loaded. A host that has something else
+     * to show for the same content — a link's OpenGraph card, say — uses this
+     * to fall back rather than leave an error where a card belongs.
+     */
+    onerror?: (reason: TileErrorReason) => void;
   };
 
-  let { uri, data, surface = "chat" }: Props = $props();
+  let { uri, data, surface = "chat", onerror }: Props = $props();
 
   let container: HTMLDivElement | undefined = $state();
   let box: HTMLDivElement | undefined = $state();
@@ -265,6 +272,7 @@
           error =
             "No loader matched that address, or its manifest could not be read from its PDS.";
           announce({ phase: "error", uri, surface, reason: "manifest" });
+          onerror?.("manifest");
           return;
         }
         if (data === undefined) {
@@ -296,7 +304,9 @@
       } catch (err) {
         if (cancelled) return;
         error = err instanceof Error ? err.message : String(err);
-        announce({ phase: "error", uri, surface, reason: classifyTileError(err) });
+        const reason = classifyTileError(err);
+        announce({ phase: "error", uri, surface, reason });
+        onerror?.(reason);
       }
     })();
     return () => {

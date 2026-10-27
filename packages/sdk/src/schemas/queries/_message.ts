@@ -80,6 +80,26 @@ const Schemas = scope({
     "imgs?": "EmbedMedia[]",
     "vid?": "EmbedMedia",
     "thumb?": "EmbedMedia",
+    /**
+     * The Web Tile that renders this URL's content, resolved appserver-side
+     * from the record the URL addresses. Present only for a URL a tile
+     * mapping claims; the OpenGraph fields above may be absent when the
+     * origin serves nothing to a scraper, and the tile is all the card has.
+     */
+    "tile?": "LinkEmbedTile",
+  },
+
+  /**
+   * A tile reference inside a link embed: the record to render, and the JSON
+   * it is handed on load.
+   *
+   * `url` is the tile's bare AT-URI (`at://…/ing.dasl.masl/<rkey>`); `data` is
+   * the entry shape `AttachmentTile` carries minus its `$type`, so one tile
+   * renderer serves both a link-resolved and an attached tile.
+   */
+  LinkEmbedTile: {
+    url: "string",
+    "data?": "unknown",
   },
 
   /** Minimal media reference within an embed (image, video, thumbnail). */
@@ -274,6 +294,7 @@ export const Reaction = Schemas.Reaction;
 export const Media = Schemas.Media;
 export const ForwardedFrom = Schemas.ForwardedFrom;
 export const LinkEmbedData = Schemas.LinkEmbedData;
+export const LinkEmbedTile = Schemas.LinkEmbedTile;
 export const LinkEmbed = Schemas.LinkEmbed;
 export const AttachmentReply = Schemas.AttachmentReply;
 export const AttachmentForward = Schemas.AttachmentForward;

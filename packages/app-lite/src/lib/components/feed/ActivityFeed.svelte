@@ -10,6 +10,7 @@
   import MediaEmbed from "@roomy/design/components/content/thread/message/embeds/MediaEmbed.svelte";
   import { linkItems, mediaItems, tileItems } from "../chat/attachment-views";
   import LinkCard from "@roomy/design/components/content/thread/message/embeds/LinkCard.svelte";
+  import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import TileEmbed from "@roomy/design/components/content/thread/message/tiles/TileEmbed.svelte";
   import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
   import MessageReactions from "../chat/MessageReactions.svelte";
@@ -28,6 +29,15 @@
   let { spaceId, showSpaceInfo = true, limit = 20 }: { spaceId?: string; showSpaceInfo?: boolean; limit?: number } = $props();
 
   const feedQuery = createActivityFeedQuery(() => ({ spaceId, limit }));
+
+  /**
+   * Whether this reader is shown a tile resolved from a link. Off, a post link
+   * keeps its OpenGraph card.
+   */
+  const flagsQuery = createFeatureFlagsQuery();
+  const linkTiles = $derived(
+    flagsQuery.data?.flags.includes("web-tiles-link") ?? false,
+  );
 
   // The viewer's own written blocks. The server drops a hidden author's
   // message from the feed, but `staleTime: Infinity` keeps a row fetched
@@ -247,7 +257,7 @@
                 {#if last.attachments && linkItems(last.attachments).length > 0}
                   <div class="flex flex-col gap-2 mt-1">
                     {#each linkItems(last.attachments) as link (link.url)}
-                      <LinkCard url={link.url} embed={link.embed} />
+                      <LinkCard url={link.url} embed={link.embed} tile={linkTiles} />
                     {/each}
                   </div>
                 {/if}

@@ -96,8 +96,10 @@ export const getMessageHandler: QueryHandler<QueryParams, MessageDto> = async (
   }
 
   // Read-driven embed prioritisation (see getMessages): jump this message's
-  // never-attempted links ahead of the backfill backlog for the viewer.
-  await prioritiseLinksForRead(db, [message]);
+  // unresolved links ahead of the backfill backlog for the viewer, and queue
+  // the tile half of any link whose tile was never resolved.
+  const spaceDid = await resolveSpaceForEntity(message.id);
+  if (spaceDid) await prioritiseLinksForRead(db, [message], spaceDid);
 
   return message;
 };

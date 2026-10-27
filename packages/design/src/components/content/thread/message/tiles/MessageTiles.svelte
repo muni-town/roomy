@@ -17,12 +17,10 @@
   tile (see `./message-tiles.ts`).
 -->
 <script lang="ts">
-  import { RICHTEXT_MIME } from "@roomy-space/sdk";
   import { parseRichTextContent } from "../../../../../utils/message-body.js";
   import {
     MAX_TILES_PER_MESSAGE,
-    tileAddressesInBlocks,
-    tileAddressesInMarkdown,
+    tileAddressesInBody,
   } from "./message-tiles.js";
   import TileEmbed from "./TileEmbed.svelte";
   import type { TileSurface } from "./tile-activity.js";
@@ -31,6 +29,7 @@
     content,
     mimeType,
     surface = "chat",
+    addresses: planned,
   }: {
     /** Message content to scan. Markdown for legacy messages, base64-encoded
      *  richtext JSON for `application/vnd.roomy.richtext+json` messages. */
@@ -39,17 +38,22 @@
     mimeType?: string;
     /** The surface rendering the message, handed to each tile it resolves. */
     surface?: TileSurface;
+    /**
+     * The addresses to render, when the caller has already decided — a message
+     * whose links resolve to tiles shares one cap between both sources, so the
+     * plan is made where both are in hand (`planMessageTiles`).
+     */
+    addresses?: readonly string[];
   } = $props();
-  const addresses = $derived(
-    mimeType === RICHTEXT_MIME
-      ? tileAddressesInBlocks(parseRichTextContent(content) ?? [])
-      : tileAddressesInMarkdown(content),
+  const scanned = $derived(
+    tileAddressesInBody(content, mimeType, parseRichTextContent),
   );
+  const addresses = $derived(planned ?? scanned.slice(0, MAX_TILES_PER_MESSAGE));
 </script>
 
 {#if addresses.length > 0}
   <div class="flex flex-col">
-    {#each addresses.slice(0, MAX_TILES_PER_MESSAGE) as uri (uri)}
+    {#each addresses as uri (uri)}
       <TileEmbed {uri} {surface} />
     {/each}
   </div>

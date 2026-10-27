@@ -7,6 +7,7 @@
     type SearchScope,
   } from "$lib/queries/search";
   import { createSearchRoomsQuery } from "$lib/queries/search-rooms";
+  import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { resolveBlobUrl } from "@roomy/design/utils";
   import { searchTerm } from "$lib/components/layout/search-term.svelte";
   import ErrorMessage from "@roomy/design/components/helper/ErrorMessage.svelte";
@@ -69,6 +70,15 @@
   // keeps `term` in sync with both.
   let term = $state(query);
   let lastSyncedQuery = $state(query);
+
+  /**
+   * Whether this reader is shown a tile resolved from a link. Off, a post link
+   * keeps its OpenGraph card.
+   */
+  const flagsQuery = createFeatureFlagsQuery();
+  const linkTiles = $derived(
+    flagsQuery.data?.flags.includes("web-tiles-link") ?? false,
+  );
 
   // External ?q= changes (navbar search submit) resync immediately — no
   // debounce, so the new term fires without a stale-results pause.
@@ -464,7 +474,7 @@
                       {#if embeds.some((l) => l.embed)}
                         <div class="flex flex-col gap-2 mt-1">
                           {#each embeds.filter((l) => l.embed) as link (link.url)}
-                            <LinkCard url={link.url} embed={link.embed} />
+                            <LinkCard url={link.url} embed={link.embed} tile={linkTiles} />
                           {/each}
                         </div>
                       {/if}

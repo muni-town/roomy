@@ -1,0 +1,11 @@
+{
+  "name": "Bluesky post",
+  "description": "A Bluesky post, drawn from the record the link points to.",
+  "categories": ["social"],
+  "theme_color": "#1d9bf0",
+  "sizing": { "width": 480, "height": 260 },
+  "resources": {
+    "/": { "file": "index.html", "content-type": "text/html; charset=utf-8" },
+    "/tile.js": { "file": "tile.js", "content-type": "text/javascript; charset=utf-8" }
+  }
+}

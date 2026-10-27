@@ -5,7 +5,11 @@
  * older than the cursor are returned.
  */
 
-import { openSpaceDbForEntity, tryOpenGlobalDb } from "../db/db.ts";
+import {
+  openSpaceDbForEntity,
+  resolveSpaceForEntity,
+  tryOpenGlobalDb,
+} from "../db/db.ts";
 import { prioritiseLinksForRead } from "../embed/sweeper.ts";
 import { selectMessages, type MessageDto } from "../queries/selectMessages.ts";
 import { parseUserDid, requireRoomRead } from "../xrpc/authGuards.ts";
@@ -76,9 +80,10 @@ export const getMessagesHandler: QueryHandler<
       // hours when dominated by erroring/timing-out links). Already-enriched
       // links are a no-op and transient-failed links keep their backoff (see
       // prioritiseLinksForRead).
-      await withSpan("getMessages.prioritiseLinks", {}, () =>
-        prioritiseLinksForRead(db, messages),
-      );
+      await withSpan("getMessages.prioritiseLinks", {}, async () => {
+        const spaceDid = await resolveSpaceForEntity(roomId);
+        if (spaceDid) await prioritiseLinksForRead(db, messages, spaceDid);
+      });
 
       span.setAttribute("roomy.has_cursor", nextCursor != null);
       return stripNulls({ messages, cursor: nextCursor }) as GetMessagesResult;

@@ -78,6 +78,20 @@
         }
       }
     },
+    "tile": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "data": {
+          "type": "unknown"
+        }
+      }
+    },
     "vid": {
       "type": "object",
       "required": [
@@ -147,6 +161,10 @@
             "thumb": {
               "type": "ref",
               "ref": "#thumb"
+            },
+            "tile": {
+              "type": "ref",
+              "ref": "#tile"
             },
             "vid": {
               "type": "ref",

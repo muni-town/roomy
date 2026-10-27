@@ -12,6 +12,7 @@
     mimeType,
     tiles = true,
     surface = "chat",
+    tileAddresses,
   }: {
     /** Message content to render. Markdown for legacy messages, base64-encoded
      *  richtext JSON for `application/vnd.roomy.richtext+json` messages. */
@@ -28,6 +29,12 @@
     tiles?: boolean;
     /** The surface rendering the message, handed down to the tiles in it. */
     surface?: TileSurface;
+    /**
+     * The body's tile addresses, when the caller has planned them against the
+     * tiles its links resolve to (`planMessageTiles`). Absent, the body is
+     * scanned and capped on its own.
+     */
+    tileAddresses?: readonly string[];
   } = $props();
 
   // New format: content is base64-encoded JSON of the blocks document
@@ -52,7 +59,7 @@
      Inside `.prose` (both branches render there), so `not-prose` on the tile's
      own wrapper is what keeps the typography plugin off it. -->
 {#if tiles}
-  <MessageTiles {content} {mimeType} {surface} />
+  <MessageTiles {content} {mimeType} {surface} addresses={tileAddresses} />
 {/if}
 
 <style>

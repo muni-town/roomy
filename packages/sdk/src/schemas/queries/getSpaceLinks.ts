@@ -7,6 +7,7 @@
  * returned; a URL shared in multiple readable rooms appears once).
  */
 import { type } from "arktype";
+import { LinkEmbedData } from "./_message";
 
 export const NSID = "space.roomy.space.getLinks" as const;
 
@@ -16,16 +17,7 @@ export const Params = type({
   "cursor?": "string",
 });
 
-export const LinkEmbedData = type({
-  "t?": "string",
-  "d?": "string",
-  "p?": type({ "n?": "string", "u?": "string" }),
-  "au?": type({ "n?": "string", "u?": "string" }),
-  "footer?": type({ "t?": "string" }),
-  "imgs?": type({ u: "string", "d?": "string", "w?": "number", "h?": "number", "m?": "string" }).array(),
-  "vid?": type({ u: "string", "d?": "string", "w?": "number", "h?": "number", "m?": "string" }),
-  "thumb?": type({ u: "string", "d?": "string", "w?": "number", "h?": "number", "m?": "string" }),
-});
+export { LinkEmbedData };
 
 export const Link = type({
   url: "string",

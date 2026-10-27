@@ -747,6 +747,7 @@ describe("selectMessages blocked authors", () => {
       linkUrl,
       JSON.stringify({ t: "A title" }),
       1,
+      0,
     );
     return id;
   }
@@ -1160,6 +1161,7 @@ describe("selectMessages attachments", () => {
       LINK_URL,
       JSON.stringify({ t: "A title" }),
       1,
+      0,
     );
     // A tile is keyed like the other embed rows but stores the bare address,
     // which is the only form its loader parses.
@@ -1326,6 +1328,124 @@ describe("selectMessages attachments", () => {
     // two views derived from it.
     expect(m.attachments).toEqual([]);
     expect(m.media).toEqual([]);
+    expect(m.linkEmbeds).toEqual([]);
+  });
+
+  test("a link embed carries the tile the resolver stored for its URL", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const id = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      id,
+      STREAM,
+      roomId,
+      "01",
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      id,
+      AUTHOR,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [id, Buffer.from("have a post"), id, 1_700_000_000_000],
+    );
+    const linkUrl = "https://bsky.app/profile/bsky.app/post/3kabc";
+    await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      linkUrl,
+      STREAM,
+      id,
+    ]);
+    await db.run("insert into comp_embed_link (entity, show_preview) values (?, 1)", [
+      linkUrl,
+    ]);
+    // A link-resolved tile has no per-message row: it rides inside the embed
+    // payload the store keeps per URL, so the read path needs no new join.
+    await writeSettledLinkEmbed(
+      await openGlobalDb(),
+      linkUrl,
+      JSON.stringify({
+        v: "1",
+        ts: "2026-10-20T10:00:00.000Z",
+        ty: "link",
+        tile: { url: TILE_URL, data: { post: { text: "a post" } } },
+      }),
+      0,
+      1,
+    );
+
+    const { messages } = await selectMessages(
+      db,
+      { kind: "room", roomId, limit: 10, cursor: null },
+      undefined,
+      await openGlobalDb(),
+    );
+    const m = messages.find((x) => x.id === id)!;
+
+    expect(m.linkEmbeds[0]?.embed).toMatchObject({
+      tile: { url: TILE_URL, data: { post: { text: "a post" } } },
+    });
+    const attachment = m.attachments.find(
+      (a) => a.$type === "space.roomy.attachment.link.v0",
+    );
+    expect(attachment?.embed).toMatchObject({
+      tile: { url: TILE_URL, data: { post: { text: "a post" } } },
+    });
+  });
+
+  test("a dismissed preview mounts no tile, however rich its stored embed is", async () => {
+    const db = freshSpaceDb();
+    const roomId = newUlid();
+    const id = newUlid();
+    await db.run("insert into entities (id, stream_id, room, sort_idx) values (?, ?, ?, ?)", [
+      id,
+      STREAM,
+      roomId,
+      "01",
+    ]);
+    await db.run("insert or ignore into entities (id, stream_id) values (?, ?)", [
+      AUTHOR,
+      STREAM,
+    ]);
+    await db.run("insert into edges (head, tail, label) values (?, ?, 'author')", [
+      id,
+      AUTHOR,
+    ]);
+    await db.run(
+      "insert into comp_content (entity, mime_type, data, last_edit, timestamp) values (?, 'text/markdown', ?, ?, ?)",
+      [id, Buffer.from("body"), id, 1_700_000_000_000],
+    );
+    const linkUrl = "https://bsky.app/profile/bsky.app/post/3dismissed";
+    await db.run("insert into entities (id, stream_id, room) values (?, ?, ?)", [
+      linkUrl,
+      STREAM,
+      id,
+    ]);
+    await db.run("insert into comp_embed_link (entity, show_preview) values (?, 0)", [
+      linkUrl,
+    ]);
+    await writeSettledLinkEmbed(
+      await openGlobalDb(),
+      linkUrl,
+      JSON.stringify({ v: "1", ts: "x", ty: "link", tile: { url: TILE_URL } }),
+      0,
+      1,
+    );
+
+    const { messages } = await selectMessages(db, {
+      kind: "room",
+      roomId,
+      limit: 10,
+      cursor: null,
+    });
+    const m = messages.find((x) => x.id === id)!;
+
+    // A dismissed preview is not a card with a tile in it: the row never
+    // reaches the projection, so nothing can mount.
+    expect(m.attachments).toEqual([]);
     expect(m.linkEmbeds).toEqual([]);
   });
 
@@ -1545,6 +1665,7 @@ describe("selectMessages attachment-encoded links", () => {
       url,
       JSON.stringify({ t: "Article" }),
       1,
+      0,
     );
 
     const { messages } = await selectMessages(

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import {
+  enrichLinkAcrossSpaces,
   storeEmbedData,
   findPendingLinks,
   filterPendingUrls,
@@ -17,6 +18,7 @@ import {
 } from "./enricher.ts";
 import type { DbLike } from "../db/types.ts";
 import type { Embed } from "./types.ts";
+import { TILE_MAPPING, TILE_RESOLVER_VERSION, _resetTileCachesForTest } from "./tiles.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SCHEMA_PATH = join(__dirname, "..", "db", "schema-space.sql");
@@ -434,5 +436,211 @@ describe("embed attempt ceiling", () => {
     const row = dataRow(db, url)!;
     expect(row.attempts).toBeGreaterThanOrEqual(maxTransientAttempts());
     expect(row.retry_after).toBeNull();
+  });
+});
+
+// ─── The tile half of a row ─────────────────────────────────────────────
+
+const POST_DID = "did:plc:z72i7hdynmk6r22z27h6tvur";
+const POST_URL = `https://bsky.app/profile/${POST_DID}/post/3kabc`;
+
+/** A `getPosts` body for {@link POST_URL}. */
+function appViewBody(text = "a post"): string {
+  return JSON.stringify({
+    posts: [
+      {
+        uri: `at://${POST_DID}/app.bsky.feed.post/3kabc`,
+        author: { did: POST_DID, handle: "bsky.app", displayName: "Bluesky" },
+        record: { text, createdAt: "2026-10-20T10:00:00.000Z" },
+        likeCount: 1,
+        repostCount: 0,
+        replyCount: 0,
+        quoteCount: 0,
+      },
+    ],
+  });
+}
+
+/**
+ * Route outbound fetches by host: the AppView answer is what the tile half
+ * reads, and `ogCalls` counts any attempt to re-read the page itself.
+ */
+function stubFetch(appView: () => Response, ogHtml = "<html></html>") {
+  const calls = { og: 0, appview: 0 };
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("app.bsky.feed.getPosts")) {
+      calls.appview++;
+      return appView();
+    }
+    calls.og++;
+    return new Response(ogHtml, { status: 200, headers: { "Content-Type": "text/html" } });
+  }) as unknown as typeof globalThis.fetch;
+  return calls;
+}
+
+describe("tile resolution in the embed store", () => {
+  const realFetch = globalThis.fetch;
+  // Resolution is a deployment decision, off unless asked for; these are the
+  // tests of what it does when it IS asked for.
+  const realFlag = process.env.EMBED_TILE_RESOLUTION;
+  beforeEach(() => {
+    process.env.EMBED_TILE_RESOLUTION = "on";
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    _resetTileCachesForTest();
+    if (realFlag === undefined) delete process.env.EMBED_TILE_RESOLUTION;
+    else process.env.EMBED_TILE_RESOLUTION = realFlag;
+  });
+
+  test("filterPendingUrls picks up an enriched URL whose tile was never resolved", async () => {
+    // The retroactive case: an OpenGraph row settled before tiles existed is
+    // not "done" any more, because its tile has never been attempted.
+    const { db: spaceDb, asyncDb } = freshDb();
+    const { asyncDb: globalAsyncDb } = freshGlobalDb();
+    seedLink(spaceDb, POST_URL);
+    await storeEmbedData(globalAsyncDb, POST_URL, { status: "ok", embed: EMBED });
+
+    expect(await filterPendingUrls(asyncDb, globalAsyncDb, [POST_URL])).toEqual([POST_URL]);
+  });
+
+  test("filterPendingUrls drops a tile URL once its tile is current", async () => {
+    const { db: spaceDb, asyncDb } = freshDb();
+    const { asyncDb: globalAsyncDb } = freshGlobalDb();
+    seedLink(spaceDb, POST_URL);
+    await storeEmbedData(globalAsyncDb, POST_URL, { status: "ok", embed: EMBED }, {
+      tileVersion: TILE_RESOLVER_VERSION,
+    });
+
+    expect(await filterPendingUrls(asyncDb, globalAsyncDb, [POST_URL])).toEqual([]);
+  });
+
+  test("a stale tile is resolved without re-fetching the page", async () => {
+    const { db, asyncDb } = freshGlobalDb();
+    await storeEmbedData(
+      asyncDb,
+      POST_URL,
+      { status: "ok", embed: { v: "1", ts: "x", ty: "link", t: "Stored title" } },
+      { tileVersion: 0 },
+    );
+    const calls = stubFetch(() => new Response(appViewBody(), { status: 200 }));
+
+    const outcome = await enrichLinkAcrossSpaces(asyncDb, POST_URL);
+
+    expect(outcome.status).toBe("ok");
+    expect(calls.og).toBe(0);
+    expect(calls.appview).toBe(1);
+    const stored = JSON.parse(dataRow(db, POST_URL)!.embed_json!) as Embed;
+    // The OpenGraph half is untouched; the tile half is new.
+    expect(stored.t).toBe("Stored title");
+    expect(stored.tile?.url).toBe(TILE_MAPPING["app.bsky.feed.post"]);
+    expect((stored.tile?.data as { post: { text: string } }).post.text).toBe("a post");
+    expect(
+      db
+        .query<{ tile_version: number | null }, [string]>(
+          "select tile_version from link_embeds where url = ?",
+        )
+        .get(POST_URL)!.tile_version,
+    ).toBe(TILE_RESOLVER_VERSION);
+  });
+
+  test("a post the AppView does not have is settled, not retried", async () => {
+    const { db, asyncDb } = freshGlobalDb();
+    await storeEmbedData(asyncDb, POST_URL, { status: "ok", embed: EMBED });
+    stubFetch(() => new Response(JSON.stringify({ posts: [] }), { status: 200 }));
+
+    // The row still renders the OpenGraph card it already had, so the outcome
+    // is `ok` — what matters is that it SETTLED rather than parked for a retry
+    // that cannot bring a deleted record back.
+    expect((await enrichLinkAcrossSpaces(asyncDb, POST_URL)).status).toBe("ok");
+    expect(dataRow(db, POST_URL)!.retry_after).toBeNull();
+    expect(
+      db
+        .query<{ tile_version: number | null }, [string]>(
+          "select tile_version from link_embeds where url = ?",
+        )
+        .get(POST_URL)!.tile_version,
+    ).toBe(TILE_RESOLVER_VERSION);
+  });
+
+  test("a tile that cannot resolve now leaves the row pending and keeps the OpenGraph card", async () => {
+    const { db, asyncDb } = freshGlobalDb();
+    await storeEmbedData(asyncDb, POST_URL, {
+      status: "ok",
+      embed: { v: "1", ts: "x", ty: "link", t: "Stored title" },
+    });
+    stubFetch(() => new Response("later", { status: 503 }));
+
+    expect((await enrichLinkAcrossSpaces(asyncDb, POST_URL)).status).toBe("transient");
+    const row = dataRow(db, POST_URL)!;
+    expect(row.retry_after).not.toBeNull();
+    expect(JSON.parse(row.embed_json!)).toMatchObject({ t: "Stored title" });
+  });
+
+  test("one half resolving while the other retries is reported as partial", async () => {
+    // The page 503s while the AppView answers: the tile is stored and
+    // announced, and the row stays pending for the OpenGraph retry.
+    const { db, asyncDb } = freshGlobalDb();
+    stubFetch(
+      () => new Response(appViewBody(), { status: 200 }),
+      "<html></html>",
+    );
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("app.bsky.feed.getPosts")) {
+        return new Response(appViewBody(), { status: 200 });
+      }
+      return new Response("later", { status: 503 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const outcome = await enrichLinkAcrossSpaces(asyncDb, POST_URL);
+    expect(outcome.status).toBe("partial");
+    const row = dataRow(db, POST_URL)!;
+    expect(row.retry_after).not.toBeNull();
+    expect(JSON.parse(row.embed_json!)).toHaveProperty("tile");
+  });
+
+  test("with resolution switched off, a mapped URL takes the pre-tile path", async () => {
+    // The deployment switch: no AppView call, no tile stored, and the row's
+    // tile_version left at 0 so the first read after the switch still queues it.
+    delete process.env.EMBED_TILE_RESOLUTION;
+    const { db, asyncDb } = freshGlobalDb();
+    const calls = stubFetch(
+      () => new Response(appViewBody(), { status: 200 }),
+      '<html><head><meta property="og:title" content="A page" /></head></html>',
+    );
+
+    const outcome = await enrichLinkAcrossSpaces(asyncDb, POST_URL);
+
+    expect(outcome.status).toBe("ok");
+    expect(calls.appview).toBe(0);
+    const stored = JSON.parse(dataRow(db, POST_URL)!.embed_json!) as Embed;
+    expect(stored.tile).toBeUndefined();
+    expect(
+      db
+        .query<{ tile_version: number | null }, [string]>(
+          "select tile_version from link_embeds where url = ?",
+        )
+        .get(POST_URL)!.tile_version ?? 0,
+    ).toBe(0);
+  });
+
+  test("with resolution switched off, an enriched tile URL is not re-queued", async () => {
+    delete process.env.EMBED_TILE_RESOLUTION;
+    const { db: spaceDb, asyncDb } = freshDb();
+    const { asyncDb: globalAsyncDb } = freshGlobalDb();
+    seedLink(spaceDb, POST_URL);
+    await storeEmbedData(globalAsyncDb, POST_URL, { status: "ok", embed: EMBED });
+
+    expect(await filterPendingUrls(asyncDb, globalAsyncDb, [POST_URL])).toEqual([]);
+  });
+
+  test("a URL no tile mapping claims is untouched by the tile half", async () => {
+    const { asyncDb } = freshGlobalDb();
+    const calls = stubFetch(() => new Response(appViewBody(), { status: 200 }));
+    await enrichLinkAcrossSpaces(asyncDb, "https://example.com/plain");
+    expect(calls.appview).toBe(0);
+    expect(calls.og).toBe(1);
   });
 });

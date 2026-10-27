@@ -15,8 +15,14 @@
   import TileEmbed from "@roomy/design/components/content/thread/message/tiles/TileEmbed.svelte";
   import ForwardContext from "@roomy/design/components/content/thread/message/ForwardContext.svelte";
   import MessageContent from "@roomy/design/components/content/thread/message/MessageContent.svelte";
+  import {
+    planMessageTiles,
+    tileAddressesInBody,
+    tileRenderKey,
+  } from "@roomy/design/components/content/thread/message/tiles/message-tiles.js";
   import ChatInput from "./ChatInput.svelte";
   import { createMentionSearch } from "$lib/tiptap/mentions";
+  import { createFeatureFlagsQuery } from "$lib/queries/feature-flags";
   import { editMessage, removeLinkEmbed } from "$lib/mutations/message";
   import { addReaction } from "$lib/mutations/reaction";
   import { createSpaceCard } from "$lib/mutations/space-card";
@@ -347,6 +353,42 @@
   );
 
   /**
+   * The tiles this message renders, planned across both sources: the addresses
+   * its body spells and the tiles its links resolve to. One cap for the two
+   * (`planMessageTiles`), because both cost the reader a record fetch and up to
+   * two blob fetches.
+   */
+  const bodyTileSource = $derived(original ?? message);
+
+  /**
+   * Whether this reader is shown a tile resolved from a link.
+   *
+   * A link's tile is a renderer of someone else's record, loaded at render time
+   * from a third-party loading server and the publisher's PDS, so it is behind
+   * a flag while it earns its place. Off, a post link keeps its OpenGraph card
+   * and the tile does not even count against the message's tile budget.
+   */
+  const flagsQuery = createFeatureFlagsQuery();
+  const linkTiles = $derived(
+    flagsQuery.data?.flags.includes("web-tiles-link") ?? false,
+  );
+
+  const tilePlan = $derived(
+    planMessageTiles(
+      tileAddressesInBody(
+        bodyTileSource.content,
+        bodyTileSource.mimeType,
+        parseRichTextContent,
+      ),
+      linkTiles
+        ? linkItems(shownAttachments)
+            .map((link) => link.embed?.tile)
+            .filter((tile): tile is { url: string; data?: unknown } => tile != null)
+        : [],
+    ),
+  );
+
+  /**
    * Space-card eligibility: the message contains exactly one link — the
    * appserver's extracted link attachments, the same source that renders link
    * previews. Shown to space admins via the toolbar's "..." menu.
@@ -630,12 +672,20 @@
           </div>
         {:else if isForward}
           {#if original}
-            <MessageContent content={original.content} mimeType={original.mimeType} />
+            <MessageContent
+            content={original.content}
+            mimeType={original.mimeType}
+            tileAddresses={tilePlan.addresses}
+          />
           {:else}
             <span class="italic text-base-400 text-sm">Original message unavailable</span>
           {/if}
         {:else}
-          <MessageContent content={message.content} mimeType={message.mimeType} />
+          <MessageContent
+            content={message.content}
+            mimeType={message.mimeType}
+            tileAddresses={tilePlan.addresses}
+          />
         {/if}
       {/snippet}
 
@@ -702,6 +752,10 @@
                 <LinkCard
                   url={link.url}
                   embed={link.embed}
+                  tile={linkTiles && link.embed?.tile != null &&
+                    tilePlan.linkTiles.has(
+                      tileRenderKey(link.embed.tile.url, link.embed.tile.data),
+                    )}
                   onRemove={!isForward && isAuthor ? () => handleRemoveEmbed(link.url) : undefined}
                 />
               {/each}
@@ -792,7 +846,11 @@
           isEdited={!!message.lastEdit}
         >
           {#snippet content()}
-            <MessageContent content={message.content} mimeType={message.mimeType} />
+            <MessageContent
+            content={message.content}
+            mimeType={message.mimeType}
+            tileAddresses={tilePlan.addresses}
+          />
           {/snippet}
         </MessageBubble>
       </div>

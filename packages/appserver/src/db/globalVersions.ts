@@ -118,9 +118,25 @@ export const GLOBAL_MIGRATIONS = {
       );
     },
   },
+  // link_embeds.tile_version: which tile resolver version last finished an
+  // attempt for a URL. schema-global.sql declares the column for fresh DBs, but
+  // `create table if not exists` is a no-op on the table an existing DB already
+  // has, so the column needs this ALTER.
+  "15": {
+    kind: "structural",
+    up: (db) => {
+      const hasTileVersion = db
+        .query(
+          "select count(*) as n from pragma_table_info('link_embeds') where name = 'tile_version'",
+        )
+        .get() as { n: number } | null;
+      if ((hasTileVersion?.n ?? 0) > 0) return;
+      db.exec("alter table link_embeds add column tile_version integer");
+    },
+  },
   // Next global schema change goes here, e.g.:
-  //   "15": { kind: "structural" },   // table added to schema-global.sql
-  //   "15": { kind: "data" },         // plus a task in GLOBAL_MIGRATION_TASKS
+  //   "16": { kind: "structural" },   // table added to schema-global.sql
+  //   "16": { kind: "data" },         // plus a task in GLOBAL_MIGRATION_TASKS
 } as const satisfies Record<string, GlobalMigrationEntry>;
 
 /**

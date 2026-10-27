@@ -56,76 +56,123 @@ export async function selectEmbedJsonByUrl(
   return out;
 }
 
+/** What the store knows about one URL: its embed payload and its tile stage. */
+export interface LinkEmbedState {
+  /** The stored embed JSON, or null when the URL has no data stored. */
+  embedJson: string | null;
+  /**
+   * The resolver version that last finished a tile attempt for this URL; 0
+   * when no attempt has completed. A reader compares it against
+   * `TILE_RESOLVER_VERSION` to decide whether the tile is stale.
+   */
+  tileVersion: number;
+  /**
+   * The epoch-ms instant a transient failure becomes eligible for another
+   * fetch, or null when the row is settled. A settled row is never re-fetched
+   * for its OpenGraph half — only a stale tile reopens the work.
+   */
+  retryAfter: number | null;
+}
+
 /**
- * Of the given URLs, those with no row at all in the store — never attempted.
+ * The embed payload and tile stage of each of `urls` that has a row.
  *
- * Used to prioritise links a user is actively waiting on: a URL already
- * enriched is a no-op, and one that failed transiently keeps its backoff
- * instead of being re-fetched by every read that shows it.
+ * One read for both halves of a row's state: the payload is what a reader
+ * renders and the tile version is what says whether more work is owed, and
+ * they are only meaningful together.
  */
-export async function filterUnevaluatedUrls(
+export async function selectLinkEmbedState(
   db: DbLike,
   urls: readonly string[],
-): Promise<string[]> {
+): Promise<Map<string, LinkEmbedState>> {
+  const out = new Map<string, LinkEmbedState>();
   const unique = [...new Set(urls)];
-  if (unique.length === 0) return [];
+  if (unique.length === 0) return out;
 
-  const known = new Set<string>();
   for (const chunk of chunks(unique)) {
     const placeholders = chunk.map(() => "?").join(",");
     const rows = await db
-      .query(`select url from link_embeds where url in (${placeholders})`)
-      .all<{ url: string }>([...chunk]);
-    for (const row of rows) known.add(row.url);
+      .query(
+        `select url, embed_json, tile_version, retry_after
+           from link_embeds where url in (${placeholders})`,
+      )
+      .all<{
+        url: string;
+        embed_json: string | null;
+        tile_version: number | null;
+        retry_after: number | null;
+      }>([...chunk]);
+    for (const row of rows) {
+      out.set(row.url, {
+        embedJson: row.embed_json,
+        tileVersion: row.tile_version ?? 0,
+        retryAfter: row.retry_after,
+      });
+    }
   }
-  return unique.filter((url) => !known.has(url));
+  return out;
 }
 
 /**
  * Write a settled row (an embed, or null for "the service had no data") with no
  * pending retry. UPSERT so `created_at` survives a re-fetch of the same URL.
+ *
+ * `tileVersion` is the resolver version that last finished a tile attempt, and
+ * it is always written: the caller composes the embed payload and the tile
+ * stage together, so a write that carried no tile still says which version
+ * decided there was none.
  */
 export async function writeSettledLinkEmbed(
   db: DbLike,
   url: string,
   embedJson: string | null,
   attempts: number,
+  tileVersion: number,
 ): Promise<void> {
   await db.run(
     `insert into link_embeds
-       (url, embed_json, attempts, retry_after, fetched_at, updated_at)
-     values (?, ?, ?, null, (unixepoch() * 1000), (unixepoch() * 1000))
+       (url, embed_json, attempts, retry_after, tile_version, fetched_at, updated_at)
+     values (?, ?, ?, null, ?, (unixepoch() * 1000), (unixepoch() * 1000))
      on conflict(url) do update set
        embed_json = excluded.embed_json,
        attempts = excluded.attempts,
        retry_after = null,
+       tile_version = excluded.tile_version,
        fetched_at = excluded.fetched_at,
        updated_at = excluded.updated_at`,
-    [url, embedJson, attempts],
+    [url, embedJson, attempts, tileVersion],
   );
 }
 
 /**
- * Write a transient failure: a null embed, an escalated attempt count, and the
- * epoch-ms instant the URL becomes eligible for another fetch.
+ * Write a transient failure: the embed payload as it stands, an escalated
+ * attempt count, and the epoch-ms instant the URL becomes eligible for another
+ * fetch.
+ *
+ * The payload is written rather than nulled because a failure in one half must
+ * not discard the other: a URL whose OpenGraph fetch failed may already carry
+ * a resolved tile, and that tile is what the card renders meanwhile.
  */
 export async function writeTransientLinkEmbed(
   db: DbLike,
   url: string,
+  embedJson: string | null,
   attempts: number,
   retryAfter: number,
+  tileVersion: number,
 ): Promise<void> {
   await db.run(
     `insert into link_embeds
-       (url, embed_json, attempts, retry_after, fetched_at, updated_at)
-     values (?, null, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))
+       (url, embed_json, attempts, retry_after, tile_version, fetched_at, updated_at)
+     values (?, ?, ?, ?, ?, (unixepoch() * 1000), (unixepoch() * 1000))
      on conflict(url) do update set
-       embed_json = null,
+       embed_json = excluded.embed_json,
        attempts = excluded.attempts,
        retry_after = excluded.retry_after,
+       tile_version = excluded.tile_version,
        fetched_at = excluded.fetched_at,
        updated_at = excluded.updated_at`,
-    [url, attempts, retryAfter],
+    [url, embedJson, attempts, retryAfter, tileVersion],
   );
 }
 
@@ -142,9 +189,13 @@ export async function selectAttempts(db: DbLike, url: string): Promise<number> {
  * statement per chunk.
  *
  * Each written row is what the enricher's attempt-ceiling branch produces for
- * the same URL — null embed, `retry_after` cleared — so the read side (which
- * keys off `embed_json`) cannot tell which path settled it. `attempts` is
- * written back UNCHANGED rather than incremented: no attempt is being made.
+ * the same URL — `retry_after` cleared — so the read side (which keys off
+ * `embed_json`) cannot tell which path settled it. `attempts` is written back
+ * UNCHANGED rather than incremented: no attempt is being made.
+ *
+ * `embed_json` is left alone. A row reaching the ceiling failed its OpenGraph
+ * fetch, but it may still carry a tile resolved earlier, and settling the one
+ * must not throw away the other.
  */
 export async function settleLinkEmbeds(
   db: DbLike,
@@ -153,15 +204,14 @@ export async function settleLinkEmbeds(
   if (entries.length === 0) return;
   for (const chunk of chunks(entries)) {
     const valuesPh = chunk
-      .map(() => "(?, null, ?, null, (unixepoch() * 1000), (unixepoch() * 1000))")
+      .map(() => "(?, null, ?, null, 0, (unixepoch() * 1000), (unixepoch() * 1000))")
       .join(", ");
     const params = chunk.flatMap((e) => [e.url, e.attempts]);
     await db.run(
       `insert into link_embeds
-         (url, embed_json, attempts, retry_after, fetched_at, updated_at)
+         (url, embed_json, attempts, retry_after, tile_version, fetched_at, updated_at)
        values ${valuesPh}
        on conflict(url) do update set
-         embed_json = excluded.embed_json,
          attempts = excluded.attempts,
          retry_after = null,
          fetched_at = excluded.fetched_at,

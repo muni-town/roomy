@@ -19,6 +19,8 @@ import {
 } from "./sweeper.ts";
 import { openDb, openGlobalDb, openSpaceDb, closeDb } from "../db/db.ts";
 import { countPendingLinks } from "./enricher.ts";
+import { writeSettledLinkEmbed } from "./store.ts";
+import { TILE_MAPPING } from "./tiles.ts";
 import type {
   InvalidationEvent,
   InvalidationRouter,
@@ -506,7 +508,11 @@ describe("embed sweeper invalidation room resolution", () => {
 
     // Simulate the getMessages handler: prioritise the viewed message's links.
     // Called BEFORE the sweeper is started (as it would be on a cold read).
-    await prioritiseLinksForRead(spaceDb, [{ linkEmbeds: [{ url: ids.url }] }]);
+    await prioritiseLinksForRead(
+      spaceDb,
+      [{ id: ids.message, linkEmbeds: [{ url: ids.url }] }],
+      SPACE_DID,
+    );
 
     await flushSweeper({ globalDb, invalidationRouter: router });
 
@@ -530,6 +536,88 @@ describe("embed sweeper invalidation room resolution", () => {
     }
   }, { timeout: 30_000 });
 
+  test("a read queues the tile half of an old message's link, and the sweep resolves it", async () => {
+    // The retroactive path: a message written before tiles existed has a
+    // settled OpenGraph row and no tile, and no write path will ever queue it
+    // again. The read is what queues it; nothing rewrites the event.
+    const { globalDb, spaceDb } = await freshWorker();
+    const { router, signals } = captureRouter();
+    const url = "https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur/post/3kold";
+    const ids = {
+      room: "01KVRRRRRRRRRRRRRRRRRRRRRR",
+      message: "01KVNNNNNNNNNNNNNNNNNNNNNN",
+      url,
+    };
+    await seedLinkMessageRoom(spaceDb, globalDb, ids);
+    // What a pre-tiles build left: the OpenGraph card settled, the tile never
+    // attempted, and the pending row long since deleted.
+    await writeSettledLinkEmbed(
+      globalDb,
+      url,
+      JSON.stringify({ v: "1", ts: "x", ty: "link", t: "Old title" }),
+      0,
+      0,
+    );
+    await globalDb.run("delete from pending_links where url = ?", [url]);
+
+    const realFetch = globalThis.fetch;
+    const realFlag = process.env.EMBED_TILE_RESOLUTION;
+    process.env.EMBED_TILE_RESOLUTION = "on";
+    const calls = { og: 0, appview: 0 };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const target = String(input);
+      if (target.includes("app.bsky.feed.getPosts")) {
+        calls.appview++;
+        return new Response(
+          JSON.stringify({
+            posts: [
+              {
+                uri: "at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3kold",
+                author: { did: "did:plc:z72i7hdynmk6r22z27h6tvur", handle: "bsky.app" },
+                record: { text: "an old post", createdAt: "2026-10-01T00:00:00.000Z" },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      calls.og++;
+      return new Response("<html></html>", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    try {
+      await prioritiseLinksForRead(
+        spaceDb,
+        [{ id: ids.message, linkEmbeds: [{ url }] }],
+        SPACE_DID,
+      );
+      // The read alone put the row back in the work queue.
+      expect(await countPendingLinks(globalDb)).toBe(1);
+
+      await flushSweeper({ globalDb, invalidationRouter: router });
+
+      // Only the AppView was asked: the settled OpenGraph half is not re-read.
+      expect(calls.appview).toBe(1);
+      expect(calls.og).toBe(0);
+
+      const signal = signals.find((s) => s.kind === "messageDiff");
+      expect(signal?.kind).toBe("messageDiff");
+      if (signal?.kind === "messageDiff") {
+        const op = signal.signal.ops[0];
+        const embed = op?.op === "update" ? op.message.linkEmbeds[0]?.embed : undefined;
+        expect((embed as { tile?: { url: string } } | undefined)?.tile?.url).toBe(
+          TILE_MAPPING["app.bsky.feed.post"],
+        );
+        expect(embed).toMatchObject({ t: "Old title" });
+      }
+    } finally {
+      globalThis.fetch = realFetch;
+      if (realFlag === undefined) delete process.env.EMBED_TILE_RESOLUTION;
+      else process.env.EMBED_TILE_RESOLUTION = realFlag;
+      _resetEmbedSweeper();
+    }
+  }, { timeout: 30_000 });
+
   test("prioritiseLinksForRead never throws on a DB error (read path stays healthy)", async () => {
     // Regression guard: a DB error (e.g. SQLITE_IOERR_VNODE under I/O
     // pressure) inside filterPendingUrls must be swallowed so getMessages /
@@ -537,9 +625,11 @@ describe("embed sweeper invalidation room resolution", () => {
     // messages are the product. A closed DB makes the query throw reliably.
     const { spaceDb } = await freshWorker();
     closeDb(); // terminate the worker so every subsequent DB call throws
-    await prioritiseLinksForRead(spaceDb, [
-      { linkEmbeds: [{ url: "https://example.com/x" }] },
-    ]);
+    await prioritiseLinksForRead(
+      spaceDb,
+      [{ id: "01KVMMMMMMMMMMMMMMMMMMMMMM", linkEmbeds: [{ url: "https://example.com/x" }] }],
+      SPACE_DID,
+    );
   }, { timeout: 30_000 });
 
   test("sweeper doesn't crash or stream anything when the DB errors mid-drain", async () => {

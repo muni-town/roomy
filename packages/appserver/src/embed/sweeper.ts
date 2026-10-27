@@ -28,6 +28,7 @@ import type { DbLike } from "../db/types.ts";
 import type { StreamDid, Ulid } from "@roomy-space/sdk";
 import {
   enrichLinkAcrossSpaces,
+  enqueueStaleTiles,
   findPendingLinks,
   findPendingLinksForUrls,
   filterPendingUrls,
@@ -43,6 +44,7 @@ import {
 import { selectParkedLinkEmbeds } from "./store.ts";
 import { openSpaceDb, tryOpenGlobalDb } from "../db/db.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
+import { canonicalUrl } from "../queries/links.ts";
 import type { MessageDto } from "../queries/selectMessages.ts";
 import { log } from "../log.ts";
 import { metrics } from "../metrics.ts";
@@ -176,6 +178,20 @@ let statsEnrichedTransient = 0;
  */
 let statsEnrichedAbandoned = 0;
 /**
+ * URLs whose resolution stored something but did not settle the row — one half
+ * of the row resolved, the other is still owed a retry. Split out from `ok`
+ * because the row stays pending, and out of `transient` because the data
+ * EXISTS and was announced; a URL churning here is one whose tile resolves
+ * while its origin keeps failing.
+ */
+let statsEnrichedPartial = 0;
+/**
+ * Selected URLs that had nothing left to do — another cycle or another
+ * instance resolved them between this batch's selection and its drain. The
+ * pending entry is dropped; no fetch was made.
+ */
+let statsEnrichedNoop = 0;
+/**
  * Sweep cycles that ran a selection (not the DB-backoff bail), and how many
  * of those the loop throttled — a FULL batch that produced no `ok`, so it
  * yielded instead of running the next batch back-to-back. Exported as
@@ -220,6 +236,14 @@ const metricEnrichedTransient = metrics.counter(
   "roomy_embed_enriched_transient_total",
   "Embed links that failed transiently (timeout / 5xx / 429 / network). These STAY pending and re-enter after a backoff window.",
 );
+const metricEnrichedPartial = metrics.counter(
+  "roomy_embed_enriched_partial_total",
+  "Embed links that stored new data but did not settle the row: one half (OpenGraph or tile) resolved while the other is still owed a retry. The data is announced now; the row stays pending.",
+);
+const metricEnrichedNoop = metrics.counter(
+  "roomy_embed_enriched_noop_total",
+  "Selected embed links that had no work left — they were resolved after this batch was selected. No fetch was made.",
+);
 const metricEnrichedAbandoned = metrics.counter(
   "roomy_embed_enriched_abandoned_total",
   `Embed links settled by the attempt ceiling (${maxTransientAttempts()} consecutive transient failures), whether a failure reached it or the sweeper found the row already past it. These LEAVE the backlog: the host is treated as gone rather than retried forever.`,
@@ -231,6 +255,8 @@ for (const c of [
   metricEnrichedDefinitive,
   metricEnrichedTransient,
   metricEnrichedAbandoned,
+  metricEnrichedPartial,
+  metricEnrichedNoop,
 ]) {
   c.inc({}, 0);
 }
@@ -667,6 +693,13 @@ export function embedSweeperStats(): {
    */
   enrichedAbandoned: number;
   /**
+   * Links that stored new data without settling the row — one half resolved,
+   * the other still owed a retry. The data is announced, the row stays pending.
+   */
+  enrichedPartial: number;
+  /** Selected links that had nothing left to do. The pending entry is dropped. */
+  enrichedNoop: number;
+  /**
    * `enrichedDefinitive + enrichedTransient`. Kept because operators and the
    * readstate review doc read this name; the two components are the
    * actionable signal.
@@ -768,6 +801,8 @@ export function embedSweeperStats(): {
     enrichedDefinitive: statsEnrichedDefinitive,
     enrichedTransient: statsEnrichedTransient,
     enrichedAbandoned: statsEnrichedAbandoned,
+    enrichedPartial: statsEnrichedPartial,
+    enrichedNoop: statsEnrichedNoop,
     enrichedNull: statsEnrichedDefinitive + statsEnrichedTransient,
     sweepCycles: statsSweepCycles,
     sweepThrottled: statsSweepThrottled,
@@ -881,7 +916,7 @@ export function pokeEmbedSweeper(urls?: string[]): void {
 
 /**
  * Read-driven prioritisation: when a client reads messages (getMessages /
- * getMessage), jump any never-attempted links in those messages ahead of the
+ * getMessage), jump any unresolved links in those messages ahead of the
  * oldest-first backfill backlog, so the viewing user sees the cards promptly
  * instead of waiting hours behind erroring/timing-out backlog links. This is
  * the READ counterpart to the WRITE-driven poke in SpaceMaterializer — write
@@ -889,18 +924,30 @@ export function pokeEmbedSweeper(urls?: string[]): void {
  * is currently viewing (which were detected during backfill and sit in the
  * backlog).
  *
- * `filterPendingUrls` returns only links with no store row yet, so
- * already-enriched links are a no-op and transient-failed links keep their
- * backoff (we don't hammer a down service on every refetch).
+ * It is also the whole of the retroactive path. A message written before tiles
+ * existed has a store row for its link and no tile in it, so no write path will
+ * ever queue it again; the read that serves it queues the tile half here, and
+ * the next sweep resolves it. Nothing rewrites the event, nothing scans the log
+ * at boot, and an unread message costs nothing.
  *
- * `db` is the per-space handle the read came from; the store lookup goes to the
- * global DB through its `global()` route.
+ * `filterPendingUrls` returns only links with work left — never-attempted ones
+ * and recognised URLs whose tile is missing or stale — so an already-resolved
+ * link is a no-op and a transient-failed one keeps its backoff (we don't hammer
+ * a down service on every refetch).
+ *
+ * `db` is the per-space handle the read came from, `spaceDid` its stream; the
+ * store and the pending index are both in the global DB, reached through its
+ * `global()` route when the caller holds a different pool.
  */
 export async function prioritiseLinksForRead(
   db: DbLike,
   messages: ReadonlyArray<
-    Readonly<{ linkEmbeds: ReadonlyArray<{ url: string }> }>
+    Readonly<{
+      id: string;
+      linkEmbeds: ReadonlyArray<{ url: string }>;
+    }>
   >,
+  spaceDid: string,
 ): Promise<void> {
   const linkUrls = messages.flatMap((m) => m.linkEmbeds.map((l) => l.url));
   if (linkUrls.length === 0) return;
@@ -913,7 +960,21 @@ export async function prioritiseLinksForRead(
     const globalDb = tryOpenGlobalDb() ?? db.global?.();
     if (!globalDb) return;
     const pending = await filterPendingUrls(db, globalDb, linkUrls);
-    if (pending.length > 0) pokeEmbedSweeper(pending);
+    if (pending.length === 0) return;
+
+    // A URL is only selectable by the sweeper if the pending index names it,
+    // so the tile half has to be recorded here rather than only poked: an old
+    // message's link has no pending row left to select it by. Idempotent, and
+    // collapses a page of messages linking one URL into the rows each already
+    // has.
+    const wanted = new Set(pending);
+    const entries = messages.flatMap((m) =>
+      m.linkEmbeds
+        .filter((l) => wanted.has(canonicalUrl(l.url)))
+        .map((l) => ({ url: l.url, spaceDid, messageId: m.id })),
+    );
+    if (entries.length > 0) await enqueueStaleTiles(globalDb, entries);
+    pokeEmbedSweeper(pending);
   } catch (err) {
     // Embed prioritisation is best-effort: a transient DB error (e.g. a macOS
     // SQLITE_IOERR_VNODE from I/O pressure) must NEVER turn a successful
@@ -1167,6 +1228,27 @@ async function runSweepCycle(globalDb: DbLike): Promise<SweepCycleResult> {
         for (const spaceDid of spaces) {
           await emitEnrichmentInvalidation(openSpaceDb(spaceDid), globalDb, spaceDid, [url]);
         }
+      } else if (outcome?.status === "partial") {
+        // One half of the row resolved and the other is still owed a retry.
+        // Announce the data now — a tile that resolved while the origin keeps
+        // failing is exactly what the card is for — but keep the row pending,
+        // because the unpaid half has a retry scheduled in the store.
+        statsEnrichedPartial++;
+        metricEnrichedPartial.inc();
+        cycleProducedOk = true;
+        const prev = transientRetry.get(url);
+        const attempts = (prev?.attempts ?? 0) + 1;
+        transientRetry.set(url, { attempts, retryAt: Date.now() + backoffMs(attempts) });
+        for (const spaceDid of spaces) {
+          await emitEnrichmentInvalidation(openSpaceDb(spaceDid), globalDb, spaceDid, [url]);
+        }
+      } else if (outcome?.status === "noop") {
+        // Nothing was owed: the row was settled between this batch's selection
+        // and its drain. Drop the pending entry like any other settled row.
+        statsEnrichedNoop++;
+        metricEnrichedNoop.inc();
+        settledUrls.add(url);
+        transientRetry.delete(url);
       } else if (outcome?.status === "definitive") {
         // Settled no-data (page loaded but no OG/oEmbed, or a stable 4xx).
         // Drop from the pending set — re-fetching it every sweep would keep

@@ -61,6 +61,19 @@ export interface EmbedFooter {
 }
 
 /**
+ * A Web Tile that renders the URL's content.
+ *
+ * `url` is the tile record's bare AT-URI and `data` is the JSON handed to it
+ * on load — the same pairing `AttachmentTile` carries. It lives inside the
+ * embed payload rather than beside it because it is a property of the URL, not
+ * of a message: one row answers every message that links the URL.
+ */
+export interface EmbedTile {
+  url: string;
+  data?: unknown;
+}
+
+/**
  * An embed is metadata taken from a given URL by loading said URL, parsing
  * any meta tags, and fetching extra information from oEmbed sources.
  */
@@ -95,6 +108,8 @@ export interface EmbedV1 {
   thumb?: EmbedMedia;
   fields?: EmbedField[];
   footer?: EmbedFooter;
+  /** The Web Tile that renders this URL's content, when a mapping claims it. */
+  tile?: EmbedTile;
 }
 
 export type Embed = { v: "1" } & EmbedV1;

@@ -17,13 +17,18 @@ for Web Tiles in Roomy.
 `docs/plans/web-tiles-roomy-feasibility.md` is the earlier feasibility read,
 kept as a historical record; §0 below states which of its conclusions still
 hold.
-**Next:** feature 1's resolution path (§11.2): AT-URI recognition → manifest
-resolution in the appserver → a tile entry in the unified `attachments`
-projection, so a Bluesky post that carries a tile address renders as a tile
-rather than a link. Milestone B's payload delivery is complete in the
-host→tile direction (an attachment's `data` reaches the loaded tile); the
-tile→host direction (`tiles-protocol-up-data-payload`) has no reader and is not
-part of B.
+Feature 1's resolution path (§11.2 phase 1) shipped in #558: a link to a Bluesky
+post resolves appserver-side to the published Bluesky-post tile plus a bounded
+projection of the post, carried in the link's embed payload. Recognition and
+resolution live in `packages/appserver/src/embed/tiles.ts`, the tile in
+`packages/appserver/tiles/bluesky-post/`, and `link_embeds.tile_version` makes
+the resolution retroactive — a message materialised before it renders richly on
+its next read, with no event rewritten and no backfill pass.
+**Next:** feature 2, the room-context tile (§6, §11.2 phase 2), then the
+calendar context type (§11.2 phase 3). Milestone B's payload delivery is
+complete in the host→tile direction (an attachment's `data`, and now a link
+embed's `tile.data`, reach the loaded tile); the tile→host direction
+(`tiles-protocol-up-data-payload`) has no reader.
 **Scope of the funded stint:** two weeks, two features (§5, §6), plus a
 30-day engagement write-up (§10).
 **Verified against:** `origin/next` @ `4276631e`.

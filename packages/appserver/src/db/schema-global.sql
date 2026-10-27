@@ -104,11 +104,20 @@ create index if not exists idx_pending_links_created on pending_links(created_at
 -- (timeout / 5xx / network) eligible for re-enrichment; null means no retry is
 -- needed (success, or a definitive failure such as a 404). `attempts` counts
 -- consecutive transient failures for backoff escalation.
+--
+-- `tile_version` is the tile resolver version that last finished an attempt for
+-- this URL, or null/0 when none has. A reader compares it against the running
+-- resolver's version to tell "this URL's tile is done" from "this URL's tile is
+-- owed", which is what lets a row enriched before tiles existed be resolved on
+-- its next read instead of by a backfill. The tile itself is not a column: it
+-- is a field of the same `embed_json` payload (`EmbedV1.tile`), because it is a
+-- property of the URL just as the OpenGraph metadata is.
 create table if not exists link_embeds (
   url text primary key,
   embed_json text, -- JSON-serialized EmbedV1; null when no data
   attempts integer not null default 0, -- consecutive transient-failure count
   retry_after integer, -- epoch ms; transient failures retry after this backoff, else null
+  tile_version integer, -- tile resolver version last completed; null/0 = never attempted
   fetched_at integer not null default (unixepoch() * 1000),
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)

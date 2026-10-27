@@ -26,7 +26,7 @@
  * the per-message cap live where the result is rendered.
  */
 
-import { extractFacetUrls } from "@roomy-space/sdk";
+import { RICHTEXT_MIME, extractFacetUrls } from "@roomy-space/sdk";
 import type { Block } from "@roomy-space/sdk";
 import { findTileAddresses } from "./at-uri.js";
 
@@ -61,6 +61,70 @@ function blockTexts(block: Block): string[] {
   }
 }
 
+/**
+ * What a link's own embed carries as a tile: the record to render and the
+ * payload it is handed.
+ */
+export interface LinkTile {
+  /** The tile's bare AT-URI. */
+  url: string;
+  /** The JSON the tile renders. Absent when the resolver had none. */
+  data?: unknown;
+}
+
+/**
+ * The identity of a rendered tile: the record, plus the payload it is handed.
+ *
+ * One tile record renders many posts, so the record's address alone does not
+ * identify a card — two different posts resolved through the same tile are two
+ * cards. A body address carries no payload, so it keys on the address alone and
+ * collapses with a link resolved to the same record that has nothing to hand
+ * it, which is the same card drawn twice.
+ */
+export function tileRenderKey(uri: string, data: unknown): string {
+  return data === undefined ? uri : `${uri}\u0000${JSON.stringify(data)}`;
+}
+
+/**
+ * Which tiles one message renders, when some come from its body and some from
+ * the links in it.
+ *
+ * Two sources, one cap. A message can spell a tile address in its text and also
+ * link a post whose card resolves to a tile — both cost the reader a record
+ * fetch and up to two blob fetches, so the cap counts them together rather than
+ * twice. The body's addresses come first: they are what the author typed.
+ *
+ * Returns the body addresses to render and the set of {@link tileRenderKey}s
+ * whose link-resolved tile may render, so a caller about to draw a link can ask
+ * whether its tile fits.
+ */
+export function planMessageTiles(
+  bodyAddresses: readonly string[],
+  links: ReadonlyArray<LinkTile>,
+): { addresses: string[]; linkTiles: Set<string> } {
+  const addresses: string[] = [];
+  const linkTiles = new Set<string>();
+  const seen = new Set<string>();
+
+  for (const uri of bodyAddresses) {
+    if (addresses.length >= MAX_TILES_PER_MESSAGE) break;
+    const key = tileRenderKey(uri, undefined);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    addresses.push(uri);
+  }
+
+  for (const link of links) {
+    if (addresses.length + linkTiles.size >= MAX_TILES_PER_MESSAGE) break;
+    const key = tileRenderKey(link.url, link.data);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    linkTiles.add(key);
+  }
+
+  return { addresses, linkTiles };
+}
+
 /** Tile addresses spelled in a rich-text body, in order, without duplicates. */
 export function tileAddressesInBlocks(blocks: Block[]): string[] {
   return findTileAddresses(
@@ -79,4 +143,19 @@ const FENCED_CODE = /^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm;
 /** Tile addresses spelled in a legacy markdown body, in order, deduplicated. */
 export function tileAddressesInMarkdown(markdown: string): string[] {
   return findTileAddresses(markdown.replace(FENCED_CODE, ""));
+}
+
+/**
+ * Tile addresses spelled in a message body, in that body's own representation —
+ * blocks for a richtext message, markdown for a legacy one. Both sources read
+ * the same way, so the branch lives here rather than at each caller.
+ */
+export function tileAddressesInBody(
+  content: string,
+  mimeType: string | undefined,
+  parseRichText: (content: string) => Block[] | null,
+): string[] {
+  return mimeType === RICHTEXT_MIME
+    ? tileAddressesInBlocks(parseRichText(content) ?? [])
+    : tileAddressesInMarkdown(content);
 }
