@@ -25,18 +25,21 @@
     tileAddressesInMarkdown,
   } from "./message-tiles.js";
   import TileEmbed from "./TileEmbed.svelte";
+  import type { TileSurface } from "./tile-activity.js";
 
   let {
     content,
     mimeType,
+    surface = "chat",
   }: {
     /** Message content to scan. Markdown for legacy messages, base64-encoded
      *  richtext JSON for `application/vnd.roomy.richtext+json` messages. */
     content: string;
     /** MIME type of the content blob. Absent → legacy markdown path. */
     mimeType?: string;
+    /** The surface rendering the message, handed to each tile it resolves. */
+    surface?: TileSurface;
   } = $props();
-
   const addresses = $derived(
     mimeType === RICHTEXT_MIME
       ? tileAddressesInBlocks(parseRichTextContent(content) ?? [])
@@ -47,7 +50,7 @@
 {#if addresses.length > 0}
   <div class="flex flex-col">
     {#each addresses.slice(0, MAX_TILES_PER_MESSAGE) as uri (uri)}
-      <TileEmbed {uri} />
+      <TileEmbed {uri} {surface} />
     {/each}
   </div>
 {/if}

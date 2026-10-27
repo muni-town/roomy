@@ -28,7 +28,7 @@
 <div class="mx-auto max-w-2xl p-6">
   <h1 class="mb-4 text-lg font-semibold">Web Tile</h1>
   {#if tile}
-    <TileEmbed uri={tile} />
+    <TileEmbed uri={tile} surface="page" />
   {:else}
     <p class="text-sm text-base-500 dark:text-base-400">
       Pass a tile address as <code>?tile=at://…/ing.dasl.masl/…</code>.

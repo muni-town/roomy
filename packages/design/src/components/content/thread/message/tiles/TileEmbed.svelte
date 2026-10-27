@@ -25,6 +25,12 @@
   import type { Tile, TileMothership } from "@dasl/tile-loader";
   import { getTileMothership } from "./mothership.js";
   import { parseTileAddress, TILE_COLLECTION } from "./at-uri.js";
+  import {
+    classifyTileError,
+    TILE_ACTIVITY_EVENT,
+    type TileActivityDetail,
+    type TileSurface,
+  } from "./tile-activity.js";
 
   type Props = {
     /** The `ing.dasl.masl` record to render. */
@@ -34,9 +40,14 @@
      * ready. Absent for a tile that renders its own content.
      */
     data?: unknown;
+    /**
+     * Which surface is rendering the tile. Only the render site knows, so it
+     * is passed in and travels with each activity announcement.
+     */
+    surface?: TileSurface;
   };
 
-  let { uri, data }: Props = $props();
+  let { uri, data, surface = "chat" }: Props = $props();
 
   let container: HTMLDivElement | undefined = $state();
   let box: HTMLDivElement | undefined = $state();
@@ -46,13 +57,14 @@
   let placed = $state(false);
   /** The tile's frame has replaced the card. */
   let mounted = $state(false);
+  /** A `view` has been announced for this instance; the listener dedupes. */
+  let viewAnnounced = false;
 
   /** Card metadata, read from the tile's manifest. */
   let tileName = $state("");
   let tileDescription = $state<string | undefined>(undefined);
   let iconUrl = $state<string | null>(null);
   let screenshotUrl = $state<string | null>(null);
-
   /** Handles the click handler addresses. */
   let mothership: TileMothership | undefined;
   let tile: Tile | undefined;
@@ -60,6 +72,69 @@
   let contentHeight = 300;
   /** Blob URLs created for the card, revoked when the component goes away. */
   const blobUrls: string[] = [];
+
+  /** How long a card must stay on screen before it counts as seen. */
+  const VIEW_DWELL_MS = 1000;
+  /** How much of the card must be on screen to count. */
+  const VIEW_VISIBLE_RATIO = 0.5;
+
+  /**
+   * Announce one phase of this tile's use.
+   *
+   * Dispatch on the component's own box, so the event bubbles out to whatever
+   * the host installed a listener on. Nothing in this package listens, which
+   * is what leaves the event inert where no host wants it, and what keeps
+   * telemetry out of this library: `uri` leaves here raw and the host decides
+   * what may be recorded.
+   */
+  function announce(detail: TileActivityDetail): void {
+    box?.dispatchEvent(
+      new CustomEvent<TileActivityDetail>(TILE_ACTIVITY_EVENT, {
+        detail,
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  // A card scrolled past in a busy room is not a tile anyone looked at, so a
+  // view is a card at least half on screen for a full second. One per
+  // instance: the host's listener is what dedupes across re-mounts and
+  // sessions.
+  onMount(() => {
+    const el = box;
+    if (!el || parseTileAddress(uri) === null) return;
+    if (typeof IntersectionObserver === "undefined") return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+    };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const seen =
+            entry.isIntersecting && entry.intersectionRatio >= VIEW_VISIBLE_RATIO;
+          if (!seen) {
+            stop();
+          } else if (timer === undefined && !viewAnnounced) {
+            timer = setTimeout(() => {
+              timer = undefined;
+              viewAnnounced = true;
+              announce({ phase: "view", uri, surface });
+            }, VIEW_DWELL_MS);
+          }
+        }
+      },
+      { threshold: VIEW_VISIBLE_RATIO },
+    );
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      stop();
+    };
+  });
 
   // Attached directly rather than declared in the markup: this is a container,
   // not a control, and the handler exists only to keep a click inside it from
@@ -174,6 +249,8 @@
 
     el.replaceChildren(ifr);
     mounted = true;
+    // The click mounted the tile's frame: the card is what was expanded.
+    announce({ phase: "expand", uri, surface });
   }
 
   onMount(() => {
@@ -187,13 +264,19 @@
         if (!loaded) {
           error =
             "No loader matched that address, or its manifest could not be read from its PDS.";
+          announce({ phase: "error", uri, surface, reason: "manifest" });
           return;
         }
         if (data === undefined) {
           // `renderCard` builds detached DOM, so the card is placed once and
-          // the loader swaps it for the content frame itself.
+          // the loader swaps it for the content frame itself. The swap happens
+          // inside the loader, so the click — the thing that mounts the frame
+          // — is what this path can observe.
           const element = await loaded.renderCard();
           if (cancelled) return;
+          element.addEventListener("click", () =>
+            announce({ phase: "expand", uri, surface }),
+          );
           container?.replaceChildren(element);
         } else {
           mothership = instance;
@@ -211,7 +294,9 @@
         }
         placed = true;
       } catch (err) {
-        if (!cancelled) error = err instanceof Error ? err.message : String(err);
+        if (cancelled) return;
+        error = err instanceof Error ? err.message : String(err);
+        announce({ phase: "error", uri, surface, reason: classifyTileError(err) });
       }
     })();
     return () => {

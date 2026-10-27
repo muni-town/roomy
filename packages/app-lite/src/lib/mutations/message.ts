@@ -1,7 +1,12 @@
 import { decodeTime, newUlid, serializeBlocks, toBytes } from "@roomy-space/sdk";
 import type { Block } from "@roomy-space/sdk";
+import {
+  MAX_TILES_PER_MESSAGE,
+  tileAddressesInBlocks,
+} from "@roomy/design/components/content/thread/message/tiles/message-tiles.js";
 import { auth } from "$lib/auth.svelte";
 import type { Message } from "$lib/queries/messages";
+import { trackTilePost, type TilePostSource } from "$lib/telemetry/tile-events";
 import {
   confirmPendingSend,
   failPendingSend,
@@ -14,6 +19,29 @@ import {
   MAX_EVENTS_PER_SEND,
   type ForwardTarget,
 } from "./forward";
+
+/** The attachment `$type` that carries a Web Tile. */
+const TILE_ATTACHMENT = "space.roomy.attachment.tile.v0";
+
+/**
+ * Count the tiles a message carries, from both places they can arrive: the
+ * addresses its body spells out, and the tile attachments beside it.
+ *
+ * `inline` is the body-only case; any tile attachment makes the message an
+ * `attachment` one, even when the body spells addresses out too. Capped at
+ * {@link MAX_TILES_PER_MESSAGE}, which is what a reader is shown and what the
+ * event's range is defined as.
+ */
+function tilePostFor(
+  blocks: Block[],
+  attachments: Record<string, unknown>[],
+): { count: number; source: TilePostSource } | undefined {
+  const inline = tileAddressesInBlocks(blocks).length;
+  const attached = attachments.filter((a) => a.$type === TILE_ATTACHMENT).length;
+  const count = Math.min(inline + attached, MAX_TILES_PER_MESSAGE);
+  if (count === 0) return undefined;
+  return { count, source: attached > 0 ? "attachment" : "inline" };
+}
 
 /** Base64 of a message body, matching the appserver's `decodeContent` (which
  *  base64-encodes every non-`text/*` body for the wire). */
@@ -156,6 +184,11 @@ export async function sendMessage(
     failPendingSend(id, isRematerialising(e) ? "queued" : "failed");
     throw e;
   }
+
+  // Counted only once the message is delivered: a failed send is not a tile
+  // anyone can have seen.
+  const tilePost = tilePostFor(opts.blocks, attachments);
+  if (tilePost) trackTilePost(tilePost.count, tilePost.source);
   return id;
 }
 

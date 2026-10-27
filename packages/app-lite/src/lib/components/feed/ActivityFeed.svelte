@@ -237,7 +237,7 @@
                   {/if}
                 </div>
                 <div class="prose dark:prose-invert prose-a:text-accent-600 dark:prose-a:text-accent-400 prose-a:no-underline text-base font-normal text-left max-w-full overflow-auto hide-scrollbar break-words [&_p]:m-0 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0">
-                  <MessageContent content={last.content} mimeType={last.mimeType} />
+                  <MessageContent content={last.content} mimeType={last.mimeType} surface="feed" />
                 </div>
 
                 {#if last.attachments && mediaItems(last.attachments).length > 0}
@@ -255,7 +255,7 @@
                 {#if last.attachments && tileItems(last.attachments).length > 0}
                   <div class="flex flex-col">
                     {#each tileItems(last.attachments) as tile (tile.url)}
-                      <TileEmbed uri={tile.url} data={tile.data} />
+                      <TileEmbed uri={tile.url} data={tile.data} surface="feed" />
                     {/each}
                   </div>
                 {/if}

@@ -722,7 +722,7 @@
         {#if tiles.length > 0}
           <div class="flex flex-col">
             {#each tiles as tile (tile.url)}
-              <TileEmbed uri={tile.url} data={tile.data} />
+              <TileEmbed uri={tile.url} data={tile.data} surface="chat" />
             {/each}
           </div>
         {/if}

@@ -11,6 +11,7 @@
   import { installPushDebug } from "$lib/push-debug";
   import { preloadSpaceSidebars } from "$lib/preload";
   import { initFaro, setFaroUser } from "$lib/telemetry/faro";
+  import { initTileTelemetry } from "$lib/telemetry/tile-events";
   import {
     installNotificationNavigateListener,
     installPushSubscriptionChangeListener,
@@ -68,6 +69,9 @@
     // Faro first so console capture/error instrumentation is active before
     // auth/bootstrap logs anything (no-op unless PUBLIC_FARO_URL is set).
     initFaro();
+    // Tile engagement rides the same transport; listening starts here so a
+    // tile rendered by the first screen is already covered.
+    initTileTelemetry();
     console.log("[app-lite env debug] $env/dynamic/public:", {
       PUBLIC_PDS: dynamicEnv.PUBLIC_PDS,
       PUBLIC_PDS_HANDLE_SUFFIX: dynamicEnv.PUBLIC_PDS_HANDLE_SUFFIX,

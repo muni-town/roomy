@@ -450,12 +450,12 @@
                     {#snippet content()}
                       {#if isForward}
                         {#if original && original.blocked !== true}
-                          <MessageContent content={original.content} mimeType={original.mimeType} />
+                          <MessageContent content={original.content} mimeType={original.mimeType} surface="search" />
                         {:else}
                           <span class="italic text-base-400 text-sm">Original message unavailable</span>
                         {/if}
                       {:else}
-                        <MessageContent content={m.content} mimeType={m.mimeType} />
+                        <MessageContent content={m.content} mimeType={m.mimeType} surface="search" />
                       {/if}
                     {/snippet}
 
@@ -482,7 +482,7 @@
                       {#if tiles.length > 0}
                         <div class="flex flex-col">
                           {#each tiles as tile (tile.url)}
-                            <TileEmbed uri={tile.url} data={tile.data} />
+                            <TileEmbed uri={tile.url} data={tile.data} surface="search" />
                           {/each}
                         </div>
                       {/if}
@@ -516,7 +516,7 @@
                         timestamp={new Date(m.timestamp)}
                       >
                         {#snippet content()}
-                          <MessageContent content={m.content} mimeType={m.mimeType} />
+                          <MessageContent content={m.content} mimeType={m.mimeType} surface="search" />
                         {/snippet}
                       </MessageBubble>
                     </div>

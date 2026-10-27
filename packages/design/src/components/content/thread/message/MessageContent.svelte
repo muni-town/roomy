@@ -4,12 +4,14 @@
   import { enrichInternalLinks } from "./enrich-internal-links.js";
   import BlocksRenderer from "./BlocksRenderer.svelte";
   import MessageTiles from "./tiles/MessageTiles.svelte";
+  import type { TileSurface } from "./tiles/tile-activity.js";
   import { RICHTEXT_MIME } from "@roomy-space/sdk";
 
   let {
     content,
     mimeType,
     tiles = true,
+    surface = "chat",
   }: {
     /** Message content to render. Markdown for legacy messages, base64-encoded
      *  richtext JSON for `application/vnd.roomy.richtext+json` messages. */
@@ -24,6 +26,8 @@
      * text for the same reason.
      */
     tiles?: boolean;
+    /** The surface rendering the message, handed down to the tiles in it. */
+    surface?: TileSurface;
   } = $props();
 
   // New format: content is base64-encoded JSON of the blocks document
@@ -48,7 +52,7 @@
      Inside `.prose` (both branches render there), so `not-prose` on the tile's
      own wrapper is what keeps the typography plugin off it. -->
 {#if tiles}
-  <MessageTiles {content} {mimeType} />
+  <MessageTiles {content} {mimeType} {surface} />
 {/if}
 
 <style>

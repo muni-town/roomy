@@ -114,6 +114,11 @@ export function initFaro(): void {
           new TracingInstrumentation(),
         ],
       });
+      // Flush in arrival order: a buffered event happened before anything the
+      // app reports from here on.
+      for (const event of pendingEvents.splice(0)) {
+        faroInstance.api.pushEvent(event.name, event.attributes);
+      }
       if (pendingUser !== undefined) faroInstance.api.setUser({ id: pendingUser });
     },
   );
@@ -134,4 +139,37 @@ export async function setFaroUser(did: string | undefined): Promise<void> {
   if (id === undefined) return;
   pendingUser = id;
   faroInstance?.api.setUser({ id });
+}
+
+/** A product event's attributes. Faro stores event attributes as strings. */
+export type EventAttributes = Record<string, string>;
+
+/**
+ * Events raised before the SDK finished loading. `initFaro` starts a dynamic
+ * import that resolves after its caller returns, and tiles can render before
+ * it does — those reports would otherwise be dropped for being early.
+ */
+const pendingEvents: Array<{ name: string; attributes: EventAttributes }> = [];
+
+/** How many early events are held. Beyond this the oldest are not kept. */
+const MAX_PENDING_EVENTS = 32;
+
+/**
+ * Record a product event (tile engagement, and whatever else needs counting
+ * that is not an error or a log line).
+ *
+ * A no-op when telemetry is not configured: `initFaro` returns without
+ * initialising, so nothing is ever flushed and the buffer fills and stops.
+ * Events raised while the SDK is still loading are buffered and flushed on
+ * initialisation, in order; beyond the cap they are dropped rather than
+ * growing without bound.
+ */
+export function trackEvent(name: string, attributes: EventAttributes): void {
+  if (faroInstance) {
+    faroInstance.api.pushEvent(name, attributes);
+    return;
+  }
+  if (pendingEvents.length < MAX_PENDING_EVENTS) {
+    pendingEvents.push({ name, attributes });
+  }
 }
