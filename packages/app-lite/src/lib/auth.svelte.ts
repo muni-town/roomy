@@ -1,5 +1,6 @@
 import { Agent, AtpAgent } from "@atproto/api";
 import {
+  describeOAuthFailure,
   initSession,
   login as sdkLogin,
   logout as sdkLogout,
@@ -343,7 +344,18 @@ export async function init() {
     ]);
     // `work` won: all session state was set inside `doInit`.
   } catch (err) {
-    initError = String(err);
+    if (timedOut) {
+      initError = String(err);
+    } else {
+      // The PDS and HappyView both collapse to one message on the way up; the
+      // step and the failing request's error body are only on the cause chain
+      // (see `describeOAuthFailure`). Both go on the sign-in screen, and the
+      // same line ships through `console.info` to the Faro log store — the
+      // only place a production failure can be read from.
+      const failure = describeOAuthFailure(err);
+      initError = failure.summary;
+      sessionDiagnostic("oauth sign-in failed", failure.summary);
+    }
 
     // If the watchdog fired but the (slow) exchange actually completed in the
     // background afterwards, the session is now persisted and authenticated —
@@ -427,7 +439,17 @@ export async function login(handle: string) {
   // The OAuth `state` is the client's own CSRF token, never a transport for
   // this path (see `return-url.ts`).
   rememberReturnUrl(currentReturnUrl());
-  const result = await sdkLogin(handle, await sessionOptions(reconcile));
+  const result = await sdkLogin(
+    handle,
+    await sessionOptions(reconcile),
+  ).catch((err: unknown) => {
+    // Failures before the browser leaves (handle/DID resolution, metadata
+    // discovery, PAR) throw here rather than on the callback. Name the step in
+    // both the message the sign-in screen shows and the log store line.
+    const failure = describeOAuthFailure(err);
+    sessionDiagnostic("oauth sign-in failed", failure.summary);
+    throw new Error(failure.summary, { cause: err });
+  });
 
   if (result) {
     // Tauri: sdkLogin resolves in place (no page navigation, so `init()`'s

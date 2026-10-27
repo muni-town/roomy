@@ -25,6 +25,10 @@ export {
   type OAuthSession,
 } from "./oauth";
 
+// Names the step a sign-in failed at and carries the failing request's error
+// body. Kept beside `initSession`/`login` because they are what throw.
+export { describeOAuthFailure, type OAuthFailure, type OAuthStep } from "./oauth-failure";
+
 export {
   NativeSessionMirror,
   NATIVE_SESSION_KEY,
