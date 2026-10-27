@@ -609,10 +609,12 @@ three are what milestone B meets. B0 answers the first; the other two are open:
 
 **Two producers write one row per link, and they do not agree on the key.** An
 explicit `LinkAttachment` writes `uri?message=<msgId>`; the body scan
-(`applyBatch.ts:589-632` → `detectAndStoreLinks`, `enricher.ts:578`) writes the
-bare URL with `show_preview = 1`. Both are entities scoped to the message, so a
-message that attaches a link *and* mentions that URL in its text produces two
-rows and two `linkEmbeds` entries for one card — verified against the
+(`detectAndStoreLinks`, `enricher.ts:546`, called from the materialiser and
+dual-written into the global `pending_links` index at `applyBatch.ts:793` and
+`derivedSteps.ts:90,141`) writes the bare URL with `show_preview = 1`. Both are
+entities scoped to the message, so a message that attaches a link *and*
+mentions that URL in its text produces two rows and two `linkEmbeds` entries
+for one card — verified against the
 materialiser. The enricher's own doc comment ("Skips URLs that already exist in
 `comp_embed_link` (via explicit LinkAttachment or a previous scan…)",
 `enricher.ts:569`) does not hold across the two encodings. It is unreachable
@@ -719,9 +721,10 @@ a question in the first place.
 **Intent, and what the plan needs from it.** Embed intent is not expressible at
 create today. `LinkAttachment.showPreview` is the only intent carrier in the
 union, and the create path never sees one — the appserver scans the body and
-writes `show_preview = 1` (`applyBatch.ts:589-632`). The composer's dismiss
-button is deliberately client-only (`ChatInputArea.svelte:103-109`); dismissal
-round-trips as an `editMessage` carrying link attachments, through the
+writes `show_preview = 1` (`detectAndStoreLinks`, `enricher.ts:546`). The
+composer's dismiss button is deliberately client-only
+(`ChatInputArea.svelte:103-109`); dismissal round-trips as an `editMessage`
+carrying link attachments, through the
 non-destructive fast path (§4.6). So the write path has *implied* intent on
 create and *explicit* intent on edit.
 
@@ -1563,21 +1566,24 @@ retroactively: once the resolver runs, every post link already in a space
 renders richly, with no event rewritten and nothing asked of the author. That
 falls out of two things, both of which are decisions rather than consequences.
 
-**One: the resolver's cache is per instance.** One map in the appserver process,
-keyed by link URL, shared across the spaces that instance serves, so a post
-resolved for one space answers every message that links it. The existing embed
-metadata cache is per space (`comp_embed_link_data`, in each space's own DB);
-this one deliberately is not, because the expensive part — a PDS round-trip for
-the tile manifest — is a property of the URL and not of the space. The cost is
-that the process holds one entry for a link that several spaces contain: cache
-state is shared where the rest of the read path is per space. Nothing renders
-differently, because the resolver's output reaches a message only through that
-message's own link row. The cache carries a resolver version, so rows enriched
-by an older resolver are recognisable as stale.
+**One: the resolver's cache is keyed by URL, not scoped to a space.** Embed
+metadata already works this way: `link_embeds` is a table in the global DB,
+keyed by the URL, written once for every space that shared the link
+(`embed/store.ts`), and a single process-wide sweep loop drains the global
+`pending_links` index under a worker lease (`embed/sweeper.ts`). The resolved
+tile is stored in that same row, so the expensive part — a PDS round-trip for
+the tile manifest — is paid once for a URL, and a post resolved for one space
+answers every message that links it in every space the instance serves.
+Nothing renders differently, because the resolver's output reaches a message
+only through that message's own link row. A `tile_version` stamp records which
+resolver wrote the tile, so a row enriched by an older resolver is
+recognisable as stale. The cost is the embed store's: cache state is shared
+where most of the read path is per space.
 
 **Two: enrichment is demand-driven, not a backfill.** Write time and read time
-are the only two points that enqueue work. A write already scans the body and
-inserts link rows (`applyBatch.ts:589-632`); a read finds rows whose embed data
+are the only two points that enqueue work. A write already scans the body
+(`detectAndStoreLinks`, `enricher.ts:546`) and indexes each URL into the global
+`pending_links` table (`applyBatch.ts:793`); a read finds rows whose embed data
 is missing, null, or stamped with an older resolver version, and re-enqueues
 them. There is no separate pass over the log and nothing to run at deploy time —
 the first read of an old message is what triggers its resolution. The requeue is
@@ -1677,9 +1683,10 @@ milestone A.
    extending the existing embed projection (the recommendation for the first
    cut) or by auto-attaching a tile attachment on send.
 3. **Resolution site** (§5.5): settled as appserver-side resolution with
-   client-side tile loading, and a resolver cache that is per instance, not per
-   space (§11.2). What that costs is recorded there: cache state is shared across
-   the spaces one appserver serves, where the rest of the read path is per space.
+   client-side tile loading, and a resolver cache keyed by URL in the global
+   embed store rather than scoped to a space (§11.2). What that costs is
+   recorded there: cache state is shared across the spaces one appserver
+   serves, where the rest of the read path is per space.
 4. **Which loading server** (§8.1): settled — the shared `load.webtil.es`, with
    `loadDomain` left unset. The open part is only Roomy's own replacement, which
    needs a wildcard certificate and is a config change away.
