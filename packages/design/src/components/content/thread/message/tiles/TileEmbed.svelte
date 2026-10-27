@@ -9,11 +9,12 @@
 
   A tile attached to a message can also be handed JSON — the attachment's
   `data` — over the tiles data-passing protocol. That path is driven here
-  rather than by the loader's `renderCard`: the loader's card swaps in
-  `renderContent`'s own iframe, whose shuttle id is private, so there would be
-  no way to address the frame to send the payload. A data-carrying tile gets a
-  card drawn from the same manifest fields and, on click, a frame this
-  component registers itself. `renderCard` remains the path for a tile with no
+  rather than by the loader's `renderCard`: the payload is addressed to a
+  shuttle id, and the frame has to carry the id the loader's own title and icon
+  handoff uses, so the frame's attachment goes through `attachTileFrame` (see
+  `./mothership.ts`), which attaches it the loader's way and reports the id
+  back. A data-carrying tile gets a card drawn from the same manifest fields
+  and, on click, that frame. `renderCard` remains the path for a tile with no
   payload.
 
   The loader is browser-only and heavy (zip, mime, TOML), so it is reached
@@ -22,8 +23,8 @@
 -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { Tile, TileMothership } from "@dasl/tile-loader";
-  import { getTileMothership } from "./mothership.js";
+  import type { Tile } from "@dasl/tile-loader";
+  import { getTileMothership, type TileFrameMothership } from "./mothership.js";
   import { parseTileAddress, TILE_COLLECTION } from "./at-uri.js";
   import {
     classifyTileError,
@@ -73,7 +74,7 @@
   let iconUrl = $state<string | null>(null);
   let screenshotUrl = $state<string | null>(null);
   /** Handles the click handler addresses. */
-  let mothership: TileMothership | undefined;
+  let mothership: TileFrameMothership | undefined;
   let tile: Tile | undefined;
   /** Height of the tile's own frame, from its manifest. */
   let contentHeight = 300;
@@ -204,9 +205,11 @@
   /**
    * Replace the card with the tile's frame and hand it the payload.
    *
-   * `registerShuttleFrame` is what addresses the frame afterwards: the
-   * mothership posts `{ id, action, payload }` into it, and the shuttle
-   * forwards that down to the tile.
+   * `attachTileFrame` registers the frame on the loader's own path and returns
+   * the id it landed on, which is what makes the frame addressable afterwards:
+   * the mothership posts `{ id, action, payload }` into it, and the shuttle
+   * forwards that down to the tile. That id is also the one the loader's own
+   * title and icon handoff posts to, so the tile is named as it loads.
    *
    * The payload goes down on two signals, because the tile decides when it can
    * accept one and the loader exposes nothing for that. The loader's `load`
@@ -232,7 +235,8 @@
     ifr.style.height = `${contentHeight}px`;
     ifr.style.border = "none";
 
-    const id = m.registerShuttleFrame(ifr, t);
+    // Also starts the shuttle on the frame's `load`, as the loader does.
+    const id = m.attachTileFrame(t, ifr);
     // The same payload on both signals: a tile that never calls `listen()` is
     // still handed one, and a tile that calls it twice is handed it twice,
     // which the protocol's handlers tolerate.
@@ -252,7 +256,6 @@
       t.removeEventListener("load", deliver);
       window.removeEventListener("message", onReady);
     };
-    ifr.addEventListener("load", () => m.startShuttle(id));
 
     el.replaceChildren(ifr);
     mounted = true;
