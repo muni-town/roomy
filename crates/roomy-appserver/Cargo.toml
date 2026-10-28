@@ -35,6 +35,7 @@ http-body-util = "0.1"
 space-db.workspace = true
 space-feed.workspace = true
 tempfile = "3"
+ureq = "2"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tower = { version = "0.5", features = ["util"] }
 serde.workspace = true

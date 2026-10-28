@@ -146,6 +146,7 @@ fn a_fixture_feed_drains_to_the_typescript_digest() {
         signals: NoSignals,
         clock: std::sync::Arc::new(SystemClock),
         cancel: Cancel::new(),
+        following: false,
         db: seeded_space(&stream),
     });
 
@@ -167,6 +168,7 @@ fn a_fixture_feed_drains_to_the_typescript_digest() {
 
     let health = worker.health();
     assert!(health.lease_held);
+    assert!(!health.following);
     assert_eq!(health.last_error, None);
     assert!(health.is_healthy());
     assert!(health.to_json().contains("\"leaseHeld\":true"));
@@ -429,6 +431,7 @@ fn drain(space: &SpaceDid, changes: &[FeedRow], space_path: &Path, global_path: 
         signals: NoSignals,
         clock: std::sync::Arc::new(SystemClock),
         cancel: Cancel::new(),
+        following: false,
         db,
     });
     run_to_idle(&mut worker);

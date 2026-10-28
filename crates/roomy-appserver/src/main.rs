@@ -15,8 +15,12 @@
 //! data directory:
 //!
 //! ```text
-//! ROOMY_DATA_DIR       data            per-space and log files live under here
+//! ROOMY_DATA_DIR       data            per-space and global files live under here
+//! ROOMY_EVENTS_DB      —               the event log this process reads;
+//!                                     defaults to `ROOMY_DATA_DIR/roomy-events.sqlite`
 //! ROOMY_HTTP_ADDR      127.0.0.1:8080  the gateway's listener
+//! ROOMY_HEALTH_ADDR    —               a supervisor's `/health` listener; the
+//!                                     gateway role serves its own and ignores it
 //! ROOMY_SPACES         —               comma-separated space DIDs to own
 //! ROOMY_TICKET_SECRET  —               required by the gateway role
 //! ROOMY_TICKET_TTL     60              a ticket's lifetime, in seconds
@@ -41,9 +45,12 @@
 //! BUILD_ID             —               the `build_id` log field; `unknown` when
 //!                                     unset (the image bakes it from the commit)
 //! ```
+//!
+//! A path that is set but blank counts as unset, so a deployment template that
+//! renders an empty value falls through to the default.
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -66,6 +73,7 @@ use space_xrpc::verify::{GatewayServiceAuth, TestMode};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+mod health;
 mod loki;
 
 use loki::{LokiLayer, LokiSink};
@@ -80,7 +88,13 @@ enum Role {
 struct Config {
     role: Role,
     data_dir: PathBuf,
+    /// The event log this process reads. It defaults to the log in its own data
+    /// directory, and is set elsewhere when the log belongs to another process:
+    /// that is what lets a follower replay production without writing beside it.
+    events_db: PathBuf,
     http_addr: SocketAddr,
+    /// Where a supervisor's `/health` is served. `None` binds nothing.
+    health_addr: Option<SocketAddr>,
     spaces: Vec<SpaceDid>,
     ticket_secret: Vec<u8>,
     ticket_ttl: u64,
@@ -151,6 +165,8 @@ impl Config {
         }
 
         let data_dir = PathBuf::from(var("ROOMY_DATA_DIR").unwrap_or_else(|| "data".into()));
+        let events_db = resolve_events_db(&data_dir, var("ROOMY_EVENTS_DB"));
+        let health_addr = resolve_health_addr(var("ROOMY_HEALTH_ADDR"))?;
         let http_addr: SocketAddr = var("ROOMY_HTTP_ADDR")
             .unwrap_or_else(|| "127.0.0.1:8080".into())
             .parse()
@@ -215,7 +231,9 @@ impl Config {
         Ok(Self {
             role,
             data_dir,
+            events_db,
             http_addr,
+            health_addr,
             spaces,
             ticket_secret: ticket_secret.into_bytes(),
             ticket_ttl,
@@ -235,11 +253,47 @@ impl Config {
     }
 
     fn events_db(&self) -> PathBuf {
-        self.data_dir.join("roomy-events.sqlite")
+        self.events_db.clone()
     }
 
     fn global_db(&self) -> PathBuf {
         self.data_dir.join("global.sqlite")
+    }
+}
+
+/// The file a data directory keeps its log in, when `ROOMY_EVENTS_DB` names no
+/// other.
+const EVENTS_DB_FILE: &str = "roomy-events.sqlite";
+
+/// The log this process reads.
+///
+/// A configured path is trimmed, and one that is blank is absent: a deployment
+/// template that renders an empty value falls through to the default rather than
+/// opening a file named nothing.
+fn resolve_events_db(data_dir: &Path, configured: Option<String>) -> PathBuf {
+    match configured
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+    {
+        Some(path) => PathBuf::from(path),
+        None => data_dir.join(EVENTS_DB_FILE),
+    }
+}
+
+/// The address a supervisor serves `/health` on. Unset — or blank, by the same
+/// rule — binds nothing.
+fn resolve_health_addr(configured: Option<String>) -> Result<Option<SocketAddr>, String> {
+    match configured
+        .as_deref()
+        .map(str::trim)
+        .filter(|addr| !addr.is_empty())
+    {
+        Some(addr) => addr
+            .parse()
+            .map(Some)
+            .map_err(|error| format!("ROOMY_HEALTH_ADDR is not an address: {error}")),
+        None => Ok(None),
     }
 }
 
@@ -264,9 +318,22 @@ fn run(config: Config, loki: Option<Arc<LokiSink>>) -> Result<(), Box<dyn std::e
                 .with_signals(signal_factory(&config, signals.clone()))
                 .with_feed(feed_factory(&config));
             supervisor.start_all(config.spaces.clone())?;
-            Some(supervisor)
+            Some(Arc::new(supervisor))
         } else {
             None
+        };
+
+        // A supervisor's health is served on its own listener, because the worker
+        // role binds no other: a follower that is falling behind has to be
+        // observable. The gateway role has no supervisor, and serves `/health`
+        // itself.
+        let health_task = match (&config.health_addr, &supervisor) {
+            (Some(addr), Some(supervisor)) => {
+                let listener = tokio::net::TcpListener::bind(addr).await?;
+                let supervisor = Arc::clone(supervisor);
+                Some(tokio::spawn(health::serve(listener, supervisor)))
+            }
+            _ => None,
         };
 
         if config.role != Role::Worker {
@@ -285,6 +352,9 @@ fn run(config: Config, loki: Option<Arc<LokiSink>>) -> Result<(), Box<dyn std::e
             let _ = tokio::signal::ctrl_c().await;
         }
 
+        if let Some(task) = health_task {
+            task.abort();
+        }
         if let Some(supervisor) = supervisor {
             supervisor.stop();
         }
@@ -450,4 +520,80 @@ fn feed_factory(config: &Config) -> FeedFactory {
 
 fn var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_events_db, resolve_health_addr};
+    use std::net::SocketAddr;
+    use std::path::{Path, PathBuf};
+
+    fn data_dir() -> PathBuf {
+        PathBuf::from("/shadow")
+    }
+
+    #[test]
+    fn a_log_beside_the_data_dir_is_the_default() {
+        assert_eq!(
+            resolve_events_db(&data_dir(), None),
+            data_dir().join("roomy-events.sqlite")
+        );
+    }
+
+    #[test]
+    fn a_configured_log_is_opened_where_it_is() {
+        assert_eq!(
+            resolve_events_db(&data_dir(), Some("/data/roomy-events.sqlite".to_string())),
+            PathBuf::from("/data/roomy-events.sqlite")
+        );
+        // Surrounding space is the template's, not the path's.
+        assert_eq!(
+            resolve_events_db(&data_dir(), Some("  /data/log.sqlite\n".to_string())),
+            PathBuf::from("/data/log.sqlite")
+        );
+    }
+
+    #[test]
+    fn a_blank_log_path_falls_through_to_the_default() {
+        for blank in ["", " ", "\t", "  \n "] {
+            assert_eq!(
+                resolve_events_db(&data_dir(), Some(blank.to_string())),
+                data_dir().join("roomy-events.sqlite"),
+                "{blank:?} is not a path"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unset_health_address_binds_nothing() {
+        assert_eq!(resolve_health_addr(None), Ok(None));
+        for blank in ["", "   ", "\n"] {
+            assert_eq!(resolve_health_addr(Some(blank.to_string())), Ok(None));
+        }
+    }
+
+    #[test]
+    fn a_configured_health_address_is_where_it_binds() {
+        assert_eq!(
+            resolve_health_addr(Some(" 127.0.0.1:9090 ".to_string())),
+            Ok(Some(
+                "127.0.0.1:9090".parse::<SocketAddr>().expect("an address")
+            ))
+        );
+        assert!(resolve_health_addr(Some("127.0.0.1".to_string())).is_err());
+    }
+
+    /// The deployment this exists for: the log stays the owner's file, and the
+    /// data directory is the follower's own.
+    #[test]
+    fn a_configured_log_sits_outside_the_data_dir() {
+        let data = Path::new("/shadow");
+        let log = resolve_events_db(data, Some("/data/roomy-events.sqlite".to_string()));
+        assert!(
+            !log.starts_with(data),
+            "{} is inside {}",
+            log.display(),
+            data.display()
+        );
+    }
 }

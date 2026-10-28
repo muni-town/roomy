@@ -28,7 +28,9 @@ directory.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ROOMY_DATA_DIR` | `data` | Where `spaces/`, `roomy-events.sqlite` and `global.sqlite` live |
+| `ROOMY_DATA_DIR` | `data` | Where this process's `spaces/` and `global.sqlite` live |
+| `ROOMY_EVENTS_DB` | `<ROOMY_DATA_DIR>/roomy-events.sqlite` | The event log this process reads. Set it to the owner's log to replay production without writing into its directory |
+| `ROOMY_HEALTH_ADDR` | — | Where the supervisor serves `/health`, for the `worker` and `all` roles. Unset binds nothing; the `gateway` role serves its own and ignores it |
 | `ROOMY_HTTP_ADDR` | `127.0.0.1:8080` | The gateway's listener |
 | `ROOMY_SPACES` | — | Comma-separated space DIDs this process owns |
 | `ROOMY_TICKET_SECRET` | — | Required by the gateway role; signs connection tickets |
@@ -49,6 +51,9 @@ directory.
 
 `ROOMY_FEED_URL` and `ROOMY_SIGNAL_URL` are for the worker role; a gateway reads the
 log it owns and fans signals out locally.
+
+A path variable that is set but blank counts as unset, so a template that renders
+an empty value falls through to the default.
 
 ## Logs
 
@@ -85,16 +90,18 @@ HTTP and relay their signals back; nothing else crosses the boundary. The lease
 lives in the shared global database, so every worker must be able to reach it.
 
 **Replicated reads.** A process with `--role worker`, `ROOMY_OWNERSHIP=follower`,
-its own `ROOMY_DATA_DIR`, and a feed URL. It replays beside the owner without taking
-the lease and serves reads from its own projection, which the gateway in that
-process mounts unchanged. Its `global.sqlite` is its own copy — never the owner's,
-because the owner is that file's writer.
+its own `ROOMY_DATA_DIR`, `ROOMY_EVENTS_DB` naming the owner's log (on the same
+machine, opened read-only), and `ROOMY_HEALTH_ADDR` so the follower is
+observable. It replays beside the owner without taking the lease and serves reads
+from its own projection, which the gateway in that process mounts unchanged. Its
+`global.sqlite` is its own copy — never the owner's, because the owner is that
+file's writer.
 
 ## Endpoints
 
 | Route | Purpose |
 | --- | --- |
-| `GET /health` | Sessions held and signal subscribers |
+| `GET /health` | Sessions held and signal subscribers (the gateway); with `ROOMY_HEALTH_ADDR`, each space's cursor, lag, lease and `following` (a supervisor) |
 | `GET /metrics` | Prometheus counters, including the shadow's comparison and divergence counts |
 | `POST /xrpc/space.roomy.auth.getConnectionTicket` | A signed, single-use ticket for the socket plane |
 | `GET /xrpc/space.roomy.sync.subscribe` | The WebSocket |
@@ -117,9 +124,9 @@ Cutover is per space and reversible on the next request. The ownership table is
    TypeScript appserver — status, headers and body verbatim — except spaces whose
    ownership row names `rust-core`.
 2. **Materialise the space here.** Run the workers with `ROOMY_SPACES` including it,
-   or start a follower. Wait until the space's cursor reaches the log's last index;
-   `/health` does not report cursors, so this is `select idx from worker_cursor` in
-   the space's database.
+   or start a follower with `ROOMY_HEALTH_ADDR` set. Wait until the space's
+   `/health` row reports `lag: 0` and a `cursor.idx` equal to the log's last
+   index — `select max(idx) from record_changes where stream_id = '<space>'`.
 3. **Shadow.** Set `ROOMY_SHADOW_PERCENT` above zero and let it run. Watch
    `roomy_cutover_shadow_comparisons` rise. `roomy_cutover_shadow_alerting_nsids`
    must stay zero: one NSID in it means the two paths answered differently for that

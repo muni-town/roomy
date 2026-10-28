@@ -206,6 +206,7 @@ impl Supervisor {
             .name(format!("space-{key}"))
             .spawn(move || {
                 let mut worker = Worker::new(WorkerParts {
+                    following: config.ownership == Ownership::Follower,
                     space: actor_space,
                     holder,
                     lease_ttl,

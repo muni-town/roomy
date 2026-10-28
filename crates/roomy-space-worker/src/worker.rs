@@ -99,6 +99,10 @@ pub struct WorkerParts<F: ChangeFeed, L: Lease, S: GlobalSink, N: SignalSink> {
     pub clock: std::sync::Arc<dyn Clock>,
     /// The supervisor's stop signal for this space.
     pub cancel: Cancel,
+    /// Whether this worker replays beside the owner instead of owning the
+    /// space. Its lease claims nothing, so its health reports no lease rather
+    /// than the answer `acquire` gives.
+    pub following: bool,
     pub db: SpaceDb,
 }
 
@@ -115,6 +119,7 @@ pub struct Worker<F: ChangeFeed, L: Lease, S: GlobalSink, N: SignalSink> {
     signals: N,
     clock: std::sync::Arc<dyn Clock>,
     cancel: Cancel,
+    following: bool,
     db: SpaceDb,
     /// The last failure, for `/health`. A failed batch leaves the cursor where
     /// it was, so the next iteration retries it.
@@ -136,6 +141,7 @@ impl<F: ChangeFeed, L: Lease, S: GlobalSink, N: SignalSink> Worker<F, L, S, N> {
             clock: parts.clock,
             cancel: parts.cancel,
             db: parts.db,
+            following: parts.following,
             last_error: None,
         }
     }
@@ -287,12 +293,19 @@ impl<F: ChangeFeed, L: Lease, S: GlobalSink, N: SignalSink> Worker<F, L, S, N> {
     pub fn health(&mut self) -> crate::health::Health {
         let cursor = self.cursor().unwrap_or((-1, -1));
         let lag = self.lag().unwrap_or(-1);
-        let lease_held = self.holds_lease().map(|grant| grant.held).unwrap_or(false);
+        // A follower holds no lease, and asking for one is a write to a table it
+        // does not own. Report what is true instead of acquiring it.
+        let lease_held = if self.following {
+            false
+        } else {
+            self.holds_lease().map(|grant| grant.held).unwrap_or(false)
+        };
         crate::health::Health {
             space: self.space.as_str().to_string(),
             cursor,
             lag,
             lease_held,
+            following: self.following,
             holder: self.holder.clone(),
             last_error: self.last_error.clone(),
         }
