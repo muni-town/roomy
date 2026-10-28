@@ -46,6 +46,7 @@
 import { Database } from "bun:sqlite";
 import { AtpAgent } from "@atproto/api";
 import { transport, newUlid, toBytes, serializeBlocks } from "@roomy-space/sdk";
+import { loginBridgeAccount, resolveLoginService } from "../roomy/atproto-login.ts";
 import { MsgType } from "../discord/types.ts";
 
 // ── config ──────────────────────────────────────────────────────────────────
@@ -274,11 +275,9 @@ async function main(): Promise<void> {
 	console.log(`  db:    ${DB_PATH}`);
 	console.log("");
 
-	const agent = new AtpAgent({ service: "https://bsky.social" });
-	await agent.login({
-		identifier: process.env.ATPROTO_BRIDGE_DID ?? "roomy-test-3.bsky.social",
-		password: APP_PASSWORD,
-	});
+	const identifier = process.env.ATPROTO_BRIDGE_DID ?? "roomy-test-3.bsky.social";
+	const agent = new AtpAgent({ service: await resolveLoginService(identifier) });
+	await loginBridgeAccount(agent, identifier, APP_PASSWORD);
 	const serviceAuth = new transport.ServiceAuthClient(agent);
 	const xrpc = new transport.DirectXrpcClient(APPSERVER_URL, APPSERVER_DID, serviceAuth);
 

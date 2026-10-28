@@ -10,6 +10,7 @@ import {
 	STREAM_NSID,
 } from "../env.ts";
 import { createLogger } from "../logger.ts";
+import { loginBridgeAccount, resolveLoginService } from "./atproto-login.ts";
 
 const log = createLogger("roomy");
 
@@ -59,9 +60,10 @@ export async function initRoomyClient(): Promise<RoomyClient> {
 	log.info("Initializing ATProto agent...");
 
 	const existingSession = loadSessionFile();
+	const identifier = ATPROTO_BRIDGE_DID();
 
 	const atpAgent = new AtpAgent({
-		service: "https://bsky.social",
+		service: await resolveLoginService(identifier),
 		persistSession: (evt, session) => {
 			log.info(`Session event: ${evt}`);
 			if (evt === "create" || evt === "update") {
@@ -80,19 +82,20 @@ export async function initRoomyClient(): Promise<RoomyClient> {
 		} catch (err) {
 			log.warn("Session restore failed, re-authenticating...", err);
 			deleteSessionFile();
-			await atpAgent.login({
-				identifier: ATPROTO_BRIDGE_DID(),
-				password: ATPROTO_BRIDGE_APP_PASSWORD(),
-			});
-			log.info(`Authenticated as ${atpAgent.did}`);
+			log.info("Authenticating with ATProto...");
+			await loginBridgeAccount(
+				atpAgent,
+				identifier,
+				ATPROTO_BRIDGE_APP_PASSWORD(),
+			);
 		}
 	} else {
 		log.info("Authenticating with ATProto...");
-		await atpAgent.login({
-			identifier: ATPROTO_BRIDGE_DID(),
-			password: ATPROTO_BRIDGE_APP_PASSWORD(),
-		});
-		log.info(`Authenticated as ${atpAgent.did}`);
+		await loginBridgeAccount(
+			atpAgent,
+			identifier,
+			ATPROTO_BRIDGE_APP_PASSWORD(),
+		);
 	}
 
 	if (!atpAgent.did) {

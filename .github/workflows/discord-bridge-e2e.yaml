@@ -16,6 +16,9 @@
 # Prerequisites (repo settings):
 #   secrets.DISCORD_BRIDGE_E2E_TOKEN         — staging bridge bot token
 #   secrets.DISCORD_BRIDGE_E2E_APP_PASSWORD  — app password of the bridge account
+#   secrets or variables.DISCORD_BRIDGE_E2E_BRIDGE_DID
+#                                            — the bridge account that password
+#                                              belongs to; either store works
 # The fixtures below are repo variables with staging defaults: the `#general`
 # channel of the bridge test guild, bridged to a room in the `Bridge E2E Test`
 # space. Override them to point the run at a different channel, room, or
@@ -62,7 +65,10 @@ jobs:
       # Bridge account.
       DISCORD_TOKEN: ${{ secrets.DISCORD_BRIDGE_E2E_TOKEN }}
       ATPROTO_BRIDGE_APP_PASSWORD: ${{ secrets.DISCORD_BRIDGE_E2E_APP_PASSWORD }}
-      ATPROTO_BRIDGE_DID: ${{ vars.DISCORD_BRIDGE_E2E_BRIDGE_DID || 'did:plc:pf4dgats5ugmzpzmfbu4jbn5' }}
+      # Read from either store: the DID and the app password only work as the
+      # pair they were created for, so a DID saved as a secret rather than a
+      # variable must still be honoured instead of falling back to the default.
+      ATPROTO_BRIDGE_DID: ${{ vars.DISCORD_BRIDGE_E2E_BRIDGE_DID || secrets.DISCORD_BRIDGE_E2E_BRIDGE_DID || 'did:plc:pf4dgats5ugmzpzmfbu4jbn5' }}
 
       # The bridged (channel, space) pair the E2E drives.
       E2E_SPACE_DID: ${{ vars.DISCORD_BRIDGE_E2E_SPACE_DID || 'did:plc:r5hlxel6tbh6vucl2jtdmni3' }}
@@ -112,6 +118,12 @@ jobs:
 
       - name: Build SDK (discord-bridge imports its dist)
         run: pnpm turbo run build-lib
+
+      # A rejected app password or a DID naming a different account has to
+      # fail here, naming the account and PDS, not inside the bridge boot.
+      - name: Check the bridge account credentials
+        working-directory: packages/discord-bridge
+        run: bun run src/scripts/check-credentials.ts
 
       # The bridge is booted here, not by the E2E: the E2E asserts on the
       # bridge's own database, so the bridge it drives has to be this

@@ -210,9 +210,15 @@ fails.
 | ----------------------------- | ------------------------------------------------------- |
 | `DISCORD_TOKEN`               | Discord bot token                                       |
 | `ATPROTO_BRIDGE_DID`          | DID of the ATProto identity the bridge authenticates as |
-| `ATPROTO_BRIDGE_APP_PASSWORD` | App password for ATProto authentication                 |
+| `ATPROTO_BRIDGE_APP_PASSWORD` | App password created on that account                    |
 | `APPSERVER_URL`               | Appserver HTTP origin (e.g. `http://127.0.0.1:8080`)    |
 | `APPSERVER_DID`               | DID of the appserver service                            |
+
+The DID and the app password only work as the pair they were created for: the
+bridge logs in at the PDS named in `ATPROTO_BRIDGE_DID`'s DID document, so one
+account's DID with another account's app password is rejected.
+`bun run src/scripts/check-credentials.ts` performs that login on its own and
+prints the account it resolved.
 
 ### Optional
 
@@ -427,7 +433,12 @@ CI runs both scripts on demand
 request gate). It needs the `DISCORD_BRIDGE_E2E_TOKEN` and
 `DISCORD_BRIDGE_E2E_APP_PASSWORD` repo secrets; the appserver and the
 (channel, space, room) triple it targets are `DISCORD_BRIDGE_E2E_*` repo
-variables with staging defaults in the workflow.
+variables with staging defaults in the workflow. The bridge account's DID
+(`DISCORD_BRIDGE_E2E_BRIDGE_DID`) may be a variable or a secret, since it is
+only useful together with the app-password secret. Before the bridge boots, the
+job logs in as that account (`src/scripts/check-credentials.ts`) so a rejected
+password or a mismatched DID fails with the account and PDS named, rather than
+as an XRPC error inside the bridge.
 
 The same sequence locally, from `packages/discord-bridge`:
 
@@ -438,6 +449,7 @@ export E2E_ROOM_ULID=01...                  # bridged channel's Roomy room
 export E2E_DISCORD_CHANNEL_ID=147...       # bridged Discord channel
 
 bun run src/scripts/seed-e2e-db.ts   # once, on a fresh database path
+bun run src/scripts/check-credentials.ts   # the same login the bridge makes
 bun run src/index.ts                 # the bridge under test, same BRIDGE_DB_PATH
 bun run src/scripts/e2e.ts           # in another shell
 ```
