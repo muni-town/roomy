@@ -1,6 +1,6 @@
 /**
- * Product events for Web Tiles: how many people see a tile, how many open
- * one, and how many messages carry one.
+ * Product events for Web Tiles: how many people see a tile, how many fail, and
+ * how many messages carry one.
  *
  * `TileEmbed` lives in `@roomy/design`, a component library with no
  * application dependencies, so it does not report anything itself: it
@@ -17,7 +17,7 @@
  * and sessions for one tile, and it does not yield the DID back. A salted
  * hash, as used for the telemetry user (`./scrub.ts`), would do the opposite —
  * the same tile would count as a different tile per deployment and per
- * session, and "how many people opened this tile" is not answerable from that.
+ * session, and "how many people saw this tile" is not answerable from that.
  *
  * Nothing else leaves the device with an event: no room id, no space id, no
  * message text, no raw URI.
@@ -62,23 +62,19 @@ export async function hashTileUri(uri: string): Promise<string> {
  */
 export const TILE_EVENT_BY_PHASE: Record<TileActivityDetail["phase"], string> = {
   view: "tile_view",
-  expand: "tile_expand",
   error: "tile_error",
 };
 
-/** The `sessionStorage` key that records one tile's report of a phase. */
-export function tileDedupeKey(
-  phase: "view" | "expand",
-  tile: string,
-): string {
-  return `tile-${phase}:${tile}`;
+/** The `sessionStorage` key that records a session's report of one tile. */
+export function tileDedupeKey(tile: string): string {
+  return `tile-view:${tile}`;
 }
 
 /**
  * Whether this session may report `phase` for `tile`, claiming the key when it
- * may. Views and expansions are counted once per session per tile: a room
- * re-renders its messages constantly (scrolling, edits, incoming events), so
- * reporting each mount would count renders, not people.
+ * may. Views are counted once per session per tile: a room re-renders its
+ * messages constantly (scrolling, edits, incoming events), so reporting each
+ * mount would count renders, not people.
  *
  * A store that is absent or throws is not a reason to lose the event — a
  * browser that refuses `sessionStorage` still has a tile someone looked at — so
@@ -95,7 +91,7 @@ export function claimTileReport(store: StringStore | undefined, key: string): bo
   }
 }
 
-/** The attributes of a `tile_view` / `tile_expand` / `tile_error` event. */
+/** The attributes of a `tile_view` / `tile_error` event. */
 export function tileActivityAttributes(
   detail: TileActivityDetail,
   tile: string,
@@ -134,8 +130,8 @@ function dedupeStore(): StringStore | undefined {
 /** Turn one announcement into a telemetry event, if it is one worth sending. */
 async function report(detail: TileActivityDetail): Promise<void> {
   const tile = await hashTileUri(detail.uri);
-  if (detail.phase === "view" || detail.phase === "expand") {
-    if (!claimTileReport(dedupeStore(), tileDedupeKey(detail.phase, tile))) return;
+  if (detail.phase === "view") {
+    if (!claimTileReport(dedupeStore(), tileDedupeKey(tile))) return;
   }
   trackEvent(TILE_EVENT_BY_PHASE[detail.phase], tileActivityAttributes(detail, tile));
 }

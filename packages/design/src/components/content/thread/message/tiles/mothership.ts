@@ -40,6 +40,15 @@ export interface TileFrameMothership extends TileMothership {
    * posted to nothing.
    */
   attachTileFrame(tile: Tile, ifr: HTMLIFrameElement): ShuttleId;
+  /**
+   * Drop a frame's registration, so an evicted tile leaves no live frame
+   * behind. The loader (2.0.0) has no unregister of its own — its maps are
+   * private and only ever grow — so this clears the frame's source, detaches
+   * the element and forgets it here. The loader keeps an inert reference to a
+   * frame that is no longer in the document, which is as far as its API
+   * reaches.
+   */
+  releaseTileFrame(id: ShuttleId): void;
 }
 
 let mothership: TileFrameMothership | undefined;
@@ -55,11 +64,21 @@ let loading: Promise<TileFrameMothership> | undefined;
 export function createTileMothership(core: typeof LoaderCore): TileFrameMothership {
   class FrameTrackingMothership extends core.TileMothership {
     #frameId: ShuttleId | undefined;
+    readonly #frames = new Map<ShuttleId, HTMLIFrameElement>();
 
     override registerShuttleFrame(ifr: HTMLIFrameElement, tile: Tile): ShuttleId {
       const id = super.registerShuttleFrame(ifr, tile);
       this.#frameId = id;
+      this.#frames.set(id, ifr);
       return id;
+    }
+
+    releaseTileFrame(id: ShuttleId): void {
+      const ifr = this.#frames.get(id);
+      if (!ifr) return;
+      this.#frames.delete(id);
+      ifr.src = "about:blank";
+      ifr.remove();
     }
 
     attachTileFrame(tile: Tile, ifr: HTMLIFrameElement): ShuttleId {

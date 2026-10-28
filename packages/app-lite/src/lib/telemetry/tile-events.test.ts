@@ -1,6 +1,6 @@
 /**
  * Tests for the tile telemetry seam: what names a tile, what each announced
- * phase turns into, and when a view or an expansion is reported.
+ * phase turns into, and when a view is reported.
  *
  * The identity rule is the one with a privacy cost if it slips: a tile's event
  * attribute must be a digest of its AT-URI, because the URI embeds the tile
@@ -87,7 +87,6 @@ describe("TILE_EVENT_BY_PHASE", () => {
   test("maps each phase to its event name", () => {
     assert.deepEqual(TILE_EVENT_BY_PHASE, {
       view: "tile_view",
-      expand: "tile_expand",
       error: "tile_error",
     });
   });
@@ -100,13 +99,6 @@ describe("tileActivityAttributes", () => {
     assert.deepEqual(
       tileActivityAttributes({ phase: "view", uri: TILE, surface: "chat" }, tile),
       { tile, surface: "chat" },
-    );
-  });
-
-  test("an expansion names the tile and the surface", () => {
-    assert.deepEqual(
-      tileActivityAttributes({ phase: "expand", uri: TILE, surface: "search" }, tile),
-      { tile, surface: "search" },
     );
   });
 
@@ -147,8 +139,7 @@ describe("tilePostAttributes", () => {
 
 describe("tileDedupeKey", () => {
   test("is the documented sessionStorage key", () => {
-    assert.equal(tileDedupeKey("view", "abc"), "tile-view:abc");
-    assert.equal(tileDedupeKey("expand", "abc"), "tile-expand:abc");
+    assert.equal(tileDedupeKey("abc"), "tile-view:abc");
   });
 });
 
@@ -178,7 +169,6 @@ describe("claimTileReport", () => {
   test("each key is claimed independently", () => {
     const store = stubStore();
     assert.equal(claimTileReport(store, "tile-view:abc"), true);
-    assert.equal(claimTileReport(store, "tile-expand:abc"), true);
     assert.equal(claimTileReport(store, "tile-view:def"), true);
   });
 

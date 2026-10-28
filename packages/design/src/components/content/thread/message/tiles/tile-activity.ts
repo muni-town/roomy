@@ -1,13 +1,16 @@
 /**
  * What a tile reports about its own use, and the event name it reports under.
  *
- * `TileEmbed` knows three things worth counting — a card was seen, a card was
- * opened, a card failed — and nothing about telemetry. `@roomy/design` is a
- * component library with no application dependencies and does not acquire one
- * here: the component announces each of those as a bubbling `CustomEvent` on
- * the DOM, and a host that wants them listens. With no listener the event is
- * inert, which is what a standalone mount (Storybook) and any surface that has
- * not opted in get.
+ * `TileEmbed` knows two things worth counting — a tile was seen, a tile failed
+ * — and nothing about telemetry. `@roomy/design` is a component library with
+ * no application dependencies and does not acquire one here: the component
+ * announces each of those as a bubbling `CustomEvent` on the DOM, and a host
+ * that wants them listens. With no listener the event is inert, which is what
+ * a standalone mount (Storybook) and any surface that has not opted in get.
+ *
+ * There is no "opened" phase: a tile's frame is mounted as soon as its
+ * manifest is read, with no card and no click in between, so the moment a card
+ * was expanded does not exist.
  *
  * `surface` travels with the announcement because only the render site knows
  * which one it is. The component cannot infer it from its own tree.
@@ -28,7 +31,6 @@ export type TileErrorReason = "manifest" | "assets" | "frame" | "other";
 /** One announcement. `uri` is the bare tile AT-URI, never sent onward as is. */
 export type TileActivityDetail =
   | { phase: "view"; uri: string; surface: TileSurface }
-  | { phase: "expand"; uri: string; surface: TileSurface }
   | {
       phase: "error";
       uri: string;
