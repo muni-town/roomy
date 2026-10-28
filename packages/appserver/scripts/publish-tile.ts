@@ -18,7 +18,13 @@
  *   ATPROTO_APP_PASSWORD  an app password for it
  *   ATPROTO_PDS           its PDS, e.g. https://roomy.chat
  *
- * Usage: bun run scripts/publish-tile.ts [tile-name]
+ * A tile's AT-URI is what every space's mapping points at, so publishing an
+ * update must land on the record that URI names. `--rkey <rkey>` (or
+ * `ATPROTO_TILE_RKEY`) republishes in place: the record at that key is
+ * overwritten, its URI unchanged. Without one the run creates a new record,
+ * which is the right thing only for a tile published for the first time.
+ *
+ * Usage: bun run scripts/publish-tile.ts [tile-name] [--rkey <rkey>]
  */
 
 import { readFile } from "node:fs/promises";
@@ -74,8 +80,40 @@ function manifestCid(manifest: unknown): string {
   return new CidLinkWrapper(bytes).$link;
 }
 
+/** A record key as the AT Protocol allows it. */
+const RKEY = /^[A-Za-z0-9._:~-]{1,512}$/;
+
+/**
+ * The tile to publish and, when the record already exists, the key it lives
+ * under.
+ *
+ * The key comes from `--rkey <rkey>` or `ATPROTO_TILE_RKEY`; absent means a
+ * first publish. A key that is not a record key is refused rather than handed
+ * to the PDS to reject.
+ */
+function parseArgs(argv: string[]): { name: string; rkey?: string } {
+  const positional: string[] = [];
+  let rkey = process.env.ATPROTO_TILE_RKEY?.trim() || undefined;
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index]!;
+    if (arg === "--rkey") {
+      const value = argv[++index];
+      if (value === undefined) throw new Error("--rkey needs a record key");
+      rkey = value;
+    } else if (arg.startsWith("--")) {
+      throw new Error(`unknown option ${arg}`);
+    } else {
+      positional.push(arg);
+    }
+  }
+  if (rkey !== undefined && !RKEY.test(rkey)) {
+    throw new Error(`"${rkey}" is not a record key (${RKEY.source})`);
+  }
+  return { name: positional[0] ?? "bluesky-post", ...(rkey ? { rkey } : {}) };
+}
+
 async function main(): Promise<void> {
-  const name = process.argv[2] ?? "bluesky-post";
+  const { name, rkey } = parseArgs(process.argv.slice(2));
   const dir = resolve(import.meta.dir, "..", "tiles", name);
   const source = JSON.parse(
     await readFile(join(dir, "manifest.json"), "utf8"),
@@ -125,17 +163,27 @@ async function main(): Promise<void> {
 
   // `validate: false`: the PDS has no lexicon for this collection, so it would
   // otherwise refuse a record it cannot check.
-  const created = await agent.com.atproto.repo.createRecord({
-    repo,
-    collection: TILE_COLLECTION,
-    record,
-    validate: false,
-  });
+  const written = rkey
+    ? await agent.com.atproto.repo.putRecord({
+        repo,
+        collection: TILE_COLLECTION,
+        rkey,
+        record,
+        validate: false,
+      })
+    : await agent.com.atproto.repo.createRecord({
+        repo,
+        collection: TILE_COLLECTION,
+        record,
+        validate: false,
+      });
 
-  const uri = created.data.uri;
-  console.log(`validation: ${created.data.validationStatus ?? "unknown"}`);
+  const uri = written.data.uri;
+  console.log(
+    rkey ? `republished in place: ${uri}` : `published: ${uri}`,
+  );
+  console.log(`validation: ${written.data.validationStatus ?? "unknown"}`);
   console.log(`tile manifest cid: ${record.cid}`);
-  console.log(`tile: ${uri}`);
 
   // Read the record back: what the PDS stores is what a loader will fetch, so
   // the paths it can resolve are worth printing rather than assuming.

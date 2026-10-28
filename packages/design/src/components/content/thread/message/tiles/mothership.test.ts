@@ -9,7 +9,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as core from "@dasl/tile-loader";
 
-import { createTileMothership } from "./mothership.js";
+import { createTileMothership, withTileImages } from "./mothership.js";
+import { _resetTileImageCacheForTest } from "./tile-images.js";
 
 const HELLO = "at://did:plc:izttpdp3l6vss5crelt5kcux/ing.dasl.masl/3meggnybzqs2n";
 
@@ -88,5 +89,92 @@ describe("attachTileFrame", () => {
     onLoad?.();
 
     expect(posted).toEqual([{ id, action: "tiles-shuttle-load", payload: { id } }]);
+  });
+});
+
+const DID = "did:plc:z72i7hdynmk6r22z27h6tvur";
+const CID = "bafkreidvywlo2nyrizqs7vy7rl7e4m5hedt75lxq2xcpb4rlljvtyqhck4";
+const IMAGE_URL = `https://cdn.bsky.app/img/feed_thumbnail/plain/${DID}/${CID}`;
+
+/** The loader answers a path with a marker, so a delegation is visible. */
+function stubLoader() {
+  let asked: string | undefined;
+  const loader = {
+    async load() {
+      return new core.Tile(
+        createTileMothership(core),
+        HELLO,
+        MANIFEST as never,
+        {
+          async resolvePath(path: string) {
+            asked = path;
+            return { ok: false, status: 404, statusText: "Not found" } as never;
+          },
+        },
+      );
+    },
+  };
+  return { loader, asked: () => asked };
+}
+
+/** The DID document, then whatever the PDS says about the blob. */
+function stubNetwork(blob: { status: number; bytes?: Uint8Array }) {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith("https://plc.directory/")) {
+      return new Response(
+        JSON.stringify({ service: [{ id: "#atproto_pds", serviceEndpoint: "https://pds.example" }] }),
+      );
+    }
+    const bytes = blob.bytes ?? new Uint8Array([7, 8]);
+    // `Response` takes an ArrayBuffer; a view's `buffer` is typed as one that
+    // may be shared, which it never is here.
+    return new Response(bytes.buffer as ArrayBuffer, {
+      status: blob.status,
+      headers: { "content-type": "image/png" },
+    });
+  }) as typeof fetch;
+}
+
+describe("withTileImages", () => {
+  afterEach(() => {
+    _resetTileImageCacheForTest();
+    vi.restoreAllMocks();
+  });
+
+  it("answers an image path with the bytes behind the URL", async () => {
+    stubNetwork({ status: 200 });
+    const { loader } = stubLoader();
+
+    const tile = await withTileImages(loader as never).load(HELLO, createTileMothership(core));
+    if (!tile) throw new Error("the wrapped loader returned no tile");
+    const response = await tile.resolvePath(`/image/${encodeURIComponent(IMAGE_URL)}`);
+
+    expect(response).toMatchObject({ ok: true, status: 200, headers: { "content-type": "image/png" } });
+    expect([...(response as { body: Uint8Array }).body]).toEqual([7, 8]);
+  });
+
+  it("leaves every other path to the loader's own resolution", async () => {
+    stubNetwork({ status: 200 });
+    const { loader, asked } = stubLoader();
+
+    const tile = await withTileImages(loader as never).load(HELLO, createTileMothership(core));
+    if (!tile) throw new Error("the wrapped loader returned no tile");
+    const response = await tile.resolvePath("/tile.js");
+
+    expect(asked()).toBe("/tile.js");
+    expect(response).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it("declines an image whose bytes cannot be read", async () => {
+    stubNetwork({ status: 500 });
+    const { loader, asked } = stubLoader();
+
+    const tile = await withTileImages(loader as never).load(HELLO, createTileMothership(core));
+    if (!tile) throw new Error("the wrapped loader returned no tile");
+    const response = await tile.resolvePath(`/image/${encodeURIComponent(IMAGE_URL)}`);
+
+    expect(response).toMatchObject({ ok: false, status: 404 });
+    expect(asked()).toBeUndefined();
   });
 });

@@ -31,7 +31,7 @@ import type { EmbedTile } from "./types.ts";
  * Bump when the projection's shape or the mapping changes: rows stamped with
  * an older version are stale and are resolved again on their next read.
  */
-export const TILE_RESOLVER_VERSION = 1;
+export const TILE_RESOLVER_VERSION = 2;
 
 /** Collection of a Web Tile manifest record. */
 export const TILE_COLLECTION = "ing.dasl.masl";
@@ -209,6 +209,26 @@ export interface PostTileImage {
   alt?: string;
 }
 
+/** An external link in a post's embed, reduced to what a tile can draw. */
+export interface PostTileExternal {
+  kind: "external";
+  uri: string;
+  title?: string;
+  description?: string;
+  thumb?: string;
+}
+
+/**
+ * The media a quoted post contributes: its own first embed, one level deep.
+ *
+ * A quote never nests another quote and never carries a video, and an image
+ * contribution is a single image, so a quoted post cannot grow the payload by
+ * quoting again.
+ */
+export type QuoteTileMedia =
+  | { kind: "image"; images: PostTileImage[] }
+  | PostTileExternal;
+
 /**
  * The bounded projection of a post handed to the tile.
  *
@@ -236,8 +256,15 @@ export interface BlueskyPostTileData {
     /** The first image, external link or quoted post, as one of these. */
     embed?:
       | { kind: "image"; images: PostTileImage[] }
-      | { kind: "external"; uri: string; title?: string; description?: string; thumb?: string }
-      | { kind: "quote"; uri: string; author: { handle: string; displayName?: string }; text?: string }
+      | PostTileExternal
+      | {
+          kind: "quote";
+          uri: string;
+          author: { handle: string; displayName?: string; avatar?: string };
+          text?: string;
+          /** The quoted post's own first embed, one level deep. */
+          media?: QuoteTileMedia;
+        }
       | { kind: "video"; thumb?: string; alt?: string };
   };
 }
@@ -273,10 +300,55 @@ function projectAuthor(author: unknown): BlueskyPostTileData["post"]["author"] {
   };
 }
 
+/** A hydrated external link, or undefined when it has no usable URI. */
+function projectExternal(external: unknown): PostTileExternal | undefined {
+  const e = obj(external);
+  const uri = str(e.uri);
+  if (!uri) return undefined;
+  // A hydrated view carries the thumbnail as a URL; an unhydrated blob ref
+  // only as a `$link`, which is not fetchable from the client.
+  const thumb = obj(e.thumb);
+  const thumbUrl = str(thumb.thumb) ?? str(thumb.$link);
+  return {
+    kind: "external",
+    uri,
+    ...(str(e.title) ? { title: str(e.title)! } : {}),
+    ...(str(e.description) ? { description: str(e.description)! } : {}),
+    ...(thumbUrl ? { thumb: thumbUrl } : {}),
+  };
+}
+
+/**
+ * The media of a quoted post: its own first embed, one level deep.
+ *
+ * Only an image set (reduced to its first image) and an external link are
+ * carried. A quoted quote and a quoted video are not: each would either grow
+ * without a bound or need a player the tile does not have.
+ */
+function projectQuoteMedia(embed: unknown): QuoteTileMedia | undefined {
+  const e = obj(embed);
+  switch (str(e.$type)) {
+    case "app.bsky.embed.images#view": {
+      const first = Array.isArray(e.images) ? e.images[0] : undefined;
+      const img = obj(first);
+      const thumb = str(img.thumb);
+      if (!thumb) return undefined;
+      return {
+        kind: "image",
+        images: [{ thumb, ...(str(img.alt) ? { alt: str(img.alt)! } : {}) }],
+      };
+    }
+    case "app.bsky.embed.external#view":
+      return projectExternal(e.external);
+    default:
+      return undefined;
+  }
+}
+
 /**
  * The first image, external link or quoted post of a post view's `embed`, if
- * it carries one. Deeper media (a quoted post's own embed, a video's playlist)
- * is left out: it is not what makes a chat card worth drawing.
+ * it carries one. A quoted post's own media travels one level further
+ * ({@link projectQuoteMedia}) and no deeper; a video's playlist is left out.
  */
 function projectEmbed(
   embed: unknown,
@@ -294,38 +366,30 @@ function projectEmbed(
       }
       return projected.length > 0 ? { kind: "image", images: projected } : undefined;
     }
-    case "app.bsky.embed.external#view": {
-      const external = obj(e.external);
-      const uri = str(external.uri);
-      if (!uri) return undefined;
-      // A hydrated view carries the thumbnail as a URL; an unhydrated blob ref
-      // only as a `$link`, which is not fetchable from the client.
-      const thumb = obj(external.thumb);
-      const thumbUrl = str(thumb.thumb) ?? str(thumb.$link);
-      return {
-        kind: "external",
-        uri,
-        ...(str(external.title) ? { title: str(external.title)! } : {}),
-        ...(str(external.description)
-          ? { description: str(external.description)! }
-          : {}),
-        ...(thumbUrl ? { thumb: thumbUrl } : {}),
-      };
-    }
+    case "app.bsky.embed.external#view":
+      return projectExternal(e.external);
     case "app.bsky.embed.record#view": {
       const record = obj(e.record);
       const uri = str(record.uri);
       if (!uri) return undefined;
       const author = obj(record.author);
       const value = obj(record.value);
+      // A hydrated record view carries the quoted post's embeds as a list; the
+      // singular form is what an unhydrated one would use.
+      const nested = Array.isArray(record.embeds)
+        ? record.embeds[0]
+        : record.embed;
+      const media = projectQuoteMedia(nested);
       return {
         kind: "quote",
         uri,
         author: {
           handle: str(author.handle) ?? "",
           ...(str(author.displayName) ? { displayName: str(author.displayName)! } : {}),
+          ...(str(author.avatar) ? { avatar: str(author.avatar)! } : {}),
         },
         ...(str(value.text) ? { text: str(value.text)!.slice(0, MAX_POST_TEXT) } : {}),
+        ...(media ? { media } : {}),
       };
     }
     case "app.bsky.embed.video#view": {
@@ -351,10 +415,10 @@ function projectEmbed(
  * every reader.
  *
  * Bounded to {@link MAX_TILE_DATA_BYTES} — the same ceiling the write path
- * enforces on an attached tile's payload. The text is shortened first, then
- * the embed is dropped; a post that still does not fit yields no payload at
- * all, which renders the tile's card without a body rather than storing an
- * unbounded one.
+ * enforces on an attached tile's payload. The text is shortened first, then a
+ * quoted post's own media is dropped, then the embed itself; a post that still
+ * does not fit yields no payload at all, which renders the tile's card without
+ * a body rather than storing an unbounded one.
  */
 export function projectPost(
   postView: unknown,
@@ -367,7 +431,10 @@ export function projectPost(
   const fullText = str(record.text) ?? "";
   const embed = projectEmbed(view.embed);
 
-  const build = (text: string, withEmbed: boolean): BlueskyPostTileData => ({
+  const build = (
+    text: string,
+    withEmbed: BlueskyPostTileData["post"]["embed"],
+  ): BlueskyPostTileData => ({
     post: {
       uri,
       ...(str(view.cid) ? { cid: str(view.cid)! } : {}),
@@ -380,26 +447,41 @@ export function projectPost(
         reply: count(view.replyCount),
         quote: count(view.quoteCount),
       },
-      ...(withEmbed && embed ? { embed } : {}),
+      ...(withEmbed ? { embed: withEmbed } : {}),
     },
   });
 
   const fits = (candidate: BlueskyPostTileData): boolean =>
     Buffer.byteLength(JSON.stringify(candidate), "utf8") <= MAX_TILE_DATA_BYTES;
 
-  // Longest first, so the payload keeps as much of the post as the bound
-  // allows; the fallbacks are ordered by how much the reader loses.
-  let text = fullText.slice(0, MAX_POST_TEXT);
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const candidate = build(text, true);
-    if (fits(candidate)) return candidate;
-    if (text.length === 0) break;
-    text = text.slice(0, Math.floor(text.length / 2));
+  // The embed stages, ordered by how much the reader loses: the whole embed,
+  // then a quote with its media removed, then no embed at all. Within a stage
+  // the text is shortened furthest first, so the payload keeps as much of the
+  // post as the bound allows before anything is dropped.
+  const stages: Array<BlueskyPostTileData["post"]["embed"]> = [];
+  if (embed) {
+    stages.push(embed);
+    if (embed.kind === "quote" && embed.media) {
+      stages.push({
+        kind: "quote",
+        uri: embed.uri,
+        author: embed.author,
+        ...(embed.text !== undefined ? { text: embed.text } : {}),
+      });
+    }
   }
-  const withoutEmbed = build(text, false);
-  if (fits(withoutEmbed)) return withoutEmbed;
-  const bare = build("", false);
-  return fits(bare) ? bare : undefined;
+  stages.push(undefined);
+
+  for (const stage of stages) {
+    let text = fullText.slice(0, MAX_POST_TEXT);
+    for (;;) {
+      const candidate = build(text, stage);
+      if (fits(candidate)) return candidate;
+      if (text.length === 0) break;
+      text = text.slice(0, Math.floor(text.length / 2));
+    }
+  }
+  return undefined;
 }
 
 // ─── Resolution ─────────────────────────────────────────────────────────

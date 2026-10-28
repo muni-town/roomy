@@ -15,6 +15,7 @@
 
 import type { Tile, TileMothership } from "@dasl/tile-loader";
 import type * as LoaderCore from "@dasl/tile-loader";
+import { TILE_IMAGE_PATH, tileImageBytes } from "./tile-images.js";
 // The loader reports nothing about the ids it mints; this is the id its own
 // `registerShuttleFrame` returns, spelled out so it outlives the loader's
 // generic-free declaration.
@@ -96,6 +97,54 @@ export function createTileMothership(core: typeof LoaderCore): TileFrameMothersh
 }
 
 /**
+ * Wrap a loader so the images a tile asks for are served from the bytes behind
+ * them.
+ *
+ * The loader's worker answers every request a tile's frame makes — including
+ * one for another origin — by resolving its path here, so an image the tile
+ * was given by URL arrives on the same route as the tile's own resources. A
+ * path under {@link TILE_IMAGE_PATH} carries a percent-encoded image URL; it is
+ * answered from {@link tileImageBytes}, and every other path goes to the
+ * loader's own resolution unchanged. A host that does not answer the image path
+ * leaves the pictures out and draws the text, which is what the tile's markup
+ * already allows for.
+ */
+export function withTileImages(
+  loader: LoaderCore.TileLoader,
+): LoaderCore.TileLoader {
+  return {
+    async load(url, mothership) {
+      const tile = await loader.load(url, mothership);
+      if (!tile) return tile;
+      const resolve = tile.resolvePath.bind(tile);
+      tile.resolvePath = async (path: string) =>
+        (await resolveImagePath(path)) ?? resolve(path);
+      return tile;
+    },
+  };
+}
+
+/** The response for an image path, or null when the path is not one. */
+async function resolveImagePath(path: string) {
+  if (!path.startsWith(TILE_IMAGE_PATH)) return null;
+  let url: string;
+  try {
+    url = decodeURIComponent(path.slice(TILE_IMAGE_PATH.length));
+  } catch {
+    return { ok: false as const, status: 404, statusText: "Not found" };
+  }
+  const image = await tileImageBytes(url);
+  if (!image) return { ok: false as const, status: 404, statusText: "Not found" };
+  return {
+    ok: true as const,
+    status: 200,
+    statusText: "Ok",
+    headers: { "content-type": image.contentType },
+    body: image.bytes,
+  };
+}
+
+/**
  * The app's mothership, constructed and initialized on first use.
  *
  * `loadDomain` is deliberately left unset: the mothership then uses the shared
@@ -114,7 +163,7 @@ export async function getTileMothership(): Promise<TileFrameMothership> {
     ]);
     const instance = createTileMothership(core);
     instance.init();
-    instance.addLoader(new at.ATTileLoader());
+    instance.addLoader(withTileImages(new at.ATTileLoader()));
     mothership = instance;
     return instance;
   })();

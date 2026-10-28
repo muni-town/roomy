@@ -147,7 +147,7 @@ describe("projectPost", () => {
     });
   });
 
-  test("a quoted post is reduced to its author and text", () => {
+  test("a quoted post carries its author and text", () => {
     const projected = projectPost(
       postView({
         embed: {
@@ -168,6 +168,165 @@ describe("projectPost", () => {
     });
   });
 
+  test("a quoted post carries its author's avatar", () => {
+    const projected = projectPost(
+      postView({
+        embed: {
+          $type: "app.bsky.embed.record#view",
+          record: {
+            uri: `at://${DID}/app.bsky.feed.post/abc`,
+            author: {
+              did: DID,
+              handle: "someone.bsky.social",
+              displayName: "Someone",
+              avatar: "https://cdn.bsky.app/quoted-avatar.jpg",
+            },
+            value: { text: "the quoted body" },
+          },
+        },
+      }),
+    ) as BlueskyPostTileData;
+    expect(projected.post.embed).toMatchObject({
+      kind: "quote",
+      author: { avatar: "https://cdn.bsky.app/quoted-avatar.jpg" },
+    });
+  });
+
+  test("a quoted post carries one image of its own", () => {
+    const projected = projectPost(
+      postView({
+        embed: {
+          $type: "app.bsky.embed.record#view",
+          record: {
+            uri: `at://${DID}/app.bsky.feed.post/abc`,
+            author: { did: DID, handle: "someone.bsky.social" },
+            value: { text: "look" },
+            embeds: [
+              {
+                $type: "app.bsky.embed.images#view",
+                images: [
+                  { thumb: "https://cdn.bsky.app/q1.jpg", alt: "quoted cat" },
+                  { thumb: "https://cdn.bsky.app/q2.jpg", alt: "second" },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    ) as BlueskyPostTileData;
+    expect(projected.post.embed).toMatchObject({
+      kind: "quote",
+      media: {
+        kind: "image",
+        images: [{ thumb: "https://cdn.bsky.app/q1.jpg", alt: "quoted cat" }],
+      },
+    });
+  });
+
+  test("a quoted post carries its own external link", () => {
+    const projected = projectPost(
+      postView({
+        embed: {
+          $type: "app.bsky.embed.record#view",
+          record: {
+            uri: `at://${DID}/app.bsky.feed.post/abc`,
+            author: { did: DID, handle: "someone.bsky.social" },
+            value: { text: "read this" },
+            embeds: [
+              {
+                $type: "app.bsky.embed.external#view",
+                external: {
+                  uri: "https://example.com/story",
+                  title: "A story",
+                  thumb: { thumb: "https://cdn.bsky.app/thumb.jpg" },
+                },
+              },
+            ],
+          },
+        },
+      }),
+    ) as BlueskyPostTileData;
+    expect(projected.post.embed).toMatchObject({
+      kind: "quote",
+      media: {
+        kind: "external",
+        uri: "https://example.com/story",
+        title: "A story",
+        thumb: "https://cdn.bsky.app/thumb.jpg",
+      },
+    });
+  });
+
+  test("a quoted post's own quote or video is not carried", () => {
+    const quotedQuote = {
+      $type: "app.bsky.embed.record#view",
+      record: {
+        uri: `at://${DID}/app.bsky.feed.post/outer`,
+        author: { did: DID, handle: "outer.bsky.social" },
+        value: { text: "outer" },
+        embeds: [
+          {
+            $type: "app.bsky.embed.record#view",
+            record: {
+              uri: `at://${DID}/app.bsky.feed.post/inner`,
+              author: { did: DID, handle: "inner.bsky.social" },
+              value: { text: "inner" },
+            },
+          },
+        ],
+      },
+    };
+    const video = {
+      $type: "app.bsky.embed.record#view",
+      record: {
+        uri: `at://${DID}/app.bsky.feed.post/outer`,
+        author: { did: DID, handle: "outer.bsky.social" },
+        value: { text: "outer" },
+        embeds: [
+          {
+            $type: "app.bsky.embed.video#view",
+            thumbnail: "https://cdn.bsky.app/v.jpg",
+            alt: "a clip",
+          },
+        ],
+      },
+    };
+    for (const embed of [quotedQuote, video]) {
+      const projected = projectPost(postView({ embed })) as BlueskyPostTileData;
+      expect(projected.post.embed).toMatchObject({ kind: "quote" });
+      expect(projected.post.embed).not.toHaveProperty("media");
+    }
+  });
+
+  test("a quote too large keeps the card and drops its media before the quote", () => {
+    // Alts big enough that neither the text alone nor the nested image fits,
+    // but the quote without its media does.
+    const projected = projectPost(
+      postView({
+        record: { text: "y".repeat(4000), createdAt: "2026-10-20T10:00:00.000Z" },
+        embed: {
+          $type: "app.bsky.embed.record#view",
+          record: {
+            uri: `at://${DID}/app.bsky.feed.post/abc`,
+            author: { did: DID, handle: "someone.bsky.social" },
+            value: { text: "z".repeat(3000) },
+            embeds: [
+              {
+                $type: "app.bsky.embed.images#view",
+                images: [{ thumb: "https://cdn.bsky.app/q1.jpg", alt: "w".repeat(8000) }],
+              },
+            ],
+          },
+        },
+      }),
+    ) as BlueskyPostTileData;
+    expect(Buffer.byteLength(JSON.stringify(projected), "utf8")).toBeLessThanOrEqual(
+      MAX_TILE_DATA_BYTES,
+    );
+    expect(projected.post.embed).toMatchObject({ kind: "quote" });
+    expect(projected.post.embed).not.toHaveProperty("media");
+  });
+
   test("a long post is shortened rather than stored unbounded", () => {
     const projected = projectPost(
       postView({ record: { text: "x".repeat(20000), createdAt: "2026-10-20T10:00:00.000Z" } }),
@@ -178,10 +337,9 @@ describe("projectPost", () => {
     expect(projected.post.text.length).toBeLessThan(20000);
   });
 
-  test("a post that cannot fit at all loses its payload, not its bound", () => {
-    // Ten enormous image alts and a huge text: no truncation of the text alone
-    // brings this under the bound, so the projection drops what it can and then
-    // gives up rather than storing an oversized row.
+  test("a post whose embed cannot fit keeps its text and drops the embed", () => {
+    // Image alts big enough that no amount of text truncation brings the
+    // payload under the bound: the embed goes, the text stays.
     const images = Array.from({ length: 4 }, () => ({
       thumb: "https://cdn.bsky.app/x.jpg",
       alt: "y".repeat(4000),
@@ -191,12 +349,12 @@ describe("projectPost", () => {
         record: { text: "z".repeat(9000), createdAt: "2026-10-20T10:00:00.000Z" },
         embed: { $type: "app.bsky.embed.images#view", images },
       }),
+    ) as BlueskyPostTileData;
+    expect(projected.post.embed).toBeUndefined();
+    expect(projected.post.text.length).toBeGreaterThan(0);
+    expect(Buffer.byteLength(JSON.stringify(projected), "utf8")).toBeLessThanOrEqual(
+      MAX_TILE_DATA_BYTES,
     );
-    if (projected) {
-      expect(Buffer.byteLength(JSON.stringify(projected), "utf8")).toBeLessThanOrEqual(
-        MAX_TILE_DATA_BYTES,
-      );
-    }
   });
 });
 
@@ -279,6 +437,6 @@ describe("resolveTileForUrl", () => {
   });
 
   test("the resolver version is the one the store is stamped with", () => {
-    expect(TILE_RESOLVER_VERSION).toBe(1);
+    expect(TILE_RESOLVER_VERSION).toBe(2);
   });
 });
