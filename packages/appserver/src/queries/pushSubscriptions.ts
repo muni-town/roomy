@@ -89,7 +89,7 @@ export async function evictOldestSseSubscriptions(
          and endpoint not in (
            select endpoint from push_subscriptions
             where user_did = ? and kind = 'sse'
-            order by updated_at desc, endpoint
+            order by updated_at desc, rowid desc
             limit ?)`,
     userDid,
     userDid,
