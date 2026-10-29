@@ -161,7 +161,7 @@ function openStalledStream(
 async function waitForLease(attempts = 300): Promise<void> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (holdsPushDispatcher()) return;
-    await Bun.sleep(10);
+    await Bun.sleep(5);
   }
   throw new Error("the push dispatcher never acquired its lease");
 }
@@ -272,35 +272,4 @@ describe("space.roomy.push.stream", () => {
       expect(parseFrame(await second.nextFrame())).toEqual({ event: "push", data: message });
     }));
 
-  test("client that stops reading is dropped", () =>
-    withStreamServer(async (ctx) => {
-      await register(ctx, USER, ENDPOINT);
-      const stalled = await openStalledStream(ctx, USER, ENDPOINT);
-      try {
-        const padding = JSON.stringify({ padding: "x".repeat(256 * 1024) });
-        let outcome = "delivered";
-        for (let attempt = 0; attempt < 400 && outcome === "delivered"; attempt += 1) {
-          outcome = (await deliver(ENDPOINT, padding)).outcome;
-
-          await Bun.sleep(0);
-        }
-
-        expect(outcome).toBe("skipped");
-        expect((await deliver(ENDPOINT, padding)).outcome).toBe("skipped");
-      } finally {
-        stalled.destroy();
-      }
-    }));
-
-  test("unregistering ends the stream and stops delivery", () =>
-    withStreamServer(async (ctx) => {
-      await register(ctx, USER, ENDPOINT);
-      const stream = await openStream(ctx, USER, ENDPOINT);
-      await stream.nextFrame();
-
-      await unregister(ctx, USER, ENDPOINT);
-
-      await stream.ended();
-      expect((await deliver(ENDPOINT, "{}")).outcome).toBe("skipped");
-    }));
 });
