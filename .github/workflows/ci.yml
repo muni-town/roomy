@@ -134,6 +134,21 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build SDK (appserver imports its dist)
         run: pnpm turbo run build-lib
+      # `quint run` needs the Rust evaluator, which quint downloads once into
+      # ~/.quint/rust-evaluator-<evaluator version>. The download is a plain,
+      # unauthenticated GitHub releases API call, and GitHub rate-limits that
+      # endpoint per IP — the runner IP is shared, so the fetch is the one part
+      # of this job that fails without a code or model change. Caching the
+      # directory makes it a once-per-evaluator-version download.
+      #
+      # A quint bump that also bumps the evaluator version looks in a different
+      # directory: the restore misses and the download happens once more, which
+      # is correct — a binary built for another version is never reused.
+      - name: Cache the quint Rust evaluator
+        uses: actions/cache@v4
+        with:
+          path: ~/.quint/rust-evaluator-v0.6.0
+          key: quint-evaluator-v0.6.0
       - name: Generate MBT traces (quint, pinned via npx)
         run: pnpm --filter @roomy/appserver mbt:traces
       - name: Test Appserver
