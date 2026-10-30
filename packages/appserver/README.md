@@ -76,6 +76,58 @@ explicitly opted in:
   (or `false`) on all subsequent deploys so a backup failure fails loudly
   rather than wiping data.
 
+### Shadow follower (`ROOMY_SHADOW`)
+
+The image carries the Rust core (`roomy-appserver`) as well as the Bun service.
+`ROOMY_SHADOW=1` starts it as a **follower**: it replays the production event log
+into a data directory of its own and serves nothing — no XRPC edge, no socket
+plane — so enabling it is a restart with a variable set, not a second deploy.
+**Unset is the default**, and the container then runs exactly the Bun service.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ROOMY_SHADOW` | unset | `1` starts the follower |
+| `ROOMY_DATA_DIR` | `/shadow` | The follower's own data directory |
+| `ROOMY_EVENTS_DB` | `$DATA_DIR/roomy-events.sqlite` | The log it replays: the owner's, opened read-only |
+| `ROOMY_SPACES` | derived | Not configured by hand — the entrypoint lists `$DATA_DIR/spaces/*.sqlite` and follows every space the owner materialises |
+| `ROOMY_OWNERSHIP` | `follower` | Passed by the entrypoint; a container that sets anything else does not start the follower |
+| `ROOMY_HEALTH_ADDR` | `127.0.0.1:8089` | The follower's `/health`, on loopback |
+| `ALLOY_URL` | — | Required: without it the follower has no telemetry |
+| `ROOMY_SHADOW_AS_LIMIT` | `1073741824` | `prlimit --as` for the child (1 GiB) |
+
+**The projection roughly doubles the derived data on the volume.** The follower
+materialises its own `spaces/*.sqlite` and `global.sqlite` from the log, so with
+`ROOMY_DATA_DIR=/data/shadow` the volume holds a second copy of every per-space
+view. The image's `/shadow` default is on the container's writable layer and is
+lost on redeploy — fine for a trial, not for a follower that should survive one.
+
+**It runs as `shadow`**, a system uid created in the image that owns only its
+data directory, under `nice -n 19`, `ionice -c3` and the address-space limit
+above. Before starting it, the entrypoint verifies that uid *cannot* write
+`ROOMY_EVENTS_DB` (`test -w` as `shadow` must fail) and refuses to start the
+follower if it can. That permission, not the code path, is what keeps a follower
+from writing production.
+
+**It is supervised, and it never takes the container down.** The child is
+restarted with backoff (1 s doubling to 60 s, reset after a minute of uptime)
+when it exits, and `SIGTERM`/`SIGINT` reach both it and the app. Bun starts
+immediately whether or not the follower does; a follower that cannot be started
+is one log line, not a failed deploy:
+
+```text
+[entrypoint] shadow: not starting the follower — ROOMY_SPACES would be empty (/data/spaces holds no *.sqlite), ALLOY_URL is unset (the follower would have no telemetry)
+```
+
+Its health, from inside the container:
+
+```bash
+docker exec <container> curl -s 127.0.0.1:8089/health
+# {"status":"ok","spaces":[{"space":"did:plc:…","cursor":{"idx":…,"ord":…},"lag":0,"leaseHeld":false,"following":true,"holder":"…","lastError":null}]}
+```
+
+`following: true` with `leaseHeld: false` is the honest pair for a follower: it
+is replaying, and it holds no lease, so it cannot stop the owner materialising.
+
 ### Schema version bumps (blue-green read serving)
 
 When `SPACE_SCHEMA_VERSION` (`src/db/db.ts`) is bumped, every on-disk per-space

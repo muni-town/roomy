@@ -38,7 +38,42 @@ COPY packages/appserver/ packages/appserver/
 # Build the SDK (appserver depends on its dist output)
 RUN pnpm --filter @roomy-space/sdk build
 
-# ── Stage 2: Runtime ──────────────────────────────────────────────────────
+# ── Stage 2: The Rust appserver binary ────────────────────────────────────
+# The image carries the Rust core as well as the Bun service: the same image is
+# production and the shadow follower beside it, and which one runs is a variable
+# (`ROOMY_SHADOW`, read by the entrypoint), not a second build.
+#
+# rusqlite is `bundled`, and the two schema files and the exclusion manifest are
+# `include_str!` in the crates, so the binary has no inputs the runtime stage
+# must carry.
+#
+# The dependency graph is the slow part, so it is built in its own layer from the
+# manifests and a stub source tree; editing a `.rs` file then recompiles only this
+# workspace's crates.
+FROM rust:1.99-bookworm AS rust-build
+
+WORKDIR /src
+
+COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY packages/appserver/src/db/schema-space.sql packages/appserver/src/db/schema-space.sql
+COPY packages/appserver/src/db/schema-global.sql packages/appserver/src/db/schema-global.sql
+COPY packages/appserver/src/db/oracle-exclusions.json packages/appserver/src/db/oracle-exclusions.json
+RUN find crates -name '*.rs' -delete \
+    && for crate in crates/*/; do \
+         mkdir -p "$crate/src" && touch "$crate/src/lib.rs"; \
+       done \
+    && printf 'fn main() {}\n' > crates/roomy-appserver/src/main.rs \
+    && cargo build --release -p roomy-appserver
+
+# The real sources, then the same build with the dependency layer already warm.
+COPY crates /tmp/sources
+RUN rm -rf crates \
+    && mv /tmp/sources crates \
+    && find crates -name '*.rs' -exec touch {} + \
+    && cargo build --release -p roomy-appserver
+
+# ── Stage 3: Runtime ──────────────────────────────────────────────────────
 # Bun version pinned to .bun-version (1.3.14).
 FROM oven/bun:1.3.14 AS runtime
 
@@ -54,8 +89,11 @@ ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
 # Install Litestream for continuous SQLite WAL replication to S3-compatible
 # storage (Railway S3 bucket). Mirrors the discord-bridge setup.
 ARG LITESTREAM_VERSION=0.3.13
+# curl is kept: the shadow follower's only signal is the `/health` listener on
+# loopback, and without an HTTP client in the image an operator has no way to
+# read it from inside the container.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates wget \
+ && apt-get install -y --no-install-recommends ca-certificates curl wget \
  && wget -q -O /tmp/litestream.tar.gz \
       "https://github.com/benbjohnson/litestream/releases/download/v${LITESTREAM_VERSION}/litestream-v${LITESTREAM_VERSION}-linux-amd64.tar.gz" \
  && tar -C /usr/local/bin -xzf /tmp/litestream.tar.gz \
@@ -71,6 +109,23 @@ COPY --from=build /project/packages/tsconfig packages/tsconfig
 COPY --from=build /project/packages/appserver packages/appserver
 COPY --from=build /project/node_modules node_modules
 COPY --from=build /project/package.json .
+
+# The Rust core, for the shadow follower. It is the same binary the space worker
+# runs; the entrypoint decides whether to start it.
+COPY --from=rust-build /src/target/release/roomy-appserver /usr/local/bin/roomy-appserver
+
+# The follower runs as its own unprivileged user, which is what makes "the
+# follower cannot write the production log" a permission and not a promise: the
+# entrypoint refuses to start it when this uid can write `ROOMY_EVENTS_DB`.
+# `/shadow` is this process's data directory — the follower owns it and nothing
+# else on the volume. The group is its own too: Debian already has a `shadow`
+# group (gid 42, the one `/etc/shadow` is readable by), and putting this user in
+# it would hand out exactly the read access this guard exists to deny.
+RUN groupadd --system roomy-shadow \
+ && useradd --system --no-create-home --shell /usr/sbin/nologin \
+        --gid roomy-shadow shadow \
+ && mkdir -p /shadow \
+ && chown shadow:roomy-shadow /shadow
 
 # Litestream config + restore/replicate entrypoint
 COPY packages/appserver/litestream.yml /etc/litestream.yml
