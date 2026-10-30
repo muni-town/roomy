@@ -7,6 +7,7 @@
  */
 
 import { openReadStateDb } from "../db/db.ts";
+import { closeSseConnection } from "../push/transports/sse.ts";
 import { deleteSubscription } from "../queries/pushSubscriptions.ts";
 import { parseUserDid } from "../xrpc/authGuards.ts";
 import { XrpcError } from "../xrpc/errors.ts";
@@ -35,4 +36,5 @@ export const unregisterSubscriptionHandler: ProcedureHandler<
 
   const db = openReadStateDb();
   await deleteSubscription(db, userDid, body.endpoint);
+  closeSseConnection(body.endpoint, "unregistered");
 };

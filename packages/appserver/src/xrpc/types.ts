@@ -101,4 +101,42 @@ export interface SyncDef {
 /** Called once when a sync WS connection opens. Manages topic subscriptions. */
 export type SyncHandler = (socket: SyncSocket) => void;
 
-export type RouteDef = QueryDef | ProcedureDef | SubscriptionDef | SyncDef;
+// ─── Stream (long-lived HTTP response) ─────────────────────────────────
+
+/** What the router hands a stream handler besides the raw request. */
+export interface StreamContext {
+  /** Parsed query-string params, same shape queries receive. */
+  params: QueryParams;
+  /**
+   * Verify the request's bearer token with the router's verifier, exactly as
+   * queries and procedures are verified. Lazy so a handler can refuse cheaply
+   * (wrong replica, at capacity) before paying for identity resolution.
+   */
+  authenticate: () => Promise<AuthCtx>;
+}
+
+/**
+ * Handler for a long-lived HTTP response such as `text/event-stream`. It gets
+ * the raw `Request` and returns the `Response` itself, because the router's
+ * JSON round-trip (validate output, `Response.json`) cannot carry a stream.
+ *
+ * The token is only checked when `authenticate()` is called, and only once:
+ * the stream outlives the token, so nothing about the response may depend on
+ * the token staying valid.
+ */
+export type StreamHandler = (
+  req: Request,
+  context: StreamContext,
+) => Promise<Response>;
+
+export interface StreamDef {
+  kind: "stream";
+  handler: StreamHandler;
+}
+
+export type RouteDef =
+  | QueryDef
+  | ProcedureDef
+  | SubscriptionDef
+  | SyncDef
+  | StreamDef;

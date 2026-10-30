@@ -161,4 +161,15 @@ describe("Transport-level edge cases", () => {
     expect(body).toHaveProperty("error");
     expect(body.error).toBe("MethodNotAllowed");
   });
+
+  test("POST on a stream endpoint → 405", async () => {
+    const ctx = await startAppserver()
+    const res = await ctx.anonFetch(
+      `${ctx.baseUrl}/xrpc/space.roomy.push.stream`,
+      { method: "POST", body: "{}" },
+    );
+    expect(res.status).toBe(405);
+    const body = await res.json();
+    expect(body.error).toBe("MethodNotAllowed");
+  });
 });

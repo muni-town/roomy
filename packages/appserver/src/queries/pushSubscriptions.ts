@@ -75,6 +75,28 @@ export async function upsertSubscription(
   );
 }
 
+/**
+ * Keep a user's `keep` most recently updated `sse` rows and delete the rest.
+ */
+export async function evictOldestSseSubscriptions(
+  db: DbLike,
+  userDid: string,
+  keep: number,
+): Promise<void> {
+  await db.run(
+    `delete from push_subscriptions
+       where user_did = ? and kind = 'sse'
+         and endpoint not in (
+           select endpoint from push_subscriptions
+            where user_did = ? and kind = 'sse'
+            order by updated_at desc, rowid desc
+            limit ?)`,
+    userDid,
+    userDid,
+    keep,
+  );
+}
+
 /** Remove a subscription by endpoint. Idempotent (no row = no-op). */
 export async function deleteSubscription(
   db: DbLike,

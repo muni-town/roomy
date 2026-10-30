@@ -308,4 +308,22 @@ describe("XrpcRouter error attribution", () => {
       spy.mockRestore();
     }
   });
+
+  test("reports the caller when a stream route authenticates", async () => {
+    const seen: string[] = [];
+    const router = new XrpcRouter(async () => ({ did: "did:plc:test" })).stream(
+      "test.stream",
+      {
+        handler: async (_req, ctx) => {
+          await ctx.authenticate();
+          return new Response("ok");
+        },
+      },
+    );
+    router.setOnAuthenticated((did) => seen.push(did));
+
+    await call(router, "http://x/xrpc/test.stream");
+
+    expect(seen).toEqual(["did:plc:test"]);
+  });
 });
