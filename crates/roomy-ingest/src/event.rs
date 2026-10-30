@@ -12,6 +12,8 @@
 
 use serde_json::Value;
 
+use crate::ids::{is_ulid, nsid_of};
+
 /// Every event type the appserver accepts, in the order its schema reports them.
 ///
 /// The order is part of the wire contract: a request whose `$type` names
@@ -86,8 +88,6 @@ fn was(value: Option<&Value>) -> String {
         Some(value) => value.to_string(),
     }
 }
-
-use crate::ids::{is_ulid, nsid_of};
 
 /// One event, decoded far enough that the ingress can decide about it.
 #[derive(Debug, Clone)]

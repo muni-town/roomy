@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use space_xrpc::access::space_access;
+use space_xrpc::error::XrpcError;
 use space_xrpc::state::SpaceReadDb;
 use space_xrpc::store::GlobalStores;
 
@@ -39,7 +40,10 @@ fn invalid(detail: &str) -> WriteDenial {
 /// The body of a `sendEvents` call.
 #[derive(Debug, Clone)]
 pub struct SendEventsBody {
+    /// The space the batch is written to: its stream, and the target of every
+    /// per-event check.
     pub space_id: String,
+    /// The events, in the order the client sent them.
     pub events: Vec<Value>,
 }
 
@@ -95,6 +99,7 @@ impl SendEventsBody {
 pub struct SendEventsOutcome {
     /// The index the batch's first entry landed on.
     pub start_idx: i64,
+    /// How many entries the batch appended.
     pub appended: usize,
 }
 
@@ -114,6 +119,12 @@ pub struct IngestState {
 ///
 /// `now_ms` is the instant the batch was accepted. It is a parameter rather
 /// than a clock read so the ordering key is a function of its inputs.
+///
+/// # Errors
+///
+/// The first refusal wins, in the appserver's order: a banned caller, then the
+/// first event that fails to decode or fails [`check_write_auth`], then an
+/// append that could not be written.
 pub fn send_events(
     log: &mut EventLog,
     state: &IngestState,
@@ -152,9 +163,8 @@ pub fn send_events(
         state
             .space
             .with(|conn| {
-                check_write_auth(conn, &event, &auth).map_err(|denial| {
-                    space_xrpc::error::XrpcError::new(denial.status, denial.error, denial.message)
-                })
+                check_write_auth(conn, &event, &auth)
+                    .map_err(|denial| XrpcError::new(denial.status, denial.error, denial.message))
             })
             .map_err(WriteDenial::from)?;
         events.push(event);

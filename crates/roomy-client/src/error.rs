@@ -14,6 +14,7 @@ pub struct TransportError {
 }
 
 impl TransportError {
+    /// A failure carrying `message`, which the adapter words for its reader.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),

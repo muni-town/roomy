@@ -29,11 +29,15 @@ pub struct SessionCredentials {
 /// The PDS session the bridge holds.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Session {
+    /// The token an authenticated XRPC call carries.
     #[serde(rename = "accessJwt")]
     pub access_jwt: String,
+    /// The token that mints a new access token when one expires.
     #[serde(rename = "refreshJwt")]
     pub refresh_jwt: String,
+    /// The account's DID, which the bridge learns from the login.
     pub did: String,
+    /// The handle the PDS resolved, when it resolved one.
     #[serde(default)]
     pub handle: Option<String>,
 }
@@ -62,12 +66,13 @@ pub struct ServiceAuth {
 }
 
 impl ServiceAuth {
+    /// Mint tokens over the live HTTP transport, from a PDS at `pds_url`.
     pub fn new(pds_url: impl Into<String>) -> Self {
-        Self::with_transport(pds_url, Arc::new(HttpTransport::new()))
+        Self::new_with_transport(pds_url, Arc::new(HttpTransport::new()))
     }
 
     /// Mint tokens over `transport` instead of a live connection.
-    pub fn with_transport(pds_url: impl Into<String>, transport: Arc<dyn Transport>) -> Self {
+    pub fn new_with_transport(pds_url: impl Into<String>, transport: Arc<dyn Transport>) -> Self {
         Self {
             transport,
             pds_url: pds_url.into().trim_end_matches('/').to_string(),
@@ -76,6 +81,11 @@ impl ServiceAuth {
     }
 
     /// Log in and return the session, so the caller learns its own DID.
+    ///
+    /// # Errors
+    ///
+    /// The PDS refusing the credentials, or a response body that is not a
+    /// session.
     pub async fn create_session(
         &self,
         credentials: &SessionCredentials,
@@ -104,6 +114,11 @@ impl ServiceAuth {
     }
 
     /// Mint a token for `aud`, optionally scoped to one method.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::ServiceAuth`] when the PDS refuses the mint — a
+    /// credential problem rather than a problem with the call being made.
     pub async fn token(
         &self,
         access_jwt: &str,

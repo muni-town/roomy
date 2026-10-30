@@ -16,7 +16,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use roomy_space_worker::{Health, Supervisor};
-use serde_json::json;
+use serde_json::{json, Value};
+use tokio::net::TcpListener;
 
 /// The listener's routes: one readiness endpoint, no authentication.
 pub fn router(supervisor: Arc<Supervisor>) -> Router {
@@ -26,7 +27,7 @@ pub fn router(supervisor: Arc<Supervisor>) -> Router {
 }
 
 async fn health(State(supervisor): State<Arc<Supervisor>>) -> Response {
-    let spaces: Vec<serde_json::Value> = supervisor.health().iter().map(Health::to_value).collect();
+    let spaces: Vec<Value> = supervisor.health().iter().map(Health::to_value).collect();
     Json(json!({ "status": "ok", "spaces": spaces })).into_response()
 }
 
@@ -34,7 +35,7 @@ async fn health(State(supervisor): State<Arc<Supervisor>>) -> Response {
 ///
 /// The caller binds, so an address already in use fails startup rather than a
 /// task nobody joins.
-pub async fn serve(listener: tokio::net::TcpListener, supervisor: Arc<Supervisor>) {
+pub async fn serve(listener: TcpListener, supervisor: Arc<Supervisor>) {
     match listener.local_addr() {
         Ok(addr) => tracing::info!(address = %addr, "health listening"),
         Err(_) => tracing::info!("health listening"),

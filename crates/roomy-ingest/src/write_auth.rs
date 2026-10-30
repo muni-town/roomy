@@ -88,81 +88,82 @@ const AUTHORITY_EXTENSIONS: [&str; 2] = [
 /// The extension map that carries `attachments`.
 const ATTACHMENTS_EXTENSION: &str = "space.roomy.extension.attachments.v0";
 
+/// Every event type this module names, grouped by the record they write.
+const MARK_READ: &str = "space.roomy.state.markRead.v0";
+
+const CREATE_MESSAGE: &str = "space.roomy.message.createMessage.v0";
+const EDIT_MESSAGE: &str = "space.roomy.message.editMessage.v0";
+const DELETE_MESSAGE: &str = "space.roomy.message.deleteMessage.v0";
+const MOVE_MESSAGES: &str = "space.roomy.message.moveMessages.v0";
+const REORDER_MESSAGE: &str = "space.roomy.message.reorderMessage.v0";
+const FORWARD_MESSAGES: &str = "space.roomy.message.forwardMessages.v0";
+
+const ADD_REACTION: &str = "space.roomy.reaction.addReaction.v0";
+const REMOVE_REACTION: &str = "space.roomy.reaction.removeReaction.v0";
+const ADD_BRIDGED_REACTION: &str = "space.roomy.reaction.addBridgedReaction.v0";
+const REMOVE_BRIDGED_REACTION: &str = "space.roomy.reaction.removeBridgedReaction.v0";
+
+const CREATE_ROOM_LINK: &str = "space.roomy.link.createRoomLink.v0";
+const REMOVE_ROOM_LINK: &str = "space.roomy.link.removeRoomLink.v0";
+
+const CREATE_ROOM: &str = "space.roomy.room.createRoom.v0";
+const UPDATE_ROOM: &str = "space.roomy.room.updateRoom.v0";
+const DELETE_ROOM: &str = "space.roomy.room.deleteRoom.v0";
+const RESTORE_ROOM: &str = "space.roomy.room.restoreRoom.v0";
+
+const UPDATE_SPACE_INFO: &str = "space.roomy.space.updateSpaceInfo.v0";
+const UPDATE_SIDEBAR_V0: &str = "space.roomy.space.updateSidebar.v0";
+const UPDATE_SIDEBAR_V1: &str = "space.roomy.space.updateSidebar.v1";
+const SET_HANDLE_PROVIDER: &str = "space.roomy.space.setHandleProvider.v0";
+const ADD_ADMIN: &str = "space.roomy.space.addAdmin.v0";
+const REMOVE_ADMIN: &str = "space.roomy.space.removeAdmin.v0";
+const BAN_ACCOUNT: &str = "space.roomy.space.banAccount.v0";
+const UNBAN_ACCOUNT: &str = "space.roomy.space.unbanAccount.v0";
+const REVOKE_INVITE: &str = "space.roomy.space.revokeInvite.v0";
+
+const CREATE_ROLE: &str = "space.roomy.role.createRole.v0";
+const DELETE_ROLE: &str = "space.roomy.role.deleteRole.v0";
+const UPDATE_ROLE: &str = "space.roomy.role.updateRole.v0";
+const ADD_MEMBER_ROLE: &str = "space.roomy.role.addMemberRole.v0";
+const REMOVE_MEMBER_ROLE: &str = "space.roomy.role.removeMemberRole.v0";
+const SET_ROLE_ROOM_PERMISSION: &str = "space.roomy.role.setRoleRoomPermission.v0";
+
+const EDIT_PAGE: &str = "space.roomy.page.editPage.v0";
+const CONFIGURE_OPENMEET: &str = "space.roomy.openmeet.configure.v0";
+
+const JOIN_SPACE: &str = "space.roomy.space.joinSpace.v0";
+const LEAVE_SPACE: &str = "space.roomy.space.leaveSpace.v0";
+const UPDATE_PROFILE: &str = "space.roomy.user.updateProfile.v0";
+const CREATE_INVITE: &str = "space.roomy.space.createInvite.v0";
+
+const FEDERATION_REQUEST: &str = "space.roomy.federation.request.v0";
+const FEDERATION_RESPOND: &str = "space.roomy.federation.respond.v0";
+const FEDERATION_REMOVE: &str = "space.roomy.federation.remove.v0";
+const SET_ROOM_PERMISSION: &str = "space.roomy.federation.setRoomPermission.v0";
+const SET_RECEIVER_PERMISSION: &str = "space.roomy.federation.setReceiverPermission.v0";
+
 /// Message types that can carry a reply attachment.
-const REPLY_TARGET_TYPES: [&str; 2] = [nsid::CREATE_MESSAGE, nsid::EDIT_MESSAGE];
+const REPLY_TARGET_TYPES: [&str; 2] = [CREATE_MESSAGE, EDIT_MESSAGE];
 
 /// Message types whose extensions this endpoint reads.
-const EXTENSION_BEARING_TYPES: [&str; 2] = [nsid::CREATE_MESSAGE, nsid::EDIT_MESSAGE];
+const EXTENSION_BEARING_TYPES: [&str; 2] = [CREATE_MESSAGE, EDIT_MESSAGE];
 
 /// Event types allowed to be authored by the service DID without standing.
-const SERVICE_SELF_WRITE_TYPES: [&str; 2] = [nsid::ADD_MEMBER_ROLE, nsid::REMOVE_MEMBER_ROLE];
-
-mod nsid {
-    pub const MARK_READ: &str = "space.roomy.state.markRead.v0";
-
-    pub const CREATE_MESSAGE: &str = "space.roomy.message.createMessage.v0";
-    pub const EDIT_MESSAGE: &str = "space.roomy.message.editMessage.v0";
-    pub const DELETE_MESSAGE: &str = "space.roomy.message.deleteMessage.v0";
-    pub const MOVE_MESSAGES: &str = "space.roomy.message.moveMessages.v0";
-    pub const REORDER_MESSAGE: &str = "space.roomy.message.reorderMessage.v0";
-    pub const FORWARD_MESSAGES: &str = "space.roomy.message.forwardMessages.v0";
-
-    pub const ADD_REACTION: &str = "space.roomy.reaction.addReaction.v0";
-    pub const REMOVE_REACTION: &str = "space.roomy.reaction.removeReaction.v0";
-    pub const ADD_BRIDGED_REACTION: &str = "space.roomy.reaction.addBridgedReaction.v0";
-    pub const REMOVE_BRIDGED_REACTION: &str = "space.roomy.reaction.removeBridgedReaction.v0";
-
-    pub const CREATE_ROOM_LINK: &str = "space.roomy.link.createRoomLink.v0";
-    pub const REMOVE_ROOM_LINK: &str = "space.roomy.link.removeRoomLink.v0";
-
-    pub const CREATE_ROOM: &str = "space.roomy.room.createRoom.v0";
-    pub const UPDATE_ROOM: &str = "space.roomy.room.updateRoom.v0";
-    pub const DELETE_ROOM: &str = "space.roomy.room.deleteRoom.v0";
-    pub const RESTORE_ROOM: &str = "space.roomy.room.restoreRoom.v0";
-
-    pub const UPDATE_SPACE_INFO: &str = "space.roomy.space.updateSpaceInfo.v0";
-    pub const UPDATE_SIDEBAR_V0: &str = "space.roomy.space.updateSidebar.v0";
-    pub const UPDATE_SIDEBAR_V1: &str = "space.roomy.space.updateSidebar.v1";
-    pub const SET_HANDLE_PROVIDER: &str = "space.roomy.space.setHandleProvider.v0";
-    pub const ADD_ADMIN: &str = "space.roomy.space.addAdmin.v0";
-    pub const REMOVE_ADMIN: &str = "space.roomy.space.removeAdmin.v0";
-    pub const BAN_ACCOUNT: &str = "space.roomy.space.banAccount.v0";
-    pub const UNBAN_ACCOUNT: &str = "space.roomy.space.unbanAccount.v0";
-    pub const REVOKE_INVITE: &str = "space.roomy.space.revokeInvite.v0";
-
-    pub const CREATE_ROLE: &str = "space.roomy.role.createRole.v0";
-    pub const DELETE_ROLE: &str = "space.roomy.role.deleteRole.v0";
-    pub const UPDATE_ROLE: &str = "space.roomy.role.updateRole.v0";
-    pub const ADD_MEMBER_ROLE: &str = "space.roomy.role.addMemberRole.v0";
-    pub const REMOVE_MEMBER_ROLE: &str = "space.roomy.role.removeMemberRole.v0";
-    pub const SET_ROLE_ROOM_PERMISSION: &str = "space.roomy.role.setRoleRoomPermission.v0";
-
-    pub const EDIT_PAGE: &str = "space.roomy.page.editPage.v0";
-    pub const CONFIGURE_OPENMEET: &str = "space.roomy.openmeet.configure.v0";
-
-    pub const JOIN_SPACE: &str = "space.roomy.space.joinSpace.v0";
-    pub const LEAVE_SPACE: &str = "space.roomy.space.leaveSpace.v0";
-    pub const UPDATE_PROFILE: &str = "space.roomy.user.updateProfile.v0";
-    pub const CREATE_INVITE: &str = "space.roomy.space.createInvite.v0";
-
-    pub const FEDERATION_REQUEST: &str = "space.roomy.federation.request.v0";
-    pub const FEDERATION_RESPOND: &str = "space.roomy.federation.respond.v0";
-    pub const FEDERATION_REMOVE: &str = "space.roomy.federation.remove.v0";
-    pub const SET_ROOM_PERMISSION: &str = "space.roomy.federation.setRoomPermission.v0";
-    pub const SET_RECEIVER_PERMISSION: &str = "space.roomy.federation.setReceiverPermission.v0";
-}
-
-use nsid::*;
+const SERVICE_SELF_WRITE_TYPES: [&str; 2] = [ADD_MEMBER_ROLE, REMOVE_MEMBER_ROLE];
 
 /// An answer of "no": the status and XRPC error envelope the client sees.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriteDenial {
+    /// The HTTP status the envelope carries.
     pub status: u16,
+    /// The XRPC error name, e.g. `InvalidRequest`.
     pub error: String,
+    /// The sentence the client reads.
     pub message: String,
 }
 
 impl WriteDenial {
+    /// A denial with an explicit status and XRPC error name.
     pub fn new(status: u16, error: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -171,22 +172,27 @@ impl WriteDenial {
         }
     }
 
+    /// A malformed request: 400 `InvalidRequest`.
     pub fn invalid_request(message: impl Into<String>) -> Self {
         Self::new(400, "InvalidRequest", message)
     }
 
+    /// A named room, message or federation that does not exist: 404.
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(404, "NotFound", message)
     }
 
+    /// A caller who may not write what they sent: 403.
     pub fn forbidden(message: impl Into<String>) -> Self {
         Self::new(403, "Forbidden", message)
     }
 
+    /// A failure this server is responsible for: 500.
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new(500, "InternalServerError", message)
     }
 
+    /// A write that contradicts the state it reads: 409.
     fn conflict(message: impl Into<String>) -> Self {
         Self::new(409, "Conflict", message)
     }
@@ -212,18 +218,30 @@ impl From<XrpcError> for WriteDenial {
 
 /// Everything one batch's authorization needs.
 ///
-/// `access` is the caller's standing in `space_id`, resolved once for the batch;
-/// the room-scoped checks read the target space's database directly. `stores`
-/// supplies the federation grants, which only the gateway's global store holds.
+/// The room-scoped checks read the target space's database directly; only the
+/// federation grants come from `stores`.
 pub struct WriteAuth<'a> {
+    /// The space the batch was sent to.
     pub space_id: &'a str,
+    /// The DID that sent the batch.
     pub caller_did: &'a str,
+    /// The caller's standing in `space_id`, resolved once for the batch.
     pub access: SpaceAccess,
+    /// The service's own DID, which is exempt from standing for the types it
+    /// may author.
     pub service_did: Option<&'a str>,
+    /// The federation grants, which only the gateway's global store holds.
     pub stores: &'a dyn GlobalStores,
 }
 
 /// `Ok(())` when this event is allowed; `Err(denial)` when it is not.
+///
+/// # Errors
+///
+/// The denial names the rule that refused the event: a malformed event is a
+/// 400, an event that names something absent is a 404, a caller without the
+/// standing the type needs is a 403, and a write that contradicts the state it
+/// reads is a 409.
 pub fn check_write_auth(
     conn: &Connection,
     event: &WireEvent,

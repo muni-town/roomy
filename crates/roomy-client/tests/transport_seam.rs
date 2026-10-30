@@ -204,8 +204,8 @@ fn message(seed: u8) -> Event {
 
 fn client(fake: &Arc<FakeTransport>) -> AppserverClient {
     let transport: Arc<dyn Transport> = fake.clone();
-    let service_auth = Arc::new(ServiceAuth::with_transport(PDS, Arc::clone(&transport)));
-    AppserverClient::with_transport(
+    let service_auth = Arc::new(ServiceAuth::new_with_transport(PDS, Arc::clone(&transport)));
+    AppserverClient::new_with_transport(
         APPSERVER,
         did(APPSERVER_DID),
         service_auth,
@@ -487,7 +487,7 @@ async fn create_session_posts_the_credentials_to_the_pds() {
         })),
     );
     let transport: Arc<dyn Transport> = Arc::clone(&fake) as Arc<dyn Transport>;
-    let auth = ServiceAuth::with_transport(PDS, transport);
+    let auth = ServiceAuth::new_with_transport(PDS, transport);
 
     let session = auth
         .create_session(&SessionCredentials {

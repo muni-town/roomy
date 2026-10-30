@@ -36,10 +36,13 @@ impl RecordCollection {
     /// The table itself is [`RecordKind::collection`], so a kind and its
     /// collection cannot disagree; this type is how the adapter names the
     /// column it writes.
-    pub fn of(kind: RecordKind) -> Self {
+    #[must_use]
+    pub fn from_kind(kind: RecordKind) -> Self {
         Self(kind.collection())
     }
 
+    /// The collection NSID this kind writes, as the log stores it.
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         self.0
     }
@@ -217,12 +220,14 @@ pub const CONVERTED_KINDS: &[RecordKind] = &[
 ];
 
 /// Whether a producer exists for `kind`.
+#[must_use]
 pub fn is_converted(kind: RecordKind) -> bool {
     CONVERTED_KINDS.contains(&kind)
 }
 
 /// The kinds `nsid` writes, in emission order; `None` when the event is not in
 /// the model at all.
+#[must_use]
 pub fn kinds_for_event(nsid: &str) -> Option<&'static [RecordKind]> {
     RECORD_KINDS_FOR_EVENT
         .iter()
@@ -264,15 +269,15 @@ mod tests {
     #[test]
     fn a_kinds_collection_is_the_nsid_the_lexicon_names() {
         assert_eq!(
-            RecordCollection::of(RecordKind::Message).as_str(),
+            RecordCollection::from_kind(RecordKind::Message).as_str(),
             "space.roomy.room.message"
         );
         assert_eq!(
-            RecordCollection::of(RecordKind::Profile).as_str(),
+            RecordCollection::from_kind(RecordKind::Profile).as_str(),
             "space.roomy.user.profile"
         );
         assert_eq!(
-            RecordCollection::of(RecordKind::VoiceCall).as_str(),
+            RecordCollection::from_kind(RecordKind::VoiceCall).as_str(),
             "space.roomy.voice.call"
         );
     }

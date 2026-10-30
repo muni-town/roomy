@@ -50,16 +50,23 @@ const SINGLETON_RKEY: &str = "self";
 /// One row of the change feed, as the table holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordChangeRow {
+    /// The space whose log the entry landed on.
     pub stream_id: String,
+    /// The entry's log position.
     pub idx: i64,
     /// Emission order within the entry.
     pub ord: i64,
+    /// The record kind, named as the projection knows it.
     pub kind: String,
+    /// The repo the record belongs to: the DID whose collection holds it.
     pub repo: String,
+    /// The record's collection NSID.
     pub collection: String,
+    /// The record key within the collection.
     pub rkey: String,
     /// `create`, `update` or `delete`.
     pub op: String,
+    /// The entry's ordering key, shared by every row from that entry.
     pub order_stamp: String,
     /// Who sent the entry. Keyed by some rules: a membership announcement is
     /// keyed by the join event, and a call fact's `joined_at` decodes the event.
@@ -85,6 +92,7 @@ pub struct EntryFacts<'a> {
 }
 
 /// The rows one log entry contributes, in emission order.
+#[must_use]
 pub fn feed_rows(event: &Value, facts: &EntryFacts<'_>) -> Vec<RecordChangeRow> {
     let Some(nsid) = event.get("$type").and_then(Value::as_str) else {
         return Vec::new();
@@ -104,15 +112,15 @@ pub fn feed_rows(event: &Value, facts: &EntryFacts<'_>) -> Vec<RecordChangeRow> 
 
     let stamp = match order_stamp(event, facts) {
         Ok(stamp) => stamp,
-        Err(err) => {
-            log_unreadable(nsid, event_id, &err);
+        Err(error) => {
+            log_unreadable(nsid, event_id, &error);
             return Vec::new();
         }
     };
     let changes = match changes_for(event, event_id, facts) {
         Ok(changes) => changes,
-        Err(err) => {
-            log_unreadable(nsid, event_id, &err);
+        Err(error) => {
+            log_unreadable(nsid, event_id, &error);
             return Vec::new();
         }
     };
@@ -124,8 +132,8 @@ pub fn feed_rows(event: &Value, facts: &EntryFacts<'_>) -> Vec<RecordChangeRow> 
     for (ord, change) in changes.iter().enumerate() {
         match change.row(facts, event_id, &stamp, ord as i64) {
             Ok(row) => rows.push(row),
-            Err(err) => {
-                log_unreadable(nsid, event_id, &err);
+            Err(error) => {
+                log_unreadable(nsid, event_id, &error);
                 return Vec::new();
             }
         }
@@ -140,6 +148,7 @@ pub fn feed_rows(event: &Value, facts: &EntryFacts<'_>) -> Vec<RecordChangeRow> 
 /// already carries bytes in that marker — the adapter's bodies are JSON
 /// throughout — so this is the identity on them; it is the one spelling of the
 /// encoding rule for a caller that holds raw bytes as some other shape.
+#[must_use]
 pub fn encode_bytes(value: &Value) -> Value {
     match value {
         Value::Array(items) => Value::Array(items.iter().map(encode_bytes).collect()),
@@ -219,7 +228,7 @@ impl Change {
         ord: i64,
     ) -> Result<RecordChangeRow, String> {
         let body = match &self.body {
-            Some(body) => Some(serde_json::to_string(body).map_err(|err| err.to_string())?),
+            Some(body) => Some(serde_json::to_string(body).map_err(|error| error.to_string())?),
             None => None,
         };
         Ok(RecordChangeRow {
@@ -228,7 +237,7 @@ impl Change {
             ord,
             kind: self.kind.name().to_string(),
             repo: self.repo.clone(),
-            collection: RecordCollection::of(self.kind).as_str().to_string(),
+            collection: RecordCollection::from_kind(self.kind).as_str().to_string(),
             rkey: self.rkey.clone(),
             op: self.op.name().to_string(),
             order_stamp: stamp.to_string(),

@@ -11,6 +11,7 @@
 //! happens once, in [`call`] and [`call_empty`], so every NSID shares one
 //! decode and one error mapping.
 
+use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
@@ -39,30 +40,37 @@ pub enum HttpMethod {
 pub struct HttpRequest {
     /// The NSID being called, which every error names.
     pub nsid: &'static str,
+    /// The HTTP method the call uses.
     pub method: HttpMethod,
+    /// The absolute URL, query string included.
     pub url: String,
     /// Headers the call needs beyond the credential: content type, and the
     /// credential itself once the client has resolved it.
     pub headers: Vec<(&'static str, String)>,
+    /// The request body, for a procedure that carries one.
     pub body: Option<Vec<u8>>,
 }
 
 /// A response as the transport observed it.
 #[derive(Debug, Clone)]
 pub struct HttpResponse {
+    /// The status code.
     pub status: u16,
     /// The status's reason phrase, when the transport knows one.
     pub reason: Option<String>,
+    /// The body, undecoded.
     pub body: Vec<u8>,
 }
 
 impl HttpResponse {
     /// Whether the status is a success.
+    #[must_use]
     pub fn is_success(&self) -> bool {
         (200..300).contains(&self.status)
     }
 
     /// The status as an error message names it, e.g. `429 Too Many Requests`.
+    #[must_use]
     pub fn status_line(&self) -> String {
         match &self.reason {
             Some(reason) if !reason.is_empty() => format!("{} {reason}", self.status),
@@ -71,6 +79,7 @@ impl HttpResponse {
     }
 
     /// The body as text, for an error message.
+    #[must_use]
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
     }
@@ -86,7 +95,7 @@ pub trait SyncSocket: Send {
 }
 
 /// Everything that leaves this process.
-pub trait Transport: Send + Sync + std::fmt::Debug {
+pub trait Transport: Send + Sync + Debug {
     /// Execute one HTTP call.
     fn http(&self, request: HttpRequest) -> BoxFuture<'_, Result<HttpResponse, TransportError>>;
 
@@ -150,6 +159,7 @@ fn check_status(nsid: &str, response: &HttpResponse) -> Result<(), ClientError> 
 }
 
 /// Percent-encode a query value.
+#[must_use]
 pub(crate) fn urlencode(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.bytes() {
@@ -170,6 +180,8 @@ pub struct HttpTransport {
 }
 
 impl HttpTransport {
+    /// The live adapter: one `reqwest` client, with a bounded request timeout
+    /// so a stalled peer cannot hold a caller forever.
     pub fn new() -> Self {
         Self {
             http: reqwest::Client::builder()

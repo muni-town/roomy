@@ -11,6 +11,7 @@ const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 /// A 26-character Crockford id, the shape every event id, message id and room
 /// id in the log has.
+#[must_use]
 pub fn is_ulid(value: &str) -> bool {
     value.len() == 26
         && value
@@ -22,6 +23,7 @@ pub fn is_ulid(value: &str) -> bool {
 ///
 /// An NSID is three-or-more dot-separated segments; the log does not care which
 /// they are, only that the field is a name rather than a number or an object.
+#[must_use]
 pub fn nsid_of(value: Option<&Value>) -> Option<String> {
     let text = value?.as_str()?;
     let segments = text.split('.').count();

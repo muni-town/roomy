@@ -49,6 +49,9 @@
 //! A path that is set but blank counts as unset, so a deployment template that
 //! renders an empty value falls through to the default.
 
+mod health;
+mod loki;
+
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -72,9 +75,7 @@ use space_xrpc::state::{SpaceReadDb, XrpcState};
 use space_xrpc::verify::{GatewayServiceAuth, TestMode};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-
-mod health;
-mod loki;
+use tracing_subscriber::EnvFilter;
 
 use loki::{LokiLayer, LokiSink};
 
@@ -120,8 +121,7 @@ fn main() {
     // the Loki layer writes the same events to Grafana when `ALLOY_URL` names an
     // Alloy. Unset, the layer is disabled and costs a branch.
     let loki = LokiSink::from_env();
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::registry()
         .with(filter)
         .with(tracing_subscriber::fmt::layer())

@@ -224,6 +224,11 @@ pub struct SinkStats {
     pub retrying: bool,
 }
 
+/// The queue and the HTTP client that drains it: what a `LokiLayer` hands each
+/// record to.
+///
+/// A sink exists only when `ALLOY_URL` names an Alloy; the process logs to
+/// stdout whether or not one does.
 pub struct LokiSink {
     push_url: String,
     env: String,
@@ -479,6 +484,8 @@ impl LokiSink {
 /// records in order. Built by hand so a record's line is not copied again into
 /// a `serde_json::Value` tree.
 fn push_body(env: &str, batch: &[Record]) -> String {
+    use std::fmt::Write;
+
     let mut streams: BTreeMap<Labels, Vec<&Record>> = BTreeMap::new();
     for record in batch {
         streams.entry(record.labels).or_default().push(record);
@@ -491,16 +498,19 @@ fn push_body(env: &str, batch: &[Record]) -> String {
         if index > 0 {
             body.push(',');
         }
-        body.push_str(&format!(
-            "{{\"stream\":{{\"service_name\":{service},\"env\":{quoted_env},\"level\":\"{}\",\"scope\":\"{}\"}},\"values\":[",
-            labels.level, labels.scope
-        ));
+        let _ = write!(
+            body,
+            "{{\"stream\":{{\"service_name\":{service},\"env\":{quoted_env},\"level\":\"{level}\",\"scope\":\"{scope}\"}},\"values\":[",
+            level = labels.level,
+            scope = labels.scope,
+        );
         for (position, record) in records.into_iter().enumerate() {
             if position > 0 {
                 body.push(',');
             }
             let line = serde_json::to_string(&record.line).unwrap_or_else(|_| "\"\"".into());
-            body.push_str(&format!("[\"{}\",{line}]", loki_timestamp(record.ts)));
+            let timestamp = loki_timestamp(record.ts);
+            let _ = write!(body, "[\"{timestamp}\",{line}]");
         }
         body.push_str("]}");
     }
@@ -570,6 +580,7 @@ pub struct LokiLayer {
 }
 
 impl LokiLayer {
+    /// A layer that feeds `sink`, or that drops every event when it is `None`.
     pub fn new(sink: Option<Arc<LokiSink>>) -> Self {
         Self { sink }
     }

@@ -16,10 +16,16 @@ use rusqlite::Connection;
 
 use crate::record_change::RecordChangeRow;
 
+/// Why an append did not happen.
+///
+/// A batch is one transaction, so an error here means no entry of the batch
+/// reached the log.
 #[derive(Debug, thiserror::Error)]
 pub enum AppendError {
+    /// The database refused a statement.
     #[error("event log error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    /// The payload or a change body was not encodable.
     #[error("event log error: {0}")]
     Cbor(String),
 }
@@ -30,6 +36,7 @@ pub enum AppendError {
 /// because every row's ordering stamp encodes the position the entry lands on —
 /// and that position is assigned inside the transaction that writes it.
 pub struct AppendDraft<'a> {
+    /// The space's stream the entry lands on.
     pub stream_id: String,
     /// The sender's DID, as recorded on the entry.
     pub user: String,
@@ -40,6 +47,7 @@ pub struct AppendDraft<'a> {
     /// The instant the server accepted the batch: the ordering key's time
     /// component, and the log's own account of when the entry arrived.
     pub created_at: i64,
+    /// When this server received the entry, in epoch milliseconds.
     pub received_at: i64,
     /// The changes the entry produces at the given index, in emission order.
     pub rows: Box<dyn FnOnce(i64) -> Vec<RecordChangeRow> + 'a>,
@@ -51,6 +59,11 @@ pub struct EventLog {
 }
 
 impl EventLog {
+    /// Open (or create) the log at `path` and apply the schema it needs.
+    ///
+    /// The connection is left in write-ahead logging mode so a reader can work
+    /// while a batch appends. Fails when the file cannot be opened or the
+    /// schema cannot be applied.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, AppendError> {
         let conn = Connection::open(path)?;
         conn.busy_timeout(std::time::Duration::from_millis(5000))?;
@@ -68,6 +81,7 @@ impl EventLog {
         Ok(Self { conn })
     }
 
+    /// The log's connection, for a caller that reads the tables directly.
     pub fn connection(&self) -> &Connection {
         &self.conn
     }

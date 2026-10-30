@@ -5,6 +5,7 @@ use std::sync::Arc;
 use base64::Engine as _;
 use roomy_events::{Did, Event, EventBatch};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as Json;
 
 use crate::auth::ServiceAuth;
 use crate::error::ClientError;
@@ -16,13 +17,18 @@ use crate::MAX_EVENTS_PER_BATCH;
 /// A member as `space.roomy.space.getMembers` reports it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Member {
+    /// The member's DID.
     pub did: String,
+    /// The handle the appserver resolved for the DID, when it resolved one.
     #[serde(default)]
     pub handle: Option<String>,
+    /// The display name from the member's profile, when they have one.
     #[serde(default)]
     pub name: Option<String>,
+    /// Whether the member holds the space's admin role.
     #[serde(rename = "isAdmin", default)]
     pub is_admin: bool,
+    /// Whether the space has banned the member.
     #[serde(rename = "isBanned", default)]
     pub is_banned: bool,
 }
@@ -30,14 +36,17 @@ pub struct Member {
 /// An admin who is not a member.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExternalAdmin {
+    /// The admin's DID.
     pub did: String,
 }
 
 /// The `getMembers` response.
 #[derive(Debug, Clone, Deserialize)]
 pub struct MembersResponse {
+    /// Everyone who is a member of the space.
     #[serde(default)]
     pub members: Vec<Member>,
+    /// Admins granted the role without joining.
     #[serde(rename = "externalAdmins", default)]
     pub external_admins: Vec<ExternalAdmin>,
 }
@@ -45,6 +54,7 @@ pub struct MembersResponse {
 impl MembersResponse {
     /// Whether `did` is an admin of the space, by membership role or by
     /// external-admin grant.
+    #[must_use]
     pub fn is_admin(&self, did: &str) -> bool {
         self.members
             .iter()
@@ -61,11 +71,16 @@ pub struct SyncEvent {
     /// The DID of the sender.
     pub user: String,
     /// The event itself.
-    pub payload: serde_json::Value,
+    pub payload: Json,
 }
 
 impl SyncEvent {
     /// Decode the payload into a typed event, when this crate models it.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Decode`] when the payload does not match any event type
+    /// this crate knows.
     pub fn event(&self) -> Result<Event, ClientError> {
         Event::from_json(self.payload.clone()).map_err(|error| ClientError::Decode {
             nsid: "sync.#streamEvents".into(),
@@ -112,6 +127,10 @@ impl SyncSubscription {
     }
 
     /// Subscribe to another stream on the same connection.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Sync`] when the subscription frame cannot be sent.
     pub async fn subscribe(&mut self, stream_did: &Did, cursor: i64) -> Result<(), ClientError> {
         #[derive(Serialize)]
         struct Sub<'a> {
@@ -177,9 +196,8 @@ fn decode_frame(frame: &[u8]) -> Result<Option<StreamEventsBody>, ClientError> {
 /// Byte strings become Roomy's `{"$bytes": "<base64>"}` wrapper, tags are
 /// dropped (this protocol assigns them no meaning), and a map key that is not
 /// text is an error because it cannot be an object key.
-fn cbor_to_json(value: ciborium::Value) -> Result<serde_json::Value, String> {
+fn cbor_to_json(value: ciborium::Value) -> Result<Json, String> {
     use ciborium::Value as Cbor;
-    use serde_json::Value as Json;
 
     Ok(match value {
         Cbor::Null => Json::Null,
@@ -266,7 +284,7 @@ impl AppserverClient {
         service_auth: Arc<ServiceAuth>,
         access_jwt: impl Into<String>,
     ) -> Self {
-        Self::with_transport(
+        Self::new_with_transport(
             base_url,
             did,
             service_auth,
@@ -276,7 +294,7 @@ impl AppserverClient {
     }
 
     /// Call over `transport` instead of a live connection.
-    pub fn with_transport(
+    pub fn new_with_transport(
         base_url: impl Into<String>,
         did: Did,
         service_auth: Arc<ServiceAuth>,
@@ -302,6 +320,7 @@ impl AppserverClient {
     }
 
     /// The appserver DID, which is every token's `aud`.
+    #[must_use]
     pub fn did(&self) -> &Did {
         &self.did
     }
@@ -345,6 +364,11 @@ impl AppserverClient {
     ///
     /// Splits at the appserver's cap rather than rejecting: a caller that hands
     /// a backfill of 120 messages should get them all written, in order.
+    ///
+    /// # Errors
+    ///
+    /// The first failed chunk ends the call: a transport failure, a token the
+    /// PDS refuses, or an XRPC error naming the NSID.
     pub async fn send_events(
         &self,
         space_did: &Did,
@@ -380,6 +404,10 @@ impl AppserverClient {
 
     /// Read one space's members, which is how the bridge answers "is this
     /// caller an admin".
+    ///
+    /// # Errors
+    ///
+    /// The appserver refusing the query, in the error it answered with.
     pub async fn get_members(&self, space_did: &Did) -> Result<MembersResponse, ClientError> {
         const NSID: &str = "space.roomy.space.getMembers";
         let token = self.token_for(NSID).await?;
@@ -403,6 +431,11 @@ impl AppserverClient {
     /// single-use ticket, and the WebSocket carries it as a query parameter.
     /// The ticket is single-use and short-lived, so it is fetched per
     /// connection rather than cached.
+    ///
+    /// # Errors
+    ///
+    /// A failed ticket call, a socket that will not connect, or a subscription
+    /// frame that cannot be sent.
     pub async fn subscribe_stream(
         &self,
         ws_url: &str,
@@ -431,6 +464,10 @@ impl AppserverClient {
     }
 
     /// Mint a connection ticket for the sync socket.
+    ///
+    /// # Errors
+    ///
+    /// The appserver refusing the procedure, in the error it answered with.
     pub async fn connection_ticket(&self) -> Result<String, ClientError> {
         const NSID: &str = "space.roomy.auth.getConnectionTicket";
         let token = self.token_for(NSID).await?;
@@ -450,13 +487,17 @@ impl AppserverClient {
         struct Ticket {
             ticket: String,
         }
-        call::<Ticket>(self.transport.as_ref(), request)
-            .await
-            .map(|ticket| ticket.ticket)
+        let ticket: Ticket = call(self.transport.as_ref(), request).await?;
+        Ok(ticket.ticket)
     }
 
     /// Upload bytes to the bridge account's PDS and return the `atblob://` ref
     /// a Roomy attachment uses.
+    ///
+    /// # Errors
+    ///
+    /// The PDS refusing the upload, or a response whose `blob.ref` is not the
+    /// shape an `atblob://` reference is built from.
     pub async fn upload_blob(
         &self,
         did: &Did,
