@@ -6,12 +6,16 @@
 //! TypeScript rules produce from that corpus.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use roomy_space_worker::{Supervisor, SupervisorConfig};
 use serde::Deserialize;
+use space_core::change::FeedRow;
 use space_core::ids::SpaceDid;
 use space_db::{digest_of, snapshot_db, worker_snapshot, SpaceDb};
+use space_feed::{ChangeFeed, Cursor, FeedError};
 
 #[derive(Deserialize)]
 struct Fixture {
@@ -229,4 +233,83 @@ fn stopping_one_space_leaves_the_others_running() {
     assert_eq!(lease(&spaces[1]), None);
 
     supervisor.stop();
+}
+
+/// A feed whose every read fails, counting the reads it was asked for: what a
+/// space does when the log itself is unreadable or an event cannot be planned.
+struct FailingFeed {
+    attempts: Arc<AtomicUsize>,
+}
+
+impl ChangeFeed for FailingFeed {
+    fn batch(
+        &self,
+        _space: &SpaceDid,
+        _cursor: Cursor,
+        _limit: usize,
+    ) -> Result<Vec<FeedRow>, FeedError> {
+        self.attempts.fetch_add(1, Ordering::Relaxed);
+        Err(FeedError::Decode("the first row does not decode".into()))
+    }
+
+    fn latest_idx(&self, _space: &SpaceDid) -> Result<i64, FeedError> {
+        Ok(0)
+    }
+}
+
+/// A space that cannot make progress waits between attempts, and `/health` says
+/// what failed. Without the wait the loop retries as fast as SQLite answers —
+/// thousands of attempts a second, one busy core per broken space.
+#[test]
+fn a_failing_space_retries_under_a_backoff_and_reports_the_error() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let space = SpaceDid::parse("did:web:broken.example".to_string()).expect("space DID");
+    let config = config(dir.path());
+    let attempts = Arc::new(AtomicUsize::new(0));
+
+    let counted = Arc::clone(&attempts);
+    let supervisor = Supervisor::new(config).with_feed(Arc::new(move || {
+        Ok(Box::new(FailingFeed {
+            attempts: Arc::clone(&counted),
+        }) as Box<dyn ChangeFeed>)
+    }));
+    supervisor
+        .start_all([space])
+        .expect("the actor starts despite a failing feed");
+
+    let window = Duration::from_secs(2);
+    std::thread::sleep(window);
+    let made = attempts.load(Ordering::Relaxed);
+    let health = supervisor.health();
+
+    // A stop joins the actor thread: it must not wait out a backoff.
+    let stopping = Instant::now();
+    supervisor.stop();
+    assert!(
+        stopping.elapsed() < Duration::from_secs(1),
+        "stopping took {:?}: the loop slept out its backoff",
+        stopping.elapsed()
+    );
+
+    // 250 ms, then 500 ms, then 1 s: a handful of attempts in two seconds. A
+    // loop with no wait makes thousands, which is what this bound rejects.
+    assert!(
+        made >= 2,
+        "the space gave up instead of retrying: {made} attempts in {window:?}"
+    );
+    assert!(
+        made <= 30,
+        "the space retried {made} times in {window:?}: the loop is spinning"
+    );
+
+    assert_eq!(health.len(), 1, "one health row for the failing space");
+    let error = health[0]
+        .last_error
+        .as_deref()
+        .expect("the health snapshot carries the failure");
+    assert!(
+        error.contains("does not decode"),
+        "the health snapshot names the error, got {error:?}"
+    );
+    assert!(!health[0].is_healthy());
 }

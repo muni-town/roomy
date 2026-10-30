@@ -192,6 +192,38 @@ start_shadow() {
 
   echo "[entrypoint] shadow: following $spaces — log $SHADOW_EVENTS_DB, data $SHADOW_DATA_DIR, health $SHADOW_HEALTH_ADDR, uid shadow ($(id -u shadow)), as-limit $SHADOW_AS_LIMIT"
 
+  # The child's environment, spelled out rather than inherited. The four values
+  # the log sink reads are passed when they are set, so what the follower logs
+  # with is what this script was told, not whatever else the container happens to
+  # carry. An unset value stays unset: the binary's default applies.
+  local -a shadow_env=(
+    MALLOC_ARENA_MAX=2
+    ROOMY_DATA_DIR="$SHADOW_DATA_DIR"
+    ROOMY_EVENTS_DB="$SHADOW_EVENTS_DB"
+    ROOMY_SPACES="$spaces"
+    ROOMY_OWNERSHIP=follower
+    ROOMY_HEALTH_ADDR="$SHADOW_HEALTH_ADDR"
+    ROOMY_MAX_OPEN_SPACES="$SHADOW_MAX_OPEN_SPACES"
+  )
+  local name
+  for name in ALLOY_URL APP_ENV BUILD_ID RUST_LOG; do
+    if [ -n "${!name:-}" ]; then
+      shadow_env+=("$name=${!name}")
+    fi
+  done
+
+  # The target by host only: ALLOY_URL may carry credentials and this line reaches
+  # the container log. Whether the sink exists at all is the other half of "will
+  # the follower's lines be in Grafana".
+  if [ -n "${ALLOY_URL:-}" ]; then
+    local host="${ALLOY_URL#*://}"
+    host="${host%%/*}"
+    host="${host##*@}"
+    echo "[entrypoint] shadow: log sink enabled — $host (env ${APP_ENV:-unknown}, build ${BUILD_ID:-unknown})"
+  else
+    echo "[entrypoint] shadow: log sink disabled (ALLOY_URL unset); the follower logs to stdout only"
+  fi
+
   # The supervisor. A crash restarts the follower with backoff; the subshell is
   # backgrounded before the app starts, so nothing here delays or blocks it, and
   # nothing it does can take the container down.
@@ -224,13 +256,7 @@ start_shadow() {
       started="$(date +%s)"
       prlimit --as="$SHADOW_AS_LIMIT" -- \
         setpriv --reuid=shadow --regid=roomy-shadow --clear-groups \
-        env MALLOC_ARENA_MAX=2 \
-            ROOMY_DATA_DIR="$SHADOW_DATA_DIR" \
-            ROOMY_EVENTS_DB="$SHADOW_EVENTS_DB" \
-            ROOMY_SPACES="$spaces" \
-            ROOMY_OWNERSHIP=follower \
-            ROOMY_HEALTH_ADDR="$SHADOW_HEALTH_ADDR" \
-            ROOMY_MAX_OPEN_SPACES="$SHADOW_MAX_OPEN_SPACES" \
+        env "${shadow_env[@]}" \
         nice -n 19 ionice -c3 /usr/local/bin/roomy-appserver --role worker &
       child=$!
 

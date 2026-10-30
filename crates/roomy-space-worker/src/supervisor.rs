@@ -16,6 +16,10 @@
 //!  * **An idle space is unloaded.** With `idle_unload` set, an actor that has
 //!    applied nothing for that long exits and drops its database handle, so the
 //!    open-set is bounded by what is actually busy. `rearm` starts it again.
+//!  * **A failing space waits, and says what failed.** A step that returns an
+//!    error retries under an exponential backoff, so one space that cannot make
+//!    progress costs neither a core nor a log flood; the warning names the
+//!    space, the cursor it is stuck at, and the error.
 //!
 //! The supervisor binds no socket and reads no environment; the binary that
 //! hosts it does both.
@@ -99,6 +103,20 @@ pub struct Supervisor {
     health: Arc<Mutex<BTreeMap<String, Health>>>,
     actors: Mutex<BTreeMap<String, Actor>>,
 }
+
+/// How long a failing actor waits before the next attempt. A space that cannot
+/// make progress must not hold a core while it waits: the process shares the
+/// machine with everything else the deployment runs.
+const ERROR_BACKOFF_INITIAL: Duration = Duration::from_millis(250);
+
+/// The longest a failing actor waits between attempts. Long enough that a space
+/// broken for hours costs nothing, short enough that a fixed dependency is
+/// picked up without a restart.
+const ERROR_BACKOFF_MAX: Duration = Duration::from_secs(30);
+
+/// How often a space repeats a failure it has already reported. The first
+/// occurrence of a distinct error is always logged; this bounds the rest.
+const ERROR_REPORT_INTERVAL: Duration = Duration::from_secs(60);
 
 /// A sink per actor, made afresh because a worker owns its sink.
 pub type SignalFactory = Arc<dyn Fn() -> Box<dyn SignalSink> + Send + Sync>;
@@ -306,24 +324,61 @@ fn run_actor<F, L, S, N>(
     N: SignalSink,
 {
     let mut last_progress = Instant::now();
+    let mut cursor = worker.cursor().unwrap_or((-1, -1));
+    let mut backoff = ERROR_BACKOFF_INITIAL;
+    // The last failure this actor reported, and when. `None` after a batch that
+    // applied, so the next failure is always logged.
+    let mut reported: Option<(String, Instant)> = None;
+
     loop {
         if worker.is_cancelled() {
             return;
         }
         let progress = worker.step();
-        match &progress {
+        let wait = match &progress {
             Ok(Progress::Applied {
-                cursor,
+                cursor: applied,
                 entries,
                 changes,
             }) => {
-                tracing::info!(idx = cursor.0, ord = cursor.1, entries, changes, "applied");
+                tracing::info!(
+                    idx = applied.0,
+                    ord = applied.1,
+                    entries,
+                    changes,
+                    "applied"
+                );
+                cursor = *applied;
                 last_progress = Instant::now();
+                backoff = ERROR_BACKOFF_INITIAL;
+                reported = None;
+                Some(idle_poll)
             }
-            Ok(Progress::NotLeased) => tracing::debug!("another process holds the lease"),
-            Ok(Progress::Idle { .. }) => {}
-            Err(error) => tracing::warn!(%error, "batch failed"),
-        }
+            Ok(Progress::NotLeased) => {
+                tracing::debug!(space = key, "another process holds the lease");
+                Some(idle_poll)
+            }
+            Ok(Progress::Idle { .. }) => Some(idle_poll),
+            Err(error) => {
+                let text = error.to_string();
+                let quiet = reported.as_ref().is_some_and(|(seen, at)| {
+                    *seen == text && at.elapsed() < ERROR_REPORT_INTERVAL
+                });
+                if !quiet {
+                    tracing::warn!(
+                        space = key,
+                        idx = cursor.0,
+                        ord = cursor.1,
+                        %error,
+                        "batch failed; retrying"
+                    );
+                    reported = Some((text, Instant::now()));
+                }
+                let wait = backoff;
+                backoff = (backoff * 2).min(ERROR_BACKOFF_MAX);
+                Some(wait)
+            }
+        };
 
         if let Ok(mut snapshot) = health.lock() {
             snapshot.insert(key.to_string(), worker.health());
@@ -340,7 +395,40 @@ fn run_actor<F, L, S, N>(
                     return;
                 }
             }
-            std::thread::sleep(idle_poll);
+        }
+        if let Some(wait) = wait {
+            wait_unless_cancelled(worker, wait, idle_poll);
+        }
+    }
+}
+
+/// Wait `duration`, in slices no longer than `slice`, returning early once the
+/// actor is cancelled.
+///
+/// `stop` joins this thread, so a backoff must not become a shutdown: without the
+/// slices, stopping a space in a 30-second retry would block for 30 seconds, and
+/// the container's interrupt path — which drains the log sink — would be cut short
+/// by its own watchdog.
+fn wait_unless_cancelled<F, L, S, N>(
+    worker: &Worker<F, L, S, N>,
+    duration: Duration,
+    slice: Duration,
+) where
+    F: ChangeFeed,
+    L: Lease,
+    S: GlobalSink,
+    N: SignalSink,
+{
+    let slice = slice.max(Duration::from_millis(1));
+    let deadline = Instant::now() + duration;
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return;
+        }
+        std::thread::sleep((deadline - now).min(slice));
+        if worker.is_cancelled() {
+            return;
         }
     }
 }

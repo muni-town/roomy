@@ -331,7 +331,13 @@ fn run(config: Config, loki: Option<Arc<LokiSink>>) -> Result<(), Box<dyn std::e
             (Some(addr), Some(supervisor)) => {
                 let listener = tokio::net::TcpListener::bind(addr).await?;
                 let supervisor = Arc::clone(supervisor);
-                Some(tokio::spawn(health::serve(listener, supervisor)))
+                // The sink's counters are part of the body: a follower whose logs
+                // never arrive has to be able to say so from its own health.
+                Some(tokio::spawn(health::serve(
+                    listener,
+                    supervisor,
+                    loki.clone(),
+                )))
             }
             _ => None,
         };
