@@ -12,6 +12,7 @@ use std::sync::Mutex;
 
 use rusqlite::{Connection, OptionalExtension};
 
+/// A user's profile fields, as the global `profiles` row carries them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProfileFields {
     pub name: Option<String>,
@@ -48,6 +49,7 @@ pub enum FederationOrder {
     RequestedAtDescending,
 }
 
+/// One federation row: the origin, the receiver, and where the request stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FederationRecord {
     pub space_id: String,
@@ -84,6 +86,10 @@ pub struct FederationReceiverPermission {
     pub permission: String,
 }
 
+/// The space-agnostic stores the gateway owns, read-only.
+///
+/// Every read is a lookup that may miss: a worker without a replica answers
+/// every miss, and the per-space fallback is the caller's business.
 pub trait GlobalStores: Send + Sync {
     /// `profiles` row for `did`, or `None` when absent/unusable.
     fn profile(&self, did: &str) -> Option<ProfileFields>;
@@ -152,6 +158,7 @@ pub struct SqliteGlobalStores {
 }
 
 impl SqliteGlobalStores {
+    /// Open `path` read-only.
     pub fn open(path: &str) -> rusqlite::Result<Self> {
         let conn = Connection::open_with_flags(
             path,

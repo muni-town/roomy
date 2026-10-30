@@ -8,17 +8,28 @@ use crate::ids::{CallerDid, Nsid};
 use crate::read_positions::{ReadPositions, HEADER};
 use crate::state::XrpcState;
 
+/// The caller and their read positions, resolved once per request.
 pub struct Context {
+    /// The caller's DID, absent on an unauthenticated request.
     pub caller: Option<CallerDid>,
+    /// The read positions the caller's header carried.
     pub positions: ReadPositions,
 }
 
 impl Context {
+    /// The caller's DID, absent on an unauthenticated request.
     pub fn did(&self) -> Option<&str> {
         self.caller.as_ref().map(CallerDid::as_str)
     }
 }
 
+/// Verify the caller and decode their read positions.
+///
+/// # Errors
+///
+/// Returns an `InvalidToken` error when the request's credentials cannot be
+/// verified, and an `InvalidRequest` error when its read-position header is
+/// malformed.
 pub async fn context(
     state: &XrpcState,
     headers: &HeaderMap,

@@ -28,9 +28,10 @@ use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
-use crate::access::{require_room_read, require_space_access};
+use crate::access;
 use crate::error::XrpcError;
-use crate::handlers::common::{parse_space, Context};
+use crate::handlers::common;
+use crate::handlers::common::Context;
 use crate::params::Params;
 use crate::state::XrpcState;
 
@@ -314,6 +315,12 @@ fn mint_token(
     .map_err(|err| XrpcError::internal(format!("voice token signing failed: {err}")))
 }
 
+/// `voice.getToken`: the caller's LiveKit token for the room's current call.
+///
+/// # Errors
+///
+/// Returns `CallNotStarted` when the room projects no call, and `Forbidden`
+/// when the caller does not hold space membership.
 pub fn get_token(
     state: &XrpcState,
     params: &Params,
@@ -324,14 +331,14 @@ pub fn get_token(
     state.db.with(|conn| {
         // Access is resolved before configuration, so a deployment without
         // LiveKit answers "may I?" identically.
-        let access = require_room_read(conn, &room_id, ctx.did())?;
+        let access = access::require_room_read(conn, &room_id, ctx.did())?;
         let Some(did) = ctx.did() else {
             return Err(XrpcError::forbidden("Sign in to join this call"));
         };
         let Some(space_id) = access.space_id.as_deref() else {
             return Err(XrpcError::forbidden("Sign in to join this call"));
         };
-        require_space_access(conn, space_id, Some(did))?;
+        access::require_space_access(conn, space_id, Some(did))?;
 
         let Some(config) = VoiceConfig::from_env() else {
             return Ok(VoiceTokenResult::unconfigured());
@@ -373,6 +380,7 @@ pub fn get_token(
     })
 }
 
+/// `voice.getParticipants`: the room's call and who is in it.
 pub fn get_participants(
     state: &XrpcState,
     params: &Params,
@@ -381,7 +389,7 @@ pub fn get_participants(
     let room_id = params.require_string("roomId")?;
 
     state.db.with(|conn| {
-        require_room_read(conn, &room_id, ctx.did())?;
+        access::require_room_read(conn, &room_id, ctx.did())?;
 
         // Unconfigured LiveKit means no call can exist, so this agrees with
         // `getToken` rather than reporting a projection nothing populates.
@@ -401,12 +409,13 @@ pub fn get_participants(
     })
 }
 
+/// `voice.getActiveCalls`: the space's rooms that currently have a call.
 pub fn get_active_calls(
     state: &XrpcState,
     params: &Params,
     ctx: &Context,
 ) -> Result<VoiceActiveCallsResult, XrpcError> {
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
     // Authentication before the space is read at all: the membership check
     // below reports an absent caller as a non-member, which is not the answer.
     let Some(did) = ctx.did() else {
@@ -420,7 +429,7 @@ pub fn get_active_calls(
     state.db.with(|conn| {
         // Membership, not public read: the list names which rooms have live
         // calls, which is not something a stranger to the space should learn.
-        require_space_access(conn, space_id.as_str(), Some(did))?;
+        access::require_space_access(conn, space_id.as_str(), Some(did))?;
 
         if VoiceConfig::from_env().is_none() {
             return Ok(VoiceActiveCallsResult { calls: Vec::new() });

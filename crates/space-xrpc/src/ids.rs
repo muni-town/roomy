@@ -9,6 +9,8 @@ use crate::error::XrpcError;
 /// Crockford base32, as used by ULIDs.
 const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
+/// Whether `value` is a 26-character Crockford base32 ULID.
+#[must_use]
 pub fn is_ulid(value: &str) -> bool {
     value.len() == 26
         && value
@@ -20,6 +22,7 @@ pub fn is_ulid(value: &str) -> bool {
 ///
 /// Mirrors `ulidx`'s `decodeTime`: any malformed prefix is an error rather than
 /// a silently wrong timestamp.
+#[must_use]
 pub fn ulid_time_ms(value: &str) -> Option<i64> {
     let bytes = value.as_bytes();
     if bytes.len() < 10 {
@@ -39,6 +42,7 @@ pub fn ulid_time_ms(value: &str) -> Option<i64> {
 }
 
 /// Minimal ATProto DID syntax check: `did:<method>:<method-specific-id>`.
+#[must_use]
 pub fn is_did(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("did:") else {
         return false;
@@ -64,6 +68,7 @@ macro_rules! validated_string {
         pub struct $name(String);
 
         impl $name {
+            #[must_use]
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -115,12 +120,17 @@ validated_string!(Cursor, "cursor", |v: &str| v.len() <= 512 && !v.is_empty());
 pub struct Limit(u32);
 
 impl Limit {
+    /// The largest `limit` any endpoint accepts.
     pub const MAX: u32 = 100;
 
+    /// The limit as a row count.
+    #[must_use]
     pub fn get(self) -> usize {
         self.0 as usize
     }
 
+    /// Parse a raw `limit`, bounded to `min..=max`; an absent or empty value is
+    /// `default`.
     pub fn parse(raw: Option<&str>, min: u32, max: u32, default: u32) -> Result<Self, XrpcError> {
         let Some(raw) = raw else {
             return Ok(Limit(default));
@@ -162,6 +172,8 @@ pub fn parse_js_integer(raw: &str, key: &str) -> Result<i64, XrpcError> {
 pub struct Nsid(String);
 
 impl Nsid {
+    /// The NSID as sent.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }

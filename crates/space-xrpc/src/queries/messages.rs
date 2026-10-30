@@ -4,34 +4,46 @@
 //! filter, same batch joins for reactions/embeds/forwards, and the same DTO
 //! assembly order.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
+use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension};
+use serde_json::value::RawValue;
+use serde_json::Value as JsonValue;
 
 use crate::dto::{
-    Attachment, ForwardedFrom, FullMessage, LinkEmbedDto, MediaDto, MessageDto, ReactionDto,
+    Attachment, BlockedMessage, ForwardedFrom, FullMessage, LinkEmbedDto, MediaDto, MessageDto,
+    ReactionDto,
 };
-use crate::ids::ulid_time_ms;
-use crate::queries::links::canonical_url;
+use crate::error::XrpcError;
+use crate::ids;
+use crate::queries::links;
 use crate::store::{GlobalStores, ProfileFields};
-use crate::time::iso_from_ms;
+use crate::time;
 
 const RICHTEXT_MIME: &str = "application/vnd.roomy.richtext+json";
 
+/// Which messages a call selects.
 pub enum SelectScope<'a> {
+    /// One page of `room_id`'s messages, newest first.
     Room {
         room_id: &'a str,
         limit: usize,
         cursor: Option<&'a str>,
     },
+    /// The messages named by `ids`.
     Ids {
         ids: Vec<String>,
+        /// Forwarded targets already being resolved, so a cycle terminates.
         forward_chain: Vec<String>,
+        /// Skip the global-store profile overlay, for a caller that has one.
         skip_profile_hydration: bool,
     },
 }
 
+/// The messages a call selected, oldest first, and the cursor for the page
+/// before them.
 pub struct SelectResult {
     pub messages: Vec<MessageDto>,
     pub next_cursor: Option<String>,
@@ -76,6 +88,14 @@ struct EmbedRow {
     data: Option<String>,
 }
 
+/// One row of `comp_reaction`, as stored.
+struct ReactionRow {
+    entity: String,
+    reaction: String,
+    user: String,
+    reaction_id: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EmbedKind {
     Image,
@@ -85,8 +105,9 @@ enum EmbedKind {
     Tile,
 }
 
-/// `roomPageSql` — order and filter on the same timeline key.
-pub fn room_page_sql(has_cursor: bool, limit: usize) -> String {
+/// `roomPageSql` — order and filter on the same timeline key. `has_cursor`
+/// adds the keyset predicate for the page after `cursor`.
+fn room_page_sql(has_cursor: bool, limit: usize) -> String {
     format!(
         "
       select
@@ -208,6 +229,7 @@ fn resolve_cursor_key(conn: &Connection, cursor_id: &str) -> rusqlite::Result<St
 }
 
 /// `decodeContent`: text and JSON as UTF-8, everything else as base64.
+#[must_use]
 pub fn decode_content(mime: Option<&str>, data: Option<&[u8]>) -> String {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
@@ -225,6 +247,7 @@ pub fn decode_content(mime: Option<&str>, data: Option<&[u8]>) -> String {
 
 /// Board preview: rich-text bodies reduce to plaintext; everything else is the
 /// wire `content` string.
+#[must_use]
 pub fn decode_board_preview(mime: Option<&str>, data: Option<&[u8]>) -> String {
     if mime == Some(RICHTEXT_MIME) {
         return data.and_then(richtext_plaintext).unwrap_or_default();
@@ -234,23 +257,23 @@ pub fn decode_board_preview(mime: Option<&str>, data: Option<&[u8]>) -> String {
 
 /// Best-effort reduction of a serialised blocks document to its text.
 fn richtext_plaintext(data: &[u8]) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_slice(data).ok()?;
+    let value: JsonValue = serde_json::from_slice(data).ok()?;
     let mut out = String::new();
     collect_text(&value, &mut out);
     Some(out)
 }
 
-fn collect_text(value: &serde_json::Value, out: &mut String) {
+fn collect_text(value: &JsonValue, out: &mut String) {
     match value {
-        serde_json::Value::Object(map) => {
-            if let Some(serde_json::Value::String(text)) = map.get("text") {
+        JsonValue::Object(map) => {
+            if let Some(JsonValue::String(text)) = map.get("text") {
                 out.push_str(text);
             }
             for value in map.values() {
                 collect_text(value, out);
             }
         }
-        serde_json::Value::Array(items) => {
+        JsonValue::Array(items) => {
             for item in items {
                 collect_text(item, out);
             }
@@ -261,7 +284,7 @@ fn collect_text(value: &serde_json::Value, out: &mut String) {
 
 fn attachment_from_embed(
     row: &EmbedRow,
-    link_embeds: &HashMap<String, Option<Box<serde_json::value::RawValue>>>,
+    link_embeds: &HashMap<String, Option<Box<RawValue>>>,
 ) -> Attachment {
     match row.kind {
         EmbedKind::Image => Attachment::Image {
@@ -291,22 +314,32 @@ fn attachment_from_embed(
         },
         EmbedKind::Link => Attachment::Link {
             url: row.url.clone(),
-            embed: link_embeds.get(canonical_url(&row.url)).cloned().flatten(),
+            embed: link_embeds
+                .get(links::canonical_url(&row.url))
+                .cloned()
+                .flatten(),
         },
         // A payload the writer produced is always valid JSON. A row that is
         // not — written by an older or a wrong writer — loses its payload, not
         // the attachment: the tile still renders, it just has no data.
         EmbedKind::Tile => Attachment::Tile {
             url: row.url.clone(),
-            data: row.data.as_deref().and_then(|text| {
-                serde_json::from_str::<Box<serde_json::value::RawValue>>(text).ok()
-            }),
+            data: row
+                .data
+                .as_deref()
+                .and_then(|text| serde_json::from_str::<Box<RawValue>>(text).ok()),
         },
     }
 }
 
+/// The `media` and `linkEmbeds` arrays an attachment list derives.
+struct AttachmentViews {
+    media: Vec<MediaDto>,
+    link_embeds: Vec<LinkEmbedDto>,
+}
+
 /// `deriveAttachmentViews`: media in kind order, then links as uri-lists.
-fn derive_attachment_views(attachments: &[Attachment]) -> (Vec<MediaDto>, Vec<LinkEmbedDto>) {
+fn derive_attachment_views(attachments: &[Attachment]) -> AttachmentViews {
     let mut media = Vec::new();
     let mut link_embeds = Vec::new();
     for attachment in attachments {
@@ -389,18 +422,20 @@ fn derive_attachment_views(attachments: &[Attachment]) -> (Vec<MediaDto>, Vec<Li
             Attachment::Reply { .. } | Attachment::Forward { .. } => {}
         }
     }
-    (media, link_embeds)
+    AttachmentViews { media, link_embeds }
 }
 
 fn blocked_tombstone(row: &BaseRow) -> MessageDto {
     let timestamp = match row.timestamp {
-        Some(ts) => iso_from_ms(ts),
+        Some(ts) => time::iso_from_ms(ts),
         None => match &row.forward_target {
-            Some(_) => ulid_time_ms(&row.id).map(iso_from_ms).unwrap_or_default(),
+            Some(_) => ids::ulid_time_ms(&row.id)
+                .map(time::iso_from_ms)
+                .unwrap_or_default(),
             None => String::new(),
         },
     };
-    MessageDto::Blocked(crate::dto::BlockedMessage {
+    MessageDto::Blocked(BlockedMessage {
         id: row.id.clone(),
         sort_idx: row.sort_idx.clone(),
         content: String::new(),
@@ -415,13 +450,17 @@ fn blocked_tombstone(row: &BaseRow) -> MessageDto {
     })
 }
 
+/// Select the messages `scope` names, in the wire shape the appserver builds.
+///
+/// `viewer_did` marks the caller's own reactions; `hidden` is the author block
+/// set, which hides a message behind a tombstone.
 pub fn select_messages(
     conn: &Connection,
     stores: &dyn GlobalStores,
     scope: SelectScope<'_>,
     viewer_did: Option<&str>,
     hidden: &[String],
-) -> Result<SelectResult, crate::error::XrpcError> {
+) -> Result<SelectResult, XrpcError> {
     // The worker has no block set of its own; the gateway resolves it. An
     // empty set (the supplied `hidden`, always empty today) makes every row
     // live, which is the same query shape `selectMessages` runs.
@@ -474,9 +513,9 @@ pub fn select_messages(
                 .join(",");
             let sql = IDS_SQL.replace("{}", &placeholders);
             let mut stmt = conn.prepare(&sql)?;
-            let mut params: Vec<rusqlite::types::Value> = Vec::with_capacity(ids.len() + 1);
-            params.push(rusqlite::types::Value::Text(hidden_param.clone()));
-            params.extend(ids.iter().cloned().map(rusqlite::types::Value::Text));
+            let mut params: Vec<Value> = Vec::with_capacity(ids.len() + 1);
+            params.push(Value::Text(hidden_param.clone()));
+            params.extend(ids.iter().cloned().map(Value::Text));
             let rows = stmt.query_map(rusqlite::params_from_iter(params), row_to_base)?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         }
@@ -507,7 +546,7 @@ pub fn select_messages(
     let mut forward_originals: HashMap<String, MessageDto> = HashMap::new();
     if !forward_targets.is_empty() {
         let unique: Vec<String> = {
-            let mut seen = std::collections::HashSet::new();
+            let mut seen = HashSet::new();
             forward_targets
                 .into_iter()
                 .filter(|id| seen.insert(id.clone()))
@@ -533,21 +572,26 @@ pub fn select_messages(
 
     // ── Step 3: reactions, embeds, link cards ─────────────────────────────
     let live_ids: Vec<String> = base_rows.iter().map(|row| row.id.clone()).collect();
-    let id_ph = live_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let placeholders = live_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
 
     // `created_at asc, reaction_id asc` is the oracle's order: reactions are
     // grouped in the order they were made, and the id breaks a tie.
-    let reaction_rows: Vec<(String, String, String, String)> = if live_ids.is_empty() {
+    let reaction_rows: Vec<ReactionRow> = if live_ids.is_empty() {
         Vec::new()
     } else {
         let mut stmt = conn.prepare(&format!(
             "select entity, reaction, user, reaction_id from comp_reaction
-              where entity in ({id_ph})
+              where entity in ({placeholders})
               order by created_at asc, reaction_id asc"
         ))?;
         let rows = stmt
             .query_map(rusqlite::params_from_iter(live_ids.iter()), |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                Ok(ReactionRow {
+                    entity: row.get(0)?,
+                    reaction: row.get(1)?,
+                    user: row.get(2)?,
+                    reaction_id: row.get(3)?,
+                })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         rows
@@ -564,7 +608,7 @@ pub fn select_messages(
                     null as length, null as name, null as data
                from comp_embed_image ei
                join entities e on e.id = ei.entity
-              where e.room in ({id_ph})
+              where e.room in ({placeholders})
              union all
              select e.room as message_id, 'video' as kind, ev.entity as url,
                     ev.mime_type as mime_type, ev.alt as alt,
@@ -573,7 +617,7 @@ pub fn select_messages(
                     ev.length as length, null as name, null as data
                from comp_embed_video ev
                join entities e on e.id = ev.entity
-              where e.room in ({id_ph})
+              where e.room in ({placeholders})
              union all
              select e.room as message_id, 'file' as kind, ef.entity as url,
                     ef.mime_type as mime_type, null as alt,
@@ -582,7 +626,7 @@ pub fn select_messages(
                     null as length, ef.name as name, null as data
                from comp_embed_file ef
                join entities e on e.id = ef.entity
-              where e.room in ({id_ph})
+              where e.room in ({placeholders})
              union all
              select e.room as message_id, 'link' as kind, el.entity as url,
                     'text/uri-list' as mime_type, null as alt,
@@ -591,7 +635,7 @@ pub fn select_messages(
                     null as length, null as name, null as data
                from comp_embed_link el
                join entities e on e.id = el.entity
-              where e.room in ({id_ph})
+              where e.room in ({placeholders})
                 and el.show_preview = 1
              union all
              select e.room as message_id, 'tile' as kind, et.tile_uri as url,
@@ -601,12 +645,12 @@ pub fn select_messages(
                     null as length, null as name, et.data as data
                from comp_embed_tile et
                join entities e on e.id = et.entity
-              where e.room in ({id_ph})",
+              where e.room in ({placeholders})",
         );
         let mut stmt = conn.prepare(&sql)?;
-        let mut params: Vec<rusqlite::types::Value> = Vec::with_capacity(live_ids.len() * 5);
+        let mut params: Vec<Value> = Vec::with_capacity(live_ids.len() * 5);
         for _ in 0..5 {
-            params.extend(live_ids.iter().cloned().map(rusqlite::types::Value::Text));
+            params.extend(live_ids.iter().cloned().map(Value::Text));
         }
         let rows = stmt
             .query_map(rusqlite::params_from_iter(params), |row| {
@@ -637,28 +681,27 @@ pub fn select_messages(
     };
 
     // Viewer's own reaction id, per (message, emoji).
-    let mut reaction_map: IndexMap<String, IndexMap<String, indexmap::IndexSet<String>>> =
-        IndexMap::new();
+    let mut reaction_map: IndexMap<String, IndexMap<String, IndexSet<String>>> = IndexMap::new();
     let mut viewer_reaction: IndexMap<String, IndexMap<String, String>> = IndexMap::new();
-    for (entity, reaction, user, reaction_id) in &reaction_rows {
-        let per_msg = reaction_map.entry(entity.clone()).or_default();
+    for row in &reaction_rows {
+        let per_msg = reaction_map.entry(row.entity.clone()).or_default();
         per_msg
-            .entry(reaction.clone())
+            .entry(row.reaction.clone())
             .or_default()
-            .insert(user.clone());
-        if viewer_did == Some(user.as_str()) {
+            .insert(row.user.clone());
+        if viewer_did == Some(row.user.as_str()) {
             viewer_reaction
-                .entry(entity.clone())
+                .entry(row.entity.clone())
                 .or_default()
-                .insert(reaction.clone(), reaction_id.clone());
+                .insert(row.reaction.clone(), row.reaction_id.clone());
         }
     }
 
     // Enriched link cards, keyed by the canonical URL: the store holds one row
     // per bare URL, while an attachment carries the message id in its own.
-    let mut link_embeds: HashMap<String, Option<Box<serde_json::value::RawValue>>> = HashMap::new();
+    let mut link_embeds: HashMap<String, Option<Box<RawValue>>> = HashMap::new();
     for row in embed_rows.iter().filter(|r| r.kind == EmbedKind::Link) {
-        let canonical = canonical_url(&row.url);
+        let canonical = links::canonical_url(&row.url);
         if link_embeds.contains_key(canonical) {
             continue;
         }
@@ -666,7 +709,7 @@ pub fn select_messages(
         // as `JSON.parse` → `JSON.stringify` preserves it in the appserver.
         let parsed = stores
             .link_embed_json(canonical)
-            .and_then(|raw| serde_json::from_str::<Box<serde_json::value::RawValue>>(&raw).ok());
+            .and_then(|raw| serde_json::from_str::<Box<RawValue>>(&raw).ok());
         link_embeds.insert(canonical.to_owned(), parsed);
     }
 
@@ -681,9 +724,9 @@ pub fn select_messages(
     let mut media_map: HashMap<String, Vec<MediaDto>> = HashMap::new();
     let mut link_embeds_map: HashMap<String, Vec<LinkEmbedDto>> = HashMap::new();
     for (message_id, attachments) in &attachments_map {
-        let (media, links) = derive_attachment_views(attachments);
-        media_map.insert(message_id.clone(), media);
-        link_embeds_map.insert(message_id.clone(), links);
+        let views = derive_attachment_views(attachments);
+        media_map.insert(message_id.clone(), views.media);
+        link_embeds_map.insert(message_id.clone(), views.link_embeds);
     }
 
     let mut messages: Vec<MessageDto> = Vec::with_capacity(base_rows.len());
@@ -739,9 +782,11 @@ pub fn select_messages(
         }
 
         let timestamp = match row.timestamp {
-            Some(ts) => iso_from_ms(ts),
+            Some(ts) => time::iso_from_ms(ts),
             None => match &row.forward_target {
-                Some(_) => ulid_time_ms(&row.id).map(iso_from_ms).unwrap_or_default(),
+                Some(_) => ids::ulid_time_ms(&row.id)
+                    .map(time::iso_from_ms)
+                    .unwrap_or_default(),
                 None => String::new(),
             },
         };

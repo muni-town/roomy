@@ -128,16 +128,11 @@ impl SpaceRegistry {
             open.by_id.clear();
         }
     }
-
-    /// Resolve an entity without the index: an id that is itself a space DID.
-    fn space_id_param(space_id: &str) -> &str {
-        space_id
-    }
 }
 
 impl SpaceResolver for SpaceRegistry {
     fn resolve_space(&self, space_id: &str) -> Option<Arc<SpaceReadDb>> {
-        self.touch(Self::space_id_param(space_id))
+        self.touch(space_id)
     }
 
     fn resolve_entity(&self, entity_id: &str) -> Option<Arc<SpaceReadDb>> {
@@ -157,6 +152,7 @@ pub struct FixedSpaces {
 }
 
 impl FixedSpaces {
+    /// A resolver over `spaces`, keyed by space DID.
     pub fn new(spaces: impl IntoIterator<Item = (String, Arc<SpaceReadDb>)>) -> Self {
         Self {
             spaces: spaces.into_iter().collect(),
@@ -191,6 +187,7 @@ impl SpaceResolver for FixedSpaces {
 }
 
 /// The space a path names, for a caller that has a database and no registry.
+#[must_use]
 pub fn space_of_path(path: &Path) -> String {
     path.file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())

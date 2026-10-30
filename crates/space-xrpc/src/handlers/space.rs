@@ -3,19 +3,19 @@
 use std::collections::{HashMap, HashSet};
 
 use rusqlite::{Connection, OptionalExtension};
+use serde_json::Value as JsonValue;
 
-use crate::access::{require_space_read, room_access, space_access};
+use crate::access;
 use crate::dto::{
     ActiveSidebarThread, ActiveThreadActivity, DeletedRoom, GetSpaceThreadsResult, JoinPolicy,
     Sidebar, SidebarCategory, SidebarChannel, SpaceMetadata, SpaceThreadRow, ThreadMember,
 };
 use crate::error::XrpcError;
-use crate::handlers::common::{parse_space, unread_count, Context};
-use crate::ids::Limit;
+use crate::handlers::common;
+use crate::handlers::common::Context;
 use crate::params::Params;
-use crate::queries::thread_activity::{
-    list_thread_activity, resolve_threads_by_ids, ListActivity, ThreadScope,
-};
+use crate::queries::thread_activity;
+use crate::queries::thread_activity::{ListActivity, ThreadScope};
 use crate::state::XrpcState;
 
 const ACTIVE_WINDOW_MS: i64 = 120 * 60 * 60 * 1000;
@@ -27,16 +27,17 @@ struct RoomListing {
     label: Option<String>,
 }
 
+/// `space.getMetadata`: the space's fields, the caller's standing and sidebar.
 pub fn get_metadata(
     state: &XrpcState,
     params: &Params,
     ctx: &Context,
 ) -> Result<SpaceMetadata, XrpcError> {
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
     let did = ctx.did();
 
     state.db.with(|conn| {
-        let access = space_access(conn, space_id.as_str(), did)?;
+        let access = access::space_access(conn, space_id.as_str(), did)?;
         if access.is_banned {
             return Err(XrpcError::forbidden("Caller is banned from this space"));
         }
@@ -94,7 +95,7 @@ pub fn get_metadata(
 
             let mut access_by_room = HashMap::new();
             for room in channels.iter().chain(voices.iter()) {
-                access_by_room.insert(room.id.clone(), room_access(conn, &room.id, did)?);
+                access_by_room.insert(room.id.clone(), access::room_access(conn, &room.id, did)?);
             }
             let accessible: Vec<String> = channels
                 .iter()
@@ -108,7 +109,7 @@ pub fn get_metadata(
             let mut rooms_with_unread = 0;
             let mut thread_rooms_with_unread = 0;
             for id in accessible.iter().chain(thread_ids.iter()) {
-                if unread_count(conn, &ctx.positions, id)? > 0 {
+                if common::unread_count(conn, &ctx.positions, id)? > 0 {
                     rooms_with_unread += 1;
                     if thread_ids.contains(id) {
                         thread_rooms_with_unread += 1;
@@ -127,19 +128,19 @@ pub fn get_metadata(
                 let Some(row) = room_by_id.get(id) else {
                     return Ok(None);
                 };
-                let Some(acc) = access_by_room.get(id) else {
+                let Some(access) = access_by_room.get(id) else {
                     return Ok(None);
                 };
-                if !acc.can_read {
+                if !access.can_read {
                     return Ok(None);
                 }
                 Ok(Some(SidebarChannel {
                     id: row.id.clone(),
                     name: row.name.clone(),
-                    default_access: acc.default_access.as_str().to_owned(),
-                    can_read: acc.can_read,
-                    can_write: acc.can_write,
-                    unread_count: unread_count(conn, &ctx.positions, id)?,
+                    default_access: access.default_access.as_str().to_owned(),
+                    can_read: access.can_read,
+                    can_write: access.can_write,
+                    unread_count: common::unread_count(conn, &ctx.positions, id)?,
                     last_read: ctx.positions.last_read(id),
                     active_threads: None,
                 }))
@@ -219,13 +220,17 @@ pub fn get_metadata(
                 .collect();
 
             if !active_ids.is_empty() {
-                let metas = resolve_threads_by_ids(conn, state.stores.as_ref(), &active_ids)?;
+                let metas = thread_activity::resolve_threads_by_ids(
+                    conn,
+                    state.stores.as_ref(),
+                    &active_ids,
+                )?;
                 let mut by_parent: HashMap<String, Vec<ActiveSidebarThread>> = HashMap::new();
                 for thread_id in &active_ids {
                     let Some(meta) = metas.get(thread_id) else {
                         continue;
                     };
-                    let acc = room_access(conn, thread_id, did)?;
+                    let acc = access::room_access(conn, thread_id, did)?;
                     if !acc.can_read {
                         continue;
                     }
@@ -252,7 +257,7 @@ pub fn get_metadata(
                             },
                             can_read: acc.can_read,
                             can_write: acc.can_write,
-                            unread_count: unread_count(conn, &ctx.positions, thread_id)?,
+                            unread_count: common::unread_count(conn, &ctx.positions, thread_id)?,
                             last_read: ctx.positions.last_read(thread_id),
                         });
                 }
@@ -331,7 +336,7 @@ struct SidebarCategoryConfig {
 }
 
 fn parse_sidebar_config(raw: &str) -> Vec<SidebarCategoryConfig> {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+    let Ok(value) = serde_json::from_str::<JsonValue>(raw) else {
         return Vec::new();
     };
     let Some(categories) = value.get("categories").and_then(|v| v.as_array()) else {
@@ -418,26 +423,27 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+/// `space.getThreads`: the space's channels and threads, newest activity first.
 pub fn get_threads(
     state: &XrpcState,
     params: &Params,
     ctx: &Context,
 ) -> Result<GetSpaceThreadsResult, XrpcError> {
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
     let limit = params.limit(50)?;
     let cursor = params.cursor()?;
     let search = params.optional_string("search");
     let did = ctx.did();
 
     state.db.with(|conn| {
-        require_space_read(conn, space_id.as_str(), did)?;
+        access::require_space_read(conn, space_id.as_str(), did)?;
 
-        let (all, next_cursor) = list_thread_activity(
+        let page = thread_activity::list_thread_activity(
             conn,
             state.stores.as_ref(),
             ListActivity {
                 scope: ThreadScope::Space(space_id.as_str()),
-                limit: limit_static(limit),
+                limit: limit.get(),
                 cursor: cursor.as_ref().map(|c| c.as_str()),
                 search: search.as_deref(),
                 kinds: &["thread", "channel"],
@@ -447,7 +453,7 @@ pub fn get_threads(
         // Channel names for threads' canonical parents.
         let mut parent_ids: Vec<String> = Vec::new();
         let mut seen = HashSet::new();
-        for thread in &all {
+        for thread in &page.activities {
             if let Some(parent) = &thread.canonical_parent {
                 if seen.insert(parent.clone()) {
                     parent_ids.push(parent.clone());
@@ -476,12 +482,12 @@ pub fn get_threads(
         }
 
         let mut rooms = Vec::new();
-        for thread in &all {
-            let access = room_access(conn, &thread.id, did)?;
+        for thread in &page.activities {
+            let access = access::room_access(conn, &thread.id, did)?;
             if !access.can_read {
                 continue;
             }
-            let unread = unread_count(conn, &ctx.positions, &thread.id)?;
+            let unread = common::unread_count(conn, &ctx.positions, &thread.id)?;
             let is_thread = thread.kind == "thread";
             let engaged = ctx.positions.is_engaged(&thread.id);
             rooms.push(SpaceThreadRow {
@@ -510,11 +516,7 @@ pub fn get_threads(
 
         Ok(GetSpaceThreadsResult {
             rooms,
-            cursor: next_cursor,
+            cursor: page.next_cursor,
         })
     })
-}
-
-fn limit_static(limit: Limit) -> usize {
-    limit.get()
 }

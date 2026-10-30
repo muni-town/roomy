@@ -8,11 +8,16 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
 
+/// An XRPC error response: the status, the machine-readable `error` name and
+/// the human-readable `message`.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("{error}: {message}")]
 pub struct XrpcError {
+    /// The HTTP status the response carries.
     pub status: u16,
+    /// The XRPC error name, e.g. `InvalidRequest`.
     pub error: String,
+    /// The message the client displays.
     pub message: String,
 }
 
@@ -23,6 +28,7 @@ struct ErrorBody<'a> {
 }
 
 impl XrpcError {
+    /// An error with an explicit status and name.
     pub fn new(status: u16, error: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -31,18 +37,22 @@ impl XrpcError {
         }
     }
 
+    /// A 400 `InvalidRequest`.
     pub fn invalid_request(message: impl Into<String>) -> Self {
         Self::new(400, "InvalidRequest", message)
     }
 
+    /// A 404 `NotFound`.
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(404, "NotFound", message)
     }
 
+    /// A 403 `Forbidden`.
     pub fn forbidden(message: impl Into<String>) -> Self {
         Self::new(403, "Forbidden", message)
     }
 
+    /// A 500 `InternalServerError`.
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new(500, "InternalServerError", message)
     }

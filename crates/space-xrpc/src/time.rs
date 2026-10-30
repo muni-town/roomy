@@ -4,8 +4,10 @@
 //! produce the same fixed-width `YYYY-MM-DDTHH:MM:SS.sssZ` string, including
 //! the three fractional digits and the proleptic Gregorian calendar.
 
-use crate::ids::ulid_time_ms;
+use crate::ids;
 
+/// `new Date(ms).toISOString()`: the fixed-width UTC form, to the millisecond.
+#[must_use]
 pub fn iso_from_ms(ms: i64) -> String {
     let (days, ms_of_day) = div_rem(ms, 86_400_000);
     let (year, month, day) = civil_from_days(days);
@@ -38,9 +40,10 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 
 /// `decodeSeenUpTo`: the ISO time encoded in a `seen_up_to` sort key, or `None`
 /// when the value is the `'0'` placeholder (or otherwise not a ULID).
+#[must_use]
 pub fn decode_seen_up_to(seen: Option<&str>) -> Option<String> {
     let seen = seen?;
-    ulid_time_ms(seen).map(iso_from_ms)
+    ids::ulid_time_ms(seen).map(iso_from_ms)
 }
 
 #[cfg(test)]

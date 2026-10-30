@@ -11,6 +11,7 @@ use serde_json::value::RawValue;
 
 // ─── Messages ─────────────────────────────────────────────────────────────
 
+/// One reaction group's count, and the caller's own reaction when there is one.
 #[derive(Debug, Clone, Serialize)]
 pub struct ReactionDto {
     pub emoji: String,
@@ -19,6 +20,7 @@ pub struct ReactionDto {
     pub my_reaction_id: Option<String>,
 }
 
+/// A link attachment's derived view, as the `linkEmbeds` array carries it.
 #[derive(Debug, Clone, Serialize)]
 pub struct LinkEmbedDto {
     pub url: String,
@@ -26,6 +28,7 @@ pub struct LinkEmbedDto {
     pub embed: Option<Box<RawValue>>,
 }
 
+/// A media attachment's derived view, as the `media` array carries it.
 #[derive(Debug, Clone, Serialize)]
 pub struct MediaDto {
     pub url: String,
@@ -47,6 +50,7 @@ pub struct MediaDto {
     pub name: Option<String>,
 }
 
+/// One attachment of a message, tagged with its lexicon type.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "$type")]
 pub enum Attachment {
@@ -123,6 +127,7 @@ pub enum Attachment {
     },
 }
 
+/// Where a forwarded message came from, and the original when it resolved.
 #[derive(Debug, Clone, Serialize)]
 pub struct ForwardedFrom {
     #[serde(rename = "messageId")]
@@ -248,6 +253,7 @@ pub struct BlockedMessage {
     pub link_embeds: Vec<LinkEmbedDto>,
 }
 
+/// A message as a response carries it: rendered, or a blocked tombstone.
 #[derive(Debug, Clone)]
 pub enum MessageDto {
     Full(FullMessage),
@@ -255,6 +261,8 @@ pub enum MessageDto {
 }
 
 impl MessageDto {
+    /// The message's id.
+    #[must_use]
     pub fn id(&self) -> &str {
         match self {
             MessageDto::Full(m) => &m.id,
@@ -262,6 +270,8 @@ impl MessageDto {
         }
     }
 
+    /// The message's ordering key and its id, as `(key, id)`.
+    #[must_use]
     pub fn key(&self) -> (&str, &str) {
         match self {
             MessageDto::Full(m) => (m.sort_idx.as_deref().unwrap_or(&m.id), &m.id),
@@ -269,6 +279,8 @@ impl MessageDto {
         }
     }
 
+    /// The DID that wrote the message.
+    #[must_use]
     pub fn author_did(&self) -> &str {
         match self {
             MessageDto::Full(m) => &m.author_did,
@@ -288,6 +300,7 @@ impl Serialize for MessageDto {
 
 // ─── Threads and rooms ────────────────────────────────────────────────────
 
+/// One participant quoted by a room activity row.
 #[derive(Debug, Clone, Serialize)]
 pub struct ThreadMember {
     pub did: String,
@@ -295,6 +308,7 @@ pub struct ThreadMember {
     pub avatar: Option<String>,
 }
 
+/// A message quoted as a thread's latest.
 #[derive(Debug, Clone, Serialize)]
 pub struct ThreadMessage {
     pub id: String,
@@ -350,6 +364,7 @@ pub struct RoomThreadRow {
 
 // ─── Sidebar (space.getMetadata) ──────────────────────────────────────────
 
+/// An engaged thread the sidebar offers as active.
 #[derive(Debug, Clone, Serialize)]
 pub struct ActiveSidebarThread {
     pub id: String,
@@ -366,6 +381,7 @@ pub struct ActiveSidebarThread {
     pub last_read: Option<String>,
 }
 
+/// The activity of a thread listed under its channel.
 #[derive(Debug, Clone, Serialize)]
 pub struct ActiveThreadActivity {
     #[serde(rename = "latestTimestamp")]
@@ -374,6 +390,7 @@ pub struct ActiveThreadActivity {
     pub latest_members: Vec<ThreadMember>,
 }
 
+/// One channel or voice room on the sidebar.
 #[derive(Debug, Clone, Serialize)]
 pub struct SidebarChannel {
     pub id: String,
@@ -393,6 +410,7 @@ pub struct SidebarChannel {
     pub active_threads: Option<Vec<ActiveSidebarThread>>,
 }
 
+/// One sidebar category and its channels, in config order.
 #[derive(Debug, Clone, Serialize)]
 pub struct SidebarCategory {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -402,12 +420,15 @@ pub struct SidebarCategory {
     pub channels: Vec<SidebarChannel>,
 }
 
+/// A space's sidebar: its categories, in config order, and the channels no
+/// category lists.
 #[derive(Debug, Clone, Serialize)]
 pub struct Sidebar {
     pub categories: Vec<SidebarCategory>,
     pub orphans: Vec<SidebarChannel>,
 }
 
+/// A space's join policy.
 #[derive(Debug, Clone, Serialize)]
 pub struct JoinPolicy {
     #[serde(rename = "allowPublicJoin")]
@@ -416,6 +437,7 @@ pub struct JoinPolicy {
     pub allow_member_invites: bool,
 }
 
+/// A deleted channel, listed only when `includeDeleted` is set.
 #[derive(Debug, Clone, Serialize)]
 pub struct DeletedRoom {
     pub id: String,
@@ -423,6 +445,7 @@ pub struct DeletedRoom {
     pub name: Option<String>,
 }
 
+/// `space.getMetadata`: the space's fields, the caller's standing and sidebar.
 #[derive(Debug, Clone, Serialize)]
 pub struct SpaceMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -454,6 +477,7 @@ pub struct SpaceMetadata {
 
 // ─── Responses ────────────────────────────────────────────────────────────
 
+/// `room.getMessages`: one page of messages and the cursor for the next.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetMessagesResult {
     pub messages: Vec<MessageDto>,
@@ -461,6 +485,7 @@ pub struct GetMessagesResult {
     pub cursor: Option<String>,
 }
 
+/// `space.getThreads`: one page of the space's channels and threads.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetSpaceThreadsResult {
     pub rooms: Vec<SpaceThreadRow>,
@@ -468,6 +493,7 @@ pub struct GetSpaceThreadsResult {
     pub cursor: Option<String>,
 }
 
+/// `room.getThreads`: one page of a channel's threads.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetRoomThreadsResult {
     pub threads: Vec<RoomThreadRow>,
@@ -475,6 +501,7 @@ pub struct GetRoomThreadsResult {
     pub cursor: Option<String>,
 }
 
+/// One row of a link index: the link, the message that carried it, and its card.
 #[derive(Debug, Clone, Serialize)]
 pub struct LinkRow {
     pub url: String,
@@ -488,6 +515,7 @@ pub struct LinkRow {
     pub embed: Option<Box<RawValue>>,
 }
 
+/// `room.getLinks` and `space.getLinks`: one page of link rows.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetLinksResult {
     pub links: Vec<LinkRow>,
@@ -495,6 +523,7 @@ pub struct GetLinksResult {
     pub cursor: Option<String>,
 }
 
+/// One participant of a reaction, with the profile fields the store supplied.
 #[derive(Debug, Clone, Serialize)]
 pub struct ReactorInfo {
     pub did: String,
@@ -505,17 +534,20 @@ pub struct ReactorInfo {
     pub avatar: Option<String>,
 }
 
+/// One emoji and everyone who reacted with it, in reaction order.
 #[derive(Debug, Clone, Serialize)]
 pub struct ReactionGroup {
     pub emoji: String,
     pub reactors: Vec<ReactorInfo>,
 }
 
+/// `message.getReactions`: every reaction on the message, grouped by emoji.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetReactionsResult {
     pub reactions: Vec<ReactionGroup>,
 }
 
+/// `room.getMetadata`: the room's identity, kind and the caller's access.
 #[derive(Debug, Clone, Serialize)]
 pub struct RoomMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]

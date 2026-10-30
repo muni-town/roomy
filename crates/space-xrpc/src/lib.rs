@@ -39,26 +39,35 @@ pub mod store;
 pub mod time;
 pub mod verify;
 
+use std::sync::Arc;
+
 use axum::extract::{Path, RawQuery, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing;
 use axum::{Json, Router};
 
 use crate::error::XrpcError;
-use crate::handlers::common::context;
+use crate::handlers::common;
 use crate::ids::Nsid;
 use crate::params::Params;
-use crate::state::{SpaceReadDb, XrpcState};
+use crate::state::{SpaceReadDb, XrpcState, ABSENT_SPACE};
 
-/// Which parameter names the entity a per-space read is about, and what to call
-/// it when it cannot be resolved.
+/// The parameter that names the entity a per-space read is about.
+struct EntityParam {
+    /// The query parameter carrying the entity's id.
+    param: &'static str,
+    /// How the entity is named in a not-found message.
+    kind: &'static str,
+}
+
+/// Which parameter names the entity a per-space read is about.
 ///
 /// `spaceId` names a space directly. Everything else names an entity inside one
 /// — a room, a message, or a thread — and resolves through the registry's
-/// entity→space index. A `None` key is an endpoint whose space id is required
-/// but which names nothing else.
-fn names_entity(nsid: &str) -> Option<(&'static str, &'static str)> {
+/// entity→space index. `None` is an endpoint whose space id is required but
+/// which names nothing else.
+fn names_entity(nsid: &str) -> Option<EntityParam> {
     match nsid {
         "space.roomy.room.getMessages"
         | "space.roomy.room.getThreads"
@@ -66,9 +75,15 @@ fn names_entity(nsid: &str) -> Option<(&'static str, &'static str)> {
         | "space.roomy.room.getMetadata"
         | "space.roomy.room.getRoomSummary"
         | "space.roomy.voice.getParticipants"
-        | "space.roomy.voice.getToken" => Some(("roomId", "Room")),
+        | "space.roomy.voice.getToken" => Some(EntityParam {
+            param: "roomId",
+            kind: "Room",
+        }),
         "space.roomy.message.getMessage" | "space.roomy.message.getReactions" => {
-            Some(("messageId", "Message"))
+            Some(EntityParam {
+                param: "messageId",
+                kind: "Message",
+            })
         }
         _ => None,
     }
@@ -82,7 +97,7 @@ fn resolve_space(
     state: &XrpcState,
     params: &Params,
     nsid: &Nsid,
-) -> Result<std::sync::Arc<SpaceReadDb>, XrpcError> {
+) -> Result<Arc<SpaceReadDb>, XrpcError> {
     let entity = names_entity(nsid.as_str());
     if let Some(space_id) = params.optional_string("spaceId") {
         // A space this process does not hold is answered from an empty one: the
@@ -93,20 +108,20 @@ fn resolve_space(
         return Ok(state
             .spaces
             .resolve_space(&space_id)
-            .unwrap_or_else(|| std::sync::Arc::clone(&crate::state::ABSENT_SPACE)));
+            .unwrap_or_else(|| Arc::clone(&ABSENT_SPACE)));
     }
     // The remaining endpoints name an entity; `validate_params` has already
     // rejected a request without one.
-    let Some((entity_key, what)) = entity else {
+    let Some(entity) = entity else {
         unreachable!("{} is neither space- nor entity-addressed", nsid.as_str());
     };
     let entity_id = params
-        .optional_string(entity_key)
+        .optional_string(entity.param)
         .expect("a required param was validated");
     state
         .spaces
         .resolve_entity(&entity_id)
-        .ok_or_else(|| XrpcError::not_found(format!("{what} not found: {entity_id}")))
+        .ok_or_else(|| XrpcError::not_found(format!("{} not found: {entity_id}", entity.kind)))
 }
 
 /// The params a request must carry, in the order the appserver's schema reports
@@ -116,7 +131,7 @@ fn required_params(nsid: &str) -> Vec<&'static str> {
         "space.roomy.search.rooms" => vec!["q", "spaceId"],
         "space.roomy.space.getUserAccess" => vec!["spaceId", "userDid"],
         _ => match names_entity(nsid) {
-            Some((entity_key, _)) => vec![entity_key],
+            Some(entity) => vec![entity.param],
             None => vec!["spaceId"],
         },
     }
@@ -176,9 +191,11 @@ pub const ENDPOINTS: &[&str] = &[
     "space.roomy.search.rooms",
 ];
 
+/// The per-space XRPC router: `GET /xrpc/{nsid}` over the endpoints in
+/// [`ENDPOINTS`].
 pub fn router(state: XrpcState) -> Router {
     Router::new()
-        .route("/xrpc/{nsid}", get(dispatch))
+        .route("/xrpc/{nsid}", routing::get(dispatch))
         .with_state(state)
 }
 
@@ -192,7 +209,7 @@ async fn dispatch(
     let params = Params::parse(query.as_deref());
     // Authentication first, then the params schema, then resolution: the order
     // the appserver runs them, and the order its errors are raised in.
-    let ctx = context(&state, &headers, &nsid).await?;
+    let ctx = common::context(&state, &headers, &nsid).await?;
     validate_params(&params, &nsid)?;
     // One process serves many spaces: the request names its space, or names an
     // entity the gateway's index resolves to one.

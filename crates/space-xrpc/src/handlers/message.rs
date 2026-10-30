@@ -3,13 +3,14 @@
 use indexmap::IndexMap;
 use rusqlite::OptionalExtension;
 
-use crate::access::require_room_read;
+use crate::access;
 use crate::dto::{GetReactionsResult, MessageDto, ReactionGroup, ReactorInfo};
 use crate::error::XrpcError;
 use crate::handlers::common::Context;
 use crate::ids::MessageId;
 use crate::params::Params;
-use crate::queries::messages::{select_messages, SelectScope};
+use crate::queries::messages;
+use crate::queries::messages::SelectScope;
 use crate::state::XrpcState;
 
 /// Resolve the message's room and enforce read access on it.
@@ -38,11 +39,12 @@ fn message_room(
                 message_id.as_str()
             )));
         };
-        require_room_read(conn, &room, ctx.did())?;
+        access::require_room_read(conn, &room, ctx.did())?;
         Ok(room)
     })
 }
 
+/// `message.getMessage`: the message the caller may read.
 pub fn get_message(
     state: &XrpcState,
     params: &Params,
@@ -52,7 +54,7 @@ pub fn get_message(
     message_room(state, &message_id, ctx)?;
 
     state.db.with(|conn| {
-        let result = select_messages(
+        let result = messages::select_messages(
             conn,
             state.stores.as_ref(),
             SelectScope::Ids {
@@ -69,6 +71,7 @@ pub fn get_message(
     })
 }
 
+/// `message.getReactions`: every reaction on the message, grouped by emoji.
 pub fn get_reactions(
     state: &XrpcState,
     params: &Params,

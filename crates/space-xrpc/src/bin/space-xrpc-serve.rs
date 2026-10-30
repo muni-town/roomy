@@ -18,7 +18,7 @@ use std::sync::Arc;
 use space_xrpc::registry::{FixedSpaces, SpaceRegistry, SpaceResolver};
 use space_xrpc::state::{SpaceReadDb, XrpcState};
 use space_xrpc::store::{GlobalStores, SqliteGlobalStores};
-use space_xrpc::verify::verifier_from_env;
+use space_xrpc::verify;
 
 #[tokio::main]
 async fn main() {
@@ -64,7 +64,7 @@ async fn main() {
         }
     }
 
-    let verifier = verifier_from_env().unwrap_or_else(|err| usage(&err));
+    let verifier = verify::verifier_from_env().unwrap_or_else(|err| usage(&err));
     let (spaces, placeholder): (Arc<dyn SpaceResolver>, Arc<SpaceReadDb>) =
         match (spaces_dir, db_path) {
             (Some(dir), None) => {

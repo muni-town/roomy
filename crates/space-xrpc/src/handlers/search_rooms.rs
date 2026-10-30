@@ -18,12 +18,13 @@ use std::collections::HashMap;
 use rusqlite::Connection;
 use serde::Serialize;
 
-use crate::access::{require_space_read, room_access};
+use crate::access;
 use crate::dto::RoomActivityDto;
 use crate::error::XrpcError;
-use crate::handlers::common::{parse_space, unread_count, Context};
+use crate::handlers::common;
+use crate::handlers::common::Context;
 use crate::params::Params;
-use crate::queries::thread_activity::fetch_room_activity;
+use crate::queries::thread_activity;
 use crate::state::XrpcState;
 
 /// One matched room.
@@ -49,20 +50,22 @@ pub struct RoomSearchResult {
     pub channel_name: Option<String>,
 }
 
+/// `search.rooms`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchRoomsResult {
     pub rooms: Vec<RoomSearchResult>,
 }
 
+/// `search.rooms`: the space's channels and threads whose name matches `q`.
 pub fn search_rooms(
     state: &XrpcState,
     params: &Params,
     ctx: &Context,
 ) -> Result<SearchRoomsResult, XrpcError> {
-    let space_id = parse_space(params)?;
-    let q = params.require_string("q")?;
-    let q = q.trim();
-    if q.is_empty() {
+    let space_id = common::parse_space(params)?;
+    let query = params.require_string("q")?;
+    let query = query.trim();
+    if query.is_empty() {
         return Err(XrpcError::invalid_request(
             "Param q must be a non-empty string",
         ));
@@ -70,17 +73,17 @@ pub fn search_rooms(
     let limit = params
         .optional_int("limit", Some(1), Some(100), Some(20))?
         .unwrap_or(20);
-    let like = format!("%{q}%");
+    let like = format!("%{query}%");
     let did = ctx.did();
 
     state.db.with(|conn| {
-        require_space_read(conn, space_id.as_str(), did)?;
+        access::require_space_read(conn, space_id.as_str(), did)?;
 
         let mut rooms: Vec<RoomSearchResult> = Vec::new();
 
         // Channels first, alphabetically.
         for (id, name) in named_rooms(conn, space_id.as_str(), CHANNEL, &like, limit)? {
-            let access = room_access(conn, &id, did)?;
+            let access = access::room_access(conn, &id, did)?;
             if !access.can_read {
                 continue;
             }
@@ -113,7 +116,7 @@ pub fn search_rooms(
                 if rooms.len() as i64 >= limit {
                     break;
                 }
-                let access = room_access(conn, &id, did)?;
+                let access = access::room_access(conn, &id, did)?;
                 if !access.can_read {
                     continue;
                 }
@@ -138,13 +141,14 @@ pub fn search_rooms(
         // Activity and unread state for the matched rooms, in one pass.
         if !rooms.is_empty() {
             let room_ids: Vec<String> = rooms.iter().map(|room| room.id.clone()).collect();
-            let activity = fetch_room_activity(conn, state.stores.as_ref(), &room_ids)?;
+            let activity =
+                thread_activity::fetch_room_activity(conn, state.stores.as_ref(), &room_ids)?;
             for room in &mut rooms {
                 let act = activity.get(&room.id);
                 if let Some(act) = act {
                     room.activity = act.to_dto();
                 }
-                let unread = unread_count(conn, &ctx.positions, &room.id)?;
+                let unread = common::unread_count(conn, &ctx.positions, &room.id)?;
                 room.unread_count = unread;
                 let has_activity = act.and_then(|act| act.latest_timestamp.as_ref()).is_some();
                 let engaged = ctx.positions.is_engaged(&room.id);

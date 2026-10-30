@@ -1,20 +1,24 @@
 //! `space.roomy.room.getMetadata`, `getMessages`, `getThreads`, `getLinks`.
 
-use rusqlite::OptionalExtension;
+use rusqlite::{Connection, OptionalExtension};
 
-use crate::access::require_room_read;
+use crate::access;
 use crate::dto::{
     GetLinksResult, GetMessagesResult, GetRoomThreadsResult, RoomMetadata, RoomThreadRow,
 };
 use crate::error::XrpcError;
-use crate::handlers::common::{unread_count, Context};
+use crate::handlers::common;
+use crate::handlers::common::Context;
 use crate::ids::RoomId;
 use crate::params::Params;
-use crate::queries::links::{build_link_rows, cursor_for_row, dedupe_links, list_links};
-use crate::queries::messages::{select_messages, SelectScope};
-use crate::queries::thread_activity::{list_thread_activity, ListActivity, ThreadScope};
+use crate::queries::links;
+use crate::queries::messages;
+use crate::queries::messages::SelectScope;
+use crate::queries::thread_activity;
+use crate::queries::thread_activity::{ListActivity, ThreadScope};
 use crate::state::XrpcState;
 
+/// `room.getMetadata`: the room's identity, kind and the caller's access.
 pub fn get_metadata(
     state: &XrpcState,
     params: &Params,
@@ -24,7 +28,7 @@ pub fn get_metadata(
     let did = ctx.did();
 
     state.db.with(|conn| {
-        let access = require_room_read(conn, room_id.as_str(), did)?;
+        let access = access::require_room_read(conn, room_id.as_str(), did)?;
 
         let row = conn
             .query_row(
@@ -45,7 +49,7 @@ pub fn get_metadata(
 
         let (unread, last_read, unread_thread_count) = match did {
             Some(_) => {
-                let unread = unread_count(conn, &ctx.positions, room_id.as_str())?;
+                let unread = common::unread_count(conn, &ctx.positions, room_id.as_str())?;
                 let last_read = ctx.positions.last_read(room_id.as_str());
                 let unread_threads = if access.parent_channel_id.is_none() {
                     channel_unread_thread_count(conn, ctx, room_id.as_str())?
@@ -75,7 +79,7 @@ pub fn get_metadata(
 /// `getChannelUnreadThreadCount`: engaged threads canonically linked from a
 /// channel, readable by the caller, with messages past their watermark.
 fn channel_unread_thread_count(
-    conn: &rusqlite::Connection,
+    conn: &Connection,
     ctx: &Context,
     channel_id: &str,
 ) -> Result<i64, XrpcError> {
@@ -106,11 +110,11 @@ fn channel_unread_thread_count(
     let did = ctx.did();
     let mut count = 0;
     for thread_id in linked {
-        let access = crate::access::room_access(conn, &thread_id, did)?;
+        let access = access::room_access(conn, &thread_id, did)?;
         if !access.can_read {
             continue;
         }
-        if unread_count(conn, &ctx.positions, &thread_id)? > 0 {
+        if common::unread_count(conn, &ctx.positions, &thread_id)? > 0 {
             count += 1;
         }
     }
@@ -127,6 +131,7 @@ fn strip_label(label: Option<&str>) -> String {
         .to_owned()
 }
 
+/// `room.getMessages`: one page of the room's messages.
 pub fn get_messages(
     state: &XrpcState,
     params: &Params,
@@ -137,8 +142,8 @@ pub fn get_messages(
     let cursor = params.cursor()?;
 
     state.db.with(|conn| {
-        require_room_read(conn, room_id.as_str(), ctx.did())?;
-        let result = select_messages(
+        access::require_room_read(conn, room_id.as_str(), ctx.did())?;
+        let result = messages::select_messages(
             conn,
             state.stores.as_ref(),
             SelectScope::Room {
@@ -156,6 +161,7 @@ pub fn get_messages(
     })
 }
 
+/// `room.getThreads`: the channel's threads the caller may read.
 pub fn get_threads(
     state: &XrpcState,
     params: &Params,
@@ -168,9 +174,9 @@ pub fn get_threads(
     let did = ctx.did();
 
     state.db.with(|conn| {
-        require_room_read(conn, room_id.as_str(), did)?;
+        access::require_room_read(conn, room_id.as_str(), did)?;
 
-        let (all, next_cursor) = list_thread_activity(
+        let page = thread_activity::list_thread_activity(
             conn,
             state.stores.as_ref(),
             ListActivity {
@@ -183,12 +189,12 @@ pub fn get_threads(
         )?;
 
         let mut threads = Vec::new();
-        for thread in &all {
-            let access = crate::access::room_access(conn, &thread.id, did)?;
+        for thread in &page.activities {
+            let access = access::room_access(conn, &thread.id, did)?;
             if !access.can_read {
                 continue;
             }
-            let unread = unread_count(conn, &ctx.positions, &thread.id)?;
+            let unread = common::unread_count(conn, &ctx.positions, &thread.id)?;
             let engaged = ctx.positions.is_engaged(&thread.id);
             threads.push(RoomThreadRow {
                 id: thread.id.clone(),
@@ -202,11 +208,12 @@ pub fn get_threads(
 
         Ok(GetRoomThreadsResult {
             threads,
-            cursor: next_cursor,
+            cursor: page.next_cursor,
         })
     })
 }
 
+/// `room.getLinks`: the room's link rows, deduped by canonical URL.
 pub fn get_links(
     state: &XrpcState,
     params: &Params,
@@ -217,9 +224,9 @@ pub fn get_links(
     let cursor = params.cursor()?;
 
     state.db.with(|conn| {
-        require_room_read(conn, room_id.as_str(), ctx.did())?;
+        access::require_room_read(conn, room_id.as_str(), ctx.did())?;
 
-        let page = list_links(
+        let page = links::list_links(
             conn,
             room_id.as_str(),
             limit.get(),
@@ -227,15 +234,14 @@ pub fn get_links(
         )?;
         // No block set on the worker: the hidden-author filter is identity
         // here, exactly as the appserver's when the caller hides nobody.
-        let cursor_page = dedupe_links(page.links.clone());
-        let deduped = dedupe_links(page.links);
+        let deduped = links::dedupe_links(page.links);
         let mut next_cursor = None;
-        if page.has_more && !cursor_page.is_empty() {
-            next_cursor = cursor_for_row(cursor_page.last());
+        if page.has_more && !deduped.is_empty() {
+            next_cursor = links::cursor_for_row(deduped.last());
         }
 
         Ok(GetLinksResult {
-            links: build_link_rows(state.stores.as_ref(), deduped),
+            links: links::build_link_rows(state.stores.as_ref(), deduped),
             cursor: next_cursor,
         })
     })

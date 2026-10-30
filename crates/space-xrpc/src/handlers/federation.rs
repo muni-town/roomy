@@ -10,13 +10,14 @@
 use rusqlite::OptionalExtension;
 use serde::Serialize;
 
-use crate::access::require_space_access;
+use crate::access;
 use crate::error::XrpcError;
 use crate::handlers::common::Context;
 use crate::params::Params;
 use crate::state::XrpcState;
 use crate::store::{FederationOrder, FederationView};
 
+/// A pending federation request, as the origin's admins see it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FederationRequestRow {
@@ -33,11 +34,13 @@ pub struct FederationRequestRow {
     pub message: Option<String>,
 }
 
+/// `federation.getRequests`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetRequestsResult {
     pub requests: Vec<FederationRequestRow>,
 }
 
+/// A federation into this space, as its admins see it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FederationIncomingRow {
@@ -53,11 +56,13 @@ pub struct FederationIncomingRow {
     pub decided_at: Option<i64>,
 }
 
+/// `federation.getIncoming`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetIncomingResult {
     pub federations: Vec<FederationIncomingRow>,
 }
 
+/// A federation out of this space, as its admins see it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FederationOutgoingRow {
@@ -75,11 +80,13 @@ pub struct FederationOutgoingRow {
     pub message: Option<String>,
 }
 
+/// `federation.getOutgoing`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetOutgoingResult {
     pub federations: Vec<FederationOutgoingRow>,
 }
 
+/// A channel grant this space, as the origin, has made.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OriginGrantRow {
@@ -90,6 +97,7 @@ pub struct OriginGrantRow {
     pub permission: String,
 }
 
+/// A channel grant this space, as the receiver, has made.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiverGrantRow {
@@ -102,6 +110,7 @@ pub struct ReceiverGrantRow {
     pub permission: String,
 }
 
+/// `federation.getGrants`'s response body.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetGrantsResult {
@@ -128,7 +137,7 @@ fn require_federation_admin(
     state.db.with(|conn| {
         // `requireSpaceAccess`, not the read gate: a public space's open join
         // does not make every caller an admin.
-        let access = require_space_access(conn, &space_id, Some(did))?;
+        let access = access::require_space_access(conn, &space_id, Some(did))?;
         if !access.is_admin {
             return Err(XrpcError::forbidden(format!(
                 "Only space admins can view {view_label}"
@@ -168,6 +177,7 @@ fn present(value: Option<String>) -> Option<String> {
     value.filter(|v| !v.is_empty())
 }
 
+/// `federation.getRequests`: pending requests into this space.
 pub fn get_requests(
     state: &XrpcState,
     params: &Params,
@@ -204,6 +214,7 @@ pub fn get_requests(
     Ok(GetRequestsResult { requests })
 }
 
+/// `federation.getIncoming`: every federation into this space.
 pub fn get_incoming(
     state: &XrpcState,
     params: &Params,
@@ -235,6 +246,7 @@ pub fn get_incoming(
     Ok(GetIncomingResult { federations })
 }
 
+/// `federation.getOutgoing`: every federation out of this space.
 pub fn get_outgoing(
     state: &XrpcState,
     params: &Params,
@@ -267,6 +279,7 @@ pub fn get_outgoing(
     Ok(GetOutgoingResult { federations })
 }
 
+/// `federation.getGrants`: the channel grants on both sides of this space.
 pub fn get_grants(
     state: &XrpcState,
     params: &Params,

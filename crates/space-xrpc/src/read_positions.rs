@@ -20,8 +20,9 @@ use base64::Engine;
 use serde::Deserialize;
 
 use crate::error::XrpcError;
-use crate::time::decode_seen_up_to;
+use crate::time;
 
+/// The request header carrying the caller's read positions.
 pub const HEADER: &str = "x-roomy-read-positions";
 
 #[derive(Debug, Deserialize)]
@@ -34,18 +35,23 @@ struct WireEntry {
     last_active_at: Option<i64>,
 }
 
+/// One room's read position.
 #[derive(Debug, Clone)]
 pub struct Entry {
+    /// The sort key of the newest message the caller has read.
     pub seen_up_to: String,
+    /// When the caller last acted in the room, in epoch milliseconds.
     pub last_active_at: Option<i64>,
 }
 
+/// The caller's read positions, keyed by room id.
 #[derive(Debug, Default, Clone)]
 pub struct ReadPositions {
     entries: HashMap<String, Entry>,
 }
 
 impl ReadPositions {
+    /// Decode the header's base64url JSON array; absent or empty is no state.
     pub fn decode(header: Option<&str>) -> Result<Self, XrpcError> {
         let Some(raw) = header else {
             return Ok(Self::default());
@@ -74,6 +80,8 @@ impl ReadPositions {
         Ok(Self { entries: map })
     }
 
+    /// The position for `room_id`, or `None` when the caller has none.
+    #[must_use]
     pub fn get(&self, room_id: &str) -> Option<&Entry> {
         self.entries.get(room_id)
     }
@@ -81,19 +89,24 @@ impl ReadPositions {
     /// The caller is "engaged" with a room when the gateway sent a position for
     /// it: a `read_positions` row is created for the channels and threads the
     /// caller has opened.
+    #[must_use]
     pub fn is_engaged(&self, room_id: &str) -> bool {
         self.entries.contains_key(room_id)
     }
 
+    /// Every position, in no particular order.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Entry)> {
         self.entries.iter()
     }
 
     /// `lastRead` for a room: the ISO time of its watermark, if there is one.
+    #[must_use]
     pub fn last_read(&self, room_id: &str) -> Option<String> {
-        decode_seen_up_to(self.entries.get(room_id).map(|e| e.seen_up_to.as_str()))
+        time::decode_seen_up_to(self.entries.get(room_id).map(|e| e.seen_up_to.as_str()))
     }
 
+    /// The watermark for `room_id`: the sort key read positions are compared to.
+    #[must_use]
     pub fn watermark(&self, room_id: &str) -> Option<&str> {
         self.entries.get(room_id).map(|e| e.seen_up_to.as_str())
     }

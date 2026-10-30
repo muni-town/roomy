@@ -8,17 +8,20 @@
 
 use serde::Serialize;
 
-use crate::access::space_access;
+use crate::access;
 use crate::error::XrpcError;
-use crate::handlers::common::{parse_space, Context};
+use crate::handlers::common;
+use crate::handlers::common::Context;
 use crate::params::Params;
 use crate::state::XrpcState;
 
+/// `space.getBridgeTokens`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetBridgeTokensResult {
     pub tokens: Vec<BridgeTokenSummary>,
 }
 
+/// One bridge-token grant: who granted it and how much of it is spent.
 #[derive(Debug, Clone, Serialize)]
 pub struct BridgeTokenSummary {
     #[serde(rename = "grantorDid")]
@@ -28,6 +31,8 @@ pub struct BridgeTokenSummary {
     pub capacity_snapshot: i64,
 }
 
+/// `space.getBridgeTokens`: the bridge-token grants a space has received.
+///
 /// Callers must be members or admins of the space; a public space's
 /// `allow_public_join` does not open this endpoint.
 pub fn get_bridge_tokens(
@@ -42,18 +47,10 @@ pub fn get_bridge_tokens(
             "Authentication required",
         ));
     };
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
 
     state.db.with(|conn| {
-        let access = space_access(conn, space_id.as_str(), Some(did))?;
-        if access.is_banned {
-            return Err(XrpcError::forbidden("Caller is banned from this space"));
-        }
-        if !access.is_member && !access.is_admin {
-            return Err(XrpcError::forbidden(
-                "Caller is neither a member nor an admin of this space",
-            ));
-        }
+        access::require_space_access(conn, space_id.as_str(), Some(did))?;
         Ok(())
     })?;
 

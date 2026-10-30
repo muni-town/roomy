@@ -11,9 +11,10 @@ use std::collections::HashMap;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
-use crate::access::{require_space_access, space_access};
+use crate::access;
 use crate::error::XrpcError;
-use crate::handlers::common::{parse_space, Context};
+use crate::handlers::common;
+use crate::handlers::common::Context;
 use crate::params::Params;
 use crate::state::XrpcState;
 use crate::store::ProfileFields;
@@ -66,6 +67,7 @@ impl RowProfile {
     }
 }
 
+/// One member: their profile fields, standing and roles.
 #[derive(Debug, Clone, Serialize)]
 pub struct MemberRow {
     pub did: String,
@@ -81,6 +83,7 @@ pub struct MemberRow {
     pub supplied: SuppliedProfile,
 }
 
+/// An admin who holds no membership edge in the space.
 #[derive(Debug, Clone, Serialize)]
 pub struct ExternalAdminRow {
     pub did: String,
@@ -90,6 +93,7 @@ pub struct ExternalAdminRow {
     pub supplied: SuppliedProfile,
 }
 
+/// `space.getMembers`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetMembersResult {
     pub members: Vec<MemberRow>,
@@ -97,6 +101,7 @@ pub struct GetMembersResult {
     pub external_admins: Vec<ExternalAdminRow>,
 }
 
+/// One room a role grants access to, and the permission it grants.
 #[derive(Debug, Clone, Serialize)]
 pub struct RoleRoom {
     #[serde(rename = "roomId")]
@@ -104,6 +109,7 @@ pub struct RoleRoom {
     pub permission: String,
 }
 
+/// One role and the rooms and members it covers.
 #[derive(Debug, Clone, Serialize)]
 pub struct RoleRow {
     pub id: String,
@@ -118,11 +124,13 @@ pub struct RoleRow {
     pub member_dids: Vec<String>,
 }
 
+/// `space.getRoles`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetRolesResult {
     pub roles: Vec<RoleRow>,
 }
 
+/// One invite token and the event that created it.
 #[derive(Debug, Clone, Serialize)]
 pub struct InviteRow {
     pub token: String,
@@ -132,11 +140,13 @@ pub struct InviteRow {
     pub event_ulid: String,
 }
 
+/// `space.getInvites`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetInvitesResult {
     pub invites: Vec<InviteRow>,
 }
 
+/// `space.getUserAccess`'s response body.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetUserAccessResult {
     #[serde(rename = "isAdmin")]
@@ -193,11 +203,11 @@ pub fn get_members(
             "Authentication required",
         ));
     };
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
     let search = params.optional_string("search");
 
     state.db.with(|conn| {
-        require_space_access(conn, space_id.as_str(), Some(did))?;
+        access::require_space_access(conn, space_id.as_str(), Some(did))?;
 
         let member_records = {
             let mut stmt = conn.prepare(
@@ -361,12 +371,13 @@ struct RoleRecord {
     description: Option<String>,
 }
 
+/// `space.getRoles`: the roles the caller administers or holds.
 pub fn get_roles(
     state: &XrpcState,
     params: &Params,
     ctx: &Context,
 ) -> Result<GetRolesResult, XrpcError> {
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
     let Some(did) = ctx.did() else {
         return Err(XrpcError::new(
             401,
@@ -376,7 +387,7 @@ pub fn get_roles(
     };
 
     state.db.with(|conn| {
-        let access = require_space_access(conn, space_id.as_str(), Some(did))?;
+        let access = access::require_space_access(conn, space_id.as_str(), Some(did))?;
 
         let role_records = {
             let mut stmt = conn.prepare(
@@ -496,6 +507,7 @@ fn select_invites(
     }
 }
 
+/// `space.getInvites`: admins see every invite, members only their own.
 pub fn get_invites(
     state: &XrpcState,
     params: &Params,
@@ -508,10 +520,10 @@ pub fn get_invites(
             "Authentication required",
         ));
     };
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
 
     state.db.with(|conn| {
-        let access = require_space_access(conn, space_id.as_str(), Some(did))?;
+        let access = access::require_space_access(conn, space_id.as_str(), Some(did))?;
 
         if !access.is_admin {
             // A null policy means unset, and the spec default is "false".
@@ -550,12 +562,14 @@ pub fn get_invites(
 
 // ─── getUserAccess ────────────────────────────────────────────────────────
 
+/// `space.getUserAccess`: one user's standing in the space, for the space's
+/// own account.
 pub fn get_user_access(
     state: &XrpcState,
     params: &Params,
     ctx: &Context,
 ) -> Result<GetUserAccessResult, XrpcError> {
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
     let user_did = params.require_string("userDid")?;
 
     // Only the space's own account may read its own user-access state. The
@@ -566,7 +580,8 @@ pub fn get_user_access(
     }
 
     state.db.with(|conn| {
-        let is_admin = space_access(conn, space_id.as_str(), Some(user_did.as_str()))?.is_admin;
+        let is_admin =
+            access::space_access(conn, space_id.as_str(), Some(user_did.as_str()))?.is_admin;
 
         let mut stmt = conn.prepare(
             "select role_id from member_roles

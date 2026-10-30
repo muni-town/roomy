@@ -12,16 +12,19 @@
 
 use std::collections::HashMap;
 
+use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
-use crate::access::{require_room_read, require_space_read, room_access, space_access};
+use crate::access;
 use crate::dto::GetLinksResult;
 use crate::error::XrpcError;
-use crate::handlers::common::{parse_space, Context};
+use crate::handlers::common;
+use crate::handlers::common::Context;
 use crate::ids::RoomId;
 use crate::params::Params;
-use crate::queries::links::{build_link_rows, cursor_for_row, dedupe_links, LinkPage, RawLinkRow};
+use crate::queries::links;
+use crate::queries::links::{LinkPage, RawLinkRow};
 use crate::state::XrpcState;
 
 /// A space's badge fields.
@@ -44,19 +47,20 @@ pub struct GetRoomSummaryResult {
     pub space_id: String,
 }
 
+/// `space.getSpaceSummary`: the space's badge fields.
 pub fn get_space_summary(
     state: &XrpcState,
     params: &Params,
     ctx: &Context,
 ) -> Result<GetSpaceSummaryResult, XrpcError> {
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
     let did = ctx.did();
 
     state.db.with(|conn| {
         // A ban is the only denial badges observe: public spaces are readable
         // anonymously, and membership/admin status changes nothing a badge
         // shows.
-        let access = space_access(conn, space_id.as_str(), did)?;
+        let access = access::space_access(conn, space_id.as_str(), did)?;
         if access.is_banned {
             return Err(XrpcError::forbidden("Caller is banned from this space"));
         }
@@ -85,18 +89,19 @@ pub fn get_space_summary(
     })
 }
 
+/// `space.getLinks`: the space's link rows the caller may read, deduped.
 pub fn get_links(
     state: &XrpcState,
     params: &Params,
     ctx: &Context,
 ) -> Result<GetLinksResult, XrpcError> {
-    let space_id = parse_space(params)?;
+    let space_id = common::parse_space(params)?;
     let limit = params.limit(50)?;
     let cursor = params.cursor()?;
     let did = ctx.did();
 
     state.db.with(|conn| {
-        require_space_read(conn, space_id.as_str(), did)?;
+        access::require_space_read(conn, space_id.as_str(), did)?;
 
         let page = list_space_links(
             conn,
@@ -115,7 +120,7 @@ pub fn get_links(
             let readable_room = match can_read.get(row.room_id.as_str()) {
                 Some(can_read) => *can_read,
                 None => {
-                    let verdict = room_access(conn, row.room_id.as_str(), did)?.can_read;
+                    let verdict = access::room_access(conn, row.room_id.as_str(), did)?.can_read;
                     can_read.insert(row.room_id.clone(), verdict);
                     verdict
                 }
@@ -127,19 +132,20 @@ pub fn get_links(
 
         // The author block set is resolved upstream, so the hidden-author
         // filter is identity here and the page dedupes as-is.
-        let deduped = dedupe_links(readable);
+        let deduped = links::dedupe_links(readable);
         let mut next_cursor = None;
         if page.has_more && !deduped.is_empty() {
-            next_cursor = cursor_for_row(deduped.last());
+            next_cursor = links::cursor_for_row(deduped.last());
         }
 
         Ok(GetLinksResult {
-            links: build_link_rows(state.stores.as_ref(), deduped),
+            links: links::build_link_rows(state.stores.as_ref(), deduped),
             cursor: next_cursor,
         })
     })
 }
 
+/// `room.getRoomSummary`: the room's badge fields.
 pub fn get_room_summary(
     state: &XrpcState,
     params: &Params,
@@ -148,7 +154,7 @@ pub fn get_room_summary(
     let room_id = RoomId::try_from(params.require_string("roomId")?)?;
 
     state.db.with(|conn| {
-        let access = require_room_read(conn, room_id.as_str(), ctx.did())?;
+        let access = access::require_room_read(conn, room_id.as_str(), ctx.did())?;
 
         let (name, label) = conn
             .query_row(
@@ -199,10 +205,10 @@ fn list_space_links(
     cursor: Option<&str>,
 ) -> Result<LinkPage, XrpcError> {
     let mut conditions: Vec<String> = Vec::new();
-    let mut params: Vec<rusqlite::types::Value> = Vec::new();
+    let mut params: Vec<Value> = Vec::new();
 
     conditions.push("msg.stream_id = ?".to_owned());
-    params.push(rusqlite::types::Value::Text(space_id.to_owned()));
+    params.push(Value::Text(space_id.to_owned()));
     conditions.push("el.entity is not null".to_owned());
     conditions.push("msg.room is not null".to_owned());
 
@@ -216,9 +222,9 @@ fn list_space_links(
                 "(coalesce(msg.sort_idx, msg.id) < ? or (coalesce(msg.sort_idx, msg.id) = ? and el.entity > ?))"
                     .to_owned(),
             );
-            params.push(rusqlite::types::Value::Text(cursor_key.to_owned()));
-            params.push(rusqlite::types::Value::Text(cursor_key.to_owned()));
-            params.push(rusqlite::types::Value::Text(cursor_url.to_owned()));
+            params.push(Value::Text(cursor_key.to_owned()));
+            params.push(Value::Text(cursor_key.to_owned()));
+            params.push(Value::Text(cursor_url.to_owned()));
         }
     }
 
@@ -236,7 +242,7 @@ fn list_space_links(
         conditions.join(" and ")
     );
     // One row beyond the page tells the caller whether a next page exists.
-    params.push(rusqlite::types::Value::Integer(limit as i64 + 1));
+    params.push(Value::Integer(limit as i64 + 1));
 
     let mut stmt = conn.prepare(&sql)?;
     let rows: Vec<RawLinkRow> = stmt

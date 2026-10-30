@@ -3,13 +3,16 @@
 
 use std::collections::HashSet;
 
+use rusqlite::types::Value;
 use rusqlite::Connection;
 
 use crate::dto::LinkRow;
-use crate::ids::ulid_time_ms;
+use crate::error::XrpcError;
+use crate::ids;
 use crate::store::GlobalStores;
-use crate::time::iso_from_ms;
+use crate::time;
 
+/// A link row as the per-space tables hold it, before hydration.
 #[derive(Debug, Clone)]
 pub struct RawLinkRow {
     pub url: String,
@@ -18,6 +21,7 @@ pub struct RawLinkRow {
     pub sort_key: String,
 }
 
+/// One page of link rows: the rows and whether the query found more.
 pub struct LinkPage {
     pub links: Vec<RawLinkRow>,
     pub has_more: bool,
@@ -29,12 +33,12 @@ pub fn list_links(
     room_id: &str,
     limit: usize,
     cursor: Option<&str>,
-) -> Result<LinkPage, crate::error::XrpcError> {
+) -> Result<LinkPage, XrpcError> {
     let mut conditions: Vec<String> = Vec::new();
-    let mut params: Vec<rusqlite::types::Value> = Vec::new();
+    let mut params: Vec<Value> = Vec::new();
 
     conditions.push("msg.room = ?".to_owned());
-    params.push(rusqlite::types::Value::Text(room_id.to_owned()));
+    params.push(Value::Text(room_id.to_owned()));
     conditions.push("el.entity is not null".to_owned());
     conditions.push("msg.room is not null".to_owned());
 
@@ -46,9 +50,9 @@ pub fn list_links(
                 "(coalesce(msg.sort_idx, msg.id) < ? or (coalesce(msg.sort_idx, msg.id) = ? and el.entity > ?))"
                     .to_owned(),
             );
-            params.push(rusqlite::types::Value::Text(cursor_key.to_owned()));
-            params.push(rusqlite::types::Value::Text(cursor_key.to_owned()));
-            params.push(rusqlite::types::Value::Text(cursor_url.to_owned()));
+            params.push(Value::Text(cursor_key.to_owned()));
+            params.push(Value::Text(cursor_key.to_owned()));
+            params.push(Value::Text(cursor_url.to_owned()));
         }
     }
 
@@ -65,7 +69,7 @@ pub fn list_links(
           limit ?",
         conditions.join(" and ")
     );
-    params.push(rusqlite::types::Value::Integer(limit as i64 + 1));
+    params.push(Value::Integer(limit as i64 + 1));
 
     let mut stmt = conn.prepare(&sql)?;
     let rows: Vec<RawLinkRow> = stmt
@@ -99,6 +103,7 @@ fn is_crockford(byte: u8) -> bool {
 }
 
 /// `canonicalUrl`: strip the machine-appended `?message=<ulid>` suffix.
+#[must_use]
 pub fn canonical_url(url: &str) -> &str {
     let bytes = url.as_bytes();
     if bytes.len() < MESSAGE_SUFFIX_LEN {
@@ -117,6 +122,7 @@ pub fn canonical_url(url: &str) -> &str {
 }
 
 /// Collapse duplicate canonical URLs, keeping the newest occurrence's place.
+#[must_use]
 pub fn dedupe_links(rows: Vec<RawLinkRow>) -> Vec<RawLinkRow> {
     let mut seen = HashSet::new();
     let mut out = Vec::with_capacity(rows.len());
@@ -128,17 +134,21 @@ pub fn dedupe_links(rows: Vec<RawLinkRow>) -> Vec<RawLinkRow> {
     out
 }
 
+/// The cursor for the last row of a page, or `None` for an empty page.
+#[must_use]
 pub fn cursor_for_row(row: Option<&RawLinkRow>) -> Option<String> {
     row.map(|row| format!("{}::{}", row.sort_key, row.url))
 }
 
 /// `linkTimestamp`: the ISO time encoded in the message's ordering key.
+#[must_use]
 pub fn link_timestamp(sort_key: &str) -> Option<String> {
-    ulid_time_ms(sort_key).map(iso_from_ms)
+    ids::ulid_time_ms(sort_key).map(time::iso_from_ms)
 }
 
 /// Build the handler's rows: global link cards hydrated by URL, timestamp from
 /// the ordering key, absent when not derivable.
+#[must_use]
 pub fn build_link_rows(stores: &dyn GlobalStores, deduped: Vec<RawLinkRow>) -> Vec<LinkRow> {
     deduped
         .into_iter()

@@ -9,21 +9,35 @@
 //! trust mode. Missing credentials are anonymous, exactly as in the appserver;
 //! the handlers' access checks decide what that may read.
 
+use std::env;
+use std::sync::Arc;
+
 use async_trait::async_trait;
+use axum::http::header;
 use axum::http::HeaderMap;
-use jsonwebtoken::jwk::Jwk;
+use jsonwebtoken::jwk::{Jwk, KeyAlgorithm};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
+use serde_json::Value;
 
 use crate::error::XrpcError;
 use crate::ids::{CallerDid, Nsid};
 
+/// The caller a request's credentials identify, if any.
 #[derive(Debug)]
 pub struct Caller {
+    /// The caller's DID, absent on an unauthenticated request.
     pub did: Option<CallerDid>,
 }
 
+/// Decides who a request is from.
 #[async_trait]
 pub trait CallerVerifier: Send + Sync {
+    /// The caller `headers` identify for `nsid`, or an anonymous caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `InvalidToken` error when credentials are present but cannot
+    /// be verified.
     async fn verify(&self, headers: &HeaderMap, nsid: &Nsid) -> Result<Caller, XrpcError>;
 }
 
@@ -52,17 +66,24 @@ pub struct GatewayServiceAuth {
 }
 
 impl GatewayServiceAuth {
+    /// A verifier for tokens the gateway at `gateway_did` mints for
+    /// `worker_did`, checked against `jwk`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the JWK's algorithm is unsupported or the key is
+    /// not usable for verification.
     pub fn new(
         gateway_did: impl Into<String>,
         worker_did: impl Into<String>,
         jwk: &Jwk,
     ) -> Result<Self, XrpcError> {
         let algorithm = match jwk.common.key_algorithm {
-            Some(jsonwebtoken::jwk::KeyAlgorithm::RS256) | None => Algorithm::RS256,
-            Some(jsonwebtoken::jwk::KeyAlgorithm::RS384) => Algorithm::RS384,
-            Some(jsonwebtoken::jwk::KeyAlgorithm::RS512) => Algorithm::RS512,
-            Some(jsonwebtoken::jwk::KeyAlgorithm::ES256) => Algorithm::ES256,
-            Some(jsonwebtoken::jwk::KeyAlgorithm::ES384) => Algorithm::ES384,
+            Some(KeyAlgorithm::RS256) | None => Algorithm::RS256,
+            Some(KeyAlgorithm::RS384) => Algorithm::RS384,
+            Some(KeyAlgorithm::RS512) => Algorithm::RS512,
+            Some(KeyAlgorithm::ES256) => Algorithm::ES256,
+            Some(KeyAlgorithm::ES384) => Algorithm::ES384,
             Some(other) => {
                 return Err(XrpcError::internal(format!(
                     "unsupported gateway JWK algorithm: {other:?}"
@@ -83,10 +104,10 @@ impl GatewayServiceAuth {
 #[async_trait]
 impl CallerVerifier for GatewayServiceAuth {
     async fn verify(&self, headers: &HeaderMap, nsid: &Nsid) -> Result<Caller, XrpcError> {
-        let Some(header) = headers.get(axum::http::header::AUTHORIZATION) else {
+        let Some(authorization) = headers.get(header::AUTHORIZATION) else {
             return Ok(Caller { did: None });
         };
-        let raw = header
+        let raw = authorization
             .to_str()
             .map_err(|_| XrpcError::new(401, "InvalidToken", "Malformed Authorization header"))?;
         let Some(token) = raw.strip_prefix("Bearer ") else {
@@ -102,10 +123,9 @@ impl CallerVerifier for GatewayServiceAuth {
         validation.set_audience(&[self.worker_did.as_str()]);
         validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
 
-        let data = jsonwebtoken::decode::<serde_json::Value>(token, &self.key, &validation)
-            .map_err(|err| {
-                XrpcError::new(401, "InvalidToken", format!("Invalid service token: {err}"))
-            })?;
+        let data = jsonwebtoken::decode::<Value>(token, &self.key, &validation).map_err(|err| {
+            XrpcError::new(401, "InvalidToken", format!("Invalid service token: {err}"))
+        })?;
 
         let claims = data.claims;
         let Some(sub) = claims.get("sub").and_then(|v| v.as_str()) else {
@@ -134,19 +154,19 @@ impl CallerVerifier for GatewayServiceAuth {
 ///
 /// `SPACE_WORKER_TEST_MODE=true` selects [`TestMode`]; otherwise the gateway
 /// variables must all be present. Absent both, construction fails.
-pub fn verifier_from_env() -> Result<std::sync::Arc<dyn CallerVerifier>, String> {
-    if std::env::var("SPACE_WORKER_TEST_MODE").as_deref() == Ok("true") {
-        return Ok(std::sync::Arc::new(TestMode));
+pub fn verifier_from_env() -> Result<Arc<dyn CallerVerifier>, String> {
+    if env::var("SPACE_WORKER_TEST_MODE").as_deref() == Ok("true") {
+        return Ok(Arc::new(TestMode));
     }
-    let gateway_did = std::env::var("SPACE_WORKER_GATEWAY_DID")
+    let gateway_did = env::var("SPACE_WORKER_GATEWAY_DID")
         .map_err(|_| "SPACE_WORKER_GATEWAY_DID is not set".to_owned())?;
     let worker_did =
-        std::env::var("SPACE_WORKER_DID").map_err(|_| "SPACE_WORKER_DID is not set".to_owned())?;
-    let jwk_json = std::env::var("SPACE_WORKER_GATEWAY_JWK")
+        env::var("SPACE_WORKER_DID").map_err(|_| "SPACE_WORKER_DID is not set".to_owned())?;
+    let jwk_json = env::var("SPACE_WORKER_GATEWAY_JWK")
         .map_err(|_| "SPACE_WORKER_GATEWAY_JWK is not set".to_owned())?;
     let jwk: Jwk = serde_json::from_str(&jwk_json)
         .map_err(|err| format!("SPACE_WORKER_GATEWAY_JWK is not a JWK: {err}"))?;
     let verifier =
         GatewayServiceAuth::new(gateway_did, worker_did, &jwk).map_err(|err| err.message)?;
-    Ok(std::sync::Arc::new(verifier))
+    Ok(Arc::new(verifier))
 }

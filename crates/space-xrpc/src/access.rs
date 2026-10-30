@@ -14,6 +14,7 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::error::XrpcError;
 
+/// The access a room grants by default, before role grants are considered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultAccess {
     ReadWrite,
@@ -22,6 +23,8 @@ pub enum DefaultAccess {
 }
 
 impl DefaultAccess {
+    /// The wire spelling: `readwrite`, `read` or `none`.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             DefaultAccess::ReadWrite => "readwrite",
@@ -55,22 +58,35 @@ impl DefaultAccess {
     }
 }
 
+/// The caller's standing in a space.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SpaceAccess {
+    /// The caller holds a `member` edge from the space.
     pub is_member: bool,
+    /// The caller holds an `admin` edge from the space.
     pub is_admin: bool,
+    /// The caller is banned from the space.
     pub is_banned: bool,
 }
 
+/// The caller's effective access to one room, and what resolving it found.
 #[derive(Debug, Clone)]
 pub struct RoomAccess {
+    /// The room exists as an entity.
     pub exists: bool,
+    /// The caller may read the room.
     pub can_read: bool,
+    /// The caller may write to the room.
     pub can_write: bool,
+    /// The caller administers the owning space.
     pub is_admin: bool,
+    /// The access the room grants by default.
     pub default_access: DefaultAccess,
+    /// The space that owns the room, absent when the room is not an entity.
     pub space_id: Option<String>,
+    /// The canonical parent channel, when the room is a thread.
     pub parent_channel_id: Option<String>,
+    /// The caller is banned from the owning space.
     pub is_banned: bool,
 }
 
@@ -99,6 +115,7 @@ fn has_edge(conn: &Connection, head: &str, tail: &str, label: &str) -> rusqlite:
     .map(|r| r.is_some())
 }
 
+/// The caller's standing in `space_id`. An absent caller holds nothing.
 pub fn space_access(
     conn: &Connection,
     space_id: &str,
@@ -193,14 +210,24 @@ pub fn resolve_room(conn: &Connection, room_id: &str) -> rusqlite::Result<Resolv
     Ok((Some((space_id.unwrap_or_default(), effective)), parent_id))
 }
 
+/// The read and write a role grants the caller on one room.
+struct RoleGrant {
+    read: bool,
+    write: bool,
+}
+
 fn role_grant(
     conn: &Connection,
     space_id: &str,
     room_id: &str,
     did: Option<&str>,
-) -> rusqlite::Result<(bool, bool)> {
+) -> rusqlite::Result<RoleGrant> {
+    let no_grant = RoleGrant {
+        read: false,
+        write: false,
+    };
     let Some(did) = did else {
-        return Ok((false, false));
+        return Ok(no_grant);
     };
     let row = conn
         .query_row(
@@ -216,16 +243,18 @@ fn role_grant(
                 and ro.deleted = 0",
             (did, room_id, space_id),
             |row| {
-                Ok((
-                    row.get::<_, Option<i64>>(0)?.unwrap_or(0) != 0,
-                    row.get::<_, Option<i64>>(1)?.unwrap_or(0) != 0,
-                ))
+                Ok(RoleGrant {
+                    read: row.get::<_, Option<i64>>(0)?.unwrap_or(0) != 0,
+                    write: row.get::<_, Option<i64>>(1)?.unwrap_or(0) != 0,
+                })
             },
         )
         .optional()?;
-    Ok(row.unwrap_or((false, false)))
+    Ok(row.unwrap_or(no_grant))
 }
 
+/// The caller's effective access to `room_id`: the room's default, capped by its
+/// canonical parent channel's, with role grants and the ban list applied.
 pub fn room_access(
     conn: &Connection,
     room_id: &str,
@@ -266,15 +295,15 @@ pub fn room_access(
         });
     }
 
-    let perm_room = parent_channel_id.as_deref().unwrap_or(room_id);
-    let (grant_read, grant_write) = role_grant(conn, &space_id, perm_room, did)?;
+    let grant_room = parent_channel_id.as_deref().unwrap_or(room_id);
+    let grant = role_grant(conn, &space_id, grant_room, did)?;
     let public_join = allows_public_join(conn, &space_id)?;
     let passes_read_gate = public_join || space.is_member;
 
     Ok(RoomAccess {
         exists: true,
-        can_read: passes_read_gate && (default_access != DefaultAccess::None || grant_read),
-        can_write: space.is_member && (default_access == DefaultAccess::ReadWrite || grant_write),
+        can_read: passes_read_gate && (default_access != DefaultAccess::None || grant.read),
+        can_write: space.is_member && (default_access == DefaultAccess::ReadWrite || grant.write),
         is_admin: false,
         default_access,
         space_id: Some(space_id),

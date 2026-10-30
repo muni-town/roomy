@@ -1,13 +1,16 @@
 //! Server state: the space database a request resolves to, a caller verifier,
 //! and the optional global-store replica.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use roomy_readstate::{NoReadState, ReadStateStore};
 use rusqlite::Connection;
 
-use crate::registry::SpaceResolver;
+use crate::error::XrpcError;
+use crate::registry::{FixedSpaces, SpaceResolver};
 use crate::store::{GlobalStores, NoGlobalStores};
 use crate::verify::CallerVerifier;
 
@@ -23,15 +26,13 @@ pub struct SpaceReadDb {
 }
 
 impl SpaceReadDb {
-    pub fn open_readonly(path: impl AsRef<std::path::Path>) -> rusqlite::Result<Self> {
+    /// Open a single read-only connection to `path`.
+    pub fn open_readonly(path: impl AsRef<Path>) -> rusqlite::Result<Self> {
         Self::open_pooled(path, 1)
     }
 
     /// Open `pool_size` read-only connections to `path`.
-    pub fn open_pooled(
-        path: impl AsRef<std::path::Path>,
-        pool_size: usize,
-    ) -> rusqlite::Result<Self> {
+    pub fn open_pooled(path: impl AsRef<Path>, pool_size: usize) -> rusqlite::Result<Self> {
         let mut connections = Vec::with_capacity(pool_size.max(1));
         for _ in 0..pool_size.max(1) {
             let conn = Connection::open_with_flags(
@@ -40,7 +41,7 @@ impl SpaceReadDb {
                     | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
             )?;
             // A reader may retry a lock rather than fail a request.
-            conn.busy_timeout(std::time::Duration::from_millis(2000))?;
+            conn.busy_timeout(Duration::from_millis(2000))?;
             connections.push(Mutex::new(conn));
         }
         Ok(Self {
@@ -58,18 +59,21 @@ impl SpaceReadDb {
         }
     }
 
+    /// Run `f` against the next connection in the pool.
     pub fn with<T>(
         &self,
-        f: impl FnOnce(&Connection) -> Result<T, crate::error::XrpcError>,
-    ) -> Result<T, crate::error::XrpcError> {
+        f: impl FnOnce(&Connection) -> Result<T, XrpcError>,
+    ) -> Result<T, XrpcError> {
         let index = self.next.fetch_add(1, Ordering::Relaxed) % self.connections.len();
         let conn = self.connections[index]
             .lock()
-            .map_err(|_| crate::error::XrpcError::internal("database lock poisoned"))?;
+            .map_err(|_| XrpcError::internal("database lock poisoned"))?;
         f(&conn)
     }
 }
 
+/// Everything a request needs: the space it resolved to, the resolver, the
+/// global store replica, the caller verifier and the read-state replica.
 #[derive(Clone)]
 pub struct XrpcState {
     /// The space this request resolved to. A per-request value: dispatch
@@ -77,7 +81,9 @@ pub struct XrpcState {
     pub db: Arc<SpaceReadDb>,
     /// Where a request's space comes from, for the router's dispatch.
     pub spaces: Arc<dyn SpaceResolver>,
+    /// The gateway's global-store replica, read for profiles and link cards.
     pub stores: Arc<dyn GlobalStores>,
+    /// Who is calling, from the request's credentials.
     pub verifier: Arc<dyn CallerVerifier>,
     /// The caller-scoped state the gateway owns: watermarks, block sets, space
     /// membership, bridge grants. A worker holds a replica of the node's store;
@@ -99,8 +105,9 @@ pub static ABSENT_SPACE: std::sync::LazyLock<Arc<SpaceReadDb>> = std::sync::Lazy
 });
 
 impl XrpcState {
+    /// State for a single space, with no read state and no global store.
     pub fn new(db: Arc<SpaceReadDb>, verifier: Arc<dyn CallerVerifier>) -> Self {
-        let spaces = Arc::new(crate::registry::FixedSpaces::new(std::iter::empty()));
+        let spaces = Arc::new(FixedSpaces::new(std::iter::empty()));
         Self {
             db,
             spaces,
@@ -116,11 +123,13 @@ impl XrpcState {
         self
     }
 
+    /// The same state, reading profiles and link cards from `stores`.
     pub fn with_stores(mut self, stores: Arc<dyn GlobalStores>) -> Self {
         self.stores = stores;
         self
     }
 
+    /// The same state, reading caller-scoped state from `read_state`.
     pub fn with_read_state(mut self, read_state: Arc<dyn ReadStateStore>) -> Self {
         self.read_state = read_state;
         self
