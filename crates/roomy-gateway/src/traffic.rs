@@ -14,17 +14,23 @@
 //! Nothing here decides correctness: the two implementations agree or they do not,
 //! and the divergence log is what says which.
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::{Request, State};
+use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use reqwest::Client;
+use serde_json::Value;
+use space_core::ids::SpaceDid;
 
 use crate::cutover::{
     self, MaterialisationOwners, OwnerStore, Shadow, ShadowConfig, ShadowRequest, ShadowResponse,
 };
-use crate::GatewayState;
+use crate::{GatewayState, Metric};
 
 /// The name this implementation writes into the ownership table. A rollback writes
 /// the TypeScript appserver's name back.
@@ -34,12 +40,14 @@ pub const RUST_NODE: &str = "rust-core";
 pub struct Traffic {
     /// The TypeScript appserver's base URL, without a trailing slash.
     pub ts_origin: String,
-    pub client: reqwest::Client,
+    pub client: Client,
     pub owners: Arc<MaterialisationOwners<Box<dyn OwnerStore>>>,
     pub shadow: Arc<Shadow>,
 }
 
 impl Traffic {
+    /// A cutover edge that proxies to `ts_origin` when a space is not this
+    /// process's, mirroring a sample of the rest as `shadow` decides.
     pub fn new(
         ts_origin: impl Into<String>,
         owners: Arc<MaterialisationOwners<Box<dyn OwnerStore>>>,
@@ -47,10 +55,10 @@ impl Traffic {
     ) -> Self {
         Self {
             ts_origin: ts_origin.into().trim_end_matches('/').to_string(),
-            client: reqwest::Client::builder()
+            client: Client::builder()
                 // The proxy is on the request's path: a hung upstream is a hung
                 // request, so it gets a deadline rather than waiting forever.
-                .timeout(std::time::Duration::from_secs(10))
+                .timeout(Duration::from_secs(10))
                 .build()
                 .unwrap_or_default(),
             owners,
@@ -59,6 +67,7 @@ impl Traffic {
     }
 
     /// Whether this process answers `space` itself.
+    #[must_use]
     pub fn owned_here(&self, space: &str) -> bool {
         match self.owners.owner(&space_did(space)) {
             // An unowned space has not been cut over: the TypeScript appserver
@@ -74,9 +83,7 @@ impl Traffic {
         let (parts, body) = request.into_parts();
         let body = match axum::body::to_bytes(body, 1024 * 1024).await {
             Ok(bytes) => bytes,
-            Err(error) => {
-                return (axum::http::StatusCode::BAD_REQUEST, format!("{error}")).into_response()
-            }
+            Err(error) => return (StatusCode::BAD_REQUEST, format!("{error}")).into_response(),
         };
         let path = parts
             .uri
@@ -97,7 +104,7 @@ impl Traffic {
             Ok(response) => response,
             Err(error) => {
                 return (
-                    axum::http::StatusCode::BAD_GATEWAY,
+                    StatusCode::BAD_GATEWAY,
                     format!("the TypeScript appserver did not answer: {error}"),
                 )
                     .into_response()
@@ -109,9 +116,7 @@ impl Traffic {
             .status(status)
             .header("content-type", "application/json")
             .body(Body::from(body))
-            .unwrap_or_else(|error| {
-                (axum::http::StatusCode::BAD_GATEWAY, format!("{error}")).into_response()
-            })
+            .unwrap_or_else(|error| (StatusCode::BAD_GATEWAY, format!("{error}")).into_response())
     }
 
     /// Mirror `request` to the TypeScript appserver and record the comparison.
@@ -174,6 +179,8 @@ impl Traffic {
         nsids
     }
 
+    /// How many comparisons the shadow has made, across every NSID.
+    #[must_use]
     pub fn comparisons(&self) -> u64 {
         self.shadow
             .divergences()
@@ -184,10 +191,9 @@ impl Traffic {
     }
 }
 
-fn space_did(space: &str) -> space_core::ids::SpaceDid {
-    space_core::ids::SpaceDid::parse(space.to_string()).unwrap_or_else(|_| {
-        space_core::ids::SpaceDid::parse("did:web:unowned".to_string()).expect("a DID")
-    })
+fn space_did(space: &str) -> SpaceDid {
+    SpaceDid::parse(space.to_string())
+        .unwrap_or_else(|_| SpaceDid::parse("did:web:unowned".to_string()).expect("a DID"))
 }
 
 /// What a request names: a space outright, or an entity the index can resolve to
@@ -212,8 +218,8 @@ fn named_space(request: &Request, body: &[u8]) -> Naming {
         }
     }
     if !body.is_empty() {
-        if let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) {
-            if let Some(space) = value.get("spaceId").and_then(serde_json::Value::as_str) {
+        if let Ok(value) = serde_json::from_slice::<Value>(body) {
+            if let Some(space) = value.get("spaceId").and_then(Value::as_str) {
                 return Naming::Space(space.to_string());
             }
         }
@@ -254,9 +260,7 @@ pub async fn cutover_layer(
     let (parts, body) = request.into_parts();
     let body = match axum::body::to_bytes(body, 1024 * 1024).await {
         Ok(bytes) => bytes,
-        Err(error) => {
-            return (axum::http::StatusCode::BAD_REQUEST, format!("{error}")).into_response()
-        }
+        Err(error) => return (StatusCode::BAD_REQUEST, format!("{error}")).into_response(),
     };
     // What the decision needs, taken before the request is handed on.
     let uri = parts
@@ -284,49 +288,48 @@ pub async fn cutover_layer(
     };
     if let Some(space) = space.as_deref() {
         if !traffic.owned_here(space) {
-            state
-                .counters
-                .proxied
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            state.counters.proxied.fetch_add(1, Ordering::Relaxed);
             return traffic.proxy(request).await;
         }
     }
 
     let authoritative = next.run(request).await;
-    {
-        if let Some(space) = space {
-            let _ = space;
-            let (parts, body) = authoritative.into_parts();
-            let bytes = match axum::body::to_bytes(body, 8 * 1024 * 1024).await {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    return (
-                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("{error}"),
-                    )
-                        .into_response()
-                }
-            };
-            let shadow_request = ShadowRequest::new(nsid, parameters);
-            traffic.mirror(
-                shadow_request,
-                uri,
-                ShadowResponse::new(parts.status.as_u16(), bytes.to_vec()),
-            );
-            return Response::from_parts(parts, Body::from(bytes));
-        }
+    if space.is_none() {
+        // A request that names no space is compared by nobody: the mirror needs
+        // a request the shadow can key.
+        return authoritative;
     }
-    authoritative
+    let (parts, body) = authoritative.into_parts();
+    let bytes = match axum::body::to_bytes(body, 8 * 1024 * 1024).await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, format!("{error}")).into_response()
+        }
+    };
+    let shadow_request = ShadowRequest::new(nsid, parameters);
+    traffic.mirror(
+        shadow_request,
+        uri,
+        ShadowResponse::new(parts.status.as_u16(), bytes.to_vec()),
+    );
+    Response::from_parts(parts, Body::from(bytes))
 }
 
 /// The comparison counts and alert state, as `/metrics` reports them.
-pub fn metric_lines(traffic: &Traffic) -> Vec<(String, u64)> {
+#[must_use]
+pub fn metric_lines(traffic: &Traffic) -> Vec<Metric> {
     let log = traffic.shadow.divergences();
     let compared: u64 = log.all().len() as u64;
     let alerting = traffic.alerts().len() as u64;
     vec![
-        ("roomy_cutover_shadow_comparisons".to_string(), compared),
-        ("roomy_cutover_shadow_alerting_nsids".to_string(), alerting),
+        Metric {
+            name: "roomy_cutover_shadow_comparisons".to_string(),
+            value: compared,
+        },
+        Metric {
+            name: "roomy_cutover_shadow_alerting_nsids".to_string(),
+            value: alerting,
+        },
     ]
 }
 

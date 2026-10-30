@@ -14,7 +14,7 @@
 //! answers with its DID alone.
 
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -23,15 +23,18 @@ use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use regex::Regex;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use space_xrpc::error::XrpcError;
 use space_xrpc::handlers::common::Context;
+use space_xrpc::ids::Nsid;
 use space_xrpc::params::Params;
 use space_xrpc::store::GlobalStores;
 
 use crate::GatewayState;
 
+/// The XRPC method this module answers.
 pub const NSID: &str = "space.roomy.user.getProfile";
 
 /// The public Bluesky appview, which serves `app.bsky.actor.getProfiles`.
@@ -120,7 +123,7 @@ pub trait ProfileResolver: Send + Sync {
 
 /// Resolves profiles over HTTP from HappyView and the Bluesky appview.
 pub struct HttpProfileResolver {
-    client: reqwest::Client,
+    client: Client,
     happy_view: Option<HappyViewConfig>,
     bluesky_endpoint: String,
     timeout: Duration,
@@ -162,7 +165,7 @@ fn profile_fetch_timeout() -> Duration {
 
 impl HttpProfileResolver {
     /// A resolver over `client` and the process environment.
-    pub fn new(client: reqwest::Client) -> Self {
+    pub fn new(client: Client) -> Self {
         Self {
             client,
             happy_view: HappyViewConfig::from_env(),
@@ -320,7 +323,7 @@ impl HttpProfileResolver {
 
 /// One client for every request-time resolver, so connections are pooled
 /// across the endpoints.
-static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+static CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
 
 impl Default for HttpProfileResolver {
     fn default() -> Self {
@@ -525,12 +528,13 @@ async fn assembled_profile(
 }
 
 /// axum handler for `GET /xrpc/space.roomy.user.getProfile`.
+/// axum handler for `GET /xrpc/space.roomy.user.getProfile`.
 pub async fn http(
-    State(state): State<std::sync::Arc<GatewayState>>,
+    State(state): State<Arc<GatewayState>>,
     headers: HeaderMap,
     RawQuery(query): RawQuery,
 ) -> Response {
-    let nsid = space_xrpc::ids::Nsid::try_from(NSID).expect("static nsid");
+    let nsid = Nsid::try_from(NSID).expect("static nsid");
     let params = Params::parse(query.as_deref());
     let context = match crate::reads::context(&state, &headers, &nsid).await {
         Ok(context) => context,
@@ -749,7 +753,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_did_actor_is_not_resolved_again() {
-        let resolver = HttpProfileResolver::new(reqwest::Client::new());
+        let resolver = HttpProfileResolver::new(Client::new());
         assert_eq!(
             resolver.actor_to_did("did:plc:abc").await.unwrap(),
             "did:plc:abc"
@@ -758,7 +762,7 @@ mod tests {
 
     #[tokio::test]
     async fn an_unresolvable_handle_is_actor_not_found() {
-        let resolver = HttpProfileResolver::new(reqwest::Client::new());
+        let resolver = HttpProfileResolver::new(Client::new());
         let error = resolver.actor_to_did("not-a-handle").await.unwrap_err();
         assert_eq!(error.status, 404);
         assert_eq!(error.error, "ActorNotFound");

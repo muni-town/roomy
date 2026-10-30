@@ -12,8 +12,12 @@
 //! therefore a bound on staleness, never a hint.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use tokio::task::JoinHandle;
+
+use crate::GatewayState;
 
 /// One request, as the cache sees it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -77,6 +81,7 @@ pub struct ResponseCache {
 }
 
 impl ResponseCache {
+    /// An empty cache whose entries live for `ttl`.
     pub fn new(ttl: Duration) -> Self {
         Self {
             ttl,
@@ -84,6 +89,8 @@ impl ResponseCache {
         }
     }
 
+    /// How long a stored answer is served for.
+    #[must_use]
     pub fn ttl(&self) -> Duration {
         self.ttl
     }
@@ -137,6 +144,7 @@ impl ResponseCache {
     }
 
     /// How many entries are held, expired ones included.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries
             .lock()
@@ -144,6 +152,8 @@ impl ResponseCache {
             .unwrap_or(0)
     }
 
+    /// Whether the cache holds no entry at all.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -271,15 +281,17 @@ pub mod middleware {
     use axum::http::{header, HeaderValue, StatusCode};
     use axum::middleware::Next;
     use axum::response::{IntoResponse, Response};
-    use http_body_util::BodyExt;
 
-    use crate::{cache::CachedResponse, GatewayState};
+    use crate::cache::{CacheKey, CachedResponse};
+    use crate::GatewayState;
 
     pub async fn cached(
         State(state): State<Arc<GatewayState>>,
         request: Request,
         next: Next,
     ) -> Response {
+        use http_body_util::BodyExt;
+
         if request.method() != axum::http::Method::GET {
             return next.run(request).await;
         }
@@ -310,7 +322,7 @@ pub mod middleware {
             .iter()
             .find(|(key, _)| key == "spaceId")
             .map(|(_, value)| value.clone());
-        let key = crate::cache::CacheKey::new(&nsid, &params, caller.as_deref(), space.as_deref());
+        let key = CacheKey::new(&nsid, &params, caller.as_deref(), space.as_deref());
 
         if let Some(cached) = state.cache.get(&key) {
             let mut response = Response::new(Body::from(cached.body));
@@ -330,10 +342,10 @@ pub mod middleware {
             .unwrap_or("application/json")
             .to_string();
         let (parts, body) = response.into_parts();
-        let bytes = match body.collect().await {
-            Ok(collected) => collected.to_bytes().to_vec(),
-            Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
+        let Ok(collected) = body.collect().await else {
+            return StatusCode::BAD_GATEWAY.into_response();
         };
+        let bytes = collected.to_bytes().to_vec();
         state.cache.put(
             key,
             CachedResponse {
@@ -350,7 +362,7 @@ pub mod middleware {
 ///
 /// Advisory signals only shorten a wait; the TTL is what bounds staleness, so a
 /// dropped signal costs freshness and never correctness.
-pub fn spawn_eviction(state: std::sync::Arc<crate::GatewayState>) -> tokio::task::JoinHandle<()> {
+pub fn spawn_eviction(state: Arc<GatewayState>) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut signals = state.signals.subscribe();
         loop {

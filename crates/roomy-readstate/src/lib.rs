@@ -22,8 +22,9 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::Duration;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 /// Where a user last read up to in one room.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +52,8 @@ pub struct BlockedSet {
 }
 
 impl BlockedSet {
+    /// The set from the DIDs the user blocked and the DIDs whose repos block
+    /// the user.
     pub fn from_parts(
         written: impl IntoIterator<Item = String>,
         blockers: impl IntoIterator<Item = String>,
@@ -60,14 +63,20 @@ impl BlockedSet {
         }
     }
 
+    /// Whether `did` is hidden from the user, in either direction.
+    #[must_use]
     pub fn is_hidden(&self, did: &str) -> bool {
         self.hidden.contains(did)
     }
 
+    /// Whether the user has no block in either direction.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.hidden.is_empty()
     }
 
+    /// How many DIDs are hidden.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.hidden.len()
     }
@@ -88,6 +97,8 @@ pub struct BridgeTokenGrant {
 }
 
 impl BridgeTokenGrant {
+    /// Whether the grant's token has already been exchanged.
+    #[must_use]
     pub fn spent(&self) -> bool {
         self.spent_at.is_some()
     }
@@ -225,11 +236,11 @@ impl SqliteReadStateStore {
             // The database outlives the process and is shared with the
             // TypeScript appserver during the migration; a reader that must
             // retry a lock beats a failed request.
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        conn.busy_timeout(std::time::Duration::from_millis(2000))?;
+        conn.busy_timeout(Duration::from_millis(2000))?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -240,9 +251,9 @@ impl SqliteReadStateStore {
     pub fn open_read_only(path: impl AsRef<Path>) -> Result<Self, ReadStateError> {
         let conn = Connection::open_with_flags(
             path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        conn.busy_timeout(std::time::Duration::from_millis(2000))?;
+        conn.busy_timeout(Duration::from_millis(2000))?;
         Ok(Self {
             conn: Mutex::new(conn),
         })

@@ -23,6 +23,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 /// What a ticket asserts.
@@ -61,6 +62,7 @@ pub enum TicketError {
 pub trait NonceStore: Send + Sync {
     /// Record `nonce` until `expires_at`. Returns false when it was already
     /// recorded — the ticket is a replay.
+    #[must_use]
     fn claim(&self, nonce: &str, expires_at: u64) -> bool;
 }
 
@@ -71,6 +73,7 @@ pub struct InMemoryNonces {
 }
 
 impl InMemoryNonces {
+    /// A store that has seen no ticket yet.
     pub fn new() -> Self {
         Self::default()
     }
@@ -112,6 +115,8 @@ pub struct TicketIssuer {
 }
 
 impl TicketIssuer {
+    /// An issuer that mints tickets for `audience`, signed with `secret`, valid
+    /// for `ttl_secs` after they are issued.
     pub fn new(secret: impl Into<Vec<u8>>, audience: impl Into<String>, ttl_secs: u64) -> Self {
         Self {
             secret: secret.into(),
@@ -131,8 +136,8 @@ impl TicketIssuer {
             nonce: new_nonce(iat),
             spaces,
         };
-        let key = jsonwebtoken::EncodingKey::from_secret(&self.secret);
-        jsonwebtoken::encode(&jsonwebtoken::Header::default(), &claims, &key)
+        let key = EncodingKey::from_secret(&self.secret);
+        jsonwebtoken::encode(&Header::default(), &claims, &key)
             .map_err(|error| TicketError::Invalid(error.to_string()))
     }
 }
@@ -145,6 +150,7 @@ pub struct TicketVerifier {
 }
 
 impl TicketVerifier {
+    /// A verifier for `audience` that consumes nonces in `nonces`.
     pub fn new(
         secret: impl Into<Vec<u8>>,
         audience: impl Into<String>,
@@ -159,8 +165,8 @@ impl TicketVerifier {
 
     /// Verify `token` for this gateway set, consuming its nonce.
     pub fn verify(&self, token: &str) -> Result<TicketClaims, TicketError> {
-        let key = jsonwebtoken::DecodingKey::from_secret(&self.secret);
-        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+        let key = DecodingKey::from_secret(&self.secret);
+        let mut validation = Validation::new(Algorithm::HS256);
         validation.set_audience(&[self.audience.as_str()]);
         validation.set_required_spec_claims(&["exp", "aud", "sub", "iat"]);
         // Expiry is checked below against our own clock, so the comparison is
@@ -186,6 +192,7 @@ impl TicketVerifier {
 }
 
 /// A ticket's decision about one space.
+#[must_use]
 pub fn ticket_allows_space(claims: &TicketClaims, space: &str) -> bool {
     claims.spaces.iter().any(|allowed| allowed == space)
 }

@@ -10,6 +10,7 @@
 //! Reading a thread is also engagement, recorded in the read-state store's
 //! thread activity, and opening a room cancels any pending push digest for it.
 
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::Bytes;
@@ -25,6 +26,7 @@ use space_xrpc::ids::Nsid;
 
 use crate::GatewayState;
 
+/// The XRPC method this module answers.
 pub const NSID: &str = "space.roomy.room.updateSeen";
 
 /// A thread room, as `comp_room` labels it: reads of one count as engagement.
@@ -32,7 +34,7 @@ const THREAD_LABEL: &str = "space.roomy.thread";
 
 /// axum handler for `POST /xrpc/space.roomy.room.updateSeen`.
 pub async fn http(
-    State(state): State<std::sync::Arc<GatewayState>>,
+    State(state): State<Arc<GatewayState>>,
     headers: HeaderMap,
     RawQuery(_query): RawQuery,
     body: Bytes,
@@ -104,14 +106,12 @@ async fn update_seen(
                 )?;
                 Ok(sort_idx)
             })?;
-            match sort_idx {
-                Some(sort_idx) => sort_idx,
-                None => {
-                    return Err(XrpcError::invalid_request(format!(
-                        "Message {message_id} does not exist in room {room_id}"
-                    )))
-                }
-            }
+            let Some(sort_idx) = sort_idx else {
+                return Err(XrpcError::invalid_request(format!(
+                    "Message {message_id} does not exist in room {room_id}"
+                )));
+            };
+            sort_idx
         }
         None => {
             // No watermark: anchor at the newest message the reader can see, so

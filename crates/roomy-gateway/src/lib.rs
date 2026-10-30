@@ -25,6 +25,7 @@ pub mod signals;
 pub mod traffic;
 pub mod ws;
 
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -47,13 +48,16 @@ pub use signals::GatewaySignals;
 pub struct GatewayState {
     /// The per-space read router, resolving requests through the registry.
     pub reads: XrpcState,
+    /// Mints the connection tickets this process hands out.
     pub tickets: Arc<TicketIssuer>,
+    /// Verifies the tickets a socket presents.
     pub verifier: Arc<TicketVerifier>,
     /// The connection plane. A mutex because every handler mutates it; the
     /// critical sections are map operations.
     pub sessions: Arc<Mutex<SessionCore>>,
     /// Signals from the workers in this process.
     pub signals: GatewaySignals,
+    /// The numbers `/metrics` reports.
     pub counters: Arc<Counters>,
     /// Answers to repeat, bounded by a TTL and evicted by signals.
     pub cache: Arc<cache::ResponseCache>,
@@ -81,41 +85,67 @@ pub struct GatewayState {
 /// The numbers `/metrics` reports.
 #[derive(Debug, Default)]
 pub struct Counters {
+    /// Tickets handed to callers.
     pub tickets_issued: AtomicU64,
+    /// Sockets that upgraded and opened a session.
     pub sessions_opened: AtomicU64,
+    /// Sessions whose socket finished.
     pub sessions_closed: AtomicU64,
+    /// Frames written to a socket.
     pub frames_sent: AtomicU64,
+    /// Signals received from workers.
     pub signals_received: AtomicU64,
     /// Reads and writes answered by the TypeScript appserver because their space
     /// is not this implementation's yet.
     pub proxied: AtomicU64,
 }
 
+/// One counter as `/metrics` reports it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Metric {
+    /// The series name, spelled the way Prometheus expects it.
+    pub name: String,
+    /// The counter's value since the process started.
+    pub value: u64,
+}
+
+impl Metric {
+    /// A counter named `name` holding `value`.
+    fn new(name: &str, value: u64) -> Self {
+        Self {
+            name: name.to_string(),
+            value,
+        }
+    }
+}
+
 impl Counters {
-    pub fn snapshot(&self) -> Vec<(String, u64)> {
+    /// Every counter, as the series `/metrics` renders.
+    #[must_use]
+    pub fn snapshot(&self) -> Vec<Metric> {
         vec![
-            (
-                "roomy_gateway_tickets_issued".to_string(),
+            Metric::new(
+                "roomy_gateway_tickets_issued",
                 self.tickets_issued.load(Ordering::Relaxed),
             ),
-            (
-                "roomy_gateway_sessions_opened".to_string(),
+            Metric::new(
+                "roomy_gateway_sessions_opened",
                 self.sessions_opened.load(Ordering::Relaxed),
             ),
-            (
-                "roomy_gateway_sessions_closed".to_string(),
+            Metric::new(
+                "roomy_gateway_sessions_closed",
                 self.sessions_closed.load(Ordering::Relaxed),
             ),
-            (
-                "roomy_gateway_frames_sent".to_string(),
+            Metric::new(
+                "roomy_gateway_frames_sent",
                 self.frames_sent.load(Ordering::Relaxed),
             ),
-            (
-                "roomy_gateway_signals_received".to_string(),
+            Metric::new(
+                "roomy_gateway_signals_received",
                 self.signals_received.load(Ordering::Relaxed),
             ),
-            (
-                "roomy_gateway_proxied".to_string(),
+            Metric::new(
+                "roomy_gateway_proxied",
                 self.proxied.load(Ordering::Relaxed),
             ),
         ]
@@ -123,6 +153,9 @@ impl Counters {
 }
 
 impl GatewayState {
+    /// A gateway over `reads`, minting tickets with `tickets`, verifying them
+    /// with `verifier`, and publishing `signals`. The optional halves — the
+    /// event log, the feed, the cutover — are added by the `with_*` methods.
     pub fn new(
         reads: XrpcState,
         tickets: Arc<TicketIssuer>,
@@ -183,8 +216,8 @@ impl GatewayState {
     }
 }
 
-impl std::fmt::Debug for GatewayState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for GatewayState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GatewayState").finish_non_exhaustive()
     }
 }
@@ -270,13 +303,20 @@ async fn health(State(state): State<Arc<GatewayState>>) -> Response {
 }
 
 async fn metrics(State(state): State<Arc<GatewayState>>) -> Response {
+    use std::fmt::Write;
+
     let mut body = String::new();
     let mut lines = state.counters.snapshot();
     if let Some(traffic) = &state.traffic {
         lines.extend(traffic::metric_lines(traffic));
     }
-    for (name, value) in lines {
-        body.push_str(&format!("# TYPE {name} counter\n{name} {value}\n"));
+    for metric in lines {
+        // Writing into a `String` cannot fail.
+        let _ = write!(
+            body,
+            "# TYPE {0} counter\n{0} {1}\n",
+            metric.name, metric.value
+        );
     }
     (
         StatusCode::OK,

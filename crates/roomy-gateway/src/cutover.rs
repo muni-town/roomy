@@ -24,6 +24,8 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
+use rusqlite::Connection;
+use serde_json::Value;
 use space_core::ids::SpaceDid;
 
 /// How many times a handover retries a lost compare-and-swap before reporting
@@ -103,7 +105,7 @@ impl ShadowResponse {
     }
 
     /// A response from a status and a JSON value.
-    pub fn json(status: u16, body: &serde_json::Value) -> Self {
+    pub fn json(status: u16, body: &Value) -> Self {
         let body = serde_json::to_vec(body).expect("a JSON value serialises");
         Self { status, body }
     }
@@ -617,7 +619,7 @@ impl OwnerStore for InMemoryOwnerStore {
 
 /// The ownership table in the global database: the production store.
 pub struct SqliteOwnerStore {
-    conn: Mutex<rusqlite::Connection>,
+    conn: Mutex<Connection>,
 }
 
 impl SqliteOwnerStore {
@@ -626,7 +628,7 @@ impl SqliteOwnerStore {
         if let Some(parent) = path.as_ref().parent() {
             std::fs::create_dir_all(parent).ok();
         }
-        let conn = rusqlite::Connection::open(path)?;
+        let conn = Connection::open(path)?;
         conn.execute_batch(
             "pragma journal_mode = wal;
              pragma synchronous = normal;
@@ -637,10 +639,10 @@ impl SqliteOwnerStore {
 
     /// An in-memory ownership table, for a test or a throwaway process.
     pub fn in_memory() -> Result<Self, StoreError> {
-        Self::from_connection(rusqlite::Connection::open_in_memory()?)
+        Self::from_connection(Connection::open_in_memory()?)
     }
 
-    fn from_connection(conn: rusqlite::Connection) -> Result<Self, StoreError> {
+    fn from_connection(conn: Connection) -> Result<Self, StoreError> {
         conn.execute_batch(
             "create table if not exists materialisation_owners (
                space      text primary key,
@@ -655,7 +657,7 @@ impl SqliteOwnerStore {
         })
     }
 
-    fn conn(&self) -> MutexGuard<'_, rusqlite::Connection> {
+    fn conn(&self) -> MutexGuard<'_, Connection> {
         self.conn
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -1112,15 +1114,13 @@ fn bodies_equivalent(authoritative: &[u8], shadow: &[u8]) -> bool {
 /// The canonical form of a JSON body: object keys sorted, no insignificant
 /// whitespace. `None` when the body is not JSON.
 fn canonical_json(body: &[u8]) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_slice(body).ok()?;
+    let value: Value = serde_json::from_slice(body).ok()?;
     let mut rendered = String::new();
     render_canonical(&value, &mut rendered);
     Some(rendered)
 }
 
-fn render_canonical(value: &serde_json::Value, out: &mut String) {
-    use serde_json::Value;
-
+fn render_canonical(value: &Value, out: &mut String) {
     match value {
         Value::Null => out.push_str("null"),
         Value::Bool(value) => out.push_str(if *value { "true" } else { "false" }),

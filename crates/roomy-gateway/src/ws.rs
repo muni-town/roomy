@@ -12,6 +12,7 @@
 //! Nothing here decides anything: the ticket decides who may connect, the
 //! session core decides who hears what, and this file moves the bytes.
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
@@ -20,12 +21,15 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 
+use roomy_auth::TicketClaims;
 use roomy_sync::{Command, Frame, FrameData, Input, SessionId};
 
 use crate::{Counters, GatewayState};
 
+/// The query string of an upgrade: a ticket, for a client that cannot set a
+/// header.
 #[derive(Debug, Default, Deserialize)]
 pub struct TicketParams {
     /// The ticket, when a client cannot set an `Authorization` header on an
@@ -85,13 +89,13 @@ pub async fn subscribe(
     state
         .counters
         .sessions_opened
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        .fetch_add(1, Ordering::Relaxed);
     upgrade
         .on_upgrade(move |socket| run(socket, state, claims))
         .into_response()
 }
 
-async fn run(socket: WebSocket, state: Arc<GatewayState>, claims: roomy_auth::TicketClaims) {
+async fn run(socket: WebSocket, state: Arc<GatewayState>, claims: TicketClaims) {
     let (mut sink, mut stream) = socket.split();
 
     // Open the session before anything is sent: the core's `ready` frame is the
@@ -113,7 +117,7 @@ async fn run(socket: WebSocket, state: Arc<GatewayState>, claims: roomy_auth::Ti
     };
     // The guard is dropped before the socket is touched: the future has to be
     // `Send`, and a held mutex is not.
-    if !deliver(&state, &mut sink, opening, &state.counters).await {
+    if !deliver(&mut sink, opening, &state.counters).await {
         return;
     }
 
@@ -144,7 +148,7 @@ async fn run(socket: WebSocket, state: Arc<GatewayState>, claims: roomy_auth::Ti
                     let mut core = state.sessions.lock().expect("the session table");
                     core.apply(input)
                 };
-                let keep_going = deliver(&state, &mut sink, commands, &counters).await;
+                let keep_going = deliver(&mut sink, commands, &counters).await;
                 if !keep_going {
                     break;
                 }
@@ -153,7 +157,7 @@ async fn run(socket: WebSocket, state: Arc<GatewayState>, claims: roomy_auth::Ti
                 let Ok(signal) = signal else { continue };
                 counters
                     .signals_received
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    .fetch_add(1, Ordering::Relaxed);
                 let commands = {
                     let mut core = state.sessions.lock().expect("the session table");
                     core.apply(Input::Signal {
@@ -161,7 +165,7 @@ async fn run(socket: WebSocket, state: Arc<GatewayState>, claims: roomy_auth::Ti
                         cursor: signal.cursor,
                     })
                 };
-                if !deliver(&state, &mut sink, commands, &counters).await {
+                if !deliver(&mut sink, commands, &counters).await {
                     break;
                 }
             }
@@ -175,18 +179,13 @@ async fn run(socket: WebSocket, state: Arc<GatewayState>, claims: roomy_auth::Ti
     state
         .counters
         .sessions_closed
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        .fetch_add(1, Ordering::Relaxed);
     let _ = sink.send(Message::Close(None)).await;
 }
 
 /// Write the core's commands to the socket. Returns false when the connection
 /// is finished.
-async fn deliver<S>(
-    state: &Arc<GatewayState>,
-    sink: &mut S,
-    commands: Vec<Command>,
-    counters: &Counters,
-) -> bool
+async fn deliver<S>(sink: &mut S, commands: Vec<Command>, counters: &Counters) -> bool
 where
     S: SinkExt<Message> + Unpin,
 {
@@ -197,30 +196,16 @@ where
                 if sink.send(Message::Text(text.into())).await.is_err() {
                     return false;
                 }
-                counters
-                    .frames_sent
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                counters.frames_sent.fetch_add(1, Ordering::Relaxed);
             }
-            Command::ReadBackfill {
-                session,
-                topic,
-                from,
-                to,
-            } => {
+            Command::ReadBackfill { .. } => {
                 // The rows behind the gap are the space's, and the registry is
                 // what knows which space this is. A worker would answer this
                 // over its own transport in a split deployment; embedded, the
                 // cursor pair is the whole answer, and the client reads the
                 // rows through the same XRPC it always does.
-                let _ = (session, &topic, from, to);
             }
-            Command::Close {
-                code,
-                reason,
-                session,
-            } => {
-                let _ = session;
-                let _ = state;
+            Command::Close { code, reason, .. } => {
                 let frame = CloseFrame {
                     code,
                     reason: reason.into(),
@@ -250,6 +235,6 @@ fn render(frame: &Frame) -> String {
     .to_string()
 }
 
-fn cursor_json(cursor: (i64, i64)) -> serde_json::Value {
+fn cursor_json(cursor: (i64, i64)) -> Value {
     json!({ "idx": cursor.0, "ord": cursor.1 })
 }

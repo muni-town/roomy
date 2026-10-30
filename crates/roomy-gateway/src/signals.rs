@@ -35,15 +35,19 @@ impl GatewaySignals {
         }
     }
 
+    /// A receiver for the signals published from now on.
     pub fn subscribe(&self) -> broadcast::Receiver<SpaceSignal> {
         self.sender.subscribe()
     }
 
+    /// How many sessions and tasks are subscribed.
+    #[must_use]
     pub fn subscriber_count(&self) -> usize {
         self.sender.receiver_count()
     }
 
     /// How many signals the workers in this process have emitted.
+    #[must_use]
     pub fn received(&self) -> u64 {
         self.received.load(Ordering::Relaxed)
     }

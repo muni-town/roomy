@@ -12,13 +12,17 @@ use axum::extract::{RawQuery, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 
-use roomy_ingest::{send_events, IngestState, SendEventsBody, WriteDenial};
+use roomy_ingest::IngestState;
+use roomy_ingest::SendEventsBody;
+use roomy_ingest::WriteDenial;
 use space_xrpc::ids::Nsid;
 
 use crate::GatewayState;
 
+/// The XRPC method this module answers.
 pub const NSID: &str = "space.roomy.space.sendEvents";
 
+/// axum handler for `POST /xrpc/space.roomy.space.sendEvents`.
 pub async fn http(
     State(state): State<Arc<GatewayState>>,
     headers: HeaderMap,
@@ -62,13 +66,10 @@ pub async fn http(
         service_did: state.service_did.clone(),
     };
     let now = state.clock.now_ms();
-    let mut log = match log.lock() {
-        Ok(log) => log,
-        Err(_) => {
-            return denied(WriteDenial::internal("event log lock poisoned"));
-        }
+    let Ok(mut log) = log.lock() else {
+        return denied(WriteDenial::internal("event log lock poisoned"));
     };
-    match send_events(&mut log, &ingest, &did, &body, now) {
+    match roomy_ingest::send_events(&mut log, &ingest, &did, &body, now) {
         Ok(_outcome) => {
             // The socket plane learns about the write the same way it learns
             // about any other: from the worker's post-commit signal, not from

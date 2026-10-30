@@ -8,12 +8,14 @@
 //! mounting it is what makes a split deployment a deployment rather than a
 //! second implementation.
 
-use std::sync::Mutex;
+use std::path;
+use std::sync::{Arc, Mutex};
 
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use rusqlite::{Connection, OpenFlags, Row};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -39,7 +41,7 @@ pub fn authorized(secret: Option<&str>, headers: &HeaderMap) -> bool {
 
 /// `POST /internal/signal` — a worker in another process says a space moved.
 pub async fn signal(
-    State(state): State<std::sync::Arc<GatewayState>>,
+    State(state): State<Arc<GatewayState>>,
     headers: HeaderMap,
     Json(wire): Json<roomy_space_worker::signal::WireSignal>,
 ) -> Response {
@@ -65,16 +67,16 @@ pub async fn signal(
 
 /// The log's rows, and the highest index it holds for the same space.
 pub struct FeedService {
-    conn: Mutex<rusqlite::Connection>,
+    conn: Mutex<Connection>,
 }
 
 impl FeedService {
     /// Open the event log read-only. A gateway that accepted writes has the file
     /// already; a read replica must be pointed at the owner's copy.
-    pub fn open(path: impl AsRef<std::path::Path>) -> rusqlite::Result<Self> {
-        let conn = rusqlite::Connection::open_with_flags(
+    pub fn open(path: impl AsRef<path::Path>) -> rusqlite::Result<Self> {
+        let conn = Connection::open_with_flags(
             path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -130,7 +132,7 @@ impl FeedService {
     }
 }
 
-fn row_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
+fn row_of(row: &Row<'_>) -> rusqlite::Result<FeedRow> {
     Ok(FeedRow {
         stream_id: row.get(0)?,
         idx: row.get(1)?,
@@ -147,6 +149,7 @@ fn row_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
     })
 }
 
+/// The query string of a feed request: a cursor and a page size.
 #[derive(Debug, Deserialize)]
 pub struct FeedQuery {
     #[serde(rename = "afterIdx", default)]
@@ -167,7 +170,7 @@ const MAX_LIMIT: usize = 5_000;
 
 /// `GET /internal/feed/{space}` — the owner's half of the HTTP change feed.
 pub async fn feed(
-    State(state): State<std::sync::Arc<GatewayState>>,
+    State(state): State<Arc<GatewayState>>,
     Path(space): Path<String>,
     Query(query): Query<FeedQuery>,
     headers: HeaderMap,

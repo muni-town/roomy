@@ -20,7 +20,7 @@
 //! appear as they are found, so a merged answer can list a fallback field
 //! after one the oEmbed response supplied.
 
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use axum::extract::{RawQuery, State};
@@ -28,13 +28,17 @@ use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use regex::Regex;
-use serde::ser::SerializeMap;
+use reqwest::header::{ACCEPT, ACCEPT_LANGUAGE, USER_AGENT};
+use reqwest::redirect::Policy;
+use reqwest::Client;
 use serde::{Serialize, Serializer};
-use serde_json::Value;
+use serde_json::{Map, Value};
+use space_xrpc::ids::Nsid;
 use space_xrpc::params::Params;
 
 use crate::GatewayState;
 
+/// The XRPC method this module answers.
 pub const NSID: &str = "space.roomy.embed.getLinkMetadata";
 
 /// Deadline for one outbound fetch — the page or its oEmbed endpoint.
@@ -56,11 +60,11 @@ const ACCEPT_HTML: &str =
 
 /// axum handler for `GET /xrpc/space.roomy.embed.getLinkMetadata`.
 pub async fn http(
-    State(state): State<std::sync::Arc<GatewayState>>,
+    State(state): State<Arc<GatewayState>>,
     headers: HeaderMap,
     RawQuery(query): RawQuery,
 ) -> Response {
-    let nsid = space_xrpc::ids::Nsid::try_from(NSID).expect("static nsid");
+    let nsid = Nsid::try_from(NSID).expect("static nsid");
     let params = Params::parse(query.as_deref());
     let _context = match crate::reads::context(&state, &headers, &nsid).await {
         Ok(context) => context,
@@ -198,6 +202,8 @@ impl LinkMetadata {
 
 impl Serialize for LinkMetadata {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+
         let mut map = serializer.serialize_map(Some(self.entries.len()))?;
         for (key, field) in &self.entries {
             map.serialize_entry(key.name(), field)?;
@@ -220,11 +226,11 @@ fn fetch_timeout() -> Duration {
 /// The one client for outbound link reads. Built on first use so the process
 /// holds a single connection pool, with the fetch deadline applied to every
 /// request and redirects followed as a browser would.
-fn http_client() -> Option<&'static reqwest::Client> {
-    static CLIENT: LazyLock<Option<reqwest::Client>> = LazyLock::new(|| {
-        reqwest::Client::builder()
+fn http_client() -> Option<&'static Client> {
+    static CLIENT: LazyLock<Option<Client>> = LazyLock::new(|| {
+        Client::builder()
             .timeout(fetch_timeout())
-            .redirect(reqwest::redirect::Policy::limited(20))
+            .redirect(Policy::limited(20))
             .build()
             .ok()
     });
@@ -256,9 +262,9 @@ async fn fetch_page(url: &str) -> FetchedPage {
 
     let response = match client
         .get(url)
-        .header(reqwest::header::USER_AGENT, BROWSER_UA)
-        .header(reqwest::header::ACCEPT, ACCEPT_HTML)
-        .header(reqwest::header::ACCEPT_LANGUAGE, "en,en-US;q=0.9")
+        .header(USER_AGENT, BROWSER_UA)
+        .header(ACCEPT, ACCEPT_HTML)
+        .header(ACCEPT_LANGUAGE, "en,en-US;q=0.9")
         .send()
         .await
     {
@@ -323,8 +329,8 @@ async fn fetch_oembed(endpoint: &str, url: &str) -> Option<Value> {
     let target = build_oembed_url(endpoint, url);
     let response = client
         .get(&target)
-        .header(reqwest::header::USER_AGENT, BROWSER_UA)
-        .header(reqwest::header::ACCEPT, "application/json")
+        .header(USER_AGENT, BROWSER_UA)
+        .header(ACCEPT, "application/json")
         .send()
         .await
         .ok()?;
@@ -530,7 +536,7 @@ fn truthy(value: &Value) -> bool {
 }
 
 /// A non-empty string member of an oEmbed object.
-fn text_field<'a>(object: &'a serde_json::Map<String, Value>, key: &str) -> Option<&'a str> {
+fn text_field<'a>(object: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     object
         .get(key)
         .and_then(Value::as_str)

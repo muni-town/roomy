@@ -22,6 +22,7 @@ use axum::http::HeaderMap;
 use space_xrpc::error::XrpcError;
 use space_xrpc::handlers::common::Context;
 use space_xrpc::ids::Nsid;
+use space_xrpc::read_positions::{ReadPositions, HEADER};
 
 use crate::GatewayState;
 
@@ -38,13 +39,9 @@ pub async fn context(
 ) -> Result<Context, XrpcError> {
     let caller = state.reads.verifier.verify(headers, nsid).await?;
     let positions = if caller.did.is_some() {
-        space_xrpc::read_positions::ReadPositions::decode(
-            headers
-                .get(space_xrpc::read_positions::HEADER)
-                .and_then(|value| value.to_str().ok()),
-        )?
+        ReadPositions::decode(headers.get(HEADER).and_then(|value| value.to_str().ok()))?
     } else {
-        space_xrpc::read_positions::ReadPositions::default()
+        ReadPositions::default()
     };
     Ok(Context {
         caller: caller.did,

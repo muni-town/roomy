@@ -19,8 +19,8 @@
 //! mentions strictly older than it.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock};
 
 use axum::extract::{RawQuery, State};
 use axum::http::HeaderMap;
@@ -31,6 +31,7 @@ use serde::Serialize;
 use space_xrpc::dto::MessageDto;
 use space_xrpc::error::XrpcError;
 use space_xrpc::handlers::common::Context;
+use space_xrpc::ids::Nsid;
 use space_xrpc::params::Params;
 use space_xrpc::queries::messages::{select_messages, SelectScope};
 use space_xrpc::state::{SpaceReadDb, XrpcState};
@@ -41,6 +42,7 @@ use space_xrpc::store::{
 
 use crate::GatewayState;
 
+/// The XRPC method this module answers.
 pub const NSID: &str = "space.roomy.mention.getMentions";
 
 /// One row of the global mention index.
@@ -76,7 +78,7 @@ pub struct SqliteMentionIndex {
 
 impl SqliteMentionIndex {
     /// Open `path` read-only.
-    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, XrpcError> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, XrpcError> {
         Ok(Self {
             db: SpaceReadDb::open_readonly(path)?,
         })
@@ -355,12 +357,13 @@ async fn mentions(
 }
 
 /// axum handler for `GET /xrpc/space.roomy.mention.getMentions`.
+/// axum handler for `GET /xrpc/space.roomy.mention.getMentions`.
 pub async fn http(
-    State(state): State<std::sync::Arc<GatewayState>>,
+    State(state): State<Arc<GatewayState>>,
     headers: HeaderMap,
     RawQuery(query): RawQuery,
 ) -> Response {
-    let nsid = space_xrpc::ids::Nsid::try_from(NSID).expect("static nsid");
+    let nsid = Nsid::try_from(NSID).expect("static nsid");
     let params = Params::parse(query.as_deref());
     let context = match crate::reads::context(&state, &headers, &nsid).await {
         Ok(context) => context,

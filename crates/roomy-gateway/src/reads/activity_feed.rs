@@ -23,10 +23,12 @@ use axum::Json;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use serde_json::value::RawValue;
+use serde_json::Value;
 
 use space_xrpc::dto::{Attachment, LinkEmbedDto, MediaDto, ReactionDto};
 use space_xrpc::error::XrpcError;
 use space_xrpc::handlers::common::Context;
+use space_xrpc::ids::Nsid;
 use space_xrpc::params::Params;
 use space_xrpc::queries::links::canonical_url;
 use space_xrpc::queries::messages::decode_content;
@@ -35,6 +37,7 @@ use space_xrpc::time::iso_from_ms;
 
 use crate::GatewayState;
 
+/// The XRPC method this module answers.
 pub const NSID: &str = "space.roomy.space.getActivityFeed";
 
 /// axum handler for GET /xrpc/space.roomy.space.getActivityFeed.
@@ -43,8 +46,8 @@ pub async fn http(
     headers: HeaderMap,
     RawQuery(query): RawQuery,
 ) -> Response {
-    let nsid = space_xrpc::ids::Nsid::try_from(NSID).expect("static nsid");
-    let params = space_xrpc::params::Params::parse(query.as_deref());
+    let nsid = Nsid::try_from(NSID).expect("static nsid");
+    let params = Params::parse(query.as_deref());
     let ctx = match crate::reads::context(&state, &headers, &nsid).await {
         Ok(ctx) => ctx,
         Err(error) => return error.into_response(),
@@ -675,12 +678,12 @@ async fn run(
                   where entity in (select value from json_each(?1))",
             )?;
             let mut mapped = statement.query_map([id_json.as_str()], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
+                Ok(ReactionRow {
+                    message_id: row.get(0)?,
+                    reaction: row.get(1)?,
+                    user: row.get(2)?,
+                    reaction_id: row.get(3)?,
+                })
             })?;
             let mut rows = Vec::new();
             for row in mapped.by_ref() {
@@ -819,14 +822,14 @@ fn hydrated_author(
         avatar,
     };
     if let Some(profile) = stores.profile(&author.did) {
-        if profile.name.is_some() {
-            author.name = profile.name;
+        if let Some(name) = profile.name {
+            author.name = Some(name);
         }
-        if profile.handle.is_some() {
-            author.handle = profile.handle;
+        if let Some(handle) = profile.handle {
+            author.handle = Some(handle);
         }
-        if profile.avatar.is_some() {
-            author.avatar = profile.avatar;
+        if let Some(avatar) = profile.avatar {
+            author.avatar = Some(avatar);
         }
     }
     author
@@ -840,15 +843,15 @@ fn hydrated_author(
 /// strings. Only the ids are needed here, because the array's order already
 /// carries the ordering the window was built in.
 fn parse_recent_message_ids(raw: &str) -> Vec<String> {
-    let Ok(serde_json::Value::Array(items)) = serde_json::from_str::<serde_json::Value>(raw) else {
+    let Ok(Value::Array(items)) = serde_json::from_str::<Value>(raw) else {
         return Vec::new();
     };
     let mut ids = Vec::with_capacity(items.len());
     for item in items {
         match item {
-            serde_json::Value::String(id) => ids.push(id),
-            serde_json::Value::Object(entry) => {
-                if let (Some(serde_json::Value::String(id)), Some(serde_json::Value::Number(_))) =
+            Value::String(id) => ids.push(id),
+            Value::Object(entry) => {
+                if let (Some(Value::String(id)), Some(Value::Number(_))) =
                     (entry.get("id"), entry.get("ts"))
                 {
                     ids.push(id.clone());
@@ -919,9 +922,10 @@ fn attachment_from_embed_row(row: &EmbedRow) -> Attachment {
         // its `data`, not its place.
         EmbedKind::Tile => Attachment::Tile {
             url: row.url.clone(),
-            data: row.data.as_deref().and_then(|text| {
-                serde_json::from_str::<Box<serde_json::value::RawValue>>(text).ok()
-            }),
+            data: row
+                .data
+                .as_deref()
+                .and_then(|text| serde_json::from_str::<Box<RawValue>>(text).ok()),
         },
     }
 }
@@ -1024,24 +1028,31 @@ struct ReactionBucket {
     mine: HashMap<String, String>,
 }
 
+/// One `comp_reaction` row: the message reacted to, the emoji, who reacted, and
+/// that reaction's own id.
+#[derive(Debug)]
+struct ReactionRow {
+    message_id: String,
+    reaction: String,
+    user: String,
+    reaction_id: String,
+}
+
 /// Group reaction rows into `{ emoji, count, myReactionId? }` per message.
-fn group_reactions(
-    rows: Vec<(String, String, String, String)>,
-    viewer_did: &str,
-) -> HashMap<String, Vec<ReactionDto>> {
+fn group_reactions(rows: Vec<ReactionRow>, viewer_did: &str) -> HashMap<String, Vec<ReactionDto>> {
     let mut buckets: HashMap<String, ReactionBucket> = HashMap::new();
-    for (entity, reaction, user, reaction_id) in rows {
-        let bucket = buckets.entry(entity).or_default();
-        if !bucket.dids.contains_key(&reaction) {
-            bucket.order.push(reaction.clone());
+    for row in rows {
+        let bucket = buckets.entry(row.message_id).or_default();
+        if !bucket.dids.contains_key(&row.reaction) {
+            bucket.order.push(row.reaction.clone());
         }
         bucket
             .dids
-            .entry(reaction.clone())
+            .entry(row.reaction.clone())
             .or_default()
-            .insert(user.clone());
-        if user == viewer_did {
-            bucket.mine.insert(reaction, reaction_id);
+            .insert(row.user.clone());
+        if row.user == viewer_did {
+            bucket.mine.insert(row.reaction, row.reaction_id);
         }
     }
 
