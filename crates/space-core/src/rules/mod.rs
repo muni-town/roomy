@@ -15,9 +15,9 @@ mod reaction;
 mod room;
 mod space_config;
 
-use crate::change::{RecordChange, RecordKind, RecordPatch};
+use crate::change::{ChangeBase, RecordBody, RecordChange, RecordKind, RecordPatch};
 use crate::context::RuleContext;
-use crate::effects::{Effect, Value};
+use crate::effects::{Effect, Target, Value};
 use crate::ids::SpaceDid;
 
 /// A change that cannot be planned.
@@ -75,7 +75,7 @@ fn index_created_entities(effects: &mut Vec<Effect>) {
         let Effect::Sql(statement) = effect else {
             continue;
         };
-        if statement.target != crate::effects::Target::Space {
+        if statement.target != Target::Space {
             continue;
         }
         if !statement
@@ -85,69 +85,81 @@ fn index_created_entities(effects: &mut Vec<Effect>) {
         {
             continue;
         }
-        match (statement.params.first(), statement.params.get(1)) {
-            (Some(Value::Text(id)), Some(Value::Text(stream))) if !stream.is_empty() => {
-                extra.push(Effect::global(
-                    ENTITY_SPACE,
-                    vec![Value::Text(id.clone()), Value::Text(stream.clone())],
-                ));
-            }
-            _ => {}
+        let (Some(Value::Text(id)), Some(Value::Text(stream))) =
+            (statement.params.first(), statement.params.get(1))
+        else {
+            continue;
+        };
+        if stream.is_empty() {
+            continue;
         }
+        extra.push(Effect::global(
+            ENTITY_SPACE,
+            vec![Value::Text(id.clone()), Value::Text(stream.clone())],
+        ));
     }
     effects.extend(extra);
 }
 
 fn create_effects(
     kind: RecordKind,
-    base: &crate::change::ChangeBase,
-    record: &crate::change::RecordBody,
+    base: &ChangeBase,
+    record: &RecordBody,
     ctx: &RuleContext,
 ) -> Result<Vec<Effect>, RuleError> {
-    use crate::change::RecordBody as B;
     let effects = match (kind, record) {
-        (RecordKind::Message, B::Message(record)) => message::create_effects(base, record, ctx)?,
-        (RecordKind::Reaction, B::Reaction(record)) => reaction::create_effects(base, record, ctx),
-        (RecordKind::Room, B::Room(record)) => room::create_effects(base, record, ctx),
-        (RecordKind::SpaceInfo, B::SpaceInfo(record)) => {
+        (RecordKind::Message, RecordBody::Message(record)) => {
+            message::create_effects(base, record, ctx)?
+        }
+        (RecordKind::Reaction, RecordBody::Reaction(record)) => {
+            reaction::create_effects(base, record, ctx)
+        }
+        (RecordKind::Room, RecordBody::Room(record)) => room::create_effects(base, record, ctx),
+        (RecordKind::SpaceInfo, RecordBody::SpaceInfo(record)) => {
             space_config::space_info_effects(record.clone(), ctx)
         }
-        (RecordKind::SpaceSidebar, B::SpaceSidebar(record)) => {
+        (RecordKind::SpaceSidebar, RecordBody::SpaceSidebar(record)) => {
             space_config::space_sidebar_effects(record, ctx)
         }
-        (RecordKind::Membership, B::Membership(record)) => {
+        (RecordKind::Membership, RecordBody::Membership(record)) => {
             membership::join_effects(base, record, ctx)
         }
-        (RecordKind::Ban, B::Ban(record)) => membership::ban_create_effects(base, record, ctx),
-        (RecordKind::Invite, B::Invite(record)) => {
+        (RecordKind::Ban, RecordBody::Ban(record)) => {
+            membership::ban_create_effects(base, record, ctx)
+        }
+        (RecordKind::Invite, RecordBody::Invite(record)) => {
             membership::invite_create_effects(base, record, ctx)
         }
-        (RecordKind::Role, B::Role(record)) => permission::role_create_effects(base, record, ctx),
-        (RecordKind::RoleGrant, B::RoleGrant(record)) => {
+        (RecordKind::Role, RecordBody::Role(record)) => {
+            permission::role_create_effects(base, record, ctx)
+        }
+        (RecordKind::RoleGrant, RecordBody::RoleGrant(record)) => {
             permission::role_grant_create_effects(base, record, ctx)
         }
-        (RecordKind::RoomPermission, B::RoomPermission(record)) => {
+        (RecordKind::RoomPermission, RecordBody::RoomPermission(record)) => {
             permission::room_permission_effects(base, record, ctx)
         }
-        (RecordKind::FederationRequest, B::FederationRequest(record)) => {
+        (RecordKind::FederationRequest, RecordBody::FederationRequest(record)) => {
             federation::request_create_effects(record, ctx)
         }
-        (RecordKind::FederationGrant, B::FederationGrant(_)) => {
+        (RecordKind::FederationGrant, RecordBody::FederationGrant(_)) => {
             return Err(RuleError::Invalid {
                 kind: "federationGrant",
                 message: "a grant is created by an update".to_string(),
             })
         }
-        (RecordKind::Profile, B::Profile(record)) => {
+        (RecordKind::Profile, RecordBody::Profile(record)) => {
             account::profile_effects(base, &account::ProfileFields::from_record(record), ctx)
         }
-        (RecordKind::CalendarLink, B::CalendarLink(record)) => {
+        (RecordKind::CalendarLink, RecordBody::CalendarLink(record)) => {
             account::calendar_link_effects(base, record, ctx)
         }
-        (RecordKind::VoiceCall, B::VoiceCall(record)) => {
+        (RecordKind::VoiceCall, RecordBody::VoiceCall(record)) => {
             account::call_create_effects(base, record, ctx)
         }
-        _ => {
+        // The caller matched on `change`'s kind, so a body of another kind
+        // cannot reach here; the arm keeps the match total over the pair.
+        (kind, _) => {
             return Err(RuleError::Invalid {
                 kind: kind.name(),
                 message: "record body does not match its kind".to_string(),
@@ -159,43 +171,46 @@ fn create_effects(
 
 fn update_effects(
     kind: RecordKind,
-    base: &crate::change::ChangeBase,
+    base: &ChangeBase,
     patch: &RecordPatch,
     ctx: &RuleContext,
 ) -> Result<Vec<Effect>, RuleError> {
-    use crate::change::RecordPatch as P;
     let effects = match (kind, patch) {
-        (RecordKind::Message, P::Message(patch)) => message::update_effects(base, patch, ctx)?,
-        (RecordKind::Room, P::Room(patch)) => room::update_effects(base, patch, ctx),
-        (RecordKind::SpaceInfo, P::SpaceInfo(patch)) => {
+        (RecordKind::Message, RecordPatch::Message(patch)) => {
+            message::update_effects(base, patch, ctx)?
+        }
+        (RecordKind::Room, RecordPatch::Room(patch)) => room::update_effects(base, patch, ctx),
+        (RecordKind::SpaceInfo, RecordPatch::SpaceInfo(patch)) => {
             space_config::space_info_effects(patch.clone(), ctx)
         }
-        (RecordKind::SpaceSidebar, P::SpaceSidebar(patch)) => {
+        (RecordKind::SpaceSidebar, RecordPatch::SpaceSidebar(patch)) => {
             space_config::space_sidebar_effects(patch, ctx)
         }
-        (RecordKind::Membership, P::Membership(patch)) => {
+        (RecordKind::Membership, RecordPatch::Membership(patch)) => {
             membership::admin_effects(base, patch, ctx)
         }
-        (RecordKind::Role, P::Role(patch)) => permission::role_update_effects(base, patch, ctx),
-        (RecordKind::RoomPermission, P::RoomPermission(patch)) => {
+        (RecordKind::Role, RecordPatch::Role(patch)) => {
+            permission::role_update_effects(base, patch, ctx)
+        }
+        (RecordKind::RoomPermission, RecordPatch::RoomPermission(patch)) => {
             permission::room_permission_effects(base, patch, ctx)
         }
-        (RecordKind::FederationRequest, P::FederationRequest(patch)) => {
+        (RecordKind::FederationRequest, RecordPatch::FederationRequest(patch)) => {
             federation::request_update_effects(base, patch, ctx)
         }
-        (RecordKind::FederationGrant, P::FederationGrant(patch)) => {
+        (RecordKind::FederationGrant, RecordPatch::FederationGrant(patch)) => {
             federation::grant_update_effects(base, patch, ctx)
         }
-        (RecordKind::Profile, P::Profile(patch)) => {
+        (RecordKind::Profile, RecordPatch::Profile(patch)) => {
             account::profile_effects(base, &account::ProfileFields::from_patch(patch), ctx)
         }
-        (RecordKind::CalendarLink, P::CalendarLink(patch)) => {
+        (RecordKind::CalendarLink, RecordPatch::CalendarLink(patch)) => {
             account::calendar_link_effects(base, patch, ctx)
         }
-        (RecordKind::VoiceCall, P::VoiceCall(patch)) => {
+        (RecordKind::VoiceCall, RecordPatch::VoiceCall(patch)) => {
             account::call_update_effects(base, patch, ctx)?
         }
-        _ => {
+        (kind, _) => {
             return Err(RuleError::Invalid {
                 kind: kind.name(),
                 message: "the kind carries no such update".to_string(),
@@ -242,6 +257,7 @@ fn delete_effects(
 /// instant — or, for an id that is not a ULID (a URL, a DID), the instant the
 /// log assigns the change. Both are values the log determines, so a replay
 /// writes the same row.
+#[must_use]
 pub(crate) fn ensure_entity(
     stream_id: &SpaceDid,
     entity_id: &str,
@@ -252,6 +268,9 @@ pub(crate) fn ensure_entity(
     ensure_entity_at(stream_id, entity_id, room, created_at)
 }
 
+/// [`ensure_entity`] with the row's creation instant supplied rather than
+/// derived from the entity id.
+#[must_use]
 pub(crate) fn ensure_entity_at(
     stream_id: &SpaceDid,
     entity_id: &str,

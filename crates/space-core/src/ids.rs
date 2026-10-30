@@ -16,14 +16,19 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub struct SpaceDid(Did);
 
 impl SpaceDid {
+    /// Parse a DID string into a space id.
+    ///
+    /// Returns [`KeyError::Did`] when `value` is not a DID.
     pub fn parse(value: impl Into<String>) -> Result<Self, KeyError> {
         Did::parse(value).map(Self).map_err(|_| KeyError::Did)
     }
 
+    /// The id's text, as the feed's `stream_id` column carries it.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
+    /// The validated DID underneath.
     pub fn did(&self) -> &Did {
         &self.0
     }
@@ -54,6 +59,10 @@ impl<'de> Deserialize<'de> for SpaceDid {
 pub struct Collection(String);
 
 impl Collection {
+    /// Parse a collection NSID.
+    ///
+    /// Returns [`KeyError::Collection`] unless `value` has three or more
+    /// non-empty dot-separated segments drawn from the NSID alphabet.
     pub fn parse(value: impl Into<String>) -> Result<Self, KeyError> {
         let value = value.into();
         let segments: Vec<&str> = value.split('.').collect();
@@ -69,6 +78,7 @@ impl Collection {
         Ok(Self(value))
     }
 
+    /// The NSID's text, as the feed's `collection` column carries it.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -86,8 +96,13 @@ impl fmt::Display for Collection {
 pub struct Rkey(String);
 
 impl Rkey {
+    /// The longest record key the syntax allows.
     pub const MAX_LEN: usize = 512;
 
+    /// Parse a record key.
+    ///
+    /// Returns [`KeyError::Rkey`] when `value` is empty, longer than
+    /// [`Rkey::MAX_LEN`], `.` or `..`, or outside the record-key alphabet.
     pub fn parse(value: impl Into<String>) -> Result<Self, KeyError> {
         let value = value.into();
         if value.is_empty() || value.len() > Self::MAX_LEN {
@@ -107,10 +122,13 @@ impl Rkey {
 
     /// A composite key: the parts joined with `~`, which appears in no DID or
     /// ULID and is in the record-key alphabet.
+    ///
+    /// Returns [`KeyError::Rkey`] when the joined key does not validate.
     pub fn composite(parts: &[&str]) -> Result<Self, KeyError> {
         Self::parse(parts.join("~"))
     }
 
+    /// The key's text, as the feed's `rkey` column carries it.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -157,7 +175,8 @@ impl<'de> Deserialize<'de> for Rkey {
 pub struct OrderStamp(String);
 
 impl OrderStamp {
-    /// The stamp's time half, in epoch milliseconds.
+    /// The stamp's time half, in epoch milliseconds, or 0 when the stamp does
+    /// not carry a readable time.
     ///
     /// The stamp is the log's 26-character ordering key: ten characters of
     /// ordering time, sixteen of log position. Only the time is ever read — by
@@ -167,6 +186,7 @@ impl OrderStamp {
         crate::time::ulid_time_ms(&self.0).unwrap_or(0)
     }
 
+    /// The stamp's text, as it sorts on the log.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -199,6 +219,10 @@ impl Serialize for OrderStamp {
 pub struct Cid(String);
 
 impl Cid {
+    /// Parse a base32 content identifier.
+    ///
+    /// Returns [`KeyError::Cid`] when `value` has no `b`/`B` multibase prefix
+    /// or the text after it is not base32.
     pub fn parse(value: impl Into<String>) -> Result<Self, KeyError> {
         let value = value.into();
         let base32 = value
@@ -211,6 +235,7 @@ impl Cid {
         Ok(Self(value))
     }
 
+    /// The identifier's text.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -222,6 +247,10 @@ impl Cid {
 pub struct Tid(String);
 
 impl Tid {
+    /// Parse a 13-character Crockford TID.
+    ///
+    /// Returns [`KeyError::Tid`] when `value` is the wrong length or outside
+    /// the Crockford alphabet.
     pub fn parse(value: impl Into<String>) -> Result<Self, KeyError> {
         let value = value.into();
         if value.len() != 13 || !crate::time::is_crockford(&value) {
@@ -230,6 +259,7 @@ impl Tid {
         Ok(Self(value))
     }
 
+    /// The TID's text.
     pub fn as_str(&self) -> &str {
         &self.0
     }

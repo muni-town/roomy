@@ -26,9 +26,12 @@ pub use digest::{
 pub use plan::{apply_plan, plan_batch, EntryChanges, PlannedEntry};
 pub use to_sql as value_to_sql;
 
-use rusqlite::Connection;
+use std::path::Path;
+
+use rusqlite::{Connection, Transaction};
 use space_core::effects::{DerivedStep, Effect, SqlEffect, Target, Value};
 use space_core::ids::SpaceDid;
+use space_core::RuleError;
 
 /// The per-space schema, shared with the TypeScript appserver.
 pub const SPACE_SCHEMA: &str = include_str!("../../../packages/appserver/src/db/schema-space.sql");
@@ -43,7 +46,7 @@ pub enum DbError {
     #[error("step produced a result the database rejected: {0}")]
     Step(String),
     #[error("{0}")]
-    Rule(#[from] space_core::RuleError),
+    Rule(#[from] RuleError),
     #[error("{0} is not an ordering stamp")]
     Stamp(String),
     /// A batch carried an epoch older than the one already written: another
@@ -61,7 +64,7 @@ pub struct SpaceDb {
 
 impl SpaceDb {
     /// Open the database at `path`, applying the schema.
-    pub fn open(path: impl AsRef<std::path::Path>, stream_id: SpaceDid) -> Result<Self, DbError> {
+    pub fn open(path: impl AsRef<Path>, stream_id: SpaceDid) -> Result<Self, DbError> {
         if let Some(parent) = path.as_ref().parent() {
             std::fs::create_dir_all(parent).ok();
         }
@@ -85,14 +88,18 @@ impl SpaceDb {
         Ok(Self { conn, stream_id })
     }
 
+    /// The space this database projects.
     pub fn stream_id(&self) -> &SpaceDid {
         &self.stream_id
     }
 
+    /// The connection underneath, for a caller that has to read the rows.
     pub fn connection(&self) -> &Connection {
         &self.conn
     }
 
+    /// The connection underneath, for a caller that has to write outside a
+    /// batch.
     pub fn connection_mut(&mut self) -> &mut Connection {
         &mut self.conn
     }
@@ -230,7 +237,7 @@ impl SpaceDb {
 /// dies before the commit, dropping this batch rolls the space transaction back
 /// so the cursor stays where it was and the same changes are read again.
 pub struct PendingBatch<'db> {
-    transaction: rusqlite::Transaction<'db>,
+    transaction: Transaction<'db>,
     cursor: (i64, i64),
     /// The lease epoch this batch was planned under.
     epoch: i64,
@@ -239,6 +246,7 @@ pub struct PendingBatch<'db> {
 
 impl PendingBatch<'_> {
     /// The statements destined for the global database, in emission order.
+    #[must_use]
     pub fn globals(&self) -> &[SqlEffect] {
         &self.globals
     }
@@ -283,6 +291,7 @@ impl PendingBatch<'_> {
 }
 
 /// Split effects into statements and steps, keeping each list's order.
+#[must_use]
 pub fn split(effects: &[Effect]) -> (Vec<&SqlEffect>, Vec<&DerivedStep>) {
     let mut statements: Vec<&SqlEffect> = Vec::new();
     let mut steps: Vec<&DerivedStep> = Vec::new();
@@ -296,6 +305,7 @@ pub fn split(effects: &[Effect]) -> (Vec<&SqlEffect>, Vec<&DerivedStep>) {
 }
 
 /// A typed parameter as SQLite takes it.
+#[must_use]
 pub fn to_sql(value: &Value) -> rusqlite::types::Value {
     use rusqlite::types::Value as Sql;
     match value {

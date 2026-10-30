@@ -7,7 +7,7 @@
 //! a reorder key is computed between the neighbours it names.
 
 use rusqlite::{params, Connection};
-use space_core::effects::{DerivedStep, SqlEffect};
+use space_core::effects::{DerivedStep, SqlEffect, Target, Value};
 use space_core::ids::SpaceDid;
 use space_core::time;
 
@@ -364,22 +364,19 @@ fn store_links(
             continue;
         }
         globals.push(SqlEffect {
-            target: space_core::Target::Global,
+            target: Target::Global,
             sql: "insert or ignore into entity_space (entity_id, space_did) values (?, ?)",
-            params: vec![
-                space_core::Value::text(url),
-                space_core::Value::text(space_id.as_str()),
-            ],
+            params: vec![Value::text(url), Value::text(space_id.as_str())],
         });
         globals.push(SqlEffect {
-            target: space_core::Target::Global,
+            target: Target::Global,
             sql: "insert or ignore into pending_links (space_did, message_id, url, created_at)
                   values (?, ?, ?, ?)",
             params: vec![
-                space_core::Value::text(space_id.as_str()),
-                space_core::Value::text(message_id),
-                space_core::Value::text(url),
-                space_core::Value::Integer(
+                Value::text(space_id.as_str()),
+                Value::text(message_id),
+                Value::text(url),
+                Value::Integer(
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_millis() as i64)

@@ -18,9 +18,12 @@ use rusqlite::Connection;
 use space_core::change::{
     decode_row, DecodeError, FeedRow, RecordBody, RecordChange, RecordKind, RecordPatch,
 };
+use space_core::effects::{DerivedStep, SqlEffect};
+use space_core::ids::SpaceDid;
+use space_core::time;
 use space_core::{Effect, PlanMode, RuleContext};
 
-use crate::DbError;
+use crate::{DbError, SpaceDb};
 
 /// One entry's effects, in application order.
 #[derive(Debug, Clone, PartialEq)]
@@ -84,7 +87,7 @@ pub fn group_entries(rows: &[FeedRow]) -> Result<Vec<EntryChanges>, GroupError> 
 /// Plan a batch, reading the prior state its changes need.
 pub fn plan_batch(
     conn: &Connection,
-    stream_id: &space_core::SpaceDid,
+    stream_id: &SpaceDid,
     entries: &[EntryChanges],
     mode: PlanMode,
 ) -> Result<Vec<PlannedEntry>, DbError> {
@@ -103,7 +106,7 @@ pub fn plan_batch(
             let key = change.base().rkey.as_str().to_string();
             // The change's instant comes from its entry's ordering stamp, so a
             // replay stamps the same values the live path did.
-            let decided_at_ms = space_core::time::ulid_time_ms(&entry.order_stamp)
+            let decided_at_ms = time::ulid_time_ms(&entry.order_stamp)
                 .ok_or_else(|| DbError::Stamp(entry.order_stamp.clone()))?;
             let mut ctx = RuleContext {
                 stream_id: stream_id.clone(),
@@ -294,11 +297,10 @@ fn read_call_rooms(conn: &Connection, ids: &[String]) -> Result<HashMap<String, 
 /// Flatten a planned batch: every entry's statements first, then every entry's
 /// derived steps, which is the order the TypeScript materialiser applies a
 /// chunk in.
-pub fn flatten(
-    planned: &[PlannedEntry],
-) -> (Vec<&space_core::SqlEffect>, Vec<&space_core::DerivedStep>) {
-    let mut statements: Vec<&space_core::SqlEffect> = Vec::new();
-    let mut steps: Vec<&space_core::DerivedStep> = Vec::new();
+#[must_use]
+pub fn flatten(planned: &[PlannedEntry]) -> (Vec<&SqlEffect>, Vec<&DerivedStep>) {
+    let mut statements: Vec<&SqlEffect> = Vec::new();
+    let mut steps: Vec<&DerivedStep> = Vec::new();
     for entry in planned {
         let (entry_statements, entry_steps) = crate::split(&entry.effects);
         statements.extend(entry_statements);
@@ -314,10 +316,7 @@ pub fn flatten(
 /// matters: a window rebuilt by one change has to see the rows the batch's other
 /// changes wrote. Global-targeted statements, including those a step produced,
 /// are returned for the caller's sink.
-pub fn apply_plan(
-    db: &mut crate::SpaceDb,
-    planned: &[PlannedEntry],
-) -> Result<Vec<space_core::SqlEffect>, DbError> {
+pub fn apply_plan(db: &mut SpaceDb, planned: &[PlannedEntry]) -> Result<Vec<SqlEffect>, DbError> {
     let (statements, steps) = flatten(planned);
     let mut globals = db.apply_statements(&statements)?;
     globals.extend(db.apply_steps(&steps)?);

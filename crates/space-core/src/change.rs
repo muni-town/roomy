@@ -11,7 +11,7 @@
 use roomy_events::Did;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::ids::{Collection, OrderStamp, Rkey};
+use crate::ids::{Collection, KeyError, OrderStamp, Rkey};
 
 /// The sixteen record kinds the event log collapses onto.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,6 +55,8 @@ const KIND_NAMES: [(&str, RecordKind); 16] = [
 ];
 
 impl RecordKind {
+    /// The kind `name` is the wire name of, or `None` when the feed carries a
+    /// name this crate does not know.
     pub fn parse(name: &str) -> Option<Self> {
         KIND_NAMES
             .iter()
@@ -62,6 +64,7 @@ impl RecordKind {
             .map(|(_, kind)| *kind)
     }
 
+    /// The kind's wire name, as the feed's `kind` column carries it.
     pub fn name(&self) -> &'static str {
         KIND_NAMES
             .iter()
@@ -125,6 +128,7 @@ pub enum RecordChange {
 }
 
 impl RecordChange {
+    /// The fields every change carries, whatever its op.
     pub fn base(&self) -> &ChangeBase {
         match self {
             RecordChange::Create { base, .. }
@@ -133,6 +137,7 @@ impl RecordChange {
         }
     }
 
+    /// The kind of record the change is for.
     pub fn kind(&self) -> RecordKind {
         self.base().kind
     }
@@ -182,7 +187,7 @@ pub enum DecodeError {
     #[error("body is not the shape {0} carries")]
     BodyShape(String),
     #[error("not a key: {0}")]
-    Key(#[from] crate::ids::KeyError),
+    Key(#[from] KeyError),
     #[error("not a DID")]
     Did,
     #[error("body is not valid JSON: {0}")]
@@ -213,7 +218,7 @@ pub fn decode_row(row: &FeedRow) -> Result<RecordChange, DecodeError> {
         collection,
         rkey: Rkey::parse(row.rkey.clone())?,
         order_stamp: serde_json::from_value(serde_json::Value::String(row.order_stamp.clone()))
-            .map_err(|_| DecodeError::Key(crate::ids::KeyError::Rkey))?,
+            .map_err(|_| DecodeError::Key(KeyError::Rkey))?,
     };
 
     match row.op.as_str() {
@@ -248,66 +253,40 @@ pub fn decode_row(row: &FeedRow) -> Result<RecordChange, DecodeError> {
 fn parse_body(kind: RecordKind, body: &str) -> Result<RecordBody, DecodeError> {
     // The feed row names the kind, so the body is read as that shape: a row
     // cannot carry one kind's name and another kind's fields.
-    let shape = |err: serde_json::Error| DecodeError::Json(err.to_string());
     Ok(match kind {
-        RecordKind::Message => RecordBody::Message(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::Reaction => RecordBody::Reaction(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::Room => RecordBody::Room(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::SpaceInfo => RecordBody::SpaceInfo(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::SpaceSidebar => {
-            RecordBody::SpaceSidebar(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::Membership => {
-            RecordBody::Membership(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::Ban => RecordBody::Ban(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::Invite => RecordBody::Invite(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::Role => RecordBody::Role(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::RoleGrant => RecordBody::RoleGrant(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::RoomPermission => {
-            RecordBody::RoomPermission(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::FederationRequest => {
-            RecordBody::FederationRequest(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::FederationGrant => {
-            RecordBody::FederationGrant(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::Profile => RecordBody::Profile(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::CalendarLink => {
-            RecordBody::CalendarLink(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::VoiceCall => RecordBody::VoiceCall(serde_json::from_str(body).map_err(shape)?),
+        RecordKind::Message => RecordBody::Message(parse_json(body)?),
+        RecordKind::Reaction => RecordBody::Reaction(parse_json(body)?),
+        RecordKind::Room => RecordBody::Room(parse_json(body)?),
+        RecordKind::SpaceInfo => RecordBody::SpaceInfo(parse_json(body)?),
+        RecordKind::SpaceSidebar => RecordBody::SpaceSidebar(parse_json(body)?),
+        RecordKind::Membership => RecordBody::Membership(parse_json(body)?),
+        RecordKind::Ban => RecordBody::Ban(parse_json(body)?),
+        RecordKind::Invite => RecordBody::Invite(parse_json(body)?),
+        RecordKind::Role => RecordBody::Role(parse_json(body)?),
+        RecordKind::RoleGrant => RecordBody::RoleGrant(parse_json(body)?),
+        RecordKind::RoomPermission => RecordBody::RoomPermission(parse_json(body)?),
+        RecordKind::FederationRequest => RecordBody::FederationRequest(parse_json(body)?),
+        RecordKind::FederationGrant => RecordBody::FederationGrant(parse_json(body)?),
+        RecordKind::Profile => RecordBody::Profile(parse_json(body)?),
+        RecordKind::CalendarLink => RecordBody::CalendarLink(parse_json(body)?),
+        RecordKind::VoiceCall => RecordBody::VoiceCall(parse_json(body)?),
     })
 }
 
 fn parse_patch(kind: RecordKind, body: &str) -> Result<RecordPatch, DecodeError> {
-    let shape = |err: serde_json::Error| DecodeError::Json(err.to_string());
     Ok(match kind {
-        RecordKind::Message => RecordPatch::Message(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::Room => RecordPatch::Room(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::SpaceInfo => RecordPatch::SpaceInfo(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::SpaceSidebar => {
-            RecordPatch::SpaceSidebar(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::Membership => {
-            RecordPatch::Membership(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::Role => RecordPatch::Role(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::RoomPermission => {
-            RecordPatch::RoomPermission(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::FederationRequest => {
-            RecordPatch::FederationRequest(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::FederationGrant => {
-            RecordPatch::FederationGrant(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::Profile => RecordPatch::Profile(serde_json::from_str(body).map_err(shape)?),
-        RecordKind::CalendarLink => {
-            RecordPatch::CalendarLink(serde_json::from_str(body).map_err(shape)?)
-        }
-        RecordKind::VoiceCall => RecordPatch::VoiceCall(serde_json::from_str(body).map_err(shape)?),
+        RecordKind::Message => RecordPatch::Message(parse_json(body)?),
+        RecordKind::Room => RecordPatch::Room(parse_json(body)?),
+        RecordKind::SpaceInfo => RecordPatch::SpaceInfo(parse_json(body)?),
+        RecordKind::SpaceSidebar => RecordPatch::SpaceSidebar(parse_json(body)?),
+        RecordKind::Membership => RecordPatch::Membership(parse_json(body)?),
+        RecordKind::Role => RecordPatch::Role(parse_json(body)?),
+        RecordKind::RoomPermission => RecordPatch::RoomPermission(parse_json(body)?),
+        RecordKind::FederationRequest => RecordPatch::FederationRequest(parse_json(body)?),
+        RecordKind::FederationGrant => RecordPatch::FederationGrant(parse_json(body)?),
+        RecordKind::Profile => RecordPatch::Profile(parse_json(body)?),
+        RecordKind::CalendarLink => RecordPatch::CalendarLink(parse_json(body)?),
+        RecordKind::VoiceCall => RecordPatch::VoiceCall(parse_json(body)?),
         // A kind whose patch body is `never`: an update to it cannot exist.
         RecordKind::Reaction | RecordKind::Ban | RecordKind::Invite | RecordKind::RoleGrant => {
             return Err(DecodeError::BodyShape(format!(
@@ -316,6 +295,11 @@ fn parse_patch(kind: RecordKind, body: &str) -> Result<RecordPatch, DecodeError>
             )));
         }
     })
+}
+
+/// One body, read as the shape its kind carries.
+fn parse_json<T: serde::de::DeserializeOwned>(body: &str) -> Result<T, DecodeError> {
+    serde_json::from_str(body).map_err(|err| DecodeError::Json(err.to_string()))
 }
 
 // ── Bodies ───────────────────────────────────────────────────────────────
@@ -342,6 +326,7 @@ pub enum RecordBody {
 }
 
 impl RecordBody {
+    /// The kind the body is a create of.
     pub fn kind(&self) -> RecordKind {
         match self {
             RecordBody::Message(_) => RecordKind::Message,
@@ -382,6 +367,7 @@ pub enum RecordPatch {
 }
 
 impl RecordPatch {
+    /// The kind the patch is an update to.
     pub fn kind(&self) -> RecordKind {
         match self {
             RecordPatch::Message(_) => RecordKind::Message,
@@ -450,6 +436,7 @@ pub struct MessagePatch {
     pub extensions: Option<Option<serde_json::Value>>,
 }
 
+/// The Discord message a bridged room was created from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiscordOrigin {
     pub snowflake: String,
@@ -457,6 +444,7 @@ pub struct DiscordOrigin {
     pub guild_id: String,
 }
 
+/// A room's create body: its kind, its `comp_info` fields and its parent.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RoomRecord {
     pub kind: String,
@@ -471,6 +459,7 @@ pub struct RoomRecord {
     pub discord_origin: Option<DiscordOrigin>,
 }
 
+/// The fields an `updateRoom` names; absent fields are left alone.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RoomPatch {
     #[serde(default)]
@@ -489,6 +478,7 @@ pub struct RoomPatch {
     pub parent: Option<Option<String>>,
 }
 
+/// A space's profile and join policy, as `comp_info` and `comp_space` hold it.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SpaceInfoRecord {
     pub name: Option<String>,
@@ -502,6 +492,7 @@ pub struct SpaceInfoRecord {
     pub suggest_to_others: Option<bool>,
 }
 
+/// The fields an `updateSpaceInfo` names; absent fields are left alone.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SpaceInfoPatch {
     #[serde(default, deserialize_with = "double_option")]
@@ -530,6 +521,7 @@ pub struct SpaceInfoPatch {
     pub suggest_to_others: Option<Option<bool>>,
 }
 
+/// One sidebar category: its optional stable id, its name and its children.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SidebarCategory {
     #[serde(default)]
@@ -539,6 +531,7 @@ pub struct SidebarCategory {
     pub children: Vec<String>,
 }
 
+/// The space's sidebar ordering, stored whole in `comp_space.sidebar_config`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SpaceSidebarRecord {
     pub categories: Vec<SidebarCategory>,
@@ -562,22 +555,26 @@ pub struct ReactionRecord {
     pub bridged: bool,
 }
 
+/// A membership: the user, and what they may do (`post` or `admin`).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct MembershipRecord {
     pub user: Did,
     pub can: String,
 }
 
+/// The level an admin grant or revoke sets.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct MembershipPatch {
     pub can: String,
 }
 
+/// A ban: the user the space refuses.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct BanRecord {
     pub user: Did,
 }
 
+/// An invite token and the user who minted it.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct InviteRecord {
     pub token: String,
@@ -585,6 +582,7 @@ pub struct InviteRecord {
     pub created_by: Did,
 }
 
+/// A role: the name, avatar and description a role's row carries.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RoleRecord {
     pub name: Option<String>,
@@ -592,6 +590,7 @@ pub struct RoleRecord {
     pub description: Option<String>,
 }
 
+/// The fields an `updateRole` names; absent fields are left alone.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RolePatch {
     #[serde(default, deserialize_with = "double_option")]
@@ -602,12 +601,14 @@ pub struct RolePatch {
     pub description: Option<Option<String>>,
 }
 
+/// A role granted to a user.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RoleGrantRecord {
     pub user: Did,
     pub role: String,
 }
 
+/// One room permission granted to a role.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RoomPermissionRecord {
     pub role: String,
@@ -615,6 +616,7 @@ pub struct RoomPermissionRecord {
     pub permission: String,
 }
 
+/// A federation request: the origin space asking to federate, and why.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FederationRequestRecord {
     #[serde(rename = "federatingSpace")]
@@ -624,6 +626,7 @@ pub struct FederationRequestRecord {
     pub message: Option<String>,
 }
 
+/// A federation request's decision: its status, the decider and their message.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FederationRequestPatch {
     pub status: String,
@@ -632,12 +635,14 @@ pub struct FederationRequestPatch {
     pub message: Option<String>,
 }
 
+/// A permission the receiving space grants the origin space in one room.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OriginGrant {
     pub room: String,
     pub permission: String,
 }
 
+/// A permission the origin space grants a grantee in one of its rooms.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReceiverGrant {
     pub room: String,
@@ -647,6 +652,7 @@ pub struct ReceiverGrant {
     pub grantee_kind: String,
 }
 
+/// A federation grant: the origin and receiver halves of the relationship.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FederationGrantRecord {
     #[serde(rename = "federatingSpace")]
@@ -677,6 +683,7 @@ pub enum FederationGrantPatch {
     },
 }
 
+/// A user's profile as the space-local `comp_info` row carries it.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ProfileRecord {
     pub name: Option<String>,
@@ -686,6 +693,7 @@ pub struct ProfileRecord {
     pub handle: Option<String>,
 }
 
+/// The fields a profile update names; absent fields are left alone.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ProfilePatch {
     #[serde(default, deserialize_with = "double_option")]
@@ -698,6 +706,7 @@ pub struct ProfilePatch {
     pub handle: Option<String>,
 }
 
+/// The space's OpenMeet connection: the group, the tenant and the API address.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct CalendarLinkRecord {
     #[serde(rename = "groupSlug")]
@@ -708,6 +717,7 @@ pub struct CalendarLinkRecord {
     pub api_url: String,
 }
 
+/// One voice call: the room it is in, its source and its start instant.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct VoiceCallRecord {
     pub room: String,
@@ -739,8 +749,9 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
-/// A byte string as the feed's JSON carries it: `{"$bytes": "<base64>"}`.
 mod blob {
+    //! A byte string as the feed's JSON carries it: `{"$bytes": "<base64>"}`.
+
     use base64::Engine as _;
     use serde::{Deserialize, Deserializer, Serializer};
 

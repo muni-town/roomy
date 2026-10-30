@@ -5,8 +5,9 @@
 //! read path's: a link is stored where a scan of the same content would find
 //! it, so the two cannot disagree about which URLs a message has.
 
-use regex::Regex;
 use std::sync::LazyLock;
+
+use regex::Regex;
 
 /// The URL pattern, as the TypeScript rule writes it: a scheme, a host with a
 /// dotted TLD, then everything up to whitespace or an angle bracket, ending on

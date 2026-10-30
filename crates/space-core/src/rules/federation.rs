@@ -18,6 +18,7 @@ use crate::change::{
 use crate::context::RuleContext;
 use crate::effects::{Effect, Value};
 
+/// A request: the pending relationship, revived if it had been removed.
 pub fn request_create_effects(record: &FederationRequestRecord, ctx: &RuleContext) -> Vec<Effect> {
     vec![Effect::global(
         "insert into space_federations (
@@ -43,6 +44,7 @@ pub fn request_create_effects(record: &FederationRequestRecord, ctx: &RuleContex
     )]
 }
 
+/// The origin space's decision on a pending request.
 pub fn request_update_effects(
     base: &ChangeBase,
     patch: &FederationRequestPatch,
@@ -68,8 +70,9 @@ pub fn request_update_effects(
     )]
 }
 
+/// A removed relationship keeps its row, marked `removed`, so a later request
+/// can revive it.
 pub fn request_delete_effects(change: &RecordChange, ctx: &RuleContext) -> Vec<Effect> {
-    // A removed relationship keeps its row so a later request can revive it.
     vec![Effect::global(
         "update space_federations set
            status = 'removed',
@@ -163,6 +166,7 @@ pub fn grant_update_effects(
     }
 }
 
+/// A revoked grant: both halves of the relationship's permissions.
 pub fn grant_delete_effects(change: &RecordChange) -> Vec<Effect> {
     let base = change.base();
     let origin = base.repo.as_str();

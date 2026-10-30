@@ -37,6 +37,7 @@ pub enum PlanMode {
 }
 
 impl PlanMode {
+    /// Whether this is a replay into a database being rebuilt.
     pub fn is_backfill(self) -> bool {
         matches!(self, PlanMode::Backfill)
     }
@@ -68,6 +69,8 @@ pub struct RuleContext {
 }
 
 impl RuleContext {
+    /// The context of a live change: no backfill, and no prior room or parent
+    /// for the planner to have read.
     pub fn new(
         stream_id: SpaceDid,
         actor: Did,

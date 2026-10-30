@@ -8,7 +8,7 @@
 
 use crate::effects::{Effect, Value};
 use crate::ids::SpaceDid;
-use crate::rules::ensure_entity;
+use crate::rules;
 
 /// The extension a message carries its attachments under.
 pub const ATTACHMENTS: &str = "space.roomy.extension.attachments.v0";
@@ -120,8 +120,8 @@ pub fn attachment_effects(
                 ],
             )),
             "space.roomy.attachment.image.v0" => {
-                let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(
+                let scoped = format!("{}?message={message_id}", attachment.uri);
+                effects.push(rules::ensure_entity(
                     stream_id,
                     &scoped,
                     Some(message_id),
@@ -147,8 +147,8 @@ pub fn attachment_effects(
                 ));
             }
             "space.roomy.attachment.video.v0" => {
-                let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(
+                let scoped = format!("{}?message={message_id}", attachment.uri);
+                effects.push(rules::ensure_entity(
                     stream_id,
                     &scoped,
                     Some(message_id),
@@ -175,8 +175,8 @@ pub fn attachment_effects(
                 ));
             }
             "space.roomy.attachment.file.v0" => {
-                let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(
+                let scoped = format!("{}?message={message_id}", attachment.uri);
+                effects.push(rules::ensure_entity(
                     stream_id,
                     &scoped,
                     Some(message_id),
@@ -198,8 +198,8 @@ pub fn attachment_effects(
                 ));
             }
             "space.roomy.attachment.link.v0" => {
-                let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(
+                let scoped = format!("{}?message={message_id}", attachment.uri);
+                effects.push(rules::ensure_entity(
                     stream_id,
                     &scoped,
                     Some(message_id),
@@ -222,8 +222,8 @@ pub fn attachment_effects(
                 // path hands that straight to the client, and a tile address is
                 // a record address — a `?message=` query makes it one that no
                 // longer parses.
-                let scoped = format!("{}?message={}", attachment.uri, message_id);
-                effects.push(ensure_entity(
+                let scoped = format!("{}?message={message_id}", attachment.uri);
+                effects.push(rules::ensure_entity(
                     stream_id,
                     &scoped,
                     Some(message_id),
@@ -291,8 +291,8 @@ pub fn attachment_update_effects(
         // must not wipe the images, videos, comments or replies on the message.
         let mut effects: Vec<Effect> = Vec::new();
         for attachment in link_attachments {
-            let scoped = format!("{}?message={}", attachment.uri, message_id);
-            effects.push(ensure_entity(
+            let scoped = format!("{}?message={message_id}", attachment.uri);
+            effects.push(rules::ensure_entity(
                 stream_id,
                 &scoped,
                 Some(message_id),

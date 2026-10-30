@@ -15,19 +15,20 @@ use crate::change::{
 };
 use crate::context::RuleContext;
 use crate::effects::{Effect, Value};
-use crate::rules::ensure_entity;
+use crate::rules;
 
+/// A join: the member edge, the global `joinedSpace` edge, and the system
+/// message announcing it in the space's first live channel.
 pub fn join_effects(
-    base: &ChangeBase,
+    _base: &ChangeBase,
     record: &MembershipRecord,
     ctx: &RuleContext,
 ) -> Vec<Effect> {
     let user = record.user.as_str();
     let stream = ctx.stream_id.as_str();
-    let _ = base;
     vec![
-        ensure_entity(&ctx.stream_id, user, None, ctx.decided_at_ms),
-        ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
+        rules::ensure_entity(&ctx.stream_id, user, None, ctx.decided_at_ms),
+        rules::ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
         Effect::global(
             "insert or ignore into edges (head, tail, label, created_at, updated_at)
              values (?, ?, 'joinedSpace', ?, ?)",
@@ -129,8 +130,8 @@ pub fn admin_effects(base: &ChangeBase, patch: &MembershipPatch, ctx: &RuleConte
     let user = base.rkey.as_str();
     if patch.can == "admin" {
         return vec![
-            ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
-            ensure_entity(&ctx.stream_id, user, None, ctx.decided_at_ms),
+            rules::ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
+            rules::ensure_entity(&ctx.stream_id, user, None, ctx.decided_at_ms),
             Effect::space(
                 "insert or replace into edges (head, tail, label, payload, created_at, updated_at)
                  values (?, ?, 'member', '{\"can\":\"admin\"}', ?, ?)",
@@ -193,8 +194,12 @@ pub fn leave_effects(change: &RecordChange, ctx: &RuleContext) -> Vec<Effect> {
     ]
 }
 
-pub fn ban_create_effects(base: &ChangeBase, record: &BanRecord, ctx: &RuleContext) -> Vec<Effect> {
-    let _ = base;
+/// A ban: the row `comp_bans` keeps for the user.
+pub fn ban_create_effects(
+    _base: &ChangeBase,
+    record: &BanRecord,
+    ctx: &RuleContext,
+) -> Vec<Effect> {
     vec![Effect::space(
         "insert into comp_bans (entity, user_did, created_at) values (?, ?, ?)",
         vec![
@@ -205,6 +210,7 @@ pub fn ban_create_effects(base: &ChangeBase, record: &BanRecord, ctx: &RuleConte
     )]
 }
 
+/// A lifted ban: the `comp_bans` row the ban wrote.
 pub fn ban_delete_effects(change: &RecordChange, ctx: &RuleContext) -> Vec<Effect> {
     vec![Effect::space(
         "delete from comp_bans where entity = ? and user_did = ?",
@@ -215,12 +221,13 @@ pub fn ban_delete_effects(change: &RecordChange, ctx: &RuleContext) -> Vec<Effec
     )]
 }
 
+/// An invite: the token row, keyed by the space, with the event that minted
+/// it.
 pub fn invite_create_effects(
-    base: &ChangeBase,
+    _base: &ChangeBase,
     record: &InviteRecord,
     ctx: &RuleContext,
 ) -> Vec<Effect> {
-    let _ = base;
     vec![Effect::space(
         "insert or ignore into comp_invite (
            entity, token, created_by_did, event_ulid, created_at
@@ -236,6 +243,7 @@ pub fn invite_create_effects(
     )]
 }
 
+/// A revoked invite: the token row.
 pub fn invite_delete_effects(change: &RecordChange, ctx: &RuleContext) -> Vec<Effect> {
     vec![Effect::space(
         "delete from comp_invite where entity = ? and token = ?",

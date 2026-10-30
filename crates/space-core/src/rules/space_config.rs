@@ -13,7 +13,7 @@
 use crate::change::{SpaceInfoPatch, SpaceInfoRecord, SpaceSidebarRecord};
 use crate::context::RuleContext;
 use crate::effects::{Effect, Value};
-use crate::rules::ensure_entity;
+use crate::rules;
 
 /// `spaceInfo` — the space's profile and join policy. A create carries the whole
 /// record; an update carries the fields it sets, so both are folded into one
@@ -24,8 +24,8 @@ pub fn space_info_effects(record: impl Into<SpaceInfoPatch>, ctx: &RuleContext) 
     let mut effects = vec![
         // The entry's own entity, kept because the event path writes it and the
         // global entity→space index records it.
-        ensure_entity(&ctx.stream_id, &ctx.event_id, None, ctx.decided_at_ms),
-        ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
+        rules::ensure_entity(&ctx.stream_id, &ctx.event_id, None, ctx.decided_at_ms),
+        rules::ensure_entity(&ctx.stream_id, stream, None, ctx.decided_at_ms),
         Effect::space(
             "insert into comp_space (entity, created_at, updated_at)
              values (?, ?, ?) on conflict do nothing",
@@ -80,7 +80,7 @@ pub fn space_info_effects(record: impl Into<SpaceInfoPatch>, ctx: &RuleContext) 
     if let Some(allow) = &patch.allow_public_join {
         effects.push(policy_effect(
             stream,
-            "allow_public_join",
+            PolicyColumn::AllowPublicJoin,
             *allow,
             ctx.decided_at_ms,
         ));
@@ -88,7 +88,7 @@ pub fn space_info_effects(record: impl Into<SpaceInfoPatch>, ctx: &RuleContext) 
     if let Some(allow) = &patch.allow_member_invites {
         effects.push(policy_effect(
             stream,
-            "allow_member_invites",
+            PolicyColumn::AllowMemberInvites,
             *allow,
             ctx.decided_at_ms,
         ));
@@ -107,7 +107,7 @@ pub fn space_info_effects(record: impl Into<SpaceInfoPatch>, ctx: &RuleContext) 
     if let Some(suggest) = &patch.suggest_to_others {
         effects.push(policy_effect(
             stream,
-            "suggest_to_others",
+            PolicyColumn::SuggestToOthers,
             *suggest,
             ctx.decided_at_ms,
         ));
@@ -116,28 +116,37 @@ pub fn space_info_effects(record: impl Into<SpaceInfoPatch>, ctx: &RuleContext) 
     effects
 }
 
+/// The three-valued join-policy columns `comp_space` carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PolicyColumn {
+    AllowPublicJoin,
+    AllowMemberInvites,
+    SuggestToOthers,
+}
+
 /// One three-valued join-policy column: `null` is "not answered", which every
 /// reader distinguishes from `0`.
+///
+/// The column is chosen here, not from the record, so each statement stays a
+/// `&'static str`.
 fn policy_effect(
     stream: &str,
-    column: &'static str,
+    column: PolicyColumn,
     value: Option<bool>,
     decided_at_ms: i64,
 ) -> Effect {
-    // The column is chosen here, not from the record, so the statement stays a
-    // `&'static str` per column.
     let sql: &'static str = match column {
-        "allow_public_join" => {
+        PolicyColumn::AllowPublicJoin => {
             "insert into comp_space (entity, allow_public_join, created_at, updated_at)
              values (?, ?, ?, ?)
              on conflict(entity) do update set allow_public_join = excluded.allow_public_join"
         }
-        "allow_member_invites" => {
+        PolicyColumn::AllowMemberInvites => {
             "insert into comp_space (entity, allow_member_invites, created_at, updated_at)
              values (?, ?, ?, ?)
              on conflict(entity) do update set allow_member_invites = excluded.allow_member_invites"
         }
-        _ => {
+        PolicyColumn::SuggestToOthers => {
             "insert into comp_space (entity, suggest_to_others, created_at, updated_at)
              values (?, ?, ?, ?)
              on conflict(entity) do update set suggest_to_others = excluded.suggest_to_others"

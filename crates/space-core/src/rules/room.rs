@@ -13,12 +13,14 @@
 use crate::change::{ChangeBase, RoomPatch, RoomRecord};
 use crate::context::RuleContext;
 use crate::effects::{Effect, Value};
-use crate::rules::ensure_entity;
+use crate::rules;
 
+/// A new room: its entity, `comp_info` and `comp_room` rows, the Discord
+/// origin a bridged room carries, and the feed names it denormalises.
 pub fn create_effects(base: &ChangeBase, record: &RoomRecord, ctx: &RuleContext) -> Vec<Effect> {
     let id = base.rkey.as_str();
     let mut effects = vec![
-        ensure_entity(&ctx.stream_id, id, None, ctx.decided_at_ms),
+        rules::ensure_entity(&ctx.stream_id, id, None, ctx.decided_at_ms),
         Effect::space(
             "insert into comp_info (entity, name, avatar, description, created_at, updated_at)
              values (?, ?, ?, ?, ?, ?)

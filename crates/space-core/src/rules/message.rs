@@ -14,9 +14,9 @@ use crate::change::{
 };
 use crate::context::RuleContext;
 use crate::effects::{DerivedStep, Effect, Value};
-use crate::links::{extract_facet_urls, extract_urls, RICHTEXT_MIME};
-use crate::rules::attachments::{attachment_effects, attachment_update_effects, attachments_of};
-use crate::rules::{ensure_entity, RuleError};
+use crate::ids::OrderStamp;
+use crate::links::{self, RICHTEXT_MIME};
+use crate::rules::{self, attachments, RuleError};
 
 /// The extension a bridged message carries its canonical send time under.
 const TIMESTAMP_OVERRIDE: &str = "space.roomy.extension.timestampOverride.v0";
@@ -24,6 +24,7 @@ const TIMESTAMP_OVERRIDE: &str = "space.roomy.extension.timestampOverride.v0";
 /// A message's canonical send time: the bridged override when there is one,
 /// else the message id's own ULID time. It is not the sort key — that is the
 /// stamp — and it is what the timeline renders and the feed orders by.
+#[must_use]
 pub fn canonical_send_time(id: &str, record: &MessageRecord) -> i64 {
     if let Some(timestamp) = record
         .extensions
@@ -37,6 +38,8 @@ pub fn canonical_send_time(id: &str, record: &MessageRecord) -> i64 {
     crate::time::ulid_time_ms(id).unwrap_or(0)
 }
 
+/// A new message: its content, its author edge, its attachments and its
+/// ordering key — or, for a system message, the link announcement it renders.
 pub fn create_effects(
     base: &ChangeBase,
     record: &MessageRecord,
@@ -47,7 +50,7 @@ pub fn create_effects(
     }
 
     let id = base.rkey.as_str();
-    let mut effects = vec![ensure_entity(
+    let mut effects = vec![rules::ensure_entity(
         &ctx.stream_id,
         id,
         Some(&record.room),
@@ -95,7 +98,7 @@ pub fn create_effects(
     ));
     // The author is the record's own: a bridged message is attributed to the
     // author the bridge overrode, which is the DID the record carries.
-    effects.push(ensure_entity(
+    effects.push(rules::ensure_entity(
         &ctx.stream_id,
         record.author.as_str(),
         None,
@@ -111,10 +114,10 @@ pub fn create_effects(
             Value::Integer(ctx.decided_at_ms),
         ],
     ));
-    effects.extend(attachment_effects(
+    effects.extend(attachments::attachment_effects(
         &ctx.stream_id,
         id,
-        &attachments_of(record.extensions.as_ref()),
+        &attachments::attachments_of(record.extensions.as_ref()),
         ctx.decided_at_ms,
     ));
     effects.push(ordering_key(id, &base.order_stamp));
@@ -240,7 +243,7 @@ pub fn update_effects(
             ],
         ));
     }
-    effects.extend(attachment_update_effects(
+    effects.extend(attachments::attachment_update_effects(
         &ctx.stream_id,
         id,
         &patch.extensions,
@@ -266,7 +269,7 @@ pub fn delete_effects(change: &RecordChange) -> Vec<Effect> {
 
 /// The message's ordering key, guarded so a replayed create cannot re-key a
 /// message an earlier derivation already keyed.
-fn ordering_key(id: &str, order_stamp: &crate::ids::OrderStamp) -> Effect {
+fn ordering_key(id: &str, order_stamp: &OrderStamp) -> Effect {
     Effect::space(
         "update entities set sort_idx = ? where id = ? and sort_idx is null",
         vec![Value::text(order_stamp.as_str()), Value::text(id)],
@@ -306,7 +309,7 @@ pub fn activity_step(change: &RecordChange, ctx: &RuleContext) -> Option<Effect>
             if let Some(from) = &ctx.prior_room {
                 rooms.push(from.as_str());
             }
-            if to_room != &ctx.prior_room.clone().unwrap_or_default() {
+            if ctx.prior_room.as_deref() != Some(to_room.as_str()) {
                 rooms.push(to_room.as_str());
             }
             invalidate_room_activity(&rooms)
@@ -409,11 +412,11 @@ fn links_in(record: &MessageRecord) -> Vec<String> {
     };
     if content.mime_type == RICHTEXT_MIME {
         return match serde_json::from_slice::<serde_json::Value>(&content.data) {
-            Ok(blocks) => extract_facet_urls(&blocks),
+            Ok(blocks) => links::extract_facet_urls(&blocks),
             Err(_) => Vec::new(),
         };
     }
-    extract_urls(&String::from_utf8_lossy(&content.data))
+    links::extract_urls(&String::from_utf8_lossy(&content.data))
 }
 
 /// `room_activity`'s live merge for one message, verbatim from

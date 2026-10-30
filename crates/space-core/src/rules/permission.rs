@@ -13,6 +13,7 @@ use crate::change::{
 use crate::context::RuleContext;
 use crate::effects::{Effect, Value};
 
+/// A role's row, written as the create names it.
 pub fn role_create_effects(
     base: &ChangeBase,
     record: &RoleRecord,
@@ -31,6 +32,7 @@ pub fn role_create_effects(
     )]
 }
 
+/// An update writes the fields it names, one statement per column.
 pub fn role_update_effects(
     base: &ChangeBase,
     patch: &RolePatch,
@@ -59,6 +61,8 @@ pub fn role_update_effects(
     effects
 }
 
+/// A deleted role keeps its row with `deleted = 1`, which every reader filters
+/// on.
 pub fn role_delete_effects(change: &RecordChange) -> Vec<Effect> {
     vec![Effect::space(
         "update roles set deleted = 1 where id = ?",
@@ -66,12 +70,12 @@ pub fn role_delete_effects(change: &RecordChange) -> Vec<Effect> {
     )]
 }
 
+/// A granted role: one `member_roles` row.
 pub fn role_grant_create_effects(
-    base: &ChangeBase,
+    _base: &ChangeBase,
     record: &RoleGrantRecord,
     ctx: &RuleContext,
 ) -> Vec<Effect> {
-    let _ = base;
     vec![Effect::space(
         "insert or ignore into member_roles (user_id, role_id, stream_id)
          values (?, ?, ?)",
@@ -83,14 +87,17 @@ pub fn role_grant_create_effects(
     )]
 }
 
+/// A revoked grant: the `member_roles` row the pair names.
 pub fn role_grant_delete_effects(change: &RecordChange) -> Vec<Effect> {
-    let key = change.base().rkey.pair();
+    let (user_id, role_id) = change.base().rkey.pair();
     vec![Effect::space(
         "delete from member_roles where user_id = ? and role_id = ?",
-        vec![Value::text(key.0), Value::text(key.1)],
+        vec![Value::text(user_id), Value::text(role_id)],
     )]
 }
 
+/// One room permission: the row is replaced, so an old permission cannot
+/// survive a new one.
 pub fn room_permission_effects(
     _base: &ChangeBase,
     record: &RoomPermissionRecord,
@@ -114,10 +121,11 @@ pub fn room_permission_effects(
     ]
 }
 
+/// A cleared room permission: the `role_rooms` row the pair names.
 pub fn room_permission_delete_effects(change: &RecordChange) -> Vec<Effect> {
-    let key = change.base().rkey.pair();
+    let (role_id, room_id) = change.base().rkey.pair();
     vec![Effect::space(
         "delete from role_rooms where role_id = ? and room_id = ?",
-        vec![Value::text(key.0), Value::text(key.1)],
+        vec![Value::text(role_id), Value::text(room_id)],
     )]
 }

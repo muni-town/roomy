@@ -20,9 +20,12 @@ use crate::change::{
 };
 use crate::context::RuleContext;
 use crate::effects::{Effect, Value};
-use crate::rules::{ensure_entity, RuleError};
+use crate::rules::{self, RuleError};
 
 /// The three `comp_info` fields a profile writes, whichever op carried them.
+///
+/// Each field is doubly optional: `None` is "the write did not mention it" and
+/// `Some(None)` is "the write cleared it".
 pub struct ProfileFields<'a> {
     pub name: Option<Option<&'a str>>,
     pub avatar: Option<Option<&'a str>>,
@@ -31,6 +34,7 @@ pub struct ProfileFields<'a> {
 }
 
 impl<'a> ProfileFields<'a> {
+    /// The fields a create carries: every field the record names.
     pub fn from_record(record: &'a ProfileRecord) -> Self {
         Self {
             name: Some(record.name.as_deref()),
@@ -40,6 +44,7 @@ impl<'a> ProfileFields<'a> {
         }
     }
 
+    /// The fields an update carries: only the ones it mentions.
     pub fn from_patch(patch: &'a ProfilePatch) -> Self {
         Self {
             name: patch.name.as_ref().map(|value| value.as_deref()),
@@ -58,20 +63,21 @@ fn text_of(value: &Option<Option<&str>>) -> Value {
     }
 }
 
+/// The statements a `profile` change writes: the space-local `comp_info` rows
+/// the write mentioned, and the handle on `comp_user` when it carried one.
 pub fn profile_effects(
     base: &ChangeBase,
     fields: &ProfileFields<'_>,
     ctx: &RuleContext,
 ) -> Vec<Effect> {
     let subject = base.repo.as_str();
-    let mut effects = vec![ensure_entity(
+    let mut effects = vec![rules::ensure_entity(
         &ctx.stream_id,
         subject,
         None,
         ctx.decided_at_ms,
     )];
 
-    let mut wrote_info = false;
     if fields.name.is_some() {
         effects.push(Effect::space(
             "insert into comp_info (entity, name, created_at, updated_at)
@@ -84,7 +90,6 @@ pub fn profile_effects(
                 Value::Integer(ctx.decided_at_ms),
             ],
         ));
-        wrote_info = true;
     }
     if fields.avatar.is_some() {
         effects.push(Effect::space(
@@ -98,7 +103,6 @@ pub fn profile_effects(
                 Value::Integer(ctx.decided_at_ms),
             ],
         ));
-        wrote_info = true;
     }
     if fields.description.is_some() {
         effects.push(Effect::space(
@@ -112,10 +116,7 @@ pub fn profile_effects(
                 Value::Integer(ctx.decided_at_ms),
             ],
         ));
-        wrote_info = true;
     }
-    let _ = wrote_info;
-
     if let Some(handle) = fields.handle {
         effects.push(Effect::space(
             "insert into comp_user (did, handle, created_at, updated_at)
@@ -133,6 +134,7 @@ pub fn profile_effects(
     effects
 }
 
+/// The space's calendar link, written whole.
 pub fn calendar_link_effects(
     _base: &ChangeBase,
     record: &CalendarLinkRecord,
@@ -150,6 +152,7 @@ pub fn calendar_link_effects(
     )]
 }
 
+/// A cleared calendar link: the space has no connection any more.
 pub fn calendar_link_delete_effects(ctx: &RuleContext) -> Vec<Effect> {
     vec![Effect::space(
         "delete from comp_calendar_link where entity = ?",
@@ -157,6 +160,8 @@ pub fn calendar_link_delete_effects(ctx: &RuleContext) -> Vec<Effect> {
     )]
 }
 
+/// A new call: the room's active call, its participants cleared, and the
+/// global index the reconciler walks.
 pub fn call_create_effects(
     base: &ChangeBase,
     record: &VoiceCallRecord,
@@ -202,6 +207,10 @@ pub fn call_create_effects(
     ]
 }
 
+/// A call fact: the participant that joined or left.
+///
+/// Returns [`RuleError::Invalid`] when the planner read no room for the call,
+/// or when the fact names neither a join nor a leave.
 pub fn call_update_effects(
     base: &ChangeBase,
     patch: &VoiceCallPatch,
@@ -249,6 +258,9 @@ pub fn call_update_effects(
     )])
 }
 
+/// A deleted call: the space's rows and the global index entry.
+///
+/// Returns [`RuleError::Invalid`] when the planner read no room for the call.
 pub fn call_delete_effects(
     change: &RecordChange,
     ctx: &RuleContext,

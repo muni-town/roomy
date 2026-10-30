@@ -54,6 +54,7 @@ pub struct HttpChangeFeed<P: Pull> {
 }
 
 impl<P: Pull> HttpChangeFeed<P> {
+    /// A feed over the gateway at `base_url`, pulled through `pull`.
     pub fn new(base_url: impl Into<String>, pull: P) -> Self {
         Self {
             base_url: base_url.into().trim_end_matches('/').to_string(),
@@ -62,14 +63,10 @@ impl<P: Pull> HttpChangeFeed<P> {
     }
 
     fn url(&self, space: &SpaceDid, cursor: Cursor, limit: usize) -> String {
-        format!(
-            "{}/internal/feed/{}?afterIdx={}&afterOrd={}&limit={}",
-            self.base_url,
-            space.as_str(),
-            cursor.idx,
-            cursor.ord,
-            limit
-        )
+        let base_url = &self.base_url;
+        let space = space.as_str();
+        let (idx, ord) = (cursor.idx, cursor.ord);
+        format!("{base_url}/internal/feed/{space}?afterIdx={idx}&afterOrd={ord}&limit={limit}")
     }
 
     fn fetch(
@@ -120,6 +117,7 @@ pub struct UreqPull {
 }
 
 impl UreqPull {
+    /// A pull whose every request times out after `timeout`.
     pub fn new(timeout: Duration) -> Self {
         Self {
             agent: ureq::AgentBuilder::new()

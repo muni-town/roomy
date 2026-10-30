@@ -30,10 +30,14 @@ pub enum Value {
 }
 
 impl Value {
+    /// A text parameter.
+    #[must_use]
     pub fn text(value: impl Into<String>) -> Self {
         Value::Text(value.into())
     }
 
+    /// A text parameter, or SQL `null` when there is no value.
+    #[must_use]
     pub fn opt_text(value: Option<impl Into<String>>) -> Self {
         match value {
             Some(value) => Value::Text(value.into()),
@@ -41,10 +45,14 @@ impl Value {
         }
     }
 
+    /// A boolean as the `0`/`1` SQLite stores.
+    #[must_use]
     pub fn flag(value: bool) -> Self {
         Value::Integer(if value { 1 } else { 0 })
     }
 
+    /// A boolean as `0`/`1`, or SQL `null` when it is not answered.
+    #[must_use]
     pub fn opt_flag(value: Option<bool>) -> Self {
         match value {
             Some(value) => Value::flag(value),
@@ -52,6 +60,8 @@ impl Value {
         }
     }
 
+    /// An integer parameter, or SQL `null` when there is no value.
+    #[must_use]
     pub fn opt_int(value: Option<i64>) -> Self {
         match value {
             Some(value) => Value::Integer(value),
@@ -108,6 +118,7 @@ pub enum Effect {
 
 impl Effect {
     /// A statement against the space's own DB.
+    #[must_use]
     pub fn space(sql: &'static str, params: Vec<Value>) -> Self {
         Effect::Sql(SqlEffect {
             target: Target::Space,
@@ -117,6 +128,7 @@ impl Effect {
     }
 
     /// A statement against the global DB, returned to the caller to apply.
+    #[must_use]
     pub fn global(sql: &'static str, params: Vec<Value>) -> Self {
         Effect::Sql(SqlEffect {
             target: Target::Global,

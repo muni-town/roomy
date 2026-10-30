@@ -48,10 +48,14 @@ impl Cursor {
     /// The position before the first change.
     pub const START: Cursor = Cursor { idx: -1, ord: -1 };
 
+    /// The position of one change: entry `idx`, order `ord` within it.
     pub fn new(idx: i64, ord: i64) -> Self {
         Self { idx, ord }
     }
 
+    /// The same position as the `(idx, ord)` pair the worker's cursor row
+    /// stores.
+    #[must_use]
     pub fn as_pair(self) -> (i64, i64) {
         (self.idx, self.ord)
     }

@@ -7,10 +7,11 @@
 
 use crate::change::{ChangeBase, ReactionRecord, RecordChange};
 use crate::context::RuleContext;
-use crate::effects::Effect;
-use crate::effects::Value;
-use crate::rules::ensure_entity;
+use crate::effects::{Effect, Value};
+use crate::rules;
 
+/// The reaction's row, and the reacting user's entity when the add was
+/// bridged.
 pub fn create_effects(
     base: &ChangeBase,
     record: &ReactionRecord,
@@ -18,7 +19,7 @@ pub fn create_effects(
 ) -> Vec<Effect> {
     let mut effects: Vec<Effect> = Vec::new();
     if record.bridged {
-        effects.push(ensure_entity(
+        effects.push(rules::ensure_entity(
             &ctx.stream_id,
             record.user.as_str(),
             None,
@@ -42,6 +43,7 @@ pub fn create_effects(
     effects
 }
 
+/// The removal: the row the add wrote, found by the add's own id.
 pub fn delete_effects(change: &RecordChange) -> Vec<Effect> {
     vec![Effect::space(
         "delete from comp_reaction where reaction_id = ?",

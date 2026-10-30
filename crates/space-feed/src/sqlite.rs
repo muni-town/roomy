@@ -4,6 +4,8 @@
 //! worker reads them read-only: the log is another process's file, and a worker
 //! that could write it would be a second writer.
 
+use std::path::Path;
+
 use rusqlite::Connection;
 use space_core::change::FeedRow;
 use space_core::ids::SpaceDid;
@@ -16,7 +18,8 @@ pub struct SqliteChangeFeed {
 }
 
 impl SqliteChangeFeed {
-    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, FeedError> {
+    /// Open the log's database read-only.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, FeedError> {
         let conn = Connection::open_with_flags(
             path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
@@ -59,6 +62,7 @@ impl SqliteChangeFeed {
         Ok(())
     }
 
+    /// The connection underneath.
     pub fn connection(&self) -> &Connection {
         &self.conn
     }

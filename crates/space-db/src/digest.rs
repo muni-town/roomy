@@ -78,6 +78,7 @@ pub fn global_tables() -> Vec<String> {
 /// One table's rows, as read out of a per-space database.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct TableSnapshot {
+    /// The table's name.
     pub table: String,
     /// The table's columns in declaration order, clock columns dropped.
     pub columns: Vec<String>,
@@ -88,8 +89,11 @@ pub struct TableSnapshot {
 /// One table two readings disagree on.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableDivergence {
+    /// The table's name.
     pub table: String,
+    /// The rows the first reading holds.
     pub before: Vec<Vec<Json>>,
+    /// The rows the second reading holds.
     pub after: Vec<Vec<Json>>,
 }
 
