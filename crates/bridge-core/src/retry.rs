@@ -56,7 +56,9 @@ impl RetryPolicy {
 /// — is decided here, so a durable queue and the in-memory one cannot drift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetryState {
+    /// Failed attempts so far.
     pub attempts: u32,
+    /// When the next attempt becomes due, in wall-clock milliseconds.
     pub next_attempt_at: Millis,
 }
 
@@ -70,6 +72,7 @@ impl RetryState {
     }
 
     /// What to do with the entry at `now`.
+    #[must_use]
     pub fn due(&self, policy: &RetryPolicy, now: Millis) -> Due {
         if self.attempts >= policy.max_attempts {
             Due::Parked
@@ -82,6 +85,7 @@ impl RetryState {
 
     /// Record a failed attempt: bump the count and schedule the next attempt,
     /// or leave the entry parked once the budget is spent.
+    #[must_use]
     pub fn record_failure(&mut self, policy: &RetryPolicy, now: Millis) -> Due {
         self.attempts = self.attempts.saturating_add(1);
         if self.attempts >= policy.max_attempts {
@@ -115,10 +119,15 @@ pub enum Due {
 /// One pending op, with its retry state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pending {
+    /// The caller's id for the op, unique within one queue.
     pub id: String,
+    /// The op to send.
     pub op: Op,
+    /// Failed attempts so far.
     pub attempts: u32,
+    /// When the next attempt becomes due, in wall-clock milliseconds.
     pub next_attempt_at: Millis,
+    /// The text of the most recent failure, for the admin API.
     pub last_error: Option<String>,
 }
 
@@ -134,6 +143,7 @@ pub struct Outbox {
 }
 
 impl Outbox {
+    /// An empty queue that retries by `policy`.
     pub fn new(policy: RetryPolicy) -> Self {
         Self {
             entries: Vec::new(),
@@ -141,6 +151,7 @@ impl Outbox {
         }
     }
 
+    /// The retry policy every entry is judged by.
     pub fn policy(&self) -> RetryPolicy {
         self.policy
     }
@@ -163,6 +174,7 @@ impl Outbox {
 
     /// Record a failed send: bump the attempt count and schedule the retry.
     /// Returns [`Due::Parked`] once the attempt budget is spent.
+    #[must_use]
     pub fn retry(&mut self, id: &str, error: impl Into<String>, now: Millis) -> Due {
         let policy = self.policy;
         let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) else {
@@ -176,6 +188,7 @@ impl Outbox {
     }
 
     /// Everything due at `now`, in order.
+    #[must_use]
     pub fn due(&self, now: Millis) -> Vec<&Pending> {
         self.entries
             .iter()
@@ -184,12 +197,14 @@ impl Outbox {
     }
 
     /// The state of one entry at `now`.
+    #[must_use]
     pub fn state(&self, id: &str, now: Millis) -> Option<Due> {
         let entry = self.entries.iter().find(|entry| entry.id == id)?;
         Some(entry.state().due(&self.policy, now))
     }
 
     /// Parked entries, for the admin API to report.
+    #[must_use]
     pub fn parked(&self) -> Vec<&Pending> {
         self.entries
             .iter()
@@ -199,6 +214,7 @@ impl Outbox {
 
     /// Requeue a parked entry, keeping its attempt count so an operator's
     /// requeue does not reset the budget silently.
+    #[must_use]
     pub fn requeue(&mut self, id: &str, now: Millis) -> bool {
         let policy = self.policy;
         let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) else {
@@ -210,10 +226,12 @@ impl Outbox {
         true
     }
 
+    /// How many ops are queued, parked ones included.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Whether no op is queued.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

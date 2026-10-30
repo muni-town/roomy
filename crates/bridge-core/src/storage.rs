@@ -39,16 +39,19 @@ pub struct VirtualClock {
 }
 
 impl VirtualClock {
+    /// A clock reading `start` milliseconds.
     pub fn new(start: Millis) -> Self {
         Self {
             now: AtomicI64::new(start),
         }
     }
 
+    /// Move the clock forward by `millis`.
     pub fn advance(&self, millis: Millis) {
         self.now.fetch_add(millis, Ordering::SeqCst);
     }
 
+    /// Move the clock to `millis`, in either direction.
     pub fn set(&self, millis: Millis) {
         self.now.store(millis, Ordering::SeqCst);
     }
@@ -63,13 +66,18 @@ impl Clock for VirtualClock {
 /// A message the bridge has already relayed, as the store keeps it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredMessage {
+    /// The Matrix event id the message was bridged from.
     pub matrix_event_id: String,
+    /// The Roomy event id the bridge wrote.
     pub roomy_event_id: String,
+    /// The Matrix room the message came from.
     pub matrix_room_id: MatrixRoomId,
+    /// The Roomy room the message went to.
     pub roomy_room_id: RoomyRoomId,
     /// The author's ghost DID, so an edit or redaction can be checked against
     /// the original sender.
     pub author: String,
+    /// The source timestamp, in wall-clock milliseconds.
     pub timestamp: Millis,
 }
 
@@ -111,6 +119,7 @@ pub struct InMemoryStorage {
 }
 
 impl InMemoryStorage {
+    /// An empty store.
     pub fn new() -> Self {
         Self::default()
     }

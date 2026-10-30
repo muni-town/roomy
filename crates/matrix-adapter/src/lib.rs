@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! Matrix side of the bridge: appservice transport, ghosts, media, and
 //! end-to-bridge encryption.
 //!

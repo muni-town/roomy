@@ -10,7 +10,7 @@ use bridge_core::BackfillCursor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::{percent_encode, Body, Exchange, MediaDownload, Method, Transport, TransportError};
+use super::{Body, Exchange, MediaDownload, Method, Transport, TransportError};
 use crate::appservice::AsToken;
 
 /// A client for the homeserver's client-server and appservice APIs.
@@ -20,6 +20,7 @@ pub struct HomeserverClient {
 }
 
 impl HomeserverClient {
+    /// A client for the homeserver at `base_url`, presenting `as_token`.
     pub fn new(base_url: impl Into<String>, as_token: AsToken) -> Self {
         Self {
             transport: Transport::new(base_url, Some(as_token)),
@@ -64,8 +65,8 @@ impl HomeserverClient {
             .put_json::<Value>(
                 &format!(
                     "/_matrix/client/v3/devices/{}?user_id={}",
-                    percent_encode(device_id),
-                    percent_encode(user_id)
+                    super::percent_encode(device_id),
+                    super::percent_encode(user_id)
                 ),
                 &json!({ "display_name": display_name }),
             )
@@ -84,8 +85,8 @@ impl HomeserverClient {
                 Method::Delete,
                 &format!(
                     "/_matrix/client/v3/devices/{}?user_id={}",
-                    percent_encode(device_id),
-                    percent_encode(user_id)
+                    super::percent_encode(device_id),
+                    super::percent_encode(user_id)
                 ),
                 Body::None,
             )
@@ -112,8 +113,8 @@ impl HomeserverClient {
             .post_json::<Value>(
                 &format!(
                     "/_matrix/client/v3/rooms/{}/join?user_id={}",
-                    percent_encode(room_id),
-                    percent_encode(user_id)
+                    super::percent_encode(room_id),
+                    super::percent_encode(user_id)
                 ),
                 &json!({}),
             )
@@ -156,7 +157,7 @@ impl HomeserverClient {
         self.transport
             .get_json::<Resolved>(&format!(
                 "/_matrix/client/v3/directory/room/{}",
-                percent_encode(alias)
+                super::percent_encode(alias)
             ))
             .await
             .map(|resolved| resolved.room_id)
@@ -224,7 +225,7 @@ impl HomeserverClient {
         self.transport
             .get_json::<Vec<StateEvent>>(&format!(
                 "/_matrix/client/v3/rooms/{}/state",
-                percent_encode(room_id)
+                super::percent_encode(room_id)
             ))
             .await
     }
@@ -239,8 +240,8 @@ impl HomeserverClient {
             .post_json::<Value>(
                 &format!(
                     "/_matrix/client/v3/join/{}?user_id={}",
-                    percent_encode(room_id),
-                    percent_encode(mxid)
+                    super::percent_encode(room_id),
+                    super::percent_encode(mxid)
                 ),
                 &json!({}),
             )
@@ -274,7 +275,7 @@ impl HomeserverClient {
         let path = match user_id {
             Some(user) => format!(
                 "/_matrix/client/v3/createRoom?user_id={}",
-                percent_encode(user)
+                super::percent_encode(user)
             ),
             None => "/_matrix/client/v3/createRoom".to_string(),
         };
@@ -295,9 +296,9 @@ impl HomeserverClient {
             .put_json::<Value>(
                 &format!(
                     "/_matrix/client/v3/rooms/{}/typing/{}?user_id={}",
-                    percent_encode(room_id),
-                    percent_encode(user_id),
-                    percent_encode(user_id)
+                    super::percent_encode(room_id),
+                    super::percent_encode(user_id),
+                    super::percent_encode(user_id)
                 ),
                 &json!({ "typing": typing, "timeout": 20_000 }),
             )
@@ -346,11 +347,13 @@ impl HomeserverClient {
     ) -> Result<(Vec<Value>, Option<BackfillCursor>), TransportError> {
         let mut path = format!(
             "/_matrix/client/v3/rooms/{}/messages?dir=b&limit={}",
-            percent_encode(room_id),
+            super::percent_encode(room_id),
             limit
         );
         match from {
-            Some(token) => path.push_str(&format!("&from={}", percent_encode(token.as_str()))),
+            Some(token) => {
+                path.push_str(&format!("&from={}", super::percent_encode(token.as_str())))
+            }
             // With no token the homeserver starts at the room's live edge,
             // which is the correct place for the first page of a recent window.
             None => path.push_str("&from="),
@@ -388,7 +391,7 @@ impl HomeserverClient {
     pub async fn room_encrypted(&self, room_id: &str) -> Result<bool, TransportError> {
         let path = format!(
             "/_matrix/client/v3/rooms/{}/state/m.room.encryption",
-            percent_encode(room_id)
+            super::percent_encode(room_id)
         );
         match self.transport.get_json::<Value>(&path).await {
             Ok(state) => Ok(state
@@ -412,7 +415,7 @@ impl HomeserverClient {
         self.transport
             .get_json::<Joined>(&format!(
                 "/_matrix/client/v3/rooms/{}/joined_members",
-                percent_encode(room_id)
+                super::percent_encode(room_id)
             ))
             .await
             .map(|joined| joined.joined.into_keys().collect())
@@ -438,8 +441,8 @@ impl HomeserverClient {
             .transport
             .get(&format!(
                 "/_matrix/client/v1/media/download/{}/{}?allow_redirects=true",
-                percent_encode(server),
-                percent_encode(media_id)
+                super::percent_encode(server),
+                super::percent_encode(media_id)
             ))
             .await?;
         Ok(MediaDownload {
@@ -492,8 +495,8 @@ impl HomeserverClient {
                 Method::Post,
                 &format!(
                     "/_matrix/client/v3/keys/upload?user_id={}&device_id={}",
-                    percent_encode(user_id),
-                    percent_encode(device_id)
+                    super::percent_encode(user_id),
+                    super::percent_encode(device_id)
                 ),
                 body,
             )
@@ -533,8 +536,8 @@ impl HomeserverClient {
                 Method::Put,
                 &format!(
                     "/_matrix/client/v3/sendToDevice/{}/{}",
-                    percent_encode(event_type),
-                    percent_encode(txn_id)
+                    super::percent_encode(event_type),
+                    super::percent_encode(txn_id)
                 ),
                 &json!({ "messages": messages }),
             )
@@ -565,20 +568,20 @@ fn send_path(
                 })?;
             format!(
                 "/_matrix/client/v3/rooms/{}/redact/{}/{}",
-                percent_encode(room_id),
-                percent_encode(target),
-                percent_encode(txn_id)
+                super::percent_encode(room_id),
+                super::percent_encode(target),
+                super::percent_encode(txn_id)
             )
         }
         event_type => format!(
             "/_matrix/client/v3/rooms/{}/send/{}/{}",
-            percent_encode(room_id),
-            percent_encode(event_type),
-            percent_encode(txn_id)
+            super::percent_encode(room_id),
+            super::percent_encode(event_type),
+            super::percent_encode(txn_id)
         ),
     };
     if let Some(user) = as_user {
-        path.push_str(&format!("?user_id={}", percent_encode(user)));
+        path.push_str(&format!("?user_id={}", super::percent_encode(user)));
     }
     Ok(path)
 }
@@ -611,27 +614,37 @@ pub struct SpaceChildContent {
 /// A room's identity and policy, from its state events.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoomSummary {
+    /// The Matrix room id.
     pub room_id: String,
+    /// `m.room.name`, when the room has one.
     pub name: Option<String>,
+    /// Whether the room carries `m.room.encryption` state.
     pub encrypted: bool,
+    /// The encryption algorithm named, when the room is encrypted.
     pub encryption_algorithm: Option<String>,
+    /// The `m.room.join_rules` rule, when the room declares one.
     pub join_rule: Option<String>,
 }
 
 /// The body of a `createRoom` call.
 #[derive(Debug, Clone, Serialize)]
 pub struct CreateRoomRequest {
+    /// The room name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The room topic.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topic: Option<String>,
+    /// The creation preset, e.g. `private_chat`.
     #[serde(rename = "preset", skip_serializing_if = "Option::is_none")]
     pub preset: Option<String>,
     /// When set, the room is created inside this space.
     #[serde(rename = "space_parent", skip_serializing_if = "Option::is_none")]
     pub space_parent: Option<String>,
+    /// Extra keys for the `m.room.create` event.
     #[serde(default)]
     pub creation_content: Value,
+    /// State events to send at creation.
     #[serde(default)]
     pub initial_state: Vec<Value>,
 }

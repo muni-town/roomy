@@ -36,19 +36,28 @@ pub enum EchoDecision {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MappingKind {
+    /// A message body.
     Message,
+    /// A reaction, addressed by the event that added it.
     Reaction,
+    /// A portal: one Matrix room paired with one Roomy room.
     Room,
+    /// An edit to a message body.
     Edit,
+    /// A redaction of a message.
     Redaction,
 }
 
 /// One id-map entry: a Matrix id and the Roomy id it corresponds to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Mapping {
+    /// What the pairing is for.
     pub kind: MappingKind,
+    /// The Matrix event or room id.
     pub matrix_id: String,
+    /// The Roomy event or room id.
     pub roomy_id: String,
+    /// When the bridge recorded the pairing, in wall-clock milliseconds.
     pub created_at: Millis,
 }
 
@@ -97,6 +106,7 @@ impl Dedupe {
     /// Two independent signals, either of which is sufficient. The id map is
     /// the fast path; the origin extension is what still works after the bridge
     /// database is lost and the id map is empty.
+    #[must_use]
     pub fn classify_matrix(
         &self,
         event_id: &str,

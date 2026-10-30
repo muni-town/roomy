@@ -14,9 +14,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::appservice::AsToken;
-use crate::transport::{
-    percent_encode, Exchange, HomeserverClient, HttpExchange, Transport, TransportError,
-};
+use crate::transport::{Exchange, HomeserverClient, HttpExchange, Transport, TransportError};
 
 /// A Matrix content URI, `mxc://<server>/<media id>`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -37,6 +35,7 @@ impl MxcUri {
         Ok(MxcUri(value))
     }
 
+    /// The URI as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -69,8 +68,11 @@ impl std::fmt::Display for MxcUri {
 /// A fetched attachment, ready to upload on the other side.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaBytes {
+    /// The media's MIME type.
     pub mime_type: String,
+    /// The bytes.
     pub data: Vec<u8>,
+    /// The filename, when the source carried one.
     pub name: Option<String>,
 }
 
@@ -88,6 +90,8 @@ pub struct MediaStore {
 }
 
 impl MediaStore {
+    /// A store over the network: the homeserver at `homeserver_url`, the blob
+    /// proxy at `appserver_url`.
     pub fn new(
         homeserver_url: impl Into<String>,
         as_token: AsToken,
@@ -142,8 +146,8 @@ impl MediaStore {
             .proxy
             .get(&format!(
                 "/blob/{}/{}",
-                percent_encode(did),
-                percent_encode(cid)
+                crate::transport::percent_encode(did),
+                crate::transport::percent_encode(cid)
             ))
             .await?;
 
@@ -179,10 +183,13 @@ fn parse_filename(header: &str) -> Option<String> {
 /// Media could not be moved.
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
+    /// The value is not an `mxc://` URI.
     #[error("not an mxc:// URI")]
     NotMxc,
+    /// The value is not an `atblob://` reference.
     #[error("not an atblob:// reference")]
     NotAtblob,
+    /// The transfer failed.
     #[error(transparent)]
     Transport(#[from] TransportError),
 }

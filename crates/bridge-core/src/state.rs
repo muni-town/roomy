@@ -11,7 +11,7 @@ use crate::dedupe::{Dedupe, Mapping, MappingKind};
 use crate::ids::{GhostDid, RoomyEventId};
 use crate::op::Op;
 use crate::portal::Portal;
-use crate::translate::{translate, EditOrder, IncomingEvent};
+use crate::translate::{self, EditOrder, IncomingEvent};
 use crate::Millis;
 
 /// The whole memory of the machine.
@@ -26,6 +26,7 @@ pub struct BridgeState {
 }
 
 impl BridgeState {
+    /// An empty machine, with no pairings recorded.
     pub fn new() -> Self {
         Self::default()
     }
@@ -55,8 +56,11 @@ pub enum Input<'a> {
     /// An event the homeserver delivered, with the portal it belongs to and
     /// the ghost DID its author maps to.
     Matrix {
+        /// The event the homeserver delivered.
         event: &'a IncomingEvent,
+        /// The portal the event belongs to.
         portal: &'a Portal,
+        /// The DID the event's author maps to.
         ghost: &'a GhostDid,
     },
 }
@@ -131,6 +135,7 @@ pub enum Rejection {
 }
 
 impl Rejection {
+    /// The stable label the logs and the admin API report.
     pub fn label(self) -> &'static str {
         match self {
             Rejection::Echo => "echo",
@@ -145,6 +150,7 @@ impl Rejection {
 ///
 /// `now` stamps the pairings an accepted input records; it is the caller's
 /// clock because the machine has none.
+#[must_use]
 pub fn step(state: &mut BridgeState, input: Input<'_>, now: Millis) -> Step {
     let Input::Matrix {
         event,
@@ -152,10 +158,11 @@ pub fn step(state: &mut BridgeState, input: Input<'_>, now: Millis) -> Step {
         ghost,
     } = input;
 
-    let decisions = match translate(event, portal, ghost, &state.dedupe, &mut state.edits) {
-        Ok(decisions) => decisions,
-        Err(rejection) => return Step::Rejected(rejection),
-    };
+    let decisions =
+        match translate::translate(event, portal, ghost, &state.dedupe, &mut state.edits) {
+            Ok(decisions) => decisions,
+            Err(rejection) => return Step::Rejected(rejection),
+        };
 
     // The write is decided; these are the two things every decision needs
     // before a caller can see it: an id to be written under, and the pairing

@@ -16,6 +16,7 @@ use crate::op::RoomyRoomKind;
 /// One room discovered in a Matrix space.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpaceNode {
+    /// The Matrix room id.
     pub room_id: MatrixRoomId,
     /// `m.room.name`, when the room has one.
     pub name: Option<String>,
@@ -29,6 +30,7 @@ pub struct SpaceNode {
 }
 
 impl SpaceNode {
+    /// A node with the given id and name, and no recorded children yet.
     pub fn new(room_id: MatrixRoomId, name: Option<String>, is_space: bool) -> Self {
         Self {
             room_id,
@@ -45,20 +47,33 @@ impl SpaceNode {
 #[serde(tag = "decision", rename_all = "snake_case")]
 pub enum HierarchyDecision {
     /// Depth 1: a channel directly under the bridged space.
-    Channel { name: String },
+    Channel {
+        /// The Roomy channel name.
+        name: String,
+    },
     /// Depth 2: a thread under the channel at depth 1.
-    Thread { name: String, parent: MatrixRoomId },
+    Thread {
+        /// The Roomy thread name.
+        name: String,
+        /// The channel the thread hangs under.
+        parent: MatrixRoomId,
+    },
     /// Depth ≥ 3: flattened into the nearest depth-2 ancestor's thread, with a
     /// name that keeps the intervening path so a reader can tell.
     Flattened {
+        /// The Roomy thread name, carrying the intervening path.
         name: String,
+        /// The depth-2 room the thread hangs under.
         parent: MatrixRoomId,
+        /// How deep in the Matrix space the room sits; always at least three.
         depth: u32,
+        /// Operator-facing explanation of why the room was flattened.
         warning: String,
     },
 }
 
 impl HierarchyDecision {
+    /// The kind of Roomy room this decision creates.
     pub fn roomy_kind(&self) -> RoomyRoomKind {
         match self {
             HierarchyDecision::Channel { .. } => RoomyRoomKind::Channel,
@@ -102,7 +117,10 @@ pub enum HierarchyError {
     /// half-bridged: a cycle has no canonical root, so any choice would be
     /// arbitrary and unstable across restarts.
     #[error("the Matrix space contains a cycle: {}", cycle.join(" -> "))]
-    Cycle { cycle: Vec<String> },
+    Cycle {
+        /// The rooms on the cycle, as Matrix room ids.
+        cycle: Vec<String>,
+    },
     /// The space has no children at all.
     #[error("the Matrix space has no child rooms")]
     Empty,
@@ -121,6 +139,8 @@ pub struct Hierarchy {
 }
 
 impl Hierarchy {
+    /// The decision recorded for a room, or `None` if the room was not bridged.
+    #[must_use]
     pub fn decision(&self, room_id: &MatrixRoomId) -> Option<&HierarchyDecision> {
         self.decisions
             .iter()
@@ -129,6 +149,7 @@ impl Hierarchy {
 
     /// The bridged rooms, in the order they should be created (parents before
     /// their threads, so a thread's parent id already exists).
+    #[must_use]
     pub fn ordered(&self) -> &[(MatrixRoomId, HierarchyDecision)] {
         &self.decisions
     }
@@ -140,6 +161,12 @@ impl Hierarchy {
 /// from it. Rooms missing from the map are skipped rather than invented — a
 /// child the homeserver did not describe is a state gap, not a room the bridge
 /// should create blind.
+///
+/// # Errors
+///
+/// Returns [`HierarchyError::Cycle`] if the space graph reachable from `root`
+/// contains a cycle, and [`HierarchyError::Empty`] if `root` is absent from
+/// `nodes` or has no children.
 pub fn derive(
     nodes: &BTreeMap<MatrixRoomId, SpaceNode>,
     root: &MatrixRoomId,

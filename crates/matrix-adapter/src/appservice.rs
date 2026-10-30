@@ -21,10 +21,17 @@ use serde::{Deserialize, Serialize};
 pub struct AsToken(String);
 
 impl AsToken {
+    /// Parses a token.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TokenError::Empty`] for an empty value and
+    /// [`TokenError::Whitespace`] when it contains whitespace.
     pub fn parse(value: impl Into<String>) -> Result<Self, TokenError> {
         parse_token(value.into()).map(AsToken)
     }
 
+    /// The token as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -50,10 +57,17 @@ impl TryFrom<&str> for AsToken {
 pub struct HsToken(String);
 
 impl HsToken {
+    /// Parses a token.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TokenError::Empty`] for an empty value and
+    /// [`TokenError::Whitespace`] when it contains whitespace.
     pub fn parse(value: impl Into<String>) -> Result<Self, TokenError> {
         parse_token(value.into()).map(HsToken)
     }
 
+    /// The token as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -86,8 +100,10 @@ fn parse_token(value: String) -> Result<String, TokenError> {
 /// A shared secret could not be parsed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TokenError {
+    /// The secret is empty.
     #[error("a token cannot be empty")]
     Empty,
+    /// The secret contains whitespace.
     #[error("a token cannot contain whitespace")]
     Whitespace,
 }
@@ -95,7 +111,9 @@ pub enum TokenError {
 /// The token pair a registered appservice holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tokens {
+    /// The token the appservice presents to the homeserver's client API.
     pub as_token: AsToken,
+    /// The token the homeserver presents on each transaction.
     pub hs_token: HsToken,
 }
 
@@ -104,16 +122,20 @@ pub struct Tokens {
 pub struct Namespace {
     /// Whether the appservice has exclusive control of the namespace.
     pub exclusive: bool,
+    /// The regex a user id, alias or room id must match.
     pub regex: String,
 }
 
 /// The three namespace kinds a registration declares.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Namespaces {
+    /// The user id namespaces.
     #[serde(default)]
     pub users: Vec<Namespace>,
+    /// The room alias namespaces.
     #[serde(default)]
     pub aliases: Vec<Namespace>,
+    /// The room id namespaces.
     #[serde(default)]
     pub rooms: Vec<Namespace>,
 }
@@ -144,6 +166,7 @@ pub struct AppserviceRegistration {
     /// create the device its `OlmMachine` runs on.
     #[serde(rename = "io.element.msc4190", default)]
     pub msc4190_device_management: bool,
+    /// The namespaces the registration claims.
     pub namespaces: Namespaces,
 }
 
@@ -319,6 +342,7 @@ impl Appservice<Running> {
 
     /// Whether a presented transaction token is the one this registration was
     /// given.
+    #[must_use]
     pub fn verifies_hs_token(&self, presented: &str) -> bool {
         constant_time_eq(presented, self.hs_token().as_str())
     }

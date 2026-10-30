@@ -28,8 +28,6 @@ use roomy_client::SyncSubscription;
 use roomy_events::Event;
 use tokio::sync::mpsc;
 
-use crate::now_ms;
-
 use crate::db::BridgeDb;
 
 /// What a supervisor needs to run.
@@ -129,6 +127,8 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
+    /// A supervisor over `deps`, paired with the channel that carries
+    /// backfill requests into it.
     pub fn new(deps: SupervisorDeps) -> (Self, mpsc::UnboundedReceiver<BackfillRequest>) {
         let SupervisorDeps {
             db,
@@ -416,7 +416,7 @@ impl Supervisor {
         // also what lets a removal redact the right Matrix event. The Matrix id
         // only exists now that the homeserver has answered, which is why this
         // pairing is recorded here rather than decided by `step`.
-        if let Some(mapping) = op.pairing(event.id.as_str(), matrix_event_id, now_ms()) {
+        if let Some(mapping) = op.pairing(event.id.as_str(), matrix_event_id, crate::now_ms()) {
             self.record_mapping(portal.space(), &mapping);
         }
 
@@ -532,7 +532,7 @@ impl Supervisor {
             mxid: mxid.as_str(),
             did: did.as_str(),
             profile_hash: None,
-            updated_at: now_ms(),
+            updated_at: crate::now_ms(),
         }) {
             tracing::warn!(%error, %did, "could not persist a ghost");
         }
@@ -558,7 +558,7 @@ impl Supervisor {
             if let Err(error) = db.set_cursor(
                 space_did.as_str(),
                 portal.roomy_room_id.as_str(),
-                highest.get(),
+                highest.value(),
             ) {
                 tracing::warn!(%error, "could not persist a cursor");
             }
@@ -617,7 +617,7 @@ impl Supervisor {
                     token: None,
                     messages: 0,
                     complete: true,
-                    updated_at: now_ms(),
+                    updated_at: crate::now_ms(),
                 })
                 .map_err(|error| OutboundError::Storage(error.to_string()))?;
             return Ok(BackfillStep {
@@ -665,7 +665,7 @@ impl Supervisor {
                 token: next_token.as_ref().map(BackfillCursor::as_str),
                 messages,
                 complete,
-                updated_at: now_ms(),
+                updated_at: crate::now_ms(),
             })
             .map_err(|error| OutboundError::Storage(error.to_string()))?;
 
@@ -718,7 +718,7 @@ impl Supervisor {
                         portal: &portal,
                         ghost: &ghost,
                     },
-                    now_ms(),
+                    crate::now_ms(),
                 )
             };
             let Step::Accepted(writes) = step else {

@@ -72,12 +72,20 @@ pub const MSC3202_KEYS: &[&str] = &[
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum MscStatus {
     /// The homeserver demonstrated the feature.
-    Pass { evidence: String },
+    Pass {
+        /// What the homeserver sent or answered that shows the feature works.
+        evidence: String,
+    },
     /// The homeserver does not have the feature.
-    Fail { evidence: String },
+    Fail {
+        /// What the homeserver sent or answered that shows the feature is
+        /// absent.
+        evidence: String,
+    },
 }
 
 impl MscStatus {
+    /// Whether the homeserver demonstrated the feature.
     pub fn passed(&self) -> bool {
         matches!(self, MscStatus::Pass { .. })
     }
@@ -268,6 +276,7 @@ pub struct TransactionObserver {
 }
 
 impl TransactionObserver {
+    /// An observer that has seen no transactions yet.
     pub fn new() -> Self {
         Self::default()
     }
@@ -299,6 +308,7 @@ pub struct CapabilityProbe {
 }
 
 impl CapabilityProbe {
+    /// A probe over `homeserver`, reading what `observer` has seen.
     pub fn new(
         homeserver: HomeserverClient,
         sender_localpart: impl Into<String>,

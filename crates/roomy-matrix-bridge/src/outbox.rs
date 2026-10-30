@@ -34,14 +34,17 @@ pub struct Queued {
 }
 
 impl Queued {
+    /// The id the batch is stored under.
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// The space the batch's events belong to.
     pub fn space_did(&self) -> &Did {
         &self.space_did
     }
 
+    /// The events in the batch.
     pub fn events(&self) -> &[Event] {
         &self.events
     }
@@ -99,6 +102,7 @@ pub struct Outbox {
 }
 
 impl Outbox {
+    /// A queue persisting to `db` and retrying by `policy`.
     pub fn new(db: Arc<Mutex<BridgeDb>>, policy: RetryPolicy, clock: Arc<dyn Clock>) -> Self {
         Self { db, policy, clock }
     }

@@ -18,9 +18,13 @@ use super::{Exchange, ExchangeError, Method, Request, Response};
 /// One scripted answer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FakeResponse {
+    /// The HTTP status to answer with.
     pub status: u16,
+    /// The `content-type` header to send, when one is scripted.
     pub content_type: Option<String>,
+    /// The `content-disposition` header to send, when one is scripted.
     pub content_disposition: Option<String>,
+    /// The body to answer with.
     pub body: Vec<u8>,
 }
 
@@ -91,6 +95,7 @@ pub struct FakeHomeserver {
 }
 
 impl FakeHomeserver {
+    /// A fake with no routes; every request is refused.
     pub fn new() -> Self {
         Self::default()
     }

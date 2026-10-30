@@ -18,6 +18,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub struct RoomyEventId(String);
 
 impl RoomyEventId {
+    /// Parses a ULID event id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedRoomyEvent`] if `value` is not a ULID.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         roomy_events::Ulid::parse(value.clone()).map_err(|_| IdError::MalformedRoomyEvent)?;
@@ -29,10 +34,17 @@ impl RoomyEventId {
         RoomyEventId(roomy_events::Ulid::new().as_str().to_string())
     }
 
+    /// The id as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
+    /// The id as a ULID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedRoomyEvent`] if the stored text is not a
+    /// ULID.
     pub fn to_ulid(&self) -> Result<roomy_events::Ulid, IdError> {
         roomy_events::Ulid::parse(self.0.clone()).map_err(|_| IdError::MalformedRoomyEvent)
     }
@@ -60,12 +72,18 @@ impl fmt::Display for RoomyEventId {
 pub struct SpaceDid(String);
 
 impl SpaceDid {
+    /// Parses a DID that names a space.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedDid`] if `value` is not a DID.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         roomy_events::Did::parse(value.clone()).map_err(|_| IdError::MalformedDid)?;
         Ok(SpaceDid(value))
     }
 
+    /// The DID as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -94,14 +112,17 @@ pub struct PortalId {
 }
 
 impl PortalId {
+    /// A portal id from the space it bridges and the Matrix room it bridges.
     pub fn new(space: SpaceDid, matrix_room: MatrixRoomId) -> Self {
         Self { space, matrix_room }
     }
 
+    /// The space the portal bridges.
     pub fn space(&self) -> &SpaceDid {
         &self.space
     }
 
+    /// The Matrix room the portal bridges.
     pub fn matrix_room(&self) -> &MatrixRoomId {
         &self.matrix_room
     }
@@ -144,6 +165,12 @@ impl<'de> Deserialize<'de> for PortalId {
 pub struct TxnId(String);
 
 impl TxnId {
+    /// Parses a transaction id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedTxnId`] if `value` is empty or contains
+    /// whitespace.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         if value.is_empty() || value.contains(char::is_whitespace) {
@@ -152,6 +179,7 @@ impl TxnId {
         Ok(TxnId(value))
     }
 
+    /// The id as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -172,6 +200,11 @@ impl fmt::Display for TxnId {
 pub struct BackfillCursor(String);
 
 impl BackfillCursor {
+    /// Parses a pagination token.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedBackfillCursor`] if `value` is empty.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         if value.is_empty() {
@@ -180,6 +213,7 @@ impl BackfillCursor {
         Ok(BackfillCursor(value))
     }
 
+    /// The token as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -200,6 +234,11 @@ impl fmt::Display for BackfillCursor {
 pub struct SortIdx(i64);
 
 impl SortIdx {
+    /// A stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedSortIdx`] if `value` is negative.
     pub fn new(value: i64) -> Result<Self, IdError> {
         if value < 0 {
             return Err(IdError::MalformedSortIdx);
@@ -209,7 +248,7 @@ impl SortIdx {
 
     /// The position, for a call that still takes a plain `i64` (the sync
     /// socket's frame, the SQLite column).
-    pub fn get(self) -> i64 {
+    pub fn value(self) -> i64 {
         self.0
     }
 }
@@ -226,6 +265,12 @@ impl fmt::Display for SortIdx {
 pub struct MatrixDeviceId(String);
 
 impl MatrixDeviceId {
+    /// Parses a device id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedDeviceId`] if `value` is empty or contains
+    /// whitespace.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         if value.is_empty() || value.contains(char::is_whitespace) {
@@ -234,6 +279,7 @@ impl MatrixDeviceId {
         Ok(MatrixDeviceId(value))
     }
 
+    /// The id as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -270,10 +316,12 @@ impl MatrixRoomId {
         }
     }
 
+    /// The room id or alias as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
+    /// Whether this is a room alias (`#…`) rather than a room id (`!…`).
     pub fn is_alias(&self) -> bool {
         self.0.starts_with('#')
     }
@@ -291,6 +339,12 @@ impl fmt::Display for MatrixRoomId {
 pub struct MatrixEventId(String);
 
 impl MatrixEventId {
+    /// Parses an event id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedMatrixEvent`] if `value` does not start with
+    /// `$` or has no id after it.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         if value.starts_with('$') && value.len() > 1 {
@@ -300,6 +354,7 @@ impl MatrixEventId {
         }
     }
 
+    /// The id as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -317,12 +372,18 @@ impl fmt::Display for MatrixEventId {
 pub struct RoomyRoomId(String);
 
 impl RoomyRoomId {
+    /// Parses a ULID room id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedRoomyRoom`] if `value` is not a ULID.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         roomy_events::Ulid::parse(value.clone()).map_err(|_| IdError::MalformedRoomyRoom)?;
         Ok(RoomyRoomId(value))
     }
 
+    /// The id as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -340,6 +401,12 @@ impl fmt::Display for RoomyRoomId {
 pub struct GhostMxid(String);
 
 impl GhostMxid {
+    /// Parses a Matrix user id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedMxid`] if `value` lacks the leading `@`, the
+    /// `:` before the server part, or contains whitespace.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         let valid =
@@ -351,6 +418,7 @@ impl GhostMxid {
         }
     }
 
+    /// The MXID as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -388,6 +456,12 @@ impl fmt::Display for GhostMxid {
 pub struct GhostDid(String);
 
 impl GhostDid {
+    /// Parses a `did:matrix:` ghost DID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdError::MalformedDid`] if `value` is not a DID, and
+    /// [`IdError::NotMatrixGhostDid`] if it names another DID method.
     pub fn parse(value: impl Into<String>) -> Result<Self, IdError> {
         let value = value.into();
         roomy_events::Did::parse(value.clone()).map_err(|_| IdError::MalformedDid)?;
@@ -397,6 +471,7 @@ impl GhostDid {
         Ok(GhostDid(value))
     }
 
+    /// The DID as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -588,7 +663,7 @@ mod tests {
 
     #[test]
     fn a_stream_position_cannot_be_negative() {
-        assert_eq!(SortIdx::new(0).unwrap().get(), 0);
+        assert_eq!(SortIdx::new(0).unwrap().value(), 0);
         assert!(SortIdx::new(-1).is_err());
     }
 

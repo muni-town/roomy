@@ -23,7 +23,9 @@ use crate::transport::{HomeserverClient, TransportError};
 /// A content object plus how it must be sent.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutgoingContent {
+    /// The Matrix event type, e.g. `m.room.message`.
     pub event_type: String,
+    /// The event content.
     pub content: Value,
 }
 
@@ -57,6 +59,7 @@ pub struct HttpSender {
 }
 
 impl HttpSender {
+    /// A sender over `client`, with no ghost joined yet.
     pub fn new(client: HomeserverClient) -> Self {
         Self {
             client,

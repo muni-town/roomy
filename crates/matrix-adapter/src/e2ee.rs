@@ -20,12 +20,14 @@
 //! encrypted room is unreadable. That is a property of the design, stated in the
 //! operator docs and in the app-lite encryption notice rather than papered over.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use matrix_sdk_crypto::types::events::room::encrypted::EncryptedEvent;
 use matrix_sdk_crypto::types::requests::AnyIncomingResponse;
+use matrix_sdk_crypto::types::requests::ToDeviceRequest;
 use matrix_sdk_crypto::{
-    types::events::room::encrypted::EncryptedEvent, types::requests::ToDeviceRequest,
     DecryptionSettings, EncryptionSettings, EncryptionSyncChanges, OlmMachine, OlmMachineBuilder,
     RoomEventDecryptionResult, TrustRequirement,
 };
@@ -33,7 +35,6 @@ use ruma::events::{AnyMessageLikeEventContent, AnyToDeviceEvent};
 use ruma::serde::Raw;
 use ruma::{DeviceId, OwnedDeviceId, OwnedRoomId, OwnedUserId, TransactionId};
 use serde_json::Value;
-use std::collections::BTreeMap;
 
 /// The crypto machine and the device identity it holds.
 pub struct CryptoMachine {
@@ -306,22 +307,29 @@ impl CryptoMachine {
 /// Ciphertext for one message, plus any key-sharing the caller must deliver
 /// before the message is decryptable.
 pub struct EncryptedContent {
+    /// The `m.room.encrypted` content to send.
     pub content: Value,
+    /// To-device requests that must be delivered before the message can be
+    /// decrypted.
     pub key_sharing: Vec<Arc<ToDeviceRequest>>,
 }
 
 /// E2EE could not proceed.
 #[derive(Debug, thiserror::Error)]
 pub enum CryptoError {
+    /// The crypto store failed.
     #[error("crypto store error: {0}")]
     Store(String),
     /// The homeserver call that carries keys failed.
     #[error(transparent)]
     Transport(#[from] crate::transport::TransportError),
+    /// No Megolm session for the room has been shared yet.
     #[error("no Megolm session for this room yet")]
     SessionNotShared,
+    /// Encryption failed.
     #[error("could not encrypt: {0}")]
     Encrypt(String),
+    /// The crypto payload could not be parsed.
     #[error("malformed crypto payload: {0}")]
     Decode(String),
 }
@@ -349,6 +357,7 @@ pub struct CryptoTransport {
 }
 
 impl CryptoTransport {
+    /// A transport sending as `user_id` from `device_id`.
     pub fn new(
         client: crate::transport::HomeserverClient,
         user_id: &ruma::UserId,

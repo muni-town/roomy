@@ -40,11 +40,14 @@ pub struct Body {
 /// A formatted body and its format, normally `org.matrix.custom.html`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FormattedBody {
+    /// The format name, normally `org.matrix.custom.html`.
     pub format: String,
+    /// The formatted body itself.
     pub body: String,
 }
 
 impl Body {
+    /// A body with no formatted variant.
     pub fn plain(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
@@ -58,8 +61,11 @@ impl Body {
 pub struct IncomingMedia {
     /// The `mxc://` URI the Matrix content names.
     pub mxc_uri: String,
+    /// The media's MIME type.
     pub mime_type: String,
+    /// The file name, when the event carries one.
     pub name: Option<String>,
+    /// The size in bytes, when the event carries it.
     pub size: Option<u64>,
     /// The Matrix `msgtype`, which decides whether the attachment is an image,
     /// a video, or a file.
@@ -69,12 +75,19 @@ pub struct IncomingMedia {
 /// The Matrix message types the bridge distinguishes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Msgtype {
+    /// `m.text`.
     Text,
+    /// `m.emote`.
     Emote,
+    /// `m.notice`.
     Notice,
+    /// `m.image`.
     Image,
+    /// `m.video`.
     Video,
+    /// `m.audio`.
     Audio,
+    /// `m.file`.
     File,
 }
 
@@ -93,7 +106,9 @@ impl Msgtype {
 pub enum IncomingKind {
     /// A message, possibly with media and possibly a reply.
     Message {
+        /// The message body, with its formatted variant when present.
         body: Body,
+        /// Media the message references.
         media: Vec<IncomingMedia>,
         /// `m.in_reply_to` target, when the content names one.
         reply_to: Option<MatrixEventId>,
@@ -101,24 +116,41 @@ pub enum IncomingKind {
         thread_root: Option<MatrixEventId>,
     },
     /// `m.replace`: a new body for `target`.
-    Edit { target: MatrixEventId, body: Body },
+    Edit {
+        /// The Matrix event being edited.
+        target: MatrixEventId,
+        /// The new body.
+        body: Body,
+    },
     /// `m.room.redaction`. The target may be a message or a reaction; the id
     /// map decides which.
     Redaction {
+        /// The Matrix event being redacted; a message or a reaction.
         target: MatrixEventId,
+        /// The reason recorded with the redaction.
         reason: Option<String>,
     },
     /// `m.annotation` reaction.
-    Reaction { target: MatrixEventId, key: String },
+    Reaction {
+        /// The Matrix event being reacted to.
+        target: MatrixEventId,
+        /// The reaction key, e.g. an emoji.
+        key: String,
+    },
 }
 
 /// One decrypted event handed to the state machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncomingEvent {
+    /// The Matrix event id.
     pub event_id: MatrixEventId,
+    /// The Matrix room the event happened in.
     pub room_id: MatrixRoomId,
+    /// The Matrix user that sent it, as their ghost MXID.
     pub sender: GhostMxid,
+    /// The event's origin timestamp, in milliseconds.
     pub origin_server_ts: Millis,
+    /// What the event is.
     pub kind: IncomingKind,
     /// Whether the event arrived inside an encrypted room, so the caller can
     /// mark a portal blocked when a key is missing.

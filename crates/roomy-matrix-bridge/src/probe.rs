@@ -16,6 +16,7 @@ pub struct ProbeState {
 }
 
 impl ProbeState {
+    /// A state that has measured nothing yet.
     pub fn new() -> Self {
         Self::default()
     }

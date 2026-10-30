@@ -20,9 +20,9 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
-use p256::ecdsa::{signature::Verifier as _, Signature as P256Signature, VerifyingKey as P256Key};
+use p256::ecdsa::signature::Verifier as _;
+use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256Key};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 
 /// A token was not acceptable.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -46,6 +46,7 @@ pub struct AdminAuth {
 const DID_CACHE_TTL: Duration = Duration::from_secs(300);
 
 impl AdminAuth {
+    /// An authenticator for tokens naming `bridge_did`.
     pub fn new(bridge_did: impl Into<String>) -> Self {
         Self {
             bridge_did: bridge_did.into(),
@@ -146,12 +147,12 @@ impl AdminAuth {
             } else {
                 format!("https://{host}/{}/did.json", path.replace(':', "/"))
             };
-            return self.get_document(&url).await;
+            return self.fetch_document(&url).await;
         }
 
         if did.starts_with("did:plc:") {
             let url = format!("https://plc.directory/{did}");
-            return self.get_document(&url).await;
+            return self.fetch_document(&url).await;
         }
 
         Err(AdminError::Unauthorized(format!(
@@ -159,7 +160,7 @@ impl AdminAuth {
         )))
     }
 
-    async fn get_document(&self, url: &str) -> Result<DidDocument, AdminError> {
+    async fn fetch_document(&self, url: &str) -> Result<DidDocument, AdminError> {
         let response = self
             .http
             .get(url)
@@ -409,6 +410,7 @@ fn unix_now() -> u64 {
 /// The SHA-256 of a byte slice, used when minting test tokens.
 #[allow(dead_code)]
 fn sha256(bytes: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hasher.finalize().into()
@@ -417,7 +419,8 @@ fn sha256(bytes: &[u8]) -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use p256::ecdsa::{signature::Signer as _, SigningKey};
+    use p256::ecdsa::signature::Signer as _;
+    use p256::ecdsa::SigningKey;
 
     fn token(
         key: &SigningKey,

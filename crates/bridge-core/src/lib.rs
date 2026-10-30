@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! Platform-neutral bridge state machine.
 //!
 //! Nothing here does I/O and nothing here reads the clock: a bridge needs to be

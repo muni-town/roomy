@@ -19,20 +19,18 @@
 
 use std::sync::Arc;
 
-use axum::{
-    extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    routing::{get, patch},
-    Json, Router,
-};
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing;
+use axum::{Json, Router};
 use bridge_core::{MatrixRoomId, RoomyRoomId, SpaceDid};
 
 use roomy_client::AppserverClient;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::{AdminAuth, AdminError};
-use crate::db::{portal_row, BridgeConfigRow, BridgeDb, NewPortal, PortalRow};
+use crate::db::{self, BridgeConfigRow, BridgeDb, NewPortal, PortalRow};
 use crate::probe::ProbeState;
 use crate::supervisor::{BackfillRequest, EncryptionSupport, Supervisor};
 
@@ -76,12 +74,15 @@ pub const ADMIN_PREFIX: &str = "/_roomy/admin/v1";
 /// Build the admin router.
 pub fn routes(state: AdminState) -> Router {
     Router::new()
-        .route("/health", get(health))
-        .route("/capabilities", get(capabilities))
-        .route("/bridges", get(list_bridges).post(create_bridge))
-        .route("/bridges/{id}", patch(update_bridge).delete(delete_bridge))
-        .route("/bridges/{id}/backfill", get(backfill))
-        .route("/bridges/{id}/rooms", get(rooms))
+        .route("/health", routing::get(health))
+        .route("/capabilities", routing::get(capabilities))
+        .route("/bridges", routing::get(list_bridges).post(create_bridge))
+        .route(
+            "/bridges/{id}",
+            routing::patch(update_bridge).delete(delete_bridge),
+        )
+        .route("/bridges/{id}/backfill", routing::get(backfill))
+        .route("/bridges/{id}/rooms", routing::get(rooms))
         .with_state(state)
 }
 
@@ -380,7 +381,7 @@ async fn create_portals(
             room_id.as_str(),
         )
         .await?;
-        let portal = portal_row(NewPortal {
+        let portal = db::portal_row(NewPortal {
             space_did: &bridge.space_did,
             bridge_id: &bridge.id,
             matrix_room_id: &room_id,
@@ -424,7 +425,7 @@ async fn create_portals(
             room_id.as_str(),
         )
         .await?;
-        let portal = portal_row(NewPortal {
+        let portal = db::portal_row(NewPortal {
             space_did: &bridge.space_did,
             bridge_id: &bridge.id,
             matrix_room_id: &room_id,
@@ -510,7 +511,7 @@ async fn create_portals(
             matrix_room_id.as_str(),
         )
         .await?;
-        let portal = portal_row(NewPortal {
+        let portal = db::portal_row(NewPortal {
             space_did: &bridge.space_did,
             bridge_id: &bridge.id,
             matrix_room_id,

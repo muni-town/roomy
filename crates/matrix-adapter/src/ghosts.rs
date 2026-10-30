@@ -12,8 +12,6 @@
 
 use std::collections::BTreeMap;
 
-use sha2::{Digest, Sha256};
-
 use bridge_core::GhostMxid;
 use roomy_events::Did;
 
@@ -24,7 +22,9 @@ pub struct GhostUser {
     pub mxid: GhostMxid,
     /// The Roomy DID behind it.
     pub did: Did,
+    /// The profile name pushed to the homeserver, when one was given.
     pub display_name: Option<String>,
+    /// The avatar URI pushed to the homeserver, when one was given.
     pub avatar_uri: Option<String>,
     /// Hash of the profile last pushed, so an unchanged profile is not re-sent.
     pub profile_hash: Option<String>,
@@ -43,6 +43,7 @@ pub struct GhostRegistry {
 }
 
 impl GhostRegistry {
+    /// A registry that mints ghosts under `host`.
     pub fn new(host: impl Into<String>) -> Self {
         Self {
             host: host.into(),
@@ -62,6 +63,8 @@ impl GhostRegistry {
     /// [`GhostRegistry::register`] refuses a localpart already taken by another
     /// DID.
     pub fn mxid_for(&self, did: &Did) -> GhostMxid {
+        use sha2::{Digest, Sha256};
+
         let digest = Sha256::digest(did.as_str().as_bytes());
         let localpart = format!("{}_{}", self.prefix, hex_prefix(&digest, 11));
         GhostMxid::parse(format!("@{}:{}", localpart, self.host))
@@ -135,8 +138,11 @@ impl GhostRegistry {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("ghost {mxid} is already minted for {held_by}, cannot give it to {wanted_by}")]
 pub struct GhostCollision {
+    /// The MXID both DIDs map to.
     pub mxid: GhostMxid,
+    /// The DID that already owns the MXID.
     pub held_by: Did,
+    /// The DID whose hash mapped to the same localpart.
     pub wanted_by: Did,
 }
 

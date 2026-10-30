@@ -31,13 +31,20 @@ pub enum PortalState {
     },
     /// Deliberately stopped — an operator disabled it, or the bridge is
     /// shutting down cleanly.
-    Paused { reason: String },
+    Paused {
+        /// Why the bridge stopped the portal.
+        reason: String,
+    },
     /// Cannot proceed without operator action — no room key, a refused
     /// hierarchy, a missing permission.
-    Blocked { reason: String },
+    Blocked {
+        /// What an operator has to change before it can proceed.
+        reason: String,
+    },
 }
 
 impl PortalState {
+    /// Whether live events flow in both directions right now.
     pub fn is_live(&self) -> bool {
         matches!(self, PortalState::Syncing | PortalState::Backfilling { .. })
     }
@@ -75,6 +82,7 @@ pub enum PortalEncryption {
     Plain,
     /// The room is encrypted; `device` says whether the bridge can encrypt.
     Encrypted {
+        /// Whether the bridge can encrypt for the room.
         #[serde(flatten)]
         device: EncryptionDevice,
     },
@@ -87,7 +95,10 @@ pub enum EncryptionDevice {
     /// The bridge device that encrypts for this room is running.
     Ready(MatrixDeviceId),
     /// The room is encrypted and the bridge has no way to encrypt for it.
-    Unusable { missing: MissingFeature },
+    Unusable {
+        /// What the bridge lacks.
+        missing: MissingFeature,
+    },
 }
 
 /// What an encrypted portal lacks, named so the admin API can say why.
@@ -102,6 +113,7 @@ pub enum MissingFeature {
 }
 
 impl MissingFeature {
+    /// The kebab-case name the admin API reports.
     pub fn label(self) -> &'static str {
         match self {
             MissingFeature::Msc4203ToDevice => "msc4203-to-device",
@@ -182,7 +194,9 @@ pub struct Portal {
     /// for it. An encrypted room the bridge cannot read is `Blocked` rather
     /// than silently plaintext.
     pub encryption: PortalEncryption,
+    /// What the portal is doing right now.
     pub state: PortalState,
+    /// When the portal row was created, in wall-clock milliseconds.
     pub created_at: Millis,
 }
 

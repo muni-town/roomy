@@ -16,8 +16,8 @@ use std::future::Future;
 use std::sync::Arc;
 
 use bridge_core::{
-    step, BridgeState, GhostDid, IncomingEvent, IncomingKind, Input, Mapping, RoomyEventId,
-    RoomyRoomId, SpaceDid, Step,
+    BridgeState, GhostDid, IncomingEvent, IncomingKind, Input, Mapping, RoomyEventId, RoomyRoomId,
+    SpaceDid, Step,
 };
 use matrix_adapter::transaction::{ToDeviceMessage, Transaction};
 use matrix_adapter::MediaStore;
@@ -76,6 +76,7 @@ pub struct RelayDeps {
 }
 
 impl Relay {
+    /// A relay over the clients and state in `deps`.
     pub fn new(deps: RelayDeps) -> Self {
         let RelayDeps {
             db,
@@ -226,7 +227,7 @@ impl RelayState {
         let now = self.clock.now_ms();
         let outcome = {
             let mut state = self.state.lock();
-            step(
+            bridge_core::step(
                 &mut state,
                 Input::Matrix {
                     event: &event,
@@ -808,7 +809,7 @@ mod tests {
             created_at: 0,
         };
         let mut state = BridgeState::new();
-        let Step::Accepted(writes) = step(
+        let Step::Accepted(writes) = bridge_core::step(
             &mut state,
             Input::Matrix {
                 event: &event,

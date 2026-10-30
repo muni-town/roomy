@@ -37,9 +37,13 @@ pub(crate) use fake::fake_client;
 /// The HTTP method of a request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Method {
+    /// `GET`.
     Get,
+    /// `POST`.
     Post,
+    /// `PUT`.
     Put,
+    /// `DELETE`.
     Delete,
 }
 
@@ -57,9 +61,17 @@ impl Method {
 /// What a request carries.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Body {
+    /// No body.
     None,
+    /// A JSON body.
     Json(Value),
-    Bytes { content_type: String, data: Vec<u8> },
+    /// Raw bytes with an explicit content type, for media uploads.
+    Bytes {
+        /// The `content-type` to send.
+        content_type: String,
+        /// The bytes to send.
+        data: Vec<u8>,
+    },
 }
 
 /// One request, fully built: absolute url, credential, body.
@@ -68,10 +80,13 @@ pub enum Body {
 /// an [`Exchange`] has nothing left to decide.
 #[derive(Clone, PartialEq)]
 pub struct Request {
+    /// The HTTP method.
     pub method: Method,
+    /// The absolute url, with path and query already encoded.
     pub url: String,
     /// Sent as `Authorization: Bearer`. Absent for an origin that needs none.
     pub token: Option<String>,
+    /// The body to send.
     pub body: Body,
 }
 
@@ -91,9 +106,13 @@ impl fmt::Debug for Request {
 /// One answer, with the headers the media path reads kept apart from the body.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Response {
+    /// The HTTP status.
     pub status: u16,
+    /// The `content-type` header, when the homeserver sent one.
     pub content_type: Option<String>,
+    /// The `content-disposition` header, when the homeserver sent one.
     pub content_disposition: Option<String>,
+    /// The body bytes, still unread.
     pub body: Vec<u8>,
 }
 
@@ -117,7 +136,9 @@ impl Response {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{url}: {message}")]
 pub struct ExchangeError {
+    /// The url that was requested.
     pub url: String,
+    /// What the network layer reported.
     pub message: String,
 }
 
@@ -127,6 +148,7 @@ pub struct ExchangeError {
 /// nothing did. It presents no token and draws no conclusion — those belong to
 /// [`Transport`], so that both adapters are measured by the same rules.
 pub trait Exchange: Send + Sync {
+    /// Execute one request, reporting only whether an answer arrived.
     fn exchange<'a>(
         &'a self,
         request: Request,
@@ -140,6 +162,7 @@ pub struct HttpExchange {
 }
 
 impl HttpExchange {
+    /// An exchange over a fresh `reqwest` client.
     pub fn new() -> Self {
         Self::default()
     }
@@ -243,6 +266,7 @@ impl Transport {
         }
     }
 
+    /// The origin every path is resolved against.
     pub fn base_url(&self) -> &str {
         &self.base_url
     }
@@ -296,11 +320,23 @@ impl Transport {
         self.send(Method::Get, path, Body::None).await
     }
 
+    /// `GET` a path and read its JSON body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError`] when the request fails or the answer is not
+    /// a JSON `T`.
     pub async fn get_json<T: DeserializeOwned>(&self, path: &str) -> Result<T, TransportError> {
         let response = self.get(path).await?;
         response.decode(|| format!("{}{}", self.base_url, path))
     }
 
+    /// `POST` a JSON body to a path and read the JSON answer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError`] when the request fails or the answer is not
+    /// a JSON `T`.
     pub async fn post_json<T: DeserializeOwned>(
         &self,
         path: &str,
@@ -312,6 +348,12 @@ impl Transport {
         response.decode(|| format!("{}{}", self.base_url, path))
     }
 
+    /// `PUT` a JSON body to a path and read the JSON answer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError`] when the request fails or the answer is not
+    /// a JSON `T`.
     pub async fn put_json<T: DeserializeOwned>(
         &self,
         path: &str,
@@ -368,8 +410,11 @@ pub(crate) fn percent_encode(value: &str) -> String {
 /// A media item as the homeserver served it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaDownload {
+    /// The `content-type` header, when the homeserver sent one.
     pub content_type: Option<String>,
+    /// The `content-disposition` header, when the homeserver sent one.
     pub content_disposition: Option<String>,
+    /// The media bytes.
     pub data: Vec<u8>,
 }
 
@@ -382,7 +427,12 @@ pub struct MediaDownload {
 pub enum TransportError {
     /// No answer arrived: DNS, connection, TLS, a dropped socket.
     #[error("could not reach {url}: {message}")]
-    Transport { url: String, message: String },
+    Transport {
+        /// The url that was requested.
+        url: String,
+        /// What the network layer reported.
+        message: String,
+    },
     /// The homeserver answered and refused.
     ///
     /// The status is always the one it answered with. A refusal this adapter
@@ -391,17 +441,30 @@ pub enum TransportError {
     /// gave up on something that could never succeed.
     #[error("{url} answered HTTP {status}: {body}")]
     Rejected {
+        /// The url that was requested.
         url: String,
+        /// The status the homeserver answered with.
         status: u16,
+        /// The body the homeserver answered with, as text.
         body: String,
     },
     /// The call could not be expressed as a request, so no homeserver saw it.
     /// Retrying sends the same thing.
     #[error("{url}: {reason}")]
-    Invalid { url: String, reason: String },
+    Invalid {
+        /// The url that could not be built.
+        url: String,
+        /// Why the call could not be expressed as a request.
+        reason: String,
+    },
     /// The answer arrived and is not what the call asked for.
     #[error("{url} returned a body this adapter cannot read: {message}")]
-    Decode { url: String, message: String },
+    Decode {
+        /// The url that was requested.
+        url: String,
+        /// What the decoder reported.
+        message: String,
+    },
 }
 
 impl TransportError {

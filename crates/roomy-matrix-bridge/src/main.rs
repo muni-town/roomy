@@ -631,7 +631,7 @@ async fn run_space_socket(
 
     loop {
         match appserver
-            .subscribe_stream(&ws_origin, &did, cursor.get())
+            .subscribe_stream(&ws_origin, &did, cursor.value())
             .await
         {
             Ok(mut subscription) => {

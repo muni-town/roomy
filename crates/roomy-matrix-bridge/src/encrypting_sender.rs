@@ -29,6 +29,7 @@ pub struct EncryptingSender {
 }
 
 impl EncryptingSender {
+    /// A sender that encrypts through `crypto` and sends through `inner`.
     pub fn new(
         inner: Arc<dyn MatrixSender>,
         client: Arc<HomeserverClient>,

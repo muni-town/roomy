@@ -14,20 +14,18 @@
 
 use std::sync::Arc;
 
-use axum::{
-    body::Bytes,
-    extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    routing::{get, put},
-    Json, Router,
-};
+use axum::body::Bytes;
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing;
+use axum::{Json, Router};
 use bridge_core::TxnId;
 use matrix_adapter::transaction::TransactionHandler;
 use parking_lot::Mutex;
 use serde::Deserialize;
 
-use crate::admin::{routes as admin_routes, AdminState, ADMIN_PREFIX};
+use crate::admin::{self, AdminState, ADMIN_PREFIX};
 
 /// Shared state for the appservice server.
 #[derive(Clone)]
@@ -102,12 +100,18 @@ impl TransactionRelay for NullRelay {
 /// 404s. Nesting is sound here because the admin router carries its own state
 /// (`AdminState`), so the outer router's state never has to be threaded into it.
 pub fn router(state: ServerState) -> Router {
-    let admin = admin_routes(state.admin.clone());
+    let admin = admin::routes(state.admin.clone());
     Router::new()
-        .route("/_matrix/app/v1/transactions/{txn_id}", put(transaction))
-        .route("/_matrix/app/v1/ping", get(ping))
-        .route("/_matrix/app/v1/users/{user_id}", get(query_user))
-        .route("/_matrix/app/v1/rooms/{room_alias}", get(query_room))
+        .route(
+            "/_matrix/app/v1/transactions/{txn_id}",
+            routing::put(transaction),
+        )
+        .route("/_matrix/app/v1/ping", routing::get(ping))
+        .route("/_matrix/app/v1/users/{user_id}", routing::get(query_user))
+        .route(
+            "/_matrix/app/v1/rooms/{room_alias}",
+            routing::get(query_room),
+        )
         .with_state(state)
         .nest(ADMIN_PREFIX, admin)
 }

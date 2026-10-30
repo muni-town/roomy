@@ -27,8 +27,10 @@ use crate::media::MxcUri;
 /// room key from the other.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Transaction {
+    /// The PDUs in the transaction.
     #[serde(default)]
     pub events: Vec<Pdu>,
+    /// The EDUs in the transaction.
     #[serde(default)]
     pub edus: Vec<Edu>,
     /// The to-device stream: room keys and verification traffic.
@@ -39,16 +41,23 @@ pub struct Transaction {
 /// One PDU in a transaction.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Pdu {
+    /// The event type, e.g. `m.room.message`.
     #[serde(rename = "type")]
     pub kind: String,
+    /// The Matrix event id.
     #[serde(rename = "event_id")]
     pub event_id: String,
+    /// The room the event happened in.
     pub room_id: String,
+    /// The Matrix user that sent the event.
     pub sender: String,
+    /// The state key; absent for message events.
     #[serde(default)]
     pub state_key: Option<String>,
+    /// The event's origin timestamp, in milliseconds.
     #[serde(rename = "origin_server_ts", default)]
     pub origin_server_ts: i64,
+    /// The event content, still platform-shaped.
     #[serde(default)]
     pub content: serde_json::Value,
     /// Present when the homeserver has already decrypted the event for this
@@ -61,8 +70,10 @@ pub struct Pdu {
 /// One EDU in a transaction.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Edu {
+    /// The EDU type, e.g. `m.typing`.
     #[serde(rename = "type")]
     pub kind: String,
+    /// The EDU content.
     #[serde(default)]
     pub content: serde_json::Value,
 }
@@ -75,6 +86,7 @@ pub struct TransactionHandler {
 }
 
 impl TransactionHandler {
+    /// A handler that has seen no transactions.
     pub fn new() -> Self {
         Self::default()
     }
@@ -84,6 +96,7 @@ impl TransactionHandler {
     /// A retry is acknowledged and discarded. Processing it again would
     /// double-post every message in the batch, and the homeserver retries
     /// precisely the transactions whose acknowledgement it did not see.
+    #[must_use]
     pub fn is_replay(&mut self, txn_id: &TxnId) -> bool {
         !self.seen.insert(txn_id.as_str().to_string())
     }
@@ -207,9 +220,12 @@ impl TransactionHandler {
 /// One to-device message, as MSC2409 delivers it.
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct ToDeviceMessage {
+    /// The to-device message type, e.g. `m.room_key`.
     #[serde(rename = "type")]
     pub kind: String,
+    /// The Matrix user that sent the message.
     pub sender: String,
+    /// The message content, still platform-shaped.
     #[serde(default)]
     pub content: serde_json::Value,
 }

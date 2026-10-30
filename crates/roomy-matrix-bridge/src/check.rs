@@ -20,14 +20,12 @@
 
 use std::time::Duration;
 
-use axum::{
-    body::Bytes,
-    extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    routing::put,
-    Json, Router,
-};
+use axum::body::Bytes;
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing;
+use axum::{Json, Router};
 use matrix_adapter::{
     AsToken, CapabilityProbe, HomeserverClient, HsToken, TransactionObserver, TransportError,
 };
@@ -119,7 +117,7 @@ pub async fn measure(config: &Config) -> Option<matrix_adapter::HomeserverCapabi
     let app = Router::new()
         .route(
             "/_matrix/app/v1/transactions/{txn_id}",
-            put(capture_transaction),
+            routing::put(capture_transaction),
         )
         .with_state(CheckState {
             observer: observer.clone(),
