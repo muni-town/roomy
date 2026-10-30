@@ -118,15 +118,31 @@ is one log line, not a failed deploy:
 [entrypoint] shadow: not starting the follower — ROOMY_SPACES would be empty (/data/spaces holds no *.sqlite), ALLOY_URL is unset (the follower would have no telemetry)
 ```
 
+**The telemetry values are passed, not inherited.** `ALLOY_URL`, `APP_ENV`,
+`BUILD_ID` and `RUST_LOG` go into the child's `env` when they are set, so what the
+follower logs with is what the container was told. Startup names the target by host
+only — the URL may carry credentials — and says whether the sink exists at all:
+
+```text
+[entrypoint] shadow: log sink enabled — alloy.internal:3100 (env staging, build abc1234)
+```
+
 Its health, from inside the container:
 
 ```bash
 docker exec <container> curl -s 127.0.0.1:8089/health
-# {"status":"ok","spaces":[{"space":"did:plc:…","cursor":{"idx":…,"ord":…},"lag":0,"leaseHeld":false,"following":true,"holder":"…","lastError":null}]}
+# {"status":"ok","spaces":[{"space":"did:plc:…","cursor":{"idx":…,"ord":…},"lag":0,"leaseHeld":false,"following":true,"holder":"…","lastError":null}],"loki":{"sent":1234,"failed":0,"dropped":0,"retrying":false}}
 ```
 
 `following: true` with `leaseHeld: false` is the honest pair for a follower: it
 is replaying, and it holds no lease, so it cannot stop the owner materialising.
+
+`loki` is the sink accounting for itself: `sent`, `failed` and `dropped` are
+cumulative record counts, `retrying` says a failed push is waiting out its backoff. A
+sink that delivers nothing looks exactly like one with nothing to say, so this is
+where "are the follower's logs arriving" is answerable without Grafana. `null` means
+no sink is configured. A failed push also writes one line to container stderr, at
+most once a minute, naming the Alloy's host and the status.
 
 ### Schema version bumps (blue-green read serving)
 

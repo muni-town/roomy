@@ -53,9 +53,23 @@ const DEFAULT_PUSH_TIMEOUT: Duration = Duration::from_secs(5);
 /// service uses on its fatal-exit path.
 pub const SHUTDOWN_FLUSH: Duration = Duration::from_secs(5);
 
+/// The most often the sink repeats a failure it has already announced. The line
+/// goes to container stdout, which an operator reads: one per minute is a
+/// signal, one per retry is a flood.
+const REPORT_INTERVAL: Duration = Duration::from_secs(60);
+
 /// The keys the line already has; an event field of the same name cannot
 /// overwrite them.
 const RESERVED: [&str; 5] = ["ts", "level", "scope", "msg", "build_id"];
+
+/// The host a push URL addresses, without its credentials, path or query: what
+/// an operator needs to know which Alloy the sink is talking to, and nothing a
+/// log line should not carry.
+fn host_of(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = rest.split('/').next().unwrap_or(rest);
+    authority.rsplit('@').next().unwrap_or(authority)
+}
 
 /// Which `scope` a `target` maps to: the logging analogue of the TypeScript
 /// service's small scope enum, not a free-form module path — a scope is a label
@@ -211,9 +225,11 @@ struct Backoff {
 }
 
 /// What the sink has done with what it was given. `queued` is the current
-/// depth; `sent`, `dropped` and `failed` are cumulative. The tests read it to
-/// see the bound and the retry they cannot see from outside.
-#[cfg(test)]
+/// depth; `sent`, `dropped` and `failed` are cumulative.
+///
+/// A sink that silently delivers nothing looks exactly like a sink with nothing
+/// to say, so these numbers are served on the process's `/health`: "are the logs
+/// arriving" is a question the process can answer about itself.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SinkStats {
     pub queued: usize,
@@ -224,6 +240,92 @@ pub struct SinkStats {
     pub retrying: bool,
 }
 
+impl SinkStats {
+    /// The object `/health` carries. `queued` is left out: it changes per record,
+    /// and the four counters here are the ones that answer whether the sink is
+    /// delivering.
+    #[must_use]
+    pub fn to_value(self) -> Value {
+        serde_json::json!({
+            "sent": self.sent,
+            "failed": self.failed,
+            "dropped": self.dropped,
+            "retrying": self.retrying,
+        })
+    }
+}
+
+/// What one push did.
+enum Outcome {
+    Sent,
+    /// The status, or a description of the transport failure, with no URL in it:
+    /// an Alloy URL may carry credentials and this text reaches stderr.
+    Failed(String),
+}
+
+/// The sink's account of itself, on stderr.
+///
+/// Deliberately not `tracing`: an event would be fed back into the queue this
+/// reporter exists to say is not draining. stderr reaches the container log the
+/// operator already reads, however broken the sink is.
+#[derive(Debug, Default)]
+struct Reporter {
+    /// Whether the last push failed. `false` until one does, so the first failure
+    /// of a run is always announced.
+    failing: bool,
+    /// When the last line was written.
+    last: Option<Instant>,
+}
+
+impl Reporter {
+    /// The line to write for `outcome`, or `None`. A change of state is always
+    /// worth a line; repeating the same failure is worth one per
+    /// [`REPORT_INTERVAL`].
+    fn observe(&mut self, target: &str, outcome: &Outcome, now: Instant) -> Option<String> {
+        match outcome {
+            Outcome::Sent => {
+                let was_failing = std::mem::replace(&mut self.failing, false);
+                if !was_failing {
+                    return None;
+                }
+                self.last = Some(now);
+                Some(format!(
+                    "[loki] push to {target} recovered; logs are reaching Loki again"
+                ))
+            }
+            Outcome::Failed(reason) => {
+                let repeated = self.failing
+                    && self
+                        .last
+                        .is_some_and(|at| now.duration_since(at) < REPORT_INTERVAL);
+                self.failing = true;
+                if repeated {
+                    return None;
+                }
+                self.last = Some(now);
+                Some(format!(
+                    "[loki] push to {target} failed: {reason}; retrying — logs are not reaching Loki"
+                ))
+            }
+        }
+    }
+}
+
+/// Why a push failed, in terms that carry no URL: `reqwest`'s own message
+/// quotes the request URL, which may hold credentials.
+fn transport_reason(error: &reqwest::Error) -> String {
+    let reason = if error.is_timeout() {
+        "timed out"
+    } else if error.is_connect() {
+        "could not connect"
+    } else if error.is_body() || error.is_decode() {
+        "unreadable response"
+    } else {
+        "request failed"
+    };
+    reason.to_string()
+}
+
 /// The queue and the HTTP client that drains it: what a `LokiLayer` hands each
 /// record to.
 ///
@@ -231,6 +333,9 @@ pub struct SinkStats {
 /// stdout whether or not one does.
 pub struct LokiSink {
     push_url: String,
+    /// The push URL's host, for the self-report line: the full URL may carry
+    /// credentials and never reaches a log.
+    target: String,
     env: String,
     build_id: String,
     limits: Limits,
@@ -239,6 +344,7 @@ pub struct LokiSink {
     requests: mpsc::UnboundedSender<oneshot::Sender<()>>,
     requests_rx: Mutex<Option<mpsc::UnboundedReceiver<oneshot::Sender<()>>>>,
     backoff: Mutex<Backoff>,
+    reporter: Mutex<Reporter>,
     sent: AtomicU64,
     dropped: AtomicU64,
     failed: AtomicU64,
@@ -269,6 +375,7 @@ impl LokiSink {
     fn new(push_url: String, env: String, build_id: String, limits: Limits) -> Self {
         let (requests, requests_rx) = mpsc::unbounded_channel();
         Self {
+            target: host_of(&push_url).to_string(),
             push_url,
             env,
             build_id,
@@ -281,6 +388,7 @@ impl LokiSink {
                 next_attempt: None,
                 delay: limits.initial_backoff,
             }),
+            reporter: Mutex::new(Reporter::default()),
             sent: AtomicU64::new(0),
             dropped: AtomicU64::new(0),
             failed: AtomicU64::new(0),
@@ -331,7 +439,7 @@ impl LokiSink {
         let _ = tokio::time::timeout(timeout, flushed).await;
     }
 
-    #[cfg(test)]
+    /// What the sink has done so far, for `/health`.
     pub fn stats(&self) -> SinkStats {
         SinkStats {
             queued: self.queue.lock().map_or(0, |queue| queue.len()),
@@ -339,6 +447,19 @@ impl LokiSink {
             dropped: self.dropped.load(Ordering::Relaxed),
             failed: self.failed.load(Ordering::Relaxed),
             retrying: self.in_backoff(),
+        }
+    }
+
+    /// Say on stderr what this push means for delivery, if it is worth saying.
+    fn report(&self, outcome: &Outcome) {
+        let line = match self.reporter.lock() {
+            Ok(mut reporter) => reporter.observe(&self.target, outcome, Instant::now()),
+            Err(poisoned) => poisoned
+                .into_inner()
+                .observe(&self.target, outcome, Instant::now()),
+        };
+        if let Some(line) = line {
+            eprintln!("{line}");
         }
     }
 
@@ -416,7 +537,8 @@ impl LokiSink {
     /// Push batches until the queue is empty, the backoff window is open, or a
     /// push fails. Every outcome is a counter, never an error: the caller is a
     /// logging path or a shutdown path, and neither can do anything about a
-    /// broken sink.
+    /// broken sink. What a broken sink can do is say so on stderr, which is what
+    /// `report` is for.
     async fn flush_once(&self, client: &reqwest::Client) {
         if self.in_backoff() {
             return;
@@ -428,17 +550,19 @@ impl LokiSink {
             }
             let count = batch.len() as u64;
             let body = push_body(&self.env, &batch);
-            let pushed = match client
+            let outcome = match client
                 .post(&self.push_url)
                 .header("content-type", "application/json")
                 .body(body)
                 .send()
                 .await
             {
-                Ok(response) => response.status().is_success(),
-                Err(_) => false,
+                Ok(response) if response.status().is_success() => Outcome::Sent,
+                Ok(response) => Outcome::Failed(format!("status {}", response.status().as_u16())),
+                Err(error) => Outcome::Failed(transport_reason(&error)),
             };
-            if pushed {
+            self.report(&outcome);
+            if matches!(outcome, Outcome::Sent) {
                 self.sent.fetch_add(count, Ordering::Relaxed);
                 self.reset_backoff();
             } else {
@@ -943,6 +1067,109 @@ mod tests {
         assert_eq!(resolve_build_id(None), "unknown");
         assert_eq!(resolve_build_id(Some(" ")), "unknown");
         assert_eq!(resolve_build_id(Some("abc1234")), "abc1234");
+    }
+
+    #[test]
+    fn the_first_failure_and_every_recovery_are_announced_once() {
+        let mut reporter = Reporter::default();
+        let start = Instant::now();
+        let failing = Outcome::Failed("status 500".into());
+        let target = "alloy.internal:3100";
+
+        let first = reporter
+            .observe(target, &failing, start)
+            .expect("the first failure of a run is announced");
+        assert!(first.contains(target), "the line names the host: {first}");
+        assert!(
+            first.contains("status 500"),
+            "the line names the status: {first}"
+        );
+
+        assert!(
+            reporter
+                .observe(target, &failing, start + Duration::from_secs(1))
+                .is_none(),
+            "the same failure a second later is not a second line"
+        );
+        assert!(
+            reporter
+                .observe(target, &failing, start + Duration::from_secs(59))
+                .is_none(),
+            "one line a minute, not one a retry"
+        );
+        let repeated = reporter
+            .observe(target, &failing, start + Duration::from_secs(61))
+            .expect("a failure still present after a minute is worth repeating");
+        assert!(repeated.contains("status 500"), "{repeated}");
+
+        let recovered = reporter
+            .observe(target, &Outcome::Sent, start + Duration::from_secs(62))
+            .expect("a recovery is a change of state and is announced");
+        assert!(recovered.contains("recovered"), "{recovered}");
+        assert!(
+            reporter
+                .observe(target, &Outcome::Sent, start + Duration::from_secs(63))
+                .is_none(),
+            "a sink that keeps delivering says so once"
+        );
+
+        assert!(
+            reporter
+                .observe(target, &failing, start + Duration::from_secs(64))
+                .is_some(),
+            "the next failure after a healthy period is announced again"
+        );
+    }
+
+    #[test]
+    fn the_reported_target_is_the_host_without_credentials_or_token() {
+        let sink = sink_for(
+            "http://user:secret@alloy.internal:3100/loki/api/v1/push?token=s3cr3t",
+            fast_limits(),
+        );
+        assert_eq!(sink.target, "alloy.internal:3100");
+        let line = Reporter::default()
+            .observe(
+                &sink.target,
+                &Outcome::Failed("could not connect".into()),
+                Instant::now(),
+            )
+            .expect("a line");
+        assert!(!line.contains("secret"), "{line}");
+        assert!(!line.contains("user"), "{line}");
+        assert!(!line.contains("http"), "{line}");
+    }
+
+    #[tokio::test]
+    async fn an_alloy_that_always_fails_moves_the_counters_and_keeps_the_process_alive() {
+        let alloy = Alloy::new(500).await;
+        let mut limits = fast_limits();
+        limits.max_queue = 8;
+        // Nothing here pushes on its own: the explicit flush is the push, so the
+        // backoff it installs is still open when the counters are read.
+        limits.flush_interval = Duration::from_secs(30);
+        limits.initial_backoff = Duration::from_secs(30);
+        limits.max_backoff = Duration::from_secs(30);
+        let sink = sink_for(&alloy.url, limits);
+        let _flusher = sink.spawn().expect("flusher");
+
+        emit(
+            &sink,
+            || tracing::info!(target: "roomy_space_worker::supervisor", "batch failed"),
+        );
+        sink.flush(Duration::from_secs(2)).await;
+
+        let stats = sink.stats();
+        assert_eq!(stats.failed, 1, "the push failed");
+        assert!(stats.retrying, "a retry is scheduled, not a spin");
+        assert_eq!(stats.queued, 1, "the records are kept for the retry");
+        assert_eq!(stats.sent, 0);
+
+        // The health body is what an operator reads; it has to move too.
+        assert_eq!(
+            sink.stats().to_value(),
+            serde_json::json!({ "sent": 0, "failed": 1, "dropped": 0, "retrying": true })
+        );
     }
 
     #[test]

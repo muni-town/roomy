@@ -79,6 +79,29 @@ seconds). A failed push is retried with exponential backoff from one second to o
 minute; every error is swallowed, so a dead Alloy loses log lines and nothing else.
 On ctrl-c the queue gets five seconds to drain.
 
+Swallowed is not silent. A push that fails writes one line to stderr — the container
+log `docker logs` shows — naming the Alloy's host, never the URL or its credentials:
+
+```
+[loki] push to alloy.internal:3100 failed: status 500; retrying — logs are not reaching Loki
+```
+
+The first failure of an unhealthy period is announced, the same failure again at most
+once a minute, and a recovery once:
+
+```
+[loki] push to alloy.internal:3100 recovered; logs are reaching Loki again
+```
+
+The counters behind it are on `/health` under `loki` (`sent`, `failed`, `dropped`,
+`retrying`), so "are the follower's logs arriving" is a question the process answers
+about itself.
+
+A space whose step fails is not retried immediately: the actor waits 250 ms, then
+doubles to 30 s, and resets on the next applied batch. A space that cannot make
+progress therefore costs neither a core nor a log flood, and its warning names the
+space, the cursor it is stuck at, and the error.
+
 ## The three deployment shapes
 
 **Embedded.** One process, `--role all`. Workers and sockets share a signal sink.
@@ -101,7 +124,7 @@ file's writer.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /health` | Sessions held and signal subscribers (the gateway); with `ROOMY_HEALTH_ADDR`, each space's cursor, lag, lease and `following` (a supervisor) |
+| `GET /health` | Sessions held and signal subscribers (the gateway); with `ROOMY_HEALTH_ADDR`, each space's cursor, lag, lease and `following`, and the log sink's counters (a supervisor) |
 | `GET /metrics` | Prometheus counters, including the shadow's comparison and divergence counts |
 | `POST /xrpc/space.roomy.auth.getConnectionTicket` | A signed, single-use ticket for the socket plane |
 | `GET /xrpc/space.roomy.sync.subscribe` | The WebSocket |
