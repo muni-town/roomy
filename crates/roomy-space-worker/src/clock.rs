@@ -9,6 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// The current instant, in epoch milliseconds.
 pub trait Clock: Send + Sync {
+    /// Now, as epoch milliseconds.
+    #[must_use]
     fn now_ms(&self) -> i64;
 }
 

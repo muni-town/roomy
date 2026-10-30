@@ -27,6 +27,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use space_core::ids::SpaceDid;
+use space_core::PlanMode;
 use space_db::SpaceDb;
 use space_feed::sqlite::SqliteChangeFeed;
 use space_feed::{ChangeFeed, FeedError};
@@ -36,8 +37,8 @@ use crate::clock::{Clock, SystemClock};
 use crate::health::Health;
 use crate::lease::{FollowOnly, Lease, SqliteLease};
 use crate::signal::{NoSignals, SignalSink};
-use crate::sink::SqliteGlobalSink;
-use crate::worker::{Progress, Worker, WorkerParts};
+use crate::sink::{GlobalSink, SqliteGlobalSink};
+use crate::worker::{Progress, Worker, WorkerError, WorkerParts};
 
 /// What this process is to the spaces it opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -63,6 +64,7 @@ pub struct SupervisorConfig {
     pub spaces_dir: PathBuf,
     /// This process's identity on a lease row.
     pub holder: String,
+    /// How long a claim stays valid without renewal.
     pub lease_ttl: Duration,
     /// How long to wait between drains when the feed came back empty.
     pub idle_poll: Duration,
@@ -114,7 +116,7 @@ impl Supervisor {
     pub fn start(
         config: SupervisorConfig,
         spaces: impl IntoIterator<Item = SpaceDid>,
-    ) -> Result<Self, crate::worker::WorkerError> {
+    ) -> Result<Self, WorkerError> {
         let supervisor = Self::new(config);
         supervisor.start_all(spaces)?;
         Ok(supervisor)
@@ -122,16 +124,16 @@ impl Supervisor {
 
     /// Start an actor for every space in `spaces`, on a supervisor already
     /// configured with its clock and signal sink.
-    pub fn start_all(
-        &self,
-        spaces: impl IntoIterator<Item = SpaceDid>,
-    ) -> Result<(), crate::worker::WorkerError> {
+    pub fn start_all(&self, spaces: impl IntoIterator<Item = SpaceDid>) -> Result<(), WorkerError> {
         for space in spaces {
             self.rearm(space)?;
         }
         Ok(())
     }
 
+    /// A supervisor for `config` that has started no actors yet, reading the
+    /// log through this machine's SQLite file and sending no signals.
+    #[must_use]
     pub fn new(config: SupervisorConfig) -> Self {
         let events_db = config.events_db.clone();
         Self {
@@ -148,29 +150,33 @@ impl Supervisor {
     }
 
     /// Read the log through `factory` instead of this machine's SQLite file.
+    #[must_use]
     pub fn with_feed(mut self, factory: FeedFactory) -> Self {
         self.feed = factory;
         self
     }
 
     /// Send this process's post-commit signals to `factory`'s sink.
+    #[must_use]
     pub fn with_signals(mut self, factory: SignalFactory) -> Self {
         self.signals = factory;
         self
     }
 
     /// Use a different clock (a test's, or a monotonic one).
+    #[must_use]
     pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Self {
         self.clock = clock;
         self
     }
 
+    /// The configuration these actors run under.
     pub fn config(&self) -> &SupervisorConfig {
         &self.config
     }
 
     /// Start (or restart) the actor for `space`. Idempotent while it runs.
-    pub fn rearm(&self, space: SpaceDid) -> Result<(), crate::worker::WorkerError> {
+    pub fn rearm(&self, space: SpaceDid) -> Result<(), WorkerError> {
         let mut actors = self.actors.lock().expect("the actor table is not poisoned");
         if actors.contains_key(space.as_str()) {
             return Ok(());
@@ -211,7 +217,7 @@ impl Supervisor {
                     holder,
                     lease_ttl,
                     batch_limit,
-                    mode: space_core::PlanMode::Live,
+                    mode: PlanMode::Live,
                     feed,
                     lease,
                     sink,
@@ -228,7 +234,7 @@ impl Supervisor {
                     health.remove(&health_key);
                 }
             })
-            .map_err(|error| crate::worker::WorkerError::Spawn(error.to_string()))?;
+            .map_err(|error| WorkerError::Spawn(error.to_string()))?;
 
         actors.insert(key, Actor { cancel, handle });
         Ok(())
@@ -262,6 +268,7 @@ impl Supervisor {
     }
 
     /// What each running actor is doing.
+    #[must_use]
     pub fn health(&self) -> Vec<Health> {
         self.health
             .lock()
@@ -270,6 +277,7 @@ impl Supervisor {
     }
 
     /// The spaces with a running actor.
+    #[must_use]
     pub fn spaces(&self) -> Vec<String> {
         self.actors
             .lock()
@@ -292,14 +300,14 @@ fn run_actor<F, L, S, N>(
     idle_poll: Duration,
     idle_unload: Option<Duration>,
 ) where
-    F: space_feed::ChangeFeed,
-    L: crate::lease::Lease,
-    S: crate::sink::GlobalSink,
+    F: ChangeFeed,
+    L: Lease,
+    S: GlobalSink,
     N: SignalSink,
 {
     let mut last_progress = Instant::now();
     loop {
-        if worker.cancelled() {
+        if worker.is_cancelled() {
             return;
         }
         let progress = worker.step();

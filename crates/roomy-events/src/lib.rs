@@ -17,21 +17,34 @@ pub mod extensions;
 mod ids;
 
 pub use content::{Bytes, Content};
-pub use extensions::*;
+pub use extensions::{
+    key, Attachment, AttachmentsExtension, AuthorOverride, ExtensionBag, FileAttachment,
+    ImageAttachment, MatrixMessageOrigin, MatrixOrigin, MessageExtensions, Reply, RoomExtensions,
+    TimestampOverride, VideoAttachment,
+};
 pub use ids::{Did, Ulid};
 
 use serde::{Deserialize, Serialize};
 
 /// The `$type` of an event, as it appears on the wire.
 pub mod nsid {
+    /// A message was created.
     pub const CREATE_MESSAGE: &str = "space.roomy.message.createMessage.v0";
+    /// A message's body was replaced.
     pub const EDIT_MESSAGE: &str = "space.roomy.message.editMessage.v0";
+    /// A message was deleted.
     pub const DELETE_MESSAGE: &str = "space.roomy.message.deleteMessage.v0";
+    /// A reaction attributed to a bridged user was added.
     pub const ADD_BRIDGED_REACTION: &str = "space.roomy.reaction.addBridgedReaction.v0";
+    /// A bridged reaction was removed.
     pub const REMOVE_BRIDGED_REACTION: &str = "space.roomy.reaction.removeBridgedReaction.v0";
+    /// A room was created.
     pub const CREATE_ROOM: &str = "space.roomy.room.createRoom.v0";
+    /// A room's name, avatar or description changed.
     pub const UPDATE_ROOM: &str = "space.roomy.room.updateRoom.v0";
+    /// A user's profile changed.
     pub const UPDATE_PROFILE: &str = "space.roomy.user.updateProfile.v0";
+    /// A user joined the space.
     pub const JOIN_SPACE: &str = "space.roomy.space.joinSpace.v0";
 }
 
@@ -191,6 +204,7 @@ pub enum EventKind {
 
 impl EventKind {
     /// The event's `$type`.
+    #[must_use]
     pub fn nsid(&self) -> &'static str {
         match self {
             EventKind::CreateMessage(_) => nsid::CREATE_MESSAGE,
@@ -221,6 +235,7 @@ pub struct Event {
 
 impl Event {
     /// An event scoped to `room`.
+    #[must_use]
     pub fn in_room(id: Ulid, room: Ulid, kind: EventKind) -> Self {
         Self {
             id,
@@ -230,6 +245,7 @@ impl Event {
     }
 
     /// An event sent at the top level of the space.
+    #[must_use]
     pub fn in_space(id: Ulid, kind: EventKind) -> Self {
         Self {
             id,
@@ -239,16 +255,23 @@ impl Event {
     }
 
     /// The event's `$type`.
+    #[must_use]
     pub fn nsid(&self) -> &'static str {
         self.kind.nsid()
     }
 
     /// Encode for a `sendEvents` JSON body.
+    #[must_use]
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(self).expect("event serialises to JSON")
     }
 
     /// Decode from a `sendEvents`-shaped JSON value.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `serde` error when the value lacks the envelope's fields or
+    /// carries a payload this crate cannot decode.
     pub fn from_json(value: serde_json::Value) -> Result<Self, serde_json::Error> {
         serde_json::from_value(value)
     }
@@ -263,11 +286,14 @@ pub struct EventBatch {
 }
 
 impl EventBatch {
+    /// A batch of `events` for `space_id`.
+    #[must_use]
     pub fn new(space_id: Did, events: Vec<Event>) -> Self {
         Self { space_id, events }
     }
 
     /// Encode the procedure body.
+    #[must_use]
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(self).expect("batch serialises to JSON")
     }

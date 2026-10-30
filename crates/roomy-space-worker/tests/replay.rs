@@ -19,7 +19,7 @@ use roomy_space_worker::sink::{GlobalSink, SqliteGlobalSink};
 use serde::Deserialize;
 use space_core::change::FeedRow;
 use space_core::ids::SpaceDid;
-use space_db::plan::{group_entries, plan_batch};
+use space_db::plan;
 use space_db::{digest_of, snapshot_db, snapshot_tables, worker_snapshot, SpaceDb};
 
 #[derive(Deserialize)]
@@ -83,9 +83,10 @@ fn replay_with_crash(
                 break;
             }
             let batch: Vec<FeedRow> = remaining.into_iter().take(batch_limit).collect();
-            let entries = group_entries(&batch).expect("group");
-            let planned = plan_batch(db.connection(), space, &entries, space_core::PlanMode::Live)
-                .expect("plan");
+            let entries = plan::group_entries(&batch).expect("group");
+            let planned =
+                plan::plan_batch(db.connection(), space, &entries, space_core::PlanMode::Live)
+                    .expect("plan");
             let last = batch.last().expect("a non-empty batch");
             let pending = db
                 .begin_batch(&planned, (last.idx, last.ord), 1)
@@ -117,9 +118,10 @@ fn replay_with_crash(
                 break;
             }
             let batch: Vec<FeedRow> = remaining.into_iter().take(batch_limit).collect();
-            let entries = group_entries(&batch).expect("group");
-            let planned = plan_batch(db.connection(), space, &entries, space_core::PlanMode::Live)
-                .expect("plan");
+            let entries = plan::group_entries(&batch).expect("group");
+            let planned =
+                plan::plan_batch(db.connection(), space, &entries, space_core::PlanMode::Live)
+                    .expect("plan");
             let last = batch.last().expect("a non-empty batch");
             let pending = db
                 .begin_batch(&planned, (last.idx, last.ord), 1)

@@ -3,7 +3,6 @@
 
 use std::fmt;
 
-use base64::Engine as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Raw bytes in whichever form the encoding wants.
@@ -17,22 +16,32 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub struct Bytes(Vec<u8>);
 
 impl Bytes {
+    /// `data`, as the value to be encoded.
+    #[must_use]
     pub fn new(data: impl Into<Vec<u8>>) -> Self {
         Bytes(data.into())
     }
 
+    /// The bytes, borrowed.
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         &self.0
     }
 
+    /// The bytes, by value.
+    #[must_use]
     pub fn into_vec(self) -> Vec<u8> {
         self.0
     }
 
+    /// How many bytes this holds.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    /// Whether this holds no bytes.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -52,7 +61,9 @@ impl From<&[u8]> for Bytes {
 
 impl Serialize for Bytes {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use base64::Engine as _;
         use serde::ser::SerializeStruct;
+
         let encoded = base64::engine::general_purpose::STANDARD.encode(&self.0);
         let mut state = serializer.serialize_struct("Bytes", 1)?;
         state.serialize_field("$bytes", &encoded)?;
@@ -62,6 +73,8 @@ impl Serialize for Bytes {
 
 impl<'de> Deserialize<'de> for Bytes {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use base64::Engine as _;
+
         #[derive(Deserialize)]
         struct Wrapper {
             #[serde(rename = "$bytes")]
@@ -95,6 +108,8 @@ pub struct Content {
 }
 
 impl Content {
+    /// A body declaring `mime_type` and carrying `data`.
+    #[must_use]
     pub fn new(mime_type: impl Into<String>, data: impl Into<Vec<u8>>) -> Self {
         Self {
             mime_type: mime_type.into(),
@@ -103,6 +118,7 @@ impl Content {
     }
 
     /// A markdown body.
+    #[must_use]
     pub fn markdown(text: impl AsRef<str>) -> Self {
         Self::new(mime::MARKDOWN, text.as_ref().as_bytes().to_vec())
     }

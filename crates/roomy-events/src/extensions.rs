@@ -70,10 +70,15 @@ pub struct MatrixMessageOrigin {
 
 /// Keys of the extensions this crate knows by name.
 pub mod key {
+    /// `space.roomy.extension.authorOverride.v0`.
     pub const AUTHOR_OVERRIDE: &str = "space.roomy.extension.authorOverride.v0";
+    /// `space.roomy.extension.timestampOverride.v0`.
     pub const TIMESTAMP_OVERRIDE: &str = "space.roomy.extension.timestampOverride.v0";
+    /// `space.roomy.extension.attachments.v0`.
     pub const ATTACHMENTS: &str = "space.roomy.extension.attachments.v0";
+    /// `space.roomy.extension.matrixOrigin.v0`.
     pub const MATRIX_ORIGIN: &str = "space.roomy.extension.matrixOrigin.v0";
+    /// `space.roomy.extension.matrixMessageOrigin.v0`.
     pub const MATRIX_MESSAGE_ORIGIN: &str = "space.roomy.extension.matrixMessageOrigin.v0";
 }
 
@@ -144,6 +149,7 @@ pub enum Attachment {
 
 impl Attachment {
     /// The attachment's `$type`.
+    #[must_use]
     pub fn nsid(&self) -> &'static str {
         match self {
             Attachment::Reply(_) => ATTACHMENT_REPLY,
@@ -213,6 +219,7 @@ impl MessageExtensions {
     }
 
     /// True when the event carries an author override pointing at `did`.
+    #[must_use]
     pub fn authored_by(&self, did: &Did) -> bool {
         self.author_override.as_ref().is_some_and(|a| &a.did == did)
     }
@@ -227,6 +234,8 @@ pub struct AttachmentsExtension {
 }
 
 impl AttachmentsExtension {
+    /// An attachments extension holding `attachments`.
+    #[must_use]
     pub fn new(attachments: Vec<Attachment>) -> Self {
         Self {
             type_: key::ATTACHMENTS.to_string(),
@@ -236,6 +245,7 @@ impl AttachmentsExtension {
 
     /// Every `atblob://` or `http(s)://` ref this extension carries, paired
     /// with its mime type — what the bridge downloads to send as Matrix media.
+    #[must_use]
     pub fn media_refs(&self) -> Vec<(&str, &str)> {
         self.attachments
             .iter()
@@ -271,6 +281,7 @@ pub struct RoomExtensions {
 
 impl RoomExtensions {
     /// Stamp a room with its Matrix origin.
+    #[must_use]
     pub fn with_matrix_origin(origin: MatrixOrigin) -> Self {
         Self {
             matrix_origin: Some(origin),
@@ -289,16 +300,21 @@ impl RoomExtensions {
 pub struct ExtensionBag(BTreeMap<String, Value>);
 
 impl ExtensionBag {
+    /// An empty bag.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// `value` under `key`, replacing whatever was there.
+    #[must_use]
     pub fn insert(mut self, key: impl Into<String>, value: Value) -> Self {
         self.0.insert(key.into(), value);
         self
     }
 
     /// Stamp the Matrix message origin into the bag.
+    #[must_use]
     pub fn with_matrix_message_origin(self, origin: &MatrixMessageOrigin) -> Self {
         self.insert(
             key::MATRIX_MESSAGE_ORIGIN,
@@ -306,21 +322,27 @@ impl ExtensionBag {
         )
     }
 
+    /// The value stored under `key`.
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.0.get(key)
     }
 
     /// The Matrix origin this bag carries, if the value is shaped like one.
+    #[must_use]
     pub fn matrix_origin(&self) -> Option<MatrixMessageOrigin> {
         self.0
             .get(key::MATRIX_MESSAGE_ORIGIN)
             .and_then(|value| serde_json::from_value(value.clone()).ok())
     }
 
+    /// Whether the bag carries no extensions.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// The bag's entries, ordered by key.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Value)> {
         self.0.iter()
     }

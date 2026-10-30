@@ -34,10 +34,14 @@ pub struct SessionId(pub u64);
 pub struct Topic(pub String);
 
 impl Topic {
+    /// The topic of `space`'s changes.
+    #[must_use]
     pub fn space(space: &str) -> Self {
         Self(space.to_string())
     }
 
+    /// The topic's wire name.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -68,10 +72,8 @@ pub enum Input {
 /// What the core tells the adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    Send {
-        session: SessionId,
-        frame: Frame,
-    },
+    /// Write `frame` to `session`.
+    Send { session: SessionId, frame: Frame },
     /// A backfill request the adapter fulfils from the space's log.
     ReadBackfill {
         session: SessionId,
@@ -79,6 +81,7 @@ pub enum Command {
         from: (i64, i64),
         to: (i64, i64),
     },
+    /// Close `session` with a WebSocket close code and reason.
     Close {
         session: SessionId,
         code: u16,
@@ -91,9 +94,11 @@ pub enum Command {
 pub struct Frame {
     /// Monotonic within the session, from 1.
     pub seq: u64,
+    /// The topic the frame is about.
     pub topic: String,
     /// The kind of frame: `subscribed`, `changed`, `backfill`.
     pub kind: &'static str,
+    /// The cursor or cursor range the frame carries.
     pub data: FrameData,
 }
 
@@ -129,32 +134,35 @@ pub struct SessionCore {
 }
 
 impl SessionCore {
+    /// An empty core: no sessions, no subscriptions.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// How many connections are open.
+    #[must_use]
     pub fn sessions(&self) -> usize {
         self.sessions.len()
     }
 
-    /// The sessions subscribed to `topic`.
-    pub fn subscribers(&self, topic: &str) -> Vec<SessionId> {
+    /// The sessions subscribed to `topic`, in session order.
+    pub fn subscribers(&self, topic: &str) -> impl Iterator<Item = SessionId> + '_ {
         self.topics
             .get(topic)
-            .map(|sessions| sessions.iter().copied().collect())
-            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|sessions| sessions.iter().copied())
     }
 
     /// The topics a session is subscribed to.
-    pub fn subscriptions(&self, session: SessionId) -> Vec<String> {
+    pub fn subscriptions(&self, session: SessionId) -> impl Iterator<Item = &str> + '_ {
         self.sessions
             .get(&session)
-            .map(|session| session.subscriptions.iter().cloned().collect())
-            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|state| state.subscriptions.iter().map(String::as_str))
     }
 
-    /// Apply one input.
+    /// Apply one input, returning the commands the adapter must carry out.
     pub fn apply(&mut self, input: Input) -> Vec<Command> {
         match input {
             Input::Open { did, spaces } => {
@@ -367,8 +375,8 @@ mod tests {
                 reason: "not allowed to subscribe to did:web:other.example".to_string(),
             }]
         );
-        assert!(core.subscriptions(session).is_empty());
-        assert!(core.subscribers("did:web:other.example").is_empty());
+        assert_eq!(core.subscriptions(session).count(), 0);
+        assert_eq!(core.subscribers("did:web:other.example").count(), 0);
     }
 
     #[test]
@@ -391,7 +399,10 @@ mod tests {
         }));
         assert_eq!(changed.len(), 1);
         assert_eq!(changed[0].0, bob);
-        assert_eq!(core.subscribers("did:web:a.example"), vec![alice]);
+        assert_eq!(
+            core.subscribers("did:web:a.example").collect::<Vec<_>>(),
+            vec![alice]
+        );
     }
 
     #[test]

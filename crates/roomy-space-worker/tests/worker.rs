@@ -15,7 +15,7 @@ use roomy_space_worker::{Cancel, Clock, SystemClock};
 use serde::Deserialize;
 use space_core::change::FeedRow;
 use space_core::ids::SpaceDid;
-use space_db::plan::{group_entries, plan_batch};
+use space_db::plan;
 use space_db::{digest_of, snapshot_db, snapshot_tables, worker_snapshot, SpaceDb};
 use space_feed::sqlite::SqliteChangeFeed;
 use space_feed::{ChangeFeed, Cursor};
@@ -288,10 +288,10 @@ fn a_batch_from_a_lost_lease_is_refused_and_leaves_the_cursor() {
         .expect("a batch from the start");
 
     // The first batch commits under epoch 1, as the lease's first grant carries.
-    let planned = plan_batch(
+    let planned = plan::plan_batch(
         db.connection(),
         &stream,
-        &group_entries(&rows).expect("group"),
+        &plan::group_entries(&rows).expect("group"),
         space_core::PlanMode::Live,
     )
     .expect("plan");
@@ -304,10 +304,10 @@ fn a_batch_from_a_lost_lease_is_refused_and_leaves_the_cursor() {
 
     // Another worker takes the lease while this one is paused: the epoch
     // advances, and the batch this worker had planned is now stale.
-    let planned = plan_batch(
+    let planned = plan::plan_batch(
         db.connection(),
         &stream,
-        &group_entries(&rows).expect("group"),
+        &plan::group_entries(&rows).expect("group"),
         space_core::PlanMode::Live,
     )
     .expect("plan");
@@ -315,10 +315,10 @@ fn a_batch_from_a_lost_lease_is_refused_and_leaves_the_cursor() {
         .begin_batch(&planned, (rows[0].idx, rows[0].ord), 2)
         .expect("begin");
     stale.commit().expect("the takeover's own batch lands");
-    let planned = plan_batch(
+    let planned = plan::plan_batch(
         db.connection(),
         &stream,
-        &group_entries(&rows).expect("group"),
+        &plan::group_entries(&rows).expect("group"),
         space_core::PlanMode::Live,
     )
     .expect("plan");
@@ -480,8 +480,8 @@ fn a_crash_between_the_global_write_and_the_commit_replays_to_the_same_projectio
         let rows = feed
             .batch(&space, Cursor::from((-1, -1)), 500)
             .expect("a batch from the start");
-        let entries = group_entries(&rows).expect("the rows group into entries");
-        let planned = plan_batch(
+        let entries = plan::group_entries(&rows).expect("the rows group into entries");
+        let planned = plan::plan_batch(
             db.connection(),
             &space,
             &entries,

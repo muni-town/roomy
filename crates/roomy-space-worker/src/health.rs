@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 /// One worker's state.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Health {
+    /// The space this actor materialises.
     pub space: String,
     /// The `(idx, ord)` position the projection has reached.
     pub cursor: (i64, i64),
@@ -26,13 +27,16 @@ pub struct Health {
     /// Whether this process replays beside the owner rather than owning the
     /// space.
     pub following: bool,
+    /// This process's identity on the lease row.
     pub holder: String,
+    /// The last failure, cleared by the next batch that succeeds.
     pub last_error: Option<String>,
 }
 
 impl Health {
     /// The object the HTTP body carries, with `lease_held` under the name an
     /// operator greps for.
+    #[must_use]
     pub fn to_value(&self) -> serde_json::Value {
         serde_json::json!({
             "space": self.space,
@@ -46,12 +50,14 @@ impl Health {
     }
 
     /// The same object, serialised.
+    #[must_use]
     pub fn to_json(&self) -> String {
         self.to_value().to_string()
     }
 
     /// Whether the worker is doing its job: nothing failed, and either it holds
     /// the lease or it is a follower, which is not supposed to have one.
+    #[must_use]
     pub fn is_healthy(&self) -> bool {
         self.last_error.is_none() && (self.lease_held || self.following)
     }

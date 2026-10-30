@@ -5,11 +5,12 @@
 //! until the next refetch or reconnect. That is why it is coarse enough to
 //! coalesce and cheap enough to send after every committed batch.
 
-use space_core::ids::SpaceDid;
+use space_core::ids::{KeyError, SpaceDid};
 
 /// One space's committed progress.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpaceSignal {
+    /// The space that moved.
     pub space: SpaceDid,
     /// The cursor the projection has reached.
     pub cursor: (i64, i64),
@@ -23,8 +24,11 @@ pub struct SpaceSignal {
 /// a worker and a gateway that upgrade on different days still agree on it.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WireSignal {
+    /// The space that moved, as its DID string.
     pub space: String,
+    /// The cursor the projection has reached.
     pub cursor: (i64, i64),
+    /// Log entries applied by the batch that produced this signal.
     pub entries: usize,
 }
 
@@ -39,8 +43,12 @@ impl From<&SpaceSignal> for WireSignal {
 }
 
 impl WireSignal {
-    /// The signal it names, or the reason its space id is not one.
-    pub fn into_signal(self) -> Result<SpaceSignal, space_core::ids::KeyError> {
+    /// The signal it names.
+    ///
+    /// # Errors
+    ///
+    /// Returns the parse error when the wire's `space` is not a DID.
+    pub fn into_signal(self) -> Result<SpaceSignal, KeyError> {
         Ok(SpaceSignal {
             space: SpaceDid::parse(self.space)?,
             cursor: self.cursor,

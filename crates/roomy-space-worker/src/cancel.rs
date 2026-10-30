@@ -15,6 +15,8 @@ pub struct Cancel {
 }
 
 impl Cancel {
+    /// A token nothing has cancelled.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -24,6 +26,8 @@ impl Cancel {
         self.cancelled.store(true, Ordering::SeqCst);
     }
 
+    /// Whether a stop has been asked for.
+    #[must_use]
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::SeqCst)
     }

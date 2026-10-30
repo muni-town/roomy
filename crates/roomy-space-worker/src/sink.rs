@@ -13,11 +13,20 @@
 //! ahead of a space batch that is about to be replayed, and is never behind a
 //! committed space projection.
 
+use std::path::Path;
+
+use rusqlite::types::Value;
 use rusqlite::Connection;
 use space_core::effects::SqlEffect;
 
 /// Applies the statements a change aimed at the global database.
 pub trait GlobalSink: Send {
+    /// Apply `statements` in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SinkError::Sqlite`] when a statement fails, leaving none of
+    /// them applied.
     fn apply(&mut self, statements: &[SqlEffect]) -> Result<(), SinkError>;
 }
 
@@ -38,7 +47,13 @@ impl SqliteGlobalSink {
     pub const SCHEMA: &'static str =
         include_str!("../../../packages/appserver/src/db/schema-global.sql");
 
-    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, SinkError> {
+    /// Open the global database at `path`, creating it and its schema.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SinkError::Sqlite`] when the file cannot be opened or the
+    /// schema cannot be applied.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, SinkError> {
         if let Some(parent) = path.as_ref().parent() {
             std::fs::create_dir_all(parent).ok();
         }
@@ -53,12 +68,18 @@ impl SqliteGlobalSink {
         Ok(Self { conn })
     }
 
+    /// The global schema in a database that dies with the process.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SinkError::Sqlite`] when the schema cannot be applied.
     pub fn in_memory() -> Result<Self, SinkError> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(Self::SCHEMA)?;
         Ok(Self { conn })
     }
 
+    /// The underlying connection, for a caller that needs to read.
     pub fn connection(&self) -> &Connection {
         &self.conn
     }
@@ -71,8 +92,7 @@ impl GlobalSink for SqliteGlobalSink {
         }
         let transaction = self.conn.transaction()?;
         for statement in statements {
-            let params: Vec<rusqlite::types::Value> =
-                statement.params.iter().map(space_db::to_sql).collect();
+            let params: Vec<Value> = statement.params.iter().map(space_db::to_sql).collect();
             transaction
                 .prepare(statement.sql)?
                 .execute(rusqlite::params_from_iter(params))?;

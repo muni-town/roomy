@@ -22,7 +22,7 @@ use roomy_space_worker::sink::{GlobalSink, SqliteGlobalSink};
 use roomy_space_worker::Clock;
 use serde::Deserialize;
 use space_core::ids::SpaceDid;
-use space_db::plan::{group_entries, plan_batch};
+use space_db::plan;
 use space_db::{digest_of, snapshot_db, snapshot_tables, worker_snapshot, SpaceDb};
 use space_feed::sqlite::SqliteChangeFeed;
 use space_feed::{ChangeFeed, Cursor};
@@ -186,8 +186,8 @@ impl Node {
         if rows.is_empty() {
             return Ok(None);
         }
-        let entries = group_entries(&rows).expect("grouped");
-        let planned = plan_batch(
+        let entries = plan::group_entries(&rows).expect("grouped");
+        let planned = plan::plan_batch(
             self.db.connection(),
             &self.space,
             &entries,

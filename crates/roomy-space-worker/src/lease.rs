@@ -18,6 +18,7 @@
 //! written there is refused. A stale writer cannot land a batch, however long
 //! it was asleep.
 
+use std::path::Path;
 use std::time::Duration;
 
 use rusqlite::Connection;
@@ -127,7 +128,16 @@ pub struct SqliteLease {
 }
 
 impl SqliteLease {
-    pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, LeaseError> {
+    /// Open the global database at `path`, creating it and the lease table.
+    ///
+    /// A database written before the fencing epoch existed gains the column
+    /// here.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LeaseError::Sqlite`] when the file cannot be opened or the
+    /// table cannot be brought up to date.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, LeaseError> {
         if let Some(parent) = path.as_ref().parent() {
             std::fs::create_dir_all(parent).ok();
         }
@@ -164,6 +174,11 @@ impl SqliteLease {
         Ok(Self { conn })
     }
 
+    /// The lease table in a database that dies with the process.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LeaseError::Sqlite`] when the table cannot be created.
     pub fn in_memory() -> Result<Self, LeaseError> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(
@@ -178,12 +193,14 @@ impl SqliteLease {
         Ok(Self { conn })
     }
 
+    /// The underlying connection, for a caller that needs to read.
     pub fn connection(&self) -> &Connection {
         &self.conn
     }
 }
 
 /// The lease row a space's worker owns.
+#[must_use]
 pub fn lease_name(space: &SpaceDid) -> String {
     format!("space-worker:{}", space.as_str())
 }

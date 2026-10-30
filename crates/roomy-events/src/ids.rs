@@ -14,6 +14,10 @@ pub struct Ulid(String);
 
 impl Ulid {
     /// Parse a ULID, rejecting anything that is not 26 Crockford base32 chars.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UlidError`] when `value` is not a well-formed ULID.
     pub fn parse(value: impl Into<String>) -> Result<Self, UlidError> {
         let value = value.into();
         ulid::Ulid::from_str(&value)
@@ -22,16 +26,20 @@ impl Ulid {
     }
 
     /// Generate a new ULID from the current wall clock.
+    #[must_use]
     pub fn new() -> Self {
         Ulid(ulid::Ulid::generate().to_string())
     }
 
+    /// The ULID's canonical 26-character encoding.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// The 48-bit millisecond timestamp a ULID carries, used as the fallback
     /// message time when no `timestampOverride` extension is present.
+    #[must_use]
     pub fn timestamp_ms(&self) -> u64 {
         ulid::Ulid::from_str(&self.0)
             .map(|u| u.timestamp_ms())
@@ -79,6 +87,12 @@ impl<'de> Deserialize<'de> for Ulid {
 pub struct Did(String);
 
 impl Did {
+    /// Parse a DID, rejecting anything without a method and an identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DidError`] when `value` does not start with `did:`, has an
+    /// empty or non-lowercase method, or has an empty or malformed identifier.
     pub fn parse(value: impl Into<String>) -> Result<Self, DidError> {
         let value = value.into();
         let rest = value.strip_prefix("did:").ok_or(DidError)?;
@@ -98,11 +112,14 @@ impl Did {
         }
     }
 
+    /// The DID as it was parsed.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// The DID's method, e.g. `web` for `did:web:example.com`.
+    #[must_use]
     pub fn method(&self) -> &str {
         self.0
             .strip_prefix("did:")

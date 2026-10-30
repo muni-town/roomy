@@ -26,6 +26,9 @@ pub struct RelaySignals {
 }
 
 impl RelaySignals {
+    /// A relay that posts to `base_url`, presenting `secret` as the process
+    /// credential when one is configured.
+    #[must_use]
     pub fn new(base_url: impl Into<String>, secret: Option<String>) -> Self {
         Self {
             url: base_url.into().trim_end_matches('/').to_string(),
@@ -40,6 +43,7 @@ impl RelaySignals {
     }
 
     /// Signals this relay handed over, and ones it gave up on.
+    #[must_use]
     pub fn counts(&self) -> (u64, u64) {
         (self.delivered, self.dropped)
     }
