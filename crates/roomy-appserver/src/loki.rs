@@ -30,6 +30,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, TryLockError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use reqwest::Url;
 use serde_json::{Map, Value};
 use tokio::sync::{mpsc, oneshot, Notify};
 use tracing::field::{Field, Visit};
@@ -65,10 +66,38 @@ const RESERVED: [&str; 5] = ["ts", "level", "scope", "msg", "build_id"];
 /// The host a push URL addresses, without its credentials, path or query: what
 /// an operator needs to know which Alloy the sink is talking to, and nothing a
 /// log line should not carry.
-fn host_of(url: &str) -> &str {
-    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
-    let authority = rest.split('/').next().unwrap_or(rest);
-    authority.rsplit('@').next().unwrap_or(authority)
+fn host_of(url: &Url) -> String {
+    let host = url.host_str().unwrap_or_default();
+    match url.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_string(),
+    }
+}
+
+/// Why `ALLOY_URL` is unusable, as one operator-length clause: `Ok(None)` when
+/// it is unset, `Ok(Some(url))` when a sink can use it, `Err(reason)` when it is
+/// set and cannot.
+///
+/// The check is absolute-plus-http(s) because that is the whole of what
+/// `reqwest` accepts: everything else fails at request time, forever, on a sink
+/// that from the inside looks exactly like one with nothing to say.
+fn parse_alloy_url(raw: Option<&str>) -> Result<Option<Url>, String> {
+    let Some(raw) = clean(raw) else {
+        return Ok(None);
+    };
+    let url = Url::parse(raw).map_err(|error| error.to_string())?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(format!("scheme is {:?}, not http or https", url.scheme()));
+    }
+    if url.host_str().is_none_or(str::is_empty) {
+        return Err("the URL has no host".to_string());
+    }
+    Ok(Some(url))
+}
+
+/// The line for an `ALLOY_URL` that names no Alloy this process can reach.
+fn disabled_line(reason: &str) -> String {
+    format!("[loki] log sink disabled — ALLOY_URL is not an absolute URL ({reason})")
 }
 
 /// Which `scope` a `target` maps to: the logging analogue of the TypeScript
@@ -258,9 +287,9 @@ impl SinkStats {
 /// What one push did.
 enum Outcome {
     Sent,
-    /// The status, or a description of the transport failure, with no URL in it:
-    /// an Alloy URL may carry credentials and this text reaches stderr.
-    Failed(String),
+    /// Why it did not, with no URL in it: an Alloy URL may carry credentials and
+    /// this text reaches stderr.
+    Failed(Failure),
 }
 
 /// The sink's account of itself, on stderr.
@@ -293,7 +322,7 @@ impl Reporter {
                     "[loki] push to {target} recovered; logs are reaching Loki again"
                 ))
             }
-            Outcome::Failed(reason) => {
+            Outcome::Failed(failure) => {
                 let repeated = self.failing
                     && self
                         .last
@@ -304,26 +333,103 @@ impl Reporter {
                 }
                 self.last = Some(now);
                 Some(format!(
-                    "[loki] push to {target} failed: {reason}; retrying — logs are not reaching Loki"
+                    "[loki] push to {target} failed ({}): {}; retrying — logs are not reaching Loki",
+                    failure.class, failure.message
                 ))
             }
         }
     }
 }
 
-/// Why a push failed, in terms that carry no URL: `reqwest`'s own message
-/// quotes the request URL, which may hold credentials.
-fn transport_reason(error: &reqwest::Error) -> String {
-    let reason = if error.is_timeout() {
-        "timed out"
-    } else if error.is_connect() {
-        "could not connect"
-    } else if error.is_body() || error.is_decode() {
-        "unreadable response"
-    } else {
-        "request failed"
-    };
-    reason.to_string()
+/// What one push failed on, in the two terms an operator needs: the kind, and
+/// the transport's own account of it.
+#[derive(Debug)]
+struct Failure {
+    /// One word naming the kind, except for the catch-all, which carries the
+    /// flags so the next occurrence needs no rerun to be classified.
+    class: String,
+    /// The failure's message, with the push URL replaced by its host: `reqwest`
+    /// quotes the URL, which may carry a token in its path or query.
+    message: String,
+}
+
+impl Failure {
+    /// Alloy answered, and not with success. The status is the actionable part:
+    /// 400 is a push body Loki refused, 401 is a credential, 5xx is Alloy's.
+    fn status(status: u16) -> Self {
+        Self {
+            class: "status".to_string(),
+            message: format!("Alloy answered HTTP {status}"),
+        }
+    }
+
+    fn transport(error: &reqwest::Error, push_url: &str, target: &str) -> Self {
+        let class = if error.is_builder() {
+            // The request was never built: the URL is the problem, not the path
+            // to Alloy. `parse_alloy_url` should have caught this at startup.
+            "builder".to_string()
+        } else if error.is_timeout() {
+            "timeout".to_string()
+        } else if error.is_connect() {
+            "connect".to_string()
+        } else if error.is_redirect() {
+            "redirect".to_string()
+        } else if error.is_body() || error.is_decode() {
+            "response".to_string()
+        } else if error.is_request() {
+            "request".to_string()
+        } else {
+            // Nothing above named it, so print what would have: a request that
+            // failed while being sent is not the same failure as one that never
+            // left, and the next occurrence should say which it was.
+            format!(
+                "unknown timeout={} connect={} request={} builder={} redirect={}",
+                error.is_timeout(),
+                error.is_connect(),
+                error.is_request(),
+                error.is_builder(),
+                error.is_redirect(),
+            )
+        };
+        Self {
+            class,
+            message: error_chain(error, push_url, target),
+        }
+    }
+}
+
+/// The error and everything it was caused by, in one line: `reqwest`'s own
+/// `Display` is the least informative link in it ("error sending request").
+fn error_chain(error: &reqwest::Error, push_url: &str, target: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(error) = current {
+        let part = redact(&error.to_string(), push_url, target);
+        if !part.is_empty() && parts.last() != Some(&part) {
+            parts.push(part);
+        }
+        current = error.source();
+    }
+    parts.join(": ")
+}
+
+/// `message` with every form of the push URL replaced by the host. The URL may
+/// carry credentials in its authority or a token in its path or query, and this
+/// text reaches stderr, which the deployment's log collector may keep forever.
+///
+/// Two forms: the URL as configured, and the URL without its userinfo, which is
+/// what `reqwest` prints — it drops credentials before quoting a URL, so the two
+/// differ exactly when there are credentials to hide.
+fn redact(message: &str, push_url: &str, target: &str) -> String {
+    let mut text = message.replace(push_url, target);
+    if let Ok(mut bare) = Url::parse(push_url) {
+        let _ = bare.set_username("");
+        let _ = bare.set_password(None);
+        if bare.as_str() != push_url {
+            text = text.replace(bare.as_str(), target);
+        }
+    }
+    text
 }
 
 /// The queue and the HTTP client that drains it: what a `LokiLayer` hands each
@@ -351,32 +457,44 @@ pub struct LokiSink {
 }
 
 impl LokiSink {
-    /// `ALLOY_URL` unset (or blank) means no sink at all: the process logs to
-    /// stdout exactly as it did before.
+    /// The sink `ALLOY_URL` names, or none. Unset (or blank) means no sink at
+    /// all: the process logs to stdout exactly as it did before. Set but
+    /// unusable means no sink and one line saying why — a sink that can never
+    /// deliver is worse than none, because it looks like one that can.
     pub fn from_env() -> Option<Arc<Self>> {
-        Self::from_url(std::env::var("ALLOY_URL").ok())
+        let (sink, line) = Self::from_value(std::env::var("ALLOY_URL").ok().as_deref());
+        if let Some(line) = line {
+            eprintln!("{line}");
+        }
+        sink
     }
 
     /// The same decision, from a value the caller supplies, so it can be tested
-    /// without touching the process environment.
-    pub fn from_url(url: Option<String>) -> Option<Arc<Self>> {
-        let push_url = clean(url.as_deref())?.to_string();
-        Some(Arc::new(Self::new(
-            push_url,
+    /// without touching the process environment. The second half is the line the
+    /// operator gets when there is no sink to speak of.
+    pub(crate) fn from_value(raw: Option<&str>) -> (Option<Arc<Self>>, Option<String>) {
+        let url = match parse_alloy_url(raw) {
+            Ok(Some(url)) => url,
+            Ok(None) => return (None, None),
+            Err(reason) => return (None, Some(disabled_line(&reason))),
+        };
+        let sink = Self::new(
+            url,
             resolve_env(
                 std::env::var("APP_ENV").ok().as_deref(),
                 std::env::var("RAILWAY_ENVIRONMENT_NAME").ok().as_deref(),
             ),
             resolve_build_id(std::env::var("BUILD_ID").ok().as_deref()),
             Limits::default(),
-        )))
+        );
+        (Some(Arc::new(sink)), None)
     }
 
-    fn new(push_url: String, env: String, build_id: String, limits: Limits) -> Self {
+    fn new(url: Url, env: String, build_id: String, limits: Limits) -> Self {
         let (requests, requests_rx) = mpsc::unbounded_channel();
         Self {
-            target: host_of(&push_url).to_string(),
-            push_url,
+            target: host_of(&url),
+            push_url: url.to_string(),
             env,
             build_id,
             limits,
@@ -393,6 +511,24 @@ impl LokiSink {
             dropped: AtomicU64::new(0),
             failed: AtomicU64::new(0),
         }
+    }
+
+    /// The one line that proves this process can deliver: it goes through the
+    /// same queue and the same push as every other event, so its arrival in Loki
+    /// settles "are the logs arriving" at startup, instead of only after a
+    /// failure. Emitted once, from the boot path, and never again.
+    ///
+    /// The target folds to `scope=startup` through [`SCOPES`].
+    pub fn announce_startup(&self, spaces: usize) {
+        tracing::info!(
+            target: "roomy_appserver",
+            spaces,
+            sink = %self.target,
+            "startup"
+        );
+        // Push it now rather than at the next batch window: the line is worth
+        // nothing to a process that exits before the window opens.
+        self.wake.notify_one();
     }
 
     /// Start the background flusher. Must be called inside the runtime that will
@@ -550,17 +686,7 @@ impl LokiSink {
             }
             let count = batch.len() as u64;
             let body = push_body(&self.env, &batch);
-            let outcome = match client
-                .post(&self.push_url)
-                .header("content-type", "application/json")
-                .body(body)
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => Outcome::Sent,
-                Ok(response) => Outcome::Failed(format!("status {}", response.status().as_u16())),
-                Err(error) => Outcome::Failed(transport_reason(&error)),
-            };
+            let outcome = self.send(client, body).await;
             self.report(&outcome);
             if matches!(outcome, Outcome::Sent) {
                 self.sent.fetch_add(count, Ordering::Relaxed);
@@ -571,6 +697,22 @@ impl LokiSink {
                 self.start_backoff();
                 return;
             }
+        }
+    }
+
+    /// One push, as an outcome. Separate from the drain loop so a test can hold
+    /// the failure and the line it produces.
+    async fn send(&self, client: &reqwest::Client, body: String) -> Outcome {
+        match client
+            .post(&self.push_url)
+            .header("content-type", "application/json")
+            .body(body)
+            .send()
+            .await
+        {
+            Ok(response) if response.status().is_success() => Outcome::Sent,
+            Ok(response) => Outcome::Failed(Failure::status(response.status().as_u16())),
+            Err(error) => Outcome::Failed(Failure::transport(&error, &self.push_url, &self.target)),
         }
     }
 
@@ -772,8 +914,9 @@ mod tests {
     }
 
     fn sink_for(url: &str, limits: Limits) -> Arc<LokiSink> {
+        let url = Url::parse(url).expect("test push URL");
         Arc::new(LokiSink::new(
-            url.to_string(),
+            url,
             "staging".to_string(),
             "abc1234".to_string(),
             limits,
@@ -1030,18 +1173,11 @@ mod tests {
 
     #[test]
     fn an_unset_alloy_url_constructs_no_sink_and_silences_nothing() {
-        assert!(
-            LokiSink::from_url(None).is_none(),
-            "unset ALLOY_URL is no sink at all"
-        );
-        assert!(
-            LokiSink::from_url(Some(String::new())).is_none(),
-            "a blank ALLOY_URL is unset"
-        );
-        assert!(
-            LokiSink::from_url(Some("   ".to_string())).is_none(),
-            "a whitespace-only ALLOY_URL is unset"
-        );
+        for raw in [None, Some(""), Some("   ")] {
+            let (sink, line) = LokiSink::from_value(raw);
+            assert!(sink.is_none(), "unset ALLOY_URL is no sink at all: {raw:?}");
+            assert!(line.is_none(), "an unset ALLOY_URL has nothing to report");
+        }
 
         // No sink is not no logging: the layer sits beside `fmt`, so an event it
         // drops must still reach everything else in the subscriber.
@@ -1053,6 +1189,37 @@ mod tests {
             );
             tracing::info!(target: "roomy_gateway", "still logged");
         });
+    }
+
+    #[test]
+    fn an_alloy_url_that_is_not_absolute_constructs_no_sink_and_says_why() {
+        for (raw, reason) in [
+            // A bare host reads as a scheme to the URL parser, which is exactly
+            // why the scheme is worth printing: the line quotes what it saw.
+            (
+                "alloy.internal:3100/loki/api/v1/push",
+                "scheme is \"alloy.internal\"",
+            ),
+            ("/loki/api/v1/push", "relative URL without a base"),
+            ("ftp://alloy.internal/loki/api/v1/push", "\"ftp\""),
+            ("http://", "empty host"),
+        ] {
+            let (sink, line) = LokiSink::from_value(Some(raw));
+            assert!(sink.is_none(), "no sink for {raw}");
+            let line = line.expect("the operator is told why there is no sink");
+            assert_eq!(line.lines().count(), 1, "one line, not a paragraph: {line}");
+            assert!(
+                line.starts_with("[loki] log sink disabled — ALLOY_URL is not an absolute URL ("),
+                "{line}"
+            );
+            assert!(line.contains(reason), "expected {reason} in {line}");
+        }
+
+        // A usable URL constructs a sink and says nothing.
+        let (sink, line) =
+            LokiSink::from_value(Some("http://alloy.internal:3100/loki/api/v1/push"));
+        assert!(sink.is_some());
+        assert_eq!(line, None);
     }
 
     #[test]
@@ -1073,7 +1240,7 @@ mod tests {
     fn the_first_failure_and_every_recovery_are_announced_once() {
         let mut reporter = Reporter::default();
         let start = Instant::now();
-        let failing = Outcome::Failed("status 500".into());
+        let failing = Outcome::Failed(Failure::status(500));
         let target = "alloy.internal:3100";
 
         let first = reporter
@@ -1081,8 +1248,8 @@ mod tests {
             .expect("the first failure of a run is announced");
         assert!(first.contains(target), "the line names the host: {first}");
         assert!(
-            first.contains("status 500"),
-            "the line names the status: {first}"
+            first.contains("(status)") && first.contains("Alloy answered HTTP 500"),
+            "the line names the class and the failure: {first}"
         );
 
         assert!(
@@ -1100,7 +1267,7 @@ mod tests {
         let repeated = reporter
             .observe(target, &failing, start + Duration::from_secs(61))
             .expect("a failure still present after a minute is worth repeating");
-        assert!(repeated.contains("status 500"), "{repeated}");
+        assert!(repeated.contains("Alloy answered HTTP 500"), "{repeated}");
 
         let recovered = reporter
             .observe(target, &Outcome::Sent, start + Duration::from_secs(62))
@@ -1131,13 +1298,140 @@ mod tests {
         let line = Reporter::default()
             .observe(
                 &sink.target,
-                &Outcome::Failed("could not connect".into()),
+                &Outcome::Failed(Failure {
+                    class: "connect".to_string(),
+                    message: "could not connect".to_string(),
+                }),
                 Instant::now(),
             )
             .expect("a line");
         assert!(!line.contains("secret"), "{line}");
         assert!(!line.contains("user"), "{line}");
         assert!(!line.contains("http"), "{line}");
+    }
+
+    #[tokio::test]
+    async fn a_builder_error_a_connect_error_and_a_status_each_name_themselves() {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .expect("client");
+
+        // The request is never built: the URL is the problem, and the message
+        // says so even though the URL text itself is redacted to its host.
+        let refused_url = "alloy.internal:3100/loki/api/v1/push";
+        let error = client
+            .post(refused_url)
+            .body("{}")
+            .send()
+            .await
+            .expect_err("a URL without a scheme cannot be sent");
+        let builder = Failure::transport(&error, refused_url, "alloy.internal:3100");
+        assert_eq!(builder.class, "builder", "{}", builder.message);
+
+        // Nothing listens on port 1: connect() fails immediately.
+        let refused_push = "http://user:s3cr3t@127.0.0.1:1/loki/api/v1/push?token=t0ken";
+        let error = client
+            .post(refused_push)
+            .body("{}")
+            .send()
+            .await
+            .expect_err("nothing listens on port 1");
+        let connect = Failure::transport(&error, refused_push, "127.0.0.1:1");
+        assert_eq!(connect.class, "connect", "{}", connect.message);
+
+        let status = Failure::status(500);
+
+        // Distinct, so a line names the failure it is about, and actionable:
+        // each says what to look at next.
+        assert_ne!(builder.class, connect.class);
+        assert_ne!(connect.class, status.class);
+        assert_eq!(status.class, "status");
+        assert_eq!(status.message, "Alloy answered HTTP 500");
+        assert!(
+            connect.message.contains("Connection refused"),
+            "the transport's own account survives: {}",
+            connect.message
+        );
+        assert!(
+            connect.message.contains("127.0.0.1:1"),
+            "the host stands in for the URL: {}",
+            connect.message
+        );
+
+        // No form of the push URL reaches the text: not the credentials, not the
+        // token in the query, not the scheme.
+        for failure in [&builder, &connect] {
+            for secret in ["s3cr3t", "user:", "t0ken", "http://", "/loki/api/v1/push"] {
+                assert!(
+                    !failure.message.contains(secret),
+                    "{secret:?} leaked into {:?}",
+                    failure.message
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_failing_alloy_line_names_the_class_and_the_message_but_never_the_url() {
+        let alloy = Alloy::new(500).await;
+        let sink = sink_for(&alloy.url, fast_limits());
+        let client = reqwest::Client::new();
+
+        let outcome = sink.send(&client, "{}".to_string()).await;
+        let line = Reporter::default()
+            .observe(&sink.target, &outcome, Instant::now())
+            .expect("a failed push is always announced");
+
+        assert!(line.contains("(status)"), "{line}");
+        assert!(line.contains("Alloy answered HTTP 500"), "{line}");
+        assert!(
+            line.contains(&sink.target),
+            "the line names the host it could not reach: {line}"
+        );
+        assert!(
+            !line.contains(&alloy.url),
+            "the push URL never reaches stderr: {line}"
+        );
+        assert!(!line.contains("http"), "{line}");
+    }
+
+    #[tokio::test]
+    async fn the_startup_line_is_emitted_once_and_reaches_the_sink() {
+        let alloy = Alloy::new(200).await;
+        let sink = sink_for(&alloy.url, fast_limits());
+        let _flusher = sink.spawn().expect("flusher");
+        let target = sink.target.clone();
+
+        emit(&sink, || sink.announce_startup(7));
+
+        // No explicit flush: the boot line is pushed because announcing wakes the
+        // flusher, not because something later drains the queue. A process that
+        // exits before its first batch window is a process whose boot is invisible.
+        let started = Instant::now();
+        while alloy.bodies().is_empty() && started.elapsed() < Duration::from_secs(2) {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "the startup line waits for the flusher, not for the batch window"
+        );
+
+        let bodies = alloy.bodies();
+        assert_eq!(bodies.len(), 1, "one push, and it carries the one line");
+        let streams = streams(&bodies[0]);
+        assert_eq!(streams.len(), 1, "one label set");
+        assert_eq!(streams[0]["stream"]["scope"], "startup");
+        assert_eq!(streams[0]["stream"]["level"], "info");
+
+        let values = values(streams[0]);
+        assert_eq!(values.len(), 1, "one line per process start");
+        let line: Value = serde_json::from_str(&values[0].1).expect("line is JSON");
+        assert_eq!(line["msg"], "startup");
+        assert_eq!(line["scope"], "startup");
+        assert_eq!(line["spaces"], 7);
+        assert_eq!(line["sink"], target.as_str());
+        assert_eq!(line["build_id"], "abc1234");
     }
 
     #[tokio::test]

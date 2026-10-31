@@ -213,13 +213,22 @@ start_shadow() {
   done
 
   # The target by host only: ALLOY_URL may carry credentials and this line reaches
-  # the container log. Whether the sink exists at all is the other half of "will
-  # the follower's lines be in Grafana".
-  if [ -n "${ALLOY_URL:-}" ]; then
-    local host="${ALLOY_URL#*://}"
-    host="${host%%/*}"
+  # the container log. The scheme is printed because its absence is the failure
+  # mode — the host reads the same with or without it, and a URL without one is a
+  # sink that can never deliver. Whether the sink exists at all is the other half
+  # of "will the follower's lines be in Grafana".
+  #
+  # The env label is resolved the way the binary resolves it (APP_ENV, then
+  # RAILWAY_ENVIRONMENT_NAME, then unknown), so this line does not contradict the
+  # `env` label on the lines it is describing.
+  local env_label="${APP_ENV:-${RAILWAY_ENVIRONMENT_NAME:-unknown}}"
+  env_label="${env_label,,}"
+  if [[ "${ALLOY_URL:-}" =~ ^(https?)://([^/]+) ]]; then
+    local scheme="${BASH_REMATCH[1]}" host="${BASH_REMATCH[2]}"
     host="${host##*@}"
-    echo "[entrypoint] shadow: log sink enabled — $host (env ${APP_ENV:-unknown}, build ${BUILD_ID:-unknown})"
+    echo "[entrypoint] shadow: log sink enabled — $scheme://$host (env $env_label, build ${BUILD_ID:-unknown})"
+  elif [ -n "${ALLOY_URL:-}" ]; then
+    echo "[entrypoint] shadow: log sink disabled — ALLOY_URL is not an absolute http(s) URL, so the follower constructs no sink"
   else
     echo "[entrypoint] shadow: log sink disabled (ALLOY_URL unset); the follower logs to stdout only"
   fi

@@ -305,6 +305,13 @@ fn run(config: Config, loki: Option<Arc<LokiSink>>) -> Result<(), Box<dyn std::e
         // The sink's HTTP client lives on this runtime, so the flusher does too.
         let flusher = loki.as_ref().and_then(|sink| sink.spawn());
 
+        // One line through the same queue and the same push as every other event:
+        // its arrival in Loki is what "the follower is delivering" means, and it
+        // answers that at startup rather than at the first failure.
+        if let Some(sink) = loki.as_ref() {
+            sink.announce_startup(config.spaces.len());
+        }
+
         // One sink for the process: a worker's committed batch and the sockets
         // that must be woken share it, whether or not the two roles are the same
         // binary invocation.

@@ -44,7 +44,7 @@ directory.
 | `ROOMY_SIGNAL_URL` | — | A worker's signal relay: the gateway that serves the sockets |
 | `ROOMY_TS_ORIGIN` | — | The TypeScript appserver. Set, and spaces not cut over are proxied to it |
 | `ROOMY_SHADOW_PERCENT` | `0` | How many eligible reads are mirrored to it for comparison |
-| `ALLOY_URL` | — | The Alloy Loki push URL (`http://<alloy>:3100/loki/api/v1/push`). Unset: stdout only |
+| `ALLOY_URL` | — | The Alloy Loki push URL (`http://<alloy>:3100/loki/api/v1/push`). Unset: stdout only; not an absolute http(s) URL: no sink, and one line saying so |
 | `APP_ENV` | — | The `env` log label; falls back to `RAILWAY_ENVIRONMENT_NAME`, then `unknown` |
 | `BUILD_ID` | `unknown` | The `build_id` field of every log line (the image bakes the commit into it) |
 | `RUST_LOG` | `info` | Which events exist at all: the filter both log destinations share |
@@ -74,16 +74,43 @@ and the line is one JSON object:
 module path. `build_id` is in the line and not in the labels: a label that changes on
 every deploy splits the stream once per release.
 
+`ALLOY_URL` is checked once at startup. Unset (or blank) is no sink at all; set but
+not an absolute http(s) URL is no sink either, and one line says why — a sink that
+can never deliver looks from the inside exactly like one with nothing to say:
+
+```
+[loki] log sink disabled — ALLOY_URL is not an absolute URL (scheme is "alloy.internal", not http or https)
+```
+
 The sink is bounded (10 000 records, oldest dropped) and batches (500 records or two
 seconds). A failed push is retried with exponential backoff from one second to one
 minute; every error is swallowed, so a dead Alloy loses log lines and nothing else.
 On ctrl-c the queue gets five seconds to drain.
 
-Swallowed is not silent. A push that fails writes one line to stderr — the container
-log `docker logs` shows — naming the Alloy's host, never the URL or its credentials:
+Swallowed is not silent. The first event of a process is a `tracing::info!` line that
+goes through the same queue and the same push as everything else, so its arrival is
+the answer to "are the logs arriving" without waiting for a warning:
+
+```json
+{"ts":"2026-10-27T12:00:00.000Z","level":"info","scope":"startup","msg":"startup","spaces":12,"sink":"alloy.internal:3100","build_id":"abc1234"}
+```
+
+A push that fails writes one line to stderr — the container log `docker logs` shows.
+It names the failure's class, the Alloy's host, and the transport's own account of
+what went wrong, with the URL replaced by that host and never the URL itself (it may
+carry a token in its path or query):
 
 ```
-[loki] push to alloy.internal:3100 failed: status 500; retrying — logs are not reaching Loki
+[loki] push to alloy.internal:3100 failed (connect): error sending request for url (alloy.internal:3100): client error (Connect): tcp connect error: Connection refused (os error 111); retrying — logs are not reaching Loki
+```
+
+The class is one of `timeout`, `connect`, `redirect`, `response` (body or decode),
+`request` (failed while being sent), `builder` (the request never left) or `status`
+(Alloy answered). A failure no flag names prints the flags that would have named it,
+so the next occurrence needs no rerun to be classified:
+
+```
+[loki] push to alloy.internal:3100 failed (unknown timeout=false connect=false request=true builder=false redirect=false): …; retrying — logs are not reaching Loki
 ```
 
 The first failure of an unhealthy period is announced, the same failure again at most

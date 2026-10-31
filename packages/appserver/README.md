@@ -120,11 +120,22 @@ is one log line, not a failed deploy:
 
 **The telemetry values are passed, not inherited.** `ALLOY_URL`, `APP_ENV`,
 `BUILD_ID` and `RUST_LOG` go into the child's `env` when they are set, so what the
-follower logs with is what the container was told. Startup names the target by host
-only — the URL may carry credentials — and says whether the sink exists at all:
+follower logs with is what the container was told. Startup names the target by
+scheme and host only — the URL may carry credentials — and says whether the sink
+exists at all. The `env` value is resolved the way the binary resolves it (`APP_ENV`,
+then `RAILWAY_ENVIRONMENT_NAME`, then `unknown`, lowercased), so this line does not
+contradict the `env` label on the lines it describes:
 
 ```text
-[entrypoint] shadow: log sink enabled — alloy.internal:3100 (env staging, build abc1234)
+[entrypoint] shadow: log sink enabled — http://alloy.internal:3100 (env staging, build abc1234)
+```
+
+`ALLOY_URL` without an absolute http(s) URL is a sink that can never deliver: the
+follower refuses it and runs without one, and the launcher says so rather than
+printing a host it cannot distinguish from the working case:
+
+```text
+[entrypoint] shadow: log sink disabled — ALLOY_URL is not an absolute http(s) URL, so the follower constructs no sink
 ```
 
 Its health, from inside the container:
@@ -142,7 +153,9 @@ cumulative record counts, `retrying` says a failed push is waiting out its backo
 sink that delivers nothing looks exactly like one with nothing to say, so this is
 where "are the follower's logs arriving" is answerable without Grafana. `null` means
 no sink is configured. A failed push also writes one line to container stderr, at
-most once a minute, naming the Alloy's host and the status.
+most once a minute, naming the Alloy's host, the failure's class, and the transport's
+own message — never the URL, which may carry a token. Every process start pushes one
+`scope=startup` line through the same sink, which is the other half of that answer.
 
 ### Schema version bumps (blue-green read serving)
 

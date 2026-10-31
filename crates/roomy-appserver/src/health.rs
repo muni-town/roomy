@@ -106,8 +106,10 @@ mod tests {
     #[test]
     fn the_body_carries_the_sink_counters_beside_the_spaces() {
         let supervisor = supervisor();
-        let sink = LokiSink::from_url(Some("http://alloy.internal:3100/loki/api/v1/push".into()))
-            .expect("a sink");
+        let (sink, line) =
+            LokiSink::from_value(Some("http://alloy.internal:3100/loki/api/v1/push"));
+        let sink = sink.expect("a sink");
+        assert_eq!(line, None, "a usable URL has nothing to report");
 
         let body = body(&supervisor, Some(&sink));
         assert_eq!(body["status"], "ok");
