@@ -255,6 +255,10 @@ impl ChangeFeed for FailingFeed {
     fn latest_idx(&self, _space: &SpaceDid) -> Result<i64, FeedError> {
         Ok(0)
     }
+
+    fn streams(&self) -> Result<Vec<SpaceDid>, FeedError> {
+        Err(FeedError::Decode("the log cannot be read".into()))
+    }
 }
 
 /// A space that cannot make progress waits between attempts, and `/health` says

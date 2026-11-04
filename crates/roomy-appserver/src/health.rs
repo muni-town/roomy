@@ -45,14 +45,17 @@ async fn health(State(probes): State<Probes>) -> Response {
     Json(body(&probes.supervisor, probes.loki.as_deref())).into_response()
 }
 
-/// The body, assembled from the two snapshots. A process with no sink reports
+/// The body, assembled from the snapshots. A process with no sink reports
 /// `"loki": null` rather than a zeroed object, so "no sink" and "a sink that has
-/// sent nothing" stay distinguishable.
+/// sent nothing" stay distinguishable; a process that derives its spaces reports
+/// what the last pass found, with a stream that holds no events named as such
+/// instead of leaving it out.
 fn body(supervisor: &Supervisor, loki: Option<&LokiSink>) -> Value {
     let spaces: Vec<Value> = supervisor.health().iter().map(Health::to_value).collect();
     json!({
         "status": "ok",
         "spaces": spaces,
+        "discovery": supervisor.discovery().map(|pass| pass.to_value()),
         "loki": loki.map(|sink| sink.stats().to_value()),
     })
 }

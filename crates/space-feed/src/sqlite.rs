@@ -10,7 +10,7 @@ use rusqlite::Connection;
 use space_core::change::FeedRow;
 use space_core::ids::SpaceDid;
 
-use crate::{ChangeFeed, Cursor, FeedError};
+use crate::{space_of, ChangeFeed, Cursor, FeedError};
 
 /// One space's changes, read out of the event-log database.
 pub struct SqliteChangeFeed {
@@ -149,6 +149,17 @@ impl ChangeFeed for SqliteChangeFeed {
             .flatten();
         Ok(latest.unwrap_or(-1))
     }
+
+    fn streams(&self) -> Result<Vec<SpaceDid>, FeedError> {
+        // One row per stream: the log itself is the only place the set of
+        // streams is written down, so a space added after this process started
+        // is in the next answer.
+        let mut statement = self
+            .conn
+            .prepare("select distinct stream_id from record_changes order by stream_id")?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        rows.map(|row| space_of(&row?)).collect()
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +216,61 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(1, 0), (2, 0), (2, 1), (2, 2)]
         );
+    }
+
+    fn feed_with_streams(streams: &[&str], rows_each: &[(i64, i64)]) -> SqliteChangeFeed {
+        let feed = SqliteChangeFeed::in_memory().expect("feed");
+        for stream in streams {
+            for (idx, ord) in rows_each {
+                feed.connection()
+                    .execute(
+                        "insert into record_changes (
+                           stream_id, idx, ord, kind, repo, collection, rkey, op,
+                           order_stamp, actor, event_id, body
+                         ) values (?, ?, ?, 'ban', ?, 'space.roomy.space.ban', ?, 'delete', ?, ?, ?, null)",
+                        rusqlite::params![
+                            stream,
+                            idx,
+                            ord,
+                            stream,
+                            format!("did:plc:user{idx}"),
+                            "01HF7YAT000000000000000001",
+                            stream,
+                            "01HF7YAT00000000000000000A",
+                        ],
+                    )
+                    .expect("insert");
+            }
+        }
+        feed
+    }
+
+    #[test]
+    fn an_empty_log_holds_no_streams() {
+        let feed = SqliteChangeFeed::in_memory().expect("feed");
+        assert!(feed.streams().expect("streams").is_empty());
+    }
+
+    #[test]
+    fn the_streams_are_each_space_once_in_order() {
+        let feed = feed_with_streams(
+            &["did:web:b.example", "did:web:a.example"],
+            &[(0, 0), (1, 0)],
+        );
+        assert_eq!(
+            feed.streams()
+                .expect("streams")
+                .iter()
+                .map(SpaceDid::as_str)
+                .collect::<Vec<_>>(),
+            vec!["did:web:a.example", "did:web:b.example"]
+        );
+    }
+
+    #[test]
+    fn a_stream_id_that_is_not_a_space_is_an_error() {
+        let feed = feed_with_streams(&["not-a-did"], &[(0, 0)]);
+        assert!(matches!(feed.streams(), Err(FeedError::Decode(_))));
     }
 
     #[test]

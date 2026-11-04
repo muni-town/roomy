@@ -9,6 +9,17 @@
 //! 200 {"changes": [<FeedRow>...], "latestIdx": <i64>}
 //! ```
 //!
+//! The owner also answers which streams it holds, for a worker that materialises
+//! whatever the log contains rather than a set it was started with:
+//!
+//! ```text
+//! GET /internal/streams
+//! 200 {"streams": ["<spaceDid>", ...]}
+//! ```
+//!
+//! It is behind the same secret as the feed: the set of spaces an owner holds is
+//! deployment information, not a public index.
+//!
 //! The contract is the same as the SQLite feed's: rows strictly after the cursor,
 //! never splitting an entry, at-least-once across a crash. `latestIdx` is what a
 //! worker reports as its lag.
@@ -23,6 +34,7 @@ use serde::Deserialize;
 use space_core::change::FeedRow;
 use space_core::ids::SpaceDid;
 
+use crate::space_of;
 use crate::{ChangeFeed, Cursor, FeedError};
 
 /// One HTTP GET, as the feed needs it.
@@ -44,6 +56,12 @@ struct FeedResponse {
     changes: Vec<FeedRow>,
     #[serde(rename = "latestIdx")]
     latest_idx: i64,
+}
+
+/// The body the streams endpoint answers with.
+#[derive(Debug, Deserialize)]
+struct StreamsResponse {
+    streams: Vec<String>,
 }
 
 /// A change feed read over HTTP.
@@ -105,6 +123,20 @@ impl<P: Pull> ChangeFeed for HttpChangeFeed<P> {
 
     fn latest_idx(&self, space: &SpaceDid) -> Result<i64, FeedError> {
         Ok(self.fetch(space, Cursor::START, 0)?.latest_idx)
+    }
+
+    fn streams(&self) -> Result<Vec<SpaceDid>, FeedError> {
+        let body = self
+            .pull
+            .get(&format!("{}/internal/streams", self.base_url))
+            .map_err(FeedError::Transport)?;
+        let response: StreamsResponse =
+            serde_json::from_str(&body).map_err(|error| FeedError::Decode(error.to_string()))?;
+        response
+            .streams
+            .iter()
+            .map(|stream| space_of(stream))
+            .collect()
     }
 }
 
@@ -214,7 +246,9 @@ mod tests {
         let asked = feed.pull.asked.lock().expect("lock").clone();
         assert_eq!(
             asked,
-            vec!["http://owner.example/internal/feed/did:web:feed.example?afterIdx=4&afterOrd=2&limit=50"]
+            vec![
+                "http://owner.example/internal/feed/did:web:feed.example?afterIdx=4&afterOrd=2&limit=50"
+            ]
         );
         assert_eq!(feed.latest_idx(&space).expect("latest"), 9);
     }
@@ -238,5 +272,35 @@ mod tests {
             feed.batch(&space, Cursor::START, 10),
             Err(FeedError::Decode(_))
         ));
+    }
+
+    #[test]
+    fn the_streams_are_asked_for_at_the_owner_s_streams_endpoint() {
+        let body = serde_json::json!({ "streams": ["did:web:a.example", "did:web:b.example"] })
+            .to_string();
+        let feed = HttpChangeFeed::new("http://owner.example/", Scripted::new(body));
+
+        let streams = feed.streams().expect("streams");
+        assert_eq!(
+            streams.iter().map(SpaceDid::as_str).collect::<Vec<_>>(),
+            vec!["did:web:a.example", "did:web:b.example"]
+        );
+        assert_eq!(
+            feed.pull.asked.lock().expect("lock").clone(),
+            vec!["http://owner.example/internal/streams"]
+        );
+    }
+
+    #[test]
+    fn a_streams_body_that_is_not_json_is_a_decode_error() {
+        let feed = HttpChangeFeed::new("http://owner.example", Scripted::new("nope".into()));
+        assert!(matches!(feed.streams(), Err(FeedError::Decode(_))));
+    }
+
+    #[test]
+    fn a_stream_that_is_not_a_space_is_a_decode_error() {
+        let body = serde_json::json!({ "streams": ["did:web:a.example", "nonsense"] }).to_string();
+        let feed = HttpChangeFeed::new("http://owner.example", Scripted::new(body));
+        assert!(matches!(feed.streams(), Err(FeedError::Decode(_))));
     }
 }

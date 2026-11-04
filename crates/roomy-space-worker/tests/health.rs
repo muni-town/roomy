@@ -133,6 +133,10 @@ impl ChangeFeed for SlowFeed {
     fn latest_idx(&self, space: &SpaceDid) -> Result<i64, FeedError> {
         self.0.latest_idx(space)
     }
+
+    fn streams(&self) -> Result<Vec<SpaceDid>, FeedError> {
+        self.0.streams()
+    }
 }
 
 fn slow_feed(events_db: &Path) -> FeedFactory {

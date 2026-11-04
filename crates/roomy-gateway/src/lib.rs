@@ -255,8 +255,10 @@ pub fn router(state: Arc<GatewayState>) -> Router {
             post(procedures::update_seen::http),
         )
         // The owner's half of the change feed: not part of the XRPC surface, and
-        // answered from the log this process holds.
+        // answered from the log this process holds. `/internal/streams` is the
+        // same answers keyed by stream, for a worker that derives its spaces.
         .route("/internal/feed/{space}", get(internal::feed))
+        .route("/internal/streams", get(internal::streams))
         .route("/internal/signal", post(internal::signal))
         // The reads no single space can answer: a feed merged across the
         // caller's spaces, mentions hydrated per space, a profile that may

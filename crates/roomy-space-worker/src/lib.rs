@@ -31,9 +31,9 @@ pub mod worker;
 
 pub use cancel::Cancel;
 pub use clock::{Clock, SystemClock};
-pub use health::Health;
+pub use health::{DiscoveryState, Health};
 pub use lease::Lease;
 pub use signal::{NoSignals, SignalSink, SpaceSignal};
 pub use sink::GlobalSink;
-pub use supervisor::{Supervisor, SupervisorConfig};
+pub use supervisor::{Discovery, Supervisor, SupervisorConfig};
 pub use worker::{Progress, Worker, WorkerError, WorkerParts};

@@ -130,6 +130,16 @@ impl FeedService {
 
         Ok((rows, latest.unwrap_or(-1)))
     }
+
+    /// Every stream the log holds, in a stable order. A worker that derives its
+    /// own space set reads this instead of being told one.
+    fn streams(&self) -> rusqlite::Result<Vec<String>> {
+        let conn = self.conn.lock().expect("the log handle is not poisoned");
+        let mut statement =
+            conn.prepare("select distinct stream_id from record_changes order by stream_id")?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        rows.collect()
+    }
 }
 
 fn row_of(row: &Row<'_>) -> rusqlite::Result<FeedRow> {
@@ -196,6 +206,35 @@ pub async fn feed(
         Ok((changes, latest)) => {
             Json(json!({ "changes": changes, "latestIdx": latest })).into_response()
         }
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "InternalServerError", "message": error.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /internal/streams` — the spaces the log holds, for a worker that
+/// materialises whatever the log contains.
+pub async fn streams(State(state): State<Arc<GatewayState>>, headers: HeaderMap) -> Response {
+    let Some(service) = state.feed.as_ref() else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "NotFound", "message": "this process holds no event log"})),
+        )
+            .into_response();
+    };
+    if !authorized(state.internal_secret.as_deref(), &headers) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(
+                json!({"error": "Forbidden", "message": "the internal streams require its secret"}),
+            ),
+        )
+            .into_response();
+    }
+    match service.streams() {
+        Ok(streams) => Json(json!({ "streams": streams })).into_response(),
         Err(error) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "InternalServerError", "message": error.to_string()})),
