@@ -32,14 +32,15 @@ directory.
 | `ROOMY_EVENTS_DB` | `<ROOMY_DATA_DIR>/roomy-events.sqlite` | The event log this process reads. Set it to the owner's log to replay production without writing into its directory |
 | `ROOMY_HEALTH_ADDR` | — | Where the supervisor serves `/health`, for the `worker` and `all` roles. Unset binds nothing; the `gateway` role serves its own and ignores it |
 | `ROOMY_HTTP_ADDR` | `127.0.0.1:8080` | The gateway's listener |
-| `ROOMY_SPACES` | — | Comma-separated space DIDs this process owns |
+| `ROOMY_SPACES` | — | A narrowing filter: comma-separated space DIDs. Unset or empty, a follower materialises every stream the log holds, including spaces added after it started. Set, it materialises only those spaces |
 | `ROOMY_TICKET_SECRET` | — | Required by the gateway role; signs connection tickets |
 | `ROOMY_TICKET_TTL` | `60` | A ticket's lifetime in seconds |
 | `ROOMY_TICKET_AUDIENCE` | `roomy-gateway` | The audience a ticket is bound to |
 | `ROOMY_TEST_MODE` | — | `true` accepts `X-Test-Did` instead of a real session |
 | `ROOMY_MAX_OPEN_SPACES` | `256` | How many per-space databases the registry keeps open |
-| `ROOMY_OWNERSHIP` | `owner` | `follower` replays beside the owner and takes no lease |
-| `ROOMY_INTERNAL_SECRET` | — | Enables `/internal/feed` and `/internal/signal` on a gateway |
+| `ROOMY_OWNERSHIP` | `owner` | `follower` replays beside the owner and takes no lease. A follower derives its spaces from the log: it asks the feed every minute and starts an actor for each stream it is not running |
+| `ROOMY_DISCOVERY_INTERVAL` | `60` | How often, in seconds, a follower asks the log which streams it holds |
+| `ROOMY_INTERNAL_SECRET` | — | Enables `/internal/feed`, `/internal/streams` and `/internal/signal` on a gateway |
 | `ROOMY_FEED_URL` | — | A worker's feed: the gateway that owns the log |
 | `ROOMY_SIGNAL_URL` | — | A worker's signal relay: the gateway that serves the sockets |
 | `ROOMY_TS_ORIGIN` | — | The TypeScript appserver. Set, and spaces not cut over are proxied to it |
@@ -51,6 +52,22 @@ directory.
 
 `ROOMY_FEED_URL` and `ROOMY_SIGNAL_URL` are for the worker role; a gateway reads the
 log it owns and fans signals out locally.
+
+### Who decides which spaces a process materialises
+
+An **owner** is told: it materialises the spaces in `ROOMY_SPACES` and no others,
+because a space it was not given is one it has no reason to hold. A lease, not this
+list, decides which of those the process *writes* — the list says which rows to
+compete for, and a process that loses the lease on a space still cannot write it.
+
+A **follower** reads its set from the log (`ROOMY_OWNERSHIP=follower`). At boot,
+and every `ROOMY_DISCOVERY_INTERVAL` seconds after, it asks the feed which streams
+exist and starts an actor for each one it is not already running. A space written
+after it booted is picked up on the next pass, and the pass that starts it writes
+one line naming it. The loop never stops an actor, and a stream the feed names but
+holds no rows for is reported as `noEvents` in `/health` rather than opened. Setting
+`ROOMY_SPACES` on a follower narrows it to the spaces named, which is what a
+deployment that wants a bounded replay uses.
 
 A path variable that is set but blank counts as unset, so a template that renders
 an empty value falls through to the default.
@@ -160,6 +177,7 @@ file's writer.
 | `GET /xrpc/{nsid}` | The per-space reads, and the four cross-space fan-outs |
 | `GET /internal/feed/{space}` | **Internal.** The log, after a cursor, for a remote worker |
 | `POST /internal/signal` | **Internal.** A worker's post-commit signal |
+| `GET /internal/streams` | **Internal.** The spaces the log holds, for a worker that derives its own set |
 
 The internal routes require `x-roomy-internal: <ROOMY_INTERNAL_SECRET>` and are not
 part of the XRPC surface. Do not expose them at the edge.
@@ -173,8 +191,9 @@ Cutover is per space and reversible on the next request. The ownership table is
 1. **Set `ROOMY_TS_ORIGIN` on the gateway.** Every space is now proxied to the
    TypeScript appserver — status, headers and body verbatim — except spaces whose
    ownership row names `rust-core`.
-2. **Materialise the space here.** Run the workers with `ROOMY_SPACES` including it,
-   or start a follower with `ROOMY_HEALTH_ADDR` set. Wait until the space's
+2. **Materialise the space here.** Start a follower with `ROOMY_OWNERSHIP=follower`
+   — it discovers the space from the log on its next pass — or run the workers with
+   `ROOMY_SPACES` including it. Wait until the space's
    `/health` row reports `lag: 0` and a `cursor.idx` equal to the log's last
    index — `select max(idx) from record_changes where stream_id = '<space>'`.
 3. **Shadow.** Set `ROOMY_SHADOW_PERCENT` above zero and let it run. Watch

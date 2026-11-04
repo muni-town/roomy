@@ -295,6 +295,38 @@ async fn an_unknown_space_is_an_empty_feed_not_an_error() {
     assert_eq!(latest, -1, "a space with no rows has no last entry");
 }
 
+/// A worker that follows the log asks which streams it holds; the owner answers
+/// the spaces it wrote, and refuses the question without its secret.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_owner_lists_its_streams_and_refuses_an_unnamed_caller() {
+    let gateway_dir = tempfile::tempdir().expect("gateway dir");
+    let space = SpaceDid::parse(SPACE.to_string()).expect("space DID");
+    let events_db = gateway_dir.path().join("events.sqlite");
+    build_events_db(&events_db, &space);
+
+    let gateway = serve_gateway(&events_db).await;
+    let feed = HttpChangeFeed::new(
+        gateway.base_url.clone(),
+        UreqPull::default().with_header(INTERNAL_HEADER, SECRET),
+    );
+    let streams = feed.streams().expect("the owner's streams");
+    let anonymous = HttpChangeFeed::new(gateway.base_url.clone(), UreqPull::default());
+    let refused = anonymous
+        .streams()
+        .expect_err("a forbidden answer is not a stream list");
+    let _ = gateway.shutdown.send(());
+    let _ = gateway.handle.await;
+
+    assert_eq!(
+        streams.iter().map(SpaceDid::as_str).collect::<Vec<_>>(),
+        vec![SPACE]
+    );
+    assert!(
+        refused.to_string().contains("403"),
+        "the refusal names the status: {refused}"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_remote_worker_s_signal_reaches_the_gateway_s_sockets() {
     let gateway_dir = tempfile::tempdir().expect("gateway dir");

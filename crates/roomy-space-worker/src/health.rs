@@ -62,3 +62,34 @@ impl Health {
         self.last_error.is_none() && (self.lease_held || self.following)
     }
 }
+
+/// What the last discovery pass found.
+///
+/// A stream the feed names but holds no rows for is reported as `noEvents`
+/// rather than left out: nothing is opened for it, and an empty stream is not a
+/// missing space. An operator who cannot tell the two apart cannot tell a quiet
+/// deployment from a broken one.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DiscoveryState {
+    /// Every stream the feed held when it was asked.
+    pub streams: Vec<String>,
+    /// The streams this process started because the pass found them.
+    pub started: Vec<String>,
+    /// The streams with nothing to apply.
+    pub no_events: Vec<String>,
+    /// The last pass that failed, cleared by the next that succeeded.
+    pub last_error: Option<String>,
+}
+
+impl DiscoveryState {
+    /// The object the health body carries.
+    #[must_use]
+    pub fn to_value(&self) -> serde_json::Value {
+        serde_json::json!({
+            "streams": self.streams,
+            "started": self.started,
+            "noEvents": self.no_events,
+            "lastError": self.last_error,
+        })
+    }
+}

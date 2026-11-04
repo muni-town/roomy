@@ -111,6 +111,43 @@ fn build_events_db(path: &Path, spaces: &[&SpaceDid], fixture: &Fixture) {
     }
 }
 
+/// Append the corpus to the log under one more space, after a process has
+/// already read it: what an owner writes when a space is created.
+fn append_space(path: &Path, space: &SpaceDid, fixture: &Fixture) {
+    let conn = rusqlite::Connection::open(path).expect("events DB");
+    for row in &fixture.changes {
+        conn.execute(
+            "insert into record_changes (
+               stream_id, idx, ord, kind, repo, collection, rkey, op,
+               order_stamp, actor, event_id, body
+             ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                space.as_str(),
+                row["idx"].as_i64(),
+                row["ord"].as_i64(),
+                row["kind"].as_str(),
+                row["repo"].as_str(),
+                row["collection"].as_str(),
+                row["rkey"].as_str(),
+                row["op"].as_str(),
+                row["orderStamp"].as_str(),
+                row["actor"].as_str(),
+                row["eventId"].as_str(),
+                row["body"].as_str(),
+            ],
+        )
+        .expect("inserting a feed row the log gained later");
+    }
+}
+
+/// The health row for `space`, if this body carries one.
+fn row_for<'a>(body: &'a serde_json::Value, space: &str) -> Option<&'a serde_json::Value> {
+    body["spaces"]
+        .as_array()?
+        .iter()
+        .find(|row| row["space"] == space)
+}
+
 fn seed_space(path: &Path, space: &SpaceDid, fixture: &Fixture) {
     let db = SpaceDb::open(path, space.clone()).expect("space DB");
     for (id, stream_id) in &fixture.space_seed.entities {
@@ -188,6 +225,29 @@ impl Follower {
             .env("ROOMY_HEALTH_ADDR", format!("127.0.0.1:{port}"))
             .env("RUST_LOG", "info")
             .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("the follower starts");
+        Self { child, port }
+    }
+
+    /// A follower told no spaces at all: it derives its set from the log. Its
+    /// output goes to `log`, because the line announcing a discovery is part of
+    /// what an operator has to be able to see.
+    fn discovering(data_dir: &Path, events_db: &Path, log: &Path) -> Self {
+        let port = free_port();
+        let out = std::fs::File::create(log).expect("the follower's log");
+        let child = Command::new(env!("CARGO_BIN_EXE_roomy-appserver"))
+            .arg("--role")
+            .arg("worker")
+            .env_clear()
+            .env("ROOMY_DATA_DIR", data_dir)
+            .env("ROOMY_EVENTS_DB", events_db)
+            .env("ROOMY_OWNERSHIP", "follower")
+            .env("ROOMY_DISCOVERY_INTERVAL", "1")
+            .env("ROOMY_HEALTH_ADDR", format!("127.0.0.1:{port}"))
+            .env("RUST_LOG", "info")
+            .stdout(Stdio::from(out))
             .stderr(Stdio::null())
             .spawn()
             .expect("the follower starts");
@@ -307,6 +367,55 @@ fn a_follower_reads_a_log_outside_its_data_dir_and_reports_itself() {
         .query_row("select count(*) from worker_leases", [], |row| row.get(0))
         .expect("lease count");
     assert_eq!(held, 0, "a follower takes no lease");
+}
+
+/// A follower told no spaces derives its set from the log: it materialises what
+/// the log held at boot, picks up a stream the log gained afterwards, and says so
+/// in one line an operator can find.
+#[test]
+fn a_follower_with_no_space_list_discovers_a_stream_written_after_it_started() {
+    let fixture = fixture();
+    let space = SpaceDid::parse(SPACE.to_string()).expect("space DID");
+    let later = SpaceDid::parse(SECOND_SPACE.to_string()).expect("space DID");
+
+    let owner = tempfile::tempdir().expect("owner dir");
+    let events_db = owner.path().join("roomy-events.sqlite");
+    build_events_db(&events_db, &[&space], &fixture);
+
+    let shadow = tempfile::tempdir().expect("shadow dir");
+    let log = shadow.path().join("follower.log");
+    let mut follower = Follower::discovering(shadow.path(), &events_db, &log);
+
+    // The stream the log held when the follower booted.
+    follower.wait_for(|body| row_for(body, SPACE).is_some_and(|row| row["lag"] == 0));
+
+    // The owner writes a space the follower was never told about.
+    append_space(&events_db, &later, &fixture);
+
+    let body =
+        follower.wait_for(|body| row_for(body, SECOND_SPACE).is_some_and(|row| row["lag"] == 0));
+
+    let pass = &body["discovery"];
+    assert_eq!(
+        pass["streams"],
+        serde_json::json!([SPACE, SECOND_SPACE]),
+        "the pass reports the whole log: {pass}"
+    );
+    assert_eq!(pass["noEvents"], serde_json::json!([]));
+
+    let written = std::fs::read_to_string(&log).expect("the follower's log");
+    let discovery = written
+        .lines()
+        .find(|line| line.contains("discovered streams") && line.contains(SECOND_SPACE))
+        .unwrap_or_else(|| panic!("no discovery line naming the space in:\n{written}"));
+    assert!(
+        discovery.contains("started"),
+        "the line says what it started: {discovery}"
+    );
+    assert!(
+        discovery.contains(SECOND_SPACE),
+        "the line names the space it started: {discovery}"
+    );
 }
 
 /// A worker without `ROOMY_HEALTH_ADDR` binds nothing, and materialises anyway:

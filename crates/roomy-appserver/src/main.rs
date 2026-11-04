@@ -21,7 +21,11 @@
 //! ROOMY_HTTP_ADDR      127.0.0.1:8080  the gateway's listener
 //! ROOMY_HEALTH_ADDR    —               a supervisor's `/health` listener; the
 //!                                     gateway role serves its own and ignores it
-//! ROOMY_SPACES         —               comma-separated space DIDs to own
+//! ROOMY_SPACES         —               comma-separated space DIDs to own; on a
+//!                                     follower, empty means every stream the
+//!                                     log holds
+//! ROOMY_DISCOVERY_INTERVAL 60         how often, in seconds, a follower asks the
+//!                                     log which streams it holds
 //! ROOMY_TICKET_SECRET  —               required by the gateway role
 //! ROOMY_TICKET_TTL     60              a ticket's lifetime, in seconds
 //! ROOMY_TICKET_AUDIENCE roomy-gateway  the audience a ticket is bound to
@@ -65,7 +69,7 @@ use roomy_gateway::{cache, router, GatewaySignals, GatewayState};
 use roomy_space_worker::relay::RelaySignals;
 use roomy_space_worker::signal::SignalSink;
 use roomy_space_worker::supervisor::{FeedFactory, Ownership, SignalFactory};
-use roomy_space_worker::{Supervisor, SupervisorConfig};
+use roomy_space_worker::{Discovery, Supervisor, SupervisorConfig};
 use space_core::ids::SpaceDid;
 use space_feed::http::{HttpChangeFeed, UreqPull};
 use space_feed::sqlite::SqliteChangeFeed;
@@ -107,6 +111,8 @@ struct Config {
     internal_secret: Option<String>,
     /// Where this worker pulls its changes from, when it does not own the log.
     feed_url: Option<String>,
+    /// How often a follower asks the log which streams it holds.
+    discovery_interval: Duration,
     /// Where this worker relays its post-commit signals, when the sockets that
     /// need them are in another process.
     signal_url: Option<String>,
@@ -205,6 +211,18 @@ impl Config {
             .transpose()?
             .unwrap_or(256);
 
+        let discovery_interval = Duration::from_secs(
+            var("ROOMY_DISCOVERY_INTERVAL")
+                .map(|interval| {
+                    interval
+                        .parse::<u64>()
+                        .map_err(|_| "ROOMY_DISCOVERY_INTERVAL is not a number".to_string())
+                })
+                .transpose()?
+                .unwrap_or(60)
+                .max(1),
+        );
+
         let internal_secret = var("ROOMY_INTERNAL_SECRET").filter(|secret| !secret.is_empty());
         let feed_url = var("ROOMY_FEED_URL").filter(|url| !url.is_empty());
         if feed_url.is_some() && role != Role::Worker {
@@ -235,6 +253,7 @@ impl Config {
             http_addr,
             health_addr,
             spaces,
+            discovery_interval,
             ticket_secret: ticket_secret.into_bytes(),
             ticket_ttl,
             ticket_audience: var("ROOMY_TICKET_AUDIENCE").unwrap_or_else(|| "roomy-gateway".into()),
@@ -321,11 +340,24 @@ fn run(config: Config, loki: Option<Arc<LokiSink>>) -> Result<(), Box<dyn std::e
         // have a projection would serve reads from empty databases.
         let supervisor = if config.role != Role::Gateway {
             let signals = signals.clone();
-            let supervisor = Supervisor::new(supervisor_config(&config))
-                .with_signals(signal_factory(&config, signals.clone()))
-                .with_feed(feed_factory(&config));
+            let supervisor = Arc::new(
+                Supervisor::new(supervisor_config(&config))
+                    .with_signals(signal_factory(&config, signals.clone()))
+                    .with_feed(feed_factory(&config)),
+            );
             supervisor.start_all(config.spaces.clone())?;
-            Some(Arc::new(supervisor))
+            // A follower materialises whatever the log holds, so the spaces it
+            // names are a narrowing filter rather than its whole work list. An
+            // owner is told its spaces: its leases, not discovery, decide which
+            // of them it writes, and a lease is what it would have to hold to
+            // open one it was not given.
+            if supervisor.config().ownership == Ownership::Follower {
+                supervisor.discover(Discovery {
+                    interval: config.discovery_interval,
+                    only: config.spaces.clone(),
+                })?;
+            }
+            Some(supervisor)
         } else {
             None
         };

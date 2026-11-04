@@ -8,6 +8,8 @@
 //!
 //! Two properties the contract fixes:
 //!
+//!  * **A feed names its streams.** `streams()` answers which spaces the log
+//!    holds, so a process that is not told its space set can derive it.
 //!  * **A batch never splits a log entry.** Rows sharing an `idx` came from one
 //!    entry, share its actor and ordering stamp, and are planned together; the
 //!    feed returns them all.
@@ -86,6 +88,14 @@ pub trait ChangeFeed: Send {
 
     /// The highest entry index the feed holds for `space`, for lag reporting.
     fn latest_idx(&self, space: &SpaceDid) -> Result<i64, FeedError>;
+
+    /// Every space the log holds, in a stable order.
+    ///
+    /// A worker that is told which spaces to run never asks. A worker that
+    /// follows the log reads its own set from this answer, so a space appended
+    /// after the process started is one it will materialise. A stream with no
+    /// rows is not listed: there is nothing in it to apply.
+    fn streams(&self) -> Result<Vec<SpaceDid>, FeedError>;
 }
 
 /// A feed read that failed.
@@ -101,6 +111,16 @@ pub enum FeedError {
     Rewound { cursor: Cursor, answered: Cursor },
 }
 
+/// A `stream_id` as the space it names.
+///
+/// The write path files every entry under a space DID, so an id that is not one
+/// is a log this worker cannot name a space in — worth failing on rather than
+/// skipping, because a skipped stream is a space nobody materialises.
+pub(crate) fn space_of(stream: &str) -> Result<SpaceDid, FeedError> {
+    SpaceDid::parse(stream.to_string())
+        .map_err(|_| FeedError::Decode(format!("{stream:?} is not a space DID")))
+}
+
 impl ChangeFeed for Box<dyn ChangeFeed> {
     fn batch(
         &self,
@@ -113,5 +133,9 @@ impl ChangeFeed for Box<dyn ChangeFeed> {
 
     fn latest_idx(&self, space: &SpaceDid) -> Result<i64, FeedError> {
         (**self).latest_idx(space)
+    }
+
+    fn streams(&self) -> Result<Vec<SpaceDid>, FeedError> {
+        (**self).streams()
     }
 }
