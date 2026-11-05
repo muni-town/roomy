@@ -106,6 +106,69 @@ fn a_message_create_writes_its_content_author_and_order_key() {
     )));
 }
 
+/// The rich-text body the client serialises: a document object whose blocks
+/// carry the link facets.
+fn richtext_body() -> Vec<u8> {
+    serde_json::json!({
+        "$type": "space.roomy.richtext.document",
+        "blocks": [
+            {
+                "$type": "space.roomy.richtext.blocks#text",
+                "text": "https://www.youtube.com/watch?v=J_IPgREVM2E",
+                "facets": [{
+                    "index": {"byteStart": 0, "byteEnd": 43},
+                    "features": [{
+                        "$type": "space.roomy.richtext.facet#link",
+                        "uri": "https://www.youtube.com/watch?v=J_IPgREVM2E"
+                    }]
+                }]
+            },
+            {
+                "$type": "space.roomy.richtext.blocks#text",
+                "text": "http://bend-lang.com/",
+                "facets": [{
+                    "index": {"byteStart": 0, "byteEnd": 21},
+                    "features": [{
+                        "$type": "space.roomy.richtext.facet#link",
+                        "uri": "http://bend-lang.com/"
+                    }]
+                }]
+            }
+        ]
+    })
+    .to_string()
+    .into_bytes()
+}
+
+#[test]
+fn a_rich_text_message_create_stores_the_urls_its_facets_name() {
+    let change = RecordChange::Create {
+        base: base(RecordKind::Message, "01HF7YAT000000000000000010"),
+        record: RecordBody::Message(MessageRecord {
+            room: "room-1".to_string(),
+            author: Did::parse(ACTOR).expect("author"),
+            actor: None,
+            extensions: None,
+            content: Some(MessageContent {
+                mime_type: "application/vnd.roomy.richtext+json".to_string(),
+                data: richtext_body(),
+            }),
+            system: None,
+            forward_of: None,
+        }),
+    };
+    let effects = plan(&change, &ctx()).expect("planned");
+
+    assert!(steps(&effects).iter().any(|step| matches!(
+        step,
+        DerivedStep::StoreLinks { urls, .. }
+            if urls == &vec![
+                "https://www.youtube.com/watch?v=J_IPgREVM2E".to_string(),
+                "http://bend-lang.com/".to_string(),
+            ]
+    )));
+}
+
 /// The attachments extension a message carries a tile under.
 fn tile_extensions(uri: &str, data: Option<serde_json::Value>) -> serde_json::Value {
     let mut attachment = serde_json::json!({

@@ -412,7 +412,7 @@ fn links_in(record: &MessageRecord) -> Vec<String> {
     };
     if content.mime_type == RICHTEXT_MIME {
         return match serde_json::from_slice::<serde_json::Value>(&content.data) {
-            Ok(blocks) => links::extract_facet_urls(&blocks),
+            Ok(body) => links::extract_facet_urls(links::blocks_of(&body)),
             Err(_) => Vec::new(),
         };
     }
